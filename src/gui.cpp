@@ -2,6 +2,7 @@
 #include "GucciBot.hpp"
 #include "clicksounds.hpp"
 #include "autoclicker.hpp"
+#include "calibration.hpp"
 
 #include "renderer.hpp"
 #include "render/renderer.hpp"
@@ -2251,6 +2252,54 @@ void MenuInterface::drawIndicatorsTab(){
         mod->setSavedValue("hack_indicator_sound",engine->indicatorSoundEnabled);
     ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
     ImGui::TextWrapped("Pitches your existing click sound higher the tighter the window is. Requires Click Sounds enabled (Clicks tab) -- this doesn't add a new sound, it reshapes the one you already have.");
+    ImGui::PopStyleColor();
+
+    ImGui::Dummy(ImVec2(0,8));
+    Widgets::SectionHeader("Calibration",theme);
+    auto& calib=CalibrationService::get();
+    static int calibModeSel=0;
+    const char* gmNames[GM_Count]={"Cube","Ship","Ball","UFO","Wave","Robot","Spider"};
+    ImGui::SetNextItemWidth(-1);
+    ImGui::Combo("##calibMode",&calibModeSel,gmNames,GM_Count);
+    auto& gcal=calib.modes[calibModeSel];
+
+    if(gcal.sampleCount>0){
+        ImGui::Text("Lead: %.0f ms    Jitter: %.0f ms    (%d samples)",gcal.leadMs,gcal.jitterMs,gcal.sampleCount);
+    } else {
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::TextUnformatted("Not calibrated yet.");
+        ImGui::PopStyleColor();
+    }
+
+    float cbw=(ImGui::GetContentRegionAvail().x-10)/2.f;
+    if(calib.active&&calib.calibratingMode==calibModeSel){
+        char prog[64];snprintf(prog,sizeof(prog),"Cancel (%d/%d)",calib.repsDone,calib.repsTarget);
+        if(Widgets::StyledButton(prog,ImVec2(cbw,28),theme,anim))calib.cancel();
+    } else if(!calib.active){
+        if(Widgets::StyledButton("Start Calibration",ImVec2(cbw,28),theme,anim)&&PlayLayer::get())
+            calib.start(calibModeSel);
+    } else {
+        ImGui::PushStyleVar(ImGuiStyleVar_Alpha,0.4f);
+        Widgets::StyledButton("Start Calibration",ImVec2(cbw,28),theme,anim);
+        ImGui::PopStyleVar();
+    }
+    ImGui::SameLine(0,10);
+    if(Widgets::StyledButton("Reset",ImVec2(cbw,28),theme,anim))calib.resetMode(calibModeSel);
+
+    if(calib.active&&calib.calibratingMode==calibModeSel){
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::TextWrapped("In the level, click steadily along with the cue. %d reps.",calib.repsTarget);
+        ImGui::PopStyleColor();
+    } else if(!PlayLayer::get()){
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::TextWrapped("Enter a level to run calibration -- it needs real clicks to measure against.");
+        ImGui::PopStyleColor();
+    }
+
+    if(Widgets::ToggleSwitch(("Show Guide In "+std::string(gmNames[calibModeSel])).c_str(),&gcal.guideEnabled,theme,anim))
+        calib.save();
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::TextWrapped("Calibration currently measures and stores your lead/jitter per gamemode. It does not yet shift the indicator's timing -- the indicator's flash/sound fire in the same frame as your real click, so there's nothing to offset against. Told Nigel; revisit if a scheduled/count-in style cue gets added.");
     ImGui::PopStyleColor();
 }
 

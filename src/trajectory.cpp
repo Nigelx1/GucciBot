@@ -1,6 +1,7 @@
 #include "trajectory.hpp"
 #include "GucciBot.hpp"
 #include "clicksounds.hpp"
+#include "calibration.hpp"
 
 #include <Geode/modify/EffectGameObject.hpp>
 #include <Geode/modify/GJBaseGameLayer.hpp>
@@ -532,6 +533,11 @@ std::vector<CCPoint> TrajectoryPredictionService::buildRingVertices(CCPoint cent
 void TrajectoryPredictionService::drawSurvivalIndicator(PlayerObject* player, bool isSecondPlayer) {
     auto* drawNode = ensureDrawNode();
     if (!drawNode || !player) {
+        return;
+    }
+
+    int gamemodeIndex = CalibrationService::gamemodeIndexFor(player);
+    if (!CalibrationService::get().modes[gamemodeIndex].guideEnabled) {
         return;
     }
 
