@@ -1,5 +1,6 @@
 #include "GucciBot.hpp"
 #include "trajectory.hpp"
+#include "playsound.hpp"
 #include "util_midhook.hpp"
 #include <safetyhook.hpp>
 
@@ -249,6 +250,12 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
 
     void handleButton(bool pressed, int button, bool player1) {
         auto* gb = GucciEngine::get();
+        if (button == 1) {
+            triggerClickAudio(!player1, button, pressed);
+            if (gb->survivalIndicator) {
+                TrajectoryPredictionService::get().onRealClick(!player1, pressed);
+            }
+        }
         if (!gb->isRecording()) {
             return GJBaseGameLayer::handleButton(pressed, button, player1);
         }

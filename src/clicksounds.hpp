@@ -68,6 +68,7 @@ public:
     void scanClickPacksP2();
     void loadClickPack(const std::string& packName, ClickPack& target, bool isP2 = false);
     void playClick(bool pressed, bool isPlayer2);
+    void playClickPitched(bool pressed, bool isPlayer2, float pitch);
     void startBackgroundNoise();
     void stopBackgroundNoise();
     void updatePendingClicks();
@@ -106,8 +107,9 @@ private:
     void ensureChannelGroup();
     bool shouldUseP2Pack(bool requestedPlayer2, bool trueTwoPlayerMode) const;
     std::string pickRandomFile(const std::vector<std::string>& files);
-    void playFile(const std::string& path, float volume);
+    void playFile(const std::string& path, float volume, float pitch = 1.0f);
     void playResolvedClick(bool pressed, bool isPlayer2);
+    void playResolvedClickPitched(bool pressed, bool isPlayer2, float pitch);
     FMOD::Sound* getCachedSound(const std::string& path);
     void clearSoundCache();
     std::vector<float> decodeClickToRaw(const std::string& filePath, int targetSampleRate);

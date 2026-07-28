@@ -1,5 +1,6 @@
 #include "trajectory.hpp"
 #include "GucciBot.hpp"
+#include "clicksounds.hpp"
 
 #include <Geode/modify/EffectGameObject.hpp>
 #include <Geode/modify/GJBaseGameLayer.hpp>
@@ -12,6 +13,7 @@
 
 namespace {
     constexpr int kMaxTraceFrames = 480;
+    constexpr float kIndicatorFlashDuration = 0.15f;
 
     const std::unordered_set<int> kInteractivePortalIds = {
         101, 99, 11, 10, 200, 201, 202, 203, 1334
@@ -533,18 +535,87 @@ void TrajectoryPredictionService::drawSurvivalIndicator(PlayerObject* player, bo
         return;
     }
 
+    auto* gb = GucciEngine::get();
     int playerIndex = isSecondPlayer ? 1 : 0;
-    bool survivable = m_context.holdSurvivedFrames[playerIndex] >= GucciEngine::get()->indicatorLookahead;
-    ccColor4F ringColor = survivable ? ccc4f(0.25f, 0.95f, 0.35f, 0.9f) : ccc4f(0.95f, 0.25f, 0.25f, 0.9f);
+    int survived = m_context.holdSurvivedFrames[playerIndex];
+    bool survivable = survived >= gb->indicatorLookahead;
 
-    auto ringVertices = buildRingVertices(player->getPosition(), 20.f, 24);
-    drawNode->drawPolygon(
-        ringVertices.data(),
-        ringVertices.size(),
-        ccc4f(0.f, 0.f, 0.f, 0.f),
-        2.5f,
-        ringColor
-    );
+    // 0 = right at (or past) the danger boundary, 1 = comfortably inside the lookahead window.
+    float margin = static_cast<float>(survived - gb->indicatorLookahead);
+    float tightness = std::clamp(1.0f - (margin / static_cast<float>(std::max(1, gb->indicatorLookahead))), 0.0f, 1.0f);
+
+    float flash = gb->indicatorFlashEnabled
+        ? (m_context.indicatorFlashTimer[playerIndex] / kIndicatorFlashDuration)
+        : 0.0f;
+
+    ccColor4F baseColor = survivable
+        ? ccc4f(gb->indicatorSafeColorR, gb->indicatorSafeColorG, gb->indicatorSafeColorB, gb->indicatorOpacity)
+        : ccc4f(gb->indicatorDangerColorR, gb->indicatorDangerColorG, gb->indicatorDangerColorB, gb->indicatorOpacity);
+    float flashAlpha = std::min(1.0f, baseColor.a + flash * 0.3f);
+
+    CCPoint center = player->getPosition();
+
+    switch (gb->indicatorStyle) {
+        case 1: { // Classic -- filled square badge above the player
+            float half = 7.f + flash * 2.f;
+            CCPoint c = center + ccp(0.f, 26.f);
+            CCPoint verts[4] = {
+                ccp(c.x - half, c.y - half), ccp(c.x + half, c.y - half),
+                ccp(c.x + half, c.y + half), ccp(c.x - half, c.y + half)
+            };
+            drawNode->drawPolygon(verts, 4,
+                ccc4f(baseColor.r, baseColor.g, baseColor.b, baseColor.a * 0.85f),
+                2.f, ccc4f(baseColor.r, baseColor.g, baseColor.b, flashAlpha));
+            break;
+        }
+        case 2: { // Converge -- two bars that close in as the margin tightens
+            float gap = std::max(6.f, 34.f - tightness * 18.f - flash * 10.f);
+            float barHalfW = 10.f;
+            ccColor4F c = ccc4f(baseColor.r, baseColor.g, baseColor.b, flashAlpha);
+            drawNode->drawSegment(ccp(center.x - barHalfW, center.y + gap), ccp(center.x + barHalfW, center.y + gap), 2.5f, c);
+            drawNode->drawSegment(ccp(center.x - barHalfW, center.y - gap), ccp(center.x + barHalfW, center.y - gap), 2.5f, c);
+            break;
+        }
+        case 3: { // Pulse -- breathing ring, breathes faster as the margin tightens
+            float pulseSpeed = 2.0f + tightness * 6.0f;
+            float pulse = 0.5f + 0.5f * sinf(m_context.indicatorPulsePhase * pulseSpeed);
+            float radius = 14.f + pulse * 8.f + flash * 8.f;
+            ccColor4F ring = ccc4f(baseColor.r, baseColor.g, baseColor.b, std::min(1.0f, baseColor.a * (0.6f + pulse * 0.4f) + flash * 0.3f));
+            auto verts = buildRingVertices(center, radius, 20);
+            drawNode->drawPolygon(verts.data(), verts.size(), ccc4f(baseColor.r, baseColor.g, baseColor.b, ring.a * 0.25f), 2.f, ring);
+            break;
+        }
+        default: { // Ring -- circle outline around the player
+            float radius = 20.f + flash * 6.f;
+            ccColor4F ring = ccc4f(baseColor.r, baseColor.g, baseColor.b, flashAlpha);
+            auto verts = buildRingVertices(center, radius, 24);
+            drawNode->drawPolygon(verts.data(), verts.size(), ccc4f(0.f, 0.f, 0.f, 0.f), 2.5f + flash * 1.5f, ring);
+            break;
+        }
+    }
+}
+
+void TrajectoryPredictionService::onRealClick(bool player2, bool pressed) {
+    auto* gb = GucciEngine::get();
+    if (!gb->survivalIndicator) {
+        return;
+    }
+
+    int playerIndex = player2 ? 1 : 0;
+    if (gb->indicatorFlashEnabled) {
+        m_context.indicatorFlashTimer[playerIndex] = kIndicatorFlashDuration;
+    }
+
+    if (!gb->indicatorSoundEnabled || !ClickSoundManager::get()->enabled) {
+        return;
+    }
+
+    int survived = pressed ? m_context.holdSurvivedFrames[playerIndex] : m_context.releaseSurvivedFrames[playerIndex];
+    float margin = static_cast<float>(survived - gb->indicatorLookahead);
+    float tightness = std::clamp(1.0f - (margin / static_cast<float>(std::max(1, gb->indicatorLookahead))), 0.0f, 1.0f);
+    float pitch = 1.0f + tightness * 0.35f; // rises up to +35% on the tightest windows
+
+    ClickSoundManager::get()->playClickPitched(pressed, player2, pitch);
 }
 
 void TrajectoryPredictionService::applyPortalHint(PlayerObject* player, int portalId) {
@@ -618,6 +689,11 @@ void TrajectoryPredictionService::traceInputPath(
     }
 
     int frameCount = std::clamp(GucciEngine::get()->pathLength, 0, kMaxTraceFrames);
+    if (!GucciEngine::get()->pathPreview && GucciEngine::get()->survivalIndicator) {
+        // Indicator-only mode doesn't need the full trajectory-length trace,
+        // just enough to confirm survival past the lookahead window.
+        frameCount = std::clamp(GucciEngine::get()->indicatorLookahead + 5, 5, kMaxTraceFrames);
+    }
     m_context.traceCancelled = false;
     m_context.holdingTrace = holdingInput;
     m_context.touchingPads.clear();
@@ -665,7 +741,9 @@ void TrajectoryPredictionService::traceInputPath(
 
         if (m_context.traceCancelled) {
             survivedFrames = frameIndex;
-            drawPredictionBounds(previewPlayer);
+            if (GucciEngine::get()->pathPreview) {
+                drawPredictionBounds(previewPlayer);
+            }
             break;
         }
 
@@ -686,7 +764,7 @@ void TrajectoryPredictionService::traceInputPath(
             lineColor.a = static_cast<float>(frameCount - frameIndex) / 40.0f;
         }
 
-        if (drawNode) {
+        if (drawNode && GucciEngine::get()->pathPreview) {
             drawNode->drawSegment(previousPosition, previewPlayer->getPosition(), 0.6f, lineColor);
         }
     }
@@ -767,11 +845,21 @@ void TrajectoryPredictionService::updatePreview(PlayLayer* playLayer) {
         return;
     }
 
-    if (!GucciEngine::get()->pathPreview) {
+    auto* gb = GucciEngine::get();
+    bool wantsSimulation = gb->pathPreview || gb->survivalIndicator;
+    if (!wantsSimulation) {
         m_context.dirty = true;
         clearOverlay();
         return;
     }
+
+    float dt = CCDirector::sharedDirector()->getDeltaTime();
+    for (int i = 0; i < 2; ++i) {
+        if (m_context.indicatorFlashTimer[i] > 0.0f) {
+            m_context.indicatorFlashTimer[i] = std::max(0.0f, m_context.indicatorFlashTimer[i] - dt);
+        }
+    }
+    m_context.indicatorPulsePhase += dt;
 
     if (!m_context.previewPlayers[0]) {
         attach(playLayer);

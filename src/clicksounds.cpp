@@ -238,7 +238,7 @@ void ClickSoundManager::clearSoundCache() {
     soundCache.clear();
 }
 
-void ClickSoundManager::playFile(const std::string& path, float volume) {
+void ClickSoundManager::playFile(const std::string& path, float volume, float pitch) {
     if (path.empty() || volume <= 0.0f) return;
     ensureChannelGroup();
 
@@ -250,6 +250,12 @@ void ClickSoundManager::playFile(const std::string& path, float volume) {
     system->playSound(sound, channelGroup, true, &channel);
     if (channel) {
         channel->setVolume(volume);
+        if (pitch != 1.0f) {
+            float baseFrequency = 0.0f;
+            if (channel->getFrequency(&baseFrequency) == FMOD_OK && baseFrequency > 0.0f) {
+                channel->setFrequency(baseFrequency * pitch);
+            }
+        }
         channel->setPaused(false);
     }
 }
@@ -267,6 +273,22 @@ void ClickSoundManager::playResolvedClick(bool pressed, bool isPlayer2) {
     auto resolved = resolveClickSound(pack, pressed, softness, rng);
     if (!resolved.file.empty() && resolved.volume > 0.0f) {
         playFile(resolved.file, resolved.volume);
+    }
+}
+
+void ClickSoundManager::playResolvedClickPitched(bool pressed, bool isPlayer2, float pitch) {
+    if (!enabled) return;
+
+    auto* playLayer = PlayLayer::get();
+    bool trueTwoPlayerMode = playLayer &&
+        playLayer->m_levelSettings &&
+        playLayer->m_levelSettings->m_twoPlayerMode;
+    ClickPack& pack = shouldUseP2Pack(isPlayer2, trueTwoPlayerMode) ? p2Pack : p1Pack;
+    if (pack.empty()) return;
+
+    auto resolved = resolveClickSound(pack, pressed, softness, rng);
+    if (!resolved.file.empty() && resolved.volume > 0.0f) {
+        playFile(resolved.file, resolved.volume, pitch);
     }
 }
 
@@ -293,6 +315,12 @@ void ClickSoundManager::playClick(bool pressed, bool isPlayer2) {
     } else {
         playResolvedClick(pressed, isPlayer2);
     }
+}
+
+void ClickSoundManager::playClickPitched(bool pressed, bool isPlayer2, float pitch) {
+    // Indicator cues are a precision timing signal -- always play immediately,
+    // bypassing clickDelayMin/Max (that jitter is for ambient click-pack feel).
+    playResolvedClickPitched(pressed, isPlayer2, pitch);
 }
 
 void ClickSoundManager::updatePendingClicks() {

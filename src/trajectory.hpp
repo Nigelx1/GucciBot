@@ -136,6 +136,8 @@ struct PredictionContext {
     std::array<CCPoint, 480> holdPathP2 {};
     int holdSurvivedFrames[2] { 0, 0 };
     int releaseSurvivedFrames[2] { 0, 0 };
+    float indicatorFlashTimer[2] { 0.0f, 0.0f };
+    float indicatorPulsePhase = 0.0f;
     PredictionWatchKey watchKeys[2] {};
     std::unordered_set<GameObject*> processedOrbs;
     std::unordered_set<GameObject*> touchingPads;
@@ -157,6 +159,7 @@ public:
     void noteSimulatedDeath(PlayerObject* player);
     bool ownsPreviewPlayer(PlayerObject* player) const;
     int  getSurvivedFrames(bool player2, bool held) const;
+    void onRealClick(bool player2, bool pressed);
 
     void simulateCollisionBatch(
         GJBaseGameLayer* layer,

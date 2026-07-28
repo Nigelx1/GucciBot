@@ -189,6 +189,7 @@ private:
     void drawCreditsTab();
     void drawHudTab();
     void drawMoreHacksTab();
+    void drawIndicatorsTab();
     void loadRenderSettings();
     void markReplayListDirty(bool queueRefresh=true);
     void refreshReplayListIfNeeded(bool force);

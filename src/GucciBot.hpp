@@ -299,6 +299,12 @@ public:
     int  pathLength            = 240;
     bool survivalIndicator     = false;
     int  indicatorLookahead    = 20;
+    int  indicatorStyle        = 0; // 0=Ring 1=Classic 2=Converge 3=Pulse
+    float indicatorOpacity     = 0.9f;
+    float indicatorSafeColorR  = 0.25f, indicatorSafeColorG = 0.95f, indicatorSafeColorB = 0.35f;
+    float indicatorDangerColorR= 0.95f, indicatorDangerColorG= 0.25f, indicatorDangerColorB= 0.25f;
+    bool  indicatorSoundEnabled= false;
+    bool  indicatorFlashEnabled= true;
     bool layoutMode            = false;
     bool noMirrorEffect        = false;
     bool noMirrorRecordingOnly = false;

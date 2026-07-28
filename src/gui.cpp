@@ -512,8 +512,8 @@ void MenuInterface::drawTabBar(){
         ImDrawList* dl=ImGui::GetWindowDrawList();
     ImVec2 pos=ImGui::GetCursorScreenPos();
     float width=ImGui::GetContentRegionAvail().x;
-        const char* names[]={"Macro","Render","Clicks","Autoclicker","Hacks","HUD","Settings","Credits"};
-    const int N=8;
+        const char* names[]={"Macro","Render","Clicks","Autoclicker","Hacks","Indicators","HUD","Settings","Credits"};
+    const int N=9;
     float tabW=width/N,tabH=34.f;
     float dt=ImGui::GetIO().DeltaTime;
     if(tabIndicatorX<0)tabIndicatorX=pos.x+activeTab*tabW;
@@ -614,9 +614,10 @@ void MenuInterface::drawTabContent(){
         case 2:drawClicksTab();break;
         case 3:drawAutoclickerTab();break;
         case 4:drawMoreHacksTab();break;
-        case 5:drawHudTab();break;
-        case 6:drawSettingsTab();break;
-        case 7:drawCreditsTab();break;}
+        case 5:drawIndicatorsTab();break;
+        case 6:drawHudTab();break;
+        case 7:drawSettingsTab();break;
+        case 8:drawCreditsTab();break;}
     if(fontBody)ImGui::PopFont();
     ImGui::PopStyleVar();}
 
@@ -1341,15 +1342,6 @@ void MenuInterface::drawHacksTab(){
         (activeTheme==THEME_TOOSII)?"Run the route. Don't look back. Ball's already there.":"Display predicted player path",
         &engine->pathPreview,theme,anim,&keybinds.trajectory)){
         Widgets::StyledSliderInt("Trajectory Length",&engine->pathLength,50,480,theme);
-        Widgets::ModuleCardEnd();}
-    if(Widgets::ModuleCardBegin("Survival Indicator",
-        "Ring around the player, green when the next click keeps you alive",
-        &engine->survivalIndicator,theme,anim)){
-        Widgets::StyledSliderInt("Lookahead (frames)",&engine->indicatorLookahead,5,120,theme);
-        if(!engine->pathPreview){
-            ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
-            ImGui::TextWrapped("v1: also requires \"Show Trajectory\" enabled above -- it reuses that engine's prediction pass.");
-            ImGui::PopStyleColor();}
         Widgets::ModuleCardEnd();}
     if(Widgets::ModuleCardBegin("Show Hitboxes","Display collision bounds for objects",&engine->showHitboxes,theme,anim,&keybinds.hitboxes)){
         Widgets::ToggleSwitch("On Death Only",&engine->hitboxOnDeath,theme,anim);
@@ -2140,6 +2132,65 @@ void MenuInterface::drawMoreHacksTab(){
     ImGui::PopStyleColor();
 }
 
+void MenuInterface::drawIndicatorsTab(){
+    auto* engine=GucciEngine::get();
+    auto* mod=Mod::get();
+    Widgets::GucciQuote("\"Green means go. Red means don't.\"","-- Survival Indicator",theme);
+    ImGui::Dummy(ImVec2(0,4));
+
+    if(Widgets::ToggleSwitch("Enable Survival Indicator",&engine->survivalIndicator,theme,anim))
+        mod->setSavedValue("hack_survival_indicator",engine->survivalIndicator);
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::TextWrapped("A marker on the player that turns green when the next click keeps you alive for the lookahead window, red otherwise. Runs on its own -- doesn't need \"Show Trajectory\" enabled.");
+    ImGui::PopStyleColor();
+    ImGui::Dummy(ImVec2(0,8));
+
+    if(!engine->survivalIndicator)return;
+
+    Widgets::SectionHeader("Style",theme);
+    const char* styles[]={"Ring","Classic","Converge","Pulse"};
+    ImGui::SetNextItemWidth(-1);
+    if(ImGui::Combo("##indicatorStyle",&engine->indicatorStyle,styles,4))
+        mod->setSavedValue("hack_indicator_style",engine->indicatorStyle);
+
+    ImGui::Dummy(ImVec2(0,8));
+    Widgets::SectionHeader("Timing",theme);
+    if(Widgets::StyledSliderInt("Lookahead (frames)",&engine->indicatorLookahead,5,120,theme))
+        mod->setSavedValue("hack_survival_indicator_lookahead",engine->indicatorLookahead);
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::TextWrapped("How many frames ahead the indicator checks before calling a click safe.");
+    ImGui::PopStyleColor();
+
+    ImGui::Dummy(ImVec2(0,8));
+    Widgets::SectionHeader("Appearance",theme);
+    if(Widgets::StyledSliderFloat("Opacity",&engine->indicatorOpacity,0.1f,1.f,theme))
+        mod->setSavedValue("hack_indicator_opacity",(double)engine->indicatorOpacity);
+    ImGui::Text("Safe Colour");ImGui::SameLine();
+    {float col[3]={engine->indicatorSafeColorR,engine->indicatorSafeColorG,engine->indicatorSafeColorB};
+    if(ImGui::ColorEdit3("##indSafeC",col,ImGuiColorEditFlags_NoInputs|ImGuiColorEditFlags_NoLabel)){
+        engine->indicatorSafeColorR=col[0];engine->indicatorSafeColorG=col[1];engine->indicatorSafeColorB=col[2];
+        mod->setSavedValue("hack_indicator_safe_r",(double)col[0]);
+        mod->setSavedValue("hack_indicator_safe_g",(double)col[1]);
+        mod->setSavedValue("hack_indicator_safe_b",(double)col[2]);}}
+    ImGui::SameLine();ImGui::Text("Danger Colour");ImGui::SameLine();
+    {float col[3]={engine->indicatorDangerColorR,engine->indicatorDangerColorG,engine->indicatorDangerColorB};
+    if(ImGui::ColorEdit3("##indDangerC",col,ImGuiColorEditFlags_NoInputs|ImGuiColorEditFlags_NoLabel)){
+        engine->indicatorDangerColorR=col[0];engine->indicatorDangerColorG=col[1];engine->indicatorDangerColorB=col[2];
+        mod->setSavedValue("hack_indicator_danger_r",(double)col[0]);
+        mod->setSavedValue("hack_indicator_danger_g",(double)col[1]);
+        mod->setSavedValue("hack_indicator_danger_b",(double)col[2]);}}
+    if(Widgets::ToggleSwitch("Flash On Click",&engine->indicatorFlashEnabled,theme,anim))
+        mod->setSavedValue("hack_indicator_flash",engine->indicatorFlashEnabled);
+
+    ImGui::Dummy(ImVec2(0,8));
+    Widgets::SectionHeader("Sound",theme);
+    if(Widgets::ToggleSwitch("Pitch-Shifted Click Cue",&engine->indicatorSoundEnabled,theme,anim))
+        mod->setSavedValue("hack_indicator_sound",engine->indicatorSoundEnabled);
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::TextWrapped("Pitches your existing click sound higher the tighter the window is. Requires Click Sounds enabled (Clicks tab) -- this doesn't add a new sound, it reshapes the one you already have.");
+    ImGui::PopStyleColor();
+}
+
 void MenuInterface::drawCreditsTab(){
     ImDrawList* dl=ImGui::GetWindowDrawList();
     ImGui::Dummy(ImVec2(0,8));
@@ -2288,6 +2339,16 @@ void MenuInterface::saveSettings(){
     mod->setSavedValue("hack_trajectory_len",eng->pathLength);
     mod->setSavedValue("hack_survival_indicator",eng->survivalIndicator);
     mod->setSavedValue("hack_survival_indicator_lookahead",eng->indicatorLookahead);
+    mod->setSavedValue("hack_indicator_style",eng->indicatorStyle);
+    mod->setSavedValue("hack_indicator_opacity",(double)eng->indicatorOpacity);
+    mod->setSavedValue("hack_indicator_safe_r",(double)eng->indicatorSafeColorR);
+    mod->setSavedValue("hack_indicator_safe_g",(double)eng->indicatorSafeColorG);
+    mod->setSavedValue("hack_indicator_safe_b",(double)eng->indicatorSafeColorB);
+    mod->setSavedValue("hack_indicator_danger_r",(double)eng->indicatorDangerColorR);
+    mod->setSavedValue("hack_indicator_danger_g",(double)eng->indicatorDangerColorG);
+    mod->setSavedValue("hack_indicator_danger_b",(double)eng->indicatorDangerColorB);
+    mod->setSavedValue("hack_indicator_flash",eng->indicatorFlashEnabled);
+    mod->setSavedValue("hack_indicator_sound",eng->indicatorSoundEnabled);
     mod->setSavedValue("hack_noclip",eng->noclipEnabled);
     mod->setSavedValue("hack_noclip_flash",eng->noclipDeathFlash);
     mod->setSavedValue("hack_noclip_color_r",eng->noclipDeathColorR);
@@ -2452,6 +2513,16 @@ void MenuInterface::loadSettings(){
     eng->pathLength=mod->getSavedValue<int>("hack_trajectory_len",312);
     eng->survivalIndicator=mod->getSavedValue<bool>("hack_survival_indicator",false);
     eng->indicatorLookahead=mod->getSavedValue<int>("hack_survival_indicator_lookahead",20);
+    eng->indicatorStyle=mod->getSavedValue<int>("hack_indicator_style",0);
+    eng->indicatorOpacity=mod->getSavedValue<float>("hack_indicator_opacity",0.9f);
+    eng->indicatorSafeColorR=mod->getSavedValue<float>("hack_indicator_safe_r",0.25f);
+    eng->indicatorSafeColorG=mod->getSavedValue<float>("hack_indicator_safe_g",0.95f);
+    eng->indicatorSafeColorB=mod->getSavedValue<float>("hack_indicator_safe_b",0.35f);
+    eng->indicatorDangerColorR=mod->getSavedValue<float>("hack_indicator_danger_r",0.95f);
+    eng->indicatorDangerColorG=mod->getSavedValue<float>("hack_indicator_danger_g",0.25f);
+    eng->indicatorDangerColorB=mod->getSavedValue<float>("hack_indicator_danger_b",0.25f);
+    eng->indicatorFlashEnabled=mod->getSavedValue<bool>("hack_indicator_flash",true);
+    eng->indicatorSoundEnabled=mod->getSavedValue<bool>("hack_indicator_sound",false);
     eng->noclipEnabled=mod->getSavedValue<bool>("hack_noclip",false);
     eng->noclipDeathFlash=mod->getSavedValue<bool>("hack_noclip_flash",true);
     eng->noclipDeathColorR=mod->getSavedValue<float>("hack_noclip_color_r",1.f);
