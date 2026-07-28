@@ -2301,6 +2301,14 @@ void MenuInterface::drawIndicatorsTab(){
     ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
     ImGui::TextWrapped("Calibration currently measures and stores your lead/jitter per gamemode. It does not yet shift the indicator's timing -- the indicator's flash/sound fire in the same frame as your real click, so there's nothing to offset against. Told Nigel; revisit if a scheduled/count-in style cue gets added.");
     ImGui::PopStyleColor();
+
+    ImGui::Dummy(ImVec2(0,8));
+    Widgets::SectionHeader("Stats",theme);
+    if(Widgets::ToggleSwitch("Accuracy / Streak HUD",&engine->accuracyHudEnabled,theme,anim))
+        mod->setSavedValue("hack_accuracy_hud",engine->accuracyHudEnabled);
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::TextWrapped("On-screen readout of how many of your real clicks matched the indicator's safe/unsafe call, plus your current and best streak this level. Only counts clicks while the indicator above is enabled.");
+    ImGui::PopStyleColor();
 }
 
 void MenuInterface::drawCreditsTab(){
@@ -2461,6 +2469,7 @@ void MenuInterface::saveSettings(){
     mod->setSavedValue("hack_indicator_danger_b",(double)eng->indicatorDangerColorB);
     mod->setSavedValue("hack_indicator_flash",eng->indicatorFlashEnabled);
     mod->setSavedValue("hack_indicator_sound",eng->indicatorSoundEnabled);
+    mod->setSavedValue("hack_accuracy_hud",eng->accuracyHudEnabled);
     mod->setSavedValue("hack_noclip",eng->noclipEnabled);
     mod->setSavedValue("hack_noclip_flash",eng->noclipDeathFlash);
     mod->setSavedValue("hack_noclip_color_r",eng->noclipDeathColorR);
@@ -2635,6 +2644,7 @@ void MenuInterface::loadSettings(){
     eng->indicatorDangerColorB=mod->getSavedValue<float>("hack_indicator_danger_b",0.25f);
     eng->indicatorFlashEnabled=mod->getSavedValue<bool>("hack_indicator_flash",true);
     eng->indicatorSoundEnabled=mod->getSavedValue<bool>("hack_indicator_sound",false);
+    eng->accuracyHudEnabled=mod->getSavedValue<bool>("hack_accuracy_hud",false);
     eng->noclipEnabled=mod->getSavedValue<bool>("hack_noclip",false);
     eng->noclipDeathFlash=mod->getSavedValue<bool>("hack_noclip_flash",true);
     eng->noclipDeathColorR=mod->getSavedValue<float>("hack_noclip_color_r",1.f);

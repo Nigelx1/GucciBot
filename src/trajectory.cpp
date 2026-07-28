@@ -612,6 +612,18 @@ void TrajectoryPredictionService::onRealClick(bool player2, bool pressed) {
         m_context.indicatorFlashTimer[playerIndex] = kIndicatorFlashDuration;
     }
 
+    if (pressed) {
+        bool wasSurvivable = m_context.holdSurvivedFrames[playerIndex] >= gb->indicatorLookahead;
+        gb->accuracyTotalClicks++;
+        if (wasSurvivable) {
+            gb->accuracyGoodClicks++;
+            gb->currentStreak++;
+            gb->bestStreak = std::max(gb->bestStreak, gb->currentStreak);
+        } else {
+            gb->currentStreak = 0;
+        }
+    }
+
     if (!gb->indicatorSoundEnabled || !ClickSoundManager::get()->enabled) {
         return;
     }
@@ -1014,10 +1026,64 @@ void TrajectoryPredictionService::handleTouchedTrigger(PlayerObject* player, Eff
     }
 }
 
+class AccuracyHudOverlay {
+public:
+    static AccuracyHudOverlay* get() {
+        static AccuracyHudOverlay inst;
+        return &inst;
+    }
+
+    void attach(PlayLayer* pl) {
+        if (m_label || !pl) return;
+        auto* label = CCLabelBMFont::create("", "bigFont.fnt");
+        label->setScale(0.35f);
+        label->setAnchorPoint({ 0.f, 1.f });
+        auto winSize = CCDirector::sharedDirector()->getWinSize();
+        label->setPosition({ 10.f, winSize.height - 90.f });
+        label->setOpacity(200);
+        pl->addChild(label, 1500);
+        m_label = label;
+    }
+
+    void detach() {
+        if (m_label) {
+            m_label->removeFromParent();
+            m_label = nullptr;
+        }
+        m_lastSignature = -1;
+    }
+
+    void update() {
+        auto* gb = GucciEngine::get();
+        if (!m_label || !gb->accuracyHudEnabled) {
+            if (m_label) m_label->setVisible(false);
+            return;
+        }
+        m_label->setVisible(true);
+
+        int signature = gb->accuracyGoodClicks * 100000 + gb->accuracyTotalClicks * 100 + gb->currentStreak;
+        if (signature == m_lastSignature) return;
+        m_lastSignature = signature;
+
+        int pct = gb->accuracyTotalClicks > 0
+            ? static_cast<int>((static_cast<float>(gb->accuracyGoodClicks) / static_cast<float>(gb->accuracyTotalClicks)) * 100.f + 0.5f)
+            : 100;
+
+        char buf[96];
+        snprintf(buf, sizeof(buf), "Accuracy: %d%%   Streak: %d (Best: %d)", pct, gb->currentStreak, gb->bestStreak);
+        m_label->setString(buf);
+    }
+
+private:
+    CCLabelBMFont* m_label = nullptr;
+    int m_lastSignature = -1;
+};
+
 class $modify(TrajectoryPreviewPlayLayer, PlayLayer) {
     void postUpdate(float dt) {
         PlayLayer::postUpdate(dt);
         TrajectoryPredictionService::get().updatePreview(this);
+        AccuracyHudOverlay::get()->update();
     }
 
     void setupHasCompleted() {
@@ -1025,6 +1091,13 @@ class $modify(TrajectoryPreviewPlayLayer, PlayLayer) {
         auto& service = TrajectoryPredictionService::get();
         service.attach(this);
         service.markDirty();
+        AccuracyHudOverlay::get()->attach(this);
+
+        auto* gb = GucciEngine::get();
+        gb->accuracyGoodClicks = 0;
+        gb->accuracyTotalClicks = 0;
+        gb->currentStreak = 0;
+        gb->bestStreak = 0;
     }
 
     void destroyPlayer(PlayerObject* player, GameObject* gameObject) {
@@ -1034,6 +1107,7 @@ class $modify(TrajectoryPreviewPlayLayer, PlayLayer) {
             return;
         }
 
+        GucciEngine::get()->currentStreak = 0;
         PlayLayer::destroyPlayer(player, gameObject);
     }
 
@@ -1041,6 +1115,7 @@ class $modify(TrajectoryPreviewPlayLayer, PlayLayer) {
         auto& service = TrajectoryPredictionService::get();
         service.clearOverlay();
         service.detach();
+        AccuracyHudOverlay::get()->detach();
         PlayLayer::onQuit();
     }
 

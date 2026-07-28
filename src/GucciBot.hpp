@@ -305,6 +305,11 @@ public:
     float indicatorDangerColorR= 0.95f, indicatorDangerColorG= 0.25f, indicatorDangerColorB= 0.25f;
     bool  indicatorSoundEnabled= false;
     bool  indicatorFlashEnabled= true;
+    bool  accuracyHudEnabled   = false;
+    int   accuracyGoodClicks   = 0;
+    int   accuracyTotalClicks  = 0;
+    int   currentStreak        = 0;
+    int   bestStreak           = 0;
     bool layoutMode            = false;
     bool noMirrorEffect        = false;
     bool noMirrorRecordingOnly = false;
