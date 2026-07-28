@@ -364,8 +364,7 @@ static void frameUpdateMidhook(SafetyHookContext&) {
                           : 'C';
                 slopeLog(fmt::format(
                     "{} f={} x={:.3f} y={:.3f} xs={:.3f} ys={:.3f} rot={:.3f} "
-                    "g={} flip={} dash={} mode={} hold={} steps={} ovf={:.4f} rs={} ckpt={} fast={} q={} "
-                    "sim={} pv={} si={}",
+                    "g={} flip={} dash={} mode={} hold={} steps={} ovf={:.4f} rs={} ckpt={} fast={} q={}",
                     slRender ? "REND" : (gb->fwAnalyzing ? "CALC" : "PLAY"),
                     upd.getFrame(),
                     (double)p->m_position.x, (double)p->m_position.y,
@@ -381,10 +380,7 @@ static void frameUpdateMidhook(SafetyHookContext&) {
                     upd.m_respawnTimer,
                     gb->fwCkptCreatedThisFrame ? 1 : 0,
                     upd.useFastLockDelta() ? 1 : 0,
-                    gb->replay.getCurrentQueuedInput().has_value() ? 1 : 0,
-                    TrajectoryPredictionService::get().isActiveSimulation() ? 1 : 0,
-                    gb->pathPreview ? 1 : 0,
-                    gb->survivalIndicator ? 1 : 0));
+                    gb->replay.getCurrentQueuedInput().has_value() ? 1 : 0));
             }
         }
     }

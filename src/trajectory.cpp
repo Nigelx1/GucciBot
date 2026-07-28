@@ -1084,42 +1084,9 @@ class $modify(TrajectoryPreviewPauseLayer, PauseLayer) {
     }
 };
 
-namespace {
-    std::ofstream g_hijackLog;
-    void hijackLogWrite(const std::string& line) {
-        if (!g_hijackLog.is_open()) {
-            auto path = Mod::get()->getSaveDir() / "guccibot_hijack.log";
-            g_hijackLog.open(path, std::ios::out | std::ios::trunc);
-        }
-        if (g_hijackLog.is_open()) {
-            g_hijackLog << line << '\n';
-            g_hijackLog.flush();
-        }
-    }
-
-    // Diagnostic only: these four GJBaseGameLayer hooks redirect to the ghost/preview
-    // simulation based purely on TrajectoryPredictionService::isActiveSimulation(), with
-    // no check on which player triggered the call. Every time isActiveSimulation() is true
-    // during one of these calls, log it (whether it's the preview player or the real one) --
-    // that tells us both whether the flag ever overlaps with these hooks at all, and whether
-    // it ever does so for the real player specifically (which would misroute/skip real
-    // collision handling silently).
-    void logIfRealPlayerHijacked(GJBaseGameLayer* layer, PlayerObject* player, const char* fn) {
-        auto& service = TrajectoryPredictionService::get();
-        if (!service.isActiveSimulation()) return;
-        auto* gb = GucciEngine::get();
-        bool isRealPlayer = !service.ownsPreviewPlayer(player);
-        hijackLogWrite(fmt::format(
-            "{} f={} isRealPlayer={} fwAnalyzing={} pathPreview={} survivalIndicator={}",
-            fn, gb->updater.getFrame(), isRealPlayer ? 1 : 0,
-            gb->fwAnalyzing ? 1 : 0, gb->pathPreview ? 1 : 0, gb->survivalIndicator ? 1 : 0));
-    }
-}
-
 class $modify(TrajectoryPreviewBaseLayer, GJBaseGameLayer) {
     void collisionCheckObjects(PlayerObject* player, gd::vector<GameObject*>* objects, int objectCount, float dt) {
         auto& service = TrajectoryPredictionService::get();
-        logIfRealPlayerHijacked(this, player, "collisionCheckObjects");
         if (!service.isActiveSimulation()) {
             GJBaseGameLayer::collisionCheckObjects(player, objects, objectCount, dt);
             return;
@@ -1130,7 +1097,6 @@ class $modify(TrajectoryPreviewBaseLayer, GJBaseGameLayer) {
 
     bool canBeActivatedByPlayer(PlayerObject* player, EffectGameObject* object) {
         auto& service = TrajectoryPredictionService::get();
-        logIfRealPlayerHijacked(this, player, "canBeActivatedByPlayer");
         if (!service.isActiveSimulation()) {
             return GJBaseGameLayer::canBeActivatedByPlayer(player, object);
         }
@@ -1140,7 +1106,6 @@ class $modify(TrajectoryPreviewBaseLayer, GJBaseGameLayer) {
 
     void playerTouchedRing(PlayerObject* player, RingObject* ring) {
         auto& service = TrajectoryPredictionService::get();
-        logIfRealPlayerHijacked(this, player, "playerTouchedRing");
         if (service.isActiveSimulation() && !service.isProcessingOrbTouch()) {
             return;
         }
@@ -1150,7 +1115,6 @@ class $modify(TrajectoryPreviewBaseLayer, GJBaseGameLayer) {
 
     void playerTouchedTrigger(PlayerObject* player, EffectGameObject* object) {
         auto& service = TrajectoryPredictionService::get();
-        logIfRealPlayerHijacked(this, player, "playerTouchedTrigger");
         if (!service.isActiveSimulation()) {
             GJBaseGameLayer::playerTouchedTrigger(player, object);
             return;
