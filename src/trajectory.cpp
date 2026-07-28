@@ -3,6 +3,9 @@
 #include "clicksounds.hpp"
 #include "calibration.hpp"
 
+#include <fstream>
+#include <fmt/format.h>
+
 #include <Geode/modify/EffectGameObject.hpp>
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/modify/GameObject.hpp>
@@ -1082,19 +1085,34 @@ class $modify(TrajectoryPreviewPauseLayer, PauseLayer) {
 };
 
 namespace {
+    std::ofstream g_hijackLog;
+    void hijackLogWrite(const std::string& line) {
+        if (!g_hijackLog.is_open()) {
+            auto path = Mod::get()->getSaveDir() / "guccibot_hijack.log";
+            g_hijackLog.open(path, std::ios::out | std::ios::trunc);
+        }
+        if (g_hijackLog.is_open()) {
+            g_hijackLog << line << '\n';
+            g_hijackLog.flush();
+        }
+    }
+
     // Diagnostic only: these four GJBaseGameLayer hooks redirect to the ghost/preview
     // simulation based purely on TrajectoryPredictionService::isActiveSimulation(), with
-    // no check on which player triggered the call. If the REAL player ever gets routed
-    // into the preview handlers because activeSimulation happened to be true at the same
-    // moment, this logs it -- that would misroute/skip real collision handling for a real
-    // player, silently, on whatever frame it happens.
+    // no check on which player triggered the call. Every time isActiveSimulation() is true
+    // during one of these calls, log it (whether it's the preview player or the real one) --
+    // that tells us both whether the flag ever overlaps with these hooks at all, and whether
+    // it ever does so for the real player specifically (which would misroute/skip real
+    // collision handling silently).
     void logIfRealPlayerHijacked(GJBaseGameLayer* layer, PlayerObject* player, const char* fn) {
         auto& service = TrajectoryPredictionService::get();
-        if (service.isActiveSimulation() && !service.ownsPreviewPlayer(player)) {
-            auto* gb = GucciEngine::get();
-            log::info("[HIJACK] {} real player routed into ghost-sim path f={} fwAnalyzing={} pathPreview={} survivalIndicator={}",
-                      fn, gb->updater.getFrame(), gb->fwAnalyzing ? 1 : 0, gb->pathPreview ? 1 : 0, gb->survivalIndicator ? 1 : 0);
-        }
+        if (!service.isActiveSimulation()) return;
+        auto* gb = GucciEngine::get();
+        bool isRealPlayer = !service.ownsPreviewPlayer(player);
+        hijackLogWrite(fmt::format(
+            "{} f={} isRealPlayer={} fwAnalyzing={} pathPreview={} survivalIndicator={}",
+            fn, gb->updater.getFrame(), isRealPlayer ? 1 : 0,
+            gb->fwAnalyzing ? 1 : 0, gb->pathPreview ? 1 : 0, gb->survivalIndicator ? 1 : 0));
     }
 }
 
