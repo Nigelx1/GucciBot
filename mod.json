@@ -1,0 +1,63 @@
+{
+  "geode": "5.7.1",
+  "version": "v10.0.0",
+  "gd": {
+    "win": "2.2081"
+  },
+  "id": "guccimanefan.guccibot",
+  "name": "GucciBot",
+  "developer": "guccimanefan",
+  "description": "GucciBot 8.0 \u2014 Silicate engine. GBR6 hypercompression. Frame perfect. Brrr.",
+  "resources": {
+    "files": [
+      "resources/*.ttf",
+      "resources/clicks/Clickbot/softReleases/click00011692.mov",
+      "resources/clicks/Clickbot/softReleases/click00012029.mov",
+      "resources/clicks/Clickbot/softReleases/click00011810.mov",
+      "resources/clicks/Clickbot/softReleases/click00012012.mov",
+      "resources/clicks/Clickbot/clicks/click00012091.mov",
+      "resources/clicks/Clickbot/clicks/click00011851.mov",
+      "resources/clicks/Clickbot/clicks/click00011661.mov",
+      "resources/clicks/Clickbot/clicks/click00012104.mov",
+      "resources/clicks/Clickbot/clicks/click00012066.mov",
+      "resources/clicks/Clickbot/clicks/click00011878.mov",
+      "resources/clicks/Clickbot/clicks/click00012109.mov",
+      "resources/clicks/Clickbot/clicks/click00011651.mov",
+      "resources/clicks/Clickbot/clicks/click00011628.mov",
+      "resources/clicks/Clickbot/clicks/click00012045.mov",
+      "resources/clicks/Clickbot/clicks/click00011840.mov",
+      "resources/clicks/Clickbot/clicks/click00011825.mov",
+      "resources/clicks/Clickbot/clicks/click00011640.mov",
+      "resources/clicks/Clickbot/clicks/click00011860.mov",
+      "resources/clicks/Clickbot/clicks/click00011865.mov",
+      "resources/clicks/Clickbot/clicks/click00011671.mov",
+      "resources/clicks/Clickbot/softClicks/click00011698.mov",
+      "resources/clicks/Clickbot/softClicks/click00012017.mov",
+      "resources/clicks/Clickbot/softClicks/click00011690.mov",
+      "resources/clicks/Clickbot/softClicks/click00012006.mov",
+      "resources/clicks/Clickbot/releases/click00011863.mov",
+      "resources/clicks/Clickbot/releases/click00012113.mov",
+      "resources/clicks/Clickbot/releases/click00011675.mov",
+      "resources/clicks/Clickbot/releases/click00011666.mov",
+      "resources/clicks/Clickbot/releases/click00011869.mov",
+      "resources/clicks/Clickbot/releases/click00012095.mov",
+      "resources/clicks/Clickbot/releases/click00012107.mov",
+      "resources/clicks/Clickbot/releases/click00011646.mov",
+      "resources/clicks/Clickbot/releases/click00011882.mov",
+      "resources/clicks/Clickbot/releases/click00011855.mov",
+      "resources/clicks/Clickbot/releases/click00012071.mov",
+      "resources/clicks/Clickbot/releases/click00011634.mov",
+      "resources/clicks/Clickbot/releases/click00011844.mov",
+      "resources/clicks/Clickbot/releases/click00011657.mov",
+      "resources/clicks/Clickbot/releases/click00012049.mov",
+      "resources/clicks/Clickbot/releases/click00011829.mov",
+      "resources/fw_default.mp3",
+      "resources/ffmpeg.exe"
+    ]
+  },
+  "tags": [
+    "gameplay",
+    "utility",
+    "cheat"
+  ]
+}
