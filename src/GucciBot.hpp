@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-07-27-a (NEW: Survival Indicator v1 -- a ring drawn at the player's live position, green if the hold-trace from TrajectoryPredictionService survives >= indicatorLookahead frames, red otherwise. Deliberately built on the trajectory/path-preview engine (trajectory.cpp), NOT on the Calculate/frame-window analyzer (framewindow.cpp, fwTiers/fwMarks/analyzeFrameWindows) -- that pipeline still has the unresolved slope-exit physics bug from CALC_SLOPE_EXIT.md (build 2026-07-04-e, never confirmed in-game). v1 scope: one style only (ring), hardcoded green/red, requires 'Show Trajectory' also enabled (rebuildPreview gate) since it reuses that draw pass -- see HacksTab hint text. Untested. Confirm in-game before any further indicator work (styles/color/opacity/sound/decoupling from pathPreview).)"
+#define GB_BUILD_LABEL "2026-07-28-a (Indicator/Calibration/Macro/HUD bulk batch, all untested in-game -- see chat for full list. New Indicators tab: Survival Indicator (4 styles, standalone of Show Trajectory, built on trajectory.cpp not the still-broken Calculate pipeline), pitch-shifted click cue, Calibration (per-gamemode lead/jitter), Accuracy/Streak HUD. Fixed: triggerClickAudio had no caller, click sounds were not playing at all -- now wired into GJBaseGameLayer::handleButton. Macro tab: added Delete (was missing). CALC_SLOPE_EXIT.md slope-exit bug untouched.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
