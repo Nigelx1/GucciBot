@@ -44,7 +44,14 @@ uint32_t GucciUpdater::getFrame() const {
 
 bool GucciUpdater::useFastLockDelta() const {
     auto* gb = GucciEngine::get();
-                                        if (gb->fwAnalyzing) return true;
+    // Calculate must always take the substepped branch (see call site, engine_updater.cpp
+    // runUpdates), but which substep count it uses should track m_lockDeltaMode the exact
+    // same way normal play and the SLRenderer render pass do -- NOT be hardcoded to fast.
+    // Forcing it to fast unconditionally (as before) only matched the renderer when the
+    // user's Lock Delta Mode happened to be Performance; on Accuracy mode (the in-class
+    // default), the renderer takes the slow/4-substep path while Calculate stayed forced
+    // fast/1-substep, reproducing the exact "renderer works, Calculate doesn't" mismatch.
+    if (gb->fwAnalyzing) return m_lockDeltaMode == LockDeltaMode::Performance;
     return m_lockDelta &&
            m_lockDeltaMode == LockDeltaMode::Performance &&
            gb->isPlaying() &&
