@@ -164,6 +164,8 @@ private:
     bool replayRenamePopupRequested=false, replayRenameFocusInput=false;
     bool replayActionPopupRequested=false;
     std::string replayActionMacroName;
+    bool replayDeletePopupRequested=false;
+    std::string replayDeleteName, replayDeleteError;
     bool replayActionIsBRR=false;
 
     int clickPackIndex=0, clickPackIndexP2=0;

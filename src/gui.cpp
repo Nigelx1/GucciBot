@@ -77,6 +77,18 @@ static bool renameStoredReplay(const std::string& oldN,const std::string& req,
     if(ec){err="Rename failed: "+ec.message();return false;}
     finalN=newName;return true;}
 
+static bool deleteStoredReplay(const std::string& name,std::string& err){
+    err.clear();
+    auto dir=getReplayDir();
+    std::error_code ec;
+        std::filesystem::path found;
+    for(auto& e:std::filesystem::directory_iterator(dir,ec)){
+        if(e.is_regular_file()&&e.path().stem().string()==name){found=e.path();break;}}
+    if(found.empty()){err="File not found.";return false;}
+    std::filesystem::remove(found,ec);
+    if(ec){err="Delete failed: "+ec.message();return false;}
+    return true;}
+
 static void drawPopupChrome(MenuInterface& ui,const char* title,float rounding=0.f,float titleBandH=28.f){
     ImVec2 wp=snapPos(ImGui::GetWindowPos()),ws=snapPos(ImGui::GetWindowSize());
     ImDrawList* dl=ImGui::GetWindowDrawList(),*fg=ImGui::GetForegroundDrawList();
@@ -1068,8 +1080,59 @@ void MenuInterface::drawReplayTab(){
             if(loaded){frameEditor.openBRR(replayActionMacroName,loaded);delete loaded;}
             ImGui::CloseCurrentPopup();}}
 
+        ImGui::Dummy(ImVec2(0,4));
+        ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(0.55f,0.12f,0.12f,1.f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered,ImVec4(0.75f,0.18f,0.18f,1.f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,ImVec4(0.4f,0.08f,0.08f,1.f));
+        if(Widgets::StyledButton("Delete##ad",ImVec2(aw,30),theme,anim,6.f)){
+            replayDeleteName=replayActionMacroName;replayDeleteError.clear();
+            ImGui::CloseCurrentPopup();replayDeletePopupRequested=true;}
+        ImGui::PopStyleColor(3);
+
         ImGui::Dummy(ImVec2(0,6));
         if(Widgets::StyledButton("Cancel##ac",ImVec2(aw,28),theme,anim,6.f))ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();}
+    ImGui::PopStyleColor(3);ImGui::PopStyleVar(2);
+        if(replayDeletePopupRequested){ImGui::OpenPopup("DeleteReplay");replayDeletePopupRequested=false;}
+    ImGui::SetNextWindowSize(ImVec2(300,0),ImGuiCond_Appearing);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(14,12));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,0.f);
+    ImGui::PushStyleColor(ImGuiCol_PopupBg,IM_COL32(0,0,0,0));
+    ImGui::PushStyleColor(ImGuiCol_Border,IM_COL32(0,0,0,0));
+    ImGui::PushStyleColor(ImGuiCol_ModalWindowDimBg,IM_COL32(0,0,0,0));
+    if(ImGui::BeginPopupModal("DeleteReplay",nullptr,
+        ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoResize)){
+        drawPopupChrome(*this,"Delete Replay");
+        ImGui::Text("Permanently delete:");
+        ImGui::TextColored(ImVec4(1.f,0.4f,0.4f,1.f),"%s",replayDeleteName.c_str());
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::TextWrapped("This removes the file from disk. It cannot be undone.");
+        ImGui::PopStyleColor();
+        if(!replayDeleteError.empty()){
+            ImGui::Dummy(ImVec2(0,4));
+            ImGui::TextColored(ImVec4(1.f,0.35f,0.35f,1.f),"%s",replayDeleteError.c_str());}
+        ImGui::Dummy(ImVec2(0,10));
+        float pbw=125.f;
+        ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(0.55f,0.12f,0.12f,1.f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered,ImVec4(0.75f,0.18f,0.18f,1.f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,ImVec4(0.4f,0.08f,0.08f,1.f));
+        bool confirmDel=Widgets::StyledButton("Delete##cd",ImVec2(pbw,28),theme,anim,6.f);
+        ImGui::PopStyleColor(3);
+        ImGui::SameLine(0,8);
+        bool cancelDel=Widgets::StyledButton("Cancel##cd",ImVec2(pbw,28),theme,anim,6.f);
+        if(confirmDel){
+            if(deleteStoredReplay(replayDeleteName,replayDeleteError)){
+                auto* eng4=GucciEngine::get();
+                if(!eng4->isRecording()&&eng4->replayName==replayDeleteName){
+                    eng4->replay.m_actionAtom.clear();
+                    eng4->replayName.clear();}
+                eng4->incompatibleMacros.erase(replayDeleteName);
+                eng4->jaMacros.erase(replayDeleteName);eng4->giddeyMacros.erase(replayDeleteName);
+                eng4->toosiiMacros.erase(replayDeleteName);eng4->bamMacros.erase(replayDeleteName);
+                eng4->sexyyMacros.erase(replayDeleteName);
+                replayDeleteName.clear();replayDeleteError.clear();
+                markReplayListDirty();refreshReplayListIfNeeded(true);ImGui::CloseCurrentPopup();}}
+        if(cancelDel){replayDeleteName.clear();replayDeleteError.clear();ImGui::CloseCurrentPopup();}
         ImGui::EndPopup();}
     ImGui::PopStyleColor(3);ImGui::PopStyleVar(2);
         ImGui::SetNextWindowSize(ImVec2(320,0),ImGuiCond_Appearing);
