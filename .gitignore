@@ -1,2 +1,3 @@
 build/
 *.geode
+.claude/scheduled_tasks.lock
