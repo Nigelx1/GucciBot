@@ -2924,6 +2924,31 @@ void displayGameplayHUD(){
     ImGui::End();
 }
 
+void displayAccuracyHUD(){
+    auto* ui=MenuInterface::get();
+    auto* engine=GucciEngine::get();
+    if(!ui||!ui->setupComplete||!engine)return;
+    if(!engine->accuracyHudEnabled)return;
+    if(!PlayLayer::get())return;
+
+    int pct=engine->accuracyTotalClicks>0
+        ? (int)((float)engine->accuracyGoodClicks/(float)engine->accuracyTotalClicks*100.f+0.5f)
+        : 100;
+
+    auto* vp=ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x+10,vp->Pos.y+vp->Size.y-10),ImGuiCond_Always,ImVec2(0,1));
+    ImGui::SetNextWindowSize(ImVec2(0,0),ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(0.45f);
+    ImGui::Begin("##accuracyhud",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoInputs|
+        ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoSavedSettings|
+        ImGuiWindowFlags_NoFocusOnAppearing|ImGuiWindowFlags_NoNav|
+        ImGuiWindowFlags_NoBringToFrontOnFocus);
+    if(ui->fontBody)ImGui::PushFont(ui->fontBody);
+    ImGui::Text("Accuracy: %d%%   Streak: %d (Best: %d)",pct,engine->currentStreak,engine->bestStreak);
+    if(ui->fontBody)ImGui::PopFont();
+    ImGui::End();
+}
+
 $on_mod(Loaded){
     ImGuiCocos::get()
         .setup([]{MenuInterface::get()->initialize();})
@@ -2932,4 +2957,5 @@ $on_mod(Loaded){
             ui->drawInterface();
             displayOverlayBranding();
             displayRenderHUD();
-            displayGameplayHUD();});}
+            displayGameplayHUD();
+            displayAccuracyHUD();});}
