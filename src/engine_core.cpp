@@ -198,6 +198,53 @@ static fs::path fwSidecarPath(const fs::path& macroPath) {
     return fs::path(macroPath.string() + ".fw");
 }
 
+static fs::path pathSamplesSidecarPath(const fs::path& macroPath) {
+    return fs::path(macroPath.string() + ".path");
+}
+
+static void savePathSamples(const fs::path& macroPath, const std::vector<MacroPathSample>& samples) {
+    auto sc = pathSamplesSidecarPath(macroPath);
+    std::error_code ec;
+    if (samples.empty()) { fs::remove(sc, ec); return; }
+    std::ofstream f(sc, std::ios::binary);
+    if (!f) return;
+    f.write("GBPS", 4);
+    uint8_t ver = 1; f.write((const char*)&ver, 1);
+    uint32_t n = (uint32_t)samples.size(); f.write((const char*)&n, 4);
+    for (auto const& s : samples) {
+        f.write((const char*)&s.p1x, 4);
+        f.write((const char*)&s.p1y, 4);
+        f.write((const char*)&s.p2x, 4);
+        f.write((const char*)&s.p2y, 4);
+        f.write(&s.gamemode1, 1);
+        f.write(&s.gamemode2, 1);
+    }
+}
+
+static void loadPathSamples(const fs::path& macroPath, std::vector<MacroPathSample>& samples) {
+    samples.clear();
+    auto sc = pathSamplesSidecarPath(macroPath);
+    if (!fs::exists(sc)) return;
+    std::ifstream f(sc, std::ios::binary);
+    if (!f) return;
+    char magic[4] = {};
+    f.read(magic, 4);
+    if (std::memcmp(magic, "GBPS", 4) != 0) return;
+    uint8_t ver = 0; f.read((char*)&ver, 1);
+    if (ver != 1) return;
+    uint32_t n = 0; f.read((char*)&n, 4);
+    samples.reserve(n);
+    for (uint32_t i = 0; i < n; ++i) {
+        MacroPathSample s;
+        f.read((char*)&s.p1x, 4); f.read((char*)&s.p1y, 4);
+        f.read((char*)&s.p2x, 4); f.read((char*)&s.p2y, 4);
+        f.read(&s.gamemode1, 1); f.read(&s.gamemode2, 1);
+        if (!f) break;
+        samples.push_back(s);
+    }
+    log::info("[GucciBot] Macro path: loaded {} sample(s) from sidecar", samples.size());
+}
+
 static void saveFwMarks(const fs::path& macroPath) {
     auto* gb = GucciEngine::get();
     auto sc  = fwSidecarPath(macroPath);
@@ -293,6 +340,7 @@ void GucciReplaySystem::save(const fs::path& path, bool noOverwrite) {
         log::info("[GucciBot] Saved with {} intentional-death marker(s)", f.deaths.size());
     }
     saveFwMarks(path);
+    savePathSamples(path, m_pathSamples);
 }
 
 void GucciReplaySystem::load(const fs::path& path) {
@@ -327,6 +375,7 @@ void GucciReplaySystem::load(const fs::path& path) {
         log::info("[GucciBot] Loaded GBR6: {} inputs, {} death marker(s)",
                   m_actionAtom.length(), f.deaths.size());
         loadFwMarks(path);
+        loadPathSamples(path, m_pathSamples);
         return;
     }
 

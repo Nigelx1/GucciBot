@@ -308,6 +308,17 @@ static void earlyUpdateMidhook(SafetyHookContext&) {
     }
 }
 
+static char gamemodeChar(PlayerObject* p) {
+    if (!p) return 'C';
+    if (p->m_isRobot)  return 'R';
+    if (p->m_isSpider) return 'X';
+    if (p->m_isShip)   return 'H';
+    if (p->m_isBall)   return 'B';
+    if (p->m_isBird)   return 'U';
+    if (p->m_isDart)   return 'V';
+    return 'C';
+}
+
 static void frameUpdateMidhook(SafetyHookContext&) {
     auto* gb  = GucciEngine::get();
     auto& upd = gb->updater;
@@ -316,6 +327,22 @@ static void frameUpdateMidhook(SafetyHookContext&) {
 
     if (!pl->m_playerDied) {
         if (PlayLayer::get()) upd.incrementFrame();
+
+        if (gb->isRecording()) {
+            auto* plr = PlayLayer::get();
+            if (plr && plr->m_player1) {
+                MacroPathSample smp;
+                smp.p1x = plr->m_player1->m_position.x;
+                smp.p1y = plr->m_player1->m_position.y;
+                smp.gamemode1 = gamemodeChar(plr->m_player1);
+                if (plr->m_player2) {
+                    smp.p2x = plr->m_player2->m_position.x;
+                    smp.p2y = plr->m_player2->m_position.y;
+                    smp.gamemode2 = gamemodeChar(plr->m_player2);
+                }
+                gb->replay.m_pathSamples.push_back(smp);
+            }
+        }
     }
 
                             if (gb->isPlaying()) {

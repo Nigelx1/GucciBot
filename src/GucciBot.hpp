@@ -90,6 +90,13 @@ public:
     void registerBrokenObject(GameObject* obj) { (void)obj; }
 };
 
+struct MacroPathSample {
+    float p1x = 0.f, p1y = 0.f;
+    float p2x = 0.f, p2y = 0.f;
+    char  gamemode1 = 'C';
+    char  gamemode2 = 'C';
+};
+
 class GucciReplaySystem {
 public:
     gb::ActionAtom m_actionAtom;
@@ -98,6 +105,11 @@ public:
     uint64_t       m_startingSeedThisAttempt = 0;
     uint64_t       m_shakeRandomState = 0;
     std::string    m_replayName   = "";
+
+    // Ground-truth position/gamemode per frame, captured live while recording
+    // (index == frame). Used to draw the macro's path + click/release markers
+    // without re-simulating anything -- see MacroPathOverlay (macropath.cpp).
+    std::vector<MacroPathSample> m_pathSamples;
 
     bool m_mirrorInputs        = false;
     bool m_mirrorInverted      = false;
@@ -310,6 +322,12 @@ public:
     int   accuracyTotalClicks  = 0;
     int   currentStreak        = 0;
     int   bestStreak           = 0;
+
+    // Macro path preview: draws the loaded macro's recorded path + click/release
+    // markers (from GucciReplaySystem::m_pathSamples), independent of live prediction.
+    bool  showMacroPath        = false;
+    float macroPathMarkerSize  = 8.f;
+    float macroPathLineOpacity = 0.6f;
     bool layoutMode            = false;
     bool noMirrorEffect        = false;
     bool noMirrorRecordingOnly = false;

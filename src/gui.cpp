@@ -782,6 +782,7 @@ void MenuInterface::drawReplayTab(){
                                     if(engine->beginResumeRecording()){anim.closing=true;anim.opening=false;}
         } else {
             engine->replay.m_actionAtom.clear();
+            engine->replay.m_pathSamples.clear();
             engine->replay.m_inputIndex = 0;
             engine->updater.resetFrame();
             engine->updater.m_frameOnLastAttempt = 0;
@@ -1281,6 +1282,22 @@ void MenuInterface::drawReplayTab(){
         }
         ImGui::Dummy(ImVec2(0,4));
         Widgets::ToggleSwitch("Ignore Manual Input",&engine->replay.m_ignoreInputs,theme,anim);
+        if(engine->replay.m_pathSamples.empty()){
+            ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+            ImGui::TextWrapped("No path data for this macro -- only recorded going forward, not backfilled for older macros.");
+            ImGui::PopStyleColor();
+        } else if(Widgets::ToggleSwitch("Show Macro Path",&engine->showMacroPath,theme,anim)){
+            Mod::get()->setSavedValue("hack_show_macro_path",engine->showMacroPath);
+        }
+        if(engine->showMacroPath&&!engine->replay.m_pathSamples.empty()){
+            if(Widgets::StyledSliderFloat("Marker Size",&engine->macroPathMarkerSize,3.f,20.f,theme))
+                Mod::get()->setSavedValue("hack_macro_path_marker_size",(double)engine->macroPathMarkerSize);
+            if(Widgets::StyledSliderFloat("Line Opacity",&engine->macroPathLineOpacity,0.1f,1.f,theme))
+                Mod::get()->setSavedValue("hack_macro_path_line_opacity",(double)engine->macroPathLineOpacity);
+            ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+            ImGui::TextWrapped("Line shows the recorded path. Squares mark clicks (and releases in Wave/Robot/Ship) -- drawn with an inverted-colour blend so they stay visible over any terrain.");
+            ImGui::PopStyleColor();
+        }
     }
 }
 
@@ -2470,6 +2487,9 @@ void MenuInterface::saveSettings(){
     mod->setSavedValue("hack_indicator_flash",eng->indicatorFlashEnabled);
     mod->setSavedValue("hack_indicator_sound",eng->indicatorSoundEnabled);
     mod->setSavedValue("hack_accuracy_hud",eng->accuracyHudEnabled);
+    mod->setSavedValue("hack_show_macro_path",eng->showMacroPath);
+    mod->setSavedValue("hack_macro_path_marker_size",(double)eng->macroPathMarkerSize);
+    mod->setSavedValue("hack_macro_path_line_opacity",(double)eng->macroPathLineOpacity);
     mod->setSavedValue("hack_noclip",eng->noclipEnabled);
     mod->setSavedValue("hack_noclip_flash",eng->noclipDeathFlash);
     mod->setSavedValue("hack_noclip_color_r",eng->noclipDeathColorR);
@@ -2645,6 +2665,9 @@ void MenuInterface::loadSettings(){
     eng->indicatorFlashEnabled=mod->getSavedValue<bool>("hack_indicator_flash",true);
     eng->indicatorSoundEnabled=mod->getSavedValue<bool>("hack_indicator_sound",false);
     eng->accuracyHudEnabled=mod->getSavedValue<bool>("hack_accuracy_hud",false);
+    eng->showMacroPath=mod->getSavedValue<bool>("hack_show_macro_path",false);
+    eng->macroPathMarkerSize=mod->getSavedValue<float>("hack_macro_path_marker_size",8.f);
+    eng->macroPathLineOpacity=mod->getSavedValue<float>("hack_macro_path_line_opacity",0.6f);
     eng->noclipEnabled=mod->getSavedValue<bool>("hack_noclip",false);
     eng->noclipDeathFlash=mod->getSavedValue<bool>("hack_noclip_flash",true);
     eng->noclipDeathColorR=mod->getSavedValue<float>("hack_noclip_color_r",1.f);
