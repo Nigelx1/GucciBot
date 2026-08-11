@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-07-28-e (SLOPE-EXIT: hijack theory CONCLUSIVELY DISPROVEN. guccibot_hijack.log came back with 18.3M lines (5M during an actual Calculate run, pathPreview/survivalIndicator on the whole time) and ZERO isRealPlayer=1 -- the ghost-sim flag never once overlaps with real-player collision handling. Three theories now eliminated with real data: dt/substep mismatch (-b), checkpoint/probe-restart (-c), ghost-sim hijack (-d). No 4th hypothesis queued. Removed all the disproven-theory instrumentation (hijack log + sim=/pv=/si= slope-log fields) so it stops generating gigabytes per session for no reason -- guccibot_slope.log is back to its original 2026-07-04 format. Original CALC_SLOPE_EXIT.md symptom (CALC undershoots a y-launch impulse REND/PLAY both catch, e.g. Bloodbath f=1718) remains unexplained. Do not stack a 4th guess on top blind -- see chat for what's actually been verified vs still open.)"
+#define GB_BUILD_LABEL "2026-08-11-a (P3 NEW APPROACH: stop trying to fix Calculate's physics accuracy, sidestep it instead. Calculate's capture pass now force-applies ground-truth kinematic state (position/velocity/rotation/onGround/upsideDown) captured live during the ORIGINAL RECORDING (MacroPathSample, extended today with more than position -- was position-only for the macro-path-line feature) every frame, instead of trusting its own physics tick to re-derive the same values -- which is exactly what's been diverging all session (e.g. missing the Bloodbath f=1718 slope-exit launch) for a mechanism never conclusively identified despite three ruled-out theories (dt/substep, checkpoint/probe-restart, ghost-sim hijack). Only engages when the loaded macro has v2 path-sample data (recorded after today) -- older macros silently fall back to unforced behavior, nothing breaks for them. Does NOT touch Calculate's probe phase (testing shifted click timings) -- that still needs genuine simulation since ground truth only has the one timing that actually happened; forcing just gives each probe a correct starting state up to the shift point instead of accumulated-simulation-error state. Nigel's idea, from the same principle as macropath.cpp: don't re-derive what you can just record. UNTESTED -- verify by re-recording a macro over the Bloodbath slope, then running Calculate and checking whether the f=1718 mark's window looks right (or just eyeball whether noclip/desync still happens on that pass).)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -92,9 +92,18 @@ public:
 
 struct MacroPathSample {
     float p1x = 0.f, p1y = 0.f;
-    float p2x = 0.f, p2y = 0.f;
+    float p1XVel = 0.f, p1YVel = 0.f;
+    float p1Rot = 0.f;
+    bool  p1OnGround = false, p1UpsideDown = false, p1Dashing = false;
     char  gamemode1 = 'C';
+
+    float p2x = 0.f, p2y = 0.f;
+    float p2XVel = 0.f, p2YVel = 0.f;
+    float p2Rot = 0.f;
+    bool  p2OnGround = false, p2UpsideDown = false, p2Dashing = false;
     char  gamemode2 = 'C';
+
+    bool hasP2 = false;
 };
 
 class GucciReplaySystem {

@@ -209,14 +209,22 @@ static void savePathSamples(const fs::path& macroPath, const std::vector<MacroPa
     std::ofstream f(sc, std::ios::binary);
     if (!f) return;
     f.write("GBPS", 4);
-    uint8_t ver = 1; f.write((const char*)&ver, 1);
+    uint8_t ver = 2; f.write((const char*)&ver, 1);
     uint32_t n = (uint32_t)samples.size(); f.write((const char*)&n, 4);
     for (auto const& s : samples) {
-        f.write((const char*)&s.p1x, 4);
-        f.write((const char*)&s.p1y, 4);
-        f.write((const char*)&s.p2x, 4);
-        f.write((const char*)&s.p2y, 4);
+        f.write((const char*)&s.p1x, 4);     f.write((const char*)&s.p1y, 4);
+        f.write((const char*)&s.p1XVel, 4);  f.write((const char*)&s.p1YVel, 4);
+        f.write((const char*)&s.p1Rot, 4);
+        uint8_t p1flags = (s.p1OnGround ? 1 : 0) | (s.p1UpsideDown ? 2 : 0) | (s.p1Dashing ? 4 : 0);
+        f.write((const char*)&p1flags, 1);
         f.write(&s.gamemode1, 1);
+
+        f.write((const char*)&s.p2x, 4);     f.write((const char*)&s.p2y, 4);
+        f.write((const char*)&s.p2XVel, 4);  f.write((const char*)&s.p2YVel, 4);
+        f.write((const char*)&s.p2Rot, 4);
+        uint8_t p2flags = (s.p2OnGround ? 1 : 0) | (s.p2UpsideDown ? 2 : 0) | (s.p2Dashing ? 4 : 0)
+                        | (s.hasP2 ? 8 : 0);
+        f.write((const char*)&p2flags, 1);
         f.write(&s.gamemode2, 1);
     }
 }
@@ -231,14 +239,26 @@ static void loadPathSamples(const fs::path& macroPath, std::vector<MacroPathSamp
     f.read(magic, 4);
     if (std::memcmp(magic, "GBPS", 4) != 0) return;
     uint8_t ver = 0; f.read((char*)&ver, 1);
-    if (ver != 1) return;
+    if (ver != 2) return; // v1 sidecars (position-only) are silently dropped -- re-record to get force-capture support
     uint32_t n = 0; f.read((char*)&n, 4);
     samples.reserve(n);
     for (uint32_t i = 0; i < n; ++i) {
         MacroPathSample s;
-        f.read((char*)&s.p1x, 4); f.read((char*)&s.p1y, 4);
-        f.read((char*)&s.p2x, 4); f.read((char*)&s.p2y, 4);
-        f.read(&s.gamemode1, 1); f.read(&s.gamemode2, 1);
+        f.read((char*)&s.p1x, 4);    f.read((char*)&s.p1y, 4);
+        f.read((char*)&s.p1XVel, 4); f.read((char*)&s.p1YVel, 4);
+        f.read((char*)&s.p1Rot, 4);
+        uint8_t p1flags = 0; f.read((char*)&p1flags, 1);
+        s.p1OnGround = p1flags & 1; s.p1UpsideDown = p1flags & 2; s.p1Dashing = p1flags & 4;
+        f.read(&s.gamemode1, 1);
+
+        f.read((char*)&s.p2x, 4);    f.read((char*)&s.p2y, 4);
+        f.read((char*)&s.p2XVel, 4); f.read((char*)&s.p2YVel, 4);
+        f.read((char*)&s.p2Rot, 4);
+        uint8_t p2flags = 0; f.read((char*)&p2flags, 1);
+        s.p2OnGround = p2flags & 1; s.p2UpsideDown = p2flags & 2; s.p2Dashing = p2flags & 4;
+        s.hasP2 = p2flags & 8;
+        f.read(&s.gamemode2, 1);
+
         if (!f) break;
         samples.push_back(s);
     }

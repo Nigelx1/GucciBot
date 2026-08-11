@@ -331,16 +331,69 @@ static void frameUpdateMidhook(SafetyHookContext&) {
         if (gb->isRecording()) {
             auto* plr = PlayLayer::get();
             if (plr && plr->m_player1) {
+                auto* p1 = plr->m_player1;
                 MacroPathSample smp;
-                smp.p1x = plr->m_player1->m_position.x;
-                smp.p1y = plr->m_player1->m_position.y;
-                smp.gamemode1 = gamemodeChar(plr->m_player1);
-                if (plr->m_player2) {
-                    smp.p2x = plr->m_player2->m_position.x;
-                    smp.p2y = plr->m_player2->m_position.y;
-                    smp.gamemode2 = gamemodeChar(plr->m_player2);
+                smp.p1x = p1->m_position.x;
+                smp.p1y = p1->m_position.y;
+                smp.p1XVel = p1->m_playerSpeed;
+                smp.p1YVel = (float)p1->m_yVelocity;
+                smp.p1Rot = p1->getRotation();
+                smp.p1OnGround = p1->m_isOnGround;
+                smp.p1UpsideDown = p1->m_isUpsideDown;
+                smp.p1Dashing = p1->m_isDashing;
+                smp.gamemode1 = gamemodeChar(p1);
+
+                if (plr->m_gameState.m_isDualMode && plr->m_player2) {
+                    auto* p2 = plr->m_player2;
+                    smp.hasP2 = true;
+                    smp.p2x = p2->m_position.x;
+                    smp.p2y = p2->m_position.y;
+                    smp.p2XVel = p2->m_playerSpeed;
+                    smp.p2YVel = (float)p2->m_yVelocity;
+                    smp.p2Rot = p2->getRotation();
+                    smp.p2OnGround = p2->m_isOnGround;
+                    smp.p2UpsideDown = p2->m_isUpsideDown;
+                    smp.p2Dashing = p2->m_isDashing;
+                    smp.gamemode2 = gamemodeChar(p2);
                 }
                 gb->replay.m_pathSamples.push_back(smp);
+            }
+        }
+
+        // Calculate's capture pass: force the player's kinematic state to match
+        // ground truth captured during the original recording, instead of trusting
+        // this pass's own physics tick to independently re-derive the same values.
+        // This is deliberate -- the whole P3 investigation has been chasing WHY
+        // Calculate's simulation diverges from the real playthrough at certain
+        // frames (e.g. missing a slope-exit launch impulse) without finding the
+        // mechanism. Forcing ground truth here sidesteps needing to ever find it,
+        // for the capture pass specifically. Only engages when the loaded macro
+        // actually has path-sample data (recorded after this feature existed) --
+        // older macros silently fall back to the previous (unforced) behavior.
+        if (gb->fwAnalyzing && gb->fwState == GucciEngine::FwState::Capturing) {
+            auto& samples = gb->replay.m_pathSamples;
+            uint32_t frame = upd.getFrame();
+            if (frame < samples.size()) {
+                auto* plr = PlayLayer::get();
+                auto const& s = samples[frame];
+                if (plr && plr->m_player1) {
+                    auto* p1 = plr->m_player1;
+                    p1->setPosition({ s.p1x, s.p1y });
+                    p1->m_playerSpeed = s.p1XVel;
+                    p1->m_yVelocity   = s.p1YVel;
+                    p1->setRotation(s.p1Rot);
+                    p1->m_isOnGround   = s.p1OnGround;
+                    p1->m_isUpsideDown = s.p1UpsideDown;
+                }
+                if (s.hasP2 && plr && plr->m_player2) {
+                    auto* p2 = plr->m_player2;
+                    p2->setPosition({ s.p2x, s.p2y });
+                    p2->m_playerSpeed = s.p2XVel;
+                    p2->m_yVelocity   = s.p2YVel;
+                    p2->setRotation(s.p2Rot);
+                    p2->m_isOnGround   = s.p2OnGround;
+                    p2->m_isUpsideDown = s.p2UpsideDown;
+                }
             }
         }
     }

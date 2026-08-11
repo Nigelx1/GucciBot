@@ -85,7 +85,7 @@ private:
 
         bool dual = false;
         for (auto const& s : samples) {
-            if (s.p2x != 0.f || s.p2y != 0.f) { dual = true; break; }
+            if (s.hasP2) { dual = true; break; }
         }
 
         ccColor4F lineColor{ 1.f, 1.f, 1.f, gb->macroPathLineOpacity };
