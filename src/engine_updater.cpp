@@ -391,7 +391,8 @@ static void frameUpdateMidhook(SafetyHookContext&) {
                           : 'C';
                 slopeLog(fmt::format(
                     "{} f={} x={:.3f} y={:.3f} xs={:.3f} ys={:.3f} rot={:.3f} "
-                    "g={} flip={} dash={} mode={} hold={} steps={} ovf={:.4f} rs={} ckpt={} fast={} q={}",
+                    "g={} flip={} dash={} mode={} hold={} steps={} ovf={:.4f} rs={} ckpt={} fast={} q={} "
+                    "onS={} wasS={} sVel={:.4f} preSV={:.4f} colS={} ang={:.2f} st={:.3f} et={:.3f} curS={}",
                     slRender ? "REND" : (gb->fwAnalyzing ? "CALC" : "PLAY"),
                     upd.getFrame(),
                     (double)p->m_position.x, (double)p->m_position.y,
@@ -407,7 +408,16 @@ static void frameUpdateMidhook(SafetyHookContext&) {
                     upd.m_respawnTimer,
                     gb->fwCkptCreatedThisFrame ? 1 : 0,
                     upd.useFastLockDelta() ? 1 : 0,
-                    gb->replay.getCurrentQueuedInput().has_value() ? 1 : 0));
+                    gb->replay.getCurrentQueuedInput().has_value() ? 1 : 0,
+                    p->m_isOnSlope ? 1 : 0,
+                    p->m_wasOnSlope ? 1 : 0,
+                    (double)p->m_slopeVelocity,
+                    (double)p->m_yVelocityBeforeSlope,
+                    p->m_isCollidingWithSlope ? 1 : 0,
+                    (double)p->m_slopeAngle,
+                    (double)p->m_slopeStartTime,
+                    (double)p->m_slopeEndTime,
+                    p->m_currentSlope ? 1 : 0));
             }
         }
     }
