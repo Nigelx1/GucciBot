@@ -59,6 +59,115 @@ static void drawSolidRect(ImDrawList* dl,ImVec2 mn,ImVec2 mx,float r,const Theme
     dl->AddRectFilled(mn,mx,toU32(fill),r);
     if(border)dl->AddRect(mn,mx,t.getAccentU32(0.18f*a),r,0,1.f);}
 
+// N-pointed outline star, points alternating outer/inner radius, as a closed polyline.
+static std::vector<ImVec2> jupiterStarPoints(ImVec2 center,float outerR,float innerR,int points,float rotRad){
+    std::vector<ImVec2> pts;
+    int total=points*2;
+    for(int i=0;i<total;i++){
+        float r=(i%2==0)?outerR:innerR;
+        float a=rotRad+(float)i/(float)total*2.0f*3.14159265f;
+        pts.push_back(ImVec2(center.x+r*cosf(a),center.y+r*sinf(a)));
+    }
+    return pts;
+}
+
+// The whole menu window becomes the art piece when the Jupiter tab is active --
+// not a themed box living inside a normal-looking app. Pulled from Nigel's 8
+// checkpoint screenshots: the gold orbit-ring-with-star ornament, scattered
+// outline stars, a faint crosshatch grid, drifting cyan pixel-squares, and a
+// dark skyline silhouette. Hand-drawn vector shapes (no ripped assets), drawn
+// on the WINDOW draw list across the full window rect (title bar, tab rail,
+// content, status bar) so nothing about the window reads as "normal app skin
+// plus a themed tab" -- everything behind the widgets is reskinned.
+static void drawJupiterBackdrop(ImDrawList* dl,ImVec2 pos,ImVec2 size,float time){
+    ImU32 goldFaint = IM_COL32(230,200,80,34);
+
+    ImVec2 ringCenter(pos.x+size.x*0.90f,pos.y+size.y*0.85f);
+    float baseR=size.x*0.30f;
+    for(int i=0;i<4;i++){
+        float r=baseR-(float)i*20.f;
+        if(r<10.f)continue;
+        dl->AddCircle(ringCenter,r,IM_COL32(230,200,80,22+i*5),64,1.6f);
+    }
+    auto starOrn=jupiterStarPoints(ringCenter,baseR*0.45f,baseR*0.18f,5,time*0.06f);
+    dl->AddPolyline(starOrn.data(),(int)starOrn.size(),IM_COL32(230,200,80,32),ImDrawFlags_Closed,1.6f);
+
+    struct StarSpec{float x,y,r,rot;int pts;};
+    static const StarSpec stars[]={
+        {0.04f,0.10f,11.f,0.3f,5},{0.10f,0.42f,8.f,1.1f,4},{0.20f,0.75f,9.f,0.6f,4},
+        {0.30f,0.20f,10.f,0.9f,5},{0.38f,0.55f,7.f,0.2f,4},{0.48f,0.85f,10.f,1.4f,5},
+        {0.58f,0.15f,7.f,0.5f,4},{0.64f,0.48f,9.f,1.0f,4},{0.72f,0.75f,8.f,0.8f,5},
+        {0.15f,0.92f,8.f,1.7f,4},{0.55f,0.35f,6.f,2.2f,4},{0.35f,0.05f,7.f,0.4f,5},
+    };
+    for(auto const& s:stars){
+        ImVec2 c(pos.x+size.x*s.x,pos.y+size.y*s.y);
+        auto pts=jupiterStarPoints(c,s.r,s.r*0.4f,s.pts,s.rot);
+        dl->AddPolyline(pts.data(),(int)pts.size(),IM_COL32(230,200,80,42),ImDrawFlags_Closed,1.3f);
+    }
+
+    float spacing=36.f;
+    for(float x=pos.x;x<pos.x+size.x;x+=spacing)
+        dl->AddLine(ImVec2(x,pos.y),ImVec2(x,pos.y+size.y),goldFaint,1.f);
+    for(float y=pos.y;y<pos.y+size.y;y+=spacing)
+        dl->AddLine(ImVec2(pos.x,y),ImVec2(pos.x+size.x,y),goldFaint,1.f);
+
+    struct DustSpec{float x,y,sz,phase;};
+    static const DustSpec dust[]={
+        {0.06f,0.20f,4.f,0.f},{0.14f,0.60f,3.f,1.2f},{0.24f,0.35f,5.f,2.1f},
+        {0.34f,0.70f,3.f,0.4f},{0.44f,0.25f,4.f,3.0f},{0.52f,0.65f,3.f,1.8f},
+        {0.62f,0.30f,5.f,2.6f},{0.70f,0.55f,3.f,0.9f},{0.80f,0.20f,4.f,1.5f},
+        {0.86f,0.68f,3.f,2.9f},{0.92f,0.15f,5.f,0.7f},{0.28f,0.15f,3.f,2.3f},
+    };
+    for(auto const& d:dust){
+        float drift=sinf(time*0.6f+d.phase)*6.f;
+        float alpha=0.18f+0.12f*sinf(time*0.9f+d.phase*1.7f);
+        ImVec2 c(pos.x+size.x*d.x,pos.y+size.y*d.y+drift);
+        dl->AddRectFilled(ImVec2(c.x-d.sz,c.y-d.sz),ImVec2(c.x+d.sz,c.y+d.sz),
+            IM_COL32(70,215,235,(int)(alpha*255)));
+    }
+
+    float baseY=pos.y+size.y;
+    float bx=pos.x;
+    int seed=17;
+    while(bx<pos.x+size.x){
+        seed=(seed*1103515245+12345)&0x7fffffff;
+        float bw=40.f+(float)(seed%50);
+        seed=(seed*1103515245+12345)&0x7fffffff;
+        float bh=18.f+(float)(seed%34);
+        dl->AddRectFilled(ImVec2(bx,baseY-bh),ImVec2(bx+bw-3.f,baseY),IM_COL32(8,5,22,150));
+        seed=(seed*1103515245+12345)&0x7fffffff;
+        if(seed%3==0){
+            dl->AddRectFilled(ImVec2(bx+bw*0.35f,baseY-bh*0.7f),ImVec2(bx+bw*0.5f,baseY-bh*0.55f),IM_COL32(230,200,80,130));
+        }
+        bx+=bw;
+    }
+}
+
+// The art project doesn't stop at the window border -- a soft gold/cyan aura
+// bleeds out past the edge, and a few stars drift in a slow orbit just outside
+// the window, on the foreground (unclipped, screen-space) draw list.
+static void drawJupiterBleed(ImDrawList* fdl,ImVec2 wp,ImVec2 ws,float time){
+    for(int i=0;i<6;i++){
+        float o=(float)(i+1)*8.f;
+        int alpha=std::max(2,18-i*3);
+        ImU32 col=(i%2==0)?IM_COL32(230,200,80,alpha):IM_COL32(70,215,235,alpha);
+        fdl->AddRect(ImVec2(wp.x-o,wp.y-o),ImVec2(wp.x+ws.x+o,wp.y+ws.y+o),col,12.f+o*0.3f,0,2.f);
+    }
+    struct BleedStar{float ang,dist,r,speed;int pts;};
+    static const BleedStar bstars[]={
+        {0.2f,30.f,8.f,0.15f,4},{2.1f,40.f,10.f,0.11f,5},{4.0f,26.f,7.f,0.18f,4},
+        {5.3f,36.f,9.f,0.13f,5},{1.1f,46.f,6.f,0.09f,4},
+    };
+    ImVec2 center(wp.x+ws.x*0.5f,wp.y+ws.y*0.5f);
+    float rx=ws.x*0.5f,ry=ws.y*0.5f;
+    for(auto const& s:bstars){
+        float a=s.ang+time*s.speed;
+        ImVec2 c(center.x+(rx+s.dist)*cosf(a),center.y+(ry+s.dist)*sinf(a));
+        auto pts=jupiterStarPoints(c,s.r,s.r*0.4f,s.pts,a);
+        fdl->AddPolyline(pts.data(),(int)pts.size(),IM_COL32(230,200,80,55),ImDrawFlags_Closed,1.4f);
+    }
+}
+
 namespace{
 static std::filesystem::path getReplayDir(){return GucciEngine::get()->getReplayDir();}
 static bool renameStoredReplay(const std::string& oldN,const std::string& req,
@@ -541,7 +650,9 @@ void MenuInterface::drawTabBar(){
         if(fontSmall)ImGui::PushFont(fontSmall);
         ImVec2 ts=ImGui::CalcTextSize(names[i]);
         ImVec2 tp(tMin.x+(tabW-ts.x)*0.5f,tMin.y+(tabH-ts.y)*0.5f);
-        ImU32 tc=(activeTab==i)?theme.getAccentU32(0.98f):(hov?theme.getTextU32():theme.getTextSecondaryU32());
+        ImU32 tc=(activeTab==i)?theme.getAccentU32(0.98f)
+            :(i==6)?IM_COL32(200,175,90,190) // Jupiter tab stays warm gold even when inactive
+            :(hov?theme.getTextU32():theme.getTextSecondaryU32());
         dl->AddText(tp,tc,names[i]);
         if(fontSmall)ImGui::PopFont();}
         float indW=tabW*0.5f,indX=tabIndicatorX+(tabW-indW)*0.5f;
@@ -637,9 +748,22 @@ void MenuInterface::drawTabContent(){
 
 void MenuInterface::drawMainWindow(){
     auto* engine=GucciEngine::get();
-    theme.applyToImGuiStyle();
     float t=anim.easeOutCubic(anim.openProgress);
     if(t<=0.f)return;
+
+        // Jupiter tab: reskin the WHOLE window's theme (title bar, tab bar, status
+    // bar, every widget) for as long as this tab is active, not just its own
+    // content -- restored at the end of this function either way.
+    bool jupiterActive=(activeTab==6);
+    ThemeEngine savedTheme=theme;
+    if(jupiterActive){
+        theme.accentColor   = ImVec4(0.90f,0.78f,0.25f,1.f);
+        theme.bgColor       = ImVec4(0.10f,0.06f,0.30f,theme.bgOpacity);
+        theme.cardColor     = ImVec4(0.15f,0.10f,0.38f,1.f);
+        theme.textPrimary   = ImVec4(0.95f,0.93f,0.88f,1.f);
+        theme.textSecondary = ImVec4(0.62f,0.57f,0.80f,1.f);
+    }
+    theme.applyToImGuiStyle();
     ImVec2 center=ImGui::GetMainViewport()->GetCenter();
     if(!windowPosInitialized){
         ImGui::SetNextWindowPos(ImVec2(center.x-windowSize.x*0.5f,center.y-windowSize.y*0.5f),ImGuiCond_Always);
@@ -670,24 +794,41 @@ void MenuInterface::drawMainWindow(){
     windowPos=ImGui::GetWindowPos();
     ImDrawList* dl=ImGui::GetWindowDrawList();
     ImVec2 wp=windowPos,ws=ImGui::GetWindowSize();
+    if(jupiterActive){
+        drawJupiterBackdrop(dl,wp,ws,(float)ImGui::GetTime());
+        drawJupiterBleed(ImGui::GetForegroundDrawList(),wp,ws,(float)ImGui::GetTime());
+    }
         dl->AddRect(wp,ImVec2(wp.x+ws.x,wp.y+ws.y),theme.getAccentU32(0.35f),theme.cornerRadius,0,1.5f);
     drawTitleBar();
     ImGui::SetNextWindowContentSize(ImVec2(0,0));
     float contentH=ws.y-52-40-14;
+    if(jupiterActive)ImGui::PushStyleColor(ImGuiCol_ChildBg,IM_COL32(0,0,0,0));
     ImGui::BeginChild("##content",ImVec2(-1,contentH),false,ImGuiWindowFlags_NoScrollbar);
     drawTabBar();
     ImGui::BeginChild("##tabcontent",ImVec2(-1,-1),false);
     drawTabContent();
     ImGui::EndChild();
     ImGui::EndChild();
+    if(jupiterActive)ImGui::PopStyleColor();
     drawStatusBar();
     ImGui::End();
-    ImGui::PopStyleVar();}
+    ImGui::PopStyleVar();
+    if(jupiterActive)theme=savedTheme;}
 
 void MenuInterface::drawMegaHackWindow(){
-    theme.applyToImGuiStyle();
     float t=anim.easeOutCubic(anim.openProgress);
     if(t<=0.f)return;
+
+    bool jupiterActive=(activeTab==6);
+    ThemeEngine savedTheme=theme;
+    if(jupiterActive){
+        theme.accentColor   = ImVec4(0.90f,0.78f,0.25f,1.f);
+        theme.bgColor       = ImVec4(0.10f,0.06f,0.30f,theme.bgOpacity);
+        theme.cardColor     = ImVec4(0.15f,0.10f,0.38f,1.f);
+        theme.textPrimary   = ImVec4(0.95f,0.93f,0.88f,1.f);
+        theme.textSecondary = ImVec4(0.62f,0.57f,0.80f,1.f);
+    }
+    theme.applyToImGuiStyle();
     ImVec2 center=ImGui::GetMainViewport()->GetCenter();
     ImVec2 mhSize(620.f,400.f);
     ImGui::SetNextWindowPos(ImVec2(center.x-mhSize.x*0.5f,center.y-mhSize.y*0.5f),ImGuiCond_FirstUseEver);
@@ -707,6 +848,10 @@ void MenuInterface::drawMegaHackWindow(){
     dl->AddRectFilled(wp,ImVec2(wp.x+ws.x,wp.y+ws.y),bgMain,rnd);
     dl->AddRectFilled(wp,ImVec2(wp.x+railW,wp.y+ws.y),bgRail,rnd,ImDrawFlags_RoundCornersLeft);
     dl->AddRectFilled(ImVec2(wp.x+railW,wp.y),ImVec2(wp.x+ws.x,wp.y+headH),bgHead,rnd,ImDrawFlags_RoundCornersTopRight);
+    if(jupiterActive){
+        drawJupiterBackdrop(dl,wp,ws,(float)ImGui::GetTime());
+        drawJupiterBleed(ImGui::GetForegroundDrawList(),wp,ws,(float)ImGui::GetTime());
+    }
     dl->AddRect(wp,ImVec2(wp.x+ws.x,wp.y+ws.y),theme.getAccentU32(0.45f),rnd,0,1.f);
     dl->AddLine(ImVec2(wp.x+railW,wp.y),ImVec2(wp.x+railW,wp.y+ws.y),theme.getAccentU32(0.12f),1.f);
     dl->AddLine(ImVec2(wp.x+railW,wp.y+headH),ImVec2(wp.x+ws.x,wp.y+headH),theme.getAccentU32(0.10f),1.f);
@@ -738,17 +883,22 @@ void MenuInterface::drawMegaHackWindow(){
         else if(hov)dl->AddRectFilled(rMin,rMax,IM_COL32(255,255,255,10));
         if(act)dl->AddRectFilled(rMin,ImVec2(rMin.x+3,rMax.y),theme.getAccentU32(0.95f));
         if(fontBody)ImGui::PushFont(fontBody);
-        ImU32 tc=act?theme.getAccentU32(0.98f):(hov?theme.getTextU32():theme.getTextSecondaryU32());
+        ImU32 tc=act?theme.getAccentU32(0.98f)
+            :(i==6)?IM_COL32(200,175,90,190)
+            :(hov?theme.getTextU32():theme.getTextSecondaryU32());
         dl->AddText(ImVec2(rMin.x+16,rMin.y+(rowH-ImGui::GetFontSize())*0.5f),tc,names[i]);
         if(fontBody)ImGui::PopFont();}
         ImGui::SetCursorScreenPos(ImVec2(wp.x+railW+12,wp.y+headH+8));
+    if(jupiterActive)ImGui::PushStyleColor(ImGuiCol_ChildBg,IM_COL32(0,0,0,0));
     ImGui::BeginChild("##mhContent",ImVec2(ws.x-railW-24,ws.y-headH-footH-16),false,ImGuiWindowFlags_NoScrollbar);
     drawTabContent();
     ImGui::EndChild();
+    if(jupiterActive)ImGui::PopStyleColor();
         ImGui::SetCursorScreenPos(ImVec2(wp.x+railW+12,wp.y+ws.y-footH+2));
     drawStatusBar();
     ImGui::End();
-    ImGui::PopStyleVar();}
+    ImGui::PopStyleVar();
+    if(jupiterActive)theme=savedTheme;}
 
 void MenuInterface::drawReplayTab(){
     auto* engine=GucciEngine::get();
@@ -2329,117 +2479,14 @@ void MenuInterface::drawIndicatorsTab(){
     ImGui::PopStyleColor();
 }
 
-namespace {
-
-// N-pointed outline star, points alternating outer/inner radius, as a closed polyline.
-std::vector<ImVec2> jupiterStarPoints(ImVec2 center,float outerR,float innerR,int points,float rotRad){
-    std::vector<ImVec2> pts;
-    int total=points*2;
-    for(int i=0;i<total;i++){
-        float r=(i%2==0)?outerR:innerR;
-        float a=rotRad+(float)i/(float)total*2.0f*3.14159265f;
-        pts.push_back(ImVec2(center.x+r*cosf(a),center.y+r*sinf(a)));
-    }
-    return pts;
-}
-
-// Everything drawn here is ambient/low-opacity so it reads as texture behind
-// the real UI, never competes with it. Pulled from Nigel's own screenshots of
-// the level: the gold orbit-ring-with-star ornament, scattered outline stars,
-// a faint crosshatch grid, drifting cyan pixel-squares, and a dark skyline
-// silhouette along the bottom. Hand-drawn vector shapes, not ripped assets.
-void drawJupiterBackdrop(ImDrawList* dl,ImVec2 pos,ImVec2 size,float time){
-    ImU32 goldFaint = IM_COL32(230,200,80,26);
-
-    // Big orbit-ring ornament, tucked in the bottom-right corner, mostly clipped.
-    ImVec2 ringCenter(pos.x+size.x*0.92f,pos.y+size.y*0.95f);
-    float baseR=size.x*0.32f;
-    for(int i=0;i<3;i++){
-        float r=baseR-(float)i*18.f;
-        if(r<10.f)continue;
-        dl->AddCircle(ringCenter,r,IM_COL32(230,200,80,16+i*4),64,1.5f);
-    }
-    auto starOrn=jupiterStarPoints(ringCenter,baseR*0.42f,baseR*0.17f,5,time*0.05f);
-    dl->AddPolyline(starOrn.data(),(int)starOrn.size(),IM_COL32(230,200,80,22),ImDrawFlags_Closed,1.5f);
-
-    // Scattered small stars (fixed layout, purely decorative).
-    struct StarSpec{float x,y,r,rot;int pts;};
-    static const StarSpec stars[]={
-        {0.06f,0.14f,10.f,0.3f,5},{0.16f,0.55f,7.f,1.1f,4},{0.30f,0.10f,8.f,0.6f,4},
-        {0.42f,0.70f,11.f,0.9f,5},{0.55f,0.20f,7.f,0.2f,4},{0.68f,0.60f,9.f,1.4f,5},
-        {0.80f,0.18f,6.f,0.5f,4},{0.24f,0.88f,8.f,1.0f,4},
-    };
-    for(auto const& s:stars){
-        ImVec2 c(pos.x+size.x*s.x,pos.y+size.y*s.y);
-        auto pts=jupiterStarPoints(c,s.r,s.r*0.4f,s.pts,s.rot);
-        dl->AddPolyline(pts.data(),(int)pts.size(),IM_COL32(230,200,80,30),ImDrawFlags_Closed,1.2f);
-    }
-
-    // Faint crosshatch grid across the whole background.
-    float spacing=42.f;
-    for(float x=pos.x;x<pos.x+size.x;x+=spacing)
-        dl->AddLine(ImVec2(x,pos.y),ImVec2(x,pos.y+size.y),goldFaint,1.f);
-    for(float y=pos.y;y<pos.y+size.y;y+=spacing)
-        dl->AddLine(ImVec2(pos.x,y),ImVec2(pos.x+size.x,y),goldFaint,1.f);
-
-    // Drifting cyan pixel-squares, gently pulsing.
-    struct DustSpec{float x,y,sz,phase;};
-    static const DustSpec dust[]={
-        {0.10f,0.30f,4.f,0.f},{0.20f,0.45f,3.f,1.2f},{0.35f,0.25f,5.f,2.1f},
-        {0.50f,0.50f,3.f,0.4f},{0.65f,0.35f,4.f,3.0f},{0.75f,0.55f,3.f,1.8f},
-        {0.88f,0.40f,5.f,2.6f},{0.45f,0.15f,3.f,0.9f},
-    };
-    for(auto const& d:dust){
-        float drift=sinf(time*0.6f+d.phase)*6.f;
-        float alpha=0.15f+0.10f*sinf(time*0.9f+d.phase*1.7f);
-        ImVec2 c(pos.x+size.x*d.x,pos.y+size.y*d.y+drift);
-        dl->AddRectFilled(ImVec2(c.x-d.sz,c.y-d.sz),ImVec2(c.x+d.sz,c.y+d.sz),
-            IM_COL32(70,215,235,(int)(alpha*255)));
-    }
-
-    // Dark skyline silhouette along the bottom edge, a few lit windows.
-    float baseY=pos.y+size.y;
-    float bx=pos.x;
-    int seed=17;
-    while(bx<pos.x+size.x){
-        seed=(seed*1103515245+12345)&0x7fffffff;
-        float bw=40.f+(float)(seed%50);
-        seed=(seed*1103515245+12345)&0x7fffffff;
-        float bh=18.f+(float)(seed%34);
-        dl->AddRectFilled(ImVec2(bx,baseY-bh),ImVec2(bx+bw-3.f,baseY),IM_COL32(8,5,22,140));
-        seed=(seed*1103515245+12345)&0x7fffffff;
-        if(seed%3==0){
-            dl->AddRectFilled(ImVec2(bx+bw*0.35f,baseY-bh*0.7f),ImVec2(bx+bw*0.5f,baseY-bh*0.55f),IM_COL32(230,200,80,120));
-        }
-        bx+=bw;
-    }
-}
-
-}
-
 void MenuInterface::drawJupiterTab(){
     auto* engine=GucciEngine::get();
     auto* mod=Mod::get();
 
-        // Temporarily reskin just this tab off the level's own palette (deep
-    // indigo/violet, gold linework, cyan highlight), then restore -- doesn't
-    // touch any other tab.
-    ThemeEngine savedTheme=theme;
-    theme.accentColor   = ImVec4(0.90f,0.78f,0.25f,1.f);
-    theme.bgColor       = ImVec4(0.10f,0.06f,0.30f,theme.bgOpacity);
-    theme.cardColor     = ImVec4(0.15f,0.10f,0.38f,1.f);
-    theme.textPrimary   = ImVec4(0.95f,0.93f,0.88f,1.f);
-    theme.textSecondary = ImVec4(0.62f,0.57f,0.80f,1.f);
-
-    {
-        ImDrawList* dl=ImGui::GetWindowDrawList();
-        ImVec2 bpos=ImGui::GetCursorScreenPos();
-        ImVec2 bsize=ImGui::GetContentRegionAvail();
-        dl->AddRectFilled(bpos,ImVec2(bpos.x+bsize.x,bpos.y+bsize.y),
-            IM_COL32((int)(theme.bgColor.x*255),(int)(theme.bgColor.y*255),(int)(theme.bgColor.z*255),255),
-            theme.cornerRadius);
-        drawJupiterBackdrop(dl,bpos,bsize,(float)ImGui::GetTime());
-    }
+        // Theme + backdrop are now applied once across the WHOLE menu window
+    // for as long as this tab is active (see drawMainWindow/drawMegaHackWindow),
+    // not just boxed into this tab's own content -- `theme` here already reads
+    // as the Jupiter palette by the time this function runs.
 
     Widgets::GucciQuote("\"Jupiter My Favourite\"","-- Nigel's favorite level, and the hardest memory section he's got",theme);
     ImGui::Dummy(ImVec2(0,4));
@@ -2571,8 +2618,6 @@ void MenuInterface::drawJupiterTab(){
     ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
     ImGui::TextWrapped("Rehearsal mode (scrub playback, pulsing cues ahead of each click, segment looping) isn't built yet -- that's the next pass.");
     ImGui::PopStyleColor();
-
-    theme=savedTheme;
 }
 
 void MenuInterface::drawCreditsTab(){
