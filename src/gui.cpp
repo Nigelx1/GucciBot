@@ -2329,6 +2329,94 @@ void MenuInterface::drawIndicatorsTab(){
     ImGui::PopStyleColor();
 }
 
+namespace {
+
+// N-pointed outline star, points alternating outer/inner radius, as a closed polyline.
+std::vector<ImVec2> jupiterStarPoints(ImVec2 center,float outerR,float innerR,int points,float rotRad){
+    std::vector<ImVec2> pts;
+    int total=points*2;
+    for(int i=0;i<total;i++){
+        float r=(i%2==0)?outerR:innerR;
+        float a=rotRad+(float)i/(float)total*2.0f*3.14159265f;
+        pts.push_back(ImVec2(center.x+r*cosf(a),center.y+r*sinf(a)));
+    }
+    return pts;
+}
+
+// Everything drawn here is ambient/low-opacity so it reads as texture behind
+// the real UI, never competes with it. Pulled from Nigel's own screenshots of
+// the level: the gold orbit-ring-with-star ornament, scattered outline stars,
+// a faint crosshatch grid, drifting cyan pixel-squares, and a dark skyline
+// silhouette along the bottom. Hand-drawn vector shapes, not ripped assets.
+void drawJupiterBackdrop(ImDrawList* dl,ImVec2 pos,ImVec2 size,float time){
+    ImU32 goldFaint = IM_COL32(230,200,80,26);
+
+    // Big orbit-ring ornament, tucked in the bottom-right corner, mostly clipped.
+    ImVec2 ringCenter(pos.x+size.x*0.92f,pos.y+size.y*0.95f);
+    float baseR=size.x*0.32f;
+    for(int i=0;i<3;i++){
+        float r=baseR-(float)i*18.f;
+        if(r<10.f)continue;
+        dl->AddCircle(ringCenter,r,IM_COL32(230,200,80,16+i*4),64,1.5f);
+    }
+    auto starOrn=jupiterStarPoints(ringCenter,baseR*0.42f,baseR*0.17f,5,time*0.05f);
+    dl->AddPolyline(starOrn.data(),(int)starOrn.size(),IM_COL32(230,200,80,22),ImDrawFlags_Closed,1.5f);
+
+    // Scattered small stars (fixed layout, purely decorative).
+    struct StarSpec{float x,y,r,rot;int pts;};
+    static const StarSpec stars[]={
+        {0.06f,0.14f,10.f,0.3f,5},{0.16f,0.55f,7.f,1.1f,4},{0.30f,0.10f,8.f,0.6f,4},
+        {0.42f,0.70f,11.f,0.9f,5},{0.55f,0.20f,7.f,0.2f,4},{0.68f,0.60f,9.f,1.4f,5},
+        {0.80f,0.18f,6.f,0.5f,4},{0.24f,0.88f,8.f,1.0f,4},
+    };
+    for(auto const& s:stars){
+        ImVec2 c(pos.x+size.x*s.x,pos.y+size.y*s.y);
+        auto pts=jupiterStarPoints(c,s.r,s.r*0.4f,s.pts,s.rot);
+        dl->AddPolyline(pts.data(),(int)pts.size(),IM_COL32(230,200,80,30),ImDrawFlags_Closed,1.2f);
+    }
+
+    // Faint crosshatch grid across the whole background.
+    float spacing=42.f;
+    for(float x=pos.x;x<pos.x+size.x;x+=spacing)
+        dl->AddLine(ImVec2(x,pos.y),ImVec2(x,pos.y+size.y),goldFaint,1.f);
+    for(float y=pos.y;y<pos.y+size.y;y+=spacing)
+        dl->AddLine(ImVec2(pos.x,y),ImVec2(pos.x+size.x,y),goldFaint,1.f);
+
+    // Drifting cyan pixel-squares, gently pulsing.
+    struct DustSpec{float x,y,sz,phase;};
+    static const DustSpec dust[]={
+        {0.10f,0.30f,4.f,0.f},{0.20f,0.45f,3.f,1.2f},{0.35f,0.25f,5.f,2.1f},
+        {0.50f,0.50f,3.f,0.4f},{0.65f,0.35f,4.f,3.0f},{0.75f,0.55f,3.f,1.8f},
+        {0.88f,0.40f,5.f,2.6f},{0.45f,0.15f,3.f,0.9f},
+    };
+    for(auto const& d:dust){
+        float drift=sinf(time*0.6f+d.phase)*6.f;
+        float alpha=0.15f+0.10f*sinf(time*0.9f+d.phase*1.7f);
+        ImVec2 c(pos.x+size.x*d.x,pos.y+size.y*d.y+drift);
+        dl->AddRectFilled(ImVec2(c.x-d.sz,c.y-d.sz),ImVec2(c.x+d.sz,c.y+d.sz),
+            IM_COL32(70,215,235,(int)(alpha*255)));
+    }
+
+    // Dark skyline silhouette along the bottom edge, a few lit windows.
+    float baseY=pos.y+size.y;
+    float bx=pos.x;
+    int seed=17;
+    while(bx<pos.x+size.x){
+        seed=(seed*1103515245+12345)&0x7fffffff;
+        float bw=40.f+(float)(seed%50);
+        seed=(seed*1103515245+12345)&0x7fffffff;
+        float bh=18.f+(float)(seed%34);
+        dl->AddRectFilled(ImVec2(bx,baseY-bh),ImVec2(bx+bw-3.f,baseY),IM_COL32(8,5,22,140));
+        seed=(seed*1103515245+12345)&0x7fffffff;
+        if(seed%3==0){
+            dl->AddRectFilled(ImVec2(bx+bw*0.35f,baseY-bh*0.7f),ImVec2(bx+bw*0.5f,baseY-bh*0.55f),IM_COL32(230,200,80,120));
+        }
+        bx+=bw;
+    }
+}
+
+}
+
 void MenuInterface::drawJupiterTab(){
     auto* engine=GucciEngine::get();
     auto* mod=Mod::get();
@@ -2342,6 +2430,16 @@ void MenuInterface::drawJupiterTab(){
     theme.cardColor     = ImVec4(0.15f,0.10f,0.38f,1.f);
     theme.textPrimary   = ImVec4(0.95f,0.93f,0.88f,1.f);
     theme.textSecondary = ImVec4(0.62f,0.57f,0.80f,1.f);
+
+    {
+        ImDrawList* dl=ImGui::GetWindowDrawList();
+        ImVec2 bpos=ImGui::GetCursorScreenPos();
+        ImVec2 bsize=ImGui::GetContentRegionAvail();
+        dl->AddRectFilled(bpos,ImVec2(bpos.x+bsize.x,bpos.y+bsize.y),
+            IM_COL32((int)(theme.bgColor.x*255),(int)(theme.bgColor.y*255),(int)(theme.bgColor.z*255),255),
+            theme.cornerRadius);
+        drawJupiterBackdrop(dl,bpos,bsize,(float)ImGui::GetTime());
+    }
 
     Widgets::GucciQuote("\"Jupiter My Favourite\"","-- Nigel's favorite level, and the hardest memory section he's got",theme);
     ImGui::Dummy(ImVec2(0,4));
