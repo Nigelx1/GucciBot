@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-11-a (P3 NEW APPROACH: stop trying to fix Calculate's physics accuracy, sidestep it instead. Calculate's capture pass now force-applies ground-truth kinematic state (position/velocity/rotation/onGround/upsideDown) captured live during the ORIGINAL RECORDING (MacroPathSample, extended today with more than position -- was position-only for the macro-path-line feature) every frame, instead of trusting its own physics tick to re-derive the same values -- which is exactly what's been diverging all session (e.g. missing the Bloodbath f=1718 slope-exit launch) for a mechanism never conclusively identified despite three ruled-out theories (dt/substep, checkpoint/probe-restart, ghost-sim hijack). Only engages when the loaded macro has v2 path-sample data (recorded after today) -- older macros silently fall back to unforced behavior, nothing breaks for them. Does NOT touch Calculate's probe phase (testing shifted click timings) -- that still needs genuine simulation since ground truth only has the one timing that actually happened; forcing just gives each probe a correct starting state up to the shift point instead of accumulated-simulation-error state. Nigel's idea, from the same principle as macropath.cpp: don't re-derive what you can just record. UNTESTED -- verify by re-recording a macro over the Bloodbath slope, then running Calculate and checking whether the f=1718 mark's window looks right (or just eyeball whether noclip/desync still happens on that pass).)"
+#define GB_BUILD_LABEL "2026-08-13-a (Nigel's Jupiter my Favourite Trainer: new dedicated tab (auto-detects the level by name, themed off Nigel's reference screenshot -- indigo/gold/cyan). Built on the macro-path overlay: ground-truth capture now also runs during normal playback (not just recording), backfilling path data the first time an imported/converted macro (e.g. from TCBot) plays through GucciBot and auto-saving on level completion -- since converted macros only carry input data, not position. New Trainer Mode: progressively reveals the path/markers only up to the furthest x ever actually reached (ratchets forward, persisted per-macro, adjustable lookahead buffer), instead of showing the whole recorded run immediately. Plus personal segment labels and a notes field, both per-macro. Also fixed a real pre-existing bug found while adding the tab: the alternate MegaHack-skin tab rail (drawMegaHackWindow) never got the Indicators tab added when that shipped, so it's been off-by-one for every tab after it since then -- fixed alongside adding Jupiter to both tab-bar implementations. Rehearsal mode (scrubbing playback with pulsing pre-click cues, segment looping) is NOT in this build -- deferred, noted as such in the tab itself. Compiles clean, completely untested in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -119,6 +119,15 @@ public:
     // (index == frame). Used to draw the macro's path + click/release markers
     // without re-simulating anything -- see MacroPathOverlay (macropath.cpp).
     std::vector<MacroPathSample> m_pathSamples;
+    bool m_pathSamplesDirty = false; // true when playback backfilled samples not yet on disk
+    void savePathSamplesNow();       // writes m_pathSamples to the current macro's sidecar
+
+    // Trainer Mode: furthest x-position ever actually reached while this macro's
+    // path overlay was active as a reference (ratchets up only, persisted
+    // per-macro). Used to progressively reveal the path/markers instead of
+    // showing the whole level's answer key immediately -- see macropath.cpp.
+    float m_trainerBestX = 0.f;
+    void saveTrainerProgressNow();
 
     bool m_mirrorInputs        = false;
     bool m_mirrorInverted      = false;
@@ -337,6 +346,20 @@ public:
     bool  showMacroPath        = false;
     float macroPathMarkerSize  = 8.f;
     float macroPathLineOpacity = 0.6f;
+
+    // Trainer Mode (generic mechanism, currently only surfaced via the dedicated
+    // Jupiter tab): progressively reveals the path/markers only up to the furthest
+    // point ever actually reached (GucciReplaySystem::m_trainerBestX), instead of
+    // showing the whole recorded run immediately.
+    bool  trainerRevealEnabled = true;
+    float trainerRevealBuffer  = 40.f;
+
+    // "Nigel's very special Jupiter my Favourite Trainer" -- a dedicated tab that's
+    // just the above mechanisms (macro path + trainer reveal), auto-scoped to one
+    // specific level, with personal notes and named segments layered on top.
+    std::string jupiterNotes;
+    std::string jupiterSegmentsRaw; // "label,x;label,x;..."
+
     bool layoutMode            = false;
     bool noMirrorEffect        = false;
     bool noMirrorRecordingOnly = false;

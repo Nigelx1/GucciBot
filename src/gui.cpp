@@ -525,8 +525,8 @@ void MenuInterface::drawTabBar(){
         ImDrawList* dl=ImGui::GetWindowDrawList();
     ImVec2 pos=ImGui::GetCursorScreenPos();
     float width=ImGui::GetContentRegionAvail().x;
-        const char* names[]={"Macro","Render","Clicks","Autoclicker","Hacks","Indicators","HUD","Settings","Credits"};
-    const int N=9;
+        const char* names[]={"Macro","Render","Clicks","Autoclicker","Hacks","Indicators","Jupiter","HUD","Settings","Credits"};
+    const int N=10;
     float tabW=width/N,tabH=34.f;
     float dt=ImGui::GetIO().DeltaTime;
     if(tabIndicatorX<0)tabIndicatorX=pos.x+activeTab*tabW;
@@ -628,9 +628,10 @@ void MenuInterface::drawTabContent(){
         case 3:drawAutoclickerTab();break;
         case 4:drawMoreHacksTab();break;
         case 5:drawIndicatorsTab();break;
-        case 6:drawHudTab();break;
-        case 7:drawSettingsTab();break;
-        case 8:drawCreditsTab();break;}
+        case 6:drawJupiterTab();break;
+        case 7:drawHudTab();break;
+        case 8:drawSettingsTab();break;
+        case 9:drawCreditsTab();break;}
     if(fontBody)ImGui::PopFont();
     ImGui::PopStyleVar();}
 
@@ -723,9 +724,9 @@ void MenuInterface::drawMegaHackWindow(){
         if(fontHeading)ImGui::PushFont(fontHeading);
     dl->AddText(ImVec2(wp.x+16,wp.y+12),theme.getAccentU32(0.92f),"GB");
     if(fontHeading)ImGui::PopFont();
-        const char* names[]={"Macro","Render","Clicks","Autoclicker","Hacks","HUD","Settings","Credits"};
+        const char* names[]={"Macro","Render","Clicks","Autoclicker","Hacks","Indicators","Jupiter","HUD","Settings","Credits"};
     float rowH=34.f,railTop=headH+10.f;
-    for(int i=0;i<8;i++){
+    for(int i=0;i<10;i++){
         ImVec2 rMin(wp.x,wp.y+railTop+i*rowH),rMax(wp.x+railW,rMin.y+rowH);
         char rid[24];snprintf(rid,sizeof(rid),"##mhTab%d",i);
         ImGui::SetCursorScreenPos(rMin);
@@ -2328,6 +2329,154 @@ void MenuInterface::drawIndicatorsTab(){
     ImGui::PopStyleColor();
 }
 
+void MenuInterface::drawJupiterTab(){
+    auto* engine=GucciEngine::get();
+    auto* mod=Mod::get();
+
+        // Temporarily reskin just this tab off the level's own palette (deep
+    // indigo/violet, gold linework, cyan highlight), then restore -- doesn't
+    // touch any other tab.
+    ThemeEngine savedTheme=theme;
+    theme.accentColor   = ImVec4(0.90f,0.78f,0.25f,1.f);
+    theme.bgColor       = ImVec4(0.10f,0.06f,0.30f,theme.bgOpacity);
+    theme.cardColor     = ImVec4(0.15f,0.10f,0.38f,1.f);
+    theme.textPrimary   = ImVec4(0.95f,0.93f,0.88f,1.f);
+    theme.textSecondary = ImVec4(0.62f,0.57f,0.80f,1.f);
+
+    Widgets::GucciQuote("\"Jupiter My Favourite\"","-- Nigel's favorite level, and the hardest memory section he's got",theme);
+    ImGui::Dummy(ImVec2(0,4));
+
+    auto* pl=PlayLayer::get();
+    std::string currentLevel = (pl&&pl->m_level) ? std::string(pl->m_level->m_levelName) : engine->loadedMacroLevelName;
+    bool isJupiter=false;
+    {
+        std::string lower=currentLevel;
+        std::transform(lower.begin(),lower.end(),lower.begin(),::tolower);
+        isJupiter = lower.find("jupiter my favourite")!=std::string::npos;
+    }
+
+    if(isJupiter){
+        Widgets::StatusBadge("ACTIVE",ImVec4(0.30f,0.88f,0.92f,1.f));
+    } else {
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::TextWrapped(currentLevel.empty()
+            ? "No level loaded. Enter (or load a macro for) Jupiter my Favourite to activate the trainer."
+            : ("Currently on \""+currentLevel+"\" -- this tab is scoped to Jupiter my Favourite specifically, but everything below still works on whatever's loaded.").c_str());
+        ImGui::PopStyleColor();
+    }
+    ImGui::Dummy(ImVec2(0,8));
+
+    Widgets::SectionHeader("Trainer",theme);
+    if(engine->replay.m_pathSamples.empty()){
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::TextWrapped("No path data yet for the loaded macro. Load your converted TCBot macro and let it play through once (bot or manual) -- ground truth gets captured automatically and saved when the level completes.");
+        ImGui::PopStyleColor();
+    } else {
+        if(Widgets::ToggleSwitch("Show Path",&engine->showMacroPath,theme,anim))
+            mod->setSavedValue("hack_show_macro_path",engine->showMacroPath);
+        if(Widgets::ToggleSwitch("Progressive Reveal",&engine->trainerRevealEnabled,theme,anim))
+            mod->setSavedValue("hack_trainer_reveal_enabled",engine->trainerRevealEnabled);
+        if(engine->trainerRevealEnabled){
+            if(Widgets::StyledSliderFloat("Reveal Buffer",&engine->trainerRevealBuffer,0.f,300.f,theme))
+                mod->setSavedValue("hack_trainer_reveal_buffer",(double)engine->trainerRevealBuffer);
+            ImGui::Text("Furthest reached: %.0f",engine->replay.m_trainerBestX);
+            ImGui::SameLine();
+            if(Widgets::StyledButton("Reset Progress##trainer",ImVec2(140,24),theme,anim)){
+                engine->replay.m_trainerBestX=0.f;
+                engine->replay.saveTrainerProgressNow();
+            }
+        }
+        if(Widgets::StyledSliderFloat("Marker Size",&engine->macroPathMarkerSize,3.f,20.f,theme))
+            mod->setSavedValue("hack_macro_path_marker_size",(double)engine->macroPathMarkerSize);
+        if(Widgets::StyledSliderFloat("Line Opacity",&engine->macroPathLineOpacity,0.1f,1.f,theme))
+            mod->setSavedValue("hack_macro_path_line_opacity",(double)engine->macroPathLineOpacity);
+    }
+
+    ImGui::Dummy(ImVec2(0,8));
+    Widgets::SectionHeader("Segments",theme);
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::TextWrapped("Personal landmarks -- name the hard parts so the reveal overlay means something at a glance. Doesn't jump you there, just labels a position for your own reference.");
+    ImGui::PopStyleColor();
+
+    static char segLabelBuf[64]="";
+    ImGui::SetNextItemWidth(-90);
+    ImGui::InputTextWithHint("##segLabel","segment name",segLabelBuf,sizeof(segLabelBuf));
+    ImGui::SameLine();
+    bool canMark = pl && pl->m_player1 && segLabelBuf[0];
+    if(!canMark)ImGui::PushStyleVar(ImGuiStyleVar_Alpha,0.4f);
+    bool markClicked=Widgets::StyledButton("Mark Here",ImVec2(84,0),theme,anim);
+    if(!canMark)ImGui::PopStyleVar();
+    if(markClicked&&canMark){
+        float x=pl->m_player1->m_position.x;
+        if(!engine->jupiterSegmentsRaw.empty())engine->jupiterSegmentsRaw+=";";
+        engine->jupiterSegmentsRaw += std::string(segLabelBuf)+","+std::to_string(x);
+        mod->setSavedValue("jupiter_segments",engine->jupiterSegmentsRaw);
+        segLabelBuf[0]=0;
+    }
+
+    {
+        std::vector<std::pair<std::string,float>> segs;
+        std::string const& raw=engine->jupiterSegmentsRaw;
+        size_t pos=0;
+        while(pos<raw.size()){
+            size_t semi=raw.find(';',pos);
+            std::string entry=raw.substr(pos,semi==std::string::npos?std::string::npos:semi-pos);
+            size_t comma=entry.rfind(',');
+            if(comma!=std::string::npos){
+                std::string label=entry.substr(0,comma);
+                float x=0.f;
+                try{x=std::stof(entry.substr(comma+1));}catch(...){}
+                segs.push_back({label,x});
+            }
+            if(semi==std::string::npos)break;
+            pos=semi+1;
+        }
+        int removeIdx=-1;
+        for(int i=0;i<(int)segs.size();i++){
+            ImGui::PushID(i);
+            ImGui::Text("%s",segs[i].first.c_str());
+            ImGui::SameLine();
+            ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+            ImGui::Text("(x=%.0f)",segs[i].second);
+            ImGui::PopStyleColor();
+            ImGui::SameLine(ImGui::GetContentRegionAvail().x-20);
+            if(ImGui::SmallButton("x"))removeIdx=i;
+            ImGui::PopID();
+        }
+        if(removeIdx>=0){
+            segs.erase(segs.begin()+removeIdx);
+            std::string rebuilt;
+            for(size_t i=0;i<segs.size();i++){
+                if(i)rebuilt+=";";
+                rebuilt+=segs[i].first+","+std::to_string(segs[i].second);
+            }
+            engine->jupiterSegmentsRaw=rebuilt;
+            mod->setSavedValue("jupiter_segments",engine->jupiterSegmentsRaw);
+        }
+    }
+
+    ImGui::Dummy(ImVec2(0,8));
+    Widgets::SectionHeader("Notes",theme);
+    static char jupiterNotesBuf[1024];
+    static bool jupiterNotesInit=false;
+    if(!jupiterNotesInit){
+        snprintf(jupiterNotesBuf,sizeof(jupiterNotesBuf),"%s",engine->jupiterNotes.c_str());
+        jupiterNotesInit=true;
+    }
+    ImGui::SetNextItemWidth(-1);
+    if(ImGui::InputTextMultiline("##jupiterNotes",jupiterNotesBuf,sizeof(jupiterNotesBuf),ImVec2(-1,100))){
+        engine->jupiterNotes=jupiterNotesBuf;
+        mod->setSavedValue("jupiter_notes",engine->jupiterNotes);
+    }
+
+    ImGui::Dummy(ImVec2(0,8));
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::TextWrapped("Rehearsal mode (scrub playback, pulsing cues ahead of each click, segment looping) isn't built yet -- that's the next pass.");
+    ImGui::PopStyleColor();
+
+    theme=savedTheme;
+}
+
 void MenuInterface::drawCreditsTab(){
     ImDrawList* dl=ImGui::GetWindowDrawList();
     ImGui::Dummy(ImVec2(0,8));
@@ -2490,6 +2639,10 @@ void MenuInterface::saveSettings(){
     mod->setSavedValue("hack_show_macro_path",eng->showMacroPath);
     mod->setSavedValue("hack_macro_path_marker_size",(double)eng->macroPathMarkerSize);
     mod->setSavedValue("hack_macro_path_line_opacity",(double)eng->macroPathLineOpacity);
+    mod->setSavedValue("hack_trainer_reveal_enabled",eng->trainerRevealEnabled);
+    mod->setSavedValue("hack_trainer_reveal_buffer",(double)eng->trainerRevealBuffer);
+    mod->setSavedValue("jupiter_notes",eng->jupiterNotes);
+    mod->setSavedValue("jupiter_segments",eng->jupiterSegmentsRaw);
     mod->setSavedValue("hack_noclip",eng->noclipEnabled);
     mod->setSavedValue("hack_noclip_flash",eng->noclipDeathFlash);
     mod->setSavedValue("hack_noclip_color_r",eng->noclipDeathColorR);
@@ -2668,6 +2821,10 @@ void MenuInterface::loadSettings(){
     eng->showMacroPath=mod->getSavedValue<bool>("hack_show_macro_path",false);
     eng->macroPathMarkerSize=mod->getSavedValue<float>("hack_macro_path_marker_size",8.f);
     eng->macroPathLineOpacity=mod->getSavedValue<float>("hack_macro_path_line_opacity",0.6f);
+    eng->trainerRevealEnabled=mod->getSavedValue<bool>("hack_trainer_reveal_enabled",true);
+    eng->trainerRevealBuffer=mod->getSavedValue<float>("hack_trainer_reveal_buffer",40.f);
+    eng->jupiterNotes=mod->getSavedValue<std::string>("jupiter_notes","");
+    eng->jupiterSegmentsRaw=mod->getSavedValue<std::string>("jupiter_segments","");
     eng->noclipEnabled=mod->getSavedValue<bool>("hack_noclip",false);
     eng->noclipDeathFlash=mod->getSavedValue<bool>("hack_noclip_flash",true);
     eng->noclipDeathColorR=mod->getSavedValue<float>("hack_noclip_color_r",1.f);

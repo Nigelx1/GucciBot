@@ -328,9 +328,18 @@ static void frameUpdateMidhook(SafetyHookContext&) {
     if (!pl->m_playerDied) {
         if (PlayLayer::get()) upd.incrementFrame();
 
-        if (gb->isRecording()) {
+        // Ground-truth capture: live recording always grows this fresh (cleared at
+        // record-start). Normal playback (bot replaying a loaded macro, NOT
+        // Calculate) backfills the same data the first time a macro plays through --
+        // this is what lets an imported/converted macro (no native GucciBot
+        // recording behind it) still get path data, just by being played back once.
+        // Either way we only ever append past what's already captured, so a macro's
+        // first clean pass through a frame is what sticks as ground truth.
+        bool shouldCapturePath = gb->isRecording() || (gb->isPlaying() && !gb->fwAnalyzing);
+        if (shouldCapturePath) {
             auto* plr = PlayLayer::get();
-            if (plr && plr->m_player1) {
+            auto& samples = gb->replay.m_pathSamples;
+            if (plr && plr->m_player1 && upd.getFrame() >= samples.size()) {
                 auto* p1 = plr->m_player1;
                 MacroPathSample smp;
                 smp.p1x = p1->m_position.x;
@@ -356,7 +365,16 @@ static void frameUpdateMidhook(SafetyHookContext&) {
                     smp.p2Dashing = p2->m_isDashing;
                     smp.gamemode2 = gamemodeChar(p2);
                 }
-                gb->replay.m_pathSamples.push_back(smp);
+                samples.push_back(smp);
+                if (!gb->isRecording()) gb->replay.m_pathSamplesDirty = true;
+            }
+        }
+
+        if (gb->replay.m_pathSamplesDirty && gb->isPlaying() && !gb->fwAnalyzing) {
+            auto* plr = PlayLayer::get();
+            if (plr && plr->m_hasCompletedLevel) {
+                gb->replay.savePathSamplesNow();
+                gb->replay.m_pathSamplesDirty = false;
             }
         }
 

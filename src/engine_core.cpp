@@ -265,6 +265,42 @@ static void loadPathSamples(const fs::path& macroPath, std::vector<MacroPathSamp
     log::info("[GucciBot] Macro path: loaded {} sample(s) from sidecar", samples.size());
 }
 
+void GucciReplaySystem::savePathSamplesNow() {
+    savePathSamples(getCurrentPath(), m_pathSamples);
+    log::info("[GucciBot] Macro path: backfilled {} sample(s) saved for '{}'",
+              m_pathSamples.size(), m_replayName);
+}
+
+static fs::path trainerSidecarPath(const fs::path& macroPath) {
+    return fs::path(macroPath.string() + ".trainer");
+}
+
+static void saveTrainerProgress(const fs::path& macroPath, float bestX) {
+    std::ofstream f(trainerSidecarPath(macroPath), std::ios::binary);
+    if (!f) return;
+    f.write("GBTP", 4);
+    uint8_t ver = 1; f.write((const char*)&ver, 1);
+    f.write((const char*)&bestX, 4);
+}
+
+static float loadTrainerProgress(const fs::path& macroPath) {
+    auto sc = trainerSidecarPath(macroPath);
+    if (!fs::exists(sc)) return 0.f;
+    std::ifstream f(sc, std::ios::binary);
+    if (!f) return 0.f;
+    char magic[4] = {};
+    f.read(magic, 4);
+    if (std::memcmp(magic, "GBTP", 4) != 0) return 0.f;
+    uint8_t ver = 0; f.read((char*)&ver, 1);
+    if (ver != 1) return 0.f;
+    float bestX = 0.f; f.read((char*)&bestX, 4);
+    return f ? bestX : 0.f;
+}
+
+void GucciReplaySystem::saveTrainerProgressNow() {
+    saveTrainerProgress(getCurrentPath(), m_trainerBestX);
+}
+
 static void saveFwMarks(const fs::path& macroPath) {
     auto* gb = GucciEngine::get();
     auto sc  = fwSidecarPath(macroPath);
@@ -361,6 +397,7 @@ void GucciReplaySystem::save(const fs::path& path, bool noOverwrite) {
     }
     saveFwMarks(path);
     savePathSamples(path, m_pathSamples);
+    saveTrainerProgress(path, m_trainerBestX);
 }
 
 void GucciReplaySystem::load(const fs::path& path) {
@@ -396,6 +433,7 @@ void GucciReplaySystem::load(const fs::path& path) {
                   m_actionAtom.length(), f.deaths.size());
         loadFwMarks(path);
         loadPathSamples(path, m_pathSamples);
+        m_trainerBestX = loadTrainerProgress(path);
         return;
     }
 

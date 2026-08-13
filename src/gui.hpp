@@ -192,6 +192,7 @@ private:
     void drawHudTab();
     void drawMoreHacksTab();
     void drawIndicatorsTab();
+    void drawJupiterTab();
     void loadRenderSettings();
     void markReplayListDirty(bool queueRefresh=true);
     void refreshReplayListIfNeeded(bool force);
