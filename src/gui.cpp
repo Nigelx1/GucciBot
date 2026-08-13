@@ -83,104 +83,45 @@ static void drawJupiterOrnament(ImDrawList* dl,ImVec2 center,float baseR,float t
     for(int i=0;i<4;i++){
         float r=baseR-(float)i*baseR*0.16f;
         if(r<10.f)continue;
-        dl->AddCircle(center,r,IM_COL32(230,200,80,130+i*20),96,2.6f);
+        dl->AddCircle(center,r,IM_COL32(230,200,80,215+i*10),96,2.8f);
     }
     auto starOrn=jupiterStarPoints(center,baseR*0.45f,baseR*0.18f,5,time*spin);
-    dl->AddConvexPolyFilled(starOrn.data(),(int)starOrn.size(),IM_COL32(230,200,80,60));
-    dl->AddPolyline(starOrn.data(),(int)starOrn.size(),IM_COL32(255,225,140,220),ImDrawFlags_Closed,2.4f);
+    dl->AddConvexPolyFilled(starOrn.data(),(int)starOrn.size(),IM_COL32(230,200,80,150));
+    dl->AddPolyline(starOrn.data(),(int)starOrn.size(),IM_COL32(255,225,140,255),ImDrawFlags_Closed,2.4f);
 }
 
-static void jupiterTriangleFilled(ImDrawList* dl,ImVec2 center,float sz,float rotRad,ImU32 col){
-    ImVec2 p[3];
-    for(int i=0;i<3;i++){
-        float a=rotRad+(float)i/3.0f*2.0f*3.14159265f;
-        p[i]=ImVec2(center.x+sz*cosf(a),center.y+sz*sinf(a));
-    }
-    dl->AddTriangleFilled(p[0],p[1],p[2],col);
-}
-
-// Full-viewport, loud, foreground-not-background per Nigel's call: real
-// opacity throughout, a bold grid with triangle markers instead of a faint
-// crosshatch, and a new colour-coded orb/road network -- the one motif from
-// the reference screenshots (2.44% and 57.10%) that hadn't been used yet,
-// and the boldest one in them.
+// Take 5, per Nigel: grid, its triangle markers, the road line, and the orb
+// network are all gone now -- the road ran straight through the readable
+// content, and the orb network's mixed colours threw the whole thing off.
+// Everything that's left is pushed to real opacity, there's a third
+// orbit-ring "wheel" ornament, and the outline "line star" shapes go from
+// 15 to 44.
 static void drawJupiterBackdrop(ImDrawList* dl,ImVec2 pos,ImVec2 size,float time){
-    // -- Bold grid: thick gold lines, small triangle markers at intersections --
-    ImU32 gridCol=IM_COL32(230,200,80,120);
-    float spacing=110.f;
-    for(float x=pos.x;x<pos.x+size.x;x+=spacing)
-        dl->AddLine(ImVec2(x,pos.y),ImVec2(x,pos.y+size.y),gridCol,2.5f);
-    for(float y=pos.y;y<pos.y+size.y;y+=spacing)
-        dl->AddLine(ImVec2(pos.x,y),ImVec2(pos.x+size.x,y),gridCol,2.5f);
-    int gseed=42;
-    for(float x=pos.x;x<pos.x+size.x;x+=spacing){
-        for(float y=pos.y;y<pos.y+size.y;y+=spacing){
-            gseed=(gseed*1103515245+12345)&0x7fffffff;
-            if(gseed%3!=0)continue;
-            float rot=(float)((gseed>>4)%4)*1.5707963f;
-            jupiterTriangleFilled(dl,ImVec2(x,y),9.f,rot,IM_COL32(230,200,80,200));
-        }
-    }
-
-    // -- Orb/road network: the big colourful constellation-map motif --
-    struct OrbNode{float x,y,r;ImU32 col;};
-    static const OrbNode orbs[]={
-        {0.10f,0.22f,26.f,IM_COL32(255,214,64,255)},
-        {0.20f,0.10f,20.f,IM_COL32(90,220,240,255)},
-        {0.30f,0.26f,32.f,IM_COL32(230,80,200,255)},
-        {0.42f,0.14f,22.f,IM_COL32(90,220,140,255)},
-        {0.55f,0.24f,28.f,IM_COL32(255,214,64,255)},
-        {0.66f,0.12f,20.f,IM_COL32(230,80,70,255)},
-        {0.78f,0.22f,26.f,IM_COL32(90,220,240,255)},
-        {0.88f,0.10f,22.f,IM_COL32(230,80,200,255)},
-        {0.15f,0.55f,24.f,IM_COL32(90,220,240,255)},
-        {0.35f,0.62f,34.f,IM_COL32(255,214,64,255)},
-        {0.55f,0.55f,22.f,IM_COL32(230,80,200,255)},
-        {0.72f,0.62f,28.f,IM_COL32(90,220,140,255)},
-        {0.90f,0.55f,22.f,IM_COL32(255,214,64,255)},
-    };
-    int n=(int)(sizeof(orbs)/sizeof(orbs[0]));
-    ImU32 roadCol=IM_COL32(230,200,80,190);
-    for(int i=1;i<n;i++){
-        ImVec2 a(pos.x+size.x*orbs[i-1].x,pos.y+size.y*orbs[i-1].y);
-        ImVec2 b(pos.x+size.x*orbs[i].x,pos.y+size.y*orbs[i].y);
-        dl->AddLine(a,b,roadCol,7.f);
-    }
-    for(auto const& o:orbs){
-        ImVec2 c(pos.x+size.x*o.x,pos.y+size.y*o.y);
-        dl->AddCircleFilled(c,o.r,IM_COL32(10,6,24,235),48);
-        dl->AddCircle(c,o.r,o.col,48,3.5f);
-        dl->AddCircleFilled(c,o.r*0.42f,o.col,32);
-        dl->AddCircle(c,o.r*1.35f,(o.col&0x00FFFFFF)|0x40000000,48,1.5f);
-    }
-
     drawJupiterOrnament(dl,ImVec2(pos.x+size.x*0.92f,pos.y+size.y*0.90f),size.x*0.22f,time,0.06f);
     drawJupiterOrnament(dl,ImVec2(pos.x+size.x*0.05f,pos.y+size.y*0.90f),size.x*0.14f,time,-0.05f);
+    drawJupiterOrnament(dl,ImVec2(pos.x+size.x*0.50f,pos.y+size.y*0.05f),size.x*0.09f,time,0.04f);
 
-    // -- Bold solid triangle spikes, the level's most-repeated single shape --
-    struct SpikeSpec{float x,y,sz,rot;};
-    static const SpikeSpec spikes[]={
-        {0.06f,0.42f,16.f,0.2f},{0.94f,0.42f,18.f,1.9f},{0.50f,0.06f,14.f,3.4f},
-        {0.25f,0.80f,15.f,2.6f},{0.65f,0.78f,17.f,0.9f},{0.85f,0.85f,13.f,4.1f},
-        {0.12f,0.30f,12.f,1.2f},{0.44f,0.92f,15.f,2.0f},
-    };
-    for(auto const& s:spikes){
-        ImVec2 c(pos.x+size.x*s.x,pos.y+size.y*s.y);
-        jupiterTriangleFilled(dl,c,s.sz,s.rot,IM_COL32(230,200,80,190));
-    }
-
+    // -- A ton of the outline "line star" shapes, scattered across the whole
+    // backdrop (seeded once so they don't reshuffle every frame) --
     struct StarSpec{float x,y,r,rot;int pts;};
-    static const StarSpec stars[]={
-        {0.04f,0.35f,15.f,0.3f,5},{0.09f,0.68f,11.f,1.1f,4},{0.14f,0.85f,13.f,0.6f,4},
-        {0.24f,0.48f,10.f,0.2f,4},{0.36f,0.42f,10.f,0.5f,4},{0.46f,0.88f,11.f,0.8f,5},
-        {0.52f,0.42f,9.f,2.2f,4},{0.62f,0.68f,12.f,1.6f,4},{0.70f,0.42f,13.f,1.9f,4},
-        {0.76f,0.85f,11.f,0.7f,5},{0.86f,0.42f,12.f,1.2f,5},{0.90f,0.68f,10.f,0.5f,4},
-        {0.34f,0.94f,9.f,1.5f,5},{0.60f,0.30f,8.f,2.8f,4},{0.18f,0.14f,10.f,1.9f,5},
-    };
+    static const std::vector<StarSpec> stars=[]{
+        std::vector<StarSpec> v;
+        uint32_t seed=777;
+        auto rnd=[&](){seed=seed*1103515245u+12345u;return (float)((seed>>8)&0xFFFFu)/65535.f;};
+        for(int i=0;i<44;i++){
+            StarSpec s;
+            s.x=rnd();s.y=rnd();
+            s.r=7.f+rnd()*9.f;
+            s.rot=rnd()*6.2831853f;
+            s.pts=(rnd()<0.5f)?4:5;
+            v.push_back(s);
+        }
+        return v;
+    }();
     for(auto const& s:stars){
         ImVec2 c(pos.x+size.x*s.x,pos.y+size.y*s.y);
         auto pts=jupiterStarPoints(c,s.r,s.r*0.4f,s.pts,s.rot);
-        dl->AddPolyline(pts.data(),(int)pts.size(),IM_COL32(255,225,140,170),ImDrawFlags_Closed,1.8f);
+        dl->AddPolyline(pts.data(),(int)pts.size(),IM_COL32(255,225,140,255),ImDrawFlags_Closed,1.8f);
     }
 
     struct DustSpec{float x,y,sz,phase;};
@@ -192,7 +133,7 @@ static void drawJupiterBackdrop(ImDrawList* dl,ImVec2 pos,ImVec2 size,float time
     };
     for(auto const& d:dust){
         float drift=sinf(time*0.6f+d.phase)*6.f;
-        float alpha=0.55f+0.30f*sinf(time*0.9f+d.phase*1.7f);
+        float alpha=0.80f+0.18f*sinf(time*0.9f+d.phase*1.7f);
         ImVec2 c(pos.x+size.x*d.x,pos.y+size.y*d.y+drift);
         dl->AddRectFilled(ImVec2(c.x-d.sz,c.y-d.sz),ImVec2(c.x+d.sz,c.y+d.sz),
             IM_COL32(90,220,240,(int)(alpha*255)));
@@ -206,13 +147,13 @@ static void drawJupiterBackdrop(ImDrawList* dl,ImVec2 pos,ImVec2 size,float time
         float bw=44.f+(float)(seed%60);
         seed=(seed*1103515245+12345)&0x7fffffff;
         float bh=26.f+(float)(seed%64);
-        dl->AddRectFilled(ImVec2(bx,baseY-bh),ImVec2(bx+bw-3.f,baseY),IM_COL32(6,4,18,235));
+        dl->AddRectFilled(ImVec2(bx,baseY-bh),ImVec2(bx+bw-3.f,baseY),IM_COL32(6,4,18,255));
         seed=(seed*1103515245+12345)&0x7fffffff;
         if(seed%3==0){
-            dl->AddRectFilled(ImVec2(bx+bw*0.35f,baseY-bh*0.7f),ImVec2(bx+bw*0.5f,baseY-bh*0.55f),IM_COL32(255,214,64,220));
+            dl->AddRectFilled(ImVec2(bx+bw*0.35f,baseY-bh*0.7f),ImVec2(bx+bw*0.5f,baseY-bh*0.55f),IM_COL32(255,214,64,255));
         }
         if(seed%5==0){
-            dl->AddRectFilled(ImVec2(bx+bw*0.6f,baseY-bh*0.4f),ImVec2(bx+bw*0.72f,baseY-bh*0.28f),IM_COL32(90,220,240,200));
+            dl->AddRectFilled(ImVec2(bx+bw*0.6f,baseY-bh*0.4f),ImVec2(bx+bw*0.72f,baseY-bh*0.28f),IM_COL32(90,220,240,255));
         }
         bx+=bw;
     }
