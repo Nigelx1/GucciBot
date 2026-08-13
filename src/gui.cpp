@@ -79,33 +79,43 @@ static std::vector<ImVec2> jupiterStarPoints(ImVec2 center,float outerR,float in
 // on the WINDOW draw list across the full window rect (title bar, tab rail,
 // content, status bar) so nothing about the window reads as "normal app skin
 // plus a themed tab" -- everything behind the widgets is reskinned.
-static void drawJupiterBackdrop(ImDrawList* dl,ImVec2 pos,ImVec2 size,float time){
-    ImU32 goldFaint = IM_COL32(230,200,80,34);
-
-    ImVec2 ringCenter(pos.x+size.x*0.90f,pos.y+size.y*0.85f);
-    float baseR=size.x*0.30f;
+static void drawJupiterOrnament(ImDrawList* dl,ImVec2 center,float baseR,float time,float spin){
     for(int i=0;i<4;i++){
-        float r=baseR-(float)i*20.f;
+        float r=baseR-(float)i*baseR*0.16f;
         if(r<10.f)continue;
-        dl->AddCircle(ringCenter,r,IM_COL32(230,200,80,22+i*5),64,1.6f);
+        dl->AddCircle(center,r,IM_COL32(230,200,80,26+i*6),96,1.8f);
     }
-    auto starOrn=jupiterStarPoints(ringCenter,baseR*0.45f,baseR*0.18f,5,time*0.06f);
-    dl->AddPolyline(starOrn.data(),(int)starOrn.size(),IM_COL32(230,200,80,32),ImDrawFlags_Closed,1.6f);
+    auto starOrn=jupiterStarPoints(center,baseR*0.45f,baseR*0.18f,5,time*spin);
+    dl->AddPolyline(starOrn.data(),(int)starOrn.size(),IM_COL32(230,200,80,36),ImDrawFlags_Closed,1.8f);
+}
+
+// This now runs at full-viewport scale (see drawMainWindow/drawMegaHackWindow),
+// so it's built to fill a real screen, not stretch a small design -- two
+// orbit-ring ornaments, two dozen scattered stars, denser dust, full crosshatch.
+static void drawJupiterBackdrop(ImDrawList* dl,ImVec2 pos,ImVec2 size,float time){
+    ImU32 goldFaint = IM_COL32(230,200,80,30);
+
+    drawJupiterOrnament(dl,ImVec2(pos.x+size.x*0.92f,pos.y+size.y*0.88f),size.x*0.20f,time,0.06f);
+    drawJupiterOrnament(dl,ImVec2(pos.x+size.x*0.05f,pos.y+size.y*0.10f),size.x*0.11f,time,-0.05f);
 
     struct StarSpec{float x,y,r,rot;int pts;};
     static const StarSpec stars[]={
-        {0.04f,0.10f,11.f,0.3f,5},{0.10f,0.42f,8.f,1.1f,4},{0.20f,0.75f,9.f,0.6f,4},
-        {0.30f,0.20f,10.f,0.9f,5},{0.38f,0.55f,7.f,0.2f,4},{0.48f,0.85f,10.f,1.4f,5},
-        {0.58f,0.15f,7.f,0.5f,4},{0.64f,0.48f,9.f,1.0f,4},{0.72f,0.75f,8.f,0.8f,5},
-        {0.15f,0.92f,8.f,1.7f,4},{0.55f,0.35f,6.f,2.2f,4},{0.35f,0.05f,7.f,0.4f,5},
+        {0.04f,0.30f,14.f,0.3f,5},{0.09f,0.60f,10.f,1.1f,4},{0.14f,0.80f,12.f,0.6f,4},
+        {0.20f,0.15f,11.f,0.9f,5},{0.24f,0.45f,9.f,0.2f,4},{0.30f,0.70f,13.f,1.4f,5},
+        {0.36f,0.25f,9.f,0.5f,4},{0.40f,0.55f,12.f,1.0f,4},{0.46f,0.82f,10.f,0.8f,5},
+        {0.15f,0.92f,9.f,1.7f,4},{0.52f,0.35f,8.f,2.2f,4},{0.58f,0.08f,10.f,0.4f,5},
+        {0.62f,0.60f,11.f,1.6f,4},{0.66f,0.85f,9.f,0.3f,5},{0.70f,0.20f,12.f,1.9f,4},
+        {0.76f,0.50f,10.f,0.7f,5},{0.80f,0.78f,8.f,2.4f,4},{0.86f,0.30f,11.f,1.2f,5},
+        {0.90f,0.60f,9.f,0.5f,4},{0.50f,0.12f,7.f,2.8f,4},{0.34f,0.90f,8.f,1.5f,5},
+        {0.60f,0.94f,9.f,0.9f,4},
     };
     for(auto const& s:stars){
         ImVec2 c(pos.x+size.x*s.x,pos.y+size.y*s.y);
         auto pts=jupiterStarPoints(c,s.r,s.r*0.4f,s.pts,s.rot);
-        dl->AddPolyline(pts.data(),(int)pts.size(),IM_COL32(230,200,80,42),ImDrawFlags_Closed,1.3f);
+        dl->AddPolyline(pts.data(),(int)pts.size(),IM_COL32(230,200,80,46),ImDrawFlags_Closed,1.4f);
     }
 
-    float spacing=36.f;
+    float spacing=44.f;
     for(float x=pos.x;x<pos.x+size.x;x+=spacing)
         dl->AddLine(ImVec2(x,pos.y),ImVec2(x,pos.y+size.y),goldFaint,1.f);
     for(float y=pos.y;y<pos.y+size.y;y+=spacing)
@@ -113,14 +123,17 @@ static void drawJupiterBackdrop(ImDrawList* dl,ImVec2 pos,ImVec2 size,float time
 
     struct DustSpec{float x,y,sz,phase;};
     static const DustSpec dust[]={
-        {0.06f,0.20f,4.f,0.f},{0.14f,0.60f,3.f,1.2f},{0.24f,0.35f,5.f,2.1f},
-        {0.34f,0.70f,3.f,0.4f},{0.44f,0.25f,4.f,3.0f},{0.52f,0.65f,3.f,1.8f},
-        {0.62f,0.30f,5.f,2.6f},{0.70f,0.55f,3.f,0.9f},{0.80f,0.20f,4.f,1.5f},
-        {0.86f,0.68f,3.f,2.9f},{0.92f,0.15f,5.f,0.7f},{0.28f,0.15f,3.f,2.3f},
+        {0.03f,0.20f,4.f,0.f},{0.08f,0.60f,3.f,1.2f},{0.13f,0.35f,5.f,2.1f},
+        {0.18f,0.70f,3.f,0.4f},{0.23f,0.25f,4.f,3.0f},{0.28f,0.65f,3.f,1.8f},
+        {0.33f,0.30f,5.f,2.6f},{0.38f,0.55f,3.f,0.9f},{0.43f,0.20f,4.f,1.5f},
+        {0.48f,0.68f,3.f,2.9f},{0.53f,0.15f,5.f,0.7f},{0.58f,0.15f,3.f,2.3f},
+        {0.63f,0.45f,4.f,1.1f},{0.68f,0.75f,3.f,2.7f},{0.73f,0.30f,5.f,0.6f},
+        {0.78f,0.60f,3.f,1.9f},{0.83f,0.20f,4.f,2.5f},{0.88f,0.68f,3.f,0.8f},
+        {0.92f,0.40f,5.f,1.6f},{0.95f,0.15f,3.f,2.2f},
     };
     for(auto const& d:dust){
         float drift=sinf(time*0.6f+d.phase)*6.f;
-        float alpha=0.18f+0.12f*sinf(time*0.9f+d.phase*1.7f);
+        float alpha=0.20f+0.14f*sinf(time*0.9f+d.phase*1.7f);
         ImVec2 c(pos.x+size.x*d.x,pos.y+size.y*d.y+drift);
         dl->AddRectFilled(ImVec2(c.x-d.sz,c.y-d.sz),ImVec2(c.x+d.sz,c.y+d.sz),
             IM_COL32(70,215,235,(int)(alpha*255)));
@@ -131,40 +144,18 @@ static void drawJupiterBackdrop(ImDrawList* dl,ImVec2 pos,ImVec2 size,float time
     int seed=17;
     while(bx<pos.x+size.x){
         seed=(seed*1103515245+12345)&0x7fffffff;
-        float bw=40.f+(float)(seed%50);
+        float bw=44.f+(float)(seed%60);
         seed=(seed*1103515245+12345)&0x7fffffff;
-        float bh=18.f+(float)(seed%34);
-        dl->AddRectFilled(ImVec2(bx,baseY-bh),ImVec2(bx+bw-3.f,baseY),IM_COL32(8,5,22,150));
+        float bh=22.f+(float)(seed%54);
+        dl->AddRectFilled(ImVec2(bx,baseY-bh),ImVec2(bx+bw-3.f,baseY),IM_COL32(8,5,22,160));
         seed=(seed*1103515245+12345)&0x7fffffff;
         if(seed%3==0){
-            dl->AddRectFilled(ImVec2(bx+bw*0.35f,baseY-bh*0.7f),ImVec2(bx+bw*0.5f,baseY-bh*0.55f),IM_COL32(230,200,80,130));
+            dl->AddRectFilled(ImVec2(bx+bw*0.35f,baseY-bh*0.7f),ImVec2(bx+bw*0.5f,baseY-bh*0.55f),IM_COL32(230,200,80,140));
+        }
+        if(seed%5==0){
+            dl->AddRectFilled(ImVec2(bx+bw*0.6f,baseY-bh*0.4f),ImVec2(bx+bw*0.72f,baseY-bh*0.28f),IM_COL32(70,215,235,110));
         }
         bx+=bw;
-    }
-}
-
-// The art project doesn't stop at the window border -- a soft gold/cyan aura
-// bleeds out past the edge, and a few stars drift in a slow orbit just outside
-// the window, on the foreground (unclipped, screen-space) draw list.
-static void drawJupiterBleed(ImDrawList* fdl,ImVec2 wp,ImVec2 ws,float time){
-    for(int i=0;i<6;i++){
-        float o=(float)(i+1)*8.f;
-        int alpha=std::max(2,18-i*3);
-        ImU32 col=(i%2==0)?IM_COL32(230,200,80,alpha):IM_COL32(70,215,235,alpha);
-        fdl->AddRect(ImVec2(wp.x-o,wp.y-o),ImVec2(wp.x+ws.x+o,wp.y+ws.y+o),col,12.f+o*0.3f,0,2.f);
-    }
-    struct BleedStar{float ang,dist,r,speed;int pts;};
-    static const BleedStar bstars[]={
-        {0.2f,30.f,8.f,0.15f,4},{2.1f,40.f,10.f,0.11f,5},{4.0f,26.f,7.f,0.18f,4},
-        {5.3f,36.f,9.f,0.13f,5},{1.1f,46.f,6.f,0.09f,4},
-    };
-    ImVec2 center(wp.x+ws.x*0.5f,wp.y+ws.y*0.5f);
-    float rx=ws.x*0.5f,ry=ws.y*0.5f;
-    for(auto const& s:bstars){
-        float a=s.ang+time*s.speed;
-        ImVec2 c(center.x+(rx+s.dist)*cosf(a),center.y+(ry+s.dist)*sinf(a));
-        auto pts=jupiterStarPoints(c,s.r,s.r*0.4f,s.pts,a);
-        fdl->AddPolyline(pts.data(),(int)pts.size(),IM_COL32(230,200,80,55),ImDrawFlags_Closed,1.4f);
     }
 }
 
@@ -634,7 +625,7 @@ void MenuInterface::drawTabBar(){
         ImDrawList* dl=ImGui::GetWindowDrawList();
     ImVec2 pos=ImGui::GetCursorScreenPos();
     float width=ImGui::GetContentRegionAvail().x;
-        const char* names[]={"Macro","Render","Clicks","Autoclicker","Hacks","Indicators","Jupiter","HUD","Settings","Credits"};
+        const char* names[]={"Macro","Render","Clicks","Autoclicker","Hacks","Indicators","JMF","HUD","Settings","Credits"};
     const int N=10;
     float tabW=width/N,tabH=34.f;
     float dt=ImGui::GetIO().DeltaTime;
@@ -764,18 +755,29 @@ void MenuInterface::drawMainWindow(){
         theme.textSecondary = ImVec4(0.62f,0.57f,0.80f,1.f);
     }
     theme.applyToImGuiStyle();
-    ImVec2 center=ImGui::GetMainViewport()->GetCenter();
-    if(!windowPosInitialized){
-        ImGui::SetNextWindowPos(ImVec2(center.x-windowSize.x*0.5f,center.y-windowSize.y*0.5f),ImGuiCond_Always);
-        windowPosInitialized=true;
+    if(jupiterActive){
+        // Not a themed box on the screen -- the screen. Full viewport takeover
+        // for as long as this tab is open; snaps back to the normal centered
+        // window the instant you switch away.
+        auto* vp=ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(vp->Pos,ImGuiCond_Always);
+        ImGui::SetNextWindowSize(vp->Size,ImGuiCond_Always);
+    } else {
+        ImVec2 center=ImGui::GetMainViewport()->GetCenter();
+        if(!windowPosInitialized){
+            ImGui::SetNextWindowPos(ImVec2(center.x-windowSize.x*0.5f,center.y-windowSize.y*0.5f),ImGuiCond_Always);
+            windowPosInitialized=true;
+        }
+        ImGui::SetNextWindowSize(windowSize,ImGuiCond_Always);
     }
-    ImGui::SetNextWindowSize(windowSize,ImGuiCond_Always);
     ImGui::SetNextWindowBgAlpha(theme.bgOpacity*t);
     ImGui::PushStyleVar(ImGuiStyleVar_Alpha,t);
         ImGui::Begin("##GucciBot",nullptr,
         ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoScrollbar|
         ImGuiWindowFlags_NoScrollWithMouse|ImGuiWindowFlags_NoTitleBar);
-        {
+        if(!jupiterActive){
+        // Drag handle -- meaningless once the window IS the viewport, so skipped
+        // entirely in Jupiter's full-screen takeover.
         ImVec2 wp=ImGui::GetWindowPos();
         ImVec2 ws=ImGui::GetWindowSize();
         ImDrawList* fdl=ImGui::GetForegroundDrawList();
@@ -795,13 +797,15 @@ void MenuInterface::drawMainWindow(){
     ImDrawList* dl=ImGui::GetWindowDrawList();
     ImVec2 wp=windowPos,ws=ImGui::GetWindowSize();
     if(jupiterActive){
+        // Full-screen now, so there's no "past the edge" to bleed onto -- that
+        // budget goes into a denser backdrop instead (see drawJupiterBackdrop).
         drawJupiterBackdrop(dl,wp,ws,(float)ImGui::GetTime());
-        drawJupiterBleed(ImGui::GetForegroundDrawList(),wp,ws,(float)ImGui::GetTime());
-    }
+    } else {
         dl->AddRect(wp,ImVec2(wp.x+ws.x,wp.y+ws.y),theme.getAccentU32(0.35f),theme.cornerRadius,0,1.5f);
-    drawTitleBar();
+    }
+    if(!jupiterActive)drawTitleBar(); // GucciBot branding suppressed entirely on Jupiter
     ImGui::SetNextWindowContentSize(ImVec2(0,0));
-    float contentH=ws.y-52-40-14;
+    float contentH=ws.y-(jupiterActive?14.f:52.f)-40-14;
     if(jupiterActive)ImGui::PushStyleColor(ImGuiCol_ChildBg,IM_COL32(0,0,0,0));
     ImGui::BeginChild("##content",ImVec2(-1,contentH),false,ImGuiWindowFlags_NoScrollbar);
     drawTabBar();
@@ -810,7 +814,7 @@ void MenuInterface::drawMainWindow(){
     ImGui::EndChild();
     ImGui::EndChild();
     if(jupiterActive)ImGui::PopStyleColor();
-    drawStatusBar();
+    if(!jupiterActive)drawStatusBar(); // TPS/tick readout + brand text also suppressed
     ImGui::End();
     ImGui::PopStyleVar();
     if(jupiterActive)theme=savedTheme;}
@@ -829,10 +833,16 @@ void MenuInterface::drawMegaHackWindow(){
         theme.textSecondary = ImVec4(0.62f,0.57f,0.80f,1.f);
     }
     theme.applyToImGuiStyle();
-    ImVec2 center=ImGui::GetMainViewport()->GetCenter();
-    ImVec2 mhSize(620.f,400.f);
-    ImGui::SetNextWindowPos(ImVec2(center.x-mhSize.x*0.5f,center.y-mhSize.y*0.5f),ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(mhSize,ImGuiCond_Always);
+    if(jupiterActive){
+        auto* vp=ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(vp->Pos,ImGuiCond_Always);
+        ImGui::SetNextWindowSize(vp->Size,ImGuiCond_Always);
+    } else {
+        ImVec2 center=ImGui::GetMainViewport()->GetCenter();
+        ImVec2 mhSize(620.f,400.f);
+        ImGui::SetNextWindowPos(ImVec2(center.x-mhSize.x*0.5f,center.y-mhSize.y*0.5f),ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(mhSize,ImGuiCond_Always);
+    }
     ImGui::SetNextWindowBgAlpha(0.f);
     ImGui::PushStyleVar(ImGuiStyleVar_Alpha,t);
     ImGui::Begin("##GucciBotMH",nullptr,
@@ -850,26 +860,28 @@ void MenuInterface::drawMegaHackWindow(){
     dl->AddRectFilled(ImVec2(wp.x+railW,wp.y),ImVec2(wp.x+ws.x,wp.y+headH),bgHead,rnd,ImDrawFlags_RoundCornersTopRight);
     if(jupiterActive){
         drawJupiterBackdrop(dl,wp,ws,(float)ImGui::GetTime());
-        drawJupiterBleed(ImGui::GetForegroundDrawList(),wp,ws,(float)ImGui::GetTime());
+    } else {
+        dl->AddRect(wp,ImVec2(wp.x+ws.x,wp.y+ws.y),theme.getAccentU32(0.45f),rnd,0,1.f);
     }
-    dl->AddRect(wp,ImVec2(wp.x+ws.x,wp.y+ws.y),theme.getAccentU32(0.45f),rnd,0,1.f);
     dl->AddLine(ImVec2(wp.x+railW,wp.y),ImVec2(wp.x+railW,wp.y+ws.y),theme.getAccentU32(0.12f),1.f);
     dl->AddLine(ImVec2(wp.x+railW,wp.y+headH),ImVec2(wp.x+ws.x,wp.y+headH),theme.getAccentU32(0.10f),1.f);
+    if(!jupiterActive){
         const char* title=(activeTheme==THEME_TOOSII)?"TOOSIIBOT":"GUCCIBOT";
-    float titleW=0.f;
-    if(fontHeading)ImGui::PushFont(fontHeading);
-    titleW=ImGui::CalcTextSize(title).x;
-    dl->AddText(ImVec2(wp.x+railW+14,wp.y+(headH-ImGui::GetFontSize())*0.5f),
-        theme.getAccentU32(0.96f),title);
-    if(fontHeading)ImGui::PopFont();
-    if(fontSmall)ImGui::PushFont(fontSmall);
-    dl->AddText(ImVec2(wp.x+railW+14+titleW+10,wp.y+headH*0.5f-5),
-        theme.getTextSecondaryU32(),"v" MOD_VERSION "  mega edition. brrr.");
-    if(fontSmall)ImGui::PopFont();
+        float titleW=0.f;
         if(fontHeading)ImGui::PushFont(fontHeading);
-    dl->AddText(ImVec2(wp.x+16,wp.y+12),theme.getAccentU32(0.92f),"GB");
-    if(fontHeading)ImGui::PopFont();
-        const char* names[]={"Macro","Render","Clicks","Autoclicker","Hacks","Indicators","Jupiter","HUD","Settings","Credits"};
+        titleW=ImGui::CalcTextSize(title).x;
+        dl->AddText(ImVec2(wp.x+railW+14,wp.y+(headH-ImGui::GetFontSize())*0.5f),
+            theme.getAccentU32(0.96f),title);
+        if(fontHeading)ImGui::PopFont();
+        if(fontSmall)ImGui::PushFont(fontSmall);
+        dl->AddText(ImVec2(wp.x+railW+14+titleW+10,wp.y+headH*0.5f-5),
+            theme.getTextSecondaryU32(),"v" MOD_VERSION "  mega edition. brrr.");
+        if(fontSmall)ImGui::PopFont();
+        if(fontHeading)ImGui::PushFont(fontHeading);
+        dl->AddText(ImVec2(wp.x+16,wp.y+12),theme.getAccentU32(0.92f),"GB");
+        if(fontHeading)ImGui::PopFont();
+    }
+        const char* names[]={"Macro","Render","Clicks","Autoclicker","Hacks","Indicators","JMF","HUD","Settings","Credits"};
     float rowH=34.f,railTop=headH+10.f;
     for(int i=0;i<10;i++){
         ImVec2 rMin(wp.x,wp.y+railTop+i*rowH),rMax(wp.x+railW,rMin.y+rowH);
@@ -895,7 +907,7 @@ void MenuInterface::drawMegaHackWindow(){
     ImGui::EndChild();
     if(jupiterActive)ImGui::PopStyleColor();
         ImGui::SetCursorScreenPos(ImVec2(wp.x+railW+12,wp.y+ws.y-footH+2));
-    drawStatusBar();
+    if(!jupiterActive)drawStatusBar();
     ImGui::End();
     ImGui::PopStyleVar();
     if(jupiterActive)theme=savedTheme;}
