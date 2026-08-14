@@ -1048,6 +1048,12 @@ void MenuInterface::drawReplayTab(){
             ImGui::TextUnformatted("Calculate frame windows for this macro? This replays the macro and simulates each click against the real engine to measure how tight it is. You must be in the level. May take a moment for long macros.");
             ImGui::PopTextWrapPos();
             ImGui::PopStyleColor();
+            ImGui::Dummy(ImVec2(0,6));
+            ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(1.f,0.8f,0.2f,1.f));
+            ImGui::PushTextWrapPos(ImGui::GetFontSize() * 24.f);
+            ImGui::TextUnformatted("Known limitation: the replay itself is accurate now (2026-08-13, ground-truth-forced), but each click's tested timing shifts still fall back to real simulation past that click -- so windows near tricky slope sections may still read off.");
+            ImGui::PopTextWrapPos();
+            ImGui::PopStyleColor();
             ImGui::Dummy(ImVec2(0,10));
             float pbw=(ImGui::GetContentRegionAvail().x-8)/2.f;
             if(Widgets::StyledButton("Calculate",ImVec2(pbw,30),theme,anim,6.f)){

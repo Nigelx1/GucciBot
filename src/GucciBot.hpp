@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-13-n (P3 CONFIRMED FIXED, after months and three disproven theories (dt/substep mismatch, checkpoint/probe-restart, ghost-sim hijack). d61ecaf's ground-truth-force approach (Calculate's capture pass pins the player's position/velocity/rotation/onGround to the original recording every frame, instead of trusting its own physics tick to re-derive them) was verified in-game by Nigel on a freshly-recorded Bloodbath macro: no more noclip/desync, and guccibot_slope.log shows CALC and PLAY position matching EXACTLY at f=1718-1725 (the historic divergence point, e.g. f=1724 x=2553.814 y=249.799 identical on both) where CALC used to undershoot the slope-exit launch impulse. No code change in this build -- the fix has been live since d61ecaf, this just marks it confirmed rather than untested.)"
+#define GB_BUILD_LABEL "2026-08-13-o (Documented the known P3 probe-phase gap directly in the GUI, not just in dev notes -- the Save-macro popup's Calculate confirmation now shows a yellow caveat line above the Calculate/Skip buttons: the replay pass itself is ground-truth-accurate now, but each click's tested timing shifts still fall back to real simulation past that click, so windows near tricky slope sections may still read off. No functional/engine change, GUI text only.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
