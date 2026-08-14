@@ -113,25 +113,33 @@ class $modify(SpriteDumpPL, PlayLayer) {
             if (std::filesystem::exists(path)) continue;
             attempted++;
 
-            auto* texture = go->getTexture();
-            if (!texture) {
-                dbg << "id=" << id << " SKIP no texture\n";
-                continue;
-            }
-            CCRect rect = go->getObjectTextureRect();
-            if (rect.size.width <= 0.f || rect.size.height <= 0.f) {
-                dbg << "id=" << id << " SKIP degenerate rect\n";
+            auto* frame = go->displayFrame();
+            if (!frame) {
+                dbg << "id=" << id << " SKIP no displayFrame\n";
                 continue;
             }
 
-            float w = std::min(rect.size.width + 24.f, 320.f);
-            float h = std::min(rect.size.height + 24.f, 320.f);
-
-            auto* snap = CCSprite::createWithTexture(texture, rect);
+            // Build a brand-new standalone sprite from the frame object
+            // itself -- this carries the atlas's own correct crop/rotated/
+            // offset metadata, instead of me reconstructing that by hand
+            // (which is what produced neighboring-sprite bleed and blanks
+            // last attempt). Also sidesteps any CCSpriteBatchNode concerns
+            // since this is a fresh, unparented node.
+            auto* snap = CCSprite::createWithSpriteFrame(frame);
             if (!snap) {
-                dbg << "id=" << id << " SKIP createWithTexture failed\n";
+                dbg << "id=" << id << " SKIP createWithSpriteFrame failed\n";
                 continue;
             }
+            CCSize contentSize = snap->getContentSize();
+            dbg << "id=" << id << " contentSize=(" << contentSize.width << ","
+                << contentSize.height << ")";
+            if (contentSize.width <= 0.f || contentSize.height <= 0.f) {
+                dbg << " SKIP degenerate contentSize\n";
+                continue;
+            }
+
+            float w = std::min(contentSize.width + 24.f, 320.f);
+            float h = std::min(contentSize.height + 24.f, 320.f);
             snap->setRotation(0.f);
             snap->setScaleX(1.f);
             snap->setScaleY(1.f);
