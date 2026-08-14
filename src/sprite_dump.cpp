@@ -113,26 +113,25 @@ class $modify(SpriteDumpPL, PlayLayer) {
             if (std::filesystem::exists(path)) continue;
             attempted++;
 
-            auto* frame = go->displayFrame();
-            if (!frame) {
-                dbg << "id=" << id << " SKIP no displayFrame\n";
-                continue;
-            }
+            // Take 6: fresh clones via createWithSpriteFrame render blank for
+            // several real, non-degenerate-sized ids (211, 1201, 817, ...)
+            // even after forcing color/opacity/blend, which ruled that out
+            // as the cause. Next theory: some decoration pieces are actually
+            // base + child node (a separate glow layer), so a standalone
+            // clone of just the base frame is legitimately blank -- the real
+            // visible content lives on a child I wasn't capturing. This
+            // captures the LIVE object itself (with any real children/state)
+            // instead of a clone, restoring its transform immediately after
+            // so nothing about the actual level visually changes.
+            CCPoint origPos = go->getPosition();
+            float origRot = go->getRotation();
+            float origScaleX = go->getScaleX();
+            float origScaleY = go->getScaleY();
 
-            // Build a brand-new standalone sprite from the frame object
-            // itself -- this carries the atlas's own correct crop/rotated/
-            // offset metadata, instead of me reconstructing that by hand
-            // (which is what produced neighboring-sprite bleed and blanks
-            // last attempt). Also sidesteps any CCSpriteBatchNode concerns
-            // since this is a fresh, unparented node.
-            auto* snap = CCSprite::createWithSpriteFrame(frame);
-            if (!snap) {
-                dbg << "id=" << id << " SKIP createWithSpriteFrame failed\n";
-                continue;
-            }
-            CCSize contentSize = snap->getContentSize();
+            CCSize contentSize = go->getContentSize();
             dbg << "id=" << id << " contentSize=(" << contentSize.width << ","
-                << contentSize.height << ")";
+                << contentSize.height << ") children="
+                << (go->getChildren() ? go->getChildren()->count() : 0);
             if (contentSize.width <= 0.f || contentSize.height <= 0.f) {
                 dbg << " SKIP degenerate contentSize\n";
                 continue;
@@ -140,27 +139,28 @@ class $modify(SpriteDumpPL, PlayLayer) {
 
             float w = std::min(contentSize.width + 24.f, 320.f);
             float h = std::min(contentSize.height + 24.f, 320.f);
-            snap->setRotation(0.f);
-            snap->setScaleX(1.f);
-            snap->setScaleY(1.f);
-            snap->setPosition({w / 2.f, h / 2.f});
-            // Many decoration pieces render via GD's own dynamic color-channel
-            // system and/or an additive glow blend function -- neither of
-            // which a freshly detached CCSprite inherits. Force plain white,
-            // full opacity, standard alpha blending so the shape is visible
-            // at all; color fidelity doesn't matter for a shape reference.
-            snap->setColor({255, 255, 255});
-            snap->setOpacity(255);
-            snap->setBlendFunc({GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA});
+            go->setRotation(0.f);
+            go->setScaleX(1.f);
+            go->setScaleY(1.f);
+            go->setPosition({w / 2.f, h / 2.f});
 
             auto* rt = CCRenderTexture::create((int)w, (int)h);
             if (!rt) {
                 dbg << "id=" << id << " SKIP CCRenderTexture::create failed\n";
+                go->setPosition(origPos);
+                go->setRotation(origRot);
+                go->setScaleX(origScaleX);
+                go->setScaleY(origScaleY);
                 continue;
             }
             rt->beginWithClear(0.f, 0.f, 0.f, 0.f);
-            snap->visit();
+            go->visit();
             rt->end();
+
+            go->setPosition(origPos);
+            go->setRotation(origRot);
+            go->setScaleX(origScaleX);
+            go->setScaleY(origScaleY);
 
             auto* img = rt->newCCImage();
             if (!img) {
