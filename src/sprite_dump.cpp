@@ -144,6 +144,14 @@ class $modify(SpriteDumpPL, PlayLayer) {
             snap->setScaleX(1.f);
             snap->setScaleY(1.f);
             snap->setPosition({w / 2.f, h / 2.f});
+            // Many decoration pieces render via GD's own dynamic color-channel
+            // system and/or an additive glow blend function -- neither of
+            // which a freshly detached CCSprite inherits. Force plain white,
+            // full opacity, standard alpha blending so the shape is visible
+            // at all; color fidelity doesn't matter for a shape reference.
+            snap->setColor({255, 255, 255});
+            snap->setOpacity(255);
+            snap->setBlendFunc({GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA});
 
             auto* rt = CCRenderTexture::create((int)w, (int)h);
             if (!rt) {
