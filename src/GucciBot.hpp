@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-13-i (Sprite dump take 2: first attempt ran (sprite_dump folder got created) but produced zero PNGs and I had no way to tell why, since geode::log::info doesn't persist anywhere readable on this machine. Replaced it with real file-based diagnostics -- <mod save dir>/sprite_dump_debug.log now records, per object, the texture-rect dimensions and the exact stage that failed (no texture / degenerate rect / sprite-creation failure / saveToFile result), so the next run is actually diagnosable instead of another blind guess. Sprite-capture logic itself unchanged from -h. Compiles clean, untested in-game.)"
+#define GB_BUILD_LABEL "2026-08-13-j (Sprite dump take 3: debug log from -i showed the render pipeline genuinely works -- real non-degenerate texture rects for every object, e.g. id=1753 rect 60x60, id=211 rect 90x90 -- but CCRenderTexture::saveToFile returned false for literally every single one. Rather than keep guessing at cocos2d's internal file-path handling, this bypasses it entirely: pulls raw RGBA pixels via CCRenderTexture::newCCImage(), then hand-encodes a real PNG (IHDR/IDAT/IEND chunks, zlib compress2 for the IDAT payload -- zlib's already a proven dependency here via brr_format.cpp) and writes it with plain std::ofstream, the same file-write pattern already working everywhere else in this mod. Debug log still records per-object outcome. Compiles clean, untested in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
