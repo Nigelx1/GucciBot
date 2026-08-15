@@ -2,6 +2,7 @@
 #include "autoclicker.hpp"
 #include "trajectory.hpp"
 #include "hitboxes.hpp"
+#include "jupiterghost.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/modify/PlayLayer.hpp>
@@ -386,6 +387,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
                 gb->jupiterDeathPcts.push_back(pct);
                 if (pct > gb->jupiterSessionBestPct) gb->jupiterSessionBestPct = pct;
             }
+            gbju::notifyJupiterAttemptEnded();
         }
 
                 if (gb->hackNoSpikeFlash && obj != m_anticheatSpike) {
@@ -415,6 +417,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
         PlayLayer::levelComplete();
         auto* gb = GucciEngine::get();
         gb->jupiterSessionBestPct = 100.f;
+        gbju::notifyJupiterAttemptEnded();
                         if (!gb->autosaveAtLevelEnd) return;
         if (!gb->isRecording() || gb->replay.m_actionAtom.empty()) return;
         auto path = gb->replay.getCurrentPath();

@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-14-n (JMF batch 1 of the full feature backlog: per-segment notes (inline expandable editor per segment, backward-compatible with old 2-field saves), Attempt/PB tracker + death heatmap (new Stats section, populated from PlayLayer::destroyPlayer -- session-only, not persisted), auto segment suggestions (buckets click density from m_clickIntervalsSec, cross-references m_pathSamples for the X position), segment export/import (base64 code bundling segments+notes), and segment looping -- deliberately NOT auto-restart (that needs the checkpoint system, which hook_playlayer.cpp shows is already heavily custom-routed through practiceFix/m_savedCheckpoints and is exactly the fragile machinery that broke intentional-death playback -- see CLAUDE.md P1), just a notification when you cross the loop-end segment. Compiles clean, untested in-game.)"
+#define GB_BUILD_LABEL "2026-08-14-o (JMF batch 2: new JupiterGhostOverlay (jupiterghost.hpp/cpp) draws the macro's ghost + your own best-attempt ghost directly in the game world, mirroring PracticeRangeOverlay's proven CCDrawNode attach/render/detach pattern -- pure rendering, no player/camera/checkpoint state touched. Scrub Preview freezes both ghosts at a manually-set percent instead of following the live frame, covering both 'jump-to-%%' and 'scrub playback' from the backlog WITHOUT real teleportation (that would need the same fragile checkpoint system flagged in batch 1). Click Deviation readout on the Click Trainer page compares your live jump-hold presses against the nearest macro click, shows frames early/late. Compiles clean, untested in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -391,9 +391,22 @@ public:
     int   jupiterLoopStartIdx = -1; // index into parseJupiterSegments(jupiterSegmentsRaw)
     int   jupiterLoopEndIdx   = -1;
 
-    // Jump-to-% practice start: seek playback to an arbitrary percent of the
-    // level instead of always starting from frame 0.
-    float jupiterJumpToPercent = 0.f;
+    // Ghost overlay + scrub/jump-to-% (JupiterGhostOverlay, jupiterghost.hpp/cpp).
+    // Deliberately camera/player-untouched: real teleportation would need the
+    // checkpoint system or a raw position+velocity+rotation state slam, both of
+    // which risk destabilizing the same fragile reset machinery flagged above --
+    // this just draws a marker at the recorded (or scrubbed) position instead,
+    // which is pure rendering with no gameplay-state risk at all.
+    bool  jupiterGhostEnabled     = true;  // macro's ghost, from replay.m_pathSamples
+    bool  jupiterBestGhostEnabled = false; // your own best-attempt ghost this session
+    bool  jupiterScrubActive      = false; // true: ghosts follow jupiterScrubFrame; false: follow the live frame
+    float jupiterScrubPercent     = 0.f;   // 0-100, the UI-facing scrub position
+
+    // Click deviation readout: compares your live clicks (Click Trainer page)
+    // against the nearest macro click in replay.m_clickIntervalsSec.
+    bool  jupiterDeviationHolding = false; // last-seen jump-hold state, to detect press edges
+    int   jupiterLastDeviationFrames = 0;  // signed: negative = early, positive = late
+    bool  jupiterHasDeviationReading = false;
 
     bool layoutMode            = false;
     bool noMirrorEffect        = false;

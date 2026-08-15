@@ -2928,6 +2928,70 @@ void MenuInterface::drawJupiterClickTrainerPage(){
         ImGui::Dummy(ImVec2(0,14));
         drawJupiterClickBar(theme,engine,engine->jupiterClickBarWindow,90.f);
     }
+
+    ImGui::Dummy(ImVec2(0,18));
+    Widgets::SectionHeader("Click Deviation",theme);
+    {
+        auto* pl=PlayLayer::get();
+        if(engine->replay.m_clickIntervalsSec.empty()){
+            ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+            ImGui::TextWrapped("No click data yet -- load a macro to compare against.");
+            ImGui::PopStyleColor();
+        } else if(!pl||!pl->m_player1||engine->isPlaying()){
+            ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+            ImGui::TextWrapped("Play the level yourself (not bot playback) to compare your clicks against the macro's.");
+            ImGui::PopStyleColor();
+        } else {
+            bool holding=(bool)pl->m_player1->m_holdingButtons[1];
+            if(holding&&!engine->jupiterDeviationHolding){
+                double tps=engine->replay.m_clickBarTps>0.0?engine->replay.m_clickBarTps:240.0;
+                double nowSec=(double)engine->updater.getFrame()/tps;
+                double bestDelta=1e9;
+                for(auto const& iv:engine->replay.m_clickIntervalsSec){
+                    double d=iv.first-nowSec;
+                    if(std::fabs(d)<std::fabs(bestDelta))bestDelta=d;
+                }
+                if(bestDelta<1e8){
+                    engine->jupiterLastDeviationFrames=-(int)std::lround(bestDelta*tps);
+                    engine->jupiterHasDeviationReading=true;
+                }
+            }
+            engine->jupiterDeviationHolding=holding;
+
+            if(!engine->jupiterHasDeviationReading){
+                ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+                ImGui::TextWrapped("Waiting for your first click...");
+                ImGui::PopStyleColor();
+            } else {
+                int f=engine->jupiterLastDeviationFrames;
+                const char* verdict=f==0?"on time":(f<0?"early":"late");
+                ImVec4 col=f==0?ImVec4(0.3f,0.9f,0.4f,1.f):(std::abs(f)<=3?ImVec4(0.95f,0.85f,0.3f,1.f):ImVec4(0.95f,0.35f,0.35f,1.f));
+                ImGui::PushStyleColor(ImGuiCol_Text,col);
+                ImGui::Text("Last click: %d frame%s %s",std::abs(f),std::abs(f)==1?"":"s",verdict);
+                ImGui::PopStyleColor();
+            }
+        }
+    }
+
+    ImGui::Dummy(ImVec2(0,18));
+    Widgets::SectionHeader("Ghosts & Scrub Preview",theme);
+    if(Widgets::ToggleSwitch("Macro Ghost",&engine->jupiterGhostEnabled,theme,anim))
+        mod->setSavedValue("jupiter_ghost_enabled",engine->jupiterGhostEnabled);
+    if(Widgets::ToggleSwitch("Your Best-Attempt Ghost",&engine->jupiterBestGhostEnabled,theme,anim))
+        mod->setSavedValue("jupiter_bestghost_enabled",engine->jupiterBestGhostEnabled);
+    ImGui::Dummy(ImVec2(0,4));
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::TextWrapped("Best-attempt ghost is session-only, not saved to disk, and only tracks real manual attempts, not bot playback. Both ghosts render in the game world, right on the player's actual path.");
+    ImGui::PopStyleColor();
+    ImGui::Dummy(ImVec2(0,10));
+
+    Widgets::ToggleSwitch("Scrub Preview",&engine->jupiterScrubActive,theme,anim);
+    if(engine->jupiterScrubActive){
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::TextWrapped("Ghosts freeze at this position in the level instead of following live playback, so you can preview any point without touching the actual player -- not a real teleport (the checkpoint system that would need is the same fragile one flagged elsewhere in this tab).");
+        ImGui::PopStyleColor();
+        Widgets::StyledSliderFloat("Scrub Percent",&engine->jupiterScrubPercent,0.f,100.f,theme);
+    }
 }
 
 void MenuInterface::drawJupiterTab(){
@@ -3391,6 +3455,8 @@ void MenuInterface::saveSettings(){
     mod->setSavedValue("jupiter_segments",eng->jupiterSegmentsRaw);
     mod->setSavedValue("jupiter_clickbar_enabled",eng->jupiterClickBarEnabled);
     mod->setSavedValue("jupiter_clickbar_window",(double)eng->jupiterClickBarWindow);
+    mod->setSavedValue("jupiter_ghost_enabled",eng->jupiterGhostEnabled);
+    mod->setSavedValue("jupiter_bestghost_enabled",eng->jupiterBestGhostEnabled);
     mod->setSavedValue("hack_noclip",eng->noclipEnabled);
     mod->setSavedValue("hack_noclip_flash",eng->noclipDeathFlash);
     mod->setSavedValue("hack_noclip_color_r",eng->noclipDeathColorR);
@@ -3575,6 +3641,8 @@ void MenuInterface::loadSettings(){
     eng->jupiterSegmentsRaw=mod->getSavedValue<std::string>("jupiter_segments","");
     eng->jupiterClickBarEnabled=mod->getSavedValue<bool>("jupiter_clickbar_enabled",true);
     eng->jupiterClickBarWindow=mod->getSavedValue<float>("jupiter_clickbar_window",2.f);
+    eng->jupiterGhostEnabled=mod->getSavedValue<bool>("jupiter_ghost_enabled",true);
+    eng->jupiterBestGhostEnabled=mod->getSavedValue<bool>("jupiter_bestghost_enabled",false);
     eng->noclipEnabled=mod->getSavedValue<bool>("hack_noclip",false);
     eng->noclipDeathFlash=mod->getSavedValue<bool>("hack_noclip_flash",true);
     eng->noclipDeathColorR=mod->getSavedValue<float>("hack_noclip_color_r",1.f);

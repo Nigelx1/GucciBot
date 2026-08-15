@@ -3,6 +3,7 @@
 #include "playsound.hpp"
 #include "calibration.hpp"
 #include "util_midhook.hpp"
+#include "jupiterghost.hpp"
 #include <safetyhook.hpp>
 
 #include <Geode/Geode.hpp>
@@ -123,6 +124,7 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
                         if (auto* fpl = PlayLayer::get()) {
             gbfw::renderFrameWindows(fpl, gb->renderer.recording);
             gbpr::renderPracticeRange(fpl);
+            gbju::renderJupiterGhost(fpl);
         }
 
                 if (gb->pendingAutoRetry > 0.0f) {
