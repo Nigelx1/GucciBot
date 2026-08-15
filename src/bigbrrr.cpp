@@ -1,4 +1,5 @@
 #include "bigbrrr.hpp"
+#include "gameaudiomute.hpp"
 #include <Geode/Bindings.hpp>
 #include <Geode/binding/FMODAudioEngine.hpp>
 #include <algorithm>
@@ -64,10 +65,15 @@ void BigBrrrManager::start() {
     }
     sound->setMode(FMOD_LOOP_NORMAL);
     system->playSound(sound, nullptr, false, &channel);
-    if (channel) channel->setVolume(1.f);
+    if (channel) {
+        channel->setVolume(1.f);
+        GameAudioMute::acquire();
+        audioMuteHeld = true;
+    }
 }
 
 void BigBrrrManager::stop() {
     if (channel) { channel->stop(); channel = nullptr; }
     if (sound) { sound->release(); sound = nullptr; }
+    if (audioMuteHeld) { GameAudioMute::release(); audioMuteHeld = false; }
 }

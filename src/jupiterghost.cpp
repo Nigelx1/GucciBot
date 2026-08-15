@@ -1,5 +1,6 @@
 #include "jupiterghost.hpp"
 #include "GucciBot.hpp"
+#include "gameaudiomute.hpp"
 #include <Geode/Geode.hpp>
 #include <Geode/modify/PlayLayer.hpp>
 #include <Geode/binding/FMODAudioEngine.hpp>
@@ -37,6 +38,7 @@ public:
     void stop() {
         if (m_channel) { m_channel->stop(); m_channel = nullptr; }
         if (m_sound) { m_sound->release(); m_sound = nullptr; }
+        if (m_audioMuteHeld) { GameAudioMute::release(); m_audioMuteHeld = false; }
     }
 
 private:
@@ -58,11 +60,16 @@ private:
             return;
         }
         system->playSound(m_sound, nullptr, false, &m_channel);
-        if (m_channel) m_channel->setVolume(1.f);
+        if (m_channel) {
+            m_channel->setVolume(1.f);
+            GameAudioMute::acquire();
+            m_audioMuteHeld = true;
+        }
     }
 
     FMOD::Sound* m_sound = nullptr;
     FMOD::Channel* m_channel = nullptr;
+    bool m_audioMuteHeld = false;
 };
 
 // Mirrors PracticeRangeOverlay (practicerange.cpp) exactly on purpose: a

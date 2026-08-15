@@ -29,6 +29,7 @@ public:
 private:
     FMOD::Sound*   sound   = nullptr;
     FMOD::Channel* channel = nullptr;
+    bool audioMuteHeld = false; // whether this manager currently holds a GameAudioMute lock
     void start();
     void stop();
 };

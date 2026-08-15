@@ -277,7 +277,22 @@ static void loadPathSamples(const fs::path& macroPath, std::vector<MacroPathSamp
 // branch of load()), deliberately kept separate.
 static void loadJupiterMacroData(const fs::path& path, GucciEngine::JupiterMacroData& out) {
     out = {};
-    auto* legacy = BRRMacro::loadFromDisk(path.stem().string());
+
+    // NOT BRRMacro::loadFromDisk(stem) -- that's hardcoded to search
+    // getSaveDir()/replays regardless of what path is passed in, which is
+    // exactly the general folder this data is deliberately NOT stored in
+    // anymore. Read the exact file directly and deserialize it instead,
+    // same low-level call convertToBRR itself uses for its BRR-payload branch.
+    std::ifstream f(path, std::ios::binary | std::ios::ate);
+    if (!f) return;
+    auto sz = static_cast<size_t>(f.tellg());
+    f.seekg(0);
+    std::vector<uint8_t> bytes(sz);
+    if (sz) f.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(sz));
+    f.close();
+    if (bytes.empty()) return;
+
+    auto* legacy = BRRMacro::deserialize(bytes);
     if (!legacy) return;
     if (legacy->inputs.empty()) { delete legacy; return; }
 
@@ -1133,7 +1148,17 @@ void GucciEngine::initialize() {
         };
 
         auto hidden = findIn(jupDir, "jupiter_my_favourite");
-        if (hidden.empty()) {
+        if (!hidden.empty()) loadJupiterMacroData(hidden, jupiterMacro);
+
+        // Self-healing: if nothing was found, OR what was found didn't
+        // actually parse into anything (e.g. a broken/empty file left behind
+        // by an earlier build's version of this logic), (re)do the seed +
+        // convert + move from scratch rather than trusting a stale file's
+        // mere existence.
+        if (!jupiterMacro.loaded) {
+            std::error_code rmEc;
+            if (!hidden.empty()) fs::remove(hidden, rmEc);
+
             auto bundled = Mod::get()->getResourcesDir() / "jupiter_my_favourite.gdr";
             std::error_code ec;
             if (fs::exists(bundled, ec)) {
@@ -1148,10 +1173,9 @@ void GucciEngine::initialize() {
                 }
                 fs::remove(seedDest, ec);
                 reloadMacroList();
+                if (!hidden.empty()) loadJupiterMacroData(hidden, jupiterMacro);
             }
         }
-
-        if (!hidden.empty()) loadJupiterMacroData(hidden, jupiterMacro);
     }
 
     auto* mod = Mod::get();
