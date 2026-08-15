@@ -2853,18 +2853,16 @@ void MenuInterface::drawIndicatorsTab(){
 // a snapshot taken once at load() -- see the comment on that field for why
 // it's not read live from m_actionAtom). Per Nigel's spec: a block's left
 // edge crossing the line means click, its right edge crossing means release.
+// Completely independent of live gameplay -- no PlayLayer or Playing-mode
+// requirement. Driven by real wall-clock time (ImGui::GetTime()), looping
+// through the macro's whole duration on repeat, so it works as a pure
+// rhythm preview from anywhere (main menu, any tab) rather than only while
+// actually attempting the level.
 static void drawJupiterClickBar(ThemeEngine& theme,GucciEngine* engine,float windowSeconds,float h=46.f){
     auto& replay=engine->replay;
     if(replay.m_clickIntervalsSec.empty()){
         ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
         ImGui::TextWrapped("No click data yet -- load a macro to see its click timing here.");
-        ImGui::PopStyleColor();
-        return;
-    }
-    auto* pl=PlayLayer::get();
-    if(!pl||!engine->isPlaying()){
-        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
-        ImGui::TextWrapped("Enter the level in Playing mode to watch clicks scroll through the line.");
         ImGui::PopStyleColor();
         return;
     }
@@ -2879,19 +2877,24 @@ static void drawJupiterClickBar(ThemeEngine& theme,GucciEngine* engine,float win
 
     dl->AddRectFilled(pos,ImVec2(pos.x+w,pos.y+h),barCol,4.f);
 
-    double tps=replay.m_clickBarTps>0.0?replay.m_clickBarTps:240.0;
-    double nowSec=(double)engine->updater.getFrame()/tps;
+    double maxT=0.0;
+    for(auto const& iv:replay.m_clickIntervalsSec)maxT=std::max(maxT,iv.second);
+    double loopLen=std::max(maxT,1.0);
+    double nowSec=std::fmod(ImGui::GetTime(),loopLen);
+
     float centerX=pos.x+w*0.5f;
     float halfWindow=std::max(windowSeconds,0.2f)*0.5f;
     float pxPerSec=(w*0.5f)/halfWindow;
 
     for(auto const& iv:replay.m_clickIntervalsSec){
-        double relStart=iv.first-nowSec, relEnd=iv.second-nowSec;
-        if(relEnd<-halfWindow||relStart>halfWindow)continue;
-        float x0=centerX+(float)relStart*pxPerSec;
-        float x1=centerX+(float)relEnd*pxPerSec;
-        x0=std::max(x0,pos.x); x1=std::min(x1,pos.x+w);
-        if(x1>x0)dl->AddRectFilled(ImVec2(x0,pos.y+5),ImVec2(x1,pos.y+h-5),clickCol,2.f);
+        for(double phase:{0.0,-loopLen,loopLen}){
+            double relStart=(iv.first+phase)-nowSec, relEnd=(iv.second+phase)-nowSec;
+            if(relEnd<-halfWindow||relStart>halfWindow)continue;
+            float x0=centerX+(float)relStart*pxPerSec;
+            float x1=centerX+(float)relEnd*pxPerSec;
+            x0=std::max(x0,pos.x); x1=std::min(x1,pos.x+w);
+            if(x1>x0)dl->AddRectFilled(ImVec2(x0,pos.y+5),ImVec2(x1,pos.y+h-5),clickCol,2.f);
+        }
     }
 
     dl->AddLine(ImVec2(centerX,pos.y-4),ImVec2(centerX,pos.y+h+4),white,3.f);

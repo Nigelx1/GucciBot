@@ -1068,41 +1068,51 @@ void GucciEngine::initialize() {
         fs::create_directories(getReplayDir());
     fs::create_directories(getPresetsDir());
 
-        // Seed the replays folder with the bundled Jupiter My Favourite GDR
-    // macro, once -- only if it's not already there, so this can never
-    // clobber Nigel's own edits/renames of it on later launches. Shows up
-    // as an "incompatible" (legacy-format) macro until converted; see
-    // convertToBRR's binary-GDR (msgpack) support below.
+        // Auto-convert + auto-load the bundled Jupiter My Favourite GDR macro,
+    // once -- but into its OWN dedicated folder, never the general replays
+    // folder. It used to briefly show up in the general "Saved Replays" list
+    // (and the Convert-to-BRR button in Macro Surgery) because convertToBRR
+    // -- a general-purpose tool also used for other legacy macros -- reads
+    // and writes there. Fixed by still using convertToBRR normally (seed the
+    // raw .gdr into the replays folder just long enough for it to run), then
+    // moving the converted result into save/jupiter/ and deleting the seed,
+    // so nothing Jupiter-related ever lingers where the general macro
+    // browser can see it. replay.load() then reads straight from that
+    // dedicated folder, completely independent of getReplayDir().
     {
-        auto bundled = Mod::get()->getResourcesDir() / "jupiter_my_favourite.gdr";
-        auto dest = getReplayDir() / "jupiter_my_favourite.gdr";
-        std::error_code ec;
-        if (fs::exists(bundled, ec) && !fs::exists(dest, ec))
-            fs::copy_file(bundled, dest, ec);
-    }
+        auto jupDir = Mod::get()->getSaveDir() / "jupiter";
+        fs::create_directories(jupDir);
 
-        // Auto-convert + auto-load it too, right here at startup -- so it's just
-    // ready by the time the JMF tab (or any level) is opened, no manual
-    // convert/load click needed and no requirement to already be in the
-    // level. Only loads if nothing else is currently loaded, so it never
-    // stomps on a macro already chosen this session.
-    {
-        auto dir = getReplayDir();
-        auto findNative = [&]() -> fs::path {
+        auto findIn = [](fs::path const& dir, std::string const& stem) -> fs::path {
             for (auto ext : { ".brrr", ".toosii", ".ja", ".giddey", ".bam", ".sexyy" }) {
                 std::error_code ec;
-                auto candidate = dir / (std::string("jupiter_my_favourite") + ext);
+                auto candidate = dir / (stem + ext);
                 if (fs::exists(candidate, ec)) return candidate;
             }
             return {};
         };
-        auto found = findNative();
-        if (found.empty()) {
-            convertToBRR("jupiter_my_favourite");
-            found = findNative();
+
+        auto hidden = findIn(jupDir, "jupiter_my_favourite");
+        if (hidden.empty()) {
+            auto bundled = Mod::get()->getResourcesDir() / "jupiter_my_favourite.gdr";
+            std::error_code ec;
+            if (fs::exists(bundled, ec)) {
+                auto seedDest = getReplayDir() / "jupiter_my_favourite.gdr";
+                fs::copy_file(bundled, seedDest, fs::copy_options::overwrite_existing, ec);
+                convertToBRR("jupiter_my_favourite");
+                auto converted = findIn(getReplayDir(), "jupiter_my_favourite");
+                if (!converted.empty()) {
+                    auto dest = jupDir / converted.filename();
+                    fs::rename(converted, dest, ec);
+                    if (!ec) hidden = dest;
+                }
+                fs::remove(seedDest, ec);
+                reloadMacroList();
+            }
         }
-        if (!found.empty() && replay.m_actionAtom.empty())
-            replay.load(found);
+
+        if (!hidden.empty() && replay.m_actionAtom.empty())
+            replay.load(hidden);
     }
 
     auto* mod = Mod::get();
