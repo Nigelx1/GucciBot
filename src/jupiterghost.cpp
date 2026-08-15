@@ -1,10 +1,8 @@
 #include "jupiterghost.hpp"
 #include "GucciBot.hpp"
-#include "gui.hpp"
 #include "gameaudiomute.hpp"
 #include <Geode/Geode.hpp>
 #include <Geode/modify/PlayLayer.hpp>
-#include <Geode/modify/CCKeyboardDispatcher.hpp>
 #include <Geode/binding/FMODAudioEngine.hpp>
 #include <algorithm>
 #include <filesystem>
@@ -206,29 +204,6 @@ class $modify(JupiterGhostPlayLayer, PlayLayer) {
         JupiterGhostOverlay::get()->detach();
         JupiterMusicSync::get()->stop();
         PlayLayer::onQuit();
-    }
-};
-
-// Click Trainer's own click/release marks (spacebar, up arrow, W): a real
-// CCKeyboardDispatcher hook, not ImGui::IsKeyPressed -- game keys aren't
-// reliably delivered to ImGui's IO in this GD+ImGui integration, which is
-// exactly why keybinds.cpp already has its own separate dispatcher hook
-// instead of relying on ImGui for these. Deliberately NOT gated on
-// PlayLayer::get() (unlike keybinds.cpp's Autoclicker tracking) since the
-// click bar is meant to work without a level loaded; gated on the Click
-// Trainer page actually being open instead, so ordinary jumping during real
-// gameplay doesn't silently pile up into the click bar's history.
-class $modify(JupiterClickBarKeyHandler, CCKeyboardDispatcher) {
-    bool dispatchKeyboardMSG(enumKeyCodes key, bool down, bool repeat, double ts) {
-        if (!repeat && (key == enumKeyCodes::KEY_Space || key == enumKeyCodes::KEY_Up || key == enumKeyCodes::KEY_W)) {
-            auto* ui = MenuInterface::get();
-            if (ui && ui->jupiterClickBarPageOpen) {
-                auto* gb = GucciEngine::get();
-                if (down) gb->jupiterClickBarMyClicks.push_back(gb->jupiterClickBarPosSec);
-                else gb->jupiterClickBarMyReleases.push_back(gb->jupiterClickBarPosSec);
-            }
-        }
-        return CCKeyboardDispatcher::dispatchKeyboardMSG(key, down, repeat, ts);
     }
 };
 

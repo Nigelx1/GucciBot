@@ -2900,15 +2900,6 @@ static void drawJupiterClickBar(ThemeEngine& theme,AnimationState& anim,GucciEng
 
     gbju::syncClickBarMusic(true,engine->jupiterClickBarPaused,engine->jupiterClickBarPosSec);
 
-    // Your own mouse clicks -- same ImGui mouse path the menu buttons
-    // already use, so it's known to work. Keyboard (spacebar/up/W) is
-    // tracked separately via a real CCKeyboardDispatcher hook in
-    // jupiterghost.cpp -- ImGui doesn't reliably see game keys in this
-    // GD+ImGui integration, same reason keybinds.cpp has its own dispatcher
-    // hook instead of relying on ImGui for these.
-    if(ImGui::IsMouseClicked(ImGuiMouseButton_Left))engine->jupiterClickBarMyClicks.push_back(engine->jupiterClickBarPosSec);
-    if(ImGui::IsMouseReleased(ImGuiMouseButton_Left))engine->jupiterClickBarMyReleases.push_back(engine->jupiterClickBarPosSec);
-
     if(Widgets::StyledButton(engine->jupiterClickBarPaused?"Resume":"Pause",ImVec2(80,24),theme,anim))
         engine->jupiterClickBarPaused=!engine->jupiterClickBarPaused;
     ImGui::SameLine();
@@ -2918,12 +2909,26 @@ static void drawJupiterClickBar(ThemeEngine& theme,AnimationState& anim,GucciEng
         engine->jupiterClickBarMyReleases.clear();
     }
     ImGui::SameLine();
-    if(Widgets::ToggleSwitch("Loop",&engine->jupiterClickBarLoop,theme,anim)){}
+    if(Widgets::ToggleSwitch("Loop",&engine->jupiterClickBarLoop,theme,anim))
+        Mod::get()->setSavedValue("jupiter_clickbar_loop",engine->jupiterClickBarLoop);
     ImGui::SameLine();
     ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
     ImGui::Text("%.1fs / %.1fs",engine->jupiterClickBarPosSec,loopLen);
     ImGui::PopStyleColor();
     ImGui::Dummy(ImVec2(0,6));
+
+    // Your own mouse clicks -- same ImGui mouse path the menu buttons
+    // already use, so it's known to work. Keyboard (spacebar/up/W) is
+    // tracked separately via keybinds.cpp's existing dispatcher hook --
+    // ImGui doesn't reliably see game keys in this GD+ImGui integration,
+    // which is exactly why that hook exists instead of relying on ImGui for
+    // these. Checked AFTER the transport row above (not before) and gated on
+    // !IsAnyItemHovered() so clicking Pause/Resume/Reset/Loop doesn't also
+    // register as a rhythm mark -- ImGui's hover/active state for widgets
+    // already submitted this frame is live by this point.
+    bool overOtherWidget=ImGui::IsAnyItemHovered();
+    if(!overOtherWidget&&ImGui::IsMouseClicked(ImGuiMouseButton_Left))engine->jupiterClickBarMyClicks.push_back(engine->jupiterClickBarPosSec);
+    if(!overOtherWidget&&ImGui::IsMouseReleased(ImGuiMouseButton_Left))engine->jupiterClickBarMyReleases.push_back(engine->jupiterClickBarPosSec);
 
     ImVec2 pos=ImGui::GetCursorScreenPos();
     float w=ImGui::GetContentRegionAvail().x;
@@ -2951,19 +2956,19 @@ static void drawJupiterClickBar(ThemeEngine& theme,AnimationState& anim,GucciEng
     }
 
     // Your own clicks + releases -- thin white lines, scrolling past the
-    // same way the yellow marks do.
-    for(double t:engine->jupiterClickBarMyClicks){
+    // same way the yellow marks do. Press marks rise from the bottom,
+    // release marks hang from the top, so the two are visually
+    // distinguishable at a glance instead of being identical lines.
+    auto drawMyMark=[&](double t,bool isRelease){
         double rel=t-nowSec;
-        if(rel<-halfWindow||rel>halfWindow)continue;
+        if(rel<-halfWindow||rel>halfWindow)return;
         float x=centerX+(float)rel*pxPerSec;
-        dl->AddLine(ImVec2(x,pos.y+3),ImVec2(x,pos.y+h-3),white,2.f);
-    }
-    for(double t:engine->jupiterClickBarMyReleases){
-        double rel=t-nowSec;
-        if(rel<-halfWindow||rel>halfWindow)continue;
-        float x=centerX+(float)rel*pxPerSec;
-        dl->AddLine(ImVec2(x,pos.y+3),ImVec2(x,pos.y+h-3),white,2.f);
-    }
+        float yMid=pos.y+h*0.5f;
+        if(isRelease)dl->AddLine(ImVec2(x,pos.y+3),ImVec2(x,yMid),white,2.f);
+        else dl->AddLine(ImVec2(x,yMid),ImVec2(x,pos.y+h-3),white,2.f);
+    };
+    for(double t:engine->jupiterClickBarMyClicks)drawMyMark(t,false);
+    for(double t:engine->jupiterClickBarMyReleases)drawMyMark(t,true);
 
     dl->AddLine(ImVec2(centerX,pos.y-4),ImVec2(centerX,pos.y+h+4),white,3.f);
 
@@ -3574,6 +3579,7 @@ void MenuInterface::saveSettings(){
     mod->setSavedValue("jupiter_segments",eng->jupiterSegmentsRaw);
     mod->setSavedValue("jupiter_clickbar_enabled",eng->jupiterClickBarEnabled);
     mod->setSavedValue("jupiter_clickbar_window",(double)eng->jupiterClickBarWindow);
+    mod->setSavedValue("jupiter_clickbar_loop",eng->jupiterClickBarLoop);
     mod->setSavedValue("jupiter_ghost_enabled",eng->jupiterGhostEnabled);
     mod->setSavedValue("jupiter_bestghost_enabled",eng->jupiterBestGhostEnabled);
     mod->setSavedValue("jupiter_music_enabled",eng->jupiterMusicEnabled);
@@ -3761,6 +3767,7 @@ void MenuInterface::loadSettings(){
     eng->jupiterSegmentsRaw=mod->getSavedValue<std::string>("jupiter_segments","");
     eng->jupiterClickBarEnabled=mod->getSavedValue<bool>("jupiter_clickbar_enabled",true);
     eng->jupiterClickBarWindow=mod->getSavedValue<float>("jupiter_clickbar_window",2.f);
+    eng->jupiterClickBarLoop=mod->getSavedValue<bool>("jupiter_clickbar_loop",false);
     eng->jupiterGhostEnabled=mod->getSavedValue<bool>("jupiter_ghost_enabled",true);
     eng->jupiterBestGhostEnabled=mod->getSavedValue<bool>("jupiter_bestghost_enabled",false);
     eng->jupiterMusicEnabled=mod->getSavedValue<bool>("jupiter_music_enabled",true);

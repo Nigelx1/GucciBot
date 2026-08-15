@@ -27,6 +27,22 @@ class $modify(GB7KeyHandler, CCKeyboardDispatcher) {
         if (ImGui::GetIO().WantTextInput)
             return CCKeyboardDispatcher::dispatchKeyboardMSG(key, down, repeat, ts);
 
+                // Click Trainer's own click/release marks (spacebar, up arrow, W):
+        // folded into this existing hook rather than a separate $modify class,
+        // since a separate hook risked silently missing keys if it ended up
+        // chained after the rebind early-return above (that path returns true
+        // without calling the base dispatchKeyboardMSG, breaking the chain for
+        // anything ordered after it). Deliberately not gated on PlayLayer::get()
+        // (unlike Autoclicker's tracking below) since the click bar works
+        // without a level loaded; gated on the Click Trainer page actually
+        // being open instead, so ordinary jumping during real gameplay doesn't
+        // silently pile up into its history.
+        if (!repeat && ui && ui->jupiterClickBarPageOpen &&
+            (key == enumKeyCodes::KEY_Space || key == enumKeyCodes::KEY_Up || key == enumKeyCodes::KEY_W)) {
+            if (down) gb->jupiterClickBarMyClicks.push_back(gb->jupiterClickBarPosSec);
+            else gb->jupiterClickBarMyReleases.push_back(gb->jupiterClickBarPosSec);
+        }
+
         bool handled = false;
         static KeybindSet s_fallbackKeybinds;
         auto& kb = ui ? ui->keybinds : s_fallbackKeybinds;

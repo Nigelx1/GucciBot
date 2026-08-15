@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-15-c (Rebuild to repackage about.md's ToastyExGD -> ToastexGD credit fix into the installed .geode -- about.md only gets bundled at package time, so the prior commit alone didn't reach the installed mod. No functional changes.)"
+#define GB_BUILD_LABEL "2026-08-15-d (1.0.1 bug-audit pass on the Click Trainer, via a code-review sweep. Fixed: clicking Pause/Resume/Reset/Loop/the window slider was also registering as a rhythm click, since detection ran before those widgets and wasn't excluded -- moved detection after the transport row, gated on !IsAnyItemHovered(). Press and release marks were visually identical white lines despite being tracked separately -- press now rises from the bottom, release hangs from the top, merged into one shared lambda instead of two copy-pasted loops. Loop toggle was never persisted -- now saved/loaded like its siblings. Folded the separate JupiterClickBarKeyHandler CCKeyboardDispatcher hook into keybinds.cpp's existing one instead of a second hook class -- the existing hook's rebind-in-progress path returns early without chaining to the base dispatchKeyboardMSG, which could've silently skipped a second hook ordered after it depending on Geode's priority resolution; folding in also gets the WantTextInput guard for free. Compiles clean, untested in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
