@@ -378,8 +378,11 @@ class $modify(GB7PlayLayer, PlayLayer) {
                 // Jupiter tab: attempt/PB tracker + death heatmap. Session-only
         // bookkeeping, deliberately placed after both early-returns above so
         // analysis probes and noclip'd "deaths" (which don't actually end the
-        // attempt) don't get counted -- only real deaths do.
-        if (obj != m_anticheatSpike) {
+        // attempt) don't get counted -- only real deaths do. Also gated to the
+        // Jupiter level itself and to real (non-bot) play, so dying on an
+        // unrelated level or the bot finishing a playback pass doesn't
+        // corrupt these Jupiter-only session stats.
+        if (obj != m_anticheatSpike && !gb->isPlaying() && gbju::isJupiterLevel(this)) {
             gb->jupiterAttemptCount++;
             float xp = player ? player->m_position.x : -1.f;
             if (m_levelLength > 0.f && xp >= 0.f) {
@@ -416,8 +419,13 @@ class $modify(GB7PlayLayer, PlayLayer) {
     void levelComplete() {
         PlayLayer::levelComplete();
         auto* gb = GucciEngine::get();
-        gb->jupiterSessionBestPct = 100.f;
-        gbju::notifyJupiterAttemptEnded();
+        // Same Jupiter/real-play scoping as the destroyPlayer tracker above --
+        // otherwise completing ANY level (or the bot finishing ANY macro)
+        // stomps the Jupiter tab's session-best to 100%.
+        if (!gb->isPlaying() && gbju::isJupiterLevel(this)) {
+            gb->jupiterSessionBestPct = 100.f;
+            gbju::notifyJupiterAttemptEnded();
+        }
                         if (!gb->autosaveAtLevelEnd) return;
         if (!gb->isRecording() || gb->replay.m_actionAtom.empty()) return;
         auto path = gb->replay.getCurrentPath();

@@ -9,6 +9,12 @@ class PlayLayer;
 // controls, and jupiterghost.cpp for why this is architected as a strict
 // attach/render/detach overlay mirroring PracticeRangeOverlay's pattern.
 namespace gbju {
+    // True if pl is a "Jupiter My Favourite" level (matched by level name,
+    // case-insensitive). Shared so every Jupiter-scoped feature -- ghost
+    // rendering, music sync, and the attempt/PB/heatmap tracker in
+    // hook_playlayer.cpp -- agrees on exactly the same definition.
+    bool isJupiterLevel(PlayLayer* pl);
+
     void renderJupiterGhost(PlayLayer* pl);
     // Call from PlayLayer::destroyPlayer/levelComplete when a real attempt
     // (not a bot playback, not an analysis probe) has just ended, so the

@@ -312,6 +312,7 @@ static char gamemodeChar(PlayerObject* p) {
     if (!p) return 'C';
     if (p->m_isRobot)  return 'R';
     if (p->m_isSpider) return 'X';
+    if (p->m_isSwing)  return 'G';
     if (p->m_isShip)   return 'H';
     if (p->m_isBall)   return 'B';
     if (p->m_isBird)   return 'U';
@@ -339,7 +340,8 @@ static void frameUpdateMidhook(SafetyHookContext&) {
         if (shouldCapturePath) {
             auto* plr = PlayLayer::get();
             auto& samples = gb->replay.m_pathSamples;
-            if (plr && plr->m_player1 && upd.getFrame() >= samples.size()) {
+            uint32_t frame = upd.getFrame();
+            if (plr && plr->m_player1 && frame >= samples.size()) {
                 auto* p1 = plr->m_player1;
                 MacroPathSample smp;
                 smp.p1x = p1->m_position.x;
@@ -365,7 +367,16 @@ static void frameUpdateMidhook(SafetyHookContext&) {
                     smp.p2Dashing = p2->m_isDashing;
                     smp.gamemode2 = gamemodeChar(p2);
                 }
-                samples.push_back(smp);
+                // Indexed by frame (see m_pathSamples' index==frame contract in
+                // GucciBot.hpp), not appended -- getFrame() is already
+                // post-incremented by the time we get here, so a plain
+                // push_back() would silently land one slot early. resize()
+                // also means a capture gap (e.g. resuming after Calculate's
+                // analysis pass skipped capture for a while) fills the missed
+                // indices with a blank placeholder instead of permanently
+                // shifting every later index out of alignment with its frame.
+                samples.resize(frame + 1);
+                samples[frame] = smp;
                 if (!gb->isRecording()) gb->replay.m_pathSamplesDirty = true;
             }
         }
@@ -402,6 +413,7 @@ static void frameUpdateMidhook(SafetyHookContext&) {
                     p1->setRotation(s.p1Rot);
                     p1->m_isOnGround   = s.p1OnGround;
                     p1->m_isUpsideDown = s.p1UpsideDown;
+                    p1->m_isDashing    = s.p1Dashing;
                 }
                 if (s.hasP2 && plr && plr->m_player2) {
                     auto* p2 = plr->m_player2;
@@ -411,6 +423,7 @@ static void frameUpdateMidhook(SafetyHookContext&) {
                     p2->setRotation(s.p2Rot);
                     p2->m_isOnGround   = s.p2OnGround;
                     p2->m_isUpsideDown = s.p2UpsideDown;
+                    p2->m_isDashing    = s.p2Dashing;
                 }
             }
         }

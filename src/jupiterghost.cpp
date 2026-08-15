@@ -9,6 +9,15 @@
 
 using namespace geode::prelude;
 
+namespace gbju {
+    bool isJupiterLevel(PlayLayer* pl) {
+        if (!pl || !pl->m_level) return false;
+        std::string lower = pl->m_level->m_levelName;
+        std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+        return lower.find("jupiter my favourite") != std::string::npos;
+    }
+}
+
 // Synced music, two independent trigger paths sharing one channel:
 //  - sync(pl,frame,tps): live gameplay, called from the per-gameplay-frame
 //    hook (renderJupiterGhost) -- seeked to the ACTUAL level frame, works
@@ -33,7 +42,7 @@ public:
 
     void sync(PlayLayer* pl, uint32_t frame, double tps) {
         auto* gb = GucciEngine::get();
-        bool shouldPlay = gb->jupiterMusicEnabled && pl && pl->m_started && isJupiterLevel(pl);
+        bool shouldPlay = gb->jupiterMusicEnabled && pl && pl->m_started && gbju::isJupiterLevel(pl);
         if (!shouldPlay) return;
         if (!m_channel) start();
         if (!m_channel) return;
@@ -46,7 +55,7 @@ public:
     void syncPreview(bool active, bool paused, double posSec) {
         auto* pl = PlayLayer::get();
         auto* gb = GucciEngine::get();
-        bool liveOwns = gb->jupiterMusicEnabled && pl && pl->m_started && isJupiterLevel(pl);
+        bool liveOwns = gb->jupiterMusicEnabled && pl && pl->m_started && gbju::isJupiterLevel(pl);
         if (liveOwns) return; // sync() has it this frame instead
 
         bool shouldPlay = active && gb->jupiterMusicEnabled;
@@ -66,13 +75,6 @@ public:
     }
 
 private:
-    static bool isJupiterLevel(PlayLayer* pl) {
-        if (!pl->m_level) return false;
-        std::string lower = pl->m_level->m_levelName;
-        std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-        return lower.find("jupiter my favourite") != std::string::npos;
-    }
-
     void seekIfDrifted(double targetMsD) {
         unsigned int targetMs = (unsigned int)std::clamp(targetMsD, 0.0, 1e9);
         unsigned int posMs = 0;

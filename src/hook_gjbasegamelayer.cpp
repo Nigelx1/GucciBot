@@ -255,11 +255,20 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         auto* gb = GucciEngine::get();
         if (button == 1) {
             triggerClickAudio(!player1, button, pressed);
-            if (gb->survivalIndicator) {
-                TrajectoryPredictionService::get().onRealClick(!player1, pressed);
-            }
-            if (pressed) {
-                CalibrationService::get().onRealClick();
+            // handleButton is the base game's single choke point for button
+            // state changes, so it also fires for clicks the bot itself
+            // injects during playback (queueButton -> processQueuedButtons
+            // re-enters this hook). Real-click measurement should only ever
+            // see actual human input, so these two are gated on !isPlaying()
+            // -- unlike triggerClickAudio just above, which already has its
+            // own separate playback-aware guard and is deliberately left as is.
+            if (!gb->isPlaying()) {
+                if (gb->survivalIndicator) {
+                    TrajectoryPredictionService::get().onRealClick(!player1, pressed);
+                }
+                if (pressed) {
+                    CalibrationService::get().onRealClick();
+                }
             }
         }
         if (!gb->isRecording()) {

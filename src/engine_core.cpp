@@ -153,6 +153,12 @@ void GucciReplaySystem::onReset(uint32_t respawnFrame, uint32_t deathFrame) {
                                                             m_actionAtom.clipFrom(respawnFrame + 1);
             size_t after = m_actionAtom.length();
             m_inputIndex = m_actionAtom.length();
+            // m_pathSamples is indexed by frame and only ever grows -- without this,
+            // a checkpoint retry leaves stale ground-truth data (from the attempt
+            // that just died) sitting at every index past the checkpoint, silently
+            // corrupting "Show Macro Path" and Calculate for the new attempt.
+            if (m_pathSamples.size() > (size_t)respawnFrame + 1)
+                m_pathSamples.resize((size_t)respawnFrame + 1);
             if (before != after)
                 log::info("[GucciBot] Recording: died@{}, respawn@{} (checkpoint) "
                           "— deleted {} stale input(s) after checkpoint (kept {})",
@@ -163,6 +169,7 @@ void GucciReplaySystem::onReset(uint32_t respawnFrame, uint32_t deathFrame) {
                           deathFrame, respawnFrame, after);
         } else {
                                                                                                                                     m_actionAtom.m_actions.clear();
+            m_pathSamples.clear();
             m_inputIndex = 0;
             log::info("[GucciBot] Recording: died@{}, full restart (no checkpoint) "
                       "— cleared {} input(s), re-recording from frame 0",
@@ -242,7 +249,23 @@ static void loadPathSamples(const fs::path& macroPath, std::vector<MacroPathSamp
     uint8_t ver = 0; f.read((char*)&ver, 1);
     if (ver != 2) return; // v1 sidecars (position-only) are silently dropped -- re-record to get force-capture support
     uint32_t n = 0; f.read((char*)&n, 4);
-    samples.reserve(n);
+    // n comes straight from an untrusted sidecar file -- reserving it outright
+    // lets a corrupted/truncated file (or a garbage value near UINT32_MAX)
+    // request a multi-gigabyte allocation, throwing length_error/bad_alloc
+    // with nothing upstream to catch it. This function runs from
+    // GucciEngine::initialize() at mod startup, so that would crash the whole
+    // game. Cap the reserve hint to what the file could actually still hold;
+    // the loop below already handles a short/corrupt file via `if (!f) break`.
+    {
+        constexpr std::streamoff kRecordBytes = 44;
+        auto curPos = f.tellg();
+        f.seekg(0, std::ios::end);
+        auto endPos = f.tellg();
+        f.seekg(curPos);
+        uint64_t maxRecords = (curPos >= 0 && endPos > curPos)
+            ? (uint64_t)(endPos - curPos) / kRecordBytes : 0;
+        samples.reserve(std::min<uint64_t>(n, maxRecords));
+    }
     for (uint32_t i = 0; i < n; ++i) {
         MacroPathSample s;
         f.read((char*)&s.p1x, 4);    f.read((char*)&s.p1y, 4);
@@ -525,6 +548,15 @@ void GucciReplaySystem::load(const fs::path& path) {
         gb->setMode(GucciEngine::Mode::Playing);
         log::info("[GucciBot] Loaded legacy BRR: {} inputs", m_actionAtom.length());
         loadFwMarks(path);
+        // Legacy format has no path-sample/trainer-progress sidecar of its own
+        // -- unlike the GBR6 branch above, which always calls loadPathSamples/
+        // loadTrainerProgress for the newly loaded file. Without clearing these
+        // here, loading a legacy macro right after a GBR6 one leaves the OLD
+        // macro's ground-truth path data and trainer best-X attached to this
+        // one, so Calculate/"Show Macro Path" force-write the wrong macro's
+        // positions and the trainer bar shows the wrong progress marker.
+        m_pathSamples.clear();
+        m_trainerBestX = 0.f;
         buildClickIntervals(gb->updater.m_tps);
         delete legacy;
         return;
@@ -561,6 +593,11 @@ bool GucciEngine::beginResumeRecording() {
     uint32_t now = updater.getFrame();
     auto& atom = replay.m_actionAtom;
     atom.clipFrom(now);
+    // Same reasoning as GucciReplaySystem::onReset() -- keep path-sample ground
+    // truth in sync with the action atom's own clipping so a resumed recording
+    // can't leave stale post-resume-point samples lying around.
+    if (replay.m_pathSamples.size() > (size_t)now)
+        replay.m_pathSamples.resize((size_t)now);
 
         bool held[2][4] = {};
     for (auto const& a : atom.m_actions)
@@ -755,24 +792,34 @@ static bool gdrJsonExtract(const std::string& text, double& framerate, std::vect
 // rather than trying to fully decode the file.
 namespace gdrmsgpack {
 
-static bool skipValue(const std::vector<uint8_t>& b, size_t& i);
+// Depth-limited: skipValue/skipContainer are mutually recursive, and a
+// crafted or corrupted .gdr can nest arrays/maps one level per byte (e.g.
+// repeated single-element array headers), which without a cap recurses
+// deep enough to overflow the stack and crash the whole game -- there's no
+// exception to catch here since a stack overflow isn't a C++ exception.
+// Legitimate GDR macro data never nests anywhere close to this deep.
+static constexpr size_t kMaxDepth = 64;
+
+static bool skipValue(const std::vector<uint8_t>& b, size_t& i, size_t depth = 0);
 
 static bool skipN(const std::vector<uint8_t>& b, size_t& i, size_t n) {
     if (i + n > b.size()) return false;
     i += n; return true;
 }
-static bool skipContainer(const std::vector<uint8_t>& b, size_t& i, size_t count, bool isMap) {
+static bool skipContainer(const std::vector<uint8_t>& b, size_t& i, size_t count, bool isMap, size_t depth) {
+    if (depth > kMaxDepth) return false;
     size_t n = isMap ? count * 2 : count;
-    for (size_t k = 0; k < n; k++) if (!skipValue(b, i)) return false;
+    for (size_t k = 0; k < n; k++) if (!skipValue(b, i, depth + 1)) return false;
     return true;
 }
-static bool skipValue(const std::vector<uint8_t>& b, size_t& i) {
+static bool skipValue(const std::vector<uint8_t>& b, size_t& i, size_t depth) {
+    if (depth > kMaxDepth) return false;
     if (i >= b.size()) return false;
     uint8_t t = b[i++];
     if (t <= 0x7f) return true;
     if (t >= 0xe0) return true;
-    if (t >= 0x80 && t <= 0x8f) return skipContainer(b, i, t & 0x0f, true);
-    if (t >= 0x90 && t <= 0x9f) return skipContainer(b, i, t & 0x0f, false);
+    if (t >= 0x80 && t <= 0x8f) return skipContainer(b, i, t & 0x0f, true, depth + 1);
+    if (t >= 0x90 && t <= 0x9f) return skipContainer(b, i, t & 0x0f, false, depth + 1);
     if (t >= 0xa0 && t <= 0xbf) return skipN(b, i, t & 0x1f);
     switch (t) {
         case 0xc0: case 0xc2: case 0xc3: return true;
@@ -792,10 +839,10 @@ static bool skipValue(const std::vector<uint8_t>& b, size_t& i) {
         case 0xd9: { if (i>=b.size()) return false; uint8_t n=b[i++]; return skipN(b,i,n); }
         case 0xda: { if (i+2>b.size()) return false; uint16_t n=(uint16_t)((b[i]<<8)|b[i+1]); i+=2; return skipN(b,i,n); }
         case 0xdb: { if (i+4>b.size()) return false; uint32_t n=((uint32_t)b[i]<<24)|((uint32_t)b[i+1]<<16)|((uint32_t)b[i+2]<<8)|b[i+3]; i+=4; return skipN(b,i,n); }
-        case 0xdc: { if (i+2>b.size()) return false; uint16_t n=(uint16_t)((b[i]<<8)|b[i+1]); i+=2; return skipContainer(b,i,n,false); }
-        case 0xdd: { if (i+4>b.size()) return false; uint32_t n=((uint32_t)b[i]<<24)|((uint32_t)b[i+1]<<16)|((uint32_t)b[i+2]<<8)|b[i+3]; i+=4; return skipContainer(b,i,n,false); }
-        case 0xde: { if (i+2>b.size()) return false; uint16_t n=(uint16_t)((b[i]<<8)|b[i+1]); i+=2; return skipContainer(b,i,n,true); }
-        case 0xdf: { if (i+4>b.size()) return false; uint32_t n=((uint32_t)b[i]<<24)|((uint32_t)b[i+1]<<16)|((uint32_t)b[i+2]<<8)|b[i+3]; i+=4; return skipContainer(b,i,n,true); }
+        case 0xdc: { if (i+2>b.size()) return false; uint16_t n=(uint16_t)((b[i]<<8)|b[i+1]); i+=2; return skipContainer(b,i,n,false,depth+1); }
+        case 0xdd: { if (i+4>b.size()) return false; uint32_t n=((uint32_t)b[i]<<24)|((uint32_t)b[i+1]<<16)|((uint32_t)b[i+2]<<8)|b[i+3]; i+=4; return skipContainer(b,i,n,false,depth+1); }
+        case 0xde: { if (i+2>b.size()) return false; uint16_t n=(uint16_t)((b[i]<<8)|b[i+1]); i+=2; return skipContainer(b,i,n,true,depth+1); }
+        case 0xdf: { if (i+4>b.size()) return false; uint32_t n=((uint32_t)b[i]<<24)|((uint32_t)b[i+1]<<16)|((uint32_t)b[i+2]<<8)|b[i+3]; i+=4; return skipContainer(b,i,n,true,depth+1); }
         default: return false;
     }
 }
@@ -873,7 +920,7 @@ static bool gdrBinaryExtract(const std::vector<uint8_t>& bytes, double& framerat
 
         if (key == "inputs") {
             auto arr = readContainerHeader(bytes, i);
-            if (arr.count == SIZE_MAX) return false;
+            if (arr.count == SIZE_MAX || arr.isMap) return false;
             for (size_t e = 0; e < arr.count; e++) {
                 auto obj = readContainerHeader(bytes, i);
                 if (obj.count == SIZE_MAX || !obj.isMap) return false;
@@ -1162,12 +1209,26 @@ void GucciEngine::initialize() {
             auto bundled = Mod::get()->getResourcesDir() / "jupiter_my_favourite.gdr";
             std::error_code ec;
             if (fs::exists(bundled, ec)) {
-                auto seedDest = getReplayDir() / "jupiter_my_favourite.gdr";
+                // Seeded under a name no real user macro would ever have,
+                // NOT "jupiter_my_favourite" -- that used to unconditionally
+                // overwrite (copy_options::overwrite_existing) whatever the
+                // user already had at that exact path in the shared replays
+                // folder, and convertToBRR/persist() match purely by stem, so
+                // a same-named user macro could get its OWN file silently
+                // renamed aside (_2) and then this seed's converted copy
+                // mistaken for it and relocated/deleted in its place. A
+                // private stem makes both collisions structurally impossible
+                // instead of just unlikely. The dedicated jupDir copy is
+                // still named jupiter_my_favourite.<ext> below, so this is
+                // invisible to everything downstream (self-heal lookup,
+                // loadJupiterMacroData).
+                const std::string seedStem = "__guccibot_jupiter_seed";
+                auto seedDest = getReplayDir() / (seedStem + ".gdr");
                 fs::copy_file(bundled, seedDest, fs::copy_options::overwrite_existing, ec);
-                convertToBRR("jupiter_my_favourite");
-                auto converted = findIn(getReplayDir(), "jupiter_my_favourite");
+                convertToBRR(seedStem);
+                auto converted = findIn(getReplayDir(), seedStem);
                 if (!converted.empty()) {
-                    auto dest = jupDir / converted.filename();
+                    auto dest = jupDir / ("jupiter_my_favourite" + converted.extension().string());
                     fs::rename(converted, dest, ec);
                     if (!ec) hidden = dest;
                 }
