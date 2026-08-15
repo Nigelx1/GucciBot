@@ -1081,7 +1081,31 @@ void GucciEngine::initialize() {
             fs::copy_file(bundled, dest, ec);
     }
 
-        auto* mod = Mod::get();
+        // Auto-convert + auto-load it too, right here at startup -- so it's just
+    // ready by the time the JMF tab (or any level) is opened, no manual
+    // convert/load click needed and no requirement to already be in the
+    // level. Only loads if nothing else is currently loaded, so it never
+    // stomps on a macro already chosen this session.
+    {
+        auto dir = getReplayDir();
+        auto findNative = [&]() -> fs::path {
+            for (auto ext : { ".brrr", ".toosii", ".ja", ".giddey", ".bam", ".sexyy" }) {
+                std::error_code ec;
+                auto candidate = dir / (std::string("jupiter_my_favourite") + ext);
+                if (fs::exists(candidate, ec)) return candidate;
+            }
+            return {};
+        };
+        auto found = findNative();
+        if (found.empty()) {
+            convertToBRR("jupiter_my_favourite");
+            found = findNative();
+        }
+        if (!found.empty() && replay.m_actionAtom.empty())
+            replay.load(found);
+    }
+
+    auto* mod = Mod::get();
     updater.m_tps              = mod->getSavedValue<double>("updater_tps", 240.0);
     updater.m_speedhack        = mod->getSavedValue<double>("updater_speedhack", 1.0);
     updater.m_lockDelta        = mod->getSavedValue<bool>("updater_lockDelta", true);

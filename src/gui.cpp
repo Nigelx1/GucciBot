@@ -2976,6 +2976,14 @@ void MenuInterface::drawJupiterClickTrainerPage(){
     }
 
     ImGui::Dummy(ImVec2(0,18));
+    Widgets::SectionHeader("Music",theme);
+    if(Widgets::ToggleSwitch("Synced Level Music",&engine->jupiterMusicEnabled,theme,anim))
+        mod->setSavedValue("jupiter_music_enabled",engine->jupiterMusicEnabled);
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::TextWrapped("Plays while actually on Jupiter My Favourite, seeked to match your current frame -- frame 0 is song position 0, no offset, and it resyncs itself after respawns/restarts instead of just playing through once.");
+    ImGui::PopStyleColor();
+
+    ImGui::Dummy(ImVec2(0,18));
     Widgets::SectionHeader("Ghosts & Scrub Preview",theme);
     if(Widgets::ToggleSwitch("Macro Ghost",&engine->jupiterGhostEnabled,theme,anim))
         mod->setSavedValue("jupiter_ghost_enabled",engine->jupiterGhostEnabled);
@@ -3464,6 +3472,7 @@ void MenuInterface::saveSettings(){
     mod->setSavedValue("jupiter_clickbar_window",(double)eng->jupiterClickBarWindow);
     mod->setSavedValue("jupiter_ghost_enabled",eng->jupiterGhostEnabled);
     mod->setSavedValue("jupiter_bestghost_enabled",eng->jupiterBestGhostEnabled);
+    mod->setSavedValue("jupiter_music_enabled",eng->jupiterMusicEnabled);
     mod->setSavedValue("hack_noclip",eng->noclipEnabled);
     mod->setSavedValue("hack_noclip_flash",eng->noclipDeathFlash);
     mod->setSavedValue("hack_noclip_color_r",eng->noclipDeathColorR);
@@ -3650,6 +3659,7 @@ void MenuInterface::loadSettings(){
     eng->jupiterClickBarWindow=mod->getSavedValue<float>("jupiter_clickbar_window",2.f);
     eng->jupiterGhostEnabled=mod->getSavedValue<bool>("jupiter_ghost_enabled",true);
     eng->jupiterBestGhostEnabled=mod->getSavedValue<bool>("jupiter_bestghost_enabled",false);
+    eng->jupiterMusicEnabled=mod->getSavedValue<bool>("jupiter_music_enabled",true);
     eng->noclipEnabled=mod->getSavedValue<bool>("hack_noclip",false);
     eng->noclipDeathFlash=mod->getSavedValue<bool>("hack_noclip_flash",true);
     eng->noclipDeathColorR=mod->getSavedValue<float>("hack_noclip_color_r",1.f);

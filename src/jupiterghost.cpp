@@ -2,9 +2,68 @@
 #include "GucciBot.hpp"
 #include <Geode/Geode.hpp>
 #include <Geode/modify/PlayLayer.hpp>
+#include <Geode/binding/FMODAudioEngine.hpp>
 #include <algorithm>
+#include <filesystem>
 
 using namespace geode::prelude;
+
+// Synced level music: plays resources/jupiter_music.mp3 while actually on
+// Jupiter My Favourite, seeked to match the current frame ((frame/tps)*1000ms
+// = song position, no offset) rather than just played once from the start.
+// Only corrects drift past a small tolerance instead of seeking every single
+// frame, so normal playback stays smooth and only actually jumps right after
+// a respawn/restart where the frame legitimately jumped too.
+class JupiterMusicSync {
+public:
+    static JupiterMusicSync* get() { static JupiterMusicSync inst; return &inst; }
+
+    void sync(PlayLayer* pl, uint32_t frame, double tps) {
+        auto* gb = GucciEngine::get();
+        bool shouldPlay = gb->jupiterMusicEnabled && pl && pl->m_started && isJupiterLevel(pl);
+        if (!shouldPlay) { stop(); return; }
+        if (!m_channel) start();
+        if (!m_channel) return;
+
+        double targetD = tps > 0.0 ? (frame / tps) * 1000.0 : 0.0;
+        unsigned int targetMs = (unsigned int)std::clamp(targetD, 0.0, 1e9);
+        unsigned int posMs = 0;
+        m_channel->getPosition(&posMs, FMOD_TIMEUNIT_MS);
+        long long diff = (long long)posMs - (long long)targetMs;
+        if (diff < 0) diff = -diff;
+        if (diff > 60) m_channel->setPosition(targetMs, FMOD_TIMEUNIT_MS);
+    }
+
+    void stop() {
+        if (m_channel) { m_channel->stop(); m_channel = nullptr; }
+        if (m_sound) { m_sound->release(); m_sound = nullptr; }
+    }
+
+private:
+    static bool isJupiterLevel(PlayLayer* pl) {
+        if (!pl->m_level) return false;
+        std::string lower = pl->m_level->m_levelName;
+        std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+        return lower.find("jupiter my favourite") != std::string::npos;
+    }
+
+    void start() {
+        auto path = Mod::get()->getResourcesDir() / "jupiter_music.mp3";
+        std::error_code ec;
+        if (!std::filesystem::exists(path, ec)) return;
+        auto* system = FMODAudioEngine::sharedEngine()->m_system;
+        if (!system) return;
+        if (system->createSound(path.string().c_str(), FMOD_CREATESAMPLE, nullptr, &m_sound) != FMOD_OK || !m_sound) {
+            m_sound = nullptr;
+            return;
+        }
+        system->playSound(m_sound, nullptr, false, &m_channel);
+        if (m_channel) m_channel->setVolume(1.f);
+    }
+
+    FMOD::Sound* m_sound = nullptr;
+    FMOD::Channel* m_channel = nullptr;
+};
 
 // Mirrors PracticeRangeOverlay (practicerange.cpp) exactly on purpose: a
 // CCDrawNode attached to m_objectLayer, cleared and redrawn every frame,
@@ -38,6 +97,10 @@ public:
         if (!gb || !pl) return;
         if (!m_node) { attach(pl); if (!m_node) return; }
         m_node->clear();
+
+        double tps = gb->updater.m_tps > 0.0 ? gb->updater.m_tps : 240.0;
+        JupiterMusicSync::get()->sync(pl, gb->updater.getFrame(), tps);
+
         if (!pl->m_started) return;
 
         // Capture this attempt's live path for the "own best attempt" ghost.
@@ -99,6 +162,7 @@ class $modify(JupiterGhostPlayLayer, PlayLayer) {
     }
     void onQuit() {
         JupiterGhostOverlay::get()->detach();
+        JupiterMusicSync::get()->stop();
         PlayLayer::onQuit();
     }
 };

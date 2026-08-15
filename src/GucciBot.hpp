@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-14-p (Cleanup + real GDR import. 1) Sidebar/ribbon overlap fixed for real this time: ##jmfConstrain shrunk 42%%->32%%, computed against the ribbon spine's actual narrowest point (x=0.36 at y=0.66 in drawJupiterWaveRibbon) instead of guessed. 2) Click Trainer page: backdrop decoration (ribbon/stars/sun) suppressed entirely, just the plain navy now. 3) resources/jupiter_my_favourite.gdr bundled and auto-seeded into the replays folder on first launch (idempotent, never overwrites). 4) convertToBRR now handles BINARY GDR too, not just JSON -- new minimal MessagePack walker (gdrmsgpack namespace, engine_core.cpp) confirmed against the actual attached file's real byte structure (frame/btn/2p/down fields, same names as the JSON path). Compiles clean, untested in-game.)"
+#define GB_BUILD_LABEL "2026-08-14-q (JMF macro now auto-converts + auto-loads at mod startup -- GucciEngine::initialize() finds/converts jupiter_my_favourite and calls replay.load() on it directly if nothing else is loaded yet, no manual click and no need to be in the level first. New JupiterMusicSync (jupiterghost.cpp) plays resources/jupiter_music.mp3 while actually on Jupiter My Favourite, seeked to match the current frame every frame (frame/tps*1000ms = song position, no offset), only correcting drift past 60ms so normal playback stays smooth and it only visibly jumps right after a respawn/restart. Compiles clean, untested in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -377,6 +377,12 @@ public:
     // m_clickIntervalsSec), independent of in-level speed portals.
     bool  jupiterClickBarEnabled = true;
     float jupiterClickBarWindow  = 2.f; // total seconds of window visible across the bar
+
+    // Synced level music (resources/jupiter_music.mp3): plays while actually
+    // in Jupiter My Favourite, seeked to match the current frame position
+    // (frame 0 = song position 0, no offset) rather than just played once
+    // from the start -- see JupiterGhostOverlay in jupiterghost.cpp.
+    bool  jupiterMusicEnabled = true;
 
     // Attempt/PB tracker + death heatmap: session-only (not persisted across GD
     // restarts, unlike m_trainerBestX which IS persisted per-macro). Populated
