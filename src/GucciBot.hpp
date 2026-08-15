@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-13-o (Documented the known P3 probe-phase gap directly in the GUI, not just in dev notes -- the Save-macro popup's Calculate confirmation now shows a yellow caveat line above the Calculate/Skip buttons: the replay pass itself is ground-truth-accurate now, but each click's tested timing shifts still fall back to real simulation past that click, so windows near tricky slope sections may still read off. No functional/engine change, GUI text only.)"
+#define GB_BUILD_LABEL "2026-08-14-a (JMF backdrop take 8: built directly from Nigel's own hand-drawn mockup instead of another blind iteration. Exact two-color palette from his sketch (#100680 navy bg, #FCF550 gold, applied to accent/bg/card/text theme colors and the whole backdrop). New jagged diagonal 'wave ribbon' spine (two zigzag rails + cross-rungs) splitting the screen per his 'line thing like that wave part' note, real content kept clear to its left. Big 'wheel' ornament moved to bleed off the bottom-right corner. Star cluster repositioned to upper-right matching his sketch. Grid removed, dust removed (not in the sketch). Skyline band narrowed to small outlined buildings bottom-center per 'small buildings on the bottom'. Tab header now reads the full 'Nigel's Jupiter My Favourite Trainer' (wraps to multiple lines) while the tab is open, replacing the short quote widget. Compiles clean, untested in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

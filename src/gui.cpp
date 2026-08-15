@@ -83,78 +83,84 @@ static void drawJupiterOrnament(ImDrawList* dl,ImVec2 center,float baseR,float t
     for(int i=0;i<4;i++){
         float r=baseR-(float)i*baseR*0.16f;
         if(r<10.f)continue;
-        dl->AddCircle(center,r,IM_COL32(230,200,80,215+i*10),96,2.8f);
+        dl->AddCircle(center,r,IM_COL32(252,245,80,255),96,3.2f);
     }
     auto starOrn=jupiterStarPoints(center,baseR*0.45f,baseR*0.18f,5,time*spin);
-    dl->AddConvexPolyFilled(starOrn.data(),(int)starOrn.size(),IM_COL32(230,200,80,150));
-    dl->AddPolyline(starOrn.data(),(int)starOrn.size(),IM_COL32(255,225,140,255),ImDrawFlags_Closed,2.4f);
+    dl->AddConvexPolyFilled(starOrn.data(),(int)starOrn.size(),IM_COL32(252,245,80,200));
+    dl->AddPolyline(starOrn.data(),(int)starOrn.size(),IM_COL32(252,245,80,255),ImDrawFlags_Closed,2.8f);
 }
 
-// Take 5, per Nigel: grid, its triangle markers, the road line, and the orb
-// network are all gone now -- the road ran straight through the readable
-// content, and the orb network's mixed colours threw the whole thing off.
-// Everything that's left is pushed to real opacity, there's a third
-// orbit-ring "wheel" ornament, and the outline "line star" shapes go from
-// 15 to 44.
-static void drawJupiterBackdrop(ImDrawList* dl,ImVec2 pos,ImVec2 size,float time){
-    drawJupiterOrnament(dl,ImVec2(pos.x+size.x*0.92f,pos.y+size.y*0.90f),size.x*0.22f,time,0.06f);
-    drawJupiterOrnament(dl,ImVec2(pos.x+size.x*0.05f,pos.y+size.y*0.90f),size.x*0.14f,time,-0.05f);
-    drawJupiterOrnament(dl,ImVec2(pos.x+size.x*0.50f,pos.y+size.y*0.05f),size.x*0.09f,time,0.04f);
+// Take 8: built directly from Nigel's own hand-drawn mockup, not iterated
+// blind. Layout per his sketch: a bold jagged diagonal "wave" ribbon splits
+// the screen (real content stays clear to its left), a star cluster upper
+// right, a big "wheel" ornament bottom-right corner, small building
+// silhouettes along the bottom, all in his exact two colors -- navy #100680
+// background, gold #FCF550 line work -- at full opacity throughout.
+static void drawJupiterWaveRibbon(ImDrawList* dl,ImVec2 pos,ImVec2 size){
+    // A jagged vertical path from top-center-ish to bottom-center-ish, drawn
+    // as two parallel zigzag rails with periodic cross-rungs between them --
+    // Nigel's "line thing like that wave part."
+    const ImU32 gold=IM_COL32(252,245,80,255);
+    const float thick=5.f;
 
-    // -- A ton of the outline "line star" shapes, scattered across the whole
-    // backdrop (seeded once so they don't reshuffle every frame) --
-    struct StarSpec{float x,y,r,rot;int pts;};
-    static const std::vector<StarSpec> stars=[]{
-        std::vector<StarSpec> v;
-        uint32_t seed=777;
-        auto rnd=[&](){seed=seed*1103515245u+12345u;return (float)((seed>>8)&0xFFFFu)/65535.f;};
-        for(int i=0;i<44;i++){
-            StarSpec s;
-            s.x=rnd();s.y=rnd();
-            s.r=7.f+rnd()*9.f;
-            s.rot=rnd()*6.2831853f;
-            s.pts=(rnd()<0.5f)?4:5;
-            v.push_back(s);
+    struct Pt{float x,y;};
+    static const Pt spine[]={
+        {0.34f,0.00f},{0.31f,0.10f},{0.335f,0.16f},{0.30f,0.24f},
+        {0.40f,0.34f},{0.335f,0.44f},{0.38f,0.52f},{0.30f,0.62f},
+        {0.335f,0.72f},{0.29f,0.84f},{0.31f,1.00f},
+    };
+    const int n=(int)(sizeof(spine)/sizeof(spine[0]));
+    const float railW=26.f;
+
+    std::vector<ImVec2> left(n),right(n);
+    for(int i=0;i<n;i++){
+        ImVec2 p(pos.x+size.x*spine[i].x,pos.y+size.y*spine[i].y);
+        float nx=0.f,ny=0.f;
+        if(i<n-1){
+            ImVec2 q(pos.x+size.x*spine[i+1].x,pos.y+size.y*spine[i+1].y);
+            float dx=q.x-p.x,dy=q.y-p.y,len=sqrtf(dx*dx+dy*dy);
+            if(len>0.01f){nx=-dy/len;ny=dx/len;}
         }
-        return v;
-    }();
+        left[i]=ImVec2(p.x+nx*railW,p.y+ny*railW);
+        right[i]=ImVec2(p.x-nx*railW,p.y-ny*railW);
+    }
+    dl->AddPolyline(left.data(),n,gold,0,thick);
+    dl->AddPolyline(right.data(),n,gold,0,thick);
+    for(int i=0;i<n;i+=2){
+        dl->AddLine(left[i],right[i],gold,thick*0.7f);
+    }
+}
+
+static void drawJupiterBackdrop(ImDrawList* dl,ImVec2 pos,ImVec2 size,float time){
+    drawJupiterWaveRibbon(dl,pos,size);
+
+    // "Wheel Thing" -- big ornament, bottom-right corner, partially bled off
+    // the edge same as Nigel's sketch.
+    drawJupiterOrnament(dl,ImVec2(pos.x+size.x*0.97f,pos.y+size.y*0.97f),size.x*0.26f,time,0.05f);
+
+    // star cluster, upper-right, matching the three stars in the sketch
+    struct StarSpec{float x,y,r,rot;int pts;};
+    static const StarSpec stars[]={
+        {0.65f,0.22f,26.f,0.3f,5},{0.83f,0.42f,24.f,1.1f,5},{0.65f,0.58f,24.f,0.7f,5},
+        {0.74f,0.32f,12.f,2.0f,4},{0.90f,0.55f,10.f,1.4f,4},{0.58f,0.68f,10.f,0.4f,4},
+        {0.78f,0.65f,13.f,2.6f,5},{0.88f,0.15f,11.f,0.9f,4},
+    };
     for(auto const& s:stars){
         ImVec2 c(pos.x+size.x*s.x,pos.y+size.y*s.y);
-        auto pts=jupiterStarPoints(c,s.r,s.r*0.4f,s.pts,s.rot);
-        dl->AddPolyline(pts.data(),(int)pts.size(),IM_COL32(255,225,140,255),ImDrawFlags_Closed,1.8f);
+        auto pts=jupiterStarPoints(c,s.r,s.r*0.42f,s.pts,s.rot);
+        dl->AddPolyline(pts.data(),(int)pts.size(),IM_COL32(252,245,80,255),ImDrawFlags_Closed,3.0f);
     }
 
-    struct DustSpec{float x,y,sz,phase;};
-    static const DustSpec dust[]={
-        {0.03f,0.75f,5.f,0.f},{0.08f,0.92f,4.f,1.2f},{0.13f,0.78f,6.f,2.1f},
-        {0.38f,0.75f,4.f,0.4f},{0.43f,0.95f,5.f,3.0f},{0.63f,0.90f,4.f,1.8f},
-        {0.68f,0.30f,6.f,2.6f},{0.80f,0.30f,4.f,0.9f},{0.95f,0.85f,5.f,1.5f},
-        {0.48f,0.30f,4.f,2.9f},{0.28f,0.30f,6.f,0.7f},{0.58f,0.90f,4.f,2.3f},
-    };
-    for(auto const& d:dust){
-        float drift=sinf(time*0.6f+d.phase)*6.f;
-        float alpha=0.80f+0.18f*sinf(time*0.9f+d.phase*1.7f);
-        ImVec2 c(pos.x+size.x*d.x,pos.y+size.y*d.y+drift);
-        dl->AddRectFilled(ImVec2(c.x-d.sz,c.y-d.sz),ImVec2(c.x+d.sz,c.y+d.sz),
-            IM_COL32(90,220,240,(int)(alpha*255)));
-    }
-
+    // "small buildings on the bottom" -- skyline silhouette band
     float baseY=pos.y+size.y;
-    float bx=pos.x;
+    float bx=pos.x+size.x*0.42f;
+    float bEnd=pos.x+size.x*0.66f;
     int seed=17;
-    while(bx<pos.x+size.x){
+    while(bx<bEnd){
         seed=(seed*1103515245+12345)&0x7fffffff;
         float bw=44.f+(float)(seed%60);
-        seed=(seed*1103515245+12345)&0x7fffffff;
-        float bh=26.f+(float)(seed%64);
-        dl->AddRectFilled(ImVec2(bx,baseY-bh),ImVec2(bx+bw-3.f,baseY),IM_COL32(6,4,18,255));
-        seed=(seed*1103515245+12345)&0x7fffffff;
-        if(seed%3==0){
-            dl->AddRectFilled(ImVec2(bx+bw*0.35f,baseY-bh*0.7f),ImVec2(bx+bw*0.5f,baseY-bh*0.55f),IM_COL32(255,214,64,255));
-        }
-        if(seed%5==0){
-            dl->AddRectFilled(ImVec2(bx+bw*0.6f,baseY-bh*0.4f),ImVec2(bx+bw*0.72f,baseY-bh*0.28f),IM_COL32(90,220,240,255));
-        }
+        float bh=64.f;
+        dl->AddRect(ImVec2(bx,baseY-bh),ImVec2(bx+bw-10.f,baseY),IM_COL32(252,245,80,255),4.f,0,4.f);
         bx+=bw;
     }
 }
@@ -748,11 +754,12 @@ void MenuInterface::drawMainWindow(){
     bool jupiterActive=(activeTab==6);
     ThemeEngine savedTheme=theme;
     if(jupiterActive){
-        theme.accentColor   = ImVec4(0.90f,0.78f,0.25f,1.f);
-        theme.bgColor       = ImVec4(0.10f,0.06f,0.30f,theme.bgOpacity);
-        theme.cardColor     = ImVec4(0.15f,0.10f,0.38f,1.f);
-        theme.textPrimary   = ImVec4(0.95f,0.93f,0.88f,1.f);
-        theme.textSecondary = ImVec4(0.62f,0.57f,0.80f,1.f);
+        // Nigel's own two colors from his mockup: #100680 navy, #FCF550 gold.
+        theme.accentColor   = ImVec4(0.988f,0.961f,0.314f,1.f);
+        theme.bgColor       = ImVec4(0.063f,0.024f,0.502f,theme.bgOpacity);
+        theme.cardColor     = ImVec4(0.09f,0.05f,0.58f,1.f);
+        theme.textPrimary   = ImVec4(0.988f,0.961f,0.314f,1.f);
+        theme.textSecondary = ImVec4(0.70f,0.66f,0.85f,1.f);
     }
     theme.applyToImGuiStyle();
     if(jupiterActive){
@@ -826,11 +833,12 @@ void MenuInterface::drawMegaHackWindow(){
     bool jupiterActive=(activeTab==6);
     ThemeEngine savedTheme=theme;
     if(jupiterActive){
-        theme.accentColor   = ImVec4(0.90f,0.78f,0.25f,1.f);
-        theme.bgColor       = ImVec4(0.10f,0.06f,0.30f,theme.bgOpacity);
-        theme.cardColor     = ImVec4(0.15f,0.10f,0.38f,1.f);
-        theme.textPrimary   = ImVec4(0.95f,0.93f,0.88f,1.f);
-        theme.textSecondary = ImVec4(0.62f,0.57f,0.80f,1.f);
+        // Nigel's own two colors from his mockup: #100680 navy, #FCF550 gold.
+        theme.accentColor   = ImVec4(0.988f,0.961f,0.314f,1.f);
+        theme.bgColor       = ImVec4(0.063f,0.024f,0.502f,theme.bgOpacity);
+        theme.cardColor     = ImVec4(0.09f,0.05f,0.58f,1.f);
+        theme.textPrimary   = ImVec4(0.988f,0.961f,0.314f,1.f);
+        theme.textSecondary = ImVec4(0.70f,0.66f,0.85f,1.f);
     }
     theme.applyToImGuiStyle();
     if(jupiterActive){
@@ -2506,8 +2514,16 @@ void MenuInterface::drawJupiterTab(){
     // not just boxed into this tab's own content -- `theme` here already reads
     // as the Jupiter palette by the time this function runs.
 
-    Widgets::GucciQuote("\"Jupiter My Favourite\"","-- Nigel's favorite level, and the hardest memory section he's got",theme);
-    ImGui::Dummy(ImVec2(0,4));
+    // Full name while the tab's actually open, per Nigel's sketch -- wraps to
+    // more than one line rather than the short "JMF" used in the tab rail.
+    if(fontHeading)ImGui::PushFont(fontHeading);
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.getAccent());
+    ImGui::PushTextWrapPos(ImGui::GetContentRegionAvail().x*0.7f);
+    ImGui::TextWrapped("Nigel's Jupiter My Favourite Trainer");
+    ImGui::PopTextWrapPos();
+    ImGui::PopStyleColor();
+    if(fontHeading)ImGui::PopFont();
+    ImGui::Dummy(ImVec2(0,6));
 
     auto* pl=PlayLayer::get();
     std::string currentLevel = (pl&&pl->m_level) ? std::string(pl->m_level->m_levelName) : engine->loadedMacroLevelName;
