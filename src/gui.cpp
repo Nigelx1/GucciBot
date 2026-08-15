@@ -3230,26 +3230,36 @@ void MenuInterface::drawJupiterTab(){
             bool validRange=engine->jupiterLoopStartIdx>=0&&engine->jupiterLoopEndIdx>=0&&
                 segs[engine->jupiterLoopStartIdx].x<segs[engine->jupiterLoopEndIdx].x;
             if(!validRange)ImGui::PushStyleVar(ImGuiStyleVar_Alpha,0.4f);
-            if(Widgets::ToggleSwitch("Loop Reminder",&engine->jupiterLoopEnabled,theme,anim)&&!validRange)
+            if(Widgets::ToggleSwitch("Auto-Loop",&engine->jupiterLoopEnabled,theme,anim)&&!validRange)
                 engine->jupiterLoopEnabled=false;
             if(!validRange)ImGui::PopStyleVar();
             ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
             ImGui::TextWrapped(!validRange
-                ? "Pick a start and end segment (start must come before end) to arm the reminder."
-                : "Not an auto-restart (that needs the checkpoint system, which is too fragile to touch casually here -- see CLAUDE.md P1). Just a notification when you cross the end segment, so you know to restart back to the start segment yourself.");
+                ? "Pick a start and end segment (start must come before end) to arm the loop."
+                : "The first time you reach the start segment, a real practice checkpoint gets placed there (pl->markCheckpoint() -- the same call your own checkpoint keybind makes, not a reconstructed one) -- dying anywhere after that respawns you there automatically, same as normal practice mode. Only places one per enable, so it won't pile up checkpoints or touch any you've placed yourself elsewhere.");
             ImGui::PopStyleColor();
 
             if(engine->jupiterLoopEnabled&&validRange&&pl&&pl->m_player1){
                 static bool loopArmed=true;
+                static bool checkpointPlaced=false;
+                static int lastStartIdx=-1;
+                if(lastStartIdx!=engine->jupiterLoopStartIdx){lastStartIdx=engine->jupiterLoopStartIdx;checkpointPlaced=false;}
+
                 float startX=segs[engine->jupiterLoopStartIdx].x;
                 float endX=segs[engine->jupiterLoopEndIdx].x;
                 float px=pl->m_player1->m_position.x;
-                if(px<startX+5.f)loopArmed=true;
-                else if(loopArmed&&px>=endX){
-                    loopArmed=false;
-                    Notification::create(
-                        ("Loop end reached -- restart back to \""+segs[engine->jupiterLoopStartIdx].label+"\"").c_str(),
-                        NotificationIcon::Success)->show();
+                if(px<startX+5.f){
+                    loopArmed=true;
+                } else {
+                    if(!checkpointPlaced){
+                        checkpointPlaced=true;
+                        pl->markCheckpoint();
+                        Notification::create("Loop checkpoint placed",NotificationIcon::Success)->show();
+                    }
+                    if(loopArmed&&px>=endX){
+                        loopArmed=false;
+                        Notification::create("Loop end reached",NotificationIcon::Success)->show();
+                    }
                 }
             }
         }
