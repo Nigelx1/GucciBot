@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-14-s (Two fixes. 1) Click bar is now fully independent of live gameplay -- dropped the PlayLayer/isPlaying requirement entirely, driven by real wall-clock time (ImGui::GetTime()) looping through the macro's whole duration on repeat, so it works as a pure rhythm preview from anywhere, not just while actually attempting the level. 2) The auto-loaded Jupiter macro was showing up in the general Saved Replays list / Convert-to-BRR button because convertToBRR (a general-purpose tool) reads/writes the shared replays folder -- fixed by still using it normally but then moving the converted result into its own dedicated save/jupiter/ folder and deleting the temporary seed file, so nothing Jupiter-related lingers where the general macro browser can see it. Compiles clean, untested in-game.)"
+#define GB_BUILD_LABEL "2026-08-14-t (Root-caused 'load macro / cant play it': the auto-load was calling replay.load(), which unconditionally reaches into the global GucciEngine singleton (force-sets mode to Playing, sets loadedMacroLevelName, etc) regardless of which GucciReplaySystem instance -- there was no way to load Jupiter's data without those side effects bleeding into the general bot-playback state Nigel needs for actually playing/loading macros normally. Fixed with a real architectural split: new GucciEngine::jupiterMacro (click intervals + path samples only), populated by a standalone loadJupiterMacroData() that duplicates just the needed parsing logic and never touches replay/mode/loadedMacroLevelName. Click bar, Click Deviation, auto-suggestions, and both ghosts now all read jupiterMacro instead of replay -- the Jupiter data is now used ONLY by the click bar and JMF tab, nowhere else, as asked. Click bar also gained real transport controls: Pause/Resume, Reset, and click-drag-to-skim directly on the bar. Compiles clean, untested in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -372,9 +372,32 @@ public:
     std::string jupiterNotes;
     std::string jupiterSegmentsRaw; // "label,x;label,x;..."
 
+    // Dedicated Jupiter-only practice data (click bar timing, ghost path),
+    // loaded ONCE at startup straight from its own hidden file -- see
+    // loadJupiterMacroData in engine_core.cpp. Deliberately separate from
+    // `replay`, which drives real bot playback/recording used throughout the
+    // rest of the mod: Jupiter's data must never touch that, or the general
+    // macro list/selection UI, or `mode`/`isPlaying()` -- it was doing all
+    // three when it went through replay.load(), which is why loading it broke
+    // the ability to actually play a macro normally afterward.
+    struct JupiterMacroData {
+        bool loaded = false;
+        std::vector<std::pair<double,double>> clickIntervalsSec;
+        double clickBarTps = 240.0;
+        std::vector<MacroPathSample> pathSamples;
+    };
+    JupiterMacroData jupiterMacro;
+
+    // Click bar transport: pause/resume/reset/skim. Position tracked as a
+    // seconds offset into the macro's timeline, advanced by real elapsed
+    // wall-clock time each frame while not paused (see drawJupiterClickBar).
+    bool   jupiterClickBarPaused       = false;
+    double jupiterClickBarPosSec       = 0.0;
+    double jupiterClickBarLastRealTime = 0.0;
+
     // Click-rhythm bar: a fixed center line with the macro's upcoming click/hold
-    // windows scrolling toward it at constant real-time speed (GucciReplaySystem::
-    // m_clickIntervalsSec), independent of in-level speed portals.
+    // windows scrolling toward it at constant real-time speed, independent of
+    // in-level speed portals.
     bool  jupiterClickBarEnabled = true;
     float jupiterClickBarWindow  = 2.f; // total seconds of window visible across the bar
 

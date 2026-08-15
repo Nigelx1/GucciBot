@@ -111,10 +111,10 @@ public:
             m_liveAttemptPath.push_back({ pl->m_player1->m_position.x, pl->m_player1->m_position.y });
         }
 
-        if (gb->jupiterGhostEnabled && !gb->replay.m_pathSamples.empty()) {
-            uint32_t frame = resolveFrame(gb, gb->replay.m_pathSamples.size());
-            if (frame < gb->replay.m_pathSamples.size()) {
-                auto const& s = gb->replay.m_pathSamples[frame];
+        if (gb->jupiterGhostEnabled && !gb->jupiterMacro.pathSamples.empty()) {
+            uint32_t frame = resolveFrame(gb, gb->jupiterMacro.pathSamples.size());
+            if (frame < gb->jupiterMacro.pathSamples.size()) {
+                auto const& s = gb->jupiterMacro.pathSamples[frame];
                 drawGhost(s.p1x, s.p1y, ccc4f(0.30f, 0.85f, 1.f, 0.65f));
             }
         }

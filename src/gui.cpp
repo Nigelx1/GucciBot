@@ -164,18 +164,18 @@ static bool importJupiterCode(GucciEngine* engine,std::string const& code,std::s
 // segment so repeated presses don't spam duplicates.
 static std::vector<JupiterSegment> suggestJupiterSegments(GucciEngine* engine){
     std::vector<JupiterSegment> out;
-    auto& replay=engine->replay;
-    if(replay.m_clickIntervalsSec.empty()||replay.m_pathSamples.empty())return out;
-    double tps=replay.m_clickBarTps>0.0?replay.m_clickBarTps:240.0;
+    auto& jup=engine->jupiterMacro;
+    if(jup.clickIntervalsSec.empty()||jup.pathSamples.empty())return out;
+    double tps=jup.clickBarTps>0.0?jup.clickBarTps:240.0;
 
     double maxT=0.0;
-    for(auto const& iv:replay.m_clickIntervalsSec)maxT=std::max(maxT,iv.second);
+    for(auto const& iv:jup.clickIntervalsSec)maxT=std::max(maxT,iv.second);
     if(maxT<=0.0)return out;
 
     const double bucketSec=0.5;
     int nBuckets=(int)(maxT/bucketSec)+1;
     std::vector<int> counts(nBuckets,0);
-    for(auto const& iv:replay.m_clickIntervalsSec){
+    for(auto const& iv:jup.clickIntervalsSec){
         int b=std::clamp((int)(iv.first/bucketSec),0,nBuckets-1);
         counts[b]++;
     }
@@ -194,8 +194,8 @@ static std::vector<JupiterSegment> suggestJupiterSegments(GucciEngine* engine){
     for(auto const& c:cands){
         double midSec=(c.bucket+0.5)*bucketSec;
         uint32_t frame=(uint32_t)(midSec*tps);
-        if(frame>=replay.m_pathSamples.size())continue;
-        float x=replay.m_pathSamples[frame].p1x;
+        if(frame>=jup.pathSamples.size())continue;
+        float x=jup.pathSamples[frame].p1x;
         bool dup=false;
         for(auto const& s:existing)if(std::fabs(s.x-x)<50.f){dup=true;break;}
         for(auto const& s:out)if(std::fabs(s.x-x)<50.f){dup=true;break;}
@@ -2849,23 +2849,50 @@ void MenuInterface::drawIndicatorsTab(){
 
 // Click-rhythm bar: a fixed white line stays put at the horizontal center
 // while the macro's click/hold windows scroll toward and through it at
-// constant real-time speed (built from GucciReplaySystem::m_clickIntervalsSec,
-// a snapshot taken once at load() -- see the comment on that field for why
-// it's not read live from m_actionAtom). Per Nigel's spec: a block's left
-// edge crossing the line means click, its right edge crossing means release.
+// constant real-time speed (built from the dedicated jupiterMacro data,
+// loaded once at startup -- see loadJupiterMacroData in engine_core.cpp).
+// Per Nigel's spec: a block's left edge crossing the line means click, its
+// right edge crossing means release.
+//
 // Completely independent of live gameplay -- no PlayLayer or Playing-mode
-// requirement. Driven by real wall-clock time (ImGui::GetTime()), looping
-// through the macro's whole duration on repeat, so it works as a pure
-// rhythm preview from anywhere (main menu, any tab) rather than only while
-// actually attempting the level.
-static void drawJupiterClickBar(ThemeEngine& theme,GucciEngine* engine,float windowSeconds,float h=46.f){
-    auto& replay=engine->replay;
-    if(replay.m_clickIntervalsSec.empty()){
+// requirement, and no dependency on the general `replay` object either
+// (that one drives real bot playback elsewhere and must stay untouched).
+// Position is a transport, not just an auto-loop: Pause/Resume/Reset
+// buttons plus click-drag-to-skim directly on the bar. jupiterClickBarPosSec
+// is the single source of truth, advanced by real elapsed wall-clock time
+// each frame while not paused, and jumped directly by dragging.
+static void drawJupiterClickBar(ThemeEngine& theme,AnimationState& anim,GucciEngine* engine,float windowSeconds,float h=46.f){
+    auto& jup=engine->jupiterMacro;
+    if(jup.clickIntervalsSec.empty()){
         ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
-        ImGui::TextWrapped("No click data yet -- load a macro to see its click timing here.");
+        ImGui::TextWrapped("No click data yet.");
         ImGui::PopStyleColor();
         return;
     }
+
+    double maxT=0.0;
+    for(auto const& iv:jup.clickIntervalsSec)maxT=std::max(maxT,iv.second);
+    double loopLen=std::max(maxT,1.0);
+
+    double realNow=ImGui::GetTime();
+    if(!engine->jupiterClickBarPaused){
+        double dt=realNow-engine->jupiterClickBarLastRealTime;
+        if(dt>0.0&&dt<1.0)engine->jupiterClickBarPosSec+=dt;
+    }
+    engine->jupiterClickBarLastRealTime=realNow;
+    engine->jupiterClickBarPosSec=std::fmod(engine->jupiterClickBarPosSec,loopLen);
+    if(engine->jupiterClickBarPosSec<0.0)engine->jupiterClickBarPosSec+=loopLen;
+
+    if(Widgets::StyledButton(engine->jupiterClickBarPaused?"Resume":"Pause",ImVec2(80,24),theme,anim))
+        engine->jupiterClickBarPaused=!engine->jupiterClickBarPaused;
+    ImGui::SameLine();
+    if(Widgets::StyledButton("Reset",ImVec2(70,24),theme,anim))
+        engine->jupiterClickBarPosSec=0.0;
+    ImGui::SameLine();
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::Text("%.1fs / %.1fs",engine->jupiterClickBarPosSec,loopLen);
+    ImGui::PopStyleColor();
+    ImGui::Dummy(ImVec2(0,6));
 
     ImVec2 pos=ImGui::GetCursorScreenPos();
     float w=ImGui::GetContentRegionAvail().x;
@@ -2877,16 +2904,12 @@ static void drawJupiterClickBar(ThemeEngine& theme,GucciEngine* engine,float win
 
     dl->AddRectFilled(pos,ImVec2(pos.x+w,pos.y+h),barCol,4.f);
 
-    double maxT=0.0;
-    for(auto const& iv:replay.m_clickIntervalsSec)maxT=std::max(maxT,iv.second);
-    double loopLen=std::max(maxT,1.0);
-    double nowSec=std::fmod(ImGui::GetTime(),loopLen);
-
     float centerX=pos.x+w*0.5f;
     float halfWindow=std::max(windowSeconds,0.2f)*0.5f;
     float pxPerSec=(w*0.5f)/halfWindow;
+    double nowSec=engine->jupiterClickBarPosSec;
 
-    for(auto const& iv:replay.m_clickIntervalsSec){
+    for(auto const& iv:jup.clickIntervalsSec){
         for(double phase:{0.0,-loopLen,loopLen}){
             double relStart=(iv.first+phase)-nowSec, relEnd=(iv.second+phase)-nowSec;
             if(relEnd<-halfWindow||relStart>halfWindow)continue;
@@ -2898,7 +2921,20 @@ static void drawJupiterClickBar(ThemeEngine& theme,GucciEngine* engine,float win
     }
 
     dl->AddLine(ImVec2(centerX,pos.y-4),ImVec2(centerX,pos.y+h+4),white,3.f);
-    ImGui::Dummy(ImVec2(w,h+8));
+
+    // Skim: click-drag directly on the bar to scrub. Dragging right reveals
+    // earlier content (rewind), dragging left reveals later content
+    // (fast-forward) -- matches dragging a filmstrip past a fixed gate.
+    ImGui::SetCursorScreenPos(pos);
+    ImGui::InvisibleButton("##clickBarSkim",ImVec2(w,h));
+    if(ImGui::IsItemActive()&&ImGui::IsMouseDragging(ImGuiMouseButton_Left)){
+        engine->jupiterClickBarPaused=true;
+        double posSec=engine->jupiterClickBarPosSec-ImGui::GetIO().MouseDelta.x/pxPerSec;
+        posSec=std::fmod(posSec,loopLen);
+        if(posSec<0.0)posSec+=loopLen;
+        engine->jupiterClickBarPosSec=posSec;
+    }
+    ImGui::Dummy(ImVec2(0,4));
 }
 
 // Click Trainer's own dedicated page, per Nigel: the rhythm bar wants more
@@ -2931,16 +2967,16 @@ void MenuInterface::drawJupiterClickTrainerPage(){
         if(Widgets::StyledSliderFloat("Window (sec)",&engine->jupiterClickBarWindow,0.3f,4.f,theme))
             mod->setSavedValue("jupiter_clickbar_window",(double)engine->jupiterClickBarWindow);
         ImGui::Dummy(ImVec2(0,14));
-        drawJupiterClickBar(theme,engine,engine->jupiterClickBarWindow,90.f);
+        drawJupiterClickBar(theme,anim,engine,engine->jupiterClickBarWindow,90.f);
     }
 
     ImGui::Dummy(ImVec2(0,18));
     Widgets::SectionHeader("Click Deviation",theme);
     {
         auto* pl=PlayLayer::get();
-        if(engine->replay.m_clickIntervalsSec.empty()){
+        if(engine->jupiterMacro.clickIntervalsSec.empty()){
             ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
-            ImGui::TextWrapped("No click data yet -- load a macro to compare against.");
+            ImGui::TextWrapped("No click data yet.");
             ImGui::PopStyleColor();
         } else if(!pl||!pl->m_player1||engine->isPlaying()){
             ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
@@ -2949,10 +2985,10 @@ void MenuInterface::drawJupiterClickTrainerPage(){
         } else {
             bool holding=(bool)pl->m_player1->m_holdingButtons[1];
             if(holding&&!engine->jupiterDeviationHolding){
-                double tps=engine->replay.m_clickBarTps>0.0?engine->replay.m_clickBarTps:240.0;
+                double tps=engine->jupiterMacro.clickBarTps>0.0?engine->jupiterMacro.clickBarTps:240.0;
                 double nowSec=(double)engine->updater.getFrame()/tps;
                 double bestDelta=1e9;
-                for(auto const& iv:engine->replay.m_clickIntervalsSec){
+                for(auto const& iv:engine->jupiterMacro.clickIntervalsSec){
                     double d=iv.first-nowSec;
                     if(std::fabs(d)<std::fabs(bestDelta))bestDelta=d;
                 }
@@ -3151,7 +3187,7 @@ void MenuInterface::drawJupiterTab(){
         segLabelBuf[0]=0;
     }
 
-    if(!engine->replay.m_clickIntervalsSec.empty()&&!engine->replay.m_pathSamples.empty()){
+    if(!engine->jupiterMacro.clickIntervalsSec.empty()&&!engine->jupiterMacro.pathSamples.empty()){
         if(Widgets::StyledButton("Suggest Segments (from click density)",ImVec2(-1,26),theme,anim)){
             auto suggestions=suggestJupiterSegments(engine);
             if(!suggestions.empty()){

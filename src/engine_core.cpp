@@ -266,6 +266,44 @@ static void loadPathSamples(const fs::path& macroPath, std::vector<MacroPathSamp
     log::info("[GucciBot] Macro path: loaded {} sample(s) from sidecar", samples.size());
 }
 
+// Loads a native BRR macro's click timing + path samples directly into a
+// GucciEngine::JupiterMacroData, WITHOUT going through GucciReplaySystem::
+// load() -- that method reaches into the global GucciEngine::get() singleton
+// unconditionally (sets mode to Playing, sets loadedMacroLevelName, etc.)
+// regardless of which GucciReplaySystem instance it's called on, so there's
+// no way to use it here without those side effects leaking into the general
+// bot-playback state. This duplicates just the parsing logic that's actually
+// needed (mirrors GucciReplaySystem::buildClickIntervals and the legacy-BRR
+// branch of load()), deliberately kept separate.
+static void loadJupiterMacroData(const fs::path& path, GucciEngine::JupiterMacroData& out) {
+    out = {};
+    auto* legacy = BRRMacro::loadFromDisk(path.stem().string());
+    if (!legacy) return;
+    if (legacy->inputs.empty()) { delete legacy; return; }
+
+    double tps = legacy->framerate > 0.0 ? legacy->framerate : 240.0;
+    std::unordered_map<int, uint32_t> openPress;
+    for (auto& inp : legacy->inputs) {
+        int key = (int)inp.actionType * 2 + (inp.isPlayer2() ? 1 : 0);
+        if (inp.isPressed()) {
+            openPress[key] = (uint32_t)inp.tick;
+        } else {
+            auto it = openPress.find(key);
+            if (it != openPress.end()) {
+                out.clickIntervalsSec.push_back({ it->second / tps, (double)inp.tick / tps });
+                openPress.erase(it);
+            }
+        }
+    }
+    out.clickBarTps = tps;
+    delete legacy;
+
+    loadPathSamples(path, out.pathSamples);
+    out.loaded = !out.clickIntervalsSec.empty() || !out.pathSamples.empty();
+    log::info("[GucciBot] Jupiter macro data: {} click interval(s), {} path sample(s)",
+              out.clickIntervalsSec.size(), out.pathSamples.size());
+}
+
 void GucciReplaySystem::savePathSamplesNow() {
     savePathSamples(getCurrentPath(), m_pathSamples);
     log::info("[GucciBot] Macro path: backfilled {} sample(s) saved for '{}'",
@@ -1068,17 +1106,19 @@ void GucciEngine::initialize() {
         fs::create_directories(getReplayDir());
     fs::create_directories(getPresetsDir());
 
-        // Auto-convert + auto-load the bundled Jupiter My Favourite GDR macro,
-    // once -- but into its OWN dedicated folder, never the general replays
-    // folder. It used to briefly show up in the general "Saved Replays" list
-    // (and the Convert-to-BRR button in Macro Surgery) because convertToBRR
-    // -- a general-purpose tool also used for other legacy macros -- reads
-    // and writes there. Fixed by still using convertToBRR normally (seed the
-    // raw .gdr into the replays folder just long enough for it to run), then
-    // moving the converted result into save/jupiter/ and deleting the seed,
-    // so nothing Jupiter-related ever lingers where the general macro
-    // browser can see it. replay.load() then reads straight from that
-    // dedicated folder, completely independent of getReplayDir().
+        // Auto-convert + load the bundled Jupiter My Favourite GDR macro's
+    // click/path data, once, into jupiterMacro -- its OWN dedicated folder
+    // AND its own dedicated data holder, never touching replay/mode/
+    // loadedMacroLevelName or the general replays folder. It used to load
+    // via replay.load(), which reaches into all of that -- that's exactly
+    // why it was showing up in the general Saved Replays list AND why
+    // actually loading/playing a real macro afterward stopped working
+    // (mode was already force-set to Playing at startup, replayName was
+    // never set to match, etc). Still uses convertToBRR normally (a
+    // general-purpose tool that reads/writes the replays folder) by seeding
+    // the raw .gdr there just long enough to run, then moves the result
+    // into save/jupiter/ and deletes the seed so nothing lingers where the
+    // general macro browser can see it.
     {
         auto jupDir = Mod::get()->getSaveDir() / "jupiter";
         fs::create_directories(jupDir);
@@ -1111,8 +1151,7 @@ void GucciEngine::initialize() {
             }
         }
 
-        if (!hidden.empty() && replay.m_actionAtom.empty())
-            replay.load(hidden);
+        if (!hidden.empty()) loadJupiterMacroData(hidden, jupiterMacro);
     }
 
     auto* mod = Mod::get();
