@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-14-w (Click Trainer: clarified which marks are which. Macro's click/hold windows are filled yellow boxes again (reverted last round's white-line change for these). NEW: your own real presses -- click, spacebar, up arrow, W, GD's standard jump bindings -- now render as separate thin white lines, detected live via raw ImGui key/mouse checks (works with or without a level loaded) and stamped at the bar's current transport position for direct rhythm comparison against the yellow marks. Cleared at the start of each fresh pass (loop auto-reset, Reset button, or freshly opening the page). Compiles clean, untested in-game.)"
+#define GB_BUILD_LABEL "2026-08-14-x (Click Trainer: fixed why your clicks never showed up, added release marks + Loop toggle. Root cause: ImGui::IsKeyPressed doesn't reliably see spacebar/up/W in this GD+ImGui integration -- same reason keybinds.cpp already has its own CCKeyboardDispatcher hook instead of trusting ImGui for game keys. New JupiterClickBarKeyHandler (jupiterghost.cpp) does the same, gated on the Click Trainer page being open rather than requiring a level. Mouse clicks stayed on ImGui (that path clearly works, menu buttons prove it). Press and release now both get their own white line (jupiterClickBarMyClicks / MyReleases). New Loop toggle: ON wraps back to 0 and keeps playing, clearing your marks each lap for a fresh comparison; OFF just stops at the end and leaves your marks until Reset or leaving the tab (now also clears on Back, not just Reset). Compiles clean, untested in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -398,12 +398,24 @@ public:
     double jupiterClickBarPosSec       = 0.0;
     double jupiterClickBarLastRealTime = 0.0;
 
-    // Your own real presses (click, spacebar, up arrow, W -- GD's standard
-    // jump bindings), tapped along live via raw ImGui key/mouse detection so
-    // it works even without a level loaded. Timestamped in click-bar-timeline
+    // Loop toggle: ON wraps back to 0 and keeps playing automatically at the
+    // end of a pass (clearing your own click/release marks each time, fresh
+    // comparison per lap); OFF just stops at the end and leaves your marks
+    // in place until you Reset or leave the tab.
+    bool jupiterClickBarLoop = false;
+
+    // Your own real presses -- click (mouse, via ImGui, same path menu
+    // buttons already use so it's known to work) and spacebar/up arrow/W
+    // (GD's standard jump bindings, via a real CCKeyboardDispatcher hook --
+    // NOT ImGui::IsKeyPressed, which this GD+ImGui integration doesn't
+    // reliably deliver game keys to, same reason this codebase already has
+    // its own keyboard dispatcher hook in keybinds.cpp instead of relying on
+    // ImGui for game-related keys). Timestamped in click-bar-timeline
     // seconds, rendered as white lines scrolling alongside the macro's own
-    // (yellow) marks. Cleared at the start of each fresh pass.
+    // (yellow) marks. Cleared on Reset, on leaving the tab, and -- only
+    // while Loop is on -- at each loop reset too.
     std::vector<double> jupiterClickBarMyClicks;
+    std::vector<double> jupiterClickBarMyReleases;
 
     // Click-rhythm bar: a fixed center line with the macro's upcoming click/hold
     // windows scrolling toward it at constant real-time speed, independent of
