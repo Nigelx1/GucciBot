@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-14-j (BIG BRRRR now ships WITH the mod: resources/big_brrr.mp3 bundled and registered in mod.json (same pattern as fw_default.mp3), loaded via Mod::get()->getResourcesDir() -- works out of the box, no manual folder-dropping needed. The save-dir brrr/ folder still works as an optional override if you ever want to swap the track without a rebuild. Compiles clean, untested in-game.)"
+#define GB_BUILD_LABEL "2026-08-14-k (Fix BIG BRRRR not settling back down: applyBigBrrrBounce() used to bail out entirely the instant the toggle went off, freezing the menu wherever the sine wave happened to be mid-swing -- 'sine nets to zero' is only true over a FULL period, not at an arbitrary toggle-off moment. Now it eases the offset back to 0 over a few frames before going idle, so the menu actually returns to its resting position. Also resets the tracked offset to 0 while the Jupiter tab is open (its position is force-set every frame anyway) so BRRRR resumes cleanly if still on when you leave that tab. Compiles clean, untested in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

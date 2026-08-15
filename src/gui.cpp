@@ -37,18 +37,31 @@ static ImVec2 snapPos(ImVec2 p){return ImVec2(std::round(p.x),std::round(p.y));}
 // between this frame's and last frame's sine value, rather than forcing an
 // absolute position. That works regardless of how the window's position is
 // otherwise being managed (custom drag handle, native ImGui drag, FirstUseEver
-// seeding, whatever) without fighting it or needing to understand it, and
-// since sine nets to zero over a full period there's no long-term drift.
+// seeding, whatever) without fighting it or needing to understand it. Sine
+// only nets to zero over a FULL period though -- toggling off mid-swing used
+// to just freeze the window wherever it happened to be, since the function
+// bailed out entirely once disabled. Now it eases lastOffset back to 0 first
+// (a few frames of decay) before going idle, so the menu actually settles
+// back to its resting spot instead of staying stuck mid-bounce.
 // Shared between drawMainWindow and drawMegaHackWindow so both skins bounce
-// in sync; never called for the Jupiter tab (jupiterActive guard).
+// in sync; never applies to the Jupiter tab (jupiterActive guard) -- and while
+// that tab's open, lastOffset is reset to 0 too, since its position is force-set
+// every frame anyway, so BRRRR resumes cleanly if it's still on when you leave.
 static void applyBigBrrrBounce(bool jupiterActive){
-    if(jupiterActive||!BigBrrrManager::get()->enabled)return;
     static float lastOffset=0.f;
-    float t=(float)ImGui::GetTime();
-    float offset=std::sin(t*14.f)*10.f;
+    if(jupiterActive){lastOffset=0.f;return;}
+    float newOffset;
+    if(BigBrrrManager::get()->enabled){
+        float t=(float)ImGui::GetTime();
+        newOffset=std::sin(t*14.f)*10.f;
+    } else {
+        if(lastOffset==0.f)return;
+        newOffset=lastOffset*0.75f;
+        if(std::fabs(newOffset)<0.05f)newOffset=0.f;
+    }
     ImVec2 wp=ImGui::GetWindowPos();
-    ImGui::SetWindowPos(ImVec2(wp.x,wp.y+(offset-lastOffset)));
-    lastOffset=offset;
+    ImGui::SetWindowPos(ImVec2(wp.x,wp.y+(newOffset-lastOffset)));
+    lastOffset=newOffset;
 }
 
 static const char* getAccuracyTag(AccuracyMode m){
