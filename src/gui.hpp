@@ -149,6 +149,7 @@ public:
 
     ImVec2 windowPos=ImVec2(-1,-1); bool windowPosInitialized=false;
     ImVec2 windowSize=ImVec2(580.f,540.f);
+    bool jupiterClickBarPageOpen=false;
 
     void initialize();
     void drawInterface();
@@ -193,6 +194,7 @@ private:
     void drawMoreHacksTab();
     void drawIndicatorsTab();
     void drawJupiterTab();
+    void drawJupiterClickTrainerPage();
     void loadRenderSettings();
     void markReplayListDirty(bool queueRefresh=true);
     void refreshReplayListIfNeeded(bool force);

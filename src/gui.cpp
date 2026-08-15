@@ -2666,7 +2666,7 @@ void MenuInterface::drawIndicatorsTab(){
 // a snapshot taken once at load() -- see the comment on that field for why
 // it's not read live from m_actionAtom). Per Nigel's spec: a block's left
 // edge crossing the line means click, its right edge crossing means release.
-static void drawJupiterClickBar(ThemeEngine& theme,GucciEngine* engine,float windowSeconds){
+static void drawJupiterClickBar(ThemeEngine& theme,GucciEngine* engine,float windowSeconds,float h=46.f){
     auto& replay=engine->replay;
     if(replay.m_clickIntervalsSec.empty()){
         ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
@@ -2684,7 +2684,6 @@ static void drawJupiterClickBar(ThemeEngine& theme,GucciEngine* engine,float win
 
     ImVec2 pos=ImGui::GetCursorScreenPos();
     float w=ImGui::GetContentRegionAvail().x;
-    float h=46.f;
     ImDrawList* dl=ImGui::GetWindowDrawList();
 
     const ImU32 barCol=IM_COL32(137,126,94,255); // olive track, per Nigel's reference sketch
@@ -2712,7 +2711,43 @@ static void drawJupiterClickBar(ThemeEngine& theme,GucciEngine* engine,float win
     ImGui::Dummy(ImVec2(w,h+8));
 }
 
+// Click Trainer's own dedicated page, per Nigel: the rhythm bar wants more
+// room than the ##jmfConstrain sidebar (42% width, shared with Trainer/
+// Segments/Notes) can give it. Uses the tab's FULL content width instead --
+// the JMF backdrop still renders behind it either way (drawJupiterBackdrop
+// runs before drawTabContent, unconditionally), this is just about how much
+// of the foreground we claim.
+void MenuInterface::drawJupiterClickTrainerPage(){
+    auto* engine=GucciEngine::get();
+    auto* mod=Mod::get();
+
+    if(Widgets::StyledButton("<- Back",ImVec2(90,28),theme,anim))jupiterClickBarPageOpen=false;
+    ImGui::Dummy(ImVec2(0,10));
+
+    if(fontHeading)ImGui::PushFont(fontHeading);
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.getAccent());
+    ImGui::TextWrapped("Click Trainer");
+    ImGui::PopStyleColor();
+    if(fontHeading)ImGui::PopFont();
+    ImGui::Dummy(ImVec2(0,4));
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::TextWrapped("Left edge of a block crossing the white line means click, right edge means release.");
+    ImGui::PopStyleColor();
+    ImGui::Dummy(ImVec2(0,12));
+
+    if(Widgets::ToggleSwitch("Show Click Bar",&engine->jupiterClickBarEnabled,theme,anim))
+        mod->setSavedValue("jupiter_clickbar_enabled",engine->jupiterClickBarEnabled);
+    if(engine->jupiterClickBarEnabled){
+        if(Widgets::StyledSliderFloat("Window (sec)",&engine->jupiterClickBarWindow,0.3f,4.f,theme))
+            mod->setSavedValue("jupiter_clickbar_window",(double)engine->jupiterClickBarWindow);
+        ImGui::Dummy(ImVec2(0,14));
+        drawJupiterClickBar(theme,engine,engine->jupiterClickBarWindow,90.f);
+    }
+}
+
 void MenuInterface::drawJupiterTab(){
+    if(jupiterClickBarPageOpen){drawJupiterClickTrainerPage();return;}
+
     auto* engine=GucciEngine::get();
     auto* mod=Mod::get();
 
@@ -2784,13 +2819,10 @@ void MenuInterface::drawJupiterTab(){
 
     ImGui::Dummy(ImVec2(0,8));
     Widgets::SectionHeader("Click Trainer",theme);
-    if(Widgets::ToggleSwitch("Show Click Bar",&engine->jupiterClickBarEnabled,theme,anim))
-        mod->setSavedValue("jupiter_clickbar_enabled",engine->jupiterClickBarEnabled);
-    if(engine->jupiterClickBarEnabled){
-        if(Widgets::StyledSliderFloat("Window (sec)",&engine->jupiterClickBarWindow,0.3f,4.f,theme))
-            mod->setSavedValue("jupiter_clickbar_window",(double)engine->jupiterClickBarWindow);
-        drawJupiterClickBar(theme,engine,engine->jupiterClickBarWindow);
-    }
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::TextWrapped("Click/hold windows scrolling toward a fixed line at constant real-time speed. Its own page now -- too cramped squeezed in here.");
+    ImGui::PopStyleColor();
+    if(Widgets::StyledButton("Open Click Trainer ->",ImVec2(-1,32),theme,anim))jupiterClickBarPageOpen=true;
 
     ImGui::Dummy(ImVec2(0,8));
     Widgets::SectionHeader("Segments",theme);
