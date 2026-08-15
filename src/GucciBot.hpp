@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-15-a (Release prep: version reset to 1.0.0 across mod.json/CMakeLists.txt (MOD_VERSION flows through to every UI display already, no source edits needed there), about.md rewritten to reflect the actual current feature set instead of stale 6.0-era content, new logo.png. No functional changes. Compiles clean, untested in-game.)"
+#define GB_BUILD_LABEL "2026-08-15-b (logo.png given rounded corners via a Pillow alpha mask, matching the other Geode mod list icons' style. No functional changes. Compiles clean, untested in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
