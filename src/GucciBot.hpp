@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-15-b (logo.png given rounded corners via a Pillow alpha mask, matching the other Geode mod list icons' style. No functional changes. Compiles clean, untested in-game.)"
+#define GB_BUILD_LABEL "2026-08-15-c (Rebuild to repackage about.md's ToastyExGD -> ToastexGD credit fix into the installed .geode -- about.md only gets bundled at package time, so the prior commit alone didn't reach the installed mod. No functional changes.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
