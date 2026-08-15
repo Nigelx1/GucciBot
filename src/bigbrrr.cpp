@@ -47,6 +47,11 @@ void BigBrrrManager::setEnabled(bool on) {
 void BigBrrrManager::start() {
     stop();
     auto path = findFirstAudioFile(getBrrrDir());
+    if (path.empty()) {
+        auto bundled = Mod::get()->getResourcesDir() / "big_brrr.mp3";
+        std::error_code ec;
+        if (std::filesystem::exists(bundled, ec)) path = bundled;
+    }
     if (path.empty()) { enabled = false; return; }
 
     auto* system = FMODAudioEngine::sharedEngine()->m_system;

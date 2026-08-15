@@ -2467,10 +2467,10 @@ void MenuInterface::drawSettingsTab(){
         ImGui::SameLine();
         if(Widgets::StyledButton("Open BRRRR Folder",ImVec2(160,0),theme,anim))brrr->openBrrrFolder();
         ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
-        if(!brrr->hasFile())
-            ImGui::TextWrapped("No audio file in the BRRRR folder yet -- drop an mp3/wav/ogg in there, then flip the switch.");
+        if(brrr->hasFile())
+            ImGui::TextWrapped("Loops the audio file in your BRRRR folder (overriding the bundled one) and makes the whole menu bounce. Doesn't touch the Jupiter tab.");
         else
-            ImGui::TextWrapped("Loops whatever's in the BRRRR folder and makes the whole menu bounce. Doesn't touch the Jupiter tab.");
+            ImGui::TextWrapped("Loops the bundled BRRRR track and makes the whole menu bounce. Doesn't touch the Jupiter tab. Drop your own mp3/wav/ogg in the BRRRR folder to swap it without a rebuild.");
         ImGui::PopStyleColor();
     }
     ImGui::Dummy(ImVec2(0,12));

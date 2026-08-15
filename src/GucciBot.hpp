@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-14-i (BIG BRRRR: a pure joke toggle in Settings > Fun. New BigBrrrManager (bigbrrr.hpp/.cpp, mirrors ClickSoundManager's background-noise FMOD loop pattern) loops whatever audio file is dropped in the mod's save-dir brrr/ folder (Open Folder button provided, same convention as click packs). While enabled, both menu skins (drawMainWindow, drawMegaHackWindow) bounce vertically via a shared applyBigBrrrBounce() helper called right after Begin() -- nudges the window by the DELTA between this frame's and last frame's sine value rather than forcing an absolute position, so it doesn't fight whatever's otherwise managing window position and can't drift over time. Never applies to the Jupiter tab (jupiterActive guard, same switch used everywhere else to isolate it). Compiles clean, untested in-game.)"
+#define GB_BUILD_LABEL "2026-08-14-j (BIG BRRRR now ships WITH the mod: resources/big_brrr.mp3 bundled and registered in mod.json (same pattern as fw_default.mp3), loaded via Mod::get()->getResourcesDir() -- works out of the box, no manual folder-dropping needed. The save-dir brrr/ folder still works as an optional override if you ever want to swap the track without a rebuild. Compiles clean, untested in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
