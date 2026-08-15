@@ -829,7 +829,11 @@ void MenuInterface::drawMainWindow(){
     if(jupiterActive){
         // Nigel's own two colors from his mockup: #100680 navy, #FCF550 gold.
         theme.accentColor   = ImVec4(0.988f,0.961f,0.314f,1.f);
-        theme.bgColor       = ImVec4(0.063f,0.024f,0.502f,theme.bgOpacity);
+        // Full takeover, not a translucent menu -- ignore the user's general
+        // bg-opacity slider entirely rather than inherit it (that's what was
+        // still reading as ~80%: SetNextWindowBgAlpha uses theme.bgOpacity,
+        // which defaults to 0.96 and can be set as low as 0.5).
+        theme.bgColor       = ImVec4(0.063f,0.024f,0.502f,1.f);
         theme.cardColor     = ImVec4(0.09f,0.05f,0.58f,1.f);
         theme.textPrimary   = ImVec4(0.988f,0.961f,0.314f,1.f);
         theme.textSecondary = ImVec4(0.70f,0.66f,0.85f,1.f);
@@ -850,7 +854,7 @@ void MenuInterface::drawMainWindow(){
         }
         ImGui::SetNextWindowSize(windowSize,ImGuiCond_Always);
     }
-    ImGui::SetNextWindowBgAlpha(theme.bgOpacity*t);
+    ImGui::SetNextWindowBgAlpha((jupiterActive?1.f:theme.bgOpacity)*t);
     ImGui::PushStyleVar(ImGuiStyleVar_Alpha,t);
         ImGui::Begin("##GucciBot",nullptr,
         ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoScrollbar|
@@ -908,7 +912,11 @@ void MenuInterface::drawMegaHackWindow(){
     if(jupiterActive){
         // Nigel's own two colors from his mockup: #100680 navy, #FCF550 gold.
         theme.accentColor   = ImVec4(0.988f,0.961f,0.314f,1.f);
-        theme.bgColor       = ImVec4(0.063f,0.024f,0.502f,theme.bgOpacity);
+        // Full takeover, not a translucent menu -- ignore the user's general
+        // bg-opacity slider entirely rather than inherit it (that's what was
+        // still reading as ~80%: SetNextWindowBgAlpha uses theme.bgOpacity,
+        // which defaults to 0.96 and can be set as low as 0.5).
+        theme.bgColor       = ImVec4(0.063f,0.024f,0.502f,1.f);
         theme.cardColor     = ImVec4(0.09f,0.05f,0.58f,1.f);
         theme.textPrimary   = ImVec4(0.988f,0.961f,0.314f,1.f);
         theme.textSecondary = ImVec4(0.70f,0.66f,0.85f,1.f);
@@ -933,9 +941,12 @@ void MenuInterface::drawMegaHackWindow(){
     ImDrawList* dl=ImGui::GetWindowDrawList();
     ImVec2 wp=windowPos,ws=ImGui::GetWindowSize();
     const float railW=150.f,headH=44.f,footH=30.f,rnd=6.f;
-    ImU32 bgMain=IM_COL32(18,19,26,(int)(243*t));
-    ImU32 bgRail=IM_COL32(13,14,19,(int)(248*t));
-    ImU32 bgHead=IM_COL32(22,24,32,(int)(248*t));
+    // MegaHack skin's own fixed dark palette, unrelated to theme.bgColor --
+    // for the JMF full takeover, force Nigel's navy at full opacity here too
+    // instead of leaving the old near-black show through underneath it.
+    ImU32 bgMain=jupiterActive?IM_COL32(16,6,128,255):IM_COL32(18,19,26,(int)(243*t));
+    ImU32 bgRail=jupiterActive?IM_COL32(16,6,128,255):IM_COL32(13,14,19,(int)(248*t));
+    ImU32 bgHead=jupiterActive?IM_COL32(16,6,128,255):IM_COL32(22,24,32,(int)(248*t));
     dl->AddRectFilled(wp,ImVec2(wp.x+ws.x,wp.y+ws.y),bgMain,rnd);
     dl->AddRectFilled(wp,ImVec2(wp.x+railW,wp.y+ws.y),bgRail,rnd,ImDrawFlags_RoundCornersLeft);
     dl->AddRectFilled(ImVec2(wp.x+railW,wp.y),ImVec2(wp.x+ws.x,wp.y+headH),bgHead,rnd,ImDrawFlags_RoundCornersTopRight);
