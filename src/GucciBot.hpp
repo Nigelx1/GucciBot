@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-14-g (JMF take 13, sun ornament was scaled off size.x*0.34 -- a fraction of the whole viewport width -- while every other element (stars, ribbon) uses fixed pixel sizes, so on a real window it ballooned way past the stars/ribbon and overlapped everything. Fixed to a flat 76px radius tucked into the bottom-right corner (0.93, baseline), same proportions/rings/rays as before, just correctly small now. Compiles clean, untested in-game.)"
+#define GB_BUILD_LABEL "2026-08-14-h (JMF Click Trainer v1: a fixed white line at the horizontal center of a new bar in the Jupiter tab, with the macro's click/hold windows scrolling toward and through it at constant real-time speed -- left edge of a block crossing the line means press, right edge means release. Built from GucciReplaySystem::m_clickIntervalsSec, a snapshot of press/release pairs converted to seconds using the tps the macro was actually recorded at, taken ONCE in load() before any live reset/respawn logic can touch m_actionAtom -- deliberately decoupled from the fragile mid-playback reset bookkeeping that broke intentional-death playback (P1). Adjustable window-size slider (0.3-4s), persisted. Compiles clean, untested in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -121,6 +121,18 @@ public:
     std::vector<MacroPathSample> m_pathSamples;
     bool m_pathSamplesDirty = false; // true when playback backfilled samples not yet on disk
     void savePathSamplesNow();       // writes m_pathSamples to the current macro's sidecar
+
+    // Click-rhythm bar (Jupiter tab): press/release intervals in seconds, built
+    // ONCE at load() time from the freshly-loaded action list, before any live
+    // reset/respawn bookkeeping can clip or clear m_actionAtom. Deliberately a
+    // separate, never-mutated copy -- reading the live m_actionAtom mid-playback
+    // would tie a GUI feature to the same fragile reset logic that broke
+    // intentional-death playback (see CLAUDE.md P1). m_clickBarTps is the tps
+    // the macro was actually recorded at, captured alongside so the bar's timing
+    // stays correct even if the user changes tps live during practice.
+    std::vector<std::pair<double,double>> m_clickIntervalsSec;
+    double m_clickBarTps = 240.0;
+    void buildClickIntervals(double tps); // called once from load(), pairs press/release per (type,player2)
 
     // Trainer Mode: furthest x-position ever actually reached while this macro's
     // path overlay was active as a reference (ratchets up only, persisted
@@ -359,6 +371,12 @@ public:
     // specific level, with personal notes and named segments layered on top.
     std::string jupiterNotes;
     std::string jupiterSegmentsRaw; // "label,x;label,x;..."
+
+    // Click-rhythm bar: a fixed center line with the macro's upcoming click/hold
+    // windows scrolling toward it at constant real-time speed (GucciReplaySystem::
+    // m_clickIntervalsSec), independent of in-level speed portals.
+    bool  jupiterClickBarEnabled = true;
+    float jupiterClickBarWindow  = 2.f; // total seconds of window visible across the bar
 
     bool layoutMode            = false;
     bool noMirrorEffect        = false;

@@ -400,6 +400,26 @@ void GucciReplaySystem::save(const fs::path& path, bool noOverwrite) {
     saveTrainerProgress(path, m_trainerBestX);
 }
 
+void GucciReplaySystem::buildClickIntervals(double tps) {
+    m_clickIntervalsSec.clear();
+    m_clickBarTps = tps > 0.0 ? tps : 240.0;
+    std::unordered_map<int, uint32_t> openPress; // key = type*2 + player2, value = press frame
+    for (auto const& a : m_actionAtom.m_actions) {
+        if (!a.isInput()) continue;
+        int key = (int)a.m_type * 2 + (a.m_player2 ? 1 : 0);
+        if (a.m_holding) {
+            openPress[key] = a.m_frame;
+        } else {
+            auto it = openPress.find(key);
+            if (it != openPress.end()) {
+                m_clickIntervalsSec.push_back({ it->second / m_clickBarTps, a.m_frame / m_clickBarTps });
+                openPress.erase(it);
+            }
+        }
+    }
+    log::info("[GucciBot] Click bar: built {} interval(s) at {} tps", m_clickIntervalsSec.size(), m_clickBarTps);
+}
+
 void GucciReplaySystem::load(const fs::path& path) {
     if (!fs::exists(path)) {
         log::error("[GucciBot] File not found: {}", path.string());
@@ -434,6 +454,7 @@ void GucciReplaySystem::load(const fs::path& path) {
         loadFwMarks(path);
         loadPathSamples(path, m_pathSamples);
         m_trainerBestX = loadTrainerProgress(path);
+        buildClickIntervals(gb->updater.m_tps);
         return;
     }
 
@@ -450,6 +471,7 @@ void GucciReplaySystem::load(const fs::path& path) {
         gb->setMode(GucciEngine::Mode::Playing);
         log::info("[GucciBot] Loaded legacy BRR: {} inputs", m_actionAtom.length());
         loadFwMarks(path);
+        buildClickIntervals(gb->updater.m_tps);
         delete legacy;
         return;
     }

@@ -2609,6 +2609,58 @@ void MenuInterface::drawIndicatorsTab(){
     ImGui::PopStyleColor();
 }
 
+// Click-rhythm bar: a fixed white line stays put at the horizontal center
+// while the macro's click/hold windows scroll toward and through it at
+// constant real-time speed (built from GucciReplaySystem::m_clickIntervalsSec,
+// a snapshot taken once at load() -- see the comment on that field for why
+// it's not read live from m_actionAtom). Per Nigel's spec: a block's left
+// edge crossing the line means click, its right edge crossing means release.
+static void drawJupiterClickBar(ThemeEngine& theme,GucciEngine* engine,float windowSeconds){
+    auto& replay=engine->replay;
+    if(replay.m_clickIntervalsSec.empty()){
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::TextWrapped("No click data yet -- load a macro to see its click timing here.");
+        ImGui::PopStyleColor();
+        return;
+    }
+    auto* pl=PlayLayer::get();
+    if(!pl||!engine->isPlaying()){
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::TextWrapped("Enter the level in Playing mode to watch clicks scroll through the line.");
+        ImGui::PopStyleColor();
+        return;
+    }
+
+    ImVec2 pos=ImGui::GetCursorScreenPos();
+    float w=ImGui::GetContentRegionAvail().x;
+    float h=46.f;
+    ImDrawList* dl=ImGui::GetWindowDrawList();
+
+    const ImU32 barCol=IM_COL32(137,126,94,255); // olive track, per Nigel's reference sketch
+    const ImU32 white=IM_COL32(255,255,255,255);
+    const ImU32 clickCol=theme.getAccentU32(1.f); // already the JMF gold while this tab is active
+
+    dl->AddRectFilled(pos,ImVec2(pos.x+w,pos.y+h),barCol,4.f);
+
+    double tps=replay.m_clickBarTps>0.0?replay.m_clickBarTps:240.0;
+    double nowSec=(double)engine->updater.getFrame()/tps;
+    float centerX=pos.x+w*0.5f;
+    float halfWindow=std::max(windowSeconds,0.2f)*0.5f;
+    float pxPerSec=(w*0.5f)/halfWindow;
+
+    for(auto const& iv:replay.m_clickIntervalsSec){
+        double relStart=iv.first-nowSec, relEnd=iv.second-nowSec;
+        if(relEnd<-halfWindow||relStart>halfWindow)continue;
+        float x0=centerX+(float)relStart*pxPerSec;
+        float x1=centerX+(float)relEnd*pxPerSec;
+        x0=std::max(x0,pos.x); x1=std::min(x1,pos.x+w);
+        if(x1>x0)dl->AddRectFilled(ImVec2(x0,pos.y+5),ImVec2(x1,pos.y+h-5),clickCol,2.f);
+    }
+
+    dl->AddLine(ImVec2(centerX,pos.y-4),ImVec2(centerX,pos.y+h+4),white,3.f);
+    ImGui::Dummy(ImVec2(w,h+8));
+}
+
 void MenuInterface::drawJupiterTab(){
     auto* engine=GucciEngine::get();
     auto* mod=Mod::get();
@@ -2677,6 +2729,16 @@ void MenuInterface::drawJupiterTab(){
             mod->setSavedValue("hack_macro_path_marker_size",(double)engine->macroPathMarkerSize);
         if(Widgets::StyledSliderFloat("Line Opacity",&engine->macroPathLineOpacity,0.1f,1.f,theme))
             mod->setSavedValue("hack_macro_path_line_opacity",(double)engine->macroPathLineOpacity);
+    }
+
+    ImGui::Dummy(ImVec2(0,8));
+    Widgets::SectionHeader("Click Trainer",theme);
+    if(Widgets::ToggleSwitch("Show Click Bar",&engine->jupiterClickBarEnabled,theme,anim))
+        mod->setSavedValue("jupiter_clickbar_enabled",engine->jupiterClickBarEnabled);
+    if(engine->jupiterClickBarEnabled){
+        if(Widgets::StyledSliderFloat("Window (sec)",&engine->jupiterClickBarWindow,0.3f,4.f,theme))
+            mod->setSavedValue("jupiter_clickbar_window",(double)engine->jupiterClickBarWindow);
+        drawJupiterClickBar(theme,engine,engine->jupiterClickBarWindow);
     }
 
     ImGui::Dummy(ImVec2(0,8));
@@ -2758,7 +2820,7 @@ void MenuInterface::drawJupiterTab(){
 
     ImGui::Dummy(ImVec2(0,8));
     ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
-    ImGui::TextWrapped("Rehearsal mode (scrub playback, pulsing cues ahead of each click, segment looping) isn't built yet -- that's the next pass.");
+    ImGui::TextWrapped("Rehearsal mode (scrub playback, segment looping) isn't built yet -- that's the next pass. Click-rhythm cues are live above.");
     ImGui::PopStyleColor();
 
     ImGui::EndChild();
@@ -2931,6 +2993,8 @@ void MenuInterface::saveSettings(){
     mod->setSavedValue("hack_trainer_reveal_buffer",(double)eng->trainerRevealBuffer);
     mod->setSavedValue("jupiter_notes",eng->jupiterNotes);
     mod->setSavedValue("jupiter_segments",eng->jupiterSegmentsRaw);
+    mod->setSavedValue("jupiter_clickbar_enabled",eng->jupiterClickBarEnabled);
+    mod->setSavedValue("jupiter_clickbar_window",(double)eng->jupiterClickBarWindow);
     mod->setSavedValue("hack_noclip",eng->noclipEnabled);
     mod->setSavedValue("hack_noclip_flash",eng->noclipDeathFlash);
     mod->setSavedValue("hack_noclip_color_r",eng->noclipDeathColorR);
@@ -3113,6 +3177,8 @@ void MenuInterface::loadSettings(){
     eng->trainerRevealBuffer=mod->getSavedValue<float>("hack_trainer_reveal_buffer",40.f);
     eng->jupiterNotes=mod->getSavedValue<std::string>("jupiter_notes","");
     eng->jupiterSegmentsRaw=mod->getSavedValue<std::string>("jupiter_segments","");
+    eng->jupiterClickBarEnabled=mod->getSavedValue<bool>("jupiter_clickbar_enabled",true);
+    eng->jupiterClickBarWindow=mod->getSavedValue<float>("jupiter_clickbar_window",2.f);
     eng->noclipEnabled=mod->getSavedValue<bool>("hack_noclip",false);
     eng->noclipDeathFlash=mod->getSavedValue<bool>("hack_noclip_flash",true);
     eng->noclipDeathColorR=mod->getSavedValue<float>("hack_noclip_color_r",1.f);
