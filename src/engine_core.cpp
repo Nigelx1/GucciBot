@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <fstream>
 #include <algorithm>
+#include <cstring>
 
 using namespace geode::prelude;
 namespace fs = std::filesystem;
@@ -691,6 +692,165 @@ static bool gdrJsonExtract(const std::string& text, double& framerate, std::vect
     return !out.empty();
 }
 
+// Minimal MessagePack reader -- just enough to walk a binary GDR file's
+// structure (nested maps/arrays/strings/ints/bools/floats) and pull out the
+// "inputs" array's frame/btn/2p/down fields, mirroring gdrJsonExtract's
+// field-matching exactly (confirmed by inspecting a real exported .gdr:
+// same key names, just msgpack-encoded instead of JSON-encoded). Not a
+// general-purpose msgpack library -- skips anything it doesn't need
+// (gameVersion, description, author, bot/level metadata, etc.) generically
+// rather than trying to fully decode the file.
+namespace gdrmsgpack {
+
+static bool skipValue(const std::vector<uint8_t>& b, size_t& i);
+
+static bool skipN(const std::vector<uint8_t>& b, size_t& i, size_t n) {
+    if (i + n > b.size()) return false;
+    i += n; return true;
+}
+static bool skipContainer(const std::vector<uint8_t>& b, size_t& i, size_t count, bool isMap) {
+    size_t n = isMap ? count * 2 : count;
+    for (size_t k = 0; k < n; k++) if (!skipValue(b, i)) return false;
+    return true;
+}
+static bool skipValue(const std::vector<uint8_t>& b, size_t& i) {
+    if (i >= b.size()) return false;
+    uint8_t t = b[i++];
+    if (t <= 0x7f) return true;
+    if (t >= 0xe0) return true;
+    if (t >= 0x80 && t <= 0x8f) return skipContainer(b, i, t & 0x0f, true);
+    if (t >= 0x90 && t <= 0x9f) return skipContainer(b, i, t & 0x0f, false);
+    if (t >= 0xa0 && t <= 0xbf) return skipN(b, i, t & 0x1f);
+    switch (t) {
+        case 0xc0: case 0xc2: case 0xc3: return true;
+        case 0xc4: { if (i>=b.size()) return false; uint8_t n=b[i++]; return skipN(b,i,n); }
+        case 0xc5: { if (i+2>b.size()) return false; uint16_t n=(uint16_t)((b[i]<<8)|b[i+1]); i+=2; return skipN(b,i,n); }
+        case 0xc6: { if (i+4>b.size()) return false; uint32_t n=((uint32_t)b[i]<<24)|((uint32_t)b[i+1]<<16)|((uint32_t)b[i+2]<<8)|b[i+3]; i+=4; return skipN(b,i,n); }
+        case 0xca: return skipN(b, i, 4);
+        case 0xcb: return skipN(b, i, 8);
+        case 0xcc: return skipN(b, i, 1);
+        case 0xcd: return skipN(b, i, 2);
+        case 0xce: return skipN(b, i, 4);
+        case 0xcf: return skipN(b, i, 8);
+        case 0xd0: return skipN(b, i, 1);
+        case 0xd1: return skipN(b, i, 2);
+        case 0xd2: return skipN(b, i, 4);
+        case 0xd3: return skipN(b, i, 8);
+        case 0xd9: { if (i>=b.size()) return false; uint8_t n=b[i++]; return skipN(b,i,n); }
+        case 0xda: { if (i+2>b.size()) return false; uint16_t n=(uint16_t)((b[i]<<8)|b[i+1]); i+=2; return skipN(b,i,n); }
+        case 0xdb: { if (i+4>b.size()) return false; uint32_t n=((uint32_t)b[i]<<24)|((uint32_t)b[i+1]<<16)|((uint32_t)b[i+2]<<8)|b[i+3]; i+=4; return skipN(b,i,n); }
+        case 0xdc: { if (i+2>b.size()) return false; uint16_t n=(uint16_t)((b[i]<<8)|b[i+1]); i+=2; return skipContainer(b,i,n,false); }
+        case 0xdd: { if (i+4>b.size()) return false; uint32_t n=((uint32_t)b[i]<<24)|((uint32_t)b[i+1]<<16)|((uint32_t)b[i+2]<<8)|b[i+3]; i+=4; return skipContainer(b,i,n,false); }
+        case 0xde: { if (i+2>b.size()) return false; uint16_t n=(uint16_t)((b[i]<<8)|b[i+1]); i+=2; return skipContainer(b,i,n,true); }
+        case 0xdf: { if (i+4>b.size()) return false; uint32_t n=((uint32_t)b[i]<<24)|((uint32_t)b[i+1]<<16)|((uint32_t)b[i+2]<<8)|b[i+3]; i+=4; return skipContainer(b,i,n,true); }
+        default: return false;
+    }
+}
+
+struct Header { size_t count = SIZE_MAX; bool isMap = false; };
+static Header readContainerHeader(const std::vector<uint8_t>& b, size_t& i) {
+    Header h;
+    if (i >= b.size()) return h;
+    uint8_t t = b[i];
+    if (t >= 0x80 && t <= 0x8f) { h.count = t & 0x0f; h.isMap = true; i++; return h; }
+    if (t >= 0x90 && t <= 0x9f) { h.count = t & 0x0f; h.isMap = false; i++; return h; }
+    if (t == 0xdc) { if (i+3>b.size()) return h; h.count=(size_t)((b[i+1]<<8)|b[i+2]); h.isMap=false; i+=3; return h; }
+    if (t == 0xdd) { if (i+5>b.size()) return h; h.count=(size_t)(((uint32_t)b[i+1]<<24)|((uint32_t)b[i+2]<<16)|((uint32_t)b[i+3]<<8)|b[i+4]); h.isMap=false; i+=5; return h; }
+    if (t == 0xde) { if (i+3>b.size()) return h; h.count=(size_t)((b[i+1]<<8)|b[i+2]); h.isMap=true; i+=3; return h; }
+    if (t == 0xdf) { if (i+5>b.size()) return h; h.count=(size_t)(((uint32_t)b[i+1]<<24)|((uint32_t)b[i+2]<<16)|((uint32_t)b[i+3]<<8)|b[i+4]); h.isMap=true; i+=5; return h; }
+    return h;
+}
+
+static bool readString(const std::vector<uint8_t>& b, size_t& i, std::string& out) {
+    if (i >= b.size()) return false;
+    uint8_t t = b[i];
+    size_t len;
+    if (t >= 0xa0 && t <= 0xbf) { len = t & 0x1f; i++; }
+    else if (t == 0xd9) { if (i+2>b.size()) return false; len=b[i+1]; i+=2; }
+    else if (t == 0xda) { if (i+3>b.size()) return false; len=(size_t)((b[i+1]<<8)|b[i+2]); i+=3; }
+    else if (t == 0xdb) { if (i+5>b.size()) return false; len=(size_t)(((uint32_t)b[i+1]<<24)|((uint32_t)b[i+2]<<16)|((uint32_t)b[i+3]<<8)|b[i+4]); i+=5; }
+    else return false;
+    if (i + len > b.size()) return false;
+    out.assign((const char*)&b[i], len);
+    i += len;
+    return true;
+}
+
+static bool readNumber(const std::vector<uint8_t>& b, size_t& i, double& out) {
+    if (i >= b.size()) return false;
+    uint8_t t = b[i];
+    if (t <= 0x7f) { out = t; i++; return true; }
+    if (t >= 0xe0) { out = (double)(int8_t)t; i++; return true; }
+    switch (t) {
+        case 0xcc: if(i+2>b.size())return false; out=b[i+1]; i+=2; return true;
+        case 0xcd: if(i+3>b.size())return false; out=(double)((b[i+1]<<8)|b[i+2]); i+=3; return true;
+        case 0xce: if(i+5>b.size())return false; out=(double)(((uint32_t)b[i+1]<<24)|((uint32_t)b[i+2]<<16)|((uint32_t)b[i+3]<<8)|b[i+4]); i+=5; return true;
+        case 0xcf: { if(i+9>b.size())return false; uint64_t v=0; for(int k=0;k<8;k++)v=(v<<8)|b[i+1+k]; out=(double)v; i+=9; return true; }
+        case 0xd0: if(i+2>b.size())return false; out=(double)(int8_t)b[i+1]; i+=2; return true;
+        case 0xd1: if(i+3>b.size())return false; out=(double)(int16_t)((b[i+1]<<8)|b[i+2]); i+=3; return true;
+        case 0xd2: if(i+5>b.size())return false; out=(double)(int32_t)(((uint32_t)b[i+1]<<24)|((uint32_t)b[i+2]<<16)|((uint32_t)b[i+3]<<8)|b[i+4]); i+=5; return true;
+        case 0xd3: { if(i+9>b.size())return false; uint64_t v=0; for(int k=0;k<8;k++)v=(v<<8)|b[i+1+k]; out=(double)(int64_t)v; i+=9; return true; }
+        case 0xca: { if(i+5>b.size())return false; uint32_t u=((uint32_t)b[i+1]<<24)|((uint32_t)b[i+2]<<16)|((uint32_t)b[i+3]<<8)|b[i+4]; float f; std::memcpy(&f,&u,4); out=f; i+=5; return true; }
+        case 0xcb: { if(i+9>b.size())return false; uint64_t u=0; for(int k=0;k<8;k++)u=(u<<8)|b[i+1+k]; double d; std::memcpy(&d,&u,8); out=d; i+=9; return true; }
+        default: return false;
+    }
+}
+
+static bool readBool(const std::vector<uint8_t>& b, size_t& i, bool& out) {
+    if (i >= b.size()) return false;
+    if (b[i] == 0xc2) { out = false; i++; return true; }
+    if (b[i] == 0xc3) { out = true; i++; return true; }
+    double n; size_t save = i;
+    if (readNumber(b, i, n)) { out = n != 0.0; return true; }
+    i = save;
+    return false;
+}
+
+} // namespace gdrmsgpack
+
+static bool gdrBinaryExtract(const std::vector<uint8_t>& bytes, double& framerate, std::vector<GdrJsonInput>& out) {
+    using namespace gdrmsgpack;
+    size_t i = 0;
+    auto top = readContainerHeader(bytes, i);
+    if (top.count == SIZE_MAX || !top.isMap) return false;
+
+    for (size_t k = 0; k < top.count; k++) {
+        std::string key;
+        if (!readString(bytes, i, key)) return false;
+
+        if (key == "inputs") {
+            auto arr = readContainerHeader(bytes, i);
+            if (arr.count == SIZE_MAX) return false;
+            for (size_t e = 0; e < arr.count; e++) {
+                auto obj = readContainerHeader(bytes, i);
+                if (obj.count == SIZE_MAX || !obj.isMap) return false;
+                GdrJsonInput in;
+                for (size_t f = 0; f < obj.count; f++) {
+                    std::string fk;
+                    if (!readString(bytes, i, fk)) return false;
+                    if (fk == "frame") { double v; if (readNumber(bytes,i,v)) in.frame=(long long)v; else return false; }
+                    else if (fk == "btn" || fk == "button") { double v; if (readNumber(bytes,i,v)) in.button=(int)v; else return false; }
+                    else if (fk == "2p" || fk == "player2") { bool v; if (readBool(bytes,i,v)) in.player2=v; else return false; }
+                    else if (fk == "down" || fk == "hold" || fk == "holding") { bool v; if (readBool(bytes,i,v)) in.down=v; else return false; }
+                    else { if (!skipValue(bytes, i)) return false; }
+                }
+                out.push_back(in);
+            }
+        } else if (key == "framerate" || key == "fps") {
+            double v; size_t save = i;
+            if (readNumber(bytes, i, v)) {
+                if (v > 0) framerate = v;
+            } else {
+                i = save;
+                if (!skipValue(bytes, i)) return false;
+            }
+        } else {
+            if (!skipValue(bytes, i)) return false;
+        }
+    }
+    return !out.empty();
+}
+
 }
 
 bool GucciEngine::convertToBRR(const std::string& name) {
@@ -759,8 +919,32 @@ bool GucciEngine::convertToBRR(const std::string& name) {
         }
     }
 
-    log::warn("[GucciBot] convertToBRR: unsupported format: {} (binary GDR? export it as JSON and retry)",
-              src.string());
+        {
+        double framerate = 240.0;
+        std::vector<GdrJsonInput> gdrInputs;
+        if (gdrBinaryExtract(bytes, framerate, gdrInputs)) {
+            BRRMacro out;
+            out.name = name;
+            out.framerate = framerate;
+            for (auto& gi : gdrInputs) {
+                BRRInput bi;
+                bi.tick = static_cast<int32_t>(std::max(0LL, gi.frame));
+                bi.actionType = static_cast<uint8_t>(std::clamp(gi.button, 1, 3));
+                bi.setPlayer2(gi.player2);
+                bi.setPressed(gi.down);
+                out.inputs.push_back(bi);
+            }
+            std::sort(out.inputs.begin(), out.inputs.end(),
+                      [](const BRRInput& x, const BRRInput& y) { return x.tick < y.tick; });
+            out.persist();
+            reloadMacroList();
+            log::info("[GucciBot] Converted '{}' (GDR binary/msgpack, {} inputs) to native format",
+                      name, out.inputs.size());
+            return true;
+        }
+    }
+
+    log::warn("[GucciBot] convertToBRR: unsupported format: {}", src.string());
     return false;
 }
 
@@ -883,6 +1067,19 @@ void GucciEngine::deleteBotSettingsPreset(const std::string& name) {
 void GucciEngine::initialize() {
         fs::create_directories(getReplayDir());
     fs::create_directories(getPresetsDir());
+
+        // Seed the replays folder with the bundled Jupiter My Favourite GDR
+    // macro, once -- only if it's not already there, so this can never
+    // clobber Nigel's own edits/renames of it on later launches. Shows up
+    // as an "incompatible" (legacy-format) macro until converted; see
+    // convertToBRR's binary-GDR (msgpack) support below.
+    {
+        auto bundled = Mod::get()->getResourcesDir() / "jupiter_my_favourite.gdr";
+        auto dest = getReplayDir() / "jupiter_my_favourite.gdr";
+        std::error_code ec;
+        if (fs::exists(bundled, ec) && !fs::exists(dest, ec))
+            fs::copy_file(bundled, dest, ec);
+    }
 
         auto* mod = Mod::get();
     updater.m_tps              = mod->getSavedValue<double>("updater_tps", 240.0);

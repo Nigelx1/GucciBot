@@ -1097,11 +1097,13 @@ void MenuInterface::drawMainWindow(){
     windowPos=ImGui::GetWindowPos();
     ImDrawList* dl=ImGui::GetWindowDrawList();
     ImVec2 wp=windowPos,ws=ImGui::GetWindowSize();
-    if(jupiterActive){
+    if(jupiterActive&&!jupiterClickBarPageOpen){
         // Full-screen now, so there's no "past the edge" to bleed onto -- that
         // budget goes into a denser backdrop instead (see drawJupiterBackdrop).
+        // Suppressed entirely on the Click Trainer page -- per Nigel, that page
+        // should read as a clean functional tool, not compete with the artwork.
         drawJupiterBackdrop(dl,wp,ws,(float)ImGui::GetTime());
-    } else {
+    } else if(!jupiterActive){
         dl->AddRect(wp,ImVec2(wp.x+ws.x,wp.y+ws.y),theme.getAccentU32(0.35f),theme.cornerRadius,0,1.5f);
     }
     if(!jupiterActive)drawTitleBar(); // GucciBot branding suppressed entirely on Jupiter
@@ -1168,9 +1170,9 @@ void MenuInterface::drawMegaHackWindow(){
     dl->AddRectFilled(wp,ImVec2(wp.x+ws.x,wp.y+ws.y),bgMain,rnd);
     dl->AddRectFilled(wp,ImVec2(wp.x+railW,wp.y+ws.y),bgRail,rnd,ImDrawFlags_RoundCornersLeft);
     dl->AddRectFilled(ImVec2(wp.x+railW,wp.y),ImVec2(wp.x+ws.x,wp.y+headH),bgHead,rnd,ImDrawFlags_RoundCornersTopRight);
-    if(jupiterActive){
+    if(jupiterActive&&!jupiterClickBarPageOpen){
         drawJupiterBackdrop(dl,wp,ws,(float)ImGui::GetTime());
-    } else {
+    } else if(!jupiterActive){
         dl->AddRect(wp,ImVec2(wp.x+ws.x,wp.y+ws.y),theme.getAccentU32(0.45f),rnd,0,1.f);
     }
     dl->AddLine(ImVec2(wp.x+railW,wp.y),ImVec2(wp.x+railW,wp.y+ws.y),theme.getAccentU32(0.12f),1.f);
@@ -3011,7 +3013,12 @@ void MenuInterface::drawJupiterTab(){
     // (per Nigel: "the features shouldnt go past the line"), so it's boxed
     // into a narrower child instead of using the full tab width.
     ImGui::PushStyleColor(ImGuiCol_ChildBg,IM_COL32(0,0,0,0));
-    ImGui::BeginChild("##jmfConstrain",ImVec2(ImGui::GetContentRegionAvail().x*0.42f,-1),false);
+    // Width picked against the ribbon's own geometry, not guessed: the spine's
+    // narrowest point is x=0.36 (at y=0.66, see drawJupiterWaveRibbon), so 0.42
+    // was ALWAYS capable of overlapping it once sidebar content got tall enough
+    // to reach that height -- which it now does, with Stats/Segment Looping/
+    // Share added on top of Trainer/Segments/Notes. 0.32 leaves real margin.
+    ImGui::BeginChild("##jmfConstrain",ImVec2(ImGui::GetContentRegionAvail().x*0.32f,-1),false);
 
     // Full name while the tab's actually open, per Nigel's sketch -- wraps to
     // more than one line rather than the short "JMF" used in the tab rail.
