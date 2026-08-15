@@ -33,6 +33,181 @@ static ImVec4 brighten(const ImVec4& c,float amt){
 static ImU32 toU32(const ImVec4& c){return ImGui::ColorConvertFloat4ToU32(c);}
 static ImVec2 snapPos(ImVec2 p){return ImVec2(std::round(p.x),std::round(p.y));}
 
+// Jupiter segments: shared by the Segments list itself, segment looping,
+// export/import, and auto-suggestions. Raw format is "label,x,note;label,x,note;...".
+// Notes are escaped (not base64 -- just swaps the two delimiter chars for a
+// harmless placeholder) so a note can contain commas/semicolons without
+// corrupting the field split. Old saves only have "label,x" (no note field);
+// loading falls back to that when the would-be x-field doesn't parse as a
+// float, so existing segments from before this feature still load correctly.
+struct JupiterSegment{std::string label;float x=0.f;std::string note;};
+
+static std::string jupEscapeField(std::string s){
+    std::string out;
+    for(char c:s){
+        if(c==',')out+="&#44;";
+        else if(c==';')out+="&#59;";
+        else out+=c;
+    }
+    return out;
+}
+static std::string jupUnescapeField(std::string s){
+    auto replaceAll=[](std::string& str,const std::string& from,const std::string& to){
+        size_t p=0;
+        while((p=str.find(from,p))!=std::string::npos){str.replace(p,from.size(),to);p+=to.size();}
+    };
+    replaceAll(s,"&#44;",",");
+    replaceAll(s,"&#59;",";");
+    return s;
+}
+
+static std::vector<JupiterSegment> parseJupiterSegments(std::string const& raw){
+    std::vector<JupiterSegment> segs;
+    size_t pos=0;
+    while(pos<raw.size()){
+        size_t semi=raw.find(';',pos);
+        std::string entry=raw.substr(pos,semi==std::string::npos?std::string::npos:semi-pos);
+        JupiterSegment seg;
+        size_t cLast=entry.rfind(',');
+        if(cLast!=std::string::npos){
+            std::string beforeLast=entry.substr(0,cLast);
+            std::string lastTok=entry.substr(cLast+1);
+            size_t cPrev=beforeLast.rfind(',');
+            bool parsedNew=false;
+            if(cPrev!=std::string::npos){
+                std::string xTok=beforeLast.substr(cPrev+1);
+                char* endp=nullptr;
+                float xv=std::strtof(xTok.c_str(),&endp);
+                if(endp&&*endp=='\0'&&endp!=xTok.c_str()){
+                    seg.label=beforeLast.substr(0,cPrev);
+                    seg.x=xv;
+                    seg.note=jupUnescapeField(lastTok);
+                    parsedNew=true;
+                }
+            }
+            if(!parsedNew){
+                seg.label=beforeLast;
+                try{seg.x=std::stof(lastTok);}catch(...){}
+            }
+            segs.push_back(seg);
+        }
+        if(semi==std::string::npos)break;
+        pos=semi+1;
+    }
+    return segs;
+}
+
+static std::string serializeJupiterSegments(std::vector<JupiterSegment> const& segs){
+    std::string out;
+    for(size_t i=0;i<segs.size();i++){
+        if(i)out+=";";
+        out+=segs[i].label+","+std::to_string(segs[i].x)+","+jupEscapeField(segs[i].note);
+    }
+    return out;
+}
+
+// Minimal base64 codec -- just enough to turn the segments+notes blob into a
+// single opaque, clipboard-safe string for export/import. Standard 6-bit
+// accumulator implementation, nothing GD-specific about it.
+static const char kB64Chars[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+static std::string base64Encode(std::string const& in){
+    std::string out;
+    int val=0,valb=-6;
+    for(unsigned char c:in){
+        val=(val<<8)+c;
+        valb+=8;
+        while(valb>=0){out.push_back(kB64Chars[(val>>valb)&0x3F]);valb-=6;}
+    }
+    if(valb>-6)out.push_back(kB64Chars[((val<<8)>>(valb+8))&0x3F]);
+    while(out.size()%4)out.push_back('=');
+    return out;
+}
+static std::string base64Decode(std::string const& in){
+    int T[256];std::fill(std::begin(T),std::end(T),-1);
+    for(int i=0;i<64;i++)T[(unsigned char)kB64Chars[i]]=i;
+    std::string out;
+    int val=0,valb=-8;
+    for(unsigned char c:in){
+        if(T[c]==-1)continue;
+        val=(val<<6)+T[c];
+        valb+=6;
+        if(valb>=0){out.push_back((char)((val>>valb)&0xFF));valb-=8;}
+    }
+    return out;
+}
+
+// Export/import: bundles segments + notes into one opaque code, using an
+// ASCII Unit Separator (0x1F) between the two blobs since it'll never
+// legitimately appear in either (segments already escape their own
+// delimiters, notes are free text but 0x1F isn't typeable in the InputText).
+static std::string exportJupiterCode(GucciEngine* engine){
+    std::string blob=engine->jupiterSegmentsRaw+"\x1F"+engine->jupiterNotes;
+    return "JMF1:"+base64Encode(blob);
+}
+static bool importJupiterCode(GucciEngine* engine,std::string const& code,std::string& err){
+    static const std::string kPrefix="JMF1:";
+    if(code.compare(0,kPrefix.size(),kPrefix)!=0){err="Not a valid JMF segment code.";return false;}
+    std::string blob=base64Decode(code.substr(kPrefix.size()));
+    size_t sep=blob.find('\x1F');
+    if(sep==std::string::npos){err="Corrupted code.";return false;}
+    engine->jupiterSegmentsRaw=blob.substr(0,sep);
+    engine->jupiterNotes=blob.substr(sep+1);
+    return true;
+}
+
+// Auto segment suggestions: buckets click PRESS times (GucciReplaySystem::
+// m_clickIntervalsSec, already built at load()) into 0.5s windows, flags
+// windows with unusually high click density, and looks up the player's
+// actual X position at that moment via m_pathSamples (index==frame) to turn
+// "a lot of clicks happened around here in time" into "here's roughly where
+// that was in the level". Skips anything within 50 units of an existing
+// segment so repeated presses don't spam duplicates.
+static std::vector<JupiterSegment> suggestJupiterSegments(GucciEngine* engine){
+    std::vector<JupiterSegment> out;
+    auto& replay=engine->replay;
+    if(replay.m_clickIntervalsSec.empty()||replay.m_pathSamples.empty())return out;
+    double tps=replay.m_clickBarTps>0.0?replay.m_clickBarTps:240.0;
+
+    double maxT=0.0;
+    for(auto const& iv:replay.m_clickIntervalsSec)maxT=std::max(maxT,iv.second);
+    if(maxT<=0.0)return out;
+
+    const double bucketSec=0.5;
+    int nBuckets=(int)(maxT/bucketSec)+1;
+    std::vector<int> counts(nBuckets,0);
+    for(auto const& iv:replay.m_clickIntervalsSec){
+        int b=std::clamp((int)(iv.first/bucketSec),0,nBuckets-1);
+        counts[b]++;
+    }
+    double meanCount=0.0;
+    for(int c:counts)meanCount+=c;
+    meanCount/=std::max(1,nBuckets);
+
+    struct Cand{int bucket;int count;};
+    std::vector<Cand> cands;
+    for(int b=0;b<nBuckets;b++)
+        if(counts[b]>=3&&(double)counts[b]>meanCount*2.0)cands.push_back({b,counts[b]});
+    std::sort(cands.begin(),cands.end(),[](Cand const&a,Cand const&b){return a.count>b.count;});
+    if(cands.size()>5)cands.resize(5);
+
+    auto existing=parseJupiterSegments(engine->jupiterSegmentsRaw);
+    for(auto const& c:cands){
+        double midSec=(c.bucket+0.5)*bucketSec;
+        uint32_t frame=(uint32_t)(midSec*tps);
+        if(frame>=replay.m_pathSamples.size())continue;
+        float x=replay.m_pathSamples[frame].p1x;
+        bool dup=false;
+        for(auto const& s:existing)if(std::fabs(s.x-x)<50.f){dup=true;break;}
+        for(auto const& s:out)if(std::fabs(s.x-x)<50.f){dup=true;break;}
+        if(dup)continue;
+        JupiterSegment seg;
+        seg.label="Auto: dense clicks ("+std::to_string(c.count)+"/500ms)";
+        seg.x=x;
+        out.push_back(seg);
+    }
+    return out;
+}
+
 // BIG BRRRR bounce, take 2. The first version nudged the window by the DELTA
 // between this frame's and last frame's sine value -- a RELATIVE correction
 // that silently assumes nothing else ever touches the window's position
@@ -2760,6 +2935,8 @@ void MenuInterface::drawJupiterTab(){
 
     auto* engine=GucciEngine::get();
     auto* mod=Mod::get();
+    static char jupiterNotesBuf[1024];
+    static bool jupiterNotesInit=false;
 
         // Theme + backdrop are now applied once across the WHOLE menu window
     // for as long as this tab is active (see drawMainWindow/drawMegaHackWindow),
@@ -2801,6 +2978,42 @@ void MenuInterface::drawJupiterTab(){
     }
     ImGui::Dummy(ImVec2(0,8));
 
+    Widgets::SectionHeader("Stats",theme);
+    ImGui::Text("Attempts this session: %d",engine->jupiterAttemptCount);
+    ImGui::Text("Best this session: %.1f%%",engine->jupiterSessionBestPct);
+    if(!engine->jupiterDeathPcts.empty()){
+        ImGui::Dummy(ImVec2(0,4));
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::Text("Death heatmap (%zu death%s logged this session)",
+            engine->jupiterDeathPcts.size(),engine->jupiterDeathPcts.size()==1?"":"s");
+        ImGui::PopStyleColor();
+        ImVec2 hmPos=ImGui::GetCursorScreenPos();
+        float hmW=ImGui::GetContentRegionAvail().x,hmH=18.f;
+        ImDrawList* hmDl=ImGui::GetWindowDrawList();
+        hmDl->AddRectFilled(hmPos,ImVec2(hmPos.x+hmW,hmPos.y+hmH),IM_COL32(30,26,60,255),3.f);
+        // Bucket into 40 bins across 0-100% so repeated deaths at the same
+        // spot visibly stack up as taller/brighter marks instead of just
+        // overlapping into one indistinguishable line.
+        const int bins=40;
+        int counts[bins]={0};
+        int maxCount=1;
+        for(float p:engine->jupiterDeathPcts){
+            int b=std::clamp((int)(p/100.f*bins),0,bins-1);
+            counts[b]++;
+            maxCount=std::max(maxCount,counts[b]);
+        }
+        for(int b=0;b<bins;b++){
+            if(counts[b]==0)continue;
+            float bx0=hmPos.x+hmW*((float)b/bins);
+            float bx1=hmPos.x+hmW*((float)(b+1)/bins);
+            float t=(float)counts[b]/(float)maxCount;
+            ImU32 col=theme.getAccentU32(0.35f+0.65f*t);
+            hmDl->AddRectFilled(ImVec2(bx0,hmPos.y+hmH*(1.f-t)),ImVec2(bx1,hmPos.y+hmH),col);
+        }
+        ImGui::Dummy(ImVec2(hmW,hmH+4));
+    }
+
+    ImGui::Dummy(ImVec2(0,8));
     Widgets::SectionHeader("Trainer",theme);
     if(engine->replay.m_pathSamples.empty()){
         ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
@@ -2851,56 +3064,146 @@ void MenuInterface::drawJupiterTab(){
     if(markClicked&&canMark){
         float x=pl->m_player1->m_position.x;
         if(!engine->jupiterSegmentsRaw.empty())engine->jupiterSegmentsRaw+=";";
-        engine->jupiterSegmentsRaw += std::string(segLabelBuf)+","+std::to_string(x);
+        engine->jupiterSegmentsRaw += std::string(segLabelBuf)+","+std::to_string(x)+",";
         mod->setSavedValue("jupiter_segments",engine->jupiterSegmentsRaw);
         segLabelBuf[0]=0;
     }
 
-    {
-        std::vector<std::pair<std::string,float>> segs;
-        std::string const& raw=engine->jupiterSegmentsRaw;
-        size_t pos=0;
-        while(pos<raw.size()){
-            size_t semi=raw.find(';',pos);
-            std::string entry=raw.substr(pos,semi==std::string::npos?std::string::npos:semi-pos);
-            size_t comma=entry.rfind(',');
-            if(comma!=std::string::npos){
-                std::string label=entry.substr(0,comma);
-                float x=0.f;
-                try{x=std::stof(entry.substr(comma+1));}catch(...){}
-                segs.push_back({label,x});
+    if(!engine->replay.m_clickIntervalsSec.empty()&&!engine->replay.m_pathSamples.empty()){
+        if(Widgets::StyledButton("Suggest Segments (from click density)",ImVec2(-1,26),theme,anim)){
+            auto suggestions=suggestJupiterSegments(engine);
+            if(!suggestions.empty()){
+                auto segs=parseJupiterSegments(engine->jupiterSegmentsRaw);
+                for(auto& s:suggestions)segs.push_back(s);
+                engine->jupiterSegmentsRaw=serializeJupiterSegments(segs);
+                mod->setSavedValue("jupiter_segments",engine->jupiterSegmentsRaw);
             }
-            if(semi==std::string::npos)break;
-            pos=semi+1;
         }
+    }
+
+    {
+        static int noteEditIdx=-1;
+        static char noteBuf[128]="";
+        auto segs=parseJupiterSegments(engine->jupiterSegmentsRaw);
         int removeIdx=-1;
+        bool dirty=false;
         for(int i=0;i<(int)segs.size();i++){
             ImGui::PushID(i);
-            ImGui::Text("%s",segs[i].first.c_str());
+            ImGui::Text("%s",segs[i].label.c_str());
             ImGui::SameLine();
             ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
-            ImGui::Text("(x=%.0f)",segs[i].second);
+            ImGui::Text("(x=%.0f)",segs[i].x);
             ImGui::PopStyleColor();
-            ImGui::SameLine(ImGui::GetContentRegionAvail().x-20);
+            ImGui::SameLine(ImGui::GetContentRegionAvail().x-44);
+            if(ImGui::SmallButton(noteEditIdx==i?"note v":"note >")){
+                if(noteEditIdx==i)noteEditIdx=-1;
+                else{noteEditIdx=i;snprintf(noteBuf,sizeof(noteBuf),"%s",segs[i].note.c_str());}
+            }
+            ImGui::SameLine();
             if(ImGui::SmallButton("x"))removeIdx=i;
+            if(noteEditIdx==i){
+                ImGui::SetNextItemWidth(-1);
+                if(ImGui::InputTextWithHint("##segNote","note for this segment",noteBuf,sizeof(noteBuf))){
+                    segs[i].note=noteBuf;
+                    dirty=true;
+                }
+            } else if(!segs[i].note.empty()){
+                ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+                ImGui::TextWrapped("  %s",segs[i].note.c_str());
+                ImGui::PopStyleColor();
+            }
             ImGui::PopID();
         }
         if(removeIdx>=0){
             segs.erase(segs.begin()+removeIdx);
-            std::string rebuilt;
-            for(size_t i=0;i<segs.size();i++){
-                if(i)rebuilt+=";";
-                rebuilt+=segs[i].first+","+std::to_string(segs[i].second);
-            }
-            engine->jupiterSegmentsRaw=rebuilt;
+            noteEditIdx=-1;
+            dirty=true;
+        }
+        if(dirty){
+            engine->jupiterSegmentsRaw=serializeJupiterSegments(segs);
             mod->setSavedValue("jupiter_segments",engine->jupiterSegmentsRaw);
+        }
+    }
+
+    ImGui::Dummy(ImVec2(0,10));
+    Widgets::SectionHeader("Segment Looping",theme);
+    {
+        auto segs=parseJupiterSegments(engine->jupiterSegmentsRaw);
+        if(segs.size()<2){
+            ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+            ImGui::TextWrapped("Mark at least two segments to loop between them.");
+            ImGui::PopStyleColor();
+        } else {
+            if(engine->jupiterLoopStartIdx>=(int)segs.size())engine->jupiterLoopStartIdx=-1;
+            if(engine->jupiterLoopEndIdx>=(int)segs.size())engine->jupiterLoopEndIdx=-1;
+            auto segCombo=[&](const char* id,int* idx){
+                std::string preview=(*idx>=0&&*idx<(int)segs.size())?segs[*idx].label:"(none)";
+                ImGui::SetNextItemWidth((ImGui::GetContentRegionAvail().x-8)*0.5f);
+                if(ImGui::BeginCombo(id,preview.c_str())){
+                    for(int i=0;i<(int)segs.size();i++)
+                        if(ImGui::Selectable(segs[i].label.c_str(),*idx==i))*idx=i;
+                    ImGui::EndCombo();
+                }
+            };
+            segCombo("##loopStart",&engine->jupiterLoopStartIdx);
+            ImGui::SameLine();
+            segCombo("##loopEnd",&engine->jupiterLoopEndIdx);
+            bool validRange=engine->jupiterLoopStartIdx>=0&&engine->jupiterLoopEndIdx>=0&&
+                segs[engine->jupiterLoopStartIdx].x<segs[engine->jupiterLoopEndIdx].x;
+            if(!validRange)ImGui::PushStyleVar(ImGuiStyleVar_Alpha,0.4f);
+            if(Widgets::ToggleSwitch("Loop Reminder",&engine->jupiterLoopEnabled,theme,anim)&&!validRange)
+                engine->jupiterLoopEnabled=false;
+            if(!validRange)ImGui::PopStyleVar();
+            ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+            ImGui::TextWrapped(!validRange
+                ? "Pick a start and end segment (start must come before end) to arm the reminder."
+                : "Not an auto-restart (that needs the checkpoint system, which is too fragile to touch casually here -- see CLAUDE.md P1). Just a notification when you cross the end segment, so you know to restart back to the start segment yourself.");
+            ImGui::PopStyleColor();
+
+            if(engine->jupiterLoopEnabled&&validRange&&pl&&pl->m_player1){
+                static bool loopArmed=true;
+                float startX=segs[engine->jupiterLoopStartIdx].x;
+                float endX=segs[engine->jupiterLoopEndIdx].x;
+                float px=pl->m_player1->m_position.x;
+                if(px<startX+5.f)loopArmed=true;
+                else if(loopArmed&&px>=endX){
+                    loopArmed=false;
+                    Notification::create(
+                        ("Loop end reached -- restart back to \""+segs[engine->jupiterLoopStartIdx].label+"\"").c_str(),
+                        NotificationIcon::Success)->show();
+                }
+            }
+        }
+    }
+
+    ImGui::Dummy(ImVec2(0,10));
+    Widgets::SectionHeader("Share",theme);
+    {
+        static char importBuf[512]="";
+        static std::string importErr;
+        if(Widgets::StyledButton("Copy Export Code",ImVec2(-1,26),theme,anim)){
+            ImGui::SetClipboardText(exportJupiterCode(engine).c_str());
+            Notification::create("Copied JMF code to clipboard",NotificationIcon::Success)->show();
+        }
+        ImGui::Dummy(ImVec2(0,4));
+        ImGui::SetNextItemWidth(-90);
+        ImGui::InputTextWithHint("##importCode","paste JMF code here",importBuf,sizeof(importBuf));
+        ImGui::SameLine();
+        if(Widgets::StyledButton("Import",ImVec2(80,0),theme,anim)){
+            if(importJupiterCode(engine,importBuf,importErr)){
+                mod->setSavedValue("jupiter_segments",engine->jupiterSegmentsRaw);
+                mod->setSavedValue("jupiter_notes",engine->jupiterNotes);
+                jupiterNotesInit=false; // force the Notes textbox below to re-sync from the freshly-imported value
+                importBuf[0]=0;
+                Notification::create("Imported segments + notes",NotificationIcon::Success)->show();
+            } else {
+                Notification::create(importErr.c_str(),NotificationIcon::Error)->show();
+            }
         }
     }
 
     ImGui::Dummy(ImVec2(0,8));
     Widgets::SectionHeader("Notes",theme);
-    static char jupiterNotesBuf[1024];
-    static bool jupiterNotesInit=false;
     if(!jupiterNotesInit){
         snprintf(jupiterNotesBuf,sizeof(jupiterNotesBuf),"%s",engine->jupiterNotes.c_str());
         jupiterNotesInit=true;

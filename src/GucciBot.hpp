@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-14-m (BIG BRRRR bounce rewritten around an absolute anchor instead of relative deltas. Confirmed still on the right build (l) and still not settling, so the -k fix's math wasn't the actual problem -- the real suspect: this window has no NoMove flag, so ImGui's own native click-drag can reposition it independent of anything applyBigBrrrBounce does, and a delta-based nudge (add THIS frame's sine minus LAST frame's sine to whatever GetWindowPos() currently reports) has no way to detect or correct for that interference, since it trusts GetWindowPos() to only reflect its own prior writes. Rewritten to track an explicit restY anchor captured the instant bouncing starts, and drive the window to restY+offset directly every active frame -- once offset decays to 0 it goes fully idle and stops touching Y, so it lands exactly back at true rest regardless of what else touched position in between. Being upfront: I can't 100%% confirm this was the exact original mechanism without more runtime info, but it's a strictly more robust design than the delta approach either way. Compiles clean, untested in-game.)"
+#define GB_BUILD_LABEL "2026-08-14-n (JMF batch 1 of the full feature backlog: per-segment notes (inline expandable editor per segment, backward-compatible with old 2-field saves), Attempt/PB tracker + death heatmap (new Stats section, populated from PlayLayer::destroyPlayer -- session-only, not persisted), auto segment suggestions (buckets click density from m_clickIntervalsSec, cross-references m_pathSamples for the X position), segment export/import (base64 code bundling segments+notes), and segment looping -- deliberately NOT auto-restart (that needs the checkpoint system, which hook_playlayer.cpp shows is already heavily custom-routed through practiceFix/m_savedCheckpoints and is exactly the fragile machinery that broke intentional-death playback -- see CLAUDE.md P1), just a notification when you cross the loop-end segment. Compiles clean, untested in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -377,6 +377,23 @@ public:
     // m_clickIntervalsSec), independent of in-level speed portals.
     bool  jupiterClickBarEnabled = true;
     float jupiterClickBarWindow  = 2.f; // total seconds of window visible across the bar
+
+    // Attempt/PB tracker + death heatmap: session-only (not persisted across GD
+    // restarts, unlike m_trainerBestX which IS persisted per-macro). Populated
+    // from PlayLayer::destroyPlayer -- see hook_playlayer.cpp.
+    int   jupiterAttemptCount    = 0;
+    float jupiterSessionBestPct  = 0.f;
+    std::vector<float> jupiterDeathPcts;
+
+    // Segment looping: restart back to a chosen segment's frame on death,
+    // instead of the level start, while active.
+    bool  jupiterLoopEnabled = false;
+    int   jupiterLoopStartIdx = -1; // index into parseJupiterSegments(jupiterSegmentsRaw)
+    int   jupiterLoopEndIdx   = -1;
+
+    // Jump-to-% practice start: seek playback to an arbitrary percent of the
+    // level instead of always starting from frame 0.
+    float jupiterJumpToPercent = 0.f;
 
     bool layoutMode            = false;
     bool noMirrorEffect        = false;

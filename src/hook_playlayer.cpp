@@ -374,6 +374,20 @@ class $modify(GB7PlayLayer, PlayLayer) {
 
         PlayLayer::destroyPlayer(player, obj);
 
+                // Jupiter tab: attempt/PB tracker + death heatmap. Session-only
+        // bookkeeping, deliberately placed after both early-returns above so
+        // analysis probes and noclip'd "deaths" (which don't actually end the
+        // attempt) don't get counted -- only real deaths do.
+        if (obj != m_anticheatSpike) {
+            gb->jupiterAttemptCount++;
+            float xp = player ? player->m_position.x : -1.f;
+            if (m_levelLength > 0.f && xp >= 0.f) {
+                float pct = std::clamp(xp / m_levelLength * 100.f, 0.f, 100.f);
+                gb->jupiterDeathPcts.push_back(pct);
+                if (pct > gb->jupiterSessionBestPct) gb->jupiterSessionBestPct = pct;
+            }
+        }
+
                 if (gb->hackNoSpikeFlash && obj != m_anticheatSpike) {
             if (auto* fl = this->getChildByID("flash"))
                 fl->setVisible(false);
@@ -400,6 +414,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
     void levelComplete() {
         PlayLayer::levelComplete();
         auto* gb = GucciEngine::get();
+        gb->jupiterSessionBestPct = 100.f;
                         if (!gb->autosaveAtLevelEnd) return;
         if (!gb->isRecording() || gb->replay.m_actionAtom.empty()) return;
         auto path = gb->replay.getCurrentPath();
