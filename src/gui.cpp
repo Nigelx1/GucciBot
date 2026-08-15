@@ -2862,7 +2862,7 @@ void MenuInterface::drawIndicatorsTab(){
 // buttons plus click-drag-to-skim directly on the bar. jupiterClickBarPosSec
 // is the single source of truth, advanced by real elapsed wall-clock time
 // each frame while not paused, and jumped directly by dragging.
-static void drawJupiterClickBar(ThemeEngine& theme,AnimationState& anim,GucciEngine* engine,float windowSeconds,float h=46.f){
+static void drawJupiterClickBar(ThemeEngine& theme,AnimationState& anim,GucciEngine* engine,float windowSeconds,bool externalWidgetJustReleased,float h=46.f){
     auto& jup=engine->jupiterMacro;
     if(jup.clickIntervalsSec.empty()){
         ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
@@ -2917,22 +2917,34 @@ static void drawJupiterClickBar(ThemeEngine& theme,AnimationState& anim,GucciEng
     ImGui::PopStyleColor();
     ImGui::Dummy(ImVec2(0,6));
 
+    ImVec2 pos=ImGui::GetCursorScreenPos();
+    float w=ImGui::GetContentRegionAvail().x;
+    ImDrawList* dl=ImGui::GetWindowDrawList();
+
     // Your own mouse clicks -- same ImGui mouse path the menu buttons
     // already use, so it's known to work. Keyboard (spacebar/up/W) is
     // tracked separately via keybinds.cpp's existing dispatcher hook --
     // ImGui doesn't reliably see game keys in this GD+ImGui integration,
     // which is exactly why that hook exists instead of relying on ImGui for
-    // these. Checked AFTER the transport row above (not before) and gated on
-    // !IsAnyItemHovered() so clicking Pause/Resume/Reset/Loop doesn't also
-    // register as a rhythm mark -- ImGui's hover/active state for widgets
-    // already submitted this frame is live by this point.
-    bool overOtherWidget=ImGui::IsAnyItemHovered();
-    if(!overOtherWidget&&ImGui::IsMouseClicked(ImGuiMouseButton_Left))engine->jupiterClickBarMyClicks.push_back(engine->jupiterClickBarPosSec);
-    if(!overOtherWidget&&ImGui::IsMouseReleased(ImGuiMouseButton_Left))engine->jupiterClickBarMyReleases.push_back(engine->jupiterClickBarPosSec);
-
-    ImVec2 pos=ImGui::GetCursorScreenPos();
-    float w=ImGui::GetContentRegionAvail().x;
-    ImDrawList* dl=ImGui::GetWindowDrawList();
+    // these.
+    //
+    // Scoped to the cursor actually being over the bar's own rect, NOT an
+    // IsAnyItemHovered()-style "was anything else touched" check -- that
+    // was tried first and was wrong two different ways: IsAnyItemHovered()
+    // also reads HoveredIdPreviousFrame (see imgui.cpp), so it stayed true
+    // for one frame after merely hovering the bar itself (its own skim
+    // InvisibleButton covers this same rect), which silently ate real bar
+    // clicks; and it can't see a widget in the CALLER (like the Window
+    // slider above) that already finished its own release-handling and
+    // cleared its active state before this code runs. Position scoping
+    // sidesteps both, and covers any future widget on the page for free
+    // without needing to enumerate it. externalWidgetJustReleased covers
+    // the one case position-scoping alone can't: dragging the Window
+    // slider and releasing with the cursor incidentally over the bar.
+    bool mouseOverBar=ImGui::IsMouseHoveringRect(pos,ImVec2(pos.x+w,pos.y+h));
+    bool blockMark=!mouseOverBar||externalWidgetJustReleased;
+    if(!blockMark&&ImGui::IsMouseClicked(ImGuiMouseButton_Left))engine->jupiterClickBarMyClicks.push_back(engine->jupiterClickBarPosSec);
+    if(!blockMark&&ImGui::IsMouseReleased(ImGuiMouseButton_Left))engine->jupiterClickBarMyReleases.push_back(engine->jupiterClickBarPosSec);
 
     const ImU32 barCol=IM_COL32(137,126,94,255); // olive track, per Nigel's reference sketch
     const ImU32 white=IM_COL32(255,255,255,255);
@@ -2995,6 +3007,15 @@ static void drawJupiterClickBar(ThemeEngine& theme,AnimationState& anim,GucciEng
 void MenuInterface::drawJupiterClickTrainerPage(){
     auto* engine=GucciEngine::get();
     auto* mod=Mod::get();
+    engine->jupiterClickBarPageVisible=true;
+
+    // A keybind rebind left armed (clicked "rebind" on Settings > Keybinds,
+    // then navigated away without pressing the target key or Escape) would
+    // otherwise intercept the down-press of your first Space/Up/W here as
+    // the rebind target, silently reassigning that keybind and leaving an
+    // unpaired release mark behind it. Being on this page at all means any
+    // such rebind attempt was abandoned, so clear it defensively.
+    rebindTarget=nullptr;
 
     if(Widgets::StyledButton("<- Back",ImVec2(90,28),theme,anim)){
         jupiterClickBarPageOpen=false;
@@ -3020,8 +3041,9 @@ void MenuInterface::drawJupiterClickTrainerPage(){
     if(engine->jupiterClickBarEnabled){
         if(Widgets::StyledSliderFloat("Window (sec)",&engine->jupiterClickBarWindow,0.3f,4.f,theme))
             mod->setSavedValue("jupiter_clickbar_window",(double)engine->jupiterClickBarWindow);
+        bool sliderJustReleased=ImGui::IsItemDeactivated(); // dragging this and releasing over the bar below shouldn't log a mark
         ImGui::Dummy(ImVec2(0,14));
-        drawJupiterClickBar(theme,anim,engine,engine->jupiterClickBarWindow,90.f);
+        drawJupiterClickBar(theme,anim,engine,engine->jupiterClickBarWindow,sliderJustReleased,90.f);
     }
 
     ImGui::Dummy(ImVec2(0,18));
@@ -3884,6 +3906,17 @@ void MenuInterface::loadSettings(){
 void MenuInterface::drawInterface(){
     auto* engine=GucciEngine::get();
     if(!setupComplete)return;
+        // Freshly computed every frame, not a sticky navigation flag: the old
+    // jupiterClickBarPageOpen (still used for navigation -- which page to
+    // render) only gets cleared by its own Back button, so leaving the
+    // Click Trainer page via any other route (menu-close hotkey, switching
+    // tabs) left it stuck true, and keybinds.cpp's click-tracking hook --
+    // which only checks that flag -- kept feeding ordinary gameplay jumps
+    // into the click bar's history indefinitely. This is reset to false
+    // here unconditionally every frame and only set true inside
+    // drawJupiterClickTrainerPage when it actually renders that frame, so
+    // it can never go stale.
+    engine->jupiterClickBarPageVisible=false;
     anim.update(ImGui::GetIO().DeltaTime);
         if(!anim.closing&&!anim.opening&&anim.openProgress<=0.f&&shown){
         shown=false;

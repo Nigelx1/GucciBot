@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-15-d (1.0.1 bug-audit pass on the Click Trainer, via a code-review sweep. Fixed: clicking Pause/Resume/Reset/Loop/the window slider was also registering as a rhythm click, since detection ran before those widgets and wasn't excluded -- moved detection after the transport row, gated on !IsAnyItemHovered(). Press and release marks were visually identical white lines despite being tracked separately -- press now rises from the bottom, release hangs from the top, merged into one shared lambda instead of two copy-pasted loops. Loop toggle was never persisted -- now saved/loaded like its siblings. Folded the separate JupiterClickBarKeyHandler CCKeyboardDispatcher hook into keybinds.cpp's existing one instead of a second hook class -- the existing hook's rebind-in-progress path returns early without chaining to the base dispatchKeyboardMSG, which could've silently skipped a second hook ordered after it depending on Geode's priority resolution; folding in also gets the WantTextInput guard for free. Compiles clean, untested in-game.)"
+#define GB_BUILD_LABEL "2026-08-15-e (Second, whole-codebase-targeted audit pass caught a real regression in the -d build's own fix, verified directly against the vendored ImGui source. IsAnyItemHovered() also reads HoveredIdPreviousFrame, so it stayed true for one frame after merely hovering the bar itself (the skim InvisibleButton covers the same rect), silently eating real bar clicks -- replaced with position-scoping to the bar's own rect (IsMouseHoveringRect), which also covers any future widget on the page for free instead of needing to enumerate them, plus an explicit exclusion for the Window slider's own release (dragging it and releasing over the bar). Also fixed: jupiterClickBarPageOpen (a sticky nav flag, only cleared by its own Back button) could get stuck true if you left the page any other way, leaving ordinary gameplay jumps feeding into the click bar's history indefinitely -- replaced the keybind hook's gate with a new jupiterClickBarPageVisible flag recomputed fresh every frame in drawInterface, true only while the page is actually rendering. A keybind rebind left armed while navigating to Click Trainer could intercept the first Space/Up/W as the rebind target instead of a click, leaving an orphaned release mark and silently reassigning an unrelated keybind -- now cleared defensively on entering the page. Extracted the KEY_Space/Up/W predicate (previously spelled out twice) into a shared isJumpKey() helper. Compiles clean, untested in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -403,6 +403,14 @@ public:
     // comparison per lap); OFF just stops at the end and leaves your marks
     // in place until you Reset or leave the tab.
     bool jupiterClickBarLoop = false;
+
+    // True only during frames where the Click Trainer page is actually
+    // rendering -- reset to false unconditionally at the top of
+    // MenuInterface::drawInterface() every frame, set true only inside
+    // drawJupiterClickTrainerPage. Used to gate keybinds.cpp's click-mark
+    // tracking so it can't go stale the way a sticky "page open" navigation
+    // flag could (see the comment in drawInterface).
+    bool jupiterClickBarPageVisible = false;
 
     // Your own real presses -- click (mouse, via ImGui, same path menu
     // buttons already use so it's known to work) and spacebar/up arrow/W
