@@ -1,13 +1,13 @@
 {
   "geode": "5.7.1",
-  "version": "v10.0.0",
+  "version": "v1.0.0",
   "gd": {
     "win": "2.2081"
   },
   "id": "guccimanefan.guccibot",
   "name": "GucciBot",
   "developer": "guccimanefan",
-  "description": "GucciBot 8.0 \u2014 Silicate engine. GBR6 hypercompression. Frame perfect. Brrr.",
+  "description": "Silicate engine, GBR6 hypercompression, and a full Jupiter My Favourite practice trainer. Frame perfect. Ice cold. Brrr.",
   "resources": {
     "files": [
       "resources/*.ttf",

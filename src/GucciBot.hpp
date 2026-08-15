@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-14-x (Click Trainer: fixed why your clicks never showed up, added release marks + Loop toggle. Root cause: ImGui::IsKeyPressed doesn't reliably see spacebar/up/W in this GD+ImGui integration -- same reason keybinds.cpp already has its own CCKeyboardDispatcher hook instead of trusting ImGui for game keys. New JupiterClickBarKeyHandler (jupiterghost.cpp) does the same, gated on the Click Trainer page being open rather than requiring a level. Mouse clicks stayed on ImGui (that path clearly works, menu buttons prove it). Press and release now both get their own white line (jupiterClickBarMyClicks / MyReleases). New Loop toggle: ON wraps back to 0 and keeps playing, clearing your marks each lap for a fresh comparison; OFF just stops at the end and leaves your marks until Reset or leaving the tab (now also clears on Back, not just Reset). Compiles clean, untested in-game.)"
+#define GB_BUILD_LABEL "2026-08-15-a (Release prep: version reset to 1.0.0 across mod.json/CMakeLists.txt (MOD_VERSION flows through to every UI display already, no source edits needed there), about.md rewritten to reflect the actual current feature set instead of stale 6.0-era content, new logo.png. No functional changes. Compiles clean, untested in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

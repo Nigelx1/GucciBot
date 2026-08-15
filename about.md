@@ -1,47 +1,43 @@
-# GucciBot 6.0
+# GucciBot 1.0
 
-> Frame perfect. GBR6. Brrr.
+> Frame perfect. Ice cold. Brrr.
 
-GucciBot 6.0 is a complete rebuild on Silicate's engine with a brand new hypercompressed replay format. Built for all four bot disciplines simultaneously.
+GucciBot is a Geometry Dash macro bot built on Silicate's physics engine, with a hypercompressed replay format and a full practice-trainer system built specifically around Jupiter My Favourite. This is the first proper public release.
 
 ---
 
-## What's new in 6.0
+## GBR6 Hypercompressed Format
 
-**GBR6 Hypercompressed Format**
 - 2 bytes per input. Matches yBot file sizes for human gameplay.
 - **Tap encoding** — wave/ship press+release pairs stored in 1 entry instead of 2. 50% smaller for those sections automatically.
-- **Autoclicker delta compression** — an autoclicker macro of any length, including octillions of clicks, stores in 4 bytes. The bot stores the *description* of the pattern, not the output. Nobody else has this publicly.
+- **Autoclicker delta compression** — an autoclicker macro of any length, including octillions of clicks, stores in 4 bytes. The bot stores the *description* of the pattern, not the output.
 - Full backward compatibility — old `.brrr` files load automatically.
+- Imports both JSON and binary (MessagePack) GDR macros.
 
-**Engine (from 5.0)**
-- Silicate's full physics engine — 5 midhooks at exact GD 2.2081 offsets, proper TPS bypass, SSB fix, lock delta, frame extrapolation
-- Intentional deaths that actually work — full Silicate `PracticeFix` flow
-- Backwards stepping
-- Mirror inputs, maintain gravity, auto-flip, prevent death
-- Complete `SavedPlayerCheckpoint` state capture (the most complete in any public bot)
+## Engine
 
-**Features (from 5.0)**
-- Macro diff viewer — compare two replays frame by frame, up to 500 diffs
-- TPS mid-macro changes — change TPS during recording, stored in the replay
-- Noclip accuracy display with optional threshold
-- Convert legacy macros to BRR with one click
-- Bot settings presets — save and load your full config as a named preset
-- Metadata editor — rename and re-author any macro
-- Autosave at level end and/or on a timer
+- Silicate's full physics engine — exact GD 2.2081 offsets, proper TPS bypass, SSB fix, lock delta, frame extrapolation
+- Intentional deaths, backwards stepping, mirror inputs, maintain gravity, auto-flip, prevent death
+- Complete player-state checkpoint capture
 
----
+## Practice & Analysis
 
-## The 4 disciplines
+- Macro diff viewer — compare two replays frame by frame
+- Frame-window analyzer ("Calculate") — per-click timing windows across real game frames
+- TPS mid-macro changes, noclip accuracy display, macro trim/merge/surgery
+- Bot settings presets, metadata editor, autosave at level end and/or on a timer
 
-| Discipline | Focus | GucciBot 6.0 |
-|---|---|---|
-| General | Render settings, polish, features | ✅ Top tier |
-| ILL | Gameplay gimmicks, accuracy | ✅ Top tier |
-| SLL | Efficiency, accuracy | ✅ Competitive (Silicate engine) |
-| PPLL | Hyper efficiency | ✅ Best in class (GBR6 + autoclicker delta) |
+## Nigel's Jupiter My Favourite Trainer
 
----
+A dedicated practice tab built entirely around one level, auto-loaded and ready the moment you open the mod:
+
+- **Click Trainer** — a rhythm bar with a fixed line at the center; the macro's click/hold windows scroll through it at constant real-time speed. Pause, resume, reset, and skim by dragging the bar directly.
+- **Your own clicks, live** — every press and release (click, spacebar, up arrow, W) shows up as its own white line alongside the macro's marks, for direct rhythm comparison. Optional looping with a fresh comparison each lap.
+- **Click deviation readout** — how many frames early or late your last click was, compared to the macro.
+- **Ghosts** — the macro's ghost, and your own best-attempt ghost, both rendered live in the game world. Scrub preview lets you freeze either at any point in the level to study it.
+- **Segments** — mark and name the hard parts, with per-segment notes, auto-suggestions from click density, export/import codes, and segment looping (real auto-restart via a genuine practice checkpoint).
+- **Stats** — attempts this session, session best %, and a death-position heatmap.
+- **Synced music** — the level's actual track, seeked to your current frame, muting the game's own audio so it doesn't clash.
 
 ## Themes
 
@@ -56,6 +52,10 @@ GucciBot 6.0 is a complete rebuild on Silicate's engine with a brand new hyperco
 | BamBot | `.bam` | Heat Black + Red |
 | SexyyBot | `.sexyy` | Hot Pink + Purple |
 
+## Extras
+
+- **BIG BRRRR** — a joke toggle in Settings. You'll know it when you see it.
+
 ---
 
 ## Credits
@@ -63,4 +63,4 @@ GucciBot 6.0 is a complete rebuild on Silicate's engine with a brand new hyperco
 - **guccimanefan** — GucciBot, themes, vision, the drip
 - **ToastyExGD** — ToastyReplay engine base and improvements
 - **peony** — Silicate (dropped the source like Gucci drops albums. Brrr.)
-- **Claude.ai** — 5.0 and 6.0 rewrite partner
+- **Claude.ai** — rewrite and feature partner
