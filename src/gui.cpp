@@ -71,24 +71,6 @@ static std::vector<ImVec2> jupiterStarPoints(ImVec2 center,float outerR,float in
     return pts;
 }
 
-// Solid star: a star polygon is concave (dents between the points), so a
-// plain convex fill draws it wrong. Decompose into the inner pentagon (a
-// real convex polygon, fillable directly -- this is the "pentagon in the
-// middle" Nigel asked for) plus one filled triangle per outer point.
-static void drawFilledStar(ImDrawList* dl,ImVec2 center,float outerR,float innerR,int points,float rotRad,ImU32 fill,ImU32 outline,float outlineThick){
-    auto pts=jupiterStarPoints(center,outerR,innerR,points,rotRad);
-    std::vector<ImVec2> inner;
-    for(int i=1;i<(int)pts.size();i+=2)inner.push_back(pts[i]);
-    dl->AddConvexPolyFilled(inner.data(),(int)inner.size(),fill);
-    int n=(int)pts.size();
-    for(int i=0;i<n;i+=2){
-        ImVec2 tip=pts[i];
-        ImVec2 a=pts[(i-1+n)%n];
-        ImVec2 b=pts[(i+1)%n];
-        dl->AddTriangleFilled(a,tip,b,fill);
-    }
-    if(outlineThick>0.f)dl->AddPolyline(pts.data(),n,outline,ImDrawFlags_Closed,outlineThick);
-}
 
 // The whole menu window becomes the art piece when the Jupiter tab is active --
 // not a themed box living inside a normal-looking app. Pulled from Nigel's 8
@@ -125,54 +107,52 @@ static void drawJupiterOrnament(ImDrawList* dl,ImVec2 center,float baseR,float t
     dl->AddPolyline(starOrn.data(),(int)starOrn.size(),IM_COL32(20,10,90,255),ImDrawFlags_Closed,2.2f);
 }
 
-// Take 9: rebuilt from Nigel's own annotated screenshot, not another guess.
-// The "line thing" is a dense woven diamond/chevron lattice (his reference
-// photo), not a sparse skeletal zigzag; the "wheel" is a glowing sun, not
-// thin rings; stars are filled with a solid pentagon core and much bigger.
-// Everything in his exact two colors -- navy #100680, gold #FCF550 -- at
-// full opacity throughout.
+// Take 10: the dense-lattice ribbon (subdivided rail diagonals across a
+// jagged, sharp-turning spine) was a mess in practice -- sharp direction
+// reversals made the cross-diagonals overlap and tangle. Rebuilt as a
+// gentler-turning spine with a bold gold line plus a clean chain of small
+// diamonds walked along it at fixed arc-length steps -- each diamond is
+// independent and locally oriented, so there's no cross-segment overlap to
+// go wrong, regardless of how the path turns.
 static void drawJupiterWaveRibbon(ImDrawList* dl,ImVec2 pos,ImVec2 size){
     const ImU32 gold=IM_COL32(252,245,80,255);
-    const float thick=5.f;
 
     struct Pt{float x,y;};
     static const Pt spine[]={
-        {0.34f,0.00f},{0.31f,0.10f},{0.335f,0.16f},{0.30f,0.24f},
-        {0.40f,0.34f},{0.335f,0.44f},{0.38f,0.52f},{0.30f,0.62f},
-        {0.335f,0.72f},{0.29f,0.84f},{0.31f,1.00f},
+        {0.34f,0.00f},{0.32f,0.14f},{0.365f,0.28f},{0.31f,0.42f},
+        {0.35f,0.56f},{0.305f,0.70f},{0.34f,0.84f},{0.32f,1.00f},
     };
     const int n=(int)(sizeof(spine)/sizeof(spine[0]));
-    const float railW=40.f;
 
-    std::vector<ImVec2> left(n),right(n);
-    for(int i=0;i<n;i++){
-        ImVec2 p(pos.x+size.x*spine[i].x,pos.y+size.y*spine[i].y);
-        float nx=0.f,ny=0.f;
-        if(i<n-1){
-            ImVec2 q(pos.x+size.x*spine[i+1].x,pos.y+size.y*spine[i+1].y);
-            float dx=q.x-p.x,dy=q.y-p.y,len=sqrtf(dx*dx+dy*dy);
-            if(len>0.01f){nx=-dy/len;ny=dx/len;}
-        }
-        left[i]=ImVec2(p.x+nx*railW,p.y+ny*railW);
-        right[i]=ImVec2(p.x-nx*railW,p.y-ny*railW);
-    }
-    dl->AddPolyline(left.data(),n,gold,0,thick);
-    dl->AddPolyline(right.data(),n,gold,0,thick);
+    std::vector<ImVec2> pts(n);
+    for(int i=0;i<n;i++)pts[i]=ImVec2(pos.x+size.x*spine[i].x,pos.y+size.y*spine[i].y);
+    dl->AddPolyline(pts.data(),n,gold,0,6.f);
 
-    // Dense diamond/chevron weave: subdivide each rail segment and draw both
-    // diagonals of each resulting cell, forming a tight X-lattice across the
-    // whole band -- matching the reference photo, not a thin skeletal line.
-    auto lerp=[](ImVec2 a,ImVec2 b,float t){return ImVec2(a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t);};
-    const int subSteps=6;
+    std::vector<float> segLen(n-1);
+    float totalLen=0.f;
     for(int i=0;i<n-1;i++){
-        for(int s=0;s<subSteps;s++){
-            float t0=(float)s/(float)subSteps, t1=(float)(s+1)/(float)subSteps;
-            ImVec2 l0=lerp(left[i],left[i+1],t0), l1=lerp(left[i],left[i+1],t1);
-            ImVec2 r0=lerp(right[i],right[i+1],t0), r1=lerp(right[i],right[i+1],t1);
-            dl->AddLine(l0,r1,gold,thick*0.55f);
-            dl->AddLine(r0,l1,gold,thick*0.55f);
-            dl->AddLine(l1,r1,gold,thick*0.4f);
-        }
+        float dx=pts[i+1].x-pts[i].x,dy=pts[i+1].y-pts[i].y;
+        segLen[i]=sqrtf(dx*dx+dy*dy);
+        totalLen+=segLen[i];
+    }
+
+    const float step=24.f,diamondR=19.f;
+    int seg=0; float segPos=0.f;
+    for(float dist=0.f;dist<totalLen;dist+=step,segPos+=step){
+        while(seg<n-2&&segPos>segLen[seg]){segPos-=segLen[seg];seg++;}
+        float segL=segLen[seg]>0.001f?segLen[seg]:0.001f;
+        float t=segPos/segL;
+        ImVec2 a=pts[seg],b=pts[seg+1];
+        ImVec2 p(a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t);
+        float dx=b.x-a.x,dy=b.y-a.y,len=sqrtf(dx*dx+dy*dy); if(len<0.01f)len=1.f;
+        float ux=dx/len,uy=dy/len;
+        ImVec2 diamond[4]={
+            {p.x+ux*diamondR,       p.y+uy*diamondR},
+            {p.x-uy*diamondR,       p.y+ux*diamondR},
+            {p.x-ux*diamondR,       p.y-uy*diamondR},
+            {p.x+uy*diamondR,       p.y-ux*diamondR},
+        };
+        dl->AddPolyline(diamond,4,gold,ImDrawFlags_Closed,3.f);
     }
 }
 
@@ -180,11 +160,13 @@ static void drawJupiterBackdrop(ImDrawList* dl,ImVec2 pos,ImVec2 size,float time
     drawJupiterWaveRibbon(dl,pos,size);
 
     // "Wheel Thing" -- glowing sun, bottom-right corner, bled off the edge
-    // same as Nigel's sketch.
+    // same as Nigel's sketch. Left as-is this round pending a fresh
+    // reference photo -- don't have new visual data to improve precision.
     drawJupiterOrnament(dl,ImVec2(pos.x+size.x*0.97f,pos.y+size.y*0.97f),size.x*0.30f,time,0.05f);
 
-    // star cluster, upper-right -- filled with a solid pentagon core (not
-    // just outline) and much bigger, per Nigel's reference photos.
+    // star cluster, upper-right -- back to outline-only per Nigel (the
+    // filled version was a miscommunication, not what he wanted), keeping
+    // the bigger size from last round.
     struct StarSpec{float x,y,r,rot;int pts;};
     static const StarSpec stars[]={
         {0.65f,0.22f,58.f,0.3f,5},{0.85f,0.44f,52.f,1.1f,5},{0.66f,0.60f,50.f,0.7f,5},
@@ -193,20 +175,38 @@ static void drawJupiterBackdrop(ImDrawList* dl,ImVec2 pos,ImVec2 size,float time
     };
     for(auto const& s:stars){
         ImVec2 c(pos.x+size.x*s.x,pos.y+size.y*s.y);
-        drawFilledStar(dl,c,s.r,s.r*0.42f,s.pts,s.rot,
-            IM_COL32(252,245,80,255),IM_COL32(20,10,90,255),3.5f);
+        auto pts=jupiterStarPoints(c,s.r,s.r*0.42f,s.pts,s.rot);
+        dl->AddPolyline(pts.data(),(int)pts.size(),IM_COL32(252,245,80,255),ImDrawFlags_Closed,3.5f);
     }
 
-    // "small buildings on the bottom" -- skyline silhouette band
+    // "small buildings on the bottom" -- real filled silhouettes with lit
+    // windows instead of empty outlines, and spanning most of the width
+    // ("make the boxes actually go to the other side") instead of a small
+    // cluster stopping well short of the sun.
+    const ImU32 buildingGold=IM_COL32(252,245,80,255);
     float baseY=pos.y+size.y;
     float bx=pos.x+size.x*0.42f;
-    float bEnd=pos.x+size.x*0.66f;
+    float bEnd=pos.x+size.x*0.95f;
     int seed=17;
     while(bx<bEnd){
         seed=(seed*1103515245+12345)&0x7fffffff;
-        float bw=44.f+(float)(seed%60);
-        float bh=64.f;
-        dl->AddRect(ImVec2(bx,baseY-bh),ImVec2(bx+bw-10.f,baseY),IM_COL32(252,245,80,255),4.f,0,4.f);
+        float bw=36.f+(float)(seed%50);
+        seed=(seed*1103515245+12345)&0x7fffffff;
+        float bh=50.f+(float)(seed%90);
+        float bxr=bx+bw-8.f;
+        dl->AddRectFilled(ImVec2(bx,baseY-bh),ImVec2(bxr,baseY),IM_COL32(8,4,50,255));
+        dl->AddRect(ImVec2(bx,baseY-bh),ImVec2(bxr,baseY),buildingGold,0.f,0,2.f);
+        int cols=std::max(1,(int)((bxr-bx)/14.f));
+        int rows=std::max(1,(int)(bh/16.f));
+        for(int cx=0;cx<cols;cx++){
+            for(int cy=0;cy<rows;cy++){
+                seed=(seed*1103515245+12345)&0x7fffffff;
+                if(seed%3!=0)continue;
+                float wx=bx+6.f+cx*14.f, wy=baseY-bh+8.f+cy*16.f;
+                if(wx+8.f>bxr)continue;
+                dl->AddRectFilled(ImVec2(wx,wy),ImVec2(wx+8.f,wy+10.f),buildingGold);
+            }
+        }
         bx+=bw;
     }
 }
