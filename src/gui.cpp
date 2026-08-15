@@ -71,6 +71,25 @@ static std::vector<ImVec2> jupiterStarPoints(ImVec2 center,float outerR,float in
     return pts;
 }
 
+// Solid star: a star polygon is concave (dents between the points), so a
+// plain convex fill draws it wrong. Decompose into the inner pentagon (a
+// real convex polygon, fillable directly -- this is the "pentagon in the
+// middle" Nigel asked for) plus one filled triangle per outer point.
+static void drawFilledStar(ImDrawList* dl,ImVec2 center,float outerR,float innerR,int points,float rotRad,ImU32 fill,ImU32 outline,float outlineThick){
+    auto pts=jupiterStarPoints(center,outerR,innerR,points,rotRad);
+    std::vector<ImVec2> inner;
+    for(int i=1;i<(int)pts.size();i+=2)inner.push_back(pts[i]);
+    dl->AddConvexPolyFilled(inner.data(),(int)inner.size(),fill);
+    int n=(int)pts.size();
+    for(int i=0;i<n;i+=2){
+        ImVec2 tip=pts[i];
+        ImVec2 a=pts[(i-1+n)%n];
+        ImVec2 b=pts[(i+1)%n];
+        dl->AddTriangleFilled(a,tip,b,fill);
+    }
+    if(outlineThick>0.f)dl->AddPolyline(pts.data(),n,outline,ImDrawFlags_Closed,outlineThick);
+}
+
 // The whole menu window becomes the art piece when the Jupiter tab is active --
 // not a themed box living inside a normal-looking app. Pulled from Nigel's 8
 // checkpoint screenshots: the gold orbit-ring-with-star ornament, scattered
@@ -79,27 +98,40 @@ static std::vector<ImVec2> jupiterStarPoints(ImVec2 center,float outerR,float in
 // on the WINDOW draw list across the full window rect (title bar, tab rail,
 // content, status bar) so nothing about the window reads as "normal app skin
 // plus a themed tab" -- everything behind the widgets is reskinned.
+// "Wheel Thing", take 2 -- Nigel wants it to read as a glowing sun (photo
+// reference), not plain thin ring outlines: a solid filled core with a soft
+// layered halo, bold rings, and radiating sundial-style ticks around it.
 static void drawJupiterOrnament(ImDrawList* dl,ImVec2 center,float baseR,float time,float spin){
-    for(int i=0;i<4;i++){
-        float r=baseR-(float)i*baseR*0.16f;
-        if(r<10.f)continue;
-        dl->AddCircle(center,r,IM_COL32(252,245,80,255),96,3.2f);
+    const ImU32 gold=IM_COL32(252,245,80,255);
+    for(int i=6;i>=1;i--){
+        float r=baseR*(0.40f+0.11f*(float)i);
+        int a=40+i*22;
+        dl->AddCircleFilled(center,r,IM_COL32(252,245,80,a),96);
     }
-    auto starOrn=jupiterStarPoints(center,baseR*0.45f,baseR*0.18f,5,time*spin);
-    dl->AddConvexPolyFilled(starOrn.data(),(int)starOrn.size(),IM_COL32(252,245,80,200));
-    dl->AddPolyline(starOrn.data(),(int)starOrn.size(),IM_COL32(252,245,80,255),ImDrawFlags_Closed,2.8f);
+    dl->AddCircleFilled(center,baseR*0.40f,gold,96);
+    dl->AddCircle(center,baseR*0.58f,gold,96,4.f);
+    dl->AddCircle(center,baseR*0.80f,gold,96,3.4f);
+    dl->AddCircle(center,baseR*1.00f,gold,96,2.6f);
+    int nTicks=28;
+    for(int i=0;i<nTicks;i++){
+        float a=(float)i/(float)nTicks*2.f*3.14159265f+time*spin;
+        bool big=(i%3==0);
+        float r0=baseR*1.00f, r1=baseR*(big?1.20f:1.10f);
+        ImVec2 p0(center.x+r0*cosf(a),center.y+r0*sinf(a));
+        ImVec2 p1(center.x+r1*cosf(a),center.y+r1*sinf(a));
+        dl->AddLine(p0,p1,gold,big?4.f:2.4f);
+    }
+    auto starOrn=jupiterStarPoints(center,baseR*0.30f,baseR*0.12f,5,time*spin*0.6f);
+    dl->AddPolyline(starOrn.data(),(int)starOrn.size(),IM_COL32(20,10,90,255),ImDrawFlags_Closed,2.2f);
 }
 
-// Take 8: built directly from Nigel's own hand-drawn mockup, not iterated
-// blind. Layout per his sketch: a bold jagged diagonal "wave" ribbon splits
-// the screen (real content stays clear to its left), a star cluster upper
-// right, a big "wheel" ornament bottom-right corner, small building
-// silhouettes along the bottom, all in his exact two colors -- navy #100680
-// background, gold #FCF550 line work -- at full opacity throughout.
+// Take 9: rebuilt from Nigel's own annotated screenshot, not another guess.
+// The "line thing" is a dense woven diamond/chevron lattice (his reference
+// photo), not a sparse skeletal zigzag; the "wheel" is a glowing sun, not
+// thin rings; stars are filled with a solid pentagon core and much bigger.
+// Everything in his exact two colors -- navy #100680, gold #FCF550 -- at
+// full opacity throughout.
 static void drawJupiterWaveRibbon(ImDrawList* dl,ImVec2 pos,ImVec2 size){
-    // A jagged vertical path from top-center-ish to bottom-center-ish, drawn
-    // as two parallel zigzag rails with periodic cross-rungs between them --
-    // Nigel's "line thing like that wave part."
     const ImU32 gold=IM_COL32(252,245,80,255);
     const float thick=5.f;
 
@@ -110,7 +142,7 @@ static void drawJupiterWaveRibbon(ImDrawList* dl,ImVec2 pos,ImVec2 size){
         {0.335f,0.72f},{0.29f,0.84f},{0.31f,1.00f},
     };
     const int n=(int)(sizeof(spine)/sizeof(spine[0]));
-    const float railW=26.f;
+    const float railW=40.f;
 
     std::vector<ImVec2> left(n),right(n);
     for(int i=0;i<n;i++){
@@ -126,29 +158,43 @@ static void drawJupiterWaveRibbon(ImDrawList* dl,ImVec2 pos,ImVec2 size){
     }
     dl->AddPolyline(left.data(),n,gold,0,thick);
     dl->AddPolyline(right.data(),n,gold,0,thick);
-    for(int i=0;i<n;i+=2){
-        dl->AddLine(left[i],right[i],gold,thick*0.7f);
+
+    // Dense diamond/chevron weave: subdivide each rail segment and draw both
+    // diagonals of each resulting cell, forming a tight X-lattice across the
+    // whole band -- matching the reference photo, not a thin skeletal line.
+    auto lerp=[](ImVec2 a,ImVec2 b,float t){return ImVec2(a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t);};
+    const int subSteps=6;
+    for(int i=0;i<n-1;i++){
+        for(int s=0;s<subSteps;s++){
+            float t0=(float)s/(float)subSteps, t1=(float)(s+1)/(float)subSteps;
+            ImVec2 l0=lerp(left[i],left[i+1],t0), l1=lerp(left[i],left[i+1],t1);
+            ImVec2 r0=lerp(right[i],right[i+1],t0), r1=lerp(right[i],right[i+1],t1);
+            dl->AddLine(l0,r1,gold,thick*0.55f);
+            dl->AddLine(r0,l1,gold,thick*0.55f);
+            dl->AddLine(l1,r1,gold,thick*0.4f);
+        }
     }
 }
 
 static void drawJupiterBackdrop(ImDrawList* dl,ImVec2 pos,ImVec2 size,float time){
     drawJupiterWaveRibbon(dl,pos,size);
 
-    // "Wheel Thing" -- big ornament, bottom-right corner, partially bled off
-    // the edge same as Nigel's sketch.
-    drawJupiterOrnament(dl,ImVec2(pos.x+size.x*0.97f,pos.y+size.y*0.97f),size.x*0.26f,time,0.05f);
+    // "Wheel Thing" -- glowing sun, bottom-right corner, bled off the edge
+    // same as Nigel's sketch.
+    drawJupiterOrnament(dl,ImVec2(pos.x+size.x*0.97f,pos.y+size.y*0.97f),size.x*0.30f,time,0.05f);
 
-    // star cluster, upper-right, matching the three stars in the sketch
+    // star cluster, upper-right -- filled with a solid pentagon core (not
+    // just outline) and much bigger, per Nigel's reference photos.
     struct StarSpec{float x,y,r,rot;int pts;};
     static const StarSpec stars[]={
-        {0.65f,0.22f,26.f,0.3f,5},{0.83f,0.42f,24.f,1.1f,5},{0.65f,0.58f,24.f,0.7f,5},
-        {0.74f,0.32f,12.f,2.0f,4},{0.90f,0.55f,10.f,1.4f,4},{0.58f,0.68f,10.f,0.4f,4},
-        {0.78f,0.65f,13.f,2.6f,5},{0.88f,0.15f,11.f,0.9f,4},
+        {0.65f,0.22f,58.f,0.3f,5},{0.85f,0.44f,52.f,1.1f,5},{0.66f,0.60f,50.f,0.7f,5},
+        {0.76f,0.33f,26.f,2.0f,4},{0.92f,0.58f,22.f,1.4f,4},{0.57f,0.70f,24.f,0.4f,4},
+        {0.79f,0.68f,28.f,2.6f,5},{0.89f,0.16f,24.f,0.9f,4},{0.60f,0.40f,20.f,1.6f,4},
     };
     for(auto const& s:stars){
         ImVec2 c(pos.x+size.x*s.x,pos.y+size.y*s.y);
-        auto pts=jupiterStarPoints(c,s.r,s.r*0.42f,s.pts,s.rot);
-        dl->AddPolyline(pts.data(),(int)pts.size(),IM_COL32(252,245,80,255),ImDrawFlags_Closed,3.0f);
+        drawFilledStar(dl,c,s.r,s.r*0.42f,s.pts,s.rot,
+            IM_COL32(252,245,80,255),IM_COL32(20,10,90,255),3.5f);
     }
 
     // "small buildings on the bottom" -- skyline silhouette band
@@ -645,12 +691,39 @@ void MenuInterface::drawTabBar(){
         bool hov=ImGui::IsItemHovered();
         if(ImGui::IsItemClicked())switchTab(i);
         if(fontSmall)ImGui::PushFont(fontSmall);
-        ImVec2 ts=ImGui::CalcTextSize(names[i]);
-        ImVec2 tp(tMin.x+(tabW-ts.x)*0.5f,tMin.y+(tabH-ts.y)*0.5f);
         ImU32 tc=(activeTab==i)?theme.getAccentU32(0.98f)
             :(i==6)?IM_COL32(200,175,90,190) // Jupiter tab stays warm gold even when inactive
             :(hov?theme.getTextU32():theme.getTextSecondaryU32());
-        dl->AddText(tp,tc,names[i]);
+        if(i==6&&activeTab==6){
+            // Full name while open, wrapped to fit the tab's own column --
+            // greedy word-wrap so it adapts to whatever the tab width is.
+            const char* full="Nigel's Jupiter My Favourite Trainer";
+            std::vector<std::string> words; {
+                std::string w; for(const char* p=full;;++p){
+                    if(*p==' '||*p==0){if(!w.empty())words.push_back(w);w.clear();if(*p==0)break;}
+                    else w.push_back(*p);
+                }
+            }
+            std::vector<std::string> lines; std::string cur;
+            for(auto& w:words){
+                std::string trial=cur.empty()?w:(cur+" "+w);
+                if(ImGui::CalcTextSize(trial.c_str()).x<=tabW-6.f||cur.empty())cur=trial;
+                else{lines.push_back(cur);cur=w;}
+            }
+            if(!cur.empty())lines.push_back(cur);
+            float lineH=ImGui::GetFontSize();
+            float totalH=lineH*(float)lines.size();
+            float ly=tMin.y+(tabH-totalH)*0.5f;
+            for(auto& ln:lines){
+                ImVec2 ts=ImGui::CalcTextSize(ln.c_str());
+                dl->AddText(ImVec2(tMin.x+(tabW-ts.x)*0.5f,ly),tc,ln.c_str());
+                ly+=lineH;
+            }
+        } else {
+            ImVec2 ts=ImGui::CalcTextSize(names[i]);
+            ImVec2 tp(tMin.x+(tabW-ts.x)*0.5f,tMin.y+(tabH-ts.y)*0.5f);
+            dl->AddText(tp,tc,names[i]);
+        }
         if(fontSmall)ImGui::PopFont();}
         float indW=tabW*0.5f,indX=tabIndicatorX+(tabW-indW)*0.5f;
     dl->AddRectFilled(ImVec2(indX,pos.y+tabH-2),ImVec2(indX+indW,pos.y+tabH),theme.getAccentU32(0.92f),2.f);
@@ -906,7 +979,28 @@ void MenuInterface::drawMegaHackWindow(){
         ImU32 tc=act?theme.getAccentU32(0.98f)
             :(i==6)?IM_COL32(200,175,90,190)
             :(hov?theme.getTextU32():theme.getTextSecondaryU32());
-        dl->AddText(ImVec2(rMin.x+16,rMin.y+(rowH-ImGui::GetFontSize())*0.5f),tc,names[i]);
+        if(i==6&&act){
+            const char* full="Nigel's Jupiter My Favourite Trainer";
+            std::vector<std::string> words; {
+                std::string w; for(const char* p=full;;++p){
+                    if(*p==' '||*p==0){if(!w.empty())words.push_back(w);w.clear();if(*p==0)break;}
+                    else w.push_back(*p);
+                }
+            }
+            std::vector<std::string> lines; std::string cur;
+            float maxW=railW-22.f;
+            for(auto& w:words){
+                std::string trial=cur.empty()?w:(cur+" "+w);
+                if(ImGui::CalcTextSize(trial.c_str()).x<=maxW||cur.empty())cur=trial;
+                else{lines.push_back(cur);cur=w;}
+            }
+            if(!cur.empty())lines.push_back(cur);
+            float lineH=ImGui::GetFontSize();
+            float ly=rMin.y+(rowH-lineH*(float)lines.size())*0.5f;
+            for(auto& ln:lines){dl->AddText(ImVec2(rMin.x+16,ly),tc,ln.c_str());ly+=lineH;}
+        } else {
+            dl->AddText(ImVec2(rMin.x+16,rMin.y+(rowH-ImGui::GetFontSize())*0.5f),tc,names[i]);
+        }
         if(fontBody)ImGui::PopFont();}
         ImGui::SetCursorScreenPos(ImVec2(wp.x+railW+12,wp.y+headH+8));
     if(jupiterActive)ImGui::PushStyleColor(ImGuiCol_ChildBg,IM_COL32(0,0,0,0));
@@ -2514,13 +2608,17 @@ void MenuInterface::drawJupiterTab(){
     // not just boxed into this tab's own content -- `theme` here already reads
     // as the Jupiter palette by the time this function runs.
 
+    // Real content has to stay clear of the diagonal wave-ribbon backdrop
+    // (per Nigel: "the features shouldnt go past the line"), so it's boxed
+    // into a narrower child instead of using the full tab width.
+    ImGui::PushStyleColor(ImGuiCol_ChildBg,IM_COL32(0,0,0,0));
+    ImGui::BeginChild("##jmfConstrain",ImVec2(ImGui::GetContentRegionAvail().x*0.42f,-1),false);
+
     // Full name while the tab's actually open, per Nigel's sketch -- wraps to
     // more than one line rather than the short "JMF" used in the tab rail.
     if(fontHeading)ImGui::PushFont(fontHeading);
     ImGui::PushStyleColor(ImGuiCol_Text,theme.getAccent());
-    ImGui::PushTextWrapPos(ImGui::GetContentRegionAvail().x*0.7f);
     ImGui::TextWrapped("Nigel's Jupiter My Favourite Trainer");
-    ImGui::PopTextWrapPos();
     ImGui::PopStyleColor();
     if(fontHeading)ImGui::PopFont();
     ImGui::Dummy(ImVec2(0,6));
@@ -2651,6 +2749,9 @@ void MenuInterface::drawJupiterTab(){
     ImGui::Dummy(ImVec2(0,8));
     ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
     ImGui::TextWrapped("Rehearsal mode (scrub playback, pulsing cues ahead of each click, segment looping) isn't built yet -- that's the next pass.");
+    ImGui::PopStyleColor();
+
+    ImGui::EndChild();
     ImGui::PopStyleColor();
 }
 
