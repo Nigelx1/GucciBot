@@ -9,12 +9,24 @@
 
 using namespace geode::prelude;
 
-// Synced level music: plays resources/jupiter_music.mp3 while actually on
-// Jupiter My Favourite, seeked to match the current frame ((frame/tps)*1000ms
-// = song position, no offset) rather than just played once from the start.
-// Only corrects drift past a small tolerance instead of seeking every single
-// frame, so normal playback stays smooth and only actually jumps right after
-// a respawn/restart where the frame legitimately jumped too.
+// Synced music, two independent trigger paths sharing one channel:
+//  - sync(pl,frame,tps): live gameplay, called from the per-gameplay-frame
+//    hook (renderJupiterGhost) -- seeked to the ACTUAL level frame, works
+//    even with the menu closed.
+//  - syncPreview(...): click-bar-preview, called directly from
+//    MenuInterface::drawJupiterClickTrainerPage every frame that page is
+//    open -- seeked to the click bar's own transport position, works from
+//    the main menu with no level loaded at all.
+// Live gameplay always takes priority if both are momentarily true (e.g.
+// the menu's open to the Click Trainer page WHILE actually playing Jupiter
+// My Favourite) -- syncPreview defers to sync() in that case rather than
+// fighting over the channel's seek position.
+//
+// Neither path unconditionally stop()s the channel just because ITS OWN
+// condition isn't met, since the OTHER path might legitimately still want
+// it running -- only syncPreview's "nothing wants this at all" branch calls
+// stop(), since it's reachable independent of whether a PlayLayer exists
+// (sync() only runs inside an active level to begin with).
 class JupiterMusicSync {
 public:
     static JupiterMusicSync* get() { static JupiterMusicSync inst; return &inst; }
@@ -22,17 +34,29 @@ public:
     void sync(PlayLayer* pl, uint32_t frame, double tps) {
         auto* gb = GucciEngine::get();
         bool shouldPlay = gb->jupiterMusicEnabled && pl && pl->m_started && isJupiterLevel(pl);
+        if (!shouldPlay) return;
+        if (!m_channel) start();
+        if (!m_channel) return;
+        m_channel->setPaused(false);
+
+        double targetD = tps > 0.0 ? (frame / tps) * 1000.0 : 0.0;
+        seekIfDrifted(targetD);
+    }
+
+    void syncPreview(bool active, bool paused, double posSec) {
+        auto* pl = PlayLayer::get();
+        auto* gb = GucciEngine::get();
+        bool liveOwns = gb->jupiterMusicEnabled && pl && pl->m_started && isJupiterLevel(pl);
+        if (liveOwns) return; // sync() has it this frame instead
+
+        bool shouldPlay = active && gb->jupiterMusicEnabled;
         if (!shouldPlay) { stop(); return; }
         if (!m_channel) start();
         if (!m_channel) return;
 
-        double targetD = tps > 0.0 ? (frame / tps) * 1000.0 : 0.0;
-        unsigned int targetMs = (unsigned int)std::clamp(targetD, 0.0, 1e9);
-        unsigned int posMs = 0;
-        m_channel->getPosition(&posMs, FMOD_TIMEUNIT_MS);
-        long long diff = (long long)posMs - (long long)targetMs;
-        if (diff < 0) diff = -diff;
-        if (diff > 60) m_channel->setPosition(targetMs, FMOD_TIMEUNIT_MS);
+        m_channel->setPaused(paused);
+        if (paused) return;
+        seekIfDrifted(posSec * 1000.0);
     }
 
     void stop() {
@@ -47,6 +71,15 @@ private:
         std::string lower = pl->m_level->m_levelName;
         std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
         return lower.find("jupiter my favourite") != std::string::npos;
+    }
+
+    void seekIfDrifted(double targetMsD) {
+        unsigned int targetMs = (unsigned int)std::clamp(targetMsD, 0.0, 1e9);
+        unsigned int posMs = 0;
+        m_channel->getPosition(&posMs, FMOD_TIMEUNIT_MS);
+        long long diff = (long long)posMs - (long long)targetMs;
+        if (diff < 0) diff = -diff;
+        if (diff > 60) m_channel->setPosition(targetMs, FMOD_TIMEUNIT_MS);
     }
 
     void start() {
@@ -180,5 +213,11 @@ namespace gbju {
     }
     void notifyJupiterAttemptEnded() {
         JupiterGhostOverlay::get()->onAttemptEnded();
+    }
+    void syncClickBarMusic(bool active, bool paused, double posSec) {
+        JupiterMusicSync::get()->syncPreview(active, paused, posSec);
+    }
+    void stopClickBarMusic() {
+        JupiterMusicSync::get()->stop();
     }
 }

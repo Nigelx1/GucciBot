@@ -4,6 +4,7 @@
 #include "autoclicker.hpp"
 #include "calibration.hpp"
 #include "bigbrrr.hpp"
+#include "jupiterghost.hpp"
 
 #include "renderer.hpp"
 #include "render/renderer.hpp"
@@ -2874,14 +2875,25 @@ static void drawJupiterClickBar(ThemeEngine& theme,AnimationState& anim,GucciEng
     for(auto const& iv:jup.clickIntervalsSec)maxT=std::max(maxT,iv.second);
     double loopLen=std::max(maxT,1.0);
 
+    // Plays through once, then auto-pauses back at the beginning instead of
+    // looping seamlessly forever -- gives a clean, repeatable "one pass"
+    // rhythm to study rather than an endless scroll.
     double realNow=ImGui::GetTime();
     if(!engine->jupiterClickBarPaused){
         double dt=realNow-engine->jupiterClickBarLastRealTime;
-        if(dt>0.0&&dt<1.0)engine->jupiterClickBarPosSec+=dt;
+        if(dt>0.0&&dt<1.0){
+            double newPos=engine->jupiterClickBarPosSec+dt;
+            if(newPos>=loopLen){
+                engine->jupiterClickBarPosSec=0.0;
+                engine->jupiterClickBarPaused=true;
+            } else {
+                engine->jupiterClickBarPosSec=newPos;
+            }
+        }
     }
     engine->jupiterClickBarLastRealTime=realNow;
-    engine->jupiterClickBarPosSec=std::fmod(engine->jupiterClickBarPosSec,loopLen);
-    if(engine->jupiterClickBarPosSec<0.0)engine->jupiterClickBarPosSec+=loopLen;
+
+    gbju::syncClickBarMusic(true,engine->jupiterClickBarPaused,engine->jupiterClickBarPosSec);
 
     if(Widgets::StyledButton(engine->jupiterClickBarPaused?"Resume":"Pause",ImVec2(80,24),theme,anim))
         engine->jupiterClickBarPaused=!engine->jupiterClickBarPaused;
@@ -2900,7 +2912,6 @@ static void drawJupiterClickBar(ThemeEngine& theme,AnimationState& anim,GucciEng
 
     const ImU32 barCol=IM_COL32(137,126,94,255); // olive track, per Nigel's reference sketch
     const ImU32 white=IM_COL32(255,255,255,255);
-    const ImU32 clickCol=theme.getAccentU32(1.f); // already the JMF gold while this tab is active
 
     dl->AddRectFilled(pos,ImVec2(pos.x+w,pos.y+h),barCol,4.f);
 
@@ -2909,14 +2920,17 @@ static void drawJupiterClickBar(ThemeEngine& theme,AnimationState& anim,GucciEng
     float pxPerSec=(w*0.5f)/halfWindow;
     double nowSec=engine->jupiterClickBarPosSec;
 
+    // Per Nigel: not a filled box -- a white line where you actually press,
+    // and a separate white line where you actually release.
     for(auto const& iv:jup.clickIntervalsSec){
-        for(double phase:{0.0,-loopLen,loopLen}){
-            double relStart=(iv.first+phase)-nowSec, relEnd=(iv.second+phase)-nowSec;
-            if(relEnd<-halfWindow||relStart>halfWindow)continue;
-            float x0=centerX+(float)relStart*pxPerSec;
-            float x1=centerX+(float)relEnd*pxPerSec;
-            x0=std::max(x0,pos.x); x1=std::min(x1,pos.x+w);
-            if(x1>x0)dl->AddRectFilled(ImVec2(x0,pos.y+5),ImVec2(x1,pos.y+h-5),clickCol,2.f);
+        double relStart=iv.first-nowSec, relEnd=iv.second-nowSec;
+        if(relStart>=-halfWindow&&relStart<=halfWindow){
+            float x=centerX+(float)relStart*pxPerSec;
+            dl->AddLine(ImVec2(x,pos.y+3),ImVec2(x,pos.y+h-3),white,2.f);
+        }
+        if(relEnd>=-halfWindow&&relEnd<=halfWindow){
+            float x=centerX+(float)relEnd*pxPerSec;
+            dl->AddLine(ImVec2(x,pos.y+3),ImVec2(x,pos.y+h-3),white,2.f);
         }
     }
 
@@ -2930,8 +2944,7 @@ static void drawJupiterClickBar(ThemeEngine& theme,AnimationState& anim,GucciEng
     if(ImGui::IsItemActive()&&ImGui::IsMouseDragging(ImGuiMouseButton_Left)){
         engine->jupiterClickBarPaused=true;
         double posSec=engine->jupiterClickBarPosSec-ImGui::GetIO().MouseDelta.x/pxPerSec;
-        posSec=std::fmod(posSec,loopLen);
-        if(posSec<0.0)posSec+=loopLen;
+        posSec=std::clamp(posSec,0.0,loopLen);
         engine->jupiterClickBarPosSec=posSec;
     }
     ImGui::Dummy(ImVec2(0,4));
@@ -2947,7 +2960,10 @@ void MenuInterface::drawJupiterClickTrainerPage(){
     auto* engine=GucciEngine::get();
     auto* mod=Mod::get();
 
-    if(Widgets::StyledButton("<- Back",ImVec2(90,28),theme,anim))jupiterClickBarPageOpen=false;
+    if(Widgets::StyledButton("<- Back",ImVec2(90,28),theme,anim)){
+        jupiterClickBarPageOpen=false;
+        gbju::stopClickBarMusic();
+    }
     ImGui::Dummy(ImVec2(0,10));
 
     if(fontHeading)ImGui::PushFont(fontHeading);
@@ -3163,7 +3179,11 @@ void MenuInterface::drawJupiterTab(){
     ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
     ImGui::TextWrapped("Click/hold windows scrolling toward a fixed line at constant real-time speed. Its own page now -- too cramped squeezed in here.");
     ImGui::PopStyleColor();
-    if(Widgets::StyledButton("Open Click Trainer ->",ImVec2(-1,32),theme,anim))jupiterClickBarPageOpen=true;
+    if(Widgets::StyledButton("Open Click Trainer ->",ImVec2(-1,32),theme,anim)){
+        jupiterClickBarPageOpen=true;
+        engine->jupiterClickBarPaused=true;
+        engine->jupiterClickBarPosSec=0.0;
+    }
 
     ImGui::Dummy(ImVec2(0,8));
     Widgets::SectionHeader("Segments",theme);

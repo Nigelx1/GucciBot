@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-14-u (Two fixes. 1) 'No click data yet' root cause: loadJupiterMacroData was calling BRRMacro::loadFromDisk(stem), which is hardcoded to search getSaveDir()/replays regardless of what path is passed in -- exactly the general folder the converted file was deliberately moved OUT of last round. Fixed by reading the exact file directly and calling BRRMacro::deserialize on the raw bytes instead, same low-level call convertToBRR itself already uses. Also made the auto-load self-healing: if a found file doesn't actually parse into anything (e.g. left behind by an earlier build's buggy version of this logic), it deletes it and redoes the full seed+convert+move rather than trusting mere file existence. 2) New GameAudioMute (gameaudiomute.hpp), reference-counted so BIG BRRRR and Jupiter synced music don't stomp each other: mutes FMODAudioEngine's own m_backgroundMusicChannel + m_globalChannel (GD's real music/SFX groups) while either is playing, leaving this mod's own independent channels (played with a null or dedicated channel group, siblings not children of GD's groups) fully audible. Compiles clean, untested in-game.)"
+#define GB_BUILD_LABEL "2026-08-14-v (Click Trainer polish. 1) Starts paused at the beginning now (default + reset whenever the page is opened via the sidebar button), instead of auto-playing from wherever it last was. 2) Plays through once then auto-pauses back at 0 instead of looping seamlessly forever. 3) Click marks are two thin white lines (press position, release position) instead of a filled box -- removed the old wrap-phase rendering trick since there's no more seamless loop to render across. 4) Music: added a second sync path (JupiterMusicSync::syncPreview, called from drawJupiterClickTrainerPage) so the synced track plays while previewing the click bar too, not just during live gameplay on the actual level -- seeked to the click bar's own transport position instead of the live frame, deferring to the live-gameplay path automatically if both are momentarily true. Compiles clean, untested in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -391,7 +391,10 @@ public:
     // Click bar transport: pause/resume/reset/skim. Position tracked as a
     // seconds offset into the macro's timeline, advanced by real elapsed
     // wall-clock time each frame while not paused (see drawJupiterClickBar).
-    bool   jupiterClickBarPaused       = false;
+    // Starts paused at the beginning -- and auto-pauses back at the
+    // beginning again once a full pass finishes, rather than looping
+    // seamlessly forever.
+    bool   jupiterClickBarPaused       = true;
     double jupiterClickBarPosSec       = 0.0;
     double jupiterClickBarLastRealTime = 0.0;
 
