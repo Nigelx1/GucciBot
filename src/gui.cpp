@@ -183,11 +183,11 @@ static void drawJupiterWaveRibbon(ImDrawList* dl,ImVec2 pos,ImVec2 size){
 static void drawJupiterBackdrop(ImDrawList* dl,ImVec2 pos,ImVec2 size,float time){
     drawJupiterWaveRibbon(dl,pos,size);
 
-    // "Wheel Thing" -- half-dome sun, sitting on the baseline toward the
-    // bottom-right. No buildings anymore to hide the flat edge behind, so
-    // it's anchored right at the bottom of the backdrop instead of bled
-    // off the corner.
-    drawJupiterOrnament(dl,ImVec2(pos.x+size.x*0.80f,pos.y+size.y),size.x*0.34f,time,0.05f);
+    // "Wheel Thing" -- half-dome sun, tucked into the bottom-right corner.
+    // Fixed pixel radius (not a fraction of the viewport width) so it stays
+    // small and proportionate to the stars instead of ballooning into
+    // everything else on wide windows -- that was the overlap bug.
+    drawJupiterOrnament(dl,ImVec2(pos.x+size.x*0.93f,pos.y+size.y),76.f,time,0.05f);
 
     // star cluster, upper-right -- 5-pointed only, each with a pentagon
     // outline nested in the middle built directly from the star's own inner
