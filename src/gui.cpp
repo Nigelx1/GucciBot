@@ -3,6 +3,7 @@
 #include "clicksounds.hpp"
 #include "autoclicker.hpp"
 #include "calibration.hpp"
+#include "bigbrrr.hpp"
 
 #include "renderer.hpp"
 #include "render/renderer.hpp"
@@ -31,6 +32,24 @@ static ImVec4 brighten(const ImVec4& c,float amt){
     return ImVec4(std::clamp(c.x+amt,0.f,1.f),std::clamp(c.y+amt,0.f,1.f),std::clamp(c.z+amt,0.f,1.f),c.w);}
 static ImU32 toU32(const ImVec4& c){return ImGui::ColorConvertFloat4ToU32(c);}
 static ImVec2 snapPos(ImVec2 p){return ImVec2(std::round(p.x),std::round(p.y));}
+
+// BIG BRRRR bounce: nudges whatever window was just Begin()'d by the DELTA
+// between this frame's and last frame's sine value, rather than forcing an
+// absolute position. That works regardless of how the window's position is
+// otherwise being managed (custom drag handle, native ImGui drag, FirstUseEver
+// seeding, whatever) without fighting it or needing to understand it, and
+// since sine nets to zero over a full period there's no long-term drift.
+// Shared between drawMainWindow and drawMegaHackWindow so both skins bounce
+// in sync; never called for the Jupiter tab (jupiterActive guard).
+static void applyBigBrrrBounce(bool jupiterActive){
+    if(jupiterActive||!BigBrrrManager::get()->enabled)return;
+    static float lastOffset=0.f;
+    float t=(float)ImGui::GetTime();
+    float offset=std::sin(t*14.f)*10.f;
+    ImVec2 wp=ImGui::GetWindowPos();
+    ImGui::SetWindowPos(ImVec2(wp.x,wp.y+(offset-lastOffset)));
+    lastOffset=offset;
+}
 
 static const char* getAccuracyTag(AccuracyMode m){
     switch(m){case AccuracyMode::CBS:return "CBS";case AccuracyMode::CBF:return "CBF";default:return nullptr;}}
@@ -858,6 +877,7 @@ void MenuInterface::drawMainWindow(){
         ImGui::Begin("##GucciBot",nullptr,
         ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoScrollbar|
         ImGuiWindowFlags_NoScrollWithMouse|ImGuiWindowFlags_NoTitleBar);
+        applyBigBrrrBounce(jupiterActive);
         if(!jupiterActive){
         // Drag handle -- meaningless once the window IS the viewport, so skipped
         // entirely in Jupiter's full-screen takeover.
@@ -936,6 +956,7 @@ void MenuInterface::drawMegaHackWindow(){
     ImGui::Begin("##GucciBotMH",nullptr,
         ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoScrollbar|
         ImGuiWindowFlags_NoScrollWithMouse|ImGuiWindowFlags_NoTitleBar);
+    applyBigBrrrBounce(jupiterActive);
     windowPos=ImGui::GetWindowPos();
     ImDrawList* dl=ImGui::GetWindowDrawList();
     ImVec2 wp=windowPos,ws=ImGui::GetWindowSize();
@@ -2437,6 +2458,23 @@ void MenuInterface::drawSettingsTab(){
     Widgets::SectionHeader("Advanced",theme);
     Widgets::ModuleCard("FastPlayback","Start playback without restarting the level",&eng->fastPlayback,theme,anim);
     ImGui::Dummy(ImVec2(0,12));
+
+    Widgets::SectionHeader("Fun",theme);
+    {
+        auto* brrr=BigBrrrManager::get();
+        bool brrrOn=brrr->enabled;
+        if(Widgets::ToggleSwitch("BIG BRRRR",&brrrOn,theme,anim))brrr->setEnabled(brrrOn);
+        ImGui::SameLine();
+        if(Widgets::StyledButton("Open BRRRR Folder",ImVec2(160,0),theme,anim))brrr->openBrrrFolder();
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        if(!brrr->hasFile())
+            ImGui::TextWrapped("No audio file in the BRRRR folder yet -- drop an mp3/wav/ogg in there, then flip the switch.");
+        else
+            ImGui::TextWrapped("Loops whatever's in the BRRRR folder and makes the whole menu bounce. Doesn't touch the Jupiter tab.");
+        ImGui::PopStyleColor();
+    }
+    ImGui::Dummy(ImVec2(0,12));
+
     Widgets::SectionHeader("Keybinds",theme);
     struct{const char* label;int* ptr;}kbs[]={
         {"Menu Toggle",&keybinds.menu},{"Frame Advance",&keybinds.frameAdvance},
