@@ -2886,6 +2886,7 @@ static void drawJupiterClickBar(ThemeEngine& theme,AnimationState& anim,GucciEng
             if(newPos>=loopLen){
                 engine->jupiterClickBarPosSec=0.0;
                 engine->jupiterClickBarPaused=true;
+                engine->jupiterClickBarMyClicks.clear(); // fresh pass, fresh comparison
             } else {
                 engine->jupiterClickBarPosSec=newPos;
             }
@@ -2895,11 +2896,24 @@ static void drawJupiterClickBar(ThemeEngine& theme,AnimationState& anim,GucciEng
 
     gbju::syncClickBarMusic(true,engine->jupiterClickBarPaused,engine->jupiterClickBarPosSec);
 
+    // Your own presses -- click, spacebar, up arrow, W (GD's standard jump
+    // bindings) -- tapped along live via raw ImGui key/mouse detection so it
+    // works with or without a level loaded. Stamped at the bar's current
+    // transport position, rendered as white lines alongside the macro's own
+    // (yellow) marks for direct rhythm comparison.
+    bool myClickNow=ImGui::IsKeyPressed(ImGuiKey_Space,false)||
+        ImGui::IsKeyPressed(ImGuiKey_UpArrow,false)||
+        ImGui::IsKeyPressed(ImGuiKey_W,false)||
+        ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+    if(myClickNow)engine->jupiterClickBarMyClicks.push_back(engine->jupiterClickBarPosSec);
+
     if(Widgets::StyledButton(engine->jupiterClickBarPaused?"Resume":"Pause",ImVec2(80,24),theme,anim))
         engine->jupiterClickBarPaused=!engine->jupiterClickBarPaused;
     ImGui::SameLine();
-    if(Widgets::StyledButton("Reset",ImVec2(70,24),theme,anim))
+    if(Widgets::StyledButton("Reset",ImVec2(70,24),theme,anim)){
         engine->jupiterClickBarPosSec=0.0;
+        engine->jupiterClickBarMyClicks.clear();
+    }
     ImGui::SameLine();
     ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
     ImGui::Text("%.1fs / %.1fs",engine->jupiterClickBarPosSec,loopLen);
@@ -2912,6 +2926,7 @@ static void drawJupiterClickBar(ThemeEngine& theme,AnimationState& anim,GucciEng
 
     const ImU32 barCol=IM_COL32(137,126,94,255); // olive track, per Nigel's reference sketch
     const ImU32 white=IM_COL32(255,255,255,255);
+    const ImU32 clickCol=theme.getAccentU32(1.f); // already the JMF gold while this tab is active
 
     dl->AddRectFilled(pos,ImVec2(pos.x+w,pos.y+h),barCol,4.f);
 
@@ -2920,18 +2935,22 @@ static void drawJupiterClickBar(ThemeEngine& theme,AnimationState& anim,GucciEng
     float pxPerSec=(w*0.5f)/halfWindow;
     double nowSec=engine->jupiterClickBarPosSec;
 
-    // Per Nigel: not a filled box -- a white line where you actually press,
-    // and a separate white line where you actually release.
+    // Macro's click/hold windows -- back to filled yellow boxes.
     for(auto const& iv:jup.clickIntervalsSec){
         double relStart=iv.first-nowSec, relEnd=iv.second-nowSec;
-        if(relStart>=-halfWindow&&relStart<=halfWindow){
-            float x=centerX+(float)relStart*pxPerSec;
-            dl->AddLine(ImVec2(x,pos.y+3),ImVec2(x,pos.y+h-3),white,2.f);
-        }
-        if(relEnd>=-halfWindow&&relEnd<=halfWindow){
-            float x=centerX+(float)relEnd*pxPerSec;
-            dl->AddLine(ImVec2(x,pos.y+3),ImVec2(x,pos.y+h-3),white,2.f);
-        }
+        if(relEnd<-halfWindow||relStart>halfWindow)continue;
+        float x0=centerX+(float)relStart*pxPerSec;
+        float x1=centerX+(float)relEnd*pxPerSec;
+        x0=std::max(x0,pos.x); x1=std::min(x1,pos.x+w);
+        if(x1>x0)dl->AddRectFilled(ImVec2(x0,pos.y+5),ImVec2(x1,pos.y+h-5),clickCol,2.f);
+    }
+
+    // Your own clicks -- thin white lines.
+    for(double t:engine->jupiterClickBarMyClicks){
+        double rel=t-nowSec;
+        if(rel<-halfWindow||rel>halfWindow)continue;
+        float x=centerX+(float)rel*pxPerSec;
+        dl->AddLine(ImVec2(x,pos.y+3),ImVec2(x,pos.y+h-3),white,2.f);
     }
 
     dl->AddLine(ImVec2(centerX,pos.y-4),ImVec2(centerX,pos.y+h+4),white,3.f);
@@ -3183,6 +3202,7 @@ void MenuInterface::drawJupiterTab(){
         jupiterClickBarPageOpen=true;
         engine->jupiterClickBarPaused=true;
         engine->jupiterClickBarPosSec=0.0;
+        engine->jupiterClickBarMyClicks.clear();
     }
 
     ImGui::Dummy(ImVec2(0,8));

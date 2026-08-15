@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-14-v (Click Trainer polish. 1) Starts paused at the beginning now (default + reset whenever the page is opened via the sidebar button), instead of auto-playing from wherever it last was. 2) Plays through once then auto-pauses back at 0 instead of looping seamlessly forever. 3) Click marks are two thin white lines (press position, release position) instead of a filled box -- removed the old wrap-phase rendering trick since there's no more seamless loop to render across. 4) Music: added a second sync path (JupiterMusicSync::syncPreview, called from drawJupiterClickTrainerPage) so the synced track plays while previewing the click bar too, not just during live gameplay on the actual level -- seeked to the click bar's own transport position instead of the live frame, deferring to the live-gameplay path automatically if both are momentarily true. Compiles clean, untested in-game.)"
+#define GB_BUILD_LABEL "2026-08-14-w (Click Trainer: clarified which marks are which. Macro's click/hold windows are filled yellow boxes again (reverted last round's white-line change for these). NEW: your own real presses -- click, spacebar, up arrow, W, GD's standard jump bindings -- now render as separate thin white lines, detected live via raw ImGui key/mouse checks (works with or without a level loaded) and stamped at the bar's current transport position for direct rhythm comparison against the yellow marks. Cleared at the start of each fresh pass (loop auto-reset, Reset button, or freshly opening the page). Compiles clean, untested in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -397,6 +397,13 @@ public:
     bool   jupiterClickBarPaused       = true;
     double jupiterClickBarPosSec       = 0.0;
     double jupiterClickBarLastRealTime = 0.0;
+
+    // Your own real presses (click, spacebar, up arrow, W -- GD's standard
+    // jump bindings), tapped along live via raw ImGui key/mouse detection so
+    // it works even without a level loaded. Timestamped in click-bar-timeline
+    // seconds, rendered as white lines scrolling alongside the macro's own
+    // (yellow) marks. Cleared at the start of each fresh pass.
+    std::vector<double> jupiterClickBarMyClicks;
 
     // Click-rhythm bar: a fixed center line with the macro's upcoming click/hold
     // windows scrolling toward it at constant real-time speed, independent of
