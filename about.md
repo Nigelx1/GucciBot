@@ -61,6 +61,6 @@ A dedicated practice tab built entirely around one level, auto-loaded and ready 
 ## Credits
 
 - **guccimanefan** — GucciBot, themes, vision, the drip
-- **ToastyExGD** — ToastyReplay engine base and improvements
+- **ToastexGD** — ToastyReplay engine base and improvements
 - **peony** — Silicate (dropped the source like Gucci drops albums. Brrr.)
 - **Claude.ai** — rewrite and feature partner
