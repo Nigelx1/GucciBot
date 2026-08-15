@@ -33,35 +33,45 @@ static ImVec4 brighten(const ImVec4& c,float amt){
 static ImU32 toU32(const ImVec4& c){return ImGui::ColorConvertFloat4ToU32(c);}
 static ImVec2 snapPos(ImVec2 p){return ImVec2(std::round(p.x),std::round(p.y));}
 
-// BIG BRRRR bounce: nudges whatever window was just Begin()'d by the DELTA
-// between this frame's and last frame's sine value, rather than forcing an
-// absolute position. That works regardless of how the window's position is
-// otherwise being managed (custom drag handle, native ImGui drag, FirstUseEver
-// seeding, whatever) without fighting it or needing to understand it. Sine
-// only nets to zero over a FULL period though -- toggling off mid-swing used
-// to just freeze the window wherever it happened to be, since the function
-// bailed out entirely once disabled. Now it eases lastOffset back to 0 first
-// (a few frames of decay) before going idle, so the menu actually settles
-// back to its resting spot instead of staying stuck mid-bounce.
+// BIG BRRRR bounce, take 2. The first version nudged the window by the DELTA
+// between this frame's and last frame's sine value -- a RELATIVE correction
+// that silently assumes nothing else ever touches the window's position
+// between calls. That assumption doesn't actually hold: this window has no
+// NoMove flag, so ImGui's own native click-drag can reposition it too, and a
+// relative delta has no way to detect or correct for that -- it just keeps
+// nudging from wherever the window happens to be, which can drift away from
+// true rest and never visibly "come back down." This version tracks an
+// explicit ABSOLUTE anchor (restY, captured the moment bouncing starts) and
+// always drives the window to restY+offset directly, rather than trusting
+// GetWindowPos() to reflect only what this function itself did last frame.
+// Once offset decays to 0 it goes fully idle and stops touching Y at all, so
+// the window ends up exactly back at its real rest position, and normal
+// dragging works unaffected while idle (same as before BRRRR existed).
 // Shared between drawMainWindow and drawMegaHackWindow so both skins bounce
-// in sync; never applies to the Jupiter tab (jupiterActive guard) -- and while
-// that tab's open, lastOffset is reset to 0 too, since its position is force-set
-// every frame anyway, so BRRRR resumes cleanly if it's still on when you leave.
+// in sync; never applies to the Jupiter tab (jupiterActive guard) -- and
+// that resets everything too, since its position is force-set every frame
+// anyway, so BRRRR re-anchors cleanly if it's still on when you leave.
 static void applyBigBrrrBounce(bool jupiterActive){
-    static float lastOffset=0.f;
-    if(jupiterActive){lastOffset=0.f;return;}
-    float newOffset;
-    if(BigBrrrManager::get()->enabled){
+    static float restY=0.f;
+    static float offset=0.f;
+    static bool active=false;
+
+    if(jupiterActive){active=false;offset=0.f;return;}
+
+    bool on=BigBrrrManager::get()->enabled;
+    if(on){
+        if(!active){restY=ImGui::GetWindowPos().y-offset;active=true;}
         float t=(float)ImGui::GetTime();
-        newOffset=std::sin(t*14.f)*10.f;
+        offset=std::sin(t*14.f)*10.f;
+    } else if(active){
+        offset*=0.75f;
+        if(std::fabs(offset)<0.05f){offset=0.f;active=false;}
     } else {
-        if(lastOffset==0.f)return;
-        newOffset=lastOffset*0.75f;
-        if(std::fabs(newOffset)<0.05f)newOffset=0.f;
+        return;
     }
+
     ImVec2 wp=ImGui::GetWindowPos();
-    ImGui::SetWindowPos(ImVec2(wp.x,wp.y+(newOffset-lastOffset)));
-    lastOffset=newOffset;
+    ImGui::SetWindowPos(ImVec2(wp.x,restY+offset));
 }
 
 static const char* getAccuracyTag(AccuracyMode m){
