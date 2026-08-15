@@ -80,55 +80,73 @@ static std::vector<ImVec2> jupiterStarPoints(ImVec2 center,float outerR,float in
 // on the WINDOW draw list across the full window rect (title bar, tab rail,
 // content, status bar) so nothing about the window reads as "normal app skin
 // plus a themed tab" -- everything behind the widgets is reskinned.
-// "Wheel Thing", take 3, per Nigel's exact spec this round: no fill/opacity
-// tricks at all -- a circle with lines radiating out through the middle,
-// several layers of plain ring outlines, and tiny filled "ball bearing"
-// dots filling the gaps between consecutive rings.
+// "Wheel Thing", take 4 -- Nigel sent a real screenshot of the actual level
+// this time. It's a half-dome sitting on the ground (not a full circle):
+// ring ARCS (top half only) with dots sitting ON each ring at intervals
+// (not filling gaps between rings), and a solid filled core at the bottom
+// center with bold triangular spike rays fanning up through the dome.
+// `center` is the BOTTOM-CENTER anchor (the dome's flat edge), not the
+// middle of a full circle.
 static void drawJupiterOrnament(ImDrawList* dl,ImVec2 center,float baseR,float time,float spin){
     const ImU32 gold=IM_COL32(252,245,80,255);
+    const float PI=3.14159265f;
 
-    const int nRings=5;
+    const int nRings=4;
     float ringR[nRings];
     for(int i=0;i<nRings;i++){
-        ringR[i]=baseR*(0.22f+0.20f*(float)i);
-        dl->AddCircle(center,ringR[i],gold,96,3.f);
+        ringR[i]=baseR*(0.34f+0.22f*(float)i);
+        const int segs=48;
+        std::vector<ImVec2> arc(segs+1);
+        for(int s=0;s<=segs;s++){
+            float a=PI+(float)s/(float)segs*PI; // sweeps the TOP half only
+            arc[s]=ImVec2(center.x+ringR[i]*cosf(a),center.y+ringR[i]*sinf(a));
+        }
+        dl->AddPolyline(arc.data(),segs+1,gold,0,3.2f);
     }
 
-    // radiating lines through the middle, sticking out past the outer ring
-    int nRays=16;
-    for(int i=0;i<nRays;i++){
-        float a=(float)i/(float)nRays*2.f*3.14159265f+time*spin;
-        ImVec2 p0(center.x+baseR*0.05f*cosf(a),center.y+baseR*0.05f*sinf(a));
-        ImVec2 p1(center.x+ringR[nRings-1]*1.18f*cosf(a),center.y+ringR[nRings-1]*1.18f*sinf(a));
-        dl->AddLine(p0,p1,gold,2.6f);
-    }
-
-    // tiny filled ball-bearing dots between each pair of consecutive rings
-    for(int i=0;i<nRings-1;i++){
-        float rMid=(ringR[i]+ringR[i+1])*0.5f;
-        float gap=ringR[i+1]-ringR[i];
-        float ballR=std::min(gap*0.28f,6.5f);
-        int count=std::max(8,(int)(2.f*3.14159265f*rMid/(ballR*3.4f)));
-        float phase=(i%2==0)?0.f:(3.14159265f/(float)count);
-        for(int b=0;b<count;b++){
-            float a=(float)b/(float)count*2.f*3.14159265f+phase;
-            ImVec2 p(center.x+rMid*cosf(a),center.y+rMid*sinf(a));
-            dl->AddCircleFilled(p,ballR,gold,16);
+    // dots sitting ON each ring at intervals, like the reference's sundial
+    // markings, plus a couple of short radial tick marks per ring.
+    for(int i=0;i<nRings;i++){
+        int count=6+i*3;
+        for(int d=1;d<count;d++){
+            float a=PI+(float)d/(float)count*PI;
+            ImVec2 p(center.x+ringR[i]*cosf(a),center.y+ringR[i]*sinf(a));
+            if(d%2==1)dl->AddCircleFilled(p,5.f,gold,12);
+            else{
+                ImVec2 t0(center.x+(ringR[i]-6.f)*cosf(a),center.y+(ringR[i]-6.f)*sinf(a));
+                ImVec2 t1(center.x+(ringR[i]+6.f)*cosf(a),center.y+(ringR[i]+6.f)*sinf(a));
+                dl->AddLine(t0,t1,gold,2.4f);
+            }
         }
     }
+
+    // solid filled core + bold triangular spike rays fanning up from it,
+    // reaching roughly to the innermost ring -- matches the reference's
+    // sunburst core, not thin lines.
+    float coreR=baseR*0.14f;
+    int nRays=11;
+    for(int i=0;i<=nRays;i++){
+        float a=PI+(float)i/(float)nRays*PI+time*spin*0.15f;
+        float rayLen=ringR[0]*1.05f;
+        float halfW=coreR*0.32f;
+        float pa=a+PI*0.5f;
+        ImVec2 tip(center.x+rayLen*cosf(a),center.y+rayLen*sinf(a));
+        ImVec2 base1(center.x+halfW*cosf(pa),center.y+halfW*sinf(pa));
+        ImVec2 base2(center.x-halfW*cosf(pa),center.y-halfW*sinf(pa));
+        dl->AddTriangleFilled(base1,base2,tip,gold);
+    }
+    dl->AddCircleFilled(center,coreR,gold,48);
 }
 
-// Wave ribbon, take 11, per Nigel's exact spec: a simple \/\  zigzag (3
-// segments, not a long jagged spine), copied and shifted to the right, then
-// connected with a bunch of parallel lines -- since the copy is a constant
-// shift of the original, connecting matching points along both is
-// guaranteed parallel by construction, no tangling possible.
+// Wave ribbon, take 12: same \/\  zigzag + shifted-copy + parallel-connector
+// construction as last round (that part worked), shifted further right so
+// it clears the real tab content instead of clipping into it.
 static void drawJupiterWaveRibbon(ImDrawList* dl,ImVec2 pos,ImVec2 size){
     const ImU32 gold=IM_COL32(252,245,80,255);
 
     struct Pt{float x,y;};
     static const Pt spine[]={
-        {0.30f,0.00f},{0.42f,0.33f},{0.28f,0.66f},{0.40f,1.00f},
+        {0.38f,0.00f},{0.50f,0.33f},{0.36f,0.66f},{0.48f,1.00f},
     };
     const int n=(int)(sizeof(spine)/sizeof(spine[0]));
     const float offsetX=size.x*0.08f;
@@ -165,13 +183,17 @@ static void drawJupiterWaveRibbon(ImDrawList* dl,ImVec2 pos,ImVec2 size){
 static void drawJupiterBackdrop(ImDrawList* dl,ImVec2 pos,ImVec2 size,float time){
     drawJupiterWaveRibbon(dl,pos,size);
 
-    // "Wheel Thing" -- rings/rays/ball-bearings sun, bottom-right corner,
-    // bled off the edge same as Nigel's sketch.
-    drawJupiterOrnament(dl,ImVec2(pos.x+size.x*0.97f,pos.y+size.y*0.97f),size.x*0.30f,time,0.05f);
+    // "Wheel Thing" -- half-dome sun, sitting on the baseline toward the
+    // bottom-right. No buildings anymore to hide the flat edge behind, so
+    // it's anchored right at the bottom of the backdrop instead of bled
+    // off the corner.
+    drawJupiterOrnament(dl,ImVec2(pos.x+size.x*0.80f,pos.y+size.y),size.x*0.34f,time,0.05f);
 
-    // star cluster, upper-right -- 5-pointed only now (4-pointed ones
-    // removed per Nigel), each with a plain pentagon outline nested in the
-    // middle (not filled -- stars stay outline throughout).
+    // star cluster, upper-right -- 5-pointed only, each with a pentagon
+    // outline nested in the middle built directly from the star's own inner
+    // (concave) vertices -- jupiterStarPoints alternates outer/inner points,
+    // so the odd indices ARE the inner ring already, guaranteeing alignment
+    // instead of recomputing angles separately (which was off by half a step).
     struct StarSpec{float x,y,r,rot;};
     static const StarSpec stars[]={
         {0.65f,0.22f,58.f,0.3f},{0.85f,0.44f,52.f,1.1f},{0.66f,0.60f,50.f,0.7f},
@@ -182,59 +204,9 @@ static void drawJupiterBackdrop(ImDrawList* dl,ImVec2 pos,ImVec2 size,float time
         ImVec2 c(pos.x+size.x*s.x,pos.y+size.y*s.y);
         auto pts=jupiterStarPoints(c,s.r,s.r*0.42f,5,s.rot);
         dl->AddPolyline(pts.data(),(int)pts.size(),IM_COL32(252,245,80,255),ImDrawFlags_Closed,3.5f);
-        // regular pentagon outline nested in the middle
-        std::vector<ImVec2> pent(5);
-        float pentR=s.r*0.42f;
-        for(int k=0;k<5;k++){
-            float a=s.rot+(float)k/5.f*2.f*3.14159265f;
-            pent[k]=ImVec2(c.x+pentR*cosf(a),c.y+pentR*sinf(a));
-        }
-        dl->AddPolyline(pent.data(),5,IM_COL32(252,245,80,255),ImDrawFlags_Closed,2.2f);
-    }
-
-    // "small buildings on the bottom" -- filled silhouettes with lit windows,
-    // spanning most of the width. Still working from memory of the earlier
-    // reference shots (dark skyline, lit cutout windows), not a fresh photo
-    // -- added stepped rooftops for silhouette variety since "more like the
-    // real level" without new reference material to pin down further; a
-    // fresh building reference photo would help nail this precisely.
-    const ImU32 buildingGold=IM_COL32(252,245,80,255);
-    float baseY=pos.y+size.y;
-    float bx=pos.x+size.x*0.42f;
-    float bEnd=pos.x+size.x*0.95f;
-    int seed=17;
-    int idx=0;
-    while(bx<bEnd){
-        seed=(seed*1103515245+12345)&0x7fffffff;
-        float bw=36.f+(float)(seed%50);
-        seed=(seed*1103515245+12345)&0x7fffffff;
-        float bh=50.f+(float)(seed%90);
-        float bxr=bx+bw-8.f;
-        dl->AddRectFilled(ImVec2(bx,baseY-bh),ImVec2(bxr,baseY),IM_COL32(8,4,50,255));
-        dl->AddRect(ImVec2(bx,baseY-bh),ImVec2(bxr,baseY),buildingGold,0.f,0,2.f);
-
-        // stepped rooftop on every third building for silhouette variety
-        if(idx%3==0){
-            float capW=(bxr-bx)*0.5f;
-            float capH=22.f+(float)((seed>>4)%30);
-            float capX0=bx+(bxr-bx-capW)*0.5f;
-            dl->AddRectFilled(ImVec2(capX0,baseY-bh-capH),ImVec2(capX0+capW,baseY-bh),IM_COL32(8,4,50,255));
-            dl->AddRect(ImVec2(capX0,baseY-bh-capH),ImVec2(capX0+capW,baseY-bh),buildingGold,0.f,0,2.f);
-        }
-
-        int cols=std::max(1,(int)((bxr-bx)/14.f));
-        int rows=std::max(1,(int)(bh/16.f));
-        for(int cx=0;cx<cols;cx++){
-            for(int cy=0;cy<rows;cy++){
-                seed=(seed*1103515245+12345)&0x7fffffff;
-                if(seed%3!=0)continue;
-                float wx=bx+6.f+cx*14.f, wy=baseY-bh+8.f+cy*16.f;
-                if(wx+8.f>bxr)continue;
-                dl->AddRectFilled(ImVec2(wx,wy),ImVec2(wx+8.f,wy+10.f),buildingGold);
-            }
-        }
-        bx+=bw;
-        idx++;
+        std::vector<ImVec2> pent;
+        for(int k=1;k<(int)pts.size();k+=2)pent.push_back(pts[k]);
+        dl->AddPolyline(pent.data(),(int)pent.size(),IM_COL32(252,245,80,255),ImDrawFlags_Closed,2.2f);
     }
 }
 
