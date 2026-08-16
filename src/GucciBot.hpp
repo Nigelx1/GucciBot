@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-16-d (1.1: moved the Trainer tab to sit right next to JMF (index 7) instead of last -- HUD/Settings/Credits shifted to 8/9/10 accordingly (names[] in both drawTabBar and drawMegaHackWindow, the switch in drawTabContent; jupiterActive's activeTab==6 check is untouched, JMF didn't move). activeTab isn't persisted so there's no stale-index migration concern. Updated about.md for the 1.1 feature set: title/intro now mention the general Trainer tab alongside JMF, and added a Trainer (Any Macro) section describing it. Compiles clean.)"
+#define GB_BUILD_LABEL "2026-08-16-e (1.1: BIG BRRRR's start offset corrected to the track's actual drop at 20 and 11/15 seconds -- BigBrrrManager::kStartOffsetSec is now 20.0 + 11.0/15.0 (was a rough 20.0), which also shifts the bounce's beatRefTime anchor by the same fraction since it's derived from kStartOffsetSec. Compiles clean.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
