@@ -19,6 +19,12 @@ class BigBrrrManager {
 public:
     static BigBrrrManager* get();
 
+    // Skips the track's slow intro -- playback starts here instead of 0:00.
+    static constexpr double kStartOffsetSec = 20.0;
+    // Track's actual BPM, used to line up the menu bounce (see
+    // applyBigBrrrBounce in gui.cpp) to the beat.
+    static constexpr double kBpm = 140.0;
+
     bool enabled = false;
 
     void setEnabled(bool on);

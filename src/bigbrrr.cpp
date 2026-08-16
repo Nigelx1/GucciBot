@@ -67,6 +67,7 @@ void BigBrrrManager::start() {
     system->playSound(sound, nullptr, false, &channel);
     if (channel) {
         channel->setVolume(1.f);
+        channel->setPosition((unsigned int)(kStartOffsetSec * 1000.0), FMOD_TIMEUNIT_MS);
         GameAudioMute::acquire();
         audioMuteHeld = true;
     }

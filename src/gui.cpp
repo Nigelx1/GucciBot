@@ -237,14 +237,25 @@ static void applyBigBrrrBounce(bool jupiterActive){
     static float restY=0.f;
     static float offset=0.f;
     static bool active=false;
+    // ImGui::GetTime() value corresponding to the track's position 0 (an
+    // assumed downbeat) -- captured fresh each time bouncing (re)starts.
+    // Playback itself starts kStartOffsetSec into the file (skips the slow
+    // intro, see BigBrrrManager::start), so that moment is kStartOffsetSec
+    // seconds AFTER this reference point, not at it.
+    static double beatRefTime=0.0;
 
     if(jupiterActive){active=false;offset=0.f;return;}
 
     bool on=BigBrrrManager::get()->enabled;
     if(on){
-        if(!active){restY=ImGui::GetWindowPos().y-offset;active=true;}
-        float t=(float)ImGui::GetTime();
-        offset=std::sin(t*14.f)*10.f;
+        if(!active){
+            restY=ImGui::GetWindowPos().y-offset;
+            active=true;
+            beatRefTime=ImGui::GetTime()-BigBrrrManager::kStartOffsetSec;
+        }
+        double elapsed=ImGui::GetTime()-beatRefTime;
+        double omega=2.0*3.14159265358979*BigBrrrManager::kBpm/60.0; // one full bounce cycle per beat
+        offset=(float)(std::sin(elapsed*omega)*10.0);
     } else if(active){
         offset*=0.75f;
         if(std::fabs(offset)<0.05f){offset=0.f;active=false;}
