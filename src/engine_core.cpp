@@ -298,7 +298,7 @@ static void loadPathSamples(const fs::path& macroPath, std::vector<MacroPathSamp
 // bot-playback state. This duplicates just the parsing logic that's actually
 // needed (mirrors GucciReplaySystem::buildClickIntervals and the legacy-BRR
 // branch of load()), deliberately kept separate.
-static void loadJupiterMacroData(const fs::path& path, GucciEngine::JupiterMacroData& out) {
+static void loadJupiterMacroData(const fs::path& path, GucciEngine::TrainerMacroData& out) {
     out = {};
 
     // NOT BRRMacro::loadFromDisk(stem) -- that's hardcoded to search
@@ -340,6 +340,102 @@ static void loadJupiterMacroData(const fs::path& path, GucciEngine::JupiterMacro
     out.loaded = !out.clickIntervalsSec.empty() || !out.pathSamples.empty();
     log::info("[GucciBot] Jupiter macro data: {} click interval(s), {} path sample(s)",
               out.clickIntervalsSec.size(), out.pathSamples.size());
+}
+
+// General-purpose version of loadJupiterMacroData for the Trainer tab's "load
+// any macro" picker. Jupiter's bundled macro always ends up in genuine legacy
+// BRR format by the time loadJupiterMacroData reads it (it's routed through
+// convertToBRR/BRRMacro::persist() first), so that function only ever needs
+// the BRRMacro::deserialize() branch below. A macro the user actually
+// recorded and saved in-app is GBR6 format instead (GucciReplaySystem::save()
+// always writes via GBR6File, regardless of the cosmetic file extension), so
+// this version has to sniff the magic and handle both -- same dual-branch
+// approach GucciReplaySystem::load() already uses for real playback.
+static void loadTrainerMacroData(const fs::path& path, GucciEngine::TrainerMacroData& out) {
+    out = {};
+
+    std::ifstream f(path, std::ios::binary | std::ios::ate);
+    if (!f) return;
+    auto sz = static_cast<size_t>(f.tellg());
+    f.seekg(0);
+    std::vector<uint8_t> bytes(sz);
+    if (sz) f.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(sz));
+    f.close();
+    if (bytes.size() < 4) return;
+
+    if (std::memcmp(bytes.data(), "GBR6", 4) == 0) {
+        auto result = GBR6File::deserialize(bytes.data(), bytes.size());
+        if (!result) return;
+        double tps = result->header.tps > 0.f ? (double)result->header.tps : 240.0;
+        out.levelName = result->header.levelName;
+
+        std::unordered_map<int, uint32_t> openPress;
+        auto pairUp = [&](std::vector<GBR6Input> const& inputs, bool p2) {
+            for (auto const& inp : inputs) {
+                int key = (int)inp.button * 2 + (p2 ? 1 : 0);
+                if (inp.pressed) {
+                    openPress[key] = inp.frame;
+                } else {
+                    auto it = openPress.find(key);
+                    if (it != openPress.end()) {
+                        out.clickIntervalsSec.push_back({ it->second / tps, (double)inp.frame / tps });
+                        openPress.erase(it);
+                    }
+                }
+            }
+        };
+        pairUp(result->p1Inputs, false);
+        pairUp(result->p2Inputs, true);
+        out.clickBarTps = tps;
+    } else if (bytes.size() >= 4 && bytes[0]=='B' && bytes[1]=='R' && bytes[2]=='R' && bytes[3]=='\0') {
+        auto* legacy = BRRMacro::deserialize(bytes);
+        if (!legacy) return;
+        if (legacy->inputs.empty()) { delete legacy; return; }
+
+        double tps = legacy->framerate > 0.0 ? legacy->framerate : 240.0;
+        out.levelName = legacy->levelName; // usually empty -- see TrainerMacroData's comment
+        out.levelId   = legacy->levelId;
+        std::unordered_map<int, uint32_t> openPress;
+        for (auto& inp : legacy->inputs) {
+            int key = (int)inp.actionType * 2 + (inp.isPlayer2() ? 1 : 0);
+            if (inp.isPressed()) {
+                openPress[key] = (uint32_t)inp.tick;
+            } else {
+                auto it = openPress.find(key);
+                if (it != openPress.end()) {
+                    out.clickIntervalsSec.push_back({ it->second / tps, (double)inp.tick / tps });
+                    openPress.erase(it);
+                }
+            }
+        }
+        out.clickBarTps = tps;
+        delete legacy;
+    } else {
+        return; // unsupported bytes -- the picker should already exclude these via incompatibleMacros
+    }
+
+    loadPathSamples(path, out.pathSamples);
+    out.loaded = !out.clickIntervalsSec.empty() || !out.pathSamples.empty();
+    log::info("[GucciBot] Trainer macro data: {} click interval(s), {} path sample(s), level='{}'",
+              out.clickIntervalsSec.size(), out.pathSamples.size(), out.levelName);
+}
+
+bool GucciEngine::loadTrainerMacro(const std::string& stem) {
+    auto dir = getReplayDir();
+    fs::path found;
+    for (auto ext : { ".brrr", ".toosii", ".ja", ".giddey", ".bam", ".sexyy" }) {
+        std::error_code ec;
+        auto candidate = dir / (stem + ext);
+        if (fs::exists(candidate, ec)) { found = candidate; break; }
+    }
+    if (found.empty()) return false;
+
+    loadTrainerMacroData(found, trainerMacro);
+    if (!trainerMacro.loaded) return false;
+    trainerMacroName = stem;
+    Mod::get()->setSavedValue("trainer_macro_name", stem);
+    log::info("[GucciBot] Trainer: loaded macro '{}'", stem);
+    return true;
 }
 
 void GucciReplaySystem::savePathSamplesNow() {

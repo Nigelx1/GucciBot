@@ -53,6 +53,12 @@ class $modify(GB7KeyHandler, CCKeyboardDispatcher) {
             else gb->jupiterClickBarMyReleases.push_back(gb->jupiterClickBarPosSec);
         }
 
+        // Same as above, for the general Trainer tab's own Click Trainer page.
+        if (!repeat && gb->trainerClickBarPageVisible && isJumpKey(key)) {
+            if (down) gb->trainerClickBarMyClicks.push_back(gb->trainerClickBarPosSec);
+            else gb->trainerClickBarMyReleases.push_back(gb->trainerClickBarPosSec);
+        }
+
         bool handled = false;
         static KeybindSet s_fallbackKeybinds;
         auto& kb = ui ? ui->keybinds : s_fallbackKeybinds;

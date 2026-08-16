@@ -3,6 +3,7 @@
 #include "trajectory.hpp"
 #include "hitboxes.hpp"
 #include "jupiterghost.hpp"
+#include "trainerghost.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/modify/PlayLayer.hpp>
@@ -393,6 +394,18 @@ class $modify(GB7PlayLayer, PlayLayer) {
             gbju::notifyJupiterAttemptEnded();
         }
 
+        // Trainer tab: same tracker, scoped to whichever macro's loaded there.
+        if (obj != m_anticheatSpike && !gb->isPlaying() && gbtr::isTrainerLevel(this)) {
+            gb->trainerAttemptCount++;
+            float xp = player ? player->m_position.x : -1.f;
+            if (m_levelLength > 0.f && xp >= 0.f) {
+                float pct = std::clamp(xp / m_levelLength * 100.f, 0.f, 100.f);
+                gb->trainerDeathPcts.push_back(pct);
+                if (pct > gb->trainerSessionBestPct) gb->trainerSessionBestPct = pct;
+            }
+            gbtr::notifyTrainerAttemptEnded();
+        }
+
                 if (gb->hackNoSpikeFlash && obj != m_anticheatSpike) {
             if (auto* fl = this->getChildByID("flash"))
                 fl->setVisible(false);
@@ -425,6 +438,10 @@ class $modify(GB7PlayLayer, PlayLayer) {
         if (!gb->isPlaying() && gbju::isJupiterLevel(this)) {
             gb->jupiterSessionBestPct = 100.f;
             gbju::notifyJupiterAttemptEnded();
+        }
+        if (!gb->isPlaying() && gbtr::isTrainerLevel(this)) {
+            gb->trainerSessionBestPct = 100.f;
+            gbtr::notifyTrainerAttemptEnded();
         }
                         if (!gb->autosaveAtLevelEnd) return;
         if (!gb->isRecording() || gb->replay.m_actionAtom.empty()) return;

@@ -5,6 +5,7 @@
 #include "calibration.hpp"
 #include "bigbrrr.hpp"
 #include "jupiterghost.hpp"
+#include "trainerghost.hpp"
 
 #include "renderer.hpp"
 #include "render/renderer.hpp"
@@ -12,6 +13,8 @@
 #include <Geode/Bindings.hpp>
 #include <Geode/modify/LoadingLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
+#include <Geode/utils/file.hpp>
+#include <Geode/utils/Task.hpp>
 #include <filesystem>
 #include <cmath>
 #include <algorithm>
@@ -141,18 +144,18 @@ static std::string base64Decode(std::string const& in){
 // ASCII Unit Separator (0x1F) between the two blobs since it'll never
 // legitimately appear in either (segments already escape their own
 // delimiters, notes are free text but 0x1F isn't typeable in the InputText).
-static std::string exportJupiterCode(GucciEngine* engine){
-    std::string blob=engine->jupiterSegmentsRaw+"\x1F"+engine->jupiterNotes;
+static std::string exportSegmentsCode(std::string const& segmentsRaw,std::string const& notes){
+    std::string blob=segmentsRaw+"\x1F"+notes;
     return "JMF1:"+base64Encode(blob);
 }
-static bool importJupiterCode(GucciEngine* engine,std::string const& code,std::string& err){
+static bool importSegmentsCode(std::string const& code,std::string& outSegmentsRaw,std::string& outNotes,std::string& err){
     static const std::string kPrefix="JMF1:";
-    if(code.compare(0,kPrefix.size(),kPrefix)!=0){err="Not a valid JMF segment code.";return false;}
+    if(code.compare(0,kPrefix.size(),kPrefix)!=0){err="Not a valid segment code.";return false;}
     std::string blob=base64Decode(code.substr(kPrefix.size()));
     size_t sep=blob.find('\x1F');
     if(sep==std::string::npos){err="Corrupted code.";return false;}
-    engine->jupiterSegmentsRaw=blob.substr(0,sep);
-    engine->jupiterNotes=blob.substr(sep+1);
+    outSegmentsRaw=blob.substr(0,sep);
+    outNotes=blob.substr(sep+1);
     return true;
 }
 
@@ -163,20 +166,23 @@ static bool importJupiterCode(GucciEngine* engine,std::string const& code,std::s
 // "a lot of clicks happened around here in time" into "here's roughly where
 // that was in the level". Skips anything within 50 units of an existing
 // segment so repeated presses don't spam duplicates.
-static std::vector<JupiterSegment> suggestJupiterSegments(GucciEngine* engine){
+static std::vector<JupiterSegment> suggestSegmentsFromClickDensity(
+    std::vector<std::pair<double,double>> const& clickIntervalsSec,
+    std::vector<MacroPathSample> const& pathSamples,
+    double clickBarTps,
+    std::string const& existingSegmentsRaw){
     std::vector<JupiterSegment> out;
-    auto& jup=engine->jupiterMacro;
-    if(jup.clickIntervalsSec.empty()||jup.pathSamples.empty())return out;
-    double tps=jup.clickBarTps>0.0?jup.clickBarTps:240.0;
+    if(clickIntervalsSec.empty()||pathSamples.empty())return out;
+    double tps=clickBarTps>0.0?clickBarTps:240.0;
 
     double maxT=0.0;
-    for(auto const& iv:jup.clickIntervalsSec)maxT=std::max(maxT,iv.second);
+    for(auto const& iv:clickIntervalsSec)maxT=std::max(maxT,iv.second);
     if(maxT<=0.0)return out;
 
     const double bucketSec=0.5;
     int nBuckets=(int)(maxT/bucketSec)+1;
     std::vector<int> counts(nBuckets,0);
-    for(auto const& iv:jup.clickIntervalsSec){
+    for(auto const& iv:clickIntervalsSec){
         int b=std::clamp((int)(iv.first/bucketSec),0,nBuckets-1);
         counts[b]++;
     }
@@ -191,12 +197,12 @@ static std::vector<JupiterSegment> suggestJupiterSegments(GucciEngine* engine){
     std::sort(cands.begin(),cands.end(),[](Cand const&a,Cand const&b){return a.count>b.count;});
     if(cands.size()>5)cands.resize(5);
 
-    auto existing=parseJupiterSegments(engine->jupiterSegmentsRaw);
+    auto existing=parseJupiterSegments(existingSegmentsRaw);
     for(auto const& c:cands){
         double midSec=(c.bucket+0.5)*bucketSec;
         uint32_t frame=(uint32_t)(midSec*tps);
-        if(frame>=jup.pathSamples.size())continue;
-        float x=jup.pathSamples[frame].p1x;
+        if(frame>=pathSamples.size())continue;
+        float x=pathSamples[frame].p1x;
         bool dup=false;
         for(auto const& s:existing)if(std::fabs(s.x-x)<50.f){dup=true;break;}
         for(auto const& s:out)if(std::fabs(s.x-x)<50.f){dup=true;break;}
@@ -894,8 +900,8 @@ void MenuInterface::drawTabBar(){
         ImDrawList* dl=ImGui::GetWindowDrawList();
     ImVec2 pos=ImGui::GetCursorScreenPos();
     float width=ImGui::GetContentRegionAvail().x;
-        const char* names[]={"Macro","Render","Clicks","Autoclicker","Hacks","Indicators","JMF","HUD","Settings","Credits"};
-    const int N=10;
+        const char* names[]={"Macro","Render","Clicks","Autoclicker","Hacks","Indicators","JMF","HUD","Settings","Credits","Trainer"};
+    const int N=11;
     float tabW=width/N,tabH=34.f;
     float dt=ImGui::GetIO().DeltaTime;
     if(tabIndicatorX<0)tabIndicatorX=pos.x+activeTab*tabW;
@@ -1029,7 +1035,8 @@ void MenuInterface::drawTabContent(){
         case 6:drawJupiterTab();break;
         case 7:drawHudTab();break;
         case 8:drawSettingsTab();break;
-        case 9:drawCreditsTab();break;}
+        case 9:drawCreditsTab();break;
+        case 10:drawTrainerTab();break;}
     if(fontBody)ImGui::PopFont();
     ImGui::PopStyleVar();}
 
@@ -1194,9 +1201,9 @@ void MenuInterface::drawMegaHackWindow(){
         dl->AddText(ImVec2(wp.x+16,wp.y+12),theme.getAccentU32(0.92f),"GB");
         if(fontHeading)ImGui::PopFont();
     }
-        const char* names[]={"Macro","Render","Clicks","Autoclicker","Hacks","Indicators","JMF","HUD","Settings","Credits"};
+        const char* names[]={"Macro","Render","Clicks","Autoclicker","Hacks","Indicators","JMF","HUD","Settings","Credits","Trainer"};
     float rowH=34.f,railTop=headH+10.f;
-    for(int i=0;i<10;i++){
+    for(int i=0;i<11;i++){
         ImVec2 rMin(wp.x,wp.y+railTop+i*rowH),rMax(wp.x+railW,rMin.y+rowH);
         char rid[24];snprintf(rid,sizeof(rid),"##mhTab%d",i);
         ImGui::SetCursorScreenPos(rMin);
@@ -3348,7 +3355,9 @@ void MenuInterface::drawJupiterTab(){
 
     if(!engine->jupiterMacro.clickIntervalsSec.empty()&&!engine->jupiterMacro.pathSamples.empty()){
         if(Widgets::StyledButton("Suggest Segments (from click density)",ImVec2(-1,26),theme,anim)){
-            auto suggestions=suggestJupiterSegments(engine);
+            auto suggestions=suggestSegmentsFromClickDensity(
+                engine->jupiterMacro.clickIntervalsSec,engine->jupiterMacro.pathSamples,
+                engine->jupiterMacro.clickBarTps,engine->jupiterSegmentsRaw);
             if(!suggestions.empty()){
                 auto segs=parseJupiterSegments(engine->jupiterSegmentsRaw);
                 for(auto& s:suggestions)segs.push_back(s);
@@ -3469,7 +3478,7 @@ void MenuInterface::drawJupiterTab(){
         static char importBuf[512]="";
         static std::string importErr;
         if(Widgets::StyledButton("Copy Export Code",ImVec2(-1,26),theme,anim)){
-            ImGui::SetClipboardText(exportJupiterCode(engine).c_str());
+            ImGui::SetClipboardText(exportSegmentsCode(engine->jupiterSegmentsRaw,engine->jupiterNotes).c_str());
             Notification::create("Copied JMF code to clipboard",NotificationIcon::Success)->show();
         }
         ImGui::Dummy(ImVec2(0,4));
@@ -3477,7 +3486,7 @@ void MenuInterface::drawJupiterTab(){
         ImGui::InputTextWithHint("##importCode","paste JMF code here",importBuf,sizeof(importBuf));
         ImGui::SameLine();
         if(Widgets::StyledButton("Import",ImVec2(80,0),theme,anim)){
-            if(importJupiterCode(engine,importBuf,importErr)){
+            if(importSegmentsCode(importBuf,engine->jupiterSegmentsRaw,engine->jupiterNotes,importErr)){
                 mod->setSavedValue("jupiter_segments",engine->jupiterSegmentsRaw);
                 mod->setSavedValue("jupiter_notes",engine->jupiterNotes);
                 jupiterNotesInit=false; // force the Notes textbox below to re-sync from the freshly-imported value
@@ -3508,6 +3517,596 @@ void MenuInterface::drawJupiterTab(){
 
     ImGui::EndChild();
     ImGui::PopStyleColor();
+}
+
+// General Trainer tab's click bar -- structural duplicate of
+// drawJupiterClickBar, reading trainer* fields instead of jupiter* ones. See
+// trainerghost.hpp for why the ghost/music side of this feature is
+// duplicated rather than shared; same reasoning applies here: this is a full
+// interactive widget (mouse-hover rect, drag-skim) reading ~8 fields by
+// name, and parameterizing it would mean changing an already-shipped,
+// working function's signature for no real benefit over a clean copy.
+static void drawTrainerClickBar(ThemeEngine& theme,AnimationState& anim,GucciEngine* engine,float windowSeconds,bool externalWidgetJustReleased,float h=46.f){
+    auto& trn=engine->trainerMacro;
+    if(trn.clickIntervalsSec.empty()){
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::TextWrapped("No click data yet.");
+        ImGui::PopStyleColor();
+        return;
+    }
+
+    double maxT=0.0;
+    for(auto const& iv:trn.clickIntervalsSec)maxT=std::max(maxT,iv.second);
+    double loopLen=std::max(maxT,1.0);
+
+    double realNow=ImGui::GetTime();
+    if(!engine->trainerClickBarPaused){
+        double dt=realNow-engine->trainerClickBarLastRealTime;
+        if(dt>0.0&&dt<1.0){
+            double newPos=engine->trainerClickBarPosSec+dt;
+            if(newPos>=loopLen){
+                engine->trainerClickBarPosSec=0.0;
+                if(engine->trainerClickBarLoop){
+                    engine->trainerClickBarMyClicks.clear();
+                    engine->trainerClickBarMyReleases.clear();
+                } else {
+                    engine->trainerClickBarPaused=true;
+                }
+            } else {
+                engine->trainerClickBarPosSec=newPos;
+            }
+        }
+    }
+    engine->trainerClickBarLastRealTime=realNow;
+
+    gbtr::syncTrainerClickBarMusic(true,engine->trainerClickBarPaused,engine->trainerClickBarPosSec);
+
+    if(Widgets::StyledButton(engine->trainerClickBarPaused?"Resume":"Pause",ImVec2(80,24),theme,anim))
+        engine->trainerClickBarPaused=!engine->trainerClickBarPaused;
+    ImGui::SameLine();
+    if(Widgets::StyledButton("Reset",ImVec2(70,24),theme,anim)){
+        engine->trainerClickBarPosSec=0.0;
+        engine->trainerClickBarMyClicks.clear();
+        engine->trainerClickBarMyReleases.clear();
+    }
+    ImGui::SameLine();
+    if(Widgets::ToggleSwitch("Loop",&engine->trainerClickBarLoop,theme,anim))
+        Mod::get()->setSavedValue("trainer_clickbar_loop",engine->trainerClickBarLoop);
+    ImGui::SameLine();
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::Text("%.1fs / %.1fs",engine->trainerClickBarPosSec,loopLen);
+    ImGui::PopStyleColor();
+    ImGui::Dummy(ImVec2(0,6));
+
+    ImVec2 pos=ImGui::GetCursorScreenPos();
+    float w=ImGui::GetContentRegionAvail().x;
+    ImDrawList* dl=ImGui::GetWindowDrawList();
+
+    bool mouseOverBar=ImGui::IsMouseHoveringRect(pos,ImVec2(pos.x+w,pos.y+h));
+    bool blockMark=!mouseOverBar||externalWidgetJustReleased;
+    if(!blockMark&&ImGui::IsMouseClicked(ImGuiMouseButton_Left))engine->trainerClickBarMyClicks.push_back(engine->trainerClickBarPosSec);
+    if(!blockMark&&ImGui::IsMouseReleased(ImGuiMouseButton_Left))engine->trainerClickBarMyReleases.push_back(engine->trainerClickBarPosSec);
+
+    const ImU32 barCol=IM_COL32(137,126,94,255);
+    const ImU32 white=IM_COL32(255,255,255,255);
+    const ImU32 clickCol=theme.getAccentU32(1.f);
+
+    dl->AddRectFilled(pos,ImVec2(pos.x+w,pos.y+h),barCol,4.f);
+
+    float centerX=pos.x+w*0.5f;
+    float halfWindow=std::max(windowSeconds,0.2f)*0.5f;
+    float pxPerSec=(w*0.5f)/halfWindow;
+    double nowSec=engine->trainerClickBarPosSec;
+
+    for(auto const& iv:trn.clickIntervalsSec){
+        double relStart=iv.first-nowSec, relEnd=iv.second-nowSec;
+        if(relEnd<-halfWindow||relStart>halfWindow)continue;
+        float x0=centerX+(float)relStart*pxPerSec;
+        float x1=centerX+(float)relEnd*pxPerSec;
+        x0=std::max(x0,pos.x); x1=std::min(x1,pos.x+w);
+        if(x1>x0)dl->AddRectFilled(ImVec2(x0,pos.y+5),ImVec2(x1,pos.y+h-5),clickCol,2.f);
+    }
+
+    auto drawMyMark=[&](double t,bool isRelease){
+        double rel=t-nowSec;
+        if(rel<-halfWindow||rel>halfWindow)return;
+        float x=centerX+(float)rel*pxPerSec;
+        float yMid=pos.y+h*0.5f;
+        if(isRelease)dl->AddLine(ImVec2(x,pos.y+3),ImVec2(x,yMid),white,2.f);
+        else dl->AddLine(ImVec2(x,yMid),ImVec2(x,pos.y+h-3),white,2.f);
+    };
+    for(double t:engine->trainerClickBarMyClicks)drawMyMark(t,false);
+    for(double t:engine->trainerClickBarMyReleases)drawMyMark(t,true);
+
+    dl->AddLine(ImVec2(centerX,pos.y-4),ImVec2(centerX,pos.y+h+4),white,3.f);
+
+    ImGui::SetCursorScreenPos(pos);
+    ImGui::InvisibleButton("##trainerClickBarSkim",ImVec2(w,h));
+    if(ImGui::IsItemActive()&&ImGui::IsMouseDragging(ImGuiMouseButton_Left)){
+        engine->trainerClickBarPaused=true;
+        double posSec=engine->trainerClickBarPosSec-ImGui::GetIO().MouseDelta.x/pxPerSec;
+        posSec=std::clamp(posSec,0.0,loopLen);
+        engine->trainerClickBarPosSec=posSec;
+    }
+    ImGui::Dummy(ImVec2(0,4));
+}
+
+// Imported music for the Trainer tab: prompts a native file picker (first
+// use of geode::utils::file::pick in this codebase -- it's an async,
+// coroutine-based Task/Future API, unlike the synchronous openFolder used
+// elsewhere here) and copies whatever's picked to a fixed on-disk location
+// rather than referencing the original path live, so a later move/rename/
+// delete of the source file can't silently break playback. listen()'s
+// callback is documented as self-cleaning ("only be used in a global
+// context"), so this deliberately isn't a member of MenuInterface -- it
+// reaches into GucciEngine::get() itself instead of capturing `this`.
+static geode::Task<bool> importTrainerMusicTask(){
+    auto pickResult = co_await geode::utils::file::pick(
+        geode::utils::file::PickMode::OpenFile,
+        geode::utils::file::FilePickOptions{
+            std::nullopt,
+            { { "Audio Files", { "mp3" } } }
+        }
+    );
+    if (pickResult.isErr()) co_return false;
+    auto pathOpt = pickResult.unwrap();
+    if (!pathOpt.has_value()) co_return false; // cancelled
+
+    auto dest = Mod::get()->getSaveDir() / "trainer_music.mp3";
+    std::error_code ec;
+    std::filesystem::copy_file(*pathOpt, dest, std::filesystem::copy_options::overwrite_existing, ec);
+    co_return !ec;
+}
+static void importTrainerMusic(){
+    importTrainerMusicTask().listen([](bool* ok){
+        auto* gb = GucciEngine::get();
+        if (ok && *ok) {
+            gb->trainerMusicImported = true;
+            Mod::get()->setSavedValue("trainer_music_imported", true);
+            Notification::create("Music imported", NotificationIcon::Success)->show();
+        } else {
+            Notification::create("Import failed or cancelled", NotificationIcon::Warning)->show();
+        }
+    });
+}
+
+void MenuInterface::drawTrainerClickTrainerPage(){
+    auto* engine=GucciEngine::get();
+    auto* mod=Mod::get();
+    engine->trainerClickBarPageVisible=true;
+
+    // Same defensive clear as drawJupiterClickTrainerPage -- see its comment.
+    rebindTarget=nullptr;
+
+    if(Widgets::StyledButton("<- Back",ImVec2(90,28),theme,anim)){
+        trainerClickBarPageOpen=false;
+        gbtr::stopTrainerClickBarMusic();
+        engine->trainerClickBarMyClicks.clear();
+        engine->trainerClickBarMyReleases.clear();
+    }
+    ImGui::Dummy(ImVec2(0,10));
+
+    if(fontHeading)ImGui::PushFont(fontHeading);
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.getAccent());
+    ImGui::TextWrapped("Click Trainer");
+    ImGui::PopStyleColor();
+    if(fontHeading)ImGui::PopFont();
+    ImGui::Dummy(ImVec2(0,4));
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::TextWrapped("Left edge of a block crossing the white line means click, right edge means release.");
+    ImGui::PopStyleColor();
+    ImGui::Dummy(ImVec2(0,12));
+
+    if(Widgets::ToggleSwitch("Show Click Bar",&engine->trainerClickBarEnabled,theme,anim))
+        mod->setSavedValue("trainer_clickbar_enabled",engine->trainerClickBarEnabled);
+    if(engine->trainerClickBarEnabled){
+        if(Widgets::StyledSliderFloat("Window (sec)",&engine->trainerClickBarWindow,0.3f,4.f,theme))
+            mod->setSavedValue("trainer_clickbar_window",(double)engine->trainerClickBarWindow);
+        bool sliderJustReleased=ImGui::IsItemDeactivated();
+        ImGui::Dummy(ImVec2(0,14));
+        drawTrainerClickBar(theme,anim,engine,engine->trainerClickBarWindow,sliderJustReleased,90.f);
+    }
+
+    ImGui::Dummy(ImVec2(0,18));
+    Widgets::SectionHeader("Click Deviation",theme);
+    {
+        auto* pl=PlayLayer::get();
+        if(engine->trainerMacro.clickIntervalsSec.empty()){
+            ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+            ImGui::TextWrapped("No click data yet.");
+            ImGui::PopStyleColor();
+        } else if(!pl||!pl->m_player1||engine->isPlaying()){
+            ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+            ImGui::TextWrapped("Play the level yourself (not bot playback) to compare your clicks against the macro's.");
+            ImGui::PopStyleColor();
+        } else {
+            bool holding=(bool)pl->m_player1->m_holdingButtons[1];
+            if(holding&&!engine->trainerDeviationHolding){
+                double tps=engine->trainerMacro.clickBarTps>0.0?engine->trainerMacro.clickBarTps:240.0;
+                double nowSec=(double)engine->updater.getFrame()/tps;
+                double bestDelta=1e9;
+                for(auto const& iv:engine->trainerMacro.clickIntervalsSec){
+                    double d=iv.first-nowSec;
+                    if(std::fabs(d)<std::fabs(bestDelta))bestDelta=d;
+                }
+                if(bestDelta<1e8){
+                    engine->trainerLastDeviationFrames=-(int)std::lround(bestDelta*tps);
+                    engine->trainerHasDeviationReading=true;
+                }
+            }
+            engine->trainerDeviationHolding=holding;
+
+            if(!engine->trainerHasDeviationReading){
+                ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+                ImGui::TextWrapped("Waiting for your first click...");
+                ImGui::PopStyleColor();
+            } else {
+                int f=engine->trainerLastDeviationFrames;
+                const char* verdict=f==0?"on time":(f<0?"early":"late");
+                ImVec4 col=f==0?ImVec4(0.3f,0.9f,0.4f,1.f):(std::abs(f)<=3?ImVec4(0.95f,0.85f,0.3f,1.f):ImVec4(0.95f,0.35f,0.35f,1.f));
+                ImGui::PushStyleColor(ImGuiCol_Text,col);
+                ImGui::Text("Last click: %d frame%s %s",std::abs(f),std::abs(f)==1?"":"s",verdict);
+                ImGui::PopStyleColor();
+            }
+        }
+    }
+
+    ImGui::Dummy(ImVec2(0,18));
+    Widgets::SectionHeader("Music",theme);
+    if(Widgets::ToggleSwitch("Synced Music",&engine->trainerMusicEnabled,theme,anim))
+        mod->setSavedValue("trainer_music_enabled",engine->trainerMusicEnabled);
+    if(Widgets::StyledButton(engine->trainerMusicImported?"Re-Import Music":"Import Music",ImVec2(160,26),theme,anim))
+        importTrainerMusic();
+    if(engine->trainerMusicImported){
+        ImGui::SameLine();
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::TextUnformatted("Music imported.");
+        ImGui::PopStyleColor();
+    }
+    if(Widgets::StyledSliderFloat("Offset (sec)",&engine->trainerMusicOffsetSec,-3.f,3.f,theme))
+        mod->setSavedValue("trainer_music_offset_sec",(double)engine->trainerMusicOffsetSec);
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::TextWrapped("Plays while on the macro's level (or any level, if it has no recorded level name), seeked to match your current frame plus the offset above. Positive offset delays the music; negative brings it earlier.");
+    ImGui::PopStyleColor();
+
+    ImGui::Dummy(ImVec2(0,18));
+    Widgets::SectionHeader("Ghosts & Scrub Preview",theme);
+    if(Widgets::ToggleSwitch("Macro Ghost",&engine->trainerGhostEnabled,theme,anim))
+        mod->setSavedValue("trainer_ghost_enabled",engine->trainerGhostEnabled);
+    if(Widgets::ToggleSwitch("Your Best-Attempt Ghost",&engine->trainerBestGhostEnabled,theme,anim))
+        mod->setSavedValue("trainer_bestghost_enabled",engine->trainerBestGhostEnabled);
+    ImGui::Dummy(ImVec2(0,4));
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::TextWrapped("Best-attempt ghost is session-only, not saved to disk, and only tracks real manual attempts, not bot playback.");
+    ImGui::PopStyleColor();
+    ImGui::Dummy(ImVec2(0,10));
+
+    Widgets::ToggleSwitch("Scrub Preview",&engine->trainerScrubActive,theme,anim);
+    if(engine->trainerScrubActive){
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::TextWrapped("Ghosts freeze at this position instead of following live playback.");
+        ImGui::PopStyleColor();
+        Widgets::StyledSliderFloat("Scrub Percent",&engine->trainerScrubPercent,0.f,100.f,theme);
+    }
+}
+
+// General-purpose counterpart to drawJupiterTab: same toolset, but scoped to
+// whichever of the user's own macros they've picked into trainerMacro
+// instead of one bundled level. Deliberately plain full-width layout (no
+// ##jmfConstrain-style narrow child, no wave-ribbon backdrop, no theme
+// reskin) -- those only exist for JMF because activeTab==6 triggers a
+// whole-window reskin in drawMainWindow/drawMegaHackWindow; a new tab at a
+// new index doesn't trigger any of that, so this can look like every other
+// ordinary tab.
+void MenuInterface::drawTrainerTab(){
+    if(trainerClickBarPageOpen){drawTrainerClickTrainerPage();return;}
+
+    auto* engine=GucciEngine::get();
+    auto* mod=Mod::get();
+    static char trainerNotesBuf[1024];
+    static bool trainerNotesInit=false;
+
+    if(fontHeading)ImGui::PushFont(fontHeading);
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.getAccent());
+    ImGui::TextWrapped("Trainer");
+    ImGui::PopStyleColor();
+    if(fontHeading)ImGui::PopFont();
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::TextWrapped("Same toolset as the JMF tab -- Click Trainer, Ghosts, Segments, Stats, Music -- but for any of your own saved macros instead of one fixed level.");
+    ImGui::PopStyleColor();
+    ImGui::Dummy(ImVec2(0,8));
+
+    Widgets::SectionHeader("Macro",theme);
+    if(engine->trainerMacro.loaded){
+        ImGui::Text("Loaded: %s",engine->trainerMacroName.c_str());
+    } else {
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::TextWrapped("No macro loaded -- pick one below.");
+        ImGui::PopStyleColor();
+    }
+    static char trainerMacroFilter[64]="";
+    ImGui::SetNextItemWidth(-1);
+    ImGui::InputTextWithHint("##trainerMacroSearch","Search macros...",trainerMacroFilter,sizeof(trainerMacroFilter));
+    auto matchesTrainerFilter=[&](const std::string& nm)->bool{
+        if(trainerMacroFilter[0]==0)return true;
+        std::string a=nm,b=trainerMacroFilter;
+        std::transform(a.begin(),a.end(),a.begin(),::tolower);
+        std::transform(b.begin(),b.end(),b.begin(),::tolower);
+        return a.find(b)!=std::string::npos;
+    };
+    refreshReplayListIfNeeded(false);
+    float trainerListH=std::max(80.f,std::min(160.f,(float)engine->storedMacros.size()*24.f+16.f));
+    ImGui::BeginChild("##TrainerMacroList",ImVec2(-1,trainerListH),true);
+    auto trainerMacroCopy=engine->storedMacros;
+    if(trainerMacroCopy.empty()){
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::TextWrapped("No saved macros yet.");
+        ImGui::PopStyleColor();
+    }
+    for(const auto& mn:trainerMacroCopy){
+        if(!matchesTrainerFilter(mn))continue;
+        bool isSel=(engine->trainerMacroName==mn && engine->trainerMacro.loaded);
+        ImGui::PushID(mn.c_str());
+        if(ImGui::Selectable(mn.c_str(),isSel)){
+            if(engine->loadTrainerMacro(mn))
+                Notification::create("Loaded macro into Trainer",NotificationIcon::Success)->show();
+            else
+                Notification::create("Couldn't load that macro",NotificationIcon::Error)->show();
+        }
+        ImGui::PopID();
+    }
+    ImGui::EndChild();
+    if(!engine->incompatibleMacros.empty()){
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::TextWrapped("%zu macro(s) need converting first -- see the Macro tab's Saved Replays list.",engine->incompatibleMacros.size());
+        ImGui::PopStyleColor();
+    }
+    ImGui::Dummy(ImVec2(0,8));
+
+    auto* pl=PlayLayer::get();
+    std::string currentLevel = (pl&&pl->m_level) ? std::string(pl->m_level->m_levelName) : "";
+    bool levelKnown = !engine->trainerMacro.levelName.empty();
+    if(!engine->trainerMacro.loaded){
+        // nothing to show -- picker above already explains the state
+    } else if(!levelKnown){
+        Widgets::StatusBadge("ACTIVE (level unknown)",ImVec4(0.95f,0.75f,0.25f,1.f));
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::TextWrapped("This macro has no recorded level name (common for imported/converted macros), so Stats/Ghost/Music stay active on any level instead of just one.");
+        ImGui::PopStyleColor();
+    } else if(gbtr::isTrainerLevel(pl)){
+        Widgets::StatusBadge("ACTIVE",ImVec4(0.30f,0.88f,0.92f,1.f));
+    } else {
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::TextWrapped(currentLevel.empty()
+            ? ("No level loaded. Enter \""+engine->trainerMacro.levelName+"\" to activate Stats/Ghost/Music for this macro.").c_str()
+            : ("Currently on \""+currentLevel+"\" -- this macro is for \""+engine->trainerMacro.levelName+"\", but everything below still works on whatever's loaded.").c_str());
+        ImGui::PopStyleColor();
+    }
+    ImGui::Dummy(ImVec2(0,8));
+
+    Widgets::SectionHeader("Stats",theme);
+    ImGui::Text("Attempts this session: %d",engine->trainerAttemptCount);
+    ImGui::Text("Best this session: %.1f%%",engine->trainerSessionBestPct);
+    if(!engine->trainerDeathPcts.empty()){
+        ImGui::Dummy(ImVec2(0,4));
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::Text("Death heatmap (%zu death%s logged this session)",
+            engine->trainerDeathPcts.size(),engine->trainerDeathPcts.size()==1?"":"s");
+        ImGui::PopStyleColor();
+        ImVec2 hmPos=ImGui::GetCursorScreenPos();
+        float hmW=ImGui::GetContentRegionAvail().x,hmH=18.f;
+        ImDrawList* hmDl=ImGui::GetWindowDrawList();
+        hmDl->AddRectFilled(hmPos,ImVec2(hmPos.x+hmW,hmPos.y+hmH),IM_COL32(30,26,60,255),3.f);
+        const int bins=40;
+        int counts[bins]={0};
+        int maxCount=1;
+        for(float p:engine->trainerDeathPcts){
+            int b=std::clamp((int)(p/100.f*bins),0,bins-1);
+            counts[b]++;
+            maxCount=std::max(maxCount,counts[b]);
+        }
+        for(int b=0;b<bins;b++){
+            if(counts[b]==0)continue;
+            float bx0=hmPos.x+hmW*((float)b/bins);
+            float bx1=hmPos.x+hmW*((float)(b+1)/bins);
+            float t=(float)counts[b]/(float)maxCount;
+            ImU32 col=theme.getAccentU32(0.35f+0.65f*t);
+            hmDl->AddRectFilled(ImVec2(bx0,hmPos.y+hmH*(1.f-t)),ImVec2(bx1,hmPos.y+hmH),col);
+        }
+        ImGui::Dummy(ImVec2(hmW,hmH+4));
+    }
+
+    ImGui::Dummy(ImVec2(0,8));
+    Widgets::SectionHeader("Click Trainer",theme);
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::TextWrapped("Click/hold windows scrolling toward a fixed line at constant real-time speed.");
+    ImGui::PopStyleColor();
+    if(Widgets::StyledButton("Open Click Trainer ->",ImVec2(-1,32),theme,anim)){
+        trainerClickBarPageOpen=true;
+        engine->trainerClickBarPaused=true;
+        engine->trainerClickBarPosSec=0.0;
+        engine->trainerClickBarMyClicks.clear();
+        engine->trainerClickBarMyReleases.clear();
+    }
+
+    ImGui::Dummy(ImVec2(0,8));
+    Widgets::SectionHeader("Segments",theme);
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::TextWrapped("Personal landmarks -- name the hard parts. Doesn't jump you there, just labels a position for your own reference.");
+    ImGui::PopStyleColor();
+
+    static char trainerSegLabelBuf[64]="";
+    ImGui::SetNextItemWidth(-90);
+    ImGui::InputTextWithHint("##trainerSegLabel","segment name",trainerSegLabelBuf,sizeof(trainerSegLabelBuf));
+    ImGui::SameLine();
+    bool canMarkT = pl && pl->m_player1 && trainerSegLabelBuf[0];
+    if(!canMarkT)ImGui::PushStyleVar(ImGuiStyleVar_Alpha,0.4f);
+    bool markClickedT=Widgets::StyledButton("Mark Here",ImVec2(84,0),theme,anim);
+    if(!canMarkT)ImGui::PopStyleVar();
+    if(markClickedT&&canMarkT){
+        float x=pl->m_player1->m_position.x;
+        if(!engine->trainerSegmentsRaw.empty())engine->trainerSegmentsRaw+=";";
+        engine->trainerSegmentsRaw += std::string(trainerSegLabelBuf)+","+std::to_string(x)+",";
+        mod->setSavedValue("trainer_segments",engine->trainerSegmentsRaw);
+        trainerSegLabelBuf[0]=0;
+    }
+
+    if(!engine->trainerMacro.clickIntervalsSec.empty()&&!engine->trainerMacro.pathSamples.empty()){
+        if(Widgets::StyledButton("Suggest Segments (from click density)",ImVec2(-1,26),theme,anim)){
+            auto suggestions=suggestSegmentsFromClickDensity(
+                engine->trainerMacro.clickIntervalsSec,engine->trainerMacro.pathSamples,
+                engine->trainerMacro.clickBarTps,engine->trainerSegmentsRaw);
+            if(!suggestions.empty()){
+                auto segs=parseJupiterSegments(engine->trainerSegmentsRaw);
+                for(auto& s:suggestions)segs.push_back(s);
+                engine->trainerSegmentsRaw=serializeJupiterSegments(segs);
+                mod->setSavedValue("trainer_segments",engine->trainerSegmentsRaw);
+            }
+        }
+    }
+
+    {
+        static int noteEditIdxT=-1;
+        static char noteBufT[128]="";
+        auto segs=parseJupiterSegments(engine->trainerSegmentsRaw);
+        int removeIdx=-1;
+        bool dirty=false;
+        for(int i=0;i<(int)segs.size();i++){
+            ImGui::PushID(i+5000);
+            ImGui::Text("%s",segs[i].label.c_str());
+            ImGui::SameLine();
+            ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+            ImGui::Text("(x=%.0f)",segs[i].x);
+            ImGui::PopStyleColor();
+            ImGui::SameLine(ImGui::GetContentRegionAvail().x-44);
+            if(ImGui::SmallButton(noteEditIdxT==i?"note v":"note >")){
+                if(noteEditIdxT==i)noteEditIdxT=-1;
+                else{noteEditIdxT=i;snprintf(noteBufT,sizeof(noteBufT),"%s",segs[i].note.c_str());}
+            }
+            ImGui::SameLine();
+            if(ImGui::SmallButton("x"))removeIdx=i;
+            if(noteEditIdxT==i){
+                ImGui::SetNextItemWidth(-1);
+                if(ImGui::InputTextWithHint("##trainerSegNote","note for this segment",noteBufT,sizeof(noteBufT))){
+                    segs[i].note=noteBufT;
+                    dirty=true;
+                }
+            } else if(!segs[i].note.empty()){
+                ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+                ImGui::TextWrapped("  %s",segs[i].note.c_str());
+                ImGui::PopStyleColor();
+            }
+            ImGui::PopID();
+        }
+        if(removeIdx>=0){
+            segs.erase(segs.begin()+removeIdx);
+            noteEditIdxT=-1;
+            dirty=true;
+        }
+        if(dirty){
+            engine->trainerSegmentsRaw=serializeJupiterSegments(segs);
+            mod->setSavedValue("trainer_segments",engine->trainerSegmentsRaw);
+        }
+    }
+
+    ImGui::Dummy(ImVec2(0,10));
+    Widgets::SectionHeader("Segment Looping",theme);
+    {
+        auto segs=parseJupiterSegments(engine->trainerSegmentsRaw);
+        if(segs.size()<2){
+            ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+            ImGui::TextWrapped("Mark at least two segments to loop between them.");
+            ImGui::PopStyleColor();
+        } else {
+            if(engine->trainerLoopStartIdx>=(int)segs.size())engine->trainerLoopStartIdx=-1;
+            if(engine->trainerLoopEndIdx>=(int)segs.size())engine->trainerLoopEndIdx=-1;
+            auto segCombo=[&](const char* id,int* idx){
+                std::string preview=(*idx>=0&&*idx<(int)segs.size())?segs[*idx].label:"(none)";
+                ImGui::SetNextItemWidth((ImGui::GetContentRegionAvail().x-8)*0.5f);
+                if(ImGui::BeginCombo(id,preview.c_str())){
+                    for(int i=0;i<(int)segs.size();i++)
+                        if(ImGui::Selectable(segs[i].label.c_str(),*idx==i))*idx=i;
+                    ImGui::EndCombo();
+                }
+            };
+            segCombo("##trainerLoopStart",&engine->trainerLoopStartIdx);
+            ImGui::SameLine();
+            segCombo("##trainerLoopEnd",&engine->trainerLoopEndIdx);
+            bool validRange=engine->trainerLoopStartIdx>=0&&engine->trainerLoopEndIdx>=0&&
+                segs[engine->trainerLoopStartIdx].x<segs[engine->trainerLoopEndIdx].x;
+            if(!validRange)ImGui::PushStyleVar(ImGuiStyleVar_Alpha,0.4f);
+            if(Widgets::ToggleSwitch("Auto-Loop",&engine->trainerLoopEnabled,theme,anim)&&!validRange)
+                engine->trainerLoopEnabled=false;
+            if(!validRange)ImGui::PopStyleVar();
+            ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+            ImGui::TextWrapped(!validRange
+                ? "Pick a start and end segment (start must come before end) to arm the loop."
+                : "The first time you reach the start segment, a real practice checkpoint gets placed there (pl->markCheckpoint() -- the same call your own checkpoint keybind makes, not a reconstructed one) -- dying anywhere after that respawns you there automatically. Only places one per enable.");
+            ImGui::PopStyleColor();
+
+            if(engine->trainerLoopEnabled&&validRange&&pl&&pl->m_player1){
+                static bool loopArmedT=true;
+                static bool checkpointPlacedT=false;
+                static int lastStartIdxT=-1;
+                if(lastStartIdxT!=engine->trainerLoopStartIdx){lastStartIdxT=engine->trainerLoopStartIdx;checkpointPlacedT=false;}
+
+                float startX=segs[engine->trainerLoopStartIdx].x;
+                float endX=segs[engine->trainerLoopEndIdx].x;
+                float px=pl->m_player1->m_position.x;
+                if(px<startX+5.f){
+                    loopArmedT=true;
+                } else {
+                    if(!checkpointPlacedT){
+                        checkpointPlacedT=true;
+                        pl->markCheckpoint();
+                        Notification::create("Loop checkpoint placed",NotificationIcon::Success)->show();
+                    }
+                    if(loopArmedT&&px>=endX){
+                        loopArmedT=false;
+                        Notification::create("Loop end reached",NotificationIcon::Success)->show();
+                    }
+                }
+            }
+        }
+    }
+
+    ImGui::Dummy(ImVec2(0,10));
+    Widgets::SectionHeader("Share",theme);
+    {
+        static char importBufT[512]="";
+        static std::string importErrT;
+        if(Widgets::StyledButton("Copy Export Code",ImVec2(-1,26),theme,anim)){
+            ImGui::SetClipboardText(exportSegmentsCode(engine->trainerSegmentsRaw,engine->trainerNotes).c_str());
+            Notification::create("Copied Trainer code to clipboard",NotificationIcon::Success)->show();
+        }
+        ImGui::Dummy(ImVec2(0,4));
+        ImGui::SetNextItemWidth(-90);
+        ImGui::InputTextWithHint("##trainerImportCode","paste Trainer code here",importBufT,sizeof(importBufT));
+        ImGui::SameLine();
+        if(Widgets::StyledButton("Import",ImVec2(80,0),theme,anim)){
+            if(importSegmentsCode(importBufT,engine->trainerSegmentsRaw,engine->trainerNotes,importErrT)){
+                mod->setSavedValue("trainer_segments",engine->trainerSegmentsRaw);
+                mod->setSavedValue("trainer_notes",engine->trainerNotes);
+                trainerNotesInit=false;
+                importBufT[0]=0;
+                Notification::create("Imported segments + notes",NotificationIcon::Success)->show();
+            } else {
+                Notification::create(importErrT.c_str(),NotificationIcon::Error)->show();
+            }
+        }
+    }
+
+    ImGui::Dummy(ImVec2(0,8));
+    Widgets::SectionHeader("Notes",theme);
+    if(!trainerNotesInit){
+        snprintf(trainerNotesBuf,sizeof(trainerNotesBuf),"%s",engine->trainerNotes.c_str());
+        trainerNotesInit=true;
+    }
+    ImGui::SetNextItemWidth(-1);
+    if(ImGui::InputTextMultiline("##trainerNotes",trainerNotesBuf,sizeof(trainerNotesBuf),ImVec2(-1,100))){
+        engine->trainerNotes=trainerNotesBuf;
+        mod->setSavedValue("trainer_notes",engine->trainerNotes);
+    }
 }
 
 void MenuInterface::drawCreditsTab(){
@@ -3682,6 +4281,18 @@ void MenuInterface::saveSettings(){
     mod->setSavedValue("jupiter_ghost_enabled",eng->jupiterGhostEnabled);
     mod->setSavedValue("jupiter_bestghost_enabled",eng->jupiterBestGhostEnabled);
     mod->setSavedValue("jupiter_music_enabled",eng->jupiterMusicEnabled);
+    mod->setSavedValue("jupiter_music_offset_sec",(double)eng->jupiterMusicOffsetSec);
+    mod->setSavedValue("trainer_macro_name",eng->trainerMacroName);
+    mod->setSavedValue("trainer_notes",eng->trainerNotes);
+    mod->setSavedValue("trainer_segments",eng->trainerSegmentsRaw);
+    mod->setSavedValue("trainer_clickbar_enabled",eng->trainerClickBarEnabled);
+    mod->setSavedValue("trainer_clickbar_window",(double)eng->trainerClickBarWindow);
+    mod->setSavedValue("trainer_clickbar_loop",eng->trainerClickBarLoop);
+    mod->setSavedValue("trainer_ghost_enabled",eng->trainerGhostEnabled);
+    mod->setSavedValue("trainer_bestghost_enabled",eng->trainerBestGhostEnabled);
+    mod->setSavedValue("trainer_music_enabled",eng->trainerMusicEnabled);
+    mod->setSavedValue("trainer_music_offset_sec",(double)eng->trainerMusicOffsetSec);
+    mod->setSavedValue("trainer_music_imported",eng->trainerMusicImported);
     mod->setSavedValue("hack_noclip",eng->noclipEnabled);
     mod->setSavedValue("hack_noclip_flash",eng->noclipDeathFlash);
     mod->setSavedValue("hack_noclip_color_r",eng->noclipDeathColorR);
@@ -3870,6 +4481,26 @@ void MenuInterface::loadSettings(){
     eng->jupiterGhostEnabled=mod->getSavedValue<bool>("jupiter_ghost_enabled",true);
     eng->jupiterBestGhostEnabled=mod->getSavedValue<bool>("jupiter_bestghost_enabled",false);
     eng->jupiterMusicEnabled=mod->getSavedValue<bool>("jupiter_music_enabled",true);
+    eng->jupiterMusicOffsetSec=mod->getSavedValue<float>("jupiter_music_offset_sec",0.f);
+    eng->trainerNotes=mod->getSavedValue<std::string>("trainer_notes","");
+    eng->trainerSegmentsRaw=mod->getSavedValue<std::string>("trainer_segments","");
+    eng->trainerClickBarEnabled=mod->getSavedValue<bool>("trainer_clickbar_enabled",true);
+    eng->trainerClickBarWindow=mod->getSavedValue<float>("trainer_clickbar_window",2.f);
+    eng->trainerClickBarLoop=mod->getSavedValue<bool>("trainer_clickbar_loop",false);
+    eng->trainerGhostEnabled=mod->getSavedValue<bool>("trainer_ghost_enabled",true);
+    eng->trainerBestGhostEnabled=mod->getSavedValue<bool>("trainer_bestghost_enabled",false);
+    eng->trainerMusicEnabled=mod->getSavedValue<bool>("trainer_music_enabled",false);
+    eng->trainerMusicOffsetSec=mod->getSavedValue<float>("trainer_music_offset_sec",0.f);
+    eng->trainerMusicImported=mod->getSavedValue<bool>("trainer_music_imported",false);
+    // Reconnect the remembered pick, if any -- no-op/false if the file's gone
+    // since. Done here (general settings load), not GucciEngine::initialize(),
+    // since that's reserved for the one-time bundled-Jupiter bootstrap and
+    // engine-wide settings -- the most fragile part of this codebase per
+    // CLAUDE.md, deliberately left untouched by this feature.
+    {
+        std::string savedTrainerMacro=mod->getSavedValue<std::string>("trainer_macro_name","");
+        if(!savedTrainerMacro.empty())eng->loadTrainerMacro(savedTrainerMacro);
+    }
     eng->noclipEnabled=mod->getSavedValue<bool>("hack_noclip",false);
     eng->noclipDeathFlash=mod->getSavedValue<bool>("hack_noclip_flash",true);
     eng->noclipDeathColorR=mod->getSavedValue<float>("hack_noclip_color_r",1.f);
@@ -3994,6 +4625,7 @@ void MenuInterface::drawInterface(){
     // drawJupiterClickTrainerPage when it actually renders that frame, so
     // it can never go stale.
     engine->jupiterClickBarPageVisible=false;
+    engine->trainerClickBarPageVisible=false;
     anim.update(ImGui::GetIO().DeltaTime);
         if(!anim.closing&&!anim.opening&&anim.openProgress<=0.f&&shown){
         shown=false;

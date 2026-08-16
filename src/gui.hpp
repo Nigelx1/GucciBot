@@ -150,6 +150,7 @@ public:
     ImVec2 windowPos=ImVec2(-1,-1); bool windowPosInitialized=false;
     ImVec2 windowSize=ImVec2(580.f,540.f);
     bool jupiterClickBarPageOpen=false;
+    bool trainerClickBarPageOpen=false;
 
     void initialize();
     void drawInterface();
@@ -195,6 +196,8 @@ private:
     void drawIndicatorsTab();
     void drawJupiterTab();
     void drawJupiterClickTrainerPage();
+    void drawTrainerTab();
+    void drawTrainerClickTrainerPage();
     void loadRenderSettings();
     void markReplayListDirty(bool queueRefresh=true);
     void refreshReplayListIfNeeded(bool force);

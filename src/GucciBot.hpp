@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-16-a (1.1 WIP: manual Frame Window entries, per Juice's suggestion. New 'Manual Frame Windows' list in the Frame Window Tracker settings -- one row per click in the loaded macro, with an editable window field. Editing a row creates/updates a FrameWindowMark with a new manual=true flag; these render through the exact same overlay/sound/render pipeline as Calculate's own results (framewindow.cpp reads fwMarks uniformly, no changes needed there). Coexistence with Calculate, per Nigel: analyzeFrameWindows() now only clears non-manual marks before a fresh run (was a full clear), and the probing loop (new beginOrSkipProbeClick(), replacing the old direct computeProbeHorizon()+beginProbeRun() calls after Capturing and after each finishProbeClick()) skips re-measuring any click a manual mark already covers instead of overwriting it. GBFW sidecar bumped to v2 to persist the manual flag; v1 sidecars still load fine (manual defaults false). Compiles clean, untested in-game.)"
+#define GB_BUILD_LABEL "2026-08-16-b (1.1 WIP: new general-purpose 'Trainer' tab (index 10, plain layout, no JMF reskin) -- the JMF Click Trainer/Ghosts/Segments/Stats/Music toolset, but for ANY of your own saved macros instead of one bundled level. Picker lists storedMacros (native-compatible formats only; incompatible ones point at the Macro tab to convert first), loading via a new dual-format loadTrainerMacroData (engine_core.cpp) that sniffs GBR6 vs legacy-BRR magic bytes -- unlike loadJupiterMacroData, which only ever sees legacy-BRR since Jupiter's bootstrap always converts through convertToBRR first, most real user macros are GBR6 (GucciReplaySystem::save() always writes it) and would've silently failed to load otherwise. JupiterMacroData renamed to the generic TrainerMacroData (now also carries levelName/levelId) and reused for both jupiterMacro and the new trainerMacro. Stats/Ghost/Music are scoped to the macro's recorded level via gbtr::isTrainerLevel (exact match, not JMF's substring match) but fail OPEN (stay active on any level) if the macro has no recorded level name at all -- common for anything converted from .gdr/.json/legacy .brr, since nothing here ever sets BRRMacro::levelName before persisting those -- with a visible 'level unknown' badge so that's never silently wrong. Ghost overlay + music sync are a deliberate parallel duplicate (new trainerghost.hpp/cpp, TrainerGhostOverlay/TrainerMusicSync/TrainerGhostPlayLayer) rather than parameterizing Jupiter's versions, since those are stateful singletons wired straight into PlayLayer's init/onQuit -- didn't want to risk the one already-shipped, working piece. Segments' pure helpers (export/import/auto-suggest) got parameterized instead of duplicated since they're plain data transforms; Segment Looping's function-local statics got duplicated instead, since C++ statics can't safely be shared across two tabs' call sites. New per-tab music: both JMF and Trainer get an Offset (sec) field (jupiterMusicOffsetSec/trainerMusicOffsetSec, applied at the seek step, positive = later); Trainer also gets an Import Music button using geode::utils::file::pick -- first use of that async Task/Future API in this codebase, copies the picked mp3 to a fixed save-dir location rather than referencing the original path live. All new trainer_*/jupiter_music_offset_sec state persisted (saveSettings/loadSettings), including reconnecting the remembered macro pick on startup (done in loadSettings, not GucciEngine::initialize -- didn't want this feature anywhere near that function's existing bundled-Jupiter-bootstrap fragility). Heads up: there's a pre-existing, unrelated 'Trainer' section inside the JMF tab itself (Show Macro Path's progressive-reveal feature, trainerRevealEnabled/m_trainerBestX) -- same word, different feature, not touched by any of this. Compiles clean, nothing here verified in-game yet -- this is a big one, please actually run through it: pick a macro, try Click Trainer/Segments/Looping/Stats, and specifically try the Import Music button since that's the one part using an API with zero prior usage in this codebase.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -380,13 +380,23 @@ public:
     // macro list/selection UI, or `mode`/`isPlaying()` -- it was doing all
     // three when it went through replay.load(), which is why loading it broke
     // the ability to actually play a macro normally afterward.
-    struct JupiterMacroData {
+    // Generic name (not "JupiterMacroData") because it's also used by the
+    // general Trainer tab (trainerMacro, below) to hold whichever of the
+    // user's own macros they've picked -- same isolated, side-effect-free
+    // loading approach (loadTrainerMacroData in engine_core.cpp), just
+    // pointed at an arbitrary path instead of the one bundled Jupiter file.
+    struct TrainerMacroData {
         bool loaded = false;
+        std::string levelName; // from the macro file itself; often EMPTY for
+                                // macros converted from .gdr/.json/legacy .brr
+                                // -- nothing in this codebase sets BRRMacro::
+                                // levelName before persisting those formats
+        int32_t levelId = 0;
         std::vector<std::pair<double,double>> clickIntervalsSec;
         double clickBarTps = 240.0;
         std::vector<MacroPathSample> pathSamples;
     };
-    JupiterMacroData jupiterMacro;
+    TrainerMacroData jupiterMacro;
 
     // Click bar transport: pause/resume/reset/skim. Position tracked as a
     // seconds offset into the macro's timeline, advanced by real elapsed
@@ -436,6 +446,9 @@ public:
     // (frame 0 = song position 0, no offset) rather than just played once
     // from the start -- see JupiterGhostOverlay in jupiterghost.cpp.
     bool  jupiterMusicEnabled = true;
+    // Manual sync correction, seconds. Positive = music plays later relative
+    // to gameplay (delays the read position); negative = earlier.
+    float jupiterMusicOffsetSec = 0.f;
 
     // Attempt/PB tracker + death heatmap: session-only (not persisted across GD
     // restarts, unlike m_trainerBestX which IS persisted per-macro). Populated
@@ -466,6 +479,61 @@ public:
     bool  jupiterDeviationHolding = false; // last-seen jump-hold state, to detect press edges
     int   jupiterLastDeviationFrames = 0;  // signed: negative = early, positive = late
     bool  jupiterHasDeviationReading = false;
+
+    // General "Trainer" tab -- same toolset as JMF (Click Trainer, Ghosts,
+    // Segments, Stats, Music) but scoped to whichever ONE of the user's own
+    // saved macros is currently loaded into it, swappable at will, instead
+    // of hardcoded to the one bundled Jupiter macro. See loadTrainerMacro()
+    // and loadTrainerMacroData() in engine_core.cpp, drawTrainerTab()/
+    // drawTrainerClickTrainerPage() in gui.cpp, and trainerghost.hpp/cpp
+    // (a parallel, duplicated JupiterGhostOverlay/JupiterMusicSync -- kept
+    // separate rather than parameterizing the Jupiter versions, since those
+    // are stateful singletons wired straight into PlayLayer's init/onQuit).
+    TrainerMacroData trainerMacro;
+    std::string trainerMacroName; // bare stem matching a storedMacros entry, "" = none loaded
+
+    std::string trainerNotes;
+    std::string trainerSegmentsRaw;
+
+    bool   trainerClickBarPaused       = true;
+    double trainerClickBarPosSec       = 0.0;
+    double trainerClickBarLastRealTime = 0.0;
+    bool   trainerClickBarLoop         = false;
+    bool   trainerClickBarPageVisible  = false;
+    std::vector<double> trainerClickBarMyClicks;
+    std::vector<double> trainerClickBarMyReleases;
+    bool  trainerClickBarEnabled = true;
+    float trainerClickBarWindow  = 2.f;
+
+    // Imported music: unlike Jupiter's bundled resources/jupiter_music.mp3,
+    // this is a copy of whatever the user picks, stored at a fixed location
+    // (getSaveDir()/trainer_music.mp3) so a later move/rename/delete of the
+    // original file they picked can't break playback.
+    bool        trainerMusicEnabled   = false;
+    bool        trainerMusicImported  = false; // true once a file has been copied in
+    float       trainerMusicOffsetSec = 0.f;
+
+    int   trainerAttemptCount    = 0;
+    float trainerSessionBestPct  = 0.f;
+    std::vector<float> trainerDeathPcts;
+
+    bool  trainerLoopEnabled  = false;
+    int   trainerLoopStartIdx = -1;
+    int   trainerLoopEndIdx   = -1;
+
+    bool  trainerGhostEnabled     = true;
+    bool  trainerBestGhostEnabled = false;
+    bool  trainerScrubActive      = false;
+    float trainerScrubPercent     = 0.f;
+
+    bool  trainerDeviationHolding = false;
+    int   trainerLastDeviationFrames = 0;
+    bool  trainerHasDeviationReading = false;
+
+    // Resolves stem -> a real file under getReplayDir(), parses it (GBR6 or
+    // legacy BRR) into trainerMacro, and remembers the pick. false if the
+    // stem can't be found/parsed (trainerMacro is left at a cleared default).
+    bool loadTrainerMacro(const std::string& stem);
 
     bool layoutMode            = false;
     bool noMirrorEffect        = false;

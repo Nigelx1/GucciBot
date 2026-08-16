@@ -1,4 +1,4 @@
-#include "jupiterghost.hpp"
+#include "trainerghost.hpp"
 #include "GucciBot.hpp"
 #include "gameaudiomute.hpp"
 #include <Geode/Geode.hpp>
@@ -9,63 +9,51 @@
 
 using namespace geode::prelude;
 
-namespace gbju {
-    bool isJupiterLevel(PlayLayer* pl) {
-        if (!pl || !pl->m_level) return false;
-        std::string lower = pl->m_level->m_levelName;
-        std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-        return lower.find("jupiter my favourite") != std::string::npos;
+namespace gbtr {
+    bool isTrainerLevel(PlayLayer* pl) {
+        auto* gb = GucciEngine::get();
+        if (!pl || !pl->m_level || !gb->trainerMacro.loaded) return false;
+        if (gb->trainerMacro.levelName.empty()) return true; // see header comment
+        std::string a = pl->m_level->m_levelName;
+        std::string b = gb->trainerMacro.levelName;
+        std::transform(a.begin(), a.end(), a.begin(), ::tolower);
+        std::transform(b.begin(), b.end(), b.begin(), ::tolower);
+        return a == b;
     }
 }
 
-// Synced music, two independent trigger paths sharing one channel:
-//  - sync(pl,frame,tps): live gameplay, called from the per-gameplay-frame
-//    hook (renderJupiterGhost) -- seeked to the ACTUAL level frame, works
-//    even with the menu closed.
-//  - syncPreview(...): click-bar-preview, called directly from
-//    MenuInterface::drawJupiterClickTrainerPage every frame that page is
-//    open -- seeked to the click bar's own transport position, works from
-//    the main menu with no level loaded at all.
-// Live gameplay always takes priority if both are momentarily true (e.g.
-// the menu's open to the Click Trainer page WHILE actually playing Jupiter
-// My Favourite) -- syncPreview defers to sync() in that case rather than
-// fighting over the channel's seek position.
-//
-// Neither path unconditionally stop()s the channel just because ITS OWN
-// condition isn't met, since the OTHER path might legitimately still want
-// it running -- only syncPreview's "nothing wants this at all" branch calls
-// stop(), since it's reachable independent of whether a PlayLayer exists
-// (sync() only runs inside an active level to begin with).
-class JupiterMusicSync {
+// Parallel to JupiterMusicSync (jupiterghost.cpp) -- see trainerghost.hpp for
+// why this is a separate class rather than a shared/parameterized one.
+class TrainerMusicSync {
 public:
-    static JupiterMusicSync* get() { static JupiterMusicSync inst; return &inst; }
+    static TrainerMusicSync* get() { static TrainerMusicSync inst; return &inst; }
 
     void sync(PlayLayer* pl, uint32_t frame, double tps) {
         auto* gb = GucciEngine::get();
-        bool shouldPlay = gb->jupiterMusicEnabled && pl && pl->m_started && gbju::isJupiterLevel(pl);
+        bool shouldPlay = gb->trainerMusicEnabled && pl && pl->m_started && gbtr::isTrainerLevel(pl);
         if (!shouldPlay) return;
         if (!m_channel) start();
         if (!m_channel) return;
         m_channel->setPaused(false);
 
         double targetD = tps > 0.0 ? (frame / tps) * 1000.0 : 0.0;
-        seekIfDrifted(targetD + gb->jupiterMusicOffsetSec * 1000.0);
+        seekIfDrifted(targetD + gb->trainerMusicOffsetSec * 1000.0);
     }
 
     void syncPreview(bool active, bool paused, double posSec) {
         auto* pl = PlayLayer::get();
         auto* gb = GucciEngine::get();
-        bool liveOwns = gb->jupiterMusicEnabled && pl && pl->m_started && gbju::isJupiterLevel(pl);
-        if (liveOwns) return; // sync() has it this frame instead
+        bool liveOwns = gb->trainerMusicEnabled && pl && pl->m_started && gbtr::isTrainerLevel(pl);
+        if (liveOwns) return;
 
-        bool shouldPlay = active && gb->jupiterMusicEnabled;
+        bool shouldPlay = active && gb->trainerMusicEnabled;
         if (!shouldPlay) { stop(); return; }
         if (!m_channel) start();
         if (!m_channel) return;
 
         m_channel->setPaused(paused);
         if (paused) return;
-        seekIfDrifted(posSec * 1000.0 + gb->jupiterMusicOffsetSec * 1000.0);
+        seekIfDrifted(posSec * 1000.0 + gb->trainerMusicOffsetSec * 1000.0);
     }
 
     void stop() {
@@ -85,7 +73,10 @@ private:
     }
 
     void start() {
-        auto path = Mod::get()->getResourcesDir() / "jupiter_music.mp3";
+        // Fixed on-disk copy, not a live reference to wherever the user's
+        // originally-picked file lives -- see trainerMusicImportTask in
+        // gui.cpp for why (source file could move/get deleted later).
+        auto path = Mod::get()->getSaveDir() / "trainer_music.mp3";
         std::error_code ec;
         if (!std::filesystem::exists(path, ec)) return;
         auto* system = FMODAudioEngine::sharedEngine()->m_system;
@@ -107,16 +98,15 @@ private:
     bool m_audioMuteHeld = false;
 };
 
-// Mirrors PracticeRangeOverlay (practicerange.cpp) exactly on purpose: a
-// CCDrawNode attached to m_objectLayer, cleared and redrawn every frame,
-// attached on PlayLayer::init and detached on PlayLayer::onQuit. That
-// pattern is already proven safe in this codebase for per-frame gameplay
-// overlays -- reusing it here means this feature can't touch anything it
-// isn't explicitly reading (m_pathSamples, a locally-tracked best-attempt
-// path), unlike the checkpoint/reset system flagged elsewhere as fragile.
-class JupiterGhostOverlay {
+// Parallel to JupiterGhostOverlay (jupiterghost.cpp) -- see trainerghost.hpp
+// for why this is a separate class. Attached at CCDrawNode z-order 1404
+// (Jupiter's is 1403) so both overlays can coexist on the same object layer
+// without contending for the same draw-order slot, in case a user happens
+// to be on Jupiter My Favourite with a Jupiter-named macro loaded into the
+// Trainer tab too -- harmless, just keeps draw order well-defined.
+class TrainerGhostOverlay {
 public:
-    static JupiterGhostOverlay* get() { static JupiterGhostOverlay inst; return &inst; }
+    static TrainerGhostOverlay* get() { static TrainerGhostOverlay inst; return &inst; }
 
     void attach(PlayLayer* pl) {
         if (m_node || !pl) return;
@@ -125,7 +115,7 @@ public:
         auto* node = CCDrawNode::create();
         node->setBlendFunc({ GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA });
         node->m_bUseArea = false;
-        anchor->addChild(node, 1403);
+        anchor->addChild(node, 1404);
         m_node = node;
     }
 
@@ -141,27 +131,23 @@ public:
         m_node->clear();
 
         double tps = gb->updater.m_tps > 0.0 ? gb->updater.m_tps : 240.0;
-        JupiterMusicSync::get()->sync(pl, gb->updater.getFrame(), tps);
+        TrainerMusicSync::get()->sync(pl, gb->updater.getFrame(), tps);
 
         if (!pl->m_started) return;
 
-        // Capture this attempt's live path for the "own best attempt" ghost.
-        // Only during real manual play -- bot playback is just replaying the
-        // same macro we're already comparing against, so capturing it would
-        // be redundant at best and would corrupt "your own best" at worst.
-        if (gb->jupiterBestGhostEnabled && !gb->isPlaying() && pl->m_player1) {
+        if (gb->trainerBestGhostEnabled && !gb->isPlaying() && pl->m_player1) {
             m_liveAttemptPath.push_back({ pl->m_player1->m_position.x, pl->m_player1->m_position.y });
         }
 
-        if (gb->jupiterGhostEnabled && !gb->jupiterMacro.pathSamples.empty()) {
-            uint32_t frame = resolveFrame(gb, gb->jupiterMacro.pathSamples.size());
-            if (frame < gb->jupiterMacro.pathSamples.size()) {
-                auto const& s = gb->jupiterMacro.pathSamples[frame];
+        if (gb->trainerGhostEnabled && !gb->trainerMacro.pathSamples.empty()) {
+            uint32_t frame = resolveFrame(gb, gb->trainerMacro.pathSamples.size());
+            if (frame < gb->trainerMacro.pathSamples.size()) {
+                auto const& s = gb->trainerMacro.pathSamples[frame];
                 drawGhost(s.p1x, s.p1y, ccc4f(0.30f, 0.85f, 1.f, 0.65f));
             }
         }
 
-        if (gb->jupiterBestGhostEnabled && !m_bestAttemptPath.empty()) {
+        if (gb->trainerBestGhostEnabled && !m_bestAttemptPath.empty()) {
             uint32_t frame = resolveFrame(gb, m_bestAttemptPath.size());
             if (frame < m_bestAttemptPath.size()) {
                 auto const& p = m_bestAttemptPath[frame];
@@ -181,8 +167,8 @@ public:
 
 private:
     static uint32_t resolveFrame(GucciEngine* gb, size_t pathLen) {
-        if (gb->jupiterScrubActive)
-            return (uint32_t)std::clamp(gb->jupiterScrubPercent / 100.f * (float)pathLen, 0.f, (float)(pathLen > 0 ? pathLen - 1 : 0));
+        if (gb->trainerScrubActive)
+            return (uint32_t)std::clamp(gb->trainerScrubPercent / 100.f * (float)pathLen, 0.f, (float)(pathLen > 0 ? pathLen - 1 : 0));
         return gb->updater.getFrame();
     }
 
@@ -196,30 +182,30 @@ private:
     float m_bestReachX = 0.f;
 };
 
-class $modify(JupiterGhostPlayLayer, PlayLayer) {
+class $modify(TrainerGhostPlayLayer, PlayLayer) {
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
         if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
-        JupiterGhostOverlay::get()->attach(this);
+        TrainerGhostOverlay::get()->attach(this);
         return true;
     }
     void onQuit() {
-        JupiterGhostOverlay::get()->detach();
-        JupiterMusicSync::get()->stop();
+        TrainerGhostOverlay::get()->detach();
+        TrainerMusicSync::get()->stop();
         PlayLayer::onQuit();
     }
 };
 
-namespace gbju {
-    void renderJupiterGhost(PlayLayer* pl) {
-        JupiterGhostOverlay::get()->render(pl);
+namespace gbtr {
+    void renderTrainerGhost(PlayLayer* pl) {
+        TrainerGhostOverlay::get()->render(pl);
     }
-    void notifyJupiterAttemptEnded() {
-        JupiterGhostOverlay::get()->onAttemptEnded();
+    void notifyTrainerAttemptEnded() {
+        TrainerGhostOverlay::get()->onAttemptEnded();
     }
-    void syncClickBarMusic(bool active, bool paused, double posSec) {
-        JupiterMusicSync::get()->syncPreview(active, paused, posSec);
+    void syncTrainerClickBarMusic(bool active, bool paused, double posSec) {
+        TrainerMusicSync::get()->syncPreview(active, paused, posSec);
     }
-    void stopClickBarMusic() {
-        JupiterMusicSync::get()->stop();
+    void stopTrainerClickBarMusic() {
+        TrainerMusicSync::get()->stop();
     }
 }
