@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-15-g (1.0.1: version bump only, mod.json/CMakeLists.txt/MOD_VERSION -> 1.0.1. No code changes since -f -- see that label's changelog for the third audit pass' fixes, still unverified in-game.)"
+#define GB_BUILD_LABEL "2026-08-16-a (1.1 WIP: manual Frame Window entries, per Juice's suggestion. New 'Manual Frame Windows' list in the Frame Window Tracker settings -- one row per click in the loaded macro, with an editable window field. Editing a row creates/updates a FrameWindowMark with a new manual=true flag; these render through the exact same overlay/sound/render pipeline as Calculate's own results (framewindow.cpp reads fwMarks uniformly, no changes needed there). Coexistence with Calculate, per Nigel: analyzeFrameWindows() now only clears non-manual marks before a fresh run (was a full clear), and the probing loop (new beginOrSkipProbeClick(), replacing the old direct computeProbeHorizon()+beginProbeRun() calls after Capturing and after each finishProbeClick()) skips re-measuring any click a manual mark already covers instead of overwriting it. GBFW sidecar bumped to v2 to persist the manual flag; v1 sidecars still load fine (manual defaults false). Compiles clean, untested in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -479,7 +479,14 @@ public:
 
             bool  practiceRangeEnabled = false;
     int   fwMaxWindow     = 25;
-        struct FrameWindowMark { float x; float y; int window; bool player2; uint32_t frame; float percent; };
+        struct FrameWindowMark {
+        float x; float y; int window; bool player2; uint32_t frame; float percent;
+        // true if this entry was hand-entered/edited (or hand-edited on top of a
+        // Calculate result) rather than purely Calculate-computed. analyzeFrameWindows()
+        // preserves these across a fresh Calculate run instead of clearing them, and the
+        // probing loop skips re-measuring any click a manual mark already covers.
+        bool manual = false;
+    };
     std::vector<FrameWindowMark> fwMarks;
     bool  fwHasData       = false;
                 struct FwClickSample { uint32_t frame; float x; float y; bool player2; bool release; };
@@ -509,12 +516,15 @@ public:
     uint32_t fwProbeStartFrame = 0;
     void  fwTick();
     void  beginProbeRun();
+    void  beginOrSkipProbeClick(); // advances fwProbeClick past any manually-covered clicks, then starts probing the next one (or finishes if none remain)
+    bool  fwHasManualMarkAt(uint32_t frame, bool player2) const;
     void  finishProbeClick();
     void  fwFinishAnalysis();
     void  cancelAnalysis();
     void  muteAnalysisMusic();
     void  unmuteAnalysisMusic();
     void  computeProbeHorizon();
+    void  saveFwMarksNow(); // persists fwMarks (Calculate results + manual entries) for the current macro
             float fwAnalyzeProgress = 0.0f;
     int   fwAnalyzeCur      = 0;
     int   fwAnalyzeTotal    = 0;

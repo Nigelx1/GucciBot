@@ -386,17 +386,19 @@ static void saveFwMarks(const fs::path& macroPath) {
     std::ofstream f(sc, std::ios::binary);
     if (!f) return;
     f.write("GBFW", 4);
-    uint8_t ver = 1; f.write((const char*)&ver, 1);
+    uint8_t ver = 2; f.write((const char*)&ver, 1);
     uint32_t n = (uint32_t)gb->fwMarks.size(); f.write((const char*)&n, 4);
     for (auto const& mk : gb->fwMarks) {
         int32_t w  = mk.window;
         uint8_t p2 = mk.player2 ? 1 : 0;
+        uint8_t man = mk.manual ? 1 : 0;
         f.write((const char*)&mk.x, 4);
         f.write((const char*)&mk.y, 4);
         f.write((const char*)&w, 4);
         f.write((const char*)&p2, 1);
         f.write((const char*)&mk.frame, 4);
         f.write((const char*)&mk.percent, 4);
+        f.write((const char*)&man, 1);
     }
 }
 
@@ -412,18 +414,29 @@ static void loadFwMarks(const fs::path& macroPath) {
     f.read(magic, 4);
     if (std::memcmp(magic, "GBFW", 4) != 0) return;
     uint8_t ver = 0; f.read((char*)&ver, 1);
-    if (ver != 1) return;
+    if (ver != 1 && ver != 2) return;
     uint32_t n = 0; f.read((char*)&n, 4);
     for (uint32_t i = 0; i < n; ++i) {
-        float x = 0, y = 0, pct = 0; int32_t w = 0; uint8_t p2 = 0; uint32_t fr = 0;
+        float x = 0, y = 0, pct = 0; int32_t w = 0; uint8_t p2 = 0; uint32_t fr = 0; uint8_t man = 0;
         f.read((char*)&x, 4); f.read((char*)&y, 4); f.read((char*)&w, 4);
         f.read((char*)&p2, 1); f.read((char*)&fr, 4); f.read((char*)&pct, 4);
+        if (ver >= 2) f.read((char*)&man, 1); // v1 sidecars predate manual marks -- default false
         if (!f) break;
-        gb->fwMarks.push_back({ x, y, (int)w, p2 != 0, fr, pct });
+        gb->fwMarks.push_back({ x, y, (int)w, p2 != 0, fr, pct, man != 0 });
     }
     gb->fwHasData = !gb->fwMarks.empty();
     log::info("[GucciBot] Frame-window: loaded {} persisted mark(s) from sidecar",
               gb->fwMarks.size());
+}
+
+void GucciEngine::saveFwMarksNow() {
+    saveFwMarks(replay.getCurrentPath());
+}
+
+bool GucciEngine::fwHasManualMarkAt(uint32_t frame, bool player2) const {
+    for (auto const& mk : fwMarks)
+        if (mk.manual && mk.frame == frame && mk.player2 == player2) return true;
+    return false;
 }
 
 void GucciReplaySystem::save(const fs::path& path, bool noOverwrite) {
@@ -1324,7 +1337,12 @@ static PauseLayer* findOpenPauseLayer() {
 }
 
 void GucciEngine::analyzeFrameWindows() {
-                fwMarks.clear();
+    // Keep manual marks across a fresh run -- only Calculate-computed entries
+    // get wiped and recomputed. The probing loop below (see
+    // beginOrSkipProbeClick) skips re-measuring any click a manual mark
+    // already covers, so this run won't just immediately overwrite them again.
+    fwMarks.erase(std::remove_if(fwMarks.begin(), fwMarks.end(),
+        [](const FrameWindowMark& mk){ return !mk.manual; }), fwMarks.end());
     fwCapStack.clear();
     fwClickSamples.clear();
 
@@ -1441,8 +1459,7 @@ void GucciEngine::fwTick() {
             fwProbeFrame = 0; fwProbeInjected = false;
             fwState = FwState::Probing;
             muteAnalysisMusic();
-            computeProbeHorizon();
-            beginProbeRun();
+            beginOrSkipProbeClick();
         }
         break;
     }
@@ -1562,14 +1579,30 @@ void GucciEngine::finishProbeClick() {
               window, fwProbeLow, fwProbeHigh);
 
     fwProbeClick++;
+    beginOrSkipProbeClick();
+}
+
+void GucciEngine::beginOrSkipProbeClick() {
+    // A manual mark at a click means the user has already decided its window
+    // by hand -- don't spend a probe run re-measuring (and potentially
+    // overwriting) it. Keep advancing past every manually-covered click
+    // before actually starting the next probe.
+    while (fwProbeClick < fwClickSamples.size() &&
+           fwHasManualMarkAt(fwClickSamples[fwProbeClick].frame, fwClickSamples[fwProbeClick].player2)) {
+        log::info("[GucciBot] Frame-window: click {} @ frame {} has a manual mark, skipping probe",
+                  fwProbeClick, fwClickSamples[fwProbeClick].frame);
+        fwProbeClick++;
+    }
+
     fwAnalyzeCur = (int)fwProbeClick;
-    fwAnalyzeProgress = 0.5f + 0.5f * (float)fwProbeClick / (float)fwClickSamples.size();
+    fwAnalyzeProgress = fwClickSamples.empty() ? 1.0f
+        : 0.5f + 0.5f * (float)fwProbeClick / (float)fwClickSamples.size();
 
     if (fwProbeClick >= fwClickSamples.size()) {
         fwFinishAnalysis();
         return;
     }
-        fwProbeShift = -1; fwProbePhase = 0; fwProbeLow = 0; fwProbeHigh = 0;
+    fwProbeShift = -1; fwProbePhase = 0; fwProbeLow = 0; fwProbeHigh = 0;
     computeProbeHorizon();
     beginProbeRun();
 }

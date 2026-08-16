@@ -2045,6 +2045,83 @@ void MenuInterface::drawHacksTab(){
         ImGui::TextWrapped("No analysis yet. Save a macro while in the level and choose Calculate to simulate frame windows.");
     ImGui::PopStyleColor();
 
+        ImGui::Dummy(ImVec2(0,8));
+    Widgets::SectionHeader("Manual Frame Windows",theme);
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::TextWrapped("Set or override a click's window by hand -- for clicks Calculate hasn't measured yet, or a reading you don't trust. Manual entries are protected: re-running Calculate fills in everything else but leaves these alone.");
+    ImGui::PopStyleColor();
+    {
+        auto& acts = engine->replay.m_actionAtom.m_actions;
+        auto& samples = engine->replay.m_pathSamples;
+        std::vector<size_t> clickIdx;
+        for(size_t i=0;i<acts.size();++i) if(acts[i].isInput()&&acts[i].m_holding) clickIdx.push_back(i);
+
+        if(clickIdx.empty()){
+            ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+            ImGui::TextWrapped("No macro loaded, or it has no inputs to list.");
+            ImGui::PopStyleColor();
+        } else {
+            float listH=std::min((float)clickIdx.size()*24.f,200.f);
+            ImGui::BeginChild("##fwManualList",ImVec2(-1,listH),true);
+            for(size_t row=0; row<clickIdx.size(); ++row){
+                auto& a = acts[clickIdx[row]];
+                ImGui::PushID((int)row+9000);
+
+                GucciEngine::FrameWindowMark* mk=nullptr;
+                for(auto& m:engine->fwMarks)
+                    if(m.frame==a.m_frame && m.player2==a.m_player2){ mk=&m; break; }
+
+                float pct = mk ? mk->percent : -1.f;
+                if(!mk && a.m_frame<samples.size() && engine->m_levelLength>0.f){
+                    float px = a.m_player2 ? samples[a.m_frame].p2x : samples[a.m_frame].p1x;
+                    pct = std::clamp(px/engine->m_levelLength*100.f,0.f,100.f);
+                }
+
+                ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+                if(pct>=0.f) ImGui::Text("f=%u  p%d  %.1f%%",a.m_frame,a.m_player2?2:1,pct);
+                else ImGui::Text("f=%u  p%d",a.m_frame,a.m_player2?2:1);
+                ImGui::PopStyleColor();
+                ImGui::SameLine(150);
+
+                int win = mk?mk->window:0;
+                ImGui::SetNextItemWidth(60);
+                if(ImGui::InputInt("##win",&win,0,0)){
+                    win=std::max(1,win);
+                    if(mk){ mk->window=win; mk->manual=true; }
+                    else {
+                        GucciEngine::FrameWindowMark nm;
+                        nm.frame=a.m_frame; nm.player2=a.m_player2; nm.window=win; nm.manual=true;
+                        if(a.m_frame<samples.size()){
+                            nm.x = a.m_player2?samples[a.m_frame].p2x:samples[a.m_frame].p1x;
+                            nm.y = a.m_player2?samples[a.m_frame].p2y:samples[a.m_frame].p1y;
+                        }
+                        nm.percent = pct>=0.f?pct:0.f;
+                        engine->fwMarks.push_back(nm);
+                        engine->fwHasData=true;
+                    }
+                }
+                ImGui::SameLine();
+                if(mk){
+                    ImGui::PushStyleColor(ImGuiCol_Text, mk->manual?theme.getAccent():theme.textSecondary);
+                    ImGui::TextUnformatted(mk->manual?"manual":"auto");
+                    ImGui::PopStyleColor();
+                    if(mk->manual){
+                        ImGui::SameLine();
+                        if(Widgets::StyledButton("Clear",ImVec2(50,20),theme,anim,4.f)){
+                            engine->fwMarks.erase(engine->fwMarks.begin()+(mk-engine->fwMarks.data()));
+                            engine->fwHasData=!engine->fwMarks.empty();
+                        }
+                    }
+                }
+                ImGui::PopID();
+            }
+            ImGui::EndChild();
+
+            if(Widgets::StyledButton("Save Manual Marks",ImVec2(-1,26),theme,anim,6.f))
+                engine->saveFwMarksNow();
+        }
+    }
+
         ImGui::Dummy(ImVec2(0,6));
     ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
     ImGui::TextWrapped("Tiers map gap sizes to a marker image and sound. Put PNG/audio files in the mod's fw_assets folder and enter the filenames. No tier = default colored ring.");
