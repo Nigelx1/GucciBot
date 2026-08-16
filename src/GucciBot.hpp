@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-16-c (1.1: BIG BRRRR now starts 0:20 into the track (skips the slow intro -- BigBrrrManager::kStartOffsetSec, bigbrrr.cpp seeks the FMOD channel there right after playSound) and the menu bounce is beat-synced to the track's 140 BPM (BigBrrrManager::kBpm) instead of an arbitrary sine rate -- applyBigBrrrBounce (gui.cpp) now anchors its phase to a beatRefTime computed as 'now minus the 20s skip' the moment bouncing (re)starts, so the bounce's period is exactly one cycle per beat (omega = 2*pi*bpm/60), assuming the track's beat 1 lands on file position 0. Version bumped to 1.1.0 everywhere (mod.json, CMakeLists.txt, MOD_VERSION) -- GBR6_VERSION/BRR_FORMAT_VERSION untouched as always. Compiles clean; the beat-sync is a best-effort based on the BPM/downbeat assumption above, worth eyeballing against the actual track.)"
+#define GB_BUILD_LABEL "2026-08-16-d (1.1: moved the Trainer tab to sit right next to JMF (index 7) instead of last -- HUD/Settings/Credits shifted to 8/9/10 accordingly (names[] in both drawTabBar and drawMegaHackWindow, the switch in drawTabContent; jupiterActive's activeTab==6 check is untouched, JMF didn't move). activeTab isn't persisted so there's no stale-index migration concern. Updated about.md for the 1.1 feature set: title/intro now mention the general Trainer tab alongside JMF, and added a Trainer (Any Macro) section describing it. Compiles clean.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

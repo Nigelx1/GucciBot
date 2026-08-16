@@ -911,7 +911,7 @@ void MenuInterface::drawTabBar(){
         ImDrawList* dl=ImGui::GetWindowDrawList();
     ImVec2 pos=ImGui::GetCursorScreenPos();
     float width=ImGui::GetContentRegionAvail().x;
-        const char* names[]={"Macro","Render","Clicks","Autoclicker","Hacks","Indicators","JMF","HUD","Settings","Credits","Trainer"};
+        const char* names[]={"Macro","Render","Clicks","Autoclicker","Hacks","Indicators","JMF","Trainer","HUD","Settings","Credits"};
     const int N=11;
     float tabW=width/N,tabH=34.f;
     float dt=ImGui::GetIO().DeltaTime;
@@ -1044,10 +1044,10 @@ void MenuInterface::drawTabContent(){
         case 4:drawMoreHacksTab();break;
         case 5:drawIndicatorsTab();break;
         case 6:drawJupiterTab();break;
-        case 7:drawHudTab();break;
-        case 8:drawSettingsTab();break;
-        case 9:drawCreditsTab();break;
-        case 10:drawTrainerTab();break;}
+        case 7:drawTrainerTab();break;
+        case 8:drawHudTab();break;
+        case 9:drawSettingsTab();break;
+        case 10:drawCreditsTab();break;}
     if(fontBody)ImGui::PopFont();
     ImGui::PopStyleVar();}
 
@@ -1212,7 +1212,7 @@ void MenuInterface::drawMegaHackWindow(){
         dl->AddText(ImVec2(wp.x+16,wp.y+12),theme.getAccentU32(0.92f),"GB");
         if(fontHeading)ImGui::PopFont();
     }
-        const char* names[]={"Macro","Render","Clicks","Autoclicker","Hacks","Indicators","JMF","HUD","Settings","Credits","Trainer"};
+        const char* names[]={"Macro","Render","Clicks","Autoclicker","Hacks","Indicators","JMF","Trainer","HUD","Settings","Credits"};
     float rowH=34.f,railTop=headH+10.f;
     for(int i=0;i<11;i++){
         ImVec2 rMin(wp.x,wp.y+railTop+i*rowH),rMax(wp.x+railW,rMin.y+rowH);

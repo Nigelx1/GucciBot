@@ -1,8 +1,8 @@
-# GucciBot 1.0
+# GucciBot 1.1
 
 > Frame perfect. Ice cold. Brrr.
 
-GucciBot is a Geometry Dash macro bot built on Silicate's physics engine, with a hypercompressed replay format and a full practice-trainer system built specifically around Jupiter My Favourite. This is the first proper public release.
+GucciBot is a Geometry Dash macro bot built on Silicate's physics engine, with a hypercompressed replay format and a full practice-trainer system -- one dedicated tab built around Jupiter My Favourite, and a second general-purpose one that works with any of your own saved macros.
 
 ---
 
@@ -38,6 +38,15 @@ A dedicated practice tab built entirely around one level, auto-loaded and ready 
 - **Segments** — mark and name the hard parts, with per-segment notes, auto-suggestions from click density, export/import codes, and segment looping (real auto-restart via a genuine practice checkpoint).
 - **Stats** — attempts this session, session best %, and a death-position heatmap.
 - **Synced music** — the level's actual track, seeked to your current frame, muting the game's own audio so it doesn't clash.
+
+## Trainer (Any Macro)
+
+The same toolset as the Jupiter My Favourite Trainer, right next to it as its own tab, but pointed at whichever of your own saved macros you pick instead of one fixed level:
+
+- **Macro picker** — load any of your saved macros in, swap at will.
+- **Click Trainer, Ghosts, Segments, Stats** — identical to the JMF tab above, just scoped to your pick.
+- **Synced music** — import your own track for it, with an adjustable sync offset (also added to the JMF tab).
+- Stats and ghosts activate automatically when you're on the level the macro was recorded on -- or on any level, with a clear heads-up, for macros that don't carry a recorded level name.
 
 ## Themes
 
