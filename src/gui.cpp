@@ -564,11 +564,11 @@ static const ThemePreset kThemePresets[]={
      ImVec4(0.580f,0.340f,0.520f,1.f),
      5.f,0.97f},
         {"JuiceBot",
-     ImVec4(0.910f,0.588f,0.478f,1.f),
-     ImVec4(0.024f,0.055f,0.051f,0.96f),
-     ImVec4(0.039f,0.086f,0.078f,1.f),
+     ImVec4(0.960f,0.520f,0.380f,1.f),
+     ImVec4(0.020f,0.090f,0.086f,0.96f),
+     ImVec4(0.035f,0.130f,0.122f,1.f),
      ImVec4(0.980f,0.960f,0.940f,1.f),
-     ImVec4(0.580f,0.480f,0.460f,1.f),
+     ImVec4(0.625f,0.565f,0.478f,1.f),
      5.f,0.96f},
 };
 
@@ -885,7 +885,8 @@ void MenuInterface::drawTitleBar(){
         (activeTheme==THEME_JA)?"JaBot":
         (activeTheme==THEME_GIDDEY)?"GiddeyBot":
         (activeTheme==THEME_BAM)?"BamBot":
-        (activeTheme==THEME_SEXYY)?"SexyyBot":"GucciBot";
+        (activeTheme==THEME_SEXYY)?"SexyyBot":
+        (activeTheme==THEME_JUICE)?"JuiceBot":"GucciBot";
     ImVec2 npos(wp.x+40,wp.y+10);
     if(fontHeading)ImGui::PushFont(fontHeading);
     dl->AddText(npos,theme.getAccentU32(),botName);
@@ -901,6 +902,8 @@ void MenuInterface::drawTitleBar(){
             "v" MOD_VERSION "  -  BITCH IM KOBEEE!!!":
         (activeTheme==THEME_SEXYY)?
             "v" MOD_VERSION "  -  Frame perfect. Goes stupid. Skee yee.":
+        (activeTheme==THEME_JUICE)?
+            "v" MOD_VERSION "  -  That's tuff. Brrr.":
         "v" MOD_VERSION "  -  Frame perfect. GBR6. Brrr.";
     ImVec2 spos(wp.x+40,wp.y+30);
     if(fontSmall)ImGui::PushFont(fontSmall);
@@ -1021,7 +1024,8 @@ void MenuInterface::drawStatusBar(){
         (activeTheme==THEME_JA)?"IYKYK!":
         (activeTheme==THEME_GIDDEY)?"Crikey!":
         (activeTheme==THEME_BAM)?"83 pts.":
-        (activeTheme==THEME_SEXYY)?"Skee yee.":"Brrr.";
+        (activeTheme==THEME_SEXYY)?"Skee yee.":
+        (activeTheme==THEME_JUICE)?"Tuff.":"Brrr.";
     ImVec2 bts=ImGui::CalcTextSize(brand);
     dl->AddText(ImVec2(wp.x+ws.x-padX-bts.x-12,barY+(barH-bts.y)*0.5f),theme.getAccentU32(0.6f),brand);
     if(fontSmall)ImGui::PopFont();}
@@ -1385,6 +1389,8 @@ void MenuInterface::drawReplayTab(){
         Widgets::GucciQuote("\"I don't record inputs. I record history. 83 points of it.\"","-- Bam, in the zone",theme);
     else if(activeTheme==THEME_SEXYY)
         Widgets::GucciQuote("\"I don't miss. Not a single frame. Skee yee.\"","-- Sexyy Red, probably",theme);
+    else if(activeTheme==THEME_JUICE)
+        Widgets::GucciQuote("\"I tested every frame. Every single one.\"","-- Juice, probably",theme);
     else
         Widgets::GucciQuote("\"I got so many replays I got files in my files.\"","-- Gucci Mane, probably",theme);
     Widgets::SectionHeader("Mode",theme);
@@ -1674,7 +1680,7 @@ void MenuInterface::drawReplayTab(){
             else if(eng2->toosiiMacros.count(mn)){tag=".toosii";tagCol=ImVec4(0.99f,0.82f,0.14f,1.f);}
             else if(eng2->bamMacros.count(mn)){tag=".bam";tagCol=ImVec4(0.878f,0.067f,0.153f,1.f);}
             else if(eng2->sexyyMacros.count(mn)){tag=".sexyy";tagCol=ImVec4(0.910f,0.004f,0.580f,1.f);}
-            else if(eng2->juiceMacros.count(mn)){tag=".juice";tagCol=ImVec4(0.910f,0.588f,0.478f,1.f);}
+            else if(eng2->juiceMacros.count(mn)){tag=".juice";tagCol=ImVec4(0.960f,0.520f,0.380f,1.f);}
             auto ts=ImGui::CalcTextSize(tag);tagX-=ts.x+4;
             wdl->AddText(ImVec2(tagX,iy+(ih-ts.y)*0.5f),toU32(tagCol),tag);}
                 float btnY=iy+(ih-xBtnW)*0.5f;
@@ -1970,6 +1976,8 @@ void MenuInterface::drawToolsTab(){
         Widgets::GucciQuote("\"Speed? I hit 83 at my own pace. You can't guard that.\"","-- Bam, on speedhack",theme);
     else if(activeTheme==THEME_SEXYY)
         Widgets::GucciQuote("\"I run this at my own speed and it still goes stupid.\"","-- Sexyy Red",theme);
+    else if(activeTheme==THEME_JUICE)
+        Widgets::GucciQuote("\"Speed doesn't mean much if the frame windows are wrong.\"","-- Juice, keeping you honest",theme);
     else
         Widgets::GucciQuote("\"I run this game at my own speed. You can't keep up.\"","-- Gucci Mane, on speedhacks",theme);
     Widgets::SectionHeader("TPS Control",theme);
@@ -2070,6 +2078,8 @@ void MenuInterface::drawHacksTab(){
         Widgets::GucciQuote("\"Noclip? I don't need it. The rim can't stop me either.\"","-- Bam, probably",theme);
     else if(activeTheme==THEME_SEXYY)
         Widgets::GucciQuote("\"Noclip? Baby I walk through walls naturally.\"","-- Sexyy Red",theme);
+    else if(activeTheme==THEME_JUICE)
+        Widgets::GucciQuote("\"Noclip's cool. I just want the analyzer to work.\"","-- Juice, still testing",theme);
     else
         Widgets::GucciQuote("\"I never die in this game. I'm immune. Like Gucci flu.\"","-- GucciBot propaganda",theme);
     ImGui::Dummy(ImVec2(0,4));
@@ -4293,6 +4303,7 @@ void MenuInterface::drawCreditsTab(){
         (activeTheme==THEME_GIDDEY)?"Australian | NBA | G'day Mate":
         (activeTheme==THEME_BAM)?"83 Pts | Center | BITCH IM KOBE":
         (activeTheme==THEME_SEXYY)?"Skee Yee | STL | Pound Town":
+        (activeTheme==THEME_JUICE)?"Beta Tester | Bug Hunter | That's Tuff":
         "Lead Dev | Vision | Brrr";
     ImVec2 bs=ImGui::CalcTextSize(badge);
     float bx=pos.x+(avail-bs.x-16)/2,by=pos.y+52;
@@ -4337,6 +4348,8 @@ void MenuInterface::drawCreditsTab(){
         Widgets::GucciQuote("\"Every frame is a bucket. 83 of them. BITCH IM KOBE!!!\"","-- Bam Adebayo",theme);
     else if(activeTheme==THEME_SEXYY)
         Widgets::GucciQuote("\"Every click go stupid. Skee yee.\"","-- Sexyy Red",theme);
+    else if(activeTheme==THEME_JUICE)
+        Widgets::GucciQuote("\"I just wanted the frame windows to work. Then I got a whole theme.\"","-- Juice",theme);
     else
         Widgets::GucciQuote("\"I'm the foundation of all of this. Brrr.\"","-- Gucci Mane",theme);}
 void MenuInterface::drawHudTab(){
