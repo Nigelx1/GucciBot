@@ -60,6 +60,7 @@ The same toolset as the Jupiter My Favourite Trainer, right next to it as its ow
 | GiddeyBot | `.giddey` | Red + White |
 | BamBot | `.bam` | Heat Black + Red |
 | SexyyBot | `.sexyy` | Hot Pink + Purple |
+| JuiceBot | `.juice` | Coral + Teal |
 
 ## Extras
 

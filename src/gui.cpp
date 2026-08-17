@@ -563,6 +563,13 @@ static const ThemePreset kThemePresets[]={
      ImVec4(0.990f,0.950f,0.980f,1.f),
      ImVec4(0.580f,0.340f,0.520f,1.f),
      5.f,0.97f},
+        {"JuiceBot",
+     ImVec4(0.910f,0.588f,0.478f,1.f),
+     ImVec4(0.024f,0.055f,0.051f,0.96f),
+     ImVec4(0.039f,0.086f,0.078f,1.f),
+     ImVec4(0.980f,0.960f,0.940f,1.f),
+     ImVec4(0.580f,0.480f,0.460f,1.f),
+     5.f,0.96f},
 };
 
 ImVec4 ThemeEngine::getAccent() const{
@@ -1325,7 +1332,7 @@ void MenuInterface::drawReplayTab(){
                 const char* nativeLabel=
             (activeTheme==THEME_TOOSII||activeTheme==THEME_TOOSII_SYRACUSE||activeTheme==THEME_TOOSII_SACSTATE)?".toosii":
             (activeTheme==THEME_JA)?".ja":
-            (activeTheme==THEME_GIDDEY)?".giddey":(activeTheme==THEME_BAM)?".bam":(activeTheme==THEME_SEXYY)?".sexyy":".brrr";
+            (activeTheme==THEME_GIDDEY)?".giddey":(activeTheme==THEME_BAM)?".bam":(activeTheme==THEME_SEXYY)?".sexyy":(activeTheme==THEME_JUICE)?".juice":".brrr";
         if(Widgets::StyledButton(nativeLabel,ImVec2(bw,30),theme,anim,6.f)){
             if(PlayLayer::get())engine->setMode(GucciEngine::Mode::Recording);
             else engine->setMode(GucciEngine::Mode::Recording);
@@ -1338,7 +1345,7 @@ void MenuInterface::drawReplayTab(){
         const char* extLabel =
             (activeTheme==THEME_TOOSII||activeTheme==THEME_TOOSII_SYRACUSE||activeTheme==THEME_TOOSII_SACSTATE)?".toosii":
             (activeTheme==THEME_JA)?".ja":
-            (activeTheme==THEME_GIDDEY)?".giddey":(activeTheme==THEME_BAM)?".bam":(activeTheme==THEME_SEXYY)?".sexyy":".brrr";
+            (activeTheme==THEME_GIDDEY)?".giddey":(activeTheme==THEME_BAM)?".bam":(activeTheme==THEME_SEXYY)?".sexyy":(activeTheme==THEME_JUICE)?".juice":".brrr";
         Widgets::StatusBadge("RECORDING",ImVec4(1.f,0.3f,0.3f,1.f));
         ImGui::SameLine();
         Widgets::StatusBadge(extLabel,getBRRTagColor());
@@ -1428,7 +1435,7 @@ void MenuInterface::drawReplayTab(){
         const char* extLabel2 =
             (activeTheme==THEME_TOOSII||activeTheme==THEME_TOOSII_SYRACUSE||activeTheme==THEME_TOOSII_SACSTATE)?".toosii":
             (activeTheme==THEME_JA)?".ja":
-            (activeTheme==THEME_GIDDEY)?".giddey":(activeTheme==THEME_BAM)?".bam":(activeTheme==THEME_SEXYY)?".sexyy":".brrr";
+            (activeTheme==THEME_GIDDEY)?".giddey":(activeTheme==THEME_BAM)?".bam":(activeTheme==THEME_SEXYY)?".sexyy":(activeTheme==THEME_JUICE)?".juice":".brrr";
         Widgets::StatusBadge("PLAYING",ImVec4(0.3f,1.f,0.3f,1.f));
         ImGui::SameLine();
         Widgets::StatusBadge(extLabel2,getBRRTagColor());
@@ -1516,6 +1523,7 @@ void MenuInterface::drawReplayTab(){
             else if(eng3->toosiiMacros.count(mn))fmtTag=".toosii";
             else if(eng3->bamMacros.count(mn))fmtTag=".bam";
             else if(eng3->sexyyMacros.count(mn))fmtTag=".sexyy";
+            else if(eng3->juiceMacros.count(mn))fmtTag=".juice";
             else fmtTag=".brrr";}
         float fmtW=(!isIncompat)?(ImGui::CalcTextSize(fmtTag).x+8):0;
         float inW=isIncompat?(ImGui::CalcTextSize("Incompatible").x+8):0;
@@ -1536,7 +1544,7 @@ void MenuInterface::drawReplayTab(){
                         {
                                 std::string extFound;
                 auto dir = Mod::get()->getSaveDir()/"replays";
-                for(auto& ext : {".brrr",".toosii",".ja",".giddey",".bam",".sexyy"}){
+                for(auto& ext : {".brrr",".toosii",".ja",".giddey",".bam",".sexyy",".juice"}){
                     if(std::filesystem::exists(dir/(mn+ext))){extFound=ext;break;}
                 }
                 if(!extFound.empty()){
@@ -1564,6 +1572,7 @@ void MenuInterface::drawReplayTab(){
             else if(eng2->toosiiMacros.count(mn)){tag=".toosii";tagCol=ImVec4(0.99f,0.82f,0.14f,1.f);}
             else if(eng2->bamMacros.count(mn)){tag=".bam";tagCol=ImVec4(0.878f,0.067f,0.153f,1.f);}
             else if(eng2->sexyyMacros.count(mn)){tag=".sexyy";tagCol=ImVec4(0.910f,0.004f,0.580f,1.f);}
+            else if(eng2->juiceMacros.count(mn)){tag=".juice";tagCol=ImVec4(0.910f,0.588f,0.478f,1.f);}
             auto ts=ImGui::CalcTextSize(tag);tagX-=ts.x+4;
             wdl->AddText(ImVec2(tagX,iy+(ih-ts.y)*0.5f),toU32(tagCol),tag);}
                 float btnY=iy+(ih-xBtnW)*0.5f;
@@ -1677,7 +1686,7 @@ void MenuInterface::drawReplayTab(){
                 eng4->incompatibleMacros.erase(replayDeleteName);
                 eng4->jaMacros.erase(replayDeleteName);eng4->giddeyMacros.erase(replayDeleteName);
                 eng4->toosiiMacros.erase(replayDeleteName);eng4->bamMacros.erase(replayDeleteName);
-                eng4->sexyyMacros.erase(replayDeleteName);
+                eng4->sexyyMacros.erase(replayDeleteName);eng4->juiceMacros.erase(replayDeleteName);
                 replayDeleteName.clear();replayDeleteError.clear();
                 markReplayListDirty();refreshReplayListIfNeeded(true);ImGui::CloseCurrentPopup();}}
         if(cancelDel){replayDeleteName.clear();replayDeleteError.clear();ImGui::CloseCurrentPopup();}
@@ -2719,6 +2728,7 @@ void MenuInterface::drawSettingsTab(){
             else if(i==5)activeTheme=THEME_GIDDEY;
             else if(i==6)activeTheme=THEME_BAM;
             else if(i==7)activeTheme=THEME_SEXYY;
+            else if(i==8)activeTheme=THEME_JUICE;
             saveSettings();}
         if(i%2==0&&i+1>=pc)ImGui::Dummy(ImVec2(0,0));
     }
@@ -4472,13 +4482,13 @@ void MenuInterface::loadSettings(){
     theme.textSecondary=sanitizeColor(loadColor("theme_text2",txt2Def),txt2Def);
     theme.bgOpacity=sanitizeClamped(mod->getSavedValue<float>("theme_bg_opacity",0.96f),0.5f,1.f,0.96f);
     theme.cornerRadius=sanitizeClamped(mod->getSavedValue<float>("theme_corner_radius",5.f),0.f,16.f,5.f);
-    theme.activePreset=std::clamp(mod->getSavedValue<int>("theme_active_preset",0),0,5);
+    theme.activePreset=std::clamp(mod->getSavedValue<int>("theme_active_preset",0),0,8);
     theme.glowCycleEnabled=mod->getSavedValue<bool>("theme_glow_cycle",false);
     theme.glowCycleRate=sanitizeClamped(mod->getSavedValue<float>("theme_glow_rate",0.5f),0.02f,1.f,0.5f);
     ambientWavesEnabled=mod->getSavedValue<bool>("ambient_waves",true);
     anim.animSpeed=sanitizeClamped(mod->getSavedValue<float>("anim_speed",8.f),2.f,24.f,8.f);
     anim.openDirection=(AnimDirection)mod->getSavedValue<int>("anim_direction",0);
-    activeTheme=(BotTheme)std::clamp(mod->getSavedValue<int>("active_theme",(int)THEME_GUCCI),0,5);
+    activeTheme=(BotTheme)std::clamp(mod->getSavedValue<int>("active_theme",(int)THEME_GUCCI),0,8);
     keybinds.menu=mod->getSavedValue<int>("key_menu",0xA4);
     keybinds.frameAdvance=mod->getSavedValue<int>("key_frame_advance",0x56);
     keybinds.frameStep=mod->getSavedValue<int>("key_frame_step",0x43);

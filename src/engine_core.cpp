@@ -432,7 +432,7 @@ static void loadTrainerMacroData(const fs::path& path, GucciEngine::TrainerMacro
 bool GucciEngine::loadTrainerMacro(const std::string& stem) {
     auto dir = getReplayDir();
     fs::path found;
-    for (auto ext : { ".brrr", ".toosii", ".ja", ".giddey", ".bam", ".sexyy" }) {
+    for (auto ext : { ".brrr", ".toosii", ".ja", ".giddey", ".bam", ".sexyy", ".juice" }) {
         std::error_code ec;
         auto candidate = dir / (stem + ext);
         if (fs::exists(candidate, ec)) { found = candidate; break; }
@@ -743,7 +743,7 @@ bool GucciEngine::beginResumeRecording() {
 void GucciEngine::reloadMacroList() {
     storedMacros.clear(); incompatibleMacros.clear();
     jaMacros.clear(); giddeyMacros.clear(); toosiiMacros.clear();
-    bamMacros.clear(); sexyyMacros.clear();
+    bamMacros.clear(); sexyyMacros.clear(); juiceMacros.clear();
 
     auto dir = getReplayDir();
     if (!fs::exists(dir)) { fs::create_directories(dir); return; }
@@ -754,13 +754,14 @@ void GucciEngine::reloadMacroList() {
         auto ext  = it.path().extension().string();
         auto stem = it.path().stem().string();
         if (ext == ".brrr" || ext == ".toosii" || ext == ".ja" ||
-            ext == ".giddey" || ext == ".bam" || ext == ".sexyy") {
+            ext == ".giddey" || ext == ".bam" || ext == ".sexyy" || ext == ".juice") {
             storedMacros.push_back(stem);
             if (ext == ".ja")     jaMacros.insert(stem);
             if (ext == ".giddey") giddeyMacros.insert(stem);
             if (ext == ".toosii") toosiiMacros.insert(stem);
             if (ext == ".bam")    bamMacros.insert(stem);
             if (ext == ".sexyy")  sexyyMacros.insert(stem);
+            if (ext == ".juice")  juiceMacros.insert(stem);
         } else if (ext == ".gdr" || ext == ".xd" || ext == ".json" || ext == ".brr") {
                         incompatibleMacros.insert(stem);
         }
@@ -1083,7 +1084,7 @@ bool GucciEngine::convertToBRR(const std::string& name) {
     auto dir = getReplayDir();
     auto isNative = [](const std::string& e) {
         return e == ".brrr" || e == ".toosii" || e == ".ja" ||
-               e == ".giddey" || e == ".bam" || e == ".sexyy";
+               e == ".giddey" || e == ".bam" || e == ".sexyy" || e == ".juice";
     };
 
     fs::path src;
@@ -1312,7 +1313,7 @@ void GucciEngine::initialize() {
         fs::create_directories(jupDir);
 
         auto findIn = [](fs::path const& dir, std::string const& stem) -> fs::path {
-            for (auto ext : { ".brrr", ".toosii", ".ja", ".giddey", ".bam", ".sexyy" }) {
+            for (auto ext : { ".brrr", ".toosii", ".ja", ".giddey", ".bam", ".sexyy", ".juice" }) {
                 std::error_code ec;
                 auto candidate = dir / (stem + ext);
                 if (fs::exists(candidate, ec)) return candidate;

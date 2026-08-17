@@ -85,7 +85,8 @@ enum BotTheme {
     THEME_JA,
     THEME_GIDDEY,
     THEME_BAM,
-    THEME_SEXYY
+    THEME_SEXYY,
+    THEME_JUICE
 };
 
 class MenuInterface {
