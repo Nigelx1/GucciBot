@@ -75,6 +75,7 @@ struct KeybindSet {
     int autoFlip = 0;
     int preventDeath = 0;
     int mirrorInputs = 0;
+    int compactMode = 0;
 };
 
 enum BotTheme {
@@ -128,6 +129,12 @@ public:
     char renderPixFmtBuf[24]="yuv420p";
     bool renderColorFix=true;
     bool megaHackLook=false;
+    // Small corner panel (record/play, TPS/speed, frame step, the handful
+    // of toggles you'd actually want mid-attempt) instead of the full tabbed
+    // window, so the bot can stay open while actually playing a level
+    // without blocking the view -- see drawCompactWindow().
+    bool compactMode=false;
+    float compactTempTickRate=240.f, compactTempGameSpeed=1.f;
     char renderVideoArgsBuf[256]="colorspace=all=bt709:iall=bt470bg:fast=1";
     char renderAudioArgsBuf[256]="";
     char renderAudioCodecBuf[64]="aac";
@@ -178,6 +185,7 @@ private:
     void drawAmbientWaves(ImDrawList* dl, ImVec2 panelMin, ImVec2 panelMax);
     void drawMainWindow();
     void drawMegaHackWindow();
+    void drawCompactWindow();
     void drawRenderCompletePopup();
     void drawTitleBar();
     void drawTabBar();

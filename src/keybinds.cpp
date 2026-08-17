@@ -92,6 +92,7 @@ class $modify(GB7KeyHandler, CCKeyboardDispatcher) {
             check(kb.preventDeath,   [&]{ gb->updater.m_preventDeath = !gb->updater.m_preventDeath; });
             check(kb.mirrorInputs,   [&]{ gb->replay.m_mirrorInputs = !gb->replay.m_mirrorInputs; });
             check(kb.safeMode,       [&]{ gb->protectedMode = !gb->protectedMode; });
+            check(kb.compactMode,    [&]{ ui->compactMode = !ui->compactMode; });
         }
 
         if (down && ui) {

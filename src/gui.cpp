@@ -1271,6 +1271,108 @@ void MenuInterface::drawMegaHackWindow(){
     ImGui::PopStyleVar();
     if(jupiterActive)theme=savedTheme;}
 
+// Small always-visible corner panel instead of the full tabbed window --
+// same idea as yBot's compact bot window: record/play, TPS/speed, frame
+// step, and the handful of toggles you'd actually want mid-attempt, small
+// enough to leave open while actually playing without blocking the level.
+// Positioned like the existing HUD overlays (displayGameplayHUD etc. --
+// SetNextWindowPos with ImGuiCond_Always, corner-anchored, recomputed every
+// frame), but unlike those this one takes real input, so it can't use
+// ImGuiWindowFlags_NoInputs/NoNav.
+void MenuInterface::drawCompactWindow(){
+    auto* engine=GucciEngine::get();
+    auto* upd=&engine->updater;
+    auto* mod=Mod::get();
+
+    float t=anim.easeOutCubic(anim.openProgress);
+    if(t<=0.f)return;
+
+    auto* vp=ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x+10,vp->Pos.y+10),ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(240,0),ImGuiCond_Always);
+    ImGui::PushStyleVar(ImGuiStyleVar_Alpha,t);
+    ImGui::Begin("##gbCompact",nullptr,
+        ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoCollapse|
+        ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoFocusOnAppearing);
+
+    if(fontHeading)ImGui::PushFont(fontHeading);
+    ImGui::TextColored(theme.getAccent(),"GucciBot");
+    if(fontHeading)ImGui::PopFont();
+    ImGui::SameLine(ImGui::GetWindowWidth()-58);
+    if(Widgets::StyledButton("Full",ImVec2(48,22),theme,anim,4.f))compactMode=false;
+    ImGui::Separator();
+
+    const char* modeStr=engine->isRecording()?"RECORDING":engine->isPlaying()?"PLAYING":"IDLE";
+    ImVec4 modeCol=engine->isRecording()?ImVec4(1.f,0.3f,0.3f,1.f):engine->isPlaying()?ImVec4(0.3f,1.f,0.3f,1.f):theme.textSecondary;
+    ImGui::TextColored(modeCol,"%s",modeStr);
+    ImGui::SameLine();
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::Text(" f=%u  %.0f TPS  %.2fx",upd->getFrame(),upd->m_tps,upd->m_speedhack);
+    ImGui::PopStyleColor();
+    if(!engine->replayName.empty()){
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::TextWrapped("%s",engine->replayName.c_str());
+        ImGui::PopStyleColor();
+    }
+    ImGui::Dummy(ImVec2(0,4));
+
+    float bw=(ImGui::GetContentRegionAvail().x-6)/2.f;
+    if(engine->isRecording()){
+        if(Widgets::StyledButton("Stop Recording",ImVec2(-1,26),theme,anim))engine->setMode(GucciEngine::Mode::Idle);
+    } else if(engine->isPlaying()){
+        if(Widgets::StyledButton("Stop Playback",ImVec2(-1,26),theme,anim))engine->setMode(GucciEngine::Mode::Idle);
+    } else {
+        if(Widgets::StyledButton("Record",ImVec2(bw,26),theme,anim))engine->setMode(GucciEngine::Mode::Recording);
+        ImGui::SameLine(0,6);
+        bool canPlay=!engine->replay.m_actionAtom.m_actions.empty();
+        if(!canPlay)ImGui::PushStyleVar(ImGuiStyleVar_Alpha,0.4f);
+        bool playClicked=Widgets::StyledButton("Play",ImVec2(bw,26),theme,anim);
+        if(!canPlay)ImGui::PopStyleVar();
+        if(playClicked&&canPlay)engine->setMode(GucciEngine::Mode::Playing);
+    }
+    ImGui::Dummy(ImVec2(0,6));
+    ImGui::Separator();
+
+    ImGui::SetNextItemWidth(bw);
+    ImGui::InputFloat("##ctps",&compactTempTickRate,0,0,"%.0f TPS");
+    ImGui::SameLine(0,6);
+    if(Widgets::StyledButton("Apply##ctps",ImVec2(bw,24),theme,anim)){
+        if(!PlayLayer::get()||!engine->isPlaying()){
+            upd->m_tps=compactTempTickRate;
+            mod->setSavedValue("eng_tick_rate",(float)upd->m_tps);
+        }
+    }
+    ImGui::SetNextItemWidth(bw);
+    ImGui::InputFloat("##cspd",&compactTempGameSpeed,0,0,"%.2fx");
+    ImGui::SameLine(0,6);
+    if(Widgets::StyledButton("Apply##cspd",ImVec2(bw,24),theme,anim))upd->m_speedhack=compactTempGameSpeed;
+    ImGui::Dummy(ImVec2(0,6));
+
+    if(Widgets::ToggleSwitch("Frame Advance",&upd->m_paused,theme,anim)){}
+    if(upd->m_paused){
+        if(Widgets::StyledButton("<< Back",ImVec2(bw,24),theme,anim,4.f)){
+            if(upd->m_backwardsStepping)upd->backwardsStep(1);
+        }
+        ImGui::SameLine(0,6);
+        if(Widgets::StyledButton("Step >>",ImVec2(bw,24),theme,anim,4.f))upd->m_stepOnce_=true;
+    }
+    ImGui::Dummy(ImVec2(0,4));
+    ImGui::Separator();
+
+    if(Widgets::ToggleSwitch("Noclip",&engine->noclipEnabled,theme,anim))
+        mod->setSavedValue("hack_noclip",engine->noclipEnabled);
+    if(Widgets::ToggleSwitch("Layout Mode",&engine->layoutMode,theme,anim))
+        mod->setSavedValue("hack_layout_mode",engine->layoutMode);
+    if(Widgets::ToggleSwitch("Show Hitboxes",&engine->showHitboxes,theme,anim))
+        mod->setSavedValue("hack_hitboxes",engine->showHitboxes);
+    if(Widgets::ToggleSwitch("No Mirror",&engine->noMirrorEffect,theme,anim))
+        mod->setSavedValue("hack_no_mirror",engine->noMirrorEffect);
+    if(Widgets::ToggleSwitch("Swap Player Inputs",&engine->replay.m_mirrorInputs,theme,anim)){}
+
+    ImGui::End();
+    ImGui::PopStyleVar();
+}
+
 void MenuInterface::drawReplayTab(){
     auto* engine=GucciEngine::get();
         if((activeTheme==THEME_TOOSII||activeTheme==THEME_TOOSII_SYRACUSE||activeTheme==THEME_TOOSII_SACSTATE))
@@ -2677,6 +2779,11 @@ void MenuInterface::drawSettingsTab(){
     Widgets::SectionHeader("Interface",theme);
     if(Widgets::ToggleSwitch("MegaHack-Style Menu",&megaHackLook,theme,anim))
         Mod::get()->setSavedValue("ui_megahack_look",megaHackLook);
+    if(Widgets::ToggleSwitch("Compact Mode",&compactMode,theme,anim))
+        Mod::get()->setSavedValue("ui_compact_mode",compactMode);
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::TextWrapped("A small corner panel instead of the full menu -- record/play, TPS/speed, frame step, noclip, and a few other essentials, small enough to leave open while actually playing.");
+    ImGui::PopStyleColor();
     ImGui::Dummy(ImVec2(0,8));
 
         Widgets::SectionHeader("Diagnostics",theme);
@@ -2826,7 +2933,8 @@ void MenuInterface::drawSettingsTab(){
         {"Back Step",&keybinds.backStep},
         {"Auto-Flip",&keybinds.autoFlip},
         {"Prevent Death",&keybinds.preventDeath},
-        {"Mirror Inputs",&keybinds.mirrorInputs}};
+        {"Mirror Inputs",&keybinds.mirrorInputs},
+        {"Compact Mode",&keybinds.compactMode}};
     for(auto& e:kbs){ImGui::Dummy(ImVec2(0,4));Widgets::KeybindButton(e.label,e.ptr,theme,anim);}
     ImGui::Dummy(ImVec2(0,12));
     if(Widgets::StyledButton("Reset to Defaults",ImVec2(-1,32),theme,anim)){
@@ -4302,6 +4410,7 @@ void MenuInterface::saveSettings(){
     mod->setSavedValue("key_auto_flip",keybinds.autoFlip);
     mod->setSavedValue("key_prevent_death",keybinds.preventDeath);
     mod->setSavedValue("key_mirror_inputs",keybinds.mirrorInputs);
+    mod->setSavedValue("key_compact_mode",keybinds.compactMode);
     mod->setSavedValue("hack_hitboxes",eng->showHitboxes);
     mod->setSavedValue("hack_hitbox_death",eng->hitboxOnDeath);
     mod->setSavedValue("hack_hitbox_trail",eng->hitboxTrail);
@@ -4582,6 +4691,7 @@ void MenuInterface::loadSettings(){
     eng->updater.m_tps=mod->getSavedValue<float>("eng_tick_rate",240.f);
     eng->updater.m_speedhack=mod->getSavedValue<float>("eng_speed",1.f);
         tempTickRate=(float)eng->updater.m_tps;tempGameSpeed=(float)eng->updater.m_speedhack;
+    compactTempTickRate=tempTickRate;compactTempGameSpeed=tempGameSpeed;
     auto* csm=ClickSoundManager::get();
     csm->enabled=mod->getSavedValue<bool>("click_enabled",false);
     csm->activePackName=mod->getSavedValue<std::string>("click_pack","");
@@ -4603,6 +4713,7 @@ void MenuInterface::loadSettings(){
     keybinds.autoFlip=mod->getSavedValue<int>("key_auto_flip",0);
     keybinds.preventDeath=mod->getSavedValue<int>("key_prevent_death",0);
     keybinds.mirrorInputs=mod->getSavedValue<int>("key_mirror_inputs",0);
+    keybinds.compactMode=mod->getSavedValue<int>("key_compact_mode",0);
         eng->updater.m_backwardsStepping=mod->getSavedValue<bool>("feat_backwards_step",false);
     eng->fwSweepRange=mod->getSavedValue<int>("fw_sweeprange",12);
     if(eng->fwMaxWindow > 2*eng->fwSweepRange) eng->fwMaxWindow = 2*eng->fwSweepRange;
@@ -4638,6 +4749,7 @@ void MenuInterface::loadSettings(){
     eng->hud.opacity=mod->getSavedValue<float>("hud_opacity",1.f);
     eng->hud.scale=mod->getSavedValue<float>("hud_scale",0.7f);
     megaHackLook=mod->getSavedValue<bool>("ui_megahack_look",false);
+    compactMode=mod->getSavedValue<bool>("ui_compact_mode",false);
         {
         std::string enc=mod->getSavedValue<std::string>("fw_tiers","");
         eng->fwTiers.clear();
@@ -4690,7 +4802,8 @@ void MenuInterface::drawInterface(){
     theme.applyToImGuiStyle();
     drawBackdrop();
     if(anim.openProgress>0.f){
-        if(megaHackLook)drawMegaHackWindow();
+        if(compactMode)drawCompactWindow();
+        else if(megaHackLook)drawMegaHackWindow();
         else drawMainWindow();
     }
     drawRenderCompletePopup();}
