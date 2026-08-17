@@ -1,4 +1,4 @@
-# GucciBot 1.1
+# GucciBot 1.2
 
 > Frame perfect. Ice cold. Brrr.
 
@@ -61,6 +61,7 @@ The same toolset as the Jupiter My Favourite Trainer, right next to it as its ow
 | BamBot | `.bam` | Heat Black + Red |
 | SexyyBot | `.sexyy` | Hot Pink + Purple |
 | JuiceBot | `.juice` | Coral + Teal |
+| ButlerBot | `.butler` | Warriors Gold + Royal Blue |
 
 ## Extras
 

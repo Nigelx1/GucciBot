@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-16-i (1.2: JuiceBot got the full treatment it was missing -- first pass only wired the mechanical parts (extension, macro set, save path), not the actual identity every other theme has. Palette redone with real saturation instead of a near-black, barely-there tint: accent pushed to a punchier coral-orange (0.960,0.520,0.380), bg/card rebuilt so the teal hue actually reads instead of just looking dark (0.020,0.090,0.086 / 0.035,0.130,0.122), textSecondary rebalanced to match. Badge color in the Saved Replays list updated to match. Added the identity bits every other theme carries that JuiceBot skipped: title bar name + subtitle ('That's tuff. Brrr.'), status bar brand ('Tuff.'), a themed quote on the Replay/Tools/Hacks tabs and on the Credits tab, and a Credits hero badge ('Beta Tester | Bug Hunter | That's Tuff') -- all in Juice's actual voice from his own bug reports, not generic filler. Compiles clean, untested in-game.)"
+#define GB_BUILD_LABEL "2026-08-16-j (1.2.0: new ButlerBot theme (.butler extension, Warriors gold + royal blue -- Jimmy Butler's current team, not Heat colors since BamBot already owns those), built with the full treatment from the start this time: palette (10th kThemePresets entry), every extension-to-theme mapping site, plus the identity content (title bar name + 'Playoff Jimmy mode: always on.' subtitle, status bar brand 'Playoff Jimmy.', themed quotes on Replay/Tools/Hacks/Credits, Credits badge 'Playoff Jimmy | Big Face Coffee | Buckets'). Preset-count-driven UI (the Settings theme picker) picks it up automatically; clamp bounds bumped 8->9 for the 10th preset. Version bumped to 1.2.0 across mod.json/CMakeLists.txt/MOD_VERSION -- GBR6_VERSION/BRR_FORMAT_VERSION untouched as always. Compiles clean, untested in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -638,6 +638,7 @@ public:
     std::unordered_set<std::string>  bamMacros;
     std::unordered_set<std::string>  sexyyMacros;
     std::unordered_set<std::string>  juiceMacros;
+    std::unordered_set<std::string>  butlerMacros;
 
         std::vector<BotSettingsPreset> settingsPresets;
     void saveBotSettingsPreset(const std::string& name);

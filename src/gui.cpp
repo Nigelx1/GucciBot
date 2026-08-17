@@ -570,6 +570,13 @@ static const ThemePreset kThemePresets[]={
      ImVec4(0.980f,0.960f,0.940f,1.f),
      ImVec4(0.625f,0.565f,0.478f,1.f),
      5.f,0.96f},
+        {"ButlerBot",
+     ImVec4(0.996f,0.725f,0.153f,1.f),
+     ImVec4(0.020f,0.050f,0.130f,0.96f),
+     ImVec4(0.035f,0.085f,0.200f,1.f),
+     ImVec4(0.980f,0.970f,0.940f,1.f),
+     ImVec4(0.560f,0.520f,0.380f,1.f),
+     5.f,0.96f},
 };
 
 ImVec4 ThemeEngine::getAccent() const{
@@ -886,7 +893,8 @@ void MenuInterface::drawTitleBar(){
         (activeTheme==THEME_GIDDEY)?"GiddeyBot":
         (activeTheme==THEME_BAM)?"BamBot":
         (activeTheme==THEME_SEXYY)?"SexyyBot":
-        (activeTheme==THEME_JUICE)?"JuiceBot":"GucciBot";
+        (activeTheme==THEME_JUICE)?"JuiceBot":
+        (activeTheme==THEME_BUTLER)?"ButlerBot":"GucciBot";
     ImVec2 npos(wp.x+40,wp.y+10);
     if(fontHeading)ImGui::PushFont(fontHeading);
     dl->AddText(npos,theme.getAccentU32(),botName);
@@ -904,6 +912,8 @@ void MenuInterface::drawTitleBar(){
             "v" MOD_VERSION "  -  Frame perfect. Goes stupid. Skee yee.":
         (activeTheme==THEME_JUICE)?
             "v" MOD_VERSION "  -  That's tuff. Brrr.":
+        (activeTheme==THEME_BUTLER)?
+            "v" MOD_VERSION "  -  Playoff Jimmy mode: always on.":
         "v" MOD_VERSION "  -  Frame perfect. GBR6. Brrr.";
     ImVec2 spos(wp.x+40,wp.y+30);
     if(fontSmall)ImGui::PushFont(fontSmall);
@@ -1025,7 +1035,8 @@ void MenuInterface::drawStatusBar(){
         (activeTheme==THEME_GIDDEY)?"Crikey!":
         (activeTheme==THEME_BAM)?"83 pts.":
         (activeTheme==THEME_SEXYY)?"Skee yee.":
-        (activeTheme==THEME_JUICE)?"Tuff.":"Brrr.";
+        (activeTheme==THEME_JUICE)?"Tuff.":
+        (activeTheme==THEME_BUTLER)?"Playoff Jimmy.":"Brrr.";
     ImVec2 bts=ImGui::CalcTextSize(brand);
     dl->AddText(ImVec2(wp.x+ws.x-padX-bts.x-12,barY+(barH-bts.y)*0.5f),theme.getAccentU32(0.6f),brand);
     if(fontSmall)ImGui::PopFont();}
@@ -1391,6 +1402,8 @@ void MenuInterface::drawReplayTab(){
         Widgets::GucciQuote("\"I don't miss. Not a single frame. Skee yee.\"","-- Sexyy Red, probably",theme);
     else if(activeTheme==THEME_JUICE)
         Widgets::GucciQuote("\"I tested every frame. Every single one.\"","-- Juice, probably",theme);
+    else if(activeTheme==THEME_BUTLER)
+        Widgets::GucciQuote("\"Regular season replays don't count. I lock in for the playoffs.\"","-- Jimmy Butler, probably",theme);
     else
         Widgets::GucciQuote("\"I got so many replays I got files in my files.\"","-- Gucci Mane, probably",theme);
     Widgets::SectionHeader("Mode",theme);
@@ -1440,7 +1453,7 @@ void MenuInterface::drawReplayTab(){
                 const char* nativeLabel=
             (activeTheme==THEME_TOOSII||activeTheme==THEME_TOOSII_SYRACUSE||activeTheme==THEME_TOOSII_SACSTATE)?".toosii":
             (activeTheme==THEME_JA)?".ja":
-            (activeTheme==THEME_GIDDEY)?".giddey":(activeTheme==THEME_BAM)?".bam":(activeTheme==THEME_SEXYY)?".sexyy":(activeTheme==THEME_JUICE)?".juice":".brrr";
+            (activeTheme==THEME_GIDDEY)?".giddey":(activeTheme==THEME_BAM)?".bam":(activeTheme==THEME_SEXYY)?".sexyy":(activeTheme==THEME_JUICE)?".juice":(activeTheme==THEME_BUTLER)?".butler":".brrr";
         if(Widgets::StyledButton(nativeLabel,ImVec2(bw,30),theme,anim,6.f)){
             if(PlayLayer::get())engine->setMode(GucciEngine::Mode::Recording);
             else engine->setMode(GucciEngine::Mode::Recording);
@@ -1453,7 +1466,7 @@ void MenuInterface::drawReplayTab(){
         const char* extLabel =
             (activeTheme==THEME_TOOSII||activeTheme==THEME_TOOSII_SYRACUSE||activeTheme==THEME_TOOSII_SACSTATE)?".toosii":
             (activeTheme==THEME_JA)?".ja":
-            (activeTheme==THEME_GIDDEY)?".giddey":(activeTheme==THEME_BAM)?".bam":(activeTheme==THEME_SEXYY)?".sexyy":(activeTheme==THEME_JUICE)?".juice":".brrr";
+            (activeTheme==THEME_GIDDEY)?".giddey":(activeTheme==THEME_BAM)?".bam":(activeTheme==THEME_SEXYY)?".sexyy":(activeTheme==THEME_JUICE)?".juice":(activeTheme==THEME_BUTLER)?".butler":".brrr";
         Widgets::StatusBadge("RECORDING",ImVec4(1.f,0.3f,0.3f,1.f));
         ImGui::SameLine();
         Widgets::StatusBadge(extLabel,getBRRTagColor());
@@ -1543,7 +1556,7 @@ void MenuInterface::drawReplayTab(){
         const char* extLabel2 =
             (activeTheme==THEME_TOOSII||activeTheme==THEME_TOOSII_SYRACUSE||activeTheme==THEME_TOOSII_SACSTATE)?".toosii":
             (activeTheme==THEME_JA)?".ja":
-            (activeTheme==THEME_GIDDEY)?".giddey":(activeTheme==THEME_BAM)?".bam":(activeTheme==THEME_SEXYY)?".sexyy":(activeTheme==THEME_JUICE)?".juice":".brrr";
+            (activeTheme==THEME_GIDDEY)?".giddey":(activeTheme==THEME_BAM)?".bam":(activeTheme==THEME_SEXYY)?".sexyy":(activeTheme==THEME_JUICE)?".juice":(activeTheme==THEME_BUTLER)?".butler":".brrr";
         Widgets::StatusBadge("PLAYING",ImVec4(0.3f,1.f,0.3f,1.f));
         ImGui::SameLine();
         Widgets::StatusBadge(extLabel2,getBRRTagColor());
@@ -1632,6 +1645,7 @@ void MenuInterface::drawReplayTab(){
             else if(eng3->bamMacros.count(mn))fmtTag=".bam";
             else if(eng3->sexyyMacros.count(mn))fmtTag=".sexyy";
             else if(eng3->juiceMacros.count(mn))fmtTag=".juice";
+            else if(eng3->butlerMacros.count(mn))fmtTag=".butler";
             else fmtTag=".brrr";}
         float fmtW=(!isIncompat)?(ImGui::CalcTextSize(fmtTag).x+8):0;
         float inW=isIncompat?(ImGui::CalcTextSize("Incompatible").x+8):0;
@@ -1652,7 +1666,7 @@ void MenuInterface::drawReplayTab(){
                         {
                                 std::string extFound;
                 auto dir = Mod::get()->getSaveDir()/"replays";
-                for(auto& ext : {".brrr",".toosii",".ja",".giddey",".bam",".sexyy",".juice"}){
+                for(auto& ext : {".brrr",".toosii",".ja",".giddey",".bam",".sexyy",".juice",".butler"}){
                     if(std::filesystem::exists(dir/(mn+ext))){extFound=ext;break;}
                 }
                 if(!extFound.empty()){
@@ -1681,6 +1695,7 @@ void MenuInterface::drawReplayTab(){
             else if(eng2->bamMacros.count(mn)){tag=".bam";tagCol=ImVec4(0.878f,0.067f,0.153f,1.f);}
             else if(eng2->sexyyMacros.count(mn)){tag=".sexyy";tagCol=ImVec4(0.910f,0.004f,0.580f,1.f);}
             else if(eng2->juiceMacros.count(mn)){tag=".juice";tagCol=ImVec4(0.960f,0.520f,0.380f,1.f);}
+            else if(eng2->butlerMacros.count(mn)){tag=".butler";tagCol=ImVec4(0.996f,0.725f,0.153f,1.f);}
             auto ts=ImGui::CalcTextSize(tag);tagX-=ts.x+4;
             wdl->AddText(ImVec2(tagX,iy+(ih-ts.y)*0.5f),toU32(tagCol),tag);}
                 float btnY=iy+(ih-xBtnW)*0.5f;
@@ -1795,6 +1810,7 @@ void MenuInterface::drawReplayTab(){
                 eng4->jaMacros.erase(replayDeleteName);eng4->giddeyMacros.erase(replayDeleteName);
                 eng4->toosiiMacros.erase(replayDeleteName);eng4->bamMacros.erase(replayDeleteName);
                 eng4->sexyyMacros.erase(replayDeleteName);eng4->juiceMacros.erase(replayDeleteName);
+                eng4->butlerMacros.erase(replayDeleteName);
                 replayDeleteName.clear();replayDeleteError.clear();
                 markReplayListDirty();refreshReplayListIfNeeded(true);ImGui::CloseCurrentPopup();}}
         if(cancelDel){replayDeleteName.clear();replayDeleteError.clear();ImGui::CloseCurrentPopup();}
@@ -1978,6 +1994,8 @@ void MenuInterface::drawToolsTab(){
         Widgets::GucciQuote("\"I run this at my own speed and it still goes stupid.\"","-- Sexyy Red",theme);
     else if(activeTheme==THEME_JUICE)
         Widgets::GucciQuote("\"Speed doesn't mean much if the frame windows are wrong.\"","-- Juice, keeping you honest",theme);
+    else if(activeTheme==THEME_BUTLER)
+        Widgets::GucciQuote("\"I don't need speedhack. I just lock in.\"","-- Jimmy Butler",theme);
     else
         Widgets::GucciQuote("\"I run this game at my own speed. You can't keep up.\"","-- Gucci Mane, on speedhacks",theme);
     Widgets::SectionHeader("TPS Control",theme);
@@ -2080,6 +2098,8 @@ void MenuInterface::drawHacksTab(){
         Widgets::GucciQuote("\"Noclip? Baby I walk through walls naturally.\"","-- Sexyy Red",theme);
     else if(activeTheme==THEME_JUICE)
         Widgets::GucciQuote("\"Noclip's cool. I just want the analyzer to work.\"","-- Juice, still testing",theme);
+    else if(activeTheme==THEME_BUTLER)
+        Widgets::GucciQuote("\"Noclip? I go through everything. That's just Playoff Jimmy.\"","-- Jimmy Butler",theme);
     else
         Widgets::GucciQuote("\"I never die in this game. I'm immune. Like Gucci flu.\"","-- GucciBot propaganda",theme);
     ImGui::Dummy(ImVec2(0,4));
@@ -2846,6 +2866,7 @@ void MenuInterface::drawSettingsTab(){
             else if(i==6)activeTheme=THEME_BAM;
             else if(i==7)activeTheme=THEME_SEXYY;
             else if(i==8)activeTheme=THEME_JUICE;
+            else if(i==9)activeTheme=THEME_BUTLER;
             saveSettings();}
         if(i%2==0&&i+1>=pc)ImGui::Dummy(ImVec2(0,0));
     }
@@ -4304,6 +4325,7 @@ void MenuInterface::drawCreditsTab(){
         (activeTheme==THEME_BAM)?"83 Pts | Center | BITCH IM KOBE":
         (activeTheme==THEME_SEXYY)?"Skee Yee | STL | Pound Town":
         (activeTheme==THEME_JUICE)?"Beta Tester | Bug Hunter | That's Tuff":
+        (activeTheme==THEME_BUTLER)?"Playoff Jimmy | Big Face Coffee | Buckets":
         "Lead Dev | Vision | Brrr";
     ImVec2 bs=ImGui::CalcTextSize(badge);
     float bx=pos.x+(avail-bs.x-16)/2,by=pos.y+52;
@@ -4350,6 +4372,8 @@ void MenuInterface::drawCreditsTab(){
         Widgets::GucciQuote("\"Every click go stupid. Skee yee.\"","-- Sexyy Red",theme);
     else if(activeTheme==THEME_JUICE)
         Widgets::GucciQuote("\"I just wanted the frame windows to work. Then I got a whole theme.\"","-- Juice",theme);
+    else if(activeTheme==THEME_BUTLER)
+        Widgets::GucciQuote("\"Every frame's the playoffs to me. Brrr.\"","-- Jimmy Butler",theme);
     else
         Widgets::GucciQuote("\"I'm the foundation of all of this. Brrr.\"","-- Gucci Mane",theme);}
 void MenuInterface::drawHudTab(){
@@ -4604,13 +4628,13 @@ void MenuInterface::loadSettings(){
     theme.textSecondary=sanitizeColor(loadColor("theme_text2",txt2Def),txt2Def);
     theme.bgOpacity=sanitizeClamped(mod->getSavedValue<float>("theme_bg_opacity",0.96f),0.5f,1.f,0.96f);
     theme.cornerRadius=sanitizeClamped(mod->getSavedValue<float>("theme_corner_radius",5.f),0.f,16.f,5.f);
-    theme.activePreset=std::clamp(mod->getSavedValue<int>("theme_active_preset",0),0,8);
+    theme.activePreset=std::clamp(mod->getSavedValue<int>("theme_active_preset",0),0,9);
     theme.glowCycleEnabled=mod->getSavedValue<bool>("theme_glow_cycle",false);
     theme.glowCycleRate=sanitizeClamped(mod->getSavedValue<float>("theme_glow_rate",0.5f),0.02f,1.f,0.5f);
     ambientWavesEnabled=mod->getSavedValue<bool>("ambient_waves",true);
     anim.animSpeed=sanitizeClamped(mod->getSavedValue<float>("anim_speed",8.f),2.f,24.f,8.f);
     anim.openDirection=(AnimDirection)mod->getSavedValue<int>("anim_direction",0);
-    activeTheme=(BotTheme)std::clamp(mod->getSavedValue<int>("active_theme",(int)THEME_GUCCI),0,8);
+    activeTheme=(BotTheme)std::clamp(mod->getSavedValue<int>("active_theme",(int)THEME_GUCCI),0,9);
     keybinds.menu=mod->getSavedValue<int>("key_menu",0xA4);
     keybinds.frameAdvance=mod->getSavedValue<int>("key_frame_advance",0x56);
     keybinds.frameStep=mod->getSavedValue<int>("key_frame_step",0x43);
