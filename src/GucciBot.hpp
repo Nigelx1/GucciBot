@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-16-e (1.1: BIG BRRRR's start offset corrected to the track's actual drop at 20 and 11/15 seconds -- BigBrrrManager::kStartOffsetSec is now 20.0 + 11.0/15.0 (was a rough 20.0), which also shifts the bounce's beatRefTime anchor by the same fraction since it's derived from kStartOffsetSec. Compiles clean.)"
+#define GB_BUILD_LABEL "2026-08-16-f (1.2 WIP: Frame Window analyzer fixes from Juice's testing. Releases are now analyzed too (FwClickSample's release flag was always false/dead before) -- gated to Wave/Ship/Robot only via ground-truth gamemode at that frame (m_pathSamples), since release timing doesn't matter elsewhere; Ship gets its own disable toggle (fwTestShipReleases) since it can be finicky to probe. beginProbeRun()'s action-matching was hardcoded to a.m_holding (press-only), so probing a release sample found nothing to shift and silently tested the unshifted timing -- now matches on holding-state via the sample's release flag. finishProbeClick() copies isRelease into the resulting FrameWindowMark; the Manual Frame Windows list now shows/accepts releases too, labeled press vs rel. Fixed real persistence bug: GucciReplaySystem::getCurrentPath() used m_replayName, a field only ever populated by loading an EXISTING file's own header -- for any freshly-recorded macro it silently stayed empty forever, so Calculate's auto-save and the Manual Marks save button all wrote to the same bare '<dir>/.brrr' regardless of which macro was open. Now uses GucciEngine::replayName (the field the UI actually keeps in sync), and save() syncs m_replayName from it too so the file's own embedded header name is correct going forward. cancelAnalysis() now persists whatever fwMarks finished before the interruption instead of discarding them. Save + Calculate are no longer recording-only -- added standalone buttons reachable while just playing back a loaded macro, so re-Calculating an existing macro doesn't require re-recording it. GBFW sidecar bumped to v3 (isRelease); v1/v2 still load fine. Not fixed, explicitly deferred: simultaneous different-button inputs on the exact same frame can still collide in fwMarks' {frame,player2} identity key -- narrow edge case, needs a bigger identity-key change; and the marker-position-looks-wrong report turned out to be the already-disclosed physics-simulation-divergence limitation (shown in the Calculate popup itself), not a new bug -- didn't touch it. Compiles clean, untested in-game -- please have Juice re-check the specific scenarios he reported.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -554,9 +554,18 @@ public:
         // preserves these across a fresh Calculate run instead of clearing them, and the
         // probing loop skips re-measuring any click a manual mark already covers.
         bool manual = false;
+        // true if this window describes a RELEASE's timing leeway rather than a
+        // press's. Only ever populated for Wave/Ship/Robot (releases don't matter
+        // for other gamemodes) -- see analyzeFrameWindows()'s shouldTestRelease.
+        bool isRelease = false;
     };
     std::vector<FrameWindowMark> fwMarks;
     bool  fwHasData       = false;
+    // Release-window testing is correct for Wave/Ship/Robot (the only
+    // gamemodes where a release's timing matters) and skipped elsewhere
+    // automatically based on recorded gamemode -- Ship specifically can be
+    // finicky to probe reliably, so it gets its own opt-out on top of that.
+    bool  fwTestShipReleases = true;
                 struct FwClickSample { uint32_t frame; float x; float y; bool player2; bool release; };
     std::vector<FwClickSample> fwClickSamples;
     bool  fwSampling      = false;

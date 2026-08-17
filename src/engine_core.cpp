@@ -187,7 +187,16 @@ void GucciReplaySystem::onReset(uint32_t respawnFrame, uint32_t deathFrame) {
 fs::path GucciReplaySystem::getCurrentPath() const {
     auto* gb = GucciEngine::get();
     auto  dir = gb->getReplayDir();
-    return dir / (m_replayName + ".brrr");
+    // NOT m_replayName -- that field is only ever populated by actually
+    // loading an existing GBR6 file (from its own embedded header), so for
+    // any macro recorded fresh in this session it silently stays "" for its
+    // entire lifetime, making every call site of this function (Calculate's
+    // auto-save, the Manual Frame Windows save button, autosave-at-interval,
+    // autosave-at-level-end) resolve to the same bare "<dir>/.brrr" for
+    // every macro. gb->replayName is the field the UI actually keeps in
+    // sync (record start, load, rename, the macro-name text field), so it's
+    // the reliable source of "which macro is this really."
+    return dir / (gb->replayName + ".brrr");
 }
 
 void GucciReplaySystem::backupExisting(const fs::path& path) {
@@ -482,12 +491,13 @@ static void saveFwMarks(const fs::path& macroPath) {
     std::ofstream f(sc, std::ios::binary);
     if (!f) return;
     f.write("GBFW", 4);
-    uint8_t ver = 2; f.write((const char*)&ver, 1);
+    uint8_t ver = 3; f.write((const char*)&ver, 1);
     uint32_t n = (uint32_t)gb->fwMarks.size(); f.write((const char*)&n, 4);
     for (auto const& mk : gb->fwMarks) {
         int32_t w  = mk.window;
         uint8_t p2 = mk.player2 ? 1 : 0;
         uint8_t man = mk.manual ? 1 : 0;
+        uint8_t rel = mk.isRelease ? 1 : 0;
         f.write((const char*)&mk.x, 4);
         f.write((const char*)&mk.y, 4);
         f.write((const char*)&w, 4);
@@ -495,6 +505,7 @@ static void saveFwMarks(const fs::path& macroPath) {
         f.write((const char*)&mk.frame, 4);
         f.write((const char*)&mk.percent, 4);
         f.write((const char*)&man, 1);
+        f.write((const char*)&rel, 1);
     }
 }
 
@@ -510,15 +521,16 @@ static void loadFwMarks(const fs::path& macroPath) {
     f.read(magic, 4);
     if (std::memcmp(magic, "GBFW", 4) != 0) return;
     uint8_t ver = 0; f.read((char*)&ver, 1);
-    if (ver != 1 && ver != 2) return;
+    if (ver < 1 || ver > 3) return;
     uint32_t n = 0; f.read((char*)&n, 4);
     for (uint32_t i = 0; i < n; ++i) {
-        float x = 0, y = 0, pct = 0; int32_t w = 0; uint8_t p2 = 0; uint32_t fr = 0; uint8_t man = 0;
+        float x = 0, y = 0, pct = 0; int32_t w = 0; uint8_t p2 = 0; uint32_t fr = 0; uint8_t man = 0; uint8_t rel = 0;
         f.read((char*)&x, 4); f.read((char*)&y, 4); f.read((char*)&w, 4);
         f.read((char*)&p2, 1); f.read((char*)&fr, 4); f.read((char*)&pct, 4);
         if (ver >= 2) f.read((char*)&man, 1); // v1 sidecars predate manual marks -- default false
+        if (ver >= 3) f.read((char*)&rel, 1); // v1/v2 sidecars predate release windows -- default false
         if (!f) break;
-        gb->fwMarks.push_back({ x, y, (int)w, p2 != 0, fr, pct, man != 0 });
+        gb->fwMarks.push_back({ x, y, (int)w, p2 != 0, fr, pct, man != 0, rel != 0 });
     }
     gb->fwHasData = !gb->fwMarks.empty();
     log::info("[GucciBot] Frame-window: loaded {} persisted mark(s) from sidecar",
@@ -539,6 +551,11 @@ void GucciReplaySystem::save(const fs::path& path, bool noOverwrite) {
     if (noOverwrite && fs::exists(path)) return;
 
     auto* gb = GucciEngine::get();
+    // Keep in sync with the field the UI actually maintains -- see
+    // getCurrentPath()'s comment. Without this, a freshly recorded macro's
+    // saved file embeds an empty header.name forever, since m_replayName
+    // was never set to anything else before this point.
+    m_replayName = gb->replayName;
 
         std::vector<GBR6Input> p1, p2;
     for (auto& a : m_actionAtom.m_actions) {
@@ -1442,9 +1459,24 @@ void GucciEngine::analyzeFrameWindows() {
     fwCapStack.clear();
     fwClickSamples.clear();
 
+    // A release's timing only matters for Wave/Ship/Robot -- everywhere else
+    // (Cube/UFO/Ball/Spider/Swing) releasing early or late doesn't change
+    // anything, so testing it there was just noise. Gamemode is read from
+    // ground truth captured during the original recording (m_pathSamples);
+    // if that's not available for this frame (e.g. an older macro with no
+    // path-sample data), the release is excluded rather than guessed.
+    auto shouldTestRelease = [&](uint32_t frame, bool player2) -> bool {
+        if (frame >= replay.m_pathSamples.size()) return false;
+        char gm = player2 ? replay.m_pathSamples[frame].gamemode2 : replay.m_pathSamples[frame].gamemode1;
+        if (gm == 'H' && !fwTestShipReleases) return false; // Ship, user disabled
+        return gm == 'V' || gm == 'H' || gm == 'R'; // Wave, Ship, Robot
+    };
+
                     for (auto const& a : replay.m_actionAtom.m_actions) {
-        if (a.isInput() && a.m_holding)
-            fwClickSamples.push_back({ a.m_frame, 0.f, 0.f, a.m_player2, false });
+        if (!a.isInput()) continue;
+        if (a.m_holding) fwClickSamples.push_back({ a.m_frame, 0.f, 0.f, a.m_player2, false });
+        else if (shouldTestRelease(a.m_frame, a.m_player2))
+            fwClickSamples.push_back({ a.m_frame, 0.f, 0.f, a.m_player2, true });
     }
 
     if (fwClickSamples.empty()) {
@@ -1490,8 +1522,10 @@ void GucciEngine::analyzeFrameWindows() {
 
                             fwClickSamples.clear();
     for (auto const& a : fwSavedAtom.m_actions) {
-        if (a.isInput() && a.m_holding)
-            fwClickSamples.push_back({ a.m_frame, 0.f, 0.f, a.m_player2, false });
+        if (!a.isInput()) continue;
+        if (a.m_holding) { fwClickSamples.push_back({ a.m_frame, 0.f, 0.f, a.m_player2, false }); continue; }
+        if (shouldTestRelease(a.m_frame, a.m_player2))
+            fwClickSamples.push_back({ a.m_frame, 0.f, 0.f, a.m_player2, true });
     }
     std::sort(fwClickSamples.begin(), fwClickSamples.end(),
         [](auto& a, auto& b){ return a.frame < b.frame; });
@@ -1624,9 +1658,14 @@ void GucciEngine::beginProbeRun() {
 
                     uint32_t targetFrame = fwClickSamples[fwProbeClick].frame;
     bool     targetP2    = fwClickSamples[fwProbeClick].player2;
+    // fwClickSamples can now hold releases too (see analyzeFrameWindows), so
+    // this has to match on holding-state as well -- previously hardcoded to
+    // a.m_holding (press-only), which meant probing a release sample found
+    // nothing to shift and silently tested the unshifted timing every time.
+    bool     targetHolding = !fwClickSamples[fwProbeClick].release;
     if (fwProbeShift > 0) {
         for (auto& a : acts) {
-            if (a.m_frame == targetFrame && a.m_player2 == targetP2 && a.m_holding) {
+            if (a.m_frame == targetFrame && a.m_player2 == targetP2 && a.m_holding == targetHolding) {
                 a.m_frame = targetFrame + (uint32_t)fwProbeShift;
                 break;
             }
@@ -1667,6 +1706,7 @@ void GucciEngine::finishProbeClick() {
     mk.player2 = fwClickSamples[fwProbeClick].player2;
     mk.frame   = fwClickSamples[fwProbeClick].frame;
     mk.percent = std::clamp(fwClickSamples[fwProbeClick].x / levelLen * 100.f, 0.f, 100.f);
+    mk.isRelease = fwClickSamples[fwProbeClick].release;
     fwMarks.push_back(mk);
 
     log::info("[GucciBot] Frame-window: click {} @ frame {} ({:.1f}%) window={} "
@@ -1766,5 +1806,14 @@ void GucciEngine::cancelAnalysis() {
     mode             = Mode::Idle;
     if (userTpsSaved > 0.0) { updater.setTps(userTpsSaved); userTpsSaved = 0.0; }
 
-    log::info("[GucciBot] Frame-window: analysis cancelled — macro restored");
+    // Clicks already finished before the cancel (finishProbeClick pushes
+    // into fwMarks progressively as each one completes) used to just get
+    // thrown away here -- any interruption mid-run (Stop, a death flipping
+    // mode, leaving the level) silently lost all completed work. Persist
+    // whatever's there instead.
+    fwHasData = !fwMarks.empty();
+    if (!fwMarks.empty()) saveFwMarksNow();
+
+    log::info("[GucciBot] Frame-window: analysis cancelled — {} result(s) kept",
+              fwMarks.size());
 }

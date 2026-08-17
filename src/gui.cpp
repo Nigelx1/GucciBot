@@ -1435,6 +1435,31 @@ void MenuInterface::drawReplayTab(){
         ImGui::SameLine();ImGui::Text("%s | Actions: %zu",nm.c_str(),cnt);
         ImGui::Dummy(ImVec2(0,4));
         if(Widgets::StyledButton("Stop Playback",ImVec2(-1,30),theme,anim))engine->setMode(GucciEngine::Mode::Idle);
+        ImGui::Dummy(ImVec2(0,4));
+        // Save + Calculate used to only be reachable while actively
+        // recording -- loading an existing macro to re-run Calculate on it
+        // (or just re-save it after e.g. the Frame Editor) had no path at
+        // all. Same underlying calls the recording panel's Save/Calculate
+        // popup uses, just exposed here too.
+        float pbw2=(ImGui::GetContentRegionAvail().x-8)/2.f;
+        if(Widgets::StyledButton("Save",ImVec2(pbw2,28),theme,anim)){
+            auto savePath = Mod::get()->getSaveDir()/"replays"/(engine->replayName+extLabel2);
+            if(engine->replayBackupsEnabled) engine->replay.backupExisting(savePath);
+            engine->replay.save(savePath);
+            markReplayListDirty();refreshReplayListIfNeeded(true);
+            Notification::create("Macro saved",NotificationIcon::Success)->show();
+        }
+        ImGui::SameLine(0,8);
+        bool canCalc=PlayLayer::get()!=nullptr;
+        if(!canCalc)ImGui::PushStyleVar(ImGuiStyleVar_Alpha,0.4f);
+        bool calcClicked=Widgets::StyledButton("Calculate",ImVec2(pbw2,28),theme,anim);
+        if(!canCalc)ImGui::PopStyleVar();
+        if(calcClicked&&canCalc)engine->analyzeFrameWindows();
+        if(!canCalc){
+            ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+            ImGui::TextWrapped("Enter the level to Calculate.");
+            ImGui::PopStyleColor();
+        }
         ImGui::Dummy(ImVec2(0,4));}
     if(!engine->startPosWarning.empty()){
         ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(1.f,0.8f,0.2f,1.f));
@@ -2017,6 +2042,11 @@ void MenuInterface::drawHacksTab(){
         Mod::get()->setSavedValue("fw_live",engine->fwEnabledLive);
     if(Widgets::ToggleSwitch("Show in Renders",&engine->fwEnabledRender,theme,anim))
         Mod::get()->setSavedValue("fw_render",engine->fwEnabledRender);
+    if(Widgets::ToggleSwitch("Test Ship Releases",&engine->fwTestShipReleases,theme,anim))
+        Mod::get()->setSavedValue("fw_test_ship_releases",engine->fwTestShipReleases);
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::TextWrapped("Calculate measures release timing windows too now, for Wave/Ship/Robot (the only gamemodes where a release's timing matters) -- Ship's can be finicky to probe reliably, so it has its own switch here.");
+    ImGui::PopStyleColor();
     ImGui::Dummy(ImVec2(0,8));
     Widgets::SectionHeader("Practice Range",theme);
     if(Widgets::ToggleSwitch("Show During Playback",&engine->practiceRangeEnabled,theme,anim))
@@ -2072,7 +2102,7 @@ void MenuInterface::drawHacksTab(){
         auto& acts = engine->replay.m_actionAtom.m_actions;
         auto& samples = engine->replay.m_pathSamples;
         std::vector<size_t> clickIdx;
-        for(size_t i=0;i<acts.size();++i) if(acts[i].isInput()&&acts[i].m_holding) clickIdx.push_back(i);
+        for(size_t i=0;i<acts.size();++i) if(acts[i].isInput()) clickIdx.push_back(i);
 
         if(clickIdx.empty()){
             ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
@@ -2095,11 +2125,12 @@ void MenuInterface::drawHacksTab(){
                     pct = std::clamp(px/engine->m_levelLength*100.f,0.f,100.f);
                 }
 
+                bool isRel=!a.m_holding;
                 ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
-                if(pct>=0.f) ImGui::Text("f=%u  p%d  %.1f%%",a.m_frame,a.m_player2?2:1,pct);
-                else ImGui::Text("f=%u  p%d",a.m_frame,a.m_player2?2:1);
+                if(pct>=0.f) ImGui::Text("f=%u  p%d  %s  %.1f%%",a.m_frame,a.m_player2?2:1,isRel?"rel":"press",pct);
+                else ImGui::Text("f=%u  p%d  %s",a.m_frame,a.m_player2?2:1,isRel?"rel":"press");
                 ImGui::PopStyleColor();
-                ImGui::SameLine(150);
+                ImGui::SameLine(190);
 
                 int win = mk?mk->window:0;
                 ImGui::SetNextItemWidth(60);
@@ -2109,6 +2140,7 @@ void MenuInterface::drawHacksTab(){
                     else {
                         GucciEngine::FrameWindowMark nm;
                         nm.frame=a.m_frame; nm.player2=a.m_player2; nm.window=win; nm.manual=true;
+                        nm.isRelease=isRel;
                         if(a.m_frame<samples.size()){
                             nm.x = a.m_player2?samples[a.m_frame].p2x:samples[a.m_frame].p1x;
                             nm.y = a.m_player2?samples[a.m_frame].p2y:samples[a.m_frame].p1y;
@@ -4567,6 +4599,7 @@ void MenuInterface::loadSettings(){
     eng->fwMaxFramesMeasured=mod->getSavedValue<int>("fw_maxframes",240);
     eng->fwLookaheadDepth=mod->getSavedValue<int>("fw_lookahead",1);
     eng->fwSimSpeed=mod->getSavedValue<int>("fw_simspeed",1);
+    eng->fwTestShipReleases=mod->getSavedValue<bool>("fw_test_ship_releases",true);
     eng->updater.m_maxBackstepFrames=mod->getSavedValue<int>("feat_back_step_count",120);
     eng->updater.m_autoFlipOnDeath=mod->getSavedValue<bool>("feat_auto_flip",false);
     eng->updater.m_preventDeath=mod->getSavedValue<bool>("feat_prevent_death",false);
