@@ -1,4 +1,4 @@
-# GucciBot 1.2
+# GucciBot 1.3
 
 > Frame perfect. Ice cold. Brrr.
 
@@ -71,7 +71,7 @@ The same toolset as the Jupiter My Favourite Trainer, right next to it as its ow
 
 ## Credits
 
-- **guccimanefan** — GucciBot, themes, vision, the drip
+- **guccimanefan** (Nigelx1) — concept, direction, themes, testing
+- **Claude** — wrote the code and this page. Essentially the whole codebase, not a euphemism.
 - **ToastexGD** — ToastyReplay engine base and improvements
 - **peony** — Silicate (dropped the source like Gucci drops albums. Brrr.)
-- **Claude.ai** — rewrite and feature partner
