@@ -29,7 +29,7 @@ You will be tempted to "just fix everything at once" because you can see several
 
 ## 1. What GucciBot is
 
-GucciBot is a **Geometry Dash macro bot**, distributed as a **Geode mod** (`guccimanefan.guccibot`). It records the player's inputs frame-perfectly and plays them back. The author is **Nigel**, who goes by **"fable"** in the GD community.
+GucciBot is a **Geometry Dash macro bot**, distributed as a **Geode mod** (`guccimanefan.guccibot`). It records the player's inputs frame-perfectly and plays them back. The author is **Nigel**, who goes by **"Nigel"** or **"Nigelx1"** in the GD community.
 
 It is built on top of three other projects:
 
@@ -142,32 +142,19 @@ This is the conceptual core, and a lot of bugs trace back to getting it wrong.
 
 ---
 
-## 5. Current broken state (in priority order)
+## 5. Current state (updated 2026-08-18 — the P1-P4 list below is RESOLVED history, kept for context; see "Currently active" for what's actually unresolved right now)
 
-### P1 — Intentional deaths are broken
+### Resolved (verify against source if it matters for what you're doing, but treat these as closed)
 
-**This is the big one, and the key insight is architectural:**
+- **P1 — Intentional deaths:** Nigel confirmed fixed in a later session (not independently re-verified since, but take his word for it).
+- **P2 — Renders were ~250 bytes (empty):** Nigel confirmed fixed in a later session.
+- **P3 — Frame-window analyzer ("Calculate") slope-exit noclip:** CONFIRMED FIXED 2026-08-13, verified with real log evidence (not just a vibe check) after multiple sessions and three disproven theories. Root fix: `MacroPathSample` was extended to capture full kinematic state per frame during recording, and Calculate's capture pass now force-applies that recorded ground truth to the real player every frame instead of trusting its own re-derivation. Only engages on macros recorded after 2026-08-11 (v2 sidecar format).
+- **P4 — Calculate UI rendering ~5 characters per line:** Nigel confirmed fixed in a later session.
+- The survival indicator (a *different* feature from Calculate, built on `TrajectoryPredictionService`'s ghost-trace) had a bug where it falsely showed dead/unsafe throughout slope sections. Never investigated — closed 2026-08-18 rather than left as a stale "next session" pointer. Reopen only if it resurfaces in actual testing.
 
-- **The recording side has always worked** and was in GucciBot before any recent work: `intentionalDeathPending`, the GUI toggle, and the `deathFrames` array being populated in `safemode.cpp`. Marking a death as intentional while recording = fine.
-- **The playback side was never natively part of GucciBot.** Silicate plays intentional deaths back correctly because Silicate was *built from scratch around that feature*; the death flows through its whole architecture. GucciBot only ever had the recording scaffolding. Every attempt to bolt playback onto a system that wasn't designed for it is what has caused the pain — including the recent rewrite.
+### Currently active — this is what a fresh session actually needs to know about
 
-**Current symptom (Nigel's words):** on an intentional-death run, the action count doesn't increase until the actual death (but increases normally on non-int-death runs); and on playback, only the run containing the intentional death plays.
-
-**Where the logic lives in Silicate (study this before reimplementing):** the death flows through `BotUpdater`, `PracticeFix`, `delayedResetLevel`, `checkIfResetWasExpected`, `handleResetWithCheckpoints`, and the `slc::Action::ActionType::Death` action type. The relevant `GucciUpdater` flags are `m_canDie` (user armed an intentional death), `m_expectsDeath` (playback knows a Death action is coming), `m_inputIsDeath` (reset came from `delayedResetLevel`), and `m_fullReset` (reset came from `fullReset`).
-
-**Recommendation:** do not try to re-bolt this in one big pass. Get a build where recording works and playback is in its original (non-intentional-death) state, confirm that's stable, and then add playback **one piece at a time** with a test after each.
-
-### P2 — Renders are broken (250 bytes)
-
-Render output comes out as **~250 bytes** — i.e. essentially empty. This has never been diagnosed or fixed. This is on the **TTR renderer** side. Start by confirming what a *correct* render's size/structure should look like and where the 250-byte file is actually being written, before changing renderer logic.
-
-### P3 — Frame-window analyzer ("Calculate") — unverified
-
-The analyzer measures per-click timing windows by running async probes across real game frames. It was rewritten in a prior session using a **probe-atom + `Mode::Playing`** approach (build `2026-06-18-a`). During that rewrite a real bug was fixed — `saveCurrent()` during capture was pushing stale entries into `m_savedCheckpoints`, causing incorrect frame-offset restores and "moves 0.0 / dies every probe" behavior — **but the rewrite was never verified to actually work.** Treat it as unproven. **Read `ANALYZER_HANDOFF.md` in the repo before touching this.**
-
-### P4 — Calculate UI display bug
-
-The Calculate result message renders **only ~5 characters per line.** This is almost certainly an ImGui text-width / wrapping / buffer-sizing issue in the GUI, not a logic bug in the analysis itself. Cheap to investigate once the analyzer (P3) is actually working; not worth chasing while P3 is unproven.
+The frame-window analyzer ("Calculate") is mid-rework as of 2026-08-17/18, based on an algorithm Juice (a GD-community collaborator, not GucciBot's author) proposed and spec'd in detail. Multiple real bugs have been found and fixed through his actual in-game testing (negative-shift/checkpoint-margin handling, a two-step reach-then-recover check, release-timing anchoring, a neighbor-input-collision bug), but **none of it has been confirmed fully correct yet** — there's still at least one open, unexplained case (a Cube-mode orb click measured wrong) with a diagnostic "Debug Mode" tool built specifically to help pin it down, awaiting Juice's next test. Don't treat this area as stable. Full blow-by-blow lives in this session's memory (`project_1_3_frame_window.md` in the Claude Code memory store, not in this repo) — read that before touching Calculate again, it has far more detail than belongs in this handoff doc.
 
 ---
 
@@ -181,17 +168,14 @@ The lesson the author has already drawn, and the one this handoff is built aroun
 
 ## 7. Existing docs in the repo
 
-- `ANALYZER_HANDOFF.md` — read before touching the frame-window analyzer.
-- `CLAUDE_CODE_CONTEXT.md` — prior context handoff.
-
-Read both before working in their areas.
+Neither `ANALYZER_HANDOFF.md` nor `CLAUDE_CODE_CONTEXT.md` exist in the repo anymore as of 2026-08-18 (checked directly) — don't go looking for them. `CALC_SLOPE_EXIT.md` does still exist but describes the frame-window analyzer's pre-fix state (see Section 5's "Resolved" list) — treat it as superseded history, not current guidance.
 
 ---
 
 ## 8. Your first three actions
 
 1. **Ask Nigel which build is the last known-good floor.** Don't start anywhere else. Make it the baseline and bump `GB_BUILD_LABEL`.
-2. **Pick exactly one bug** — P1 (intentional deaths) or P2 (renders) are the highest-value. **Read the actual current source for it.** Do not trust this document's code snippets as the live state; they are reconstructed and may be stale.
+2. **Check Section 5's "Currently active" entry and the Claude Code memory store** for what's actually unresolved right now — the P1-P4 list is old, resolved history, not a task list. **Read the actual current source for whatever you're about to touch.** Do not trust this document's code snippets as the live state; they are reconstructed and may be stale.
 3. **Make one change, build, have Nigel confirm in-game, and only then continue.**
 
 If at any point you find yourself about to make a second change before the first was confirmed working in-game — stop. That is the exact failure mode that produced this handoff.
