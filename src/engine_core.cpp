@@ -2215,8 +2215,14 @@ void GucciEngine::cancelAnalysis() {
     // thrown away here -- any interruption mid-run (Stop, a death flipping
     // mode, leaving the level) silently lost all completed work. Persist
     // whatever's there instead.
+    //
+    // Nigel: save unconditionally, no matter what -- saveFwMarksNow() already
+    // handles the empty case correctly on its own (removes a stale sidecar
+    // instead of writing an empty one), so the old "only save if non-empty"
+    // guard here was just skipping the empty-case cleanup, not avoiding
+    // anything genuinely unnecessary.
     fwHasData = !fwMarks.empty();
-    if (!fwMarks.empty()) saveFwMarksNow();
+    saveFwMarksNow();
 
     log::info("[GucciBot] Frame-window: analysis cancelled — {} result(s) kept",
               fwMarks.size());

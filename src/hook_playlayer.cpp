@@ -93,6 +93,14 @@ class $modify(GB7PlayLayer, PlayLayer) {
 
     void onQuit() {
         auto* gb = GucciEngine::get();
+        // Nigel: Calculate should save no matter what it stops for. fwTick()
+        // only cancels (and saves) when it notices PlayLayer is already gone
+        // -- but that check runs from frameUpdateMidhook, which itself bails
+        // before fwTick() if GJBaseGameLayer is already gone too (a full exit
+        // to menu can tear both down before another tick ever runs). Catch it
+        // here instead, while the layer is still valid enough for
+        // cancelAnalysis()'s own PlayLayer::get() check to work normally.
+        if (gb->fwAnalyzing) gb->cancelAnalysis();
         if (gb->renderer.recording) gb->renderer.stop(gb->updater.getFrame());
         TrajectoryPredictionService::get().updatePreview(nullptr);
         PlayLayer::onQuit();
