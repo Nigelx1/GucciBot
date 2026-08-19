@@ -291,6 +291,17 @@ class $modify(GB7PlayLayer, PlayLayer) {
             return PlayLayer::resetLevel();
         }
 
+        // Bot-triggered resets (Calculate starting/restarting a probe run, a
+        // recording/playback restart, etc.) call resetLevel() directly rather
+        // than going through the player pressing Retry off the end screen --
+        // vanilla never has to tear down EndLevelLayer here because vanilla
+        // never calls this while it's still showing. If the level was just
+        // completed (endscreen up) and something bot-side resets it, the
+        // endscreen was staying on screen on top of the level actually
+        // playing behind it (Nigel's report). Same one-liner already used in
+        // fullReset()'s m_expectsDeath branch below.
+        if (auto* ell = getChildByID("EndLevelLayer")) ell->removeFromParent();
+
         m_practiceMusicSync = true;
         auto& upd = gb->updater;
         upd.m_tpsOverflow  = 0.0;

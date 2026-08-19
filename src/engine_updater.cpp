@@ -320,6 +320,41 @@ static char gamemodeChar(PlayerObject* p) {
     return 'C';
 }
 
+// Mirrors fwClassifyOrbTouch/fwIsDashOrbType/fwIsNonDashOrbType in
+// engine_core.cpp -- kept as its own copy here (this codebase's existing
+// convention for small per-file classification helpers) rather than shared,
+// since this one runs at RECORD time. Ground truth captured here is what
+// Calculate's Capturing pass reads back later instead of trusting its own
+// live m_touchingRings (see MacroPathSample::p1OrbDash's comment).
+static void classifyOrbTouchForCapture(PlayerObject* player, bool& outDash, bool& outNonDash) {
+    outDash = false;
+    outNonDash = false;
+    if (!player || !player->m_touchingRings) return;
+    for (auto* obj : CCArrayExt<GameObject*>(player->m_touchingRings)) {
+        if (!obj) continue;
+        auto type = obj->m_objectType;
+        if (type == GameObjectType::DashRing || type == GameObjectType::GravityDashRing) {
+            outDash = true;
+            continue;
+        }
+        switch (type) {
+            case GameObjectType::YellowJumpRing:
+            case GameObjectType::PinkJumpRing:
+            case GameObjectType::GravityRing:
+            case GameObjectType::GreenRing:
+            case GameObjectType::RedJumpRing:
+            case GameObjectType::DropRing:
+            case GameObjectType::SpiderOrb:
+            case GameObjectType::CustomRing:
+            case GameObjectType::TeleportOrb:
+                outNonDash = true;
+                break;
+            default:
+                break;
+        }
+    }
+}
+
 static void frameUpdateMidhook(SafetyHookContext&) {
     auto* gb  = GucciEngine::get();
     auto& upd = gb->updater;
@@ -352,6 +387,7 @@ static void frameUpdateMidhook(SafetyHookContext&) {
                 smp.p1OnGround = p1->m_isOnGround;
                 smp.p1UpsideDown = p1->m_isUpsideDown;
                 smp.p1Dashing = p1->m_isDashing;
+                classifyOrbTouchForCapture(p1, smp.p1OrbDash, smp.p1OrbNonDash);
                 smp.gamemode1 = gamemodeChar(p1);
 
                 if (plr->m_gameState.m_isDualMode && plr->m_player2) {
@@ -365,6 +401,7 @@ static void frameUpdateMidhook(SafetyHookContext&) {
                     smp.p2OnGround = p2->m_isOnGround;
                     smp.p2UpsideDown = p2->m_isUpsideDown;
                     smp.p2Dashing = p2->m_isDashing;
+                    classifyOrbTouchForCapture(p2, smp.p2OrbDash, smp.p2OrbNonDash);
                     smp.gamemode2 = gamemodeChar(p2);
                 }
                 // Indexed by frame (see m_pathSamples' index==frame contract in

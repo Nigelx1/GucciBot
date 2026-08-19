@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-16-j (1.2.0: new ButlerBot theme (.butler extension, Warriors gold + royal blue -- Jimmy Butler's current team, not Heat colors since BamBot already owns those), built with the full treatment from the start this time: palette (10th kThemePresets entry), every extension-to-theme mapping site, plus the identity content (title bar name + 'Playoff Jimmy mode: always on.' subtitle, status bar brand 'Playoff Jimmy.', themed quotes on Replay/Tools/Hacks/Credits, Credits badge 'Playoff Jimmy | Big Face Coffee | Buckets'). Preset-count-driven UI (the Settings theme picker) picks it up automatically; clamp bounds bumped 8->9 for the 10th preset. Version bumped to 1.2.0 across mod.json/CMakeLists.txt/MOD_VERSION -- GBR6_VERSION/BRR_FORMAT_VERSION untouched as always. Compiles clean, untested in-game.)"
+#define GB_BUILD_LABEL "2026-08-19-e (Three fixes from Nigel's latest test pass, bulk mode. 1) resetLevel() now tears down a lingering EndLevelLayer before a bot-triggered reset (Calculate starting/restarting a probe run, etc) -- previously only fullReset()'s m_expectsDeath branch did this, so starting Calculate right after actually completing the level left the endscreen sitting on top of the level playing behind it. 2) Added a corner HUD (displayCalculatingHUD in gui.cpp) that shows 'Calculating...' + stage/progress + a Cancel button whenever fwAnalyzing is true, independent of whether the main menu is open -- previously cancelAnalysis() was never wired to any button and there was no way to tell Calculate was running without the Frame Windows tab open. 3) Gravity portals/dash orbs were reading wrong during Calculate's Capturing pass: it classified orb touch live off the player's m_touchingRings, but by that point in the pass the frame's position had already been force-corrected to recorded ground truth (the P3 fix), while m_touchingRings still reflected whatever the native collision check saw against the pre-correction, independently-simulated position. Fix extends MacroPathSample with p1/p2OrbDash+OrbNonDash captured at RECORD time (same instant as the already-correct upsideDown/dashing capture) and has the Capturing pass read that ground truth instead of live state; falls back to the old live read for macros recorded before this (path-sample sidecar bumped v2->v3, old sidecars dropped same as the v1->v2 precedent). Compiles clean, ALL THREE untested in-game -- especially want confirmation on fix 3, it's the one I'm least certain about since I couldn't verify the exact native collision-check timing, only reasoned it out from the existing P3 force-apply comments.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -95,12 +95,23 @@ struct MacroPathSample {
     float p1XVel = 0.f, p1YVel = 0.f;
     float p1Rot = 0.f;
     bool  p1OnGround = false, p1UpsideDown = false, p1Dashing = false;
+    // Ring/orb touch ground truth, captured the same instant as the fields
+    // above (real recording, no force-apply divergence yet to worry about).
+    // Exists so Calculate's Capturing pass can read orb touch from here
+    // instead of the live player's m_touchingRings -- by the time Capturing
+    // gets to classify a click, this frame's position has already been
+    // force-corrected to ground truth (see frameUpdateMidhook), but
+    // m_touchingRings reflects whatever the native collision check saw
+    // against the pre-correction, independently-simulated (possibly
+    // diverged) position, not the corrected one.
+    bool  p1OrbDash = false, p1OrbNonDash = false;
     char  gamemode1 = 'C';
 
     float p2x = 0.f, p2y = 0.f;
     float p2XVel = 0.f, p2YVel = 0.f;
     float p2Rot = 0.f;
     bool  p2OnGround = false, p2UpsideDown = false, p2Dashing = false;
+    bool  p2OrbDash = false, p2OrbNonDash = false;
     char  gamemode2 = 'C';
 
     bool hasP2 = false;
@@ -566,21 +577,57 @@ public:
     // automatically based on recorded gamemode -- Ship specifically can be
     // finicky to probe reliably, so it gets its own opt-out on top of that.
     bool  fwTestShipReleases = true;
-                struct FwClickSample { uint32_t frame; float x; float y; bool player2; bool release; };
+    // Juice's orb-type-aware release-skip rule: a non-dash orb click's release
+    // isn't a measurable input on its own (Robot mode only -- Wave/Ship always
+    // measure every release regardless of orb type, Cube/UFO/Ball/Spider never
+    // measure releases at all). Toggleable so it's a one-click revert, not a
+    // rebuild, if it turns out to misclassify something. See fwTick()'s
+    // Capturing case (orb detection) and the post-capture filter pass in
+    // engine_core.cpp for where this is actually applied.
+    bool  fwOrbAwareReleaseSkip = true;
+                struct FwClickSample {
+        uint32_t frame; float x; float y; bool player2; bool release;
+        // Only meaningful when release == false -- classifies what (if
+        // anything) this click activated, detected live during the Capturing
+        // pass via the player's m_touchingRings at the click's exact frame.
+        bool orbDash = false;
+        bool orbNonDash = false;
+    };
     std::vector<FwClickSample> fwClickSamples;
     bool  fwSampling      = false;
     int   fwSweepRange    = 12;
         int   fwMaxFramesMeasured = 240;
-    int   fwLookaheadDepth    = 1;
     int   fwSimSpeed          = 1;
+    // Juice's time-based survival test (replaced the recovery-range algorithm
+    // 2026-08-18, after several rounds of bugs in that approach): for a shift being
+    // tested, measure how many frames the ORIGINAL macro takes from the click to the
+    // next measurable input (target = N.frame - shiftedI.frame, recomputed per shift
+    // since it tracks N's real position, not a fixed offset -- see the note in
+    // beginShiftTest() about why the first version of this got that wrong). The next
+    // input itself is NEVER shifted or removed anymore -- it always fires at its own
+    // original frame, exactly like the rest of the macro. Survival requires staying
+    // alive through target+fwSlackWindow frames past the shifted click.
+    int   fwSlackWindow   = 3;
+    // Nigel: "make it a toggleable feature and I'll test out which works best" --
+    // false (default): stop expanding a direction the moment one shift fails there
+    // (assumes windows are contiguous around 0, cheaper). true: keep testing every
+    // shift out to the legality/sweep bound regardless of intermediate failures, so
+    // non-contiguous survivable windows actually show up instead of being silently
+    // missed by the contiguity assumption.
+    bool  fwFullRangeSweep = false;
     bool  fwAnalyzing     = false;
     bool  fwProbeDied     = false;
     float fwSavedMusicVolume = 0.f;
     bool  fwMusicMuted    = false;
 
-                                enum class FwState { Idle, Capturing, Probing, Finishing };
+                                enum class FwState { Idle, Capturing, Probing, DebugPause, Finishing };
     FwState fwState        = FwState::Idle;
     size_t  fwCapIndex     = 0;
+    // Checkpoint capture (fwCapIndex above) now fires fwSweepRange frames BEFORE
+    // each click instead of exactly on it -- restoring exactly on the click left
+    // no room to ever simulate that click firing earlier (see fwXYIndex below for
+    // why on-screen marker position is still captured at the click's true frame).
+    size_t  fwXYIndex      = 0;
     bool    fwCkptCreatedThisFrame = false;
     size_t  fwProbeClick   = 0;
     int     fwProbeShift   = 0;
@@ -589,11 +636,92 @@ public:
     int     fwProbePhase   = 0;
     int     fwProbeFrame   = 0;
     int     fwProbeHorizon = 16;
-    bool    fwProbeInjected= false;
-    uint32_t fwProbeStartFrame = 0;
+    // Cached info about the next measurable input after the click currently being
+    // probed (fwProbeClick) -- computed once per click in beginOrSkipProbeClick(),
+    // reused across every shift X tested for it. N itself is never shifted anymore.
+    bool     fwProbeHasNext       = false;
+    uint32_t fwProbeNextFrame     = 0;
+    bool     fwProbeNextIsRelease = false;
+    bool     fwProbeNextPlayer2   = false;
+    // The survival-check horizon for the CURRENT shift only -- target (N's real gap
+    // from the shifted click) + fwSlackWindow. Recomputed per shift in
+    // beginShiftTest(), since target depends on the shift being tested.
+    int      fwProbeWindowHigh = 0;
+    // Juice's bug 1 (2026-08-17): explicit dedup guard on the outer shift sweep --
+    // he suspected the same offset getting tested/counted twice was inflating
+    // window sizes. Cleared per-click in beginOrSkipProbeClick(), checked in
+    // beginShiftTest() before a new shift is ever probed.
+    std::set<int> fwProbeTestedShifts;
+    // fwProbeLow/fwProbeHigh (below) still track the CONTIGUOUS run from 0 outward,
+    // purely for logging the shape of the window -- once a shift fails in a
+    // direction, further non-adjacent survivors past it no longer extend them, but
+    // still count in fwProbeValidCount. Reset true per click in
+    // beginOrSkipProbeClick(), set false on first failure in that direction.
+    bool     fwProbeNegContiguous = true;
+    bool     fwProbePosContiguous = true;
+    // Corrected 2026-08-19 per Juice: this IS the reported window now (finishProbeClick
+    // sets mk.window = fwProbeValidCount directly), not a separate stat compared
+    // against a contiguous span. A shift's window is just "how many tested offsets
+    // survived," full stop -- previously it was the contiguous fwProbeHigh-fwProbeLow
+    // span, which under fwFullRangeSweep silently dropped genuinely-valid but
+    // non-adjacent survivors from the number Juice was actually looking at (debug mode
+    // showed 3 green marks, reported window said 1).
+    //
+    // Real reset value is 0, set explicitly in beginOrSkipProbeClick() -- this default
+    // member initializer only ever applies once, at mod load, before that function has
+    // ever run, so it's cosmetic (previously left at the stale pre-2026-08-19 value of
+    // 1, which never actually caused the double-count Juice reported since it's always
+    // overwritten before use, but was worth correcting for anyone reading this field
+    // fresh). X=0 gets one explicit +1 in beginOrSkipProbeClick(); every other offset
+    // that survives adds another in advanceOffsetSweep().
+    int      fwProbeValidCount = 0;
+    // Neighbor-distance clamps (added 2026-08-17, Juice's dense-pattern report): the
+    // sweep was never checked against where the ADJACENT measurable inputs actually
+    // sit. In a tightly-packed section (rings only a handful of frames apart), a
+    // large shift could leapfrog past a neighbor's original frame -- stable_sort
+    // would then reorder the action list, so the probe run silently stopped testing
+    // the sequence it thought it was testing. Computed once per click in
+    // beginOrSkipProbeClick(); the outer sweep in advanceOffsetSweep() is capped by
+    // these instead of the raw fwSweepRange.
+    int      fwProbeMaxNegShift = 0;
+    int      fwProbeMaxPosShift = 0;
+    // Debug/slow mode (added 2026-08-17, Juice asked for a way to watch Calculate
+    // work instead of guessing from the final numbers): every time an individual
+    // test (a shift, or a recovery candidate) concludes, drop a mark at wherever
+    // the player ended up (death position, or current position if it survived to
+    // horizon) and pause for fwDebugSlowdown real ticks before the next test
+    // starts, so the sequence of pass/fail results is actually watchable instead
+    // of flashing by in a fraction of a second.
+    bool     fwDebugMode        = false;
+    int      fwDebugSlowdown    = 30;
+    int      fwDebugPauseRemaining = 0;
+    // Extended 2026-08-18 per Juice's second round of debug-mode requests: each mark now
+    // carries enough context to (a) show it meaningfully in a list -- which macro input it
+    // belongs to, what frame was actually tried, an ordinal "input number" -- and (b) let
+    // the user jump back to that exact test later (debugTeleportToMark()). Marks now
+    // accumulate for the WHOLE Calculate run (cleared in analyzeFrameWindows(), not per
+    // click) so the full history is browsable, not just the click currently in progress.
+    struct FwDebugMark {
+        float    x = 0.f, y = 0.f;
+        bool     survived = false;
+        uint32_t macroFrame  = 0;  // the input's real, original frame in the macro
+        uint32_t testedFrame = 0;  // the shifted frame actually tried for this test
+        int      inputNumber = 0;  // 1-based ordinal among ALL isInput() actions in the macro
+        bool     isRelease   = false;
+        bool     player2     = false;
+        size_t   clickIndex  = 0;  // fwProbeClick value this mark belongs to -- which fwCapStack checkpoint to restore for teleport
+    };
+    std::vector<FwDebugMark> fwDebugMarks;
+    void  debugPauseOrContinue(bool survived);
+    // Restores the checkpoint + shift state a specific debug mark represents, then hands
+    // control back to normal (non-Calculate) gameplay so the user can watch (or take
+    // over) exactly what that test ran. Cancels any in-progress Calculate run first.
+    void  debugTeleportToMark(size_t markIndex);
     void  fwTick();
     void  beginProbeRun();
     void  beginOrSkipProbeClick(); // advances fwProbeClick past any manually-covered clicks, then starts probing the next one (or finishes if none remain)
+    void  beginShiftTest(); // computes this shift's survival-check window and starts the run for it
+    void  advanceOffsetSweep(bool survived); // records the just-finished shift's result and moves the sweep to the next shift (or finishes the click)
     bool  fwHasManualMarkAt(uint32_t frame, bool player2) const;
     void  finishProbeClick();
     void  fwFinishAnalysis();

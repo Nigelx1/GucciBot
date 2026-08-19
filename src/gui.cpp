@@ -2188,6 +2188,11 @@ void MenuInterface::drawHacksTab(){
     ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
     ImGui::TextWrapped("Calculate measures release timing windows too now, for Wave/Ship/Robot (the only gamemodes where a release's timing matters) -- Ship's can be finicky to probe reliably, so it has its own switch here.");
     ImGui::PopStyleColor();
+    if(Widgets::ToggleSwitch("Orb-Aware Release Skip",&engine->fwOrbAwareReleaseSkip,theme,anim))
+        Mod::get()->setSavedValue("fw_orb_aware_release_skip",engine->fwOrbAwareReleaseSkip);
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::TextWrapped("In Robot mode, a release right after clicking a non-dash orb isn't treated as its own measurable input (dash orbs and non-orb clicks still are). Turn off to go back to testing every Robot release, no exceptions.");
+    ImGui::PopStyleColor();
     ImGui::Dummy(ImVec2(0,8));
     Widgets::SectionHeader("Practice Range",theme);
     if(Widgets::ToggleSwitch("Show During Playback",&engine->practiceRangeEnabled,theme,anim))
@@ -2200,12 +2205,68 @@ void MenuInterface::drawHacksTab(){
         Mod::get()->setSavedValue("fw_maxwindow",(int64_t)engine->fwMaxWindow);
     if(Widgets::StyledSliderInt("Sweep Range (+/- frames)",&engine->fwSweepRange,1,30,theme))
         Mod::get()->setSavedValue("fw_sweeprange",(int64_t)engine->fwSweepRange);
+    if(Widgets::StyledSliderInt("Slack Window (+/- frames)",&engine->fwSlackWindow,0,20,theme))
+        Mod::get()->setSavedValue("fw_slackwindow",(int64_t)engine->fwSlackWindow);
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::TextWrapped("A shift survives if it stays alive through roughly how long the original macro takes to reach the next input, plus or minus this many frames of slack. The next input itself is never moved -- it always fires at its own original frame.");
+    ImGui::PopStyleColor();
+    if(Widgets::ToggleSwitch("Full-Range Sweep",&engine->fwFullRangeSweep,theme,anim))
+        Mod::get()->setSavedValue("fw_full_range_sweep",engine->fwFullRangeSweep);
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::TextWrapped("Off (default): stop expanding a direction the moment one shift fails there. On: keep testing every shift out to the sweep range regardless of failures in between, so non-contiguous survivable windows actually show up instead of being silently missed. Slower.");
+    ImGui::PopStyleColor();
     if(Widgets::StyledSliderInt("Max Frames Measured",&engine->fwMaxFramesMeasured,16,480,theme))
         Mod::get()->setSavedValue("fw_maxframes",(int64_t)engine->fwMaxFramesMeasured);
-    if(Widgets::StyledSliderInt("Lookahead Depth (inputs)",&engine->fwLookaheadDepth,1,10,theme))
-        Mod::get()->setSavedValue("fw_lookahead",(int64_t)engine->fwLookaheadDepth);
     if(Widgets::StyledSliderInt("Simulation Speed",&engine->fwSimSpeed,1,8,theme))
         Mod::get()->setSavedValue("fw_simspeed",(int64_t)engine->fwSimSpeed);
+    if(Widgets::ToggleSwitch("Debug Mode",&engine->fwDebugMode,theme,anim))
+        Mod::get()->setSavedValue("fw_debug_mode",engine->fwDebugMode);
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::TextWrapped("Pauses briefly after every individual shift test and drops a green/red mark where the player ended up, so you can watch Calculate work through a click instead of only seeing the final number.");
+    ImGui::PopStyleColor();
+    if(engine->fwDebugMode && Widgets::StyledSliderInt("Debug Pause (ticks)",&engine->fwDebugSlowdown,1,120,theme))
+        Mod::get()->setSavedValue("fw_debug_slowdown",(int64_t)engine->fwDebugSlowdown);
+    if(!engine->fwDebugMarks.empty() && Widgets::StyledButton("View Debug History (...)",ImVec2(-1,28),theme,anim,6.f))
+        ImGui::OpenPopup("FwDebugHistory");
+    ImGui::SetNextWindowSize(ImVec2(440,0),ImGuiCond_Appearing);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(14,12));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,0.f);
+    ImGui::PushStyleColor(ImGuiCol_PopupBg,IM_COL32(0,0,0,0));
+    ImGui::PushStyleColor(ImGuiCol_Border,IM_COL32(0,0,0,0));
+    ImGui::PushStyleColor(ImGuiCol_ModalWindowDimBg,IM_COL32(0,0,0,0));
+    if(ImGui::BeginPopupModal("FwDebugHistory",nullptr,
+        ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoResize)){
+        drawPopupChrome(*this,"Debug History");
+        ImGui::TextColored(theme.getAccent(),"%zu test(s) recorded this run",engine->fwDebugMarks.size());
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::TextWrapped("\"Go\" teleports you to that test's exact checkpoint + shift and lets it play out exactly like the real test did -- watch it, or take over yourself.");
+        ImGui::PopStyleColor();
+        ImGui::Dummy(ImVec2(0,6));
+        float listH=std::min((float)engine->fwDebugMarks.size()*26.f,320.f);
+        ImGui::BeginChild("##fwDebugHistList",ImVec2(410,listH),true);
+        for(size_t i=0;i<engine->fwDebugMarks.size();++i){
+            auto const& mk=engine->fwDebugMarks[i];
+            ImGui::PushID((int)i+11000);
+            ImGui::TextColored(mk.survived?ImVec4(0.3f,1.f,0.4f,1.f):ImVec4(1.f,0.3f,0.3f,1.f),
+                "%s",mk.survived?"PASS":"FAIL");
+            ImGui::SameLine();
+            ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+            ImGui::Text("in#%d f=%u -> shift f=%u  %s p%d",
+                mk.inputNumber,mk.macroFrame,mk.testedFrame,mk.isRelease?"rel":"press",mk.player2?2:1);
+            ImGui::PopStyleColor();
+            ImGui::SameLine();
+            if(Widgets::StyledButton("Go",ImVec2(40,20),theme,anim,4.f)){
+                engine->debugTeleportToMark(i);
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::PopID();
+        }
+        ImGui::EndChild();
+        ImGui::Dummy(ImVec2(0,6));
+        if(Widgets::StyledButton("Close##fwDebugHist",ImVec2(-1,28),theme,anim,6.f))ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+    ImGui::PopStyleColor(3);ImGui::PopStyleVar(2);
             if(engine->fwAnalyzeRunning){
         ImGui::Dummy(ImVec2(0,4));
         ImGui::PushStyleColor(ImGuiCol_PlotHistogram,theme.getAccent());
@@ -2239,7 +2300,20 @@ void MenuInterface::drawHacksTab(){
     ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
     ImGui::TextWrapped("Set or override a click's window by hand -- for clicks Calculate hasn't measured yet, or a reading you don't trust. Manual entries are protected: re-running Calculate fills in everything else but leaves these alone.");
     ImGui::PopStyleColor();
-    {
+    if(engine->fwAnalyzing){
+        // Juice's GUI-overlap report: this list used to read engine->replay.m_actionAtom
+        // live, every GUI frame -- but that's the exact same atom Calculate's probing
+        // continuously reassigns/reshapes (filtered to inputs-only, shifted, resorted)
+        // many times per second while measuring. Rendering it live during Calculate meant
+        // showing a different, transient, probe-internal snapshot practically every frame
+        // instead of a stable view of the real macro -- which is what "compressed/
+        // overlapping" almost certainly was. Just don't render the interactive list at all
+        // while Calculate is running, instead of reading data that isn't meant to be read
+        // from here right now.
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::TextWrapped("Unavailable while Calculate is running -- it's actively reshaping the macro's action list to run its tests. Manual Frame Windows will show up again once it finishes.");
+        ImGui::PopStyleColor();
+    } else {
         auto& acts = engine->replay.m_actionAtom.m_actions;
         auto& samples = engine->replay.m_pathSamples;
         std::vector<size_t> clickIdx;
@@ -4317,7 +4391,7 @@ void MenuInterface::drawCreditsTab(){
     dl->AddText(bigF,bigF?bigF->FontSize:22.f,ImVec2(pos.x+(avail-ns.x)/2,pos.y+8),theme.getAccentU32(),"Gucci Mane Fan");
     if(bigF)ImGui::PopFont();
     if(fontSmall)ImGui::PushFont(fontSmall);
-    dl->AddText(ImVec2(pos.x+(avail-ImGui::CalcTextSize("Developer extraordinaire").x)/2,pos.y+34),theme.getTextSecondaryU32(),"Developer extraordinaire");
+    dl->AddText(ImVec2(pos.x+(avail-ImGui::CalcTextSize("Concept, Direction & Testing").x)/2,pos.y+34),theme.getTextSecondaryU32(),"Concept, Direction & Testing");
     const char* badge=
         (activeTheme==THEME_TOOSII||activeTheme==THEME_TOOSII_SYRACUSE||activeTheme==THEME_TOOSII_SACSTATE)?"WR1 | Rapper | Never Covered":
         (activeTheme==THEME_JA)?"High Flyer | Ball Don't Lie | IYKYK":
@@ -4326,7 +4400,7 @@ void MenuInterface::drawCreditsTab(){
         (activeTheme==THEME_SEXYY)?"Skee Yee | STL | Pound Town":
         (activeTheme==THEME_JUICE)?"Beta Tester | Bug Hunter | That's Tuff":
         (activeTheme==THEME_BUTLER)?"Playoff Jimmy | Big Face Coffee | Buckets":
-        "Lead Dev | Vision | Brrr";
+        "Concept | Vision | Brrr";
     ImVec2 bs=ImGui::CalcTextSize(badge);
     float bx=pos.x+(avail-bs.x-16)/2,by=pos.y+52;
     dl->AddRectFilled(ImVec2(bx,by),ImVec2(bx+bs.x+16,by+18),theme.getAccentU32(0.12f),9.f);
@@ -4335,13 +4409,13 @@ void MenuInterface::drawCreditsTab(){
     if(fontSmall)ImGui::PopFont();
     ImGui::Dummy(ImVec2(0,heroH+12));}
         struct{const char* init;const char* name;const char* role;}entries[]={
-        {"N","Nigel","Co-developer"},
-        {"K","kepe","Co-developer"},
+        {"N","guccimanefan (Nigelx1)","Concept, direction & testing"},
+        {"C","Claude","Wrote the code. All of it. Not a euphemism."},
+        {"K","kepe","yBot -- the file-size benchmark GBR6 was built to meet"},
         {"T","ToastexGD","Original ToastyReplay -- the GOAT"},
         {"G","Gucci Mane","He's the truth. Brrr."},
         {"T","Toosii","ToosiiBot theme & WR ambitions"},
-        {"P","peony","Silicate dev -- dropped the source like Gucci drops albums. Brrr."},
-        {"C","Claude.ai","Built literally all of this. Brrr."},};
+        {"P","peony","Silicate dev -- dropped the source like Gucci drops albums. Brrr."},};
     for(auto& e:entries){
         ImVec2 pos=ImGui::GetCursorScreenPos();
         float avail=ImGui::GetContentRegionAvail().x,rowH=46.f;
@@ -4754,10 +4828,14 @@ void MenuInterface::loadSettings(){
         eng->updater.m_backwardsStepping=mod->getSavedValue<bool>("feat_backwards_step",false);
     eng->fwSweepRange=mod->getSavedValue<int>("fw_sweeprange",12);
     if(eng->fwMaxWindow > 2*eng->fwSweepRange) eng->fwMaxWindow = 2*eng->fwSweepRange;
+    eng->fwSlackWindow=mod->getSavedValue<int>("fw_slackwindow",3);
+    eng->fwFullRangeSweep=mod->getSavedValue<bool>("fw_full_range_sweep",false);
     eng->fwMaxFramesMeasured=mod->getSavedValue<int>("fw_maxframes",240);
-    eng->fwLookaheadDepth=mod->getSavedValue<int>("fw_lookahead",1);
     eng->fwSimSpeed=mod->getSavedValue<int>("fw_simspeed",1);
     eng->fwTestShipReleases=mod->getSavedValue<bool>("fw_test_ship_releases",true);
+    eng->fwOrbAwareReleaseSkip=mod->getSavedValue<bool>("fw_orb_aware_release_skip",true);
+    eng->fwDebugMode=mod->getSavedValue<bool>("fw_debug_mode",false);
+    eng->fwDebugSlowdown=mod->getSavedValue<int>("fw_debug_slowdown",30);
     eng->updater.m_maxBackstepFrames=mod->getSavedValue<int>("feat_back_step_count",120);
     eng->updater.m_autoFlipOnDeath=mod->getSavedValue<bool>("feat_auto_flip",false);
     eng->updater.m_preventDeath=mod->getSavedValue<bool>("feat_prevent_death",false);
@@ -4951,6 +5029,40 @@ void displayRenderHUD(){
     if(ui->fontBody)ImGui::PopFont();
     ImGui::End();}
 
+void displayCalculatingHUD(){
+    auto* ui=MenuInterface::get();
+    auto* engine=GucciEngine::get();
+    if(!ui||!ui->setupComplete||!engine)return;
+    // Nigel: no way to tell Calculate is running, or to stop it, without the
+    // menu open on the Frame Windows tab specifically -- unlike drawInterface()'s
+    // windows, this one is deliberately NOT gated on ui->shown/anim.openProgress,
+    // same as the other display*HUD overlays below.
+    if(!engine->fwAnalyzing)return;
+
+    auto* vp=ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x+vp->Size.x-10,vp->Pos.y+10),ImGuiCond_Always,ImVec2(1,0));
+    ImGui::SetNextWindowSize(ImVec2(0,0),ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(0.75f);
+    ImGui::Begin("##calcHud",nullptr,ImGuiWindowFlags_NoDecoration|
+        ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoSavedSettings|
+        ImGuiWindowFlags_NoFocusOnAppearing|ImGuiWindowFlags_NoNav|
+        ImGuiWindowFlags_NoBringToFrontOnFocus);
+    if(ui->fontBody)ImGui::PushFont(ui->fontBody);
+    float pulse=0.55f+0.45f*std::sin((float)ImGui::GetTime()*4.f);
+    ImVec4 accent=ui->theme.getAccent();
+    ImGui::TextColored(ImVec4(accent.x,accent.y,accent.z,pulse),"Calculating...");
+    if(ui->fontBody)ImGui::PopFont();
+    ImGui::PushStyleColor(ImGuiCol_Text,ui->theme.textSecondary);
+    if(engine->fwAnalyzeTotal>0)
+        ImGui::Text("%s  %d/%d  (%.0f%%)",engine->fwAnalyzeStage.c_str(),
+            engine->fwAnalyzeCur,engine->fwAnalyzeTotal,engine->fwAnalyzeProgress*100.f);
+    else
+        ImGui::Text("%s  (%.0f%%)",engine->fwAnalyzeStage.c_str(),engine->fwAnalyzeProgress*100.f);
+    ImGui::PopStyleColor();
+    if(Widgets::StyledButton("Cancel",ImVec2(-1,24),ui->theme,ui->anim,4.f))engine->cancelAnalysis();
+    ImGui::End();
+}
+
 void displayGameplayHUD(){
     auto* ui=MenuInterface::get();
     auto* engine=GucciEngine::get();
@@ -5029,5 +5141,6 @@ $on_mod(Loaded){
             ui->drawInterface();
             displayOverlayBranding();
             displayRenderHUD();
+            displayCalculatingHUD();
             displayGameplayHUD();
             displayAccuracyHUD();});}
