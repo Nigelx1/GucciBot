@@ -36,7 +36,42 @@ public:
     void detach() {
         if (m_node) { m_node->removeFromParent(); m_node = nullptr; }
         if (m_labelLayer) { m_labelLayer->removeFromParent(); m_labelLayer = nullptr; }
+        if (m_debugNode) { m_debugNode->removeFromParent(); m_debugNode = nullptr; }
         m_builtForCount = -1;
+    }
+
+    // Juice's debug/slow mode: draws a mark at wherever the player ended up for
+    // every individual test Calculate has run so far on the CURRENT click (green
+    // ring = survived, red X = died) -- separate draw node from m_node/m_labelLayer
+    // above since these change every single test and shouldn't be gated by that
+    // node's own "only rebuild when something changed" signature check. Live-only,
+    // never drawn into an actual render.
+    void renderDebugMarks(PlayLayer* pl, GucciEngine* gb, bool isRendering) {
+        if (!m_debugNode) {
+            auto* anchor = pl->m_objectLayer;
+            if (!anchor) return;
+            auto* node = CCDrawNode::create();
+            node->setBlendFunc({ GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA });
+            node->m_bUseArea = false;
+            anchor->addChild(node, 1405);
+            m_debugNode = node;
+        }
+        m_debugNode->clear();
+        if (isRendering || !gb->fwAnalyzing || !gb->fwDebugMode) return;
+
+        for (auto const& mk : gb->fwDebugMarks) {
+            CCPoint at{ mk.x, mk.y };
+            if (mk.survived) {
+                ccColor4F col{ 0.25f, 1.f, 0.35f, 1.f };
+                ccColor4F clear4{ 0.f, 0.f, 0.f, 0.f };
+                m_debugNode->drawCircle(at, 6.f, clear4, 2.5f, col, 16);
+            } else {
+                ccColor4F col{ 1.f, 0.2f, 0.2f, 1.f };
+                float s = 6.f;
+                m_debugNode->drawSegment({ at.x - s, at.y - s }, { at.x + s, at.y + s }, 2.5f, col);
+                m_debugNode->drawSegment({ at.x - s, at.y + s }, { at.x + s, at.y - s }, 2.5f, col);
+            }
+        }
     }
 
         void render(PlayLayer* pl, bool isRendering) {
@@ -46,6 +81,8 @@ public:
             attach(pl);
             if (!m_node) return;
         }
+
+        renderDebugMarks(pl, gb, isRendering);
 
         bool show = isRendering ? gb->fwEnabledRender : gb->fwEnabledLive;
         if (!show || !gb->fwHasData) {
@@ -82,9 +119,16 @@ public:
             if (mk.window > gb->fwMaxWindow) continue;
             if (mk.frame > curFrame) continue;
 
+                        auto* tier = gb->fwTierFor(mk.window);
+            // Juice: if tiers are actually configured, a window that doesn't fall
+            // into ANY of them shouldn't get a marker at all -- e.g. tiers for 1-4
+            // and 5-6 only, a 25-frame window should be invisible, not shown with
+            // fallback coloring just because it's under fwMaxWindow. An empty tier
+            // list (nothing configured yet) keeps the old show-everything behavior.
+            if (!gb->fwTiers.empty() && !tier) continue;
+
             CCPoint at{ mk.x, mk.y };
 
-                        auto* tier = gb->fwTierFor(mk.window);
             ccColor4F col = tier
                 ? ccColor4F{ tier->r, tier->g, tier->b, 1.f }
                 : gradeColor(mk.window, gb->fwMaxWindow);
@@ -142,6 +186,7 @@ private:
 
     CCDrawNode* m_node = nullptr;
     CCNode*     m_labelLayer = nullptr;
+    CCDrawNode* m_debugNode = nullptr;
     int         m_builtForCount = -1;
 };
 
@@ -165,8 +210,6 @@ namespace gbfw {
 
                                         void playTierSound(int window) {
         static std::unordered_map<std::string, FMOD::Sound*> s_soundCache;
-        static FMOD::Channel* s_channel = nullptr;
-        static FMOD::Sound*   s_currentSound = nullptr;
 
         auto* gb = GucciEngine::get();
         auto* tier = gb->fwTierFor(window);
@@ -196,14 +239,12 @@ namespace gbfw {
             s_soundCache[key] = sound;
         }
 
-                                                                        bool playing = false;
-        if (s_channel) s_channel->isPlaying(&playing);
-        if (s_channel && playing && s_currentSound == sound) {
-            s_channel->setPosition(0, FMOD_TIMEUNIT_MS);
-            return;
-        }
-        if (s_channel) s_channel->stop();
-        system->playSound(sound, nullptr, false, &s_channel);
-        s_currentSound = sound;
+        // Each call gets its own fresh FMOD channel instead of sharing/stealing one --
+        // these are supposed to be able to overlap (e.g. two clicks close together each
+        // get their own cue), and FMOD already handles concurrent channels natively.
+        // Previously this stopped whatever was already playing before starting the new
+        // one, which is exactly why overlapping cues were cutting each other off.
+        FMOD::Channel* channel = nullptr;
+        system->playSound(sound, nullptr, false, &channel);
     }
 }

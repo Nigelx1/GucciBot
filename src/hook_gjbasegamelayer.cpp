@@ -198,9 +198,20 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
                 { action.m_frame, sp->m_position.x, sp->m_position.y, action.m_player2 });
         }
 
-                                                if (gb->fwEnabledLive && !gb->fwAnalyzing && gb->fwHasData && action.m_holding) {
+                                                if (gb->fwEnabledLive && !gb->fwAnalyzing && gb->fwHasData) {
+            // Juice: releases have their own frame-window marks (Wave/Ship/Robot)
+            // and should cue exactly like presses do -- this used to be gated on
+            // action.m_holding, so a release's cue never played at all, only its
+            // preceding press's did. Match on mark TYPE too (not just frame), since
+            // a press and release mark could in principle share a frame.
+            bool actionIsRelease = !action.m_holding;
             for (auto const& mk : gb->fwMarks) {
-                if (mk.frame == action.m_frame) { gbfw::playTierSound(mk.window); break; }
+                if (mk.frame != action.m_frame || mk.isRelease != actionIsRelease) continue;
+                // Same tier-gating as the visual marker (framewindow.cpp): if tiers
+                // are configured, a window outside all of them gets no cue either.
+                if (!gb->fwTiers.empty() && !gb->fwTierFor(mk.window)) break;
+                gbfw::playTierSound(mk.window);
+                break;
             }
         }
 
