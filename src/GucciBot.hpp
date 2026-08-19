@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-19-e (Three fixes from Nigel's latest test pass, bulk mode. 1) resetLevel() now tears down a lingering EndLevelLayer before a bot-triggered reset (Calculate starting/restarting a probe run, etc) -- previously only fullReset()'s m_expectsDeath branch did this, so starting Calculate right after actually completing the level left the endscreen sitting on top of the level playing behind it. 2) Added a corner HUD (displayCalculatingHUD in gui.cpp) that shows 'Calculating...' + stage/progress + a Cancel button whenever fwAnalyzing is true, independent of whether the main menu is open -- previously cancelAnalysis() was never wired to any button and there was no way to tell Calculate was running without the Frame Windows tab open. 3) Gravity portals/dash orbs were reading wrong during Calculate's Capturing pass: it classified orb touch live off the player's m_touchingRings, but by that point in the pass the frame's position had already been force-corrected to recorded ground truth (the P3 fix), while m_touchingRings still reflected whatever the native collision check saw against the pre-correction, independently-simulated position. Fix extends MacroPathSample with p1/p2OrbDash+OrbNonDash captured at RECORD time (same instant as the already-correct upsideDown/dashing capture) and has the Capturing pass read that ground truth instead of live state; falls back to the old live read for macros recorded before this (path-sample sidecar bumped v2->v3, old sidecars dropped same as the v1->v2 precedent). Compiles clean, ALL THREE untested in-game -- especially want confirmation on fix 3, it's the one I'm least certain about since I couldn't verify the exact native collision-check timing, only reasoned it out from the existing P3 force-apply comments.)"
+#define GB_BUILD_LABEL "2026-08-19-f (Two more from Nigel. 1) Calculate now saves no matter what it stops for: cancelAnalysis() dropped its 'only save if fwMarks non-empty' guard (saveFwMarksNow() already handles the empty case correctly on its own -- removes a stale sidecar instead of writing an empty one, so the guard was only skipping that cleanup, not avoiding real work), and PlayLayer::onQuit() now calls cancelAnalysis() directly if fwAnalyzing -- previously a full exit-to-menu mid-run could tear down GJBaseGameLayer before fwTick() ever got another chance to notice PlayLayer was gone and cancel+save itself. 2) Added a togglable Frame Window Legend (Juice's idea, from a reference screenshot of a GD YouTube video's counter overlay) -- displayFwLegendHUD() in gui.cpp, top-left corner, independent of whether the menu is open. Shows one line per configured Tier ('lo-hi: count' or 'lo: count'), loosest at top, tightest at bottom, tallying how many of the macro's clicks reached so far (frame <= current frame, same progressive reveal as the marker overlay) landed in that tier's window range. New 'Show Legend' toggle in the Frame Window Tracker settings section, persisted as fw_legend. Compiles clean, both untested in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -555,6 +555,10 @@ public:
 
         bool  fwEnabledLive   = false;
     bool  fwEnabledRender = false;
+    // Juice's idea: a running per-tier tally in the corner, like the frame-
+    // window counter overlays in some GD YouTube videos -- see
+    // displayFwLegendHUD() in gui.cpp.
+    bool  fwLegendEnabled = false;
 
             bool  practiceRangeEnabled = false;
     int   fwMaxWindow     = 25;

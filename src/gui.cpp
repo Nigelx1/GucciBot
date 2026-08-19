@@ -2183,6 +2183,11 @@ void MenuInterface::drawHacksTab(){
         Mod::get()->setSavedValue("fw_live",engine->fwEnabledLive);
     if(Widgets::ToggleSwitch("Show in Renders",&engine->fwEnabledRender,theme,anim))
         Mod::get()->setSavedValue("fw_render",engine->fwEnabledRender);
+    if(Widgets::ToggleSwitch("Show Legend",&engine->fwLegendEnabled,theme,anim))
+        Mod::get()->setSavedValue("fw_legend",engine->fwLegendEnabled);
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::TextWrapped("Juice's idea: a running tally in the top-left corner, like the frame-window counter overlays in some GD YouTube videos -- how many of the clicks reached so far landed in each Tier's window range below. Shows nothing until at least one Tier is configured and Calculate has results.");
+    ImGui::PopStyleColor();
     if(Widgets::ToggleSwitch("Test Ship Releases",&engine->fwTestShipReleases,theme,anim))
         Mod::get()->setSavedValue("fw_test_ship_releases",engine->fwTestShipReleases);
     ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
@@ -4834,6 +4839,7 @@ void MenuInterface::loadSettings(){
     eng->fwSimSpeed=mod->getSavedValue<int>("fw_simspeed",1);
     eng->fwTestShipReleases=mod->getSavedValue<bool>("fw_test_ship_releases",true);
     eng->fwOrbAwareReleaseSkip=mod->getSavedValue<bool>("fw_orb_aware_release_skip",true);
+    eng->fwLegendEnabled=mod->getSavedValue<bool>("fw_legend",false);
     eng->fwDebugMode=mod->getSavedValue<bool>("fw_debug_mode",false);
     eng->fwDebugSlowdown=mod->getSavedValue<int>("fw_debug_slowdown",30);
     eng->updater.m_maxBackstepFrames=mod->getSavedValue<int>("feat_back_step_count",120);
@@ -5063,6 +5069,57 @@ void displayCalculatingHUD(){
     ImGui::End();
 }
 
+void displayFwLegendHUD(){
+    auto* ui=MenuInterface::get();
+    auto* engine=GucciEngine::get();
+    if(!ui||!ui->setupComplete||!engine)return;
+    if(!engine->fwLegendEnabled||!engine->fwHasData||engine->fwTiers.empty())return;
+    if(!PlayLayer::get())return;
+
+    uint32_t curFrame=engine->updater.getFrame();
+
+    // Tally marks reached so far (frame <= curFrame) into whichever Tier
+    // each one's window falls into -- mirrors the marker overlay's own
+    // progressive reveal (framewindow.cpp's render()), so the counter fills
+    // in exactly in step with the markers appearing on screen, same as the
+    // reference frame-window-counter overlays this was modeled on.
+    std::vector<int> counts(engine->fwTiers.size(),0);
+    for(auto const& mk:engine->fwMarks){
+        if(mk.frame>curFrame)continue;
+        for(size_t i=0;i<engine->fwTiers.size();++i){
+            auto const& t=engine->fwTiers[i];
+            if(mk.window>=t.lo&&mk.window<=t.hi){counts[i]++;break;}
+        }
+    }
+
+    // Loosest tier first (top), tightest last (bottom) -- matches the
+    // reference layout regardless of what order the tiers are actually
+    // configured/stored in.
+    std::vector<size_t> order(engine->fwTiers.size());
+    for(size_t i=0;i<order.size();++i)order[i]=i;
+    std::sort(order.begin(),order.end(),[&](size_t a,size_t b){
+        return engine->fwTiers[a].hi>engine->fwTiers[b].hi;
+    });
+
+    auto* vp=ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x+10,vp->Pos.y+10),ImGuiCond_Always,ImVec2(0,0));
+    ImGui::SetNextWindowSize(ImVec2(0,0),ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(0.5f);
+    ImGui::Begin("##fwLegend",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoInputs|
+        ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoSavedSettings|
+        ImGuiWindowFlags_NoFocusOnAppearing|ImGuiWindowFlags_NoNav|
+        ImGuiWindowFlags_NoBringToFrontOnFocus);
+    if(ui->fontBody)ImGui::PushFont(ui->fontBody);
+    for(size_t idx:order){
+        auto const& t=engine->fwTiers[idx];
+        ImVec4 col(t.r,t.g,t.b,1.f);
+        if(t.lo==t.hi) ImGui::TextColored(col,"%d: %d",t.lo,counts[idx]);
+        else           ImGui::TextColored(col,"%d-%d: %d",t.lo,t.hi,counts[idx]);
+    }
+    if(ui->fontBody)ImGui::PopFont();
+    ImGui::End();
+}
+
 void displayGameplayHUD(){
     auto* ui=MenuInterface::get();
     auto* engine=GucciEngine::get();
@@ -5142,5 +5199,6 @@ $on_mod(Loaded){
             displayOverlayBranding();
             displayRenderHUD();
             displayCalculatingHUD();
+            displayFwLegendHUD();
             displayGameplayHUD();
             displayAccuracyHUD();});}
