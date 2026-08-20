@@ -2229,6 +2229,11 @@ void MenuInterface::drawHacksTab(){
     ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
     ImGui::TextWrapped("Pauses briefly after every individual shift test and drops a green/red mark where the player ended up, so you can watch Calculate work through a click instead of only seeing the final number.");
     ImGui::PopStyleColor();
+    if(Widgets::ToggleSwitch("Delay Marker Capture (diagnostic)",&engine->fwDelayMarkerCapture,theme,anim))
+        Mod::get()->setSavedValue("fw_delay_marker_capture",engine->fwDelayMarkerCapture);
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::TextWrapped("Juice's position-lag report: run Calculate once with this off, once with it on, on the same macro/click. Doesn't change any measurement, only where the marker ring gets drawn -- whichever run's rings actually line up with the real click tells us which way the fix needs to go.");
+    ImGui::PopStyleColor();
     if(engine->fwDebugMode && Widgets::StyledSliderInt("Debug Pause (ticks)",&engine->fwDebugSlowdown,1,120,theme))
         Mod::get()->setSavedValue("fw_debug_slowdown",(int64_t)engine->fwDebugSlowdown);
     if(!engine->fwDebugMarks.empty() && Widgets::StyledButton("View Debug History (...)",ImVec2(-1,28),theme,anim,6.f))
@@ -4842,6 +4847,7 @@ void MenuInterface::loadSettings(){
     eng->fwLegendEnabled=mod->getSavedValue<bool>("fw_legend",false);
     eng->fwDebugMode=mod->getSavedValue<bool>("fw_debug_mode",false);
     eng->fwDebugSlowdown=mod->getSavedValue<int>("fw_debug_slowdown",30);
+    eng->fwDelayMarkerCapture=mod->getSavedValue<bool>("fw_delay_marker_capture",false);
     eng->updater.m_maxBackstepFrames=mod->getSavedValue<int>("feat_back_step_count",120);
     eng->updater.m_autoFlipOnDeath=mod->getSavedValue<bool>("feat_auto_flip",false);
     eng->updater.m_preventDeath=mod->getSavedValue<bool>("feat_prevent_death",false);

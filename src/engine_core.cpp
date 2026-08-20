@@ -1639,8 +1639,11 @@ void GucciEngine::fwTick() {
         }
                 // Position for the overlay marker is recorded right at the click's own
                 // frame -- unrelated to when the restore checkpoint below gets taken.
+                // fwDelayMarkerCapture (diagnostic, off by default) samples one tick
+                // later instead, for A/B testing Juice's position-lag report.
+                uint32_t markerCaptureDelay = fwDelayMarkerCapture ? 1u : 0u;
                 while (fwXYIndex < fwClickSamples.size() &&
-               fwClickSamples[fwXYIndex].frame <= frame) {
+               fwClickSamples[fwXYIndex].frame + markerCaptureDelay <= frame) {
                         if (auto* sp = fwClickSamples[fwXYIndex].player2 ? pl->m_player2 : pl->m_player1) {
                 fwClickSamples[fwXYIndex].x = sp->m_position.x;
                 fwClickSamples[fwXYIndex].y = sp->m_position.y;

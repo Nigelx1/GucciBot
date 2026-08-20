@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-19-f (Two more from Nigel. 1) Calculate now saves no matter what it stops for: cancelAnalysis() dropped its 'only save if fwMarks non-empty' guard (saveFwMarksNow() already handles the empty case correctly on its own -- removes a stale sidecar instead of writing an empty one, so the guard was only skipping that cleanup, not avoiding real work), and PlayLayer::onQuit() now calls cancelAnalysis() directly if fwAnalyzing -- previously a full exit-to-menu mid-run could tear down GJBaseGameLayer before fwTick() ever got another chance to notice PlayLayer was gone and cancel+save itself. 2) Added a togglable Frame Window Legend (Juice's idea, from a reference screenshot of a GD YouTube video's counter overlay) -- displayFwLegendHUD() in gui.cpp, top-left corner, independent of whether the menu is open. Shows one line per configured Tier ('lo-hi: count' or 'lo: count'), loosest at top, tightest at bottom, tallying how many of the macro's clicks reached so far (frame <= current frame, same progressive reveal as the marker overlay) landed in that tier's window range. New 'Show Legend' toggle in the Frame Window Tracker settings section, persisted as fw_legend. Compiles clean, both untested in-game.)"
+#define GB_BUILD_LABEL "2026-08-19-g (Diagnostic for Juice's position-lag report: his screenshots show the marker ring consistently landing one tick behind the real click on a fast-moving Wave zigzag. Release-shift targeting itself checks out fine by reading the code (shifts the release action specifically, never its preceding click), so this isn't that -- more likely the marker's x/y ground truth is captured one tick early/late relative to the game's own physics update, baked in from record time via m_pathSamples. New 'Delay Marker Capture (diagnostic)' toggle in Frame Window Tracker settings, off by default (zero behavior change): when on, the Capturing pass's marker-position sample is taken one tick later than today. Purely cosmetic -- touches nothing about actual shift-testing/measurement, only where the ring gets drawn. Meant to be A/B'd: run Calculate once with it off, once on, same macro/click, see which one's rings actually land on the real click. Not a fix, a way to find out which direction the real fix needs to go. Compiles clean, untested in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -699,6 +699,16 @@ public:
     bool     fwDebugMode        = false;
     int      fwDebugSlowdown    = 30;
     int      fwDebugPauseRemaining = 0;
+    // Diagnostic toggle for Juice's position-lag report (2026-08-19): his
+    // screenshots show marker rings consistently sitting one tick behind
+    // where the click actually happens on a fast-moving path (a Wave zigzag
+    // makes it obvious; most paths move too little frame-to-frame to notice).
+    // Off (default) = current behavior, sample the marker's x/y at the
+    // click's own recorded frame. On = sample it one tick later instead.
+    // Doesn't touch shift-testing/probing at all, purely the marker's drawn
+    // position -- meant to be A/B'd across two Calculate runs to find out
+    // which one actually lines up with the real click, not shipped as a fix.
+    bool     fwDelayMarkerCapture = false;
     // Extended 2026-08-18 per Juice's second round of debug-mode requests: each mark now
     // carries enough context to (a) show it meaningfully in a list -- which macro input it
     // belongs to, what frame was actually tried, an ordinal "input number" -- and (b) let
