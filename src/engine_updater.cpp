@@ -26,6 +26,23 @@ static void slopeLog(const std::string& line) {
     log::info("[SLOPE] {}", line);
 }
 
+// Geode's own console log doesn't persist to a findable file on every setup
+// (confirmed absent on this machine) -- log::info() alone isn't something a
+// tester can actually hand back as evidence. Mirrors slopeLog's pattern:
+// dedicated file in the mod's save dir, truncated fresh each GD session.
+static std::ofstream g_frameIncLog;
+void logFrameIncrement(const char* callSite, uint32_t frame) {
+    if (!g_frameIncLog.is_open()) {
+        auto path = Mod::get()->getSaveDir() / "guccibot_frameinc.log";
+        g_frameIncLog.open(path, std::ios::out | std::ios::trunc);
+        log::info("[FRAMEINC] log file at: {}", path.string());
+    }
+    if (g_frameIncLog.is_open()) {
+        g_frameIncLog << callSite << " -> frame " << frame << '\n';
+        g_frameIncLog.flush();
+    }
+}
+
 float GucciUpdater::getTimeWarp() const {
     if (auto* pl = PlayLayer::get()) {
         float tw = pl->m_gameState.m_timeWarp;
@@ -365,7 +382,7 @@ static void frameUpdateMidhook(SafetyHookContext&) {
         if (PlayLayer::get()) {
             upd.incrementFrame();
             if (upd.m_logFrameIncrements)
-                log::info("[GucciBot] [FRAMEINC] frameUpdateMidhook -> frame {}", upd.getFrame());
+                logFrameIncrement("frameUpdateMidhook", upd.getFrame());
         }
 
         // Ground-truth capture: live recording always grows this fresh (cleared at

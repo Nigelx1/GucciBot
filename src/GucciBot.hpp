@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-19-h (Second diagnostic for Juice's frame-skip reports -- his TPS=240/SimSpeed=1x answers ruled out my TPS-lock-overshoot theory from build -g, so no fix attempted, just better instrumentation. New 'Log Frame Increments' toggle in Diagnostics (off by default, floods the log if left on): logs every incrementFrame() call site plus the resulting frame value -- frameUpdateMidhook's normal per-tick path vs resetLevel()'s respawn path, tagged separately, so a single MH frame-step or a single release test's log output will show directly whether the frame counter is genuinely advancing by 2 from the SAME call site firing twice, or something else entirely. Pure logging, zero behavior change. Also separately: his checkpoint-survive/die report turned out to be a vanilla GD practice-mode checkpoint placed during recording, not GucciBot's own checkpoint system -- untouched this build, needs its own investigation. Compiles clean, untested in-game.)"
+#define GB_BUILD_LABEL "2026-08-19-i (Fixed a gap in -h before shipping it: 'Log Frame Increments' was only calling log::info(), but Geode's console log doesn't persist to a findable file on this machine (confirmed absent, matches an old diagnostics-memory note) -- meaning there'd have been no reliable way to actually hand the evidence back. Now routes through a dedicated guccibot_frameinc.log in the mod's save dir instead, same proven pattern as guccibot_slope.log from the P3 investigation (truncated fresh each GD session, then appended+flushed per line). Shared via a new logFrameIncrement() free function so both call sites (frameUpdateMidhook, resetLevel()) write to the same file instead of managing separate handles. Compiles clean, untested in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -17,6 +17,11 @@
 #include "renderer.hpp"
 
 using namespace geode::prelude;
+
+// Defined in engine_updater.cpp -- shared between the two incrementFrame()
+// call sites (there, and hook_playlayer.cpp's resetLevel()) so both write to
+// the same dedicated log file instead of each managing their own handle.
+void logFrameIncrement(const char* callSite, uint32_t frame);
 
 class GucciScheduler {
 public:
