@@ -2045,11 +2045,8 @@ void MenuInterface::drawToolsTab(){
     if(Widgets::ModuleCardBegin("Lock Delta",
         "Lock physics dt for deterministic simulation",
         &engine->updater.m_lockDelta,theme,anim)){
-        const char* ldModes[]={"Performance","Accuracy"};
-        ImGui::SetNextItemWidth(-1);
-        ImGui::Combo("##ldMode",reinterpret_cast<int*>(&engine->updater.m_lockDeltaMode),ldModes,2);
         ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
-        ImGui::TextWrapped("Performance: cap dt to prevent spiral-of-death.  Accuracy: force exact 1/TPS every step.");
+        ImGui::TextWrapped("Forces exact 1/TPS every step. The old Performance mode (batching multiple ticks into one to catch up) was removed -- it measurably undercounted the frame number relative to real physics progress, and this bot doesn't need the speed badly enough to be worth that.");
         ImGui::PopStyleColor();
         Widgets::ModuleCardEnd();}
 
@@ -4608,7 +4605,6 @@ void MenuInterface::saveSettings(){
     mod->setSavedValue("feat_replay_backups",eng->replayBackupsEnabled);
     mod->setSavedValue("feat_scroll_speed_fix",eng->updater.m_ssbFix);
     mod->setSavedValue("feat_lock_delta",eng->updater.m_lockDelta);
-    mod->setSavedValue("feat_lock_delta_mode",static_cast<int>(eng->updater.m_lockDeltaMode));
     mod->setSavedValue("feat_frame_extrapolation",eng->updater.m_extrapolateFrames);
     mod->setSavedValue("hud_enabled",eng->hud.enabled);
     mod->setSavedValue("hud_show_frame",eng->hud.showFrame);
@@ -4867,7 +4863,6 @@ void MenuInterface::loadSettings(){
     eng->replayBackupsEnabled=mod->getSavedValue<bool>("feat_replay_backups",true);
     eng->updater.m_ssbFix=mod->getSavedValue<bool>("feat_scroll_speed_fix",false);
     eng->updater.m_lockDelta=mod->getSavedValue<bool>("feat_lock_delta",true);
-    eng->updater.m_lockDeltaMode=static_cast<GucciUpdater::LockDeltaMode>(mod->getSavedValue<int>("feat_lock_delta_mode",0));
     eng->updater.m_extrapolateFrames=mod->getSavedValue<bool>("feat_frame_extrapolation",false);
     eng->hud.enabled=mod->getSavedValue<bool>("hud_enabled",false);
     eng->hud.showFrame=mod->getSavedValue<bool>("hud_show_frame",true);

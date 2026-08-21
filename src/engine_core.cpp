@@ -1255,7 +1255,6 @@ void GucciEngine::saveBotSettingsPreset(const std::string& name) {
     p.name = name;
     p.tps = updater.m_tps; p.speedhack = updater.m_speedhack;
     p.lockDelta = updater.m_lockDelta;
-    p.lockDeltaMode = (int)updater.m_lockDeltaMode;
     p.backwardsStepping = updater.m_backwardsStepping;
     p.ssbFix = updater.m_ssbFix;
     p.extrapolateFrames = updater.m_extrapolateFrames;
@@ -1294,7 +1293,6 @@ bool GucciEngine::loadBotSettingsPreset(const std::string& name) {
     auto& p = *it;
     updater.setTps(p.tps); updater.m_speedhack = p.speedhack;
     updater.m_lockDelta = p.lockDelta;
-    updater.m_lockDeltaMode = (GucciUpdater::LockDeltaMode)p.lockDeltaMode;
     updater.m_ssbFix = p.ssbFix;
     updater.m_preventDeath = p.preventDeath;
     replay.m_maintainGravity = false;
@@ -1393,7 +1391,6 @@ void GucciEngine::initialize() {
     updater.m_tps              = mod->getSavedValue<double>("updater_tps", 240.0);
     updater.m_speedhack        = mod->getSavedValue<double>("updater_speedhack", 1.0);
     updater.m_lockDelta        = mod->getSavedValue<bool>("updater_lockDelta", true);
-    updater.m_lockDeltaMode    = (GucciUpdater::LockDeltaMode)mod->getSavedValue<int>("updater_lockDeltaMode", 0);
     updater.m_ssbFix           = mod->getSavedValue<bool>("updater_ssbFix", true);
     updater.m_backwardsStepping= mod->getSavedValue<bool>("updater_backwardsStepping", false);
     updater.m_extrapolateFrames= mod->getSavedValue<bool>("updater_extrapolateFrames", false);

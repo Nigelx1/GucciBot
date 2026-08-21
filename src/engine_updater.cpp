@@ -60,19 +60,19 @@ uint32_t GucciUpdater::getFrame() const {
 }
 
 bool GucciUpdater::useFastLockDelta() const {
-    auto* gb = GucciEngine::get();
-    // Calculate must always take the substepped branch (see call site, engine_updater.cpp
-    // runUpdates), but which substep count it uses should track m_lockDeltaMode the exact
-    // same way normal play and the SLRenderer render pass do -- NOT be hardcoded to fast.
-    // Forcing it to fast unconditionally (as before) only matched the renderer when the
-    // user's Lock Delta Mode happened to be Performance; on Accuracy mode (the in-class
-    // default), the renderer takes the slow/4-substep path while Calculate stayed forced
-    // fast/1-substep, reproducing the exact "renderer works, Calculate doesn't" mismatch.
-    if (gb->fwAnalyzing) return m_lockDeltaMode == LockDeltaMode::Performance;
-    return m_lockDelta &&
-           m_lockDeltaMode == LockDeltaMode::Performance &&
-           gb->isPlaying() &&
-           !gb->renderer.recording;
+    // Performance mode removed entirely (2026-08-19, Nigel's call, per Juice's
+    // testing): it collapsed multiple physics ticks into a single scheduler
+    // update to catch up to the next queued input, but GucciBot's own frame
+    // counter only increments once per scheduler call -- so the frame count
+    // fell behind how much the game had actually simulated, every time that
+    // catch-up path engaged. That's what Accuracy mode avoided, and why
+    // switching to it visibly fixed/reduced several of Juice's frame-skip
+    // reports. Casual botting doesn't need Performance's speed badly enough
+    // to be worth the inaccuracy -- always false now; kept as a named method
+    // rather than inlining `false` at every call site (runUpdates, the two
+    // register-patch midhooks below, hook_gjbasegamelayer.cpp) since removing
+    // the method itself would touch more files for no behavioral gain.
+    return false;
 }
 
 void GucciUpdater::calculateSteps(float dt, float targetDt) {
@@ -118,39 +118,6 @@ void GucciUpdater::breakLoop() {
     estimatedStepCount = 0;
     totalStepCount     = 0;
     m_tpsOverflow      = 0.0;
-}
-
-static void runFastLockDelta(GucciUpdater& upd,
-                              std::function<void(float)> update,
-                              float realDt) {
-    upd.m_allowedToProcessActions = false;
-    auto nextInput = GucciEngine::get()->replay.getCurrentQueuedInput();
-
-    if (!nextInput.has_value()) {
-        upd.calculateSteps(realDt * upd.getTimeWarp() * upd.m_speedhack, upd.getPhysicsDt());
-        if (upd.estimatedStepCount >= 1)
-            update(realDt * upd.m_speedhack);
-    } else {
-        upd.calculateSteps(realDt * upd.getTimeWarp() * upd.m_speedhack, upd.getPhysicsDt());
-        int steps = upd.totalStepCount;
-        while (steps > 0) {
-            auto inp = GucciEngine::get()->replay.getCurrentQueuedInput();
-            uint64_t safeSteps = inp.has_value()
-                ? inp->m_frame - upd.getFrame()
-                : (uint64_t)steps;
-            safeSteps = std::min(safeSteps, (uint64_t)steps);
-            if (safeSteps > 0) {
-                upd.estimatedStepCount = (int)safeSteps;
-                update(upd.getPhysicsDt() * safeSteps);
-                steps -= (int)safeSteps;
-            }
-            if (steps > 0) {
-                upd.estimatedStepCount = 1;
-                update(realDt * upd.m_speedhack);
-                steps--;
-            }
-        }
-    }
 }
 
 static void runSlowLockDelta(GucciUpdater& upd,
@@ -231,19 +198,15 @@ void GucciUpdater::runUpdates(std::function<void(float)> update,
         m_ssbFix &&
         gb->renderer.recording;
 
-    bool useAccLockDelta = m_lockDelta &&
-        (m_lockDeltaMode == LockDeltaMode::Accuracy || gb->renderer.recording);
-
                         if (gb->fwAnalyzing && (getFrame() % 25) == 0) {
         auto qi = gb->replay.getCurrentQueuedInput();
-        log::info("[FWDISP] f={} enterBlock={} fastFn={} lockD={} mode={} acc={} hasInput={} realDt={:.6f} est={}",
-                  getFrame(), (m_lockDelta || useAccLockDelta) && isPlayLayer, useFastLockDelta(),
-                  m_lockDelta, (int)m_lockDeltaMode, useAccLockDelta, qi.has_value(), realDt, estimatedStepCount);
+        log::info("[FWDISP] f={} enterBlock={} lockD={} hasInput={} realDt={:.6f} est={}",
+                  getFrame(), m_lockDelta && isPlayLayer,
+                  m_lockDelta, qi.has_value(), realDt, estimatedStepCount);
     }
 
-    if ((m_lockDelta || useAccLockDelta) && isPlayLayer) {
-        if (useFastLockDelta()) runFastLockDelta(*this, update, realDt);
-        else                    runSlowLockDelta(*this, update, realDt, calcSsb);
+    if (m_lockDelta && isPlayLayer) {
+        runSlowLockDelta(*this, update, realDt, calcSsb);
     } else {
         m_shouldRender = true;
         if (m_respawnTimer > 0) {

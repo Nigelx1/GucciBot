@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-19-i (Fixed a gap in -h before shipping it: 'Log Frame Increments' was only calling log::info(), but Geode's console log doesn't persist to a findable file on this machine (confirmed absent, matches an old diagnostics-memory note) -- meaning there'd have been no reliable way to actually hand the evidence back. Now routes through a dedicated guccibot_frameinc.log in the mod's save dir instead, same proven pattern as guccibot_slope.log from the P3 investigation (truncated fresh each GD session, then appended+flushed per line). Shared via a new logFrameIncrement() free function so both call sites (frameUpdateMidhook, resetLevel()) write to the same file instead of managing separate handles. Compiles clean, untested in-game.)"
+#define GB_BUILD_LABEL "2026-08-19-j (Removed Lock Delta Performance mode entirely, per Nigel: casual botting doesn't need it, Accuracy mode is the only mode now. LockDeltaMode enum/m_lockDeltaMode field gone from GucciUpdater; useFastLockDelta() always returns false (kept as a named method, still called from a few places, rather than touching every call site); runFastLockDelta() deleted outright (was genuinely unreachable dead code once useFastLockDelta() can't return true); runUpdates() always takes the runSlowLockDelta path when Lock Delta is on. GUI dropdown removed, both persisted-setting keys removed (there were two, feat_lock_delta_mode and updater_lockDeltaMode -- pre-existing duplication, not new), preset bridge lines removed (BotSettingsPreset::lockDeltaMode field itself left in place, now inert, to avoid touching the hand-rolled preset JSON reader for a field nothing reads back anymore). This also likely explains -- and likely already fixes -- Juice's #2 (checkpoint-restart frame reported 1 low, stacking across restarts): runFastLockDelta's single-update-call-covers-multiple-ticks path meant a real hitch (which a checkpoint restore commonly causes) could get absorbed into one big step without a matching number of frame-counter increments. That mechanism no longer exists. Have NOT touched anything for #3 (actions captured 1 frame early) separately -- traced two competing theories (the live-recording handleButton() path firing before its tick's own increment vs the checkpoint-touch/collision timing itself) and couldn't distinguish them from source alone, and didn't want to guess on the input-recording path specifically. Asking for #2 and #3 to be re-tested against this build first, since there's a real chance this one change already resolved both. Compiles clean, untested in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -189,8 +189,6 @@ public:
 
 class GucciUpdater {
 public:
-    enum class LockDeltaMode : int { Performance = 0, Accuracy = 1 };
-
         double   m_tps             = 240.0;
     double   m_speedhack       = 1.0;
     double   m_tpsOverflow     = 0.0;
@@ -213,8 +211,7 @@ public:
     // unconditionally during normal play would flood the log.
     bool     m_logFrameIncrements = false;
 
-        bool          m_lockDelta     = true;
-    LockDeltaMode m_lockDeltaMode = LockDeltaMode::Accuracy;
+        bool m_lockDelta     = true;
 
         bool m_paused       = false;
     bool m_stepOnce_    = false;
