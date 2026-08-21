@@ -29,7 +29,12 @@ class $modify(GB7PlayLayer, PlayLayer) {
             gb->practiceFix.m_platformerCheckpoints.push_back(std::make_pair(obj, (CheckpointObject*)this->m_activatedCheckpoint));
             return;
         }
-        gb->practiceFix.saveCurrent(obj, gb->updater.getFrame());
+        // Juice's testing (2026-08-19): a checkpoint placed on what the bot
+        // reads as frame N actually happens on frame N+1 -- storeCheckpoint
+        // is native GD's own checkpoint-touch callback, fired before this
+        // tick's own frame increment (frameUpdateMidhook). Confirmed the
+        // same +1 applies to input clicks too (see addInputToReplay).
+        gb->practiceFix.saveCurrent(obj, gb->updater.getFrame() + 1);
     }
 
     void loadFromCheckpoint(CheckpointObject* obj) {

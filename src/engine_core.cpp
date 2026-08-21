@@ -71,7 +71,15 @@ void GucciPracticeFix::saveCurrent(CheckpointObject* cp, uint64_t frameOffset) {
 
         StoredFrame sf;
     sf.state = state;
-    sf.frame = GucciEngine::get()->updater.getFrame();
+    // frameOffset, NOT an independent getFrame() re-read -- m_storedFrames
+    // (used for backstepping and Calculate's own checkpoint restore) and
+    // m_savedCheckpoints (state.m_frameOffset, used for normal checkpoint
+    // respawns) must agree on what frame this SAME checkpoint happened at.
+    // A second independent read here could silently diverge from frameOffset
+    // depending on what the caller passed in -- see Juice's 2026-08-19 fix
+    // (call sites now pass getFrame()+1 for checkpoints placed via a native
+    // GD hook that fires before that tick's own frame increment).
+    sf.frame = frameOffset;
     m_storedFrames.push_back(sf);
 }
 

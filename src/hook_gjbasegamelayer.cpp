@@ -145,9 +145,16 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         if (cmd.m_isPlayer2 && !m_levelSettings->m_twoPlayerMode)
             cmd.m_isPlayer2 = false;
         auto& atom = gb->replay.m_actionAtom;
-        if (atom.length() > 0 && atom.m_actions.back().m_frame > gb->updater.getFrame())
+        // Juice's testing (2026-08-19): a click made on what the bot reads as
+        // frame N actually happens on frame N+1 -- handleButton (this
+        // function's main caller) is native GD's own input callback, fired
+        // before this tick's own frame increment (frameUpdateMidhook). Same
+        // +1 as storeCheckpoint's checkpoint placement. Computed once and
+        // used for both the guard below and the stored action so they stay
+        // consistent with each other.
+        uint32_t f = gb->updater.getFrame() + 1;
+        if (atom.length() > 0 && atom.m_actions.back().m_frame > f)
             return;
-        uint32_t f = gb->updater.getFrame();
         bool added = atom.addAction(f,
                        static_cast<gb::ActionType>(cmd.m_button),
                        cmd.m_isPush,

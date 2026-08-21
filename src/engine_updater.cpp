@@ -284,7 +284,11 @@ static void earlyUpdateMidhook(SafetyHookContext&) {
         CheckpointObject* cp = pl->createCheckpoint();
         if (!cp) return;
         cp->retain();
-        gb->practiceFix.saveState(cp, upd.getFrame());
+        // earlyUpdateMidhook (0x237E42) fires before frameUpdateMidhook's own
+        // increment (0x238BAA) within the same native tick -- same off-by-one
+        // Juice found for checkpoints/clicks in general, confirmed here by
+        // the two hooks' relative offsets rather than just by analogy.
+        gb->practiceFix.saveState(cp, upd.getFrame() + 1);
     }
 }
 
