@@ -145,14 +145,18 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         if (cmd.m_isPlayer2 && !m_levelSettings->m_twoPlayerMode)
             cmd.m_isPlayer2 = false;
         auto& atom = gb->replay.m_actionAtom;
-        // Juice's testing (2026-08-19): a click made on what the bot reads as
-        // frame N actually happens on frame N+1 -- handleButton (this
-        // function's main caller) is native GD's own input callback, fired
-        // before this tick's own frame increment (frameUpdateMidhook). Same
-        // +1 as storeCheckpoint's checkpoint placement. Computed once and
-        // used for both the guard below and the stored action so they stay
-        // consistent with each other.
-        uint32_t f = gb->updater.getFrame() + 1;
+        // Reverted the +1 from here (2026-08-19) -- it broke normal playback.
+        // Best guess: playback's own input-application has its own,
+        // never-independently-fixed one-tick delay that this recorded value
+        // was unknowingly canceling out against (record 1 early + apply 1
+        // late = correct net timing for playback, even though each side was
+        // individually "wrong"). Correcting only this side broke that
+        // cancellation. Juice's +1 finding is still real -- it just needs to
+        // live inside Calculate's own internal frame accounting instead of
+        // in the stored macro data that playback also depends on. See
+        // storeCheckpoint/earlyUpdateMidhook, which keep their +1 for now
+        // since they haven't been reported broken.
+        uint32_t f = gb->updater.getFrame();
         if (atom.length() > 0 && atom.m_actions.back().m_frame > f)
             return;
         bool added = atom.addAction(f,
