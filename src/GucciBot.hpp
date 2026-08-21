@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-19-l (Build -k's click +1 broke normal playback -- Juice: 'a lot of clicks are broken' now, whereas playback was fine before. Reverted ONLY the addInputToReplay +1 (hook_gjbasegamelayer.cpp) back to storing getFrame() as before. Best-guess mechanism: playback's own input-application likely has its own, never-independently-found one-tick delay that the old (technically 'wrong') recorded value was unknowingly canceling out against -- correcting only the record side broke that cancellation. Left storeCheckpoint's and earlyUpdateMidhook's +1 in place since those haven't been reported broken -- Juice's checkpoint-restart fix may still be holding. Juice's own suggestion (record/playback keep the old convention, Calculate's internal accounting uses the corrected one) is probably the right direction, but implementing that requires carefully tracing exactly where Calculate reads stored click frames for matching vs where it needs the true frame, and I don't want to guess at that split blind after two rounds of 'close but broke something else' already. Asking for a retest first: does normal playback work again, and does release-testing/Calculate still show the improvement from the checkpoint fixes alone, before touching anything further. Compiles clean, untested in-game.)"
+#define GB_BUILD_LABEL "2026-08-19-m (Implemented Juice's actual proposed fix instead of the stopgap: store the TRUE frame everywhere again (addInputToReplay's +1 re-added), and compensate ONLY at the one place normal playback applies a queued input (processQueuedButtons in hook_gjbasegamelayer.cpp) -- looks the input up one frame ahead of its true label during real playback (gb->isPlaying() && !gb->fwAnalyzing), unshifted during Calculate. One true frame stored everywhere, one clearly-scoped compensation exactly where it's needed, instead of two conventions mixed into stored data. Also: fixed a real bug in GucciPracticeFix::applyCheckpoint -- saveCurrent was already capturing m_isOnGround/m_jumpBuffered per-checkpoint but applyCheckpoint never wrote them back to the player, so a checkpoint restore could leave stale ground-state and change how gravity/jump physics played out next tick even with correct position+velocity (Juice's practice-checkpoint trajectory-change report). Added Legend Size slider (Frame Window Tracker settings, fw_legend_scale) and Ring Boldness slider (fw_ring_boldness) -- default marker is now a concentric double ring (matching Juice's reference image) with adjustable stroke thickness, drawn procedurally rather than as a bitmap so boldness is a real parameter, not faked from a fixed-stroke image; only affects markers without a Tier-specific image configured. NOT touched this build: gravity-portal-capture-sometimes-wrong (need fresh evidence/screenshot, this exact thing was already fixed once for orbs in build -e and I don't want to guess what's different now without seeing it) and reviving the old recovery-range algorithm as a selectable alternative (that's a full second measurement algorithm that was completely deleted, not just modified, on 2026-08-18 -- reviving it needs care to reintegrate with everything changed since, including tonight's own fixes, and deserves its own dedicated pass rather than being rushed into an already-large batch). Compiles clean, untested in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -567,6 +567,15 @@ public:
     // window counter overlays in some GD YouTube videos -- see
     // displayFwLegendHUD() in gui.cpp.
     bool  fwLegendEnabled = false;
+    float fwLegendScale   = 1.f; // Juice's request (2026-08-19)
+    // Juice's request (2026-08-19): a concentric double-ring "target" look
+    // (sent a reference PNG of exactly this) for the default marker, in
+    // place of the old single ring, with adjustable stroke thickness. Drawn
+    // procedurally instead of as a bitmap so boldness is a real, precise
+    // parameter rather than faked by scaling a fixed-stroke image -- see
+    // FrameWindowOverlay::drawRing in framewindow.cpp. Only affects markers
+    // with no tier-specific image configured; tier images are untouched.
+    float fwRingBoldness = 2.2f;
 
             bool  practiceRangeEnabled = false;
     int   fwMaxWindow     = 25;

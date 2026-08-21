@@ -174,9 +174,13 @@ private:
 
     void drawRing(CCPoint center, float radius, ccColor4F color) {
         const int segs = 28;
-        const float thickness = 2.2f;
+        float thickness = GucciEngine::get()->fwRingBoldness;
         ccColor4F clear4{ 0, 0, 0, 0 };
-                m_node->drawCircle(center, radius, clear4, thickness, color, segs);
+        // Concentric double ring (Juice's reference image) instead of a
+        // single circle -- inner ring at ~55% of the outer radius, matching
+        // the reference's proportions.
+        m_node->drawCircle(center, radius, clear4, thickness, color, segs);
+        m_node->drawCircle(center, radius * 0.55f, clear4, thickness, color, segs);
     }
 
     void clear() {

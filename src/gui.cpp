@@ -2185,6 +2185,13 @@ void MenuInterface::drawHacksTab(){
     ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
     ImGui::TextWrapped("Juice's idea: a running tally in the top-left corner, like the frame-window counter overlays in some GD YouTube videos -- how many of the clicks reached so far landed in each Tier's window range below. Shows nothing until at least one Tier is configured and Calculate has results.");
     ImGui::PopStyleColor();
+    if(engine->fwLegendEnabled&&Widgets::StyledSliderFloat("Legend Size",&engine->fwLegendScale,0.5f,3.f,theme))
+        Mod::get()->setSavedValue("fw_legend_scale",engine->fwLegendScale);
+    if(Widgets::StyledSliderFloat("Ring Boldness",&engine->fwRingBoldness,0.5f,8.f,theme))
+        Mod::get()->setSavedValue("fw_ring_boldness",engine->fwRingBoldness);
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::TextWrapped("Marker stroke thickness for the concentric double-ring style. Only affects markers without a Tier-specific image configured.");
+    ImGui::PopStyleColor();
     if(Widgets::ToggleSwitch("Test Ship Releases",&engine->fwTestShipReleases,theme,anim))
         Mod::get()->setSavedValue("fw_test_ship_releases",engine->fwTestShipReleases);
     ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
@@ -4847,6 +4854,8 @@ void MenuInterface::loadSettings(){
     eng->fwTestShipReleases=mod->getSavedValue<bool>("fw_test_ship_releases",true);
     eng->fwOrbAwareReleaseSkip=mod->getSavedValue<bool>("fw_orb_aware_release_skip",true);
     eng->fwLegendEnabled=mod->getSavedValue<bool>("fw_legend",false);
+    eng->fwLegendScale=mod->getSavedValue<float>("fw_legend_scale",1.f);
+    eng->fwRingBoldness=mod->getSavedValue<float>("fw_ring_boldness",2.2f);
     eng->fwDebugMode=mod->getSavedValue<bool>("fw_debug_mode",false);
     eng->fwDebugSlowdown=mod->getSavedValue<int>("fw_debug_slowdown",30);
     eng->fwDelayMarkerCapture=mod->getSavedValue<bool>("fw_delay_marker_capture",false);
@@ -5118,12 +5127,14 @@ void displayFwLegendHUD(){
         ImGuiWindowFlags_NoFocusOnAppearing|ImGuiWindowFlags_NoNav|
         ImGuiWindowFlags_NoBringToFrontOnFocus);
     if(ui->fontBody)ImGui::PushFont(ui->fontBody);
+    ImGui::SetWindowFontScale(engine->fwLegendScale);
     for(size_t idx:order){
         auto const& t=engine->fwTiers[idx];
         ImVec4 col(t.r,t.g,t.b,1.f);
         if(t.lo==t.hi) ImGui::TextColored(col,"%d: %d",t.lo,counts[idx]);
         else           ImGui::TextColored(col,"%d-%d: %d",t.lo,t.hi,counts[idx]);
     }
+    ImGui::SetWindowFontScale(1.0f);
     if(ui->fontBody)ImGui::PopFont();
     ImGui::End();
 }
