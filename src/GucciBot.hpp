@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-19-g (Diagnostic for Juice's position-lag report: his screenshots show the marker ring consistently landing one tick behind the real click on a fast-moving Wave zigzag. Release-shift targeting itself checks out fine by reading the code (shifts the release action specifically, never its preceding click), so this isn't that -- more likely the marker's x/y ground truth is captured one tick early/late relative to the game's own physics update, baked in from record time via m_pathSamples. New 'Delay Marker Capture (diagnostic)' toggle in Frame Window Tracker settings, off by default (zero behavior change): when on, the Capturing pass's marker-position sample is taken one tick later than today. Purely cosmetic -- touches nothing about actual shift-testing/measurement, only where the ring gets drawn. Meant to be A/B'd: run Calculate once with it off, once on, same macro/click, see which one's rings actually land on the real click. Not a fix, a way to find out which direction the real fix needs to go. Compiles clean, untested in-game.)"
+#define GB_BUILD_LABEL "2026-08-19-h (Second diagnostic for Juice's frame-skip reports -- his TPS=240/SimSpeed=1x answers ruled out my TPS-lock-overshoot theory from build -g, so no fix attempted, just better instrumentation. New 'Log Frame Increments' toggle in Diagnostics (off by default, floods the log if left on): logs every incrementFrame() call site plus the resulting frame value -- frameUpdateMidhook's normal per-tick path vs resetLevel()'s respawn path, tagged separately, so a single MH frame-step or a single release test's log output will show directly whether the frame counter is genuinely advancing by 2 from the SAME call site firing twice, or something else entirely. Pure logging, zero behavior change. Also separately: his checkpoint-survive/die report turned out to be a vanilla GD practice-mode checkpoint placed during recording, not GucciBot's own checkpoint system -- untouched this build, needs its own investigation. Compiles clean, untested in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -201,6 +201,12 @@ public:
     int      estimatedStepCount   = 1;
     float    currentDelta         = 0.f;
     float    m_lastTfp            = 0.f;
+    // Diagnostic for Juice's frame-skip report (2026-08-19): off by default,
+    // logs every incrementFrame() call site + the resulting frame value when
+    // on. Meant to be flipped on right before reproducing (MH's frame
+    // stepper, or a release test) and back off after -- logging every tick
+    // unconditionally during normal play would flood the log.
+    bool     m_logFrameIncrements = false;
 
         bool          m_lockDelta     = true;
     LockDeltaMode m_lockDeltaMode = LockDeltaMode::Accuracy;

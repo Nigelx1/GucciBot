@@ -315,6 +315,8 @@ class $modify(GB7PlayLayer, PlayLayer) {
         upd.m_tpsOverflow  = 0.0;
         upd.m_respawnTimer = gb->hackRespawnInstant ? 0 : 2;
         upd.incrementFrame();
+        if (upd.m_logFrameIncrements)
+            log::info("[GucciBot] [FRAMEINC] resetLevel -> frame {}", upd.getFrame());
         uint64_t deathFrame = upd.getFrame();
 
         checkIfResetWasExpected(deathFrame);

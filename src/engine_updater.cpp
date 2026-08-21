@@ -362,7 +362,11 @@ static void frameUpdateMidhook(SafetyHookContext&) {
     if (!pl || pl->m_resumeTimer > 0) return;
 
     if (!pl->m_playerDied) {
-        if (PlayLayer::get()) upd.incrementFrame();
+        if (PlayLayer::get()) {
+            upd.incrementFrame();
+            if (upd.m_logFrameIncrements)
+                log::info("[GucciBot] [FRAMEINC] frameUpdateMidhook -> frame {}", upd.getFrame());
+        }
 
         // Ground-truth capture: live recording always grows this fresh (cleared at
         // record-start). Normal playback (bot replaying a loaded macro, NOT

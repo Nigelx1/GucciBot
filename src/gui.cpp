@@ -2929,6 +2929,12 @@ void MenuInterface::drawSettingsTab(){
         if(eng->renderer.lastRender.fileSize>0)
             ImGui::Text("Last render: %.2f MB",(double)eng->renderer.lastRender.fileSize/(1024.0*1024.0));
         ImGui::PopStyleColor();
+        ImGui::Dummy(ImVec2(0,4));
+        if(Widgets::ToggleSwitch("Log Frame Increments",&eng->updater.m_logFrameIncrements,theme,anim))
+            Mod::get()->setSavedValue("diag_log_frame_increments",eng->updater.m_logFrameIncrements);
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::TextWrapped("Juice's frame-skip report: logs every place the frame counter advances, tagged by call site, to the mod log. Flip on right before reproducing (an MH step, a release test), then off -- leaving it on floods the log during normal play.");
+        ImGui::PopStyleColor();
     }
     ImGui::Dummy(ImVec2(0,8));
     Widgets::SectionHeader("Theme",theme);
@@ -4848,6 +4854,7 @@ void MenuInterface::loadSettings(){
     eng->fwDebugMode=mod->getSavedValue<bool>("fw_debug_mode",false);
     eng->fwDebugSlowdown=mod->getSavedValue<int>("fw_debug_slowdown",30);
     eng->fwDelayMarkerCapture=mod->getSavedValue<bool>("fw_delay_marker_capture",false);
+    eng->updater.m_logFrameIncrements=mod->getSavedValue<bool>("diag_log_frame_increments",false);
     eng->updater.m_maxBackstepFrames=mod->getSavedValue<int>("feat_back_step_count",120);
     eng->updater.m_autoFlipOnDeath=mod->getSavedValue<bool>("feat_auto_flip",false);
     eng->updater.m_preventDeath=mod->getSavedValue<bool>("feat_prevent_death",false);
