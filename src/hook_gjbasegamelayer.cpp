@@ -145,18 +145,18 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         if (cmd.m_isPlayer2 && !m_levelSettings->m_twoPlayerMode)
             cmd.m_isPlayer2 = false;
         auto& atom = gb->replay.m_actionAtom;
-        // Reverted the +1 from here (2026-08-19) -- it broke normal playback.
-        // Best guess: playback's own input-application has its own,
-        // never-independently-fixed one-tick delay that this recorded value
-        // was unknowingly canceling out against (record 1 early + apply 1
-        // late = correct net timing for playback, even though each side was
-        // individually "wrong"). Correcting only this side broke that
-        // cancellation. Juice's +1 finding is still real -- it just needs to
-        // live inside Calculate's own internal frame accounting instead of
-        // in the stored macro data that playback also depends on. See
-        // storeCheckpoint/earlyUpdateMidhook, which keep their +1 for now
-        // since they haven't been reported broken.
-        uint32_t f = gb->updater.getFrame();
+        // Re-added (2026-08-19, Juice's redesign): store the TRUE frame here
+        // again -- handleButton (this function's main caller) is native GD's
+        // own input callback, fired before this tick's own frame increment
+        // (frameUpdateMidhook). The playback-broke-last-time problem is now
+        // fixed at the OTHER end instead: normal playback's queued-apply has
+        // its own inherent one-tick delay, so processQueuedButtons looks
+        // inputs up one frame early during real playback (not during
+        // Calculate, which wants the true frame directly) to compensate --
+        // see the lookupFrame comment there. One true frame stored
+        // everywhere, one clearly-scoped compensation at the one place that
+        // actually needs it, instead of two conventions mixed into the data.
+        uint32_t f = gb->updater.getFrame() + 1;
         if (atom.length() > 0 && atom.m_actions.back().m_frame > f)
             return;
         bool added = atom.addAction(f,
@@ -321,7 +321,17 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
             saveQueuedButtons();
         } else if (gb->isPlaying()) {
             uint32_t frame = gb->updater.getFrame();
-            while (auto input = gb->replay.getNextInput(frame)) {
+            // Inputs are stored at their true frame (addInputToReplay).
+            // Calculate wants that true frame directly. Real playback needs
+            // to look one frame ahead of the true label instead: applying a
+            // queued command goes through GD's own queued-apply path, which
+            // has its own inherent one-tick delay, so firing the lookup one
+            // frame early lands the input on its true frame once applied.
+            // Same isPlaying()-not-fwAnalyzing distinction already used
+            // elsewhere (see shouldCapturePath in engine_updater.cpp) to tell
+            // real playback apart from Calculate's own internal replay.
+            uint32_t lookupFrame = gb->fwAnalyzing ? frame : frame + 1;
+            while (auto input = gb->replay.getNextInput(lookupFrame)) {
                                                                 if (gb->fwAnalyzing) {
                     log::info("[CAP-IN] f={} inputFrame={} hold={} p2={}",
                               frame, input->m_frame, input->m_holding ? 1 : 0,
