@@ -115,6 +115,14 @@ void GucciPracticeFix::applyCheckpoint(const SavedCheckpointState& state) {
         p1->m_isUpsideDown = state.m_p1IsUpsideDown;
                         p1->m_playerSpeed = state.m_p1XVel;
         p1->m_yVelocity   = state.m_p1YVel;
+        // Captured in saveCurrent but never applied back here -- restoring a
+        // checkpoint could leave the player's ground state stale (e.g. still
+        // "airborne" from whatever it was doing right before the restore),
+        // changing how gravity/jump physics play out the next tick even
+        // though position/velocity matched. Juice's practice-checkpoint
+        // trajectory-change report (2026-08-19).
+        p1->m_isOnGround   = state.m_p1IsOnGround;
+        p1->m_jumpBuffered = state.m_p1JumpBuffered;
     }
     if (p2) {
         p2->setPosition(state.m_p2Position);
@@ -122,6 +130,8 @@ void GucciPracticeFix::applyCheckpoint(const SavedCheckpointState& state) {
         p2->m_isUpsideDown = state.m_p2IsUpsideDown;
         p2->m_playerSpeed = state.m_p2XVel;
         p2->m_yVelocity   = state.m_p2YVel;
+        p2->m_isOnGround   = state.m_p2IsOnGround;
+        p2->m_jumpBuffered = state.m_p2JumpBuffered;
     }
 }
 
