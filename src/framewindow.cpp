@@ -46,6 +46,26 @@ public:
         m_builtForCount = -1;
     }
 
+    // The camera's actual current view, converted into m_node's local space
+    // (the same space mk.x/mk.y are already in) via its real transform --
+    // not a fixed distance from the player, so this stays correct through
+    // zoom triggers. A margin keeps marks from popping in/out right at the
+    // screen edge as the camera scrolls.
+    CCRect computeVisibleRect() {
+        auto* director = CCDirector::sharedDirector();
+        CCSize visSize = director->getVisibleSize();
+        CCPoint visOrigin = director->getVisibleOrigin();
+        CCPoint bl = m_node->convertToNodeSpace(visOrigin);
+        CCPoint tr = m_node->convertToNodeSpace(
+            { visOrigin.x + visSize.width, visOrigin.y + visSize.height });
+        const float margin = 60.f;
+        float minX = std::min(bl.x, tr.x) - margin;
+        float maxX = std::max(bl.x, tr.x) + margin;
+        float minY = std::min(bl.y, tr.y) - margin;
+        float maxY = std::max(bl.y, tr.y) + margin;
+        return CCRect(minX, minY, maxX - minX, maxY - minY);
+    }
+
     // Juice's debug/slow mode: draws a mark at wherever the player ended up for
     // every individual test Calculate has run so far on the CURRENT click (green
     // ring = survived, red X = died) -- separate draw node from m_node/m_labelLayer
@@ -104,6 +124,16 @@ public:
         if (curFrame < m_lastCurFrame) m_pulseStart.clear();
         m_lastCurFrame = curFrame;
 
+                        // Juice's lag report (2026-08-21): nothing was culling marks
+        // outside the camera's actual view -- every mark ever revealed
+        // (frame <= curFrame) got drawn, even ones far behind/ahead of where
+        // the camera currently is, worst on Spiral since it's the most
+        // expensive shape to draw per mark. Computed in the CCDrawNode's own
+        // local space (same space mk.x/mk.y are already in) via the real
+        // camera transform, not a fixed distance guess, so it stays correct
+        // through zoom triggers too.
+        CCRect visRect = computeVisibleRect();
+
                 int visibleCount = 0;
         // Pulse effects need to redraw every frame while any are actually
         // mid-animation -- the signature cache below would otherwise freeze
@@ -130,10 +160,20 @@ public:
 
                                         bool mirrored = m_labelLayer && parentChainFlipped(m_labelLayer);
 
+                        // Which marks are actually inside visRect changes as the camera
+        // scrolls, even when nothing else here does -- fold a coarsely
+        // quantized camera position into the signature so the overlay
+        // rebuilds as marks cross into/out of view, without rebuilding
+        // every single tick for sub-pixel camera motion.
+        int camBucketX = (int)std::floor(visRect.getMidX() / 20.f);
+        int camBucketY = (int)std::floor(visRect.getMidY() / 20.f);
+
         int sig = visibleCount * 100000
                 + static_cast<int>(gb->fwMarks.size()) * 100
                 + gb->fwMaxWindow
-                + (mirrored ? 1 : 0);
+                + (mirrored ? 1 : 0)
+                + camBucketX * 7919
+                + camBucketY * 104729;
         if (!anyPulseActive && sig == m_builtForCount) return;
         m_builtForCount = anyPulseActive ? -1 : sig;
 
@@ -161,6 +201,7 @@ public:
             if (!gb->fwTiers.empty() && !tier) continue;
 
             CCPoint at{ mk.x, mk.y };
+            if (!visRect.containsPoint(at)) continue;
 
             ccColor4F col = tier
                 ? ccColor4F{ tier->r, tier->g, tier->b, 1.f }
