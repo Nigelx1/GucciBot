@@ -2466,6 +2466,78 @@ void MenuInterface::drawHacksTab(){
         }
         ImGui::SameLine();ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
         ImGui::TextUnformatted("tint / ring color");ImGui::PopStyleColor();
+
+                        ImGui::Dummy(ImVec2(0,4));
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::TextUnformatted("Shape (used when no marker image is set above):");
+        ImGui::PopStyleColor();
+        {
+            const char* shapeNames[]={"Circle","Star","Spiral","Geometric"};
+            int shapeIdx=(int)t.shape;
+            ImGui::SetNextItemWidth(-1);
+            if(ImGui::Combo("##shape",&shapeIdx,shapeNames,4))
+                t.shape=(GucciEngine::FwMarkerShape)shapeIdx;
+        }
+        if(t.shape==GucciEngine::FwMarkerShape::Polygon){
+            ImGui::SetNextItemWidth(third);
+            ImGui::InputInt("##sides",&t.polygonSides,0,0);
+            t.polygonSides=std::clamp(t.polygonSides,3,12);
+            ImGui::SameLine();ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+            ImGui::TextUnformatted("sides");ImGui::PopStyleColor();
+            ImGui::SetNextItemWidth(third);
+            ImGui::SliderFloat("##cornerrad",&t.polygonCornerRadius,0.f,1.f,"%.2f");
+            ImGui::SameLine();ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+            ImGui::TextUnformatted("corner radius");ImGui::PopStyleColor();
+        }
+
+        {
+            const char* fillNames[]={"Inverted (default)","Normal (donut)"};
+            int fillIdx=(int)t.fillStyle;
+            ImGui::SetNextItemWidth(-1);
+            if(ImGui::Combo("##fillstyle",&fillIdx,fillNames,2))
+                t.fillStyle=(GucciEngine::FwFillStyle)fillIdx;
+        }
+        ImGui::Checkbox("No Border##tier",&t.noBorder);
+        if(!t.noBorder){
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(third);
+            ImGui::SliderFloat("##stroke",&t.strokeSize,0.5f,10.f,"%.1f stroke");
+        }
+        ImGui::SetNextItemWidth(-1);
+        ImGui::SliderFloat("##vol",&t.volume,0.f,1.f,"%.2f sound volume");
+
+        if(ImGui::TreeNodeEx("Pulse Effects",ImGuiTreeNodeFlags_None)){
+            ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+            ImGui::TextWrapped("Fades from the marker/text's normal color to the pulse color, holds, fades back, and repeats.");
+            ImGui::PopStyleColor();
+            ImGui::Checkbox("Enable Marker Pulse",&t.markerPulseEnabled);
+            if(t.markerPulseEnabled){
+                ImGui::ColorEdit3("Marker Pulse Color",t.markerPulseColor,ImGuiColorEditFlags_NoInputs);
+                ImGui::SetNextItemWidth(third);
+                ImGui::InputFloat("##mfi",&t.markerPulseFadeIn,0,0,"%.2fs in");ImGui::SameLine();
+                ImGui::SetNextItemWidth(third);
+                ImGui::InputFloat("##mhd",&t.markerPulseHold,0,0,"%.2fs hold");ImGui::SameLine();
+                ImGui::SetNextItemWidth(third);
+                ImGui::InputFloat("##mfo",&t.markerPulseFadeOut,0,0,"%.2fs out");
+                t.markerPulseFadeIn=std::max(0.f,t.markerPulseFadeIn);
+                t.markerPulseHold=std::max(0.f,t.markerPulseHold);
+                t.markerPulseFadeOut=std::max(0.f,t.markerPulseFadeOut);
+            }
+            ImGui::Checkbox("Enable Text Pulse",&t.textPulseEnabled);
+            if(t.textPulseEnabled){
+                ImGui::ColorEdit3("Text Pulse Color",t.textPulseColor,ImGuiColorEditFlags_NoInputs);
+                ImGui::SetNextItemWidth(third);
+                ImGui::InputFloat("##tfi",&t.textPulseFadeIn,0,0,"%.2fs in");ImGui::SameLine();
+                ImGui::SetNextItemWidth(third);
+                ImGui::InputFloat("##thd",&t.textPulseHold,0,0,"%.2fs hold");ImGui::SameLine();
+                ImGui::SetNextItemWidth(third);
+                ImGui::InputFloat("##tfo",&t.textPulseFadeOut,0,0,"%.2fs out");
+                t.textPulseFadeIn=std::max(0.f,t.textPulseFadeIn);
+                t.textPulseHold=std::max(0.f,t.textPulseHold);
+                t.textPulseFadeOut=std::max(0.f,t.textPulseFadeOut);
+            }
+            ImGui::TreePop();
+        }
         ImGui::PopID();
     }
     if(tierRemove>=0)engine->fwTiers.erase(engine->fwTiers.begin()+tierRemove);
@@ -2481,7 +2553,28 @@ void MenuInterface::drawHacksTab(){
             for(auto& t:engine->fwTiers){
                 enc+=std::to_string(t.lo)+"|"+std::to_string(t.hi)+"|"+
                      t.imageFile+"|"+t.soundFile+"|"+
-                     std::to_string(t.r)+"|"+std::to_string(t.g)+"|"+std::to_string(t.b)+";";
+                     std::to_string(t.r)+"|"+std::to_string(t.g)+"|"+std::to_string(t.b)+"|"+
+                     std::to_string((int)t.shape)+"|"+
+                     std::to_string(t.polygonSides)+"|"+
+                     std::to_string(t.polygonCornerRadius)+"|"+
+                     std::to_string((int)t.fillStyle)+"|"+
+                     (t.noBorder?"1":"0")+"|"+
+                     std::to_string(t.strokeSize)+"|"+
+                     std::to_string(t.volume)+"|"+
+                     (t.markerPulseEnabled?"1":"0")+"|"+
+                     std::to_string(t.markerPulseColor[0])+"|"+
+                     std::to_string(t.markerPulseColor[1])+"|"+
+                     std::to_string(t.markerPulseColor[2])+"|"+
+                     std::to_string(t.markerPulseFadeIn)+"|"+
+                     std::to_string(t.markerPulseHold)+"|"+
+                     std::to_string(t.markerPulseFadeOut)+"|"+
+                     (t.textPulseEnabled?"1":"0")+"|"+
+                     std::to_string(t.textPulseColor[0])+"|"+
+                     std::to_string(t.textPulseColor[1])+"|"+
+                     std::to_string(t.textPulseColor[2])+"|"+
+                     std::to_string(t.textPulseFadeIn)+"|"+
+                     std::to_string(t.textPulseHold)+"|"+
+                     std::to_string(t.textPulseFadeOut)+";";
             }
             Mod::get()->setSavedValue("fw_tiers",enc);
         }
@@ -4949,6 +5042,32 @@ void MenuInterface::loadSettings(){
                 snprintf(t.imageFile,sizeof(t.imageFile),"%s",f[2].c_str());
                 snprintf(t.soundFile,sizeof(t.soundFile),"%s",f[3].c_str());
                 t.r=(float)atof(f[4].c_str()); t.g=(float)atof(f[5].c_str()); t.b=(float)atof(f[6].c_str());
+                // Fields added 2026-08-21 (Juice's marker customization spec) --
+                // rows saved before this exist with only the first 7 fields, so
+                // everything below stays at the struct's own defaults for those.
+                if(f.size()>=28){
+                    t.shape=(GucciEngine::FwMarkerShape)atoi(f[7].c_str());
+                    t.polygonSides=atoi(f[8].c_str());
+                    t.polygonCornerRadius=(float)atof(f[9].c_str());
+                    t.fillStyle=(GucciEngine::FwFillStyle)atoi(f[10].c_str());
+                    t.noBorder=(f[11]=="1");
+                    t.strokeSize=(float)atof(f[12].c_str());
+                    t.volume=(float)atof(f[13].c_str());
+                    t.markerPulseEnabled=(f[14]=="1");
+                    t.markerPulseColor[0]=(float)atof(f[15].c_str());
+                    t.markerPulseColor[1]=(float)atof(f[16].c_str());
+                    t.markerPulseColor[2]=(float)atof(f[17].c_str());
+                    t.markerPulseFadeIn=(float)atof(f[18].c_str());
+                    t.markerPulseHold=(float)atof(f[19].c_str());
+                    t.markerPulseFadeOut=(float)atof(f[20].c_str());
+                    t.textPulseEnabled=(f[21]=="1");
+                    t.textPulseColor[0]=(float)atof(f[22].c_str());
+                    t.textPulseColor[1]=(float)atof(f[23].c_str());
+                    t.textPulseColor[2]=(float)atof(f[24].c_str());
+                    t.textPulseFadeIn=(float)atof(f[25].c_str());
+                    t.textPulseHold=(float)atof(f[26].c_str());
+                    t.textPulseFadeOut=(float)atof(f[27].c_str());
+                }
                 eng->fwTiers.push_back(t);
             }
         }

@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-19-o (Two of Juice's requested UX safeguards: algorithm selector (Time-Based/Recovery Range) now locked/greyed while Calculate is actually running, unlocks on finish or cancel. Show Live and Show Legend now force off the instant recording starts (setMode(Recording)) and stay locked/greyed until recording stops -- Show in Renders deliberately NOT touched, that's about a future render, not live-during-recording state, and wasn't part of his report. Did NOT touch: his 'recovery range still uses time-based when pressing Calculate' report -- re-read beginShiftTest()/fwTick's Probing case/beginOrSkipProbeClick() closely and the routing looks structurally correct (checks fwUseRecoveryRangeAlgorithm before anything else, no other code path resets it) -- need to know specifically HOW he's telling it's still time-based (Recovery Range should be visibly/audibly slower, more probe runs per shift) before guessing at a fix here, especially right after the -k/-l/-m saga in this exact area. Also did NOT touch his orb-aware input logic bug report (Robot gamemode, non-dash vs dash orb release handling) -- read fwIsDashOrbType/fwIsNonDashOrbType and the Capturing-pass skip logic closely and it already appears to implement exactly what he described (non-dash click drops the following release, dash click keeps it) -- no obvious gap found, so need a concrete repro before touching it. Explicitly NOT attempted this build: the full marker shape/fill/pulse-effects/per-tier-override system from his spec -- that's a genuinely large rendering/customization overhaul, and both he and Nigel have separately landed on 'accuracy first' as the actual priority right now, so deferring it rather than adding untested surface area on top of an already-shaky-until-confirmed frame-timing engine. Compiles clean, untested in-game.)"
+#define GB_BUILD_LABEL "2026-08-19-p (Nigel: go ahead and build the customization spec now, fix what's broken after. Marker shapes: Circle (existing double-ring), Star, Spiral (stroke-only, no fill concept), and Geometric/Polygon (3-12 sides, approximate corner rounding via chamfering, not true arcs) -- per-tier. Fill style per-tier: Inverted (existing outline-only look) or Normal/donut (filled ring + black border), built via an outer-boundary-plus-reversed-inner-boundary 'bridge' polygon so CCDrawNode's fill algorithm renders it as a ring instead of a solid disk -- KNOWN RISK: haven't verified this renders artifact-free on every shape, the bridge seam is a plausible visual glitch spot. No Border toggle + Stroke Size, per tier. Per-tier sound volume (FMOD channel starts paused, volume set, then unpaused, so no full-volume frame before it applies). Pulse effects: marker and text pulse independently, each with enable/color/fade-in/hold/fade-out (real seconds, wall-clock based via std::chrono, not tied to TPS/speedhack) -- forces the marker overlay to redraw every frame instead of its usual change-detection cache whenever any visible mark's tier has a pulse enabled. Tier save/load format extended from 7 to 28 pipe-separated fields; old 7-field saves still load fine, just default to Circle/Inverted/no pulse. Compiles clean on the first pass despite the scope, but ENTIRELY UNTESTED IN-GAME -- expect some of this needs fixing, per Nigel's own explicit call. Separately, asked Juice to clarify how he's telling Recovery Range isn't engaging (still haven't touched that code -- see -o's label for why) and did not touch the orb-aware input logic report, same reasoning as -o.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -795,12 +795,31 @@ public:
     std::string fwAnalyzeStage;
     void  analyzeFrameWindows();
 
+                enum class FwMarkerShape { Circle = 0, Star = 1, Spiral = 2, Polygon = 3 };
+    enum class FwFillStyle   { Inverted = 0, Normal = 1 }; // Inverted = existing style; Normal = donut (filled + black border)
+
                 struct FrameWindowTier {
         int   lo = 1;
         int   hi = 3;
         char  imageFile[96] = "";
         char  soundFile[96] = "";
         float r = 1.f, g = 0.2f, b = 0.2f;
+        // Juice's marker customization spec (2026-08-21) -- all per-tier,
+        // only applies when imageFile is empty (a configured tier image
+        // still wins, same as before).
+        FwMarkerShape shape = FwMarkerShape::Circle;
+        int   polygonSides = 5;          // Polygon shape only
+        float polygonCornerRadius = 0.f; // Polygon shape only, 0..1 fraction of edge length
+        FwFillStyle fillStyle = FwFillStyle::Inverted;
+        bool  noBorder = false;
+        float strokeSize = 2.2f;         // outline thickness (Inverted) or border thickness (Normal)
+        float volume = 1.f;              // per-tier "ding" sound volume, 0..1
+        bool  markerPulseEnabled = false;
+        float markerPulseColor[3] = { 1.f, 1.f, 1.f };
+        float markerPulseFadeIn = 0.1f, markerPulseHold = 0.3f, markerPulseFadeOut = 0.5f;
+        bool  textPulseEnabled = false;
+        float textPulseColor[3] = { 1.f, 1.f, 1.f };
+        float textPulseFadeIn = 0.1f, textPulseHold = 0.3f, textPulseFadeOut = 0.5f;
     };
     std::vector<FrameWindowTier> fwTiers;
         FrameWindowTier* fwTierFor(int window) {
