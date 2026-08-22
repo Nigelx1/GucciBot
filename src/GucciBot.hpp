@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-19-m (Implemented Juice's actual proposed fix instead of the stopgap: store the TRUE frame everywhere again (addInputToReplay's +1 re-added), and compensate ONLY at the one place normal playback applies a queued input (processQueuedButtons in hook_gjbasegamelayer.cpp) -- looks the input up one frame ahead of its true label during real playback (gb->isPlaying() && !gb->fwAnalyzing), unshifted during Calculate. One true frame stored everywhere, one clearly-scoped compensation exactly where it's needed, instead of two conventions mixed into stored data. Also: fixed a real bug in GucciPracticeFix::applyCheckpoint -- saveCurrent was already capturing m_isOnGround/m_jumpBuffered per-checkpoint but applyCheckpoint never wrote them back to the player, so a checkpoint restore could leave stale ground-state and change how gravity/jump physics played out next tick even with correct position+velocity (Juice's practice-checkpoint trajectory-change report). Added Legend Size slider (Frame Window Tracker settings, fw_legend_scale) and Ring Boldness slider (fw_ring_boldness) -- default marker is now a concentric double ring (matching Juice's reference image) with adjustable stroke thickness, drawn procedurally rather than as a bitmap so boldness is a real parameter, not faked from a fixed-stroke image; only affects markers without a Tier-specific image configured. NOT touched this build: gravity-portal-capture-sometimes-wrong (need fresh evidence/screenshot, this exact thing was already fixed once for orbs in build -e and I don't want to guess what's different now without seeing it) and reviving the old recovery-range algorithm as a selectable alternative (that's a full second measurement algorithm that was completely deleted, not just modified, on 2026-08-18 -- reviving it needs care to reintegrate with everything changed since, including tonight's own fixes, and deserves its own dedicated pass rather than being rushed into an already-large batch). Compiles clean, untested in-game.)"
+#define GB_BUILD_LABEL "2026-08-19-n (Revived the Recovery Range algorithm as a selectable alternative to the default Time-Based test, per Juice's request and Nigel's go-ahead. IMPORTANT CAVEAT: this algorithm was never committed to git as its own state -- it lived and died entirely in an uncommitted working tree in an earlier session, so this is a RECONSTRUCTION from memory of its design and known bug-fix history, not a restore of previously-verified code. New GUI selector in Frame Window Tracker settings ('Time-Based' / 'Recovery Range'), off by default. Design: for a shift X on the click being probed, first check the shifted click's own trajectory can REACH the next measurable input N (N's action stripped so nothing fires there -- beginProbeRunReach()); only if that succeeds, search candidate frames k = N.frame + offset for offset in [-fwRecoveryRange, +fwRecoveryRange] (new slider, default 4) for one where firing N AT k still survives (beginRecoveryCandidate()) -- models a player adapting N's timing slightly to a shifted earlier click. New state routing: beginShiftTest()/fwTick's Probing case branch on fwUseRecoveryRangeAlgorithm to beginShiftTestRecovery()/advanceRecoverySweep() instead of the existing beginProbeRun()/advanceOffsetSweep(), which are completely untouched -- the default path has zero risk from this addition. Both algorithms share the outer X-sweep bookkeeping (advanceOffsetSweep is called with the final verdict either way), the neighbor-distance clamps, the dedup guard, and debug mode. Compiles clean, completely unverified in-game -- flagged as such in the GUI's own description text too. NOT touched this build: gravity-portal-capture-sometimes-wrong (still need fresh evidence/screenshot before touching this again). Also carried over from -m, untouched: true-frame playback fix, checkpoint ground-state restore fix, Legend Size and Ring Boldness sliders.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -706,6 +706,26 @@ public:
     // these instead of the raw fwSweepRange.
     int      fwProbeMaxNegShift = 0;
     int      fwProbeMaxPosShift = 0;
+    // Revived 2026-08-19 at Juice's request as a selectable alternative to the
+    // time-based test above -- his original 1.3 algorithm: instead of just
+    // watching the shifted click survive on its own, first check it can still
+    // REACH the next measurable input N (N's own action removed so nothing
+    // fires there), then search a small range of frames around N's original
+    // timing for one where N can still actually be executed. In theory more
+    // accurate (models a player adapting N's timing slightly to a shifted
+    // click before it), but noticeably more expensive (up to 2*fwRecoveryRange+1
+    // extra probe runs per shift instead of one). Off by default -- the
+    // time-based test above stays the default for speed on easier levels.
+    // This exact algorithm existed before (2026-08-17 through 2026-08-18) and
+    // was fully replaced by the time-based test, not just patched -- it was
+    // never committed to git as its own state, so this is a reconstruction
+    // from memory of its design and known bug fixes, not a restore of
+    // verified-working code. Treat as unverified until tested fresh.
+    bool     fwUseRecoveryRangeAlgorithm = false;
+    int      fwRecoveryRange = 4;
+    enum class FwProbeSubPhase { Reaching, RecoveryCandidate };
+    FwProbeSubPhase fwProbeSubPhase = FwProbeSubPhase::Reaching;
+    int      fwRecoveryOffset = 0; // current candidate k, as an offset from N's original frame
     // Debug/slow mode (added 2026-08-17, Juice asked for a way to watch Calculate
     // work instead of guessing from the final numbers): every time an individual
     // test (a shift, or a recovery candidate) concludes, drop a mark at wherever
@@ -753,6 +773,11 @@ public:
     void  beginOrSkipProbeClick(); // advances fwProbeClick past any manually-covered clicks, then starts probing the next one (or finishes if none remain)
     void  beginShiftTest(); // computes this shift's survival-check window and starts the run for it
     void  advanceOffsetSweep(bool survived); // records the just-finished shift's result and moves the sweep to the next shift (or finishes the click)
+    // Recovery Range algorithm (see fwUseRecoveryRangeAlgorithm's comment above).
+    void  beginShiftTestRecovery();   // starts the reach sub-phase for the current shift X
+    void  beginProbeRunReach();       // like beginProbeRun(), but also strips N's own action so it can't fire during the reach check
+    void  beginRecoveryCandidate();   // restores + applies shift X to I and moves N to N.frame + fwRecoveryOffset, then runs
+    void  advanceRecoverySweep(bool survived); // routes a concluded reach/candidate test to the next step, or into advanceOffsetSweep() with the final verdict
     bool  fwHasManualMarkAt(uint32_t frame, bool player2) const;
     void  finishProbeClick();
     void  fwFinishAnalysis();

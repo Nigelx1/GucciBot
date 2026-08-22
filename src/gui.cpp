@@ -2176,6 +2176,20 @@ void MenuInterface::drawHacksTab(){
 
         ImGui::Dummy(ImVec2(0,8));
     Widgets::SectionHeader("Frame Window Tracker",theme);
+    {
+        const char* algoNames[]={"Time-Based","Recovery Range"};
+        int algoIdx=engine->fwUseRecoveryRangeAlgorithm?1:0;
+        ImGui::SetNextItemWidth(-1);
+        if(ImGui::Combo("##fwAlgo",&algoIdx,algoNames,2)){
+            engine->fwUseRecoveryRangeAlgorithm=(algoIdx==1);
+            Mod::get()->setSavedValue("fw_use_recovery_range",engine->fwUseRecoveryRangeAlgorithm);
+        }
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::TextWrapped("Time-Based (default): faster, watches the shifted click survive on its own -- good for most levels. Recovery Range: Juice's original algorithm, revived -- also checks whether the NEXT click's timing could shift slightly to still work, which is more accurate but noticeably slower (extra probe runs per shift). Unverified since being brought back -- worth A/B'ing against Time-Based on the same section.");
+        ImGui::PopStyleColor();
+        if(engine->fwUseRecoveryRangeAlgorithm&&Widgets::StyledSliderInt("Recovery Range",&engine->fwRecoveryRange,1,10,theme))
+            Mod::get()->setSavedValue("fw_recovery_range",(int64_t)engine->fwRecoveryRange);
+    }
     if(Widgets::ToggleSwitch("Show Live",&engine->fwEnabledLive,theme,anim))
         Mod::get()->setSavedValue("fw_live",engine->fwEnabledLive);
     if(Widgets::ToggleSwitch("Show in Renders",&engine->fwEnabledRender,theme,anim))
@@ -4856,6 +4870,8 @@ void MenuInterface::loadSettings(){
     eng->fwLegendEnabled=mod->getSavedValue<bool>("fw_legend",false);
     eng->fwLegendScale=mod->getSavedValue<float>("fw_legend_scale",1.f);
     eng->fwRingBoldness=mod->getSavedValue<float>("fw_ring_boldness",2.2f);
+    eng->fwUseRecoveryRangeAlgorithm=mod->getSavedValue<bool>("fw_use_recovery_range",false);
+    eng->fwRecoveryRange=mod->getSavedValue<int>("fw_recovery_range",4);
     eng->fwDebugMode=mod->getSavedValue<bool>("fw_debug_mode",false);
     eng->fwDebugSlowdown=mod->getSavedValue<int>("fw_debug_slowdown",30);
     eng->fwDelayMarkerCapture=mod->getSavedValue<bool>("fw_delay_marker_capture",false);

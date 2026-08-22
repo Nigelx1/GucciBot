@@ -1802,7 +1802,8 @@ void GucciEngine::fwTick() {
                       "(after {} frames, horizon {}, windowHigh {})",
                       fwProbeClick, fwProbeShift, fwProbeDied ? "YES" : "no",
                       fwProbeFrame, fwProbeHorizon, fwProbeWindowHigh);
-            advanceOffsetSweep(survived);
+            if (fwUseRecoveryRangeAlgorithm) advanceRecoverySweep(survived);
+            else                             advanceOffsetSweep(survived);
         }
         break;
     }
@@ -1851,6 +1852,11 @@ void GucciEngine::beginShiftTest() {
         return;
     }
     fwProbeTestedShifts.insert(fwProbeShift);
+
+    if (fwUseRecoveryRangeAlgorithm) {
+        beginShiftTestRecovery();
+        return;
+    }
 
     if (fwProbeHasNext) {
         // Juice's time-based test, corrected per his own follow-up: the window has to
@@ -2071,6 +2077,200 @@ void GucciEngine::beginProbeRun() {
         practiceFix.m_loadCheckpoint = false;
         practiceFix.m_isBackstep     = false;
     }
+}
+
+// --- Recovery Range algorithm (fwUseRecoveryRangeAlgorithm) ---
+// See its field comment in GucciBot.hpp for what this is and why it's
+// separate from the time-based test above.
+
+void GucciEngine::beginShiftTestRecovery() {
+    fwProbeSubPhase = FwProbeSubPhase::Reaching;
+    if (!fwProbeHasNext) {
+        // Nothing to recover against -- same as the time-based test's own
+        // no-next-input path, just watch survival out to a flat horizon.
+        computeProbeHorizon();
+        beginProbeRun();
+        return;
+    }
+    // Reach check: horizon is the distance from the shifted click to N's
+    // ORIGINAL frame (N's action is removed below, so nothing should fire
+    // before then anyway), plus the same checkpoint-warmup margin the
+    // time-based test accounts for.
+    int64_t shiftedIFrame = std::max<int64_t>((int64_t)fwClickSamples[fwProbeClick].frame + fwProbeShift, 0);
+    int64_t horizonToN    = std::max<int64_t>((int64_t)fwProbeNextFrame - shiftedIFrame, 0);
+    long margin = 0;
+    if (fwProbeClick < fwCapStack.size())
+        margin = (long)fwClickSamples[fwProbeClick].frame - (long)fwCapStack[fwProbeClick].frame;
+    margin = std::max(0L, margin);
+    fwProbeHorizon = (int)horizonToN + (int)margin;
+    beginProbeRunReach();
+}
+
+void GucciEngine::beginProbeRunReach() {
+    auto* pl = PlayLayer::get();
+    if (!pl) return;
+    if (fwProbeClick >= fwCapStack.size() ||
+        fwCapStack[fwProbeClick].frame > fwClickSamples[fwProbeClick].frame) {
+        finishProbeClick();
+        return;
+    }
+
+    replay.m_actionAtom = fwSavedAtom;
+    auto& acts = replay.m_actionAtom.m_actions;
+    acts.erase(std::remove_if(acts.begin(), acts.end(),
+                   [](const gb::Action& a){ return !a.isInput(); }),
+               acts.end());
+
+    uint32_t targetFrame   = fwClickSamples[fwProbeClick].frame;
+    bool     targetP2      = fwClickSamples[fwProbeClick].player2;
+    bool     targetHolding = !fwClickSamples[fwProbeClick].release;
+    for (auto& a : acts) {
+        if (a.m_frame == targetFrame && a.m_player2 == targetP2 && a.m_holding == targetHolding) {
+            int64_t shifted = (int64_t)targetFrame + fwProbeShift;
+            a.m_frame = (uint32_t)std::max<int64_t>(shifted, 0);
+            break;
+        }
+    }
+
+    // Reach phase: strip N's own action entirely so nothing fires there --
+    // this test only checks whether the shifted click's own trajectory
+    // survives long enough to REACH N, not whether N itself can still be
+    // executed (that's the separate recovery-candidate search below).
+    if (fwProbeHasNext) {
+        acts.erase(std::remove_if(acts.begin(), acts.end(),
+            [&](const gb::Action& a){
+                return a.m_frame == fwProbeNextFrame && a.m_player2 == fwProbeNextPlayer2 &&
+                       a.m_holding == !fwProbeNextIsRelease;
+            }), acts.end());
+    }
+
+    std::stable_sort(acts.begin(), acts.end(),
+                     [](const gb::Action& a, const gb::Action& b){ return a.m_frame < b.m_frame; });
+
+    practiceFix.m_savedCheckpoints.clear();
+    practiceFix.m_storedFrames.clear();
+    practiceFix.m_storedFrames.push_back(fwCapStack[fwProbeClick]);
+    practiceFix.m_storedFrames.push_back(fwCapStack[fwProbeClick]);
+
+    fwProbeDied  = false;
+    fwProbeFrame = 0;
+
+    mode = Mode::Playing;
+
+    if (practiceFix.canRestoreState()) {
+        practiceFix.m_loadCheckpoint = true;
+        practiceFix.m_isBackstep     = true;
+        pl->resetLevel();
+        practiceFix.m_loadCheckpoint = false;
+        practiceFix.m_isBackstep     = false;
+    }
+}
+
+void GucciEngine::beginRecoveryCandidate() {
+    auto* pl = PlayLayer::get();
+    if (!pl) return;
+    if (fwProbeClick >= fwCapStack.size() ||
+        fwCapStack[fwProbeClick].frame > fwClickSamples[fwProbeClick].frame) {
+        finishProbeClick();
+        return;
+    }
+
+    replay.m_actionAtom = fwSavedAtom;
+    auto& acts = replay.m_actionAtom.m_actions;
+    acts.erase(std::remove_if(acts.begin(), acts.end(),
+                   [](const gb::Action& a){ return !a.isInput(); }),
+               acts.end());
+
+    uint32_t targetFrame   = fwClickSamples[fwProbeClick].frame;
+    bool     targetP2      = fwClickSamples[fwProbeClick].player2;
+    bool     targetHolding = !fwClickSamples[fwProbeClick].release;
+    for (auto& a : acts) {
+        if (a.m_frame == targetFrame && a.m_player2 == targetP2 && a.m_holding == targetHolding) {
+            int64_t shifted = (int64_t)targetFrame + fwProbeShift;
+            a.m_frame = (uint32_t)std::max<int64_t>(shifted, 0);
+            break;
+        }
+    }
+
+    // Recovery candidate: try firing N at N.frame + fwRecoveryOffset instead
+    // of its own original frame -- models a player adjusting N's timing
+    // slightly in response to the shifted click before it.
+    int64_t shiftedNFrame = fwProbeNextFrame;
+    if (fwProbeHasNext) {
+        for (auto& a : acts) {
+            if (a.m_frame == fwProbeNextFrame && a.m_player2 == fwProbeNextPlayer2 &&
+                a.m_holding == !fwProbeNextIsRelease) {
+                shiftedNFrame = std::max<int64_t>((int64_t)fwProbeNextFrame + fwRecoveryOffset, 0);
+                a.m_frame = (uint32_t)shiftedNFrame;
+                break;
+            }
+        }
+    }
+
+    std::stable_sort(acts.begin(), acts.end(),
+                     [](const gb::Action& a, const gb::Action& b){ return a.m_frame < b.m_frame; });
+
+    practiceFix.m_savedCheckpoints.clear();
+    practiceFix.m_storedFrames.clear();
+    practiceFix.m_storedFrames.push_back(fwCapStack[fwProbeClick]);
+    practiceFix.m_storedFrames.push_back(fwCapStack[fwProbeClick]);
+
+    fwProbeDied  = false;
+    fwProbeFrame = 0;
+
+    // Horizon: survive to N's candidate frame plus slack, so N's action (now
+    // firing at the candidate frame) actually gets to execute and we watch
+    // what happens just after it too -- same slack the time-based test uses.
+    int64_t shiftedIFrame = std::max<int64_t>((int64_t)targetFrame + fwProbeShift, 0);
+    int64_t horizon = std::max<int64_t>(shiftedNFrame - shiftedIFrame, 0) + fwSlackWindow;
+    long margin = 0;
+    if (fwProbeClick < fwCapStack.size())
+        margin = (long)targetFrame - (long)fwCapStack[fwProbeClick].frame;
+    margin = std::max(0L, margin);
+    fwProbeHorizon = (int)horizon + (int)margin;
+
+    mode = Mode::Playing;
+
+    if (practiceFix.canRestoreState()) {
+        practiceFix.m_loadCheckpoint = true;
+        practiceFix.m_isBackstep     = true;
+        pl->resetLevel();
+        practiceFix.m_loadCheckpoint = false;
+        practiceFix.m_isBackstep     = false;
+    }
+}
+
+void GucciEngine::advanceRecoverySweep(bool survived) {
+    if (fwProbeSubPhase == FwProbeSubPhase::Reaching) {
+        if (!fwProbeHasNext) {
+            // No next input -- the reach check WAS the whole test.
+            advanceOffsetSweep(survived);
+            return;
+        }
+        if (!survived) {
+            // Didn't even reach N -- this shift fails outright, nothing to recover.
+            advanceOffsetSweep(false);
+            return;
+        }
+        fwProbeSubPhase  = FwProbeSubPhase::RecoveryCandidate;
+        fwRecoveryOffset = -fwRecoveryRange;
+        beginRecoveryCandidate();
+        return;
+    }
+
+    // A recovery-candidate test just concluded.
+    if (survived) {
+        // Found a candidate that works -- this shift counts as valid.
+        advanceOffsetSweep(true);
+        return;
+    }
+    fwRecoveryOffset++;
+    if (fwRecoveryOffset > fwRecoveryRange) {
+        // Exhausted the recovery range without finding one that works.
+        advanceOffsetSweep(false);
+        return;
+    }
+    beginRecoveryCandidate();
 }
 
 void GucciEngine::finishProbeClick() {
