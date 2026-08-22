@@ -2409,9 +2409,29 @@ void GucciEngine::fwFinishAnalysis() {
 }
 
 void GucciEngine::muteAnalysisMusic() {
-                }
+    // Juice's request (2026-08-21): mute the game during Calculate, unmute
+    // after. Uses GD's own music/SFX volume (not a raw FMOD channel-group
+    // mute) specifically so it doesn't also silence the per-tier "ding"
+    // sounds -- those play on manually-created FMOD channels that don't
+    // route through these volume settings.
+    if (fwMusicMuted) return;
+    auto* fmod = FMODAudioEngine::sharedEngine();
+    if (!fmod) return;
+    fwSavedMusicVolume   = fmod->getBackgroundMusicVolume();
+    fwSavedEffectsVolume = fmod->getEffectsVolume();
+    fmod->setBackgroundMusicVolume(0.f);
+    fmod->setEffectsVolume(0.f);
+    fwMusicMuted = true;
+}
 void GucciEngine::unmuteAnalysisMusic() {
+    if (!fwMusicMuted) return;
+    auto* fmod = FMODAudioEngine::sharedEngine();
+    if (fmod) {
+        fmod->setBackgroundMusicVolume(fwSavedMusicVolume);
+        fmod->setEffectsVolume(fwSavedEffectsVolume);
     }
+    fwMusicMuted = false;
+}
 
 void GucciEngine::cancelAnalysis() {
     if (!fwAnalyzing) return;

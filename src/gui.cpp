@@ -2448,14 +2448,17 @@ void MenuInterface::drawHacksTab(){
     for(size_t ti=0;ti<engine->fwTiers.size();++ti){
         auto& t=engine->fwTiers[ti];
         ImGui::PushID((int)(7000+ti));
-        ImGui::Separator();
+        char hdrLabel[64];
+        snprintf(hdrLabel,sizeof(hdrLabel),"Tier %d-%d frames###tierhdr",t.lo,t.hi);
+        // Juice's request (2026-08-21): collapsible per tier -- there's a lot
+        // of controls per tier now, expanding all of them at once got unwieldy.
+        if(!ImGui::CollapsingHeader(hdrLabel)){ImGui::PopID();continue;}
         float third=(ImGui::GetContentRegionAvail().x-16)/3.f;
         ImGui::SetNextItemWidth(third);
         ImGui::InputInt("##lo",&t.lo,0,0); ImGui::SameLine(0,8);
         ImGui::SetNextItemWidth(third);
         ImGui::InputInt("##hi",&t.hi,0,0); ImGui::SameLine(0,8);
         if(Widgets::StyledButton("X",ImVec2(-1,22),theme,anim,4.f))tierRemove=(int)ti;
-        ImGui::Text("Range %d-%d frames",t.lo,t.hi);
         ImGui::SetNextItemWidth(-1);
         ImGui::InputTextWithHint("##img","marker.png (in fw_assets)",t.imageFile,sizeof(t.imageFile));
         ImGui::SetNextItemWidth(-1);
@@ -2497,18 +2500,24 @@ void MenuInterface::drawHacksTab(){
             if(ImGui::Combo("##fillstyle",&fillIdx,fillNames,2))
                 t.fillStyle=(GucciEngine::FwFillStyle)fillIdx;
         }
-        ImGui::Checkbox("No Border##tier",&t.noBorder);
-        if(!t.noBorder){
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(third);
-            ImGui::SliderFloat("##stroke",&t.strokeSize,0.5f,10.f,"%.1f stroke");
+        // Juice: No Border only makes sense in Normal/donut mode -- Inverted
+        // is already outline-only, so "no border" there would mean nothing to
+        // draw at all. Stroke Size still applies to both, so it stays visible.
+        if(t.fillStyle==GucciEngine::FwFillStyle::Normal){
+            ImGui::Checkbox("No Border##tier",&t.noBorder);
+        } else if(t.noBorder){
+            t.noBorder=false; // stale from a prior Normal-mode session, doesn't apply here
         }
+        ImGui::SetNextItemWidth(third);
+        ImGui::SliderFloat("##stroke",&t.strokeSize,0.5f,10.f,"%.1f stroke");
+        ImGui::SetNextItemWidth(third);
+        ImGui::SliderFloat("##size",&t.sizeScale,0.3f,3.f,"%.2fx size");
         ImGui::SetNextItemWidth(-1);
         ImGui::SliderFloat("##vol",&t.volume,0.f,1.f,"%.2f sound volume");
 
         if(ImGui::TreeNodeEx("Pulse Effects",ImGuiTreeNodeFlags_None)){
             ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
-            ImGui::TextWrapped("Fades from the marker/text's normal color to the pulse color, holds, fades back, and repeats.");
+            ImGui::TextWrapped("Fades from the marker/text's normal color to the pulse color, holds, then fades back -- once, the moment this mark first shows up each time you watch the macro play. Doesn't loop.");
             ImGui::PopStyleColor();
             ImGui::Checkbox("Enable Marker Pulse",&t.markerPulseEnabled);
             if(t.markerPulseEnabled){
@@ -2574,7 +2583,8 @@ void MenuInterface::drawHacksTab(){
                      std::to_string(t.textPulseColor[2])+"|"+
                      std::to_string(t.textPulseFadeIn)+"|"+
                      std::to_string(t.textPulseHold)+"|"+
-                     std::to_string(t.textPulseFadeOut)+";";
+                     std::to_string(t.textPulseFadeOut)+"|"+
+                     std::to_string(t.sizeScale)+";";
             }
             Mod::get()->setSavedValue("fw_tiers",enc);
         }
@@ -5067,6 +5077,7 @@ void MenuInterface::loadSettings(){
                     t.textPulseFadeIn=(float)atof(f[25].c_str());
                     t.textPulseHold=(float)atof(f[26].c_str());
                     t.textPulseFadeOut=(float)atof(f[27].c_str());
+                    if(f.size()>=29) t.sizeScale=(float)atof(f[28].c_str());
                 }
                 eng->fwTiers.push_back(t);
             }

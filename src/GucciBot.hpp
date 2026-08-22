@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-19-p (Nigel: go ahead and build the customization spec now, fix what's broken after. Marker shapes: Circle (existing double-ring), Star, Spiral (stroke-only, no fill concept), and Geometric/Polygon (3-12 sides, approximate corner rounding via chamfering, not true arcs) -- per-tier. Fill style per-tier: Inverted (existing outline-only look) or Normal/donut (filled ring + black border), built via an outer-boundary-plus-reversed-inner-boundary 'bridge' polygon so CCDrawNode's fill algorithm renders it as a ring instead of a solid disk -- KNOWN RISK: haven't verified this renders artifact-free on every shape, the bridge seam is a plausible visual glitch spot. No Border toggle + Stroke Size, per tier. Per-tier sound volume (FMOD channel starts paused, volume set, then unpaused, so no full-volume frame before it applies). Pulse effects: marker and text pulse independently, each with enable/color/fade-in/hold/fade-out (real seconds, wall-clock based via std::chrono, not tied to TPS/speedhack) -- forces the marker overlay to redraw every frame instead of its usual change-detection cache whenever any visible mark's tier has a pulse enabled. Tier save/load format extended from 7 to 28 pipe-separated fields; old 7-field saves still load fine, just default to Circle/Inverted/no pulse. Compiles clean on the first pass despite the scope, but ENTIRELY UNTESTED IN-GAME -- expect some of this needs fixing, per Nigel's own explicit call. Separately, asked Juice to clarify how he's telling Recovery Range isn't engaging (still haven't touched that code -- see -o's label for why) and did not touch the orb-aware input logic report, same reasoning as -o.)"
+#define GB_BUILD_LABEL "2026-08-19-q (Juice's follow-up round on -p's customization system. 1/2) Donut fill was actually broken (his screenshots: Polygon rendered solid-filled, Circle showed a stray dot) -- the bridge-polygon fill approach never worked. Replaced with exactly what he described: three concentric outline strokes (outer black border at the highest radius, a thick colored band at the middle radius, inner black border at the lowest radius), using the same stroke primitive Inverted mode already used correctly. No fill polygon involved anymore for Circle/Polygon/Star. 3) Pulses were one global endlessly-looping clock shared by every mark of a tier -- rebuilt as per-mark, one-shot: each mark gets its own pulse starting the instant IT first becomes visible this playthrough (keyed by frame+player2), never repeats until the next playthrough (detected by the frame counter going backwards). 4) No Border checkbox now only shows in Normal/donut mode; Stroke Size always shows. 5) Added a per-tier Size slider (0.3x-3x), applied to both procedural shapes and tier images. 6) Tiers are now collapsible (CollapsingHeader per tier). 7) Mute-during-Calculate actually implemented -- turns out muteAnalysisMusic()/unmuteAnalysisMusic() and their call sites already existed from an earlier attempt, just as empty stub bodies; wired them to FMODAudioEngine's music/effects volume (not a channel-group mute, so the per-tier ding sounds on their own raw FMOD channels aren't silenced too) with save/restore so unmute returns to whatever the user actually had set. Tier format now 29 fields (was 28); old saves still load. Compiles clean, untested in-game -- still waiting to hear back on whether Recovery Range and the orb-aware logic reports need code changes or were build/testing-method issues.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -639,6 +639,7 @@ public:
     bool  fwAnalyzing     = false;
     bool  fwProbeDied     = false;
     float fwSavedMusicVolume = 0.f;
+    float fwSavedEffectsVolume = 0.f;
     bool  fwMusicMuted    = false;
 
                                 enum class FwState { Idle, Capturing, Probing, DebugPause, Finishing };
@@ -814,6 +815,7 @@ public:
         bool  noBorder = false;
         float strokeSize = 2.2f;         // outline thickness (Inverted) or border thickness (Normal)
         float volume = 1.f;              // per-tier "ding" sound volume, 0..1
+        float sizeScale = 1.f;           // overall marker size multiplier
         bool  markerPulseEnabled = false;
         float markerPulseColor[3] = { 1.f, 1.f, 1.f };
         float markerPulseFadeIn = 0.1f, markerPulseHold = 0.3f, markerPulseFadeOut = 0.5f;

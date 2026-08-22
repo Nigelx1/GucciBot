@@ -6,6 +6,7 @@
 #include <cmath>
 #include <algorithm>
 #include <chrono>
+#include <unordered_map>
 
 using namespace geode::prelude;
 
@@ -96,20 +97,38 @@ public:
         }
 
                                         uint32_t curFrame = gb->updater.getFrame();
+
+        // A frame count lower than last time means a new attempt/playthrough
+        // just started (checkpoint respawn, restart, or a fresh watch) --
+        // clear every mark's pulse-start time so pulses can trigger again.
+        if (curFrame < m_lastCurFrame) m_pulseStart.clear();
+        m_lastCurFrame = curFrame;
+
                 int visibleCount = 0;
-        for (auto const& mk : gb->fwMarks)
-            if (mk.frame <= curFrame && mk.window <= gb->fwMaxWindow) ++visibleCount;
-
-                                        bool mirrored = m_labelLayer && parentChainFlipped(m_labelLayer);
-
-                        // Pulse effects need to redraw every frame to animate -- the
-        // signature cache below would otherwise freeze them on their first frame.
+        // Pulse effects need to redraw every frame while any are actually
+        // mid-animation -- the signature cache below would otherwise freeze
+        // them on their first frame. Registers each newly-visible mark's
+        // pulse start time here too, so it's set before drawing needs it.
         bool anyPulseActive = false;
         for (auto const& mk : gb->fwMarks) {
             if (mk.frame > curFrame || mk.window > gb->fwMaxWindow) continue;
+            ++visibleCount;
             auto* t = gb->fwTierFor(mk.window);
-            if (t && (t->markerPulseEnabled || t->textPulseEnabled)) { anyPulseActive = true; break; }
+            if (!t || (!t->markerPulseEnabled && !t->textPulseEnabled)) continue;
+            uint64_t key = pulseKey(mk.frame, mk.player2);
+            auto it = m_pulseStart.find(key);
+            if (it == m_pulseStart.end()) {
+                m_pulseStart[key] = nowSeconds();
+                anyPulseActive = true;
+            } else {
+                float maxCycle = std::max(
+                    t->markerPulseEnabled ? t->markerPulseFadeIn + t->markerPulseHold + t->markerPulseFadeOut : 0.f,
+                    t->textPulseEnabled   ? t->textPulseFadeIn   + t->textPulseHold   + t->textPulseFadeOut   : 0.f);
+                if (nowSeconds() - it->second < maxCycle) anyPulseActive = true;
+            }
         }
+
+                                        bool mirrored = m_labelLayer && parentChainFlipped(m_labelLayer);
 
         int sig = visibleCount * 100000
                 + static_cast<int>(gb->fwMarks.size()) * 100
@@ -149,16 +168,21 @@ public:
 
             // Pulse effects (Juice's spec): marker and text pulse independently,
             // each fading from the tier's normal color to its own pulse color,
-            // holding, fading back, and repeating on a real-time (not game-tick)
-            // clock -- see applyPulse().
+            // holding, and fading back -- ONCE, per mark, from the moment that
+            // specific mark first became visible this playthrough. Real seconds,
+            // not scaled by TPS/speedhack. See applyPulse()/m_pulseStart.
             ccColor4F markerCol = col;
             ccColor4F textCol   = col;
-            if (tier && tier->markerPulseEnabled)
-                markerCol = applyPulse(col, tier->markerPulseColor,
-                    tier->markerPulseFadeIn, tier->markerPulseHold, tier->markerPulseFadeOut);
-            if (tier && tier->textPulseEnabled)
-                textCol = applyPulse(col, tier->textPulseColor,
-                    tier->textPulseFadeIn, tier->textPulseHold, tier->textPulseFadeOut);
+            if (tier && (tier->markerPulseEnabled || tier->textPulseEnabled)) {
+                auto it = m_pulseStart.find(pulseKey(mk.frame, mk.player2));
+                float elapsed = it != m_pulseStart.end() ? (nowSeconds() - it->second) : 0.f;
+                if (tier->markerPulseEnabled)
+                    markerCol = applyPulse(col, tier->markerPulseColor, elapsed,
+                        tier->markerPulseFadeIn, tier->markerPulseHold, tier->markerPulseFadeOut);
+                if (tier->textPulseEnabled)
+                    textCol = applyPulse(col, tier->textPulseColor, elapsed,
+                        tier->textPulseFadeIn, tier->textPulseHold, tier->textPulseFadeOut);
+            }
 
             bool drewSprite = false;
             if (tier && tier->imageFile[0]) {
@@ -169,7 +193,8 @@ public:
                         spr->setPosition(at);
                         float maxDim = std::max(spr->getContentSize().width,
                                                 spr->getContentSize().height);
-                        if (maxDim > 0.f) spr->setScale((kRadius * 2.2f) / maxDim);
+                        float sizeMul = std::max(0.1f, tier->sizeScale);
+                        if (maxDim > 0.f) spr->setScale((kRadius * 2.2f * sizeMul) / maxDim);
                         spr->setColor({ (GLubyte)(markerCol.r*255),(GLubyte)(markerCol.g*255),(GLubyte)(markerCol.b*255) });
                         if (mirrored) spr->setScaleX(-spr->getScaleX());
                         m_labelLayer->addChild(spr);
@@ -193,27 +218,40 @@ public:
 private:
     static constexpr float kRadius = 11.f;
 
+    // Per-mark pulse state (Juice's fix, 2026-08-21): pulses used to share one
+    // global, endlessly-looping clock across every marker of a tier, so a
+    // 4-frame mark at frame 30 would pulse in lockstep with a 4-frame mark at
+    // frame 10, forever. Each mark now gets its OWN one-shot pulse, keyed by
+    // (frame, player2), starting the instant it first becomes visible this
+    // playthrough and never repeating until the next playthrough (detected by
+    // the frame counter going backwards -- a fresh attempt/replay).
+    std::unordered_map<uint64_t, float> m_pulseStart;
+    uint32_t m_lastCurFrame = 0xFFFFFFFFu;
+
+    static uint64_t pulseKey(uint32_t frame, bool player2) {
+        return (static_cast<uint64_t>(frame) << 1) | (player2 ? 1u : 0u);
+    }
+
                 static float nowSeconds() {
         using namespace std::chrono;
         static const auto start = steady_clock::now();
         return duration<float>(steady_clock::now() - start).count();
     }
 
-    // Fades from normalColor to pulseRGB, holds, fades back, repeats forever
-    // on a real-time (wall-clock) cycle -- durations are in real seconds per
-    // Juice's spec, not scaled by TPS/speedhack.
+    // One-shot fade from normalColor to pulseRGB, hold, fade back -- does NOT
+    // repeat (elapsed >= the full cycle just stays at normalColor). Durations
+    // are real seconds per Juice's spec, not scaled by TPS/speedhack.
     static ccColor4F applyPulse(ccColor4F normalColor, const float pulseRGB[3],
-                                 float fadeIn, float hold, float fadeOut) {
+                                 float elapsed, float fadeIn, float hold, float fadeOut) {
         float cycle = fadeIn + hold + fadeOut;
-        if (cycle <= 0.0001f) return normalColor;
-        float t = std::fmod(nowSeconds(), cycle);
+        if (cycle <= 0.0001f || elapsed >= cycle) return normalColor;
         float mix;
-        if (t < fadeIn) {
-            mix = fadeIn > 0.0001f ? t / fadeIn : 1.f;
-        } else if (t < fadeIn + hold) {
+        if (elapsed < fadeIn) {
+            mix = fadeIn > 0.0001f ? elapsed / fadeIn : 1.f;
+        } else if (elapsed < fadeIn + hold) {
             mix = 1.f;
         } else {
-            float ft = t - fadeIn - hold;
+            float ft = elapsed - fadeIn - hold;
             mix = fadeOut > 0.0001f ? 1.f - (ft / fadeOut) : 0.f;
         }
         mix = std::clamp(mix, 0.f, 1.f);
@@ -236,9 +274,14 @@ private:
     // matched -- keeps the original double-ring circle, Inverted style).
     // Rounded corners (Polygon shape) are only applied in Inverted (outline)
     // style -- Normal/donut fill uses sharp corners for both boundaries.
-    // Known limitation: the donut fill's inner/outer seam can show a minor
-    // triangulation artifact on some shapes -- flagged as a follow-up, not
-    // blocking.
+    //
+    // Normal/donut fill redone 2026-08-21 per Juice: the first pass (a
+    // filled ring built as one "bridge" polygon) rendered broken/solid on
+    // Polygon and left a stray dot on Circle. Rebuilt as exactly the three
+    // concentric strokes he described -- outer border (highest radius),
+    // a thick colored band (middle radius), inner border (lowest radius) --
+    // using the same outline-stroke primitive Inverted mode already uses
+    // correctly, just three times instead of two. No fill polygon involved.
     void drawMarkerShape(CCPoint center, float radius, ccColor4F color,
                           const GucciEngine::FrameWindowTier* tier) {
         auto shape     = tier ? tier->shape     : GucciEngine::FwMarkerShape::Circle;
@@ -247,6 +290,8 @@ private:
         float stroke   = tier ? tier->strokeSize : GucciEngine::get()->fwRingBoldness;
         int sides      = tier ? std::clamp(tier->polygonSides, 3, 12) : 5;
         float cornerR  = tier ? std::clamp(tier->polygonCornerRadius, 0.f, 1.f) : 0.f;
+        float sizeMul  = tier ? std::max(0.1f, tier->sizeScale) : 1.f;
+        radius *= sizeMul;
 
         switch (shape) {
             case GucciEngine::FwMarkerShape::Star:
@@ -265,20 +310,19 @@ private:
         }
     }
 
-    static ccColor4F borderColorFor(bool noBorder) {
-        return noBorder ? ccColor4F{ 0, 0, 0, 0 } : ccColor4F{ 0, 0, 0, 1.f };
-    }
-
     void drawCircleShape(CCPoint center, float radius, ccColor4F color,
                           GucciEngine::FwFillStyle fillStyle, bool noBorder, float stroke) {
         const int segs = 28;
         ccColor4F clear4{ 0, 0, 0, 0 };
+        ccColor4F black{ 0, 0, 0, 1.f };
         float innerR = radius * 0.55f;
         if (fillStyle == GucciEngine::FwFillStyle::Normal) {
-            ccColor4F bc = borderColorFor(noBorder);
-            std::vector<CCPoint> ring = buildAnnulusVerts(center, radius, innerR, segs,
-                [](CCPoint c, float ang, float r){ return CCPoint{ c.x + r * std::cos(ang), c.y + r * std::sin(ang) }; });
-            m_node->drawPolygon(ring.data(), (int)ring.size(), color, noBorder ? 0.f : stroke, bc);
+            float borderStroke = std::max(0.5f, stroke * 0.5f);
+            float bandR = (radius + innerR) * 0.5f;
+            float bandThick = std::max(1.f, radius - innerR);
+            if (!noBorder) m_node->drawCircle(center, radius, clear4, borderStroke, black, segs);
+            m_node->drawCircle(center, bandR, clear4, bandThick, color, segs);
+            if (!noBorder) m_node->drawCircle(center, innerR, clear4, borderStroke, black, segs);
         } else {
             m_node->drawCircle(center, radius, clear4, stroke, color, segs);
             m_node->drawCircle(center, innerR, clear4, stroke, color, segs);
@@ -289,13 +333,17 @@ private:
                            ccColor4F color, GucciEngine::FwFillStyle fillStyle,
                            bool noBorder, float stroke) {
         ccColor4F clear4{ 0, 0, 0, 0 };
+        ccColor4F black{ 0, 0, 0, 1.f };
         float innerR = radius * 0.55f;
         if (fillStyle == GucciEngine::FwFillStyle::Normal) {
-            ccColor4F bc = borderColorFor(noBorder);
+            float borderStroke = std::max(0.5f, stroke * 0.5f);
+            float bandThick = std::max(1.f, radius - innerR);
             auto outer = regularPolygonVerts(center, radius, sides, 0.f);
+            auto band  = regularPolygonVerts(center, (radius + innerR) * 0.5f, sides, 0.f);
             auto inner = regularPolygonVerts(center, innerR, sides, 0.f);
-            auto ring = buildAnnulusFromVerts(outer, inner);
-            m_node->drawPolygon(ring.data(), (int)ring.size(), color, noBorder ? 0.f : stroke, bc);
+            if (!noBorder) m_node->drawPolygon(outer.data(), (int)outer.size(), clear4, borderStroke, black);
+            m_node->drawPolygon(band.data(), (int)band.size(), clear4, bandThick, color);
+            if (!noBorder) m_node->drawPolygon(inner.data(), (int)inner.size(), clear4, borderStroke, black);
         } else {
             auto outer = roundedPolygonVerts(center, radius, sides, cornerRadius);
             auto inner = roundedPolygonVerts(center, innerR, sides, cornerRadius);
@@ -308,12 +356,22 @@ private:
                         GucciEngine::FwFillStyle fillStyle, bool noBorder, float stroke) {
         const int points = 5;
         ccColor4F clear4{ 0, 0, 0, 0 };
+        ccColor4F black{ 0, 0, 0, 1.f };
+        float innerScale = 0.55f;
         auto outer = starVerts(center, radius, radius * 0.42f, points);
         if (fillStyle == GucciEngine::FwFillStyle::Normal) {
-            ccColor4F bc = borderColorFor(noBorder);
-            m_node->drawPolygon(outer.data(), (int)outer.size(), color, noBorder ? 0.f : stroke, bc);
+            float borderStroke = std::max(0.5f, stroke * 0.5f);
+            float bandThick = std::max(1.f, radius * (1.f - innerScale));
+            float bandR = radius * (1.f + innerScale) * 0.5f;
+            auto band  = starVerts(center, bandR, bandR * 0.42f, points);
+            auto inner = starVerts(center, radius * innerScale, radius * innerScale * 0.42f, points);
+            if (!noBorder) m_node->drawPolygon(outer.data(), (int)outer.size(), clear4, borderStroke, black);
+            m_node->drawPolygon(band.data(), (int)band.size(), clear4, bandThick, color);
+            if (!noBorder) m_node->drawPolygon(inner.data(), (int)inner.size(), clear4, borderStroke, black);
         } else {
+            auto inner = starVerts(center, radius * innerScale, radius * innerScale * 0.42f, points);
             m_node->drawPolygon(outer.data(), (int)outer.size(), clear4, stroke, color);
+            m_node->drawPolygon(inner.data(), (int)inner.size(), clear4, stroke, color);
         }
     }
 
@@ -377,32 +435,6 @@ private:
             float ang = (float)i / (float)total * 2.f * (float)M_PI - (float)M_PI / 2.f;
             v.push_back({ center.x + r * std::cos(ang), center.y + r * std::sin(ang) });
         }
-        return v;
-    }
-
-    // Converts an outer/inner boundary pair into one simple polygon fillable
-    // as a ring: around the outside, a zero-width bridge back to the start,
-    // then around the inside in reverse. May leave a faint seam artifact at
-    // the bridge on some shapes.
-    template <typename PointAt>
-    static std::vector<CCPoint> buildAnnulusVerts(CCPoint center, float outerR, float innerR, int segs, PointAt pointAt) {
-        std::vector<CCPoint> outer, inner;
-        for (int i = 0; i <= segs; ++i) {
-            float ang = (float)i / (float)segs * 2.f * (float)M_PI;
-            outer.push_back(pointAt(center, ang, outerR));
-        }
-        for (int i = 0; i <= segs; ++i) {
-            float ang = (float)i / (float)segs * 2.f * (float)M_PI;
-            inner.push_back(pointAt(center, ang, innerR));
-        }
-        return buildAnnulusFromVerts(outer, inner);
-    }
-
-    static std::vector<CCPoint> buildAnnulusFromVerts(std::vector<CCPoint> outer, std::vector<CCPoint> inner) {
-        std::vector<CCPoint> v = outer;
-        v.push_back(outer[0]);
-        std::reverse(inner.begin(), inner.end());
-        for (auto& p : inner) v.push_back(p);
         return v;
     }
 
