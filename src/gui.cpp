@@ -2177,6 +2177,10 @@ void MenuInterface::drawHacksTab(){
         ImGui::Dummy(ImVec2(0,8));
     Widgets::SectionHeader("Frame Window Tracker",theme);
     {
+        // Juice: switching algorithms mid-run was confusing -- lock the
+        // selector while Calculate is actually running (2026-08-21).
+        bool locked=engine->fwAnalyzing;
+        if(locked)ImGui::BeginDisabled();
         const char* algoNames[]={"Time-Based","Recovery Range"};
         int algoIdx=engine->fwUseRecoveryRangeAlgorithm?1:0;
         ImGui::SetNextItemWidth(-1);
@@ -2184,20 +2188,40 @@ void MenuInterface::drawHacksTab(){
             engine->fwUseRecoveryRangeAlgorithm=(algoIdx==1);
             Mod::get()->setSavedValue("fw_use_recovery_range",engine->fwUseRecoveryRangeAlgorithm);
         }
+        if(locked)ImGui::EndDisabled();
         ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
-        ImGui::TextWrapped("Time-Based (default): faster, watches the shifted click survive on its own -- good for most levels. Recovery Range: Juice's original algorithm, revived -- also checks whether the NEXT click's timing could shift slightly to still work, which is more accurate but noticeably slower (extra probe runs per shift). Unverified since being brought back -- worth A/B'ing against Time-Based on the same section.");
+        ImGui::TextWrapped(locked
+            ?"Locked while Calculate is running -- finish or cancel the current run to switch algorithms."
+            :"Time-Based (default): faster, watches the shifted click survive on its own -- good for most levels. Recovery Range: Juice's original algorithm, revived -- also checks whether the NEXT click's timing could shift slightly to still work, which is more accurate but noticeably slower (extra probe runs per shift). Unverified since being brought back -- worth A/B'ing against Time-Based on the same section.");
         ImGui::PopStyleColor();
+        if(locked)ImGui::BeginDisabled();
         if(engine->fwUseRecoveryRangeAlgorithm&&Widgets::StyledSliderInt("Recovery Range",&engine->fwRecoveryRange,1,10,theme))
             Mod::get()->setSavedValue("fw_recovery_range",(int64_t)engine->fwRecoveryRange);
+        if(locked)ImGui::EndDisabled();
     }
-    if(Widgets::ToggleSwitch("Show Live",&engine->fwEnabledLive,theme,anim))
-        Mod::get()->setSavedValue("fw_live",engine->fwEnabledLive);
-    if(Widgets::ToggleSwitch("Show in Renders",&engine->fwEnabledRender,theme,anim))
-        Mod::get()->setSavedValue("fw_render",engine->fwEnabledRender);
-    if(Widgets::ToggleSwitch("Show Legend",&engine->fwLegendEnabled,theme,anim))
-        Mod::get()->setSavedValue("fw_legend",engine->fwLegendEnabled);
+    {
+        // Juice (2026-08-21): both read live macro/Calculate state that
+        // doesn't mean anything yet while still recording -- setMode() already
+        // forces them off the moment recording starts; lock the controls too
+        // so they can't be flicked back on until recording stops. Show in
+        // Renders isn't part of this -- that's about a future render, not
+        // live-during-recording state, and Juice didn't flag it.
+        bool recLocked=engine->isRecording();
+        if(recLocked)ImGui::BeginDisabled();
+        if(Widgets::ToggleSwitch("Show Live",&engine->fwEnabledLive,theme,anim))
+            Mod::get()->setSavedValue("fw_live",engine->fwEnabledLive);
+        if(recLocked)ImGui::EndDisabled();
+        if(Widgets::ToggleSwitch("Show in Renders",&engine->fwEnabledRender,theme,anim))
+            Mod::get()->setSavedValue("fw_render",engine->fwEnabledRender);
+        if(recLocked)ImGui::BeginDisabled();
+        if(Widgets::ToggleSwitch("Show Legend",&engine->fwLegendEnabled,theme,anim))
+            Mod::get()->setSavedValue("fw_legend",engine->fwLegendEnabled);
+        if(recLocked)ImGui::EndDisabled();
+    }
     ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
-    ImGui::TextWrapped("Juice's idea: a running tally in the top-left corner, like the frame-window counter overlays in some GD YouTube videos -- how many of the clicks reached so far landed in each Tier's window range below. Shows nothing until at least one Tier is configured and Calculate has results.");
+    ImGui::TextWrapped(engine->isRecording()
+        ?"Show Live and Show Legend are locked off while recording -- both read state that doesn't exist yet mid-recording. Available again once recording stops."
+        :"Juice's idea: a running tally in the top-left corner, like the frame-window counter overlays in some GD YouTube videos -- how many of the clicks reached so far landed in each Tier's window range below. Shows nothing until at least one Tier is configured and Calculate has results.");
     ImGui::PopStyleColor();
     if(engine->fwLegendEnabled&&Widgets::StyledSliderFloat("Legend Size",&engine->fwLegendScale,0.5f,3.f,theme))
         Mod::get()->setSavedValue("fw_legend_scale",engine->fwLegendScale);

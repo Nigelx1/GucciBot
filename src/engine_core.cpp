@@ -737,6 +737,17 @@ void GucciEngine::setMode(Mode m) {
     }
     Mode prev = mode;
     mode = m;
+    if (m == Mode::Recording) {
+        // Juice (2026-08-21): Show Live and the Legend both read live macro/
+        // Calculate state that doesn't make sense yet while a macro is still
+        // being recorded (there's nothing measured, and fwMarks belongs to
+        // whatever was last loaded) -- force them off, GUI locks them back on
+        // until recording stops.
+        fwEnabledLive   = false;
+        fwLegendEnabled = false;
+        Mod::get()->setSavedValue("fw_live", false);
+        Mod::get()->setSavedValue("fw_legend", false);
+    }
     if (m == Mode::Playing) {
                                 if (prev != Mode::Playing) userTpsSaved = updater.m_tps;
         replay.m_inputIndex = 0;
