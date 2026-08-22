@@ -1870,23 +1870,37 @@ void GucciEngine::beginShiftTest() {
     }
 
     if (fwProbeHasNext) {
-        // Juice's time-based test, corrected per his own follow-up: the window has to
-        // track N's REAL position in the shifted timeline (N never moves, so its gap
-        // from the shifted click is target = N.frame - shiftedI.frame), not a window
-        // centered on the ORIGINAL gap. Centering on the original gap silently stopped
-        // meaning anything once |X| exceeded the slack -- N could finish firing before
-        // the window even opened, or the window could close before N ever fired.
-        int64_t shiftedIFrame = std::max<int64_t>((int64_t)fwClickSamples[fwProbeClick].frame + fwProbeShift, 0);
-        int64_t target = std::max<int64_t>((int64_t)fwProbeNextFrame - shiftedIFrame, 0);
-        long high = (long)(target + fwSlackWindow);
-        long margin = 0;
+        // Juice (2026-08-21): the previous version computed target as N.frame
+        // minus the SHIFTED click's frame, then added that to a horizon
+        // counted from the CHECKPOINT restore (fwProbeFrame's actual zero
+        // point, not the shifted click). Combined with a shift-independent
+        // warmup margin, the effective absolute stop-frame SHRANK as the
+        // shift grew instead of tracking forward with it -- his debug-mode
+        // screenshot showed exactly that: later shifts ending their test
+        // progressively EARLIER along the trajectory, forming a backwards
+        // diagonal instead of the expected one.
+        //
+        // What should move WITH the shift is the target itself: the gap from
+        // click to N in the ORIGINAL macro is fixed, so N's true target for a
+        // shifted click is target_absolute = N.frame + shift (same gap,
+        // slid by the shift), window = target_absolute +/- slack. In terms
+        // of fwProbeFrame (ticks since checkpoint), that's: ticks from
+        // checkpoint to the SHIFTED click (warmup + shift) plus ticks from
+        // there out to target+slack -- and that second part is just the
+        // ORIGINAL gap + slack, since the shift cancels out (both the
+        // shifted click and its target move together).
+        int64_t originalGap = std::max<int64_t>(
+            (int64_t)fwProbeNextFrame - (int64_t)fwClickSamples[fwProbeClick].frame, 0);
+        long high = (long)(originalGap + fwSlackWindow);
+        long warmup = 0;
         if (fwProbeClick < fwCapStack.size())
-            margin = (long)fwClickSamples[fwProbeClick].frame - (long)fwCapStack[fwProbeClick].frame;
-        margin = std::max(0L, margin);
+            warmup = (long)fwClickSamples[fwProbeClick].frame - (long)fwCapStack[fwProbeClick].frame;
+        warmup = std::max(0L, warmup);
         const int kMaxHorizon = std::max(16, fwMaxFramesMeasured);
         const int kMinHorizon = 12;
         fwProbeWindowHigh = (int)high;
-        fwProbeHorizon = (int)std::clamp(high, (long)kMinHorizon, (long)kMaxHorizon) + (int)margin;
+        fwProbeHorizon = (int)std::clamp(high, (long)kMinHorizon, (long)kMaxHorizon)
+                       + (int)std::max(0L, warmup + (long)fwProbeShift);
     } else {
         computeProbeHorizon();
     }

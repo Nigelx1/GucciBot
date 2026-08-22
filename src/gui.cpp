@@ -25,6 +25,8 @@
 #include <regex>
 #include <system_error>
 #include <vector>
+#include <unordered_map>
+#include <climits>
 using namespace geode::prelude;
 
 static ImVec4 lerpColor(const ImVec4& a,const ImVec4& b,float t){
@@ -2460,6 +2462,8 @@ void MenuInterface::drawHacksTab(){
         ImGui::InputInt("##hi",&t.hi,0,0); ImGui::SameLine(0,8);
         if(Widgets::StyledButton("X",ImVec2(-1,22),theme,anim,4.f))tierRemove=(int)ti;
         ImGui::SetNextItemWidth(-1);
+        ImGui::InputTextWithHint("##legendgroup","Legend group (optional -- e.g. make lo=hi=5 and lo=hi=6 both '5-6' to customize each individually but combine them in the Legend)",t.legendGroup,sizeof(t.legendGroup));
+        ImGui::SetNextItemWidth(-1);
         ImGui::InputTextWithHint("##img","marker.png (in fw_assets)",t.imageFile,sizeof(t.imageFile));
         ImGui::SetNextItemWidth(-1);
         ImGui::InputTextWithHint("##snd","sound file, or 'none' for silent",t.soundFile,sizeof(t.soundFile));
@@ -2584,7 +2588,8 @@ void MenuInterface::drawHacksTab(){
                      std::to_string(t.textPulseFadeIn)+"|"+
                      std::to_string(t.textPulseHold)+"|"+
                      std::to_string(t.textPulseFadeOut)+"|"+
-                     std::to_string(t.sizeScale)+";";
+                     std::to_string(t.sizeScale)+"|"+
+                     t.legendGroup+";";
             }
             Mod::get()->setSavedValue("fw_tiers",enc);
         }
@@ -5078,6 +5083,7 @@ void MenuInterface::loadSettings(){
                     t.textPulseHold=(float)atof(f[26].c_str());
                     t.textPulseFadeOut=(float)atof(f[27].c_str());
                     if(f.size()>=29) t.sizeScale=(float)atof(f[28].c_str());
+                    if(f.size()>=30) snprintf(t.legendGroup,sizeof(t.legendGroup),"%s",f[29].c_str());
                 }
                 eng->fwTiers.push_back(t);
             }
@@ -5265,28 +5271,46 @@ void displayFwLegendHUD(){
 
     uint32_t curFrame=engine->updater.getFrame();
 
-    // Tally marks reached so far (frame <= curFrame) into whichever Tier
-    // each one's window falls into -- mirrors the marker overlay's own
+    // Tiers with the same non-empty legendGroup combine into one Legend line
+    // (Juice's request, 2026-08-21) -- lets e.g. window 5 and window 6 each
+    // get their own tier with independent shape/color/etc while still
+    // reading as one "5-6" row here. A tier with no legendGroup set is its
+    // own solo group, keyed uniquely by index so it never accidentally
+    // merges with another empty-group tier -- existing single-tier-per-range
+    // setups render exactly as before.
+    struct LegendGroup{int lo=INT_MAX,hi=INT_MIN;int count=0;float r=1,g=1,b=1;bool colorSet=false;};
+    std::unordered_map<std::string,LegendGroup> groups;
+    auto groupKey=[&](size_t i)->std::string{
+        auto const& t=engine->fwTiers[i];
+        return t.legendGroup[0] ? std::string(t.legendGroup) : ("##solo"+std::to_string(i));
+    };
+    for(size_t i=0;i<engine->fwTiers.size();++i){
+        auto const& t=engine->fwTiers[i];
+        auto& g=groups[groupKey(i)];
+        if(!g.colorSet){g.r=t.r;g.g=t.g;g.b=t.b;g.colorSet=true;}
+        g.lo=std::min(g.lo,t.lo);
+        g.hi=std::max(g.hi,t.hi);
+    }
+    // Tally marks reached so far (frame <= curFrame) into whichever Tier's
+    // group each one's window falls into -- mirrors the marker overlay's own
     // progressive reveal (framewindow.cpp's render()), so the counter fills
     // in exactly in step with the markers appearing on screen, same as the
     // reference frame-window-counter overlays this was modeled on.
-    std::vector<int> counts(engine->fwTiers.size(),0);
     for(auto const& mk:engine->fwMarks){
         if(mk.frame>curFrame)continue;
         for(size_t i=0;i<engine->fwTiers.size();++i){
             auto const& t=engine->fwTiers[i];
-            if(mk.window>=t.lo&&mk.window<=t.hi){counts[i]++;break;}
+            if(mk.window>=t.lo&&mk.window<=t.hi){groups[groupKey(i)].count++;break;}
         }
     }
 
-    // Loosest tier first (top), tightest last (bottom) -- matches the
+    // Loosest group first (top), tightest last (bottom) -- matches the
     // reference layout regardless of what order the tiers are actually
     // configured/stored in.
-    std::vector<size_t> order(engine->fwTiers.size());
-    for(size_t i=0;i<order.size();++i)order[i]=i;
-    std::sort(order.begin(),order.end(),[&](size_t a,size_t b){
-        return engine->fwTiers[a].hi>engine->fwTiers[b].hi;
-    });
+    std::vector<LegendGroup> sorted;
+    sorted.reserve(groups.size());
+    for(auto const& kv:groups)sorted.push_back(kv.second);
+    std::sort(sorted.begin(),sorted.end(),[](auto const& a,auto const& b){return a.hi>b.hi;});
 
     auto* vp=ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(ImVec2(vp->Pos.x+10,vp->Pos.y+10),ImGuiCond_Always,ImVec2(0,0));
@@ -5298,11 +5322,10 @@ void displayFwLegendHUD(){
         ImGuiWindowFlags_NoBringToFrontOnFocus);
     if(ui->fontBody)ImGui::PushFont(ui->fontBody);
     ImGui::SetWindowFontScale(engine->fwLegendScale);
-    for(size_t idx:order){
-        auto const& t=engine->fwTiers[idx];
-        ImVec4 col(t.r,t.g,t.b,1.f);
-        if(t.lo==t.hi) ImGui::TextColored(col,"%d: %d",t.lo,counts[idx]);
-        else           ImGui::TextColored(col,"%d-%d: %d",t.lo,t.hi,counts[idx]);
+    for(auto const& g:sorted){
+        ImVec4 col(g.r,g.g,g.b,1.f);
+        if(g.lo==g.hi) ImGui::TextColored(col,"%d: %d",g.lo,g.count);
+        else           ImGui::TextColored(col,"%d-%d: %d",g.lo,g.hi,g.count);
     }
     ImGui::SetWindowFontScale(1.0f);
     if(ui->fontBody)ImGui::PopFont();

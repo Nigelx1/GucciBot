@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-19-s (Juice's lag report: nothing was culling frame-window marks outside the camera's actual view -- every mark ever revealed (frame <= curFrame) got drawn regardless of how far behind/ahead of the camera it was, worst on Spiral since it's the most expensive shape per mark (32 drawSegment calls). Added real visibility culling: computeVisibleRect() converts the screen's actual visible area into the marker draw node's own local space via its real transform (CCDirector visible size/origin -> convertToNodeSpace), not a fixed distance from the player, so it stays correct through zoom triggers. Marks outside that rect (plus a small margin so they don't pop at the screen edge) are skipped entirely -- not just hidden, never even reach the shape-drawing code. Since which marks are in view now changes as the camera scrolls, folded a coarsely-quantized camera position into the existing rebuild-signature check so the overlay updates as marks cross into/out of view, without forcing a full rebuild every single tick for sub-pixel camera motion. Compiles clean, untested in-game.)"
+#define GB_BUILD_LABEL "2026-08-19-t (Two from Juice. 1) Real bug in the time-based test's target math, confirmed by his debug-mode screenshot (a backwards diagonal -- later shifts ending their survival check progressively EARLIER instead of later). Root cause: the horizon was computed as target=N.frame-shiftedI.frame added on top of a shift-INDEPENDENT warmup margin, but fwProbeFrame counts ticks from the CHECKPOINT restore, not from the shifted click -- so the effective absolute stop-frame shrank as shift grew instead of tracking forward with it. Fixed using his own worked example (release@30, next-click@50, gap=20, slack=3: shift+1 -> target=51, window 48-54) to verify the formula: the gap from click to N in the original macro is fixed, so target_absolute = N.frame + shift, and critically the distance from the SHIFTED click to target+slack is just the ORIGINAL gap + slack (shift cancels out, since both move together) -- only the checkpoint-to-shifted-click portion (warmup + shift) needs the shift added in. 2) Added per-exact-value customization within what still reads as one Legend line: tiers now have an optional legendGroup label -- e.g. two tiers (lo=hi=5, lo=hi=6) both set to '5-6' render with fully independent shape/color/etc per exact window value, but the Legend HUD combines their counts into one '5-6: N' row (min lo to max hi across the group). Empty legendGroup (unset, the default) keeps existing single-tier-per-range setups rendering exactly as before, each its own group. Tier format now 30 fields (was 29); old saves still load. Compiles clean, untested in-game -- high confidence in the timing fix specifically since it was verified arithmetically against Juice's own numbers, not just re-derived from scratch again.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -822,6 +822,14 @@ public:
         bool  textPulseEnabled = false;
         float textPulseColor[3] = { 1.f, 1.f, 1.f };
         float textPulseFadeIn = 0.1f, textPulseHold = 0.3f, textPulseFadeOut = 0.5f;
+        // Juice's request (2026-08-21): per-exact-value customization within
+        // what reads as one range in the Legend -- e.g. window 5 and window 6
+        // each get their own tier (lo=hi=5, lo=hi=6) with independent
+        // shape/color/etc, but share a legendGroup so the Legend HUD combines
+        // their counts into one "5-6: N" line instead of two. Empty (the
+        // default) means this tier is its own group, keyed by its own lo-hi
+        // -- existing single-tier-per-range setups are unaffected.
+        char legendGroup[32] = "";
     };
     std::vector<FrameWindowTier> fwTiers;
         FrameWindowTier* fwTierFor(int window) {
