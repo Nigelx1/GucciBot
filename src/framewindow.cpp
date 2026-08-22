@@ -275,13 +275,17 @@ private:
     // Rounded corners (Polygon shape) are only applied in Inverted (outline)
     // style -- Normal/donut fill uses sharp corners for both boundaries.
     //
-    // Normal/donut fill redone 2026-08-21 per Juice: the first pass (a
-    // filled ring built as one "bridge" polygon) rendered broken/solid on
-    // Polygon and left a stray dot on Circle. Rebuilt as exactly the three
-    // concentric strokes he described -- outer border (highest radius),
-    // a thick colored band (middle radius), inner border (lowest radius) --
-    // using the same outline-stroke primitive Inverted mode already uses
-    // correctly, just three times instead of two. No fill polygon involved.
+    // Normal/donut fill redone AGAIN 2026-08-21 per Juice's second report
+    // with screenshots: the "three concentric strokes via drawPolygon's own
+    // border" attempt still came out wrong on a triangle (yellow outside,
+    // black middle, filled yellow center) -- drawPolygon's border/stroke
+    // parameter isn't reliable for small, pointed polygons, only smooth
+    // shapes like circles. Rebuilt AGAIN, this time not depending on that
+    // parameter at all: each ring (outer black border, colored band, inner
+    // black border) is built from scratch as a set of simple convex quads
+    // between two boundaries at adjacent radii (fillRingBetween) -- a quad
+    // can't misrender regardless of how pointed the shape is, so this should
+    // be reliable for any shape/side count. See drawDonutRing/fillRingBetween.
     void drawMarkerShape(CCPoint center, float radius, ccColor4F color,
                           const GucciEngine::FrameWindowTier* tier) {
         auto shape     = tier ? tier->shape     : GucciEngine::FwMarkerShape::Circle;
@@ -314,15 +318,10 @@ private:
                           GucciEngine::FwFillStyle fillStyle, bool noBorder, float stroke) {
         const int segs = 28;
         ccColor4F clear4{ 0, 0, 0, 0 };
-        ccColor4F black{ 0, 0, 0, 1.f };
         float innerR = radius * 0.55f;
         if (fillStyle == GucciEngine::FwFillStyle::Normal) {
-            float borderStroke = std::max(0.5f, stroke * 0.5f);
-            float bandR = (radius + innerR) * 0.5f;
-            float bandThick = std::max(1.f, radius - innerR);
-            if (!noBorder) m_node->drawCircle(center, radius, clear4, borderStroke, black, segs);
-            m_node->drawCircle(center, bandR, clear4, bandThick, color, segs);
-            if (!noBorder) m_node->drawCircle(center, innerR, clear4, borderStroke, black, segs);
+            drawDonutRing(radius, innerR, color, noBorder, stroke,
+                [&](float r){ return regularPolygonVerts(center, r, segs, 0.f); });
         } else {
             m_node->drawCircle(center, radius, clear4, stroke, color, segs);
             m_node->drawCircle(center, innerR, clear4, stroke, color, segs);
@@ -333,17 +332,12 @@ private:
                            ccColor4F color, GucciEngine::FwFillStyle fillStyle,
                            bool noBorder, float stroke) {
         ccColor4F clear4{ 0, 0, 0, 0 };
-        ccColor4F black{ 0, 0, 0, 1.f };
         float innerR = radius * 0.55f;
         if (fillStyle == GucciEngine::FwFillStyle::Normal) {
-            float borderStroke = std::max(0.5f, stroke * 0.5f);
-            float bandThick = std::max(1.f, radius - innerR);
-            auto outer = regularPolygonVerts(center, radius, sides, 0.f);
-            auto band  = regularPolygonVerts(center, (radius + innerR) * 0.5f, sides, 0.f);
-            auto inner = regularPolygonVerts(center, innerR, sides, 0.f);
-            if (!noBorder) m_node->drawPolygon(outer.data(), (int)outer.size(), clear4, borderStroke, black);
-            m_node->drawPolygon(band.data(), (int)band.size(), clear4, bandThick, color);
-            if (!noBorder) m_node->drawPolygon(inner.data(), (int)inner.size(), clear4, borderStroke, black);
+            // Sharp corners for the donut fill -- rounded corners only apply
+            // to Inverted's outline below.
+            drawDonutRing(radius, innerR, color, noBorder, stroke,
+                [&](float r){ return regularPolygonVerts(center, r, sides, 0.f); });
         } else {
             auto outer = roundedPolygonVerts(center, radius, sides, cornerRadius);
             auto inner = roundedPolygonVerts(center, innerR, sides, cornerRadius);
@@ -356,22 +350,47 @@ private:
                         GucciEngine::FwFillStyle fillStyle, bool noBorder, float stroke) {
         const int points = 5;
         ccColor4F clear4{ 0, 0, 0, 0 };
-        ccColor4F black{ 0, 0, 0, 1.f };
         float innerScale = 0.55f;
-        auto outer = starVerts(center, radius, radius * 0.42f, points);
         if (fillStyle == GucciEngine::FwFillStyle::Normal) {
-            float borderStroke = std::max(0.5f, stroke * 0.5f);
-            float bandThick = std::max(1.f, radius * (1.f - innerScale));
-            float bandR = radius * (1.f + innerScale) * 0.5f;
-            auto band  = starVerts(center, bandR, bandR * 0.42f, points);
-            auto inner = starVerts(center, radius * innerScale, radius * innerScale * 0.42f, points);
-            if (!noBorder) m_node->drawPolygon(outer.data(), (int)outer.size(), clear4, borderStroke, black);
-            m_node->drawPolygon(band.data(), (int)band.size(), clear4, bandThick, color);
-            if (!noBorder) m_node->drawPolygon(inner.data(), (int)inner.size(), clear4, borderStroke, black);
+            drawDonutRing(radius, radius * innerScale, color, noBorder, stroke,
+                [&](float r){ return starVerts(center, r, r * 0.42f, points); });
         } else {
+            auto outer = starVerts(center, radius, radius * 0.42f, points);
             auto inner = starVerts(center, radius * innerScale, radius * innerScale * 0.42f, points);
             m_node->drawPolygon(outer.data(), (int)outer.size(), clear4, stroke, color);
             m_node->drawPolygon(inner.data(), (int)inner.size(), clear4, stroke, color);
+        }
+    }
+
+    // Draws a filled ring as three concentric bands -- outer black border,
+    // colored middle, inner black border, clear beyond that -- exactly as
+    // Juice specified. boundaryAt(r) must return a closed-loop vertex list
+    // (same length/winding for any r) at radius r; each ring is built from
+    // simple convex quads between two such boundaries (fillRingBetween),
+    // never relying on CCDrawNode's own border/stroke algorithm, which
+    // proved unreliable for small pointed shapes like a triangle.
+    template <typename BoundaryAt>
+    void drawDonutRing(float outerR, float innerR, ccColor4F color, bool noBorder,
+                        float stroke, BoundaryAt boundaryAt) {
+        if (outerR <= innerR) return;
+        ccColor4F black{ 0, 0, 0, 1.f };
+        float maxBorder = std::max(0.f, (outerR - innerR) * 0.4f);
+        float bt = noBorder ? 0.f : std::clamp(stroke, 0.f, maxBorder);
+        if (!noBorder && bt > 0.001f) {
+            fillRingBetween(boundaryAt(outerR), boundaryAt(outerR - bt), black);
+            fillRingBetween(boundaryAt(innerR + bt), boundaryAt(innerR), black);
+        }
+        fillRingBetween(boundaryAt(outerR - bt), boundaryAt(innerR + bt), color);
+    }
+
+    void fillRingBetween(const std::vector<CCPoint>& outer, const std::vector<CCPoint>& inner, ccColor4F color) {
+        if (outer.size() != inner.size() || outer.size() < 2) return;
+        ccColor4F clear4{ 0, 0, 0, 0 };
+        int n = (int)outer.size();
+        for (int i = 0; i < n; ++i) {
+            int j = (i + 1) % n;
+            CCPoint quad[4] = { outer[i], outer[j], inner[j], inner[i] };
+            m_node->drawPolygon(quad, 4, color, 0.f, clear4);
         }
     }
 
