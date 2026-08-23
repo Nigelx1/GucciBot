@@ -343,7 +343,7 @@ private:
                 drawStarShape(center, radius, color, fillStyle, noBorder, stroke);
                 break;
             case GucciEngine::FwMarkerShape::Spiral:
-                drawSpiralShape(center, radius, color, stroke);
+                drawSpiralShape(center, radius, color, fillStyle, noBorder, stroke);
                 break;
             case GucciEngine::FwMarkerShape::Polygon:
                 drawPolygonShape(center, radius, sides, cornerR, color, fillStyle, noBorder, stroke);
@@ -435,19 +435,34 @@ private:
         }
     }
 
-    void drawSpiralShape(CCPoint center, float radius, ccColor4F color, float stroke) {
-        // Spirals don't have an inside/outside to fill -- always stroke-only,
-        // regardless of fill style.
+    // Juice's request (2026-08-21): Spiral can use donut/Normal fill now too.
+    // A spiral has no inside/outside to leave a hole in, so its "donut" is
+    // the tube-cross-section analog: a black outline along both edges of the
+    // stroke's width with the tier color down the middle, instead of a
+    // ring's outer-color-inner-clear. Built by drawing the same segment
+    // twice per step -- a wider black pass first, a narrower colored pass on
+    // top -- rather than a single-color stroke.
+    void drawSpiralShape(CCPoint center, float radius, ccColor4F color,
+                          GucciEngine::FwFillStyle fillStyle, bool noBorder, float stroke) {
         const int turns = 2;
         const int segsPerTurn = 16;
         const int total = turns * segsPerTurn;
+        bool donut = fillStyle == GucciEngine::FwFillStyle::Normal;
+        float borderThick = donut && !noBorder ? std::max(0.5f, std::min(stroke * 0.5f, stroke - 0.5f)) : 0.f;
         CCPoint prev = center;
         for (int i = 1; i <= total; ++i) {
             float t = (float)i / (float)total;
             float ang = t * turns * 2.f * (float)M_PI;
             float r = t * radius;
             CCPoint cur{ center.x + r * std::cos(ang), center.y + r * std::sin(ang) };
-            m_node->drawSegment(prev, cur, stroke, color);
+            if (donut) {
+                ccColor4F black{ 0, 0, 0, 1.f };
+                if (!noBorder) m_node->drawSegment(prev, cur, stroke, black);
+                float innerStroke = std::max(0.5f, stroke - borderThick * 2.f);
+                m_node->drawSegment(prev, cur, innerStroke, color);
+            } else {
+                m_node->drawSegment(prev, cur, stroke, color);
+            }
             prev = cur;
         }
     }

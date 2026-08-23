@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-19-t (Two from Juice. 1) Real bug in the time-based test's target math, confirmed by his debug-mode screenshot (a backwards diagonal -- later shifts ending their survival check progressively EARLIER instead of later). Root cause: the horizon was computed as target=N.frame-shiftedI.frame added on top of a shift-INDEPENDENT warmup margin, but fwProbeFrame counts ticks from the CHECKPOINT restore, not from the shifted click -- so the effective absolute stop-frame shrank as shift grew instead of tracking forward with it. Fixed using his own worked example (release@30, next-click@50, gap=20, slack=3: shift+1 -> target=51, window 48-54) to verify the formula: the gap from click to N in the original macro is fixed, so target_absolute = N.frame + shift, and critically the distance from the SHIFTED click to target+slack is just the ORIGINAL gap + slack (shift cancels out, since both move together) -- only the checkpoint-to-shifted-click portion (warmup + shift) needs the shift added in. 2) Added per-exact-value customization within what still reads as one Legend line: tiers now have an optional legendGroup label -- e.g. two tiers (lo=hi=5, lo=hi=6) both set to '5-6' render with fully independent shape/color/etc per exact window value, but the Legend HUD combines their counts into one '5-6: N' row (min lo to max hi across the group). Empty legendGroup (unset, the default) keeps existing single-tier-per-range setups rendering exactly as before, each its own group. Tier format now 30 fields (was 29); old saves still load. Compiles clean, untested in-game -- high confidence in the timing fix specifically since it was verified arithmetically against Juice's own numbers, not just re-derived from scratch again.)"
+#define GB_BUILD_LABEL "2026-08-19-u (Three more from Juice, on top of what he called ready-to-release. 1) Slack now only SHORTENS the required survival time, never extends it -- a 30-frame gap with 3 slack means surviving 27 counts as a pass, not 'must survive up to 33.' Previously added slack on top of the gap; now subtracted (floored at 0). 2) New 'Position Tolerance' feature (off by default): a shift that survives to the horizon can still be a false positive if the player drifted off the real path without dying. When enabled, a survived shift only counts if the player's position at the horizon is within a configurable Position Slack (default 50 units) of the next input's TRUE position (captured during the original Capturing pass) on both axes -- otherwise it's downgraded to failed. Applies uniformly to both the Time-Based and Recovery Range algorithms since both route through the same shared survival-check point. 3) Spiral can use Normal/donut fill now too -- since a spiral has no inside/outside to leave a hole in, its donut is the tube-cross-section analog: a black outline on both edges of the stroke width with the tier color down the middle, built as two overlaid drawSegment passes per step (wide black, narrower color) instead of one uniform-color pass. Compiles clean, untested in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -665,6 +665,17 @@ public:
     uint32_t fwProbeNextFrame     = 0;
     bool     fwProbeNextIsRelease = false;
     bool     fwProbeNextPlayer2   = false;
+    float    fwProbeNextX = 0.f, fwProbeNextY = 0.f; // N's TRUE position, for the Position Tolerance check
+    // "Position Tolerance" (Juice's request, 2026-08-21): a shift that
+    // survives to the horizon can still be a false positive if it ends up
+    // somewhere the real macro never was -- e.g. it didn't die, but drifted
+    // off the intended path far enough that actually executing N from there
+    // wouldn't work. When enabled, a survived shift is only counted if the
+    // player's position at the horizon is within fwPositionSlack units of
+    // N's TRUE position on both axes; otherwise it's treated as failed.
+    // Off by default (existing behavior: survival alone is enough).
+    bool     fwPositionCheckEnabled = false;
+    float    fwPositionSlack = 50.f;
     // The survival-check horizon for the CURRENT shift only -- target (N's real gap
     // from the shifted click) + fwSlackWindow. Recomputed per shift in
     // beginShiftTest(), since target depends on the shift being tested.

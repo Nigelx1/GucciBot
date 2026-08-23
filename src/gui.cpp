@@ -2254,11 +2254,18 @@ void MenuInterface::drawHacksTab(){
         Mod::get()->setSavedValue("fw_maxwindow",(int64_t)engine->fwMaxWindow);
     if(Widgets::StyledSliderInt("Sweep Range (+/- frames)",&engine->fwSweepRange,1,30,theme))
         Mod::get()->setSavedValue("fw_sweeprange",(int64_t)engine->fwSweepRange);
-    if(Widgets::StyledSliderInt("Slack Window (+/- frames)",&engine->fwSlackWindow,0,20,theme))
+    if(Widgets::StyledSliderInt("Slack Window (frames)",&engine->fwSlackWindow,0,20,theme))
         Mod::get()->setSavedValue("fw_slackwindow",(int64_t)engine->fwSlackWindow);
     ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
-    ImGui::TextWrapped("A shift survives if it stays alive through roughly how long the original macro takes to reach the next input, plus or minus this many frames of slack. The next input itself is never moved -- it always fires at its own original frame.");
+    ImGui::TextWrapped("A shift survives if it stays alive through roughly how long the original macro takes to reach the next input, MINUS this many frames of slack (a shorter survival still counts as a pass -- it never needs to survive longer than the original gap). The next input itself is never moved -- it always fires at its own original frame.");
     ImGui::PopStyleColor();
+    if(Widgets::ToggleSwitch("Position Tolerance",&engine->fwPositionCheckEnabled,theme,anim))
+        Mod::get()->setSavedValue("fw_position_check",engine->fwPositionCheckEnabled);
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::TextWrapped("Juice's request: surviving isn't proof a shift actually worked -- the player could be alive but far off the real path. When on, a survived shift only counts if the player ends up within the slack below of the next input's TRUE position (both axes); otherwise it's treated as failed.");
+    ImGui::PopStyleColor();
+    if(engine->fwPositionCheckEnabled&&Widgets::StyledSliderFloat("Position Slack (units)",&engine->fwPositionSlack,1.f,200.f,theme))
+        Mod::get()->setSavedValue("fw_position_slack",engine->fwPositionSlack);
     if(Widgets::ToggleSwitch("Full-Range Sweep",&engine->fwFullRangeSweep,theme,anim))
         Mod::get()->setSavedValue("fw_full_range_sweep",engine->fwFullRangeSweep);
     ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
@@ -4994,6 +5001,8 @@ void MenuInterface::loadSettings(){
     eng->fwSweepRange=mod->getSavedValue<int>("fw_sweeprange",12);
     if(eng->fwMaxWindow > 2*eng->fwSweepRange) eng->fwMaxWindow = 2*eng->fwSweepRange;
     eng->fwSlackWindow=mod->getSavedValue<int>("fw_slackwindow",3);
+    eng->fwPositionCheckEnabled=mod->getSavedValue<bool>("fw_position_check",false);
+    eng->fwPositionSlack=mod->getSavedValue<float>("fw_position_slack",50.f);
     eng->fwFullRangeSweep=mod->getSavedValue<bool>("fw_full_range_sweep",false);
     eng->fwMaxFramesMeasured=mod->getSavedValue<int>("fw_maxframes",240);
     eng->fwSimSpeed=mod->getSavedValue<int>("fw_simspeed",1);

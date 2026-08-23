@@ -1809,6 +1809,20 @@ void GucciEngine::fwTick() {
                 // computed per shift in beginShiftTest()).
                 if (fwProbeDied || fwProbeFrame >= fwProbeHorizon) {
             bool survived = !fwProbeDied;
+            // Juice's Position Tolerance (2026-08-21): surviving to the
+            // horizon isn't proof the shift actually worked -- the player
+            // could still be alive but far off the real path, somewhere N
+            // couldn't actually be executed from correctly. Only checked
+            // when there's a real N to compare against; a bare survival
+            // with no next input to reach is unaffected.
+            if (survived && fwPositionCheckEnabled && fwProbeHasNext) {
+                auto* posPlayer = fwProbeNextPlayer2 ? pl->m_player2 : player1;
+                if (posPlayer) {
+                    float dx = std::abs(posPlayer->m_position.x - fwProbeNextX);
+                    float dy = std::abs(posPlayer->m_position.y - fwProbeNextY);
+                    if (dx > fwPositionSlack || dy > fwPositionSlack) survived = false;
+                }
+            }
             log::info("[GucciBot]   probe click {} shift {:+d}: died={} "
                       "(after {} frames, horizon {}, windowHigh {})",
                       fwProbeClick, fwProbeShift, fwProbeDied ? "YES" : "no",
@@ -1891,7 +1905,11 @@ void GucciEngine::beginShiftTest() {
         // shifted click and its target move together).
         int64_t originalGap = std::max<int64_t>(
             (int64_t)fwProbeNextFrame - (int64_t)fwClickSamples[fwProbeClick].frame, 0);
-        long high = (long)(originalGap + fwSlackWindow);
+        // Juice (2026-08-21): slack only shortens the required survival time,
+        // it doesn't extend it -- a 30-frame gap with 3 slack means surviving
+        // 27 frames counts as a pass, not "must survive up to 33." Previously
+        // added slack on top of the gap; now subtracted from it (floored at 0).
+        long high = (long)std::max<int64_t>(originalGap - fwSlackWindow, 0);
         long warmup = 0;
         if (fwProbeClick < fwCapStack.size())
             warmup = (long)fwClickSamples[fwProbeClick].frame - (long)fwCapStack[fwProbeClick].frame;
@@ -2354,6 +2372,10 @@ void GucciEngine::beginOrSkipProbeClick() {
         fwProbeNextFrame     = fwClickSamples[nextIdx].frame;
         fwProbeNextIsRelease = fwClickSamples[nextIdx].release;
         fwProbeNextPlayer2   = fwClickSamples[nextIdx].player2;
+        // N's TRUE position, captured during Capturing (the original,
+        // unshifted playthrough) -- for Juice's Position Tolerance check.
+        fwProbeNextX = fwClickSamples[nextIdx].x;
+        fwProbeNextY = fwClickSamples[nextIdx].y;
     }
 
     // Neighbor-distance clamps: never let this click's own shift reach or cross
