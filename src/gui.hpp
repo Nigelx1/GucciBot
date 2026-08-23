@@ -198,7 +198,7 @@ private:
     void drawMainSubTabBar();
     void drawReplayTab();
     void drawToolsTab();
-    void drawHacksTab();
+    void drawFrameWindowsTab();
     void drawRenderTab();
     void drawClicksTab();
     void drawAutoclickerTab();

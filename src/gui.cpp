@@ -965,8 +965,8 @@ void MenuInterface::drawTabBar(){
         ImDrawList* dl=ImGui::GetWindowDrawList();
     ImVec2 pos=ImGui::GetCursorScreenPos();
     float width=ImGui::GetContentRegionAvail().x;
-        const char* names[]={"Macro","Render","Clicks","Autoclicker","Hacks","Indicators","JMF","Trainer","HUD","Settings","Credits"};
-    const int N=11;
+        const char* names[]={"Macro","Render","Clicks","Autoclicker","Hacks","Indicators","Frame Windows","JMF","Trainer","HUD","Settings","Credits"};
+    const int N=12;
     float tabW=width/N,tabH=34.f;
     float dt=ImGui::GetIO().DeltaTime;
     if(tabIndicatorX<0)tabIndicatorX=pos.x+activeTab*tabW;
@@ -980,9 +980,9 @@ void MenuInterface::drawTabBar(){
         if(ImGui::IsItemClicked())switchTab(i);
         if(fontSmall)ImGui::PushFont(fontSmall);
         ImU32 tc=(activeTab==i)?theme.getAccentU32(0.98f)
-            :(i==6)?IM_COL32(200,175,90,190) // Jupiter tab stays warm gold even when inactive
+            :(i==7)?IM_COL32(200,175,90,190) // Jupiter tab stays warm gold even when inactive
             :(hov?theme.getTextU32():theme.getTextSecondaryU32());
-        if(i==6&&activeTab==6){
+        if(i==7&&activeTab==7){
             // Full name while open, wrapped to fit the tab's own column --
             // greedy word-wrap so it adapts to whatever the tab width is.
             const char* full="Nigel's Jupiter My Favourite Trainer";
@@ -1022,8 +1022,8 @@ void MenuInterface::drawMainSubTabBar(){
     ImDrawList* dl=ImGui::GetWindowDrawList();
     ImVec2 pos=ImGui::GetCursorScreenPos();
     float width=ImGui::GetContentRegionAvail().x;
-    const char* sub[]={"Replay","Tools","Hacks"};
-    const int SN=3;
+    const char* sub[]={"Replay","Tools & Hacks"};
+    const int SN=2;
     float subW=width/SN,subH=30.f;
     float dt=ImGui::GetIO().DeltaTime;
     static float subIndX=-1.f;
@@ -1093,19 +1093,19 @@ void MenuInterface::drawTabContent(){
             drawMainSubTabBar();
             switch(mainSubTab){
                 case 0:drawReplayTab();break;
-                case 1:drawToolsTab();break;
-                case 2:drawHacksTab();break;}
+                case 1:drawToolsTab();break;}
             break;
         case 1:drawRenderTab();break;
         case 2:drawClicksTab();break;
         case 3:drawAutoclickerTab();break;
         case 4:drawMoreHacksTab();break;
         case 5:drawIndicatorsTab();break;
-        case 6:drawJupiterTab();break;
-        case 7:drawTrainerTab();break;
-        case 8:drawHudTab();break;
-        case 9:drawSettingsTab();break;
-        case 10:drawCreditsTab();break;}
+        case 6:drawFrameWindowsTab();break;
+        case 7:drawJupiterTab();break;
+        case 8:drawTrainerTab();break;
+        case 9:drawHudTab();break;
+        case 10:drawSettingsTab();break;
+        case 11:drawCreditsTab();break;}
     if(fontBody)ImGui::PopFont();
     ImGui::PopStyleVar();}
 
@@ -1117,7 +1117,7 @@ void MenuInterface::drawMainWindow(){
         // Jupiter tab: reskin the WHOLE window's theme (title bar, tab bar, status
     // bar, every widget) for as long as this tab is active, not just its own
     // content -- restored at the end of this function either way.
-    bool jupiterActive=(activeTab==6);
+    bool jupiterActive=(activeTab==7);
     ThemeEngine savedTheme=theme;
     if(jupiterActive){
         // Nigel's own two colors from his mockup: #100680 navy, #FCF550 gold.
@@ -1203,7 +1203,7 @@ void MenuInterface::drawMegaHackWindow(){
     float t=anim.easeOutCubic(anim.openProgress);
     if(t<=0.f)return;
 
-    bool jupiterActive=(activeTab==6);
+    bool jupiterActive=(activeTab==7);
     ThemeEngine savedTheme=theme;
     if(jupiterActive){
         // Nigel's own two colors from his mockup: #100680 navy, #FCF550 gold.
@@ -1270,9 +1270,9 @@ void MenuInterface::drawMegaHackWindow(){
         dl->AddText(ImVec2(wp.x+16,wp.y+12),theme.getAccentU32(0.92f),"GB");
         if(fontHeading)ImGui::PopFont();
     }
-        const char* names[]={"Macro","Render","Clicks","Autoclicker","Hacks","Indicators","JMF","Trainer","HUD","Settings","Credits"};
+        const char* names[]={"Macro","Render","Clicks","Autoclicker","Hacks","Indicators","Frame Windows","JMF","Trainer","HUD","Settings","Credits"};
     float rowH=34.f,railTop=headH+10.f;
-    for(int i=0;i<11;i++){
+    for(int i=0;i<12;i++){
         ImVec2 rMin(wp.x,wp.y+railTop+i*rowH),rMax(wp.x+railW,rMin.y+rowH);
         char rid[24];snprintf(rid,sizeof(rid),"##mhTab%d",i);
         ImGui::SetCursorScreenPos(rMin);
@@ -1285,9 +1285,9 @@ void MenuInterface::drawMegaHackWindow(){
         if(act)dl->AddRectFilled(rMin,ImVec2(rMin.x+3,rMax.y),theme.getAccentU32(0.95f));
         if(fontBody)ImGui::PushFont(fontBody);
         ImU32 tc=act?theme.getAccentU32(0.98f)
-            :(i==6)?IM_COL32(200,175,90,190)
+            :(i==7)?IM_COL32(200,175,90,190)
             :(hov?theme.getTextU32():theme.getTextSecondaryU32());
-        if(i==6&&act){
+        if(i==7&&act){
             const char* full="Nigel's Jupiter My Favourite Trainer";
             std::vector<std::string> words; {
                 std::string w; for(const char* p=full;;++p){
@@ -2210,7 +2210,114 @@ void MenuInterface::drawToolsTab(){
     Widgets::ToggleSwitch("Backup Before Overwrite",&engine->replayBackupsEnabled,theme,anim);
     ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
     ImGui::TextWrapped("Backups saved to replays/backups/ subfolder.");
-    ImGui::PopStyleColor();}
+    ImGui::PopStyleColor();
+
+    // Moved here from the old standalone "Hacks" sub-tab (1.5 GUI reorg,
+    // Nigel: "combine the tools and hacks tab") -- these are unrelated to
+    // the Frame Window Tracker content that used to live in the same
+    // sub-tab, which got its own top-level tab instead. See that tab's own
+    // comment for the reorg rationale.
+        ImGui::Dummy(ImVec2(0,8));
+    Widgets::SectionHeader("Hacks",theme);
+    if(Widgets::ModuleCardBegin("Safe Mode",
+        (activeTheme==THEME_TOOSII)?"Safe mode is just playing with no pads. Still catching everything.":"Prevents stats and percentage gain",
+        &engine->protectedMode,theme,anim,&keybinds.safeMode))Widgets::ModuleCardEnd();
+    if(Widgets::ModuleCardBegin("Show Trajectory",
+        (activeTheme==THEME_TOOSII)?"Run the route. Don't look back. Ball's already there.":"Display predicted player path",
+        &engine->pathPreview,theme,anim,&keybinds.trajectory)){
+        Widgets::StyledSliderInt("Trajectory Length",&engine->pathLength,50,480,theme);
+        Widgets::ModuleCardEnd();}
+    if(Widgets::ModuleCardBegin("Show Hitboxes","Display collision bounds for objects",&engine->showHitboxes,theme,anim,&keybinds.hitboxes)){
+        Widgets::ToggleSwitch("On Death Only",&engine->hitboxOnDeath,theme,anim);
+        Widgets::ToggleSwitch("Draw Trail",&engine->hitboxTrail,theme,anim);
+        if(engine->hitboxTrail)Widgets::StyledSliderInt("Trail Length",&engine->hitboxTrailLength,10,600,theme);
+        Widgets::ModuleCardEnd();}
+    if(Widgets::ModuleCardBegin("Noclip",
+        (activeTheme==THEME_TOOSII)?"Can't cover what you can't see. Route so clean it's invisible.":"Disable collision with obstacles",
+        &engine->noclipEnabled,theme,anim,&keybinds.noclip)){
+
+                if(engine->noclipAccuracyVisible){
+            float pct = engine->noclipAccuracy * 100.f;
+            ImVec4 hc = pct>=90?ImVec4(0.3f,1,0.3f,1):pct>=70?ImVec4(1,1,0.3f,1):ImVec4(1,0.3f,0.3f,1);
+            ImGui::Text("Accuracy: ");ImGui::SameLine();ImGui::TextColored(hc,"%.2f%%",pct);
+            ImGui::Dummy(ImVec2(0,4));
+            bool hasThresh = engine->noclipThreshold > 0.f;
+            if(Widgets::ToggleSwitch("Accuracy Threshold",&hasThresh,theme,anim))
+                engine->noclipThreshold = hasThresh ? 0.80f : 0.f;
+            if(hasThresh){
+                ImGui::SetNextItemWidth(-1);
+                float t = engine->noclipThreshold * 100.f;
+                if(ImGui::SliderFloat("##noclipThresh",&t,1.f,100.f,"%.1f%%"))
+                    engine->noclipThreshold = t / 100.f;
+                ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+                ImGui::TextWrapped("Noclip disables itself when accuracy reaches this value.");
+                ImGui::PopStyleColor();}
+            ImGui::Dummy(ImVec2(0,4));}
+
+        Widgets::ToggleSwitch("On Death Color",&engine->noclipDeathFlash,theme,anim);
+        if(engine->noclipDeathFlash){
+            float col[3]={engine->noclipDeathColorR,engine->noclipDeathColorG,engine->noclipDeathColorB};
+            if(ImGui::ColorEdit3("##dc",col,ImGuiColorEditFlags_NoInputs|ImGuiColorEditFlags_NoLabel)){
+                engine->noclipDeathColorR=col[0];engine->noclipDeathColorG=col[1];engine->noclipDeathColorB=col[2];}}
+        Widgets::ModuleCardEnd();}
+
+    if(Widgets::ModuleCardBegin("RNG Lock",
+        (activeTheme==THEME_TOOSII)?"Fixed seed. Like my routes -- always finding the soft spot in zone.":"Use fixed seed for consistent RNG",
+        &engine->rngLocked,theme,anim,&keybinds.rngLock)){
+        if(!rngBufferInit){snprintf(rngBuffer,sizeof(rngBuffer),"%u",engine->rngSeedVal);rngBufferInit=true;}
+        ImGui::Text("Seed Value:");ImGui::SetNextItemWidth(-1);
+        if(ImGui::InputText("##seed",rngBuffer,sizeof(rngBuffer),ImGuiInputTextFlags_CharsDecimal)){
+            try{engine->rngSeedVal=(unsigned)std::stoull(rngBuffer);}catch(...){engine->rngSeedVal=1;}}
+        Widgets::ModuleCardEnd();}
+
+    if(Widgets::ModuleCardBegin("Auto-Flip on Death",
+        "Flip gravity instead of dying -- great for mirror levels",
+        &engine->updater.m_autoFlipOnDeath,theme,anim,&keybinds.autoFlip)){
+        if(engine->updater.m_isAutoFlipped){
+            Widgets::StatusBadge("FLIPPED",ImVec4(0.4f,0.8f,1.f,1.f));}
+        Widgets::ModuleCardEnd();}
+
+    if(Widgets::ModuleCard("Prevent Death",
+        "Absorb all hits silently -- no collision counter",
+        &engine->updater.m_preventDeath,theme,anim,&keybinds.preventDeath)){}
+
+    if(Widgets::ModuleCardBegin("Mirror Inputs",
+        "Replay as if left/right controls are swapped",
+        &engine->replay.m_mirrorInputs,theme,anim,&keybinds.mirrorInputs)){
+        Widgets::ToggleSwitch("Invert Players",&engine->replay.m_mirrorInverted,theme,anim);
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::TextWrapped("Invert Players: swap which player each input goes to.");
+        ImGui::PopStyleColor();
+        Widgets::ModuleCardEnd();}
+
+        ImGui::Dummy(ImVec2(0,8));
+    Widgets::SectionHeader("Frame Stepping",theme);
+    {
+    auto& upd=engine->updater;
+    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+    ImGui::Text("Current frame: %u",upd.getFrame());
+    ImGui::PopStyleColor();
+    bool paused=upd.m_paused;
+    if(Widgets::ToggleSwitch("Pause Physics",&paused,theme,anim))upd.setPaused(paused);
+    if(upd.m_paused){
+        float bw=(ImGui::GetContentRegionAvail().x-8)/2.f;
+        if(Widgets::StyledButton("<< Step Back",ImVec2(bw,28),theme,anim,6.f)){
+            if(upd.m_backwardsStepping)upd.backwardsStep(1);
+        }
+        ImGui::SameLine(0,8);
+        if(Widgets::StyledButton("Step Fwd >>",ImVec2(bw,28),theme,anim,6.f)){
+            upd.m_stepOnce_=true;
+        }
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        if(!upd.m_backwardsStepping)
+            ImGui::TextWrapped("Enable Backwards Stepping (above) to step back.");
+        ImGui::PopStyleColor();
+    } else {
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::TextWrapped("Pause physics to step frame-by-frame. Hotkeys are in Settings > Keybinds.");
+        ImGui::PopStyleColor();
+    }
+    }}
 
 // Frame-window asset import (Juice/Nigel's request, 2026-08-23): tier
 // sound/image lookup already resolves bare filenames against fw_assets/
@@ -2290,103 +2397,38 @@ static void importFwAssetFolder(){
     });
 }
 
-void MenuInterface::drawHacksTab(){
+void MenuInterface::drawFrameWindowsTab(){
     auto* engine=GucciEngine::get();
-    if((activeTheme==THEME_TOOSII||activeTheme==THEME_TOOSII_SYRACUSE||activeTheme==THEME_TOOSII_SACSTATE))
-        Widgets::GucciQuote("\"I'm open every play. They just never throw me the ball.\"","-- Toosii, open in the end zone",theme);
-    else if(activeTheme==THEME_JA)
-        Widgets::GucciQuote("\"Noclip is just confidence. I go where I want.\""," -- Ja Morant",theme);
-    else if(activeTheme==THEME_GIDDEY)
-        Widgets::GucciQuote("\"I flew 17 hours to play this game. Where's the replay button?\"","-- Josh Giddey, probably",theme);
-    else if(activeTheme==THEME_BAM)
-        Widgets::GucciQuote("\"Noclip? I don't need it. The rim can't stop me either.\"","-- Bam, probably",theme);
-    else if(activeTheme==THEME_SEXYY)
-        Widgets::GucciQuote("\"Noclip? Baby I walk through walls naturally.\"","-- Sexyy Red",theme);
-    else if(activeTheme==THEME_JUICE)
-        Widgets::GucciQuote("\"Noclip's cool. I just want the analyzer to work.\"","-- Juice, still testing",theme);
-    else if(activeTheme==THEME_BUTLER)
-        Widgets::GucciQuote("\"Noclip? I go through everything. That's just Playoff Jimmy.\"","-- Jimmy Butler",theme);
-    else if(activeTheme==THEME_SAWEETIE)
-        Widgets::GucciQuote("\"Walk through walls? Icy girls don't need permission.\"","-- Saweetie, probably",theme);
-    else if(activeTheme==THEME_MAYBACH)
-        Widgets::GucciQuote("\"Walls don't stop a boss.\"","-- Rick Ross, probably",theme);
-    else
-        Widgets::GucciQuote("\"I never die in this game. I'm immune. Like Gucci flu.\"","-- GucciBot propaganda",theme);
+    // Renamed from drawHacksTab (1.5 GUI reorg) -- Frame Window/Calculate was
+    // ~77% of that tab's content (432 of ~560 lines) buried two clicks deep
+    // (Macro -> Hacks), while Survival Indicator, a much smaller and less
+    // actively-developed feature, had its own top-level tab. Nigel: "how is
+    // all the frame window stuff part of one huge thing while the survival
+    // indicator gets its own tab." Everything below this point is unchanged
+    // from the old drawHacksTab; the actual hack toggles (Safe Mode,
+    // Trajectory, Hitboxes, Noclip, RNG Lock, Auto-Flip, Prevent Death,
+    // Mirror Inputs) and Frame Stepping moved to drawToolsTab instead.
+    Widgets::GucciQuote("\"Speed doesn't mean much if the frame windows are wrong.\"","-- Juice, keeping you honest",theme);
     ImGui::Dummy(ImVec2(0,4));
-    if(Widgets::ModuleCardBegin("Safe Mode",
-        (activeTheme==THEME_TOOSII)?"Safe mode is just playing with no pads. Still catching everything.":"Prevents stats and percentage gain",
-        &engine->protectedMode,theme,anim,&keybinds.safeMode))Widgets::ModuleCardEnd();
-    if(Widgets::ModuleCardBegin("Show Trajectory",
-        (activeTheme==THEME_TOOSII)?"Run the route. Don't look back. Ball's already there.":"Display predicted player path",
-        &engine->pathPreview,theme,anim,&keybinds.trajectory)){
-        Widgets::StyledSliderInt("Trajectory Length",&engine->pathLength,50,480,theme);
-        Widgets::ModuleCardEnd();}
-    if(Widgets::ModuleCardBegin("Show Hitboxes","Display collision bounds for objects",&engine->showHitboxes,theme,anim,&keybinds.hitboxes)){
-        Widgets::ToggleSwitch("On Death Only",&engine->hitboxOnDeath,theme,anim);
-        Widgets::ToggleSwitch("Draw Trail",&engine->hitboxTrail,theme,anim);
-        if(engine->hitboxTrail)Widgets::StyledSliderInt("Trail Length",&engine->hitboxTrailLength,10,600,theme);
-        Widgets::ModuleCardEnd();}
-    if(Widgets::ModuleCardBegin("Noclip",
-        (activeTheme==THEME_TOOSII)?"Can't cover what you can't see. Route so clean it's invisible.":"Disable collision with obstacles",
-        &engine->noclipEnabled,theme,anim,&keybinds.noclip)){
-
-                if(engine->noclipAccuracyVisible){
-            float pct = engine->noclipAccuracy * 100.f;
-            ImVec4 hc = pct>=90?ImVec4(0.3f,1,0.3f,1):pct>=70?ImVec4(1,1,0.3f,1):ImVec4(1,0.3f,0.3f,1);
-            ImGui::Text("Accuracy: ");ImGui::SameLine();ImGui::TextColored(hc,"%.2f%%",pct);
-            ImGui::Dummy(ImVec2(0,4));
-            bool hasThresh = engine->noclipThreshold > 0.f;
-            if(Widgets::ToggleSwitch("Accuracy Threshold",&hasThresh,theme,anim))
-                engine->noclipThreshold = hasThresh ? 0.80f : 0.f;
-            if(hasThresh){
-                ImGui::SetNextItemWidth(-1);
-                float t = engine->noclipThreshold * 100.f;
-                if(ImGui::SliderFloat("##noclipThresh",&t,1.f,100.f,"%.1f%%"))
-                    engine->noclipThreshold = t / 100.f;
-                ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
-                ImGui::TextWrapped("Noclip disables itself when accuracy reaches this value.");
-                ImGui::PopStyleColor();}
-            ImGui::Dummy(ImVec2(0,4));}
-
-        Widgets::ToggleSwitch("On Death Color",&engine->noclipDeathFlash,theme,anim);
-        if(engine->noclipDeathFlash){
-            float col[3]={engine->noclipDeathColorR,engine->noclipDeathColorG,engine->noclipDeathColorB};
-            if(ImGui::ColorEdit3("##dc",col,ImGuiColorEditFlags_NoInputs|ImGuiColorEditFlags_NoLabel)){
-                engine->noclipDeathColorR=col[0];engine->noclipDeathColorG=col[1];engine->noclipDeathColorB=col[2];}}
-        Widgets::ModuleCardEnd();}
-
-    if(Widgets::ModuleCardBegin("RNG Lock",
-        (activeTheme==THEME_TOOSII)?"Fixed seed. Like my routes -- always finding the soft spot in zone.":"Use fixed seed for consistent RNG",
-        &engine->rngLocked,theme,anim,&keybinds.rngLock)){
-        if(!rngBufferInit){snprintf(rngBuffer,sizeof(rngBuffer),"%u",engine->rngSeedVal);rngBufferInit=true;}
-        ImGui::Text("Seed Value:");ImGui::SetNextItemWidth(-1);
-        if(ImGui::InputText("##seed",rngBuffer,sizeof(rngBuffer),ImGuiInputTextFlags_CharsDecimal)){
-            try{engine->rngSeedVal=(unsigned)std::stoull(rngBuffer);}catch(...){engine->rngSeedVal=1;}}
-        Widgets::ModuleCardEnd();}
-
-        ImGui::Dummy(ImVec2(0,4));
-    Widgets::SectionHeader("v4.0 — From Silicate",theme);
-
-    if(Widgets::ModuleCardBegin("Auto-Flip on Death",
-        "Flip gravity instead of dying -- great for mirror levels",
-        &engine->updater.m_autoFlipOnDeath,theme,anim,&keybinds.autoFlip)){
-        if(engine->updater.m_isAutoFlipped){
-            Widgets::StatusBadge("FLIPPED",ImVec4(0.4f,0.8f,1.f,1.f));}
-        Widgets::ModuleCardEnd();}
-
-    if(Widgets::ModuleCard("Prevent Death",
-        "Absorb all hits silently -- no collision counter",
-        &engine->updater.m_preventDeath,theme,anim,&keybinds.preventDeath)){}
-
-    if(Widgets::ModuleCardBegin("Mirror Inputs",
-        "Replay as if left/right controls are swapped",
-        &engine->replay.m_mirrorInputs,theme,anim,&keybinds.mirrorInputs)){
-        Widgets::ToggleSwitch("Invert Players",&engine->replay.m_mirrorInverted,theme,anim);
-        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
-        ImGui::TextWrapped("Invert Players: swap which player each input goes to.");
-        ImGui::PopStyleColor();
-        Widgets::ModuleCardEnd();}
-
+    {
+        auto& replay=engine->replay;
+        bool hasActions=!replay.m_actionAtom.m_actions.empty();
+        bool canCalc=PlayLayer::get()!=nullptr&&hasActions;
+        if(!canCalc)ImGui::PushStyleVar(ImGuiStyleVar_Alpha,0.4f);
+        // Nigel: put the Calculate trigger in both places -- it also still
+        // lives in Macro -> Replay next to Save, since it acts on whatever
+        // macro you just finished/loaded there. This copy exists so the tab
+        // that actually configures/shows Calculate isn't just a dead end
+        // you have to leave to run the thing it configures.
+        bool calcClicked=Widgets::StyledButton("Calculate",ImVec2(-1,30),theme,anim,6.f);
+        if(!canCalc)ImGui::PopStyleVar();
+        if(calcClicked&&canCalc)engine->analyzeFrameWindows();
+        if(!canCalc){
+            ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+            ImGui::TextWrapped(PlayLayer::get()?"Record or load a macro with actions first.":"Enter the level to Calculate.");
+            ImGui::PopStyleColor();
+        }
+    }
         ImGui::Dummy(ImVec2(0,8));
     Widgets::SectionHeader("Frame Window Tracker",theme);
     {
@@ -2457,6 +2499,12 @@ void MenuInterface::drawHacksTab(){
     Widgets::SectionHeader("Practice Range",theme);
     if(Widgets::ToggleSwitch("Show During Playback",&engine->practiceRangeEnabled,theme,anim))
         Mod::get()->setSavedValue("practice_range",engine->practiceRangeEnabled);
+    // Everything below here was previously rendering under the "Practice
+    // Range" header above by mistake -- it's all Frame Window engine tuning
+    // (sweep/slack/position tolerance/debug), not Practice Range settings.
+    // Found during the 1.5 GUI reorg audit; given its own correct header.
+    ImGui::Dummy(ImVec2(0,8));
+    Widgets::SectionHeader("Analysis Settings",theme);
             if(engine->fwMaxWindow > 2*engine->fwSweepRange){
         engine->fwMaxWindow = 2*engine->fwSweepRange;
         Mod::get()->setSavedValue("fw_maxwindow",(int64_t)engine->fwMaxWindow);
@@ -2820,33 +2868,6 @@ void MenuInterface::drawHacksTab(){
             }
             Mod::get()->setSavedValue("fw_tiers",enc);
         }
-    }
-
-        ImGui::Dummy(ImVec2(0,8));
-    Widgets::SectionHeader("Frame Stepping",theme);
-    auto& upd=engine->updater;
-    ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
-    ImGui::Text("Current frame: %u",upd.getFrame());
-    ImGui::PopStyleColor();
-    bool paused=upd.m_paused;
-    if(Widgets::ToggleSwitch("Pause Physics",&paused,theme,anim))upd.setPaused(paused);
-    if(upd.m_paused){
-        float bw=(ImGui::GetContentRegionAvail().x-8)/2.f;
-        if(Widgets::StyledButton("<< Step Back",ImVec2(bw,28),theme,anim,6.f)){
-            if(upd.m_backwardsStepping)upd.backwardsStep(1);
-        }
-        ImGui::SameLine(0,8);
-        if(Widgets::StyledButton("Step Fwd >>",ImVec2(bw,28),theme,anim,6.f)){
-            upd.m_stepOnce_=true;
-        }
-        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
-        if(!upd.m_backwardsStepping)
-            ImGui::TextWrapped("Enable Backwards Stepping (above) to step back.");
-        ImGui::PopStyleColor();
-    } else {
-        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
-        ImGui::TextWrapped("Pause physics to step frame-by-frame. Hotkeys are in Settings > Keybinds.");
-        ImGui::PopStyleColor();
     }
 }
 
@@ -4498,7 +4519,7 @@ void MenuInterface::drawTrainerClickTrainerPage(){
 // whichever of the user's own macros they've picked into trainerMacro
 // instead of one bundled level. Deliberately plain full-width layout (no
 // ##jmfConstrain-style narrow child, no wave-ribbon backdrop, no theme
-// reskin) -- those only exist for JMF because activeTab==6 triggers a
+// reskin) -- those only exist for JMF because activeTab==7 triggers a
 // whole-window reskin in drawMainWindow/drawMegaHackWindow; a new tab at a
 // new index doesn't trigger any of that, so this can look like every other
 // ordinary tab.
@@ -5265,6 +5286,12 @@ void MenuInterface::loadSettings(){
     windowSize.x=mod->getSavedValue<float>("window_size_w",580.f);
     windowSize.y=mod->getSavedValue<float>("window_size_h",540.f);
     mainSubTab=mod->getSavedValue<int>("main_sub_tab",0);
+    // Macro's sub-tab bar shrank from 3 (Replay/Tools/Hacks) to 2
+    // (Replay/Tools & Hacks) in the 1.5 GUI reorg -- clamp so a value saved
+    // by an older build (2, the old Hacks sub-tab) doesn't land on a
+    // nonexistent sub-tab and render blank. Same class of bug as the old
+    // theme/preset-index clamps -- derive from the real bound, not a literal.
+    if(mainSubTab<0||mainSubTab>1)mainSubTab=0;
         keybinds.intentionalDeath=mod->getSavedValue<int>("key_intentional_death",0);
     keybinds.backStep=mod->getSavedValue<int>("key_back_step",0);
     keybinds.autoFlip=mod->getSavedValue<int>("key_auto_flip",0);
