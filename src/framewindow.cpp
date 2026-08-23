@@ -85,8 +85,15 @@ public:
         m_debugNode->clear();
         if (isRendering || !gb->fwAnalyzing || !gb->fwDebugMode) return;
 
+        // Juice's request (2026-08-21): cull debug marks outside the camera's
+        // actual view too -- same reasoning/technique as the main marker
+        // overlay's culling. m_debugNode is an untransformed sibling of
+        // m_node under the same anchor, so m_node's conversion is valid here.
+        CCRect visRect = computeVisibleRect();
+
         for (auto const& mk : gb->fwDebugMarks) {
             CCPoint at{ mk.x, mk.y };
+            if (!visRect.containsPoint(at)) continue;
             if (mk.survived) {
                 ccColor4F col{ 0.25f, 1.f, 0.35f, 1.f };
                 ccColor4F clear4{ 0.f, 0.f, 0.f, 0.f };
@@ -97,6 +104,22 @@ public:
                 m_debugNode->drawSegment({ at.x - s, at.y - s }, { at.x + s, at.y + s }, 2.5f, col);
                 m_debugNode->drawSegment({ at.x - s, at.y + s }, { at.x + s, at.y - s }, 2.5f, col);
             }
+        }
+
+        // Juice's request: a visual box showing the allowed Position
+        // Tolerance range around the next input's true position, so it's
+        // possible to actually SEE whether a survived shift landed inside or
+        // outside it instead of only trusting the reported pass/fail.
+        if (gb->fwPositionCheckEnabled && gb->fwProbeHasNext) {
+            CCPoint c{ gb->fwProbeNextX, gb->fwProbeNextY };
+            float s = gb->fwPositionSlack;
+            ccColor4F clear4{ 0.f, 0.f, 0.f, 0.f };
+            ccColor4F boxCol{ 0.2f, 0.7f, 1.f, 1.f };
+            CCPoint box[4] = {
+                { c.x - s, c.y - s }, { c.x + s, c.y - s },
+                { c.x + s, c.y + s }, { c.x - s, c.y + s },
+            };
+            m_debugNode->drawPolygon(box, 4, clear4, 2.f, boxCol);
         }
     }
 
@@ -343,7 +366,7 @@ private:
                 drawStarShape(center, radius, color, fillStyle, noBorder, stroke);
                 break;
             case GucciEngine::FwMarkerShape::Spiral:
-                drawSpiralShape(center, radius, color, fillStyle, noBorder, stroke);
+                drawSpiralShape(center, radius, color, fillStyle, stroke);
                 break;
             case GucciEngine::FwMarkerShape::Polygon:
                 drawPolygonShape(center, radius, sides, cornerR, color, fillStyle, noBorder, stroke);
@@ -435,34 +458,35 @@ private:
         }
     }
 
-    // Juice's request (2026-08-21): Spiral can use donut/Normal fill now too.
-    // A spiral has no inside/outside to leave a hole in, so its "donut" is
-    // the tube-cross-section analog: a black outline along both edges of the
-    // stroke's width with the tier color down the middle, instead of a
-    // ring's outer-color-inner-clear. Built by drawing the same segment
-    // twice per step -- a wider black pass first, a narrower colored pass on
-    // top -- rather than a single-color stroke.
+    // Spiral donut mode, take 2 (2026-08-21) -- Juice: the tube-cross-section
+    // idea wasn't it, "the inside shouldn't be filled, just the outside."
+    // Matches the same mental model as Circle/Polygon/Star's donut: a clear
+    // hole in the middle. For a spiral that means simply not drawing the
+    // innermost portion of the coil (r < innerR) at all, same tier color as
+    // Inverted, rather than any black-bordered tube treatment.
     void drawSpiralShape(CCPoint center, float radius, ccColor4F color,
-                          GucciEngine::FwFillStyle fillStyle, bool noBorder, float stroke) {
+                          GucciEngine::FwFillStyle fillStyle, float stroke) {
         const int turns = 2;
         const int segsPerTurn = 16;
         const int total = turns * segsPerTurn;
         bool donut = fillStyle == GucciEngine::FwFillStyle::Normal;
-        float borderThick = donut && !noBorder ? std::max(0.5f, std::min(stroke * 0.5f, stroke - 0.5f)) : 0.f;
-        CCPoint prev = center;
-        for (int i = 1; i <= total; ++i) {
-            float t = (float)i / (float)total;
+        float innerR = donut ? radius * 0.55f : 0.f;
+
+        auto pointAt = [&](float t) -> CCPoint {
             float ang = t * turns * 2.f * (float)M_PI;
             float r = t * radius;
-            CCPoint cur{ center.x + r * std::cos(ang), center.y + r * std::sin(ang) };
-            if (donut) {
-                ccColor4F black{ 0, 0, 0, 1.f };
-                if (!noBorder) m_node->drawSegment(prev, cur, stroke, black);
-                float innerStroke = std::max(0.5f, stroke - borderThick * 2.f);
-                m_node->drawSegment(prev, cur, innerStroke, color);
-            } else {
-                m_node->drawSegment(prev, cur, stroke, color);
-            }
+            return { center.x + r * std::cos(ang), center.y + r * std::sin(ang) };
+        };
+
+        int startI = 0;
+        if (donut && radius > 0.001f) {
+            float tStart = std::clamp(innerR / radius, 0.f, 1.f);
+            startI = (int)std::ceil(tStart * total);
+        }
+        CCPoint prev = pointAt((float)startI / (float)total);
+        for (int i = startI + 1; i <= total; ++i) {
+            CCPoint cur = pointAt((float)i / (float)total);
+            m_node->drawSegment(prev, cur, stroke, color);
             prev = cur;
         }
     }
