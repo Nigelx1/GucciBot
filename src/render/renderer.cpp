@@ -160,6 +160,7 @@ void SLRenderer::loadSettingsFromGeode() {
     m_settings.m_sfxVolume   = mod->getSavedValue<double>("render_sfx_volume", 1.0);
 
                 m_collectAudio = mod->getSavedValue<bool>("render_include_audio", true);
+    m_settings.m_splitAudioTracks = mod->getSavedValue<bool>("render_split_audio_tracks", false);
 
     std::string ext = mod->getSavedValue<std::string>("render_file_extension", ".mp4");
     if (!ext.empty() && ext[0] == '.') ext.erase(0, 1);
@@ -271,38 +272,55 @@ geode::Result<> SLRenderer::start() {
     if (ff->avcodec_parameters_from_context(m_videoStream->codecpar, m_videoCodecCtx.get()) < 0)
         return geode::Err("Failed to copy codec parameters");
 
-                        if (m_collectAudio) {
-        m_audioCodec = ff->avcodec_find_encoder_by_name(m_settings.m_audioCodec.c_str());
-        if (!m_audioCodec) return geode::Err("Failed to find audio codec '{}'", m_settings.m_audioCodec);
+    m_audioTracks.clear();
+    if (m_collectAudio) {
+        // Juice: split mode is 4 tracks -- the original combined mix (index
+        // 0, always present) PLUS the 3 isolated ones, not instead of it.
+        int trackCount = m_settings.m_splitAudioTracks ? 4 : 1;
+        static const char* kTrackNames[4] = {"combined", "music", "sfx", "frame-window"};
+        for (int i = 0; i < trackCount; i++) {
+            SLAudioTrack track;
 
-        m_audioCodecCtx.reset(ff->avcodec_alloc_context3(m_audioCodec));
-        if (!m_audioCodecCtx) return geode::Err("Failed to allocate audio codec context");
+            track.codec = ff->avcodec_find_encoder_by_name(m_settings.m_audioCodec.c_str());
+            if (!track.codec) return geode::Err("Failed to find audio codec '{}'", m_settings.m_audioCodec);
 
-        m_audioCodecCtx->codec_tag   = 0;
-        m_audioCodecCtx->codec_type  = AVMEDIA_TYPE_AUDIO;
-        m_audioCodecCtx->ch_layout   = AV_CHANNEL_LAYOUT_STEREO;
-        m_audioCodecCtx->bit_rate    = 320000;
-        m_audioCodecCtx->sample_fmt  = AV_SAMPLE_FMT_FLTP;
-        m_audioCodecCtx->sample_rate = m_sampleRate;
-        m_audioCodecCtx->time_base   = {1, m_sampleRate};
-        m_audioCodecCtx->flags &= ~AV_CODEC_FLAG_QSCALE;
-        if (m_formatCtx->oformat->flags & AVFMT_GLOBALHEADER)
-            m_audioCodecCtx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+            track.codecCtx.reset(ff->avcodec_alloc_context3(track.codec));
+            if (!track.codecCtx) return geode::Err("Failed to allocate audio codec context");
 
-        AVDictionary* audio_opts = nullptr;
-        ff->av_dict_set(&audio_opts, "compression_level", "0", 0);
-        if (ff->avcodec_open2(m_audioCodecCtx.get(), m_audioCodec, &audio_opts) < 0)
-            return geode::Err("Failed to open audio codec '{}'", m_settings.m_audioCodec);
-        ff->av_dict_free(&audio_opts);
+            track.codecCtx->codec_tag   = 0;
+            track.codecCtx->codec_type  = AVMEDIA_TYPE_AUDIO;
+            track.codecCtx->ch_layout   = AV_CHANNEL_LAYOUT_STEREO;
+            track.codecCtx->bit_rate    = 320000;
+            track.codecCtx->sample_fmt  = AV_SAMPLE_FMT_FLTP;
+            track.codecCtx->sample_rate = m_sampleRate;
+            track.codecCtx->time_base   = {1, m_sampleRate};
+            track.codecCtx->flags &= ~AV_CODEC_FLAG_QSCALE;
+            if (m_formatCtx->oformat->flags & AVFMT_GLOBALHEADER)
+                track.codecCtx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 
-        m_audioStream = ff->avformat_new_stream(m_formatCtx, m_audioCodec);
-        if (!m_audioStream) return geode::Err("Failed to create audio stream");
-        if (ff->avcodec_parameters_from_context(m_audioStream->codecpar, m_audioCodecCtx.get()) < 0)
-            return geode::Err("Failed to copy audio codec parameters");
-        m_audioStream->time_base = m_audioCodecCtx->time_base;
+            AVDictionary* audio_opts = nullptr;
+            ff->av_dict_set(&audio_opts, "compression_level", "0", 0);
+            if (ff->avcodec_open2(track.codecCtx.get(), track.codec, &audio_opts) < 0)
+                return geode::Err("Failed to open audio codec '{}'", m_settings.m_audioCodec);
+            ff->av_dict_free(&audio_opts);
 
-        geode::log::info("[GucciBot] Audio stream: {} @ {}Hz, frame_size={}",
-                         m_settings.m_audioCodec, m_sampleRate, m_audioCodecCtx->frame_size);
+            track.stream = ff->avformat_new_stream(m_formatCtx, track.codec);
+            if (!track.stream) return geode::Err("Failed to create audio stream");
+            if (ff->avcodec_parameters_from_context(track.stream->codecpar, track.codecCtx.get()) < 0)
+                return geode::Err("Failed to copy audio codec parameters");
+            track.stream->time_base = track.codecCtx->time_base;
+            if (m_settings.m_splitAudioTracks) {
+                // Track titles so an editor/player shows which is which
+                // instead of three unlabeled audio streams.
+                ff->av_dict_set(&track.stream->metadata, "title", kTrackNames[i], 0);
+            }
+
+            geode::log::info("[GucciBot] Audio stream {} ({}): {} @ {}Hz, frame_size={}",
+                             i, m_settings.m_splitAudioTracks ? kTrackNames[i] : "combined",
+                             m_settings.m_audioCodec, m_sampleRate, track.codecCtx->frame_size);
+
+            m_audioTracks.push_back(std::move(track));
+        }
     }
 
     if (ff->avio_open(&m_formatCtx->pb, outPath.c_str(), AVIO_FLAG_WRITE) < 0)
@@ -319,21 +337,18 @@ geode::Result<> SLRenderer::start() {
     m_pkt.reset(ff->av_packet_alloc());
     if (!m_pkt) return geode::Err("Failed to allocate packet");
 
-        if (m_collectAudio) {
-        m_audioFrame.reset(ff->av_frame_alloc());
-        if (!m_audioFrame) return geode::Err("Failed to allocate audio frame");
-        m_audioFrame->nb_samples  = m_audioCodecCtx->frame_size;
-        m_audioFrame->sample_rate = m_audioCodecCtx->sample_rate;
-        m_audioFrame->format      = m_audioCodecCtx->sample_fmt;
-        m_audioFrame->ch_layout   = m_audioCodecCtx->ch_layout;
-        if (ff->av_frame_get_buffer(m_audioFrame.get(), 0) < 0)
+    for (auto& track : m_audioTracks) {
+        track.frame.reset(ff->av_frame_alloc());
+        if (!track.frame) return geode::Err("Failed to allocate audio frame");
+        track.frame->nb_samples  = track.codecCtx->frame_size;
+        track.frame->sample_rate = track.codecCtx->sample_rate;
+        track.frame->format      = track.codecCtx->sample_fmt;
+        track.frame->ch_layout   = track.codecCtx->ch_layout;
+        if (ff->av_frame_get_buffer(track.frame.get(), 0) < 0)
             return geode::Err("Failed to get audio frame buffer");
 
-        m_audioPkt.reset(ff->av_packet_alloc());
-        if (!m_audioPkt) return geode::Err("Failed to allocate packet (audio)");
-
-        m_audioIndex = 0;
-        m_audioBuffer.clear();
+        track.pkt.reset(ff->av_packet_alloc());
+        if (!track.pkt) return geode::Err("Failed to allocate packet (audio)");
     }
 
     m_time = 0.0; m_endTime = 0.0f; m_updateIndex = 0; m_frameCount = 0;
@@ -362,8 +377,36 @@ geode::Result<> SLRenderer::start() {
     geode::log::info("[GucciBot] SLRenderer capture ready — buffer {}", m_bufferSize);
 
                 if (m_collectAudio) {
+        // Juice: force the frame-window channel group to exist BEFORE
+        // switching FMOD to NRT/no-sound output below -- it's normally
+        // created lazily on first use (see gbfw::frameWindowChannelGroup),
+        // and if that first-ever creation happens to fall inside a render
+        // (nothing played it live first), the group gets built and wired
+        // into the mix graph while the system is already in NRT mode,
+        // unlike m_backgroundMusicChannel/m_globalChannel which GD's own
+        // engine sets up at normal startup long before any of this. Likely
+        // root cause of frame-window audio being silent when split.
+        gbfw::frameWindowChannelGroup();
+        AudioEngineRenderState::enter(m_settings.m_musicVolume, m_settings.m_sfxVolume);
+
+        // Juice: split mode should be 4 tracks, not 3 -- the original
+        // combined mix PLUS the 3 isolated ones, not instead of it. get()
+        // (master) is now always attached for real in both modes, which
+        // also removes the need for the old hand-wavy "get() is just a
+        // timing reference, sync its m_time from getMusic() after the
+        // fact" workaround -- it has its own real buffer draining normally
+        // like everything else now.
         AudioRecorder::get()->init();
-        AudioRecorder::get()->attach(m_settings.m_musicVolume, m_settings.m_sfxVolume);
+        AudioRecorder::get()->attach();
+        if (m_settings.m_splitAudioTracks) {
+            auto* engine = FMODAudioEngine::get();
+            AudioRecorder::getMusic()->init(engine->m_backgroundMusicChannel);
+            AudioRecorder::getMusic()->attach();
+            AudioRecorder::getSfx()->init(engine->m_globalChannel);
+            AudioRecorder::getSfx()->attach();
+            AudioRecorder::getFrameWindow()->init(gbfw::frameWindowChannelGroup());
+            AudioRecorder::getFrameWindow()->attach();
+        }
     }
 
     std::thread(&SLRenderer::recordLoop, this).detach();
@@ -411,44 +454,48 @@ geode::Result<> SLRenderer::write() {
     return geode::Ok();
 }
 
-geode::Result<> SLRenderer::writeAudio(std::vector<float>& data, uint64_t pts) {
-                        m_audioFrame->pts        = pts;
-    m_audioFrame->nb_samples = m_audioCodecCtx->frame_size;
-    m_audioFrame->ch_layout  = m_audioCodecCtx->ch_layout;
+geode::Result<> SLRenderer::writeAudio(std::vector<float>& data, uint64_t pts, int trackIndex) {
+    if (trackIndex < 0 || trackIndex >= (int)m_audioTracks.size())
+        return geode::Err("Invalid audio track index {}", trackIndex);
+    auto& track = m_audioTracks[trackIndex];
+
+                        track.frame->pts        = pts;
+    track.frame->nb_samples = track.codecCtx->frame_size;
+    track.frame->ch_layout  = track.codecCtx->ch_layout;
 
     int ret = 0;
 
     AVChannelLayout inputChLayout;
     ff->av_channel_layout_default(&inputChLayout, m_channels);
 
-    if (!m_swrCtx) {
+    if (!track.swrCtx) {
         ret = ff->swr_alloc_set_opts2(
-            &m_swrCtx, &m_audioCodecCtx->ch_layout, m_audioCodecCtx->sample_fmt,
-            m_audioCodecCtx->sample_rate, &inputChLayout, AV_SAMPLE_FMT_FLT,
+            &track.swrCtx, &track.codecCtx->ch_layout, track.codecCtx->sample_fmt,
+            track.codecCtx->sample_rate, &inputChLayout, AV_SAMPLE_FMT_FLT,
             m_sampleRate, 0, nullptr);
         if (ret < 0) return geode::Err("Failed to set swr options: {}", ret);
-        if (!m_swrCtx) return geode::Err("Failed to allocate swr context");
-        if (ff->swr_init(m_swrCtx) < 0) return geode::Err("Failed to initialize swr context");
+        if (!track.swrCtx) return geode::Err("Failed to allocate swr context");
+        if (ff->swr_init(track.swrCtx) < 0) return geode::Err("Failed to initialize swr context");
     }
 
     const uint8_t* inData[1] = {reinterpret_cast<const uint8_t*>(data.data())};
-    ff->swr_convert(m_swrCtx, m_audioFrame->data, m_audioCodecCtx->frame_size,
-                    inData, m_audioCodecCtx->frame_size);
+    ff->swr_convert(track.swrCtx, track.frame->data, track.codecCtx->frame_size,
+                    inData, track.codecCtx->frame_size);
 
-    ret = ff->avcodec_send_frame(m_audioCodecCtx.get(), m_audioFrame.get());
+    ret = ff->avcodec_send_frame(track.codecCtx.get(), track.frame.get());
     if (ret < 0) return geode::Err("Failed to send audio frame: {}", ret);
 
             while (ret >= 0) {
-        ret = ff->avcodec_receive_packet(m_audioCodecCtx.get(), m_audioPkt.get());
+        ret = ff->avcodec_receive_packet(track.codecCtx.get(), track.pkt.get());
         if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) break;
         if (ret < 0) return geode::Err("Failed to receive audio packet");
 
-        ff->av_packet_rescale_ts(m_audioPkt.get(), m_audioCodecCtx->time_base,
-                                 m_audioStream->time_base);
-        m_audioPkt->stream_index = m_audioStream->index;
-        ret = ff->av_interleaved_write_frame(m_formatCtx, m_audioPkt.get());
+        ff->av_packet_rescale_ts(track.pkt.get(), track.codecCtx->time_base,
+                                 track.stream->time_base);
+        track.pkt->stream_index = track.stream->index;
+        ret = ff->av_interleaved_write_frame(m_formatCtx, track.pkt.get());
         if (ret < 0) return geode::Err("Failed to write audio frame");
-        ff->av_packet_unref(m_audioPkt.get());
+        ff->av_packet_unref(track.pkt.get());
     }
 
     return geode::Ok();
@@ -459,6 +506,15 @@ geode::Result<> SLRenderer::stop() {
 
                 AudioRecorder::get()->detach();
     AudioRecorder::get()->uninit();
+    if (m_settings.m_splitAudioTracks) {
+        AudioRecorder::getMusic()->detach();
+        AudioRecorder::getMusic()->uninit();
+        AudioRecorder::getSfx()->detach();
+        AudioRecorder::getSfx()->uninit();
+        AudioRecorder::getFrameWindow()->detach();
+        AudioRecorder::getFrameWindow()->uninit();
+    }
+    AudioEngineRenderState::exit();
 
     if (m_pkt && m_videoCodecCtx && m_formatCtx && m_videoStream) {
         ff->avcodec_send_frame(m_videoCodecCtx.get(), nullptr);
@@ -470,13 +526,14 @@ geode::Result<> SLRenderer::stop() {
         }
     }
 
-            if (m_audioPkt && m_audioCodecCtx && m_formatCtx && m_audioStream) {
-        ff->avcodec_send_frame(m_audioCodecCtx.get(), nullptr);
-        while (ff->avcodec_receive_packet(m_audioCodecCtx.get(), m_audioPkt.get()) == 0) {
-            ff->av_packet_rescale_ts(m_audioPkt.get(), m_audioCodecCtx->time_base, m_audioStream->time_base);
-            m_audioPkt->stream_index = m_audioStream->index;
-            ff->av_interleaved_write_frame(m_formatCtx, m_audioPkt.get());
-            ff->av_packet_unref(m_audioPkt.get());
+    for (auto& track : m_audioTracks) {
+        if (!(track.pkt && track.codecCtx && m_formatCtx && track.stream)) continue;
+        ff->avcodec_send_frame(track.codecCtx.get(), nullptr);
+        while (ff->avcodec_receive_packet(track.codecCtx.get(), track.pkt.get()) == 0) {
+            ff->av_packet_rescale_ts(track.pkt.get(), track.codecCtx->time_base, track.stream->time_base);
+            track.pkt->stream_index = track.stream->index;
+            ff->av_interleaved_write_frame(m_formatCtx, track.pkt.get());
+            ff->av_packet_unref(track.pkt.get());
         }
     }
 
@@ -484,7 +541,8 @@ geode::Result<> SLRenderer::stop() {
         ff->av_write_trailer(m_formatCtx);
         if (m_formatCtx->pb) ff->avio_close(m_formatCtx->pb);
     }
-    ff->swr_free(&m_swrCtx);
+    for (auto& track : m_audioTracks) ff->swr_free(&track.swrCtx);
+    m_audioTracks.clear();
 
     m_halting = false;
     m_collected = false;
@@ -533,7 +591,7 @@ void SLRenderer::update(PlayLayer* pl) {
         this->m_endTime += this->getDt();
     }
 
-                        if (m_collectAudio) AudioRecorder::get()->unpause();
+                        if (m_collectAudio) AudioEngineRenderState::pump(getDt(), m_settings.m_splitAudioTracks);
 
     this->capture();
 }

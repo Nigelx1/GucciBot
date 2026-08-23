@@ -1,6 +1,6 @@
 {
   "geode": "5.7.1",
-  "version": "v1.3.0",
+  "version": "v1.4.0",
   "gd": {
     "win": "2.2081"
   },
@@ -53,9 +53,12 @@
       "resources/clicks/Clickbot/releases/click00011829.mov",
       "resources/fw_default.mp3",
       "resources/big_brrr.mp3",
+      "resources/big_brrr_maybach.mp3",
       "resources/jupiter_my_favourite.gdr",
       "resources/jupiter_music.mp3",
-      "resources/ffmpeg.exe"
+      "resources/ffmpeg.exe",
+      "resources/ffmpeg_libs/*.dll",
+      "resources/fw_assets/*.wav"
     ]
   },
   "tags": [

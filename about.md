@@ -1,4 +1,4 @@
-# GucciBot 1.3
+# GucciBot 1.4
 
 > Frame perfect. Ice cold. Brrr.
 
@@ -48,6 +48,14 @@ The same toolset as the Jupiter My Favourite Trainer, right next to it as its ow
 - **Synced music** — import your own track for it, with an adjustable sync offset (also added to the JMF tab).
 - Stats and ghosts activate automatically when you're on the level the macro was recorded on -- or on any level, with a clear heads-up, for macros that don't carry a recorded level name.
 
+## Rendering
+
+- Full gameplay capture to video via FFmpeg — configurable resolution, FPS, bitrate, codec (hardware encoders auto-detected per GPU vendor), and output extension.
+- Audio captured straight from the game's own mix, with music and SFX volumes independently adjustable for the render.
+- **Split audio tracks** — optional 4-track output (combined mix, plus music, SFX, and frame-window cues each isolated) instead of one merged track.
+- Frame-window markers and cues render into the video too, matching your live tier setup.
+- Render presets — save and reload full render configurations by name.
+
 ## Themes
 
 | Theme | Extension | Colors |
@@ -57,14 +65,17 @@ The same toolset as the Jupiter My Favourite Trainer, right next to it as its ow
 | ToosiiBot (Syracuse) | `.toosii` | Orange + Navy |
 | ToosiiBot (Sac State) | `.toosii` | Dark Green + Gold |
 | JaBot | `.ja` | Navy + Light Blue |
-| GiddeyBot | `.giddey` | Red + White |
+| GiddeyBot | `.giddey` | Thunder Blue + Orange |
 | BamBot | `.bam` | Heat Black + Red |
 | SexyyBot | `.sexyy` | Hot Pink + Purple |
 | JuiceBot | `.juice` | Coral + Teal |
-| ButlerBot | `.butler` | Warriors Gold + Royal Blue |
+| ButlerBot | `.butler` | Bulls Red + Black |
+| SaweetieBot | `.saweetie` | Hot Pink + Plum |
+| MaybachBot | `.maybach` | Platinum + Black |
 
 ## Extras
 
+- **Compact Mode** — a small corner panel (record/play, save/name/Calculate, macro picker, TPS/speed, frame stepping) instead of the full tabbed window, so the bot stays usable while you're actually playing.
 - **BIG BRRRR** — a joke toggle in Settings. You'll know it when you see it.
 
 ---
@@ -72,6 +83,7 @@ The same toolset as the Jupiter My Favourite Trainer, right next to it as its ow
 ## Credits
 
 - **guccimanefan** (Nigelx1) — concept, direction, themes, testing
+- **Juice** — frame-window algorithm design, lead co-tester
 - **Claude** — wrote the code and this page. Essentially the whole codebase, not a euphemism.
 - **ToastexGD** — ToastyReplay engine base and improvements
 - **peony** — Silicate (dropped the source like Gucci drops albums. Brrr.)

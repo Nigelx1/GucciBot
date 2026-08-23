@@ -15,6 +15,7 @@
 #include <Geode/modify/PlayLayer.hpp>
 #include <Geode/utils/file.hpp>
 #include <Geode/utils/Task.hpp>
+#include <fmt/format.h>
 #include <filesystem>
 #include <cmath>
 #include <algorithm>
@@ -253,10 +254,10 @@ static void applyBigBrrrBounce(bool jupiterActive){
         if(!active){
             restY=ImGui::GetWindowPos().y-offset;
             active=true;
-            beatRefTime=ImGui::GetTime()-BigBrrrManager::kStartOffsetSec;
+            beatRefTime=ImGui::GetTime()-BigBrrrManager::kStartOffsetSec();
         }
         double elapsed=ImGui::GetTime()-beatRefTime;
-        double omega=2.0*3.14159265358979*BigBrrrManager::kBpm/60.0; // one full bounce cycle per beat
+        double omega=2.0*3.14159265358979*BigBrrrManager::kBpm()/60.0; // one full bounce cycle per beat
         offset=(float)(std::sin(elapsed*omega)*10.0);
     } else if(active){
         offset*=0.75f;
@@ -545,11 +546,19 @@ static const ThemePreset kThemePresets[]={
      ImVec4(0.400f,0.540f,0.720f,1.f),
      5.f,0.96f},
         {"GiddeyBot",
-     ImVec4(0.871f,0.122f,0.122f,1.f),
-     ImVec4(0.098f,0.039f,0.039f,0.96f),
-     ImVec4(0.157f,0.063f,0.063f,1.f),
-     ImVec4(0.980f,0.960f,0.960f,1.f),
-     ImVec4(0.620f,0.420f,0.420f,1.f),
+     // Thunder colors (Nigel, 2026-08-23) -- was modeled on Giddey's current
+     // team (Bulls-ish red/black); he wants it back to Thunder blue/orange,
+     // reflecting the team that drafted him. Punched up further (2026-08-24,
+     // Nigel: "too muted") -- the first pass leaned so dark/desaturated on
+     // bg/card that the "Thunder blue" identity barely read as blue at all,
+     // just dark navy-black with an orange accent. Boosted saturation and
+     // brightness on bg/card specifically so the blue is actually visible,
+     // plus a punchier accent and textSecondary.
+     ImVec4(1.000f,0.310f,0.106f,1.f),
+     ImVec4(0.031f,0.145f,0.278f,0.96f),
+     ImVec4(0.047f,0.220f,0.400f,1.f),
+     ImVec4(0.975f,0.985f,0.995f,1.f),
+     ImVec4(0.580f,0.740f,0.900f,1.f),
      5.f,0.96f},
         {"BamBot",
      ImVec4(0.878f,0.067f,0.153f,1.f),
@@ -573,12 +582,29 @@ static const ThemePreset kThemePresets[]={
      ImVec4(0.625f,0.565f,0.478f,1.f),
      5.f,0.96f},
         {"ButlerBot",
-     ImVec4(0.996f,0.725f,0.153f,1.f),
-     ImVec4(0.020f,0.050f,0.130f,0.96f),
-     ImVec4(0.035f,0.085f,0.200f,1.f),
-     ImVec4(0.980f,0.970f,0.940f,1.f),
-     ImVec4(0.560f,0.520f,0.380f,1.f),
+     // Bulls colors (Nigel, 2026-08-23) -- was modeled on Jimmy's current
+     // team (Warriors-ish blue/gold); he wants it back to Bulls red/black,
+     // reflecting his breakout years there.
+     ImVec4(0.808f,0.067f,0.255f,1.f),
+     ImVec4(0.035f,0.020f,0.024f,0.96f),
+     ImVec4(0.070f,0.030f,0.040f,1.f),
+     ImVec4(0.980f,0.970f,0.970f,1.f),
+     ImVec4(0.560f,0.400f,0.420f,1.f),
      5.f,0.96f},
+        {"SaweetieBot",
+     ImVec4(1.000f,0.180f,0.520f,1.f),
+     ImVec4(0.090f,0.020f,0.060f,0.96f),
+     ImVec4(0.140f,0.035f,0.095f,1.f),
+     ImVec4(0.990f,0.960f,0.980f,1.f),
+     ImVec4(0.620f,0.400f,0.520f,1.f),
+     5.f,0.96f},
+        {"MaybachBot",
+     ImVec4(0.780f,0.780f,0.800f,1.f),
+     ImVec4(0.035f,0.035f,0.038f,0.97f),
+     ImVec4(0.070f,0.070f,0.075f,1.f),
+     ImVec4(0.960f,0.960f,0.965f,1.f),
+     ImVec4(0.500f,0.500f,0.520f,1.f),
+     5.f,0.97f},
 };
 
 ImVec4 ThemeEngine::getAccent() const{
@@ -896,7 +922,9 @@ void MenuInterface::drawTitleBar(){
         (activeTheme==THEME_BAM)?"BamBot":
         (activeTheme==THEME_SEXYY)?"SexyyBot":
         (activeTheme==THEME_JUICE)?"JuiceBot":
-        (activeTheme==THEME_BUTLER)?"ButlerBot":"GucciBot";
+        (activeTheme==THEME_BUTLER)?"ButlerBot":
+        (activeTheme==THEME_SAWEETIE)?"SaweetieBot":
+        (activeTheme==THEME_MAYBACH)?"MaybachBot":"GucciBot";
     ImVec2 npos(wp.x+40,wp.y+10);
     if(fontHeading)ImGui::PushFont(fontHeading);
     dl->AddText(npos,theme.getAccentU32(),botName);
@@ -916,6 +944,10 @@ void MenuInterface::drawTitleBar(){
             "v" MOD_VERSION "  -  That's tuff. Brrr.":
         (activeTheme==THEME_BUTLER)?
             "v" MOD_VERSION "  -  Playoff Jimmy mode: always on.":
+        (activeTheme==THEME_SAWEETIE)?
+            "v" MOD_VERSION "  -  Icy girl. Tap in, don't fall off.":
+        (activeTheme==THEME_MAYBACH)?
+            "v" MOD_VERSION "  -  Huh. Maybach Music. Frame perfect.":
         "v" MOD_VERSION "  -  Frame perfect. GBR6. Brrr.";
     ImVec2 spos(wp.x+40,wp.y+30);
     if(fontSmall)ImGui::PushFont(fontSmall);
@@ -1038,7 +1070,9 @@ void MenuInterface::drawStatusBar(){
         (activeTheme==THEME_BAM)?"83 pts.":
         (activeTheme==THEME_SEXYY)?"Skee yee.":
         (activeTheme==THEME_JUICE)?"Tuff.":
-        (activeTheme==THEME_BUTLER)?"Playoff Jimmy.":"Brrr.";
+        (activeTheme==THEME_BUTLER)?"Playoff Jimmy.":
+        (activeTheme==THEME_SAWEETIE)?"Icy!":
+        (activeTheme==THEME_MAYBACH)?"MMG!":"Brrr.";
     ImVec2 bts=ImGui::CalcTextSize(brand);
     dl->AddText(ImVec2(wp.x+ws.x-padX-bts.x-12,barY+(barH-bts.y)*0.5f),theme.getAccentU32(0.6f),brand);
     if(fontSmall)ImGui::PopFont();}
@@ -1316,7 +1350,7 @@ void MenuInterface::drawCompactWindow(){
     ImGui::TextColored(theme.getAccent(),"GucciBot");
     if(fontHeading)ImGui::PopFont();
     ImGui::SameLine(ImGui::GetWindowWidth()-58);
-    if(Widgets::StyledButton("Full",ImVec2(48,22),theme,anim,4.f))compactMode=false;
+    if(Widgets::StyledButton("Full",ImVec2(48,22),theme,anim,4.f)){compactMode=false;Mod::get()->setSavedValue("ui_compact_mode",compactMode);}
     ImGui::Separator();
 
     const char* modeStr=engine->isRecording()?"RECORDING":engine->isPlaying()?"PLAYING":"IDLE";
@@ -1333,6 +1367,53 @@ void MenuInterface::drawCompactWindow(){
     }
     ImGui::Dummy(ImVec2(0,4));
 
+    // Juice: compact mode had nothing for saving, naming, Calculate, or
+    // selecting macros -- defeated the point of using it for a real
+    // session. Nigel's ask, 2026-08-23: bring those over from the full
+    // Replay tab, condensed to fit this window's width. Macro picker here;
+    // name/Save/Calculate live below, after Record/Play, matching the
+    // full tab's own top-to-bottom flow (pick a macro -> play it, or
+    // record a new one -> name & save it -> Calculate it).
+    {
+        refreshReplayListIfNeeded(false);
+        static int compactMacroIdx=-1;
+        if(!engine->storedMacros.empty()){
+            std::string preview=(compactMacroIdx>=0&&compactMacroIdx<(int)engine->storedMacros.size())
+                ?engine->storedMacros[compactMacroIdx]:"Select macro...";
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x-56);
+            if(ImGui::BeginCombo("##compactMacroSel",preview.c_str())){
+                for(int i=0;i<(int)engine->storedMacros.size();++i){
+                    bool sel=(i==compactMacroIdx);
+                    if(ImGui::Selectable(engine->storedMacros[i].c_str(),sel))compactMacroIdx=i;
+                    if(sel)ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::SameLine();
+            bool canLoad=compactMacroIdx>=0&&!engine->isRecording();
+            if(!canLoad)ImGui::PushStyleVar(ImGuiStyleVar_Alpha,0.4f);
+            bool loadClicked=Widgets::StyledButton("Load",ImVec2(48,0),theme,anim,4.f);
+            if(!canLoad)ImGui::PopStyleVar();
+            if(loadClicked&&canLoad){
+                std::string mn=engine->storedMacros[compactMacroIdx];
+                std::string extFound;
+                auto dir=Mod::get()->getSaveDir()/"replays";
+                for(auto& ext : {".brrr",".toosii",".ja",".giddey",".bam",".sexyy",".juice",".butler",".saweetie",".maybach"}){
+                    if(std::filesystem::exists(dir/(mn+ext))){extFound=ext;break;}
+                }
+                if(!extFound.empty()){
+                    engine->replay.load(dir/(mn+extFound));
+                    engine->replayName=mn;
+                }
+            }
+        } else {
+            ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+            ImGui::TextWrapped("No saved macros yet.");
+            ImGui::PopStyleColor();
+        }
+    }
+    ImGui::Dummy(ImVec2(0,4));
+
     float bw=(ImGui::GetContentRegionAvail().x-6)/2.f;
     if(engine->isRecording()){
         if(Widgets::StyledButton("Stop Recording",ImVec2(-1,26),theme,anim))engine->setMode(GucciEngine::Mode::Idle);
@@ -1346,6 +1427,41 @@ void MenuInterface::drawCompactWindow(){
         bool playClicked=Widgets::StyledButton("Play",ImVec2(bw,26),theme,anim);
         if(!canPlay)ImGui::PopStyleVar();
         if(playClicked&&canPlay)engine->setMode(GucciEngine::Mode::Playing);
+    }
+    ImGui::Dummy(ImVec2(0,6));
+
+    {
+        bool hasActions=!engine->replay.m_actionAtom.m_actions.empty();
+        if(engine->isRecording()){
+            if(!macroNameReady){
+                strncpy(macroNameBuffer,engine->replayName.c_str(),sizeof(macroNameBuffer)-1);
+                macroNameBuffer[sizeof(macroNameBuffer)-1]=0;macroNameReady=true;}
+            ImGui::SetNextItemWidth(-1);
+            if(ImGui::InputTextWithHint("##compactMacroName","Macro name",macroNameBuffer,sizeof(macroNameBuffer)))
+                engine->replayName=macroNameBuffer;
+            ImGui::Dummy(ImVec2(0,4));
+        }
+        const char* ext=
+            (activeTheme==THEME_TOOSII||activeTheme==THEME_TOOSII_SYRACUSE||activeTheme==THEME_TOOSII_SACSTATE)?".toosii":
+            (activeTheme==THEME_JA)?".ja":
+            (activeTheme==THEME_GIDDEY)?".giddey":(activeTheme==THEME_BAM)?".bam":(activeTheme==THEME_SEXYY)?".sexyy":(activeTheme==THEME_JUICE)?".juice":(activeTheme==THEME_BUTLER)?".butler":(activeTheme==THEME_SAWEETIE)?".saweetie":(activeTheme==THEME_MAYBACH)?".maybach":".brrr";
+        bool canSave=hasActions&&!engine->replayName.empty();
+        if(!canSave)ImGui::PushStyleVar(ImGuiStyleVar_Alpha,0.4f);
+        bool saveClicked=Widgets::StyledButton("Save",ImVec2(bw,26),theme,anim);
+        if(!canSave)ImGui::PopStyleVar();
+        if(saveClicked&&canSave){
+            auto savePath=Mod::get()->getSaveDir()/"replays"/(engine->replayName+ext);
+            if(engine->replayBackupsEnabled) engine->replay.backupExisting(savePath);
+            engine->replay.save(savePath);
+            markReplayListDirty();refreshReplayListIfNeeded(true);
+            Notification::create("Macro saved",NotificationIcon::Success)->show();
+        }
+        ImGui::SameLine(0,6);
+        bool canCalc=PlayLayer::get()!=nullptr&&hasActions;
+        if(!canCalc)ImGui::PushStyleVar(ImGuiStyleVar_Alpha,0.4f);
+        bool calcClicked=Widgets::StyledButton("Calculate",ImVec2(bw,26),theme,anim);
+        if(!canCalc)ImGui::PopStyleVar();
+        if(calcClicked&&canCalc)engine->analyzeFrameWindows();
     }
     ImGui::Dummy(ImVec2(0,6));
     ImGui::Separator();
@@ -1406,6 +1522,10 @@ void MenuInterface::drawReplayTab(){
         Widgets::GucciQuote("\"I tested every frame. Every single one.\"","-- Juice, probably",theme);
     else if(activeTheme==THEME_BUTLER)
         Widgets::GucciQuote("\"Regular season replays don't count. I lock in for the playoffs.\"","-- Jimmy Butler, probably",theme);
+    else if(activeTheme==THEME_SAWEETIE)
+        Widgets::GucciQuote("\"I don't miss. I'm too expensive to miss.\"","-- Saweetie, probably",theme);
+    else if(activeTheme==THEME_MAYBACH)
+        Widgets::GucciQuote("\"Every replay a hit. Every frame a boss move.\"","-- Rick Ross, probably",theme);
     else
         Widgets::GucciQuote("\"I got so many replays I got files in my files.\"","-- Gucci Mane, probably",theme);
     Widgets::SectionHeader("Mode",theme);
@@ -1455,7 +1575,7 @@ void MenuInterface::drawReplayTab(){
                 const char* nativeLabel=
             (activeTheme==THEME_TOOSII||activeTheme==THEME_TOOSII_SYRACUSE||activeTheme==THEME_TOOSII_SACSTATE)?".toosii":
             (activeTheme==THEME_JA)?".ja":
-            (activeTheme==THEME_GIDDEY)?".giddey":(activeTheme==THEME_BAM)?".bam":(activeTheme==THEME_SEXYY)?".sexyy":(activeTheme==THEME_JUICE)?".juice":(activeTheme==THEME_BUTLER)?".butler":".brrr";
+            (activeTheme==THEME_GIDDEY)?".giddey":(activeTheme==THEME_BAM)?".bam":(activeTheme==THEME_SEXYY)?".sexyy":(activeTheme==THEME_JUICE)?".juice":(activeTheme==THEME_BUTLER)?".butler":(activeTheme==THEME_SAWEETIE)?".saweetie":(activeTheme==THEME_MAYBACH)?".maybach":".brrr";
         if(Widgets::StyledButton(nativeLabel,ImVec2(bw,30),theme,anim,6.f)){
             if(PlayLayer::get())engine->setMode(GucciEngine::Mode::Recording);
             else engine->setMode(GucciEngine::Mode::Recording);
@@ -1468,7 +1588,7 @@ void MenuInterface::drawReplayTab(){
         const char* extLabel =
             (activeTheme==THEME_TOOSII||activeTheme==THEME_TOOSII_SYRACUSE||activeTheme==THEME_TOOSII_SACSTATE)?".toosii":
             (activeTheme==THEME_JA)?".ja":
-            (activeTheme==THEME_GIDDEY)?".giddey":(activeTheme==THEME_BAM)?".bam":(activeTheme==THEME_SEXYY)?".sexyy":(activeTheme==THEME_JUICE)?".juice":(activeTheme==THEME_BUTLER)?".butler":".brrr";
+            (activeTheme==THEME_GIDDEY)?".giddey":(activeTheme==THEME_BAM)?".bam":(activeTheme==THEME_SEXYY)?".sexyy":(activeTheme==THEME_JUICE)?".juice":(activeTheme==THEME_BUTLER)?".butler":(activeTheme==THEME_SAWEETIE)?".saweetie":(activeTheme==THEME_MAYBACH)?".maybach":".brrr";
         Widgets::StatusBadge("RECORDING",ImVec4(1.f,0.3f,0.3f,1.f));
         ImGui::SameLine();
         Widgets::StatusBadge(extLabel,getBRRTagColor());
@@ -1558,7 +1678,7 @@ void MenuInterface::drawReplayTab(){
         const char* extLabel2 =
             (activeTheme==THEME_TOOSII||activeTheme==THEME_TOOSII_SYRACUSE||activeTheme==THEME_TOOSII_SACSTATE)?".toosii":
             (activeTheme==THEME_JA)?".ja":
-            (activeTheme==THEME_GIDDEY)?".giddey":(activeTheme==THEME_BAM)?".bam":(activeTheme==THEME_SEXYY)?".sexyy":(activeTheme==THEME_JUICE)?".juice":(activeTheme==THEME_BUTLER)?".butler":".brrr";
+            (activeTheme==THEME_GIDDEY)?".giddey":(activeTheme==THEME_BAM)?".bam":(activeTheme==THEME_SEXYY)?".sexyy":(activeTheme==THEME_JUICE)?".juice":(activeTheme==THEME_BUTLER)?".butler":(activeTheme==THEME_SAWEETIE)?".saweetie":(activeTheme==THEME_MAYBACH)?".maybach":".brrr";
         Widgets::StatusBadge("PLAYING",ImVec4(0.3f,1.f,0.3f,1.f));
         ImGui::SameLine();
         Widgets::StatusBadge(extLabel2,getBRRTagColor());
@@ -1648,6 +1768,8 @@ void MenuInterface::drawReplayTab(){
             else if(eng3->sexyyMacros.count(mn))fmtTag=".sexyy";
             else if(eng3->juiceMacros.count(mn))fmtTag=".juice";
             else if(eng3->butlerMacros.count(mn))fmtTag=".butler";
+            else if(eng3->saweetieMacros.count(mn))fmtTag=".saweetie";
+            else if(eng3->maybachMacros.count(mn))fmtTag=".maybach";
             else fmtTag=".brrr";}
         float fmtW=(!isIncompat)?(ImGui::CalcTextSize(fmtTag).x+8):0;
         float inW=isIncompat?(ImGui::CalcTextSize("Incompatible").x+8):0;
@@ -1668,7 +1790,7 @@ void MenuInterface::drawReplayTab(){
                         {
                                 std::string extFound;
                 auto dir = Mod::get()->getSaveDir()/"replays";
-                for(auto& ext : {".brrr",".toosii",".ja",".giddey",".bam",".sexyy",".juice",".butler"}){
+                for(auto& ext : {".brrr",".toosii",".ja",".giddey",".bam",".sexyy",".juice",".butler",".saweetie",".maybach"}){
                     if(std::filesystem::exists(dir/(mn+ext))){extFound=ext;break;}
                 }
                 if(!extFound.empty()){
@@ -1692,12 +1814,14 @@ void MenuInterface::drawReplayTab(){
             const char* tag=".brrr";ImVec4 tagCol=getBRRTagColor();
             auto* eng2=GucciEngine::get();
             if(eng2->jaMacros.count(mn)){tag=".ja";tagCol=ImVec4(0.42f,0.78f,0.95f,1.f);}
-            else if(eng2->giddeyMacros.count(mn)){tag=".giddey";tagCol=ImVec4(0.87f,0.12f,0.12f,1.f);}
+            else if(eng2->giddeyMacros.count(mn)){tag=".giddey";tagCol=ImVec4(1.000f,0.310f,0.106f,1.f);}
             else if(eng2->toosiiMacros.count(mn)){tag=".toosii";tagCol=ImVec4(0.99f,0.82f,0.14f,1.f);}
             else if(eng2->bamMacros.count(mn)){tag=".bam";tagCol=ImVec4(0.878f,0.067f,0.153f,1.f);}
             else if(eng2->sexyyMacros.count(mn)){tag=".sexyy";tagCol=ImVec4(0.910f,0.004f,0.580f,1.f);}
             else if(eng2->juiceMacros.count(mn)){tag=".juice";tagCol=ImVec4(0.960f,0.520f,0.380f,1.f);}
-            else if(eng2->butlerMacros.count(mn)){tag=".butler";tagCol=ImVec4(0.996f,0.725f,0.153f,1.f);}
+            else if(eng2->butlerMacros.count(mn)){tag=".butler";tagCol=ImVec4(0.808f,0.067f,0.255f,1.f);}
+            else if(eng2->saweetieMacros.count(mn)){tag=".saweetie";tagCol=ImVec4(1.000f,0.180f,0.520f,1.f);}
+            else if(eng2->maybachMacros.count(mn)){tag=".maybach";tagCol=ImVec4(0.780f,0.780f,0.800f,1.f);}
             auto ts=ImGui::CalcTextSize(tag);tagX-=ts.x+4;
             wdl->AddText(ImVec2(tagX,iy+(ih-ts.y)*0.5f),toU32(tagCol),tag);}
                 float btnY=iy+(ih-xBtnW)*0.5f;
@@ -1813,6 +1937,7 @@ void MenuInterface::drawReplayTab(){
                 eng4->toosiiMacros.erase(replayDeleteName);eng4->bamMacros.erase(replayDeleteName);
                 eng4->sexyyMacros.erase(replayDeleteName);eng4->juiceMacros.erase(replayDeleteName);
                 eng4->butlerMacros.erase(replayDeleteName);
+                eng4->saweetieMacros.erase(replayDeleteName);eng4->maybachMacros.erase(replayDeleteName);
                 replayDeleteName.clear();replayDeleteError.clear();
                 markReplayListDirty();refreshReplayListIfNeeded(true);ImGui::CloseCurrentPopup();}}
         if(cancelDel){replayDeleteName.clear();replayDeleteError.clear();ImGui::CloseCurrentPopup();}
@@ -1998,6 +2123,10 @@ void MenuInterface::drawToolsTab(){
         Widgets::GucciQuote("\"Speed doesn't mean much if the frame windows are wrong.\"","-- Juice, keeping you honest",theme);
     else if(activeTheme==THEME_BUTLER)
         Widgets::GucciQuote("\"I don't need speedhack. I just lock in.\"","-- Jimmy Butler",theme);
+    else if(activeTheme==THEME_SAWEETIE)
+        Widgets::GucciQuote("\"Fast money, fast frames. Tap in.\"","-- Saweetie, on speedhack",theme);
+    else if(activeTheme==THEME_MAYBACH)
+        Widgets::GucciQuote("\"I don't rush. The Maybach arrives exactly on time.\"","-- Rick Ross, on speedhack",theme);
     else
         Widgets::GucciQuote("\"I run this game at my own speed. You can't keep up.\"","-- Gucci Mane, on speedhacks",theme);
     Widgets::SectionHeader("TPS Control",theme);
@@ -2083,6 +2212,84 @@ void MenuInterface::drawToolsTab(){
     ImGui::TextWrapped("Backups saved to replays/backups/ subfolder.");
     ImGui::PopStyleColor();}
 
+// Frame-window asset import (Juice/Nigel's request, 2026-08-23): tier
+// sound/image lookup already resolves bare filenames against fw_assets/
+// (see framewindow.cpp's playTierSound/marker-image loading) -- the only
+// missing piece was a way to get files INTO that folder without manually
+// typing out a full source path in Explorer. Same pick-then-copy-to-a-
+// fixed-location shape as importTrainerMusicTask below, generalized to
+// pickMany() (multiple files at once) and to a whole folder, copied
+// recursively so "import folder NaN_fw_sounds" -> fw_assets/NaN_fw_sounds/
+// -- then typing "NaN_fw_sounds/fw_1.wav" in a tier's sound field just
+// works, since that's already a valid relative subpath as far as the
+// existing resolution code is concerned. No change needed there at all.
+static geode::Task<int> importFwAssetFilesTask(){
+    auto pickResult = co_await geode::utils::file::pickMany(
+        geode::utils::file::FilePickOptions{
+            std::nullopt,
+            { { "Audio/Image Files", { "wav", "mp3", "ogg", "png" } } }
+        }
+    );
+    if (pickResult.isErr()) co_return -1;
+    auto paths = pickResult.unwrap();
+    if (paths.empty()) co_return -1; // cancelled
+
+    auto destDir = Mod::get()->getSaveDir() / "fw_assets";
+    std::error_code ec;
+    std::filesystem::create_directories(destDir, ec);
+
+    int copied = 0;
+    for (auto& p : paths) {
+        std::filesystem::copy_file(p, destDir / p.filename(),
+            std::filesystem::copy_options::overwrite_existing, ec);
+        if (!ec) copied++;
+    }
+    co_return copied;
+}
+static void importFwAssetFiles(){
+    importFwAssetFilesTask().listen([](int* copied){
+        if (copied && *copied > 0)
+            Notification::create(fmt::format("Imported {} file(s) into fw_assets", *copied), NotificationIcon::Success)->show();
+        else
+            Notification::create("Import failed or cancelled", NotificationIcon::Warning)->show();
+    });
+}
+
+static geode::Task<int> importFwAssetFolderTask(){
+    auto pickResult = co_await geode::utils::file::pick(
+        geode::utils::file::PickMode::OpenFolder,
+        geode::utils::file::FilePickOptions{ std::nullopt, {} }
+    );
+    if (pickResult.isErr()) co_return -1;
+    auto srcOpt = pickResult.unwrap();
+    if (!srcOpt.has_value()) co_return -1; // cancelled
+
+    auto destDir = Mod::get()->getSaveDir() / "fw_assets" / srcOpt->filename();
+    std::error_code ec;
+    std::filesystem::create_directories(destDir, ec);
+
+    int copied = 0;
+    for (auto& entry : std::filesystem::recursive_directory_iterator(*srcOpt, ec)) {
+        if (ec || !entry.is_regular_file()) continue;
+        auto rel = std::filesystem::relative(entry.path(), *srcOpt, ec);
+        if (ec) continue;
+        auto dest = destDir / rel;
+        std::filesystem::create_directories(dest.parent_path(), ec);
+        std::filesystem::copy_file(entry.path(), dest,
+            std::filesystem::copy_options::overwrite_existing, ec);
+        if (!ec) copied++;
+    }
+    co_return copied;
+}
+static void importFwAssetFolder(){
+    importFwAssetFolderTask().listen([](int* copied){
+        if (copied && *copied > 0)
+            Notification::create(fmt::format("Imported {} file(s) into fw_assets", *copied), NotificationIcon::Success)->show();
+        else
+            Notification::create("Import failed or cancelled", NotificationIcon::Warning)->show();
+    });
+}
+
 void MenuInterface::drawHacksTab(){
     auto* engine=GucciEngine::get();
     if((activeTheme==THEME_TOOSII||activeTheme==THEME_TOOSII_SYRACUSE||activeTheme==THEME_TOOSII_SACSTATE))
@@ -2099,6 +2306,10 @@ void MenuInterface::drawHacksTab(){
         Widgets::GucciQuote("\"Noclip's cool. I just want the analyzer to work.\"","-- Juice, still testing",theme);
     else if(activeTheme==THEME_BUTLER)
         Widgets::GucciQuote("\"Noclip? I go through everything. That's just Playoff Jimmy.\"","-- Jimmy Butler",theme);
+    else if(activeTheme==THEME_SAWEETIE)
+        Widgets::GucciQuote("\"Walk through walls? Icy girls don't need permission.\"","-- Saweetie, probably",theme);
+    else if(activeTheme==THEME_MAYBACH)
+        Widgets::GucciQuote("\"Walls don't stop a boss.\"","-- Rick Ross, probably",theme);
     else
         Widgets::GucciQuote("\"I never die in this game. I'm immune. Like Gucci flu.\"","-- GucciBot propaganda",theme);
     ImGui::Dummy(ImVec2(0,4));
@@ -2453,6 +2664,15 @@ void MenuInterface::drawHacksTab(){
     ImGui::TextWrapped("Tiers map gap sizes to a marker image and sound. Put PNG/audio files in the mod's fw_assets folder and enter the filenames. No tier = default colored ring.");
     ImGui::TextWrapped("Sound: leave blank for the built-in default chime, type a filename for custom, or 'none' to silence that tier. Markers appear as the bot reaches each click.");
     ImGui::PopStyleColor();
+    {
+        float halfW=(ImGui::GetContentRegionAvail().x-8)/2.f;
+        if(Widgets::StyledButton("Import Sounds/Images",ImVec2(halfW,24),theme,anim,4.f))
+            importFwAssetFiles();
+        ImGui::SameLine(0,8);
+        if(Widgets::StyledButton("Import Folder",ImVec2(halfW,24),theme,anim,4.f))
+            importFwAssetFolder();
+    }
+    ImGui::Dummy(ImVec2(0,4));
     int tierRemove=-1;
     for(size_t ti=0;ti<engine->fwTiers.size();++ti){
         auto& t=engine->fwTiers[ti];
@@ -2639,6 +2859,29 @@ void MenuInterface::drawRenderTab(){
          {"1440p (2560x1440)",2560,1440},{"4K (3840x2160)",3840,2160}};
     if(!renderBufsInit)loadRenderSettings();
     float iW=ImGui::GetContentRegionAvail().x*0.45f;
+
+    // Juice's report (2026-08-23): a fresh install has no libraries/ folder
+    // at all under the mod's persistent dir, so SLRenderer::start() silently
+    // fails with "FFmpeg not loaded" in the console -- nothing in the GUI
+    // ever said why, since isFFmpegLoaded() wasn't surfaced anywhere. The 7
+    // required FFmpeg DLLs (~227MB total) aren't bundled in the .geode
+    // package, so every new user hits this once until someone tells them
+    // where to put them -- at least make that visible instead of silent.
+    if(!SLRenderer::get()->isFFmpegLoaded()){
+        ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(1.f,0.55f,0.3f,1.f));
+        ImGui::TextWrapped("FFmpeg libraries not found -- rendering won't work until these are installed.");
+        ImGui::PopStyleColor();
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::TextWrapped("Get a shared FFmpeg 8.0 Windows build (avutil-60.dll, swresample-6.dll, swscale-9.dll, avcodec-62.dll, avformat-62.dll, avfilter-11.dll, avdevice-62.dll) and place all 7 DLLs in the folder below.");
+        ImGui::PopStyleColor();
+        if(Widgets::StyledButton("Open FFmpeg Folder",ImVec2(-1,24),theme,anim,4.f)){
+            auto libDir=Mod::get()->getPersistentDir()/"libraries";
+            std::error_code ec;
+            if(std::filesystem::exists(libDir,ec)||std::filesystem::create_directories(libDir,ec))
+                utils::file::openFolder(libDir);
+        }
+        ImGui::Dummy(ImVec2(0,6));
+    }
 
         Widgets::SectionHeader("Render Presets",theme);
         static char presetNameBuf[64]="My Preset";
@@ -2869,11 +3112,22 @@ void MenuInterface::drawRenderTab(){
     ImGui::Dummy(ImVec2(0,8));
     Widgets::SectionHeader("Audio",theme);
     if(Widgets::ToggleSwitch("Include Audio",&renderIncludeAudio,theme,anim))mod->setSavedValue("render_include_audio",renderIncludeAudio);
+    if(renderIncludeAudio){
+        if(Widgets::ToggleSwitch("Split Into 4 Tracks",&renderSplitAudioTracks,theme,anim))
+            mod->setSavedValue("render_split_audio_tracks",renderSplitAudioTracks);
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::TextWrapped("Off: one combined audio track, same as always. On: four tracks in the output file -- the combined mix, plus music, level/UI SFX, and frame-window cues isolated separately.");
+        ImGui::PopStyleColor();
+        // Juice: these were gated on "Include Click Sounds", which doesn't
+        // make sense -- they're the overall music/SFX volume for the whole
+        // render (m_settings.m_musicVolume/m_sfxVolume), nothing to do with
+        // click sounds specifically. Gated on "Include Audio" instead, the
+        // setting they actually depend on.
+        Widgets::StyledSliderFloat("Music Volume",&renderMusicVol,0.f,2.f,theme,true);
+        Widgets::StyledSliderFloat("SFX Volume",&renderSfxVol,0.f,2.f,theme,true);
+    }
     if(Widgets::ToggleSwitch("Auto Color Fix",&renderColorFix,theme,anim))mod->setSavedValue("render_color_fix",renderColorFix);
     if(Widgets::ToggleSwitch("Include Click Sounds",&renderIncludeClicks,theme,anim))mod->setSavedValue("render_include_clicks",renderIncludeClicks);
-    if(renderIncludeClicks){
-        Widgets::StyledSliderFloat("Music Volume",&renderMusicVol,0.f,2.f,theme,true);
-        Widgets::StyledSliderFloat("SFX Volume",&renderSfxVol,0.f,2.f,theme,true);}
     ImGui::Dummy(ImVec2(0,8));
     Widgets::SectionHeader("Options",theme);
     if(Widgets::ToggleSwitch("Hide End Screen",&renderHideEndscreen,theme,anim))mod->setSavedValue("render_hide_endscreen",renderHideEndscreen);
@@ -3114,6 +3368,16 @@ void MenuInterface::drawSettingsTab(){
             else if(i==7)activeTheme=THEME_SEXYY;
             else if(i==8)activeTheme=THEME_JUICE;
             else if(i==9)activeTheme=THEME_BUTLER;
+            else if(i==10)activeTheme=THEME_SAWEETIE;
+            else if(i==11)activeTheme=THEME_MAYBACH;
+            // Juice: switching themes while Big Brrr is already playing
+            // changed the bounce speed live (kBpm() reads activeTheme every
+            // frame) but not the actual track -- BigBrrrManager::start()
+            // only ever picks the file once, when the toggle turns on, not
+            // continuously. Restart it on a theme change so the audio
+            // matches whichever theme (Maybach's own track, or the default)
+            // is now active.
+            if(BigBrrrManager::get()->enabled)BigBrrrManager::get()->setEnabled(true);
             saveSettings();}
         if(i%2==0&&i+1>=pc)ImGui::Dummy(ImVec2(0,0));
     }
@@ -3217,6 +3481,7 @@ void MenuInterface::drawSettingsTab(){
     ImGui::Dummy(ImVec2(0,12));
     if(Widgets::StyledButton("Reset to Defaults",ImVec2(-1,32),theme,anim)){
         theme.resetDefaults();activeTheme=THEME_GUCCI;
+        if(BigBrrrManager::get()->enabled)BigBrrrManager::get()->setEnabled(true);
         anim.animSpeed=8.f;anim.openDirection=ANIM_CENTER;
         eng->fastPlayback=false;
         ambientWavesEnabled=true;saveSettings();}}
@@ -4573,6 +4838,8 @@ void MenuInterface::drawCreditsTab(){
         (activeTheme==THEME_SEXYY)?"Skee Yee | STL | Pound Town":
         (activeTheme==THEME_JUICE)?"Beta Tester | Bug Hunter | That's Tuff":
         (activeTheme==THEME_BUTLER)?"Playoff Jimmy | Big Face Coffee | Buckets":
+        (activeTheme==THEME_SAWEETIE)?"Icy Grl | Tap In | Best Friend":
+        (activeTheme==THEME_MAYBACH)?"MMG | Boss | Huh":
         "Concept | Vision | Brrr";
     ImVec2 bs=ImGui::CalcTextSize(badge);
     float bx=pos.x+(avail-bs.x-16)/2,by=pos.y+52;
@@ -4583,6 +4850,7 @@ void MenuInterface::drawCreditsTab(){
     ImGui::Dummy(ImVec2(0,heroH+12));}
         struct{const char* init;const char* name;const char* role;}entries[]={
         {"N","guccimanefan (Nigelx1)","Concept, direction & testing"},
+        {"J","Juice","Frame-window algorithm design & lead co-tester -- found the bugs nobody else caught"},
         {"C","Claude","Wrote the code. All of it. Not a euphemism."},
         {"K","kepe","yBot -- the file-size benchmark GBR6 was built to meet"},
         {"T","ToastexGD","Original ToastyReplay -- the GOAT"},
@@ -4621,6 +4889,10 @@ void MenuInterface::drawCreditsTab(){
         Widgets::GucciQuote("\"I just wanted the frame windows to work. Then I got a whole theme.\"","-- Juice",theme);
     else if(activeTheme==THEME_BUTLER)
         Widgets::GucciQuote("\"Every frame's the playoffs to me. Brrr.\"","-- Jimmy Butler",theme);
+    else if(activeTheme==THEME_SAWEETIE)
+        Widgets::GucciQuote("\"Every frame's a flex. Stay icy.\"","-- Saweetie",theme);
+    else if(activeTheme==THEME_MAYBACH)
+        Widgets::GucciQuote("\"Every input's a deal closed. Huh.\"","-- Rick Ross",theme);
     else
         Widgets::GucciQuote("\"I'm the foundation of all of this. Brrr.\"","-- Gucci Mane",theme);}
 void MenuInterface::drawHudTab(){
@@ -4803,6 +5075,7 @@ void MenuInterface::saveSettings(){
     mod->setSavedValue("render_audio_args",std::string(renderAudioArgsBuf));
     mod->setSavedValue("render_seconds_after",std::string(renderSecondsAfterBuf));
     mod->setSavedValue("render_include_audio",renderIncludeAudio);
+    mod->setSavedValue("render_split_audio_tracks",renderSplitAudioTracks);
     mod->setSavedValue("render_include_clicks",renderIncludeClicks);
     mod->setSavedValue("render_sfx_volume",(double)renderSfxVol);
     mod->setSavedValue("render_music_volume",(double)renderMusicVol);
@@ -4840,6 +5113,7 @@ void MenuInterface::loadRenderSettings(){
     auto raa=loadSV<std::string>(mod,"render_audio_args","");
     auto rs=loadSV<std::string>(mod,"render_seconds_after","3");
     renderIncludeAudio=loadSV<bool>(mod,"render_include_audio",true);
+    renderSplitAudioTracks=loadSV<bool>(mod,"render_split_audio_tracks",false);
     renderColorFix=loadSV<bool>(mod,"render_color_fix",true);
     renderIncludeClicks=loadSV<bool>(mod,"render_include_clicks",false);
     renderSfxVol=(float)loadSV<double>(mod,"render_sfx_volume",1.0);
@@ -4874,13 +5148,13 @@ void MenuInterface::loadSettings(){
     theme.textSecondary=sanitizeColor(loadColor("theme_text2",txt2Def),txt2Def);
     theme.bgOpacity=sanitizeClamped(mod->getSavedValue<float>("theme_bg_opacity",0.96f),0.5f,1.f,0.96f);
     theme.cornerRadius=sanitizeClamped(mod->getSavedValue<float>("theme_corner_radius",5.f),0.f,16.f,5.f);
-    theme.activePreset=std::clamp(mod->getSavedValue<int>("theme_active_preset",0),0,9);
+    theme.activePreset=std::clamp(mod->getSavedValue<int>("theme_active_preset",0),0,ThemeEngine::getPresetCount()-1);
     theme.glowCycleEnabled=mod->getSavedValue<bool>("theme_glow_cycle",false);
     theme.glowCycleRate=sanitizeClamped(mod->getSavedValue<float>("theme_glow_rate",0.5f),0.02f,1.f,0.5f);
     ambientWavesEnabled=mod->getSavedValue<bool>("ambient_waves",true);
     anim.animSpeed=sanitizeClamped(mod->getSavedValue<float>("anim_speed",8.f),2.f,24.f,8.f);
     anim.openDirection=(AnimDirection)mod->getSavedValue<int>("anim_direction",0);
-    activeTheme=(BotTheme)std::clamp(mod->getSavedValue<int>("active_theme",(int)THEME_GUCCI),0,9);
+    activeTheme=(BotTheme)std::clamp(mod->getSavedValue<int>("active_theme",(int)THEME_GUCCI),0,ThemeEngine::getPresetCount()-1);
     keybinds.menu=mod->getSavedValue<int>("key_menu",0xA4);
     keybinds.frameAdvance=mod->getSavedValue<int>("key_frame_advance",0x56);
     keybinds.frameStep=mod->getSavedValue<int>("key_frame_step",0x43);

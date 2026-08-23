@@ -88,7 +88,9 @@ enum BotTheme {
     THEME_BAM,
     THEME_SEXYY,
     THEME_JUICE,
-    THEME_BUTLER
+    THEME_BUTLER,
+    THEME_SAWEETIE,
+    THEME_MAYBACH
 };
 
 class MenuInterface {
@@ -143,6 +145,7 @@ public:
     char renderAudioBitrateBuf[16]="192k";
     char renderSecondsAfterBuf[16]="3";
     bool renderIncludeAudio=true;
+    bool renderSplitAudioTracks=false;
     bool renderIncludeClicks=false;
     float renderSfxVol=1.f, renderMusicVol=1.f;
     bool renderHideEndscreen=false, renderHideLevelComplete=false;

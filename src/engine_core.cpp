@@ -169,6 +169,26 @@ void GucciReplaySystem::onReset(uint32_t respawnFrame, uint32_t deathFrame) {
         size_t before = m_actionAtom.length();
         if (respawnFrame > 0) {
                                                             m_actionAtom.clipFrom(respawnFrame + 1);
+            // Juice's dying-mid-click fix: if the last surviving action is a
+            // press with no matching release, the player died while still
+            // holding it -- the release either happened after the clip
+            // boundary (and got clipped away with it) or never happened at
+            // all. Either way it's not a real, complete input; drop it, and
+            // suppress whatever release comes in next for that player, since
+            // the physical button may still be down through the reset and
+            // would otherwise record as an orphan release with nothing to
+            // close.
+            if (!m_actionAtom.m_actions.empty()) {
+                auto& last = m_actionAtom.m_actions.back();
+                if (last.isInput() && last.m_holding) {
+                    int p = last.m_player2 ? 1 : 0;
+                    log::info("[GucciBot] Recording: removed dangling press @ frame {} "
+                              "(died mid-click) -- suppressing next release for player{}",
+                              last.m_frame, p + 1);
+                    m_actionAtom.m_actions.pop_back();
+                    m_suppressNextRelease[p] = true;
+                }
+            }
             size_t after = m_actionAtom.length();
             m_inputIndex = m_actionAtom.length();
             // m_pathSamples is indexed by frame and only ever grows -- without this,
@@ -189,6 +209,12 @@ void GucciReplaySystem::onReset(uint32_t respawnFrame, uint32_t deathFrame) {
                                                                                                                                     m_actionAtom.m_actions.clear();
             m_pathSamples.clear();
             m_inputIndex = 0;
+            // A full restart wipes everything, so any pending suppression
+            // from a not-yet-consumed dangling-press cleanup (see above) no
+            // longer refers to anything real -- clear it rather than risk it
+            // incorrectly eating a legitimate release in the fresh recording.
+            m_suppressNextRelease[0] = false;
+            m_suppressNextRelease[1] = false;
             log::info("[GucciBot] Recording: died@{}, full restart (no checkpoint) "
                       "— cleared {} input(s), re-recording from frame 0",
                       deathFrame, before);
@@ -226,7 +252,7 @@ fs::path GucciReplaySystem::getCurrentPath() const {
     // -- next load finds no sidecar and the results appear to have vanished).
     // Probe for the macro's actual extension first; only fall back to
     // .brrr when nothing exists yet (a macro that hasn't been saved once).
-    for (auto ext : { ".brrr", ".toosii", ".ja", ".giddey", ".bam", ".sexyy", ".juice", ".butler" }) {
+    for (auto ext : { ".brrr", ".toosii", ".ja", ".giddey", ".bam", ".sexyy", ".juice", ".butler", ".saweetie", ".maybach" }) {
         std::error_code ec;
         auto candidate = dir / (gb->replayName + ext);
         if (fs::exists(candidate, ec)) return candidate;
@@ -472,7 +498,7 @@ static void loadTrainerMacroData(const fs::path& path, GucciEngine::TrainerMacro
 bool GucciEngine::loadTrainerMacro(const std::string& stem) {
     auto dir = getReplayDir();
     fs::path found;
-    for (auto ext : { ".brrr", ".toosii", ".ja", ".giddey", ".bam", ".sexyy", ".juice", ".butler" }) {
+    for (auto ext : { ".brrr", ".toosii", ".ja", ".giddey", ".bam", ".sexyy", ".juice", ".butler", ".saweetie", ".maybach" }) {
         std::error_code ec;
         auto candidate = dir / (stem + ext);
         if (fs::exists(candidate, ec)) { found = candidate; break; }
@@ -795,6 +821,7 @@ void GucciEngine::reloadMacroList() {
     storedMacros.clear(); incompatibleMacros.clear();
     jaMacros.clear(); giddeyMacros.clear(); toosiiMacros.clear();
     bamMacros.clear(); sexyyMacros.clear(); juiceMacros.clear(); butlerMacros.clear();
+    saweetieMacros.clear(); maybachMacros.clear();
 
     auto dir = getReplayDir();
     if (!fs::exists(dir)) { fs::create_directories(dir); return; }
@@ -805,7 +832,8 @@ void GucciEngine::reloadMacroList() {
         auto ext  = it.path().extension().string();
         auto stem = it.path().stem().string();
         if (ext == ".brrr" || ext == ".toosii" || ext == ".ja" ||
-            ext == ".giddey" || ext == ".bam" || ext == ".sexyy" || ext == ".juice" || ext == ".butler") {
+            ext == ".giddey" || ext == ".bam" || ext == ".sexyy" || ext == ".juice" || ext == ".butler" ||
+            ext == ".saweetie" || ext == ".maybach") {
             storedMacros.push_back(stem);
             if (ext == ".ja")     jaMacros.insert(stem);
             if (ext == ".giddey") giddeyMacros.insert(stem);
@@ -814,6 +842,8 @@ void GucciEngine::reloadMacroList() {
             if (ext == ".sexyy")  sexyyMacros.insert(stem);
             if (ext == ".juice")  juiceMacros.insert(stem);
             if (ext == ".butler") butlerMacros.insert(stem);
+            if (ext == ".saweetie") saweetieMacros.insert(stem);
+            if (ext == ".maybach")  maybachMacros.insert(stem);
         } else if (ext == ".gdr" || ext == ".xd" || ext == ".json" || ext == ".brr") {
                         incompatibleMacros.insert(stem);
         }
@@ -1136,7 +1166,8 @@ bool GucciEngine::convertToBRR(const std::string& name) {
     auto dir = getReplayDir();
     auto isNative = [](const std::string& e) {
         return e == ".brrr" || e == ".toosii" || e == ".ja" ||
-               e == ".giddey" || e == ".bam" || e == ".sexyy" || e == ".juice" || e == ".butler";
+               e == ".giddey" || e == ".bam" || e == ".sexyy" || e == ".juice" || e == ".butler" ||
+               e == ".saweetie" || e == ".maybach";
     };
 
     fs::path src;
@@ -1363,7 +1394,7 @@ void GucciEngine::initialize() {
         fs::create_directories(jupDir);
 
         auto findIn = [](fs::path const& dir, std::string const& stem) -> fs::path {
-            for (auto ext : { ".brrr", ".toosii", ".ja", ".giddey", ".bam", ".sexyy", ".juice", ".butler" }) {
+            for (auto ext : { ".brrr", ".toosii", ".ja", ".giddey", ".bam", ".sexyy", ".juice", ".butler", ".saweetie", ".maybach" }) {
                 std::error_code ec;
                 auto candidate = dir / (stem + ext);
                 if (fs::exists(candidate, ec)) return candidate;
@@ -1728,12 +1759,18 @@ void GucciEngine::fwTick() {
             log::info("[GucciBot] Frame-window: capture done — {} checkpoints",
                       fwCapStack.size());
 
-            // Juice's 1a: a Robot-mode release whose click touched a non-dash
-            // orb isn't a measurable input on its own -- drop it here, now that
-            // orb classification (done live during the loop above) is known for
-            // every click. Wave/Ship releases are exempt (rule 3, already only
-            // ever gamemode-gated in, never filtered here); Cube/UFO/Ball/Spider
-            // releases were never candidates to begin with.
+            // Juice's 1a, corrected 2026-08-23 (Nigel/Juice: Wave and Ship
+            // still need their orb releases checked normally -- Robot is the
+            // ONLY hold gamemode where a release right after a non-dash orb
+            // isn't its own measurable input). My 2026-08-23-a build had this
+            // backwards -- removed the gm=='R' gate on the theory it was a
+            // redundant leftover from shouldTestRelease's own gating, but it
+            // was in fact the actual rule. Reverted. The real, still-open bug
+            // per Juice's report is that the skip isn't firing even in Robot
+            // mode. Diagnostic logging added below (every click's orb
+            // classification, not just skip decisions) since two rounds of
+            // static reading haven't turned up why -- next Robot-mode test
+            // should make it visible in the log.
             if (fwOrbAwareReleaseSkip) {
                 bool lastOrbNonDash[2] = { false, false };
                 std::vector<FwClickSample> keptSamples;
@@ -1745,11 +1782,17 @@ void GucciEngine::fwTick() {
                     int p = s.player2 ? 1 : 0;
                     if (!s.release) {
                         lastOrbNonDash[p] = s.orbNonDash && !s.orbDash;
+                        log::info("[GucciBot] Frame-window: click @ frame {} "
+                                  "player{} orbDash={} orbNonDash={}",
+                                  s.frame, p + 1, s.orbDash, s.orbNonDash);
                         keptSamples.push_back(s);
                         keptCap.push_back(fwCapStack[i]);
                         continue;
                     }
                     char gm = fwGamemodeAt(this, s.frame, s.player2);
+                    log::info("[GucciBot] Frame-window: release @ frame {} "
+                              "player{} gm={} lastOrbNonDash={}",
+                              s.frame, p + 1, gm, lastOrbNonDash[p]);
                     if (gm == 'R' && lastOrbNonDash[p]) {
                         log::info("[GucciBot] Frame-window: release @ frame {} "
                                   "skipped -- preceding click touched a non-dash "

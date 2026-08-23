@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-19-v (Three more from Juice. 1) Spiral donut mode take 2 -- the tube-cross-section idea from -u wasn't it ('the inside shouldn't be filled, just the outside'). Redone to match the same mental model as Circle/Polygon/Star's donut: a clear hole in the middle, done by simply not drawing the innermost portion of the coil (r < innerR) at all, same tier color throughout, no black-bordered tube. 2) Debug Mode now draws a box (cyan outline) around the next input's true position at its Position Tolerance range, whenever Position Tolerance is on -- so it's actually visible whether a survived shift's ending position landed inside or outside the allowed range instead of only trusting the reported pass/fail. 3) Debug marks (the per-test green/red marks) are now culled to the camera's actual view too, reusing the same computeVisibleRect() technique already applied to the main marker overlay (the position-tolerance box itself isn't culled -- it's a single draw call, not worth the complexity). Compiles clean, untested in-game.)"
+#define GB_BUILD_LABEL "2026-08-23-p (Nigel asked whether about.md needed more than the header for the 1.4 bump -- it did, several real gaps: GiddeyBot/ButlerBot's theme-table color descriptions were still the OLD colors (Red+White, Warriors Gold+Royal Blue) from before this session's recolors; SaweetieBot and MaybachBot weren't listed in the theme table at all; Juice was missing from Credits entirely (in-game credits got him added earlier this session, about.md didn't); and there was no 'Rendering' section at all despite SLRenderer/FFmpeg export being a real, substantial mod feature -- added one covering the FFmpeg pipeline, audio capture, the new split-audio-tracks option, and render presets. Also added a Compact Mode bullet under Extras, previously undocumented anywhere in this file. No code changes -- about.md content only, repackaged.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -17,6 +17,8 @@
 #include "renderer.hpp"
 
 using namespace geode::prelude;
+
+namespace FMOD { class ChannelGroup; }
 
 // Defined in engine_updater.cpp -- shared between the two incrementFrame()
 // call sites (there, and hook_playlayer.cpp's resetLevel()) so both write to
@@ -165,6 +167,15 @@ public:
     bool m_flipProcessingInputs = false;
 
     std::unordered_map<int, gb::Action> m_lastInputs;
+
+    // Juice's dying-mid-click fix (2026-08-23): set by onReset() when it
+    // removes a dangling press (a click that survived the checkpoint clip
+    // with no matching release because death interrupted it). The physical
+    // button may still be down through the reset, so the next recorded
+    // input for that player, if it's a release, gets suppressed once --
+    // see addInputToReplay (hook_gjbasegamelayer.cpp). Index 0 = player1,
+    // 1 = player2.
+    bool m_suppressNextRelease[2] = { false, false };
 
     GucciScheduler::JobId m_autosaveJobId = 0;
 
@@ -863,6 +874,8 @@ public:
     std::unordered_set<std::string>  sexyyMacros;
     std::unordered_set<std::string>  juiceMacros;
     std::unordered_set<std::string>  butlerMacros;
+    std::unordered_set<std::string>  saweetieMacros;
+    std::unordered_set<std::string>  maybachMacros;
 
         std::vector<BotSettingsPreset> settingsPresets;
     void saveBotSettingsPreset(const std::string& name);
@@ -898,6 +911,14 @@ private:
 namespace gbfw {
     void renderFrameWindows(PlayLayer* pl, bool isRecording);
     void playTierSound(int window);
+    // Dedicated FMOD channel group frame-window cues play into (instead of
+    // playing straight to master) -- created lazily, added as a child of
+    // master so audibility during normal play is unchanged, but gives
+    // render's split-audio-tracks mode (render/dsp.cpp) a group of its own
+    // to isolate frame-window cues from music/SFX. Forward-declared here
+    // (not FMOD::ChannelGroup*) the same way bigbrrr.hpp avoids pulling
+    // FMOD headers into this file.
+    FMOD::ChannelGroup* frameWindowChannelGroup();
 }
 
 namespace gbpr {

@@ -458,19 +458,19 @@ private:
         }
     }
 
-    // Spiral donut mode, take 2 (2026-08-21) -- Juice: the tube-cross-section
-    // idea wasn't it, "the inside shouldn't be filled, just the outside."
-    // Matches the same mental model as Circle/Polygon/Star's donut: a clear
-    // hole in the middle. For a spiral that means simply not drawing the
-    // innermost portion of the coil (r < innerR) at all, same tier color as
-    // Inverted, rather than any black-bordered tube treatment.
+    // Spiral, take 3 (2026-08-23) -- Juice sent a reference screenshot: a
+    // spiral is just a traced coil outline, no hole, no border, same as it
+    // always looked. Donut mode doesn't have a sensible meaning for a curve
+    // (there's no fill area to hollow out the way Circle/Polygon/Star have
+    // one), so it no longer branches on fillStyle at all -- always the same
+    // single traced stroke from center to outer radius. Takes/ignores
+    // fillStyle in the signature only to keep drawMarkerShape's dispatch
+    // uniform across shapes.
     void drawSpiralShape(CCPoint center, float radius, ccColor4F color,
-                          GucciEngine::FwFillStyle fillStyle, float stroke) {
+                          GucciEngine::FwFillStyle /*fillStyle*/, float stroke) {
         const int turns = 2;
         const int segsPerTurn = 16;
         const int total = turns * segsPerTurn;
-        bool donut = fillStyle == GucciEngine::FwFillStyle::Normal;
-        float innerR = donut ? radius * 0.55f : 0.f;
 
         auto pointAt = [&](float t) -> CCPoint {
             float ang = t * turns * 2.f * (float)M_PI;
@@ -478,13 +478,8 @@ private:
             return { center.x + r * std::cos(ang), center.y + r * std::sin(ang) };
         };
 
-        int startI = 0;
-        if (donut && radius > 0.001f) {
-            float tStart = std::clamp(innerR / radius, 0.f, 1.f);
-            startI = (int)std::ceil(tStart * total);
-        }
-        CCPoint prev = pointAt((float)startI / (float)total);
-        for (int i = startI + 1; i <= total; ++i) {
+        CCPoint prev = pointAt(0.f);
+        for (int i = 1; i <= total; ++i) {
             CCPoint cur = pointAt((float)i / (float)total);
             m_node->drawSegment(prev, cur, stroke, color);
             prev = cur;
@@ -566,6 +561,26 @@ namespace gbfw {
         FrameWindowOverlay::get()->render(pl, isRendering);
     }
 
+    // Nigel/Juice, 2026-08-23: split-audio-tracks render mode needs frame-
+    // window cues isolated on their own FMOD channel group so they can be
+    // captured separately from music/SFX (render/dsp.cpp's getFrameWindow()
+    // instance hooks a DSP onto exactly this group). Created lazily on
+    // first use, added as a child of master (addGroup) so normal audibility
+    // during live play is completely unchanged -- this only adds a capture
+    // tap point, it doesn't change where the sound is actually heard from.
+    FMOD::ChannelGroup* frameWindowChannelGroup() {
+        static FMOD::ChannelGroup* group = nullptr;
+        if (group) return group;
+        auto* system = FMODAudioEngine::sharedEngine()->m_system;
+        if (!system) return nullptr;
+        if (system->createChannelGroup("gucciFrameWindow", &group) != FMOD_OK || !group)
+            return nullptr;
+        FMOD::ChannelGroup* master = nullptr;
+        system->getMasterChannelGroup(&master);
+        if (master) master->addGroup(group);
+        return group;
+    }
+
                                         void playTierSound(int window) {
         static std::unordered_map<std::string, FMOD::Sound*> s_soundCache;
 
@@ -606,7 +621,7 @@ namespace gbfw {
         // Starts paused so the per-tier volume (Juice's spec) is applied before
         // any audio actually comes out, instead of a frame at full volume first.
         FMOD::Channel* channel = nullptr;
-        system->playSound(sound, nullptr, true, &channel);
+        system->playSound(sound, frameWindowChannelGroup(), true, &channel);
         if (channel) {
             channel->setVolume(tier ? std::clamp(tier->volume, 0.f, 1.f) : 1.f);
             channel->setPaused(false);

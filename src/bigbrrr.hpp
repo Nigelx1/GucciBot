@@ -20,11 +20,15 @@ public:
     static BigBrrrManager* get();
 
     // Skips the track's slow intro -- playback starts here instead of 0:00.
-    // The drop is at 20 and 11/15 seconds.
-    static constexpr double kStartOffsetSec = 20.0 + 11.0 / 15.0;
+    // The drop is at 20 and 11/15 seconds. Nigel, 2026-08-23: the Maybach
+    // theme gets its own track (big_brrr_maybach.mp3, 75bpm, no intro to
+    // skip), so these are no longer fixed constants -- both check the
+    // active theme at call time. Implemented in bigbrrr.cpp (not here) so
+    // this header doesn't need to depend on gui.hpp's MenuInterface.
+    static double kStartOffsetSec();
     // Track's actual BPM, used to line up the menu bounce (see
     // applyBigBrrrBounce in gui.cpp) to the beat.
-    static constexpr double kBpm = 140.0;
+    static double kBpm();
 
     bool enabled = false;
 

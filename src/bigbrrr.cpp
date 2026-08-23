@@ -1,5 +1,6 @@
 #include "bigbrrr.hpp"
 #include "gameaudiomute.hpp"
+#include "gui.hpp"
 #include <Geode/Bindings.hpp>
 #include <Geode/binding/FMODAudioEngine.hpp>
 #include <algorithm>
@@ -9,6 +10,18 @@ using namespace geode::prelude;
 BigBrrrManager* BigBrrrManager::get() {
     static BigBrrrManager* instance = new BigBrrrManager();
     return instance;
+}
+
+static bool isMaybachTheme() {
+    auto* ui = MenuInterface::get();
+    return ui && ui->activeTheme == THEME_MAYBACH;
+}
+
+double BigBrrrManager::kStartOffsetSec() {
+    return isMaybachTheme() ? 0.0 : (20.0 + 11.0 / 15.0);
+}
+double BigBrrrManager::kBpm() {
+    return isMaybachTheme() ? 75.0 : 140.0;
 }
 
 std::filesystem::path BigBrrrManager::getBrrrDir() const {
@@ -49,7 +62,8 @@ void BigBrrrManager::start() {
     stop();
     auto path = findFirstAudioFile(getBrrrDir());
     if (path.empty()) {
-        auto bundled = Mod::get()->getResourcesDir() / "big_brrr.mp3";
+        auto bundled = Mod::get()->getResourcesDir() /
+            (isMaybachTheme() ? "big_brrr_maybach.mp3" : "big_brrr.mp3");
         std::error_code ec;
         if (std::filesystem::exists(bundled, ec)) path = bundled;
     }
@@ -67,7 +81,7 @@ void BigBrrrManager::start() {
     system->playSound(sound, nullptr, false, &channel);
     if (channel) {
         channel->setVolume(1.f);
-        channel->setPosition((unsigned int)(kStartOffsetSec * 1000.0), FMOD_TIMEUNIT_MS);
+        channel->setPosition((unsigned int)(kStartOffsetSec() * 1000.0), FMOD_TIMEUNIT_MS);
         GameAudioMute::acquire();
         audioMuteHeld = true;
     }

@@ -242,6 +242,21 @@ class $modify(GB7PlayLayer, PlayLayer) {
             if (upd.m_canDie) { m_player1->releaseAllButtons(); m_player2->releaseAllButtons(); return; }
 
                                                                         if (m_player1->m_isDead || m_player2->m_isDead) {
+                // Juice: dying mid-click left one stray input carried into the
+                // restart, self-correcting only on a second restart. First
+                // attempt at a fix (queueButton-ing a recorded release here,
+                // based on live m_holdingButtons state) didn't hold up in
+                // Juice's retest -- most likely because GD's own death
+                // handling already clears m_holdingButtons before this runs,
+                // making that check read false and the fix a silent no-op.
+                // Replaced with Juice's own algorithm instead, which doesn't
+                // depend on live state at all: see onReset() (engine_core.cpp)
+                // for the actual fix -- it inspects the RECORDED macro data
+                // directly (was the last action before the checkpoint clip a
+                // press with no matching release?) and cleans that up, plus
+                // suppresses whatever release comes in next in case the
+                // physical button is still down through the reset. This
+                // branch just releases the live buttons now, same as always.
                 m_player1->releaseAllButtons();
                 m_player2->releaseAllButtons();
                 return;
