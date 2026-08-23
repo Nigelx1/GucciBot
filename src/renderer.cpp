@@ -722,6 +722,7 @@ void Renderer::start() {
                                 if (engine->isPlaying() && !engine->replay.m_actionAtom.empty()) {
         pl->m_isPaused = false;
         engine->practiceFix.m_savedCheckpoints.clear();
+        engine->practiceFix.m_brokenObjects.clear();
         pl->resetLevel();
     }
 

@@ -1,0 +1,276 @@
+#pragma once
+
+// Ported from Silicate's real per-player checkpoint state
+// (git.silicate.dev/silicate/silicate, src/checkpoint/checkpoint.hpp/.cpp),
+// 2026-08-23. GucciBot's own SavedCheckpointState only ever captured ~15
+// fields per player (position/rotation/velocity/a few flags) -- a tiny
+// fraction of what Geode's actual PlayerObject binding exposes and what
+// Silicate's own practice-fix restores: slope state, dash state, streak/
+// particle state, held-direction/held-button state, jump-buffer state, and
+// dozens more. Field names below (both the struct's own storage names and
+// the p-> names they're copied to/from) were verified 2026-08-23 against
+// the generated Geode/binding/PlayerObject.hpp for GD 2.2081 that this mod
+// actually links against -- every field referenced here exists there under
+// the exact same name. Struct layout, the apply()/create() field lists, and
+// which fields are deliberately captured-but-never-applied (m_ccPosition,
+// m_mainLayer) or declared-but-never-populated (the four collision-log
+// CCDictionary* fields) all mirror Silicate's own source exactly -- this is
+// a faithful port, not a reinterpretation.
+struct SavedPlayerCheckpoint {
+    void apply(PlayerObject* p);
+    static SavedPlayerCheckpoint create(PlayerObject* p);
+
+    // Captured in Silicate's create() only in a commented-out line -- stays
+    // default/unset there and here. apply() restores position via m_position
+    // instead (below). Kept only for 1:1 struct-shape fidelity with upstream.
+    cocos2d::CCPoint m_ccPosition{};
+    float m_ccRotation = 0.f;
+    // Captured but never applied back in Silicate's apply() either.
+    cocos2d::CCNode* m_mainLayer = nullptr;
+    bool m_wasTeleported = false;
+    bool m_fixGravityBug = false;
+    bool m_reverseSync = false;
+    double m_yVelocityBeforeSlope = 0.0;
+    double m_dashX = 0.0;
+    double m_dashY = 0.0;
+    double m_dashAngle = 0.0;
+    double m_dashStartTime = 0.0;
+    DashRingObject* m_dashRing = nullptr;
+    double m_slopeStartTime = 0.0;
+    bool m_justPlacedStreak = false;
+    GameObject* m_maybeLastGroundObject = nullptr;
+    // Declared but never assigned in create() nor read in apply() upstream --
+    // kept for struct-shape fidelity only, always null/unused here too.
+    cocos2d::CCDictionary* m_collisionLogTop = nullptr;
+    cocos2d::CCDictionary* m_collisionLogBottom = nullptr;
+    cocos2d::CCDictionary* m_collisionLogLeft = nullptr;
+    cocos2d::CCDictionary* m_collisionLogRight = nullptr;
+    int m_lastCollisionBottom = 0;
+    int m_lastCollisionTop = 0;
+    int m_lastCollisionLeft = 0;
+    int m_lastCollisionRight = 0;
+    int m_unk50C = 0;
+    int m_unk510 = 0;
+    GameObject* m_currentSlope2 = nullptr;
+    GameObject* m_preLastGroundObject = nullptr;
+    float m_slopeAngle = 0.f;
+    bool m_slopeSlidingMaybeRotated = false;
+    bool m_quickCheckpointMode = false;
+    GameObject* m_collidedObject = nullptr;
+    GameObject* m_lastGroundObject = nullptr;
+    GameObject* m_collidingWithLeft = nullptr;
+    GameObject* m_collidingWithRight = nullptr;
+    int m_maybeSavedPlayerFrame = 0;
+    double m_scaleXRelated2 = 0.0;
+    double m_groundYVelocity = 0.0;
+    double m_yVelocityRelated = 0.0;
+    double m_scaleXRelated3 = 0.0;
+    double m_scaleXRelated4 = 0.0;
+    double m_scaleXRelated5 = 0.0;
+    bool m_isCollidingWithSlope = false;
+    bool m_isBallRotating = false;
+    bool m_unk669 = false;
+    GameObject* m_currentSlope3 = nullptr;
+    GameObject* m_currentSlope = nullptr;
+    double unk_584 = 0.0;
+    int m_collidingWithSlopeId = 0;
+    bool m_slopeFlipGravityRelated = false;
+    cocos2d::CCArray* m_particleSystems = nullptr;
+    float m_slopeAngleRadians = 0.f;
+    gd::unordered_map<int, GJPointDouble> m_rotateObjectsRelated;
+    gd::unordered_map<int, GameObject*> m_maybeRotatedObjectsMap;
+    float m_rotationSpeed = 0.f;
+    float m_rotateSpeed = 0.f;
+    bool m_isRotating = false;
+    bool m_isBallRotating2 = false;
+    bool m_hasGlow = false;
+    bool m_isHidden = false;
+    double m_speedMultiplier = 0.0;
+    double m_yStart = 0.0;
+    double m_gravity = 0.0;
+    float m_trailingParticleLife = 0.f;
+    float m_unk648 = 0.f;
+    double m_gameModeChangedTime = 0.0;
+    bool m_padRingRelated = false;
+    bool m_maybeReducedEffects = false;
+    bool m_maybeIsFalling = false;
+    bool m_shouldTryPlacingCheckpoint = false;
+    bool m_playEffects = false;
+    bool m_maybeCanRunIntoBlocks = false;
+    bool m_hasGroundParticles = false;
+    bool m_hasShipParticles = false;
+    bool m_isOnGround3 = false;
+    bool m_checkpointTimeout = false;
+    double m_lastCheckpointTime = 0.0;
+    double m_lastJumpTime = 0.0;
+    double m_lastFlipTime = 0.0;
+    double m_flashTime = 0.0;
+    float m_flashRelated = 0.f;
+    float m_flashRelated1 = 0.f;
+    double m_lastSpiderFlipTime = 0.0;
+    bool m_unkBool5 = false;
+    bool m_maybeIsVehicleGlowing = false;
+    bool m_gv0096 = false;
+    bool m_gv0100 = false;
+    double m_accelerationOrSpeed = 0.0;
+    double m_snapDistance = 0.0;
+    bool m_ringJumpRelated = false;
+    gd::unordered_set<int> m_ringRelatedSet;
+    GameObject* m_objectSnappedTo = nullptr;
+    CheckpointObject* m_pendingCheckpoint = nullptr;
+    int m_onFlyCheckpointTries = 0;
+    bool m_maybeSpriteRelated = false;
+    bool m_useLandParticles0 = false;
+    float m_landParticlesAngle = 0.f;
+    float m_landParticleRelatedY = 0.f;
+    int m_playerStreak = 0;
+    float m_streakStrokeWidth = 0.f;
+    bool m_disableStreakTint = false;
+    bool m_alwaysShowStreak = false;
+    ShipStreak m_shipStreakType{};
+    double m_slopeRotation = 0.0;
+    double m_currentSlopeYVelocity = 0.0;
+    double m_unk3d0 = 0.0;
+    double m_blackOrbRelated = 0.0;
+    bool m_unk3e0 = false;
+    bool m_unk3e1 = false;
+    bool m_isAccelerating = false;
+    bool m_isCurrentSlopeTop = false;
+    double m_collidedTopMinY = 0.0;
+    double m_collidedBottomMaxY = 0.0;
+    double m_collidedLeftMaxX = 0.0;
+    double m_collidedRightMinX = 0.0;
+    bool m_fadeOutStreak = false;
+    bool m_canPlaceCheckpoint = false;
+    bool m_hasCustomGlowColor = false;
+    bool m_maybeIsColliding = false;
+    bool m_jumpBuffered = false;
+    bool m_stateRingJump = false;
+    bool m_wasJumpBuffered = false;
+    bool m_wasRobotJump = false;
+    unsigned char m_stateJumpBuffered = 0;
+    bool m_stateRingJump2 = false;
+    bool m_touchedRing = false;
+    bool m_touchedCustomRing = false;
+    bool m_touchedGravityPortal = false;
+    bool m_maybeTouchedBreakableBlock = false;
+    geode::SeedValueRSV m_jumpRelatedAC2{};
+    bool m_touchedPad = false;
+    double m_yVelocity = 0.0;
+    double m_fallSpeed = 0.0;
+    bool m_isOnSlope = false;
+    bool m_wasOnSlope = false;
+    float m_slopeVelocity = 0.f;
+    bool m_maybeUpsideDownSlope = false;
+    bool m_isShip = false;
+    bool m_isBird = false;
+    bool m_isBall = false;
+    bool m_isDart = false;
+    bool m_isRobot = false;
+    bool m_isSpider = false;
+    bool m_isUpsideDown = false;
+    bool m_isDead = false;
+    bool m_isOnGround = false;
+    bool m_isGoingLeft = false;
+    bool m_isSideways = false;
+    bool m_isSwing = false;
+    int m_reverseRelated = 0;
+    double m_maybeReverseSpeed = 0.0;
+    double m_maybeReverseAcceleration = 0.0;
+    float m_xVelocityRelated2 = 0.f;
+    bool m_isDashing = false;
+    int m_unk9e8 = 0;
+    int m_groundObjectMaterial = 0;
+    float m_vehicleSize = 0.f;
+    float m_playerSpeed = 0.f;
+    cocos2d::CCPoint m_shipRotation{};
+    cocos2d::CCPoint m_lastPortalPos{};
+    float m_unkUnused3 = 0.f;
+    bool m_isOnGround2 = false;
+    double m_lastLandTime = 0.0;
+    float m_platformerVelocityRelated = 0.f;
+    bool m_maybeIsBoosted = false;
+    double m_scaleXRelatedTime = 0.0;
+    bool m_decreaseBoostSlide = false;
+    bool m_unkA29 = false;
+    bool m_isLocked = false;
+    bool m_controlsDisabled = false;
+    cocos2d::CCPoint m_lastGroundedPos{};
+    gd::vector<cocos2d::CCObject*> m_touchingRings;
+    gd::unordered_set<int> m_touchedRings;
+    GameObject* m_lastActivatedPortal = nullptr;
+    bool m_hasEverJumped = false;
+    bool m_ringOrStreakRelated = false;
+    cocos2d::CCPoint m_position{};
+    bool m_isSecondPlayer = false;
+    bool m_unkA99 = false;
+    double m_totalTime = 0.0;
+    bool m_isBeingSpawnedByDualPortal = false;
+    float m_unkAAC = 0.f;
+    float m_unkAngle1 = 0.f;
+    float m_yVelocityRelated3 = 0.f;
+    bool m_gamevar0060 = false;
+    bool m_swapColors = false;
+    bool m_gamevar0062 = false;
+    int m_followRelated = 0;
+    gd::vector<float> m_playerFollowFloats;
+    float m_unk838 = 0.f;
+    int m_stateOnGround = 0;
+    unsigned char m_stateUnk = 0;
+    unsigned char m_stateNoStickX = 0;
+    unsigned char m_stateNoStickY = 0;
+    unsigned char m_stateUnk2 = 0;
+    int m_stateBoostX = 0;
+    int m_stateBoostY = 0;
+    int m_maybeStateForce2 = 0;
+    int m_stateScale = 0;
+    double m_platformerXVelocity = 0.0;
+    bool m_holdingRight = false;
+    bool m_holdingLeft = false;
+    bool m_leftPressedFirst = false;
+    double m_scaleXRelated = 0.0;
+    bool m_maybeHasStopped = false;
+    float m_xVelocityRelated = 0.f;
+    bool m_maybeGoingCorrectSlopeDirection = false;
+    bool m_isSliding = false;
+    double m_maybeSlopeForce = 0.0;
+    bool m_isOnIce = false;
+    double m_physDeltaRelated = 0.0;
+    bool m_isOnGround4 = false;
+    int m_maybeSlidingTime = 0;
+    double m_maybeSlidingStartTime = 0.0;
+    double m_changedDirectionsTime = 0.0;
+    double m_slopeEndTime = 0.0;
+    bool m_isMoving = false;
+    bool m_platformerMovingLeft = false;
+    bool m_platformerMovingRight = false;
+    bool m_isSlidingRight = false;
+    double m_maybeChangedDirectionAngle = 0.0;
+    double m_unkUnused2 = 0.0;
+    bool m_isPlatformer = false;
+    int m_stateNoAutoJump = 0;
+    int m_stateDartSlide = 0;
+    int m_stateHitHead = 0;
+    int m_stateFlipGravity = 0;
+    float m_gravityMod = 0.f;
+    int m_stateForce = 0;
+    cocos2d::CCPoint m_stateForceVector{};
+    bool m_affectedByForces = false;
+    gd::map<int, bool> m_jumpPadRelated;
+    float m_somethingPlayerSpeedTime = 0.f;
+    float m_playerSpeedAC = 0.f;
+    bool m_fixRobotJump = false;
+    gd::map<int, bool> m_holdingButtons;
+    bool m_inputsLocked = false;
+    bool m_gv0123 = false;
+    int m_iconRequestID = 0;
+    int m_unkUnused = 0;
+    bool m_isOutOfBounds = false;
+    float m_fallStartY = 0.f;
+    bool m_disablePlayerSqueeze = false;
+    bool m_robotHasRun3 = false;
+    bool m_robotHasRun2 = false;
+    bool m_item20 = false;
+    bool m_ignoreDamage = false;
+    bool m_enable22Changes = false;
+};

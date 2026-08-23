@@ -49,23 +49,13 @@ void GucciPracticeFix::saveCurrent(CheckpointObject* cp, uint64_t frameOffset) {
     auto* p1 = pl->m_player1;
     auto* p2 = pl->m_player2;
 
-    state.m_p1Position      = p1->m_position;
-    state.m_p1Rotation      = p1->getRotation();
-    state.m_p1XVel          = p1->m_playerSpeed;
-    state.m_p1YVel          = p1->m_yVelocity;
-    state.m_p1IsUpsideDown  = p1->m_isUpsideDown;
-    state.m_p1JumpBuffered  = p1->m_jumpBuffered;
-    state.m_p1IsOnGround    = p1->m_isOnGround;
-    state.m_p1GameMode      = 0;
+    state.m_player1 = SavedPlayerCheckpoint::create(p1);
+    state.m_player2 = SavedPlayerCheckpoint::create(p2);
 
-    state.m_p2Position      = p2->m_position;
-    state.m_p2Rotation      = p2->getRotation();
-    state.m_p2XVel          = p2->m_playerSpeed;
-    state.m_p2YVel          = p2->m_yVelocity;
-    state.m_p2IsUpsideDown  = p2->m_isUpsideDown;
-    state.m_p2JumpBuffered  = p2->m_jumpBuffered;
-    state.m_p2IsOnGround    = p2->m_isOnGround;
-    state.m_p2GameMode      = 0;
+    // Ported from Silicate: snapshot the current cumulative broken-objects
+    // list into this checkpoint, matching createCheckpoint()'s
+    // `.m_brokenObjects = this->m_brokenObjects`.
+    state.m_brokenObjects = m_brokenObjects;
 
     m_savedCheckpoints.push_back(state);
 
@@ -101,7 +91,7 @@ void GucciPracticeFix::applyLatest() {
     applyCheckpoint(m_savedCheckpoints.back());
 }
 
-void GucciPracticeFix::applyCheckpoint(const SavedCheckpointState& state) {
+void GucciPracticeFix::applyCheckpoint(SavedCheckpointState& state) {
     auto* pl = PlayLayer::get();
     if (!pl) return;
 
@@ -109,29 +99,30 @@ void GucciPracticeFix::applyCheckpoint(const SavedCheckpointState& state) {
 
     auto* p1 = pl->m_player1;
     auto* p2 = pl->m_player2;
-    if (p1) {
-        p1->setPosition(state.m_p1Position);
-        p1->setRotation(state.m_p1Rotation);
-        p1->m_isUpsideDown = state.m_p1IsUpsideDown;
-                        p1->m_playerSpeed = state.m_p1XVel;
-        p1->m_yVelocity   = state.m_p1YVel;
-        // Captured in saveCurrent but never applied back here -- restoring a
-        // checkpoint could leave the player's ground state stale (e.g. still
-        // "airborne" from whatever it was doing right before the restore),
-        // changing how gravity/jump physics play out the next tick even
-        // though position/velocity matched. Juice's practice-checkpoint
-        // trajectory-change report (2026-08-19).
-        p1->m_isOnGround   = state.m_p1IsOnGround;
-        p1->m_jumpBuffered = state.m_p1JumpBuffered;
-    }
-    if (p2) {
-        p2->setPosition(state.m_p2Position);
-        p2->setRotation(state.m_p2Rotation);
-        p2->m_isUpsideDown = state.m_p2IsUpsideDown;
-        p2->m_playerSpeed = state.m_p2XVel;
-        p2->m_yVelocity   = state.m_p2YVel;
-        p2->m_isOnGround   = state.m_p2IsOnGround;
-        p2->m_jumpBuffered = state.m_p2JumpBuffered;
+    // Full per-player state restore (slope/dash/streak/held-input/etc, not
+    // just position/rotation/velocity/ground-state) -- see
+    // checkpoint_player.hpp. Juice's practice-checkpoint trajectory-change
+    // report (2026-08-19) was the original motivation for restoring ground
+    // state at all; this supersedes that narrower fix with the same field
+    // (and everything else Silicate's own restore covers) included.
+    if (p1) state.m_player1.apply(p1);
+    if (p2) state.m_player2.apply(p2);
+
+    // Ported from Silicate's applyCheckpoint(): rewind the live broken-
+    // objects list to whatever this checkpoint had (objects destroyed AFTER
+    // this checkpoint was taken are no longer "broken" from here on out --
+    // this checkpoint predates their destruction), then re-neutralize every
+    // one of them. Runs AFTER the native GD checkpoint restore (this
+    // function is always called following the loadFn() callback in
+    // restorePreviousFrame()/applyLatest()'s callers) specifically so it
+    // wins over whatever state native restore put these objects back into --
+    // that's the actual point of the fix, not just bookkeeping.
+    m_brokenObjects = state.m_brokenObjects;
+    for (auto* obj : m_brokenObjects) {
+        if (!obj) continue;
+        obj->m_isDisabled  = true;
+        obj->m_isDisabled2 = true;
+        obj->setOpacity(0.f);
     }
 }
 
@@ -1651,6 +1642,7 @@ void GucciEngine::analyzeFrameWindows() {
     practiceFix.m_loadCheckpoint = false;
     practiceFix.m_isBackstep     = false;
     practiceFix.m_savedCheckpoints.clear();
+    practiceFix.m_brokenObjects.clear();
     updater.m_fullReset = true;
     pl->resetLevel();
                                                                                                                             updater.m_fullReset = false;
@@ -2083,6 +2075,7 @@ void GucciEngine::debugTeleportToMark(size_t markIndex) {
                       [](const gb::Action& a, const gb::Action& b){ return a.m_frame < b.m_frame; });
 
     practiceFix.m_savedCheckpoints.clear();
+    practiceFix.m_brokenObjects.clear();
     practiceFix.m_storedFrames.clear();
     practiceFix.m_storedFrames.push_back(fwCapStack[mk.clickIndex]);
     practiceFix.m_storedFrames.push_back(fwCapStack[mk.clickIndex]);
@@ -2147,6 +2140,7 @@ void GucciEngine::beginProbeRun() {
                              return a.m_frame < b.m_frame; });
 
                                         practiceFix.m_savedCheckpoints.clear();
+    practiceFix.m_brokenObjects.clear();
     practiceFix.m_storedFrames.clear();
     practiceFix.m_storedFrames.push_back(fwCapStack[fwProbeClick]);
     practiceFix.m_storedFrames.push_back(fwCapStack[fwProbeClick]);
@@ -2159,6 +2153,23 @@ void GucciEngine::beginProbeRun() {
     if (practiceFix.canRestoreState()) {
         practiceFix.m_loadCheckpoint = true;
         practiceFix.m_isBackstep     = true;
+        // Diagnostic for Nigel's "died at some random part, idk why" report
+        // (2026-08-24): GD's own checkpoint restore is well-known to not
+        // always correctly resync trigger-driven moving hazards, and
+        // Calculate hammers repeated restores of the SAME checkpoint far
+        // harder than normal play ever does (once per shift offset tested).
+        // No fix attempted yet -- can't verify GD's internals or replicate
+        // MegaHack's Practice Fix without a reference to check against, and
+        // this project has been burned before by shipping a guess on
+        // something this foundational (see P3 slope-exit, three wrong
+        // theories before the real fix). This just logs which exact
+        // restore is about to run; [CAP-DIE] (hook_playlayer.cpp) already
+        // logs every death frame during probing -- together they let a
+        // "died at some random part" report be matched to the exact
+        // shift/frame being tested, so the level can actually be inspected
+        // at that spot instead of guessing blind at the mechanism.
+        log::info("[CAP-RESTORE] click={} shift={} targetFrame={} cpFrame={}",
+                  fwProbeClick, fwProbeShift, targetFrame, fwCapStack[fwProbeClick].frame);
         pl->resetLevel();
         practiceFix.m_loadCheckpoint = false;
         practiceFix.m_isBackstep     = false;
@@ -2234,6 +2245,7 @@ void GucciEngine::beginProbeRunReach() {
                      [](const gb::Action& a, const gb::Action& b){ return a.m_frame < b.m_frame; });
 
     practiceFix.m_savedCheckpoints.clear();
+    practiceFix.m_brokenObjects.clear();
     practiceFix.m_storedFrames.clear();
     practiceFix.m_storedFrames.push_back(fwCapStack[fwProbeClick]);
     practiceFix.m_storedFrames.push_back(fwCapStack[fwProbeClick]);
@@ -2297,6 +2309,7 @@ void GucciEngine::beginRecoveryCandidate() {
                      [](const gb::Action& a, const gb::Action& b){ return a.m_frame < b.m_frame; });
 
     practiceFix.m_savedCheckpoints.clear();
+    practiceFix.m_brokenObjects.clear();
     practiceFix.m_storedFrames.clear();
     practiceFix.m_storedFrames.push_back(fwCapStack[fwProbeClick]);
     practiceFix.m_storedFrames.push_back(fwCapStack[fwProbeClick]);

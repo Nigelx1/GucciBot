@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-23-p (Nigel asked whether about.md needed more than the header for the 1.4 bump -- it did, several real gaps: GiddeyBot/ButlerBot's theme-table color descriptions were still the OLD colors (Red+White, Warriors Gold+Royal Blue) from before this session's recolors; SaweetieBot and MaybachBot weren't listed in the theme table at all; Juice was missing from Credits entirely (in-game credits got him added earlier this session, about.md didn't); and there was no 'Rendering' section at all despite SLRenderer/FFmpeg export being a real, substantial mod feature -- added one covering the FFmpeg pipeline, audio capture, the new split-audio-tracks option, and render presets. Also added a Compact Mode bullet under Extras, previously undocumented anywhere in this file. No code changes -- about.md content only, repackaged.)"
+#define GB_BUILD_LABEL "2026-08-24-c (Full per-player checkpoint state, ported from Silicate's real SavedPlayerCheckpoint (checkpoint_player.hpp/.cpp, new files). Audit found GucciBot's SavedCheckpointState was only ever capturing ~15 fields per player (position/rotation/velocity/a few flags) against Silicate's ~250 -- missing slope state, dash state, streak state, particle systems, held-direction/held-button maps, jump-buffer nuance, basically all of PlayerObject's internal physics state. Every field name (both Silicate's own storage names and the live p-> names, including ones where they differ, e.g. m_flashRelated<->m_flashDuration, m_gv0096<->m_switchWaveTrailColor, m_unk9e8<->m_dashFireFrame) was individually verified 2026-08-24 against the generated Geode/binding/PlayerObject.hpp for GD 2.2081 that this mod actually links against -- confirmed present under the exact same names, so this is a compiler-checked mechanical port, not a guess despite Silicate's own use of unk/maybe names for reverse-engineered fields. SavedCheckpointState now embeds SavedPlayerCheckpoint m_player1/m_player2 instead of the old flat field list; saveCurrent()/applyCheckpoint() (engine_core.cpp) now call create()/apply() instead of manually copying ~7 fields. Also investigated GucciPracticeFix::updatePlatformerInputs (the other confirmed stub from the same audit) and did NOT port it -- traced its consumer chain in Silicate's own fix.cpp/checkpoint.cpp and found the m_p1Left/m_p1Right/m_p2Left/m_p2Right state it writes is never read anywhere in Silicate either (not part of SavedCheckpoint, not restored, no other reader found) -- appears to be dead/vestigial machinery even upstream, so wiring it up wouldn't fix anything real. Compiles clean, untested in-game -- this is a large, mechanically-verified change but touches core per-frame physics restore, so treat as unconfirmed until Nigel/Juice run an actual practice-mode checkpoint session.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -15,6 +15,7 @@
 
 #include "action_types.hpp"
 #include "renderer.hpp"
+#include "checkpoint_player.hpp"
 
 using namespace geode::prelude;
 
@@ -44,26 +45,21 @@ struct SavedCheckpointState {
     CheckpointObject* m_checkpoint  = nullptr;
     uint64_t          m_frameOffset = 0;
 
-        cocos2d::CCPoint m_p1Position;
-    float  m_p1Rotation = 0.f;
-    double m_p1XVel = 0.0, m_p1YVel = 0.0;
-    bool   m_p1IsUpsideDown = false;
-    bool   m_p1JumpBuffered = false;
-    bool   m_p1IsOnGround = false;
-    bool   m_p1WasOnGround = false;
-    int    m_p1GameMode = 0;
-    int    m_p1Left = 0, m_p1Right = 0;
-    bool   m_p1ControlsDisabled = false;
-
-        cocos2d::CCPoint m_p2Position;
-    float  m_p2Rotation = 0.f;
-    double m_p2XVel = 0.0, m_p2YVel = 0.0;
-    bool   m_p2IsUpsideDown = false;
-    bool   m_p2JumpBuffered = false;
-    bool   m_p2IsOnGround = false;
-    int    m_p2GameMode = 0;
+    // Full per-player physics/slope/dash/streak/held-input state, ported
+    // from Silicate's own SavedPlayerCheckpoint (checkpoint_player.hpp) --
+    // replaces the ~15-field subset this struct used to carry (position/
+    // rotation/velocity/a few flags), which left out things like slope
+    // state and dash state entirely. See checkpoint_player.hpp for details.
+    SavedPlayerCheckpoint m_player1;
+    SavedPlayerCheckpoint m_player2;
 
         GJGameState m_gameState;
+
+    // Ported from Silicate's real PracticeFix (git.silicate.dev/silicate/silicate,
+    // src/checkpoint/fix.cpp), 2026-08-24. A snapshot of the LIVE
+    // GucciPracticeFix::m_brokenObjects list at the moment this checkpoint was
+    // taken -- see that field's own comment for what "broken" means and why.
+    std::vector<GameObject*> m_brokenObjects;
 };
 
 struct StoredFrame {
@@ -84,17 +80,37 @@ public:
 
         SavedCheckpointState* m_forcedState = nullptr;
 
+    // Ported from Silicate 2026-08-24 (Nigel/Juice: "died at some random
+    // part" during Calculate without MegaHack's Practice Fix enabled -- GD's
+    // own checkpoint restore doesn't correctly handle objects that were
+    // destroyed mid-attempt). GucciBot's destroyObject hook
+    // (hook_gjbasegamelayer.cpp) already called registerBrokenObject() on
+    // every object GD destroys while in practice mode -- ported directly
+    // from Silicate's own identical hook -- but this side, the actual fix,
+    // was previously a no-op stub that just discarded the object. An object
+    // GD destroyed (a one-time, not-cleanly-reversible event -- particle
+    // effects, pooled memory, etc.) can't be trusted to behave correctly if
+    // a checkpoint restore brings the level state back to before its
+    // destruction; rather than trying to properly "undestroy" it, the fix
+    // is to just neutralize it (disabled + invisible) after every restore,
+    // so it can never cause a phantom collision/death again. This is the
+    // LIVE, cumulative list (grows as objects are destroyed during the
+    // current attempt); each checkpoint takes its own frozen copy in
+    // SavedCheckpointState::m_brokenObjects, matching Silicate's own
+    // createCheckpoint()/applyCheckpoint() split exactly.
+    std::vector<GameObject*> m_brokenObjects;
+
     void saveCurrent(CheckpointObject* cp, uint64_t frameOffset);
     void saveState(CheckpointObject* cp, uint64_t frameOffset);
     void restorePreviousFrame(std::function<void(CheckpointObject*)> loadFn);
     void applyLatest();
-    void applyCheckpoint(const SavedCheckpointState& state);
+    void applyCheckpoint(SavedCheckpointState& state);
     void dropLastStoredFrame();
     void clearStoredFrames() { m_storedFrames.clear(); }
     void clearPlatformer(bool full);
     bool canRestoreState() const { return m_storedFrames.size() > 1; }
     void updatePlatformerInputs(cocos2d::CCArray* queuedButtons) { (void)queuedButtons; }
-    void registerBrokenObject(GameObject* obj) { (void)obj; }
+    void registerBrokenObject(GameObject* obj) { m_brokenObjects.push_back(obj); }
 };
 
 struct MacroPathSample {

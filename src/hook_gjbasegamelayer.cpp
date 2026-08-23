@@ -260,8 +260,17 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
             bool actionIsRelease = !action.m_holding;
             for (auto const& mk : gb->fwMarks) {
                 if (mk.frame != action.m_frame || mk.isRelease != actionIsRelease) continue;
-                // Same tier-gating as the visual marker (framewindow.cpp): if tiers
-                // are configured, a window outside all of them gets no cue either.
+                // Juice: sound played for every click, not just ones whose
+                // marker actually appears. Root cause: the visual marker
+                // (framewindow.cpp's render(), `mk.window > gb->fwMaxWindow`)
+                // suppresses any mark past the configured max-window-to-show
+                // threshold, on top of tier-gating -- this check only ever
+                // had the tier half of that, so a click whose window exceeded
+                // fwMaxWindow still cued a sound with no marker ever drawn
+                // for it. Added the same fwMaxWindow check the marker uses.
+                if (mk.window > gb->fwMaxWindow) break;
+                // Same tier-gating as the visual marker: if tiers are
+                // configured, a window outside all of them gets no cue either.
                 if (!gb->fwTiers.empty() && !gb->fwTierFor(mk.window)) break;
                 gbfw::playTierSound(mk.window);
                 break;

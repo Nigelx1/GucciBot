@@ -59,9 +59,9 @@ It is built on top of three other projects:
 
 **GucciBot source (verify exact paths):** `src/replay_engine.cpp`, `src/brr_format.hpp`, `src/gui.cpp`, `src/physicsbypass.cpp`, `src/safemode.cpp`, plus a checkpoint system file. There is an ImGui-based GUI.
 
-**Reference codebases that should be on disk for diffing:**
-- `silicate/` — diff against this for physics / intentional-death logic.
-- `ToastyReplay-main/` (TTR) — organized into `src/core/`, `src/hacks/`, `src/tools/`, `src/gui/`. Diff against this for rendering and for the replay engine.
+**Reference codebases — diff against these for physics/practice-mode and rendering/replay logic respectively. Neither has ever actually been found on local disk; don't assume a local folder and give up if it's missing.**
+- **Silicate** — physics / practice-mode / checkpoint / intentional-death logic. Real source (corrected 2026-08-24 after wasting time assuming a local folder that's never existed): **https://git.silicate.dev/silicate/silicate**, self-hosted, NOT GitHub (GitHub's `silicate-bot` org only has supporting tools — replay format, UI framework, a releases-only repo with no code — searching there comes up empty). `src/checkpoint/` is literally labeled "The practice fix" in the repo itself; `src/hooks/` has one file per hooked GD class, and GucciBot's own `hook_*.cpp` files were clearly originally ported from this same structure — in at least one confirmed case (`registerBrokenObject`, see the Practice Fix work in the Claude Code memory store) GucciBot had the *detection* half of a Silicate mechanism ported byte-for-byte but the actual fix logic was a silent no-op stub the whole time, so checking Silicate's real source is often both "does this already exist" AND "here's exactly how to implement it correctly," not just a reference to skim. WebFetch on this host only returns an AI-paraphrased summary, not literal code — use `curl` on a raw URL (`.../raw/branch/main/<path>`) instead, every time.
+- `ToastyReplay-main/` (TTR) — organized into `src/core/`, `src/hacks/`, `src/tools/`, `src/gui/`. Diff against this for rendering and for the replay engine. Real source location not yet confirmed as of 2026-08-24 — don't assume GitHub (Silicate wasn't there either); ask Nigel or search the way Silicate's self-hosted git was eventually tracked down.
 
 **GucciBot-specific additions** that don't exist in the upstream projects (so don't expect to find them by diffing): CBF recording, `kQueuedCommandMatchTolerance`, `attemptBaseTick`.
 
