@@ -1019,8 +1019,39 @@ void MenuInterface::drawTabBar(){
             }
         } else {
             ImVec2 ts=ImGui::CalcTextSize(names[i]);
-            ImVec2 tp(tMin.x+(tabW-ts.x)*0.5f,tMin.y+(tabH-ts.y)*0.5f);
-            dl->AddText(tp,tc,names[i]);
+            if(ts.x<=tabW-6.f){
+                ImVec2 tp(tMin.x+(tabW-ts.x)*0.5f,tMin.y+(tabH-ts.y)*0.5f);
+                dl->AddText(tp,tc,names[i]);
+            } else {
+                // Nigel: "Click Indicator" and "Frame Windows" overlapped in
+                // the tab bar -- longer labels (from the GUI reorg) don't
+                // all fit a fixed-width column at every window size, and
+                // nothing was clipping/wrapping them, so they bled into the
+                // neighboring tab. Same greedy word-wrap the Jupiter tab
+                // above already uses for its own long name, generalized to
+                // any label instead of a special case just for JMF.
+                std::vector<std::string> words; {
+                    std::string w; for(const char* p=names[i];;++p){
+                        if(*p==' '||*p==0){if(!w.empty())words.push_back(w);w.clear();if(*p==0)break;}
+                        else w.push_back(*p);
+                    }
+                }
+                std::vector<std::string> lines; std::string cur;
+                for(auto& w:words){
+                    std::string trial=cur.empty()?w:(cur+" "+w);
+                    if(ImGui::CalcTextSize(trial.c_str()).x<=tabW-6.f||cur.empty())cur=trial;
+                    else{lines.push_back(cur);cur=w;}
+                }
+                if(!cur.empty())lines.push_back(cur);
+                float lineH=ImGui::GetFontSize();
+                float totalH=lineH*(float)lines.size();
+                float ly=tMin.y+(tabH-totalH)*0.5f;
+                for(auto& ln:lines){
+                    ImVec2 lts=ImGui::CalcTextSize(ln.c_str());
+                    dl->AddText(ImVec2(tMin.x+(tabW-lts.x)*0.5f,ly),tc,ln.c_str());
+                    ly+=lineH;
+                }
+            }
         }
         if(fontSmall)ImGui::PopFont();}
         float indW=tabW*0.5f,indX=tabIndicatorX+(tabW-indW)*0.5f;
@@ -1327,7 +1358,31 @@ void MenuInterface::drawMegaHackWindow(){
             float ly=rMin.y+(rowH-lineH*(float)lines.size())*0.5f;
             for(auto& ln:lines){dl->AddText(ImVec2(rMin.x+16,ly),tc,ln.c_str());ly+=lineH;}
         } else {
-            dl->AddText(ImVec2(rMin.x+16,rMin.y+(rowH-ImGui::GetFontSize())*0.5f),tc,names[i]);
+            // Same overlap risk as the classic tab bar (longer post-reorg
+            // labels vs a fixed column) -- railW is roomier here (150px)
+            // but not unlimited, so guard it the same way rather than
+            // assuming every label fits.
+            float maxW=railW-22.f;
+            if(ImGui::CalcTextSize(names[i]).x<=maxW){
+                dl->AddText(ImVec2(rMin.x+16,rMin.y+(rowH-ImGui::GetFontSize())*0.5f),tc,names[i]);
+            } else {
+                std::vector<std::string> words; {
+                    std::string w; for(const char* p=names[i];;++p){
+                        if(*p==' '||*p==0){if(!w.empty())words.push_back(w);w.clear();if(*p==0)break;}
+                        else w.push_back(*p);
+                    }
+                }
+                std::vector<std::string> lines; std::string cur;
+                for(auto& w:words){
+                    std::string trial=cur.empty()?w:(cur+" "+w);
+                    if(ImGui::CalcTextSize(trial.c_str()).x<=maxW||cur.empty())cur=trial;
+                    else{lines.push_back(cur);cur=w;}
+                }
+                if(!cur.empty())lines.push_back(cur);
+                float lineH=ImGui::GetFontSize();
+                float ly=rMin.y+(rowH-lineH*(float)lines.size())*0.5f;
+                for(auto& ln:lines){dl->AddText(ImVec2(rMin.x+16,ly),tc,ln.c_str());ly+=lineH;}
+            }
         }
         if(fontBody)ImGui::PopFont();}
         ImGui::SetCursorScreenPos(ImVec2(wp.x+railW+12,wp.y+headH+8));
