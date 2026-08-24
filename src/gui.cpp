@@ -298,42 +298,49 @@ static float bigBrrrFlickerAlpha(bool jupiterActive){
 
 static void applyBigBrrrShake(bool jupiterActive){
     static float smoothed=0.f;
-    // Nigel: "it just keeps moving to the left." Root cause: this read
-    // GetWindowPos() (already carrying LAST frame's random offset) and
-    // added a NEW random offset on top of it every frame -- not a jitter
-    // around a fixed point, an actual random walk, since nothing was ever
-    // subtracted back out. applyBigBrrrBounce avoids this by remembering
-    // restY once and always setting position FROM that anchor; this does
-    // the same thing every frame instead (bounce already resets Y itself
-    // each frame, which is why only X visibly wandered) -- remember
-    // exactly what was added last frame and subtract it back out first to
-    // recover the true pre-shake position, THEN apply this frame's offset,
-    // so nothing ever compounds. Self-correcting even if the window gets
-    // dragged mid-shake, since it only cares about undoing its OWN last
-    // contribution, not tracking an absolute position.
-    static float lastSx=0.f, lastSy=0.f;
+    static float anchorX=0.f, anchorY=0.f;
+    static bool active=false;
+    // Nigel: still drifting left even after the random-walk fix (bounded
+    // this time, not runaway, but persistent). Root cause of THIS version:
+    // the previous fix recovered the anchor every single frame by reading
+    // GetWindowPos() back and subtracting last frame's offset -- round-
+    // tripping position through ImGui's own internal storage every frame
+    // while actively shaking. If that storage quantizes/rounds position to
+    // whole pixels for crisp rendering (typical for an immediate-mode
+    // GUI), each round-trip loses a small, consistently-signed fraction --
+    // never gains one, since rounding only ever goes one way -- and that
+    // creeps steadily in one direction over hundreds of frames. Bounded
+    // per frame, but still a real, visible drift over time, matching
+    // exactly what was reported. Fixed the same way applyBigBrrrBounce
+    // already does it above: capture the anchor exactly ONCE when a shake
+    // episode starts (not every frame), then only ever compute anchor+
+    // freshOffset directly for the rest of the episode -- nothing to round-
+    // trip while actively shaking, since GetWindowPos() is never read back
+    // mid-episode at all.
     auto* brrr=BigBrrrManager::get();
     bool on=!jupiterActive&&brrr->enabled&&brrr->shakeEnabled;
     float target=on?brrr->getBassLevel():0.f;
     float rate=(target>smoothed)?40.f:6.f;
     smoothed+=(target-smoothed)*std::min(1.f,rate*ImGui::GetIO().DeltaTime);
 
-    if(lastSx==0.f&&lastSy==0.f&&smoothed<=0.001f)return; // already settled, nothing to undo or apply
-
-    ImVec2 wp=ImGui::GetWindowPos();
-    ImVec2 base=ImVec2(wp.x-lastSx,wp.y-lastSy);
-
     if(smoothed<=0.001f){
-        lastSx=lastSy=0.f;
-        ImGui::SetWindowPos(base); // snap fully back to anchor, don't leave residual offset
+        if(active){
+            ImGui::SetWindowPos(ImVec2(anchorX,anchorY)); // snap back to the exact anchor, no residual offset
+            active=false;
+        }
         return;
+    }
+
+    if(!active){
+        ImVec2 wp=ImGui::GetWindowPos();
+        anchorX=wp.x;anchorY=wp.y;
+        active=true;
     }
 
     float amp=smoothed*smoothed*28.f; // squared -- quiet parts stay basically still, real hits actually hit
     float sx=((float)(rand()%2001)/1000.f-1.f)*amp;
     float sy=((float)(rand()%2001)/1000.f-1.f)*amp;
-    lastSx=sx;lastSy=sy;
-    ImGui::SetWindowPos(ImVec2(base.x+sx,base.y+sy));
+    ImGui::SetWindowPos(ImVec2(anchorX+sx,anchorY+sy));
 }
 
 static const char* getAccuracyTag(AccuracyMode m){
