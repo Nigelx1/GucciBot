@@ -959,14 +959,24 @@ void MenuInterface::drawTitleBar(){
 void MenuInterface::switchTab(int newTab){
     if(newTab==activeTab)return;
     previousTab=activeTab;activeTab=newTab;
-    anim.tabTransition=0.f;anim.transitionFromTab=previousTab;}
+    anim.tabTransition=0.f;anim.transitionFromTab=previousTab;
+    // Nigel: leaving JMF (Jupiter) snapped the window to the top-left
+    // corner instead of staying centered. Root cause: Jupiter's full-
+    // viewport takeover (drawMainWindow/drawMegaHackWindow, jupiterActive
+    // branch) force-sets the window's position to vp->Pos every single
+    // frame it's open, which permanently overwrites ImGui's own remembered
+    // position for that window -- windowPosInitialized only ever guarded
+    // the very first launch, so nothing ever re-centered it afterward.
+    // Resetting it here makes the next frame's non-Jupiter branch treat
+    // this exactly like a fresh launch and recenter for real.
+    if(previousTab==5&&newTab!=5)windowPosInitialized=false;}
 
 void MenuInterface::drawTabBar(){
         ImDrawList* dl=ImGui::GetWindowDrawList();
     ImVec2 pos=ImGui::GetCursorScreenPos();
     float width=ImGui::GetContentRegionAvail().x;
-        const char* names[]={"Macro","Render","Clicks","Autoclicker","Hacks","Indicators","Frame Windows","JMF","Trainer","HUD","Settings","Credits"};
-    const int N=12;
+        const char* names[]={"Macro","Render","Autoclicker","Click Indicator","Frame Windows","JMF","Trainer","HUD","Settings","Credits"};
+    const int N=10;
     float tabW=width/N,tabH=34.f;
     float dt=ImGui::GetIO().DeltaTime;
     if(tabIndicatorX<0)tabIndicatorX=pos.x+activeTab*tabW;
@@ -980,9 +990,9 @@ void MenuInterface::drawTabBar(){
         if(ImGui::IsItemClicked())switchTab(i);
         if(fontSmall)ImGui::PushFont(fontSmall);
         ImU32 tc=(activeTab==i)?theme.getAccentU32(0.98f)
-            :(i==7)?IM_COL32(200,175,90,190) // Jupiter tab stays warm gold even when inactive
+            :(i==5)?IM_COL32(200,175,90,190) // Jupiter tab stays warm gold even when inactive
             :(hov?theme.getTextU32():theme.getTextSecondaryU32());
-        if(i==7&&activeTab==7){
+        if(i==5&&activeTab==5){
             // Full name while open, wrapped to fit the tab's own column --
             // greedy word-wrap so it adapts to whatever the tab width is.
             const char* full="Nigel's Jupiter My Favourite Trainer";
@@ -1096,16 +1106,14 @@ void MenuInterface::drawTabContent(){
                 case 1:drawToolsTab();break;}
             break;
         case 1:drawRenderTab();break;
-        case 2:drawClicksTab();break;
-        case 3:drawAutoclickerTab();break;
-        case 4:drawMoreHacksTab();break;
-        case 5:drawIndicatorsTab();break;
-        case 6:drawFrameWindowsTab();break;
-        case 7:drawJupiterTab();break;
-        case 8:drawTrainerTab();break;
-        case 9:drawHudTab();break;
-        case 10:drawSettingsTab();break;
-        case 11:drawCreditsTab();break;}
+        case 2:drawAutoclickerTab();break;
+        case 3:drawIndicatorsTab();break;
+        case 4:drawFrameWindowsTab();break;
+        case 5:drawJupiterTab();break;
+        case 6:drawTrainerTab();break;
+        case 7:drawHudTab();break;
+        case 8:drawSettingsTab();break;
+        case 9:drawCreditsTab();break;}
     if(fontBody)ImGui::PopFont();
     ImGui::PopStyleVar();}
 
@@ -1117,7 +1125,7 @@ void MenuInterface::drawMainWindow(){
         // Jupiter tab: reskin the WHOLE window's theme (title bar, tab bar, status
     // bar, every widget) for as long as this tab is active, not just its own
     // content -- restored at the end of this function either way.
-    bool jupiterActive=(activeTab==7);
+    bool jupiterActive=(activeTab==5);
     ThemeEngine savedTheme=theme;
     if(jupiterActive){
         // Nigel's own two colors from his mockup: #100680 navy, #FCF550 gold.
@@ -1203,7 +1211,7 @@ void MenuInterface::drawMegaHackWindow(){
     float t=anim.easeOutCubic(anim.openProgress);
     if(t<=0.f)return;
 
-    bool jupiterActive=(activeTab==7);
+    bool jupiterActive=(activeTab==5);
     ThemeEngine savedTheme=theme;
     if(jupiterActive){
         // Nigel's own two colors from his mockup: #100680 navy, #FCF550 gold.
@@ -1225,7 +1233,19 @@ void MenuInterface::drawMegaHackWindow(){
     } else {
         ImVec2 center=ImGui::GetMainViewport()->GetCenter();
         ImVec2 mhSize(620.f,400.f);
-        ImGui::SetNextWindowPos(ImVec2(center.x-mhSize.x*0.5f,center.y-mhSize.y*0.5f),ImGuiCond_FirstUseEver);
+        // windowPosInitialized doubles as "needs a forced recenter" here,
+        // same as drawMainWindow -- Jupiter's full-viewport takeover above
+        // permanently overwrites this window's remembered ImGui position to
+        // vp->Pos (top-left) every frame it's active; ImGuiCond_FirstUseEver
+        // never refires once ImGui has seen this window once, so leaving
+        // Jupiter used to strand the window there. switchTab() resets this
+        // flag to false when leaving the Jupiter tab specifically.
+        if(!windowPosInitialized){
+            ImGui::SetNextWindowPos(ImVec2(center.x-mhSize.x*0.5f,center.y-mhSize.y*0.5f),ImGuiCond_Always);
+            windowPosInitialized=true;
+        } else {
+            ImGui::SetNextWindowPos(ImVec2(center.x-mhSize.x*0.5f,center.y-mhSize.y*0.5f),ImGuiCond_FirstUseEver);
+        }
         ImGui::SetNextWindowSize(mhSize,ImGuiCond_Always);
     }
     ImGui::SetNextWindowBgAlpha(0.f);
@@ -1270,9 +1290,9 @@ void MenuInterface::drawMegaHackWindow(){
         dl->AddText(ImVec2(wp.x+16,wp.y+12),theme.getAccentU32(0.92f),"GB");
         if(fontHeading)ImGui::PopFont();
     }
-        const char* names[]={"Macro","Render","Clicks","Autoclicker","Hacks","Indicators","Frame Windows","JMF","Trainer","HUD","Settings","Credits"};
+        const char* names[]={"Macro","Render","Autoclicker","Click Indicator","Frame Windows","JMF","Trainer","HUD","Settings","Credits"};
     float rowH=34.f,railTop=headH+10.f;
-    for(int i=0;i<12;i++){
+    for(int i=0;i<10;i++){
         ImVec2 rMin(wp.x,wp.y+railTop+i*rowH),rMax(wp.x+railW,rMin.y+rowH);
         char rid[24];snprintf(rid,sizeof(rid),"##mhTab%d",i);
         ImGui::SetCursorScreenPos(rMin);
@@ -1285,9 +1305,9 @@ void MenuInterface::drawMegaHackWindow(){
         if(act)dl->AddRectFilled(rMin,ImVec2(rMin.x+3,rMax.y),theme.getAccentU32(0.95f));
         if(fontBody)ImGui::PushFont(fontBody);
         ImU32 tc=act?theme.getAccentU32(0.98f)
-            :(i==7)?IM_COL32(200,175,90,190)
+            :(i==5)?IM_COL32(200,175,90,190)
             :(hov?theme.getTextU32():theme.getTextSecondaryU32());
-        if(i==7&&act){
+        if(i==5&&act){
             const char* full="Nigel's Jupiter My Favourite Trainer";
             std::vector<std::string> words; {
                 std::string w; for(const char* p=full;;++p){
@@ -2317,7 +2337,23 @@ void MenuInterface::drawToolsTab(){
         ImGui::TextWrapped("Pause physics to step frame-by-frame. Hotkeys are in Settings > Keybinds.");
         ImGui::PopStyleColor();
     }
-    }}
+    }
+
+    // Moved here from their own top-level tabs (second 1.5 GUI reorg pass,
+    // Nigel): the top-level "Hacks" tab's toggles (Hide Attempts/Auto
+    // Retry/Instant Respawn/Force Platformer) belong wherever the other
+    // hack toggles ended up, above. Click Sounds were headed for Render at
+    // first, but they play live on real button presses (triggerClickAudio,
+    // wired into GJBaseGameLayer::handleButton -- confirmed before moving
+    // it, not assumed), not just baked into renders, so Nigel's own rule
+    // ("unless we can play them live, if so put them in hacks or sum")
+    // puts it here instead. Both are still real, separate features -- just
+    // calling the existing functions rather than duplicating their bodies.
+    ImGui::Dummy(ImVec2(0,8));
+    drawMoreHacksTab();
+    ImGui::Dummy(ImVec2(0,8));
+    drawClicksTab();
+}
 
 // Frame-window asset import (Juice/Nigel's request, 2026-08-23): tier
 // sound/image lookup already resolves bare filenames against fw_assets/
@@ -4519,7 +4555,7 @@ void MenuInterface::drawTrainerClickTrainerPage(){
 // whichever of the user's own macros they've picked into trainerMacro
 // instead of one bundled level. Deliberately plain full-width layout (no
 // ##jmfConstrain-style narrow child, no wave-ribbon backdrop, no theme
-// reskin) -- those only exist for JMF because activeTab==7 triggers a
+// reskin) -- those only exist for JMF because activeTab==5 triggers a
 // whole-window reskin in drawMainWindow/drawMegaHackWindow; a new tab at a
 // new index doesn't trigger any of that, so this can look like every other
 // ordinary tab.
