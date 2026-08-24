@@ -12,16 +12,30 @@ BigBrrrManager* BigBrrrManager::get() {
     return instance;
 }
 
-static bool isMaybachTheme() {
+static BotTheme currentTheme() {
     auto* ui = MenuInterface::get();
-    return ui && ui->activeTheme == THEME_MAYBACH;
+    return ui ? ui->activeTheme : THEME_GUCCI;
 }
 
+// Nigel's per-theme Big Brrr tracks: each gets its own bundled file, BPM,
+// and beat-drop offset -- extended from the original Maybach-only special
+// case (2026-08-24, Romo/Grizzley themes) to a real per-theme dispatch
+// instead of stacking more booleans next to isMaybachTheme().
 double BigBrrrManager::kStartOffsetSec() {
-    return isMaybachTheme() ? 0.0 : (20.0 + 11.0 / 15.0);
+    switch (currentTheme()) {
+        case THEME_MAYBACH:  return 0.0;
+        case THEME_ROMO:     return 16.0 + 11.0 / 30.0;
+        case THEME_GRIZZLEY: return 90.0 + 4.0 / 30.0;
+        default:             return 20.0 + 11.0 / 15.0;
+    }
 }
 double BigBrrrManager::kBpm() {
-    return isMaybachTheme() ? 75.0 : 140.0;
+    switch (currentTheme()) {
+        case THEME_MAYBACH:  return 75.0;
+        case THEME_ROMO:     return 130.0;
+        case THEME_GRIZZLEY: return 98.0;
+        default:             return 140.0;
+    }
 }
 
 std::filesystem::path BigBrrrManager::getBrrrDir() const {
@@ -62,8 +76,14 @@ void BigBrrrManager::start() {
     stop();
     auto path = findFirstAudioFile(getBrrrDir());
     if (path.empty()) {
-        auto bundled = Mod::get()->getResourcesDir() /
-            (isMaybachTheme() ? "big_brrr_maybach.mp3" : "big_brrr.mp3");
+        const char* bundledName = "big_brrr.mp3";
+        switch (currentTheme()) {
+            case THEME_MAYBACH:  bundledName = "big_brrr_maybach.mp3"; break;
+            case THEME_ROMO:     bundledName = "big_brrr_romo.mp3"; break;
+            case THEME_GRIZZLEY: bundledName = "big_brrr_grizzley.mp3"; break;
+            default: break;
+        }
+        auto bundled = Mod::get()->getResourcesDir() / bundledName;
         std::error_code ec;
         if (std::filesystem::exists(bundled, ec)) path = bundled;
     }

@@ -90,7 +90,9 @@ enum BotTheme {
     THEME_JUICE,
     THEME_BUTLER,
     THEME_SAWEETIE,
-    THEME_MAYBACH
+    THEME_MAYBACH,
+    THEME_ROMO,
+    THEME_GRIZZLEY
 };
 
 class MenuInterface {

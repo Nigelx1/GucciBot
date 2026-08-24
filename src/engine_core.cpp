@@ -243,7 +243,7 @@ fs::path GucciReplaySystem::getCurrentPath() const {
     // -- next load finds no sidecar and the results appear to have vanished).
     // Probe for the macro's actual extension first; only fall back to
     // .brrr when nothing exists yet (a macro that hasn't been saved once).
-    for (auto ext : { ".brrr", ".toosii", ".ja", ".giddey", ".bam", ".sexyy", ".juice", ".butler", ".saweetie", ".maybach" }) {
+    for (auto ext : { ".brrr", ".toosii", ".ja", ".giddey", ".bam", ".sexyy", ".juice", ".butler", ".saweetie", ".maybach", ".romo", ".grizzley" }) {
         std::error_code ec;
         auto candidate = dir / (gb->replayName + ext);
         if (fs::exists(candidate, ec)) return candidate;
@@ -489,7 +489,7 @@ static void loadTrainerMacroData(const fs::path& path, GucciEngine::TrainerMacro
 bool GucciEngine::loadTrainerMacro(const std::string& stem) {
     auto dir = getReplayDir();
     fs::path found;
-    for (auto ext : { ".brrr", ".toosii", ".ja", ".giddey", ".bam", ".sexyy", ".juice", ".butler", ".saweetie", ".maybach" }) {
+    for (auto ext : { ".brrr", ".toosii", ".ja", ".giddey", ".bam", ".sexyy", ".juice", ".butler", ".saweetie", ".maybach", ".romo", ".grizzley" }) {
         std::error_code ec;
         auto candidate = dir / (stem + ext);
         if (fs::exists(candidate, ec)) { found = candidate; break; }
@@ -813,6 +813,7 @@ void GucciEngine::reloadMacroList() {
     jaMacros.clear(); giddeyMacros.clear(); toosiiMacros.clear();
     bamMacros.clear(); sexyyMacros.clear(); juiceMacros.clear(); butlerMacros.clear();
     saweetieMacros.clear(); maybachMacros.clear();
+    romoMacros.clear(); grizzleyMacros.clear();
 
     auto dir = getReplayDir();
     if (!fs::exists(dir)) { fs::create_directories(dir); return; }
@@ -824,7 +825,7 @@ void GucciEngine::reloadMacroList() {
         auto stem = it.path().stem().string();
         if (ext == ".brrr" || ext == ".toosii" || ext == ".ja" ||
             ext == ".giddey" || ext == ".bam" || ext == ".sexyy" || ext == ".juice" || ext == ".butler" ||
-            ext == ".saweetie" || ext == ".maybach") {
+            ext == ".saweetie" || ext == ".maybach" || ext == ".romo" || ext == ".grizzley") {
             storedMacros.push_back(stem);
             if (ext == ".ja")     jaMacros.insert(stem);
             if (ext == ".giddey") giddeyMacros.insert(stem);
@@ -835,6 +836,8 @@ void GucciEngine::reloadMacroList() {
             if (ext == ".butler") butlerMacros.insert(stem);
             if (ext == ".saweetie") saweetieMacros.insert(stem);
             if (ext == ".maybach")  maybachMacros.insert(stem);
+            if (ext == ".romo")     romoMacros.insert(stem);
+            if (ext == ".grizzley") grizzleyMacros.insert(stem);
         } else if (ext == ".gdr" || ext == ".xd" || ext == ".json" || ext == ".brr") {
                         incompatibleMacros.insert(stem);
         }
@@ -1158,7 +1161,7 @@ bool GucciEngine::convertToBRR(const std::string& name) {
     auto isNative = [](const std::string& e) {
         return e == ".brrr" || e == ".toosii" || e == ".ja" ||
                e == ".giddey" || e == ".bam" || e == ".sexyy" || e == ".juice" || e == ".butler" ||
-               e == ".saweetie" || e == ".maybach";
+               e == ".saweetie" || e == ".maybach" || e == ".romo" || e == ".grizzley";
     };
 
     fs::path src;
@@ -1385,7 +1388,7 @@ void GucciEngine::initialize() {
         fs::create_directories(jupDir);
 
         auto findIn = [](fs::path const& dir, std::string const& stem) -> fs::path {
-            for (auto ext : { ".brrr", ".toosii", ".ja", ".giddey", ".bam", ".sexyy", ".juice", ".butler", ".saweetie", ".maybach" }) {
+            for (auto ext : { ".brrr", ".toosii", ".ja", ".giddey", ".bam", ".sexyy", ".juice", ".butler", ".saweetie", ".maybach", ".romo", ".grizzley" }) {
                 std::error_code ec;
                 auto candidate = dir / (stem + ext);
                 if (fs::exists(candidate, ec)) return candidate;
