@@ -298,17 +298,42 @@ static float bigBrrrFlickerAlpha(bool jupiterActive){
 
 static void applyBigBrrrShake(bool jupiterActive){
     static float smoothed=0.f;
+    // Nigel: "it just keeps moving to the left." Root cause: this read
+    // GetWindowPos() (already carrying LAST frame's random offset) and
+    // added a NEW random offset on top of it every frame -- not a jitter
+    // around a fixed point, an actual random walk, since nothing was ever
+    // subtracted back out. applyBigBrrrBounce avoids this by remembering
+    // restY once and always setting position FROM that anchor; this does
+    // the same thing every frame instead (bounce already resets Y itself
+    // each frame, which is why only X visibly wandered) -- remember
+    // exactly what was added last frame and subtract it back out first to
+    // recover the true pre-shake position, THEN apply this frame's offset,
+    // so nothing ever compounds. Self-correcting even if the window gets
+    // dragged mid-shake, since it only cares about undoing its OWN last
+    // contribution, not tracking an absolute position.
+    static float lastSx=0.f, lastSy=0.f;
     auto* brrr=BigBrrrManager::get();
     bool on=!jupiterActive&&brrr->enabled&&brrr->shakeEnabled;
     float target=on?brrr->getBassLevel():0.f;
     float rate=(target>smoothed)?40.f:6.f;
     smoothed+=(target-smoothed)*std::min(1.f,rate*ImGui::GetIO().DeltaTime);
-    if(smoothed<=0.001f)return;
+
+    if(lastSx==0.f&&lastSy==0.f&&smoothed<=0.001f)return; // already settled, nothing to undo or apply
+
+    ImVec2 wp=ImGui::GetWindowPos();
+    ImVec2 base=ImVec2(wp.x-lastSx,wp.y-lastSy);
+
+    if(smoothed<=0.001f){
+        lastSx=lastSy=0.f;
+        ImGui::SetWindowPos(base); // snap fully back to anchor, don't leave residual offset
+        return;
+    }
+
     float amp=smoothed*smoothed*28.f; // squared -- quiet parts stay basically still, real hits actually hit
     float sx=((float)(rand()%2001)/1000.f-1.f)*amp;
     float sy=((float)(rand()%2001)/1000.f-1.f)*amp;
-    ImVec2 wp=ImGui::GetWindowPos();
-    ImGui::SetWindowPos(ImVec2(wp.x+sx,wp.y+sy));
+    lastSx=sx;lastSy=sy;
+    ImGui::SetWindowPos(ImVec2(base.x+sx,base.y+sy));
 }
 
 static const char* getAccuracyTag(AccuracyMode m){
