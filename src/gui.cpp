@@ -3646,7 +3646,14 @@ void MenuInterface::drawIndicatorsTab(){
     ImGui::PopStyleColor();
     ImGui::Dummy(ImVec2(0,8));
 
-    if(!engine->survivalIndicator)return;
+    // Nigel: "the survival indicator shouldn't HAVE to be on for other
+    // green window settings and stuff" -- this early return used to hide
+    // Style/Timing/Appearance/Sound/Calibration/Stats entirely unless the
+    // master toggle above was on. None of it actually depends on the
+    // indicator being active right now -- it's all just stored preferences
+    // the indicator reads whenever it does run, plus Calibration, which is
+    // useful prep work independent of the indicator entirely. Removed the
+    // gate so everything below is always visible/editable.
 
     Widgets::SectionHeader("Style",theme);
     const char* styles[]={"Ring","Classic","Converge","Pulse"};
