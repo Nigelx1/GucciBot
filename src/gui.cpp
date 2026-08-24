@@ -606,24 +606,23 @@ static const ThemePreset kThemePresets[]={
      ImVec4(0.500f,0.500f,0.520f,1.f),
      5.f,0.97f},
         {"RomoBot",
-     // Cowboys navy/silver (his real team) with a hazard-red accent -- a
-     // color-only nod to "based off his dui" rather than anything explicit
-     // in the palette itself; the one actual wink lives in the subtitle text.
-     ImVec4(0.910f,0.180f,0.140f,1.f),
+     // Cowboys navy/silver (his real team) -- accent swapped to silver per
+     // Nigel (was hazard-red); the one actual "based off his dui" wink now
+     // lives purely in the subtitle text, nothing left in the palette itself.
+     ImVec4(0.760f,0.800f,0.850f,1.f),
      ImVec4(0.020f,0.055f,0.110f,0.96f),
      ImVec4(0.035f,0.085f,0.160f,1.f),
      ImVec4(0.960f,0.965f,0.975f,1.f),
      ImVec4(0.520f,0.560f,0.620f,1.f),
      5.f,0.96f},
         {"GrizzleyBot",
-     // Detroit steel-black with a flare-orange-red accent -- distinct from
-     // ButlerBot's warmer crimson/black (cooler bg undertone, more orange
-     // in the accent) despite both landing in red/black territory.
-     ImVec4(0.900f,0.220f,0.080f,1.f),
-     ImVec4(0.028f,0.032f,0.038f,0.96f),
-     ImVec4(0.055f,0.062f,0.072f,1.f),
-     ImVec4(0.970f,0.970f,0.975f,1.f),
-     ImVec4(0.520f,0.500f,0.480f,1.f),
+     // Grizzley Gang GTA RP palette per Nigel (was Detroit steel/orange-red)
+     // -- GTA's own most recognizable identity, neon money-green on black.
+     ImVec4(0.180f,0.980f,0.320f,1.f),
+     ImVec4(0.020f,0.030f,0.022f,0.96f),
+     ImVec4(0.040f,0.058f,0.042f,1.f),
+     ImVec4(0.960f,0.980f,0.965f,1.f),
+     ImVec4(0.460f,0.560f,0.480f,1.f),
      5.f,0.96f},
 };
 
@@ -1931,8 +1930,8 @@ void MenuInterface::drawReplayTab(){
             else if(eng2->butlerMacros.count(mn)){tag=".butler";tagCol=ImVec4(0.808f,0.067f,0.255f,1.f);}
             else if(eng2->saweetieMacros.count(mn)){tag=".saweetie";tagCol=ImVec4(1.000f,0.180f,0.520f,1.f);}
             else if(eng2->maybachMacros.count(mn)){tag=".maybach";tagCol=ImVec4(0.780f,0.780f,0.800f,1.f);}
-            else if(eng2->romoMacros.count(mn)){tag=".romo";tagCol=ImVec4(0.910f,0.180f,0.140f,1.f);}
-            else if(eng2->grizzleyMacros.count(mn)){tag=".grizzley";tagCol=ImVec4(0.900f,0.220f,0.080f,1.f);}
+            else if(eng2->romoMacros.count(mn)){tag=".romo";tagCol=ImVec4(0.760f,0.800f,0.850f,1.f);}
+            else if(eng2->grizzleyMacros.count(mn)){tag=".grizzley";tagCol=ImVec4(0.180f,0.980f,0.320f,1.f);}
             auto ts=ImGui::CalcTextSize(tag);tagX-=ts.x+4;
             wdl->AddText(ImVec2(tagX,iy+(ih-ts.y)*0.5f),toU32(tagCol),tag);}
                 float btnY=iy+(ih-xBtnW)*0.5f;
