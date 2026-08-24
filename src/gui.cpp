@@ -270,6 +270,47 @@ static void applyBigBrrrBounce(bool jupiterActive){
     ImGui::SetWindowPos(ImVec2(wp.x,restY+offset));
 }
 
+// Nigel, 2026-08-24: GrizzleyBot's track is "crazy bass boosted" -- "is
+// there any way to like... vibrate the menu like a speaker on the bassy
+// parts?" Unlike the sine-wave bounce above (a BPM guess, no real audio
+// data), this reads BigBrrrManager's live FMOD DSP tap on the actual
+// playback channel -- genuine per-buffer bass energy, not a metronome.
+// True GPU blur isn't reachable here: ImGuiCocos (build/_deps/gd-imgui-
+// cocos-src) only exposes setup()/draw() callback registration, nothing
+// resembling a render-target/backend hook to intercept for a post-process
+// shader, and forking that dependency for one effect wasn't worth it.
+// Instead: a violent position shake plus a window-alpha flicker, both
+// driven by the same smoothed bass envelope -- reads as the whole menu
+// glitching/thumping on hits rather than a soft wobble. Nigel was explicit
+// it's fine to be intense: "it can be annoying on purpose if its
+// accurate." Two independent smoothing trackers (one per effect) rather
+// than shared state, same one-concern-per-function preference already
+// used for AudioRecorder's per-instance callbacks.
+static float bigBrrrFlickerAlpha(bool jupiterActive){
+    static float smoothed=0.f;
+    auto* brrr=BigBrrrManager::get();
+    bool on=!jupiterActive&&brrr->enabled&&brrr->shakeEnabled;
+    float target=on?brrr->getBassLevel():0.f;
+    float rate=(target>smoothed)?40.f:6.f; // fast attack, slower decay -- reads as punching on hits
+    smoothed+=(target-smoothed)*std::min(1.f,rate*ImGui::GetIO().DeltaTime);
+    return 1.f-smoothed*smoothed*0.5f; // squared response, up to a 50% alpha dip at full intensity
+}
+
+static void applyBigBrrrShake(bool jupiterActive){
+    static float smoothed=0.f;
+    auto* brrr=BigBrrrManager::get();
+    bool on=!jupiterActive&&brrr->enabled&&brrr->shakeEnabled;
+    float target=on?brrr->getBassLevel():0.f;
+    float rate=(target>smoothed)?40.f:6.f;
+    smoothed+=(target-smoothed)*std::min(1.f,rate*ImGui::GetIO().DeltaTime);
+    if(smoothed<=0.001f)return;
+    float amp=smoothed*smoothed*28.f; // squared -- quiet parts stay basically still, real hits actually hit
+    float sx=((float)(rand()%2001)/1000.f-1.f)*amp;
+    float sy=((float)(rand()%2001)/1000.f-1.f)*amp;
+    ImVec2 wp=ImGui::GetWindowPos();
+    ImGui::SetWindowPos(ImVec2(wp.x+sx,wp.y+sy));
+}
+
 static const char* getAccuracyTag(AccuracyMode m){
     switch(m){case AccuracyMode::CBS:return "CBS";case AccuracyMode::CBF:return "CBF";default:return nullptr;}}
 static ImVec4 getAccuracyTagColor(AccuracyMode m){
@@ -1188,6 +1229,7 @@ void MenuInterface::drawMainWindow(){
     // bar, every widget) for as long as this tab is active, not just its own
     // content -- restored at the end of this function either way.
     bool jupiterActive=(activeTab==5);
+    t*=bigBrrrFlickerAlpha(jupiterActive);
     ThemeEngine savedTheme=theme;
     if(jupiterActive){
         // Nigel's own two colors from his mockup: #100680 navy, #FCF550 gold.
@@ -1223,6 +1265,7 @@ void MenuInterface::drawMainWindow(){
         ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoScrollbar|
         ImGuiWindowFlags_NoScrollWithMouse|ImGuiWindowFlags_NoTitleBar);
         applyBigBrrrBounce(jupiterActive);
+        applyBigBrrrShake(jupiterActive);
         if(!jupiterActive){
         // Drag handle -- meaningless once the window IS the viewport, so skipped
         // entirely in Jupiter's full-screen takeover.
@@ -1274,6 +1317,7 @@ void MenuInterface::drawMegaHackWindow(){
     if(t<=0.f)return;
 
     bool jupiterActive=(activeTab==5);
+    t*=bigBrrrFlickerAlpha(jupiterActive);
     ThemeEngine savedTheme=theme;
     if(jupiterActive){
         // Nigel's own two colors from his mockup: #100680 navy, #FCF550 gold.
@@ -1316,6 +1360,7 @@ void MenuInterface::drawMegaHackWindow(){
         ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoScrollbar|
         ImGuiWindowFlags_NoScrollWithMouse|ImGuiWindowFlags_NoTitleBar);
     applyBigBrrrBounce(jupiterActive);
+    applyBigBrrrShake(jupiterActive);
     windowPos=ImGui::GetWindowPos();
     ImDrawList* dl=ImGui::GetWindowDrawList();
     ImVec2 wp=windowPos,ws=ImGui::GetWindowSize();
@@ -3617,6 +3662,12 @@ void MenuInterface::drawSettingsTab(){
         else
             ImGui::TextWrapped("Loops the bundled BRRRR track and makes the whole menu bounce. Doesn't touch the Jupiter tab. Drop your own mp3/wav/ogg in the BRRRR folder to swap it without a rebuild.");
         ImGui::PopStyleColor();
+        ImGui::Dummy(ImVec2(0,6));
+        bool shakeOn=brrr->shakeEnabled;
+        if(Widgets::ToggleSwitch("Bass Shake",&shakeOn,theme,anim))brrr->shakeEnabled=shakeOn;
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::TextWrapped("Reads the track's actual bass energy live and shakes/flickers the menu on hits -- not a beat guess, a real audio tap on the BRRRR channel. Deliberately intense by default, not a subtle wobble.");
+        ImGui::PopStyleColor();
     }
     ImGui::Dummy(ImVec2(0,12));
 
@@ -5005,7 +5056,7 @@ void MenuInterface::drawCreditsTab(){
         (activeTheme==THEME_BUTLER)?"Playoff Jimmy | Big Face Coffee | Buckets":
         (activeTheme==THEME_SAWEETIE)?"Icy Grl | Tap In | Best Friend":
         (activeTheme==THEME_MAYBACH)?"MMG | Boss | Huh":
-        (activeTheme==THEME_ROMO)?"Analyst | Prophet | One Bad Night":
+        (activeTheme==THEME_ROMO)?"Analyst | Prophet | One Bad Afternoon":
         (activeTheme==THEME_GRIZZLEY)?"Detroit | Activated | First Day Out":
         "Concept | Vision | Brrr";
     ImVec2 bs=ImGui::CalcTextSize(badge);

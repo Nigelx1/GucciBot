@@ -1,11 +1,11 @@
 #pragma once
 
 #include <Geode/Geode.hpp>
+#include <Geode/binding/FMODAudioEngine.hpp>
+#include <atomic>
 #include <filesystem>
 
 using namespace geode::prelude;
-
-namespace FMOD { class Sound; class Channel; }
 
 // "BIG BRRRR" -- a pure joke toggle, unrelated to any bot functionality.
 // Loops resources/big_brrr.mp3, bundled with the mod (Mod::get()->getResourcesDir(),
@@ -31,16 +31,31 @@ public:
     static double kBpm();
 
     bool enabled = false;
+    // Nigel, 2026-08-24: GrizzleyBot's track is heavily bass-boosted --
+    // "vibrate the menu like a speaker on the bassy parts," and explicitly
+    // fine with it being intense ("annoying on purpose if its accurate").
+    // Separate opt-out from `enabled` itself since the shake is a lot more
+    // aggressive than the existing beat-synced bounce.
+    bool shakeEnabled = false;
 
     void setEnabled(bool on);
     std::filesystem::path getBrrrDir() const;
     void openBrrrFolder();
     bool hasFile() const; // true if a save-dir override is present (bundled default always works)
 
+    // Smoothed [0,1] live bass-energy reading, safe to poll every ImGui
+    // frame from the main thread. Fed by a real FMOD DSP tap on the actual
+    // playback channel (bassDspCallback, bigbrrr.cpp) -- not a BPM guess
+    // like applyBigBrrrBounce's sine wave, genuine per-buffer signal.
+    float getBassLevel() const { return rawBassLevel.load(); }
+
 private:
     FMOD::Sound*   sound   = nullptr;
     FMOD::Channel* channel = nullptr;
+    FMOD::DSP*     bassDsp = nullptr;
+    std::atomic<float> rawBassLevel{0.f}; // written on FMOD's mixer thread, read on the main thread
     bool audioMuteHeld = false; // whether this manager currently holds a GameAudioMute lock
     void start();
     void stop();
+    static FMOD_RESULT F_CALLBACK bassDspCallback(FMOD_DSP_STATE*, float*, float*, unsigned int, int, int*);
 };

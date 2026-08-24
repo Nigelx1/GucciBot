@@ -4,8 +4,42 @@
 #include <Geode/Bindings.hpp>
 #include <Geode/binding/FMODAudioEngine.hpp>
 #include <algorithm>
+#include <cmath>
+#include <cstring>
 
 using namespace geode::prelude;
+
+// Live bass-tap DSP, attached directly to Big Brrr's own playback channel
+// (not the master channel group) so it only ever sees this track's audio,
+// never gameplay music/SFX/click sounds. Unlike render/dsp.cpp's
+// AudioRecorder (which zeroes its output buffer -- fine for render capture,
+// where nothing needs to be heard live), this one passes audio through
+// unchanged and only reads it, since the whole point is the user actually
+// hearing the bass-boosted track while the menu reacts to it.
+FMOD_RESULT F_CALLBACK BigBrrrManager::bassDspCallback(FMOD_DSP_STATE*,
+                                                        float* inbuffer,
+                                                        float* outbuffer,
+                                                        unsigned int length,
+                                                        int inchannels, int*) {
+    unsigned int total = length * (unsigned int)std::max(inchannels, 1);
+    std::memcpy(outbuffer, inbuffer, (size_t)total * sizeof(float));
+
+    // Cheap single-pole low-pass (not a true FFT band-split -- far lower
+    // risk to get right than spectral analysis, and good enough given the
+    // source tracks are already bass-boosted) then RMS of the filtered
+    // signal for this buffer as "how much bass right now." alpha/gain
+    // tuned by ear, not derived from the sample rate.
+    static float lpState = 0.f;
+    const float alpha = 0.06f;
+    double sumSq = 0.0;
+    for (unsigned int i = 0; i < total; i++) {
+        lpState += alpha * (inbuffer[i] - lpState);
+        sumSq += (double)lpState * (double)lpState;
+    }
+    float rms = total > 0 ? (float)std::sqrt(sumSq / (double)total) : 0.f;
+    BigBrrrManager::get()->rawBassLevel.store(std::clamp(rms * 4.0f, 0.f, 1.f));
+    return FMOD_OK;
+}
 
 BigBrrrManager* BigBrrrManager::get() {
     static BigBrrrManager* instance = new BigBrrrManager();
@@ -104,11 +138,29 @@ void BigBrrrManager::start() {
         channel->setPosition((unsigned int)(kStartOffsetSec() * 1000.0), FMOD_TIMEUNIT_MS);
         GameAudioMute::acquire();
         audioMuteHeld = true;
+
+        FMOD_DSP_DESCRIPTION desc = {};
+        strcpy_s(desc.name, "guccibot bass tap");
+        desc.version = 0x00020000;
+        desc.numinputbuffers = 1;
+        desc.numoutputbuffers = 1;
+        desc.read = BigBrrrManager::bassDspCallback;
+        if (system->createDSP(&desc, &bassDsp) == FMOD_OK && bassDsp) {
+            channel->addDSP(0, bassDsp);
+        } else {
+            bassDsp = nullptr;
+        }
     }
 }
 
 void BigBrrrManager::stop() {
-    if (channel) { channel->stop(); channel = nullptr; }
+    if (channel) {
+        if (bassDsp) channel->removeDSP(bassDsp);
+        channel->stop();
+        channel = nullptr;
+    }
+    if (bassDsp) { bassDsp->release(); bassDsp = nullptr; }
+    rawBassLevel.store(0.f);
     if (sound) { sound->release(); sound = nullptr; }
     if (audioMuteHeld) { GameAudioMute::release(); audioMuteHeld = false; }
 }
