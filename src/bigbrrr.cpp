@@ -53,9 +53,12 @@ static BotTheme currentTheme() {
 
 // Nigel's per-theme Big Brrr tracks: each gets its own bundled file, BPM,
 // and beat-drop offset -- extended from the original Maybach-only special
-// case (2026-08-24, Romo/Grizzley themes) to a real per-theme dispatch
-// instead of stacking more booleans next to isMaybachTheme().
+// case (2026-08-24, Romo/Grizzley themes, then again for user-created
+// custom themes) to a real per-theme dispatch instead of stacking more
+// booleans next to isMaybachTheme().
 double BigBrrrManager::kStartOffsetSec() {
+    auto* ui = MenuInterface::get();
+    if (auto* c = ui ? ui->getActiveCustomTheme() : nullptr) return c->dropOffsetSec;
     switch (currentTheme()) {
         case THEME_MAYBACH:  return 0.0;
         case THEME_ROMO:     return 16.0 + 11.0 / 30.0;
@@ -64,6 +67,8 @@ double BigBrrrManager::kStartOffsetSec() {
     }
 }
 double BigBrrrManager::kBpm() {
+    auto* ui = MenuInterface::get();
+    if (auto* c = ui ? ui->getActiveCustomTheme() : nullptr) return c->bpm;
     switch (currentTheme()) {
         case THEME_MAYBACH:  return 75.0;
         case THEME_ROMO:     return 130.0;
@@ -110,16 +115,31 @@ void BigBrrrManager::start() {
     stop();
     auto path = findFirstAudioFile(getBrrrDir());
     if (path.empty()) {
-        const char* bundledName = "big_brrr.mp3";
-        switch (currentTheme()) {
-            case THEME_MAYBACH:  bundledName = "big_brrr_maybach.mp3"; break;
-            case THEME_ROMO:     bundledName = "big_brrr_romo.mp3"; break;
-            case THEME_GRIZZLEY: bundledName = "big_brrr_grizzley.mp3"; break;
-            default: break;
-        }
-        auto bundled = Mod::get()->getResourcesDir() / bundledName;
+        auto* ui = MenuInterface::get();
+        auto* custom = ui ? ui->getActiveCustomTheme() : nullptr;
         std::error_code ec;
-        if (std::filesystem::exists(bundled, ec)) path = bundled;
+        if (custom && custom->hasAudio) {
+            // Custom themes' tracks aren't bundled mod resources -- they
+            // were imported by the user and copied into customthemes/,
+            // named by extension the same way the theme's own JSON is.
+            auto customPath = ui->getCustomThemesDir() / (custom->extension + "_brrr.mp3");
+            if (std::filesystem::exists(customPath, ec)) path = customPath;
+        }
+        if (path.empty()) {
+            // No custom track imported yet (or a built-in theme active) --
+            // fall back to the theme's bundled default rather than leaving
+            // BIG BRRRR looking broken for a custom theme that just hasn't
+            // had a track picked for it.
+            const char* bundledName = "big_brrr.mp3";
+            switch (currentTheme()) {
+                case THEME_MAYBACH:  bundledName = "big_brrr_maybach.mp3"; break;
+                case THEME_ROMO:     bundledName = "big_brrr_romo.mp3"; break;
+                case THEME_GRIZZLEY: bundledName = "big_brrr_grizzley.mp3"; break;
+                default: break;
+            }
+            auto bundled = Mod::get()->getResourcesDir() / bundledName;
+            if (std::filesystem::exists(bundled, ec)) path = bundled;
+        }
     }
     if (path.empty()) { enabled = false; return; }
 

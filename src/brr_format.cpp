@@ -636,6 +636,7 @@ BRRMacro* BRRMacro::deserialize(std::vector<uint8_t> const& data) {
 static std::string getThemeExtension() {
     auto* ui = MenuInterface::get();
     if (!ui) return ".brrr";
+    if (auto* c = ui->getActiveCustomTheme()) return c->extension;
     switch (ui->activeTheme) {
         case THEME_TOOSII:
         case THEME_TOOSII_SYRACUSE:

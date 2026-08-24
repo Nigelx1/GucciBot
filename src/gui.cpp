@@ -349,6 +349,30 @@ static ImVec4 getAccuracyTagColor(AccuracyMode m){
     switch(m){case AccuracyMode::CBS:case AccuracyMode::CBF:return ImVec4(1.f,0.22f,0.22f,1.f);default:return ImVec4(1,1,1,1);}}
 static ImVec4 getBRRTagColor(){return ImVec4(0.30f,0.70f,1.0f,1.0f);}
 
+// Centralizes what used to be the same 12-way ternary chain duplicated
+// verbatim at every save/load/display site (four in this file alone, plus
+// the extension-list arrays and brr_format.cpp's own switch) -- adding
+// THEME_CUSTOM's lookup once here instead of at every call site removes
+// the main risk of a future new theme (built-in or the custom system)
+// getting added to some sites and missed at others.
+static std::string currentThemeExtension(MenuInterface* ui){
+    if(auto* c=ui->getActiveCustomTheme())return c->extension;
+    switch(ui->activeTheme){
+        case THEME_TOOSII: case THEME_TOOSII_SYRACUSE: case THEME_TOOSII_SACSTATE: return ".toosii";
+        case THEME_JA: return ".ja";
+        case THEME_GIDDEY: return ".giddey";
+        case THEME_BAM: return ".bam";
+        case THEME_SEXYY: return ".sexyy";
+        case THEME_JUICE: return ".juice";
+        case THEME_BUTLER: return ".butler";
+        case THEME_SAWEETIE: return ".saweetie";
+        case THEME_MAYBACH: return ".maybach";
+        case THEME_ROMO: return ".romo";
+        case THEME_GRIZZLEY: return ".grizzley";
+        default: return ".brrr";
+    }
+}
+
 static float sanitizeClamped(float v,float lo,float hi,float fb){
     if(!std::isfinite(v))return fb;return std::clamp(v,lo,hi);}
 static ImVec4 sanitizeColor(ImVec4 v,ImVec4 fb){
@@ -1010,7 +1034,8 @@ void MenuInterface::drawTitleBar(){
     ImVec4 acc=theme.getAccent();
     dl->AddQuad(ImVec2(lc.x,lc.y-lr),ImVec2(lc.x+lr,lc.y),ImVec2(lc.x,lc.y+lr),ImVec2(lc.x-lr,lc.y),theme.getAccentU32(0.9f),1.5f);
     dl->AddQuadFilled(ImVec2(lc.x,lc.y-lr),ImVec2(lc.x+lr,lc.y),ImVec2(lc.x,lc.y),ImVec2(lc.x-lr,lc.y),theme.getAccentU32(0.18f));
-        const char* botName=
+    auto* activeCustom=getActiveCustomTheme();
+    std::string botNameStr=activeCustom?activeCustom->name:
         (activeTheme==THEME_TOOSII||activeTheme==THEME_TOOSII_SYRACUSE||activeTheme==THEME_TOOSII_SACSTATE)?
             "ToosiiBot":
         (activeTheme==THEME_JA)?"JaBot":
@@ -1023,11 +1048,12 @@ void MenuInterface::drawTitleBar(){
         (activeTheme==THEME_MAYBACH)?"MaybachBot":
         (activeTheme==THEME_ROMO)?"RomoBot":
         (activeTheme==THEME_GRIZZLEY)?"GrizzleyBot":"GucciBot";
+    const char* botName=botNameStr.c_str();
     ImVec2 npos(wp.x+40,wp.y+10);
     if(fontHeading)ImGui::PushFont(fontHeading);
     dl->AddText(npos,theme.getAccentU32(),botName);
     if(fontHeading)ImGui::PopFont();
-        const char* sub=
+    std::string subStr=activeCustom?("v" MOD_VERSION "  -  "+activeCustom->subtitle):
         (activeTheme==THEME_TOOSII||activeTheme==THEME_TOOSII_SYRACUSE||activeTheme==THEME_TOOSII_SACSTATE)?
             "v" MOD_VERSION "  -  Running routes. Dropping passes.":
         (activeTheme==THEME_JA)?
@@ -1051,6 +1077,7 @@ void MenuInterface::drawTitleBar(){
         (activeTheme==THEME_GRIZZLEY)?
             "v" MOD_VERSION "  -  First day out. Frame perfect.":
         "v" MOD_VERSION "  -  Frame perfect. GBR6. Brrr.";
+    const char* sub=subStr.c_str();
     ImVec2 spos(wp.x+40,wp.y+30);
     if(fontSmall)ImGui::PushFont(fontSmall);
     dl->AddText(spos,theme.getTextSecondaryU32(),sub);
@@ -1205,7 +1232,8 @@ void MenuInterface::drawStatusBar(){
         engine->updater.m_tps,engine->updater.m_speedhack,tick);
     ImVec2 ts=ImGui::CalcTextSize(buf);
     dl->AddText(ImVec2(wp.x+padX+12,barY+(barH-ts.y)*0.5f),theme.getTextSecondaryU32(),buf);
-        const char* brand=
+    auto* statusCustom=getActiveCustomTheme();
+    std::string brandStr=statusCustom?statusCustom->brandTag:
         (activeTheme==THEME_TOOSII||activeTheme==THEME_TOOSII_SYRACUSE||activeTheme==THEME_TOOSII_SACSTATE)?
             "Open!":
         (activeTheme==THEME_JA)?"IYKYK!":
@@ -1218,6 +1246,7 @@ void MenuInterface::drawStatusBar(){
         (activeTheme==THEME_MAYBACH)?"MMG!":
         (activeTheme==THEME_ROMO)?"Called it!":
         (activeTheme==THEME_GRIZZLEY)?"Activated!":"Brrr.";
+    const char* brand=brandStr.c_str();
     ImVec2 bts=ImGui::CalcTextSize(brand);
     dl->AddText(ImVec2(wp.x+ws.x-padX-bts.x-12,barY+(barH-bts.y)*0.5f),theme.getAccentU32(0.6f),brand);
     if(fontSmall)ImGui::PopFont();}
@@ -1581,7 +1610,7 @@ void MenuInterface::drawCompactWindow(){
                 std::string mn=engine->storedMacros[compactMacroIdx];
                 std::string extFound;
                 auto dir=Mod::get()->getSaveDir()/"replays";
-                for(auto& ext : {".brrr",".toosii",".ja",".giddey",".bam",".sexyy",".juice",".butler",".saweetie",".maybach",".romo",".grizzley"}){
+                for(auto& ext : allKnownMacroExtensions()){
                     if(std::filesystem::exists(dir/(mn+ext))){extFound=ext;break;}
                 }
                 if(!extFound.empty()){
@@ -1624,10 +1653,8 @@ void MenuInterface::drawCompactWindow(){
                 engine->replayName=macroNameBuffer;
             ImGui::Dummy(ImVec2(0,4));
         }
-        const char* ext=
-            (activeTheme==THEME_TOOSII||activeTheme==THEME_TOOSII_SYRACUSE||activeTheme==THEME_TOOSII_SACSTATE)?".toosii":
-            (activeTheme==THEME_JA)?".ja":
-            (activeTheme==THEME_GIDDEY)?".giddey":(activeTheme==THEME_BAM)?".bam":(activeTheme==THEME_SEXYY)?".sexyy":(activeTheme==THEME_JUICE)?".juice":(activeTheme==THEME_BUTLER)?".butler":(activeTheme==THEME_SAWEETIE)?".saweetie":(activeTheme==THEME_MAYBACH)?".maybach":(activeTheme==THEME_ROMO)?".romo":(activeTheme==THEME_GRIZZLEY)?".grizzley":".brrr";
+        std::string extStr=currentThemeExtension(this);
+        const char* ext=extStr.c_str();
         bool canSave=hasActions&&!engine->replayName.empty();
         if(!canSave)ImGui::PushStyleVar(ImGuiStyleVar_Alpha,0.4f);
         bool saveClicked=Widgets::StyledButton("Save",ImVec2(bw,26),theme,anim);
@@ -1691,7 +1718,9 @@ void MenuInterface::drawCompactWindow(){
 
 void MenuInterface::drawReplayTab(){
     auto* engine=GucciEngine::get();
-        if((activeTheme==THEME_TOOSII||activeTheme==THEME_TOOSII_SYRACUSE||activeTheme==THEME_TOOSII_SACSTATE))
+    if(auto* replayCustom=getActiveCustomTheme())
+        Widgets::GucciQuote(replayCustom->quoteReplay.text.c_str(),replayCustom->quoteReplay.attribution.c_str(),theme);
+    else if((activeTheme==THEME_TOOSII||activeTheme==THEME_TOOSII_SYRACUSE||activeTheme==THEME_TOOSII_SACSTATE))
         Widgets::GucciQuote("\"What's cover 1?\"","-- Toosii, asking the cornerback",theme);
     else if(activeTheme==THEME_JA)
         Widgets::GucciQuote("\"Nobody can replay what I just did. Nobody.\""," -- Ja Morant",theme);
@@ -1759,10 +1788,8 @@ void MenuInterface::drawReplayTab(){
             if(ImGui::BeginPopup("##FmtSel",ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoResize)){
         drawPopupChrome(*this,"Select Format");
         float bw=110.f;
-                const char* nativeLabel=
-            (activeTheme==THEME_TOOSII||activeTheme==THEME_TOOSII_SYRACUSE||activeTheme==THEME_TOOSII_SACSTATE)?".toosii":
-            (activeTheme==THEME_JA)?".ja":
-            (activeTheme==THEME_GIDDEY)?".giddey":(activeTheme==THEME_BAM)?".bam":(activeTheme==THEME_SEXYY)?".sexyy":(activeTheme==THEME_JUICE)?".juice":(activeTheme==THEME_BUTLER)?".butler":(activeTheme==THEME_SAWEETIE)?".saweetie":(activeTheme==THEME_MAYBACH)?".maybach":(activeTheme==THEME_ROMO)?".romo":(activeTheme==THEME_GRIZZLEY)?".grizzley":".brrr";
+                std::string nativeLabelStr=currentThemeExtension(this);
+            const char* nativeLabel=nativeLabelStr.c_str();
         if(Widgets::StyledButton(nativeLabel,ImVec2(bw,30),theme,anim,6.f)){
             if(PlayLayer::get())engine->setMode(GucciEngine::Mode::Recording);
             else engine->setMode(GucciEngine::Mode::Recording);
@@ -1772,10 +1799,8 @@ void MenuInterface::drawReplayTab(){
 
         if(engine->isRecording()){
         size_t cnt = engine->replay.m_actionAtom.m_actions.size();
-        const char* extLabel =
-            (activeTheme==THEME_TOOSII||activeTheme==THEME_TOOSII_SYRACUSE||activeTheme==THEME_TOOSII_SACSTATE)?".toosii":
-            (activeTheme==THEME_JA)?".ja":
-            (activeTheme==THEME_GIDDEY)?".giddey":(activeTheme==THEME_BAM)?".bam":(activeTheme==THEME_SEXYY)?".sexyy":(activeTheme==THEME_JUICE)?".juice":(activeTheme==THEME_BUTLER)?".butler":(activeTheme==THEME_SAWEETIE)?".saweetie":(activeTheme==THEME_MAYBACH)?".maybach":(activeTheme==THEME_ROMO)?".romo":(activeTheme==THEME_GRIZZLEY)?".grizzley":".brrr";
+        std::string extLabelStr=currentThemeExtension(this);
+        const char* extLabel=extLabelStr.c_str();
         Widgets::StatusBadge("RECORDING",ImVec4(1.f,0.3f,0.3f,1.f));
         ImGui::SameLine();
         Widgets::StatusBadge(extLabel,getBRRTagColor());
@@ -1862,10 +1887,8 @@ void MenuInterface::drawReplayTab(){
         if(engine->isPlaying()&&!engine->replay.m_actionAtom.m_actions.empty()){
         size_t cnt=engine->replay.m_actionAtom.m_actions.size();
         std::string nm=engine->replayName;
-        const char* extLabel2 =
-            (activeTheme==THEME_TOOSII||activeTheme==THEME_TOOSII_SYRACUSE||activeTheme==THEME_TOOSII_SACSTATE)?".toosii":
-            (activeTheme==THEME_JA)?".ja":
-            (activeTheme==THEME_GIDDEY)?".giddey":(activeTheme==THEME_BAM)?".bam":(activeTheme==THEME_SEXYY)?".sexyy":(activeTheme==THEME_JUICE)?".juice":(activeTheme==THEME_BUTLER)?".butler":(activeTheme==THEME_SAWEETIE)?".saweetie":(activeTheme==THEME_MAYBACH)?".maybach":(activeTheme==THEME_ROMO)?".romo":(activeTheme==THEME_GRIZZLEY)?".grizzley":".brrr";
+        std::string extLabel2Str=currentThemeExtension(this);
+        const char* extLabel2=extLabel2Str.c_str();
         Widgets::StatusBadge("PLAYING",ImVec4(0.3f,1.f,0.3f,1.f));
         ImGui::SameLine();
         Widgets::StatusBadge(extLabel2,getBRRTagColor());
@@ -1945,21 +1968,27 @@ void MenuInterface::drawReplayTab(){
         float rightReserved=xBtnW+dotsBtnW+btnGap+listPadX;
         std::string rowLbl=mn;
         float accW = 0.f;
-                const char* fmtTag=".gdr";
+                std::string fmtTagStr=".gdr";
         if(true){
             auto* eng3=GucciEngine::get();
-            if(eng3->jaMacros.count(mn))fmtTag=".ja";
-            else if(eng3->giddeyMacros.count(mn))fmtTag=".giddey";
-            else if(eng3->toosiiMacros.count(mn))fmtTag=".toosii";
-            else if(eng3->bamMacros.count(mn))fmtTag=".bam";
-            else if(eng3->sexyyMacros.count(mn))fmtTag=".sexyy";
-            else if(eng3->juiceMacros.count(mn))fmtTag=".juice";
-            else if(eng3->butlerMacros.count(mn))fmtTag=".butler";
-            else if(eng3->saweetieMacros.count(mn))fmtTag=".saweetie";
-            else if(eng3->maybachMacros.count(mn))fmtTag=".maybach";
-            else if(eng3->romoMacros.count(mn))fmtTag=".romo";
-            else if(eng3->grizzleyMacros.count(mn))fmtTag=".grizzley";
-            else fmtTag=".brrr";}
+            bool foundCustom=false;
+            for(auto& [ext,set] : eng3->customThemeMacrosByExt){
+                if(set.count(mn)){fmtTagStr="."+ext;foundCustom=true;break;}
+            }
+            if(foundCustom){}
+            else if(eng3->jaMacros.count(mn))fmtTagStr=".ja";
+            else if(eng3->giddeyMacros.count(mn))fmtTagStr=".giddey";
+            else if(eng3->toosiiMacros.count(mn))fmtTagStr=".toosii";
+            else if(eng3->bamMacros.count(mn))fmtTagStr=".bam";
+            else if(eng3->sexyyMacros.count(mn))fmtTagStr=".sexyy";
+            else if(eng3->juiceMacros.count(mn))fmtTagStr=".juice";
+            else if(eng3->butlerMacros.count(mn))fmtTagStr=".butler";
+            else if(eng3->saweetieMacros.count(mn))fmtTagStr=".saweetie";
+            else if(eng3->maybachMacros.count(mn))fmtTagStr=".maybach";
+            else if(eng3->romoMacros.count(mn))fmtTagStr=".romo";
+            else if(eng3->grizzleyMacros.count(mn))fmtTagStr=".grizzley";
+            else fmtTagStr=".brrr";}
+        const char* fmtTag=fmtTagStr.c_str();
         float fmtW=(!isIncompat)?(ImGui::CalcTextSize(fmtTag).x+8):0;
         float inW=isIncompat?(ImGui::CalcTextSize("Incompatible").x+8):0;
         float maxNW=std::max(40.f,fullW-rightReserved-accW-fmtW-inW-listPadX-8.f);
@@ -1979,7 +2008,7 @@ void MenuInterface::drawReplayTab(){
                         {
                                 std::string extFound;
                 auto dir = Mod::get()->getSaveDir()/"replays";
-                for(auto& ext : {".brrr",".toosii",".ja",".giddey",".bam",".sexyy",".juice",".butler",".saweetie",".maybach",".romo",".grizzley"}){
+                for(auto& ext : allKnownMacroExtensions()){
                     if(std::filesystem::exists(dir/(mn+ext))){extFound=ext;break;}
                 }
                 if(!extFound.empty()){
@@ -2000,19 +2029,28 @@ void MenuInterface::drawReplayTab(){
             auto ts=ImGui::CalcTextSize("Incompatible");tagX-=ts.x+4;
             wdl->AddText(ImVec2(tagX,iy+(ih-ts.y)*0.5f),toU32(ImVec4(1.f,0.2f,0.2f,1.f)),"Incompatible");}
         if(!isIncompat){
-            const char* tag=".brrr";ImVec4 tagCol=getBRRTagColor();
+            std::string tagStr=".brrr";ImVec4 tagCol=getBRRTagColor();
             auto* eng2=GucciEngine::get();
-            if(eng2->jaMacros.count(mn)){tag=".ja";tagCol=ImVec4(0.42f,0.78f,0.95f,1.f);}
-            else if(eng2->giddeyMacros.count(mn)){tag=".giddey";tagCol=ImVec4(1.000f,0.310f,0.106f,1.f);}
-            else if(eng2->toosiiMacros.count(mn)){tag=".toosii";tagCol=ImVec4(0.99f,0.82f,0.14f,1.f);}
-            else if(eng2->bamMacros.count(mn)){tag=".bam";tagCol=ImVec4(0.878f,0.067f,0.153f,1.f);}
-            else if(eng2->sexyyMacros.count(mn)){tag=".sexyy";tagCol=ImVec4(0.910f,0.004f,0.580f,1.f);}
-            else if(eng2->juiceMacros.count(mn)){tag=".juice";tagCol=ImVec4(0.960f,0.520f,0.380f,1.f);}
-            else if(eng2->butlerMacros.count(mn)){tag=".butler";tagCol=ImVec4(0.808f,0.067f,0.255f,1.f);}
-            else if(eng2->saweetieMacros.count(mn)){tag=".saweetie";tagCol=ImVec4(1.000f,0.180f,0.520f,1.f);}
-            else if(eng2->maybachMacros.count(mn)){tag=".maybach";tagCol=ImVec4(0.780f,0.780f,0.800f,1.f);}
-            else if(eng2->romoMacros.count(mn)){tag=".romo";tagCol=ImVec4(0.760f,0.800f,0.850f,1.f);}
-            else if(eng2->grizzleyMacros.count(mn)){tag=".grizzley";tagCol=ImVec4(0.870f,0.090f,0.070f,1.f);}
+            bool foundCustomTag=false;
+            for(auto& [ext,set] : eng2->customThemeMacrosByExt){
+                if(!set.count(mn))continue;
+                tagStr="."+ext;
+                for(auto& ct : customThemes) if(ct.extension==ext){tagCol=ct.accent;break;}
+                foundCustomTag=true;break;
+            }
+            if(foundCustomTag){}
+            else if(eng2->jaMacros.count(mn)){tagStr=".ja";tagCol=ImVec4(0.42f,0.78f,0.95f,1.f);}
+            else if(eng2->giddeyMacros.count(mn)){tagStr=".giddey";tagCol=ImVec4(1.000f,0.310f,0.106f,1.f);}
+            else if(eng2->toosiiMacros.count(mn)){tagStr=".toosii";tagCol=ImVec4(0.99f,0.82f,0.14f,1.f);}
+            else if(eng2->bamMacros.count(mn)){tagStr=".bam";tagCol=ImVec4(0.878f,0.067f,0.153f,1.f);}
+            else if(eng2->sexyyMacros.count(mn)){tagStr=".sexyy";tagCol=ImVec4(0.910f,0.004f,0.580f,1.f);}
+            else if(eng2->juiceMacros.count(mn)){tagStr=".juice";tagCol=ImVec4(0.960f,0.520f,0.380f,1.f);}
+            else if(eng2->butlerMacros.count(mn)){tagStr=".butler";tagCol=ImVec4(0.808f,0.067f,0.255f,1.f);}
+            else if(eng2->saweetieMacros.count(mn)){tagStr=".saweetie";tagCol=ImVec4(1.000f,0.180f,0.520f,1.f);}
+            else if(eng2->maybachMacros.count(mn)){tagStr=".maybach";tagCol=ImVec4(0.780f,0.780f,0.800f,1.f);}
+            else if(eng2->romoMacros.count(mn)){tagStr=".romo";tagCol=ImVec4(0.760f,0.800f,0.850f,1.f);}
+            else if(eng2->grizzleyMacros.count(mn)){tagStr=".grizzley";tagCol=ImVec4(0.870f,0.090f,0.070f,1.f);}
+            const char* tag=tagStr.c_str();
             auto ts=ImGui::CalcTextSize(tag);tagX-=ts.x+4;
             wdl->AddText(ImVec2(tagX,iy+(ih-ts.y)*0.5f),toU32(tagCol),tag);}
                 float btnY=iy+(ih-xBtnW)*0.5f;
@@ -2130,6 +2168,7 @@ void MenuInterface::drawReplayTab(){
                 eng4->butlerMacros.erase(replayDeleteName);
                 eng4->saweetieMacros.erase(replayDeleteName);eng4->maybachMacros.erase(replayDeleteName);
                 eng4->romoMacros.erase(replayDeleteName);eng4->grizzleyMacros.erase(replayDeleteName);
+                for(auto& [ext,set] : eng4->customThemeMacrosByExt) set.erase(replayDeleteName);
                 replayDeleteName.clear();replayDeleteError.clear();
                 markReplayListDirty();refreshReplayListIfNeeded(true);ImGui::CloseCurrentPopup();}}
         if(cancelDel){replayDeleteName.clear();replayDeleteError.clear();ImGui::CloseCurrentPopup();}
@@ -2301,7 +2340,9 @@ void MenuInterface::drawReplayTab(){
 
 void MenuInterface::drawToolsTab(){
     auto* engine=GucciEngine::get();
-    if((activeTheme==THEME_TOOSII||activeTheme==THEME_TOOSII_SYRACUSE||activeTheme==THEME_TOOSII_SACSTATE))
+    if(auto* toolsCustom=getActiveCustomTheme())
+        Widgets::GucciQuote(toolsCustom->quoteTools.text.c_str(),toolsCustom->quoteTools.attribution.c_str(),theme);
+    else if((activeTheme==THEME_TOOSII||activeTheme==THEME_TOOSII_SYRACUSE||activeTheme==THEME_TOOSII_SACSTATE))
         Widgets::GucciQuote("\"I run the route so fast the DB thinks I'm a speedhack.\"","-- Toosii, route running",theme);
     else if(activeTheme==THEME_JA)
         Widgets::GucciQuote("\"I don't use speedhack. That's just me.\""," -- Ja Morant",theme);
@@ -3612,10 +3653,43 @@ void MenuInterface::drawSettingsTab(){
             // continuously. Restart it on a theme change so the audio
             // matches whichever theme (Maybach's own track, or the default)
             // is now active.
+            activeCustomThemeName.clear();
             if(BigBrrrManager::get()->enabled)BigBrrrManager::get()->setEnabled(true);
             saveSettings();}
         if(i%2==0&&i+1>=pc)ImGui::Dummy(ImVec2(0,0));
     }
+
+    ImGui::Dummy(ImVec2(0,10));
+    Widgets::SectionHeader("Custom Themes",theme);
+    if(customThemes.empty()){
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::TextWrapped("No custom themes yet -- colors, identity, quotes, and your own Big Brrr track, all yours to set.");
+        ImGui::PopStyleColor();
+    } else {
+        for(size_t i=0;i<customThemes.size();i++){
+            auto& ct=customThemes[i];
+            ImGui::PushID((int)i+20000);
+            bool active=(activeTheme==THEME_CUSTOM&&activeCustomThemeName==ct.name);
+            float rowW=ImGui::GetContentRegionAvail().x;
+            float editW=50.f,gap=6.f;
+            if(Widgets::PillButton(ct.name.c_str(),active,rowW-editW-gap,theme,anim)){
+                activeTheme=THEME_CUSTOM;
+                activeCustomThemeName=ct.name;
+                theme.accentColor=ct.accent;theme.bgColor=ct.bg;theme.cardColor=ct.card;
+                theme.textPrimary=ct.textPrimary;theme.textSecondary=ct.textSecondary;
+                theme.cornerRadius=ct.cornerRadius;theme.bgOpacity=ct.bgOpacity;
+                theme.activePreset=-1;
+                if(BigBrrrManager::get()->enabled)BigBrrrManager::get()->setEnabled(true);
+                saveSettings();
+            }
+            ImGui::SameLine(0,gap);
+            if(Widgets::StyledButton("Edit",ImVec2(editW,32),theme,anim))openCustomThemeEditor(&ct);
+            ImGui::PopID();
+        }
+    }
+    if(Widgets::StyledButton("+ Create New Custom Theme",ImVec2(-1,30),theme,anim,6.f))openCustomThemeEditor(nullptr);
+    ImGui::Dummy(ImVec2(0,10));
+
     ImGui::Text("Accent Color");ImGui::SameLine();
     if(ImGui::ColorEdit4("##acc",(float*)&theme.accentColor,ImGuiColorEditFlags_NoInputs|ImGuiColorEditFlags_NoLabel))theme.activePreset=-1;
     ImGui::Dummy(ImVec2(0,4));
@@ -5078,7 +5152,8 @@ void MenuInterface::drawCreditsTab(){
     if(bigF)ImGui::PopFont();
     if(fontSmall)ImGui::PushFont(fontSmall);
     dl->AddText(ImVec2(pos.x+(avail-ImGui::CalcTextSize("Concept, Direction & Testing").x)/2,pos.y+34),theme.getTextSecondaryU32(),"Concept, Direction & Testing");
-    const char* badge=
+    auto* creditsCustom=getActiveCustomTheme();
+    std::string badgeStr=creditsCustom?creditsCustom->creditsBadge:
         (activeTheme==THEME_TOOSII||activeTheme==THEME_TOOSII_SYRACUSE||activeTheme==THEME_TOOSII_SACSTATE)?"WR1 | Rapper | Never Covered":
         (activeTheme==THEME_JA)?"High Flyer | Ball Don't Lie | IYKYK":
         (activeTheme==THEME_GIDDEY)?"Australian | NBA | G'day Mate":
@@ -5091,6 +5166,7 @@ void MenuInterface::drawCreditsTab(){
         (activeTheme==THEME_ROMO)?"Analyst | Prophet | One Bad Afternoon":
         (activeTheme==THEME_GRIZZLEY)?"Detroit | Activated | First Day Out":
         "Concept | Vision | Brrr";
+    const char* badge=badgeStr.c_str();
     ImVec2 bs=ImGui::CalcTextSize(badge);
     float bx=pos.x+(avail-bs.x-16)/2,by=pos.y+52;
     dl->AddRectFilled(ImVec2(bx,by),ImVec2(bx+bs.x+16,by+18),theme.getAccentU32(0.12f),9.f);
@@ -5125,7 +5201,9 @@ void MenuInterface::drawCreditsTab(){
         if(fontSmall)ImGui::PopFont();
         ImGui::Dummy(ImVec2(0,rowH+5));}
         ImGui::Dummy(ImVec2(0,4));
-    if(activeTheme==THEME_TOOSII||activeTheme==THEME_TOOSII_SYRACUSE||activeTheme==THEME_TOOSII_SACSTATE)
+    if(auto* creditsQuoteCustom=getActiveCustomTheme())
+        Widgets::GucciQuote(creditsQuoteCustom->quoteCredits.text.c_str(),creditsQuoteCustom->quoteCredits.attribution.c_str(),theme);
+    else if(activeTheme==THEME_TOOSII||activeTheme==THEME_TOOSII_SYRACUSE||activeTheme==THEME_TOOSII_SACSTATE)
         Widgets::GucciQuote("\"Every click is a catch. I don't drop nothing. Not even frames.\"","-- Toosii, post-game presser",theme);
     else if(activeTheme==THEME_JA)
         Widgets::GucciQuote("\"Watch me. That's all I ask. Just watch.\"","-- Ja Morant",theme);
@@ -5201,6 +5279,7 @@ void MenuInterface::saveSettings(){
     mod->setSavedValue("anim_speed",anim.animSpeed);
     mod->setSavedValue("anim_direction",(int)anim.openDirection);
     mod->setSavedValue("active_theme",(int)activeTheme);
+    mod->setSavedValue("active_custom_theme",activeCustomThemeName);
     mod->setSavedValue("active_theme_preset",theme.activePreset);
     mod->setSavedValue("key_menu",keybinds.menu);
     mod->setSavedValue("key_frame_advance",keybinds.frameAdvance);
@@ -5408,7 +5487,26 @@ void MenuInterface::loadSettings(){
     ambientWavesEnabled=mod->getSavedValue<bool>("ambient_waves",true);
     anim.animSpeed=sanitizeClamped(mod->getSavedValue<float>("anim_speed",8.f),2.f,24.f,8.f);
     anim.openDirection=(AnimDirection)mod->getSavedValue<int>("anim_direction",0);
-    activeTheme=(BotTheme)std::clamp(mod->getSavedValue<int>("active_theme",(int)THEME_GUCCI),0,ThemeEngine::getPresetCount()-1);
+    {
+        // THEME_CUSTOM is a sentinel, not a real entry in kThemePresets --
+        // clamping it into the built-in preset range like every other
+        // saved theme value would silently discard "you had a custom
+        // theme active" on every restart. Load the custom list first so
+        // getActiveCustomTheme() has something to look up against.
+        loadCustomThemes();
+        activeCustomThemeName=mod->getSavedValue<std::string>("active_custom_theme","");
+        int saved=mod->getSavedValue<int>("active_theme",(int)THEME_GUCCI);
+        activeTheme=(saved==(int)THEME_CUSTOM)
+            ? THEME_CUSTOM
+            : (BotTheme)std::clamp(saved,0,ThemeEngine::getPresetCount()-1);
+        if(activeTheme==THEME_CUSTOM&&!getActiveCustomTheme()){
+            // Saved theme was deleted (or its file failed to load) since
+            // last session -- fall back rather than silently point at
+            // nothing every frame.
+            activeTheme=THEME_GUCCI;
+            activeCustomThemeName.clear();
+        }
+    }
     keybinds.menu=mod->getSavedValue<int>("key_menu",0xA4);
     keybinds.frameAdvance=mod->getSavedValue<int>("key_frame_advance",0x56);
     keybinds.frameStep=mod->getSavedValue<int>("key_frame_step",0x43);
@@ -5663,7 +5761,8 @@ void MenuInterface::drawInterface(){
         else if(megaHackLook)drawMegaHackWindow();
         else drawMainWindow();
     }
-    drawRenderCompletePopup();}
+    drawRenderCompletePopup();
+    drawCustomThemeEditorPopup();}
 
 void MenuInterface::drawRenderCompletePopup(){
     auto* engine=GucciEngine::get();
