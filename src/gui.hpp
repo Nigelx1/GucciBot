@@ -180,6 +180,14 @@ public:
     // disambiguated against every built-in extension and every OTHER
     // custom theme's extension so two themes never collide on disk.
     std::string deriveCustomThemeExtension(const std::string& name) const;
+    // Sanitizes a manually-typed extension (lowercase, alnum only) and
+    // checks it doesn't collide with any built-in or any OTHER custom
+    // theme's extension (excludeName lets the theme currently being edited
+    // check against everyone ELSE, not itself). Returns the sanitized
+    // form; sets *ok=false (and leaves the value as-is otherwise) if it's
+    // empty after sanitizing or if it collides -- caller decides what to
+    // tell the user, this just judges validity.
+    std::string sanitizeCustomExtension(const std::string& raw, const std::string& excludeName, bool* ok) const;
     void loadCustomThemes(); // called once at startup
     void saveCustomTheme(CustomTheme& t); // creates or overwrites by name
     void deleteCustomTheme(const std::string& name);
@@ -194,8 +202,15 @@ public:
     bool customThemeEditorOpen = false;
     bool customThemeEditIsNew = true;
     std::string customThemeEditOriginalName; // empty when creating new; used to detect renames on save
+    std::string customThemeEditOriginalExtension; // same, for detecting a manual extension change
     CustomTheme customThemeEditBuffer;
     char cteName[64]={0};
+    // Optional -- left blank, extension auto-derives from the name like
+    // before. Typed non-blank, it's used exactly as given (sanitized,
+    // collision-checked against every built-in and every OTHER custom
+    // theme) rather than silently suffixed like the auto-derive path does,
+    // since a manually-typed value is a deliberate choice, not a guess.
+    char cteExtension[32]={0};
     char cteSubtitle[160]={0};
     char cteBrandTag[32]={0};
     char cteQuoteReplayText[256]={0}, cteQuoteReplayAttr[128]={0};

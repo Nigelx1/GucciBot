@@ -142,6 +142,21 @@ std::string MenuInterface::deriveCustomThemeExtension(const std::string& name) c
     return candidate;
 }
 
+std::string MenuInterface::sanitizeCustomExtension(const std::string& raw, const std::string& excludeName, bool* ok) const {
+    std::string clean;
+    for (char c : raw) {
+        if (std::isalnum((unsigned char)c)) clean += (char)std::tolower((unsigned char)c);
+    }
+    if (clean.size() > 24) clean = clean.substr(0, 24);
+    if (clean.empty()) { *ok = false; return clean; }
+    if (isBuiltinExtension(clean)) { *ok = false; return clean; }
+    for (auto& t : customThemes) {
+        if (t.name != excludeName && t.extension == clean) { *ok = false; return clean; }
+    }
+    *ok = true;
+    return clean;
+}
+
 void MenuInterface::loadCustomThemes() {
     customThemes.clear();
     std::error_code ec;
@@ -178,6 +193,14 @@ void MenuInterface::saveCustomTheme(CustomTheme& t) {
     // path component" problem the extension already solved.
     std::ofstream f(dir / (t.extension + ".json"));
     f << t.toJson().dump();
+    // Previously unchecked -- a failed write (disk full, permissions,
+    // whatever) would silently look identical to a successful one from the
+    // UI's perspective: theme applies live, just never lands on disk to
+    // survive a restart. Surface it instead of leaving that undetectable.
+    if (!f.good()) {
+        log::warn("[GucciBot] Failed to write custom theme file: {}", (dir / (t.extension + ".json")).string());
+        Notification::create("Saved, but couldn't write the theme file to disk -- it may not survive a restart.", NotificationIcon::Warning)->show();
+    }
 }
 
 void MenuInterface::openCustomThemeEditor(const CustomTheme* existing) {
@@ -185,15 +208,21 @@ void MenuInterface::openCustomThemeEditor(const CustomTheme* existing) {
     if (existing) {
         customThemeEditIsNew = false;
         customThemeEditOriginalName = existing->name;
+        customThemeEditOriginalExtension = existing->extension;
         customThemeEditBuffer = *existing;
     } else {
         customThemeEditIsNew = true;
         customThemeEditOriginalName.clear();
+        customThemeEditOriginalExtension.clear();
         customThemeEditBuffer = CustomTheme{};
         customThemeEditBuffer.name = "My Theme";
     }
     auto copyBuf = [](char* dst, size_t n, const std::string& s) { snprintf(dst, n, "%s", s.c_str()); };
     copyBuf(cteName, sizeof(cteName), customThemeEditBuffer.name);
+    // Blank for a new theme (auto-derives from the name on save, like
+    // before); pre-filled with the real extension when editing, so typing
+    // nothing on an edit keeps it unchanged rather than re-deriving.
+    copyBuf(cteExtension, sizeof(cteExtension), existing ? existing->extension : std::string());
     copyBuf(cteSubtitle, sizeof(cteSubtitle), customThemeEditBuffer.subtitle);
     copyBuf(cteBrandTag, sizeof(cteBrandTag), customThemeEditBuffer.brandTag);
     copyBuf(cteQuoteReplayText, sizeof(cteQuoteReplayText), customThemeEditBuffer.quoteReplay.text);
@@ -256,6 +285,11 @@ void MenuInterface::drawCustomThemeEditorPopup() {
     Widgets::SectionHeader("Identity", theme);
     ImGui::Text("Name"); ImGui::SetNextItemWidth(-1);
     ImGui::InputText("##cteName", cteName, sizeof(cteName));
+    ImGui::Text("File Suffix (optional)"); ImGui::SetNextItemWidth(-1);
+    ImGui::InputText("##cteExtension", cteExtension, sizeof(cteExtension));
+    ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+    ImGui::TextWrapped("What your saved macros end in, like .brrr or .toosii. Leave blank to auto-generate one from the name.");
+    ImGui::PopStyleColor();
     ImGui::Text("Subtitle"); ImGui::SetNextItemWidth(-1);
     ImGui::InputText("##cteSubtitle", cteSubtitle, sizeof(cteSubtitle));
     ImGui::Text("Brand Tag (corner word)"); ImGui::SetNextItemWidth(-1);
@@ -334,22 +368,33 @@ void MenuInterface::drawCustomThemeEditorPopup() {
         customThemeEditBuffer.creditsBadge = cteCreditsBadge[0] ? cteCreditsBadge : "Custom Theme";
         customThemeEditBuffer.hasAudio = stagedAudioExists;
 
-        bool renamed = !customThemeEditIsNew && customThemeEditOriginalName != customThemeEditBuffer.name;
         bool wasActive = activeTheme==THEME_CUSTOM && activeCustomThemeName==customThemeEditOriginalName;
-        if (customThemeEditIsNew || renamed) {
-            // Renaming derives a fresh extension (name-based) -- clear any
-            // old extension on the buffer so it doesn't collide with
-            // itself in deriveCustomThemeExtension's "any OTHER theme"
-            // check, then remove the old on-disk entry once the new one
-            // is safely saved under its own name.
-            customThemeEditBuffer.extension.clear();
+
+        // Extension: manually typed, or auto-derived. A typed value is
+        // used exactly as given or rejected outright (no silent
+        // resuffixing) since typing one is a deliberate choice; a blank
+        // field auto-derives fresh only on a name change or a new theme,
+        // otherwise keeps whatever this theme already had so an ordinary
+        // edit with the field left blank can't silently change the suffix.
+        std::string typedExt(cteExtension);
+        bool extensionRejected = false;
+        if (!typedExt.empty()) {
+            bool ok=false;
+            std::string sanitized = sanitizeCustomExtension(typedExt, customThemeEditOriginalName, &ok);
+            if (!ok) {
+                Notification::create("That suffix is taken or invalid -- try another.", NotificationIcon::Error)->show();
+                extensionRejected = true;
+            } else {
+                customThemeEditBuffer.extension = sanitized;
+            }
+        } else {
+            bool renamedName = !customThemeEditIsNew && customThemeEditOriginalName != customThemeEditBuffer.name;
+            if (customThemeEditIsNew || renamedName) customThemeEditBuffer.extension.clear();
+            else customThemeEditBuffer.extension = customThemeEditOriginalExtension;
         }
-        // Look up the actual old extension (not the name) for cleanup, since
-        // deleteCustomTheme keys files by extension, not display name.
-        std::string oldExtForCleanup;
-        if (renamed) {
-            for (auto& t : customThemes) if (t.name==customThemeEditOriginalName) { oldExtForCleanup=t.extension; break; }
-        }
+
+        if (!extensionRejected) {
+        std::string oldExtForCleanup = customThemeEditOriginalExtension;
 
         std::error_code ec;
         auto stagingPath = getCustomThemesDir() / "_editing_brrr.mp3";
@@ -363,7 +408,7 @@ void MenuInterface::drawCustomThemeEditorPopup() {
 
         saveCustomTheme(customThemeEditBuffer);
 
-        if (renamed && !oldExtForCleanup.empty() && oldExtForCleanup != customThemeEditBuffer.extension) {
+        if (!customThemeEditIsNew && !oldExtForCleanup.empty() && oldExtForCleanup != customThemeEditBuffer.extension) {
             fs::remove(getCustomThemesDir() / (oldExtForCleanup + ".json"), ec);
             fs::remove(getCustomThemesDir() / (oldExtForCleanup + "_brrr.mp3"), ec);
         }
@@ -384,6 +429,7 @@ void MenuInterface::drawCustomThemeEditorPopup() {
         }
         customThemeEditorOpen = false;
         ImGui::CloseCurrentPopup();
+        } // !extensionRejected
     }
     ImGui::SameLine(0,8);
     if (Widgets::StyledButton("Cancel", ImVec2(bw,30), theme, anim)) {
