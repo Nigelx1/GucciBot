@@ -616,13 +616,17 @@ static const ThemePreset kThemePresets[]={
      ImVec4(0.520f,0.560f,0.620f,1.f),
      5.f,0.96f},
         {"GrizzleyBot",
-     // Grizzley Gang GTA RP palette per Nigel (was Detroit steel/orange-red)
-     // -- GTA's own most recognizable identity, neon money-green on black.
-     ImVec4(0.180f,0.980f,0.320f,1.f),
-     ImVec4(0.020f,0.030f,0.022f,0.96f),
-     ImVec4(0.040f,0.058f,0.042f,1.f),
-     ImVec4(0.960f,0.980f,0.965f,1.f),
-     ImVec4(0.460f,0.560f,0.480f,1.f),
+     // Real Grizzley Gang Gaming banner (Nigel-supplied reference,
+     // 2026-08-24) -- previous neon-green GTA guess was wrong. Actual
+     // palette: grungy black/charcoal, bold true-red crest/paint strokes,
+     // bold white graffiti lettering, tan/brown bear mascot. True red
+     // (more orange-leaning) and a neutral warm-gray bg distinguish this
+     // from ButlerBot's cooler crimson-pink/reddish-black.
+     ImVec4(0.870f,0.090f,0.070f,1.f),
+     ImVec4(0.040f,0.038f,0.036f,0.96f),
+     ImVec4(0.072f,0.068f,0.064f,1.f),
+     ImVec4(0.975f,0.970f,0.965f,1.f),
+     ImVec4(0.540f,0.460f,0.400f,1.f),
      5.f,0.96f},
 };
 
@@ -1931,7 +1935,7 @@ void MenuInterface::drawReplayTab(){
             else if(eng2->saweetieMacros.count(mn)){tag=".saweetie";tagCol=ImVec4(1.000f,0.180f,0.520f,1.f);}
             else if(eng2->maybachMacros.count(mn)){tag=".maybach";tagCol=ImVec4(0.780f,0.780f,0.800f,1.f);}
             else if(eng2->romoMacros.count(mn)){tag=".romo";tagCol=ImVec4(0.760f,0.800f,0.850f,1.f);}
-            else if(eng2->grizzleyMacros.count(mn)){tag=".grizzley";tagCol=ImVec4(0.180f,0.980f,0.320f,1.f);}
+            else if(eng2->grizzleyMacros.count(mn)){tag=".grizzley";tagCol=ImVec4(0.870f,0.090f,0.070f,1.f);}
             auto ts=ImGui::CalcTextSize(tag);tagX-=ts.x+4;
             wdl->AddText(ImVec2(tagX,iy+(ih-ts.y)*0.5f),toU32(tagCol),tag);}
                 float btnY=iy+(ih-xBtnW)*0.5f;
@@ -2239,7 +2243,7 @@ void MenuInterface::drawToolsTab(){
     else if(activeTheme==THEME_MAYBACH)
         Widgets::GucciQuote("\"I don't rush. The Maybach arrives exactly on time.\"","-- Rick Ross, on speedhack",theme);
     else if(activeTheme==THEME_ROMO)
-        Widgets::GucciQuote("\"I don't need to see it fast. I already know what's coming.\"","-- Tony Romo, probably",theme);
+        Widgets::GucciQuote("\"I don't need speedhack. I've had worse rides.\"","-- Tony Romo, probably",theme);
     else if(activeTheme==THEME_GRIZZLEY)
         Widgets::GucciQuote("\"I don't need speedhack. I move different.\"","-- Tee Grizzley, probably",theme);
     else
@@ -5001,7 +5005,7 @@ void MenuInterface::drawCreditsTab(){
         (activeTheme==THEME_BUTLER)?"Playoff Jimmy | Big Face Coffee | Buckets":
         (activeTheme==THEME_SAWEETIE)?"Icy Grl | Tap In | Best Friend":
         (activeTheme==THEME_MAYBACH)?"MMG | Boss | Huh":
-        (activeTheme==THEME_ROMO)?"Analyst | Prophet | Called It":
+        (activeTheme==THEME_ROMO)?"Analyst | Prophet | One Bad Night":
         (activeTheme==THEME_GRIZZLEY)?"Detroit | Activated | First Day Out":
         "Concept | Vision | Brrr";
     ImVec2 bs=ImGui::CalcTextSize(badge);
@@ -5057,7 +5061,7 @@ void MenuInterface::drawCreditsTab(){
     else if(activeTheme==THEME_MAYBACH)
         Widgets::GucciQuote("\"Every input's a deal closed. Huh.\"","-- Rick Ross",theme);
     else if(activeTheme==THEME_ROMO)
-        Widgets::GucciQuote("\"Every frame, I saw coming. Every single one.\"","-- Tony Romo",theme);
+        Widgets::GucciQuote("\"Every frame, I saw coming. Every single one -- well, almost.\"","-- Tony Romo",theme);
     else if(activeTheme==THEME_GRIZZLEY)
         Widgets::GucciQuote("\"Every frame, I earned it.\"","-- Tee Grizzley",theme);
     else
