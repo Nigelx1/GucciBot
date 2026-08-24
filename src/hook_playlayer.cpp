@@ -34,6 +34,8 @@ class $modify(GB7PlayLayer, PlayLayer) {
         // is native GD's own checkpoint-touch callback, fired before this
         // tick's own frame increment (frameUpdateMidhook). Confirmed the
         // same +1 applies to input clicks too (see addInputToReplay).
+        if (gb->updater.m_logFrameIncrements)
+            logFrameIncrement("storeCheckpoint(saveCurrent)", gb->updater.getFrame() + 1, this->m_player1);
         gb->practiceFix.saveCurrent(obj, gb->updater.getFrame() + 1);
     }
 

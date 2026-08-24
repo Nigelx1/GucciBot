@@ -108,6 +108,15 @@ void GucciPracticeFix::applyCheckpoint(SavedCheckpointState& state) {
     // (and everything else Silicate's own restore covers) included.
     if (p1) state.m_player1.apply(p1);
     if (p2) state.m_player2.apply(p2);
+    if (GucciEngine::get()->updater.m_logFrameIncrements) {
+        // Logged as its own call site distinct from the frame counter
+        // (state.m_frameOffset, the LABEL this checkpoint was saved under)
+        // -- if this doesn't match the live player's actual post-apply
+        // position/velocity in a principled way relative to frameUpdateMidhook's
+        // own log lines, that's the save-vs-restore mismatch Juice's report
+        // is describing, visible directly instead of inferred.
+        logFrameIncrement("applyCheckpoint(restored, label)", (uint32_t)state.m_frameOffset, p1);
+    }
 
     // Ported from Silicate's applyCheckpoint(): rewind the live broken-
     // objects list to whatever this checkpoint had (objects destroyed AFTER

@@ -31,14 +31,31 @@ static void slopeLog(const std::string& line) {
 // tester can actually hand back as evidence. Mirrors slopeLog's pattern:
 // dedicated file in the mod's save dir, truncated fresh each GD session.
 static std::ofstream g_frameIncLog;
-void logFrameIncrement(const char* callSite, uint32_t frame) {
+void logFrameIncrement(const char* callSite, uint32_t frame, PlayerObject* p) {
     if (!g_frameIncLog.is_open()) {
         auto path = Mod::get()->getSaveDir() / "guccibot_frameinc.log";
         g_frameIncLog.open(path, std::ios::out | std::ios::trunc);
         log::info("[FRAMEINC] log file at: {}", path.string());
     }
     if (g_frameIncLog.is_open()) {
-        g_frameIncLog << callSite << " -> frame " << frame << '\n';
+        g_frameIncLog << callSite << " -> frame " << frame;
+        // Juice's 2026-08-24 report: checkpoint position/velocity appears
+        // to be captured one tick stale relative to its assigned frame
+        // label, compounding by exactly one frame's movement per
+        // checkpoint placed (confirmed via matching screenshots against
+        // the level's own known per-frame wave velocity). Logging the
+        // live player state at every call site that touches frame
+        // labeling or checkpoint capture/restore -- rather than guessing
+        // at the mechanism -- so the actual save-vs-settle-vs-restore
+        // timing can be read directly off real data, the same way P3 was
+        // ultimately solved (three guessed theories failed there before
+        // real log evidence found it).
+        if (p) {
+            g_frameIncLog << " pos=(" << p->m_position.x << "," << p->m_position.y << ")"
+                          << " vel=(" << p->m_playerSpeed << "," << p->m_yVelocity << ")"
+                          << " grnd=" << (p->m_isOnGround?1:0);
+        }
+        g_frameIncLog << '\n';
         g_frameIncLog.flush();
     }
 }
@@ -288,6 +305,8 @@ static void earlyUpdateMidhook(SafetyHookContext&) {
         // increment (0x238BAA) within the same native tick -- same off-by-one
         // Juice found for checkpoints/clicks in general, confirmed here by
         // the two hooks' relative offsets rather than just by analogy.
+        if (upd.m_logFrameIncrements)
+            logFrameIncrement("earlyUpdateMidhook(saveState)", upd.getFrame() + 1, pl->m_player1);
         gb->practiceFix.saveState(cp, upd.getFrame() + 1);
     }
 }
@@ -349,7 +368,7 @@ static void frameUpdateMidhook(SafetyHookContext&) {
         if (PlayLayer::get()) {
             upd.incrementFrame();
             if (upd.m_logFrameIncrements)
-                logFrameIncrement("frameUpdateMidhook", upd.getFrame());
+                logFrameIncrement("frameUpdateMidhook", upd.getFrame(), pl->m_player1);
         }
 
         // Ground-truth capture: live recording always grows this fresh (cleared at

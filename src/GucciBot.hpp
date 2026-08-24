@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-24-o (Custom theme follow-ups. 1) Manual file-suffix field: Nigel asked whether the .brrr-style extension could be typed by hand instead of always auto-derived from the theme name -- added an optional 'File Suffix' field to the editor. Left blank, behaves exactly as before (auto-derives from the name, silently re-suffixed on collision). Typed, it's used exactly as given or the save is rejected outright with a Notification if it's empty-after-sanitizing or collides with any built-in or other custom theme's extension -- no silent resuffixing for a value someone deliberately typed. New sanitizeCustomExtension() (gui.hpp/customtheme.cpp) alongside the existing deriveCustomThemeExtension(), and the save handler now tracks the theme's original extension separately from its original name so an extension-only change (name unchanged) still triggers the old on-disk file cleanup, which previously only fired on a detected rename. 2) Added a write-failure check to saveCustomTheme() -- it previously never verified the ofstream actually succeeded, so a failed write would have looked identical to a successful one from the UI's perspective (theme applies live, just silently never lands on disk to survive a restart). Now checks f.good() and surfaces a warning Notification if it failed. Prompted by checking Nigel's actual save directory after a 'where do themes save' question turned up an empty customthemes/ folder -- turned out to be an intentional delete on his end, not a real bug, but the missing success-check was still worth closing given how easy it would be for a real instance of exactly that failure mode to go unnoticed. Compiles clean, untested in-game.)"
+#define GB_BUILD_LABEL "2026-08-24-p (Diagnostic logging only, NOT a fix -- Juice's checkpoint-drift report. His finding: same frame label (445), but actual position keeps shifting backward by exactly one frame's worth of the level's own known wave velocity (2.4,-2.4) per checkpoint placed -- verified against his 3 screenshots directly, math checks out exactly (2 checkpoints = -4.8 in X = precisely 2 frames). His own hypothesis: checkpoint position/velocity is captured one frame early. Traced the actual mechanism in code: storeCheckpoint (hook_playlayer.cpp) and earlyUpdateMidhook both already carry a documented +1 label compensation from Juice's OWN 2026-08-19 testing, because they fire before frameUpdateMidhook's frame-counter increment within the same native tick (confirmed by relative hook addresses: physDt 0x237A7C < physStepCount 0x237DCE < earlyUpdate 0x237E42 < frameUpdate 0x238BAA < restorePhysDt 0x238F6E -- the physics/position integration step appears to happen between frameUpdate and restorePhysDt, i.e. AFTER both storeCheckpoint and earlyUpdateMidhook already fired). That would mean the +1 correctly predicts what the frame COUNTER will read, but the captured POSITION is genuinely one tick stale relative to it -- and since each restore would lock that lag in before the NEXT checkpoint's own capture (based on an already-drifted counter), it compounds by exactly one frame per checkpoint, matching the data precisely. High confidence on the mechanism, NOT verified by disassembly, and NOT confident enough about a fix to ship one blind -- this project's own P3 saga took three disproven theories before real log evidence found the actual answer, and this smells like the same category of bug. Rather than guess, extended the existing 'Log Frame Increments' diagnostic toggle (already exposed in Settings > Diagnostics) to also log live player position/velocity/ground-state at every point that touches frame labeling or checkpoint capture/restore: storeCheckpoint, earlyUpdateMidhook, frameUpdateMidhook, and applyCheckpoint (both the label being restored and the resulting live state). Same guccibot_frameinc.log file Juice/Nigel already know how to find. Next real step is Juice re-testing with that toggle on and sending the log from a repro run -- that turns this from a strong inference into an actual confirmed mechanism, the same way P3 eventually got solved for real. Compiles clean.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -21,10 +21,14 @@ using namespace geode::prelude;
 
 namespace FMOD { class ChannelGroup; }
 
-// Defined in engine_updater.cpp -- shared between the two incrementFrame()
-// call sites (there, and hook_playlayer.cpp's resetLevel()) so both write to
+// Defined in engine_updater.cpp -- shared between call sites that touch
+// frame labeling and/or checkpoint capture/restore, so they all write to
 // the same dedicated log file instead of each managing their own handle.
-void logFrameIncrement(const char* callSite, uint32_t frame);
+// Optional player param (2026-08-24, Juice's checkpoint-drift report) logs
+// live position/velocity/ground-state alongside the frame label, so a
+// save-vs-restore timing mismatch shows up directly in real data instead
+// of needing to be inferred.
+void logFrameIncrement(const char* callSite, uint32_t frame, PlayerObject* p = nullptr);
 
 class GucciScheduler {
 public:
