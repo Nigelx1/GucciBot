@@ -12,14 +12,17 @@ using namespace geode::prelude;
 
 static bool shouldUpdateAudio() {
     auto audio = AudioRecorder::get();
-    if (!audio->m_attached) return true;
-    if (!audio->m_shouldUpdateFmod) return false;
+    if (!audio->m_attached)
+        return true;
+    if (!audio->m_shouldUpdateFmod)
+        return false;
     return true;
 }
 
 struct GB7AudioEngine : Modify<GB7AudioEngine, FMODAudioEngine> {
     void update(float dt) {
-        if (!shouldUpdateAudio()) return;
+        if (!shouldUpdateAudio())
+            return;
         AudioRecorder::get()->m_fmodTime += dt;
         FMODAudioEngine::update(dt);
     }
@@ -36,17 +39,15 @@ static bool drainRecorderIntoTrack(SLRenderer* renderer, AudioRecorder* audio, i
 
         auto result = renderer->writeAudio(audio->m_buffer, pts, trackIndex);
         if (result.isErr()) {
-            geode::log::error("[GucciBot] Failed to write audio (track {}), stopping render", trackIndex);
+            geode::log::error("[GucciBot] Failed to write audio (track {}), stopping render",
+                              trackIndex);
             renderer->signalStop();
             return false;
         }
 
-        audio->m_buffer.erase(audio->m_buffer.begin(),
-                              audio->m_buffer.begin() + totalFrameSize);
-        audio->m_time =
-            static_cast<double>(audio->m_index++) *
-            (static_cast<double>(frameSize) /
-             static_cast<double>(audio->m_sampleRate));
+        audio->m_buffer.erase(audio->m_buffer.begin(), audio->m_buffer.begin() + totalFrameSize);
+        audio->m_time = static_cast<double>(audio->m_index++) *
+                        (static_cast<double>(frameSize) / static_cast<double>(audio->m_sampleRate));
     }
     return true;
 }
@@ -56,9 +57,10 @@ static void fmodSystemUpdateHook(FMOD::System* self) {
         return;
     }
 
-                            auto audio = AudioRecorder::get();
+    auto audio = AudioRecorder::get();
     if (!audio->m_attached) {
-        if (fmodSystemUpdateOrig) fmodSystemUpdateOrig(self);
+        if (fmodSystemUpdateOrig)
+            fmodSystemUpdateOrig(self);
         return;
     }
 
@@ -75,27 +77,30 @@ static void fmodSystemUpdateHook(FMOD::System* self) {
 
     int processedSamples = 0;
     while (requiredSamples > processedSamples) {
-        if (fmodSystemUpdateOrig) fmodSystemUpdateOrig(self);
+        if (fmodSystemUpdateOrig)
+            fmodSystemUpdateOrig(self);
         processedSamples += static_cast<int>(bufferLength);
     }
 
-                    if (!drainRecorderIntoTrack(renderer, audio, 0)) return;
-    if (!split) return;
+    if (!drainRecorderIntoTrack(renderer, audio, 0))
+        return;
+    if (!split)
+        return;
 
-    if (!drainRecorderIntoTrack(renderer, AudioRecorder::getMusic(), 1)) return;
-    if (!drainRecorderIntoTrack(renderer, AudioRecorder::getSfx(), 2)) return;
-    if (!drainRecorderIntoTrack(renderer, AudioRecorder::getFrameWindow(), 3)) return;
+    if (!drainRecorderIntoTrack(renderer, AudioRecorder::getMusic(), 1))
+        return;
+    if (!drainRecorderIntoTrack(renderer, AudioRecorder::getSfx(), 2))
+        return;
+    if (!drainRecorderIntoTrack(renderer, AudioRecorder::getFrameWindow(), 3))
+        return;
 }
 
 $execute {
-    auto addr = reinterpret_cast<void*>(
-        geode::addresser::getNonVirtual(&FMOD::System::update));
+    auto addr = reinterpret_cast<void*>(geode::addresser::getNonVirtual(&FMOD::System::update));
     fmodSystemUpdateOrig = reinterpret_cast<void (*)(FMOD::System*)>(addr);
-    auto res = Mod::get()->hook(addr, &fmodSystemUpdateHook,
-                                "FMOD::System::update",
-                                tulip::hook::TulipConvention::Stdcall);
+    auto res = Mod::get()->hook(
+        addr, &fmodSystemUpdateHook, "FMOD::System::update", tulip::hook::TulipConvention::Stdcall);
     if (res.isErr()) {
-        geode::log::error("[GucciBot] Failed to hook FMOD::System::update: {}",
-                          res.unwrapErr());
+        geode::log::error("[GucciBot] Failed to hook FMOD::System::update: {}", res.unwrapErr());
     }
 }

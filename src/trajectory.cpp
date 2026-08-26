@@ -20,8 +20,7 @@ namespace {
     constexpr float kIndicatorFlashDuration = 0.15f;
 
     const std::unordered_set<int> kInteractivePortalIds = {
-        101, 99, 11, 10, 200, 201, 202, 203, 1334
-    };
+        101, 99, 11, 10, 200, 201, 202, 203, 1334};
 
     struct ActivationSnapshot {
         bool activated;
@@ -39,7 +38,7 @@ namespace {
 
     ActivationSnapshot captureActivation(EffectGameObject* object);
     void restoreActivation(EffectGameObject* object, ActivationSnapshot const& snapshot);
-}
+} // namespace
 
 TrajectoryPredictionService& TrajectoryPredictionService::get() {
     static TrajectoryPredictionService service;
@@ -48,33 +47,33 @@ TrajectoryPredictionService& TrajectoryPredictionService::get() {
 
 bool TrajectoryPredictionService::isSimulatedPad(GameObjectType type) {
     switch (type) {
-        case GameObjectType::YellowJumpPad:
-        case GameObjectType::PinkJumpPad:
-        case GameObjectType::RedJumpPad:
-        case GameObjectType::GravityPad:
-        case GameObjectType::SpiderPad:
-            return true;
-        default:
-            return false;
+    case GameObjectType::YellowJumpPad:
+    case GameObjectType::PinkJumpPad:
+    case GameObjectType::RedJumpPad:
+    case GameObjectType::GravityPad:
+    case GameObjectType::SpiderPad:
+        return true;
+    default:
+        return false;
     }
 }
 
 bool TrajectoryPredictionService::isSimulatedOrb(GameObjectType type) {
     switch (type) {
-        case GameObjectType::YellowJumpRing:
-        case GameObjectType::PinkJumpRing:
-        case GameObjectType::GravityRing:
-        case GameObjectType::GreenRing:
-        case GameObjectType::RedJumpRing:
-        case GameObjectType::DropRing:
-        case GameObjectType::DashRing:
-        case GameObjectType::GravityDashRing:
-        case GameObjectType::SpiderOrb:
-        case GameObjectType::CustomRing:
-        case GameObjectType::TeleportOrb:
-            return true;
-        default:
-            return false;
+    case GameObjectType::YellowJumpRing:
+    case GameObjectType::PinkJumpRing:
+    case GameObjectType::GravityRing:
+    case GameObjectType::GreenRing:
+    case GameObjectType::RedJumpRing:
+    case GameObjectType::DropRing:
+    case GameObjectType::DashRing:
+    case GameObjectType::GravityDashRing:
+    case GameObjectType::SpiderOrb:
+    case GameObjectType::CustomRing:
+    case GameObjectType::TeleportOrb:
+        return true;
+    default:
+        return false;
     }
 }
 
@@ -92,14 +91,12 @@ namespace {
     }
 
     ActivationSnapshot captureActivation(EffectGameObject* object) {
-        return {
-            object->m_activated,
-            object->m_activatedByPlayer1,
-            object->m_activatedByPlayer2,
-            object->m_isActivated,
-            object->m_isDisabled,
-            object->m_isDisabled2
-        };
+        return {object->m_activated,
+                object->m_activatedByPlayer1,
+                object->m_activatedByPlayer2,
+                object->m_isActivated,
+                object->m_isDisabled,
+                object->m_isDisabled2};
     }
 
     void restoreActivation(EffectGameObject* object, ActivationSnapshot const& snapshot) {
@@ -110,146 +107,126 @@ namespace {
         object->m_isDisabled = snapshot.isDisabled;
         object->m_isDisabled2 = snapshot.isDisabled2;
     }
-}
+} // namespace
 
-bool TrajectoryPredictionService::watchChanged(PredictionWatchKey const& lhs, PredictionWatchKey const& rhs) {
-    return lhs.position.x != rhs.position.x
-        || lhs.position.y != rhs.position.y
-        || lhs.verticalVelocity != rhs.verticalVelocity
-        || lhs.rotation != rhs.rotation
-        || lhs.gravityInverted != rhs.gravityInverted
-        || lhs.movementSpeed != rhs.movementSpeed
-        || lhs.grounded != rhs.grounded
-        || lhs.scale != rhs.scale
-        || lhs.dashing != rhs.dashing
-        || lhs.inShipMode != rhs.inShipMode
-        || lhs.inUfoMode != rhs.inUfoMode
-        || lhs.inBallMode != rhs.inBallMode
-        || lhs.inWaveMode != rhs.inWaveMode
-        || lhs.inRobotMode != rhs.inRobotMode
-        || lhs.inSpiderMode != rhs.inSpiderMode
-        || lhs.inSwingMode != rhs.inSwingMode
-        || lhs.isGoingLeft != rhs.isGoingLeft
-        || lhs.isSideways != rhs.isSideways
-        || lhs.reverseRelated != rhs.reverseRelated;
+bool TrajectoryPredictionService::watchChanged(PredictionWatchKey const& lhs,
+                                               PredictionWatchKey const& rhs) {
+    return lhs.position.x != rhs.position.x || lhs.position.y != rhs.position.y ||
+           lhs.verticalVelocity != rhs.verticalVelocity || lhs.rotation != rhs.rotation ||
+           lhs.gravityInverted != rhs.gravityInverted || lhs.movementSpeed != rhs.movementSpeed ||
+           lhs.grounded != rhs.grounded || lhs.scale != rhs.scale || lhs.dashing != rhs.dashing ||
+           lhs.inShipMode != rhs.inShipMode || lhs.inUfoMode != rhs.inUfoMode ||
+           lhs.inBallMode != rhs.inBallMode || lhs.inWaveMode != rhs.inWaveMode ||
+           lhs.inRobotMode != rhs.inRobotMode || lhs.inSpiderMode != rhs.inSpiderMode ||
+           lhs.inSwingMode != rhs.inSwingMode || lhs.isGoingLeft != rhs.isGoingLeft ||
+           lhs.isSideways != rhs.isSideways || lhs.reverseRelated != rhs.reverseRelated;
 }
 
 PredictionWatchKey TrajectoryPredictionService::buildWatchKey(PlayerObject* player) {
-    return {
-        player->getPosition(),
-        player->m_yVelocity,
-        player->getRotation(),
-        player->m_isUpsideDown,
-        player->m_playerSpeed,
-        player->m_isOnGround,
-        player->m_vehicleSize,
-        player->m_isDashing,
-        player->m_isShip,
-        player->m_isBird,
-        player->m_isBall,
-        player->m_isDart,
-        player->m_isRobot,
-        player->m_isSpider,
-        player->m_isSwing,
-        player->m_isGoingLeft,
-        player->m_isSideways,
-        player->m_reverseRelated
-    };
+    return {player->getPosition(),
+            player->m_yVelocity,
+            player->getRotation(),
+            player->m_isUpsideDown,
+            player->m_playerSpeed,
+            player->m_isOnGround,
+            player->m_vehicleSize,
+            player->m_isDashing,
+            player->m_isShip,
+            player->m_isBird,
+            player->m_isBall,
+            player->m_isDart,
+            player->m_isRobot,
+            player->m_isSpider,
+            player->m_isSwing,
+            player->m_isGoingLeft,
+            player->m_isSideways,
+            player->m_reverseRelated};
 }
 
 PlayerStateCapsule TrajectoryPredictionService::capturePlayerState(PlayerObject* player) {
     PlayerStateCapsule state;
 
-    state.motion = {
-        player->getPosition(),
-        player->m_lastPosition,
-        player->m_yVelocity,
-        player->m_yVelocityBeforeSlope,
-        player->getRotation(),
-        player->m_vehicleSize,
-        player->m_playerSpeed,
-        player->m_gravityMod,
-        player->m_totalTime,
-        player->m_objectType
-    };
+    state.motion = {player->getPosition(),
+                    player->m_lastPosition,
+                    player->m_yVelocity,
+                    player->m_yVelocityBeforeSlope,
+                    player->getRotation(),
+                    player->m_vehicleSize,
+                    player->m_playerSpeed,
+                    player->m_gravityMod,
+                    player->m_totalTime,
+                    player->m_objectType};
 
-    state.form = {
-        player->m_isUpsideDown,
-        player->m_isOnSlope,
-        player->m_wasOnSlope,
-        player->m_isShip,
-        player->m_isBird,
-        player->m_isBall,
-        player->m_isDart,
-        player->m_isRobot,
-        player->m_isSpider,
-        player->m_isSwing,
-        player->m_isOnGround,
-        player->m_isDashing,
-        player->m_isGoingLeft,
-        player->m_isSideways,
-        player->m_reverseRelated,
-        player->m_maybeReverseSpeed,
-        player->m_maybeReverseAcceleration
-    };
+    state.form = {player->m_isUpsideDown,
+                  player->m_isOnSlope,
+                  player->m_wasOnSlope,
+                  player->m_isShip,
+                  player->m_isBird,
+                  player->m_isBall,
+                  player->m_isDart,
+                  player->m_isRobot,
+                  player->m_isSpider,
+                  player->m_isSwing,
+                  player->m_isOnGround,
+                  player->m_isDashing,
+                  player->m_isGoingLeft,
+                  player->m_isSideways,
+                  player->m_reverseRelated,
+                  player->m_maybeReverseSpeed,
+                  player->m_maybeReverseAcceleration};
 
-    state.interaction = {
-        player->m_padRingRelated,
-        player->m_ringJumpRelated,
-        player->m_ringRelatedSet,
-        player->m_touchedRing,
-        player->m_touchedCustomRing,
-        player->m_touchedPad,
-        player->m_lastActivatedPortal,
-        player->m_lastPortalPos,
-        player->m_playEffects
-    };
+    state.interaction = {player->m_padRingRelated,
+                         player->m_ringJumpRelated,
+                         player->m_ringRelatedSet,
+                         player->m_touchedRing,
+                         player->m_touchedCustomRing,
+                         player->m_touchedPad,
+                         player->m_lastActivatedPortal,
+                         player->m_lastPortalPos,
+                         player->m_playEffects};
 
-    state.slope = {
-        player->m_currentSlope,
-        player->m_currentSlope2,
-        player->m_currentPotentialSlope,
-        player->m_slopeAngle,
-        player->m_slopeAngleRadians,
-        player->m_isCollidingWithSlope,
-        player->m_collidingWithSlopeId,
-        player->m_slopeFlipGravityRelated,
-        player->m_slopeVelocity,
-        player->m_currentSlopeYVelocity,
-        player->m_isCurrentSlopeTop,
-        player->m_slopeSlidingMaybeRotated,
-        player->m_slopeRotation,
-        player->m_maybeSlopeForce,
-        player->m_maybeUpsideDownSlope,
-        player->m_maybeGoingCorrectSlopeDirection,
-        player->m_isSliding,
-        player->m_isSlidingRight,
-        player->m_slopeStartTime,
-        player->m_slopeEndTime
-    };
+    state.slope = {player->m_currentSlope,
+                   player->m_currentSlope2,
+                   player->m_currentPotentialSlope,
+                   player->m_slopeAngle,
+                   player->m_slopeAngleRadians,
+                   player->m_isCollidingWithSlope,
+                   player->m_collidingWithSlopeId,
+                   player->m_slopeFlipGravityRelated,
+                   player->m_slopeVelocity,
+                   player->m_currentSlopeYVelocity,
+                   player->m_isCurrentSlopeTop,
+                   player->m_slopeSlidingMaybeRotated,
+                   player->m_slopeRotation,
+                   player->m_maybeSlopeForce,
+                   player->m_maybeUpsideDownSlope,
+                   player->m_maybeGoingCorrectSlopeDirection,
+                   player->m_isSliding,
+                   player->m_isSlidingRight,
+                   player->m_slopeStartTime,
+                   player->m_slopeEndTime};
 
-    state.collision = {
-        player->m_lastGroundObject,
-        player->m_preLastGroundObject,
-        player->m_collidedObject,
-        player->m_collidingWithLeft,
-        player->m_collidingWithRight,
-        player->m_groundYVelocity,
-        player->m_lastCollisionBottom,
-        player->m_lastCollisionTop,
-        player->m_lastCollisionLeft,
-        player->m_lastCollisionRight,
-        player->m_isOnGround2,
-        player->m_isOnGround3,
-        player->m_isOnGround4,
-        player->m_fallSpeed,
-        player->m_maybeIsColliding
-    };
+    state.collision = {player->m_lastGroundObject,
+                       player->m_preLastGroundObject,
+                       player->m_collidedObject,
+                       player->m_collidingWithLeft,
+                       player->m_collidingWithRight,
+                       player->m_groundYVelocity,
+                       player->m_lastCollisionBottom,
+                       player->m_lastCollisionTop,
+                       player->m_lastCollisionLeft,
+                       player->m_lastCollisionRight,
+                       player->m_isOnGround2,
+                       player->m_isOnGround3,
+                       player->m_isOnGround4,
+                       player->m_fallSpeed,
+                       player->m_maybeIsColliding};
 
     return state;
 }
 
-void TrajectoryPredictionService::applyPlayerState(PlayerObject* player, PlayerStateCapsule const& state) {
+void TrajectoryPredictionService::applyPlayerState(PlayerObject* player,
+                                                   PlayerStateCapsule const& state) {
     player->setPosition(state.motion.position);
     player->m_lastPosition = state.motion.previousPosition;
     player->m_yVelocity = state.motion.verticalVelocity;
@@ -356,7 +333,7 @@ cocos2d::CCDrawNode* TrajectoryPredictionService::ensureDrawNode() {
         }
 
         drawNode->retain();
-        drawNode->setBlendFunc({ GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA });
+        drawNode->setBlendFunc({GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA});
         m_drawNode = drawNode;
     }
 
@@ -376,7 +353,7 @@ void TrajectoryPredictionService::attach(PlayLayer* playLayer) {
         }
 
         previewPlayer->setVisible(false);
-        previewPlayer->setPosition({ 0.0f, 105.0f });
+        previewPlayer->setPosition({0.0f, 105.0f});
         playLayer->m_objectLayer->addChild(previewPlayer);
         m_context.previewPlayers[playerIndex] = previewPlayer;
     }
@@ -420,7 +397,8 @@ void TrajectoryPredictionService::captureFrameDelta(float dt) {
 }
 
 bool TrajectoryPredictionService::ownsPreviewPlayer(PlayerObject* player) const {
-    return player && (player == m_context.previewPlayers[0] || player == m_context.previewPlayers[1]);
+    return player &&
+           (player == m_context.previewPlayers[0] || player == m_context.previewPlayers[1]);
 }
 
 void TrajectoryPredictionService::noteSimulatedDeath(PlayerObject* player) {
@@ -433,33 +411,26 @@ void TrajectoryPredictionService::noteSimulatedDeath(PlayerObject* player) {
 }
 
 void TrajectoryPredictionService::recalculateOverlapColors() {
-    m_overlapColor = {
-        std::min(1.0f, (m_holdColor.r + m_releaseColor.r) * 0.5f + 0.45f),
-        std::min(1.0f, (m_holdColor.g + m_releaseColor.g) * 0.5f + 0.45f),
-        std::min(1.0f, (m_holdColor.b + m_releaseColor.b) * 0.5f + 0.45f),
-        1.0f
-    };
+    m_overlapColor = {std::min(1.0f, (m_holdColor.r + m_releaseColor.r) * 0.5f + 0.45f),
+                      std::min(1.0f, (m_holdColor.g + m_releaseColor.g) * 0.5f + 0.45f),
+                      std::min(1.0f, (m_holdColor.b + m_releaseColor.b) * 0.5f + 0.45f),
+                      1.0f};
 
-    m_overlapColorP2 = {
-        std::min(1.0f, (m_holdColorP2.r + m_releaseColor.r) * 0.5f + 0.45f),
-        std::min(1.0f, (m_holdColorP2.g + m_releaseColor.g) * 0.5f + 0.45f),
-        std::min(1.0f, (m_holdColorP2.b + m_releaseColor.b) * 0.5f + 0.45f),
-        1.0f
-    };
+    m_overlapColorP2 = {std::min(1.0f, (m_holdColorP2.r + m_releaseColor.r) * 0.5f + 0.45f),
+                        std::min(1.0f, (m_holdColorP2.g + m_releaseColor.g) * 0.5f + 0.45f),
+                        std::min(1.0f, (m_holdColorP2.b + m_releaseColor.b) * 0.5f + 0.45f),
+                        1.0f};
 }
 
-std::vector<CCPoint> TrajectoryPredictionService::buildPlayerBounds(PlayerObject* player, CCRect bounds, float angle) {
-    std::vector<CCPoint> vertices = {
-        ccp(bounds.getMinX(), bounds.getMaxY()),
-        ccp(bounds.getMaxX(), bounds.getMaxY()),
-        ccp(bounds.getMaxX(), bounds.getMinY()),
-        ccp(bounds.getMinX(), bounds.getMinY())
-    };
+std::vector<CCPoint>
+TrajectoryPredictionService::buildPlayerBounds(PlayerObject* player, CCRect bounds, float angle) {
+    std::vector<CCPoint> vertices = {ccp(bounds.getMinX(), bounds.getMaxY()),
+                                     ccp(bounds.getMaxX(), bounds.getMaxY()),
+                                     ccp(bounds.getMaxX(), bounds.getMinY()),
+                                     ccp(bounds.getMinX(), bounds.getMinY())};
 
-    CCPoint center = ccp(
-        (bounds.getMinX() + bounds.getMaxX()) * 0.5f,
-        (bounds.getMinY() + bounds.getMaxY()) * 0.5f
-    );
+    CCPoint center = ccp((bounds.getMinX() + bounds.getMaxX()) * 0.5f,
+                         (bounds.getMinY() + bounds.getMaxY()) * 0.5f);
 
     float dimension = static_cast<float>(static_cast<int>(bounds.getMaxX() - bounds.getMinX()));
     if ((dimension == 18.0f || dimension == 5.0f) && player->getScale() == 1.0f) {
@@ -469,8 +440,8 @@ std::vector<CCPoint> TrajectoryPredictionService::buildPlayerBounds(PlayerObject
         }
     }
 
-    if ((dimension == 7.0f || dimension == 30.0f || dimension == 29.0f || dimension == 9.0f)
-        && player->getScale() != 1.0f) {
+    if ((dimension == 7.0f || dimension == 30.0f || dimension == 29.0f || dimension == 9.0f) &&
+        player->getScale() != 1.0f) {
         for (auto& vertex : vertices) {
             vertex.x = center.x + (vertex.x - center.x) * 0.6f;
             vertex.y = center.y + (vertex.y - center.y) * 0.6f;
@@ -505,25 +476,22 @@ void TrajectoryPredictionService::drawPredictionBounds(PlayerObject* player) {
     CCRect innerBounds = player->GameObject::getObjectRect(0.3f, 0.3f);
 
     auto outerVertices = buildPlayerBounds(player, outerBounds, m_context.collisionRotation);
-    drawNode->drawPolygon(
-        outerVertices.data(),
-        outerVertices.size(),
-        ccc4f(m_releaseColor.r, m_releaseColor.g, m_releaseColor.b, 0.2f),
-        0.5f,
-        m_releaseColor
-    );
+    drawNode->drawPolygon(outerVertices.data(),
+                          outerVertices.size(),
+                          ccc4f(m_releaseColor.r, m_releaseColor.g, m_releaseColor.b, 0.2f),
+                          0.5f,
+                          m_releaseColor);
 
     auto innerVertices = buildPlayerBounds(player, innerBounds, m_context.collisionRotation);
-    drawNode->drawPolygon(
-        innerVertices.data(),
-        innerVertices.size(),
-        ccc4f(m_overlapColor.r, m_overlapColor.g, m_overlapColor.b, 0.2f),
-        0.35f,
-        ccc4f(m_overlapColor.r, m_overlapColor.g, m_overlapColor.b, 0.55f)
-    );
+    drawNode->drawPolygon(innerVertices.data(),
+                          innerVertices.size(),
+                          ccc4f(m_overlapColor.r, m_overlapColor.g, m_overlapColor.b, 0.2f),
+                          0.35f,
+                          ccc4f(m_overlapColor.r, m_overlapColor.g, m_overlapColor.b, 0.55f));
 }
 
-std::vector<CCPoint> TrajectoryPredictionService::buildRingVertices(CCPoint center, float radius, int segments) {
+std::vector<CCPoint>
+TrajectoryPredictionService::buildRingVertices(CCPoint center, float radius, int segments) {
     std::vector<CCPoint> vertices;
     vertices.reserve(segments);
     for (int i = 0; i < segments; ++i) {
@@ -549,57 +517,79 @@ void TrajectoryPredictionService::drawSurvivalIndicator(PlayerObject* player, bo
     int survived = m_context.holdSurvivedFrames[playerIndex];
     bool survivable = survived >= gb->indicatorLookahead;
 
-        float margin = static_cast<float>(survived - gb->indicatorLookahead);
-    float tightness = std::clamp(1.0f - (margin / static_cast<float>(std::max(1, gb->indicatorLookahead))), 0.0f, 1.0f);
+    float margin = static_cast<float>(survived - gb->indicatorLookahead);
+    float tightness = std::clamp(
+        1.0f - (margin / static_cast<float>(std::max(1, gb->indicatorLookahead))), 0.0f, 1.0f);
 
     float flash = gb->indicatorFlashEnabled
-        ? (m_context.indicatorFlashTimer[playerIndex] / kIndicatorFlashDuration)
-        : 0.0f;
+                      ? (m_context.indicatorFlashTimer[playerIndex] / kIndicatorFlashDuration)
+                      : 0.0f;
 
-    ccColor4F baseColor = survivable
-        ? ccc4f(gb->indicatorSafeColorR, gb->indicatorSafeColorG, gb->indicatorSafeColorB, gb->indicatorOpacity)
-        : ccc4f(gb->indicatorDangerColorR, gb->indicatorDangerColorG, gb->indicatorDangerColorB, gb->indicatorOpacity);
+    ccColor4F baseColor = survivable ? ccc4f(gb->indicatorSafeColorR,
+                                             gb->indicatorSafeColorG,
+                                             gb->indicatorSafeColorB,
+                                             gb->indicatorOpacity)
+                                     : ccc4f(gb->indicatorDangerColorR,
+                                             gb->indicatorDangerColorG,
+                                             gb->indicatorDangerColorB,
+                                             gb->indicatorOpacity);
     float flashAlpha = std::min(1.0f, baseColor.a + flash * 0.3f);
 
     CCPoint center = player->getPosition();
 
     switch (gb->indicatorStyle) {
-        case 1: {
-            float half = 7.f + flash * 2.f;
-            CCPoint c = center + ccp(0.f, 26.f);
-            CCPoint verts[4] = {
-                ccp(c.x - half, c.y - half), ccp(c.x + half, c.y - half),
-                ccp(c.x + half, c.y + half), ccp(c.x - half, c.y + half)
-            };
-            drawNode->drawPolygon(verts, 4,
-                ccc4f(baseColor.r, baseColor.g, baseColor.b, baseColor.a * 0.85f),
-                2.f, ccc4f(baseColor.r, baseColor.g, baseColor.b, flashAlpha));
-            break;
-        }
-        case 2: {
-            float gap = std::max(6.f, 34.f - tightness * 18.f - flash * 10.f);
-            float barHalfW = 10.f;
-            ccColor4F c = ccc4f(baseColor.r, baseColor.g, baseColor.b, flashAlpha);
-            drawNode->drawSegment(ccp(center.x - barHalfW, center.y + gap), ccp(center.x + barHalfW, center.y + gap), 2.5f, c);
-            drawNode->drawSegment(ccp(center.x - barHalfW, center.y - gap), ccp(center.x + barHalfW, center.y - gap), 2.5f, c);
-            break;
-        }
-        case 3: {
-            float pulseSpeed = 2.0f + tightness * 6.0f;
-            float pulse = 0.5f + 0.5f * sinf(m_context.indicatorPulsePhase * pulseSpeed);
-            float radius = 14.f + pulse * 8.f + flash * 8.f;
-            ccColor4F ring = ccc4f(baseColor.r, baseColor.g, baseColor.b, std::min(1.0f, baseColor.a * (0.6f + pulse * 0.4f) + flash * 0.3f));
-            auto verts = buildRingVertices(center, radius, 20);
-            drawNode->drawPolygon(verts.data(), verts.size(), ccc4f(baseColor.r, baseColor.g, baseColor.b, ring.a * 0.25f), 2.f, ring);
-            break;
-        }
-        default: {
-            float radius = 20.f + flash * 6.f;
-            ccColor4F ring = ccc4f(baseColor.r, baseColor.g, baseColor.b, flashAlpha);
-            auto verts = buildRingVertices(center, radius, 24);
-            drawNode->drawPolygon(verts.data(), verts.size(), ccc4f(0.f, 0.f, 0.f, 0.f), 2.5f + flash * 1.5f, ring);
-            break;
-        }
+    case 1: {
+        float half = 7.f + flash * 2.f;
+        CCPoint c = center + ccp(0.f, 26.f);
+        CCPoint verts[4] = {ccp(c.x - half, c.y - half),
+                            ccp(c.x + half, c.y - half),
+                            ccp(c.x + half, c.y + half),
+                            ccp(c.x - half, c.y + half)};
+        drawNode->drawPolygon(verts,
+                              4,
+                              ccc4f(baseColor.r, baseColor.g, baseColor.b, baseColor.a * 0.85f),
+                              2.f,
+                              ccc4f(baseColor.r, baseColor.g, baseColor.b, flashAlpha));
+        break;
+    }
+    case 2: {
+        float gap = std::max(6.f, 34.f - tightness * 18.f - flash * 10.f);
+        float barHalfW = 10.f;
+        ccColor4F c = ccc4f(baseColor.r, baseColor.g, baseColor.b, flashAlpha);
+        drawNode->drawSegment(ccp(center.x - barHalfW, center.y + gap),
+                              ccp(center.x + barHalfW, center.y + gap),
+                              2.5f,
+                              c);
+        drawNode->drawSegment(ccp(center.x - barHalfW, center.y - gap),
+                              ccp(center.x + barHalfW, center.y - gap),
+                              2.5f,
+                              c);
+        break;
+    }
+    case 3: {
+        float pulseSpeed = 2.0f + tightness * 6.0f;
+        float pulse = 0.5f + 0.5f * sinf(m_context.indicatorPulsePhase * pulseSpeed);
+        float radius = 14.f + pulse * 8.f + flash * 8.f;
+        ccColor4F ring = ccc4f(baseColor.r,
+                               baseColor.g,
+                               baseColor.b,
+                               std::min(1.0f, baseColor.a * (0.6f + pulse * 0.4f) + flash * 0.3f));
+        auto verts = buildRingVertices(center, radius, 20);
+        drawNode->drawPolygon(verts.data(),
+                              verts.size(),
+                              ccc4f(baseColor.r, baseColor.g, baseColor.b, ring.a * 0.25f),
+                              2.f,
+                              ring);
+        break;
+    }
+    default: {
+        float radius = 20.f + flash * 6.f;
+        ccColor4F ring = ccc4f(baseColor.r, baseColor.g, baseColor.b, flashAlpha);
+        auto verts = buildRingVertices(center, radius, 24);
+        drawNode->drawPolygon(
+            verts.data(), verts.size(), ccc4f(0.f, 0.f, 0.f, 0.f), 2.5f + flash * 1.5f, ring);
+        break;
+    }
     }
 }
 
@@ -630,9 +620,11 @@ void TrajectoryPredictionService::onRealClick(bool player2, bool pressed) {
         return;
     }
 
-    int survived = pressed ? m_context.holdSurvivedFrames[playerIndex] : m_context.releaseSurvivedFrames[playerIndex];
+    int survived = pressed ? m_context.holdSurvivedFrames[playerIndex]
+                           : m_context.releaseSurvivedFrames[playerIndex];
     float margin = static_cast<float>(survived - gb->indicatorLookahead);
-    float tightness = std::clamp(1.0f - (margin / static_cast<float>(std::max(1, gb->indicatorLookahead))), 0.0f, 1.0f);
+    float tightness = std::clamp(
+        1.0f - (margin / static_cast<float>(std::max(1, gb->indicatorLookahead))), 0.0f, 1.0f);
     float pitch = 1.0f + tightness * 0.35f;
 
     ClickSoundManager::get()->playClickPitched(pressed, player2, pitch);
@@ -644,45 +636,43 @@ void TrajectoryPredictionService::applyPortalHint(PlayerObject* player, int port
     }
 
     switch (portalId) {
-        case 101:
-            player->togglePlayerScale(true, true);
-            player->updatePlayerScale();
-            break;
-        case 99:
-            player->togglePlayerScale(false, true);
-            player->updatePlayerScale();
-            break;
-        case 200:
-            player->m_playerSpeed = 0.7f;
-            break;
-        case 201:
-            player->m_playerSpeed = 0.9f;
-            break;
-        case 202:
-            player->m_playerSpeed = 1.1f;
-            break;
-        case 203:
-            player->m_playerSpeed = 1.3f;
-            break;
-        case 1334:
-            player->m_playerSpeed = 1.6f;
-            break;
-        case 10:
-            player->m_isUpsideDown = false;
-            break;
-        case 11:
-            player->m_isUpsideDown = true;
-            break;
-        default:
-            break;
+    case 101:
+        player->togglePlayerScale(true, true);
+        player->updatePlayerScale();
+        break;
+    case 99:
+        player->togglePlayerScale(false, true);
+        player->updatePlayerScale();
+        break;
+    case 200:
+        player->m_playerSpeed = 0.7f;
+        break;
+    case 201:
+        player->m_playerSpeed = 0.9f;
+        break;
+    case 202:
+        player->m_playerSpeed = 1.1f;
+        break;
+    case 203:
+        player->m_playerSpeed = 1.3f;
+        break;
+    case 1334:
+        player->m_playerSpeed = 1.6f;
+        break;
+    case 10:
+        player->m_isUpsideDown = false;
+        break;
+    case 11:
+        player->m_isUpsideDown = true;
+        break;
+    default:
+        break;
     }
 }
-void TrajectoryPredictionService::traceInputPath(
-    PlayLayer* playLayer,
-    PlayerObject* previewPlayer,
-    PlayerObject* sourcePlayer,
-    bool holdingInput
-) {
+void TrajectoryPredictionService::traceInputPath(PlayLayer* playLayer,
+                                                 PlayerObject* previewPlayer,
+                                                 PlayerObject* sourcePlayer,
+                                                 bool holdingInput) {
     if (!playLayer || !previewPlayer || !sourcePlayer) {
         return;
     }
@@ -705,12 +695,12 @@ void TrajectoryPredictionService::traceInputPath(
 
     previewPlayer->m_potentialSlopeMap.clear();
     for (auto const& [key, value] : sourcePlayer->m_potentialSlopeMap) {
-        previewPlayer->m_potentialSlopeMap.insert({ key, value });
+        previewPlayer->m_potentialSlopeMap.insert({key, value});
     }
 
     int frameCount = std::clamp(GucciEngine::get()->pathLength, 0, kMaxTraceFrames);
     if (!GucciEngine::get()->pathPreview && GucciEngine::get()->survivalIndicator) {
-                        frameCount = std::clamp(GucciEngine::get()->indicatorLookahead + 5, 5, kMaxTraceFrames);
+        frameCount = std::clamp(GucciEngine::get()->indicatorLookahead + 5, 5, kMaxTraceFrames);
     }
     m_context.traceCancelled = false;
     m_context.holdingTrace = holdingInput;
@@ -765,14 +755,13 @@ void TrajectoryPredictionService::traceInputPath(
             break;
         }
 
-        cocos2d::ccColor4F lineColor = holdingInput
-            ? (isSecondPlayer ? m_holdColorP2 : m_holdColor)
-            : m_releaseColor;
+        cocos2d::ccColor4F lineColor =
+            holdingInput ? (isSecondPlayer ? m_holdColorP2 : m_holdColor) : m_releaseColor;
 
         if (!holdingInput) {
             bool overlapsHoldPath = isSecondPlayer
-                ? (m_context.holdPathP2[frameIndex] == previousPosition)
-                : (m_context.holdPathP1[frameIndex] == previousPosition);
+                                        ? (m_context.holdPathP2[frameIndex] == previousPosition)
+                                        : (m_context.holdPathP1[frameIndex] == previousPosition);
             if (overlapsHoldPath) {
                 lineColor = isSecondPlayer ? m_overlapColorP2 : m_overlapColor;
             }
@@ -801,7 +790,8 @@ void TrajectoryPredictionService::traceInputPath(
 
 int TrajectoryPredictionService::getSurvivedFrames(bool player2, bool held) const {
     int playerIndex = player2 ? 1 : 0;
-    return held ? m_context.holdSurvivedFrames[playerIndex] : m_context.releaseSurvivedFrames[playerIndex];
+    return held ? m_context.holdSurvivedFrames[playerIndex]
+                : m_context.releaseSurvivedFrames[playerIndex];
 }
 
 void TrajectoryPredictionService::rebuildPreview(PlayLayer* playLayer) {
@@ -828,7 +818,8 @@ void TrajectoryPredictionService::rebuildPreview(PlayLayer* playLayer) {
     traceInputPath(playLayer, m_context.previewPlayers[0], playLayer->m_player1, false);
 
     m_context.processedOrbs.clear();
-    if (playLayer->m_gameState.m_isDualMode && playLayer->m_player2 && m_context.previewPlayers[1]) {
+    if (playLayer->m_gameState.m_isDualMode && playLayer->m_player2 &&
+        m_context.previewPlayers[1]) {
         traceInputPath(playLayer, m_context.previewPlayers[1], playLayer->m_player2, true);
         traceInputPath(playLayer, m_context.previewPlayers[1], playLayer->m_player2, false);
     }
@@ -874,7 +865,8 @@ void TrajectoryPredictionService::updatePreview(PlayLayer* playLayer) {
     float dt = CCDirector::sharedDirector()->getDeltaTime();
     for (int i = 0; i < 2; ++i) {
         if (m_context.indicatorFlashTimer[i] > 0.0f) {
-            m_context.indicatorFlashTimer[i] = std::max(0.0f, m_context.indicatorFlashTimer[i] - dt);
+            m_context.indicatorFlashTimer[i] =
+                std::max(0.0f, m_context.indicatorFlashTimer[i] - dt);
         }
     }
     m_context.indicatorPulsePhase += dt;
@@ -899,13 +891,11 @@ void TrajectoryPredictionService::updatePreview(PlayLayer* playLayer) {
         rebuildPreview(playLayer);
     }
 }
-void TrajectoryPredictionService::simulateCollisionBatch(
-    GJBaseGameLayer* layer,
-    PlayerObject* player,
-    gd::vector<GameObject*>* objects,
-    int objectCount,
-    float dt
-) {
+void TrajectoryPredictionService::simulateCollisionBatch(GJBaseGameLayer* layer,
+                                                         PlayerObject* player,
+                                                         gd::vector<GameObject*>* objects,
+                                                         int objectCount,
+                                                         float dt) {
     if (!layer || !player || !objects) {
         return;
     }
@@ -922,10 +912,8 @@ void TrajectoryPredictionService::simulateCollisionBatch(
         }
 
         auto type = object->m_objectType;
-        if (type == GameObjectType::Solid
-            || type == GameObjectType::Hazard
-            || type == GameObjectType::AnimatedHazard
-            || type == GameObjectType::Slope) {
+        if (type == GameObjectType::Solid || type == GameObjectType::Hazard ||
+            type == GameObjectType::AnimatedHazard || type == GameObjectType::Slope) {
             filteredObjects.push_back(object);
             continue;
         }
@@ -939,7 +927,8 @@ void TrajectoryPredictionService::simulateCollisionBatch(
         }
     }
 
-    layer->GJBaseGameLayer::collisionCheckObjects(player, &filteredObjects, static_cast<int>(filteredObjects.size()), dt);
+    layer->GJBaseGameLayer::collisionCheckObjects(
+        player, &filteredObjects, static_cast<int>(filteredObjects.size()), dt);
 
     CCRect playerRect = player->getObjectRect();
     for (auto* object : filteredObjects) {
@@ -1003,7 +992,8 @@ void TrajectoryPredictionService::simulateCollisionBatch(
     }
 }
 
-bool TrajectoryPredictionService::handleActivationCheck(PlayerObject* player, EffectGameObject* object) {
+bool TrajectoryPredictionService::handleActivationCheck(PlayerObject* player,
+                                                        EffectGameObject* object) {
     if (!player || !object) {
         return false;
     }
@@ -1016,7 +1006,8 @@ bool TrajectoryPredictionService::handleActivationCheck(PlayerObject* player, Ef
     return isSimulatedPad(object->m_objectType);
 }
 
-void TrajectoryPredictionService::handleTouchedTrigger(PlayerObject* player, EffectGameObject* object) {
+void TrajectoryPredictionService::handleTouchedTrigger(PlayerObject* player,
+                                                       EffectGameObject* object) {
     if (!player || !object) {
         return;
     }
@@ -1082,7 +1073,10 @@ class $modify(TrajectoryPreviewPauseLayer, PauseLayer) {
 };
 
 class $modify(TrajectoryPreviewBaseLayer, GJBaseGameLayer) {
-    void collisionCheckObjects(PlayerObject* player, gd::vector<GameObject*>* objects, int objectCount, float dt) {
+    void collisionCheckObjects(PlayerObject* player,
+                               gd::vector<GameObject*>* objects,
+                               int objectCount,
+                               float dt) {
         auto& service = TrajectoryPredictionService::get();
         if (!service.isActiveSimulation()) {
             GJBaseGameLayer::collisionCheckObjects(player, objects, objectCount, dt);

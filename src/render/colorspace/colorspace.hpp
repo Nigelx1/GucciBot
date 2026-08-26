@@ -16,13 +16,12 @@ extern "C" {
 }
 
 class Colorspace {
-   public:
+public:
     uint32_t m_alignedWidth, m_alignedHeight;
 
     virtual const std::vector<RenderPass> getPasses() = 0;
     virtual size_t getBufferSize() = 0;
-    virtual geode::Result<> prepareFrame(AVFrame* frame, uint8_t* data,
-                                         size_t size) = 0;
+    virtual geode::Result<> prepareFrame(AVFrame* frame, uint8_t* data, size_t size) = 0;
 
     virtual ~Colorspace() = default;
 };

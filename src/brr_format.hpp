@@ -8,22 +8,27 @@
 enum class AccuracyMode { Vanilla = 0, CBF = 1, CBS = 2 };
 
 struct MacroAction {
-    int   frame      = 0;
-    int   button     = 0;
-    bool  pressed    = false;
-    bool  down       = false;
-    bool  player2    = false;
+    int frame = 0;
+    int button = 0;
+    bool pressed = false;
+    bool down = false;
+    bool player2 = false;
     float stepOffset = 0.f;
 
     MacroAction() = default;
-        MacroAction(int f, int b, bool p2, bool press, float off)
-        : frame(f), button(b), pressed(press), down(press), player2(p2), stepOffset(off) {}
+    MacroAction(int f, int b, bool p2, bool press, float off)
+        : frame(f),
+          button(b),
+          pressed(press),
+          down(press),
+          player2(p2),
+          stepOffset(off) {}
 };
 
 struct PlayerStateBundle {
     struct Motion {
         cocos2d::CCPoint position;
-        float  rotation = 0.f;
+        float rotation = 0.f;
         double verticalVelocity = 0.0;
         double preSlopeVerticalVelocity = 0.0;
         double horizontalVelocity = 0.0;
@@ -44,13 +49,13 @@ struct PlayerStateBundle {
 };
 
 struct AnchorRngState {
-    bool      locked        = false;
-    uint32_t  seed          = 0;
+    bool locked = false;
+    uint32_t seed = 0;
     uintptr_t fastRandState = 0;
 };
 
 struct PlaybackAnchor {
-    int  tick       = 0;
+    int tick = 0;
     bool hasPlayer2 = false;
     PlayerStateBundle player1;
     PlayerStateBundle player2;
@@ -86,11 +91,19 @@ struct BRRInput {
     uint8_t flags = 0;
     float stepOffset = 0.0f;
 
-    bool isPlayer2() const { return (flags & 0x01) != 0; }
-    bool isPressed() const { return (flags & 0x02) != 0; }
+    bool isPlayer2() const {
+        return (flags & 0x01) != 0;
+    }
+    bool isPressed() const {
+        return (flags & 0x02) != 0;
+    }
 
-    void setPlayer2(bool value) { flags = (flags & ~0x01) | (value ? 0x01 : 0x00); }
-    void setPressed(bool value) { flags = (flags & ~0x02) | (value ? 0x02 : 0x00); }
+    void setPlayer2(bool value) {
+        flags = (flags & ~0x01) | (value ? 0x01 : 0x00);
+    }
+    void setPressed(bool value) {
+        flags = (flags & ~0x02) | (value ? 0x02 : 0x00);
+    }
 };
 
 struct BRRCheckpoint {
@@ -126,7 +139,8 @@ public:
     std::vector<int32_t> attemptStartTicks;
 
     void recordAction(int tick, int button, bool player2, bool pressed, float offset);
-    void recordAnchor(int tick, PlayerObject* p1, PlayerObject* p2, bool isPlatformer, bool isDual = true);
+    void recordAnchor(
+        int tick, PlayerObject* p1, PlayerObject* p2, bool isPlatformer, bool isDual = true);
     void truncateAfter(int tick);
     std::vector<uint8_t> serialize() const;
     static BRRMacro* deserialize(std::vector<uint8_t> const& data);
@@ -138,13 +152,15 @@ public:
     }
     static BRRMacro* loadFromDisk(std::string const& filename);
     std::vector<MacroAction> toMacroActions() const;
-        bool isDeathFrame(int32_t tick, size_t index) const {
-        if (index >= deathFrames.size()) return false;
+    bool isDeathFrame(int32_t tick, size_t index) const {
+        if (index >= deathFrames.size())
+            return false;
         return std::abs(deathFrames[index] - tick) <= 5;
     }
-        bool isAnyDeathFrame(int32_t tick) const {
+    bool isAnyDeathFrame(int32_t tick) const {
         for (auto df : deathFrames)
-            if (std::abs(df - tick) <= 5) return true;
+            if (std::abs(df - tick) <= 5)
+                return true;
         return false;
     }
 };

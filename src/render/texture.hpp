@@ -9,14 +9,14 @@
 #include "pass.hpp"
 
 class SLRenderTexture {
-   public:
+public:
     void init(std::unique_ptr<Colorspace> colorspace);
     void destroy() const;
     void capture(uint8_t** data, std::atomic<bool>& hasDataFlag);
     void postCapture();
     void displayPreview();
 
-   public:
+public:
     std::unique_ptr<Colorspace> m_colorspace;
     std::vector<RenderPass> m_passes;
 

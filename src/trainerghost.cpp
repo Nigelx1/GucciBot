@@ -12,26 +12,35 @@ using namespace geode::prelude;
 namespace gbtr {
     bool isTrainerLevel(PlayLayer* pl) {
         auto* gb = GucciEngine::get();
-        if (!pl || !pl->m_level || !gb->trainerMacro.loaded) return false;
-        if (gb->trainerMacro.levelName.empty()) return true;
+        if (!pl || !pl->m_level || !gb->trainerMacro.loaded)
+            return false;
+        if (gb->trainerMacro.levelName.empty())
+            return true;
         std::string a = pl->m_level->m_levelName;
         std::string b = gb->trainerMacro.levelName;
         std::transform(a.begin(), a.end(), a.begin(), ::tolower);
         std::transform(b.begin(), b.end(), b.begin(), ::tolower);
         return a == b;
     }
-}
+} // namespace gbtr
 
 class TrainerMusicSync {
 public:
-    static TrainerMusicSync* get() { static TrainerMusicSync inst; return &inst; }
+    static TrainerMusicSync* get() {
+        static TrainerMusicSync inst;
+        return &inst;
+    }
 
     void sync(PlayLayer* pl, uint32_t frame, double tps) {
         auto* gb = GucciEngine::get();
-        bool shouldPlay = gb->trainerMusicEnabled && pl && pl->m_started && gbtr::isTrainerLevel(pl);
-        if (!shouldPlay) return;
-        if (!m_channel) start();
-        if (!m_channel) return;
+        bool shouldPlay =
+            gb->trainerMusicEnabled && pl && pl->m_started && gbtr::isTrainerLevel(pl);
+        if (!shouldPlay)
+            return;
+        if (!m_channel)
+            start();
+        if (!m_channel)
+            return;
         m_channel->setPaused(false);
 
         double targetD = tps > 0.0 ? (frame / tps) * 1000.0 : 0.0;
@@ -42,22 +51,38 @@ public:
         auto* pl = PlayLayer::get();
         auto* gb = GucciEngine::get();
         bool liveOwns = gb->trainerMusicEnabled && pl && pl->m_started && gbtr::isTrainerLevel(pl);
-        if (liveOwns) return;
+        if (liveOwns)
+            return;
 
         bool shouldPlay = active && gb->trainerMusicEnabled;
-        if (!shouldPlay) { stop(); return; }
-        if (!m_channel) start();
-        if (!m_channel) return;
+        if (!shouldPlay) {
+            stop();
+            return;
+        }
+        if (!m_channel)
+            start();
+        if (!m_channel)
+            return;
 
         m_channel->setPaused(paused);
-        if (paused) return;
+        if (paused)
+            return;
         seekIfDrifted(posSec * 1000.0 + gb->trainerMusicOffsetSec * 1000.0);
     }
 
     void stop() {
-        if (m_channel) { m_channel->stop(); m_channel = nullptr; }
-        if (m_sound) { m_sound->release(); m_sound = nullptr; }
-        if (m_audioMuteHeld) { GameAudioMute::release(); m_audioMuteHeld = false; }
+        if (m_channel) {
+            m_channel->stop();
+            m_channel = nullptr;
+        }
+        if (m_sound) {
+            m_sound->release();
+            m_sound = nullptr;
+        }
+        if (m_audioMuteHeld) {
+            GameAudioMute::release();
+            m_audioMuteHeld = false;
+        }
     }
 
 private:
@@ -66,17 +91,23 @@ private:
         unsigned int posMs = 0;
         m_channel->getPosition(&posMs, FMOD_TIMEUNIT_MS);
         long long diff = (long long)posMs - (long long)targetMs;
-        if (diff < 0) diff = -diff;
-        if (diff > 60) m_channel->setPosition(targetMs, FMOD_TIMEUNIT_MS);
+        if (diff < 0)
+            diff = -diff;
+        if (diff > 60)
+            m_channel->setPosition(targetMs, FMOD_TIMEUNIT_MS);
     }
 
     void start() {
-                                auto path = Mod::get()->getSaveDir() / "trainer_music.mp3";
+        auto path = Mod::get()->getSaveDir() / "trainer_music.mp3";
         std::error_code ec;
-        if (!std::filesystem::exists(path, ec)) return;
+        if (!std::filesystem::exists(path, ec))
+            return;
         auto* system = FMODAudioEngine::sharedEngine()->m_system;
-        if (!system) return;
-        if (system->createSound(path.string().c_str(), FMOD_CREATESAMPLE, nullptr, &m_sound) != FMOD_OK || !m_sound) {
+        if (!system)
+            return;
+        if (system->createSound(path.string().c_str(), FMOD_CREATESAMPLE, nullptr, &m_sound) !=
+                FMOD_OK ||
+            !m_sound) {
             m_sound = nullptr;
             return;
         }
@@ -95,37 +126,51 @@ private:
 
 class TrainerGhostOverlay {
 public:
-    static TrainerGhostOverlay* get() { static TrainerGhostOverlay inst; return &inst; }
+    static TrainerGhostOverlay* get() {
+        static TrainerGhostOverlay inst;
+        return &inst;
+    }
 
     void attach(PlayLayer* pl) {
-        if (m_node || !pl) return;
+        if (m_node || !pl)
+            return;
         auto* anchor = pl->m_objectLayer;
-        if (!anchor) return;
+        if (!anchor)
+            return;
         auto* node = CCDrawNode::create();
-        node->setBlendFunc({ GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA });
+        node->setBlendFunc({GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA});
         node->m_bUseArea = false;
         anchor->addChild(node, 1404);
         m_node = node;
     }
 
     void detach() {
-        if (m_node) { m_node->removeFromParent(); m_node = nullptr; }
+        if (m_node) {
+            m_node->removeFromParent();
+            m_node = nullptr;
+        }
         m_liveAttemptPath.clear();
     }
 
     void render(PlayLayer* pl) {
         auto* gb = GucciEngine::get();
-        if (!gb || !pl) return;
-        if (!m_node) { attach(pl); if (!m_node) return; }
+        if (!gb || !pl)
+            return;
+        if (!m_node) {
+            attach(pl);
+            if (!m_node)
+                return;
+        }
         m_node->clear();
 
         double tps = gb->updater.m_tps > 0.0 ? gb->updater.m_tps : 240.0;
         TrainerMusicSync::get()->sync(pl, gb->updater.getFrame(), tps);
 
-        if (!pl->m_started) return;
+        if (!pl->m_started)
+            return;
 
         if (gb->trainerBestGhostEnabled && !gb->isPlaying() && pl->m_player1) {
-            m_liveAttemptPath.push_back({ pl->m_player1->m_position.x, pl->m_player1->m_position.y });
+            m_liveAttemptPath.push_back({pl->m_player1->m_position.x, pl->m_player1->m_position.y});
         }
 
         if (gb->trainerGhostEnabled && !gb->trainerMacro.pathSamples.empty()) {
@@ -157,7 +202,9 @@ public:
 private:
     static uint32_t resolveFrame(GucciEngine* gb, size_t pathLen) {
         if (gb->trainerScrubActive)
-            return (uint32_t)std::clamp(gb->trainerScrubPercent / 100.f * (float)pathLen, 0.f, (float)(pathLen > 0 ? pathLen - 1 : 0));
+            return (uint32_t)std::clamp(gb->trainerScrubPercent / 100.f * (float)pathLen,
+                                        0.f,
+                                        (float)(pathLen > 0 ? pathLen - 1 : 0));
         return gb->updater.getFrame();
     }
 
@@ -166,14 +213,15 @@ private:
     }
 
     CCDrawNode* m_node = nullptr;
-    std::vector<std::pair<float,float>> m_liveAttemptPath;
-    std::vector<std::pair<float,float>> m_bestAttemptPath;
+    std::vector<std::pair<float, float>> m_liveAttemptPath;
+    std::vector<std::pair<float, float>> m_bestAttemptPath;
     float m_bestReachX = 0.f;
 };
 
 class $modify(TrainerGhostPlayLayer, PlayLayer) {
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
-        if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
+        if (!PlayLayer::init(level, useReplay, dontCreateObjects))
+            return false;
         TrainerGhostOverlay::get()->attach(this);
         return true;
     }
@@ -197,4 +245,4 @@ namespace gbtr {
     void stopTrainerClickBarMusic() {
         TrainerMusicSync::get()->stop();
     }
-}
+} // namespace gbtr

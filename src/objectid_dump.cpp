@@ -14,17 +14,22 @@ namespace {
         std::string line;
         while (std::getline(in, line)) {
             auto comma = line.find(',');
-            if (comma == std::string::npos) continue;
-            try { known.insert(std::stoi(line.substr(0, comma))); } catch (...) {}
+            if (comma == std::string::npos)
+                continue;
+            try {
+                known.insert(std::stoi(line.substr(0, comma)));
+            } catch (...) {
+            }
         }
         return known;
     }
-}
+} // namespace
 
 class $modify(ObjectIDDumpPL, PlayLayer) {
     void createObjectsFromSetupFinished() {
         PlayLayer::createObjectsFromSetupFinished();
-        if (!m_objects) return;
+        if (!m_objects)
+            return;
 
         auto path = Mod::get()->getSaveDir() / "guccibot_objectids.log";
         auto known = loadKnownIds(path);
@@ -32,9 +37,11 @@ class $modify(ObjectIDDumpPL, PlayLayer) {
 
         std::ofstream out(path, std::ios::app);
         for (auto* go : CCArrayExt<GameObject*>(m_objects)) {
-            if (!go) continue;
+            if (!go)
+                continue;
             int id = go->m_objectID;
-            if (known.count(id)) continue;
+            if (known.count(id))
+                continue;
             known.insert(id);
             out << id << "," << static_cast<int>(go->m_objectType) << "," << levelName << "\n";
         }

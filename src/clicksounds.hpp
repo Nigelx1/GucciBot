@@ -25,16 +25,21 @@ struct ClickPack {
     float softVolume = 0.5f;
     float releaseVolume = 0.8f;
 
-    int hardCount() const { return static_cast<int>(hardClicks.size()); }
-    int softCount() const { return static_cast<int>(softClicks.size()); }
+    int hardCount() const {
+        return static_cast<int>(hardClicks.size());
+    }
+    int softCount() const {
+        return static_cast<int>(softClicks.size());
+    }
     int releaseCount() const {
         return static_cast<int>(hardReleases.size() + softReleases.size() + releases.size());
     }
-    int noiseCount() const { return static_cast<int>(noiseFiles.size()); }
+    int noiseCount() const {
+        return static_cast<int>(noiseFiles.size());
+    }
     bool empty() const {
-        return hardClicks.empty() && softClicks.empty() &&
-            hardReleases.empty() && softReleases.empty() &&
-            releases.empty();
+        return hardClicks.empty() && softClicks.empty() && hardReleases.empty() &&
+               softReleases.empty() && releases.empty();
     }
 };
 
@@ -76,11 +81,13 @@ public:
     void openClickFolder();
     void openClickFolderP2();
 
-    std::vector<float> generateClickAudio(
-        const std::vector<MacroAction>& actions,
-        float tickRate, float duration, int sampleRate,
-        int startTick = 0, bool applyDelay = false,
-        bool trueTwoPlayerMode = false);
+    std::vector<float> generateClickAudio(const std::vector<MacroAction>& actions,
+                                          float tickRate,
+                                          float duration,
+                                          int sampleRate,
+                                          int startTick = 0,
+                                          bool applyDelay = false,
+                                          bool trueTwoPlayerMode = false);
 
     void preDecodeForRender(int sampleRate);
     std::unordered_map<std::string, std::vector<float>> decodedClickCache;

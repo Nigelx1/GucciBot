@@ -22,7 +22,7 @@ void SavedPlayerCheckpoint::apply(PlayerObject* p) {
     p->m_slopeStartTime = m_slopeStartTime;
     p->m_justPlacedStreak = m_justPlacedStreak;
     p->m_maybeLastGroundObject = m_maybeLastGroundObject;
-            p->m_lastCollisionBottom = m_lastCollisionBottom;
+    p->m_lastCollisionBottom = m_lastCollisionBottom;
     p->m_lastCollisionTop = m_lastCollisionTop;
     p->m_lastCollisionLeft = m_lastCollisionLeft;
     p->m_lastCollisionRight = m_lastCollisionRight;

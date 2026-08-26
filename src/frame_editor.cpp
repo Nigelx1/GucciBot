@@ -16,12 +16,10 @@ static ImVec4 feWithAlpha(ImVec4 c, float a) {
 }
 
 static ImVec4 feBrighten(const ImVec4& c, float amount) {
-    return ImVec4(
-        std::clamp(c.x + amount, 0.0f, 1.0f),
-        std::clamp(c.y + amount, 0.0f, 1.0f),
-        std::clamp(c.z + amount, 0.0f, 1.0f),
-        c.w
-    );
+    return ImVec4(std::clamp(c.x + amount, 0.0f, 1.0f),
+                  std::clamp(c.y + amount, 0.0f, 1.0f),
+                  std::clamp(c.z + amount, 0.0f, 1.0f),
+                  c.w);
 }
 
 static ImU32 feToU32(const ImVec4& c) {
@@ -38,7 +36,13 @@ static float feEaseOutCubic(float t) {
     return 1.0f - inv * inv * inv;
 }
 
-static void feDrawSolidRect(ImDrawList* dl, ImVec2 min, ImVec2 max, float rounding, const ThemeEngine& theme, float alpha, bool border = true) {
+static void feDrawSolidRect(ImDrawList* dl,
+                            ImVec2 min,
+                            ImVec2 max,
+                            float rounding,
+                            const ThemeEngine& theme,
+                            float alpha,
+                            bool border = true) {
     ImVec4 fill(theme.cardColor.x, theme.cardColor.y, theme.cardColor.z, theme.cardColor.w * alpha);
     dl->AddRectFilled(min, max, feToU32(fill), rounding);
     if (border)
@@ -54,33 +58,58 @@ void FrameEditor::computeP2Color(const ImVec4& accent) {
 
     if (delta > 0.0001f) {
         s = delta / cmax;
-        if (cmax == r) h = std::fmod((g - b) / delta, 6.0f);
-        else if (cmax == g) h = (b - r) / delta + 2.0f;
-        else h = (r - g) / delta + 4.0f;
+        if (cmax == r)
+            h = std::fmod((g - b) / delta, 6.0f);
+        else if (cmax == g)
+            h = (b - r) / delta + 2.0f;
+        else
+            h = (r - g) / delta + 4.0f;
         h /= 6.0f;
-        if (h < 0.0f) h += 1.0f;
+        if (h < 0.0f)
+            h += 1.0f;
     }
 
     h += 0.5f;
-    if (h > 1.0f) h -= 1.0f;
+    if (h > 1.0f)
+        h -= 1.0f;
 
     float c = v * s;
     float x = c * (1.0f - std::abs(std::fmod(h * 6.0f, 2.0f) - 1.0f));
     float m = v - c;
     float rr, gg, bb;
     float hh = h * 6.0f;
-    if (hh < 1.0f) { rr = c; gg = x; bb = 0; }
-    else if (hh < 2.0f) { rr = x; gg = c; bb = 0; }
-    else if (hh < 3.0f) { rr = 0; gg = c; bb = x; }
-    else if (hh < 4.0f) { rr = 0; gg = x; bb = c; }
-    else if (hh < 5.0f) { rr = x; gg = 0; bb = c; }
-    else { rr = c; gg = 0; bb = x; }
+    if (hh < 1.0f) {
+        rr = c;
+        gg = x;
+        bb = 0;
+    } else if (hh < 2.0f) {
+        rr = x;
+        gg = c;
+        bb = 0;
+    } else if (hh < 3.0f) {
+        rr = 0;
+        gg = c;
+        bb = x;
+    } else if (hh < 4.0f) {
+        rr = 0;
+        gg = x;
+        bb = c;
+    } else if (hh < 5.0f) {
+        rr = x;
+        gg = 0;
+        bb = c;
+    } else {
+        rr = c;
+        gg = 0;
+        bb = x;
+    }
 
     p2Color = ImVec4(rr + m, gg + m, bb + m, 1.0f);
 }
 
 void FrameEditor::openBRR(const std::string& name, BRRMacro* macro) {
-    if (!macro) return;
+    if (!macro)
+        return;
     active = true;
     dirty = false;
     macroName = name;
@@ -89,8 +118,14 @@ void FrameEditor::openBRR(const std::string& name, BRRMacro* macro) {
     twoPlayerMode = macro->twoPlayerMode;
     confirmingDiscard = false;
 
-    if (cachedBRR) { delete cachedBRR; cachedBRR = nullptr; }
-    if (cachedBRR) { delete cachedBRR; cachedBRR = nullptr; }
+    if (cachedBRR) {
+        delete cachedBRR;
+        cachedBRR = nullptr;
+    }
+    if (cachedBRR) {
+        delete cachedBRR;
+        cachedBRR = nullptr;
+    }
     cachedBRR = new BRRMacro(*macro);
 
     inputs.clear();
@@ -110,7 +145,8 @@ void FrameEditor::openBRR(const std::string& name, BRRMacro* macro) {
     originalInputs = inputs;
     maxFrame = 0;
     for (auto& inp : inputs) {
-        if (inp.frame > maxFrame) maxFrame = inp.frame;
+        if (inp.frame > maxFrame)
+            maxFrame = inp.frame;
     }
     maxFrame = std::max(maxFrame + 120, (int32_t)240);
 
@@ -133,7 +169,8 @@ void FrameEditor::openBRR(const std::string& name, BRRMacro* macro) {
 }
 
 void FrameEditor::openGDR(const std::string& name, BRRMacro* macro) {
-    if (!macro) return;
+    if (!macro)
+        return;
     active = true;
     dirty = false;
     macroName = name;
@@ -142,8 +179,14 @@ void FrameEditor::openGDR(const std::string& name, BRRMacro* macro) {
     twoPlayerMode = false;
     confirmingDiscard = false;
 
-    if (cachedBRR) { delete cachedBRR; cachedBRR = nullptr; }
-    if (cachedBRR) { delete cachedBRR; cachedBRR = nullptr; }
+    if (cachedBRR) {
+        delete cachedBRR;
+        cachedBRR = nullptr;
+    }
+    if (cachedBRR) {
+        delete cachedBRR;
+        cachedBRR = nullptr;
+    }
     cachedBRR = new BRRMacro(*macro);
 
     inputs.clear();
@@ -163,7 +206,8 @@ void FrameEditor::openGDR(const std::string& name, BRRMacro* macro) {
     originalInputs = inputs;
     maxFrame = 0;
     for (auto& inp : inputs) {
-        if (inp.frame > maxFrame) maxFrame = inp.frame;
+        if (inp.frame > maxFrame)
+            maxFrame = inp.frame;
     }
     maxFrame = std::max(maxFrame + 120, (int32_t)240);
 
@@ -196,8 +240,14 @@ void FrameEditor::close() {
     selectedSegment = -1;
     hoveredSegment = -1;
     confirmingDiscard = false;
-    if (cachedBRR) { delete cachedBRR; cachedBRR = nullptr; }
-    if (cachedBRR) { delete cachedBRR; cachedBRR = nullptr; }
+    if (cachedBRR) {
+        delete cachedBRR;
+        cachedBRR = nullptr;
+    }
+    if (cachedBRR) {
+        delete cachedBRR;
+        cachedBRR = nullptr;
+    }
 }
 
 bool FrameEditor::isActive() const {
@@ -206,7 +256,8 @@ bool FrameEditor::isActive() const {
 
 int FrameEditor::findSegmentByPressIndex(size_t pressIdx) const {
     for (int i = 0; i < (int)segments.size(); i++) {
-        if (segments[i].pressIndex == pressIdx) return i;
+        if (segments[i].pressIndex == pressIdx)
+            return i;
     }
     return -1;
 }
@@ -215,7 +266,8 @@ void FrameEditor::rebuildSegments() {
     segments.clear();
 
     std::vector<size_t> sorted(inputs.size());
-    for (size_t i = 0; i < inputs.size(); i++) sorted[i] = i;
+    for (size_t i = 0; i < inputs.size(); i++)
+        sorted[i] = i;
     std::stable_sort(sorted.begin(), sorted.end(), [&](size_t a, size_t b) {
         return inputs[a].frame < inputs[b].frame;
     });
@@ -231,7 +283,8 @@ void FrameEditor::rebuildSegments() {
                 size_t idx = sorted[si];
                 auto& inp = inputs[idx];
                 bool inputIsP2 = twoPlayerMode ? inp.player2 : false;
-                if (inputIsP2 != isP2 || inp.actionType != act) continue;
+                if (inputIsP2 != isP2 || inp.actionType != act)
+                    continue;
 
                 if (inp.pressed) {
                     if (openPress >= 0) {
@@ -300,7 +353,8 @@ void FrameEditor::pushUndo() {
 }
 
 void FrameEditor::undo() {
-    if (undoIndex < 0) return;
+    if (undoIndex < 0)
+        return;
     if (undoIndex == (int)undoStack.size() - 1) {
         UndoEntry current;
         current.inputs = inputs;
@@ -314,7 +368,8 @@ void FrameEditor::undo() {
 }
 
 void FrameEditor::redo() {
-    if (undoIndex + 2 >= (int)undoStack.size()) return;
+    if (undoIndex + 2 >= (int)undoStack.size())
+        return;
     undoIndex++;
     inputs = undoStack[undoIndex + 1].inputs;
     rebuildSegments();
@@ -332,7 +387,8 @@ void FrameEditor::applyToBRR() {
     cachedBRR->inputs.reserve(inputs.size());
 
     std::vector<size_t> order(inputs.size());
-    for (size_t i = 0; i < inputs.size(); i++) order[i] = i;
+    for (size_t i = 0; i < inputs.size(); i++)
+        order[i] = i;
     std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
         return inputs[a].frame < inputs[b].frame;
     });
@@ -354,18 +410,19 @@ void FrameEditor::applyToBRR() {
     cachedBRR->persist();
     macroName = cachedBRR->name;
 
-        auto* engine = GucciEngine::get();
+    auto* engine = GucciEngine::get();
     if (engine) {
         engine->replayName = cachedBRR->name;
         engine->replay.m_inputIndex = 0;
-                engine->replay.m_actionAtom.clear();
+        engine->replay.m_actionAtom.clear();
         for (auto& inp : cachedBRR->inputs) {
             gb::ActionType t = gb::ActionType::Jump;
-            if (inp.actionType == 2) t = gb::ActionType::Left;
-            if (inp.actionType == 3) t = gb::ActionType::Right;
+            if (inp.actionType == 2)
+                t = gb::ActionType::Left;
+            if (inp.actionType == 3)
+                t = gb::ActionType::Right;
             engine->replay.m_actionAtom.addAction(
-                static_cast<uint32_t>(inp.tick), t,
-                inp.isPressed(), inp.isPlayer2());
+                static_cast<uint32_t>(inp.tick), t, inp.isPressed(), inp.isPlayer2());
         }
     }
 
@@ -374,13 +431,15 @@ void FrameEditor::applyToBRR() {
 }
 
 void FrameEditor::applyToGDR() {
-    if (!cachedBRR) return;
+    if (!cachedBRR)
+        return;
 
     cachedBRR->inputs.clear();
     cachedBRR->inputs.reserve(inputs.size());
 
     std::vector<size_t> order(inputs.size());
-    for (size_t i = 0; i < inputs.size(); i++) order[i] = i;
+    for (size_t i = 0; i < inputs.size(); i++)
+        order[i] = i;
     std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
         return inputs[a].frame < inputs[b].frame;
     });
@@ -402,7 +461,7 @@ void FrameEditor::applyToGDR() {
     cachedBRR->persist(accMode, anchorInt);
     macroName = cachedBRR->name;
 
-        (void)GucciEngine::get();
+    (void)GucciEngine::get();
 
     originalInputs = inputs;
     dirty = false;
@@ -426,7 +485,8 @@ int32_t FrameEditor::visibleFrameEnd(float canvasWidth) const {
 
 void FrameEditor::handleZoom(float mouseX, float canvasOriginX, float canvasWidth) {
     float wheel = ImGui::GetIO().MouseWheel;
-    if (std::abs(wheel) < 0.01f) return;
+    if (std::abs(wheel) < 0.01f)
+        return;
 
     float mouseFrame = (mouseX - canvasOriginX) / pixelsPerFrame + scrollX;
     targetPixelsPerFrame *= (1.0f + wheel * 0.15f);
@@ -458,7 +518,8 @@ void FrameEditor::handleDrag(float mouseX, float canvasOriginX) {
             inputs[dragPressIdx].frame = dragOriginalFrame + delta;
             if (dragReleaseIdx != dragPressIdx && dragReleaseIdx < inputs.size()) {
                 inputs[dragReleaseIdx].frame = dragReleaseOrigFrame + delta;
-                if (inputs[dragReleaseIdx].frame < 0) inputs[dragReleaseIdx].frame = 0;
+                if (inputs[dragReleaseIdx].frame < 0)
+                    inputs[dragReleaseIdx].frame = 0;
             }
             dirty = true;
             rebuildSegments();
@@ -473,7 +534,8 @@ void FrameEditor::handleDrag(float mouseX, float canvasOriginX) {
             newFrame = std::max(newFrame, (int32_t)0);
             if (dragReleaseIdx != dragPressIdx && dragReleaseIdx < inputs.size()) {
                 int32_t releaseFrame = inputs[dragReleaseIdx].frame;
-                if (newFrame >= releaseFrame) newFrame = releaseFrame - 1;
+                if (newFrame >= releaseFrame)
+                    newFrame = releaseFrame - 1;
             }
             inputs[dragPressIdx].frame = newFrame;
             dirty = true;
@@ -488,7 +550,8 @@ void FrameEditor::handleDrag(float mouseX, float canvasOriginX) {
             int32_t newFrame = frameAtPixel(mouseX, canvasOriginX);
             newFrame = std::max(newFrame, (int32_t)0);
             int32_t pressFrame = inputs[dragPressIdx].frame;
-            if (newFrame <= pressFrame) newFrame = pressFrame + 1;
+            if (newFrame <= pressFrame)
+                newFrame = pressFrame + 1;
             inputs[dragReleaseIdx].frame = newFrame;
             dirty = true;
             rebuildSegments();
@@ -504,7 +567,8 @@ void FrameEditor::handleDrag(float mouseX, float canvasOriginX) {
     }
 }
 
-int FrameEditor::hitTestSegment(ImVec2 mousePos, ImVec2 lanesOrigin, float lanesWidth, float lanesHeight, int& edgeOut) const {
+int FrameEditor::hitTestSegment(
+    ImVec2 mousePos, ImVec2 lanesOrigin, float lanesWidth, float lanesHeight, int& edgeOut) const {
     edgeOut = 0;
     float laneH = lanesHeight * 0.5f;
     float barInset = laneH * 0.15f;
@@ -514,14 +578,17 @@ int FrameEditor::hitTestSegment(ImVec2 mousePos, ImVec2 lanesOrigin, float lanes
         float leftX = pixelAtFrame(seg.startFrame, lanesOrigin.x);
         float rightX = pixelAtFrame(seg.endFrame, lanesOrigin.x);
 
-        if (rightX < lanesOrigin.x || leftX > lanesOrigin.x + lanesWidth) continue;
+        if (rightX < lanesOrigin.x || leftX > lanesOrigin.x + lanesWidth)
+            continue;
 
         float laneTop = seg.player2 ? lanesOrigin.y + laneH : lanesOrigin.y;
         float barTop = laneTop + barInset;
         float barBot = laneTop + laneH - barInset;
 
-        if (mousePos.y < barTop || mousePos.y > barBot) continue;
-        if (mousePos.x < leftX - 4.0f || mousePos.x > rightX + 4.0f) continue;
+        if (mousePos.y < barTop || mousePos.y > barBot)
+            continue;
+        if (mousePos.x < leftX - 4.0f || mousePos.x > rightX + 4.0f)
+            continue;
 
         float edgeThreshold = std::max(6.0f, pixelsPerFrame * 0.5f);
         edgeThreshold = std::min(edgeThreshold, (rightX - leftX) * 0.3f);
@@ -556,17 +623,19 @@ void FrameEditor::draw(MenuInterface& ui) {
     float contentHeight = ImGui::GetContentRegionAvail().y;
 
     if (inputs.empty()) {
-        ImVec2 center(contentOrigin.x + contentWidth * 0.5f, contentOrigin.y + contentHeight * 0.4f);
+        ImVec2 center(contentOrigin.x + contentWidth * 0.5f,
+                      contentOrigin.y + contentHeight * 0.4f);
         const char* msg = "No inputs to edit";
         ImVec2 textSize = ImGui::CalcTextSize(msg);
         ImGui::GetWindowDrawList()->AddText(
             ImVec2(center.x - textSize.x * 0.5f, center.y - textSize.y * 0.5f),
             ui.theme.getTextSecondaryU32(),
-            msg
-        );
+            msg);
 
-        ImGui::SetCursorScreenPos(ImVec2(contentOrigin.x + contentWidth * 0.5f - 50.0f, center.y + 30.0f));
-        if (Widgets::StyledButton("Back##editorEmpty", ImVec2(100.0f, 28.0f), ui.theme, ui.anim, 6.0f)) {
+        ImGui::SetCursorScreenPos(
+            ImVec2(contentOrigin.x + contentWidth * 0.5f - 50.0f, center.y + 30.0f));
+        if (Widgets::StyledButton(
+                "Back##editorEmpty", ImVec2(100.0f, 28.0f), ui.theme, ui.anim, 6.0f)) {
             close();
         }
         ImGui::PopStyleVar();
@@ -640,7 +709,8 @@ void FrameEditor::draw(MenuInterface& ui) {
                     dragStartFrame = frameAtPixel(mousePos.x, lanesOrigin.x);
                     dragOriginalFrame = inputs[seg.pressIndex].frame;
                     dragReleaseOrigFrame = (seg.hasRelease && seg.releaseIndex != seg.pressIndex)
-                        ? inputs[seg.releaseIndex].frame : inputs[seg.pressIndex].frame;
+                                               ? inputs[seg.releaseIndex].frame
+                                               : inputs[seg.pressIndex].frame;
                 }
             } else {
                 selectedSegment = -1;
@@ -650,7 +720,6 @@ void FrameEditor::draw(MenuInterface& ui) {
                 dragStartScrollX = scrollX;
             }
         }
-
     }
 
     yPos += lanesH + spacing;
@@ -665,13 +734,16 @@ void FrameEditor::draw(MenuInterface& ui) {
         bool shiftHeld = io.KeyShift;
 
         if (ctrlHeld && ImGui::IsKeyPressed(ImGuiKey_Z)) {
-            if (shiftHeld) redo();
-            else undo();
+            if (shiftHeld)
+                redo();
+            else
+                undo();
         }
         if (ctrlHeld && ImGui::IsKeyPressed(ImGuiKey_Y)) {
             redo();
         }
-        if (ImGui::IsKeyPressed(ImGuiKey_Delete) && selectedSegment >= 0 && selectedSegment < (int)segments.size()) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Delete) && selectedSegment >= 0 &&
+            selectedSegment < (int)segments.size()) {
             pushUndo();
             auto& seg = segments[selectedSegment];
             std::vector<size_t> toRemove;
@@ -690,7 +762,8 @@ void FrameEditor::draw(MenuInterface& ui) {
             rebuildSegments();
         }
 
-        if (selectedSegment >= 0 && selectedSegment < (int)segments.size() && dragMode == DragMode::None) {
+        if (selectedSegment >= 0 && selectedSegment < (int)segments.size() &&
+            dragMode == DragMode::None) {
             auto& seg = segments[selectedSegment];
             size_t pIdx = seg.pressIndex;
             size_t rIdx = seg.releaseIndex;
@@ -707,7 +780,8 @@ void FrameEditor::draw(MenuInterface& ui) {
                     rebuildSegments();
                     selectedSegment = findSegmentByPressIndex(pIdx);
                     if (selectedSegment >= 0)
-                        std::snprintf(selectedFrameBuf, sizeof(selectedFrameBuf), "%d", inputs[pIdx].frame);
+                        std::snprintf(
+                            selectedFrameBuf, sizeof(selectedFrameBuf), "%d", inputs[pIdx].frame);
                 }
             }
             if (ImGui::IsKeyPressed(ImGuiKey_RightArrow)) {
@@ -720,7 +794,8 @@ void FrameEditor::draw(MenuInterface& ui) {
                 rebuildSegments();
                 selectedSegment = findSegmentByPressIndex(pIdx);
                 if (selectedSegment >= 0)
-                    std::snprintf(selectedFrameBuf, sizeof(selectedFrameBuf), "%d", inputs[pIdx].frame);
+                    std::snprintf(
+                        selectedFrameBuf, sizeof(selectedFrameBuf), "%d", inputs[pIdx].frame);
             }
         }
 
@@ -737,26 +812,31 @@ void FrameEditor::draw(MenuInterface& ui) {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         float popW = 260.0f;
         float popH = 70.0f;
-        ImVec2 popMin(contentOrigin.x + (contentWidth - popW) * 0.5f, contentOrigin.y + contentHeight * 0.5f - popH * 0.5f);
+        ImVec2 popMin(contentOrigin.x + (contentWidth - popW) * 0.5f,
+                      contentOrigin.y + contentHeight * 0.5f - popH * 0.5f);
         ImVec2 popMax(popMin.x + popW, popMin.y + popH);
 
-        dl->AddRectFilled(contentOrigin, ImVec2(contentOrigin.x + contentWidth, contentOrigin.y + contentHeight),
-            feToU32(ImVec4(0.0f, 0.0f, 0.0f, 0.4f)));
+        dl->AddRectFilled(contentOrigin,
+                          ImVec2(contentOrigin.x + contentWidth, contentOrigin.y + contentHeight),
+                          feToU32(ImVec4(0.0f, 0.0f, 0.0f, 0.4f)));
         dl->AddRectFilled(popMin, popMax, feToU32(ImVec4(0.08f, 0.08f, 0.1f, 0.95f)), 6.0f);
         dl->AddRect(popMin, popMax, ui.theme.getAccentU32(0.5f), 6.0f, 0, 1.0f);
 
         const char* promptText = "Unsaved changes. Discard?";
         ImVec2 promptSize = ImGui::CalcTextSize(promptText);
         dl->AddText(ImVec2(popMin.x + (popW - promptSize.x) * 0.5f, popMin.y + 8.0f),
-            ui.theme.getTextU32(), promptText);
+                    ui.theme.getTextU32(),
+                    promptText);
 
         ImGui::SetCursorScreenPos(ImVec2(popMin.x + 30.0f, popMin.y + 34.0f));
-        if (Widgets::StyledButton("Discard##confirmDisc", ImVec2(90.0f, 26.0f), ui.theme, ui.anim, 4.0f)) {
+        if (Widgets::StyledButton(
+                "Discard##confirmDisc", ImVec2(90.0f, 26.0f), ui.theme, ui.anim, 4.0f)) {
             confirmingDiscard = false;
             close();
         }
         ImGui::SameLine(0, 20.0f);
-        if (Widgets::StyledButton("Cancel##confirmCancel", ImVec2(90.0f, 26.0f), ui.theme, ui.anim, 4.0f)) {
+        if (Widgets::StyledButton(
+                "Cancel##confirmCancel", ImVec2(90.0f, 26.0f), ui.theme, ui.anim, 4.0f)) {
             confirmingDiscard = false;
         }
     }
@@ -786,8 +866,10 @@ void FrameEditor::drawToolbar(MenuInterface& ui, ImVec2 origin, float width) {
     ImGui::SetCursorScreenPos(ImVec2(x, btnY));
     if (Widgets::StyledButton("Save##edSave", ImVec2(50.0f, btnH), ui.theme, ui.anim, 4.0f)) {
         if (dirty) {
-            if (format == EditorFormat::BRR) applyToBRR();
-            else applyToGDR();
+            if (format == EditorFormat::BRR)
+                applyToBRR();
+            else
+                applyToGDR();
         }
     }
     x += 58.0f;
@@ -821,9 +903,9 @@ void FrameEditor::drawToolbar(MenuInterface& ui, ImVec2 origin, float width) {
     }
 
     if (dirty) {
-        dl->AddText(ImVec2(nameX - 16.0f, origin.y + 10.0f), feToU32(ImVec4(1.0f, 0.8f, 0.2f, 1.0f)), "*");
+        dl->AddText(
+            ImVec2(nameX - 16.0f, origin.y + 10.0f), feToU32(ImVec4(1.0f, 0.8f, 0.2f, 1.0f)), "*");
     }
-
 }
 
 void FrameEditor::drawOverviewBar(MenuInterface& ui, ImVec2 origin, float width, float height) {
@@ -833,7 +915,8 @@ void FrameEditor::drawOverviewBar(MenuInterface& ui, ImVec2 origin, float width,
     dl->AddRectFilled(origin, max, feToU32(ImVec4(0.06f, 0.06f, 0.08f, 0.7f)), 3.0f);
     dl->AddRect(origin, max, ui.theme.getAccentU32(0.12f), 3.0f, 0, 1.0f);
 
-    if (maxFrame <= 0) return;
+    if (maxFrame <= 0)
+        return;
 
     float barPad = 2.0f;
     float innerW = width - barPad * 2.0f;
@@ -883,22 +966,36 @@ void FrameEditor::drawRuler(MenuInterface& ui, ImVec2 origin, float width, float
     int32_t vEnd = visibleFrameEnd(width);
 
     int majorInterval, minorInterval;
-    if (pixelsPerFrame > 12.0f) { majorInterval = 10; minorInterval = 1; }
-    else if (pixelsPerFrame > 5.0f) { majorInterval = 50; minorInterval = 10; }
-    else if (pixelsPerFrame > 2.0f) { majorInterval = 100; minorInterval = 10; }
-    else if (pixelsPerFrame > 1.0f) { majorInterval = 200; minorInterval = 50; }
-    else { majorInterval = 500; minorInterval = 100; }
+    if (pixelsPerFrame > 12.0f) {
+        majorInterval = 10;
+        minorInterval = 1;
+    } else if (pixelsPerFrame > 5.0f) {
+        majorInterval = 50;
+        minorInterval = 10;
+    } else if (pixelsPerFrame > 2.0f) {
+        majorInterval = 100;
+        minorInterval = 10;
+    } else if (pixelsPerFrame > 1.0f) {
+        majorInterval = 200;
+        minorInterval = 50;
+    } else {
+        majorInterval = 500;
+        minorInterval = 100;
+    }
 
     int32_t minorStart = (vStart / minorInterval) * minorInterval;
     for (int32_t f = minorStart; f <= vEnd; f += minorInterval) {
-        if (f < 0) continue;
+        if (f < 0)
+            continue;
         float x = pixelAtFrame(f, origin.x);
-        if (x < origin.x || x > origin.x + width) continue;
+        if (x < origin.x || x > origin.x + width)
+            continue;
 
         bool isMajor = (f % majorInterval == 0);
         float tickH = isMajor ? height * 0.6f : height * 0.3f;
         ImU32 tickCol = isMajor ? ui.theme.getAccentU32(0.5f) : ui.theme.getAccentU32(0.2f);
-        dl->AddLine(ImVec2(x, origin.y + height - tickH), ImVec2(x, origin.y + height), tickCol, 1.0f);
+        dl->AddLine(
+            ImVec2(x, origin.y + height - tickH), ImVec2(x, origin.y + height), tickCol, 1.0f);
 
         if (isMajor) {
             char buf[16];
@@ -923,33 +1020,43 @@ void FrameEditor::drawLanes(MenuInterface& ui, ImVec2 origin, float width, float
     dl->AddRectFilled(p1Min, p1Max, feToU32(ImVec4(0.05f, 0.05f, 0.07f, 0.55f)));
     dl->AddRectFilled(p2Min, p2Max, feToU32(ImVec4(0.04f, 0.04f, 0.06f, 0.55f)));
 
-    dl->AddLine(ImVec2(origin.x, origin.y + laneH), ImVec2(origin.x + width, origin.y + laneH),
-        ui.theme.getAccentU32(0.15f), 1.0f);
+    dl->AddLine(ImVec2(origin.x, origin.y + laneH),
+                ImVec2(origin.x + width, origin.y + laneH),
+                ui.theme.getAccentU32(0.15f),
+                1.0f);
 
     ImVec4 accentColor = ui.theme.getAccent();
 
     float labelX = origin.x + 4.0f;
-    if (ui.fontSmall) ImGui::PushFont(ui.fontSmall);
+    if (ui.fontSmall)
+        ImGui::PushFont(ui.fontSmall);
     dl->AddText(ImVec2(labelX, origin.y + 2.0f), feToU32(feWithAlpha(accentColor, 0.4f)), "P1");
     dl->AddText(ImVec2(labelX, origin.y + laneH + 2.0f), feToU32(feWithAlpha(p2Color, 0.4f)), "P2");
-    if (ui.fontSmall) ImGui::PopFont();
+    if (ui.fontSmall)
+        ImGui::PopFont();
 
     int32_t vStart = visibleFrameStart();
     int32_t vEnd = visibleFrameEnd(width);
 
     int gridInterval;
-    if (pixelsPerFrame > 12.0f) gridInterval = 10;
-    else if (pixelsPerFrame > 5.0f) gridInterval = 50;
-    else if (pixelsPerFrame > 2.0f) gridInterval = 100;
-    else gridInterval = 500;
+    if (pixelsPerFrame > 12.0f)
+        gridInterval = 10;
+    else if (pixelsPerFrame > 5.0f)
+        gridInterval = 50;
+    else if (pixelsPerFrame > 2.0f)
+        gridInterval = 100;
+    else
+        gridInterval = 500;
 
     int32_t gridStart = (vStart / gridInterval) * gridInterval;
     for (int32_t f = gridStart; f <= vEnd; f += gridInterval) {
-        if (f < 0) continue;
+        if (f < 0)
+            continue;
         float x = pixelAtFrame(f, origin.x);
-        if (x < origin.x || x > origin.x + width) continue;
-        dl->AddLine(ImVec2(x, origin.y), ImVec2(x, origin.y + height),
-            ui.theme.getAccentU32(0.06f), 1.0f);
+        if (x < origin.x || x > origin.x + width)
+            continue;
+        dl->AddLine(
+            ImVec2(x, origin.y), ImVec2(x, origin.y + height), ui.theme.getAccentU32(0.06f), 1.0f);
     }
 
     float barInset = laneH * 0.15f;
@@ -960,10 +1067,12 @@ void FrameEditor::drawLanes(MenuInterface& ui, ImVec2 origin, float width, float
         float leftX = pixelAtFrame(seg.startFrame, origin.x);
         float rightX = pixelAtFrame(seg.endFrame, origin.x);
 
-        if (rightX < origin.x || leftX > origin.x + width) continue;
+        if (rightX < origin.x || leftX > origin.x + width)
+            continue;
         leftX = std::max(leftX, origin.x);
         rightX = std::min(rightX, origin.x + width);
-        if (rightX - leftX < 1.0f) rightX = leftX + 1.0f;
+        if (rightX - leftX < 1.0f)
+            rightX = leftX + 1.0f;
 
         float laneTop = seg.player2 ? origin.y + laneH : origin.y;
         float barTop = laneTop + barInset;
@@ -971,9 +1080,12 @@ void FrameEditor::drawLanes(MenuInterface& ui, ImVec2 origin, float width, float
         ImVec4 baseCol = seg.player2 ? p2Color : accentColor;
         float baseAlpha = 0.55f;
 
-        if (seg.actionType == 1) baseCol = feBrighten(baseCol, 0.08f);
-        else if (seg.actionType == 2) baseCol = feBrighten(baseCol, -0.06f);
-        else if (seg.actionType == 3) baseCol = feBrighten(baseCol, -0.12f);
+        if (seg.actionType == 1)
+            baseCol = feBrighten(baseCol, 0.08f);
+        else if (seg.actionType == 2)
+            baseCol = feBrighten(baseCol, -0.06f);
+        else if (seg.actionType == 3)
+            baseCol = feBrighten(baseCol, -0.12f);
 
         bool isSelected = (i == selectedSegment);
         bool isHovered = (i == hoveredSegment);
@@ -985,36 +1097,48 @@ void FrameEditor::drawLanes(MenuInterface& ui, ImVec2 origin, float width, float
         }
 
         ImVec4 fillCol = feWithAlpha(baseCol, isSelected ? 0.80f : (isHovered ? 0.68f : baseAlpha));
-        dl->AddRectFilled(ImVec2(leftX, barTop), ImVec2(rightX, barTop + barH), feToU32(fillCol), 3.0f);
+        dl->AddRectFilled(
+            ImVec2(leftX, barTop), ImVec2(rightX, barTop + barH), feToU32(fillCol), 3.0f);
 
         if (isSelected) {
-            dl->AddRect(ImVec2(leftX, barTop), ImVec2(rightX, barTop + barH),
-                feToU32(feWithAlpha(baseCol, 0.9f)), 3.0f, 0, 1.5f);
+            dl->AddRect(ImVec2(leftX, barTop),
+                        ImVec2(rightX, barTop + barH),
+                        feToU32(feWithAlpha(baseCol, 0.9f)),
+                        3.0f,
+                        0,
+                        1.5f);
         }
 
         if (pixelsPerFrame > 2.0f) {
             float edgeW = std::min(4.0f, (rightX - leftX) * 0.2f);
 
             ImVec4 edgeCol = ImVec4(1.0f, 1.0f, 1.0f, isSelected ? 0.5f : 0.25f);
-            dl->AddRectFilled(ImVec2(leftX, barTop), ImVec2(leftX + edgeW, barTop + barH),
-                feToU32(edgeCol), 2.0f);
+            dl->AddRectFilled(ImVec2(leftX, barTop),
+                              ImVec2(leftX + edgeW, barTop + barH),
+                              feToU32(edgeCol),
+                              2.0f);
 
             if (seg.hasRelease) {
-                dl->AddRectFilled(ImVec2(rightX - edgeW, barTop), ImVec2(rightX, barTop + barH),
-                    feToU32(edgeCol), 2.0f);
+                dl->AddRectFilled(ImVec2(rightX - edgeW, barTop),
+                                  ImVec2(rightX, barTop + barH),
+                                  feToU32(edgeCol),
+                                  2.0f);
             }
         }
 
         if (pixelsPerFrame > 6.0f && (rightX - leftX) > 40.0f) {
             char frameBuf[16];
             std::snprintf(frameBuf, sizeof(frameBuf), "%d", seg.startFrame);
-            if (ui.fontSmall) ImGui::PushFont(ui.fontSmall);
+            if (ui.fontSmall)
+                ImGui::PushFont(ui.fontSmall);
             ImVec2 ts = ImGui::CalcTextSize(frameBuf);
             if (ts.x < (rightX - leftX - 4.0f)) {
                 dl->AddText(ImVec2(leftX + 4.0f, barTop + (barH - ts.y) * 0.5f),
-                    feToU32(ImVec4(1.0f, 1.0f, 1.0f, 0.7f)), frameBuf);
+                            feToU32(ImVec4(1.0f, 1.0f, 1.0f, 0.7f)),
+                            frameBuf);
             }
-            if (ui.fontSmall) ImGui::PopFont();
+            if (ui.fontSmall)
+                ImGui::PopFont();
         }
     }
 
@@ -1035,11 +1159,13 @@ void FrameEditor::drawScrollbar(MenuInterface& ui, ImVec2 origin, float width, f
 
     dl->AddRectFilled(origin, max, feToU32(ImVec4(0.05f, 0.05f, 0.07f, 0.5f)), 3.0f);
 
-    if (maxFrame <= 0) return;
+    if (maxFrame <= 0)
+        return;
 
     float viewFrames = width / pixelsPerFrame;
     float totalFrames = static_cast<float>(maxFrame);
-    if (totalFrames <= 0) return;
+    if (totalFrames <= 0)
+        return;
 
     float thumbRatio = std::min(viewFrames / totalFrames, 1.0f);
     float thumbW = std::max(thumbRatio * width, 20.0f);
@@ -1080,8 +1206,11 @@ void FrameEditor::drawDetailBar(MenuInterface& ui, ImVec2 origin, float width, f
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 3));
         ImGui::PushStyleColor(ImGuiCol_FrameBg, feToU32(ImVec4(0.1f, 0.1f, 0.12f, 0.8f)));
         ImGui::PushStyleColor(ImGuiCol_Text, feToU32(ui.theme.textPrimary));
-        bool submitted = ImGui::InputText("##selFrame", selectedFrameBuf, sizeof(selectedFrameBuf),
-            ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsDecimal);
+        bool submitted = ImGui::InputText("##selFrame",
+                                          selectedFrameBuf,
+                                          sizeof(selectedFrameBuf),
+                                          ImGuiInputTextFlags_EnterReturnsTrue |
+                                              ImGuiInputTextFlags_CharsDecimal);
         ImGui::PopStyleColor(2);
         ImGui::PopStyleVar();
         ImGui::PopItemWidth();
@@ -1124,7 +1253,8 @@ void FrameEditor::drawDetailBar(MenuInterface& ui, ImVec2 origin, float width, f
         std::snprintf(durBuf, sizeof(durBuf), "%d frames", dur);
         dl->AddText(ImVec2(x, textY), ui.theme.getTextSecondaryU32(), durBuf);
     } else {
-        dl->AddText(ImVec2(x, textY), ui.theme.getTextSecondaryU32(), "Click a segment to select it");
+        dl->AddText(
+            ImVec2(x, textY), ui.theme.getTextSecondaryU32(), "Click a segment to select it");
     }
 
     float goToX = origin.x + width - 140.0f;
@@ -1136,8 +1266,11 @@ void FrameEditor::drawDetailBar(MenuInterface& ui, ImVec2 origin, float width, f
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 3));
     ImGui::PushStyleColor(ImGuiCol_FrameBg, feToU32(ImVec4(0.1f, 0.1f, 0.12f, 0.8f)));
     ImGui::PushStyleColor(ImGuiCol_Text, feToU32(ui.theme.textPrimary));
-    bool goSubmitted = ImGui::InputText("##goToFrame", goToFrameBuf, sizeof(goToFrameBuf),
-        ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsDecimal);
+    bool goSubmitted =
+        ImGui::InputText("##goToFrame",
+                         goToFrameBuf,
+                         sizeof(goToFrameBuf),
+                         ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsDecimal);
     ImGui::PopStyleColor(2);
     ImGui::PopStyleVar();
     ImGui::PopItemWidth();

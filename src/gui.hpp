@@ -16,55 +16,62 @@ struct ThemePreset {
 };
 
 struct ThemeEngine {
-    ImVec4 accentColor    = ImVec4(0.788f, 0.659f, 0.298f, 1.0f);
-    ImVec4 bgColor        = ImVec4(0.051f, 0.051f, 0.051f, 0.96f);
-    ImVec4 cardColor      = ImVec4(0.078f, 0.078f, 0.078f, 1.0f);
-    ImVec4 textPrimary    = ImVec4(0.941f, 0.910f, 0.816f, 1.0f);
-    ImVec4 textSecondary  = ImVec4(0.478f, 0.447f, 0.376f, 1.0f);
-    float  bgOpacity      = 0.96f;
-    float  cornerRadius   = 5.0f;
-    float  textScale      = 1.0f;
-    bool   glowCycleEnabled = false;
-    float  glowCycleRate    = 0.5f;
-    int    activePreset     = 0;
+    ImVec4 accentColor = ImVec4(0.788f, 0.659f, 0.298f, 1.0f);
+    ImVec4 bgColor = ImVec4(0.051f, 0.051f, 0.051f, 0.96f);
+    ImVec4 cardColor = ImVec4(0.078f, 0.078f, 0.078f, 1.0f);
+    ImVec4 textPrimary = ImVec4(0.941f, 0.910f, 0.816f, 1.0f);
+    ImVec4 textSecondary = ImVec4(0.478f, 0.447f, 0.376f, 1.0f);
+    float bgOpacity = 0.96f;
+    float cornerRadius = 5.0f;
+    float textScale = 1.0f;
+    bool glowCycleEnabled = false;
+    float glowCycleRate = 0.5f;
+    int activePreset = 0;
 
     ImVec4 computeCycleColor(float rate) const;
     ImVec4 computeRedKingdomPulse() const;
     ImVec4 getAccent() const;
     ImVec4 getGlowAccent() const;
-    ImU32  getAccentU32(float alpha = 1.0f) const;
-    ImU32  getAccentDimU32(float factor = 0.3f) const;
-    ImU32  getTextU32() const;
-    ImU32  getTextSecondaryU32() const;
-    ImU32  getCardU32() const;
-    void   applyToImGuiStyle();
-    void   resetDefaults();
-    void   applyPreset(int index);
+    ImU32 getAccentU32(float alpha = 1.0f) const;
+    ImU32 getAccentDimU32(float factor = 0.3f) const;
+    ImU32 getTextU32() const;
+    ImU32 getTextSecondaryU32() const;
+    ImU32 getCardU32() const;
+    void applyToImGuiStyle();
+    void resetDefaults();
+    void applyPreset(int index);
     static const ThemePreset* getPresets();
     static int getPresetCount();
 };
 
 enum AnimDirection {
-    ANIM_CENTER, ANIM_FROM_LEFT, ANIM_FROM_RIGHT, ANIM_FROM_TOP, ANIM_FROM_BOTTOM
+    ANIM_CENTER,
+    ANIM_FROM_LEFT,
+    ANIM_FROM_RIGHT,
+    ANIM_FROM_TOP,
+    ANIM_FROM_BOTTOM
 };
 
 struct AnimationState {
     float openProgress = 0.0f;
-    bool  opening = false;
-    bool  closing = false;
+    bool opening = false;
+    bool closing = false;
     float tabTransition = 1.0f;
-    int   transitionFromTab = -1;
+    int transitionFromTab = -1;
     std::unordered_map<ImGuiID, float> toggleAnims;
     std::unordered_map<ImGuiID, float> hoverAnims;
-    struct ModuleAnimData { float progress = 0.0f; float height = 0.0f; };
+    struct ModuleAnimData {
+        float progress = 0.0f;
+        float height = 0.0f;
+    };
     std::unordered_map<const void*, ModuleAnimData> moduleAnims;
     float animSpeed = 8.0f;
     AnimDirection openDirection = ANIM_CENTER;
     ImVec2 smoothCursorPos = ImVec2(0, 0);
-    bool   cursorPosInitialized = false;
-    void   update(float dt);
-    float  easeOutCubic(float t);
-    float  easeInOutQuad(float t);
+    bool cursorPosInitialized = false;
+    void update(float dt);
+    float easeOutCubic(float t);
+    float easeInOutQuad(float t);
 };
 
 struct KeybindSet {
@@ -72,7 +79,7 @@ struct KeybindSet {
     int replayToggle = 0, noclip = 0, safeMode = 0;
     int trajectory = 0, audioPitch = 0, rngLock = 0, hitboxes = 0;
     int layoutMode = 0, noMirror = 0, autoclicker = 0;
-        int intentionalDeath = 0;
+    int intentionalDeath = 0;
     int backStep = 0;
     int autoFlip = 0;
     int preventDeath = 0;
@@ -96,7 +103,7 @@ enum BotTheme {
     THEME_ROMO,
     THEME_GRIZZLEY,
     THEME_REDKINGDOM,
-                        THEME_CUSTOM
+    THEME_CUSTOM
 };
 
 std::vector<std::string> allKnownMacroExtensions();
@@ -110,24 +117,24 @@ struct CustomTheme {
     std::string name;
     std::string extension;
 
-    ImVec4 accent        = ImVec4(0.788f,0.659f,0.298f,1.f);
-    ImVec4 bg            = ImVec4(0.051f,0.051f,0.051f,0.96f);
-    ImVec4 card           = ImVec4(0.078f,0.078f,0.078f,1.f);
-    ImVec4 textPrimary    = ImVec4(0.941f,0.910f,0.816f,1.f);
-    ImVec4 textSecondary  = ImVec4(0.478f,0.447f,0.376f,1.f);
-    float  cornerRadius   = 5.f;
-    float  bgOpacity      = 0.96f;
+    ImVec4 accent = ImVec4(0.788f, 0.659f, 0.298f, 1.f);
+    ImVec4 bg = ImVec4(0.051f, 0.051f, 0.051f, 0.96f);
+    ImVec4 card = ImVec4(0.078f, 0.078f, 0.078f, 1.f);
+    ImVec4 textPrimary = ImVec4(0.941f, 0.910f, 0.816f, 1.f);
+    ImVec4 textSecondary = ImVec4(0.478f, 0.447f, 0.376f, 1.f);
+    float cornerRadius = 5.f;
+    float bgOpacity = 0.96f;
 
-    std::string subtitle     = "Frame perfect. Custom theme.";
-    std::string brandTag     = "Brrr.";
-    CustomThemeQuote quoteReplay  {"\"Custom, and proud of it.\"", "-- probably"};
-    CustomThemeQuote quoteTools   {"\"My theme, my rules.\"", "-- probably"};
-    CustomThemeQuote quoteCredits {"\"I built this one myself.\"", ""};
+    std::string subtitle = "Frame perfect. Custom theme.";
+    std::string brandTag = "Brrr.";
+    CustomThemeQuote quoteReplay{"\"Custom, and proud of it.\"", "-- probably"};
+    CustomThemeQuote quoteTools{"\"My theme, my rules.\"", "-- probably"};
+    CustomThemeQuote quoteCredits{"\"I built this one myself.\"", ""};
     std::string creditsBadge = "Custom | Made | By You";
 
-    double bpm           = 140.0;
+    double bpm = 140.0;
     double dropOffsetSec = 0.0;
-    bool   hasAudio       = false;
+    bool hasAudio = false;
 
     matjson::Value toJson() const;
     static CustomTheme fromJson(const matjson::Value& v);
@@ -137,37 +144,40 @@ class MenuInterface {
 public:
     static MenuInterface* get();
 
-    ImFont *fontBody=nullptr, *fontSmall=nullptr, *fontHeading=nullptr, *fontTitle=nullptr;
-    bool shown=false, previouslyShown=false, setupComplete=false;
+    ImFont *fontBody = nullptr, *fontSmall = nullptr, *fontHeading = nullptr, *fontTitle = nullptr;
+    bool shown = false, previouslyShown = false, setupComplete = false;
 
-    int activeTab=0, previousTab=-1;
-    int mainSubTab=0;
+    int activeTab = 0, previousTab = -1;
+    int mainSubTab = 0;
 
     BotTheme activeTheme = THEME_GUCCI;
 
     std::vector<CustomTheme> customThemes;
     std::string activeCustomThemeName;
-                        CustomTheme* getActiveCustomTheme();
-    std::filesystem::path getCustomThemesDir() const { return Mod::get()->getSaveDir() / "customthemes"; }
-                    std::string deriveCustomThemeExtension(const std::string& name) const;
-                                std::string sanitizeCustomExtension(const std::string& raw, const std::string& excludeName, bool* ok) const;
+    CustomTheme* getActiveCustomTheme();
+    std::filesystem::path getCustomThemesDir() const {
+        return Mod::get()->getSaveDir() / "customthemes";
+    }
+    std::string deriveCustomThemeExtension(const std::string& name) const;
+    std::string
+    sanitizeCustomExtension(const std::string& raw, const std::string& excludeName, bool* ok) const;
     void loadCustomThemes();
     void saveCustomTheme(CustomTheme& t);
     void deleteCustomTheme(const std::string& name);
 
-                                bool customThemeEditorOpen = false;
+    bool customThemeEditorOpen = false;
     bool customThemeEditIsNew = true;
     std::string customThemeEditOriginalName;
     std::string customThemeEditOriginalExtension;
     CustomTheme customThemeEditBuffer;
-    char cteName[64]={0};
-                        char cteExtension[32]={0};
-    char cteSubtitle[160]={0};
-    char cteBrandTag[32]={0};
-    char cteQuoteReplayText[256]={0}, cteQuoteReplayAttr[128]={0};
-    char cteQuoteToolsText[256]={0}, cteQuoteToolsAttr[128]={0};
-    char cteQuoteCreditsText[256]={0}, cteQuoteCreditsAttr[128]={0};
-    char cteCreditsBadge[128]={0};
+    char cteName[64] = {0};
+    char cteExtension[32] = {0};
+    char cteSubtitle[160] = {0};
+    char cteBrandTag[32] = {0};
+    char cteQuoteReplayText[256] = {0}, cteQuoteReplayAttr[128] = {0};
+    char cteQuoteToolsText[256] = {0}, cteQuoteToolsAttr[128] = {0};
+    char cteQuoteCreditsText[256] = {0}, cteQuoteCreditsAttr[128] = {0};
+    char cteCreditsBadge[128] = {0};
     void openCustomThemeEditor(const CustomTheme* existing);
     void drawCustomThemeEditorPopup();
 
@@ -176,55 +186,58 @@ public:
     KeybindSet keybinds;
 
     float ambientTime = 0.0f;
-    bool  ambientWavesEnabled = true;
+    bool ambientWavesEnabled = true;
 
     int* rebindTarget = nullptr;
 
     FrameEditor frameEditor;
 
-    char macroNameBuffer[256]={0}; bool macroNameReady=false;
-    char rngBuffer[32]="1";       bool rngBufferInit=false;
-    float tempTickRate=240.f, tempGameSpeed=1.f;
+    char macroNameBuffer[256] = {0};
+    bool macroNameReady = false;
+    char rngBuffer[32] = "1";
+    bool rngBufferInit = false;
+    float tempTickRate = 240.f, tempGameSpeed = 1.f;
 
-        int  renderPresetIndex=1;
-    char renderNameBuf[256]="";
-    char renderWidthBuf[16]="1920";
-    char renderHeightBuf[16]="1080";
-    char renderFpsBuf[16]="60";
-    char renderCodecBuf[64]="";
-    char renderBitrateBuf[16]="30";
-    char renderExtBuf[16]=".mp4";
-    char renderArgsBuf[256]="-pix_fmt yuv420p";
-    char renderPixFmtBuf[24]="yuv420p";
-    bool renderColorFix=true;
-    bool megaHackLook=false;
-                    bool compactMode=false;
-    float compactTempTickRate=240.f, compactTempGameSpeed=1.f;
-    char renderVideoArgsBuf[256]="colorspace=all=bt709:iall=bt470bg:fast=1";
-    char renderAudioArgsBuf[256]="";
-    char renderAudioCodecBuf[64]="aac";
-    char outputFolderBuf[512]="";
-    char renderAudioBitrateBuf[16]="192k";
-    char renderSecondsAfterBuf[16]="3";
-    bool renderIncludeAudio=true;
-    bool renderSplitAudioTracks=false;
-    bool renderIncludeClicks=false;
-    float renderSfxVol=1.f, renderMusicVol=1.f;
-    bool renderHideEndscreen=false, renderHideLevelComplete=false;
-    bool renderBufsInit=false;
-    bool advancedWarningAccepted=false, showAdvancedWarning=false;
-    char backupCodecBuf[64]="";
-    char backupBitrateBuf[16]="30";
-    char backupExtBuf[16]=".mp4";
-    char backupArgsBuf[256]="-pix_fmt yuv420p";
-    char backupVideoArgsBuf[256]="colorspace=all=bt709:iall=bt470bg:fast=1";
-    char backupAudioArgsBuf[256]="";
-    char backupSecondsAfterBuf[16]="3";
+    int renderPresetIndex = 1;
+    char renderNameBuf[256] = "";
+    char renderWidthBuf[16] = "1920";
+    char renderHeightBuf[16] = "1080";
+    char renderFpsBuf[16] = "60";
+    char renderCodecBuf[64] = "";
+    char renderBitrateBuf[16] = "30";
+    char renderExtBuf[16] = ".mp4";
+    char renderArgsBuf[256] = "-pix_fmt yuv420p";
+    char renderPixFmtBuf[24] = "yuv420p";
+    bool renderColorFix = true;
+    bool megaHackLook = false;
+    bool compactMode = false;
+    float compactTempTickRate = 240.f, compactTempGameSpeed = 1.f;
+    char renderVideoArgsBuf[256] = "colorspace=all=bt709:iall=bt470bg:fast=1";
+    char renderAudioArgsBuf[256] = "";
+    char renderAudioCodecBuf[64] = "aac";
+    char outputFolderBuf[512] = "";
+    char renderAudioBitrateBuf[16] = "192k";
+    char renderSecondsAfterBuf[16] = "3";
+    bool renderIncludeAudio = true;
+    bool renderSplitAudioTracks = false;
+    bool renderIncludeClicks = false;
+    float renderSfxVol = 1.f, renderMusicVol = 1.f;
+    bool renderHideEndscreen = false, renderHideLevelComplete = false;
+    bool renderBufsInit = false;
+    bool advancedWarningAccepted = false, showAdvancedWarning = false;
+    char backupCodecBuf[64] = "";
+    char backupBitrateBuf[16] = "30";
+    char backupExtBuf[16] = ".mp4";
+    char backupArgsBuf[256] = "-pix_fmt yuv420p";
+    char backupVideoArgsBuf[256] = "colorspace=all=bt709:iall=bt470bg:fast=1";
+    char backupAudioArgsBuf[256] = "";
+    char backupSecondsAfterBuf[16] = "3";
 
-    ImVec2 windowPos=ImVec2(-1,-1); bool windowPosInitialized=false;
-    ImVec2 windowSize=ImVec2(580.f,540.f);
-    bool jupiterClickBarPageOpen=false;
-    bool trainerClickBarPageOpen=false;
+    ImVec2 windowPos = ImVec2(-1, -1);
+    bool windowPosInitialized = false;
+    ImVec2 windowSize = ImVec2(580.f, 540.f);
+    bool jupiterClickBarPageOpen = false;
+    bool trainerClickBarPageOpen = false;
 
     void initialize();
     void drawInterface();
@@ -232,20 +245,20 @@ public:
     void loadSettings();
 
 private:
-    float tabIndicatorX=-1.f;
-    bool replayListDirty=true, replayRefreshQueued=true, replayDirTimeValid=false;
+    float tabIndicatorX = -1.f;
+    bool replayListDirty = true, replayRefreshQueued = true, replayDirTimeValid = false;
     std::filesystem::file_time_type replayDirLastWriteTime{};
-    char replayRenameBuffer[256]={0};
+    char replayRenameBuffer[256] = {0};
     std::string replayRenameOriginalName, replayRenameError;
-    bool replayRenamePopupRequested=false, replayRenameFocusInput=false;
-    bool replayActionPopupRequested=false;
+    bool replayRenamePopupRequested = false, replayRenameFocusInput = false;
+    bool replayActionPopupRequested = false;
     std::string replayActionMacroName;
-    bool replayDeletePopupRequested=false;
+    bool replayDeletePopupRequested = false;
     std::string replayDeleteName, replayDeleteError;
-    bool replayActionIsBRR=false;
+    bool replayActionIsBRR = false;
 
-    int clickPackIndex=0, clickPackIndexP2=0;
-    bool clickPacksScanned=false;
+    int clickPackIndex = 0, clickPackIndexP2 = 0;
+    bool clickPacksScanned = false;
 
     void drawBackdrop();
     void drawAmbientWaves(ImDrawList* dl, ImVec2 panelMin, ImVec2 panelMax);
@@ -274,7 +287,7 @@ private:
     void drawTrainerTab();
     void drawTrainerClickTrainerPage();
     void loadRenderSettings();
-    void markReplayListDirty(bool queueRefresh=true);
+    void markReplayListDirty(bool queueRefresh = true);
     void refreshReplayListIfNeeded(bool force);
     bool hasReplayDirectoryChanged() const;
     void captureReplayDirectoryTimestamp();
@@ -285,17 +298,37 @@ std::string getKeyName(int code);
 
 namespace Widgets {
     bool ToggleSwitch(const char* label, bool* value, ThemeEngine& theme, AnimationState& anim);
-    bool StyledButton(const char* label, ImVec2 size, ThemeEngine& theme, AnimationState& anim, float roundingOverride=-1.f);
-    bool StyledSliderFloat(const char* label, float* value, float min, float max, ThemeEngine& theme, bool allowManualInput=false);
+    bool StyledButton(const char* label,
+                      ImVec2 size,
+                      ThemeEngine& theme,
+                      AnimationState& anim,
+                      float roundingOverride = -1.f);
+    bool StyledSliderFloat(const char* label,
+                           float* value,
+                           float min,
+                           float max,
+                           ThemeEngine& theme,
+                           bool allowManualInput = false);
     bool StyledSliderInt(const char* label, int* value, int min, int max, ThemeEngine& theme);
     void SectionHeader(const char* text, ThemeEngine& theme);
-    bool ModuleCard(const char* name, const char* description, bool* enabled, ThemeEngine& theme, AnimationState& anim, int* keybind=nullptr);
-    bool ModuleCardBegin(const char* name, const char* description, bool* enabled, ThemeEngine& theme, AnimationState& anim, int* keybind=nullptr);
+    bool ModuleCard(const char* name,
+                    const char* description,
+                    bool* enabled,
+                    ThemeEngine& theme,
+                    AnimationState& anim,
+                    int* keybind = nullptr);
+    bool ModuleCardBegin(const char* name,
+                         const char* description,
+                         bool* enabled,
+                         ThemeEngine& theme,
+                         AnimationState& anim,
+                         int* keybind = nullptr);
     void ModuleCardEnd();
     void StatusBadge(const char* text, ImVec4 color);
-    bool PillButton(const char* label, bool active, float width, ThemeEngine& theme, AnimationState& anim);
+    bool PillButton(
+        const char* label, bool active, float width, ThemeEngine& theme, AnimationState& anim);
     void KeybindButton(const char* label, int* keyCode, ThemeEngine& theme, AnimationState& anim);
     void GucciQuote(const char* quote, const char* attr, ThemeEngine& theme);
-}
+} // namespace Widgets
 
 void displayOverlayBranding();

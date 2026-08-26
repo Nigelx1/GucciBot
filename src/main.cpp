@@ -15,13 +15,17 @@ static void ensureBundledAssets() {
     bool libDirPopulated = fs::exists(libDir, ec) && !fs::is_empty(libDir, ec);
     if (!libDirPopulated) {
         fs::create_directories(libDir, ec);
-                                std::error_code iterEc;
+        std::error_code iterEc;
         for (auto& entry : fs::directory_iterator(resDir, iterEc)) {
-            if (iterEc) break;
-            if (entry.path().extension() != ".dll") continue;
+            if (iterEc)
+                break;
+            if (entry.path().extension() != ".dll")
+                continue;
             std::error_code copyEc;
-            fs::copy_file(entry.path(), libDir / entry.path().filename(),
-                          fs::copy_options::overwrite_existing, copyEc);
+            fs::copy_file(entry.path(),
+                          libDir / entry.path().filename(),
+                          fs::copy_options::overwrite_existing,
+                          copyEc);
         }
         log::info("[GucciBot] First run: populated FFmpeg libraries from bundled resources");
     }
@@ -30,8 +34,10 @@ static void ensureBundledAssets() {
     fs::create_directories(fwDir, ec);
     std::error_code iterEc;
     for (auto& entry : fs::directory_iterator(resDir, iterEc)) {
-        if (iterEc) break;
-        if (entry.path().extension() != ".wav") continue;
+        if (iterEc)
+            break;
+        if (entry.path().extension() != ".wav")
+            continue;
         auto dest = fwDir / entry.path().filename();
         std::error_code existsEc, copyEc;
         if (!fs::exists(dest, existsEc)) {

@@ -26,12 +26,10 @@ using namespace geode::prelude;
 static constexpr int kApiMixSampleRate = 44100;
 
 template <class T>
-static T loadSavedValueWithFallback(
-    Mod* mod,
-    std::string_view canonicalKey,
-    T defaultValue,
-    std::initializer_list<std::string_view> legacyKeys = {}
-) {
+static T loadSavedValueWithFallback(Mod* mod,
+                                    std::string_view canonicalKey,
+                                    T defaultValue,
+                                    std::initializer_list<std::string_view> legacyKeys = {}) {
     std::string canonicalKeyStr(canonicalKey);
     if (mod->hasSavedValue(canonicalKeyStr)) {
         return mod->getSavedValue<T>(canonicalKeyStr, defaultValue);
@@ -47,11 +45,9 @@ static T loadSavedValueWithFallback(
     return defaultValue;
 }
 
-static bool writeRawAudioWav(
-    std::filesystem::path const& outputPath,
-    std::span<float const> rawAudio,
-    uint32_t sampleRate
-) {
+static bool writeRawAudioWav(std::filesystem::path const& outputPath,
+                             std::span<float const> rawAudio,
+                             uint32_t sampleRate) {
     std::ofstream wavFile(outputPath, std::ios::binary);
     if (!wavFile.is_open()) {
         return false;
@@ -88,12 +84,10 @@ static bool writeRawAudioWav(
     return wavFile.good();
 }
 
-static void cleanupTempFile(
-    std::filesystem::path const& filePath,
-    std::string_view label,
-    int attempts = 5,
-    std::chrono::milliseconds retryDelay = std::chrono::milliseconds(200)
-) {
+static void cleanupTempFile(std::filesystem::path const& filePath,
+                            std::string_view label,
+                            int attempts = 5,
+                            std::chrono::milliseconds retryDelay = std::chrono::milliseconds(200)) {
     if (filePath.empty()) {
         return;
     }
@@ -132,13 +126,12 @@ static void fitAudioToDuration(std::vector<float>& rawAudio, double durationSec,
     rawAudio.resize(expectedSamples, 0.0f);
 }
 
-static std::vector<float> resampleInterleavedAudio(
-    std::vector<float> const& input,
-    int channels,
-    int sourceRate,
-    int targetRate
-) {
-    if (input.empty() || channels <= 0 || sourceRate <= 0 || targetRate <= 0 || sourceRate == targetRate) {
+static std::vector<float> resampleInterleavedAudio(std::vector<float> const& input,
+                                                   int channels,
+                                                   int sourceRate,
+                                                   int targetRate) {
+    if (input.empty() || channels <= 0 || sourceRate <= 0 || targetRate <= 0 ||
+        sourceRate == targetRate) {
         return input;
     }
 
@@ -160,7 +153,8 @@ static std::vector<float> resampleInterleavedAudio(
         for (int channel = 0; channel < channels; ++channel) {
             float sample0 = input[frame0 * channels + channel];
             float sample1 = input[frame1 * channels + channel];
-            output[frame * channels + channel] = static_cast<float>(sample0 * (1.0 - frac) + sample1 * frac);
+            output[frame * channels + channel] =
+                static_cast<float>(sample0 * (1.0 - frac) + sample1 * frac);
         }
     }
 
@@ -171,25 +165,27 @@ static std::vector<float> resampleInterleavedAudio(
 static std::string resolveFfmpegExecutable(std::filesystem::path const& configuredPath) {
     if (!configuredPath.empty()) {
         std::error_code ec;
-        if (std::filesystem::exists(configuredPath, ec) && configuredPath.filename() == "ffmpeg.exe") {
+        if (std::filesystem::exists(configuredPath, ec) &&
+            configuredPath.filename() == "ffmpeg.exe") {
             return configuredPath.string();
         }
     }
 
-        {
+    {
         std::error_code ec;
         auto saveDirPath = Mod::get()->getSaveDir() / "ffmpeg.exe";
         if (std::filesystem::exists(saveDirPath, ec)) {
             return saveDirPath.string();
         }
-                auto resDirPath = Mod::get()->getResourcesDir() / "ffmpeg.exe";
+        auto resDirPath = Mod::get()->getResourcesDir() / "ffmpeg.exe";
         if (std::filesystem::exists(resDirPath, ec)) {
             return resDirPath.string();
         }
     }
 
     char resolvedPath[MAX_PATH] = {};
-    DWORD resolvedLength = SearchPathA(nullptr, "ffmpeg.exe", nullptr, MAX_PATH, resolvedPath, nullptr);
+    DWORD resolvedLength =
+        SearchPathA(nullptr, "ffmpeg.exe", nullptr, MAX_PATH, resolvedPath, nullptr);
     if (resolvedLength == 0 || resolvedLength >= MAX_PATH) {
         return {};
     }
@@ -207,10 +203,7 @@ static bool isUsableFfmpegExecutable(std::string const& ffmpegPath) {
         return false;
     }
 
-    std::string command = fmt::format(
-        "\"{}\" -hide_banner -loglevel error -version",
-        ffmpegPath
-    );
+    std::string command = fmt::format("\"{}\" -hide_banner -loglevel error -version", ffmpegPath);
 
     auto probe = Subprocess(command);
     if (!probe.isRunning()) {
@@ -236,19 +229,17 @@ static std::string resolveUsableFfmpegExecutable(std::filesystem::path const& co
     return resolvedPath;
 }
 
-static bool tryMuxAudioWithExe(
-    std::string const& ffmpegPath,
-    std::string const& audioInput,
-    std::string const& videoInput,
-    std::filesystem::path const& outputPath,
-    float audioOffset,
-    double totalTime,
-    bool fadeIn,
-    bool fadeOut,
-    float timeAfter,
-    float audioVolume,
-    std::string extraAudioArgs
-) {
+static bool tryMuxAudioWithExe(std::string const& ffmpegPath,
+                               std::string const& audioInput,
+                               std::string const& videoInput,
+                               std::filesystem::path const& outputPath,
+                               float audioOffset,
+                               double totalTime,
+                               bool fadeIn,
+                               bool fadeOut,
+                               float timeAfter,
+                               float audioVolume,
+                               std::string extraAudioArgs) {
     if (ffmpegPath.empty()) {
         return false;
     }
@@ -273,21 +264,21 @@ static bool tryMuxAudioWithExe(
         extraAudioArgs += " ";
     }
 
-    std::string command = fmt::format(
-        "\"{}\" -y -ss {:.6f} -i \"{}\" -i \"{}\" -t {:.6f} -map 1:v -map 0:a -c:v copy -c:a {} -b:a {} {}-af \"adelay=0|0{}{},volume={:.2f}\" \"{}\"",
-        ffmpegPath,
-        audioOffset,
-        audioInput,
-        videoInput,
-        totalTime,
-        Mod::get()->getSavedValue<std::string>("render_audio_codec", "aac"),
-        Mod::get()->getSavedValue<std::string>("render_audio_bitrate", "192k"),
-        extraAudioArgs,
-        fadeInString,
-        fadeOutString,
-        audioVolume,
-        outputPath.string()
-    );
+    std::string command =
+        fmt::format("\"{}\" -y -ss {:.6f} -i \"{}\" -i \"{}\" -t {:.6f} -map 1:v -map 0:a -c:v "
+                    "copy -c:a {} -b:a {} {}-af \"adelay=0|0{}{},volume={:.2f}\" \"{}\"",
+                    ffmpegPath,
+                    audioOffset,
+                    audioInput,
+                    videoInput,
+                    totalTime,
+                    Mod::get()->getSavedValue<std::string>("render_audio_codec", "aac"),
+                    Mod::get()->getSavedValue<std::string>("render_audio_bitrate", "192k"),
+                    extraAudioArgs,
+                    fadeInString,
+                    fadeOutString,
+                    audioVolume,
+                    outputPath.string());
 
     log::info("Executing (Audio): {}", command);
     auto proc = Subprocess(command);
@@ -301,12 +292,14 @@ static bool tryMuxAudioWithExe(
 }
 #endif
 
-static std::vector<float> decodeSongToRaw(const std::string& filePath, float offsetSec, float durationSec, float volume) {
+static std::vector<float>
+decodeSongToRaw(const std::string& filePath, float offsetSec, float durationSec, float volume) {
     std::vector<float> result;
     auto* system = FMODAudioEngine::sharedEngine()->m_system;
     FMOD::Sound* sound = nullptr;
 
-    if (system->createSound(filePath.c_str(), FMOD_CREATESAMPLE, nullptr, &sound) != FMOD_OK || !sound)
+    if (system->createSound(filePath.c_str(), FMOD_CREATESAMPLE, nullptr, &sound) != FMOD_OK ||
+        !sound)
         return result;
 
     FMOD_SOUND_FORMAT format;
@@ -316,13 +309,17 @@ static std::vector<float> decodeSongToRaw(const std::string& filePath, float off
     float freq;
     sound->getDefaults(&freq, nullptr);
     int sampleRate = static_cast<int>(freq);
-    if (sampleRate <= 0 || channels <= 0) { sound->release(); return result; }
+    if (sampleRate <= 0 || channels <= 0) {
+        sound->release();
+        return result;
+    }
 
     unsigned int pcmSamples, totalBytes;
     sound->getLength(&pcmSamples, FMOD_TIMEUNIT_PCM);
     sound->getLength(&totalBytes, FMOD_TIMEUNIT_PCMBYTES);
 
-    void* ptr1 = nullptr; void* ptr2 = nullptr;
+    void* ptr1 = nullptr;
+    void* ptr2 = nullptr;
     unsigned int len1 = 0, len2 = 0;
     if (sound->lock(0, totalBytes, &ptr1, &ptr2, &len1, &len2) != FMOD_OK || !ptr1) {
         sound->release();
@@ -331,8 +328,13 @@ static std::vector<float> decodeSongToRaw(const std::string& filePath, float off
 
     auto offset = static_cast<unsigned int>(std::max(0.f, offsetSec) * sampleRate);
     auto duration = static_cast<unsigned int>(durationSec * sampleRate);
-    if (offset >= pcmSamples) { sound->unlock(ptr1, ptr2, len1, len2); sound->release(); return result; }
-    if (offset + duration > pcmSamples) duration = pcmSamples - offset;
+    if (offset >= pcmSamples) {
+        sound->unlock(ptr1, ptr2, len1, len2);
+        sound->release();
+        return result;
+    }
+    if (offset + duration > pcmSamples)
+        duration = pcmSamples - offset;
 
     size_t start = static_cast<size_t>(offset) * channels;
     size_t count = static_cast<size_t>(duration) * channels;
@@ -340,13 +342,15 @@ static std::vector<float> decodeSongToRaw(const std::string& filePath, float off
 
     if (format == FMOD_SOUND_FORMAT_PCM16) {
         auto* s = static_cast<const int16_t*>(ptr1);
-        for (size_t i = 0; i < count; i++) result[i] = s[start + i] / 32768.f;
+        for (size_t i = 0; i < count; i++)
+            result[i] = s[start + i] / 32768.f;
     } else if (format == FMOD_SOUND_FORMAT_PCMFLOAT) {
         auto* s = static_cast<const float*>(ptr1);
         std::copy(s + start, s + start + count, result.begin());
     } else if (format == FMOD_SOUND_FORMAT_PCM32) {
         auto* s = static_cast<const int32_t*>(ptr1);
-        for (size_t i = 0; i < count; i++) result[i] = s[start + i] / 2147483648.f;
+        for (size_t i = 0; i < count; i++)
+            result[i] = s[start + i] / 2147483648.f;
     } else {
         result.clear();
     }
@@ -371,10 +375,18 @@ static std::vector<float> decodeSongToRaw(const std::string& filePath, float off
 
     sound->release();
 
-    for (auto& s : result) s *= volume;
+    for (auto& s : result)
+        s *= volume;
 
-    log::info("Decoded song: {}Hz {}ch fmt={} offset={:.2f}s dur={:.2f}s -> {} samples (sysRate={})",
-        sampleRate, channels, static_cast<int>(format), offsetSec, durationSec, result.size(), systemRate);
+    log::info(
+        "Decoded song: {}Hz {}ch fmt={} offset={:.2f}s dur={:.2f}s -> {} samples (sysRate={})",
+        sampleRate,
+        channels,
+        static_cast<int>(format),
+        offsetSec,
+        durationSec,
+        result.size(),
+        systemRate);
 
     return result;
 }
@@ -409,9 +421,8 @@ bool FrameCaptureService::submit(std::vector<uint8_t>&& frame) {
     std::unique_lock lock(m_lock);
     m_pendingChanged.wait(lock, [&] {
         auto* engine = GucciEngine::get();
-        return m_pendingFrames.size() < m_maxBufferedFrames
-            || !engine
-            || !engine->renderer.recording;
+        return m_pendingFrames.size() < m_maxBufferedFrames || !engine ||
+               !engine->renderer.recording;
     });
 
     auto* engine = GucciEngine::get();
@@ -457,8 +468,11 @@ void RenderTexture::begin() {
     {
         auto data = malloc(width * height * 3);
         memset(data, 0, width * height * 3);
-        texture->initWithData(data, kCCTexture2DPixelFormat_RGB888, width, height,
-            CCSize(static_cast<float>(width), static_cast<float>(height)));
+        texture->initWithData(data,
+                              kCCTexture2DPixelFormat_RGB888,
+                              width,
+                              height,
+                              CCSize(static_cast<float>(width), static_cast<float>(height)));
         free(data);
     }
 
@@ -467,8 +481,8 @@ void RenderTexture::begin() {
     glGenFramebuffersEXT(1, &fbo);
     glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, fbo);
 
-    glFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT,
-        GL_COLOR_ATTACHMENT0_EXT, GL_TEXTURE_2D, texture->getName(), 0);
+    glFramebufferTexture2DEXT(
+        GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT, GL_TEXTURE_2D, texture->getName(), 0);
 
     texture->setAliasTexParameters();
 
@@ -493,11 +507,13 @@ void RenderTexture::end() {
 void RenderTexture::capture(FrameCaptureService& frameCapture, cocos2d::CCNode* overlay) {
     CCDirector* director = CCDirector::sharedDirector();
     PlayLayer* pl = PlayLayer::get();
-    if (!pl || !fbo) return;
+    if (!pl || !fbo)
+        return;
 
 #ifdef GEODE_IS_WINDOWS
     auto frame = frameCapture.createFrameBuffer();
-    if (frame.empty()) return;
+    if (frame.empty())
+        return;
 
     glViewport(-1, 1, width, height);
     glGetIntegerv(GL_FRAMEBUFFER_BINDING_EXT, &old_fbo);
@@ -537,7 +553,8 @@ void Renderer::changeRes(bool og) {
     scaleX = og ? ogScaleX : (width / res.width);
     scaleY = og ? ogScaleY : (height / res.height);
 
-    if (res == CCSize(0, 0) && !og) return changeRes(true);
+    if (res == CCSize(0, 0) && !og)
+        return changeRes(true);
 
     CCDirector::sharedDirector()->m_obWinSizeInPoints = res;
     view->setDesignResolutionSize(res.width, res.height, ResolutionPolicy::kResolutionExactFit);
@@ -565,7 +582,8 @@ bool Renderer::toggle() {
     bool foundApi = Loader::get()->isModLoaded("eclipse.ffmpeg-api");
     engine->renderer.usingApi = shouldUseAPI();
 
-    std::filesystem::path exePath = Mod::get()->getSettingValue<std::filesystem::path>("ffmpeg_path");
+    std::filesystem::path exePath =
+        Mod::get()->getSettingValue<std::filesystem::path>("ffmpeg_path");
 #ifdef GEODE_IS_WINDOWS
     std::string resolvedFfmpegPath;
     bool foundExe = false;
@@ -579,21 +597,29 @@ bool Renderer::toggle() {
     if (!foundExe && !foundApi) {
         geode::createQuickPopup(
             "Error",
-            "<cl>FFmpeg</c> not found. Set the path to ffmpeg.exe in mod settings or install FFmpeg API.\nOpen download link?",
-            "Cancel", "Yes",
+            "<cl>FFmpeg</c> not found. Set the path to ffmpeg.exe in mod settings or install "
+            "FFmpeg API.\nOpen download link?",
+            "Cancel",
+            "Yes",
             [](auto, bool btn2) {
                 if (btn2) {
-                    FLAlertLayer::create("Info", "Unzip the downloaded file and look for <cl>ffmpeg.exe</c> in the 'bin' folder.", "Ok")->show();
-                    utils::web::openLinkInBrowser("https://www.gyan.dev/ffmpeg/builds/ffmpeg-git-essentials.7z");
+                    FLAlertLayer::create("Info",
+                                         "Unzip the downloaded file and look for "
+                                         "<cl>ffmpeg.exe</c> in the 'bin' folder.",
+                                         "Ok")
+                        ->show();
+                    utils::web::openLinkInBrowser(
+                        "https://www.gyan.dev/ffmpeg/builds/ffmpeg-git-essentials.7z");
                 }
-            }
-        );
+            });
         return false;
     }
     engine->renderer.ffmpegPath = resolvedFfmpegPath;
 #else
     if (!foundApi) {
-        FLAlertLayer::create("Error", "<cl>FFmpeg API</c> not found. Download it to render a level.", "Ok")->show();
+        FLAlertLayer::create(
+            "Error", "<cl>FFmpeg API</c> not found. Download it to render a level.", "Ok")
+            ->show();
         return false;
     }
 #endif
@@ -603,7 +629,8 @@ bool Renderer::toggle() {
         return false;
     }
 
-    std::filesystem::path renderPath = Mod::get()->getSettingValue<std::filesystem::path>("render_folder");
+    std::filesystem::path renderPath =
+        Mod::get()->getSettingValue<std::filesystem::path>("render_folder");
     if (renderPath.empty() || renderPath.string().find("{gd_dir}") != std::string::npos) {
         renderPath = dirs::getGameDir() / "renders";
     }
@@ -623,7 +650,8 @@ bool Renderer::toggle() {
 
 void Renderer::start() {
     PlayLayer* pl = PlayLayer::get();
-    if (!pl) return;
+    if (!pl)
+        return;
 
     auto* engine = GucciEngine::get();
     Mod* mod = Mod::get();
@@ -631,13 +659,16 @@ void Renderer::start() {
 
     fps = static_cast<unsigned>(mod->getSavedValue<int64_t>("render_fps", 60));
     codec = mod->getSavedValue<std::string>("render_codec", "");
-    if (codec.empty()) codec = "libx264";
+    if (codec.empty())
+        codec = "libx264";
     bitrate = mod->getSavedValue<std::string>("render_bitrate", "30") + "M";
-    extraArgs = loadSavedValueWithFallback<std::string>(mod, "render_args", "-pix_fmt yuv420p", {"render_extra_args"});
-    videoArgs = mod->getSavedValue<std::string>("render_video_args", "colorspace=all=bt709:iall=bt470bg:fast=1");
+    extraArgs = loadSavedValueWithFallback<std::string>(
+        mod, "render_args", "-pix_fmt yuv420p", {"render_extra_args"});
+    videoArgs = mod->getSavedValue<std::string>("render_video_args",
+                                                "colorspace=all=bt709:iall=bt470bg:fast=1");
     extraAudioArgs = mod->getSavedValue<std::string>("render_audio_args", "");
 
-                if (mod->getSavedValue<bool>("render_color_fix", true)) {
+    if (mod->getSavedValue<bool>("render_color_fix", true)) {
         if (videoArgs.find("colorspace=") == std::string::npos &&
             videoArgs.find("colormatrix=") == std::string::npos) {
             std::string colorFix = "colorspace=all=bt709:iall=bt470bg:fast=1";
@@ -645,39 +676,51 @@ void Renderer::start() {
         }
     }
 
-                    std::string pixFmtClean = mod->getSavedValue<std::string>("render_pix_fmt", "yuv420p");
-    pixFmtClean.erase(std::remove_if(pixFmtClean.begin(), pixFmtClean.end(),
-        [](unsigned char c) { return std::isspace(c); }), pixFmtClean.end());
+    std::string pixFmtClean = mod->getSavedValue<std::string>("render_pix_fmt", "yuv420p");
+    pixFmtClean.erase(std::remove_if(pixFmtClean.begin(),
+                                     pixFmtClean.end(),
+                                     [](unsigned char c) {
+                                         return std::isspace(c);
+                                     }),
+                      pixFmtClean.end());
     std::string apiPixFmtFilter;
     if (!pixFmtClean.empty()) {
         size_t pos = extraArgs.find("-pix_fmt");
         if (pos != std::string::npos) {
             size_t valStart = extraArgs.find_first_not_of(' ', pos + 8);
-            size_t valEnd = (valStart == std::string::npos)
-                ? std::string::npos : extraArgs.find(' ', valStart);
+            size_t valEnd =
+                (valStart == std::string::npos) ? std::string::npos : extraArgs.find(' ', valStart);
             extraArgs.erase(pos, (valEnd == std::string::npos ? extraArgs.size() : valEnd) - pos);
         }
-        if (!extraArgs.empty() && extraArgs.back() != ' ') extraArgs += ' ';
+        if (!extraArgs.empty() && extraArgs.back() != ' ')
+            extraArgs += ' ';
         extraArgs += "-pix_fmt " + pixFmtClean;
-        if (!videoArgs.empty()) videoArgs += ",";
+        if (!videoArgs.empty())
+            videoArgs += ",";
         videoArgs += "format=" + pixFmtClean;
         apiPixFmtFilter = "format=" + pixFmtClean;
     }
     sfxVolume = static_cast<float>(mod->getSavedValue<double>("render_sfx_volume", 1.0));
     musicVolume = static_cast<float>(mod->getSavedValue<double>("render_music_volume", 1.0));
-    log::info("Render audio: musicVolume={:.3f}, clickVolume={:.3f}, includeAudio={}, includeClicks={}",
-        musicVolume, sfxVolume,
-        loadSavedValueWithFallback<bool>(mod, "render_include_audio", true, {"render_record_audio", "render_capture_audio"}),
+    log::info(
+        "Render audio: musicVolume={:.3f}, clickVolume={:.3f}, includeAudio={}, includeClicks={}",
+        musicVolume,
+        sfxVolume,
+        loadSavedValueWithFallback<bool>(
+            mod, "render_include_audio", true, {"render_record_audio", "render_capture_audio"}),
         mod->getSavedValue<bool>("render_include_clicks", false));
-    stopAfter = static_cast<float>(
-        geode::utils::numFromString<float>(
-            loadSavedValueWithFallback<std::string>(mod, "render_seconds_after", "3", {"render_after_seconds"})
-        ).unwrapOr(3.f));
+    stopAfter =
+        static_cast<float>(geode::utils::numFromString<float>(
+                               loadSavedValueWithFallback<std::string>(
+                                   mod, "render_seconds_after", "3", {"render_after_seconds"}))
+                               .unwrapOr(3.f));
     audioMode = AUDIO_OFF;
 
-    std::string extension = loadSavedValueWithFallback<std::string>(mod, "render_file_extension", ".mp4", {"render_extension"});
+    std::string extension = loadSavedValueWithFallback<std::string>(
+        mod, "render_file_extension", ".mp4", {"render_extension"});
 
-    if (loadSavedValueWithFallback<bool>(mod, "render_include_audio", true, {"render_record_audio", "render_capture_audio"})) {
+    if (loadSavedValueWithFallback<bool>(
+            mod, "render_include_audio", true, {"render_record_audio", "render_capture_audio"})) {
         audioMode = AUDIO_SONG;
     }
 
@@ -687,18 +730,23 @@ void Renderer::start() {
     height = static_cast<unsigned>(mod->getSavedValue<int64_t>("render_height", 1080));
 
     auto now = std::chrono::system_clock::now();
-    auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+    auto timestamp =
+        std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
 
     std::string customName = mod->getSavedValue<std::string>("render_name", "");
     std::string filename;
     if (!customName.empty()) {
-        filename = fmt::format("{}_{}{}",
-            customName, std::to_string(timestamp), extension);
+        filename = fmt::format("{}_{}{}", customName, std::to_string(timestamp), extension);
     } else {
         filename = fmt::format("render_{}_{}x{}_{}{}",
-            std::string_view(pl->m_level->m_levelName), width, height, std::to_string(timestamp), extension);
+                               std::string_view(pl->m_level->m_levelName),
+                               width,
+                               height,
+                               std::to_string(timestamp),
+                               extension);
     }
-    std::string renderFolderStr = Mod::get()->getSavedValue<std::string>("render_output_folder", "");
+    std::string renderFolderStr =
+        Mod::get()->getSavedValue<std::string>("render_output_folder", "");
     std::filesystem::path renderFolder;
     if (!renderFolderStr.empty()) {
         renderFolder = std::filesystem::path(renderFolderStr);
@@ -710,8 +758,10 @@ void Renderer::start() {
         std::filesystem::create_directories(renderFolder, rfec);
     path = (renderFolder / filename).string();
 
-    if (width % 2 != 0) width++;
-    if (height % 2 != 0) height++;
+    if (width % 2 != 0)
+        width++;
+    if (height % 2 != 0)
+        height++;
 
     renderTex.width = width;
     renderTex.height = height;
@@ -719,7 +769,7 @@ void Renderer::start() {
     ogScaleX = cocos2d::CCEGLView::get()->m_fScaleX;
     ogScaleY = cocos2d::CCEGLView::get()->m_fScaleY;
 
-                                if (engine->isPlaying() && !engine->replay.m_actionAtom.empty()) {
+    if (engine->isPlaying() && !engine->replay.m_actionAtom.empty()) {
         pl->m_isPaused = false;
         engine->practiceFix.m_savedCheckpoints.clear();
         engine->practiceFix.m_brokenObjects.clear();
@@ -727,7 +777,7 @@ void Renderer::start() {
     }
 
     dontRender = false;
-                             recording = true;
+    recording = true;
     levelFinished = false;
     timeAfter = 0.f;
     finishFrame = 0;
@@ -742,7 +792,7 @@ void Renderer::start() {
     renderTex.begin();
     changeRes(false);
 
-        if (watermarkLabel) {
+    if (watermarkLabel) {
         watermarkLabel->release();
         watermarkLabel = nullptr;
     }
@@ -764,7 +814,8 @@ void Renderer::start() {
 
     std::string songFile = pl->m_level->getAudioFileName();
     if (pl->m_level->m_songID == 0) {
-        songFile = cocos2d::CCFileUtils::sharedFileUtils()->fullPathForFilename(songFile.c_str(), false);
+        songFile =
+            cocos2d::CCFileUtils::sharedFileUtils()->fullPathForFilename(songFile.c_str(), false);
     } else {
         std::string writablePath = cocos2d::CCFileUtils::sharedFileUtils()->getWritablePath();
         auto fullPath = std::filesystem::path(writablePath) / songFile;
@@ -772,7 +823,8 @@ void Renderer::start() {
             songFile = fullPath.string();
         } else {
 
-            auto resolved = cocos2d::CCFileUtils::sharedFileUtils()->fullPathForFilename(songFile.c_str(), false);
+            auto resolved = cocos2d::CCFileUtils::sharedFileUtils()->fullPathForFilename(
+                songFile.c_str(), false);
             if (std::filesystem::exists(resolved))
                 songFile = resolved;
         }
@@ -780,12 +832,14 @@ void Renderer::start() {
 
     log::info("Song file: {} (exists: {})", songFile, std::filesystem::exists(songFile));
 
-    float songOffset = pl->m_levelSettings->m_songOffset +
-        (static_cast<float>(levelStartFrame) / getTPS());
+    float songOffset =
+        pl->m_levelSettings->m_songOffset + (static_cast<float>(levelStartFrame) / getTPS());
     bool fadeIn = pl->m_levelSettings->m_fadeIn;
     bool fadeOut = pl->m_levelSettings->m_fadeOut;
     int64_t bitrateApi = geode::utils::numFromString<int64_t>(
-        mod->getSavedValue<std::string>("render_bitrate", "30")).unwrapOr(30) * 1000000;
+                             mod->getSavedValue<std::string>("render_bitrate", "30"))
+                             .unwrapOr(30) *
+                         1000000;
 
     if (includeClickSounds) {
         int systemRate = 44100;
@@ -793,374 +847,444 @@ void Renderer::start() {
         ClickSoundManager::get()->preDecodeForRender(systemRate);
     }
 
-    std::thread([this, songFile, songOffset, fadeIn, fadeOut, extension, bitrateApi, apiPixFmtFilter]() {
+    std::thread([this,
+                 songFile,
+                 songOffset,
+                 fadeIn,
+                 fadeOut,
+                 extension,
+                 bitrateApi,
+                 apiPixFmtFilter]() {
         try {
-        ffmpeg::RenderSettings settings;
-        settings.m_pixelFormat = ffmpeg::PixelFormat::RGB24;
-        settings.m_codec = codec;
-        settings.m_bitrate = bitrateApi;
-        settings.m_width = width;
-        settings.m_height = height;
-        settings.m_fps = fps;
-        settings.m_outputFile = path;
-        encodeSession.outputFile = path;
-        settings.m_colorspaceFilters = apiPixFmtFilter;
+            ffmpeg::RenderSettings settings;
+            settings.m_pixelFormat = ffmpeg::PixelFormat::RGB24;
+            settings.m_codec = codec;
+            settings.m_bitrate = bitrateApi;
+            settings.m_width = width;
+            settings.m_height = height;
+            settings.m_fps = fps;
+            settings.m_outputFile = path;
+            encodeSession.outputFile = path;
+            settings.m_colorspaceFilters = apiPixFmtFilter;
 
-        log::info("Render settings: codec={}, bitrate={}, {}x{} @{}fps, output={}",
-            settings.m_codec, settings.m_bitrate, settings.m_width, settings.m_height, settings.m_fps, settings.m_outputFile.string());
+            log::info("Render settings: codec={}, bitrate={}, {}x{} @{}fps, output={}",
+                      settings.m_codec,
+                      settings.m_bitrate,
+                      settings.m_width,
+                      settings.m_height,
+                      settings.m_fps,
+                      settings.m_outputFile.string());
 
-        auto availableCodecs = ffmpeg::events::Recorder::getAvailableCodecs();
-        std::string codecList;
-        for (auto& c : availableCodecs) codecList += c + ", ";
-        log::info("Available codecs ({}): {}", availableCodecs.size(), codecList);
+            auto availableCodecs = ffmpeg::events::Recorder::getAvailableCodecs();
+            std::string codecList;
+            for (auto& c : availableCodecs)
+                codecList += c + ", ";
+            log::info("Available codecs ({}): {}", availableCodecs.size(), codecList);
 
-        if (!availableCodecs.empty() && std::find(availableCodecs.begin(), availableCodecs.end(), settings.m_codec) == availableCodecs.end()) {
-            log::warn("Codec '{}' not found in available codecs, trying fallbacks...", settings.m_codec);
-            std::vector<std::string> fallbacks = {"libx264", "libx265", "h264", "h264_mf", "mpeg4", "libvpx-vp9"};
-            bool found = false;
-            for (auto& fb : fallbacks) {
-                if (std::find(availableCodecs.begin(), availableCodecs.end(), fb) != availableCodecs.end()) {
-                    log::info("Using fallback codec: {}", fb);
-                    settings.m_codec = fb;
-                    found = true;
-                    break;
-                }
-            }
-            if (!found && !availableCodecs.empty()) {
-                settings.m_codec = availableCodecs[0];
-                log::info("Using first available codec: {}", settings.m_codec);
-            }
-        }
-
-        std::string localCodec = codec;
-        std::string localBitrate = bitrate;
-        std::string localExtraArgs = extraArgs;
-        std::string localVideoArgs = videoArgs;
-
-        bool useApiForEncoding = usingApi;
-
-        {
-#ifdef GEODE_IS_WINDOWS
-        Subprocess process;
-#endif
-        ffmpeg::events::Recorder recorder;
-
-        if (useApiForEncoding) {
-            auto res = recorder.init(settings);
-            if (res.isErr()) {
-                log::error("FFmpeg init error: {}", res.unwrapErr());
-#ifdef GEODE_IS_WINDOWS
-                if (!ffmpegPath.empty() && std::filesystem::exists(ffmpegPath)) {
-                    useApiForEncoding = false;
-                    Loader::get()->queueInMainThread([] {
-                        Notification::create("FFmpeg API unavailable, using ffmpeg.exe", NotificationIcon::Warning)->show();
-                    });
-                } else {
-#endif
-                    Loader::get()->queueInMainThread([this] {
-                        FLAlertLayer::create("Error", "FFmpeg API failed to initialize.", "Ok")->show();
-                        stop();
-                    });
-                    audioMode = AUDIO_OFF;
-                    recording = false;
-                    return;
-#ifdef GEODE_IS_WINDOWS
-                }
-#endif
-            }
-        }
-
-        if (!useApiForEncoding) {
-#ifdef GEODE_IS_WINDOWS
-            if (!localCodec.empty()) localCodec = "-c:v " + localCodec + " ";
-            if (!localBitrate.empty()) localBitrate = "-b:v " + localBitrate + " ";
-            if (localExtraArgs.empty()) localExtraArgs = "-pix_fmt yuv420p";
-            if (localVideoArgs.empty()) localVideoArgs = "colorspace=all=bt709:iall=bt470bg:fast=1";
-
-            std::string command = fmt::format(
-                "\"{}\" -y -f rawvideo -pix_fmt rgb24 -s {}x{} -r {} -i - {}{}{} -vf \"vflip,{}\" -an \"{}\"",
-                ffmpegPath,
-                std::to_string(width),
-                std::to_string(height),
-                std::to_string(fps),
-                localCodec,
-                localBitrate,
-                localExtraArgs,
-                localVideoArgs,
-                path
-            );
-
-            log::info("Executing: {}", command);
-            process = Subprocess(command);
-#endif
-        }
-
-        while (recording || pause || frameCapture.hasPendingFrame()) {
-            auto frame = frameCapture.takeFrame();
-            if (!frame.empty()) {
-                if (useApiForEncoding) {
-                    auto res = recorder.writeFrame(frame);
-                    if (res.isErr()) {
-                        Loader::get()->queueInMainThread([this] {
-                            FLAlertLayer::create("Error", "FFmpeg API failed to write frame.", "Ok")->show();
-                            stop();
-                        });
-                        audioMode = AUDIO_OFF;
-                        recording = false;
+            if (!availableCodecs.empty() &&
+                std::find(availableCodecs.begin(), availableCodecs.end(), settings.m_codec) ==
+                    availableCodecs.end()) {
+                log::warn("Codec '{}' not found in available codecs, trying fallbacks...",
+                          settings.m_codec);
+                std::vector<std::string> fallbacks = {
+                    "libx264", "libx265", "h264", "h264_mf", "mpeg4", "libvpx-vp9"};
+                bool found = false;
+                for (auto& fb : fallbacks) {
+                    if (std::find(availableCodecs.begin(), availableCodecs.end(), fb) !=
+                        availableCodecs.end()) {
+                        log::info("Using fallback codec: {}", fb);
+                        settings.m_codec = fb;
+                        found = true;
                         break;
                     }
                 }
+                if (!found && !availableCodecs.empty()) {
+                    settings.m_codec = availableCodecs[0];
+                    log::info("Using first available codec: {}", settings.m_codec);
+                }
+            }
+
+            std::string localCodec = codec;
+            std::string localBitrate = bitrate;
+            std::string localExtraArgs = extraArgs;
+            std::string localVideoArgs = videoArgs;
+
+            bool useApiForEncoding = usingApi;
+
+            {
 #ifdef GEODE_IS_WINDOWS
-                else {
-                    process.writeStdin(frame.data(), frame.size());
-                }
+                Subprocess process;
 #endif
-            } else {
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            }
-        }
+                ffmpeg::events::Recorder recorder;
 
-        if (useApiForEncoding) {
-            recorder.stop();
-        } else {
+                if (useApiForEncoding) {
+                    auto res = recorder.init(settings);
+                    if (res.isErr()) {
+                        log::error("FFmpeg init error: {}", res.unwrapErr());
 #ifdef GEODE_IS_WINDOWS
-            if (process.close()) {
-                Loader::get()->queueInMainThread([] {
-                    FLAlertLayer::create("Error", "There was an error saving the render.", "Ok")->show();
-                });
-                return;
-            }
-#endif
-        }
-
-        bool preferExeAudioMux = false;
-#ifdef GEODE_IS_WINDOWS
-        preferExeAudioMux = !ffmpegPath.empty();
-#endif
-
-        bool needMixedAudio = includeClickSounds || (!preferExeAudioMux && musicVolume != 1.0f);
-
-        audioCapture.rawMixBuffer.clear();
-        auto& rawAudio = audioCapture.rawMixBuffer;
-        if (needMixedAudio && audioMode == AUDIO_SONG && std::filesystem::exists(songFile)) {
-            rawAudio = decodeSongToRaw(songFile, songOffset, lastFrame_t, musicVolume);
-        }
-
-        audioCapture.sampleRate = 44100;
-        int& rawAudioSampleRate = audioCapture.sampleRate;
-        if (FMODAudioEngine::sharedEngine() && FMODAudioEngine::sharedEngine()->m_system) {
-            FMODAudioEngine::sharedEngine()->m_system->getSoftwareFormat(&rawAudioSampleRate, nullptr, nullptr);
-        }
-
-        if (includeClickSounds) {
-            auto* csm = ClickSoundManager::get();
-            auto* engine = GucciEngine::get();
-            bool hasInputs = !engine->replay.m_actionAtom.empty();
-                                                if (hasInputs) {
-                std::vector<MacroAction> acts;
-                acts.reserve(engine->replay.m_actionAtom.m_actions.size());
-                for (auto const& a : engine->replay.m_actionAtom.m_actions)
-                    if (a.isInput())
-                        acts.emplace_back((int)a.m_frame, (int)a.m_type,
-                                          a.m_player2, a.m_holding, 0.f);
-                auto clicks = csm->generateClickAudio(
-                    acts, (float)getTPS(), (float)lastFrame_t,
-                    rawAudioSampleRate, 0, false, false);
-                if (rawAudio.size() < clicks.size())
-                    rawAudio.resize(clicks.size(), 0.0f);
-                for (size_t i = 0; i < clicks.size(); ++i)
-                    rawAudio[i] += clicks[i];
-            }
-        }
-
-        if (!rawAudio.empty()) {
-            fitAudioToDuration(rawAudio, lastFrame_t, rawAudioSampleRate);
-        }
-
-        Loader::get()->queueInMainThread([] {
-            Notification::create("Saving Render...", NotificationIcon::Loading)->show();
-        });
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-        bool hasRawAudio = !rawAudio.empty();
-        bool hasAudio = hasRawAudio || (audioMode == AUDIO_SONG && (musicVolume > 0.f && std::filesystem::exists(songFile)));
-        log::info("Audio mux: hasRawAudio={}, rawAudio.size={}, hasAudio={}, musicVolume={:.3f}, useApi={}",
-            hasRawAudio, rawAudio.size(), hasAudio, musicVolume, useApiForEncoding);
-        if (audioMode == AUDIO_SONG && !hasRawAudio && !std::filesystem::exists(songFile) && !includeClickSounds) {
-            log::error("Song file not found and no raw audio captured: {}", songFile);
-        }
-
-        if (!hasAudio) {
-            Loader::get()->queueInMainThread([this] {
-                Notification::create("Render Saved Without Audio", NotificationIcon::Success)->show();
-                publishRenderResult(true);
-                if (Mod::get()->getSavedValue<bool>("render_hide_endscreen", false)) {
-                    if (PlayLayer* pl = PlayLayer::get())
-                        if (EndLevelLayer* layer = pl->getChildByType<EndLevelLayer>(0))
-                            layer->setVisible(true);
-                }
-            });
-            return;
-        }
-
-        std::filesystem::path tempPath = std::filesystem::path(path).parent_path() /
-            ("temp_" + std::filesystem::path(path).filename().string());
-        std::filesystem::path rawAudioPath;
-        auto ensureRawAudioFile = [&]() -> bool {
-            if (rawAudioPath.empty()) {
-                rawAudioPath = std::filesystem::path(path).parent_path() /
-                    fmt::format("temp_audio_{}.wav", std::chrono::duration_cast<std::chrono::milliseconds>(
-                        std::chrono::system_clock::now().time_since_epoch()).count());
-
-                if (!writeRawAudioWav(rawAudioPath, rawAudio, static_cast<uint32_t>(rawAudioSampleRate))) {
-                    log::error("Failed to write temporary render audio '{}'", rawAudioPath.string());
-                    rawAudioPath.clear();
-                    return false;
-                }
-            }
-            return true;
-        };
-
-        double totalTime = lastFrame_t;
-        bool audioMuxed = false;
-
-        if (!preferExeAudioMux && useApiForEncoding) {
-            if (hasRawAudio) {
-                if (rawAudioSampleRate != kApiMixSampleRate) {
-                    log::info(
-                        "Resampling raw render audio for API mux: {}Hz -> {}Hz",
-                        rawAudioSampleRate,
-                        kApiMixSampleRate
-                    );
-                    rawAudio = resampleInterleavedAudio(rawAudio, 2, rawAudioSampleRate, kApiMixSampleRate);
-                    rawAudioSampleRate = kApiMixSampleRate;
-                    fitAudioToDuration(rawAudio, totalTime, rawAudioSampleRate);
-                }
-
-                auto rawRes = ffmpeg::events::AudioMixer::mixVideoRaw(path, rawAudio, tempPath);
-                if (rawRes.isOk()) {
-                    audioMuxed = true;
-                    log::info("Audio mux succeeded via API raw audio");
-                } else {
-                    log::error("Audio mux via API raw audio failed: {}", rawRes.unwrapErr());
-
-                    if (ensureRawAudioFile()) {
-                        auto fileRes = ffmpeg::events::AudioMixer::mixVideoAudio(path, rawAudioPath, tempPath);
-                        if (fileRes.isOk()) {
-                            audioMuxed = true;
-                            log::info("Audio mux succeeded via API WAV file fallback");
+                        if (!ffmpegPath.empty() && std::filesystem::exists(ffmpegPath)) {
+                            useApiForEncoding = false;
+                            Loader::get()->queueInMainThread([] {
+                                Notification::create("FFmpeg API unavailable, using ffmpeg.exe",
+                                                     NotificationIcon::Warning)
+                                    ->show();
+                            });
                         } else {
-                            log::error("Audio mux via API WAV fallback failed: {}", fileRes.unwrapErr());
+#endif
+                            Loader::get()->queueInMainThread([this] {
+                                FLAlertLayer::create(
+                                    "Error", "FFmpeg API failed to initialize.", "Ok")
+                                    ->show();
+                                stop();
+                            });
+                            audioMode = AUDIO_OFF;
+                            recording = false;
+                            return;
+#ifdef GEODE_IS_WINDOWS
                         }
+#endif
                     }
                 }
-            } else {
-                auto fileRes = ffmpeg::events::AudioMixer::mixVideoAudio(path, songFile, tempPath);
-                if (fileRes.isOk()) {
-                    audioMuxed = true;
-                    log::info("Audio mux succeeded via API song file");
-                } else {
-                    log::error("Audio mux via API song file failed: {}", fileRes.unwrapErr());
-                }
-            }
-        }
 
+                if (!useApiForEncoding) {
 #ifdef GEODE_IS_WINDOWS
-        if (!audioMuxed && !ffmpegPath.empty()) {
-            std::string audioInput;
-            float audioOffset = 0.0f;
-            float audioVolume = 1.0f;
+                    if (!localCodec.empty())
+                        localCodec = "-c:v " + localCodec + " ";
+                    if (!localBitrate.empty())
+                        localBitrate = "-b:v " + localBitrate + " ";
+                    if (localExtraArgs.empty())
+                        localExtraArgs = "-pix_fmt yuv420p";
+                    if (localVideoArgs.empty())
+                        localVideoArgs = "colorspace=all=bt709:iall=bt470bg:fast=1";
 
-            if (hasRawAudio) {
-                if (!ensureRawAudioFile()) {
-                    Loader::get()->queueInMainThread([] {
-                        FLAlertLayer::create("Error", "Failed to write temporary render audio.", "Ok")->show();
+                    std::string command =
+                        fmt::format("\"{}\" -y -f rawvideo -pix_fmt rgb24 -s {}x{} -r {} -i - "
+                                    "{}{}{} -vf \"vflip,{}\" -an \"{}\"",
+                                    ffmpegPath,
+                                    std::to_string(width),
+                                    std::to_string(height),
+                                    std::to_string(fps),
+                                    localCodec,
+                                    localBitrate,
+                                    localExtraArgs,
+                                    localVideoArgs,
+                                    path);
+
+                    log::info("Executing: {}", command);
+                    process = Subprocess(command);
+#endif
+                }
+
+                while (recording || pause || frameCapture.hasPendingFrame()) {
+                    auto frame = frameCapture.takeFrame();
+                    if (!frame.empty()) {
+                        if (useApiForEncoding) {
+                            auto res = recorder.writeFrame(frame);
+                            if (res.isErr()) {
+                                Loader::get()->queueInMainThread([this] {
+                                    FLAlertLayer::create(
+                                        "Error", "FFmpeg API failed to write frame.", "Ok")
+                                        ->show();
+                                    stop();
+                                });
+                                audioMode = AUDIO_OFF;
+                                recording = false;
+                                break;
+                            }
+                        }
+#ifdef GEODE_IS_WINDOWS
+                        else {
+                            process.writeStdin(frame.data(), frame.size());
+                        }
+#endif
+                    } else {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                    }
+                }
+
+                if (useApiForEncoding) {
+                    recorder.stop();
+                } else {
+#ifdef GEODE_IS_WINDOWS
+                    if (process.close()) {
+                        Loader::get()->queueInMainThread([] {
+                            FLAlertLayer::create(
+                                "Error", "There was an error saving the render.", "Ok")
+                                ->show();
+                        });
+                        return;
+                    }
+#endif
+                }
+
+                bool preferExeAudioMux = false;
+#ifdef GEODE_IS_WINDOWS
+                preferExeAudioMux = !ffmpegPath.empty();
+#endif
+
+                bool needMixedAudio =
+                    includeClickSounds || (!preferExeAudioMux && musicVolume != 1.0f);
+
+                audioCapture.rawMixBuffer.clear();
+                auto& rawAudio = audioCapture.rawMixBuffer;
+                if (needMixedAudio && audioMode == AUDIO_SONG &&
+                    std::filesystem::exists(songFile)) {
+                    rawAudio = decodeSongToRaw(songFile, songOffset, lastFrame_t, musicVolume);
+                }
+
+                audioCapture.sampleRate = 44100;
+                int& rawAudioSampleRate = audioCapture.sampleRate;
+                if (FMODAudioEngine::sharedEngine() && FMODAudioEngine::sharedEngine()->m_system) {
+                    FMODAudioEngine::sharedEngine()->m_system->getSoftwareFormat(
+                        &rawAudioSampleRate, nullptr, nullptr);
+                }
+
+                if (includeClickSounds) {
+                    auto* csm = ClickSoundManager::get();
+                    auto* engine = GucciEngine::get();
+                    bool hasInputs = !engine->replay.m_actionAtom.empty();
+                    if (hasInputs) {
+                        std::vector<MacroAction> acts;
+                        acts.reserve(engine->replay.m_actionAtom.m_actions.size());
+                        for (auto const& a : engine->replay.m_actionAtom.m_actions)
+                            if (a.isInput())
+                                acts.emplace_back(
+                                    (int)a.m_frame, (int)a.m_type, a.m_player2, a.m_holding, 0.f);
+                        auto clicks = csm->generateClickAudio(acts,
+                                                              (float)getTPS(),
+                                                              (float)lastFrame_t,
+                                                              rawAudioSampleRate,
+                                                              0,
+                                                              false,
+                                                              false);
+                        if (rawAudio.size() < clicks.size())
+                            rawAudio.resize(clicks.size(), 0.0f);
+                        for (size_t i = 0; i < clicks.size(); ++i)
+                            rawAudio[i] += clicks[i];
+                    }
+                }
+
+                if (!rawAudio.empty()) {
+                    fitAudioToDuration(rawAudio, lastFrame_t, rawAudioSampleRate);
+                }
+
+                Loader::get()->queueInMainThread([] {
+                    Notification::create("Saving Render...", NotificationIcon::Loading)->show();
+                });
+
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+                bool hasRawAudio = !rawAudio.empty();
+                bool hasAudio =
+                    hasRawAudio || (audioMode == AUDIO_SONG &&
+                                    (musicVolume > 0.f && std::filesystem::exists(songFile)));
+                log::info("Audio mux: hasRawAudio={}, rawAudio.size={}, hasAudio={}, "
+                          "musicVolume={:.3f}, useApi={}",
+                          hasRawAudio,
+                          rawAudio.size(),
+                          hasAudio,
+                          musicVolume,
+                          useApiForEncoding);
+                if (audioMode == AUDIO_SONG && !hasRawAudio && !std::filesystem::exists(songFile) &&
+                    !includeClickSounds) {
+                    log::error("Song file not found and no raw audio captured: {}", songFile);
+                }
+
+                if (!hasAudio) {
+                    Loader::get()->queueInMainThread([this] {
+                        Notification::create("Render Saved Without Audio",
+                                             NotificationIcon::Success)
+                            ->show();
+                        publishRenderResult(true);
+                        if (Mod::get()->getSavedValue<bool>("render_hide_endscreen", false)) {
+                            if (PlayLayer* pl = PlayLayer::get())
+                                if (EndLevelLayer* layer = pl->getChildByType<EndLevelLayer>(0))
+                                    layer->setVisible(true);
+                        }
                     });
                     return;
                 }
-                audioInput = rawAudioPath.string();
-            } else {
-                audioInput = songFile;
-                audioOffset = songOffset;
-                audioVolume = musicVolume;
-            }
 
-            audioMuxed = tryMuxAudioWithExe(
-                ffmpegPath,
-                audioInput,
-                path,
-                tempPath,
-                audioOffset,
-                totalTime,
-                fadeIn,
-                fadeOut,
-                timeAfter,
-                audioVolume,
-                extraAudioArgs
-            );
-        }
+                std::filesystem::path tempPath =
+                    std::filesystem::path(path).parent_path() /
+                    ("temp_" + std::filesystem::path(path).filename().string());
+                std::filesystem::path rawAudioPath;
+                auto ensureRawAudioFile = [&]() -> bool {
+                    if (rawAudioPath.empty()) {
+                        rawAudioPath =
+                            std::filesystem::path(path).parent_path() /
+                            fmt::format("temp_audio_{}.wav",
+                                        std::chrono::duration_cast<std::chrono::milliseconds>(
+                                            std::chrono::system_clock::now().time_since_epoch())
+                                            .count());
+
+                        if (!writeRawAudioWav(rawAudioPath,
+                                              rawAudio,
+                                              static_cast<uint32_t>(rawAudioSampleRate))) {
+                            log::error("Failed to write temporary render audio '{}'",
+                                       rawAudioPath.string());
+                            rawAudioPath.clear();
+                            return false;
+                        }
+                    }
+                    return true;
+                };
+
+                double totalTime = lastFrame_t;
+                bool audioMuxed = false;
+
+                if (!preferExeAudioMux && useApiForEncoding) {
+                    if (hasRawAudio) {
+                        if (rawAudioSampleRate != kApiMixSampleRate) {
+                            log::info("Resampling raw render audio for API mux: {}Hz -> {}Hz",
+                                      rawAudioSampleRate,
+                                      kApiMixSampleRate);
+                            rawAudio = resampleInterleavedAudio(
+                                rawAudio, 2, rawAudioSampleRate, kApiMixSampleRate);
+                            rawAudioSampleRate = kApiMixSampleRate;
+                            fitAudioToDuration(rawAudio, totalTime, rawAudioSampleRate);
+                        }
+
+                        auto rawRes =
+                            ffmpeg::events::AudioMixer::mixVideoRaw(path, rawAudio, tempPath);
+                        if (rawRes.isOk()) {
+                            audioMuxed = true;
+                            log::info("Audio mux succeeded via API raw audio");
+                        } else {
+                            log::error("Audio mux via API raw audio failed: {}",
+                                       rawRes.unwrapErr());
+
+                            if (ensureRawAudioFile()) {
+                                auto fileRes = ffmpeg::events::AudioMixer::mixVideoAudio(
+                                    path, rawAudioPath, tempPath);
+                                if (fileRes.isOk()) {
+                                    audioMuxed = true;
+                                    log::info("Audio mux succeeded via API WAV file fallback");
+                                } else {
+                                    log::error("Audio mux via API WAV fallback failed: {}",
+                                               fileRes.unwrapErr());
+                                }
+                            }
+                        }
+                    } else {
+                        auto fileRes =
+                            ffmpeg::events::AudioMixer::mixVideoAudio(path, songFile, tempPath);
+                        if (fileRes.isOk()) {
+                            audioMuxed = true;
+                            log::info("Audio mux succeeded via API song file");
+                        } else {
+                            log::error("Audio mux via API song file failed: {}",
+                                       fileRes.unwrapErr());
+                        }
+                    }
+                }
+
+#ifdef GEODE_IS_WINDOWS
+                if (!audioMuxed && !ffmpegPath.empty()) {
+                    std::string audioInput;
+                    float audioOffset = 0.0f;
+                    float audioVolume = 1.0f;
+
+                    if (hasRawAudio) {
+                        if (!ensureRawAudioFile()) {
+                            Loader::get()->queueInMainThread([] {
+                                FLAlertLayer::create(
+                                    "Error", "Failed to write temporary render audio.", "Ok")
+                                    ->show();
+                            });
+                            return;
+                        }
+                        audioInput = rawAudioPath.string();
+                    } else {
+                        audioInput = songFile;
+                        audioOffset = songOffset;
+                        audioVolume = musicVolume;
+                    }
+
+                    audioMuxed = tryMuxAudioWithExe(ffmpegPath,
+                                                    audioInput,
+                                                    path,
+                                                    tempPath,
+                                                    audioOffset,
+                                                    totalTime,
+                                                    fadeIn,
+                                                    fadeOut,
+                                                    timeAfter,
+                                                    audioVolume,
+                                                    extraAudioArgs);
+                }
 #endif
 
-        if (!audioMuxed) {
-            Loader::get()->queueInMainThread([] {
-                FLAlertLayer::create("Error", "FFmpeg failed to add audio.", "Ok")->show();
-            });
-            if (!rawAudioPath.empty()) cleanupTempFile(rawAudioPath, "temporary render audio");
-            return;
-        }
+                if (!audioMuxed) {
+                    Loader::get()->queueInMainThread([] {
+                        FLAlertLayer::create("Error", "FFmpeg failed to add audio.", "Ok")->show();
+                    });
+                    if (!rawAudioPath.empty())
+                        cleanupTempFile(rawAudioPath, "temporary render audio");
+                    return;
+                }
 
-        if (!rawAudioPath.empty()) cleanupTempFile(rawAudioPath, "temporary render audio");
+                if (!rawAudioPath.empty())
+                    cleanupTempFile(rawAudioPath, "temporary render audio");
 
-        std::error_code ec;
-        std::filesystem::remove(path, ec);
-        if (ec) log::warn("Failed to remove old render file: {}", ec.message());
-        else {
-            ec.clear();
-            std::filesystem::rename(tempPath, path, ec);
-            if (ec) log::warn("Failed to rename temp render file: {}", ec.message());
-            else log::info("Render with audio saved to: {}", path);
-        }
+                std::error_code ec;
+                std::filesystem::remove(path, ec);
+                if (ec)
+                    log::warn("Failed to remove old render file: {}", ec.message());
+                else {
+                    ec.clear();
+                    std::filesystem::rename(tempPath, path, ec);
+                    if (ec)
+                        log::warn("Failed to rename temp render file: {}", ec.message());
+                    else
+                        log::info("Render with audio saved to: {}", path);
+                }
 
-        if (!ec) {
-            Loader::get()->queueInMainThread([this] {
-                Notification::create("Render Saved With Audio", NotificationIcon::Success)->show();
-                publishRenderResult(true);
-            });
-        } else {
-            Loader::get()->queueInMainThread([] {
-                Notification::create("Error saving render with audio", NotificationIcon::Error)->show();
-            });
-        }
-
-        }
+                if (!ec) {
+                    Loader::get()->queueInMainThread([this] {
+                        Notification::create("Render Saved With Audio", NotificationIcon::Success)
+                            ->show();
+                        publishRenderResult(true);
+                    });
+                } else {
+                    Loader::get()->queueInMainThread([] {
+                        Notification::create("Error saving render with audio",
+                                             NotificationIcon::Error)
+                            ->show();
+                    });
+                }
+            }
         } catch (std::exception const& e) {
             log::error("Unhandled render worker exception: {}", e.what());
             Loader::get()->queueInMainThread([] {
-                FLAlertLayer::create("Error", "Render finalization failed. Check the log for details.", "Ok")->show();
+                FLAlertLayer::create(
+                    "Error", "Render finalization failed. Check the log for details.", "Ok")
+                    ->show();
             });
         } catch (...) {
             log::error("Unhandled render worker exception: unknown error");
             Loader::get()->queueInMainThread([] {
-                FLAlertLayer::create("Error", "Render finalization failed. Check the log for details.", "Ok")->show();
+                FLAlertLayer::create(
+                    "Error", "Render finalization failed. Check the log for details.", "Ok")
+                    ->show();
             });
         }
-
     }).detach();
 }
 
 void Renderer::publishRenderResult(bool success) {
-    lastRender.success  = success;
-    lastRender.path     = path;
-    lastRender.width    = width;
-    lastRender.height   = height;
-    lastRender.fps      = fps;
+    lastRender.success = success;
+    lastRender.path = path;
+    lastRender.width = width;
+    lastRender.height = height;
+    lastRender.fps = fps;
     lastRender.duration = lastFrame_t;
     lastRender.fileSize = 0;
     if (success) {
         std::error_code ec;
         auto sz = std::filesystem::file_size(std::filesystem::path(path), ec);
-        if (!ec) lastRender.fileSize = sz;
+        if (!ec)
+            lastRender.fileSize = sz;
     }
     lastRender.pending = true;
 }
@@ -1199,9 +1323,11 @@ void Renderer::stop(int frame) {
 }
 
 void Renderer::handleRecording(PlayLayer* pl, int frame) {
-    if (!pl) return stop(frame);
+    if (!pl)
+        return stop(frame);
     isPlatformer = pl->m_levelSettings->m_platformerMode;
-    if (dontRender || pl->m_player1->m_isDead) return;
+    if (dontRender || pl->m_player1->m_isDead)
+        return;
 
     if (renderedFrames.contains(frame) && frame > 10)
         return;
@@ -1217,7 +1343,7 @@ void Renderer::handleRecording(PlayLayer* pl, int frame) {
             levelFinished = true;
         }
 
-                                        if (!firstCaptureDone) {
+        if (!firstCaptureDone) {
             captureFrame();
             lastFrame_t = static_cast<double>(pl->m_gameState.m_levelTime);
             firstCaptureDone = true;
@@ -1225,8 +1351,8 @@ void Renderer::handleRecording(PlayLayer* pl, int frame) {
 
         double time = static_cast<double>(pl->m_gameState.m_levelTime) + extra_t - lastFrame_t;
         if (time >= dt) {
-            int correctMusicTime = static_cast<int>((frame / getTPS()
-                + pl->m_levelSettings->m_songOffset) * 1000);
+            int correctMusicTime =
+                static_cast<int>((frame / getTPS() + pl->m_levelSettings->m_songOffset) * 1000);
             correctMusicTime += fmod->m_musicOffset;
 
             if (fmod->getMusicTimeMS(0) - correctMusicTime >= 110)
@@ -1250,7 +1376,7 @@ class $modify(RenderPlayLayer, PlayLayer) {
         auto* engine = GucciEngine::get();
         auto& rnd = engine->renderer;
         if (rnd.recording) {
-                                    rnd.dontRender = false;
+            rnd.dontRender = false;
             rnd.lastFrame_t = 0;
             rnd.extra_t = 0;
             rnd.firstCaptureDone = false;
@@ -1264,14 +1390,17 @@ class $modify(RenderPlayLayer, PlayLayer) {
     void showCompleteText() {
         PlayLayer::showCompleteText();
         auto* engine = GucciEngine::get();
-        if (!engine->renderer.recording) return;
+        if (!engine->renderer.recording)
+            return;
 
         if (m_levelEndAnimationStarted &&
             Mod::get()->getSavedValue<bool>("render_hide_levelcomplete", false)) {
             for (CCNode* node : CCArrayExt<CCNode*>(getChildren())) {
                 CCSprite* spr = typeinfo_cast<CCSprite*>(node);
-                if (!spr) continue;
-                if (!isSpriteFrameName(spr, "GJ_levelComplete_001.png")) continue;
+                if (!spr)
+                    continue;
+                if (!isSpriteFrameName(spr, "GJ_levelComplete_001.png"))
+                    continue;
                 spr->setVisible(false);
             }
         }
@@ -1281,7 +1410,8 @@ class $modify(RenderPlayLayer, PlayLayer) {
 class $modify(RenderEndLayer, EndLevelLayer) {
     void customSetup() {
         EndLevelLayer::customSetup();
-        if (!PlayLayer::get()) return;
+        if (!PlayLayer::get())
+            return;
         auto* engine = GucciEngine::get();
         if (engine->renderer.recording && PlayLayer::get()->m_levelEndAnimationStarted &&
             Mod::get()->getSavedValue<bool>("render_hide_endscreen", false)) {
@@ -1295,7 +1425,8 @@ class $modify(RenderEndLayer, EndLevelLayer) {
 class $modify(RenderFMOD, FMODAudioEngine) {
     int playEffect(gd::string path, float speed, float p2, float volume) {
         auto* engine = GucciEngine::get();
-        if (std::string_view(path) == "explode_11.ogg" && engine->renderer.recording) return 0;
+        if (std::string_view(path) == "explode_11.ogg" && engine->renderer.recording)
+            return 0;
 
         return FMODAudioEngine::playEffect(path, speed, p2, volume);
     }
@@ -1314,7 +1445,8 @@ class $modify(RenderAudioEffects, AudioEffectsLayer) {
 
 class $modify(RenderBaseLayer, GJBaseGameLayer) {
     void updateAudioVisualizer() {
-        if (GucciEngine::get()->renderer.recording) return;
+        if (GucciEngine::get()->renderer.recording)
+            return;
         GJBaseGameLayer::updateAudioVisualizer();
     }
 };
@@ -1323,7 +1455,8 @@ class $modify(RenderParticle, CCParticleSystemQuad) {
     static CCParticleSystemQuad* create(const char* v1, bool v2) {
         CCParticleSystemQuad* ret = CCParticleSystemQuad::create(v1, v2);
         auto* engine = GucciEngine::get();
-        if (!engine->renderer.recording) return ret;
+        if (!engine->renderer.recording)
+            return ret;
 
         if (std::string_view(v1) == "levelComplete01.plist" &&
             Mod::get()->getSavedValue<bool>("render_hide_levelcomplete", false))

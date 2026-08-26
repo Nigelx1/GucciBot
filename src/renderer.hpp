@@ -15,10 +15,7 @@
 
 using namespace geode::prelude;
 
-enum RenderAudioMode {
-    AUDIO_OFF = 0,
-    AUDIO_SONG = 1
-};
+enum RenderAudioMode { AUDIO_OFF = 0, AUDIO_SONG = 1 };
 
 class FrameCaptureService {
 public:
@@ -82,13 +79,13 @@ public:
 
     bool levelFinished = false;
     bool recording = false;
-        struct LastRender {
-        bool        pending = false;
-        bool        success = false;
+    struct LastRender {
+        bool pending = false;
+        bool success = false;
         std::string path;
-        unsigned    width = 0, height = 0, fps = 0;
-        double      duration = 0.0;
-        uintmax_t   fileSize = 0;
+        unsigned width = 0, height = 0, fps = 0;
+        double duration = 0.0;
+        uintmax_t fileSize = 0;
     } lastRender;
     void publishRenderResult(bool success);
     bool pause = false;
@@ -128,7 +125,7 @@ public:
     std::unordered_set<int> renderedFrames;
 
     FMODAudioEngine* fmod = nullptr;
-    cocos2d::CCSize ogRes = { 0, 0 };
+    cocos2d::CCSize ogRes = {0, 0};
     float ogScaleX = 1.f;
     float ogScaleY = 1.f;
 

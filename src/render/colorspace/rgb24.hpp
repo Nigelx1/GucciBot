@@ -3,7 +3,7 @@
 #include "colorspace.hpp"
 
 class RGB24Colorspace : public Colorspace {
-   public:
+public:
     const std::vector<RenderPass> getPasses() override {
         const char* vertexShader = R"(#version 130
         in vec4 a_position;
@@ -17,15 +17,17 @@ class RGB24Colorspace : public Colorspace {
         }
         )";
 
-        return {RenderPass{.m_width = m_alignedWidth,
-                           .m_height = m_alignedHeight,
-                           .m_vertexShader = nullptr,
-                           .m_fragmentShader = nullptr,
-                           .m_readPixels = [](float, float) {}},
-                RenderPass{.m_width = m_alignedWidth,
-                           .m_height = m_alignedHeight,
-                           .m_vertexShader = vertexShader,
-                           .m_fragmentShader = R"(#version 130
+        return {
+            RenderPass{.m_width = m_alignedWidth,
+                       .m_height = m_alignedHeight,
+                       .m_vertexShader = nullptr,
+                       .m_fragmentShader = nullptr,
+                       .m_readPixels = [](float, float) {}},
+            RenderPass{
+                .m_width = m_alignedWidth,
+                .m_height = m_alignedHeight,
+                .m_vertexShader = vertexShader,
+                .m_fragmentShader = R"(#version 130
                 precision highp float;
 
                 in vec2 v_texCoord;
@@ -38,19 +40,17 @@ class RGB24Colorspace : public Colorspace {
 
                     gl_FragData[0] = vec4(rgb, 1.0);
                 })",
-                           .m_readPixels = [this](float x, float y) {
-                               glReadPixels(x, y, m_alignedWidth,
-                                            m_alignedHeight, GL_RGB,
-                                            GL_UNSIGNED_BYTE, nullptr);
-                           }}};
+                .m_readPixels = [this](float x, float y) {
+                    glReadPixels(
+                        x, y, m_alignedWidth, m_alignedHeight, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+                }}};
     }
 
     size_t getBufferSize() override {
         return m_alignedWidth * m_alignedHeight * 3;
     }
 
-    geode::Result<> prepareFrame(AVFrame* frame, uint8_t* data,
-                                 size_t size) override {
+    geode::Result<> prepareFrame(AVFrame* frame, uint8_t* data, size_t size) override {
         if (!frame || !data || size == 0) {
             return geode::Err("Invalid parameters");
         }

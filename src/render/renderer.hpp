@@ -33,7 +33,7 @@ struct SLRendererSettings {
     double m_musicVolume = 1.0;
     double m_sfxVolume = 1.0;
 
-                                    bool m_splitAudioTracks = false;
+    bool m_splitAudioTracks = false;
 };
 
 #define SL_AV_PTR(type) std::unique_ptr<type, void (*)(type*)>
@@ -41,23 +41,24 @@ struct SLRendererSettings {
 
 struct SLAudioTrack {
     AVStream* stream = nullptr;
-    SL_AV_PTR(AVCodecContext) codecCtx = {nullptr, SL_AV_LEAK(AVCodecContext)};
+    SL_AV_PTR(AVCodecContext) codecCtx = { nullptr, SL_AV_LEAK(AVCodecContext) };
     const AVCodec* codec = nullptr;
-    SL_AV_PTR(AVFrame) frame = {nullptr, SL_AV_LEAK(AVFrame)};
-    SL_AV_PTR(AVPacket) pkt = {nullptr, SL_AV_LEAK(AVPacket)};
+    SL_AV_PTR(AVFrame) frame = { nullptr, SL_AV_LEAK(AVFrame) };
+    SL_AV_PTR(AVPacket) pkt = { nullptr, SL_AV_LEAK(AVPacket) };
     SwrContext* swrCtx = nullptr;
 };
 
 class SLRenderer {
-   public:
-    void queueStart() { m_shouldStart = true; }
+public:
+    void queueStart() {
+        m_shouldStart = true;
+    }
     void startIfQueued() {
         if (m_shouldStart) {
             m_shouldStart = false;
             auto ret = start();
             if (ret.isErr()) {
-                geode::log::error("[GucciBot] Failed to start SLRenderer: {}",
-                                  ret.unwrapErr());
+                geode::log::error("[GucciBot] Failed to start SLRenderer: {}", ret.unwrapErr());
             }
         }
     }
@@ -67,14 +68,18 @@ class SLRenderer {
     geode::Result<> writeAudio(std::vector<float>& data, uint64_t pts, int trackIndex);
     geode::Result<> stop();
 
-    void signalStop() { m_recording = false; }
+    void signalStop() {
+        m_recording = false;
+    }
 
     void recordLoop();
 
     void capture();
     void update(PlayLayer* pl);
 
-    void displayPreview() { m_texture.displayPreview(); }
+    void displayPreview() {
+        m_texture.displayPreview();
+    }
 
     SLRendererSettings m_settings;
 
@@ -83,21 +88,30 @@ class SLRenderer {
         return &instance;
     }
 
-    float getDt() const { return 1.f / m_settings.m_fps; }
-    bool isRecording() const { return m_recording; }
-    float getTime() const { return m_time; }
-    inline bool isFFmpegLoaded() const { return m_ffmpegLoaded; }
+    float getDt() const {
+        return 1.f / m_settings.m_fps;
+    }
+    bool isRecording() const {
+        return m_recording;
+    }
+    float getTime() const {
+        return m_time;
+    }
+    inline bool isFFmpegLoaded() const {
+        return m_ffmpegLoaded;
+    }
 
     void loadFFmpeg() {
         if (ff) {
             free(ff);
         }
         ff = (ff_t*)malloc(sizeof(ff_t));
-        if (!ff) return;
+        if (!ff)
+            return;
         m_ffmpegLoaded = loadFFmpegFunctions(ff);
     }
 
-                void loadSettingsFromGeode();
+    void loadSettingsFromGeode();
 
     bool m_shouldStart = false;
     bool m_collectAudio = true;
@@ -113,17 +127,17 @@ class SLRenderer {
     SLRenderTexture m_texture;
     ff_t* ff = 0;
 
-   private:
-    SL_AV_PTR(AVCodecContext) m_videoCodecCtx = {nullptr, SL_AV_LEAK(AVCodecContext)};
+private:
+    SL_AV_PTR(AVCodecContext) m_videoCodecCtx = { nullptr, SL_AV_LEAK(AVCodecContext) };
     AVFormatContext* m_formatCtx = nullptr;
     AVStream* m_videoStream = nullptr;
 
     const AVCodec* m_videoCodec = nullptr;
 
-    SL_AV_PTR(AVFrame) m_frame = {nullptr, SL_AV_LEAK(AVFrame)};
-    SL_AV_PTR(AVPacket) m_pkt = {nullptr, SL_AV_LEAK(AVPacket)};
+    SL_AV_PTR(AVFrame) m_frame = { nullptr, SL_AV_LEAK(AVFrame) };
+    SL_AV_PTR(AVPacket) m_pkt = { nullptr, SL_AV_LEAK(AVPacket) };
 
-        std::vector<SLAudioTrack> m_audioTracks;
+    std::vector<SLAudioTrack> m_audioTracks;
 
     float m_visualFps = 60.0f;
     bool m_recording = false;

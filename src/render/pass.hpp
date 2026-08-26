@@ -5,7 +5,7 @@
 GLuint compileShader(GLenum type, const char* source);
 
 class RenderPass {
-   public:
+public:
     GLuint m_program = 0;
     GLuint m_fbo = 0;
     GLuint m_tex = 0;
@@ -18,7 +18,7 @@ class RenderPass {
 
     std::function<void(float, float)> m_readPixels;
 
-   public:
+public:
     void initialize();
     void resize();
     void destroy();

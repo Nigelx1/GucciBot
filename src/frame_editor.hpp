@@ -116,7 +116,11 @@ private:
     int32_t visibleFrameEnd(float canvasWidth) const;
 
     void computeP2Color(const ImVec4& accent);
-    int hitTestSegment(ImVec2 mousePos, ImVec2 lanesOrigin, float lanesWidth, float lanesHeight, int& edgeOut) const;
+    int hitTestSegment(ImVec2 mousePos,
+                       ImVec2 lanesOrigin,
+                       float lanesWidth,
+                       float lanesHeight,
+                       int& edgeOut) const;
     int findSegmentByPressIndex(size_t pressIdx) const;
 };
 

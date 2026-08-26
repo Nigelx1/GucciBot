@@ -4,9 +4,9 @@ struct SavedPlayerCheckpoint {
     void apply(PlayerObject* p);
     static SavedPlayerCheckpoint create(PlayerObject* p);
 
-                cocos2d::CCPoint m_ccPosition{};
+    cocos2d::CCPoint m_ccPosition{};
     float m_ccRotation = 0.f;
-        cocos2d::CCNode* m_mainLayer = nullptr;
+    cocos2d::CCNode* m_mainLayer = nullptr;
     bool m_wasTeleported = false;
     bool m_fixGravityBug = false;
     bool m_reverseSync = false;
@@ -19,7 +19,7 @@ struct SavedPlayerCheckpoint {
     double m_slopeStartTime = 0.0;
     bool m_justPlacedStreak = false;
     GameObject* m_maybeLastGroundObject = nullptr;
-            cocos2d::CCDictionary* m_collisionLogTop = nullptr;
+    cocos2d::CCDictionary* m_collisionLogTop = nullptr;
     cocos2d::CCDictionary* m_collisionLogBottom = nullptr;
     cocos2d::CCDictionary* m_collisionLogLeft = nullptr;
     cocos2d::CCDictionary* m_collisionLogRight = nullptr;

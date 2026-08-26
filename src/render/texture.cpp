@@ -14,8 +14,7 @@
 
 using namespace cocos2d;
 
-static void silentChangeSize(CCSize size, float ,
-                             float ) {
+static void silentChangeSize(CCSize size, float, float) {
     auto director = CCDirector::sharedDirector();
     auto view = CCEGLView::sharedOpenGLView();
     view->CCEGLViewProtocol::setFrameSize(size.width, size.height);
@@ -44,16 +43,25 @@ void SLRenderTexture::init(std::unique_ptr<Colorspace> colorspace) {
 
     glGenBuffers(1, &m_pbo);
     glBindBuffer(GL_PIXEL_PACK_BUFFER, m_pbo);
-    glBufferData(GL_PIXEL_PACK_BUFFER, m_colorspace->getBufferSize(), nullptr,
-                 GL_STREAM_READ);
+    glBufferData(GL_PIXEL_PACK_BUFFER, m_colorspace->getBufferSize(), nullptr, GL_STREAM_READ);
     glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
 
-    float vertices[] = {
-                -1.0f, -1.0f, 0.0f, 0.0f,
-        1.0f,  -1.0f, 1.0f, 0.0f,
-        1.0f,  1.0f,  1.0f, 1.0f,
-        -1.0f, 1.0f,  0.0f, 1.0f
-    };
+    float vertices[] = {-1.0f,
+                        -1.0f,
+                        0.0f,
+                        0.0f,
+                        1.0f,
+                        -1.0f,
+                        1.0f,
+                        0.0f,
+                        1.0f,
+                        1.0f,
+                        1.0f,
+                        1.0f,
+                        -1.0f,
+                        1.0f,
+                        0.0f,
+                        1.0f};
 
     glGenVertexArrays(1, &m_quadVAO);
     glBindVertexArray(m_quadVAO);
@@ -63,12 +71,10 @@ void SLRenderTexture::init(std::unique_ptr<Colorspace> colorspace) {
 
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float),
-                          (void*)0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
 
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float),
-                          (void*)(2 * sizeof(float)));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
     glEnableVertexAttribArray(1);
 
     glBindVertexArray(0);
@@ -99,8 +105,8 @@ void SLRenderTexture::capture(uint8_t** data, std::atomic<bool>& hasDataFlag) {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         if (i == 0) {
-                        silentChangeSize(cocos2d::CCSize(pass.m_width, pass.m_height),
-                             m_widthOffset, m_heightOffset);
+            silentChangeSize(
+                cocos2d::CCSize(pass.m_width, pass.m_height), m_widthOffset, m_heightOffset);
 
             CCDirector::get()->m_pRunningScene->visit();
         } else {
@@ -118,7 +124,8 @@ void SLRenderTexture::capture(uint8_t** data, std::atomic<bool>& hasDataFlag) {
 
             glUniform1i(glGetUniformLocation(pass.m_program, "u_texture"), 1);
             glUniform2f(glGetUniformLocation(pass.m_program, "u_texelSize"),
-                        1.0f / pass.m_width, 1.0f / pass.m_height);
+                        1.0f / pass.m_width,
+                        1.0f / pass.m_height);
 
             glBindVertexArray(m_quadVAO);
             glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
@@ -132,8 +139,7 @@ void SLRenderTexture::capture(uint8_t** data, std::atomic<bool>& hasDataFlag) {
     }
 
     glBindBuffer(GL_PIXEL_PACK_BUFFER, m_pbo);
-    auto* pixelData =
-        static_cast<uint8_t*>(glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY));
+    auto* pixelData = static_cast<uint8_t*>(glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY));
 
     if (pixelData) {
         *data = pixelData;
@@ -167,9 +173,16 @@ void SLRenderTexture::displayPreview() {
     glBindFramebuffer(GL_READ_FRAMEBUFFER, m_passes[0].m_fbo);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_old_fbo);
 
-    glBlitFramebuffer(m_widthOffset, m_heightOffset, m_alignedWidth,
-                      m_alignedHeight, 0, 0, size.width, size.height,
-                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    glBlitFramebuffer(m_widthOffset,
+                      m_heightOffset,
+                      m_alignedWidth,
+                      m_alignedHeight,
+                      0,
+                      0,
+                      size.width,
+                      size.height,
+                      GL_COLOR_BUFFER_BIT,
+                      GL_NEAREST);
 
     if (blend) {
         glEnable(GL_BLEND);

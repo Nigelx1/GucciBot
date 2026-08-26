@@ -124,7 +124,7 @@ struct PredictionWatchKey {
 };
 
 struct PredictionContext {
-    PlayerObject* previewPlayers[2] = { nullptr, nullptr };
+    PlayerObject* previewPlayers[2] = {nullptr, nullptr};
     bool activeSimulation = false;
     bool traceCancelled = false;
     bool holdingTrace = false;
@@ -132,13 +132,13 @@ struct PredictionContext {
     bool dirty = true;
     float stepDelta = 1.0f / 240.0f;
     float collisionRotation = 0.0f;
-    std::array<CCPoint, 480> holdPathP1 {};
-    std::array<CCPoint, 480> holdPathP2 {};
-    int holdSurvivedFrames[2] { 0, 0 };
-    int releaseSurvivedFrames[2] { 0, 0 };
-    float indicatorFlashTimer[2] { 0.0f, 0.0f };
+    std::array<CCPoint, 480> holdPathP1{};
+    std::array<CCPoint, 480> holdPathP2{};
+    int holdSurvivedFrames[2]{0, 0};
+    int releaseSurvivedFrames[2]{0, 0};
+    float indicatorFlashTimer[2]{0.0f, 0.0f};
     float indicatorPulsePhase = 0.0f;
-    PredictionWatchKey watchKeys[2] {};
+    PredictionWatchKey watchKeys[2]{};
     std::unordered_set<GameObject*> processedOrbs;
     std::unordered_set<GameObject*> touchingPads;
     std::unordered_set<GameObject*> frameTouchingPads;
@@ -158,16 +158,14 @@ public:
     void captureFrameDelta(float dt);
     void noteSimulatedDeath(PlayerObject* player);
     bool ownsPreviewPlayer(PlayerObject* player) const;
-    int  getSurvivedFrames(bool player2, bool held) const;
+    int getSurvivedFrames(bool player2, bool held) const;
     void onRealClick(bool player2, bool pressed);
 
-    void simulateCollisionBatch(
-        GJBaseGameLayer* layer,
-        PlayerObject* player,
-        gd::vector<GameObject*>* objects,
-        int objectCount,
-        float dt
-    );
+    void simulateCollisionBatch(GJBaseGameLayer* layer,
+                                PlayerObject* player,
+                                gd::vector<GameObject*>* objects,
+                                int objectCount,
+                                float dt);
     bool handleActivationCheck(PlayerObject* player, EffectGameObject* object);
     void handleTouchedTrigger(PlayerObject* player, EffectGameObject* object);
 
@@ -189,7 +187,10 @@ private:
     static void applyPlayerState(PlayerObject* player, PlayerStateCapsule const& state);
 
     void rebuildPreview(PlayLayer* playLayer);
-    void traceInputPath(PlayLayer* playLayer, PlayerObject* previewPlayer, PlayerObject* sourcePlayer, bool holdingInput);
+    void traceInputPath(PlayLayer* playLayer,
+                        PlayerObject* previewPlayer,
+                        PlayerObject* sourcePlayer,
+                        bool holdingInput);
     void drawPredictionBounds(PlayerObject* player);
     void drawSurvivalIndicator(PlayerObject* player, bool isSecondPlayer);
     void recalculateOverlapColors();

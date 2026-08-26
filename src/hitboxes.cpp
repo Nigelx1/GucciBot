@@ -12,43 +12,38 @@
 using namespace cocos2d;
 
 namespace {
-    constexpr ccColor4F kSolidColor       = { 0.00f, 0.25f, 1.00f, 1.00f };
-    constexpr ccColor4F kDangerColor      = { 1.00f, 0.00f, 0.00f, 1.00f };
-    constexpr ccColor4F kPassableColor    = { 0.00f, 1.00f, 1.00f, 1.00f };
-    constexpr ccColor4F kInteractColor    = { 0.00f, 1.00f, 0.00f, 1.00f };
-    constexpr ccColor4F kPlayerColor      = { 1.00f, 0.00f, 0.00f, 1.00f };
-    constexpr ccColor4F kPlayerInnerColor = { 0.00f, 0.25f, 1.00f, 1.00f };
-    constexpr ccColor4F kPlayerAreaColor  = { 0.55f, 0.00f, 0.00f, 1.00f };
-    constexpr ccColor4F kCoinColor        = { 0.00f, 1.00f, 0.00f, 1.00f };
-    constexpr ccColor4F kSlopeColor       = { 0.00f, 0.25f, 1.00f, 1.00f };
+    constexpr ccColor4F kSolidColor = {0.00f, 0.25f, 1.00f, 1.00f};
+    constexpr ccColor4F kDangerColor = {1.00f, 0.00f, 0.00f, 1.00f};
+    constexpr ccColor4F kPassableColor = {0.00f, 1.00f, 1.00f, 1.00f};
+    constexpr ccColor4F kInteractColor = {0.00f, 1.00f, 0.00f, 1.00f};
+    constexpr ccColor4F kPlayerColor = {1.00f, 0.00f, 0.00f, 1.00f};
+    constexpr ccColor4F kPlayerInnerColor = {0.00f, 0.25f, 1.00f, 1.00f};
+    constexpr ccColor4F kPlayerAreaColor = {0.55f, 0.00f, 0.00f, 1.00f};
+    constexpr ccColor4F kCoinColor = {0.00f, 1.00f, 0.00f, 1.00f};
+    constexpr ccColor4F kSlopeColor = {0.00f, 0.25f, 1.00f, 1.00f};
     constexpr float kBorderWidth = 0.25f;
     constexpr unsigned int kCircleSegments = 28;
 
     ccColor4F transparentFill() {
-        return { 0.0f, 0.0f, 0.0f, 0.0f };
+        return {0.0f, 0.0f, 0.0f, 0.0f};
     }
 
     struct ShapeDescriptor {
-        enum class Kind {
-            Rectangle,
-            Triangle,
-            OrientedQuad,
-            Circle
-        };
+        enum class Kind { Rectangle, Triangle, OrientedQuad, Circle };
 
         Kind kind = Kind::Rectangle;
-        std::array<CCPoint, 4> points {};
+        std::array<CCPoint, 4> points{};
         size_t pointCount = 0;
-        CCRect rect {};
-        CCPoint center {};
+        CCRect rect{};
+        CCPoint center{};
         float radius = 0.0f;
-        ccColor4F fill {};
-        ccColor4F border {};
+        ccColor4F fill{};
+        ccColor4F border{};
     };
 
     struct PlayerHitboxSample {
-        CCRect outer {};
-        CCRect inner {};
+        CCRect outer{};
+        CCRect inner{};
         bool subtick = false;
     };
 
@@ -95,7 +90,8 @@ namespace {
 
     class OverlayPainter {
     public:
-        explicit OverlayPainter(CCDrawNode* drawNode) : m_drawNode(drawNode) {}
+        explicit OverlayPainter(CCDrawNode* drawNode)
+            : m_drawNode(drawNode) {}
 
         void clear() {
             if (m_drawNode) {
@@ -110,40 +106,36 @@ namespace {
 
             for (auto const& shape : shapes) {
                 switch (shape.kind) {
-                    case ShapeDescriptor::Kind::Rectangle: {
-                        std::array<CCPoint, 4> corners = {
-                            CCPoint(shape.rect.getMinX(), shape.rect.getMinY()),
-                            CCPoint(shape.rect.getMinX(), shape.rect.getMaxY()),
-                            CCPoint(shape.rect.getMaxX(), shape.rect.getMaxY()),
-                            CCPoint(shape.rect.getMaxX(), shape.rect.getMinY())
-                        };
-                        m_drawNode->drawPolygon(corners.data(), corners.size(), shape.fill, kBorderWidth, shape.border);
-                        break;
-                    }
+                case ShapeDescriptor::Kind::Rectangle: {
+                    std::array<CCPoint, 4> corners = {
+                        CCPoint(shape.rect.getMinX(), shape.rect.getMinY()),
+                        CCPoint(shape.rect.getMinX(), shape.rect.getMaxY()),
+                        CCPoint(shape.rect.getMaxX(), shape.rect.getMaxY()),
+                        CCPoint(shape.rect.getMaxX(), shape.rect.getMinY())};
+                    m_drawNode->drawPolygon(
+                        corners.data(), corners.size(), shape.fill, kBorderWidth, shape.border);
+                    break;
+                }
 
-                    case ShapeDescriptor::Kind::Triangle:
-                    case ShapeDescriptor::Kind::OrientedQuad: {
-                        auto polygon = shape.points;
-                        m_drawNode->drawPolygon(
-                            polygon.data(),
-                            static_cast<unsigned int>(shape.pointCount),
-                            shape.fill,
-                            kBorderWidth,
-                            shape.border
-                        );
-                        break;
-                    }
+                case ShapeDescriptor::Kind::Triangle:
+                case ShapeDescriptor::Kind::OrientedQuad: {
+                    auto polygon = shape.points;
+                    m_drawNode->drawPolygon(polygon.data(),
+                                            static_cast<unsigned int>(shape.pointCount),
+                                            shape.fill,
+                                            kBorderWidth,
+                                            shape.border);
+                    break;
+                }
 
-                    case ShapeDescriptor::Kind::Circle:
-                        m_drawNode->drawCircle(
-                            shape.center,
-                            shape.radius,
-                            shape.fill,
-                            kBorderWidth,
-                            shape.border,
-                            kCircleSegments
-                        );
-                        break;
+                case ShapeDescriptor::Kind::Circle:
+                    m_drawNode->drawCircle(shape.center,
+                                           shape.radius,
+                                           shape.fill,
+                                           kBorderWidth,
+                                           shape.border,
+                                           kCircleSegments);
+                    break;
                 }
             }
         }
@@ -154,7 +146,8 @@ namespace {
 
     class VisibleObjectSnapshot {
     public:
-        static VisibleObjectSnapshot capture(GJBaseGameLayer* layer, bool focusKiller, GameObject* killerObject) {
+        static VisibleObjectSnapshot
+        capture(GJBaseGameLayer* layer, bool focusKiller, GameObject* killerObject) {
             VisibleObjectSnapshot snapshot;
             if (!layer) {
                 return snapshot;
@@ -165,20 +158,25 @@ namespace {
                 return snapshot;
             }
 
-            int sectionCount = layer->m_sections.empty() ? -1 : static_cast<int>(layer->m_sections.size());
+            int sectionCount =
+                layer->m_sections.empty() ? -1 : static_cast<int>(layer->m_sections.size());
             int startCol = std::min(layer->m_leftSectionIndex, layer->m_rightSectionIndex);
             int endCol = std::max(layer->m_leftSectionIndex, layer->m_rightSectionIndex);
             int startRow = std::min(layer->m_bottomSectionIndex, layer->m_topSectionIndex);
             int endRow = std::max(layer->m_bottomSectionIndex, layer->m_topSectionIndex);
 
-            for (int columnIndex = std::max(0, startCol); columnIndex <= endCol && columnIndex < sectionCount; ++columnIndex) {
+            for (int columnIndex = std::max(0, startCol);
+                 columnIndex <= endCol && columnIndex < sectionCount;
+                 ++columnIndex) {
                 auto* column = layer->m_sections[columnIndex];
                 if (!column) {
                     continue;
                 }
 
                 int cellCount = static_cast<int>(column->size());
-                for (int rowIndex = std::max(0, startRow); rowIndex <= endRow && rowIndex < cellCount; ++rowIndex) {
+                for (int rowIndex = std::max(0, startRow);
+                     rowIndex <= endRow && rowIndex < cellCount;
+                     ++rowIndex) {
                     auto* cell = column->at(rowIndex);
                     if (!cell) {
                         continue;
@@ -234,7 +232,8 @@ namespace {
             }
         }
 
-        static void appendPlayerShapes(std::deque<PlayerHitboxSample> const& entries, std::vector<ShapeDescriptor>& out) {
+        static void appendPlayerShapes(std::deque<PlayerHitboxSample> const& entries,
+                                       std::vector<ShapeDescriptor>& out) {
             for (auto const& sample : entries) {
                 auto outer = makeRectangle(sample.outer, kPlayerColor);
                 auto inner = makeRectangle(sample.inner, kPlayerInnerColor);
@@ -254,11 +253,8 @@ namespace {
                 return;
             }
 
-            m_entries[slot].push_back({
-                player->getObjectRect(),
-                player->getObjectRect(0.25f, 0.25f),
-                subtick
-            });
+            m_entries[slot].push_back(
+                {player->getObjectRect(), player->getObjectRect(0.25f, 0.25f), subtick});
             trim(m_entries[slot], limit);
         }
 
@@ -267,7 +263,8 @@ namespace {
 
     class ShapeExtractor {
     public:
-        explicit ShapeExtractor(GJBaseGameLayer* layer) : m_layer(layer) {}
+        explicit ShapeExtractor(GJBaseGameLayer* layer)
+            : m_layer(layer) {}
 
         std::vector<ShapeDescriptor> collect(VisibleObjectSnapshot const& snapshot) const {
             std::vector<ShapeDescriptor> shapes;
@@ -314,96 +311,100 @@ namespace {
                 return;
             }
 
-            if (object->m_objectType == GameObjectType::Decoration || !object->m_isActivated || object->m_isGroupDisabled) {
+            if (object->m_objectType == GameObjectType::Decoration || !object->m_isActivated ||
+                object->m_isGroupDisabled) {
                 return;
             }
 
-            if (object == static_cast<GameObject*>(m_layer->m_player1) || object == static_cast<GameObject*>(m_layer->m_player2)) {
+            if (object == static_cast<GameObject*>(m_layer->m_player1) ||
+                object == static_cast<GameObject*>(m_layer->m_player2)) {
                 return;
             }
 
             switch (object->m_objectType) {
-                case GameObjectType::Solid: {
-                    out.push_back(makeRectangle(object->getObjectRect(), object->m_isPassable ? kPassableColor : kSolidColor));
+            case GameObjectType::Solid: {
+                out.push_back(makeRectangle(object->getObjectRect(),
+                                            object->m_isPassable ? kPassableColor : kSolidColor));
+                return;
+            }
+
+            case GameObjectType::Slope: {
+                auto rect = object->getObjectRect();
+                std::array<CCPoint, 3> triangle = {CCPoint(rect.getMinX(), rect.getMinY()),
+                                                   CCPoint(rect.getMinX(), rect.getMaxY()),
+                                                   CCPoint(rect.getMaxX(), rect.getMinY())};
+                CCPoint topRight(rect.getMaxX(), rect.getMaxY());
+                switch (object->m_slopeDirection) {
+                case 0:
+                case 7:
+                    triangle[1] = topRight;
+                    break;
+                case 1:
+                case 5:
+                    triangle[0] = topRight;
+                    break;
+                case 3:
+                case 6:
+                    triangle[2] = topRight;
+                    break;
+                default:
+                    break;
+                }
+                out.push_back(
+                    makeTriangle(triangle, object->m_isPassable ? kPassableColor : kSlopeColor));
+                return;
+            }
+
+            case GameObjectType::Hazard:
+            case GameObjectType::AnimatedHazard: {
+                if (object == m_layer->m_anticheatSpike) {
                     return;
                 }
 
-                case GameObjectType::Slope: {
-                    auto rect = object->getObjectRect();
-                    std::array<CCPoint, 3> triangle = {
-                        CCPoint(rect.getMinX(), rect.getMinY()),
-                        CCPoint(rect.getMinX(), rect.getMaxY()),
-                        CCPoint(rect.getMaxX(), rect.getMinY())
-                    };
-                    CCPoint topRight(rect.getMaxX(), rect.getMaxY());
-                    switch (object->m_slopeDirection) {
-                        case 0:
-                        case 7:
-                            triangle[1] = topRight;
-                            break;
-                        case 1:
-                        case 5:
-                            triangle[0] = topRight;
-                            break;
-                        case 3:
-                        case 6:
-                            triangle[2] = topRight;
-                            break;
-                        default:
-                            break;
-                    }
-                    out.push_back(makeTriangle(triangle, object->m_isPassable ? kPassableColor : kSlopeColor));
+                float radius = object->getObjectRadius();
+                if (radius > 0.0f) {
+                    out.push_back(makeCircle(object->getPosition(), radius, kDangerColor));
                     return;
                 }
 
-                case GameObjectType::Hazard:
-                case GameObjectType::AnimatedHazard: {
-                    if (object == m_layer->m_anticheatSpike) {
-                        return;
-                    }
-
-                    float radius = object->getObjectRadius();
-                    if (radius > 0.0f) {
-                        out.push_back(makeCircle(object->getPosition(), radius, kDangerColor));
-                        return;
-                    }
-
-                    if (auto* orientedBox = m_layer->m_isEditor ? object->getOrientedBox() : object->m_orientedBox) {
-                        out.push_back(makeOrientedQuad(orientedBox->m_corners, kDangerColor));
-                        return;
-                    }
-
-                    auto dirtyRect = object->m_isObjectRectDirty;
-                    auto boxOffsetCalculated = object->m_boxOffsetCalculated;
-                    out.push_back(makeRectangle(object->getObjectRect(), kDangerColor));
-                    object->m_isObjectRectDirty = dirtyRect;
-                    object->m_boxOffsetCalculated = boxOffsetCalculated;
+                if (auto* orientedBox =
+                        m_layer->m_isEditor ? object->getOrientedBox() : object->m_orientedBox) {
+                    out.push_back(makeOrientedQuad(orientedBox->m_corners, kDangerColor));
                     return;
                 }
 
-                case GameObjectType::SecretCoin:
-                case GameObjectType::UserCoin:
-                case GameObjectType::Collectible:
-                    out.push_back(makeRectangle(object->getObjectRect(), kCoinColor));
-                    return;
+                auto dirtyRect = object->m_isObjectRectDirty;
+                auto boxOffsetCalculated = object->m_boxOffsetCalculated;
+                out.push_back(makeRectangle(object->getObjectRect(), kDangerColor));
+                object->m_isObjectRectDirty = dirtyRect;
+                object->m_boxOffsetCalculated = boxOffsetCalculated;
+                return;
+            }
 
-                case GameObjectType::CollisionObject:
-                    return;
+            case GameObjectType::SecretCoin:
+            case GameObjectType::UserCoin:
+            case GameObjectType::Collectible:
+                out.push_back(makeRectangle(object->getObjectRect(), kCoinColor));
+                return;
 
-                case GameObjectType::Modifier:
-                    if (!isSpeedModifier(object)) {
-                        return;
-                    }
-                    [[fallthrough]];
+            case GameObjectType::CollisionObject:
+                return;
 
-                default: {
-                    if (auto* orientedBox = m_layer->m_isEditor ? object->getOrientedBox() : object->m_orientedBox) {
-                        out.push_back(makeOrientedQuad(orientedBox->m_corners, kInteractColor));
-                    } else {
-                        out.push_back(makeRectangle(object->getObjectRect(), kInteractColor));
-                    }
+            case GameObjectType::Modifier:
+                if (!isSpeedModifier(object)) {
                     return;
                 }
+                [[fallthrough]];
+
+            default: {
+                if (auto* orientedBox =
+                        m_layer->m_isEditor ? object->getOrientedBox() : object->m_orientedBox) {
+                    out.push_back(makeOrientedQuad(orientedBox->m_corners, kInteractColor));
+                } else {
+                    out.push_back(makeRectangle(object->getObjectRect(), kInteractColor));
+                }
+                return;
+            }
             }
         }
 
@@ -431,7 +432,7 @@ namespace {
             }
 
             auto* node = CCDrawNode::create();
-            node->setBlendFunc({ GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA });
+            node->setBlendFunc({GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA});
             node->m_bUseArea = false;
             parent->addChild(node, 1402);
             m_overlayNode = node;
@@ -481,7 +482,8 @@ namespace {
                 return;
             }
 
-            auto snapshot = VisibleObjectSnapshot::capture(layer, engine->hitboxOnDeath && m_dead, m_killerObject);
+            auto snapshot = VisibleObjectSnapshot::capture(
+                layer, engine->hitboxOnDeath && m_dead, m_killerObject);
             ShapeExtractor extractor(layer);
             auto shapes = extractor.collect(snapshot);
 
@@ -498,12 +500,13 @@ namespace {
         bool m_dead = false;
         GameObject* m_killerObject = nullptr;
     };
-}
+} // namespace
 
 class $modify(HitboxBGL, GJBaseGameLayer) {
     void processCommands(float dt, bool isHalfTick, bool isLastTick) {
         GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
-        if (!PlayLayer::get()) return;
+        if (!PlayLayer::get())
+            return;
         HitboxOverlayState::get().captureTrail(this, isHalfTick);
     }
 };

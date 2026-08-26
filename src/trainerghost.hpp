@@ -3,11 +3,11 @@
 class PlayLayer;
 
 namespace gbtr {
-                                bool isTrainerLevel(PlayLayer* pl);
+    bool isTrainerLevel(PlayLayer* pl);
 
     void renderTrainerGhost(PlayLayer* pl);
-                void notifyTrainerAttemptEnded();
+    void notifyTrainerAttemptEnded();
 
     void syncTrainerClickBarMusic(bool active, bool paused, double posSec);
     void stopTrainerClickBarMusic();
-}
+} // namespace gbtr

@@ -11,16 +11,14 @@ using namespace geode::prelude;
 
 #include <zlib.h>
 
-template <typename T>
-static void writeLE(std::vector<uint8_t>& buffer, T value) {
+template <typename T> static void writeLE(std::vector<uint8_t>& buffer, T value) {
     static_assert(std::is_trivially_copyable_v<T>);
     size_t position = buffer.size();
     buffer.resize(position + sizeof(T));
     std::memcpy(buffer.data() + position, &value, sizeof(T));
 }
 
-template <typename T>
-static T readLE(std::vector<uint8_t> const& data, size_t& position) {
+template <typename T> static T readLE(std::vector<uint8_t> const& data, size_t& position) {
     static_assert(std::is_trivially_copyable_v<T>);
     if (position + sizeof(T) > data.size()) {
         throw std::runtime_error("BRR: unexpected end of data");
@@ -79,7 +77,11 @@ static uint32_t readVarint(std::vector<uint8_t> const& data, size_t& position) {
 static std::vector<uint8_t> zlibCompress(std::vector<uint8_t> const& input) {
     uLongf bound = compressBound(static_cast<uLong>(input.size()));
     std::vector<uint8_t> output(bound);
-    int result = compress2(output.data(), &bound, input.data(), static_cast<uLong>(input.size()), Z_DEFAULT_COMPRESSION);
+    int result = compress2(output.data(),
+                           &bound,
+                           input.data(),
+                           static_cast<uLong>(input.size()),
+                           Z_DEFAULT_COMPRESSION);
     if (result != Z_OK) {
         throw std::runtime_error("BRR: zlib compress failed");
     }
@@ -87,15 +89,14 @@ static std::vector<uint8_t> zlibCompress(std::vector<uint8_t> const& input) {
     return output;
 }
 
-static std::vector<uint8_t> zlibDecompress(
-    std::vector<uint8_t> const& input,
-    size_t offset,
-    size_t length,
-    uint32_t uncompressedSize
-) {
+static std::vector<uint8_t> zlibDecompress(std::vector<uint8_t> const& input,
+                                           size_t offset,
+                                           size_t length,
+                                           uint32_t uncompressedSize) {
     std::vector<uint8_t> output(uncompressedSize);
     uLongf destinationLength = uncompressedSize;
-    int result = uncompress(output.data(), &destinationLength, input.data() + offset, static_cast<uLong>(length));
+    int result = uncompress(
+        output.data(), &destinationLength, input.data() + offset, static_cast<uLong>(length));
     if (result != Z_OK) {
         throw std::runtime_error("BRR: zlib decompress failed");
     }
@@ -114,7 +115,7 @@ static uint8_t packHoldMask(std::array<bool, 4> const& holds) {
 }
 
 static std::array<bool, 4> unpackHoldMask(uint8_t mask) {
-    std::array<bool, 4> holds = { false, false, false, false };
+    std::array<bool, 4> holds = {false, false, false, false};
     for (size_t index = 0; index < holds.size(); ++index) {
         holds[index] = (mask & static_cast<uint8_t>(1u << index)) != 0;
     }
@@ -125,7 +126,8 @@ static bool usesTimedAccuracy(AccuracyMode mode) {
     return mode == AccuracyMode::CBS || mode == AccuracyMode::CBF;
 }
 
-static PlayerStateBundle capturePlayerState(PlayerObject* player, bool isPlatformer, bool isDual, bool isTwoPlayer) {
+static PlayerStateBundle
+capturePlayerState(PlayerObject* player, bool isPlatformer, bool isDual, bool isTwoPlayer) {
     PlayerStateBundle state;
     auto position = player->getPosition();
     state.motion.position = position;
@@ -157,13 +159,20 @@ static void writeAnchorPlayerV3(std::vector<uint8_t>& payload, PlayerStateBundle
     writeLE<float>(payload, static_cast<float>(state.environment.gravity));
 
     uint8_t stateFlags = 0;
-    if (state.flags.upsideDown) stateFlags |= 1 << 0;
-    if (state.flags.holdingLeft) stateFlags |= 1 << 1;
-    if (state.flags.holdingRight) stateFlags |= 1 << 2;
-    if (state.flags.platformer) stateFlags |= 1 << 3;
-    if (state.flags.dead) stateFlags |= 1 << 4;
-    if (state.environment.dualContext) stateFlags |= 1 << 5;
-    if (state.environment.twoPlayerContext) stateFlags |= 1 << 6;
+    if (state.flags.upsideDown)
+        stateFlags |= 1 << 0;
+    if (state.flags.holdingLeft)
+        stateFlags |= 1 << 1;
+    if (state.flags.holdingRight)
+        stateFlags |= 1 << 2;
+    if (state.flags.platformer)
+        stateFlags |= 1 << 3;
+    if (state.flags.dead)
+        stateFlags |= 1 << 4;
+    if (state.environment.dualContext)
+        stateFlags |= 1 << 5;
+    if (state.environment.twoPlayerContext)
+        stateFlags |= 1 << 6;
     writeLE<uint8_t>(payload, stateFlags);
     writeLE<uint8_t>(payload, packHoldMask(state.flags.buttonHolds));
 }
@@ -200,7 +209,8 @@ struct LegacyTTRPlayerSnapshot {
     uint8_t flags = 0;
 };
 
-static LegacyTTRPlayerSnapshot readPlayerSnapshotV1(std::vector<uint8_t> const& data, size_t& position) {
+static LegacyTTRPlayerSnapshot readPlayerSnapshotV1(std::vector<uint8_t> const& data,
+                                                    size_t& position) {
     LegacyTTRPlayerSnapshot snapshot;
     snapshot.x = readLE<double>(data, position);
     snapshot.y = readLE<double>(data, position);
@@ -212,7 +222,8 @@ static LegacyTTRPlayerSnapshot readPlayerSnapshotV1(std::vector<uint8_t> const& 
     return snapshot;
 }
 
-static LegacyTTRPlayerSnapshot readPlayerSnapshotV2(std::vector<uint8_t> const& data, size_t& position) {
+static LegacyTTRPlayerSnapshot readPlayerSnapshotV2(std::vector<uint8_t> const& data,
+                                                    size_t& position) {
     LegacyTTRPlayerSnapshot snapshot;
     snapshot.x = static_cast<double>(readLE<float>(data, position));
     snapshot.y = static_cast<double>(readLE<float>(data, position));
@@ -224,12 +235,13 @@ static LegacyTTRPlayerSnapshot readPlayerSnapshotV2(std::vector<uint8_t> const& 
     return snapshot;
 }
 
-static PlayerStateBundle convertLegacySnapshot(LegacyTTRPlayerSnapshot const& snapshot, bool isPlatformer, bool isDual, bool isTwoPlayer) {
+static PlayerStateBundle convertLegacySnapshot(LegacyTTRPlayerSnapshot const& snapshot,
+                                               bool isPlatformer,
+                                               bool isDual,
+                                               bool isTwoPlayer) {
     PlayerStateBundle state;
-    state.motion.position = cocos2d::CCPoint{
-        static_cast<float>(snapshot.x),
-        static_cast<float>(snapshot.y)
-    };
+    state.motion.position =
+        cocos2d::CCPoint{static_cast<float>(snapshot.x), static_cast<float>(snapshot.y)};
     state.motion.verticalVelocity = snapshot.yVelocity;
     state.motion.preSlopeVerticalVelocity = snapshot.yVelocityBeforeSlope;
     state.motion.horizontalVelocity = isPlatformer ? snapshot.xVelocity : 0.0;
@@ -250,13 +262,20 @@ static void writeHeader(std::vector<uint8_t>& buffer, BRRMacro const& macro) {
     writeLE<uint16_t>(buffer, BRR_FORMAT_VERSION);
 
     uint32_t flags = 0;
-    if (macro.accuracyMode == AccuracyMode::CBS) flags |= BRR_FLAG_ACCURACY_CBS;
-    if (macro.accuracyMode == AccuracyMode::CBF) flags |= BRR_FLAG_ACCURACY_CBF;
-    if (macro.recordedFromStartPos) flags |= BRR_FLAG_FROM_START_POS;
-    if (macro.platformerMode) flags |= BRR_FLAG_PLATFORMER;
-    if (macro.twoPlayerMode) flags |= BRR_FLAG_TWO_PLAYER;
-    if (macro.rngLocked) flags |= BRR_FLAG_RNG_LOCKED;
-    if (!macro.deathFrames.empty()) flags |= BRR_FLAG_HAS_DEATH_FRAMES;
+    if (macro.accuracyMode == AccuracyMode::CBS)
+        flags |= BRR_FLAG_ACCURACY_CBS;
+    if (macro.accuracyMode == AccuracyMode::CBF)
+        flags |= BRR_FLAG_ACCURACY_CBF;
+    if (macro.recordedFromStartPos)
+        flags |= BRR_FLAG_FROM_START_POS;
+    if (macro.platformerMode)
+        flags |= BRR_FLAG_PLATFORMER;
+    if (macro.twoPlayerMode)
+        flags |= BRR_FLAG_TWO_PLAYER;
+    if (macro.rngLocked)
+        flags |= BRR_FLAG_RNG_LOCKED;
+    if (!macro.deathFrames.empty())
+        flags |= BRR_FLAG_HAS_DEATH_FRAMES;
     writeLE<uint32_t>(buffer, flags);
 
     size_t headerSizePosition = buffer.size();
@@ -288,7 +307,8 @@ void BRRMacro::recordAction(int tick, int button, bool player2, bool pressed, fl
     inputs.push_back(input);
 }
 
-void BRRMacro::recordAnchor(int tick, PlayerObject* p1, PlayerObject* p2, bool isPlatformer, bool isDual) {
+void BRRMacro::recordAnchor(
+    int tick, PlayerObject* p1, PlayerObject* p2, bool isPlatformer, bool isDual) {
     PlaybackAnchor anchor;
     anchor.tick = tick;
     anchor.hasPlayer2 = isDual;
@@ -331,7 +351,8 @@ std::vector<uint8_t> BRRMacro::serialize() const {
     writeLE<uint32_t>(payload, static_cast<uint32_t>(inputs.size()));
     int32_t previousInputTick = 0;
     for (auto const& input : inputs) {
-                if (input.tick < previousInputTick) previousInputTick = 0;
+        if (input.tick < previousInputTick)
+            previousInputTick = 0;
         writeVarint(payload, static_cast<uint32_t>(input.tick - previousInputTick));
         previousInputTick = input.tick;
         writeLE<uint8_t>(payload, input.actionType);
@@ -348,8 +369,10 @@ std::vector<uint8_t> BRRMacro::serialize() const {
         previousAnchorTick = anchor.tick;
 
         uint8_t anchorFlags = 0;
-        if (anchor.hasPlayer2) anchorFlags |= 1 << 0;
-        if (anchor.rng.fastRandState != 0) anchorFlags |= 1 << 1;
+        if (anchor.hasPlayer2)
+            anchorFlags |= 1 << 0;
+        if (anchor.rng.fastRandState != 0)
+            anchorFlags |= 1 << 1;
         writeLE<uint8_t>(payload, anchorFlags);
         writeAnchorPlayerV3(payload, anchor.player1);
         writeLE<uint8_t>(payload, anchor.player1LatchMask);
@@ -369,12 +392,12 @@ std::vector<uint8_t> BRRMacro::serialize() const {
         writeLE<int32_t>(payload, checkpoint.priorTick);
     }
 
-        if (!deathFrames.empty()) {
+    if (!deathFrames.empty()) {
         writeLE<uint32_t>(payload, static_cast<uint32_t>(deathFrames.size()));
         for (auto df : deathFrames) {
             writeLE<int32_t>(payload, df);
         }
-                writeLE<uint32_t>(payload, static_cast<uint32_t>(attemptStartTicks.size()));
+        writeLE<uint32_t>(payload, static_cast<uint32_t>(attemptStartTicks.size()));
         for (auto t : attemptStartTicks) {
             writeLE<int32_t>(payload, t);
         }
@@ -386,12 +409,10 @@ std::vector<uint8_t> BRRMacro::serialize() const {
     return output;
 }
 
-static bool readSharedMetadata(
-    std::vector<uint8_t> const& data,
-    size_t& position,
-    uint32_t headerSize,
-    BRRMacro& macro
-) {
+static bool readSharedMetadata(std::vector<uint8_t> const& data,
+                               size_t& position,
+                               uint32_t headerSize,
+                               BRRMacro& macro) {
     try {
         macro.author = readString(data, position);
         macro.name = readString(data, position);
@@ -414,13 +435,11 @@ static bool readSharedMetadata(
     return true;
 }
 
-static BRRMacro* deserializeLegacyV1(
-    std::vector<uint8_t> const& data,
-    size_t position,
-    uint32_t flags,
-    uint32_t headerSize,
-    BRRMacro* macro
-) {
+static BRRMacro* deserializeLegacyV1(std::vector<uint8_t> const& data,
+                                     size_t position,
+                                     uint32_t flags,
+                                     uint32_t headerSize,
+                                     BRRMacro* macro) {
     if (!readSharedMetadata(data, position, headerSize, *macro)) {
         delete macro;
         return nullptr;
@@ -444,18 +463,14 @@ static BRRMacro* deserializeLegacyV1(
             PlaybackAnchor anchor;
             anchor.tick = readLE<int32_t>(data, position);
             anchor.hasPlayer2 = true;
-            anchor.player1 = convertLegacySnapshot(
-                readPlayerSnapshotV1(data, position),
-                macro->platformerMode,
-                true,
-                macro->twoPlayerMode
-            );
-            anchor.player2 = convertLegacySnapshot(
-                readPlayerSnapshotV1(data, position),
-                macro->platformerMode,
-                true,
-                macro->twoPlayerMode
-            );
+            anchor.player1 = convertLegacySnapshot(readPlayerSnapshotV1(data, position),
+                                                   macro->platformerMode,
+                                                   true,
+                                                   macro->twoPlayerMode);
+            anchor.player2 = convertLegacySnapshot(readPlayerSnapshotV1(data, position),
+                                                   macro->platformerMode,
+                                                   true,
+                                                   macro->twoPlayerMode);
             macro->anchors.push_back(anchor);
         }
 
@@ -478,14 +493,12 @@ static BRRMacro* deserializeLegacyV1(
     return macro;
 }
 
-static BRRMacro* deserializeCompressedPayload(
-    std::vector<uint8_t> const& data,
-    size_t position,
-    uint16_t version,
-    uint32_t flags,
-    uint32_t headerSize,
-    BRRMacro* macro
-) {
+static BRRMacro* deserializeCompressedPayload(std::vector<uint8_t> const& data,
+                                              size_t position,
+                                              uint16_t version,
+                                              uint32_t flags,
+                                              uint32_t headerSize,
+                                              BRRMacro* macro) {
     if (!readSharedMetadata(data, position, headerSize, *macro)) {
         delete macro;
         return nullptr;
@@ -504,7 +517,8 @@ static BRRMacro* deserializeCompressedPayload(
         for (uint32_t index = 0; index < inputCount; ++index) {
             BRRInput input;
             int32_t delta = static_cast<int32_t>(readVarint(payload, payloadPosition));
-            if (previousInputTick + delta < 0) previousInputTick = 0;
+            if (previousInputTick + delta < 0)
+                previousInputTick = 0;
             previousInputTick += delta;
             input.tick = previousInputTick;
             input.actionType = readLE<uint8_t>(payload, payloadPosition);
@@ -531,26 +545,25 @@ static BRRMacro* deserializeCompressedPayload(
                     anchor.player2LatchMask = readLE<uint8_t>(payload, payloadPosition);
                 }
                 if ((anchorFlags & (1 << 1)) != 0) {
-                    anchor.rng.fastRandState = static_cast<uintptr_t>(readLE<uint64_t>(payload, payloadPosition));
+                    anchor.rng.fastRandState =
+                        static_cast<uintptr_t>(readLE<uint64_t>(payload, payloadPosition));
                 }
                 anchor.rng.locked = macro->rngLocked;
                 anchor.rng.seed = macro->rngSeed;
             } else {
                 uint8_t anchorFlags = readLE<uint8_t>(payload, payloadPosition);
                 anchor.hasPlayer2 = (anchorFlags & 0x01) != 0;
-                anchor.player1 = convertLegacySnapshot(
-                    readPlayerSnapshotV2(payload, payloadPosition),
-                    macro->platformerMode,
-                    anchor.hasPlayer2,
-                    macro->twoPlayerMode
-                );
+                anchor.player1 =
+                    convertLegacySnapshot(readPlayerSnapshotV2(payload, payloadPosition),
+                                          macro->platformerMode,
+                                          anchor.hasPlayer2,
+                                          macro->twoPlayerMode);
                 if (anchor.hasPlayer2) {
-                    anchor.player2 = convertLegacySnapshot(
-                        readPlayerSnapshotV2(payload, payloadPosition),
-                        macro->platformerMode,
-                        anchor.hasPlayer2,
-                        macro->twoPlayerMode
-                    );
+                    anchor.player2 =
+                        convertLegacySnapshot(readPlayerSnapshotV2(payload, payloadPosition),
+                                              macro->platformerMode,
+                                              anchor.hasPlayer2,
+                                              macro->twoPlayerMode);
                 }
             }
 
@@ -568,20 +581,19 @@ static BRRMacro* deserializeCompressedPayload(
                 macro->checkpoints.push_back(checkpoint);
             }
         }
-                if ((flags & BRR_FLAG_HAS_DEATH_FRAMES) != 0 &&
-            payloadPosition + 4 <= payload.size()) {
+        if ((flags & BRR_FLAG_HAS_DEATH_FRAMES) != 0 && payloadPosition + 4 <= payload.size()) {
             uint32_t dfCount = readLE<uint32_t>(payload, payloadPosition);
             macro->deathFrames.reserve(dfCount);
-            for (uint32_t i = 0; i < dfCount &&
-                 payloadPosition + 4 <= payload.size(); ++i) {
+            for (uint32_t i = 0; i < dfCount && payloadPosition + 4 <= payload.size(); ++i) {
                 macro->deathFrames.push_back(readLE<int32_t>(payload, payloadPosition));
             }
-                        if (payloadPosition + 4 <= payload.size()) {
+            if (payloadPosition + 4 <= payload.size()) {
                 uint32_t startCount = readLE<uint32_t>(payload, payloadPosition);
                 if (startCount <= 100) {
-                    for (uint32_t i = 0; i < startCount &&
-                         payloadPosition + 4 <= payload.size(); ++i) {
-                        macro->attemptStartTicks.push_back(readLE<int32_t>(payload, payloadPosition));
+                    for (uint32_t i = 0; i < startCount && payloadPosition + 4 <= payload.size();
+                         ++i) {
+                        macro->attemptStartTicks.push_back(
+                            readLE<int32_t>(payload, payloadPosition));
                     }
                 }
             }
@@ -606,7 +618,8 @@ BRRMacro* BRRMacro::deserialize(std::vector<uint8_t> const& data) {
     size_t position = 4;
     uint16_t version = readLE<uint16_t>(data, position);
     if (version > BRR_FORMAT_VERSION) {
-        log::warn("[BRR] Format version {} is newer than supported ({})", version, BRR_FORMAT_VERSION);
+        log::warn(
+            "[BRR] Format version {} is newer than supported ({})", version, BRR_FORMAT_VERSION);
         return nullptr;
     }
 
@@ -635,24 +648,39 @@ BRRMacro* BRRMacro::deserialize(std::vector<uint8_t> const& data) {
 
 static std::string getThemeExtension() {
     auto* ui = MenuInterface::get();
-    if (!ui) return ".brrr";
-    if (auto* c = ui->getActiveCustomTheme()) return c->extension;
+    if (!ui)
+        return ".brrr";
+    if (auto* c = ui->getActiveCustomTheme())
+        return c->extension;
     switch (ui->activeTheme) {
-        case THEME_TOOSII:
-        case THEME_TOOSII_SYRACUSE:
-        case THEME_TOOSII_SACSTATE: return ".toosii";
-        case THEME_JA:    return ".ja";
-        case THEME_GIDDEY: return ".giddey";
-        case THEME_BAM:    return ".bam";
-        case THEME_SEXYY:  return ".sexyy";
-        case THEME_JUICE:  return ".juice";
-        case THEME_BUTLER: return ".butler";
-        case THEME_SAWEETIE: return ".saweetie";
-        case THEME_MAYBACH:  return ".maybach";
-        case THEME_ROMO:     return ".romo";
-        case THEME_GRIZZLEY: return ".grizzley";
-        case THEME_REDKINGDOM: return ".redkingdom";
-        default:           return ".brrr";
+    case THEME_TOOSII:
+    case THEME_TOOSII_SYRACUSE:
+    case THEME_TOOSII_SACSTATE:
+        return ".toosii";
+    case THEME_JA:
+        return ".ja";
+    case THEME_GIDDEY:
+        return ".giddey";
+    case THEME_BAM:
+        return ".bam";
+    case THEME_SEXYY:
+        return ".sexyy";
+    case THEME_JUICE:
+        return ".juice";
+    case THEME_BUTLER:
+        return ".butler";
+    case THEME_SAWEETIE:
+        return ".saweetie";
+    case THEME_MAYBACH:
+        return ".maybach";
+    case THEME_ROMO:
+        return ".romo";
+    case THEME_GRIZZLEY:
+        return ".grizzley";
+    case THEME_REDKINGDOM:
+        return ".redkingdom";
+    default:
+        return ".brrr";
     }
 }
 
@@ -661,24 +689,41 @@ namespace ReplayStorage {
         return Mod::get()->getSaveDir() / "replays";
     }
     static bool replayNameTaken(std::filesystem::path const& dir, std::string const& candidate) {
-        for (auto ext : { ".brrr", ".toosii", ".ja", ".giddey", ".bam", ".sexyy", ".juice", ".butler", ".saweetie", ".maybach", ".romo", ".grizzley", ".redkingdom" }) {
+        for (auto ext : {".brrr",
+                         ".toosii",
+                         ".ja",
+                         ".giddey",
+                         ".bam",
+                         ".sexyy",
+                         ".juice",
+                         ".butler",
+                         ".saweetie",
+                         ".maybach",
+                         ".romo",
+                         ".grizzley",
+                         ".redkingdom"}) {
             std::error_code ec;
-            if (std::filesystem::exists(dir / (candidate + ext), ec)) return true;
+            if (std::filesystem::exists(dir / (candidate + ext), ec))
+                return true;
         }
         return false;
     }
-    static std::string makeUniqueReplayName(std::string const& wanted, std::string const& persistedName) {
+    static std::string makeUniqueReplayName(std::string const& wanted,
+                                            std::string const& persistedName) {
         std::string base = wanted.empty() ? "macro" : wanted;
-                if (!persistedName.empty() && base == persistedName) return base;
+        if (!persistedName.empty() && base == persistedName)
+            return base;
         auto dir = getReplayDirectoryPath();
-        if (!replayNameTaken(dir, base)) return base;
+        if (!replayNameTaken(dir, base))
+            return base;
         for (int i = 2; i < 1000; ++i) {
             std::string candidate = base + "_" + std::to_string(i);
-            if (!replayNameTaken(dir, candidate)) return candidate;
+            if (!replayNameTaken(dir, candidate))
+                return candidate;
         }
         return base;
     }
-}
+} // namespace ReplayStorage
 
 void BRRMacro::persist() {
     author = GJAccountManager::get()->m_username;
@@ -699,13 +744,11 @@ void BRRMacro::persist() {
     output.write(reinterpret_cast<char const*>(bytes.data()), bytes.size());
     output.close();
 
-    log::info(
-        "[BRR] Saved macro to {} ({} bytes, {} inputs, {} anchors)",
-        (directory / (name + ext)).string(),
-        bytes.size(),
-        inputs.size(),
-        anchors.size()
-    );
+    log::info("[BRR] Saved macro to {} ({} bytes, {} inputs, {} anchors)",
+              (directory / (name + ext)).string(),
+              bytes.size(),
+              inputs.size(),
+              anchors.size());
 }
 
 BRRMacro* BRRMacro::loadFromDisk(std::string const& filename) {
@@ -714,18 +757,36 @@ BRRMacro* BRRMacro::loadFromDisk(std::string const& filename) {
         return nullptr;
     }
 
-        std::filesystem::path path;
-    for (auto& ext : std::initializer_list<const char*>{".brrr", ".toosii", ".ja", ".giddey", ".bam", ".sexyy", ".juice", ".butler", ".saweetie", ".maybach", ".romo", ".grizzley", ".redkingdom"}) {
+    std::filesystem::path path;
+    for (auto& ext : std::initializer_list<const char*>{".brrr",
+                                                        ".toosii",
+                                                        ".ja",
+                                                        ".giddey",
+                                                        ".bam",
+                                                        ".sexyy",
+                                                        ".juice",
+                                                        ".butler",
+                                                        ".saweetie",
+                                                        ".maybach",
+                                                        ".romo",
+                                                        ".grizzley",
+                                                        ".redkingdom"}) {
         auto candidate = directory / (filename + ext);
-        if (std::filesystem::exists(candidate)) { path = candidate; break; }
+        if (std::filesystem::exists(candidate)) {
+            path = candidate;
+            break;
+        }
     }
     if (path.empty()) {
-                auto bare = directory / filename;
-        if (std::filesystem::exists(bare)) path = bare;
-        else return nullptr;
+        auto bare = directory / filename;
+        if (std::filesystem::exists(bare))
+            path = bare;
+        else
+            return nullptr;
     }
     std::ifstream input(path, std::ios::binary);
-    if (!input.is_open()) return nullptr;
+    if (!input.is_open())
+        return nullptr;
 
     input.seekg(0, std::ios::end);
     auto fileSize = input.tellg();
@@ -739,7 +800,10 @@ BRRMacro* BRRMacro::loadFromDisk(std::string const& filename) {
     if (result) {
         result->name = filename;
         result->persistedName = filename;
-        log::info("[BRR] Loaded macro: {} ({} inputs, {} anchors)", filename, result->inputs.size(), result->anchors.size());
+        log::info("[BRR] Loaded macro: {} ({} inputs, {} anchors)",
+                  filename,
+                  result->inputs.size(),
+                  result->anchors.size());
     }
     return result;
 }
@@ -748,13 +812,11 @@ std::vector<MacroAction> BRRMacro::toMacroActions() const {
     std::vector<MacroAction> actions;
     actions.reserve(inputs.size());
     for (auto const& input : inputs) {
-        actions.emplace_back(
-            input.tick,
-            static_cast<int>(input.actionType),
-            input.isPlayer2(),
-            input.isPressed(),
-            input.stepOffset
-        );
+        actions.emplace_back(input.tick,
+                             static_cast<int>(input.actionType),
+                             input.isPlayer2(),
+                             input.isPressed(),
+                             input.stepOffset);
     }
     return actions;
 }

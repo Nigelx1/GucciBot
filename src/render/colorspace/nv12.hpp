@@ -3,7 +3,7 @@
 #include "colorspace.hpp"
 
 class NV12Colorspace : public Colorspace {
-   public:
+public:
     const std::vector<RenderPass> getPasses() override {
         const uintptr_t yPlaneSize = m_alignedWidth * m_alignedHeight;
 
@@ -53,8 +53,13 @@ class NV12Colorspace : public Colorspace {
                 })",
                 .m_readPixels =
                     [this](float x, float y) {
-                        glReadPixels(x, y, m_alignedWidth, m_alignedHeight,
-                                     GL_RED, GL_UNSIGNED_BYTE, nullptr);
+                        glReadPixels(x,
+                                     y,
+                                     m_alignedWidth,
+                                     m_alignedHeight,
+                                     GL_RED,
+                                     GL_UNSIGNED_BYTE,
+                                     nullptr);
                     },
             },
             RenderPass{
@@ -92,8 +97,11 @@ class NV12Colorspace : public Colorspace {
             })",
                 .m_readPixels =
                     [this, yPlaneSize](float x, float y) {
-                        glReadPixels(x, y, m_alignedWidth / 2,
-                                     m_alignedHeight / 2, GL_RG,
+                        glReadPixels(x,
+                                     y,
+                                     m_alignedWidth / 2,
+                                     m_alignedHeight / 2,
+                                     GL_RG,
                                      GL_UNSIGNED_BYTE,
                                      reinterpret_cast<void*>(yPlaneSize));
                     },
@@ -107,8 +115,7 @@ class NV12Colorspace : public Colorspace {
         return yPlaneSize + uvPlaneSize * 2;
     }
 
-    geode::Result<> prepareFrame(AVFrame* frame, uint8_t* data,
-                                 size_t size) override {
+    geode::Result<> prepareFrame(AVFrame* frame, uint8_t* data, size_t size) override {
         if (!frame || !data || size == 0) {
             return geode::Err("Invalid parameters");
         }

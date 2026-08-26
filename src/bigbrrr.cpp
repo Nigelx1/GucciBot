@@ -9,15 +9,12 @@
 
 using namespace geode::prelude;
 
-FMOD_RESULT F_CALLBACK BigBrrrManager::bassDspCallback(FMOD_DSP_STATE*,
-                                                        float* inbuffer,
-                                                        float* outbuffer,
-                                                        unsigned int length,
-                                                        int inchannels, int*) {
+FMOD_RESULT F_CALLBACK BigBrrrManager::bassDspCallback(
+    FMOD_DSP_STATE*, float* inbuffer, float* outbuffer, unsigned int length, int inchannels, int*) {
     unsigned int total = length * (unsigned int)std::max(inchannels, 1);
     std::memcpy(outbuffer, inbuffer, (size_t)total * sizeof(float));
 
-                        static float lpState = 0.f;
+    static float lpState = 0.f;
     const float alpha = 0.06f;
     double sumSq = 0.0;
     for (unsigned int i = 0; i < total; i++) {
@@ -41,24 +38,36 @@ static BotTheme currentTheme() {
 
 double BigBrrrManager::kStartOffsetSec() {
     auto* ui = MenuInterface::get();
-    if (auto* c = ui ? ui->getActiveCustomTheme() : nullptr) return c->dropOffsetSec;
+    if (auto* c = ui ? ui->getActiveCustomTheme() : nullptr)
+        return c->dropOffsetSec;
     switch (currentTheme()) {
-        case THEME_MAYBACH:  return 0.0;
-        case THEME_ROMO:     return 16.0 + 11.0 / 30.0;
-        case THEME_GRIZZLEY: return 90.0 + 4.0 / 30.0;
-        case THEME_REDKINGDOM: return 14.0 + 17.0 / 30.0;
-        default:             return 20.0 + 11.0 / 15.0;
+    case THEME_MAYBACH:
+        return 0.0;
+    case THEME_ROMO:
+        return 16.0 + 11.0 / 30.0;
+    case THEME_GRIZZLEY:
+        return 90.0 + 4.0 / 30.0;
+    case THEME_REDKINGDOM:
+        return 14.0 + 17.0 / 30.0;
+    default:
+        return 20.0 + 11.0 / 15.0;
     }
 }
 double BigBrrrManager::kBpm() {
     auto* ui = MenuInterface::get();
-    if (auto* c = ui ? ui->getActiveCustomTheme() : nullptr) return c->bpm;
+    if (auto* c = ui ? ui->getActiveCustomTheme() : nullptr)
+        return c->bpm;
     switch (currentTheme()) {
-        case THEME_MAYBACH:  return 75.0;
-        case THEME_ROMO:     return 130.0;
-        case THEME_GRIZZLEY: return 98.0;
-        case THEME_REDKINGDOM: return 100.0;
-        default:             return 140.0;
+    case THEME_MAYBACH:
+        return 75.0;
+    case THEME_ROMO:
+        return 130.0;
+    case THEME_GRIZZLEY:
+        return 98.0;
+    case THEME_REDKINGDOM:
+        return 100.0;
+    default:
+        return 140.0;
     }
 }
 
@@ -68,7 +77,8 @@ std::filesystem::path BigBrrrManager::getBrrrDir() const {
 
 void BigBrrrManager::openBrrrFolder() {
     auto dir = getBrrrDir();
-    if (!std::filesystem::exists(dir)) std::filesystem::create_directories(dir);
+    if (!std::filesystem::exists(dir))
+        std::filesystem::create_directories(dir);
     geode::utils::file::openFolder(dir);
 }
 
@@ -80,9 +90,11 @@ static bool isPlayableAudioFile(std::filesystem::path const& p) {
 
 static std::filesystem::path findFirstAudioFile(std::filesystem::path const& dir) {
     std::error_code ec;
-    if (!std::filesystem::exists(dir, ec)) return {};
+    if (!std::filesystem::exists(dir, ec))
+        return {};
     for (auto& entry : std::filesystem::directory_iterator(dir, ec)) {
-        if (entry.is_regular_file() && isPlayableAudioFile(entry.path())) return entry.path();
+        if (entry.is_regular_file() && isPlayableAudioFile(entry.path()))
+            return entry.path();
     }
     return {};
 }
@@ -92,7 +104,10 @@ bool BigBrrrManager::hasFile() const {
 }
 
 void BigBrrrManager::setEnabled(bool on) {
-    if (on) start(); else stop();
+    if (on)
+        start();
+    else
+        stop();
     enabled = on;
 }
 
@@ -104,28 +119,48 @@ void BigBrrrManager::start() {
         auto* custom = ui ? ui->getActiveCustomTheme() : nullptr;
         std::error_code ec;
         if (custom && custom->hasAudio) {
-                                                auto customPath = ui->getCustomThemesDir() / (custom->extension + "_brrr.mp3");
-            if (std::filesystem::exists(customPath, ec)) path = customPath;
+            auto customPath = ui->getCustomThemesDir() / (custom->extension + "_brrr.mp3");
+            if (std::filesystem::exists(customPath, ec))
+                path = customPath;
         }
         if (path.empty()) {
-                                                            const char* bundledName = "big_brrr.mp3";
+            const char* bundledName = "big_brrr.mp3";
             switch (currentTheme()) {
-                case THEME_MAYBACH:  bundledName = "big_brrr_maybach.mp3"; break;
-                case THEME_ROMO:     bundledName = "big_brrr_romo.mp3"; break;
-                case THEME_GRIZZLEY: bundledName = "big_brrr_grizzley.mp3"; break;
-                case THEME_REDKINGDOM: bundledName = "big_brrr_redkingdom.mp3"; break;
-                default: break;
+            case THEME_MAYBACH:
+                bundledName = "big_brrr_maybach.mp3";
+                break;
+            case THEME_ROMO:
+                bundledName = "big_brrr_romo.mp3";
+                break;
+            case THEME_GRIZZLEY:
+                bundledName = "big_brrr_grizzley.mp3";
+                break;
+            case THEME_REDKINGDOM:
+                bundledName = "big_brrr_redkingdom.mp3";
+                break;
+            default:
+                break;
             }
             auto bundled = Mod::get()->getResourcesDir() / bundledName;
-            if (std::filesystem::exists(bundled, ec)) path = bundled;
+            if (std::filesystem::exists(bundled, ec))
+                path = bundled;
         }
     }
-    if (path.empty()) { enabled = false; return; }
+    if (path.empty()) {
+        enabled = false;
+        return;
+    }
 
     auto* system = FMODAudioEngine::sharedEngine()->m_system;
-    if (!system) { enabled = false; return; }
+    if (!system) {
+        enabled = false;
+        return;
+    }
 
-    if (system->createSound(path.string().c_str(), FMOD_CREATESAMPLE | FMOD_LOOP_NORMAL, nullptr, &sound) != FMOD_OK || !sound) {
+    if (system->createSound(
+            path.string().c_str(), FMOD_CREATESAMPLE | FMOD_LOOP_NORMAL, nullptr, &sound) !=
+            FMOD_OK ||
+        !sound) {
         sound = nullptr;
         enabled = false;
         return;
@@ -154,12 +189,22 @@ void BigBrrrManager::start() {
 
 void BigBrrrManager::stop() {
     if (channel) {
-        if (bassDsp) channel->removeDSP(bassDsp);
+        if (bassDsp)
+            channel->removeDSP(bassDsp);
         channel->stop();
         channel = nullptr;
     }
-    if (bassDsp) { bassDsp->release(); bassDsp = nullptr; }
+    if (bassDsp) {
+        bassDsp->release();
+        bassDsp = nullptr;
+    }
     rawBassLevel.store(0.f);
-    if (sound) { sound->release(); sound = nullptr; }
-    if (audioMuteHeld) { GameAudioMute::release(); audioMuteHeld = false; }
+    if (sound) {
+        sound->release();
+        sound = nullptr;
+    }
+    if (audioMuteHeld) {
+        GameAudioMute::release();
+        audioMuteHeld = false;
+    }
 }

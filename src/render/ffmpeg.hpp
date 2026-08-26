@@ -57,41 +57,39 @@ typedef struct {
     FFMPEG_FN(av_packet_free)
 } ff_t;
 
-static std::vector<std::string> DLL_FUNCTION_NAMES = {
-    "avformat_alloc_output_context2",
-    "avcodec_find_encoder_by_name",
-    "avcodec_alloc_context3",
-    "avcodec_get_supported_config",
-    "av_dict_set",
-    "avcodec_open2",
-    "av_dict_free",
-    "avformat_new_stream",
-    "avcodec_parameters_from_context",
-    "avio_open",
-    "avformat_write_header",
-    "av_frame_alloc",
-    "av_frame_get_buffer",
-    "av_packet_alloc",
-    "av_frame_unref",
-    "av_frame_make_writable",
-    "av_image_fill_linesizes",
-    "avcodec_send_frame",
-    "avcodec_receive_packet",
-    "av_packet_rescale_ts",
-    "av_interleaved_write_frame",
-    "av_packet_unref",
-    "av_channel_layout_default",
-    "swr_alloc_set_opts2",
-    "swr_init",
-    "swr_convert",
-    "av_write_trailer",
-    "avio_close",
-    "swr_free",
-    "avcodec_free_context",
-    "av_packet_free"};
+static std::vector<std::string> DLL_FUNCTION_NAMES = {"avformat_alloc_output_context2",
+                                                      "avcodec_find_encoder_by_name",
+                                                      "avcodec_alloc_context3",
+                                                      "avcodec_get_supported_config",
+                                                      "av_dict_set",
+                                                      "avcodec_open2",
+                                                      "av_dict_free",
+                                                      "avformat_new_stream",
+                                                      "avcodec_parameters_from_context",
+                                                      "avio_open",
+                                                      "avformat_write_header",
+                                                      "av_frame_alloc",
+                                                      "av_frame_get_buffer",
+                                                      "av_packet_alloc",
+                                                      "av_frame_unref",
+                                                      "av_frame_make_writable",
+                                                      "av_image_fill_linesizes",
+                                                      "avcodec_send_frame",
+                                                      "avcodec_receive_packet",
+                                                      "av_packet_rescale_ts",
+                                                      "av_interleaved_write_frame",
+                                                      "av_packet_unref",
+                                                      "av_channel_layout_default",
+                                                      "swr_alloc_set_opts2",
+                                                      "swr_init",
+                                                      "swr_convert",
+                                                      "av_write_trailer",
+                                                      "avio_close",
+                                                      "swr_free",
+                                                      "avcodec_free_context",
+                                                      "av_packet_free"};
 
-inline void* loadFunction(HMODULE* modules, size_t moduleSize,
-                          const char* name) {
+inline void* loadFunction(HMODULE* modules, size_t moduleSize, const char* name) {
     void* fn = 0;
 
     size_t moduleIdx = 0;
@@ -102,7 +100,7 @@ inline void* loadFunction(HMODULE* modules, size_t moduleSize,
     }
 
     if (fn != 0) {
-            } else {
+    } else {
         geode::log::error("[RENDERER] Failed to load symbol {}", name);
     }
 
@@ -114,32 +112,36 @@ static_assert(sizeof(ff_t) == sizeof(void*) * 31);
 inline bool loadFFmpegFunctions(void* ff) {
     std::vector<HMODULE> modules;
     std::vector<std::string> dlls = {
-        "avutil-60.dll",   "swresample-6.dll", "swscale-9.dll",
-        "avcodec-62.dll",  "avformat-62.dll",  "avfilter-11.dll",
+        "avutil-60.dll",
+        "swresample-6.dll",
+        "swscale-9.dll",
+        "avcodec-62.dll",
+        "avformat-62.dll",
+        "avfilter-11.dll",
         "avdevice-62.dll",
     };
 
     for (std::string& s : dlls) {
-        geode::log::info(
-            "[RENDERER] Loading library {}",
-            geode::Mod::get()->getPersistentDir() / "libraries" / s);
+        geode::log::info("[RENDERER] Loading library {}",
+                         geode::Mod::get()->getPersistentDir() / "libraries" / s);
 
         HMODULE mod = LoadLibraryW(
-            (geode::Mod::get()->getPersistentDir() / "libraries" / s)
-                .wstring()
-                .c_str());
+            (geode::Mod::get()->getPersistentDir() / "libraries" / s).wstring().c_str());
 
         if (mod == NULL) {
             DWORD errorCode = GetLastError();
             LPSTR messageBuffer = nullptr;
-            FormatMessageA(
-                FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
-                    FORMAT_MESSAGE_IGNORE_INSERTS,
-                NULL, errorCode, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                (LPSTR)&messageBuffer, 0, NULL);
+            FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
+                               FORMAT_MESSAGE_IGNORE_INSERTS,
+                           NULL,
+                           errorCode,
+                           MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                           (LPSTR)&messageBuffer,
+                           0,
+                           NULL);
 
-            geode::log::error("[RENDERER] Failed to load {}: Error {} - {}", s,
-                              errorCode, messageBuffer);
+            geode::log::error(
+                "[RENDERER] Failed to load {}: Error {} - {}", s, errorCode, messageBuffer);
 
             LocalFree(messageBuffer);
         }
@@ -150,8 +152,7 @@ inline bool loadFFmpegFunctions(void* ff) {
     uintptr_t i = 0;
     geode::log::info("Loading {} functions...", DLL_FUNCTION_NAMES.size());
     for (std::string& s : DLL_FUNCTION_NAMES) {
-        void** loc =
-            reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(ff) + i);
+        void** loc = reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(ff) + i);
         *loc = loadFunction(modules.data(), modules.size(), s.c_str());
 
         if (*loc == 0) {

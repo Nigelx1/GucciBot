@@ -3,7 +3,7 @@
 #include "colorspace.hpp"
 
 class YUV420PColorspace : public Colorspace {
-   public:
+public:
     const std::vector<RenderPass> getPasses() override {
         const uintptr_t yPlaneSize = m_alignedWidth * m_alignedHeight;
         const uintptr_t uvPlaneSize = yPlaneSize / 4;
@@ -50,9 +50,13 @@ class YUV420PColorspace : public Colorspace {
                 })",
                            .m_readPixels =
                                [this](float x, float y) {
-                                   glReadPixels(x, y, m_alignedWidth,
-                                                m_alignedHeight, GL_RED,
-                                                GL_UNSIGNED_BYTE, nullptr);
+                                   glReadPixels(x,
+                                                y,
+                                                m_alignedWidth,
+                                                m_alignedHeight,
+                                                GL_RED,
+                                                GL_UNSIGNED_BYTE,
+                                                nullptr);
                                }},
                 RenderPass{.m_width = m_alignedWidth / 2,
                            .m_height = m_alignedHeight / 2,
@@ -85,17 +89,18 @@ class YUV420PColorspace : public Colorspace {
             })",
                            .m_readPixels =
                                [this, yPlaneSize](float x, float y) {
-                                   glReadPixels(
-                                       x, y, m_alignedWidth / 2,
-                                       m_alignedHeight / 2, GL_RED,
-                                       GL_UNSIGNED_BYTE,
-                                       reinterpret_cast<void*>(yPlaneSize));
+                                   glReadPixels(x,
+                                                y,
+                                                m_alignedWidth / 2,
+                                                m_alignedHeight / 2,
+                                                GL_RED,
+                                                GL_UNSIGNED_BYTE,
+                                                reinterpret_cast<void*>(yPlaneSize));
                                }},
-                RenderPass{
-                    .m_width = m_alignedWidth / 2,
-                    .m_height = m_alignedHeight / 2,
-                    .m_vertexShader = vertexShader,
-                    .m_fragmentShader = R"(#version 130
+                RenderPass{.m_width = m_alignedWidth / 2,
+                           .m_height = m_alignedHeight / 2,
+                           .m_vertexShader = vertexShader,
+                           .m_fragmentShader = R"(#version 130
             precision highp float;
 
             in vec2 v_texCoord;
@@ -121,13 +126,15 @@ class YUV420PColorspace : public Colorspace {
             
                 gl_FragData[0] = vec4(v, 0.0, 0.0, 1.0);
             })",
-                    .m_readPixels = [this, yPlaneSize, uvPlaneSize](float x,
-                                                                    float y) {
-                        glReadPixels(
-                            x, y, m_alignedWidth / 2, m_alignedHeight / 2,
-                            GL_RED, GL_UNSIGNED_BYTE,
-                            reinterpret_cast<void*>(yPlaneSize + uvPlaneSize));
-                    }}};
+                           .m_readPixels = [this, yPlaneSize, uvPlaneSize](float x, float y) {
+                               glReadPixels(x,
+                                            y,
+                                            m_alignedWidth / 2,
+                                            m_alignedHeight / 2,
+                                            GL_RED,
+                                            GL_UNSIGNED_BYTE,
+                                            reinterpret_cast<void*>(yPlaneSize + uvPlaneSize));
+                           }}};
     }
 
     size_t getBufferSize() override {
@@ -136,8 +143,7 @@ class YUV420PColorspace : public Colorspace {
         return yPlaneSize + uvPlaneSize * 2;
     }
 
-    geode::Result<> prepareFrame(AVFrame* frame, uint8_t* data,
-                                 size_t size) override {
+    geode::Result<> prepareFrame(AVFrame* frame, uint8_t* data, size_t size) override {
         if (!frame || !data || size == 0) {
             return geode::Err("Invalid parameters");
         }

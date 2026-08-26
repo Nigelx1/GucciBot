@@ -7,8 +7,10 @@ using namespace geode::prelude;
 
 void triggerClickAudio(bool p2, int button, bool pressed) {
     auto* csm = ClickSoundManager::get();
-    if (!csm->enabled || button != 1) return;
-    if (GucciEngine::get()->isPlaying() && !csm->playDuringPlayback) return;
+    if (!csm->enabled || button != 1)
+        return;
+    if (GucciEngine::get()->isPlaying() && !csm->playDuringPlayback)
+        return;
     csm->playClick(pressed, p2);
 }
 
@@ -16,7 +18,8 @@ class $modify(GB7ClickSoundPL, PlayLayer) {
     void setupHasCompleted() {
         PlayLayer::setupHasCompleted();
         auto* csm = ClickSoundManager::get();
-        if (csm->enabled && csm->backgroundNoiseEnabled) csm->startBackgroundNoise();
+        if (csm->enabled && csm->backgroundNoiseEnabled)
+            csm->startBackgroundNoise();
     }
     void onQuit() {
         ClickSoundManager::get()->clearPendingClicks();
@@ -28,6 +31,7 @@ class $modify(GB7ClickSoundPL, PlayLayer) {
         ClickSoundManager::get()->stopBackgroundNoise();
         PlayLayer::resetLevel();
         auto* csm = ClickSoundManager::get();
-        if (csm->enabled && csm->backgroundNoiseEnabled) csm->startBackgroundNoise();
+        if (csm->enabled && csm->backgroundNoiseEnabled)
+            csm->startBackgroundNoise();
     }
 };

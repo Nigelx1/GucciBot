@@ -5,8 +5,10 @@
 #include <algorithm>
 #include <cstring>
 
-static FMOD_RESULT captureInto(AudioRecorder* recorder, float* inBuffer,
-                               float* outBuffer, unsigned int length,
+static FMOD_RESULT captureInto(AudioRecorder* recorder,
+                               float* inBuffer,
+                               float* outBuffer,
+                               unsigned int length,
                                int inChannels) {
     if (!recorder->m_shouldUpdateFmod) {
         return FMOD_OK;
@@ -20,45 +22,33 @@ static FMOD_RESULT captureInto(AudioRecorder* recorder, float* inBuffer,
     return FMOD_OK;
 }
 
-FMOD_RESULT F_CALLBACK AudioRecorder::writeCallbackMain(FMOD_DSP_STATE*,
-                                                        float* inBuffer,
-                                                        float* outBuffer,
-                                                        unsigned int length,
-                                                        int inChannels, int*) {
+FMOD_RESULT F_CALLBACK AudioRecorder::writeCallbackMain(
+    FMOD_DSP_STATE*, float* inBuffer, float* outBuffer, unsigned int length, int inChannels, int*) {
     return captureInto(AudioRecorder::get(), inBuffer, outBuffer, length, inChannels);
 }
-FMOD_RESULT F_CALLBACK AudioRecorder::writeCallbackMusic(FMOD_DSP_STATE*,
-                                                         float* inBuffer,
-                                                         float* outBuffer,
-                                                         unsigned int length,
-                                                         int inChannels, int*) {
+FMOD_RESULT F_CALLBACK AudioRecorder::writeCallbackMusic(
+    FMOD_DSP_STATE*, float* inBuffer, float* outBuffer, unsigned int length, int inChannels, int*) {
     return captureInto(AudioRecorder::getMusic(), inBuffer, outBuffer, length, inChannels);
 }
-FMOD_RESULT F_CALLBACK AudioRecorder::writeCallbackSfx(FMOD_DSP_STATE*,
-                                                       float* inBuffer,
-                                                       float* outBuffer,
-                                                       unsigned int length,
-                                                       int inChannels, int*) {
+FMOD_RESULT F_CALLBACK AudioRecorder::writeCallbackSfx(
+    FMOD_DSP_STATE*, float* inBuffer, float* outBuffer, unsigned int length, int inChannels, int*) {
     return captureInto(AudioRecorder::getSfx(), inBuffer, outBuffer, length, inChannels);
 }
-FMOD_RESULT F_CALLBACK AudioRecorder::writeCallbackFrameWindow(FMOD_DSP_STATE*,
-                                                               float* inBuffer,
-                                                               float* outBuffer,
-                                                               unsigned int length,
-                                                               int inChannels, int*) {
+FMOD_RESULT F_CALLBACK AudioRecorder::writeCallbackFrameWindow(
+    FMOD_DSP_STATE*, float* inBuffer, float* outBuffer, unsigned int length, int inChannels, int*) {
     return captureInto(AudioRecorder::getFrameWindow(), inBuffer, outBuffer, length, inChannels);
 }
 
 void AudioRecorder::haltWithData(float* data, unsigned int length) {
     m_buffer.insert(m_buffer.end(), data, data + length);
 
-            for (size_t i = m_buffer.size() - length; i < m_buffer.size(); i++) {
+    for (size_t i = m_buffer.size() - length; i < m_buffer.size(); i++) {
         m_buffer[i] = std::clamp(m_buffer[i], -1.0f, 1.0f);
     }
 }
 
 void AudioRecorder::init(FMOD::ChannelGroup* group) {
-                    FMOD_DSP_DESCRIPTION desc = {};
+    FMOD_DSP_DESCRIPTION desc = {};
     if (this == getMusic()) {
         strcpy_s(desc.name, "guccibot dsp (music)");
         desc.read = AudioRecorder::writeCallbackMusic;
@@ -108,7 +98,8 @@ void AudioRecorder::attach() {
 }
 
 void AudioRecorder::detach() {
-    if (!m_attached) return;
+    if (!m_attached)
+        return;
 
     m_master->removeDSP(m_dsp);
     m_master->setPaused(false);
@@ -126,7 +117,7 @@ void AudioRecorder::uninit() {
 namespace AudioEngineRenderState {
     static float s_previousMusicVolume = 0.0f;
     static float s_previousSFXVolume = 0.0f;
-    static bool  s_active = false;
+    static bool s_active = false;
 
     void enter(double musicVolume, double sfxVolume) {
         auto engine = FMODAudioEngine::get();
@@ -139,7 +130,8 @@ namespace AudioEngineRenderState {
     }
 
     void exit() {
-        if (!s_active) return;
+        if (!s_active)
+            return;
         auto engine = FMODAudioEngine::get();
         engine->setEffectsVolume(s_previousSFXVolume);
         engine->setBackgroundMusicVolume(s_previousMusicVolume);
@@ -161,4 +153,4 @@ namespace AudioEngineRenderState {
         AudioRecorder::getSfx()->m_shouldUpdateFmod = false;
         AudioRecorder::getFrameWindow()->m_shouldUpdateFmod = false;
     }
-}
+} // namespace AudioEngineRenderState
