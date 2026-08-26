@@ -2,9 +2,9 @@
 
 > Frame perfect. Ice cold. Brrr Brrr Brrr.
 
-It's Gucci. GucciBot is a Geometry Dash macro bot (a [Geode](https://geode-sdk.org/) mod) that records your inputs frame-perfectly and plays them back exactly, built on top of [Silicate](https://git.silicate.dev/silicate/silicate)'s physics engine and [ToastyReplay](https://github.com/silicate-bot)'s renderer. Think of it as a very expensive, very icy ghost of your best run — except the ghost never drops a frame, never has an off day, and definitely never forgets its jewelry.
+It's Gucci. GucciBot is a Geometry Dash macro bot (a [Geode](https://geode-sdk.org/) mod) that records your inputs frame-perfectly and plays them back exactly, built on top of [Silicate](https://git.silicate.dev/silicate/silicate)'s physics engine and [ToastyReplay](https://github.com/silicate-bot)'s renderer. Think of it as a very expensive, very icy ghost of your best run — except the ghost never drops a frame, never has an off day, and definitely never forgets its jewelry. So icy.
 
-This is a private personal project. If you're reading this and you're not Nigel or Juice, you found a leak — say something nice about the themes on your way out.
+This is a private personal project. If you're reading this and you're not Nigel, Juice, or GWDdoS, you found a leak — say something nice about the themes on your way out.
 
 ---
 
@@ -44,13 +44,13 @@ This is a private personal project. If you're reading this and you're not Nigel 
 
 ## Trainers
 
-Two flavors of the same toolset: one permanently pointed at Jupiter's "My Favourite," one pointed at whatever macro you feel like practicing against.
+Two flavors of the same toolset: one permanently pointed at the level "Jupiter My Favourite," one pointed at whatever macro you feel like practicing against.
 
 - **Click Trainer** — a scrolling rhythm bar with a fixed center line; your own presses/releases render live next to the macro's, so you can see exactly how early or late you actually were.
 - **Ghosts** — the macro's ghost and your own best-attempt ghost, both live in the world, scrubbable.
 - **Segments** — name the hard parts, loop just those, get auto-suggested splits from click density.
 - **Stats** — attempts, session best, a death-position heatmap for when you want to know exactly where the level is bullying you.
-- Synced music, because grinding a segment in silence is a crime.
+- Synced music, because grinding a segment in silence is a crime. Trap music, ideally.
 
 ## Rendering
 
@@ -65,7 +65,7 @@ The full current roster. Pick one, or build your own — Settings → Theme has 
 
 | Theme | Extension | Colors |
 |---|---|---|
-| GucciBot | `.brrr` | Gold |
+| GucciBot | `.brrr` | Gold + Black |
 | ToosiiBot (LSU / Syracuse / Sac State) | `.toosii` | Purple+Gold / Orange+Navy / Green+Gold |
 | JaBot | `.ja` | Navy + Light Blue |
 | GiddeyBot | `.giddey` | Thunder Blue + Orange |
@@ -82,7 +82,7 @@ The full current roster. Pick one, or build your own — Settings → Theme has 
 
 GucciBot's own color is gold, for the record. Yellow everything this time, you know what I'm talking about? Yellow rims. Yellow big booty yellowbones, ha. Yellow Lambs, yellow MPs, yellow watch. Yellow charm ring, chain. Yellow living room set.
 
-Also in Settings: **BIG BRRRR**, a joke toggle that does exactly what it sounds like, and **Bass Shake**, which makes the whole menu react to the track's actual bass in real time. You'll know it when you feel it.
+Also in Settings: **BIG BRRRR**, a core feature of this mod, and **Bass Shake**, which makes the whole menu react to the track's actual bass in real time. You'll know it when you feel it.
 
 ## Building it
 
@@ -92,7 +92,7 @@ Also in Settings: **BIG BRRRR**, a joke toggle that does exactly what it sounds 
   ```
   .\build_win.bat
   ```
-- Every build bumps `GB_BUILD_LABEL` in `src/GucciBot.hpp` — check it before assuming which binary is actually running. This project got burned by testing a stale build exactly once, and once was enough.
+- Every build bumps `GB_BUILD_LABEL` in `src/GucciBot.hpp` — check it before assuming which binary is actually running. This project got burned by testing a stale build exactly once, and once was enough. Trap or die, basically.
 
 ## Status
 
