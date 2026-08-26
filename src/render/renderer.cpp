@@ -1,5 +1,5 @@
 #include "renderer.hpp"
-#include "GucciBot.hpp"
+#include "core/GucciBot.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/binding/PlayLayer.hpp>

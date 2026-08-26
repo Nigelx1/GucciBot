@@ -1,6 +1,6 @@
-#include "GucciBot.hpp"
+#include "core/GucciBot.hpp"
 #include "render/renderer.hpp"
-#include "calibration.hpp"
+#include "trainers/calibration.hpp"
 #include <Geode/Geode.hpp>
 #include <filesystem>
 using namespace geode::prelude;
