@@ -318,9 +318,7 @@ void ClickSoundManager::playClick(bool pressed, bool isPlayer2) {
 }
 
 void ClickSoundManager::playClickPitched(bool pressed, bool isPlayer2, float pitch) {
-    // Indicator cues are a precision timing signal -- always play immediately,
-    // bypassing clickDelayMin/Max (that jitter is for ambient click-pack feel).
-    playResolvedClickPitched(pressed, isPlayer2, pitch);
+            playResolvedClickPitched(pressed, isPlayer2, pitch);
 }
 
 void ClickSoundManager::updatePendingClicks() {

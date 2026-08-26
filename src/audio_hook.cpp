@@ -27,11 +27,6 @@ struct GB7AudioEngine : Modify<GB7AudioEngine, FMODAudioEngine> {
 
 static void (*fmodSystemUpdateOrig)(FMOD::System*) = nullptr;
 
-// Drains one AudioRecorder's accumulated buffer into the given SLRenderer
-// audio track, exactly like the pre-split single-track logic did -- each
-// recorder keeps its own m_index/m_time (independent pts bookkeeping), so
-// this is safe to call for however many recorders are active without them
-// interfering with each other.
 static bool drainRecorderIntoTrack(SLRenderer* renderer, AudioRecorder* audio, int trackIndex) {
     const unsigned int frameSize = 1024;
     const size_t totalFrameSize = frameSize * static_cast<size_t>(audio->m_channels);
@@ -61,13 +56,7 @@ static void fmodSystemUpdateHook(FMOD::System* self) {
         return;
     }
 
-    // get() (combined/master) is always attached now, in both modes -- see
-    // renderer.cpp's start(), which always calls get()->init()/attach()
-    // regardless of split, and additionally attaches getMusic()/getSfx()/
-    // getFrameWindow() when split. So get() is both the timing/gating
-    // reference AND a real capturing recorder (track 0) in every case,
-    // same as before any split-mode work existed.
-    auto audio = AudioRecorder::get();
+                            auto audio = AudioRecorder::get();
     if (!audio->m_attached) {
         if (fmodSystemUpdateOrig) fmodSystemUpdateOrig(self);
         return;
@@ -90,11 +79,7 @@ static void fmodSystemUpdateHook(FMOD::System* self) {
         processedSamples += static_cast<int>(bufferLength);
     }
 
-    // Unchanged from before any split-mode work: drainRecorderIntoTrack
-    // advances audio's (get()'s) own m_time/m_index internally as it
-    // drains, which is what keeps requiredDt correct next call -- true in
-    // both modes now, since get() always has a real buffer to drain.
-    if (!drainRecorderIntoTrack(renderer, audio, 0)) return;
+                    if (!drainRecorderIntoTrack(renderer, audio, 0)) return;
     if (!split) return;
 
     if (!drainRecorderIntoTrack(renderer, AudioRecorder::getMusic(), 1)) return;

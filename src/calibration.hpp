@@ -12,7 +12,6 @@ struct GamemodeCalibration {
     bool  guideEnabled = true;
 };
 
-// Gamemode indices, matching PlayerObject's mutually-exclusive mode flags.
 enum GamemodeIndex {
     GM_Cube = 0, GM_Ship, GM_Ball, GM_Ufo, GM_Wave, GM_Robot, GM_Spider, GM_Count
 };

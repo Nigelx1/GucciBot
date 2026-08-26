@@ -53,24 +53,13 @@ void GucciPracticeFix::saveCurrent(CheckpointObject* cp, uint64_t frameOffset) {
     state.m_player1 = SavedPlayerCheckpoint::create(p1);
     state.m_player2 = SavedPlayerCheckpoint::create(p2);
 
-    // Ported from Silicate: snapshot the current cumulative broken-objects
-    // list into this checkpoint, matching createCheckpoint()'s
-    // `.m_brokenObjects = this->m_brokenObjects`.
-    state.m_brokenObjects = m_brokenObjects;
+                state.m_brokenObjects = m_brokenObjects;
 
     m_savedCheckpoints.push_back(state);
 
         StoredFrame sf;
     sf.state = state;
-    // frameOffset, NOT an independent getFrame() re-read -- m_storedFrames
-    // (used for backstepping and Calculate's own checkpoint restore) and
-    // m_savedCheckpoints (state.m_frameOffset, used for normal checkpoint
-    // respawns) must agree on what frame this SAME checkpoint happened at.
-    // A second independent read here could silently diverge from frameOffset
-    // depending on what the caller passed in -- see Juice's 2026-08-19 fix
-    // (call sites now pass getFrame()+1 for checkpoints placed via a native
-    // GD hook that fires before that tick's own frame increment).
-    sf.frame = frameOffset;
+                                    sf.frame = frameOffset;
     m_storedFrames.push_back(sf);
 }
 
@@ -100,34 +89,13 @@ void GucciPracticeFix::applyCheckpoint(SavedCheckpointState& state) {
 
     auto* p1 = pl->m_player1;
     auto* p2 = pl->m_player2;
-    // Full per-player state restore (slope/dash/streak/held-input/etc, not
-    // just position/rotation/velocity/ground-state) -- see
-    // checkpoint_player.hpp. Juice's practice-checkpoint trajectory-change
-    // report (2026-08-19) was the original motivation for restoring ground
-    // state at all; this supersedes that narrower fix with the same field
-    // (and everything else Silicate's own restore covers) included.
-    if (p1) state.m_player1.apply(p1);
+                            if (p1) state.m_player1.apply(p1);
     if (p2) state.m_player2.apply(p2);
     if (GucciEngine::get()->updater.m_logFrameIncrements) {
-        // Logged as its own call site distinct from the frame counter
-        // (state.m_frameOffset, the LABEL this checkpoint was saved under)
-        // -- if this doesn't match the live player's actual post-apply
-        // position/velocity in a principled way relative to frameUpdateMidhook's
-        // own log lines, that's the save-vs-restore mismatch Juice's report
-        // is describing, visible directly instead of inferred.
-        logFrameIncrement("applyCheckpoint(restored, label)", (uint32_t)state.m_frameOffset, p1);
+                                                        logFrameIncrement("applyCheckpoint(restored, label)", (uint32_t)state.m_frameOffset, p1);
     }
 
-    // Ported from Silicate's applyCheckpoint(): rewind the live broken-
-    // objects list to whatever this checkpoint had (objects destroyed AFTER
-    // this checkpoint was taken are no longer "broken" from here on out --
-    // this checkpoint predates their destruction), then re-neutralize every
-    // one of them. Runs AFTER the native GD checkpoint restore (this
-    // function is always called following the loadFn() callback in
-    // restorePreviousFrame()/applyLatest()'s callers) specifically so it
-    // wins over whatever state native restore put these objects back into --
-    // that's the actual point of the fix, not just bookkeeping.
-    m_brokenObjects = state.m_brokenObjects;
+                                        m_brokenObjects = state.m_brokenObjects;
     for (auto* obj : m_brokenObjects) {
         if (!obj) continue;
         obj->m_isDisabled  = true;
@@ -170,16 +138,7 @@ void GucciReplaySystem::onReset(uint32_t respawnFrame, uint32_t deathFrame) {
         size_t before = m_actionAtom.length();
         if (respawnFrame > 0) {
                                                             m_actionAtom.clipFrom(respawnFrame + 1);
-            // Juice's dying-mid-click fix: if the last surviving action is a
-            // press with no matching release, the player died while still
-            // holding it -- the release either happened after the clip
-            // boundary (and got clipped away with it) or never happened at
-            // all. Either way it's not a real, complete input; drop it, and
-            // suppress whatever release comes in next for that player, since
-            // the physical button may still be down through the reset and
-            // would otherwise record as an orphan release with nothing to
-            // close.
-            if (!m_actionAtom.m_actions.empty()) {
+                                                                                                                        if (!m_actionAtom.m_actions.empty()) {
                 auto& last = m_actionAtom.m_actions.back();
                 if (last.isInput() && last.m_holding) {
                     int p = last.m_player2 ? 1 : 0;
@@ -192,11 +151,7 @@ void GucciReplaySystem::onReset(uint32_t respawnFrame, uint32_t deathFrame) {
             }
             size_t after = m_actionAtom.length();
             m_inputIndex = m_actionAtom.length();
-            // m_pathSamples is indexed by frame and only ever grows -- without this,
-            // a checkpoint retry leaves stale ground-truth data (from the attempt
-            // that just died) sitting at every index past the checkpoint, silently
-            // corrupting "Show Macro Path" and Calculate for the new attempt.
-            if (m_pathSamples.size() > (size_t)respawnFrame + 1)
+                                                            if (m_pathSamples.size() > (size_t)respawnFrame + 1)
                 m_pathSamples.resize((size_t)respawnFrame + 1);
             if (before != after)
                 log::info("[GucciBot] Recording: died@{}, respawn@{} (checkpoint) "
@@ -210,11 +165,7 @@ void GucciReplaySystem::onReset(uint32_t respawnFrame, uint32_t deathFrame) {
                                                                                                                                     m_actionAtom.m_actions.clear();
             m_pathSamples.clear();
             m_inputIndex = 0;
-            // A full restart wipes everything, so any pending suppression
-            // from a not-yet-consumed dangling-press cleanup (see above) no
-            // longer refers to anything real -- clear it rather than risk it
-            // incorrectly eating a legitimate release in the fresh recording.
-            m_suppressNextRelease[0] = false;
+                                                            m_suppressNextRelease[0] = false;
             m_suppressNextRelease[1] = false;
             log::info("[GucciBot] Recording: died@{}, full restart (no checkpoint) "
                       "— cleared {} input(s), re-recording from frame 0",
@@ -232,28 +183,7 @@ void GucciReplaySystem::onReset(uint32_t respawnFrame, uint32_t deathFrame) {
 fs::path GucciReplaySystem::getCurrentPath() const {
     auto* gb = GucciEngine::get();
     auto  dir = gb->getReplayDir();
-    // NOT m_replayName -- that field is only ever populated by actually
-    // loading an existing GBR6 file (from its own embedded header), so for
-    // any macro recorded fresh in this session it silently stays "" for its
-    // entire lifetime, making every call site of this function (Calculate's
-    // auto-save, the Manual Frame Windows save button, autosave-at-interval,
-    // autosave-at-level-end) resolve to the same bare "<dir>/.brrr" for
-    // every macro. gb->replayName is the field the UI actually keeps in
-    // sync (record start, load, rename, the macro-name text field), so it's
-    // the reliable source of "which macro is this really."
-    //
-    // Extension is NOT always ".brrr" -- a macro's real on-disk extension
-    // follows whichever theme was active when it was saved (.juice for
-    // JuiceBot, .butler for ButlerBot, etc -- see gui.cpp's save-path theme
-    // ternary). load() already resolves the real extension via this same
-    // disk probe before reading the .fw/.path sidecars, so hardcoding
-    // ".brrr" here made every sidecar SAVE for a non-.brrr macro land next
-    // to a file that never gets read back (e.g. Calculate results silently
-    // written to "<name>.brrr.fw" while the macro itself is "<name>.juice"
-    // -- next load finds no sidecar and the results appear to have vanished).
-    // Probe for the macro's actual extension first; only fall back to
-    // .brrr when nothing exists yet (a macro that hasn't been saved once).
-    for (auto& ext : allKnownMacroExtensions()) {
+                                                                                        for (auto& ext : allKnownMacroExtensions()) {
         std::error_code ec;
         auto candidate = dir / (gb->replayName + ext);
         if (fs::exists(candidate, ec)) return candidate;
@@ -288,9 +218,7 @@ static void savePathSamples(const fs::path& macroPath, const std::vector<MacroPa
     std::ofstream f(sc, std::ios::binary);
     if (!f) return;
     f.write("GBPS", 4);
-    // v3: adds orb-touch ground truth (packed into the existing flags bytes,
-    // record size unchanged) -- see MacroPathSample::p1OrbDash's comment.
-    uint8_t ver = 3; f.write((const char*)&ver, 1);
+            uint8_t ver = 3; f.write((const char*)&ver, 1);
     uint32_t n = (uint32_t)samples.size(); f.write((const char*)&n, 4);
     for (auto const& s : samples) {
         f.write((const char*)&s.p1x, 4);     f.write((const char*)&s.p1y, 4);
@@ -321,16 +249,9 @@ static void loadPathSamples(const fs::path& macroPath, std::vector<MacroPathSamp
     f.read(magic, 4);
     if (std::memcmp(magic, "GBPS", 4) != 0) return;
     uint8_t ver = 0; f.read((char*)&ver, 1);
-    if (ver != 3) return; // v1/v2 sidecars are silently dropped -- re-record to get force-capture / orb-touch ground truth
+    if (ver != 3) return;
     uint32_t n = 0; f.read((char*)&n, 4);
-    // n comes straight from an untrusted sidecar file -- reserving it outright
-    // lets a corrupted/truncated file (or a garbage value near UINT32_MAX)
-    // request a multi-gigabyte allocation, throwing length_error/bad_alloc
-    // with nothing upstream to catch it. This function runs from
-    // GucciEngine::initialize() at mod startup, so that would crash the whole
-    // game. Cap the reserve hint to what the file could actually still hold;
-    // the loop below already handles a short/corrupt file via `if (!f) break`.
-    {
+                                {
         constexpr std::streamoff kRecordBytes = 44;
         auto curPos = f.tellg();
         f.seekg(0, std::ios::end);
@@ -365,24 +286,10 @@ static void loadPathSamples(const fs::path& macroPath, std::vector<MacroPathSamp
     log::info("[GucciBot] Macro path: loaded {} sample(s) from sidecar", samples.size());
 }
 
-// Loads a native BRR macro's click timing + path samples directly into a
-// GucciEngine::JupiterMacroData, WITHOUT going through GucciReplaySystem::
-// load() -- that method reaches into the global GucciEngine::get() singleton
-// unconditionally (sets mode to Playing, sets loadedMacroLevelName, etc.)
-// regardless of which GucciReplaySystem instance it's called on, so there's
-// no way to use it here without those side effects leaking into the general
-// bot-playback state. This duplicates just the parsing logic that's actually
-// needed (mirrors GucciReplaySystem::buildClickIntervals and the legacy-BRR
-// branch of load()), deliberately kept separate.
 static void loadJupiterMacroData(const fs::path& path, GucciEngine::TrainerMacroData& out) {
     out = {};
 
-    // NOT BRRMacro::loadFromDisk(stem) -- that's hardcoded to search
-    // getSaveDir()/replays regardless of what path is passed in, which is
-    // exactly the general folder this data is deliberately NOT stored in
-    // anymore. Read the exact file directly and deserialize it instead,
-    // same low-level call convertToBRR itself uses for its BRR-payload branch.
-    std::ifstream f(path, std::ios::binary | std::ios::ate);
+                        std::ifstream f(path, std::ios::binary | std::ios::ate);
     if (!f) return;
     auto sz = static_cast<size_t>(f.tellg());
     f.seekg(0);
@@ -418,15 +325,6 @@ static void loadJupiterMacroData(const fs::path& path, GucciEngine::TrainerMacro
               out.clickIntervalsSec.size(), out.pathSamples.size());
 }
 
-// General-purpose version of loadJupiterMacroData for the Trainer tab's "load
-// any macro" picker. Jupiter's bundled macro always ends up in genuine legacy
-// BRR format by the time loadJupiterMacroData reads it (it's routed through
-// convertToBRR/BRRMacro::persist() first), so that function only ever needs
-// the BRRMacro::deserialize() branch below. A macro the user actually
-// recorded and saved in-app is GBR6 format instead (GucciReplaySystem::save()
-// always writes via GBR6File, regardless of the cosmetic file extension), so
-// this version has to sniff the magic and handle both -- same dual-branch
-// approach GucciReplaySystem::load() already uses for real playback.
 static void loadTrainerMacroData(const fs::path& path, GucciEngine::TrainerMacroData& out) {
     out = {};
 
@@ -469,7 +367,7 @@ static void loadTrainerMacroData(const fs::path& path, GucciEngine::TrainerMacro
         if (legacy->inputs.empty()) { delete legacy; return; }
 
         double tps = legacy->framerate > 0.0 ? legacy->framerate : 240.0;
-        out.levelName = legacy->levelName; // usually empty -- see TrainerMacroData's comment
+        out.levelName = legacy->levelName;
         out.levelId   = legacy->levelId;
         std::unordered_map<int, uint32_t> openPress;
         for (auto& inp : legacy->inputs) {
@@ -487,7 +385,7 @@ static void loadTrainerMacroData(const fs::path& path, GucciEngine::TrainerMacro
         out.clickBarTps = tps;
         delete legacy;
     } else {
-        return; // unsupported bytes -- the picker should already exclude these via incompatibleMacros
+        return;
     }
 
     loadPathSamples(path, out.pathSamples);
@@ -594,8 +492,8 @@ static void loadFwMarks(const fs::path& macroPath) {
         float x = 0, y = 0, pct = 0; int32_t w = 0; uint8_t p2 = 0; uint32_t fr = 0; uint8_t man = 0; uint8_t rel = 0;
         f.read((char*)&x, 4); f.read((char*)&y, 4); f.read((char*)&w, 4);
         f.read((char*)&p2, 1); f.read((char*)&fr, 4); f.read((char*)&pct, 4);
-        if (ver >= 2) f.read((char*)&man, 1); // v1 sidecars predate manual marks -- default false
-        if (ver >= 3) f.read((char*)&rel, 1); // v1/v2 sidecars predate release windows -- default false
+        if (ver >= 2) f.read((char*)&man, 1);
+        if (ver >= 3) f.read((char*)&rel, 1);
         if (!f) break;
         gb->fwMarks.push_back({ x, y, (int)w, p2 != 0, fr, pct, man != 0, rel != 0 });
     }
@@ -618,11 +516,7 @@ void GucciReplaySystem::save(const fs::path& path, bool noOverwrite) {
     if (noOverwrite && fs::exists(path)) return;
 
     auto* gb = GucciEngine::get();
-    // Keep in sync with the field the UI actually maintains -- see
-    // getCurrentPath()'s comment. Without this, a freshly recorded macro's
-    // saved file embeds an empty header.name forever, since m_replayName
-    // was never set to anything else before this point.
-    m_replayName = gb->replayName;
+                    m_replayName = gb->replayName;
 
         std::vector<GBR6Input> p1, p2;
     for (auto& a : m_actionAtom.m_actions) {
@@ -673,7 +567,7 @@ void GucciReplaySystem::save(const fs::path& path, bool noOverwrite) {
 void GucciReplaySystem::buildClickIntervals(double tps) {
     m_clickIntervalsSec.clear();
     m_clickBarTps = tps > 0.0 ? tps : 240.0;
-    std::unordered_map<int, uint32_t> openPress; // key = type*2 + player2, value = press frame
+    std::unordered_map<int, uint32_t> openPress;
     for (auto const& a : m_actionAtom.m_actions) {
         if (!a.isInput()) continue;
         int key = (int)a.m_type * 2 + (a.m_player2 ? 1 : 0);
@@ -741,14 +635,7 @@ void GucciReplaySystem::load(const fs::path& path) {
         gb->setMode(GucciEngine::Mode::Playing);
         log::info("[GucciBot] Loaded legacy BRR: {} inputs", m_actionAtom.length());
         loadFwMarks(path);
-        // Legacy format has no path-sample/trainer-progress sidecar of its own
-        // -- unlike the GBR6 branch above, which always calls loadPathSamples/
-        // loadTrainerProgress for the newly loaded file. Without clearing these
-        // here, loading a legacy macro right after a GBR6 one leaves the OLD
-        // macro's ground-truth path data and trainer best-X attached to this
-        // one, so Calculate/"Show Macro Path" force-write the wrong macro's
-        // positions and the trainer bar shows the wrong progress marker.
-        m_pathSamples.clear();
+                                                                m_pathSamples.clear();
         m_trainerBestX = 0.f;
         buildClickIntervals(gb->updater.m_tps);
         delete legacy;
@@ -765,12 +652,7 @@ void GucciEngine::setMode(Mode m) {
     Mode prev = mode;
     mode = m;
     if (m == Mode::Recording) {
-        // Juice (2026-08-21): Show Live and the Legend both read live macro/
-        // Calculate state that doesn't make sense yet while a macro is still
-        // being recorded (there's nothing measured, and fwMarks belongs to
-        // whatever was last loaded) -- force them off, GUI locks them back on
-        // until recording stops.
-        fwEnabledLive   = false;
+                                                fwEnabledLive   = false;
         fwLegendEnabled = false;
         Mod::get()->setSavedValue("fw_live", false);
         Mod::get()->setSavedValue("fw_legend", false);
@@ -797,10 +679,7 @@ bool GucciEngine::beginResumeRecording() {
     uint32_t now = updater.getFrame();
     auto& atom = replay.m_actionAtom;
     atom.clipFrom(now);
-    // Same reasoning as GucciReplaySystem::onReset() -- keep path-sample ground
-    // truth in sync with the action atom's own clipping so a resumed recording
-    // can't leave stale post-resume-point samples lying around.
-    if (replay.m_pathSamples.size() > (size_t)now)
+                if (replay.m_pathSamples.size() > (size_t)now)
         replay.m_pathSamples.resize((size_t)now);
 
         bool held[2][4] = {};
@@ -850,7 +729,7 @@ void GucciEngine::reloadMacroList() {
             if (ext == ".grizzley") grizzleyMacros.insert(stem);
             if (ext == ".redkingdom") redKingdomMacros.insert(stem);
             if (!ext.empty()) {
-                std::string bare = ext.substr(1); // drop the leading '.'
+                std::string bare = ext.substr(1);
                 bool isBuiltin = ext==".brrr"||ext==".toosii"||ext==".ja"||ext==".giddey"||
                     ext==".bam"||ext==".sexyy"||ext==".juice"||ext==".butler"||
                     ext==".saweetie"||ext==".maybach"||ext==".romo"||ext==".grizzley"||
@@ -1004,22 +883,8 @@ static bool gdrJsonExtract(const std::string& text, double& framerate, std::vect
     return !out.empty();
 }
 
-// Minimal MessagePack reader -- just enough to walk a binary GDR file's
-// structure (nested maps/arrays/strings/ints/bools/floats) and pull out the
-// "inputs" array's frame/btn/2p/down fields, mirroring gdrJsonExtract's
-// field-matching exactly (confirmed by inspecting a real exported .gdr:
-// same key names, just msgpack-encoded instead of JSON-encoded). Not a
-// general-purpose msgpack library -- skips anything it doesn't need
-// (gameVersion, description, author, bot/level metadata, etc.) generically
-// rather than trying to fully decode the file.
 namespace gdrmsgpack {
 
-// Depth-limited: skipValue/skipContainer are mutually recursive, and a
-// crafted or corrupted .gdr can nest arrays/maps one level per byte (e.g.
-// repeated single-element array headers), which without a cap recurses
-// deep enough to overflow the stack and crash the whole game -- there's no
-// exception to catch here since a stack overflow isn't a C++ exception.
-// Legitimate GDR macro data never nests anywhere close to this deep.
 static constexpr size_t kMaxDepth = 64;
 
 static bool skipValue(const std::vector<uint8_t>& b, size_t& i, size_t depth = 0);
@@ -1128,7 +993,7 @@ static bool readBool(const std::vector<uint8_t>& b, size_t& i, bool& out) {
     return false;
 }
 
-} // namespace gdrmsgpack
+}
 
 static bool gdrBinaryExtract(const std::vector<uint8_t>& bytes, double& framerate, std::vector<GdrJsonInput>& out) {
     using namespace gdrmsgpack;
@@ -1388,20 +1253,7 @@ void GucciEngine::initialize() {
         fs::create_directories(getReplayDir());
     fs::create_directories(getPresetsDir());
 
-        // Auto-convert + load the bundled Jupiter My Favourite GDR macro's
-    // click/path data, once, into jupiterMacro -- its OWN dedicated folder
-    // AND its own dedicated data holder, never touching replay/mode/
-    // loadedMacroLevelName or the general replays folder. It used to load
-    // via replay.load(), which reaches into all of that -- that's exactly
-    // why it was showing up in the general Saved Replays list AND why
-    // actually loading/playing a real macro afterward stopped working
-    // (mode was already force-set to Playing at startup, replayName was
-    // never set to match, etc). Still uses convertToBRR normally (a
-    // general-purpose tool that reads/writes the replays folder) by seeding
-    // the raw .gdr there just long enough to run, then moves the result
-    // into save/jupiter/ and deletes the seed so nothing lingers where the
-    // general macro browser can see it.
-    {
+                                                            {
         auto jupDir = Mod::get()->getSaveDir() / "jupiter";
         fs::create_directories(jupDir);
 
@@ -1417,32 +1269,14 @@ void GucciEngine::initialize() {
         auto hidden = findIn(jupDir, "jupiter_my_favourite");
         if (!hidden.empty()) loadJupiterMacroData(hidden, jupiterMacro);
 
-        // Self-healing: if nothing was found, OR what was found didn't
-        // actually parse into anything (e.g. a broken/empty file left behind
-        // by an earlier build's version of this logic), (re)do the seed +
-        // convert + move from scratch rather than trusting a stale file's
-        // mere existence.
-        if (!jupiterMacro.loaded) {
+                                                if (!jupiterMacro.loaded) {
             std::error_code rmEc;
             if (!hidden.empty()) fs::remove(hidden, rmEc);
 
             auto bundled = Mod::get()->getResourcesDir() / "jupiter_my_favourite.gdr";
             std::error_code ec;
             if (fs::exists(bundled, ec)) {
-                // Seeded under a name no real user macro would ever have,
-                // NOT "jupiter_my_favourite" -- that used to unconditionally
-                // overwrite (copy_options::overwrite_existing) whatever the
-                // user already had at that exact path in the shared replays
-                // folder, and convertToBRR/persist() match purely by stem, so
-                // a same-named user macro could get its OWN file silently
-                // renamed aside (_2) and then this seed's converted copy
-                // mistaken for it and relocated/deleted in its place. A
-                // private stem makes both collisions structurally impossible
-                // instead of just unlikely. The dedicated jupDir copy is
-                // still named jupiter_my_favourite.<ext> below, so this is
-                // invisible to everything downstream (self-heal lookup,
-                // loadJupiterMacroData).
-                const std::string seedStem = "__guccibot_jupiter_seed";
+                                                                                                                                                                                                                                const std::string seedStem = "__guccibot_jupiter_seed";
                 auto seedDest = getReplayDir() / (seedStem + ".gdr");
                 fs::copy_file(bundled, seedDest, fs::copy_options::overwrite_existing, ec);
                 convertToBRR(seedStem);
@@ -1542,9 +1376,6 @@ static PauseLayer* findOpenPauseLayer() {
     return findOpenPauseLayerRecursive(CCDirector::sharedDirector()->getRunningScene());
 }
 
-// 1-based ordinal among ALL isInput() actions in the macro (both players, frame order,
-// counting unmeasured releases too) -- Juice's "click 1 in cube is input 1, click 2 is
-// input 3" convention, for the debug-mode mark list.
 static int fwComputeInputNumber(const gb::ActionAtom& atom, uint32_t frame, bool player2, bool holding) {
     int n = 0;
     for (auto const& a : atom.m_actions) {
@@ -1564,8 +1395,6 @@ static bool fwIsDashOrbType(GameObjectType type) {
     return type == GameObjectType::DashRing || type == GameObjectType::GravityDashRing;
 }
 
-// Mirrors TrajectoryPredictionService::isSimulatedOrb's ring-type list
-// (trajectory.cpp) minus the two dash-ring types above.
 static bool fwIsNonDashOrbType(GameObjectType type) {
     switch (type) {
         case GameObjectType::YellowJumpRing:
@@ -1583,10 +1412,6 @@ static bool fwIsNonDashOrbType(GameObjectType type) {
     }
 }
 
-// Classifies what (if anything) a player is touching right now, for Juice's
-// orb-aware release-skip rule (fwOrbAwareReleaseSkip). Reads m_touchingRings
-// live at the click's exact frame during the Capturing pass -- real game
-// state, not inferred from recorded path samples.
 static void fwClassifyOrbTouch(PlayerObject* player, bool& outDash, bool& outNonDash) {
     outDash = false;
     outNonDash = false;
@@ -1599,26 +1424,16 @@ static void fwClassifyOrbTouch(PlayerObject* player, bool& outDash, bool& outNon
 }
 
 void GucciEngine::analyzeFrameWindows() {
-    // Keep manual marks across a fresh run -- only Calculate-computed entries
-    // get wiped and recomputed. The probing loop below (see
-    // beginOrSkipProbeClick) skips re-measuring any click a manual mark
-    // already covers, so this run won't just immediately overwrite them again.
-    fwMarks.erase(std::remove_if(fwMarks.begin(), fwMarks.end(),
+                    fwMarks.erase(std::remove_if(fwMarks.begin(), fwMarks.end(),
         [](const FrameWindowMark& mk){ return !mk.manual; }), fwMarks.end());
     fwCapStack.clear();
     fwClickSamples.clear();
-    fwDebugMarks.clear(); // debug marks accumulate for the WHOLE run, not per click
+    fwDebugMarks.clear();
 
-    // A release's timing only matters for Wave/Ship/Robot -- everywhere else
-    // (Cube/UFO/Ball/Spider/Swing) releasing early or late doesn't change
-    // anything, so testing it there was just noise. Gamemode is read from
-    // ground truth captured during the original recording (m_pathSamples);
-    // if that's not available for this frame (e.g. an older macro with no
-    // path-sample data), the release is excluded rather than guessed.
-    auto shouldTestRelease = [&](uint32_t frame, bool player2) -> bool {
+                            auto shouldTestRelease = [&](uint32_t frame, bool player2) -> bool {
         char gm = fwGamemodeAt(this, frame, player2);
-        if (gm == 'H' && !fwTestShipReleases) return false; // Ship, user disabled
-        return gm == 'V' || gm == 'H' || gm == 'R'; // Wave, Ship, Robot
+        if (gm == 'H' && !fwTestShipReleases) return false;
+        return gm == 'V' || gm == 'H' || gm == 'R';
     };
 
                     for (auto const& a : replay.m_actionAtom.m_actions) {
@@ -1707,26 +1522,14 @@ void GucciEngine::fwTick() {
                       player1->m_position.x, player1->m_position.y, player1->m_yVelocity,
                       player1->m_isOnGround ? 1 : 0, updater.m_respawnTimer, updater.m_tps);
         }
-                // Position for the overlay marker is recorded right at the click's own
-                // frame -- unrelated to when the restore checkpoint below gets taken.
-                // fwDelayMarkerCapture (diagnostic, off by default) samples one tick
-                // later instead, for A/B testing Juice's position-lag report.
-                uint32_t markerCaptureDelay = fwDelayMarkerCapture ? 1u : 0u;
+                                                                                uint32_t markerCaptureDelay = fwDelayMarkerCapture ? 1u : 0u;
                 while (fwXYIndex < fwClickSamples.size() &&
                fwClickSamples[fwXYIndex].frame + markerCaptureDelay <= frame) {
                         if (auto* sp = fwClickSamples[fwXYIndex].player2 ? pl->m_player2 : pl->m_player1) {
                 fwClickSamples[fwXYIndex].x = sp->m_position.x;
                 fwClickSamples[fwXYIndex].y = sp->m_position.y;
                 if (!fwClickSamples[fwXYIndex].release) {
-                    // Ground truth from the original recording, NOT sp->m_touchingRings --
-                    // by this point in the Capturing pass, this frame's position has
-                    // already been force-corrected to ground truth (frameUpdateMidhook),
-                    // but m_touchingRings still reflects whatever the native collision
-                    // check saw against the pre-correction, independently-simulated
-                    // position. That's what made gravity portals/dash orbs read wrong
-                    // here. Falls back to the old live read for a macro recorded before
-                    // this ground truth existed (m_pathSamples too short for this frame).
-                    auto& samples = replay.m_pathSamples;
+                                                                                                                                                                                    auto& samples = replay.m_pathSamples;
                     if (frame < samples.size()) {
                         auto const& gt = samples[frame];
                         fwClickSamples[fwXYIndex].orbDash    = fwClickSamples[fwXYIndex].player2 ? gt.p2OrbDash    : gt.p1OrbDash;
@@ -1740,12 +1543,7 @@ void GucciEngine::fwTick() {
             fwXYIndex++;
         }
 
-                // Checkpoint capture fires fwSweepRange frames BEFORE the click (clamped
-                // to not go past frame 0 or before the previous click), not on it -- a
-                // checkpoint taken exactly at the click can only ever be resimulated
-                // forward, so shifting that click EARLIER than its own restore point was
-                // never actually possible. See fwCapIndex's declaration in GucciBot.hpp.
-                while (fwCapIndex < fwClickSamples.size()) {
+                                                                                                while (fwCapIndex < fwClickSamples.size()) {
             uint32_t clickFrame = fwClickSamples[fwCapIndex].frame;
             uint32_t margin     = (uint32_t)std::max(0, fwSweepRange);
             uint32_t captureFrame = clickFrame > margin ? clickFrame - margin : 0;
@@ -1772,19 +1570,7 @@ void GucciEngine::fwTick() {
             log::info("[GucciBot] Frame-window: capture done — {} checkpoints",
                       fwCapStack.size());
 
-            // Juice's 1a, corrected 2026-08-23 (Nigel/Juice: Wave and Ship
-            // still need their orb releases checked normally -- Robot is the
-            // ONLY hold gamemode where a release right after a non-dash orb
-            // isn't its own measurable input). My 2026-08-23-a build had this
-            // backwards -- removed the gm=='R' gate on the theory it was a
-            // redundant leftover from shouldTestRelease's own gating, but it
-            // was in fact the actual rule. Reverted. The real, still-open bug
-            // per Juice's report is that the skip isn't firing even in Robot
-            // mode. Diagnostic logging added below (every click's orb
-            // classification, not just skip decisions) since two rounds of
-            // static reading haven't turned up why -- next Robot-mode test
-            // should make it visible in the log.
-            if (fwOrbAwareReleaseSkip) {
+                                                                                                                                                            if (fwOrbAwareReleaseSkip) {
                 bool lastOrbNonDash[2] = { false, false };
                 std::vector<FwClickSample> keptSamples;
                 std::vector<StoredFrame>   keptCap;
@@ -1820,15 +1606,7 @@ void GucciEngine::fwTick() {
                 fwAnalyzeTotal = (int)fwClickSamples.size();
             }
 
-            // Juice's bug 3: a release's restore point must be anchored to its
-            // preceding click's own checkpoint, not independently computed from
-            // the release's own frame -- the click is what establishes the
-            // trajectory the release timing gets tested against, and it must
-            // fire at its own original macro frame, never moved. Backfill every
-            // release entry's fwCapStack with a copy of the nearest earlier
-            // click's (same player) so restoring for a release-probe always
-            // lands exactly where that click left things.
-            {
+                                                                                                            {
                 int lastClickCap[2] = { -1, -1 };
                 for (size_t i = 0; i < fwClickSamples.size(); ++i) {
                     auto const& s = fwClickSamples[i];
@@ -1859,19 +1637,9 @@ void GucciEngine::fwTick() {
         fwAnalyzeStage = "probing";
                                                 fwProbeFrame++;
 
-                // Juice's time-based survival test: N is never shifted or removed, it
-                // always fires at its own original frame. Just watch for death out to
-                // fwProbeHorizon (target-relative-to-N + slack + checkpoint warmup,
-                // computed per shift in beginShiftTest()).
-                if (fwProbeDied || fwProbeFrame >= fwProbeHorizon) {
+                                                                                if (fwProbeDied || fwProbeFrame >= fwProbeHorizon) {
             bool survived = !fwProbeDied;
-            // Juice's Position Tolerance (2026-08-21): surviving to the
-            // horizon isn't proof the shift actually worked -- the player
-            // could still be alive but far off the real path, somewhere N
-            // couldn't actually be executed from correctly. Only checked
-            // when there's a real N to compare against; a bare survival
-            // with no next input to reach is unaffected.
-            if (survived && fwPositionCheckEnabled && fwProbeHasNext) {
+                                                                                    if (survived && fwPositionCheckEnabled && fwProbeHasNext) {
                 auto* posPlayer = fwProbeNextPlayer2 ? pl->m_player2 : player1;
                 if (posPlayer) {
                     float dx = std::abs(posPlayer->m_position.x - fwProbeNextX);
@@ -1910,11 +1678,7 @@ void GucciEngine::fwTick() {
 }
 
 void GucciEngine::computeProbeHorizon() {
-    // Only used for the legacy no-next-input path now (the last measurable input in
-    // the macro, nothing to measure a target gap against) -- the normal case computes
-    // its own per-shift horizon in beginShiftTest() instead, since the real gap to N
-    // depends on the shift being tested.
-    fwProbeHorizon = std::max(16, fwMaxFramesMeasured);
+                    fwProbeHorizon = std::max(16, fwMaxFramesMeasured);
     long margin = 0;
     if (fwProbeClick < fwCapStack.size())
         margin = (long)fwClickSamples[fwProbeClick].frame - (long)fwCapStack[fwProbeClick].frame;
@@ -1922,15 +1686,7 @@ void GucciEngine::computeProbeHorizon() {
 }
 
 void GucciEngine::beginShiftTest() {
-    // Juice, 2026-08-19 (third report): X=0 is no longer assumed valid by default --
-    // it gets simulated and tested exactly like every other offset, counted only if
-    // it actually survives. fwProbePhase == -1 means "currently testing X=0"; see
-    // advanceOffsetSweep() for what happens when that result comes back.
-    //
-    // Juice's bug 1: dedup guard -- an offset should only ever be probed once
-    // per click. If this fires, something upstream is re-entering a shift that
-    // was already resolved, which would silently inflate the reported window.
-    if (fwProbeTestedShifts.count(fwProbeShift)) {
+                                    if (fwProbeTestedShifts.count(fwProbeShift)) {
         log::error("[GucciBot] Frame-window: shift {:+d} already tested for click {} -- "
                    "dedup guard caught a repeat, ending this click's sweep early "
                    "instead of risking an inflated window", fwProbeShift, fwProbeClick);
@@ -1945,31 +1701,13 @@ void GucciEngine::beginShiftTest() {
     }
 
     if (fwProbeHasNext) {
-        // Juice (2026-08-21): the previous version computed target as N.frame
-        // minus the SHIFTED click's frame, then added that to a horizon
-        // counted from the CHECKPOINT restore (fwProbeFrame's actual zero
-        // point, not the shifted click). Combined with a shift-independent
-        // warmup margin, the effective absolute stop-frame SHRANK as the
-        // shift grew instead of tracking forward with it -- his debug-mode
-        // screenshot showed exactly that: later shifts ending their test
-        // progressively EARLIER along the trajectory, forming a backwards
-        // diagonal instead of the expected one.
-        //
-        // What should move WITH the shift is the target itself: the gap from
-        // click to N in the ORIGINAL macro is fixed, so N's true target for a
-        // shifted click is target_absolute = N.frame + shift (same gap,
-        // slid by the shift), window = target_absolute +/- slack. In terms
-        // of fwProbeFrame (ticks since checkpoint), that's: ticks from
-        // checkpoint to the SHIFTED click (warmup + shift) plus ticks from
-        // there out to target+slack -- and that second part is just the
-        // ORIGINAL gap + slack, since the shift cancels out (both the
-        // shifted click and its target move together).
         int64_t originalGap = std::max<int64_t>(
             (int64_t)fwProbeNextFrame - (int64_t)fwClickSamples[fwProbeClick].frame, 0);
-        // Juice (2026-08-21): slack only shortens the required survival time,
-        // it doesn't extend it -- a 30-frame gap with 3 slack means surviving
-        // 27 frames counts as a pass, not "must survive up to 33." Previously
-        // added slack on top of the gap; now subtracted from it (floored at 0).
+        // Slack SHORTENS the required survival distance, it does not extend
+        // it (surviving gap-slack frames counts as a pass, not gap+slack) --
+        // this was previously the other sign and produced systematically
+        // inflated windows. Don't flip this back without a specific report
+        // asking for it.
         long high = (long)std::max<int64_t>(originalGap - fwSlackWindow, 0);
         long warmup = 0;
         if (fwProbeClick < fwCapStack.size())
@@ -1987,16 +1725,10 @@ void GucciEngine::beginShiftTest() {
 }
 
 void GucciEngine::advanceOffsetSweep(bool survived) {
-    // Bounds are the neighbor-distance clamps (fwProbeMaxNegShift/PosShift), not the
-    // raw fwSweepRange -- see their field comments in GucciBot.hpp.
-    if (survived) fwProbeValidCount++;
+            if (survived) fwProbeValidCount++;
 
     if (fwProbePhase == -1) {
-        // The X=0 test itself just concluded (Juice: test it for real, don't assume
-        // it). If it survived, it's the anchor everything else's contiguity is
-        // measured from; if it didn't, there's no valid "0" to be contiguous with,
-        // so neither direction starts out contiguous.
-        if (survived) {
+                                        if (survived) {
             fwProbeLow = 0;
             fwProbeHigh = 0;
         } else {
@@ -2080,12 +1812,7 @@ void GucciEngine::debugTeleportToMark(size_t markIndex) {
 
     if (fwAnalyzing) cancelAnalysis();
 
-    // Rebuild the same action list this test used: just the owning click shifted to
-    // mk.testedFrame, exactly like the test itself ran -- N is never touched anymore
-    // (Juice's time-based test always leaves it at its own original frame), so the
-    // rest of the macro plays out completely normally from here, same as the real
-    // test did. Nothing to suppress.
-    replay.m_actionAtom = fwSavedAtom;
+                        replay.m_actionAtom = fwSavedAtom;
     auto& acts = replay.m_actionAtom.m_actions;
     acts.erase(std::remove_if(acts.begin(), acts.end(),
                    [](const gb::Action& a){ return !a.isInput(); }),
@@ -2106,11 +1833,7 @@ void GucciEngine::debugTeleportToMark(size_t markIndex) {
     practiceFix.m_storedFrames.push_back(fwCapStack[mk.clickIndex]);
     practiceFix.m_storedFrames.push_back(fwCapStack[mk.clickIndex]);
 
-    // Raw field assignment, not setMode() -- setMode(Playing) clears fwClickSamples as
-    // a side effect (appropriate for starting a fresh recording/playback session, not
-    // for resuming mid-flight from a checkpoint), which would break every OTHER mark's
-    // clickIndex lookup the next time this function runs.
-    mode = Mode::Playing;
+                    mode = Mode::Playing;
     if (practiceFix.canRestoreState()) {
         practiceFix.m_loadCheckpoint = true;
         practiceFix.m_isBackstep     = true;
@@ -2140,26 +1863,14 @@ void GucciEngine::beginProbeRun() {
 
                     uint32_t targetFrame = fwClickSamples[fwProbeClick].frame;
     bool     targetP2    = fwClickSamples[fwProbeClick].player2;
-    // fwClickSamples can now hold releases too (see analyzeFrameWindows), so
-    // this has to match on holding-state as well -- previously hardcoded to
-    // a.m_holding (press-only), which meant probing a release sample found
-    // nothing to shift and silently tested the unshifted timing every time.
-    bool     targetHolding = !fwClickSamples[fwProbeClick].release;
-    // Shift is applied unconditionally now (both directions) -- it used to only
-    // fire for fwProbeShift > 0, which silently meant negative shifts were never
-    // actually tested (see [[project-1-3-frame-window]] memory for how this was
-    // found). Clamped at 0 since frames can't go negative.
-    for (auto& a : acts) {
+                    bool     targetHolding = !fwClickSamples[fwProbeClick].release;
+                    for (auto& a : acts) {
         if (a.m_frame == targetFrame && a.m_player2 == targetP2 && a.m_holding == targetHolding) {
             int64_t shifted = (int64_t)targetFrame + fwProbeShift;
             a.m_frame = (uint32_t)std::max<int64_t>(shifted, 0);
             break;
         }
     }
-
-    // Juice's time-based test: N is never shifted or removed -- it always fires at
-    // its own original frame, same as every other input in the macro that isn't the
-    // one being probed. Nothing else to touch here.
 
                 std::stable_sort(acts.begin(), acts.end(),
                          [](const gb::Action& a, const gb::Action& b){
@@ -2179,22 +1890,7 @@ void GucciEngine::beginProbeRun() {
     if (practiceFix.canRestoreState()) {
         practiceFix.m_loadCheckpoint = true;
         practiceFix.m_isBackstep     = true;
-        // Diagnostic for Nigel's "died at some random part, idk why" report
-        // (2026-08-24): GD's own checkpoint restore is well-known to not
-        // always correctly resync trigger-driven moving hazards, and
-        // Calculate hammers repeated restores of the SAME checkpoint far
-        // harder than normal play ever does (once per shift offset tested).
-        // No fix attempted yet -- can't verify GD's internals or replicate
-        // MegaHack's Practice Fix without a reference to check against, and
-        // this project has been burned before by shipping a guess on
-        // something this foundational (see P3 slope-exit, three wrong
-        // theories before the real fix). This just logs which exact
-        // restore is about to run; [CAP-DIE] (hook_playlayer.cpp) already
-        // logs every death frame during probing -- together they let a
-        // "died at some random part" report be matched to the exact
-        // shift/frame being tested, so the level can actually be inspected
-        // at that spot instead of guessing blind at the mechanism.
-        log::info("[CAP-RESTORE] click={} shift={} targetFrame={} cpFrame={}",
+                                                                                                                                log::info("[CAP-RESTORE] click={} shift={} targetFrame={} cpFrame={}",
                   fwProbeClick, fwProbeShift, targetFrame, fwCapStack[fwProbeClick].frame);
         pl->resetLevel();
         practiceFix.m_loadCheckpoint = false;
@@ -2202,24 +1898,14 @@ void GucciEngine::beginProbeRun() {
     }
 }
 
-// --- Recovery Range algorithm (fwUseRecoveryRangeAlgorithm) ---
-// See its field comment in GucciBot.hpp for what this is and why it's
-// separate from the time-based test above.
-
 void GucciEngine::beginShiftTestRecovery() {
     fwProbeSubPhase = FwProbeSubPhase::Reaching;
     if (!fwProbeHasNext) {
-        // Nothing to recover against -- same as the time-based test's own
-        // no-next-input path, just watch survival out to a flat horizon.
-        computeProbeHorizon();
+                        computeProbeHorizon();
         beginProbeRun();
         return;
     }
-    // Reach check: horizon is the distance from the shifted click to N's
-    // ORIGINAL frame (N's action is removed below, so nothing should fire
-    // before then anyway), plus the same checkpoint-warmup margin the
-    // time-based test accounts for.
-    int64_t shiftedIFrame = std::max<int64_t>((int64_t)fwClickSamples[fwProbeClick].frame + fwProbeShift, 0);
+                    int64_t shiftedIFrame = std::max<int64_t>((int64_t)fwClickSamples[fwProbeClick].frame + fwProbeShift, 0);
     int64_t horizonToN    = std::max<int64_t>((int64_t)fwProbeNextFrame - shiftedIFrame, 0);
     long margin = 0;
     if (fwProbeClick < fwCapStack.size())
@@ -2255,11 +1941,7 @@ void GucciEngine::beginProbeRunReach() {
         }
     }
 
-    // Reach phase: strip N's own action entirely so nothing fires there --
-    // this test only checks whether the shifted click's own trajectory
-    // survives long enough to REACH N, not whether N itself can still be
-    // executed (that's the separate recovery-candidate search below).
-    if (fwProbeHasNext) {
+                    if (fwProbeHasNext) {
         acts.erase(std::remove_if(acts.begin(), acts.end(),
             [&](const gb::Action& a){
                 return a.m_frame == fwProbeNextFrame && a.m_player2 == fwProbeNextPlayer2 &&
@@ -2316,10 +1998,7 @@ void GucciEngine::beginRecoveryCandidate() {
         }
     }
 
-    // Recovery candidate: try firing N at N.frame + fwRecoveryOffset instead
-    // of its own original frame -- models a player adjusting N's timing
-    // slightly in response to the shifted click before it.
-    int64_t shiftedNFrame = fwProbeNextFrame;
+                int64_t shiftedNFrame = fwProbeNextFrame;
     if (fwProbeHasNext) {
         for (auto& a : acts) {
             if (a.m_frame == fwProbeNextFrame && a.m_player2 == fwProbeNextPlayer2 &&
@@ -2343,10 +2022,7 @@ void GucciEngine::beginRecoveryCandidate() {
     fwProbeDied  = false;
     fwProbeFrame = 0;
 
-    // Horizon: survive to N's candidate frame plus slack, so N's action (now
-    // firing at the candidate frame) actually gets to execute and we watch
-    // what happens just after it too -- same slack the time-based test uses.
-    int64_t shiftedIFrame = std::max<int64_t>((int64_t)targetFrame + fwProbeShift, 0);
+                int64_t shiftedIFrame = std::max<int64_t>((int64_t)targetFrame + fwProbeShift, 0);
     int64_t horizon = std::max<int64_t>(shiftedNFrame - shiftedIFrame, 0) + fwSlackWindow;
     long margin = 0;
     if (fwProbeClick < fwCapStack.size())
@@ -2368,13 +2044,11 @@ void GucciEngine::beginRecoveryCandidate() {
 void GucciEngine::advanceRecoverySweep(bool survived) {
     if (fwProbeSubPhase == FwProbeSubPhase::Reaching) {
         if (!fwProbeHasNext) {
-            // No next input -- the reach check WAS the whole test.
-            advanceOffsetSweep(survived);
+                        advanceOffsetSweep(survived);
             return;
         }
         if (!survived) {
-            // Didn't even reach N -- this shift fails outright, nothing to recover.
-            advanceOffsetSweep(false);
+                        advanceOffsetSweep(false);
             return;
         }
         fwProbeSubPhase  = FwProbeSubPhase::RecoveryCandidate;
@@ -2383,27 +2057,20 @@ void GucciEngine::advanceRecoverySweep(bool survived) {
         return;
     }
 
-    // A recovery-candidate test just concluded.
-    if (survived) {
-        // Found a candidate that works -- this shift counts as valid.
-        advanceOffsetSweep(true);
+        if (survived) {
+                advanceOffsetSweep(true);
         return;
     }
     fwRecoveryOffset++;
     if (fwRecoveryOffset > fwRecoveryRange) {
-        // Exhausted the recovery range without finding one that works.
-        advanceOffsetSweep(false);
+                advanceOffsetSweep(false);
         return;
     }
     beginRecoveryCandidate();
 }
 
 void GucciEngine::finishProbeClick() {
-    // Juice, 2026-08-19: the reported window is now just "how many tested offsets
-    // survived" -- fwProbeValidCount, not the contiguous fwProbeHigh-fwProbeLow span.
-    // The old contiguous-span number could read e.g. "1" while debug mode visibly
-    // showed 3 surviving marks, because those 3 survivors weren't all adjacent to 0.
-    int window = fwProbeValidCount;
+                    int window = fwProbeValidCount;
     const float levelLen = m_levelLength > 0.f ? m_levelLength : 1.f;
 
     FrameWindowMark mk;
@@ -2426,11 +2093,7 @@ void GucciEngine::finishProbeClick() {
 }
 
 void GucciEngine::beginOrSkipProbeClick() {
-    // A manual mark at a click means the user has already decided its window
-    // by hand -- don't spend a probe run re-measuring (and potentially
-    // overwriting) it. Keep advancing past every manually-covered click
-    // before actually starting the next probe.
-    while (fwProbeClick < fwClickSamples.size() &&
+                    while (fwProbeClick < fwClickSamples.size() &&
            fwHasManualMarkAt(fwClickSamples[fwProbeClick].frame, fwClickSamples[fwProbeClick].player2)) {
         log::info("[GucciBot] Frame-window: click {} @ frame {} has a manual mark, skipping probe",
                   fwProbeClick, fwClickSamples[fwProbeClick].frame);
@@ -2446,24 +2109,17 @@ void GucciEngine::beginOrSkipProbeClick() {
         return;
     }
 
-    // Cache the next measurable input (if any) once per click -- reused for
-    // every shift X and every recovery candidate k tested while probing it.
-    size_t nextIdx = fwProbeClick + 1;
+            size_t nextIdx = fwProbeClick + 1;
     fwProbeHasNext = nextIdx < fwClickSamples.size();
     if (fwProbeHasNext) {
         fwProbeNextFrame     = fwClickSamples[nextIdx].frame;
         fwProbeNextIsRelease = fwClickSamples[nextIdx].release;
         fwProbeNextPlayer2   = fwClickSamples[nextIdx].player2;
-        // N's TRUE position, captured during Capturing (the original,
-        // unshifted playthrough) -- for Juice's Position Tolerance check.
-        fwProbeNextX = fwClickSamples[nextIdx].x;
+                        fwProbeNextX = fwClickSamples[nextIdx].x;
         fwProbeNextY = fwClickSamples[nextIdx].y;
     }
 
-    // Neighbor-distance clamps: never let this click's own shift reach or cross
-    // the previous/next measurable input's ORIGINAL frame. See the field
-    // comments in GucciBot.hpp for why this matters in dense sections.
-    uint32_t clickFrame = fwClickSamples[fwProbeClick].frame;
+                uint32_t clickFrame = fwClickSamples[fwProbeClick].frame;
     fwProbeMaxPosShift = fwSweepRange;
     if (fwProbeHasNext) {
         long room = (long)fwProbeNextFrame - (long)clickFrame - 1;
@@ -2479,18 +2135,9 @@ void GucciEngine::beginOrSkipProbeClick() {
     fwProbeNegContiguous = true;
     fwProbePosContiguous = true;
     fwProbeValidCount = 0;
-    fwProbeTestedShifts.clear(); // Juice's bug 1: dedup guard is scoped per click
+    fwProbeTestedShifts.clear();
 
-    // Juice, 2026-08-19 (third report): X=0 is no longer assumed valid -- it gets
-    // simulated and tested exactly like every other offset, through the exact same
-    // pipeline (beginShiftTest() -> beginProbeRun() -> ... -> advanceOffsetSweep()),
-    // so it gets counted once if it survives and gets its debug mark from a REAL
-    // test instead of a synthetic one added separately. See advanceOffsetSweep()'s
-    // fwProbePhase == -1 branch for what happens once this result comes back --
-    // including starting the negative/positive expansion (or finishing immediately
-    // if there's no room in either direction, which used to be decided here before
-    // X=0 even ran).
-    fwProbeShift = 0; fwProbePhase = -1;
+                                        fwProbeShift = 0; fwProbePhase = -1;
     beginShiftTest();
 }
 
@@ -2527,12 +2174,7 @@ void GucciEngine::fwFinishAnalysis() {
 }
 
 void GucciEngine::muteAnalysisMusic() {
-    // Juice's request (2026-08-21): mute the game during Calculate, unmute
-    // after. Uses GD's own music/SFX volume (not a raw FMOD channel-group
-    // mute) specifically so it doesn't also silence the per-tier "ding"
-    // sounds -- those play on manually-created FMOD channels that don't
-    // route through these volume settings.
-    if (fwMusicMuted) return;
+                        if (fwMusicMuted) return;
     auto* fmod = FMODAudioEngine::sharedEngine();
     if (!fmod) return;
     fwSavedMusicVolume   = fmod->getBackgroundMusicVolume();
@@ -2577,18 +2219,7 @@ void GucciEngine::cancelAnalysis() {
     mode             = Mode::Idle;
     if (userTpsSaved > 0.0) { updater.setTps(userTpsSaved); userTpsSaved = 0.0; }
 
-    // Clicks already finished before the cancel (finishProbeClick pushes
-    // into fwMarks progressively as each one completes) used to just get
-    // thrown away here -- any interruption mid-run (Stop, a death flipping
-    // mode, leaving the level) silently lost all completed work. Persist
-    // whatever's there instead.
-    //
-    // Nigel: save unconditionally, no matter what -- saveFwMarksNow() already
-    // handles the empty case correctly on its own (removes a stale sidecar
-    // instead of writing an empty one), so the old "only save if non-empty"
-    // guard here was just skipping the empty-case cleanup, not avoiding
-    // anything genuinely unnecessary.
-    fwHasData = !fwMarks.empty();
+                                                fwHasData = !fwMarks.empty();
     saveFwMarksNow();
 
     log::info("[GucciBot] Frame-window: analysis cancelled — {} result(s) kept",

@@ -33,20 +33,13 @@ void writeChunk(std::ofstream& out, const char* type, std::vector<uint8_t> const
     out.write((const char*)crcBuf.data(), 4);
 }
 
-// Hand-rolled PNG encoder -- bypasses CCRenderTexture::saveToFile entirely
-// (which returned false for every single object in the first real test,
-// most likely cocos2d's own file-path handling not liking a Windows
-// absolute path). Raw RGBA pixels -> zlib-compressed scanlines (proven zlib
-// usage already exists in this codebase, see brr_format.cpp) -> written via
-// plain std::ofstream, the file-write pattern already proven to work
-// everywhere else in this mod.
 bool writePng(std::filesystem::path const& path, const unsigned char* rgba, int width, int height) {
     if (!rgba || width <= 0 || height <= 0) return false;
 
     std::vector<uint8_t> raw;
     raw.reserve((size_t)height * (1 + (size_t)width * 4));
     for (int y = 0; y < height; y++) {
-        raw.push_back(0); // filter type: None
+        raw.push_back(0);
         const unsigned char* row = rgba + (size_t)y * (size_t)width * 4;
         raw.insert(raw.end(), row, row + (size_t)width * 4);
     }
@@ -66,11 +59,11 @@ bool writePng(std::filesystem::path const& path, const unsigned char* rgba, int 
     std::vector<uint8_t> ihdr;
     writeBE32(ihdr, (uint32_t)width);
     writeBE32(ihdr, (uint32_t)height);
-    ihdr.push_back(8); // bit depth
-    ihdr.push_back(6); // color type: RGBA
-    ihdr.push_back(0); // compression method
-    ihdr.push_back(0); // filter method
-    ihdr.push_back(0); // interlace method
+    ihdr.push_back(8);
+    ihdr.push_back(6);
+    ihdr.push_back(0);
+    ihdr.push_back(0);
+    ihdr.push_back(0);
     writeChunk(out, "IHDR", ihdr);
     writeChunk(out, "IDAT", compressed);
     writeChunk(out, "IEND", {});
@@ -80,17 +73,6 @@ bool writePng(std::filesystem::path const& path, const unsigned char* rgba, int 
 
 }
 
-// One-time diagnostic, same spirit as objectid_dump.cpp but for actual pixels
-// instead of just the object-type enum: renders each not-yet-captured object's
-// real sprite (unrotated, unscaled -- as authored in the texture atlas) to a
-// small transparent PNG, so shape assumptions for procedural decoration don't
-// have to be guessed from rotation/scale statistics anymore.
-//
-// Take 3: the first two attempts confirmed the render pipeline itself works
-// (real non-degenerate texture rects were being read for every object) but
-// CCRenderTexture::saveToFile returned false for all of them -- so this
-// bypasses it and writes the PNG manually instead of trusting cocos2d's own
-// file writer.
 class $modify(SpriteDumpPL, PlayLayer) {
     void createObjectsFromSetupFinished() {
         PlayLayer::createObjectsFromSetupFinished();
@@ -113,17 +95,7 @@ class $modify(SpriteDumpPL, PlayLayer) {
             if (std::filesystem::exists(path)) continue;
             attempted++;
 
-            // Take 6: fresh clones via createWithSpriteFrame render blank for
-            // several real, non-degenerate-sized ids (211, 1201, 817, ...)
-            // even after forcing color/opacity/blend, which ruled that out
-            // as the cause. Next theory: some decoration pieces are actually
-            // base + child node (a separate glow layer), so a standalone
-            // clone of just the base frame is legitimately blank -- the real
-            // visible content lives on a child I wasn't capturing. This
-            // captures the LIVE object itself (with any real children/state)
-            // instead of a clone, restoring its transform immediately after
-            // so nothing about the actual level visually changes.
-            CCPoint origPos = go->getPosition();
+                                                                                                                                    CCPoint origPos = go->getPosition();
             float origRot = go->getRotation();
             float origScaleX = go->getScaleX();
             float origScaleY = go->getScaleY();

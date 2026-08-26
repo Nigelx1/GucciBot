@@ -10,9 +10,6 @@ using namespace geode::prelude;
 
 namespace {
 
-// Marker squares are drawn with an inverted destination-colour blend
-// (result = 1 - background), so they stay visible against any terrain
-// colour without needing to pick a fixed colour per level.
 std::vector<CCPoint> squareVertices(CCPoint center, float half) {
     return {
         ccp(center.x - half, center.y - half), ccp(center.x + half, center.y - half),
@@ -73,10 +70,7 @@ public:
             return;
         }
 
-        // Trainer reveal frontier: ratchets forward as the real player (whoever's
-        // controlling -- bot or Nigel manually) actually reaches new ground, never
-        // backward. Persisted per-macro so it survives between sessions.
-        if (gb->trainerRevealEnabled && pl->m_player1) {
+                                if (gb->trainerRevealEnabled && pl->m_player1) {
             float curX = pl->m_player1->m_position.x;
             if (curX > gb->replay.m_trainerBestX) {
                 gb->replay.m_trainerBestX = curX;

@@ -5,9 +5,6 @@
 #include <Geode/modify/CCKeyboardDispatcher.hpp>
 using namespace geode::prelude;
 
-// GD's standard jump bindings -- shared by Click Trainer's tracking and
-// Autoclicker's input tracking below so the two can't drift apart on which
-// keys count as a jump.
 static bool isJumpKey(enumKeyCodes key) {
     return key == enumKeyCodes::KEY_Space || key == enumKeyCodes::KEY_Up || key == enumKeyCodes::KEY_W;
 }
@@ -34,27 +31,12 @@ class $modify(GB7KeyHandler, CCKeyboardDispatcher) {
         if (ImGui::GetIO().WantTextInput)
             return CCKeyboardDispatcher::dispatchKeyboardMSG(key, down, repeat, ts);
 
-        // Click Trainer's own click/release marks (spacebar, up arrow, W):
-        // folded into this existing hook rather than a separate $modify class,
-        // since a separate hook risked silently missing keys if it ended up
-        // chained after the rebind early-return above (that path returns true
-        // without calling the base dispatchKeyboardMSG, breaking the chain for
-        // anything ordered after it). Deliberately not gated on PlayLayer::get()
-        // (unlike Autoclicker's tracking below) since the click bar works
-        // without a level loaded; gated on jupiterClickBarPageVisible, which
-        // is recomputed fresh every frame in drawInterface (true only while
-        // the page is actually rendering), NOT the sticky jupiterClickBarPageOpen
-        // navigation flag -- that one only clears via its own Back button, so
-        // leaving the page any other way (menu-close hotkey, switching tabs)
-        // left it stuck true and ordinary gameplay jumping kept piling into
-        // this history indefinitely.
-        if (!repeat && gb->jupiterClickBarPageVisible && isJumpKey(key)) {
+                                                                                                                        if (!repeat && gb->jupiterClickBarPageVisible && isJumpKey(key)) {
             if (down) gb->jupiterClickBarMyClicks.push_back(gb->jupiterClickBarPosSec);
             else gb->jupiterClickBarMyReleases.push_back(gb->jupiterClickBarPosSec);
         }
 
-        // Same as above, for the general Trainer tab's own Click Trainer page.
-        if (!repeat && gb->trainerClickBarPageVisible && isJumpKey(key)) {
+                if (!repeat && gb->trainerClickBarPageVisible && isJumpKey(key)) {
             if (down) gb->trainerClickBarMyClicks.push_back(gb->trainerClickBarPosSec);
             else gb->trainerClickBarMyReleases.push_back(gb->trainerClickBarPosSec);
         }

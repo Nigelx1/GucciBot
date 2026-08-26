@@ -5,9 +5,6 @@
 #include <algorithm>
 #include <cstring>
 
-// Shared body for all four write callbacks -- each named callback below
-// just supplies which AudioRecorder instance it belongs to and forwards
-// here, so the actual capture logic exists exactly once.
 static FMOD_RESULT captureInto(AudioRecorder* recorder, float* inBuffer,
                                float* outBuffer, unsigned int length,
                                int inChannels) {
@@ -61,11 +58,7 @@ void AudioRecorder::haltWithData(float* data, unsigned int length) {
 }
 
 void AudioRecorder::init(FMOD::ChannelGroup* group) {
-    // Each instance owns its own FMOD::DSP*, one createDSP call per
-    // instance (previously this was all inside the single get() instance
-    // -- fine, since FMOD::DSP objects are independent regardless of which
-    // AudioRecorder created them).
-    FMOD_DSP_DESCRIPTION desc = {};
+                    FMOD_DSP_DESCRIPTION desc = {};
     if (this == getMusic()) {
         strcpy_s(desc.name, "guccibot dsp (music)");
         desc.read = AudioRecorder::writeCallbackMusic;

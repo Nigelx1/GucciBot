@@ -40,13 +40,6 @@ static ImVec4 brighten(const ImVec4& c,float amt){
 static ImU32 toU32(const ImVec4& c){return ImGui::ColorConvertFloat4ToU32(c);}
 static ImVec2 snapPos(ImVec2 p){return ImVec2(std::round(p.x),std::round(p.y));}
 
-// Jupiter segments: shared by the Segments list itself, segment looping,
-// export/import, and auto-suggestions. Raw format is "label,x,note;label,x,note;...".
-// Notes are escaped (not base64 -- just swaps the two delimiter chars for a
-// harmless placeholder) so a note can contain commas/semicolons without
-// corrupting the field split. Old saves only have "label,x" (no note field);
-// loading falls back to that when the would-be x-field doesn't parse as a
-// float, so existing segments from before this feature still load correctly.
 struct JupiterSegment{std::string label;float x=0.f;std::string note;};
 
 static std::string jupEscapeField(std::string s){
@@ -113,9 +106,6 @@ static std::string serializeJupiterSegments(std::vector<JupiterSegment> const& s
     return out;
 }
 
-// Minimal base64 codec -- just enough to turn the segments+notes blob into a
-// single opaque, clipboard-safe string for export/import. Standard 6-bit
-// accumulator implementation, nothing GD-specific about it.
 static const char kB64Chars[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 static std::string base64Encode(std::string const& in){
     std::string out;
@@ -143,10 +133,6 @@ static std::string base64Decode(std::string const& in){
     return out;
 }
 
-// Export/import: bundles segments + notes into one opaque code, using an
-// ASCII Unit Separator (0x1F) between the two blobs since it'll never
-// legitimately appear in either (segments already escape their own
-// delimiters, notes are free text but 0x1F isn't typeable in the InputText).
 static std::string exportSegmentsCode(std::string const& segmentsRaw,std::string const& notes){
     std::string blob=segmentsRaw+"\x1F"+notes;
     return "JMF1:"+base64Encode(blob);
@@ -162,13 +148,6 @@ static bool importSegmentsCode(std::string const& code,std::string& outSegmentsR
     return true;
 }
 
-// Auto segment suggestions: buckets click PRESS times (GucciReplaySystem::
-// m_clickIntervalsSec, already built at load()) into 0.5s windows, flags
-// windows with unusually high click density, and looks up the player's
-// actual X position at that moment via m_pathSamples (index==frame) to turn
-// "a lot of clicks happened around here in time" into "here's roughly where
-// that was in the level". Skips anything within 50 units of an existing
-// segment so repeated presses don't spam duplicates.
 static std::vector<JupiterSegment> suggestSegmentsFromClickDensity(
     std::vector<std::pair<double,double>> const& clickIntervalsSec,
     std::vector<MacroPathSample> const& pathSamples,
@@ -218,34 +197,11 @@ static std::vector<JupiterSegment> suggestSegmentsFromClickDensity(
     return out;
 }
 
-// BIG BRRRR bounce, take 2. The first version nudged the window by the DELTA
-// between this frame's and last frame's sine value -- a RELATIVE correction
-// that silently assumes nothing else ever touches the window's position
-// between calls. That assumption doesn't actually hold: this window has no
-// NoMove flag, so ImGui's own native click-drag can reposition it too, and a
-// relative delta has no way to detect or correct for that -- it just keeps
-// nudging from wherever the window happens to be, which can drift away from
-// true rest and never visibly "come back down." This version tracks an
-// explicit ABSOLUTE anchor (restY, captured the moment bouncing starts) and
-// always drives the window to restY+offset directly, rather than trusting
-// GetWindowPos() to reflect only what this function itself did last frame.
-// Once offset decays to 0 it goes fully idle and stops touching Y at all, so
-// the window ends up exactly back at its real rest position, and normal
-// dragging works unaffected while idle (same as before BRRRR existed).
-// Shared between drawMainWindow and drawMegaHackWindow so both skins bounce
-// in sync; never applies to the Jupiter tab (jupiterActive guard) -- and
-// that resets everything too, since its position is force-set every frame
-// anyway, so BRRRR re-anchors cleanly if it's still on when you leave.
 static void applyBigBrrrBounce(bool jupiterActive){
     static float restY=0.f;
     static float offset=0.f;
     static bool active=false;
-    // ImGui::GetTime() value corresponding to the track's position 0 (an
-    // assumed downbeat) -- captured fresh each time bouncing (re)starts.
-    // Playback itself starts kStartOffsetSec into the file (skips the slow
-    // intro, see BigBrrrManager::start), so that moment is kStartOffsetSec
-    // seconds AFTER this reference point, not at it.
-    static double beatRefTime=0.0;
+                        static double beatRefTime=0.0;
 
     if(jupiterActive){active=false;offset=0.f;return;}
 
@@ -257,7 +213,7 @@ static void applyBigBrrrBounce(bool jupiterActive){
             beatRefTime=ImGui::GetTime()-BigBrrrManager::kStartOffsetSec();
         }
         double elapsed=ImGui::GetTime()-beatRefTime;
-        double omega=2.0*3.14159265358979*BigBrrrManager::kBpm()/60.0; // one full bounce cycle per beat
+        double omega=2.0*3.14159265358979*BigBrrrManager::kBpm()/60.0;
         offset=(float)(std::sin(elapsed*omega)*10.0);
     } else if(active){
         offset*=0.75f;
@@ -270,53 +226,27 @@ static void applyBigBrrrBounce(bool jupiterActive){
     ImGui::SetWindowPos(ImVec2(wp.x,restY+offset));
 }
 
-// Nigel, 2026-08-24: GrizzleyBot's track is "crazy bass boosted" -- "is
-// there any way to like... vibrate the menu like a speaker on the bassy
-// parts?" Unlike the sine-wave bounce above (a BPM guess, no real audio
-// data), this reads BigBrrrManager's live FMOD DSP tap on the actual
-// playback channel -- genuine per-buffer bass energy, not a metronome.
-// True GPU blur isn't reachable here: ImGuiCocos (build/_deps/gd-imgui-
-// cocos-src) only exposes setup()/draw() callback registration, nothing
-// resembling a render-target/backend hook to intercept for a post-process
-// shader, and forking that dependency for one effect wasn't worth it.
-// Instead: a violent position shake plus a window-alpha flicker, both
-// driven by the same smoothed bass envelope -- reads as the whole menu
-// glitching/thumping on hits rather than a soft wobble. Nigel was explicit
-// it's fine to be intense: "it can be annoying on purpose if its
-// accurate." Two independent smoothing trackers (one per effect) rather
-// than shared state, same one-concern-per-function preference already
-// used for AudioRecorder's per-instance callbacks.
 static float bigBrrrFlickerAlpha(bool jupiterActive){
     static float smoothed=0.f;
     auto* brrr=BigBrrrManager::get();
     bool on=!jupiterActive&&brrr->enabled&&brrr->shakeEnabled;
     float target=on?brrr->getBassLevel():0.f;
-    float rate=(target>smoothed)?40.f:6.f; // fast attack, slower decay -- reads as punching on hits
+    float rate=(target>smoothed)?40.f:6.f;
     smoothed+=(target-smoothed)*std::min(1.f,rate*ImGui::GetIO().DeltaTime);
-    return 1.f-smoothed*smoothed*brrr->flickerIntensity; // squared response; max dip now user-adjustable (was a fixed 50%)
+    return 1.f-smoothed*smoothed*brrr->flickerIntensity;
 }
 
 static void applyBigBrrrShake(bool jupiterActive){
     static float smoothed=0.f;
     static float anchorX=0.f, anchorY=0.f;
     static bool active=false;
-    // Nigel: still drifting left even after the random-walk fix (bounded
-    // this time, not runaway, but persistent). Root cause of THIS version:
-    // the previous fix recovered the anchor every single frame by reading
-    // GetWindowPos() back and subtracting last frame's offset -- round-
-    // tripping position through ImGui's own internal storage every frame
-    // while actively shaking. If that storage quantizes/rounds position to
-    // whole pixels for crisp rendering (typical for an immediate-mode
-    // GUI), each round-trip loses a small, consistently-signed fraction --
-    // never gains one, since rounding only ever goes one way -- and that
-    // creeps steadily in one direction over hundreds of frames. Bounded
-    // per frame, but still a real, visible drift over time, matching
-    // exactly what was reported. Fixed the same way applyBigBrrrBounce
-    // already does it above: capture the anchor exactly ONCE when a shake
-    // episode starts (not every frame), then only ever compute anchor+
-    // freshOffset directly for the rest of the episode -- nothing to round-
-    // trip while actively shaking, since GetWindowPos() is never read back
-    // mid-episode at all.
+    // Anchor is captured once when a shake episode starts, never read back
+    // from GetWindowPos() mid-episode. Reading position back and
+    // subtracting the last offset round-trips it through ImGui's internal
+    // storage every frame; if that storage quantizes to whole pixels, each
+    // round-trip loses a small consistently-signed fraction and the window
+    // drifts steadily in one direction over time. Don't reintroduce a
+    // per-frame GetWindowPos() read here.
     auto* brrr=BigBrrrManager::get();
     bool on=!jupiterActive&&brrr->enabled&&brrr->shakeEnabled;
     float target=on?brrr->getBassLevel():0.f;
@@ -325,7 +255,7 @@ static void applyBigBrrrShake(bool jupiterActive){
 
     if(smoothed<=0.001f){
         if(active){
-            ImGui::SetWindowPos(ImVec2(anchorX,anchorY)); // snap back to the exact anchor, no residual offset
+            ImGui::SetWindowPos(ImVec2(anchorX,anchorY));
             active=false;
         }
         return;
@@ -337,7 +267,7 @@ static void applyBigBrrrShake(bool jupiterActive){
         active=true;
     }
 
-    float amp=smoothed*smoothed*28.f; // squared -- quiet parts stay basically still, real hits actually hit
+    float amp=smoothed*smoothed*28.f;
     float sx=((float)(rand()%2001)/1000.f-1.f)*amp;
     float sy=((float)(rand()%2001)/1000.f-1.f)*amp;
     ImGui::SetWindowPos(ImVec2(anchorX+sx,anchorY+sy));
@@ -349,12 +279,6 @@ static ImVec4 getAccuracyTagColor(AccuracyMode m){
     switch(m){case AccuracyMode::CBS:case AccuracyMode::CBF:return ImVec4(1.f,0.22f,0.22f,1.f);default:return ImVec4(1,1,1,1);}}
 static ImVec4 getBRRTagColor(){return ImVec4(0.30f,0.70f,1.0f,1.0f);}
 
-// Centralizes what used to be the same 12-way ternary chain duplicated
-// verbatim at every save/load/display site (four in this file alone, plus
-// the extension-list arrays and brr_format.cpp's own switch) -- adding
-// THEME_CUSTOM's lookup once here instead of at every call site removes
-// the main risk of a future new theme (built-in or the custom system)
-// getting added to some sites and missed at others.
 static std::string currentThemeExtension(MenuInterface* ui){
     if(auto* c=ui->getActiveCustomTheme())return c->extension;
     switch(ui->activeTheme){
@@ -395,7 +319,6 @@ static void drawSolidRect(ImDrawList* dl,ImVec2 mn,ImVec2 mx,float r,const Theme
     dl->AddRectFilled(mn,mx,toU32(fill),r);
     if(border)dl->AddRect(mn,mx,t.getAccentU32(0.18f*a),r,0,1.f);}
 
-// N-pointed outline star, points alternating outer/inner radius, as a closed polyline.
 static std::vector<ImVec2> jupiterStarPoints(ImVec2 center,float outerR,float innerR,int points,float rotRad){
     std::vector<ImVec2> pts;
     int total=points*2;
@@ -407,22 +330,6 @@ static std::vector<ImVec2> jupiterStarPoints(ImVec2 center,float outerR,float in
     return pts;
 }
 
-
-// The whole menu window becomes the art piece when the Jupiter tab is active --
-// not a themed box living inside a normal-looking app. Pulled from Nigel's 8
-// checkpoint screenshots: the gold orbit-ring-with-star ornament, scattered
-// outline stars, a faint crosshatch grid, drifting cyan pixel-squares, and a
-// dark skyline silhouette. Hand-drawn vector shapes (no ripped assets), drawn
-// on the WINDOW draw list across the full window rect (title bar, tab rail,
-// content, status bar) so nothing about the window reads as "normal app skin
-// plus a themed tab" -- everything behind the widgets is reskinned.
-// "Wheel Thing", take 4 -- Nigel sent a real screenshot of the actual level
-// this time. It's a half-dome sitting on the ground (not a full circle):
-// ring ARCS (top half only) with dots sitting ON each ring at intervals
-// (not filling gaps between rings), and a solid filled core at the bottom
-// center with bold triangular spike rays fanning up through the dome.
-// `center` is the BOTTOM-CENTER anchor (the dome's flat edge), not the
-// middle of a full circle.
 static void drawJupiterOrnament(ImDrawList* dl,ImVec2 center,float baseR,float time,float spin){
     const ImU32 gold=IM_COL32(252,245,80,255);
     const float PI=3.14159265f;
@@ -434,15 +341,13 @@ static void drawJupiterOrnament(ImDrawList* dl,ImVec2 center,float baseR,float t
         const int segs=48;
         std::vector<ImVec2> arc(segs+1);
         for(int s=0;s<=segs;s++){
-            float a=PI+(float)s/(float)segs*PI; // sweeps the TOP half only
+            float a=PI+(float)s/(float)segs*PI;
             arc[s]=ImVec2(center.x+ringR[i]*cosf(a),center.y+ringR[i]*sinf(a));
         }
         dl->AddPolyline(arc.data(),segs+1,gold,0,3.2f);
     }
 
-    // dots sitting ON each ring at intervals, like the reference's sundial
-    // markings, plus a couple of short radial tick marks per ring.
-    for(int i=0;i<nRings;i++){
+            for(int i=0;i<nRings;i++){
         int count=6+i*3;
         for(int d=1;d<count;d++){
             float a=PI+(float)d/(float)count*PI;
@@ -456,10 +361,7 @@ static void drawJupiterOrnament(ImDrawList* dl,ImVec2 center,float baseR,float t
         }
     }
 
-    // solid filled core + bold triangular spike rays fanning up from it,
-    // reaching roughly to the innermost ring -- matches the reference's
-    // sunburst core, not thin lines.
-    float coreR=baseR*0.14f;
+                float coreR=baseR*0.14f;
     int nRays=11;
     for(int i=0;i<=nRays;i++){
         float a=PI+(float)i/(float)nRays*PI+time*spin*0.15f;
@@ -474,9 +376,6 @@ static void drawJupiterOrnament(ImDrawList* dl,ImVec2 center,float baseR,float t
     dl->AddCircleFilled(center,coreR,gold,48);
 }
 
-// Wave ribbon, take 12: same \/\  zigzag + shifted-copy + parallel-connector
-// construction as last round (that part worked), shifted further right so
-// it clears the real tab content instead of clipping into it.
 static void drawJupiterWaveRibbon(ImDrawList* dl,ImVec2 pos,ImVec2 size){
     const ImU32 gold=IM_COL32(252,245,80,255);
 
@@ -519,18 +418,9 @@ static void drawJupiterWaveRibbon(ImDrawList* dl,ImVec2 pos,ImVec2 size){
 static void drawJupiterBackdrop(ImDrawList* dl,ImVec2 pos,ImVec2 size,float time){
     drawJupiterWaveRibbon(dl,pos,size);
 
-    // "Wheel Thing" -- half-dome sun, tucked into the bottom-right corner.
-    // Fixed pixel radius (not a fraction of the viewport width) so it stays
-    // small and proportionate to the stars instead of ballooning into
-    // everything else on wide windows -- that was the overlap bug.
-    drawJupiterOrnament(dl,ImVec2(pos.x+size.x*0.93f,pos.y+size.y),76.f,time,0.05f);
+                    drawJupiterOrnament(dl,ImVec2(pos.x+size.x*0.93f,pos.y+size.y),76.f,time,0.05f);
 
-    // star cluster, upper-right -- 5-pointed only, each with a pentagon
-    // outline nested in the middle built directly from the star's own inner
-    // (concave) vertices -- jupiterStarPoints alternates outer/inner points,
-    // so the odd indices ARE the inner ring already, guaranteeing alignment
-    // instead of recomputing angles separately (which was off by half a step).
-    struct StarSpec{float x,y,r,rot;};
+                        struct StarSpec{float x,y,r,rot;};
     static const StarSpec stars[]={
         {0.65f,0.22f,58.f,0.3f},{0.85f,0.44f,52.f,1.1f},{0.66f,0.60f,50.f,0.7f},
         {0.76f,0.33f,26.f,2.0f},{0.92f,0.58f,22.f,1.4f},{0.57f,0.70f,24.f,0.4f},
@@ -644,15 +534,7 @@ static const ThemePreset kThemePresets[]={
      ImVec4(0.400f,0.540f,0.720f,1.f),
      5.f,0.96f},
         {"GiddeyBot",
-     // Thunder colors (Nigel, 2026-08-23) -- was modeled on Giddey's current
-     // team (Bulls-ish red/black); he wants it back to Thunder blue/orange,
-     // reflecting the team that drafted him. Punched up further (2026-08-24,
-     // Nigel: "too muted") -- the first pass leaned so dark/desaturated on
-     // bg/card that the "Thunder blue" identity barely read as blue at all,
-     // just dark navy-black with an orange accent. Boosted saturation and
-     // brightness on bg/card specifically so the blue is actually visible,
-     // plus a punchier accent and textSecondary.
-     ImVec4(1.000f,0.310f,0.106f,1.f),
+                    ImVec4(1.000f,0.310f,0.106f,1.f),
      ImVec4(0.031f,0.145f,0.278f,0.96f),
      ImVec4(0.047f,0.220f,0.400f,1.f),
      ImVec4(0.975f,0.985f,0.995f,1.f),
@@ -680,10 +562,7 @@ static const ThemePreset kThemePresets[]={
      ImVec4(0.625f,0.565f,0.478f,1.f),
      5.f,0.96f},
         {"ButlerBot",
-     // Bulls colors (Nigel, 2026-08-23) -- was modeled on Jimmy's current
-     // team (Warriors-ish blue/gold); he wants it back to Bulls red/black,
-     // reflecting his breakout years there.
-     ImVec4(0.808f,0.067f,0.255f,1.f),
+          ImVec4(0.808f,0.067f,0.255f,1.f),
      ImVec4(0.035f,0.020f,0.024f,0.96f),
      ImVec4(0.070f,0.030f,0.040f,1.f),
      ImVec4(0.980f,0.970f,0.970f,1.f),
@@ -704,43 +583,21 @@ static const ThemePreset kThemePresets[]={
      ImVec4(0.500f,0.500f,0.520f,1.f),
      5.f,0.97f},
         {"RomoBot",
-     // Cowboys navy/silver (his real team) -- accent swapped to silver per
-     // Nigel (was hazard-red); the one actual "based off his dui" wink now
-     // lives purely in the subtitle text, nothing left in the palette itself.
-     ImVec4(0.760f,0.800f,0.850f,1.f),
+               ImVec4(0.760f,0.800f,0.850f,1.f),
      ImVec4(0.020f,0.055f,0.110f,0.96f),
      ImVec4(0.035f,0.085f,0.160f,1.f),
      ImVec4(0.960f,0.965f,0.975f,1.f),
      ImVec4(0.520f,0.560f,0.620f,1.f),
      5.f,0.96f},
         {"GrizzleyBot",
-     // Real Grizzley Gang Gaming banner (Nigel-supplied reference,
-     // 2026-08-24) -- previous neon-green GTA guess was wrong. Actual
-     // palette: grungy black/charcoal, bold true-red crest/paint strokes,
-     // bold white graffiti lettering, tan/brown bear mascot. True red
-     // (more orange-leaning) and a neutral warm-gray bg distinguish this
-     // from ButlerBot's cooler crimson-pink/reddish-black.
-     ImVec4(0.870f,0.090f,0.070f,1.f),
+                              ImVec4(0.870f,0.090f,0.070f,1.f),
      ImVec4(0.040f,0.038f,0.036f,0.96f),
      ImVec4(0.072f,0.068f,0.064f,1.f),
      ImVec4(0.975f,0.970f,0.965f,1.f),
      ImVec4(0.540f,0.460f,0.400f,1.f),
      5.f,0.96f},
         {"Red Kingdom",
-     // Nigel, 2026-08-24: a theme for Tech N9ne's "Red Kingdom," deliberately
-     // "way more intense" than every other theme, not just another palette --
-     // no "Bot" suffix (every other theme has one, this one doesn't, on
-     // purpose). Pure saturated red with no pink (ButlerBot) or orange
-     // (GrizzleyBot) lean, near-black bg with a red undertone instead of
-     // neutral charcoal, sharp corners (0 vs everyone else's 5) and fully
-     // solid bgOpacity (1.0 vs ~0.96 everywhere else) so it reads as heavier
-     // and more present, not airier. The actual "way more intense" gimmick
-     // is a live one, not a static palette choice -- see
-     // ThemeEngine::getAccent()'s activePreset==THEME_REDKINGDOM branch (a
-     // slow pulse between two red shades, not a static color) and the
-     // picker's own special-cased card below, not just another flat
-     // PillButton.
-     ImVec4(0.820f,0.035f,0.035f,1.f),
+                                                                      ImVec4(0.820f,0.035f,0.035f,1.f),
      ImVec4(0.028f,0.008f,0.008f,1.f),
      ImVec4(0.055f,0.014f,0.014f,1.f),
      ImVec4(0.960f,0.930f,0.930f,1.f),
@@ -749,12 +606,7 @@ static const ThemePreset kThemePresets[]={
 };
 
 ImVec4 ThemeEngine::getAccent() const{
-    // Red Kingdom's "way more intense than the other themes" ask (Nigel,
-    // 2026-08-24) -- a live effect, not just a bolder static palette. Gated
-    // on activePreset (ThemeEngine's own field, already the source of truth
-    // for "which built-in preset is live") rather than reaching out to
-    // MenuInterface::activeTheme, which ThemeEngine can't see anyway.
-    if(activePreset==THEME_REDKINGDOM)return computeRedKingdomPulse();
+                if(activePreset==THEME_REDKINGDOM)return computeRedKingdomPulse();
     if(glowCycleEnabled)return computeCycleColor(glowCycleRate);
     return accentColor;}
 ImVec4 ThemeEngine::getGlowAccent() const{return accentColor;}
@@ -765,10 +617,7 @@ ImVec4 ThemeEngine::computeCycleColor(float rate) const{
     float b=0.5f+0.5f*std::sin(t+4.189f);
     return ImVec4(r,g,b,1.f);}
 ImVec4 ThemeEngine::computeRedKingdomPulse() const{
-    // Deliberately stays red the whole cycle (unlike computeCycleColor's
-    // full rainbow sweep) -- breathes between a darker blood red and a
-    // brighter hot red, ~2.6s per cycle, heartbeat-ish rather than strobing.
-    float pulse=0.5f+0.5f*std::sin((float)ImGui::GetTime()*2.4f);
+                float pulse=0.5f+0.5f*std::sin((float)ImGui::GetTime()*2.4f);
     ImVec4 dark(0.550f,0.020f,0.020f,1.f), hot(1.000f,0.140f,0.080f,1.f);
     return ImVec4(
         dark.x+(hot.x-dark.x)*pulse,
@@ -1130,16 +979,7 @@ void MenuInterface::switchTab(int newTab){
     if(newTab==activeTab)return;
     previousTab=activeTab;activeTab=newTab;
     anim.tabTransition=0.f;anim.transitionFromTab=previousTab;
-    // Nigel: leaving JMF (Jupiter) snapped the window to the top-left
-    // corner instead of staying centered. Root cause: Jupiter's full-
-    // viewport takeover (drawMainWindow/drawMegaHackWindow, jupiterActive
-    // branch) force-sets the window's position to vp->Pos every single
-    // frame it's open, which permanently overwrites ImGui's own remembered
-    // position for that window -- windowPosInitialized only ever guarded
-    // the very first launch, so nothing ever re-centered it afterward.
-    // Resetting it here makes the next frame's non-Jupiter branch treat
-    // this exactly like a fresh launch and recenter for real.
-    if(previousTab==5&&newTab!=5)windowPosInitialized=false;}
+                                if(previousTab==5&&newTab!=5)windowPosInitialized=false;}
 
 void MenuInterface::drawTabBar(){
         ImDrawList* dl=ImGui::GetWindowDrawList();
@@ -1160,12 +1000,10 @@ void MenuInterface::drawTabBar(){
         if(ImGui::IsItemClicked())switchTab(i);
         if(fontSmall)ImGui::PushFont(fontSmall);
         ImU32 tc=(activeTab==i)?theme.getAccentU32(0.98f)
-            :(i==5)?IM_COL32(200,175,90,190) // Jupiter tab stays warm gold even when inactive
+            :(i==5)?IM_COL32(200,175,90,190)
             :(hov?theme.getTextU32():theme.getTextSecondaryU32());
         if(i==5&&activeTab==5){
-            // Full name while open, wrapped to fit the tab's own column --
-            // greedy word-wrap so it adapts to whatever the tab width is.
-            const char* full="Nigel's Jupiter My Favourite Trainer";
+                                    const char* full="Nigel's Jupiter My Favourite Trainer";
             std::vector<std::string> words; {
                 std::string w; for(const char* p=full;;++p){
                     if(*p==' '||*p==0){if(!w.empty())words.push_back(w);w.clear();if(*p==0)break;}
@@ -1193,14 +1031,7 @@ void MenuInterface::drawTabBar(){
                 ImVec2 tp(tMin.x+(tabW-ts.x)*0.5f,tMin.y+(tabH-ts.y)*0.5f);
                 dl->AddText(tp,tc,names[i]);
             } else {
-                // Nigel: "Click Indicator" and "Frame Windows" overlapped in
-                // the tab bar -- longer labels (from the GUI reorg) don't
-                // all fit a fixed-width column at every window size, and
-                // nothing was clipping/wrapping them, so they bled into the
-                // neighboring tab. Same greedy word-wrap the Jupiter tab
-                // above already uses for its own long name, generalized to
-                // any label instead of a special case just for JMF.
-                std::vector<std::string> words; {
+                                                                                                std::vector<std::string> words; {
                     std::string w; for(const char* p=names[i];;++p){
                         if(*p==' '||*p==0){if(!w.empty())words.push_back(w);w.clear();if(*p==0)break;}
                         else w.push_back(*p);
@@ -1328,30 +1159,19 @@ void MenuInterface::drawMainWindow(){
     float t=anim.easeOutCubic(anim.openProgress);
     if(t<=0.f)return;
 
-        // Jupiter tab: reskin the WHOLE window's theme (title bar, tab bar, status
-    // bar, every widget) for as long as this tab is active, not just its own
-    // content -- restored at the end of this function either way.
-    bool jupiterActive=(activeTab==5);
+                    bool jupiterActive=(activeTab==5);
     t*=bigBrrrFlickerAlpha(jupiterActive);
     ThemeEngine savedTheme=theme;
     if(jupiterActive){
-        // Nigel's own two colors from his mockup: #100680 navy, #FCF550 gold.
-        theme.accentColor   = ImVec4(0.988f,0.961f,0.314f,1.f);
-        // Full takeover, not a translucent menu -- ignore the user's general
-        // bg-opacity slider entirely rather than inherit it (that's what was
-        // still reading as ~80%: SetNextWindowBgAlpha uses theme.bgOpacity,
-        // which defaults to 0.96 and can be set as low as 0.5).
-        theme.bgColor       = ImVec4(0.063f,0.024f,0.502f,1.f);
+                theme.accentColor   = ImVec4(0.988f,0.961f,0.314f,1.f);
+                                        theme.bgColor       = ImVec4(0.063f,0.024f,0.502f,1.f);
         theme.cardColor     = ImVec4(0.09f,0.05f,0.58f,1.f);
         theme.textPrimary   = ImVec4(0.988f,0.961f,0.314f,1.f);
         theme.textSecondary = ImVec4(0.70f,0.66f,0.85f,1.f);
     }
     theme.applyToImGuiStyle();
     if(jupiterActive){
-        // Not a themed box on the screen -- the screen. Full viewport takeover
-        // for as long as this tab is open; snaps back to the normal centered
-        // window the instant you switch away.
-        auto* vp=ImGui::GetMainViewport();
+                                auto* vp=ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(vp->Pos,ImGuiCond_Always);
         ImGui::SetNextWindowSize(vp->Size,ImGuiCond_Always);
     } else {
@@ -1370,9 +1190,7 @@ void MenuInterface::drawMainWindow(){
         applyBigBrrrBounce(jupiterActive);
         applyBigBrrrShake(jupiterActive);
         if(!jupiterActive){
-        // Drag handle -- meaningless once the window IS the viewport, so skipped
-        // entirely in Jupiter's full-screen takeover.
-        ImVec2 wp=ImGui::GetWindowPos();
+                        ImVec2 wp=ImGui::GetWindowPos();
         ImVec2 ws=ImGui::GetWindowSize();
         ImDrawList* fdl=ImGui::GetForegroundDrawList();
         ImVec2 dragMin(wp.x+ws.x*0.35f,wp.y+3);
@@ -1391,15 +1209,11 @@ void MenuInterface::drawMainWindow(){
     ImDrawList* dl=ImGui::GetWindowDrawList();
     ImVec2 wp=windowPos,ws=ImGui::GetWindowSize();
     if(jupiterActive&&!jupiterClickBarPageOpen){
-        // Full-screen now, so there's no "past the edge" to bleed onto -- that
-        // budget goes into a denser backdrop instead (see drawJupiterBackdrop).
-        // Suppressed entirely on the Click Trainer page -- per Nigel, that page
-        // should read as a clean functional tool, not compete with the artwork.
-        drawJupiterBackdrop(dl,wp,ws,(float)ImGui::GetTime());
+                                        drawJupiterBackdrop(dl,wp,ws,(float)ImGui::GetTime());
     } else if(!jupiterActive){
         dl->AddRect(wp,ImVec2(wp.x+ws.x,wp.y+ws.y),theme.getAccentU32(0.35f),theme.cornerRadius,0,1.5f);
     }
-    if(!jupiterActive)drawTitleBar(); // GucciBot branding suppressed entirely on Jupiter
+    if(!jupiterActive)drawTitleBar();
     ImGui::SetNextWindowContentSize(ImVec2(0,0));
     float contentH=ws.y-(jupiterActive?14.f:52.f)-40-14;
     if(jupiterActive)ImGui::PushStyleColor(ImGuiCol_ChildBg,IM_COL32(0,0,0,0));
@@ -1410,7 +1224,7 @@ void MenuInterface::drawMainWindow(){
     ImGui::EndChild();
     ImGui::EndChild();
     if(jupiterActive)ImGui::PopStyleColor();
-    if(!jupiterActive)drawStatusBar(); // TPS/tick readout + brand text also suppressed
+    if(!jupiterActive)drawStatusBar();
     ImGui::End();
     ImGui::PopStyleVar();
     if(jupiterActive)theme=savedTheme;}
@@ -1423,13 +1237,8 @@ void MenuInterface::drawMegaHackWindow(){
     t*=bigBrrrFlickerAlpha(jupiterActive);
     ThemeEngine savedTheme=theme;
     if(jupiterActive){
-        // Nigel's own two colors from his mockup: #100680 navy, #FCF550 gold.
-        theme.accentColor   = ImVec4(0.988f,0.961f,0.314f,1.f);
-        // Full takeover, not a translucent menu -- ignore the user's general
-        // bg-opacity slider entirely rather than inherit it (that's what was
-        // still reading as ~80%: SetNextWindowBgAlpha uses theme.bgOpacity,
-        // which defaults to 0.96 and can be set as low as 0.5).
-        theme.bgColor       = ImVec4(0.063f,0.024f,0.502f,1.f);
+                theme.accentColor   = ImVec4(0.988f,0.961f,0.314f,1.f);
+                                        theme.bgColor       = ImVec4(0.063f,0.024f,0.502f,1.f);
         theme.cardColor     = ImVec4(0.09f,0.05f,0.58f,1.f);
         theme.textPrimary   = ImVec4(0.988f,0.961f,0.314f,1.f);
         theme.textSecondary = ImVec4(0.70f,0.66f,0.85f,1.f);
@@ -1442,14 +1251,7 @@ void MenuInterface::drawMegaHackWindow(){
     } else {
         ImVec2 center=ImGui::GetMainViewport()->GetCenter();
         ImVec2 mhSize(620.f,400.f);
-        // windowPosInitialized doubles as "needs a forced recenter" here,
-        // same as drawMainWindow -- Jupiter's full-viewport takeover above
-        // permanently overwrites this window's remembered ImGui position to
-        // vp->Pos (top-left) every frame it's active; ImGuiCond_FirstUseEver
-        // never refires once ImGui has seen this window once, so leaving
-        // Jupiter used to strand the window there. switchTab() resets this
-        // flag to false when leaving the Jupiter tab specifically.
-        if(!windowPosInitialized){
+                                                                if(!windowPosInitialized){
             ImGui::SetNextWindowPos(ImVec2(center.x-mhSize.x*0.5f,center.y-mhSize.y*0.5f),ImGuiCond_Always);
             windowPosInitialized=true;
         } else {
@@ -1468,10 +1270,7 @@ void MenuInterface::drawMegaHackWindow(){
     ImDrawList* dl=ImGui::GetWindowDrawList();
     ImVec2 wp=windowPos,ws=ImGui::GetWindowSize();
     const float railW=150.f,headH=44.f,footH=30.f,rnd=6.f;
-    // MegaHack skin's own fixed dark palette, unrelated to theme.bgColor --
-    // for the JMF full takeover, force Nigel's navy at full opacity here too
-    // instead of leaving the old near-black show through underneath it.
-    ImU32 bgMain=jupiterActive?IM_COL32(16,6,128,255):IM_COL32(18,19,26,(int)(243*t));
+                ImU32 bgMain=jupiterActive?IM_COL32(16,6,128,255):IM_COL32(18,19,26,(int)(243*t));
     ImU32 bgRail=jupiterActive?IM_COL32(16,6,128,255):IM_COL32(13,14,19,(int)(248*t));
     ImU32 bgHead=jupiterActive?IM_COL32(16,6,128,255):IM_COL32(22,24,32,(int)(248*t));
     dl->AddRectFilled(wp,ImVec2(wp.x+ws.x,wp.y+ws.y),bgMain,rnd);
@@ -1537,11 +1336,7 @@ void MenuInterface::drawMegaHackWindow(){
             float ly=rMin.y+(rowH-lineH*(float)lines.size())*0.5f;
             for(auto& ln:lines){dl->AddText(ImVec2(rMin.x+16,ly),tc,ln.c_str());ly+=lineH;}
         } else {
-            // Same overlap risk as the classic tab bar (longer post-reorg
-            // labels vs a fixed column) -- railW is roomier here (150px)
-            // but not unlimited, so guard it the same way rather than
-            // assuming every label fits.
-            float maxW=railW-22.f;
+                                                            float maxW=railW-22.f;
             if(ImGui::CalcTextSize(names[i]).x<=maxW){
                 dl->AddText(ImVec2(rMin.x+16,rMin.y+(rowH-ImGui::GetFontSize())*0.5f),tc,names[i]);
             } else {
@@ -1576,14 +1371,6 @@ void MenuInterface::drawMegaHackWindow(){
     ImGui::PopStyleVar();
     if(jupiterActive)theme=savedTheme;}
 
-// Small always-visible corner panel instead of the full tabbed window --
-// same idea as yBot's compact bot window: record/play, TPS/speed, frame
-// step, and the handful of toggles you'd actually want mid-attempt, small
-// enough to leave open while actually playing without blocking the level.
-// Positioned like the existing HUD overlays (displayGameplayHUD etc. --
-// SetNextWindowPos with ImGuiCond_Always, corner-anchored, recomputed every
-// frame), but unlike those this one takes real input, so it can't use
-// ImGuiWindowFlags_NoInputs/NoNav.
 void MenuInterface::drawCompactWindow(){
     auto* engine=GucciEngine::get();
     auto* upd=&engine->updater;
@@ -1621,14 +1408,7 @@ void MenuInterface::drawCompactWindow(){
     }
     ImGui::Dummy(ImVec2(0,4));
 
-    // Juice: compact mode had nothing for saving, naming, Calculate, or
-    // selecting macros -- defeated the point of using it for a real
-    // session. Nigel's ask, 2026-08-23: bring those over from the full
-    // Replay tab, condensed to fit this window's width. Macro picker here;
-    // name/Save/Calculate live below, after Record/Play, matching the
-    // full tab's own top-to-bottom flow (pick a macro -> play it, or
-    // record a new one -> name & save it -> Calculate it).
-    {
+                        {
         refreshReplayListIfNeeded(false);
         static int compactMacroIdx=-1;
         if(!engine->storedMacros.empty()){
@@ -1940,12 +1720,7 @@ void MenuInterface::drawReplayTab(){
         ImGui::Dummy(ImVec2(0,4));
         if(Widgets::StyledButton("Stop Playback",ImVec2(-1,30),theme,anim))engine->setMode(GucciEngine::Mode::Idle);
         ImGui::Dummy(ImVec2(0,4));
-        // Save + Calculate used to only be reachable while actively
-        // recording -- loading an existing macro to re-run Calculate on it
-        // (or just re-save it after e.g. the Frame Editor) had no path at
-        // all. Same underlying calls the recording panel's Save/Calculate
-        // popup uses, just exposed here too.
-        float pbw2=(ImGui::GetContentRegionAvail().x-8)/2.f;
+                                                float pbw2=(ImGui::GetContentRegionAvail().x-8)/2.f;
         if(Widgets::StyledButton("Save",ImVec2(pbw2,28),theme,anim)){
             auto savePath = Mod::get()->getSaveDir()/"replays"/(engine->replayName+extLabel2);
             if(engine->replayBackupsEnabled) engine->replay.backupExisting(savePath);
@@ -2498,12 +2273,7 @@ void MenuInterface::drawToolsTab(){
     ImGui::TextWrapped("Backups saved to replays/backups/ subfolder.");
     ImGui::PopStyleColor();
 
-    // Moved here from the old standalone "Hacks" sub-tab (1.5 GUI reorg,
-    // Nigel: "combine the tools and hacks tab") -- these are unrelated to
-    // the Frame Window Tracker content that used to live in the same
-    // sub-tab, which got its own top-level tab instead. See that tab's own
-    // comment for the reorg rationale.
-        ImGui::Dummy(ImVec2(0,8));
+                            ImGui::Dummy(ImVec2(0,8));
     Widgets::SectionHeader("Hacks",theme);
     if(Widgets::ModuleCardBegin("Safe Mode",
         (activeTheme==THEME_TOOSII)?"Safe mode is just playing with no pads. Still catching everything.":"Prevents stats and percentage gain",
@@ -2605,33 +2375,12 @@ void MenuInterface::drawToolsTab(){
     }
     }
 
-    // Moved here from their own top-level tabs (second 1.5 GUI reorg pass,
-    // Nigel): the top-level "Hacks" tab's toggles (Hide Attempts/Auto
-    // Retry/Instant Respawn/Force Platformer) belong wherever the other
-    // hack toggles ended up, above. Click Sounds were headed for Render at
-    // first, but they play live on real button presses (triggerClickAudio,
-    // wired into GJBaseGameLayer::handleButton -- confirmed before moving
-    // it, not assumed), not just baked into renders, so Nigel's own rule
-    // ("unless we can play them live, if so put them in hacks or sum")
-    // puts it here instead. Both are still real, separate features -- just
-    // calling the existing functions rather than duplicating their bodies.
-    ImGui::Dummy(ImVec2(0,8));
+                                            ImGui::Dummy(ImVec2(0,8));
     drawMoreHacksTab();
     ImGui::Dummy(ImVec2(0,8));
     drawClicksTab();
 }
 
-// Frame-window asset import (Juice/Nigel's request, 2026-08-23): tier
-// sound/image lookup already resolves bare filenames against fw_assets/
-// (see framewindow.cpp's playTierSound/marker-image loading) -- the only
-// missing piece was a way to get files INTO that folder without manually
-// typing out a full source path in Explorer. Same pick-then-copy-to-a-
-// fixed-location shape as importTrainerMusicTask below, generalized to
-// pickMany() (multiple files at once) and to a whole folder, copied
-// recursively so "import folder NaN_fw_sounds" -> fw_assets/NaN_fw_sounds/
-// -- then typing "NaN_fw_sounds/fw_1.wav" in a tier's sound field just
-// works, since that's already a valid relative subpath as far as the
-// existing resolution code is concerned. No change needed there at all.
 static geode::Task<int> importFwAssetFilesTask(){
     auto pickResult = co_await geode::utils::file::pickMany(
         geode::utils::file::FilePickOptions{
@@ -2641,7 +2390,7 @@ static geode::Task<int> importFwAssetFilesTask(){
     );
     if (pickResult.isErr()) co_return -1;
     auto paths = pickResult.unwrap();
-    if (paths.empty()) co_return -1; // cancelled
+    if (paths.empty()) co_return -1;
 
     auto destDir = Mod::get()->getSaveDir() / "fw_assets";
     std::error_code ec;
@@ -2655,23 +2404,13 @@ static geode::Task<int> importFwAssetFilesTask(){
     }
     co_return copied;
 }
-// Juice's crash report (2026-08-24): clicking Import Sounds/Images or Import
-// Folder crashes the game. Traced with real evidence, not a guess -- symbolicated
-// his crash log (dumpbin/dbghelp against this exact build's matching PDB) to
-// importFwAssetFilesTask resuming inside Geode's own file::pickMany coroutine
-// machinery. Root cause: `SomeTask().listen(...)` created the Task as an
-// unstored temporary -- Task::m_handle is the ONLY thing keeping the async
-// operation's Handle alive (its own coroutine promise holds just a weak_ptr,
-// confirmed by reading Geode's actual Task.hpp), so the temporary's destructor
-// dropped the sole owning reference right as the picker's background thread
-// was still in flight, a real use-after-free window. Separately, and also
-// confirmed by reading the actual linked Geode SDK source (not assumed):
-// Task::listen()'s entire body is commented out in this exact Geode version --
-// it's a genuine no-op, meaning these Notification callbacks were silently
-// never firing regardless of the crash. Fixed both by storing the Task in a
-// static (keeps the Handle alive for the whole async round-trip) and polling
-// isFinished()/getFinishedValue() once per frame from drawFrameWindowsTab
-// instead of relying on the dead listen() callback.
+// Must be stored, not an unstored temporary -- Task<T>'s own coroutine
+// promise holds only a weak_ptr to its Handle, so this static is the ONLY
+// thing keeping an in-flight file-picker Task alive. An unstored temporary
+// here caused a real crash (use-after-free while the OS picker dialog's
+// background thread was still running). Task::listen()'s callback is also
+// a no-op in this Geode version -- poll isFinished() instead, don't add a
+// .listen() call back in.
 static geode::Task<int> s_fwAssetFilesTask;
 static geode::Task<int> s_fwAssetFolderTask;
 static void importFwAssetFiles(){
@@ -2703,7 +2442,7 @@ static geode::Task<int> importFwAssetFolderTask(){
     );
     if (pickResult.isErr()) co_return -1;
     auto srcOpt = pickResult.unwrap();
-    if (!srcOpt.has_value()) co_return -1; // cancelled
+    if (!srcOpt.has_value()) co_return -1;
 
     auto destDir = Mod::get()->getSaveDir() / "fw_assets" / srcOpt->filename();
     std::error_code ec;
@@ -2729,28 +2468,14 @@ static void importFwAssetFolder(){
 void MenuInterface::drawFrameWindowsTab(){
     pollFwAssetImportTasks();
     auto* engine=GucciEngine::get();
-    // Renamed from drawHacksTab (1.5 GUI reorg) -- Frame Window/Calculate was
-    // ~77% of that tab's content (432 of ~560 lines) buried two clicks deep
-    // (Macro -> Hacks), while Survival Indicator, a much smaller and less
-    // actively-developed feature, had its own top-level tab. Nigel: "how is
-    // all the frame window stuff part of one huge thing while the survival
-    // indicator gets its own tab." Everything below this point is unchanged
-    // from the old drawHacksTab; the actual hack toggles (Safe Mode,
-    // Trajectory, Hitboxes, Noclip, RNG Lock, Auto-Flip, Prevent Death,
-    // Mirror Inputs) and Frame Stepping moved to drawToolsTab instead.
-    Widgets::GucciQuote("\"Speed doesn't mean much if the frame windows are wrong.\"","-- Juice, keeping you honest",theme);
+                                        Widgets::GucciQuote("\"Speed doesn't mean much if the frame windows are wrong.\"","-- Juice, keeping you honest",theme);
     ImGui::Dummy(ImVec2(0,4));
     {
         auto& replay=engine->replay;
         bool hasActions=!replay.m_actionAtom.m_actions.empty();
         bool canCalc=PlayLayer::get()!=nullptr&&hasActions;
         if(!canCalc)ImGui::PushStyleVar(ImGuiStyleVar_Alpha,0.4f);
-        // Nigel: put the Calculate trigger in both places -- it also still
-        // lives in Macro -> Replay next to Save, since it acts on whatever
-        // macro you just finished/loaded there. This copy exists so the tab
-        // that actually configures/shows Calculate isn't just a dead end
-        // you have to leave to run the thing it configures.
-        bool calcClicked=Widgets::StyledButton("Calculate",ImVec2(-1,30),theme,anim,6.f);
+                                                bool calcClicked=Widgets::StyledButton("Calculate",ImVec2(-1,30),theme,anim,6.f);
         if(!canCalc)ImGui::PopStyleVar();
         if(calcClicked&&canCalc)engine->analyzeFrameWindows();
         if(!canCalc){
@@ -2762,9 +2487,7 @@ void MenuInterface::drawFrameWindowsTab(){
         ImGui::Dummy(ImVec2(0,8));
     Widgets::SectionHeader("Frame Window Tracker",theme);
     {
-        // Juice: switching algorithms mid-run was confusing -- lock the
-        // selector while Calculate is actually running (2026-08-21).
-        bool locked=engine->fwAnalyzing;
+                        bool locked=engine->fwAnalyzing;
         if(locked)ImGui::BeginDisabled();
         const char* algoNames[]={"Time-Based","Recovery Range"};
         int algoIdx=engine->fwUseRecoveryRangeAlgorithm?1:0;
@@ -2785,13 +2508,7 @@ void MenuInterface::drawFrameWindowsTab(){
         if(locked)ImGui::EndDisabled();
     }
     {
-        // Juice (2026-08-21): both read live macro/Calculate state that
-        // doesn't mean anything yet while still recording -- setMode() already
-        // forces them off the moment recording starts; lock the controls too
-        // so they can't be flicked back on until recording stops. Show in
-        // Renders isn't part of this -- that's about a future render, not
-        // live-during-recording state, and Juice didn't flag it.
-        bool recLocked=engine->isRecording();
+                                                        bool recLocked=engine->isRecording();
         if(recLocked)ImGui::BeginDisabled();
         if(Widgets::ToggleSwitch("Show Live",&engine->fwEnabledLive,theme,anim))
             Mod::get()->setSavedValue("fw_live",engine->fwEnabledLive);
@@ -2829,11 +2546,7 @@ void MenuInterface::drawFrameWindowsTab(){
     Widgets::SectionHeader("Practice Range",theme);
     if(Widgets::ToggleSwitch("Show During Playback",&engine->practiceRangeEnabled,theme,anim))
         Mod::get()->setSavedValue("practice_range",engine->practiceRangeEnabled);
-    // Everything below here was previously rendering under the "Practice
-    // Range" header above by mistake -- it's all Frame Window engine tuning
-    // (sweep/slack/position tolerance/debug), not Practice Range settings.
-    // Found during the 1.5 GUI reorg audit; given its own correct header.
-    ImGui::Dummy(ImVec2(0,8));
+                    ImGui::Dummy(ImVec2(0,8));
     Widgets::SectionHeader("Analysis Settings",theme);
             if(engine->fwMaxWindow > 2*engine->fwSweepRange){
         engine->fwMaxWindow = 2*engine->fwSweepRange;
@@ -2951,16 +2664,7 @@ void MenuInterface::drawFrameWindowsTab(){
     ImGui::TextWrapped("Set or override a click's window by hand -- for clicks Calculate hasn't measured yet, or a reading you don't trust. Manual entries are protected: re-running Calculate fills in everything else but leaves these alone.");
     ImGui::PopStyleColor();
     if(engine->fwAnalyzing){
-        // Juice's GUI-overlap report: this list used to read engine->replay.m_actionAtom
-        // live, every GUI frame -- but that's the exact same atom Calculate's probing
-        // continuously reassigns/reshapes (filtered to inputs-only, shifted, resorted)
-        // many times per second while measuring. Rendering it live during Calculate meant
-        // showing a different, transient, probe-internal snapshot practically every frame
-        // instead of a stable view of the real macro -- which is what "compressed/
-        // overlapping" almost certainly was. Just don't render the interactive list at all
-        // while Calculate is running, instead of reading data that isn't meant to be read
-        // from here right now.
-        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+                                                                                ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
         ImGui::TextWrapped("Unavailable while Calculate is running -- it's actively reshaping the macro's action list to run its tests. Manual Frame Windows will show up again once it finishes.");
         ImGui::PopStyleColor();
     } else {
@@ -2997,14 +2701,7 @@ void MenuInterface::drawFrameWindowsTab(){
                 ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
                 ImGui::TextUnformatted(rowLabel);
                 ImGui::PopStyleColor();
-                // Juice's "text layering" report (2026-08-24): this used to be a
-                // fixed SameLine(190), which overlapped the InputInt whenever the
-                // label rendered wider than that -- high frame numbers (more
-                // digits), the "press"/percent variants, or just a bumped-up
-                // Text Scale setting (theme.textScale) all push the real width
-                // past 190px. Measure the actual label and only fall back to 190
-                // as a floor, not an assumption.
-                float labelW=ImGui::CalcTextSize(rowLabel).x;
+                                                                                                                                float labelW=ImGui::CalcTextSize(rowLabel).x;
                 ImGui::SameLine(std::max(190.f,labelW+12.f));
 
                 int win = mk?mk->window:0;
@@ -3067,9 +2764,7 @@ void MenuInterface::drawFrameWindowsTab(){
         ImGui::PushID((int)(7000+ti));
         char hdrLabel[64];
         snprintf(hdrLabel,sizeof(hdrLabel),"Tier %d-%d frames###tierhdr",t.lo,t.hi);
-        // Juice's request (2026-08-21): collapsible per tier -- there's a lot
-        // of controls per tier now, expanding all of them at once got unwieldy.
-        if(!ImGui::CollapsingHeader(hdrLabel)){ImGui::PopID();continue;}
+                        if(!ImGui::CollapsingHeader(hdrLabel)){ImGui::PopID();continue;}
         float third=(ImGui::GetContentRegionAvail().x-16)/3.f;
         ImGui::SetNextItemWidth(third);
         ImGui::InputInt("##lo",&t.lo,0,0); ImGui::SameLine(0,8);
@@ -3119,13 +2814,10 @@ void MenuInterface::drawFrameWindowsTab(){
             if(ImGui::Combo("##fillstyle",&fillIdx,fillNames,2))
                 t.fillStyle=(GucciEngine::FwFillStyle)fillIdx;
         }
-        // Juice: No Border only makes sense in Normal/donut mode -- Inverted
-        // is already outline-only, so "no border" there would mean nothing to
-        // draw at all. Stroke Size still applies to both, so it stays visible.
-        if(t.fillStyle==GucciEngine::FwFillStyle::Normal){
+                                if(t.fillStyle==GucciEngine::FwFillStyle::Normal){
             ImGui::Checkbox("No Border##tier",&t.noBorder);
         } else if(t.noBorder){
-            t.noBorder=false; // stale from a prior Normal-mode session, doesn't apply here
+            t.noBorder=false;
         }
         ImGui::SetNextItemWidth(third);
         ImGui::SliderFloat("##stroke",&t.strokeSize,0.5f,10.f,"%.1f stroke");
@@ -3221,14 +2913,7 @@ void MenuInterface::drawRenderTab(){
     if(!renderBufsInit)loadRenderSettings();
     float iW=ImGui::GetContentRegionAvail().x*0.45f;
 
-    // Juice's report (2026-08-23): a fresh install has no libraries/ folder
-    // at all under the mod's persistent dir, so SLRenderer::start() silently
-    // fails with "FFmpeg not loaded" in the console -- nothing in the GUI
-    // ever said why, since isFFmpegLoaded() wasn't surfaced anywhere. The 7
-    // required FFmpeg DLLs (~227MB total) aren't bundled in the .geode
-    // package, so every new user hits this once until someone tells them
-    // where to put them -- at least make that visible instead of silent.
-    if(!SLRenderer::get()->isFFmpegLoaded()){
+                                if(!SLRenderer::get()->isFFmpegLoaded()){
         ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(1.f,0.55f,0.3f,1.f));
         ImGui::TextWrapped("FFmpeg libraries not found -- rendering won't work until these are installed.");
         ImGui::PopStyleColor();
@@ -3479,12 +3164,7 @@ void MenuInterface::drawRenderTab(){
         ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
         ImGui::TextWrapped("Off: one combined audio track, same as always. On: four tracks in the output file -- the combined mix, plus music, level/UI SFX, and frame-window cues isolated separately.");
         ImGui::PopStyleColor();
-        // Juice: these were gated on "Include Click Sounds", which doesn't
-        // make sense -- they're the overall music/SFX volume for the whole
-        // render (m_settings.m_musicVolume/m_sfxVolume), nothing to do with
-        // click sounds specifically. Gated on "Include Audio" instead, the
-        // setting they actually depend on.
-        Widgets::StyledSliderFloat("Music Volume",&renderMusicVol,0.f,2.f,theme,true);
+                                                Widgets::StyledSliderFloat("Music Volume",&renderMusicVol,0.f,2.f,theme,true);
         Widgets::StyledSliderFloat("SFX Volume",&renderSfxVol,0.f,2.f,theme,true);
     }
     if(Widgets::ToggleSwitch("Auto Color Fix",&renderColorFix,theme,anim))mod->setSavedValue("render_color_fix",renderColorFix);
@@ -3717,15 +3397,7 @@ void MenuInterface::drawSettingsTab(){
     for(int i=0;i<pc;i++){
         if(i%2==1)ImGui::SameLine(0,8);
         bool active=(theme.activePreset==i);
-        // Red Kingdom's picker card (Nigel, 2026-08-24: "the theme selector
-        // thing should be different than the rest") deliberately does NOT
-        // use the plain PillButton every other preset does -- PillButton
-        // reads theme.getAccent(), the CURRENTLY ACTIVE theme's color, so
-        // Red Kingdom's own card would only pulse once it's already
-        // selected, not stand out beforehand. Draws its own pulse directly
-        // (computeRedKingdomPulse() doesn't depend on activePreset) so the
-        // card is visibly alive in the grid even before you pick it.
-        bool clickedRk=false;
+                                                                        bool clickedRk=false;
         if(i==(int)THEME_REDKINGDOM){
             ImVec2 pos=ImGui::GetCursorScreenPos();
             float h=32.f;
@@ -3758,14 +3430,7 @@ void MenuInterface::drawSettingsTab(){
             else if(i==12)activeTheme=THEME_ROMO;
             else if(i==13)activeTheme=THEME_GRIZZLEY;
             else if(i==14)activeTheme=THEME_REDKINGDOM;
-            // Juice: switching themes while Big Brrr is already playing
-            // changed the bounce speed live (kBpm() reads activeTheme every
-            // frame) but not the actual track -- BigBrrrManager::start()
-            // only ever picks the file once, when the toggle turns on, not
-            // continuously. Restart it on a theme change so the audio
-            // matches whichever theme (Maybach's own track, or the default)
-            // is now active.
-            activeCustomThemeName.clear();
+                                                                                                activeCustomThemeName.clear();
             if(BigBrrrManager::get()->enabled)BigBrrrManager::get()->setEnabled(true);
             saveSettings();}
         if(i%2==0&&i+1>=pc)ImGui::Dummy(ImVec2(0,0));
@@ -3965,15 +3630,6 @@ void MenuInterface::drawIndicatorsTab(){
     ImGui::PopStyleColor();
     ImGui::Dummy(ImVec2(0,8));
 
-    // Nigel: "the survival indicator shouldn't HAVE to be on for other
-    // green window settings and stuff" -- this early return used to hide
-    // Style/Timing/Appearance/Sound/Calibration/Stats entirely unless the
-    // master toggle above was on. None of it actually depends on the
-    // indicator being active right now -- it's all just stored preferences
-    // the indicator reads whenever it does run, plus Calibration, which is
-    // useful prep work independent of the indicator entirely. Removed the
-    // gate so everything below is always visible/editable.
-
     Widgets::SectionHeader("Style",theme);
     const char* styles[]={"Ring","Classic","Converge","Pulse"};
     ImGui::SetNextItemWidth(-1);
@@ -4074,20 +3730,6 @@ void MenuInterface::drawIndicatorsTab(){
     ImGui::PopStyleColor();
 }
 
-// Click-rhythm bar: a fixed white line stays put at the horizontal center
-// while the macro's click/hold windows scroll toward and through it at
-// constant real-time speed (built from the dedicated jupiterMacro data,
-// loaded once at startup -- see loadJupiterMacroData in engine_core.cpp).
-// Per Nigel's spec: a block's left edge crossing the line means click, its
-// right edge crossing means release.
-//
-// Completely independent of live gameplay -- no PlayLayer or Playing-mode
-// requirement, and no dependency on the general `replay` object either
-// (that one drives real bot playback elsewhere and must stay untouched).
-// Position is a transport, not just an auto-loop: Pause/Resume/Reset
-// buttons plus click-drag-to-skim directly on the bar. jupiterClickBarPosSec
-// is the single source of truth, advanced by real elapsed wall-clock time
-// each frame while not paused, and jumped directly by dragging.
 static void drawJupiterClickBar(ThemeEngine& theme,AnimationState& anim,GucciEngine* engine,float windowSeconds,bool externalWidgetJustReleased,float h=46.f){
     auto& jup=engine->jupiterMacro;
     if(jup.clickIntervalsSec.empty()){
@@ -4101,10 +3743,7 @@ static void drawJupiterClickBar(ThemeEngine& theme,AnimationState& anim,GucciEng
     for(auto const& iv:jup.clickIntervalsSec)maxT=std::max(maxT,iv.second);
     double loopLen=std::max(maxT,1.0);
 
-    // Loop OFF: plays through once, then auto-pauses back at the beginning.
-    // Loop ON: wraps back to 0 and keeps playing, clearing your own click/
-    // release marks each time for a fresh per-lap comparison.
-    double realNow=ImGui::GetTime();
+                double realNow=ImGui::GetTime();
     if(!engine->jupiterClickBarPaused){
         double dt=realNow-engine->jupiterClickBarLastRealTime;
         if(dt>0.0&&dt<1.0){
@@ -4147,34 +3786,14 @@ static void drawJupiterClickBar(ThemeEngine& theme,AnimationState& anim,GucciEng
     float w=ImGui::GetContentRegionAvail().x;
     ImDrawList* dl=ImGui::GetWindowDrawList();
 
-    // Your own mouse clicks -- same ImGui mouse path the menu buttons
-    // already use, so it's known to work. Keyboard (spacebar/up/W) is
-    // tracked separately via keybinds.cpp's existing dispatcher hook --
-    // ImGui doesn't reliably see game keys in this GD+ImGui integration,
-    // which is exactly why that hook exists instead of relying on ImGui for
-    // these.
-    //
-    // Scoped to the cursor actually being over the bar's own rect, NOT an
-    // IsAnyItemHovered()-style "was anything else touched" check -- that
-    // was tried first and was wrong two different ways: IsAnyItemHovered()
-    // also reads HoveredIdPreviousFrame (see imgui.cpp), so it stayed true
-    // for one frame after merely hovering the bar itself (its own skim
-    // InvisibleButton covers this same rect), which silently ate real bar
-    // clicks; and it can't see a widget in the CALLER (like the Window
-    // slider above) that already finished its own release-handling and
-    // cleared its active state before this code runs. Position scoping
-    // sidesteps both, and covers any future widget on the page for free
-    // without needing to enumerate it. externalWidgetJustReleased covers
-    // the one case position-scoping alone can't: dragging the Window
-    // slider and releasing with the cursor incidentally over the bar.
-    bool mouseOverBar=ImGui::IsMouseHoveringRect(pos,ImVec2(pos.x+w,pos.y+h));
+                                                                                    bool mouseOverBar=ImGui::IsMouseHoveringRect(pos,ImVec2(pos.x+w,pos.y+h));
     bool blockMark=!mouseOverBar||externalWidgetJustReleased;
     if(!blockMark&&ImGui::IsMouseClicked(ImGuiMouseButton_Left))engine->jupiterClickBarMyClicks.push_back(engine->jupiterClickBarPosSec);
     if(!blockMark&&ImGui::IsMouseReleased(ImGuiMouseButton_Left))engine->jupiterClickBarMyReleases.push_back(engine->jupiterClickBarPosSec);
 
-    const ImU32 barCol=IM_COL32(137,126,94,255); // olive track, per Nigel's reference sketch
+    const ImU32 barCol=IM_COL32(137,126,94,255);
     const ImU32 white=IM_COL32(255,255,255,255);
-    const ImU32 clickCol=theme.getAccentU32(1.f); // already the JMF gold while this tab is active
+    const ImU32 clickCol=theme.getAccentU32(1.f);
 
     dl->AddRectFilled(pos,ImVec2(pos.x+w,pos.y+h),barCol,4.f);
 
@@ -4183,8 +3802,7 @@ static void drawJupiterClickBar(ThemeEngine& theme,AnimationState& anim,GucciEng
     float pxPerSec=(w*0.5f)/halfWindow;
     double nowSec=engine->jupiterClickBarPosSec;
 
-    // Macro's click/hold windows -- filled yellow boxes.
-    for(auto const& iv:jup.clickIntervalsSec){
+        for(auto const& iv:jup.clickIntervalsSec){
         double relStart=iv.first-nowSec, relEnd=iv.second-nowSec;
         if(relEnd<-halfWindow||relStart>halfWindow)continue;
         float x0=centerX+(float)relStart*pxPerSec;
@@ -4193,11 +3811,7 @@ static void drawJupiterClickBar(ThemeEngine& theme,AnimationState& anim,GucciEng
         if(x1>x0)dl->AddRectFilled(ImVec2(x0,pos.y+5),ImVec2(x1,pos.y+h-5),clickCol,2.f);
     }
 
-    // Your own clicks + releases -- thin white lines, scrolling past the
-    // same way the yellow marks do. Press marks rise from the bottom,
-    // release marks hang from the top, so the two are visually
-    // distinguishable at a glance instead of being identical lines.
-    auto drawMyMark=[&](double t,bool isRelease){
+                    auto drawMyMark=[&](double t,bool isRelease){
         double rel=t-nowSec;
         if(rel<-halfWindow||rel>halfWindow)return;
         float x=centerX+(float)rel*pxPerSec;
@@ -4210,10 +3824,7 @@ static void drawJupiterClickBar(ThemeEngine& theme,AnimationState& anim,GucciEng
 
     dl->AddLine(ImVec2(centerX,pos.y-4),ImVec2(centerX,pos.y+h+4),white,3.f);
 
-    // Skim: click-drag directly on the bar to scrub. Dragging right reveals
-    // earlier content (rewind), dragging left reveals later content
-    // (fast-forward) -- matches dragging a filmstrip past a fixed gate.
-    ImGui::SetCursorScreenPos(pos);
+                ImGui::SetCursorScreenPos(pos);
     ImGui::InvisibleButton("##clickBarSkim",ImVec2(w,h));
     if(ImGui::IsItemActive()&&ImGui::IsMouseDragging(ImGuiMouseButton_Left)){
         engine->jupiterClickBarPaused=true;
@@ -4224,24 +3835,12 @@ static void drawJupiterClickBar(ThemeEngine& theme,AnimationState& anim,GucciEng
     ImGui::Dummy(ImVec2(0,4));
 }
 
-// Click Trainer's own dedicated page, per Nigel: the rhythm bar wants more
-// room than the ##jmfConstrain sidebar (42% width, shared with Trainer/
-// Segments/Notes) can give it. Uses the tab's FULL content width instead --
-// the JMF backdrop still renders behind it either way (drawJupiterBackdrop
-// runs before drawTabContent, unconditionally), this is just about how much
-// of the foreground we claim.
 void MenuInterface::drawJupiterClickTrainerPage(){
     auto* engine=GucciEngine::get();
     auto* mod=Mod::get();
     engine->jupiterClickBarPageVisible=true;
 
-    // A keybind rebind left armed (clicked "rebind" on Settings > Keybinds,
-    // then navigated away without pressing the target key or Escape) would
-    // otherwise intercept the down-press of your first Space/Up/W here as
-    // the rebind target, silently reassigning that keybind and leaving an
-    // unpaired release mark behind it. Being on this page at all means any
-    // such rebind attempt was abandoned, so clear it defensively.
-    rebindTarget=nullptr;
+                            rebindTarget=nullptr;
 
     if(Widgets::StyledButton("<- Back",ImVec2(90,28),theme,anim)){
         jupiterClickBarPageOpen=false;
@@ -4267,7 +3866,7 @@ void MenuInterface::drawJupiterClickTrainerPage(){
     if(engine->jupiterClickBarEnabled){
         if(Widgets::StyledSliderFloat("Window (sec)",&engine->jupiterClickBarWindow,0.3f,4.f,theme))
             mod->setSavedValue("jupiter_clickbar_window",(double)engine->jupiterClickBarWindow);
-        bool sliderJustReleased=ImGui::IsItemDeactivated(); // dragging this and releasing over the bar below shouldn't log a mark
+        bool sliderJustReleased=ImGui::IsItemDeactivated();
         ImGui::Dummy(ImVec2(0,14));
         drawJupiterClickBar(theme,anim,engine,engine->jupiterClickBarWindow,sliderJustReleased,90.f);
     }
@@ -4353,25 +3952,10 @@ void MenuInterface::drawJupiterTab(){
     static char jupiterNotesBuf[1024];
     static bool jupiterNotesInit=false;
 
-        // Theme + backdrop are now applied once across the WHOLE menu window
-    // for as long as this tab is active (see drawMainWindow/drawMegaHackWindow),
-    // not just boxed into this tab's own content -- `theme` here already reads
-    // as the Jupiter palette by the time this function runs.
+                ImGui::PushStyleColor(ImGuiCol_ChildBg,IM_COL32(0,0,0,0));
+                        ImGui::BeginChild("##jmfConstrain",ImVec2(ImGui::GetContentRegionAvail().x*0.32f,-1),false);
 
-    // Real content has to stay clear of the diagonal wave-ribbon backdrop
-    // (per Nigel: "the features shouldnt go past the line"), so it's boxed
-    // into a narrower child instead of using the full tab width.
-    ImGui::PushStyleColor(ImGuiCol_ChildBg,IM_COL32(0,0,0,0));
-    // Width picked against the ribbon's own geometry, not guessed: the spine's
-    // narrowest point is x=0.36 (at y=0.66, see drawJupiterWaveRibbon), so 0.42
-    // was ALWAYS capable of overlapping it once sidebar content got tall enough
-    // to reach that height -- which it now does, with Stats/Segment Looping/
-    // Share added on top of Trainer/Segments/Notes. 0.32 leaves real margin.
-    ImGui::BeginChild("##jmfConstrain",ImVec2(ImGui::GetContentRegionAvail().x*0.32f,-1),false);
-
-    // Full name while the tab's actually open, per Nigel's sketch -- wraps to
-    // more than one line rather than the short "JMF" used in the tab rail.
-    if(fontHeading)ImGui::PushFont(fontHeading);
+            if(fontHeading)ImGui::PushFont(fontHeading);
     ImGui::PushStyleColor(ImGuiCol_Text,theme.getAccent());
     ImGui::TextWrapped("Nigel's Jupiter My Favourite Trainer");
     ImGui::PopStyleColor();
@@ -4411,10 +3995,7 @@ void MenuInterface::drawJupiterTab(){
         float hmW=ImGui::GetContentRegionAvail().x,hmH=18.f;
         ImDrawList* hmDl=ImGui::GetWindowDrawList();
         hmDl->AddRectFilled(hmPos,ImVec2(hmPos.x+hmW,hmPos.y+hmH),IM_COL32(30,26,60,255),3.f);
-        // Bucket into 40 bins across 0-100% so repeated deaths at the same
-        // spot visibly stack up as taller/brighter marks instead of just
-        // overlapping into one indistinguishable line.
-        const int bins=40;
+                                const int bins=40;
         int counts[bins]={0};
         int maxCount=1;
         for(float p:engine->jupiterDeathPcts){
@@ -4631,7 +4212,7 @@ void MenuInterface::drawJupiterTab(){
             if(importSegmentsCode(importBuf,engine->jupiterSegmentsRaw,engine->jupiterNotes,importErr)){
                 mod->setSavedValue("jupiter_segments",engine->jupiterSegmentsRaw);
                 mod->setSavedValue("jupiter_notes",engine->jupiterNotes);
-                jupiterNotesInit=false; // force the Notes textbox below to re-sync from the freshly-imported value
+                jupiterNotesInit=false;
                 importBuf[0]=0;
                 Notification::create("Imported segments + notes",NotificationIcon::Success)->show();
             } else {
@@ -4661,13 +4242,6 @@ void MenuInterface::drawJupiterTab(){
     ImGui::PopStyleColor();
 }
 
-// General Trainer tab's click bar -- structural duplicate of
-// drawJupiterClickBar, reading trainer* fields instead of jupiter* ones. See
-// trainerghost.hpp for why the ghost/music side of this feature is
-// duplicated rather than shared; same reasoning applies here: this is a full
-// interactive widget (mouse-hover rect, drag-skim) reading ~8 fields by
-// name, and parameterizing it would mean changing an already-shipped,
-// working function's signature for no real benefit over a clean copy.
 static void drawTrainerClickBar(ThemeEngine& theme,AnimationState& anim,GucciEngine* engine,float windowSeconds,bool externalWidgetJustReleased,float h=46.f){
     auto& trn=engine->trainerMacro;
     if(trn.clickIntervalsSec.empty()){
@@ -4773,15 +4347,6 @@ static void drawTrainerClickBar(ThemeEngine& theme,AnimationState& anim,GucciEng
     ImGui::Dummy(ImVec2(0,4));
 }
 
-// Imported music for the Trainer tab: prompts a native file picker (first
-// use of geode::utils::file::pick in this codebase -- it's an async,
-// coroutine-based Task/Future API, unlike the synchronous openFolder used
-// elsewhere here) and copies whatever's picked to a fixed on-disk location
-// rather than referencing the original path live, so a later move/rename/
-// delete of the source file can't silently break playback. listen()'s
-// callback is documented as self-cleaning ("only be used in a global
-// context"), so this deliberately isn't a member of MenuInterface -- it
-// reaches into GucciEngine::get() itself instead of capturing `this`.
 static geode::Task<bool> importTrainerMusicTask(){
     auto pickResult = co_await geode::utils::file::pick(
         geode::utils::file::PickMode::OpenFile,
@@ -4792,16 +4357,15 @@ static geode::Task<bool> importTrainerMusicTask(){
     );
     if (pickResult.isErr()) co_return false;
     auto pathOpt = pickResult.unwrap();
-    if (!pathOpt.has_value()) co_return false; // cancelled
+    if (!pathOpt.has_value()) co_return false;
 
     auto dest = Mod::get()->getSaveDir() / "trainer_music.mp3";
     std::error_code ec;
     std::filesystem::copy_file(*pathOpt, dest, std::filesystem::copy_options::overwrite_existing, ec);
     co_return !ec;
 }
-// Same Task-lifetime + dead-listen() fix as the fw-asset importers above
-// (2026-08-24, Juice's crash report) -- stored instead of an unstored
-// temporary, polled instead of relying on listen()'s no-op callback.
+// Must stay a stored static, never an unstored temporary -- see
+// s_fwAssetFilesTask's comment above for why (real crash otherwise).
 static geode::Task<bool> s_trainerMusicTask;
 static void importTrainerMusic(){
     s_trainerMusicTask = importTrainerMusicTask();
@@ -4827,8 +4391,7 @@ void MenuInterface::drawTrainerClickTrainerPage(){
     auto* mod=Mod::get();
     engine->trainerClickBarPageVisible=true;
 
-    // Same defensive clear as drawJupiterClickTrainerPage -- see its comment.
-    rebindTarget=nullptr;
+        rebindTarget=nullptr;
 
     if(Widgets::StyledButton("<- Back",ImVec2(90,28),theme,anim)){
         trainerClickBarPageOpen=false;
@@ -4942,14 +4505,6 @@ void MenuInterface::drawTrainerClickTrainerPage(){
     }
 }
 
-// General-purpose counterpart to drawJupiterTab: same toolset, but scoped to
-// whichever of the user's own macros they've picked into trainerMacro
-// instead of one bundled level. Deliberately plain full-width layout (no
-// ##jmfConstrain-style narrow child, no wave-ribbon backdrop, no theme
-// reskin) -- those only exist for JMF because activeTab==5 triggers a
-// whole-window reskin in drawMainWindow/drawMegaHackWindow; a new tab at a
-// new index doesn't trigger any of that, so this can look like every other
-// ordinary tab.
 void MenuInterface::drawTrainerTab(){
     if(trainerClickBarPageOpen){drawTrainerClickTrainerPage();return;}
 
@@ -5019,8 +4574,7 @@ void MenuInterface::drawTrainerTab(){
     std::string currentLevel = (pl&&pl->m_level) ? std::string(pl->m_level->m_levelName) : "";
     bool levelKnown = !engine->trainerMacro.levelName.empty();
     if(!engine->trainerMacro.loaded){
-        // nothing to show -- picker above already explains the state
-    } else if(!levelKnown){
+            } else if(!levelKnown){
         Widgets::StatusBadge("ACTIVE (level unknown)",ImVec4(0.95f,0.75f,0.25f,1.f));
         ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
         ImGui::TextWrapped("This macro has no recorded level name (common for imported/converted macros), so Stats/Ghost/Music stay active on any level instead of just one.");
@@ -5617,22 +5171,14 @@ void MenuInterface::loadSettings(){
     anim.animSpeed=sanitizeClamped(mod->getSavedValue<float>("anim_speed",8.f),2.f,24.f,8.f);
     anim.openDirection=(AnimDirection)mod->getSavedValue<int>("anim_direction",0);
     {
-        // THEME_CUSTOM is a sentinel, not a real entry in kThemePresets --
-        // clamping it into the built-in preset range like every other
-        // saved theme value would silently discard "you had a custom
-        // theme active" on every restart. Load the custom list first so
-        // getActiveCustomTheme() has something to look up against.
-        loadCustomThemes();
+                                                loadCustomThemes();
         activeCustomThemeName=mod->getSavedValue<std::string>("active_custom_theme","");
         int saved=mod->getSavedValue<int>("active_theme",(int)THEME_GUCCI);
         activeTheme=(saved==(int)THEME_CUSTOM)
             ? THEME_CUSTOM
             : (BotTheme)std::clamp(saved,0,ThemeEngine::getPresetCount()-1);
         if(activeTheme==THEME_CUSTOM&&!getActiveCustomTheme()){
-            // Saved theme was deleted (or its file failed to load) since
-            // last session -- fall back rather than silently point at
-            // nothing every frame.
-            activeTheme=THEME_GUCCI;
+                                                activeTheme=THEME_GUCCI;
             activeCustomThemeName.clear();
         }
     }
@@ -5692,12 +5238,7 @@ void MenuInterface::loadSettings(){
     eng->trainerMusicEnabled=mod->getSavedValue<bool>("trainer_music_enabled",false);
     eng->trainerMusicOffsetSec=mod->getSavedValue<float>("trainer_music_offset_sec",0.f);
     eng->trainerMusicImported=mod->getSavedValue<bool>("trainer_music_imported",false);
-    // Reconnect the remembered pick, if any -- no-op/false if the file's gone
-    // since. Done here (general settings load), not GucciEngine::initialize(),
-    // since that's reserved for the one-time bundled-Jupiter bootstrap and
-    // engine-wide settings -- the most fragile part of this codebase per
-    // CLAUDE.md, deliberately left untouched by this feature.
-    {
+                        {
         std::string savedTrainerMacro=mod->getSavedValue<std::string>("trainer_macro_name","");
         if(!savedTrainerMacro.empty())eng->loadTrainerMacro(savedTrainerMacro);
     }
@@ -5746,12 +5287,7 @@ void MenuInterface::loadSettings(){
     windowSize.x=mod->getSavedValue<float>("window_size_w",580.f);
     windowSize.y=mod->getSavedValue<float>("window_size_h",540.f);
     mainSubTab=mod->getSavedValue<int>("main_sub_tab",0);
-    // Macro's sub-tab bar shrank from 3 (Replay/Tools/Hacks) to 2
-    // (Replay/Tools & Hacks) in the 1.5 GUI reorg -- clamp so a value saved
-    // by an older build (2, the old Hacks sub-tab) doesn't land on a
-    // nonexistent sub-tab and render blank. Same class of bug as the old
-    // theme/preset-index clamps -- derive from the real bound, not a literal.
-    if(mainSubTab<0||mainSubTab>1)mainSubTab=0;
+                        if(mainSubTab<0||mainSubTab>1)mainSubTab=0;
         keybinds.intentionalDeath=mod->getSavedValue<int>("key_intentional_death",0);
     keybinds.backStep=mod->getSavedValue<int>("key_back_step",0);
     keybinds.autoFlip=mod->getSavedValue<int>("key_auto_flip",0);
@@ -5827,10 +5363,7 @@ void MenuInterface::loadSettings(){
                 snprintf(t.imageFile,sizeof(t.imageFile),"%s",f[2].c_str());
                 snprintf(t.soundFile,sizeof(t.soundFile),"%s",f[3].c_str());
                 t.r=(float)atof(f[4].c_str()); t.g=(float)atof(f[5].c_str()); t.b=(float)atof(f[6].c_str());
-                // Fields added 2026-08-21 (Juice's marker customization spec) --
-                // rows saved before this exist with only the first 7 fields, so
-                // everything below stays at the struct's own defaults for those.
-                if(f.size()>=28){
+                                                                if(f.size()>=28){
                     t.shape=(GucciEngine::FwMarkerShape)atoi(f[7].c_str());
                     t.polygonSides=atoi(f[8].c_str());
                     t.polygonCornerRadius=(float)atof(f[9].c_str());
@@ -5864,17 +5397,7 @@ void MenuInterface::loadSettings(){
 void MenuInterface::drawInterface(){
     auto* engine=GucciEngine::get();
     if(!setupComplete)return;
-        // Freshly computed every frame, not a sticky navigation flag: the old
-    // jupiterClickBarPageOpen (still used for navigation -- which page to
-    // render) only gets cleared by its own Back button, so leaving the
-    // Click Trainer page via any other route (menu-close hotkey, switching
-    // tabs) left it stuck true, and keybinds.cpp's click-tracking hook --
-    // which only checks that flag -- kept feeding ordinary gameplay jumps
-    // into the click bar's history indefinitely. This is reset to false
-    // here unconditionally every frame and only set true inside
-    // drawJupiterClickTrainerPage when it actually renders that frame, so
-    // it can never go stale.
-    engine->jupiterClickBarPageVisible=false;
+                                                engine->jupiterClickBarPageVisible=false;
     engine->trainerClickBarPageVisible=false;
     anim.update(ImGui::GetIO().DeltaTime);
         if(!anim.closing&&!anim.opening&&anim.openProgress<=0.f&&shown){
@@ -6003,11 +5526,7 @@ void displayCalculatingHUD(){
     auto* ui=MenuInterface::get();
     auto* engine=GucciEngine::get();
     if(!ui||!ui->setupComplete||!engine)return;
-    // Nigel: no way to tell Calculate is running, or to stop it, without the
-    // menu open on the Frame Windows tab specifically -- unlike drawInterface()'s
-    // windows, this one is deliberately NOT gated on ui->shown/anim.openProgress,
-    // same as the other display*HUD overlays below.
-    if(!engine->fwAnalyzing)return;
+                    if(!engine->fwAnalyzing)return;
 
     auto* vp=ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(ImVec2(vp->Pos.x+vp->Size.x-10,vp->Pos.y+10),ImGuiCond_Always,ImVec2(1,0));
@@ -6042,14 +5561,7 @@ void displayFwLegendHUD(){
 
     uint32_t curFrame=engine->updater.getFrame();
 
-    // Tiers with the same non-empty legendGroup combine into one Legend line
-    // (Juice's request, 2026-08-21) -- lets e.g. window 5 and window 6 each
-    // get their own tier with independent shape/color/etc while still
-    // reading as one "5-6" row here. A tier with no legendGroup set is its
-    // own solo group, keyed uniquely by index so it never accidentally
-    // merges with another empty-group tier -- existing single-tier-per-range
-    // setups render exactly as before.
-    struct LegendGroup{int lo=INT_MAX,hi=INT_MIN;int count=0;float r=1,g=1,b=1;bool colorSet=false;};
+                                struct LegendGroup{int lo=INT_MAX,hi=INT_MIN;int count=0;float r=1,g=1,b=1;bool colorSet=false;};
     std::unordered_map<std::string,LegendGroup> groups;
     auto groupKey=[&](size_t i)->std::string{
         auto const& t=engine->fwTiers[i];
@@ -6062,12 +5574,7 @@ void displayFwLegendHUD(){
         g.lo=std::min(g.lo,t.lo);
         g.hi=std::max(g.hi,t.hi);
     }
-    // Tally marks reached so far (frame <= curFrame) into whichever Tier's
-    // group each one's window falls into -- mirrors the marker overlay's own
-    // progressive reveal (framewindow.cpp's render()), so the counter fills
-    // in exactly in step with the markers appearing on screen, same as the
-    // reference frame-window-counter overlays this was modeled on.
-    for(auto const& mk:engine->fwMarks){
+                        for(auto const& mk:engine->fwMarks){
         if(mk.frame>curFrame)continue;
         for(size_t i=0;i<engine->fwTiers.size();++i){
             auto const& t=engine->fwTiers[i];
@@ -6075,10 +5582,7 @@ void displayFwLegendHUD(){
         }
     }
 
-    // Loosest group first (top), tightest last (bottom) -- matches the
-    // reference layout regardless of what order the tiers are actually
-    // configured/stored in.
-    std::vector<LegendGroup> sorted;
+                std::vector<LegendGroup> sorted;
     sorted.reserve(groups.size());
     for(auto const& kv:groups)sorted.push_back(kv.second);
     std::sort(sorted.begin(),sorted.end(),[](auto const& a,auto const& b){return a.hi>b.hi;});

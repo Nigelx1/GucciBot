@@ -96,42 +96,19 @@ enum BotTheme {
     THEME_ROMO,
     THEME_GRIZZLEY,
     THEME_REDKINGDOM,
-    // Sentinel, not a real compile-time theme -- "which custom theme" is
-    // tracked separately (MenuInterface::activeCustomThemeName), since the
-    // custom list is a runtime, user-editable, unbounded set that can't
-    // live in the fixed kThemePresets array or a fixed enum value the way
-    // every built-in theme above does.
-    THEME_CUSTOM
+                        THEME_CUSTOM
 };
 
-// Every extension a saved macro might have -- the 12 built-in ones plus
-// whatever custom themes currently exist. Several places (gui.cpp,
-// engine_core.cpp, brr_format.cpp) scan disk for "does a file with any
-// known macro extension exist" and used to do it against a fixed 12-entry
-// compile-time list; custom themes' extensions aren't known at compile
-// time, so those scans need this instead. Defined once in customtheme.cpp
-// rather than duplicated per file.
 std::vector<std::string> allKnownMacroExtensions();
 
-// One user-authored quote, matching the (text, attribution) pairs every
-// built-in theme's GucciQuote calls already use.
 struct CustomThemeQuote {
     std::string text;
     std::string attribution;
 };
 
-// User-created theme, per Nigel's "create your own theme" (2026-08-24,
-// full scope: colors + identity + quotes + its own Big Brrr track). Unlike
-// the built-in ThemePreset entries (compiled into kThemePresets, gui.cpp),
-// these are created/edited/deleted at runtime and persisted as one JSON
-// file per theme in Mod::get()->getSaveDir()/"customthemes" (mirroring
-// BotSettingsPreset's one-file-per-preset convention, GucciBot.hpp/
-// engine_core.cpp) -- except using real matjson serialization instead of
-// that convention's hand-rolled unescaped string writer, since quote text
-// is freeform user input very likely to contain literal quote characters.
 struct CustomTheme {
-    std::string name;      // shown in the preset list AND as the bot name/title
-    std::string extension; // derived from name (sanitized), used for save files
+    std::string name;
+    std::string extension;
 
     ImVec4 accent        = ImVec4(0.788f,0.659f,0.298f,1.f);
     ImVec4 bg            = ImVec4(0.051f,0.051f,0.051f,0.96f);
@@ -150,7 +127,7 @@ struct CustomTheme {
 
     double bpm           = 140.0;
     double dropOffsetSec = 0.0;
-    bool   hasAudio       = false; // whether a Big Brrr track was imported for this theme
+    bool   hasAudio       = false;
 
     matjson::Value toJson() const;
     static CustomTheme fromJson(const matjson::Value& v);
@@ -169,57 +146,29 @@ public:
     BotTheme activeTheme = THEME_GUCCI;
 
     std::vector<CustomTheme> customThemes;
-    std::string activeCustomThemeName; // which entry of customThemes is active, when activeTheme==THEME_CUSTOM
-    // Returns the active custom theme, or nullptr if activeTheme != THEME_CUSTOM
-    // or the named theme is missing (deleted out from under an active
-    // session, a corrupt/missing file, etc.) -- every call site that reads
-    // from this treats null as "fall back to GucciBot's own defaults",
-    // never as a crash.
-    CustomTheme* getActiveCustomTheme();
+    std::string activeCustomThemeName;
+                        CustomTheme* getActiveCustomTheme();
     std::filesystem::path getCustomThemesDir() const { return Mod::get()->getSaveDir() / "customthemes"; }
-    // Derives a save-file extension from a theme name (lowercase, alnum
-    // only, falls back to "customN" if the sanitized name is empty),
-    // disambiguated against every built-in extension and every OTHER
-    // custom theme's extension so two themes never collide on disk.
-    std::string deriveCustomThemeExtension(const std::string& name) const;
-    // Sanitizes a manually-typed extension (lowercase, alnum only) and
-    // checks it doesn't collide with any built-in or any OTHER custom
-    // theme's extension (excludeName lets the theme currently being edited
-    // check against everyone ELSE, not itself). Returns the sanitized
-    // form; sets *ok=false (and leaves the value as-is otherwise) if it's
-    // empty after sanitizing or if it collides -- caller decides what to
-    // tell the user, this just judges validity.
-    std::string sanitizeCustomExtension(const std::string& raw, const std::string& excludeName, bool* ok) const;
-    void loadCustomThemes(); // called once at startup
-    void saveCustomTheme(CustomTheme& t); // creates or overwrites by name
+                    std::string deriveCustomThemeExtension(const std::string& name) const;
+                                std::string sanitizeCustomExtension(const std::string& raw, const std::string& excludeName, bool* ok) const;
+    void loadCustomThemes();
+    void saveCustomTheme(CustomTheme& t);
     void deleteCustomTheme(const std::string& name);
 
-    // "Create your own theme" editor state (Settings > Theme). Free-text
-    // fields use fixed char buffers rather than std::string, matching this
-    // codebase's existing InputText convention everywhere else (e.g.
-    // macroNameBuffer, presetNameBuf) instead of introducing a different
-    // pattern just for this one feature. Non-text fields (colors, BPM,
-    // etc) are held directly on a staging CustomTheme instead, and only
-    // written back into customThemes on an explicit Save.
-    bool customThemeEditorOpen = false;
+                                bool customThemeEditorOpen = false;
     bool customThemeEditIsNew = true;
-    std::string customThemeEditOriginalName; // empty when creating new; used to detect renames on save
-    std::string customThemeEditOriginalExtension; // same, for detecting a manual extension change
+    std::string customThemeEditOriginalName;
+    std::string customThemeEditOriginalExtension;
     CustomTheme customThemeEditBuffer;
     char cteName[64]={0};
-    // Optional -- left blank, extension auto-derives from the name like
-    // before. Typed non-blank, it's used exactly as given (sanitized,
-    // collision-checked against every built-in and every OTHER custom
-    // theme) rather than silently suffixed like the auto-derive path does,
-    // since a manually-typed value is a deliberate choice, not a guess.
-    char cteExtension[32]={0};
+                        char cteExtension[32]={0};
     char cteSubtitle[160]={0};
     char cteBrandTag[32]={0};
     char cteQuoteReplayText[256]={0}, cteQuoteReplayAttr[128]={0};
     char cteQuoteToolsText[256]={0}, cteQuoteToolsAttr[128]={0};
     char cteQuoteCreditsText[256]={0}, cteQuoteCreditsAttr[128]={0};
     char cteCreditsBadge[128]={0};
-    void openCustomThemeEditor(const CustomTheme* existing); // pass nullptr to create new
+    void openCustomThemeEditor(const CustomTheme* existing);
     void drawCustomThemeEditorPopup();
 
     ThemeEngine theme;
@@ -249,11 +198,7 @@ public:
     char renderPixFmtBuf[24]="yuv420p";
     bool renderColorFix=true;
     bool megaHackLook=false;
-    // Small corner panel (record/play, TPS/speed, frame step, the handful
-    // of toggles you'd actually want mid-attempt) instead of the full tabbed
-    // window, so the bot can stay open while actually playing a level
-    // without blocking the view -- see drawCompactWindow().
-    bool compactMode=false;
+                    bool compactMode=false;
     float compactTempTickRate=240.f, compactTempGameSpeed=1.f;
     char renderVideoArgsBuf[256]="colorspace=all=bt709:iall=bt470bg:fast=1";
     char renderAudioArgsBuf[256]="";

@@ -549,8 +549,7 @@ void TrajectoryPredictionService::drawSurvivalIndicator(PlayerObject* player, bo
     int survived = m_context.holdSurvivedFrames[playerIndex];
     bool survivable = survived >= gb->indicatorLookahead;
 
-    // 0 = right at (or past) the danger boundary, 1 = comfortably inside the lookahead window.
-    float margin = static_cast<float>(survived - gb->indicatorLookahead);
+        float margin = static_cast<float>(survived - gb->indicatorLookahead);
     float tightness = std::clamp(1.0f - (margin / static_cast<float>(std::max(1, gb->indicatorLookahead))), 0.0f, 1.0f);
 
     float flash = gb->indicatorFlashEnabled
@@ -565,7 +564,7 @@ void TrajectoryPredictionService::drawSurvivalIndicator(PlayerObject* player, bo
     CCPoint center = player->getPosition();
 
     switch (gb->indicatorStyle) {
-        case 1: { // Classic -- filled square badge above the player
+        case 1: {
             float half = 7.f + flash * 2.f;
             CCPoint c = center + ccp(0.f, 26.f);
             CCPoint verts[4] = {
@@ -577,7 +576,7 @@ void TrajectoryPredictionService::drawSurvivalIndicator(PlayerObject* player, bo
                 2.f, ccc4f(baseColor.r, baseColor.g, baseColor.b, flashAlpha));
             break;
         }
-        case 2: { // Converge -- two bars that close in as the margin tightens
+        case 2: {
             float gap = std::max(6.f, 34.f - tightness * 18.f - flash * 10.f);
             float barHalfW = 10.f;
             ccColor4F c = ccc4f(baseColor.r, baseColor.g, baseColor.b, flashAlpha);
@@ -585,7 +584,7 @@ void TrajectoryPredictionService::drawSurvivalIndicator(PlayerObject* player, bo
             drawNode->drawSegment(ccp(center.x - barHalfW, center.y - gap), ccp(center.x + barHalfW, center.y - gap), 2.5f, c);
             break;
         }
-        case 3: { // Pulse -- breathing ring, breathes faster as the margin tightens
+        case 3: {
             float pulseSpeed = 2.0f + tightness * 6.0f;
             float pulse = 0.5f + 0.5f * sinf(m_context.indicatorPulsePhase * pulseSpeed);
             float radius = 14.f + pulse * 8.f + flash * 8.f;
@@ -594,7 +593,7 @@ void TrajectoryPredictionService::drawSurvivalIndicator(PlayerObject* player, bo
             drawNode->drawPolygon(verts.data(), verts.size(), ccc4f(baseColor.r, baseColor.g, baseColor.b, ring.a * 0.25f), 2.f, ring);
             break;
         }
-        default: { // Ring -- circle outline around the player
+        default: {
             float radius = 20.f + flash * 6.f;
             ccColor4F ring = ccc4f(baseColor.r, baseColor.g, baseColor.b, flashAlpha);
             auto verts = buildRingVertices(center, radius, 24);
@@ -634,7 +633,7 @@ void TrajectoryPredictionService::onRealClick(bool player2, bool pressed) {
     int survived = pressed ? m_context.holdSurvivedFrames[playerIndex] : m_context.releaseSurvivedFrames[playerIndex];
     float margin = static_cast<float>(survived - gb->indicatorLookahead);
     float tightness = std::clamp(1.0f - (margin / static_cast<float>(std::max(1, gb->indicatorLookahead))), 0.0f, 1.0f);
-    float pitch = 1.0f + tightness * 0.35f; // rises up to +35% on the tightest windows
+    float pitch = 1.0f + tightness * 0.35f;
 
     ClickSoundManager::get()->playClickPitched(pressed, player2, pitch);
 }
@@ -711,9 +710,7 @@ void TrajectoryPredictionService::traceInputPath(
 
     int frameCount = std::clamp(GucciEngine::get()->pathLength, 0, kMaxTraceFrames);
     if (!GucciEngine::get()->pathPreview && GucciEngine::get()->survivalIndicator) {
-        // Indicator-only mode doesn't need the full trajectory-length trace,
-        // just enough to confirm survival past the lookahead window.
-        frameCount = std::clamp(GucciEngine::get()->indicatorLookahead + 5, 5, kMaxTraceFrames);
+                        frameCount = std::clamp(GucciEngine::get()->indicatorLookahead + 5, 5, kMaxTraceFrames);
     }
     m_context.traceCancelled = false;
     m_context.holdingTrace = holdingInput;

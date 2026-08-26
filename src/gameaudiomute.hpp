@@ -3,14 +3,6 @@
 #include <Geode/Geode.hpp>
 #include <Geode/binding/FMODAudioEngine.hpp>
 
-// Shared, reference-counted mute for GD's own audio -- used by both BIG
-// BRRRR and the Jupiter synced music so neither one accidentally unmutes
-// the game while the other is still playing. Mutes FMODAudioEngine's own
-// background-music and SFX channel groups specifically (m_backgroundMusicChannel,
-// m_globalChannel), NOT the FMOD master group -- anything this mod plays into
-// its own independent channel (passing nullptr as the channel group, or a
-// dedicated group like ClickSounds') is a sibling of those, not a child, so
-// it's never affected by this.
 class GameAudioMute {
 public:
     static void acquire() {

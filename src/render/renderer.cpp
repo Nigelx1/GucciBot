@@ -274,9 +274,7 @@ geode::Result<> SLRenderer::start() {
 
     m_audioTracks.clear();
     if (m_collectAudio) {
-        // Juice: split mode is 4 tracks -- the original combined mix (index
-        // 0, always present) PLUS the 3 isolated ones, not instead of it.
-        int trackCount = m_settings.m_splitAudioTracks ? 4 : 1;
+                        int trackCount = m_settings.m_splitAudioTracks ? 4 : 1;
         static const char* kTrackNames[4] = {"combined", "music", "sfx", "frame-window"};
         for (int i = 0; i < trackCount; i++) {
             SLAudioTrack track;
@@ -310,9 +308,7 @@ geode::Result<> SLRenderer::start() {
                 return geode::Err("Failed to copy audio codec parameters");
             track.stream->time_base = track.codecCtx->time_base;
             if (m_settings.m_splitAudioTracks) {
-                // Track titles so an editor/player shows which is which
-                // instead of three unlabeled audio streams.
-                ff->av_dict_set(&track.stream->metadata, "title", kTrackNames[i], 0);
+                                                ff->av_dict_set(&track.stream->metadata, "title", kTrackNames[i], 0);
             }
 
             geode::log::info("[GucciBot] Audio stream {} ({}): {} @ {}Hz, frame_size={}",
@@ -377,26 +373,10 @@ geode::Result<> SLRenderer::start() {
     geode::log::info("[GucciBot] SLRenderer capture ready — buffer {}", m_bufferSize);
 
                 if (m_collectAudio) {
-        // Juice: force the frame-window channel group to exist BEFORE
-        // switching FMOD to NRT/no-sound output below -- it's normally
-        // created lazily on first use (see gbfw::frameWindowChannelGroup),
-        // and if that first-ever creation happens to fall inside a render
-        // (nothing played it live first), the group gets built and wired
-        // into the mix graph while the system is already in NRT mode,
-        // unlike m_backgroundMusicChannel/m_globalChannel which GD's own
-        // engine sets up at normal startup long before any of this. Likely
-        // root cause of frame-window audio being silent when split.
-        gbfw::frameWindowChannelGroup();
+                                                                                gbfw::frameWindowChannelGroup();
         AudioEngineRenderState::enter(m_settings.m_musicVolume, m_settings.m_sfxVolume);
 
-        // Juice: split mode should be 4 tracks, not 3 -- the original
-        // combined mix PLUS the 3 isolated ones, not instead of it. get()
-        // (master) is now always attached for real in both modes, which
-        // also removes the need for the old hand-wavy "get() is just a
-        // timing reference, sync its m_time from getMusic() after the
-        // fact" workaround -- it has its own real buffer draining normally
-        // like everything else now.
-        AudioRecorder::get()->init();
+                                                                AudioRecorder::get()->init();
         AudioRecorder::get()->attach();
         if (m_settings.m_splitAudioTracks) {
             auto* engine = FMODAudioEngine::get();

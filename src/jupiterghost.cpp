@@ -18,24 +18,6 @@ namespace gbju {
     }
 }
 
-// Synced music, two independent trigger paths sharing one channel:
-//  - sync(pl,frame,tps): live gameplay, called from the per-gameplay-frame
-//    hook (renderJupiterGhost) -- seeked to the ACTUAL level frame, works
-//    even with the menu closed.
-//  - syncPreview(...): click-bar-preview, called directly from
-//    MenuInterface::drawJupiterClickTrainerPage every frame that page is
-//    open -- seeked to the click bar's own transport position, works from
-//    the main menu with no level loaded at all.
-// Live gameplay always takes priority if both are momentarily true (e.g.
-// the menu's open to the Click Trainer page WHILE actually playing Jupiter
-// My Favourite) -- syncPreview defers to sync() in that case rather than
-// fighting over the channel's seek position.
-//
-// Neither path unconditionally stop()s the channel just because ITS OWN
-// condition isn't met, since the OTHER path might legitimately still want
-// it running -- only syncPreview's "nothing wants this at all" branch calls
-// stop(), since it's reachable independent of whether a PlayLayer exists
-// (sync() only runs inside an active level to begin with).
 class JupiterMusicSync {
 public:
     static JupiterMusicSync* get() { static JupiterMusicSync inst; return &inst; }
@@ -56,7 +38,7 @@ public:
         auto* pl = PlayLayer::get();
         auto* gb = GucciEngine::get();
         bool liveOwns = gb->jupiterMusicEnabled && pl && pl->m_started && gbju::isJupiterLevel(pl);
-        if (liveOwns) return; // sync() has it this frame instead
+        if (liveOwns) return;
 
         bool shouldPlay = active && gb->jupiterMusicEnabled;
         if (!shouldPlay) { stop(); return; }
@@ -107,13 +89,6 @@ private:
     bool m_audioMuteHeld = false;
 };
 
-// Mirrors PracticeRangeOverlay (practicerange.cpp) exactly on purpose: a
-// CCDrawNode attached to m_objectLayer, cleared and redrawn every frame,
-// attached on PlayLayer::init and detached on PlayLayer::onQuit. That
-// pattern is already proven safe in this codebase for per-frame gameplay
-// overlays -- reusing it here means this feature can't touch anything it
-// isn't explicitly reading (m_pathSamples, a locally-tracked best-attempt
-// path), unlike the checkpoint/reset system flagged elsewhere as fragile.
 class JupiterGhostOverlay {
 public:
     static JupiterGhostOverlay* get() { static JupiterGhostOverlay inst; return &inst; }
@@ -145,11 +120,7 @@ public:
 
         if (!pl->m_started) return;
 
-        // Capture this attempt's live path for the "own best attempt" ghost.
-        // Only during real manual play -- bot playback is just replaying the
-        // same macro we're already comparing against, so capturing it would
-        // be redundant at best and would corrupt "your own best" at worst.
-        if (gb->jupiterBestGhostEnabled && !gb->isPlaying() && pl->m_player1) {
+                                        if (gb->jupiterBestGhostEnabled && !gb->isPlaying() && pl->m_player1) {
             m_liveAttemptPath.push_back({ pl->m_player1->m_position.x, pl->m_player1->m_position.y });
         }
 

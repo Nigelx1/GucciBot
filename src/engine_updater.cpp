@@ -26,10 +26,6 @@ static void slopeLog(const std::string& line) {
     log::info("[SLOPE] {}", line);
 }
 
-// Geode's own console log doesn't persist to a findable file on every setup
-// (confirmed absent on this machine) -- log::info() alone isn't something a
-// tester can actually hand back as evidence. Mirrors slopeLog's pattern:
-// dedicated file in the mod's save dir, truncated fresh each GD session.
 static std::ofstream g_frameIncLog;
 void logFrameIncrement(const char* callSite, uint32_t frame, PlayerObject* p) {
     if (!g_frameIncLog.is_open()) {
@@ -39,18 +35,7 @@ void logFrameIncrement(const char* callSite, uint32_t frame, PlayerObject* p) {
     }
     if (g_frameIncLog.is_open()) {
         g_frameIncLog << callSite << " -> frame " << frame;
-        // Juice's 2026-08-24 report: checkpoint position/velocity appears
-        // to be captured one tick stale relative to its assigned frame
-        // label, compounding by exactly one frame's movement per
-        // checkpoint placed (confirmed via matching screenshots against
-        // the level's own known per-frame wave velocity). Logging the
-        // live player state at every call site that touches frame
-        // labeling or checkpoint capture/restore -- rather than guessing
-        // at the mechanism -- so the actual save-vs-settle-vs-restore
-        // timing can be read directly off real data, the same way P3 was
-        // ultimately solved (three guessed theories failed there before
-        // real log evidence found it).
-        if (p) {
+                                                                                                if (p) {
             g_frameIncLog << " pos=(" << p->m_position.x << "," << p->m_position.y << ")"
                           << " vel=(" << p->m_playerSpeed << "," << p->m_yVelocity << ")"
                           << " grnd=" << (p->m_isOnGround?1:0);
@@ -90,19 +75,7 @@ uint32_t GucciUpdater::getFrame() const {
 }
 
 bool GucciUpdater::useFastLockDelta() const {
-    // Performance mode removed entirely (2026-08-19, Nigel's call, per Juice's
-    // testing): it collapsed multiple physics ticks into a single scheduler
-    // update to catch up to the next queued input, but GucciBot's own frame
-    // counter only increments once per scheduler call -- so the frame count
-    // fell behind how much the game had actually simulated, every time that
-    // catch-up path engaged. That's what Accuracy mode avoided, and why
-    // switching to it visibly fixed/reduced several of Juice's frame-skip
-    // reports. Casual botting doesn't need Performance's speed badly enough
-    // to be worth the inaccuracy -- always false now; kept as a named method
-    // rather than inlining `false` at every call site (runUpdates, the two
-    // register-patch midhooks below, hook_gjbasegamelayer.cpp) since removing
-    // the method itself would touch more files for no behavioral gain.
-    return false;
+                                                    return false;
 }
 
 void GucciUpdater::calculateSteps(float dt, float targetDt) {
@@ -314,21 +287,7 @@ static void earlyUpdateMidhook(SafetyHookContext&) {
         CheckpointObject* cp = pl->createCheckpoint();
         if (!cp) return;
         cp->retain();
-        // earlyUpdateMidhook (0x237E42) fires before frameUpdateMidhook's own
-        // increment (0x238BAA) within the same native tick -- same off-by-one
-        // Juice found for checkpoints/clicks in general, confirmed here by
-        // the two hooks' relative offsets rather than just by analogy.
-        //
-        // NOT yet given the same deferred-capture treatment as
-        // storeCheckpoint (hook_playlayer.cpp, 2026-08-24) -- the label is
-        // still +1 here but the position/velocity data below is captured
-        // live, same stale-data issue. Left alone for now because this
-        // fires every tick while backwards-stepping is active (continuous
-        // frame history), not once per discrete event -- storeCheckpoint's
-        // single-slot pending queue would silently drop every other frame
-        // if reused here. Needs a real queue (or per-frame deferred
-        // capture), not this same mechanism, if it turns out to need fixing.
-        if (upd.m_logFrameIncrements)
+                                                                                                                        if (upd.m_logFrameIncrements)
             logFrameIncrement("earlyUpdateMidhook(saveState)", upd.getFrame() + 1, pl->m_player1);
         gb->practiceFix.saveState(cp, upd.getFrame() + 1);
     }
@@ -346,12 +305,6 @@ static char gamemodeChar(PlayerObject* p) {
     return 'C';
 }
 
-// Mirrors fwClassifyOrbTouch/fwIsDashOrbType/fwIsNonDashOrbType in
-// engine_core.cpp -- kept as its own copy here (this codebase's existing
-// convention for small per-file classification helpers) rather than shared,
-// since this one runs at RECORD time. Ground truth captured here is what
-// Calculate's Capturing pass reads back later instead of trusting its own
-// live m_touchingRings (see MacroPathSample::p1OrbDash's comment).
 static void classifyOrbTouchForCapture(PlayerObject* player, bool& outDash, bool& outNonDash) {
     outDash = false;
     outNonDash = false;
@@ -389,14 +342,13 @@ static void frameUpdateMidhook(SafetyHookContext&) {
 
     if (!pl->m_playerDied) {
         if (PlayLayer::get()) {
-            // Deferred checkpoint capture (Nigel/Juice, 2026-08-24): see
-            // m_pendingCaptureStage in GucciBot.hpp and storeCheckpoint /
-            // earlyUpdateMidhook's saveState. Checked and cleared BEFORE
-            // incrementFrame() below so the actual saveCurrent() call
-            // happens while getFrame() still reads the frame it was queued
-            // under -- one full native update() call after it was queued,
-            // so this tick's own physics integration for that frame has
-            // already completed.
+            // Checked/cleared BEFORE incrementFrame() below on purpose, so
+            // stage 2 captures while getFrame() still reads the label it
+            // was queued under -- one tick after storeCheckpoint queued it
+            // (hook_playlayer.cpp), so this tick's own physics settle has
+            // already happened. Don't move this after incrementFrame() or
+            // collapse the two-stage promotion -- both changes reintroduce
+            // stale-position checkpoint capture.
             auto& pf = gb->practiceFix;
             if (pf.m_pendingCaptureStage == 2) {
                 if (upd.m_logFrameIncrements)
@@ -413,14 +365,7 @@ static void frameUpdateMidhook(SafetyHookContext&) {
                 logFrameIncrement("frameUpdateMidhook", upd.getFrame(), pl->m_player1);
         }
 
-        // Ground-truth capture: live recording always grows this fresh (cleared at
-        // record-start). Normal playback (bot replaying a loaded macro, NOT
-        // Calculate) backfills the same data the first time a macro plays through --
-        // this is what lets an imported/converted macro (no native GucciBot
-        // recording behind it) still get path data, just by being played back once.
-        // Either way we only ever append past what's already captured, so a macro's
-        // first clean pass through a frame is what sticks as ground truth.
-        bool shouldCapturePath = gb->isRecording() || (gb->isPlaying() && !gb->fwAnalyzing);
+                                                                bool shouldCapturePath = gb->isRecording() || (gb->isPlaying() && !gb->fwAnalyzing);
         if (shouldCapturePath) {
             auto* plr = PlayLayer::get();
             auto& samples = gb->replay.m_pathSamples;
@@ -453,15 +398,7 @@ static void frameUpdateMidhook(SafetyHookContext&) {
                     classifyOrbTouchForCapture(p2, smp.p2OrbDash, smp.p2OrbNonDash);
                     smp.gamemode2 = gamemodeChar(p2);
                 }
-                // Indexed by frame (see m_pathSamples' index==frame contract in
-                // GucciBot.hpp), not appended -- getFrame() is already
-                // post-incremented by the time we get here, so a plain
-                // push_back() would silently land one slot early. resize()
-                // also means a capture gap (e.g. resuming after Calculate's
-                // analysis pass skipped capture for a while) fills the missed
-                // indices with a blank placeholder instead of permanently
-                // shifting every later index out of alignment with its frame.
-                samples.resize(frame + 1);
+                                                                                                                                                samples.resize(frame + 1);
                 samples[frame] = smp;
                 if (!gb->isRecording()) gb->replay.m_pathSamplesDirty = true;
             }
@@ -475,17 +412,7 @@ static void frameUpdateMidhook(SafetyHookContext&) {
             }
         }
 
-        // Calculate's capture pass: force the player's kinematic state to match
-        // ground truth captured during the original recording, instead of trusting
-        // this pass's own physics tick to independently re-derive the same values.
-        // This is deliberate -- the whole P3 investigation has been chasing WHY
-        // Calculate's simulation diverges from the real playthrough at certain
-        // frames (e.g. missing a slope-exit launch impulse) without finding the
-        // mechanism. Forcing ground truth here sidesteps needing to ever find it,
-        // for the capture pass specifically. Only engages when the loaded macro
-        // actually has path-sample data (recorded after this feature existed) --
-        // older macros silently fall back to the previous (unforced) behavior.
-        if (gb->fwAnalyzing && gb->fwState == GucciEngine::FwState::Capturing) {
+                                                                                        if (gb->fwAnalyzing && gb->fwState == GucciEngine::FwState::Capturing) {
             auto& samples = gb->replay.m_pathSamples;
             uint32_t frame = upd.getFrame();
             if (frame < samples.size()) {

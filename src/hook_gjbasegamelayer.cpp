@@ -124,15 +124,7 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         }
 
                         if (auto* fpl = PlayLayer::get()) {
-            // Juice: frame-window sounds don't play in the render. Root
-            // cause: this was passing gb->renderer.recording, the OLD
-            // subprocess-based Renderer's own flag (renderer.cpp) -- "Start
-            // Render" only ever drives SLRenderer (render/renderer.cpp), so
-            // that flag never goes true in current usage, meaning
-            // renderFrameWindows always thought it was live, never
-            // rendering. Fixed here; see hook_gjbasegamelayer.cpp's
-            // handleButton for the matching sound-cue-side fix.
-            gbfw::renderFrameWindows(fpl, SLRenderer::get()->isRecording());
+                                                                                                            gbfw::renderFrameWindows(fpl, SLRenderer::get()->isRecording());
             gbpr::renderPracticeRange(fpl);
             gbju::renderJupiterGhost(fpl);
             gbtr::renderTrainerGhost(fpl);
@@ -155,15 +147,7 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
             cmd.m_isPlayer2 = false;
         auto& atom = gb->replay.m_actionAtom;
 
-        // Juice's dying-mid-click fix: onReset() (engine_core.cpp) may have
-        // just removed a dangling press and armed this for the player whose
-        // physical button might still be down through the reset. Consumed
-        // by whatever input actually comes in next for that player -- if
-        // it's a release, drop it (an orphan closing a press that no longer
-        // exists in the recording); if it's a press instead, just clear the
-        // flag and record normally. Indexed by the SAME final (post-flip)
-        // player2 value addAction below actually stores, not the raw cmd.
-        bool finalPlayer2 = gb->replay.playerFlipped(cmd.m_isPlayer2);
+                                                                        bool finalPlayer2 = gb->replay.playerFlipped(cmd.m_isPlayer2);
         int suppressIdx = finalPlayer2 ? 1 : 0;
         if (gb->replay.m_suppressNextRelease[suppressIdx]) {
             gb->replay.m_suppressNextRelease[suppressIdx] = false;
@@ -174,18 +158,7 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
             }
         }
 
-        // Re-added (2026-08-19, Juice's redesign): store the TRUE frame here
-        // again -- handleButton (this function's main caller) is native GD's
-        // own input callback, fired before this tick's own frame increment
-        // (frameUpdateMidhook). The playback-broke-last-time problem is now
-        // fixed at the OTHER end instead: normal playback's queued-apply has
-        // its own inherent one-tick delay, so processQueuedButtons looks
-        // inputs up one frame early during real playback (not during
-        // Calculate, which wants the true frame directly) to compensate --
-        // see the lookupFrame comment there. One true frame stored
-        // everywhere, one clearly-scoped compensation at the one place that
-        // actually needs it, instead of two conventions mixed into the data.
-        uint32_t f = gb->updater.getFrame() + 1;
+                                                                                                uint32_t f = gb->updater.getFrame() + 1;
         if (atom.length() > 0 && atom.m_actions.back().m_frame > f)
             return;
         bool added = atom.addAction(f,
@@ -241,37 +214,11 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
                                                 bool fwSoundEnabled = SLRenderer::get()->isRecording()
                 ? gb->fwEnabledRender : gb->fwEnabledLive;
         if (fwSoundEnabled && !gb->fwAnalyzing && gb->fwHasData) {
-            // Juice: frame-window sounds didn't play in renders at all --
-            // this was hardcoded to fwEnabledLive with no render branch,
-            // unlike the visual marker (framewindow.cpp's render()), which
-            // already correctly switches between fwEnabledLive/fwEnabledRender.
-            // A normal workflow is "Show Live" off (quiet during practice),
-            // "Show in Renders" on (cues only in the final video) -- with the
-            // old hardcoded check, that setup meant cues NEVER fired, live or
-            // rendered. Mirrors the marker's own isRendering pattern now,
-            // using SLRenderer directly (see renderFrameWindows's call site
-            // above for why gb->renderer.recording was never the right flag).
-            //
-            // Juice: releases have their own frame-window marks (Wave/Ship/Robot)
-            // and should cue exactly like presses do -- this used to be gated on
-            // action.m_holding, so a release's cue never played at all, only its
-            // preceding press's did. Match on mark TYPE too (not just frame), since
-            // a press and release mark could in principle share a frame.
-            bool actionIsRelease = !action.m_holding;
+                                                                                                                                                                                                            bool actionIsRelease = !action.m_holding;
             for (auto const& mk : gb->fwMarks) {
                 if (mk.frame != action.m_frame || mk.isRelease != actionIsRelease) continue;
-                // Juice: sound played for every click, not just ones whose
-                // marker actually appears. Root cause: the visual marker
-                // (framewindow.cpp's render(), `mk.window > gb->fwMaxWindow`)
-                // suppresses any mark past the configured max-window-to-show
-                // threshold, on top of tier-gating -- this check only ever
-                // had the tier half of that, so a click whose window exceeded
-                // fwMaxWindow still cued a sound with no marker ever drawn
-                // for it. Added the same fwMaxWindow check the marker uses.
-                if (mk.window > gb->fwMaxWindow) break;
-                // Same tier-gating as the visual marker: if tiers are
-                // configured, a window outside all of them gets no cue either.
-                if (!gb->fwTiers.empty() && !gb->fwTierFor(mk.window)) break;
+                                                                                                                                                if (mk.window > gb->fwMaxWindow) break;
+                                                if (!gb->fwTiers.empty() && !gb->fwTierFor(mk.window)) break;
                 gbfw::playTierSound(mk.window);
                 break;
             }
@@ -330,14 +277,7 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         auto* gb = GucciEngine::get();
         if (button == 1) {
             triggerClickAudio(!player1, button, pressed);
-            // handleButton is the base game's single choke point for button
-            // state changes, so it also fires for clicks the bot itself
-            // injects during playback (queueButton -> processQueuedButtons
-            // re-enters this hook). Real-click measurement should only ever
-            // see actual human input, so these two are gated on !isPlaying()
-            // -- unlike triggerClickAudio just above, which already has its
-            // own separate playback-aware guard and is deliberately left as is.
-            if (!gb->isPlaying()) {
+                                                                                                if (!gb->isPlaying()) {
                 if (gb->survivalIndicator) {
                     TrajectoryPredictionService::get().onRealClick(!player1, pressed);
                 }
@@ -372,16 +312,7 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
             saveQueuedButtons();
         } else if (gb->isPlaying()) {
             uint32_t frame = gb->updater.getFrame();
-            // Inputs are stored at their true frame (addInputToReplay).
-            // Calculate wants that true frame directly. Real playback needs
-            // to look one frame ahead of the true label instead: applying a
-            // queued command goes through GD's own queued-apply path, which
-            // has its own inherent one-tick delay, so firing the lookup one
-            // frame early lands the input on its true frame once applied.
-            // Same isPlaying()-not-fwAnalyzing distinction already used
-            // elsewhere (see shouldCapturePath in engine_updater.cpp) to tell
-            // real playback apart from Calculate's own internal replay.
-            uint32_t lookupFrame = gb->fwAnalyzing ? frame : frame + 1;
+                                                                                                                        uint32_t lookupFrame = gb->fwAnalyzing ? frame : frame + 1;
             while (auto input = gb->replay.getNextInput(lookupFrame)) {
                                                                 if (gb->fwAnalyzing) {
                     log::info("[CAP-IN] f={} inputFrame={} hold={} p2={}",

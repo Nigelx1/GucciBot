@@ -1,15 +1,12 @@
 #include "GucciBot.hpp"
 #include "checkpoint_player.hpp"
 
-// Faithful port of Silicate's SavedPlayerCheckpoint::apply()/create()
-// (src/checkpoint/checkpoint.cpp) -- see checkpoint_player.hpp for context.
-// Field-by-field, including the handful of cases where this struct's own
-// storage name differs from the live PlayerObject field it's copied to/from
-// (e.g. m_flashRelated <-> p->m_flashDuration, m_gv0096 <->
-// p->m_switchWaveTrailColor, m_unk9e8 <-> p->m_dashFireFrame) -- these are
-// Silicate's own naming, not typos, and were verified against Geode's
-// generated PlayerObject.hpp for 2.2081 rather than assumed from the name.
-
+// A faithful field-for-field port of Silicate's SavedPlayerCheckpoint. Where
+// a storage field name doesn't match the live PlayerObject field it maps to
+// (m_flashRelated<->m_flashDuration, m_gv0096<->m_switchWaveTrailColor,
+// m_unk9e8<->m_dashFireFrame, m_robotHasRun3<->m_robotAnimation1Enabled),
+// that's confirmed intentional upstream, not a typo -- don't "fix" the
+// names to match without re-checking Silicate's own checkpoint.cpp.
 void SavedPlayerCheckpoint::apply(PlayerObject* p) {
     p->setPosition(m_position);
     p->setRotation(m_ccRotation);
@@ -25,9 +22,7 @@ void SavedPlayerCheckpoint::apply(PlayerObject* p) {
     p->m_slopeStartTime = m_slopeStartTime;
     p->m_justPlacedStreak = m_justPlacedStreak;
     p->m_maybeLastGroundObject = m_maybeLastGroundObject;
-    // Collision-log dictionaries intentionally not restored -- matches
-    // Silicate's own apply(), which leaves these commented out.
-    p->m_lastCollisionBottom = m_lastCollisionBottom;
+            p->m_lastCollisionBottom = m_lastCollisionBottom;
     p->m_lastCollisionTop = m_lastCollisionTop;
     p->m_lastCollisionLeft = m_lastCollisionLeft;
     p->m_lastCollisionRight = m_lastCollisionRight;

@@ -1,32 +1,12 @@
 #pragma once
 
-// Ported from Silicate's real per-player checkpoint state
-// (git.silicate.dev/silicate/silicate, src/checkpoint/checkpoint.hpp/.cpp),
-// 2026-08-23. GucciBot's own SavedCheckpointState only ever captured ~15
-// fields per player (position/rotation/velocity/a few flags) -- a tiny
-// fraction of what Geode's actual PlayerObject binding exposes and what
-// Silicate's own practice-fix restores: slope state, dash state, streak/
-// particle state, held-direction/held-button state, jump-buffer state, and
-// dozens more. Field names below (both the struct's own storage names and
-// the p-> names they're copied to/from) were verified 2026-08-23 against
-// the generated Geode/binding/PlayerObject.hpp for GD 2.2081 that this mod
-// actually links against -- every field referenced here exists there under
-// the exact same name. Struct layout, the apply()/create() field lists, and
-// which fields are deliberately captured-but-never-applied (m_ccPosition,
-// m_mainLayer) or declared-but-never-populated (the four collision-log
-// CCDictionary* fields) all mirror Silicate's own source exactly -- this is
-// a faithful port, not a reinterpretation.
 struct SavedPlayerCheckpoint {
     void apply(PlayerObject* p);
     static SavedPlayerCheckpoint create(PlayerObject* p);
 
-    // Captured in Silicate's create() only in a commented-out line -- stays
-    // default/unset there and here. apply() restores position via m_position
-    // instead (below). Kept only for 1:1 struct-shape fidelity with upstream.
-    cocos2d::CCPoint m_ccPosition{};
+                cocos2d::CCPoint m_ccPosition{};
     float m_ccRotation = 0.f;
-    // Captured but never applied back in Silicate's apply() either.
-    cocos2d::CCNode* m_mainLayer = nullptr;
+        cocos2d::CCNode* m_mainLayer = nullptr;
     bool m_wasTeleported = false;
     bool m_fixGravityBug = false;
     bool m_reverseSync = false;
@@ -39,9 +19,7 @@ struct SavedPlayerCheckpoint {
     double m_slopeStartTime = 0.0;
     bool m_justPlacedStreak = false;
     GameObject* m_maybeLastGroundObject = nullptr;
-    // Declared but never assigned in create() nor read in apply() upstream --
-    // kept for struct-shape fidelity only, always null/unused here too.
-    cocos2d::CCDictionary* m_collisionLogTop = nullptr;
+            cocos2d::CCDictionary* m_collisionLogTop = nullptr;
     cocos2d::CCDictionary* m_collisionLogBottom = nullptr;
     cocos2d::CCDictionary* m_collisionLogLeft = nullptr;
     cocos2d::CCDictionary* m_collisionLogRight = nullptr;

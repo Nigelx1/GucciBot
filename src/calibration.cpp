@@ -69,8 +69,7 @@ void CalibrationService::tick(float dt) {
     if (waitingForClick) {
         timeSinceCue += dt;
         if (timeSinceCue > kClickTimeoutSec) {
-            // No click came in time -- abort rather than record garbage or hang forever.
-            cancel();
+                        cancel();
         }
         return;
     }

@@ -21,13 +21,6 @@ namespace {
     }
 }
 
-// One-time diagnostic: dump {objectID -> real GameObjectType} for every object
-// GD itself creates, straight from GameObject::m_objectType (the actual runtime
-// classification -- Solid/Hazard/Decoration/etc, see Geode/Enums.hpp). This is
-// authoritative in a way no community spreadsheet can be, since it's the game's
-// own object-type assignment, not a guess. Appends only newly-seen IDs across
-// runs so playing a couple of levels builds up a running reference table at
-// <mod save dir>/guccibot_objectids.log as "id,objectType,levelName".
 class $modify(ObjectIDDumpPL, PlayLayer) {
     void createObjectsFromSetupFinished() {
         PlayLayer::createObjectsFromSetupFinished();

@@ -30,25 +30,16 @@ class $modify(GB7PlayLayer, PlayLayer) {
             gb->practiceFix.m_platformerCheckpoints.push_back(std::make_pair(obj, (CheckpointObject*)this->m_activatedCheckpoint));
             return;
         }
-        // Juice's testing (2026-08-19): a checkpoint placed on what the bot
-        // reads as frame N actually happens on frame N+1 -- storeCheckpoint
-        // is native GD's own checkpoint-touch callback, fired before this
-        // tick's own frame increment (frameUpdateMidhook). Confirmed the
-        // same +1 applies to input clicks too (see addInputToReplay).
-        //
-        // Nigel/Juice (2026-08-24): the label fix alone wasn't enough --
-        // saveCurrent() reads the player's LIVE position/velocity right
-        // here, still before this tick's physics integration for that
-        // labeled frame has happened, so the captured data was stale even
-        // once the label said N+1. Queue the capture instead; the real
-        // saveCurrent() call happens from frameUpdateMidhook one tick later
-        // (see m_pendingCaptureStage in GucciBot.hpp).
+        // Queues the capture instead of taking it immediately: this native
+        // hook fires before that tick's own physics integration for the
+        // labeled frame has happened, so an immediate saveCurrent() here
+        // reads stale position/velocity even though the +1 frame label
+        // is correct. frameUpdateMidhook (engine_updater.cpp) performs the
+        // real saveCurrent() one tick later, once the frame has settled --
+        // don't "simplify" this back to an immediate call, that's exactly
+        // the bug this fixed (compounding per-checkpoint position drift).
         auto& pf = gb->practiceFix;
         if (pf.m_pendingCaptureStage != 0 && pf.m_pendingCaptureCp) {
-            // A previous checkpoint's deferred capture hasn't fired yet
-            // (back-to-back checkpoints within the same tick or two) --
-            // flush it now with whatever's live rather than silently
-            // dropping its entry.
             pf.saveCurrent(pf.m_pendingCaptureCp, pf.m_pendingCaptureFrameOffset);
         }
         if (gb->updater.m_logFrameIncrements)
@@ -119,14 +110,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
 
     void onQuit() {
         auto* gb = GucciEngine::get();
-        // Nigel: Calculate should save no matter what it stops for. fwTick()
-        // only cancels (and saves) when it notices PlayLayer is already gone
-        // -- but that check runs from frameUpdateMidhook, which itself bails
-        // before fwTick() if GJBaseGameLayer is already gone too (a full exit
-        // to menu can tear both down before another tick ever runs). Catch it
-        // here instead, while the layer is still valid enough for
-        // cancelAnalysis()'s own PlayLayer::get() check to work normally.
-        if (gb->fwAnalyzing) gb->cancelAnalysis();
+                                                                if (gb->fwAnalyzing) gb->cancelAnalysis();
         if (gb->renderer.recording) gb->renderer.stop(gb->updater.getFrame());
         TrajectoryPredictionService::get().updatePreview(nullptr);
         PlayLayer::onQuit();
@@ -263,22 +247,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
             if (upd.m_canDie) { m_player1->releaseAllButtons(); m_player2->releaseAllButtons(); return; }
 
                                                                         if (m_player1->m_isDead || m_player2->m_isDead) {
-                // Juice: dying mid-click left one stray input carried into the
-                // restart, self-correcting only on a second restart. First
-                // attempt at a fix (queueButton-ing a recorded release here,
-                // based on live m_holdingButtons state) didn't hold up in
-                // Juice's retest -- most likely because GD's own death
-                // handling already clears m_holdingButtons before this runs,
-                // making that check read false and the fix a silent no-op.
-                // Replaced with Juice's own algorithm instead, which doesn't
-                // depend on live state at all: see onReset() (engine_core.cpp)
-                // for the actual fix -- it inspects the RECORDED macro data
-                // directly (was the last action before the checkpoint clip a
-                // press with no matching release?) and cleans that up, plus
-                // suppresses whatever release comes in next in case the
-                // physical button is still down through the reset. This
-                // branch just releases the live buttons now, same as always.
-                m_player1->releaseAllButtons();
+                                                                                                                                                                                                                                                                m_player1->releaseAllButtons();
                 m_player2->releaseAllButtons();
                 return;
             }
@@ -340,16 +309,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
             return PlayLayer::resetLevel();
         }
 
-        // Bot-triggered resets (Calculate starting/restarting a probe run, a
-        // recording/playback restart, etc.) call resetLevel() directly rather
-        // than going through the player pressing Retry off the end screen --
-        // vanilla never has to tear down EndLevelLayer here because vanilla
-        // never calls this while it's still showing. If the level was just
-        // completed (endscreen up) and something bot-side resets it, the
-        // endscreen was staying on screen on top of the level actually
-        // playing behind it (Nigel's report). Same one-liner already used in
-        // fullReset()'s m_expectsDeath branch below.
-        if (auto* ell = getChildByID("EndLevelLayer")) ell->removeFromParent();
+                                                                                if (auto* ell = getChildByID("EndLevelLayer")) ell->removeFromParent();
 
         m_practiceMusicSync = true;
         auto& upd = gb->updater;
@@ -441,14 +401,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
 
         PlayLayer::destroyPlayer(player, obj);
 
-                // Jupiter tab: attempt/PB tracker + death heatmap. Session-only
-        // bookkeeping, deliberately placed after both early-returns above so
-        // analysis probes and noclip'd "deaths" (which don't actually end the
-        // attempt) don't get counted -- only real deaths do. Also gated to the
-        // Jupiter level itself and to real (non-bot) play, so dying on an
-        // unrelated level or the bot finishing a playback pass doesn't
-        // corrupt these Jupiter-only session stats.
-        if (obj != m_anticheatSpike && !gb->isPlaying() && gbju::isJupiterLevel(this)) {
+                                                                        if (obj != m_anticheatSpike && !gb->isPlaying() && gbju::isJupiterLevel(this)) {
             gb->jupiterAttemptCount++;
             float xp = player ? player->m_position.x : -1.f;
             if (m_levelLength > 0.f && xp >= 0.f) {
@@ -459,8 +412,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
             gbju::notifyJupiterAttemptEnded();
         }
 
-        // Trainer tab: same tracker, scoped to whichever macro's loaded there.
-        if (obj != m_anticheatSpike && !gb->isPlaying() && gbtr::isTrainerLevel(this)) {
+                if (obj != m_anticheatSpike && !gb->isPlaying() && gbtr::isTrainerLevel(this)) {
             gb->trainerAttemptCount++;
             float xp = player ? player->m_position.x : -1.f;
             if (m_levelLength > 0.f && xp >= 0.f) {
@@ -497,10 +449,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
     void levelComplete() {
         PlayLayer::levelComplete();
         auto* gb = GucciEngine::get();
-        // Same Jupiter/real-play scoping as the destroyPlayer tracker above --
-        // otherwise completing ANY level (or the bot finishing ANY macro)
-        // stomps the Jupiter tab's session-best to 100%.
-        if (!gb->isPlaying() && gbju::isJupiterLevel(this)) {
+                                if (!gb->isPlaying() && gbju::isJupiterLevel(this)) {
             gb->jupiterSessionBestPct = 100.f;
             gbju::notifyJupiterAttemptEnded();
         }

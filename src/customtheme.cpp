@@ -11,11 +11,12 @@
 using namespace geode::prelude;
 namespace fs = std::filesystem;
 
-// Built-in extensions a derived custom-theme extension must never collide
-// with -- kept in sync by hand with the ternary chains in gui.cpp/
-// brr_format.cpp/engine_core.cpp (see reference_guccibot_diagnostics-style
-// audit note in this function's own header comment: if a new built-in
-// theme is ever added, add its extension here too).
+// This list is duplicated (not shared) across several files -- gui.cpp's
+// currentThemeExtension()/macro-tag lookups, brr_format.cpp's
+// getThemeExtension() and its two disk-scan lists, engine_core.cpp's
+// reloadMacroList(), and allKnownMacroExtensions() below. Adding a new
+// built-in theme needs every one of these updated; missing one is a
+// confirmed repeat failure mode on this project.
 static bool isBuiltinExtension(const std::string& ext) {
     static const char* kBuiltin[] = {
         "brrr", "toosii", "ja", "giddey", "bam", "sexyy", "juice",
@@ -127,7 +128,7 @@ std::string MenuInterface::deriveCustomThemeExtension(const std::string& name) c
         if (std::isalnum((unsigned char)c)) base += (char)std::tolower((unsigned char)c);
     }
     if (base.empty()) base = "custom";
-    if (base.size() > 24) base = base.substr(0, 24); // keep filenames sane
+    if (base.size() > 24) base = base.substr(0, 24);
 
     std::string candidate = base;
     int suffix = 1;
@@ -187,17 +188,9 @@ void MenuInterface::saveCustomTheme(CustomTheme& t) {
     auto dir = getCustomThemesDir();
     std::error_code ec;
     fs::create_directories(dir, ec);
-    // Filename keyed by extension (already collision-checked), not the raw
-    // display name -- avoids re-deriving filesystem-unsafe-character
-    // handling twice for what's effectively the same "make this a safe
-    // path component" problem the extension already solved.
-    std::ofstream f(dir / (t.extension + ".json"));
+                    std::ofstream f(dir / (t.extension + ".json"));
     f << t.toJson().dump();
-    // Previously unchecked -- a failed write (disk full, permissions,
-    // whatever) would silently look identical to a successful one from the
-    // UI's perspective: theme applies live, just never lands on disk to
-    // survive a restart. Surface it instead of leaving that undetectable.
-    if (!f.good()) {
+                    if (!f.good()) {
         log::warn("[GucciBot] Failed to write custom theme file: {}", (dir / (t.extension + ".json")).string());
         Notification::create("Saved, but couldn't write the theme file to disk -- it may not survive a restart.", NotificationIcon::Warning)->show();
     }
@@ -219,10 +212,7 @@ void MenuInterface::openCustomThemeEditor(const CustomTheme* existing) {
     }
     auto copyBuf = [](char* dst, size_t n, const std::string& s) { snprintf(dst, n, "%s", s.c_str()); };
     copyBuf(cteName, sizeof(cteName), customThemeEditBuffer.name);
-    // Blank for a new theme (auto-derives from the name on save, like
-    // before); pre-filled with the real extension when editing, so typing
-    // nothing on an edit keeps it unchanged rather than re-deriving.
-    copyBuf(cteExtension, sizeof(cteExtension), existing ? existing->extension : std::string());
+                copyBuf(cteExtension, sizeof(cteExtension), existing ? existing->extension : std::string());
     copyBuf(cteSubtitle, sizeof(cteSubtitle), customThemeEditBuffer.subtitle);
     copyBuf(cteBrandTag, sizeof(cteBrandTag), customThemeEditBuffer.brandTag);
     copyBuf(cteQuoteReplayText, sizeof(cteQuoteReplayText), customThemeEditBuffer.quoteReplay.text);
@@ -233,9 +223,7 @@ void MenuInterface::openCustomThemeEditor(const CustomTheme* existing) {
     copyBuf(cteQuoteCreditsAttr, sizeof(cteQuoteCreditsAttr), customThemeEditBuffer.quoteCredits.attribution);
     copyBuf(cteCreditsBadge, sizeof(cteCreditsBadge), customThemeEditBuffer.creditsBadge);
 
-    // Stage a working copy of the audio so importing (or not) during this
-    // edit session never touches the real file until Save actually commits.
-    std::error_code ec;
+            std::error_code ec;
     auto stagingPath = getCustomThemesDir() / "_editing_brrr.mp3";
     fs::remove(stagingPath, ec);
     if (existing && existing->hasAudio) {
@@ -251,7 +239,7 @@ static geode::Task<bool> importCustomThemeAudioTask() {
     );
     if (pickResult.isErr()) co_return false;
     auto pathOpt = pickResult.unwrap();
-    if (!pathOpt.has_value()) co_return false; // cancelled
+    if (!pathOpt.has_value()) co_return false;
 
     auto* ui = MenuInterface::get();
     auto dir = ui->getCustomThemesDir();
@@ -261,10 +249,13 @@ static geode::Task<bool> importCustomThemeAudioTask() {
     fs::copy_file(*pathOpt, dest, fs::copy_options::overwrite_existing, ec);
     co_return !ec;
 }
-// Same Task-lifetime + dead-listen() fix as gui.cpp's fw-asset/trainer-music
-// importers (2026-08-24, Juice's crash report -- see gui.cpp's importFwAssetFiles
-// comment for the full root-cause trace). Stored instead of an unstored
-// temporary, polled instead of relying on listen()'s no-op callback.
+// Must stay a stored static, never an unstored temporary -- Task<T>'s own
+// coroutine promise only holds a weak_ptr to its Handle, so this static is
+// the only thing keeping an in-flight file-picker Task alive; an unstored
+// temporary caused a real crash elsewhere in this codebase (use-after-free
+// while the OS picker's background thread was still running). Poll
+// isFinished() to observe completion -- Task::listen()'s callback is a
+// no-op in this Geode version.
 static geode::Task<bool> s_customThemeAudioTask;
 static void importCustomThemeAudio() {
     s_customThemeAudioTask = importCustomThemeAudioTask();
@@ -284,10 +275,7 @@ void pollCustomThemeAudioImportTask() {
 }
 
 void MenuInterface::drawCustomThemeEditorPopup() {
-    // Polled here (before the popup-visibility early return below) rather
-    // than gated on the popup still being open, in case the editor got
-    // closed before an in-flight audio import finished.
-    pollCustomThemeAudioImportTask();
+                pollCustomThemeAudioImportTask();
     if (customThemeEditorOpen) ImGui::OpenPopup("Custom Theme Editor");
     ImGui::SetNextWindowSize(ImVec2(480, 560), ImGuiCond_Appearing);
     if (!ImGui::BeginPopupModal("Custom Theme Editor", nullptr, ImGuiWindowFlags_NoSavedSettings)) return;
@@ -385,13 +373,7 @@ void MenuInterface::drawCustomThemeEditorPopup() {
 
         bool wasActive = activeTheme==THEME_CUSTOM && activeCustomThemeName==customThemeEditOriginalName;
 
-        // Extension: manually typed, or auto-derived. A typed value is
-        // used exactly as given or rejected outright (no silent
-        // resuffixing) since typing one is a deliberate choice; a blank
-        // field auto-derives fresh only on a name change or a new theme,
-        // otherwise keeps whatever this theme already had so an ordinary
-        // edit with the field left blank can't silently change the suffix.
-        std::string typedExt(cteExtension);
+                                                        std::string typedExt(cteExtension);
         bool extensionRejected = false;
         if (!typedExt.empty()) {
             bool ok=false;
@@ -444,7 +426,7 @@ void MenuInterface::drawCustomThemeEditorPopup() {
         }
         customThemeEditorOpen = false;
         ImGui::CloseCurrentPopup();
-        } // !extensionRejected
+        }
     }
     ImGui::SameLine(0,8);
     if (Widgets::StyledButton("Cancel", ImVec2(bw,30), theme, anim)) {

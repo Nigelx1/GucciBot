@@ -46,12 +46,7 @@ public:
         m_builtForCount = -1;
     }
 
-    // The camera's actual current view, converted into m_node's local space
-    // (the same space mk.x/mk.y are already in) via its real transform --
-    // not a fixed distance from the player, so this stays correct through
-    // zoom triggers. A margin keeps marks from popping in/out right at the
-    // screen edge as the camera scrolls.
-    CCRect computeVisibleRect() {
+                        CCRect computeVisibleRect() {
         auto* director = CCDirector::sharedDirector();
         CCSize visSize = director->getVisibleSize();
         CCPoint visOrigin = director->getVisibleOrigin();
@@ -66,13 +61,7 @@ public:
         return CCRect(minX, minY, maxX - minX, maxY - minY);
     }
 
-    // Juice's debug/slow mode: draws a mark at wherever the player ended up for
-    // every individual test Calculate has run so far on the CURRENT click (green
-    // ring = survived, red X = died) -- separate draw node from m_node/m_labelLayer
-    // above since these change every single test and shouldn't be gated by that
-    // node's own "only rebuild when something changed" signature check. Live-only,
-    // never drawn into an actual render.
-    void renderDebugMarks(PlayLayer* pl, GucciEngine* gb, bool isRendering) {
+                            void renderDebugMarks(PlayLayer* pl, GucciEngine* gb, bool isRendering) {
         if (!m_debugNode) {
             auto* anchor = pl->m_objectLayer;
             if (!anchor) return;
@@ -85,11 +74,7 @@ public:
         m_debugNode->clear();
         if (isRendering || !gb->fwAnalyzing || !gb->fwDebugMode) return;
 
-        // Juice's request (2026-08-21): cull debug marks outside the camera's
-        // actual view too -- same reasoning/technique as the main marker
-        // overlay's culling. m_debugNode is an untransformed sibling of
-        // m_node under the same anchor, so m_node's conversion is valid here.
-        CCRect visRect = computeVisibleRect();
+                                        CCRect visRect = computeVisibleRect();
 
         for (auto const& mk : gb->fwDebugMarks) {
             CCPoint at{ mk.x, mk.y };
@@ -106,11 +91,7 @@ public:
             }
         }
 
-        // Juice's request: a visual box showing the allowed Position
-        // Tolerance range around the next input's true position, so it's
-        // possible to actually SEE whether a survived shift landed inside or
-        // outside it instead of only trusting the reported pass/fail.
-        if (gb->fwPositionCheckEnabled && gb->fwProbeHasNext) {
+                                        if (gb->fwPositionCheckEnabled && gb->fwProbeHasNext) {
             CCPoint c{ gb->fwProbeNextX, gb->fwProbeNextY };
             float s = gb->fwPositionSlack;
             ccColor4F clear4{ 0.f, 0.f, 0.f, 0.f };
@@ -141,28 +122,13 @@ public:
 
                                         uint32_t curFrame = gb->updater.getFrame();
 
-        // A frame count lower than last time means a new attempt/playthrough
-        // just started (checkpoint respawn, restart, or a fresh watch) --
-        // clear every mark's pulse-start time so pulses can trigger again.
-        if (curFrame < m_lastCurFrame) m_pulseStart.clear();
+                                if (curFrame < m_lastCurFrame) m_pulseStart.clear();
         m_lastCurFrame = curFrame;
 
-                        // Juice's lag report (2026-08-21): nothing was culling marks
-        // outside the camera's actual view -- every mark ever revealed
-        // (frame <= curFrame) got drawn, even ones far behind/ahead of where
-        // the camera currently is, worst on Spiral since it's the most
-        // expensive shape to draw per mark. Computed in the CCDrawNode's own
-        // local space (same space mk.x/mk.y are already in) via the real
-        // camera transform, not a fixed distance guess, so it stays correct
-        // through zoom triggers too.
-        CCRect visRect = computeVisibleRect();
+                                                                                        CCRect visRect = computeVisibleRect();
 
                 int visibleCount = 0;
-        // Pulse effects need to redraw every frame while any are actually
-        // mid-animation -- the signature cache below would otherwise freeze
-        // them on their first frame. Registers each newly-visible mark's
-        // pulse start time here too, so it's set before drawing needs it.
-        bool anyPulseActive = false;
+                                        bool anyPulseActive = false;
         for (auto const& mk : gb->fwMarks) {
             if (mk.frame > curFrame || mk.window > gb->fwMaxWindow) continue;
             ++visibleCount;
@@ -183,12 +149,7 @@ public:
 
                                         bool mirrored = m_labelLayer && parentChainFlipped(m_labelLayer);
 
-                        // Which marks are actually inside visRect changes as the camera
-        // scrolls, even when nothing else here does -- fold a coarsely
-        // quantized camera position into the signature so the overlay
-        // rebuilds as marks cross into/out of view, without rebuilding
-        // every single tick for sub-pixel camera motion.
-        int camBucketX = (int)std::floor(visRect.getMidX() / 20.f);
+                                                                int camBucketX = (int)std::floor(visRect.getMidX() / 20.f);
         int camBucketY = (int)std::floor(visRect.getMidY() / 20.f);
 
         int sig = visibleCount * 100000
@@ -216,12 +177,7 @@ public:
             if (mk.frame > curFrame) continue;
 
                         auto* tier = gb->fwTierFor(mk.window);
-            // Juice: if tiers are actually configured, a window that doesn't fall
-            // into ANY of them shouldn't get a marker at all -- e.g. tiers for 1-4
-            // and 5-6 only, a 25-frame window should be invisible, not shown with
-            // fallback coloring just because it's under fwMaxWindow. An empty tier
-            // list (nothing configured yet) keeps the old show-everything behavior.
-            if (!gb->fwTiers.empty() && !tier) continue;
+                                                                        if (!gb->fwTiers.empty() && !tier) continue;
 
             CCPoint at{ mk.x, mk.y };
             if (!visRect.containsPoint(at)) continue;
@@ -230,12 +186,7 @@ public:
                 ? ccColor4F{ tier->r, tier->g, tier->b, 1.f }
                 : gradeColor(mk.window, gb->fwMaxWindow);
 
-            // Pulse effects (Juice's spec): marker and text pulse independently,
-            // each fading from the tier's normal color to its own pulse color,
-            // holding, and fading back -- ONCE, per mark, from the moment that
-            // specific mark first became visible this playthrough. Real seconds,
-            // not scaled by TPS/speedhack. See applyPulse()/m_pulseStart.
-            ccColor4F markerCol = col;
+                                                                        ccColor4F markerCol = col;
             ccColor4F textCol   = col;
             if (tier && (tier->markerPulseEnabled || tier->textPulseEnabled)) {
                 auto it = m_pulseStart.find(pulseKey(mk.frame, mk.player2));
@@ -282,14 +233,7 @@ public:
 private:
     static constexpr float kRadius = 11.f;
 
-    // Per-mark pulse state (Juice's fix, 2026-08-21): pulses used to share one
-    // global, endlessly-looping clock across every marker of a tier, so a
-    // 4-frame mark at frame 30 would pulse in lockstep with a 4-frame mark at
-    // frame 10, forever. Each mark now gets its OWN one-shot pulse, keyed by
-    // (frame, player2), starting the instant it first becomes visible this
-    // playthrough and never repeating until the next playthrough (detected by
-    // the frame counter going backwards -- a fresh attempt/replay).
-    std::unordered_map<uint64_t, float> m_pulseStart;
+                                std::unordered_map<uint64_t, float> m_pulseStart;
     uint32_t m_lastCurFrame = 0xFFFFFFFFu;
 
     static uint64_t pulseKey(uint32_t frame, bool player2) {
@@ -302,10 +246,7 @@ private:
         return duration<float>(steady_clock::now() - start).count();
     }
 
-    // One-shot fade from normalColor to pulseRGB, hold, fade back -- does NOT
-    // repeat (elapsed >= the full cycle just stays at normalColor). Durations
-    // are real seconds per Juice's spec, not scaled by TPS/speedhack.
-    static ccColor4F applyPulse(ccColor4F normalColor, const float pulseRGB[3],
+                static ccColor4F applyPulse(ccColor4F normalColor, const float pulseRGB[3],
                                  float elapsed, float fadeIn, float hold, float fadeOut) {
         float cycle = fadeIn + hold + fadeOut;
         if (cycle <= 0.0001f || elapsed >= cycle) return normalColor;
@@ -333,24 +274,7 @@ private:
                 return ccColor4F{ 1.f - t, t, 0.15f, 1.f };
     }
 
-    // Juice's marker customization spec (2026-08-21). Dispatches on the
-    // marking tier's shape/fill settings (tier == nullptr means no tier
-    // matched -- keeps the original double-ring circle, Inverted style).
-    // Rounded corners (Polygon shape) are only applied in Inverted (outline)
-    // style -- Normal/donut fill uses sharp corners for both boundaries.
-    //
-    // Normal/donut fill redone AGAIN 2026-08-21 per Juice's second report
-    // with screenshots: the "three concentric strokes via drawPolygon's own
-    // border" attempt still came out wrong on a triangle (yellow outside,
-    // black middle, filled yellow center) -- drawPolygon's border/stroke
-    // parameter isn't reliable for small, pointed polygons, only smooth
-    // shapes like circles. Rebuilt AGAIN, this time not depending on that
-    // parameter at all: each ring (outer black border, colored band, inner
-    // black border) is built from scratch as a set of simple convex quads
-    // between two boundaries at adjacent radii (fillRingBetween) -- a quad
-    // can't misrender regardless of how pointed the shape is, so this should
-    // be reliable for any shape/side count. See drawDonutRing/fillRingBetween.
-    void drawMarkerShape(CCPoint center, float radius, ccColor4F color,
+                                                                        void drawMarkerShape(CCPoint center, float radius, ccColor4F color,
                           const GucciEngine::FrameWindowTier* tier) {
         auto shape     = tier ? tier->shape     : GucciEngine::FwMarkerShape::Circle;
         auto fillStyle = tier ? tier->fillStyle : GucciEngine::FwFillStyle::Inverted;
@@ -398,9 +322,7 @@ private:
         ccColor4F clear4{ 0, 0, 0, 0 };
         float innerR = radius * 0.55f;
         if (fillStyle == GucciEngine::FwFillStyle::Normal) {
-            // Sharp corners for the donut fill -- rounded corners only apply
-            // to Inverted's outline below.
-            drawDonutRing(radius, innerR, color, noBorder, stroke,
+                                    drawDonutRing(radius, innerR, color, noBorder, stroke,
                 [&](float r){ return regularPolygonVerts(center, r, sides, 0.f); });
         } else {
             auto outer = roundedPolygonVerts(center, radius, sides, cornerRadius);
@@ -426,14 +348,7 @@ private:
         }
     }
 
-    // Draws a filled ring as three concentric bands -- outer black border,
-    // colored middle, inner black border, clear beyond that -- exactly as
-    // Juice specified. boundaryAt(r) must return a closed-loop vertex list
-    // (same length/winding for any r) at radius r; each ring is built from
-    // simple convex quads between two such boundaries (fillRingBetween),
-    // never relying on CCDrawNode's own border/stroke algorithm, which
-    // proved unreliable for small pointed shapes like a triangle.
-    template <typename BoundaryAt>
+                                template <typename BoundaryAt>
     void drawDonutRing(float outerR, float innerR, ccColor4F color, bool noBorder,
                         float stroke, BoundaryAt boundaryAt) {
         if (outerR <= innerR) return;
@@ -458,16 +373,8 @@ private:
         }
     }
 
-    // Spiral, take 3 (2026-08-23) -- Juice sent a reference screenshot: a
-    // spiral is just a traced coil outline, no hole, no border, same as it
-    // always looked. Donut mode doesn't have a sensible meaning for a curve
-    // (there's no fill area to hollow out the way Circle/Polygon/Star have
-    // one), so it no longer branches on fillStyle at all -- always the same
-    // single traced stroke from center to outer radius. Takes/ignores
-    // fillStyle in the signature only to keep drawMarkerShape's dispatch
-    // uniform across shapes.
-    void drawSpiralShape(CCPoint center, float radius, ccColor4F color,
-                          GucciEngine::FwFillStyle /*fillStyle*/, float stroke) {
+                                    void drawSpiralShape(CCPoint center, float radius, ccColor4F color,
+                          GucciEngine::FwFillStyle , float stroke) {
         const int turns = 2;
         const int segsPerTurn = 16;
         const int total = turns * segsPerTurn;
@@ -496,10 +403,7 @@ private:
         return v;
     }
 
-    // Chamfers each corner toward its neighbors by cornerRadius (0..1 fraction
-    // of the shorter adjacent edge) instead of a true rounded arc -- a
-    // reasonable approximation, not geometrically exact.
-    static std::vector<CCPoint> roundedPolygonVerts(CCPoint center, float radius, int sides, float cornerRadius) {
+                static std::vector<CCPoint> roundedPolygonVerts(CCPoint center, float radius, int sides, float cornerRadius) {
         auto sharp = regularPolygonVerts(center, radius, sides, 0.f);
         if (cornerRadius <= 0.001f) return sharp;
         std::vector<CCPoint> out;
@@ -561,14 +465,7 @@ namespace gbfw {
         FrameWindowOverlay::get()->render(pl, isRendering);
     }
 
-    // Nigel/Juice, 2026-08-23: split-audio-tracks render mode needs frame-
-    // window cues isolated on their own FMOD channel group so they can be
-    // captured separately from music/SFX (render/dsp.cpp's getFrameWindow()
-    // instance hooks a DSP onto exactly this group). Created lazily on
-    // first use, added as a child of master (addGroup) so normal audibility
-    // during live play is completely unchanged -- this only adds a capture
-    // tap point, it doesn't change where the sound is actually heard from.
-    FMOD::ChannelGroup* frameWindowChannelGroup() {
+                                FMOD::ChannelGroup* frameWindowChannelGroup() {
         static FMOD::ChannelGroup* group = nullptr;
         if (group) return group;
         auto* system = FMODAudioEngine::sharedEngine()->m_system;
@@ -612,15 +509,7 @@ namespace gbfw {
             s_soundCache[key] = sound;
         }
 
-        // Each call gets its own fresh FMOD channel instead of sharing/stealing one --
-        // these are supposed to be able to overlap (e.g. two clicks close together each
-        // get their own cue), and FMOD already handles concurrent channels natively.
-        // Previously this stopped whatever was already playing before starting the new
-        // one, which is exactly why overlapping cues were cutting each other off.
-        //
-        // Starts paused so the per-tier volume (Juice's spec) is applied before
-        // any audio actually comes out, instead of a frame at full volume first.
-        FMOD::Channel* channel = nullptr;
+                                                                        FMOD::Channel* channel = nullptr;
         system->playSound(sound, frameWindowChannelGroup(), true, &channel);
         if (channel) {
             channel->setVolume(tier ? std::clamp(tier->volume, 0.f, 1.f) : 1.f);

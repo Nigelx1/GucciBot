@@ -13,7 +13,7 @@ namespace gbtr {
     bool isTrainerLevel(PlayLayer* pl) {
         auto* gb = GucciEngine::get();
         if (!pl || !pl->m_level || !gb->trainerMacro.loaded) return false;
-        if (gb->trainerMacro.levelName.empty()) return true; // see header comment
+        if (gb->trainerMacro.levelName.empty()) return true;
         std::string a = pl->m_level->m_levelName;
         std::string b = gb->trainerMacro.levelName;
         std::transform(a.begin(), a.end(), a.begin(), ::tolower);
@@ -22,8 +22,6 @@ namespace gbtr {
     }
 }
 
-// Parallel to JupiterMusicSync (jupiterghost.cpp) -- see trainerghost.hpp for
-// why this is a separate class rather than a shared/parameterized one.
 class TrainerMusicSync {
 public:
     static TrainerMusicSync* get() { static TrainerMusicSync inst; return &inst; }
@@ -73,10 +71,7 @@ private:
     }
 
     void start() {
-        // Fixed on-disk copy, not a live reference to wherever the user's
-        // originally-picked file lives -- see trainerMusicImportTask in
-        // gui.cpp for why (source file could move/get deleted later).
-        auto path = Mod::get()->getSaveDir() / "trainer_music.mp3";
+                                auto path = Mod::get()->getSaveDir() / "trainer_music.mp3";
         std::error_code ec;
         if (!std::filesystem::exists(path, ec)) return;
         auto* system = FMODAudioEngine::sharedEngine()->m_system;
@@ -98,12 +93,6 @@ private:
     bool m_audioMuteHeld = false;
 };
 
-// Parallel to JupiterGhostOverlay (jupiterghost.cpp) -- see trainerghost.hpp
-// for why this is a separate class. Attached at CCDrawNode z-order 1404
-// (Jupiter's is 1403) so both overlays can coexist on the same object layer
-// without contending for the same draw-order slot, in case a user happens
-// to be on Jupiter My Favourite with a Jupiter-named macro loaded into the
-// Trainer tab too -- harmless, just keeps draw order well-defined.
 class TrainerGhostOverlay {
 public:
     static TrainerGhostOverlay* get() { static TrainerGhostOverlay inst; return &inst; }
