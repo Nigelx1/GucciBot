@@ -29,6 +29,7 @@ struct ThemeEngine {
     int    activePreset     = 0;
 
     ImVec4 computeCycleColor(float rate) const;
+    ImVec4 computeRedKingdomPulse() const;
     ImVec4 getAccent() const;
     ImVec4 getGlowAccent() const;
     ImU32  getAccentU32(float alpha = 1.0f) const;
@@ -94,6 +95,7 @@ enum BotTheme {
     THEME_MAYBACH,
     THEME_ROMO,
     THEME_GRIZZLEY,
+    THEME_REDKINGDOM,
     // Sentinel, not a real compile-time theme -- "which custom theme" is
     // tracked separately (MenuInterface::activeCustomThemeName), since the
     // custom list is a runtime, user-editable, unbounded set that can't

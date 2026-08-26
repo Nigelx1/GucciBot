@@ -1,6 +1,6 @@
 #pragma once
 
-#define GB_BUILD_LABEL "2026-08-24-p (Diagnostic logging only, NOT a fix -- Juice's checkpoint-drift report. His finding: same frame label (445), but actual position keeps shifting backward by exactly one frame's worth of the level's own known wave velocity (2.4,-2.4) per checkpoint placed -- verified against his 3 screenshots directly, math checks out exactly (2 checkpoints = -4.8 in X = precisely 2 frames). His own hypothesis: checkpoint position/velocity is captured one frame early. Traced the actual mechanism in code: storeCheckpoint (hook_playlayer.cpp) and earlyUpdateMidhook both already carry a documented +1 label compensation from Juice's OWN 2026-08-19 testing, because they fire before frameUpdateMidhook's frame-counter increment within the same native tick (confirmed by relative hook addresses: physDt 0x237A7C < physStepCount 0x237DCE < earlyUpdate 0x237E42 < frameUpdate 0x238BAA < restorePhysDt 0x238F6E -- the physics/position integration step appears to happen between frameUpdate and restorePhysDt, i.e. AFTER both storeCheckpoint and earlyUpdateMidhook already fired). That would mean the +1 correctly predicts what the frame COUNTER will read, but the captured POSITION is genuinely one tick stale relative to it -- and since each restore would lock that lag in before the NEXT checkpoint's own capture (based on an already-drifted counter), it compounds by exactly one frame per checkpoint, matching the data precisely. High confidence on the mechanism, NOT verified by disassembly, and NOT confident enough about a fix to ship one blind -- this project's own P3 saga took three disproven theories before real log evidence found the actual answer, and this smells like the same category of bug. Rather than guess, extended the existing 'Log Frame Increments' diagnostic toggle (already exposed in Settings > Diagnostics) to also log live player position/velocity/ground-state at every point that touches frame labeling or checkpoint capture/restore: storeCheckpoint, earlyUpdateMidhook, frameUpdateMidhook, and applyCheckpoint (both the label being restored and the resulting live state). Same guccibot_frameinc.log file Juice/Nigel already know how to find. Next real step is Juice re-testing with that toggle on and sending the log from a repro run -- that turns this from a strong inference into an actual confirmed mechanism, the same way P3 eventually got solved for real. Compiles clean.)"
+#define GB_BUILD_LABEL "2026-08-24-v (Red Kingdom gets its own Big Brrr track, closing out the one piece deliberately left undone in build -t. Nigel supplied the real file + numbers directly -- RED KINGDOM.mp3 -> resources/big_brrr_redkingdom.mp3 (declared in mod.json, verified present in the packaged .geode via unzip -l before calling it done, same habit as every prior per-theme track), 100bpm, drop at 14+17/30s. Wired into all three of bigbrrr.cpp's per-theme switches (kStartOffsetSec/kBpm/bundled-file-selection in start()) the same way Romo/Grizzley/Maybach already were. No fabricated numbers this time -- these are Nigel's own supplied values, not a guess. Compiles clean, NOT yet confirmed in-game (both that the track actually plays for this theme AND that the bounce/shake feel right against its real tempo).)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -29,6 +29,15 @@ namespace FMOD { class ChannelGroup; }
 // save-vs-restore timing mismatch shows up directly in real data instead
 // of needing to be inferred.
 void logFrameIncrement(const char* callSite, uint32_t frame, PlayerObject* p = nullptr);
+// Juice's 2026-08-24 report: Calculate "marks certain clicks as valid even
+// though the player dies." The two log points that would prove or disprove
+// a death/horizon-ordering race already existed as plain log::info calls
+// ([CAP-DIE] in hook_playlayer.cpp's destroyPlayer, and the probe-conclusion
+// line in engine_core.cpp's FwState::Probing case) -- not adding new
+// instrumentation, just routing both to a dedicated findable file, same
+// reasoning as logFrameIncrement's own comment (Geode's console log isn't
+// guaranteed to persist anywhere retrievable on every setup).
+void logCalcDeathTrace(const std::string& line);
 
 class GucciScheduler {
 public:
@@ -103,6 +112,19 @@ public:
     // SavedCheckpointState::m_brokenObjects, matching Silicate's own
     // createCheckpoint()/applyCheckpoint() split exactly.
     std::vector<GameObject*> m_brokenObjects;
+
+    // Deferred-capture queue for storeCheckpoint/earlyUpdateMidhook's
+    // saveState (Nigel/Juice, 2026-08-24): the frame LABEL fix (+1) wasn't
+    // sufficient on its own -- saveCurrent() was still reading live player
+    // position/velocity at the moment those hooks fired, which is before
+    // that tick's own physics integration for the labeled frame has
+    // actually happened. frameUpdateMidhook (engine_updater.cpp) processes
+    // this queue: stage 1 (just queued this tick) promotes to stage 2
+    // without capturing, and stage 2 performs the real saveCurrent() call
+    // one full tick later, once the labeled frame has genuinely settled.
+    CheckpointObject* m_pendingCaptureCp = nullptr;
+    uint64_t m_pendingCaptureFrameOffset = 0;
+    int      m_pendingCaptureStage = 0; // 0=none, 1=queued this tick, 2=armed, capture next tick
 
     void saveCurrent(CheckpointObject* cp, uint64_t frameOffset);
     void saveState(CheckpointObject* cp, uint64_t frameOffset);
@@ -898,6 +920,7 @@ public:
     std::unordered_set<std::string>  maybachMacros;
     std::unordered_set<std::string>  romoMacros;
     std::unordered_set<std::string>  grizzleyMacros;
+    std::unordered_set<std::string>  redKingdomMacros;
     // Custom themes are a runtime, unbounded list -- can't get one
     // hardcoded unordered_set member each like the built-in themes above.
     // Keyed by extension (without the leading dot, matching

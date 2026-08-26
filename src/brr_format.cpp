@@ -651,6 +651,7 @@ static std::string getThemeExtension() {
         case THEME_MAYBACH:  return ".maybach";
         case THEME_ROMO:     return ".romo";
         case THEME_GRIZZLEY: return ".grizzley";
+        case THEME_REDKINGDOM: return ".redkingdom";
         default:           return ".brrr";
     }
 }
@@ -660,7 +661,7 @@ namespace ReplayStorage {
         return Mod::get()->getSaveDir() / "replays";
     }
     static bool replayNameTaken(std::filesystem::path const& dir, std::string const& candidate) {
-        for (auto ext : { ".brrr", ".toosii", ".ja", ".giddey", ".bam", ".sexyy", ".juice", ".butler", ".saweetie", ".maybach", ".romo", ".grizzley" }) {
+        for (auto ext : { ".brrr", ".toosii", ".ja", ".giddey", ".bam", ".sexyy", ".juice", ".butler", ".saweetie", ".maybach", ".romo", ".grizzley", ".redkingdom" }) {
             std::error_code ec;
             if (std::filesystem::exists(dir / (candidate + ext), ec)) return true;
         }
@@ -714,7 +715,7 @@ BRRMacro* BRRMacro::loadFromDisk(std::string const& filename) {
     }
 
         std::filesystem::path path;
-    for (auto& ext : std::initializer_list<const char*>{".brrr", ".toosii", ".ja", ".giddey", ".bam", ".sexyy", ".juice", ".butler", ".saweetie", ".maybach", ".romo", ".grizzley"}) {
+    for (auto& ext : std::initializer_list<const char*>{".brrr", ".toosii", ".ja", ".giddey", ".bam", ".sexyy", ".juice", ".butler", ".saweetie", ".maybach", ".romo", ".grizzley", ".redkingdom"}) {
         auto candidate = directory / (filename + ext);
         if (std::filesystem::exists(candidate)) { path = candidate; break; }
     }

@@ -2,3 +2,14 @@ build/
 *.geode
 .claude/scheduled_tasks.lock
 .freebuff/
+
+# Vendored FFmpeg binaries -- bundled into the packaged .geode for
+# distribution (see mod.json's file list) but too large for GitHub (one DLL
+# alone is over the 100MB hard limit) and don't benefit from version
+# tracking anyway, since they're static third-party dependencies, not
+# GucciBot's own source. Stripped from git history 2026-08-25 when this repo
+# was first pushed; kept on disk so build_win.bat still works unchanged.
+resources/ffmpeg.exe
+resources/ffmpeg(1).exe
+resources/ffmpeg_libs/avcodec-62.dll
+resources/ffmpeg_libs/avfilter-11.dll

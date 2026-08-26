@@ -63,6 +63,7 @@ double BigBrrrManager::kStartOffsetSec() {
         case THEME_MAYBACH:  return 0.0;
         case THEME_ROMO:     return 16.0 + 11.0 / 30.0;
         case THEME_GRIZZLEY: return 90.0 + 4.0 / 30.0;
+        case THEME_REDKINGDOM: return 14.0 + 17.0 / 30.0;
         default:             return 20.0 + 11.0 / 15.0;
     }
 }
@@ -73,6 +74,7 @@ double BigBrrrManager::kBpm() {
         case THEME_MAYBACH:  return 75.0;
         case THEME_ROMO:     return 130.0;
         case THEME_GRIZZLEY: return 98.0;
+        case THEME_REDKINGDOM: return 100.0;
         default:             return 140.0;
     }
 }
@@ -135,6 +137,7 @@ void BigBrrrManager::start() {
                 case THEME_MAYBACH:  bundledName = "big_brrr_maybach.mp3"; break;
                 case THEME_ROMO:     bundledName = "big_brrr_romo.mp3"; break;
                 case THEME_GRIZZLEY: bundledName = "big_brrr_grizzley.mp3"; break;
+                case THEME_REDKINGDOM: bundledName = "big_brrr_redkingdom.mp3"; break;
                 default: break;
             }
             auto bundled = Mod::get()->getResourcesDir() / bundledName;

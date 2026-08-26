@@ -19,7 +19,7 @@ namespace fs = std::filesystem;
 static bool isBuiltinExtension(const std::string& ext) {
     static const char* kBuiltin[] = {
         "brrr", "toosii", "ja", "giddey", "bam", "sexyy", "juice",
-        "butler", "saweetie", "maybach", "romo", "grizzley"
+        "butler", "saweetie", "maybach", "romo", "grizzley", "redkingdom"
     };
     for (auto* e : kBuiltin) if (ext == e) return true;
     return false;
@@ -107,7 +107,7 @@ CustomTheme CustomTheme::fromJson(const matjson::Value& v) {
 std::vector<std::string> allKnownMacroExtensions() {
     std::vector<std::string> exts = {
         ".brrr", ".toosii", ".ja", ".giddey", ".bam", ".sexyy", ".juice",
-        ".butler", ".saweetie", ".maybach", ".romo", ".grizzley"
+        ".butler", ".saweetie", ".maybach", ".romo", ".grizzley", ".redkingdom"
     };
     if (auto* ui = MenuInterface::get()) {
         for (auto& t : ui->customThemes) exts.push_back("." + t.extension);
@@ -261,8 +261,17 @@ static geode::Task<bool> importCustomThemeAudioTask() {
     fs::copy_file(*pathOpt, dest, fs::copy_options::overwrite_existing, ec);
     co_return !ec;
 }
+// Same Task-lifetime + dead-listen() fix as gui.cpp's fw-asset/trainer-music
+// importers (2026-08-24, Juice's crash report -- see gui.cpp's importFwAssetFiles
+// comment for the full root-cause trace). Stored instead of an unstored
+// temporary, polled instead of relying on listen()'s no-op callback.
+static geode::Task<bool> s_customThemeAudioTask;
 static void importCustomThemeAudio() {
-    importCustomThemeAudioTask().listen([](bool* ok){
+    s_customThemeAudioTask = importCustomThemeAudioTask();
+}
+void pollCustomThemeAudioImportTask() {
+    if (s_customThemeAudioTask.isFinished()) {
+        auto* ok = s_customThemeAudioTask.getFinishedValue();
         auto* ui = MenuInterface::get();
         if (ok && *ok) {
             ui->customThemeEditBuffer.hasAudio = true;
@@ -270,10 +279,15 @@ static void importCustomThemeAudio() {
         } else {
             Notification::create("Import failed or cancelled", NotificationIcon::Warning)->show();
         }
-    });
+        s_customThemeAudioTask = {};
+    }
 }
 
 void MenuInterface::drawCustomThemeEditorPopup() {
+    // Polled here (before the popup-visibility early return below) rather
+    // than gated on the popup still being open, in case the editor got
+    // closed before an in-flight audio import finished.
+    pollCustomThemeAudioImportTask();
     if (customThemeEditorOpen) ImGui::OpenPopup("Custom Theme Editor");
     ImGui::SetNextWindowSize(ImVec2(480, 560), ImGuiCond_Appearing);
     if (!ImGui::BeginPopupModal("Custom Theme Editor", nullptr, ImGuiWindowFlags_NoSavedSettings)) return;
@@ -289,6 +303,7 @@ void MenuInterface::drawCustomThemeEditorPopup() {
     ImGui::InputText("##cteExtension", cteExtension, sizeof(cteExtension));
     ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
     ImGui::TextWrapped("What your saved macros end in, like .brrr or .toosii. Leave blank to auto-generate one from the name.");
+    ImGui::TextWrapped("Type it with or without the leading dot -- either works, only the letters/numbers are kept.");
     ImGui::PopStyleColor();
     ImGui::Text("Subtitle"); ImGui::SetNextItemWidth(-1);
     ImGui::InputText("##cteSubtitle", cteSubtitle, sizeof(cteSubtitle));

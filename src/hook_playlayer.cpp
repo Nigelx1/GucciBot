@@ -8,6 +8,7 @@
 #include <Geode/Geode.hpp>
 #include <Geode/modify/PlayLayer.hpp>
 #include <safetyhook.hpp>
+#include <fmt/format.h>
 
 using namespace geode::prelude;
 
@@ -34,9 +35,27 @@ class $modify(GB7PlayLayer, PlayLayer) {
         // is native GD's own checkpoint-touch callback, fired before this
         // tick's own frame increment (frameUpdateMidhook). Confirmed the
         // same +1 applies to input clicks too (see addInputToReplay).
+        //
+        // Nigel/Juice (2026-08-24): the label fix alone wasn't enough --
+        // saveCurrent() reads the player's LIVE position/velocity right
+        // here, still before this tick's physics integration for that
+        // labeled frame has happened, so the captured data was stale even
+        // once the label said N+1. Queue the capture instead; the real
+        // saveCurrent() call happens from frameUpdateMidhook one tick later
+        // (see m_pendingCaptureStage in GucciBot.hpp).
+        auto& pf = gb->practiceFix;
+        if (pf.m_pendingCaptureStage != 0 && pf.m_pendingCaptureCp) {
+            // A previous checkpoint's deferred capture hasn't fired yet
+            // (back-to-back checkpoints within the same tick or two) --
+            // flush it now with whatever's live rather than silently
+            // dropping its entry.
+            pf.saveCurrent(pf.m_pendingCaptureCp, pf.m_pendingCaptureFrameOffset);
+        }
         if (gb->updater.m_logFrameIncrements)
-            logFrameIncrement("storeCheckpoint(saveCurrent)", gb->updater.getFrame() + 1, this->m_player1);
-        gb->practiceFix.saveCurrent(obj, gb->updater.getFrame() + 1);
+            logFrameIncrement("storeCheckpoint(queued)", gb->updater.getFrame() + 1, this->m_player1);
+        pf.m_pendingCaptureCp = obj;
+        pf.m_pendingCaptureFrameOffset = gb->updater.getFrame() + 1;
+        pf.m_pendingCaptureStage = 1;
     }
 
     void loadFromCheckpoint(CheckpointObject* obj) {
@@ -396,6 +415,9 @@ class $modify(GB7PlayLayer, PlayLayer) {
                                                                 float xp  = player ? player->m_position.x : -1.f;
                 float pct = m_levelLength > 0.f ? xp / m_levelLength * 100.f : -1.f;
                 log::info("[CAP-DIE] f={} x={:.1f} pct={:.1f}", upd.getFrame(), xp, pct);
+                logCalcDeathTrace(fmt::format(
+                    "[DIE] click={} shift={:+d} probeFrame={} f={} x={:.1f} pct={:.1f}",
+                    gb->fwProbeClick, gb->fwProbeShift, gb->fwProbeFrame, upd.getFrame(), xp, pct));
             }
             return;
         }

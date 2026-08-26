@@ -60,6 +60,19 @@ void logFrameIncrement(const char* callSite, uint32_t frame, PlayerObject* p) {
     }
 }
 
+static std::ofstream g_calcDeathLog;
+void logCalcDeathTrace(const std::string& line) {
+    if (!g_calcDeathLog.is_open()) {
+        auto path = Mod::get()->getSaveDir() / "guccibot_calcdeath.log";
+        g_calcDeathLog.open(path, std::ios::out | std::ios::trunc);
+        log::info("[CALCDEATH] log file at: {}", path.string());
+    }
+    if (g_calcDeathLog.is_open()) {
+        g_calcDeathLog << line << '\n';
+        g_calcDeathLog.flush();
+    }
+}
+
 float GucciUpdater::getTimeWarp() const {
     if (auto* pl = PlayLayer::get()) {
         float tw = pl->m_gameState.m_timeWarp;
@@ -305,6 +318,16 @@ static void earlyUpdateMidhook(SafetyHookContext&) {
         // increment (0x238BAA) within the same native tick -- same off-by-one
         // Juice found for checkpoints/clicks in general, confirmed here by
         // the two hooks' relative offsets rather than just by analogy.
+        //
+        // NOT yet given the same deferred-capture treatment as
+        // storeCheckpoint (hook_playlayer.cpp, 2026-08-24) -- the label is
+        // still +1 here but the position/velocity data below is captured
+        // live, same stale-data issue. Left alone for now because this
+        // fires every tick while backwards-stepping is active (continuous
+        // frame history), not once per discrete event -- storeCheckpoint's
+        // single-slot pending queue would silently drop every other frame
+        // if reused here. Needs a real queue (or per-frame deferred
+        // capture), not this same mechanism, if it turns out to need fixing.
         if (upd.m_logFrameIncrements)
             logFrameIncrement("earlyUpdateMidhook(saveState)", upd.getFrame() + 1, pl->m_player1);
         gb->practiceFix.saveState(cp, upd.getFrame() + 1);
@@ -366,6 +389,25 @@ static void frameUpdateMidhook(SafetyHookContext&) {
 
     if (!pl->m_playerDied) {
         if (PlayLayer::get()) {
+            // Deferred checkpoint capture (Nigel/Juice, 2026-08-24): see
+            // m_pendingCaptureStage in GucciBot.hpp and storeCheckpoint /
+            // earlyUpdateMidhook's saveState. Checked and cleared BEFORE
+            // incrementFrame() below so the actual saveCurrent() call
+            // happens while getFrame() still reads the frame it was queued
+            // under -- one full native update() call after it was queued,
+            // so this tick's own physics integration for that frame has
+            // already completed.
+            auto& pf = gb->practiceFix;
+            if (pf.m_pendingCaptureStage == 2) {
+                if (upd.m_logFrameIncrements)
+                    logFrameIncrement("frameUpdateMidhook(deferredCapture)", upd.getFrame() + 1, pl->m_player1);
+                pf.saveCurrent(pf.m_pendingCaptureCp, pf.m_pendingCaptureFrameOffset);
+                pf.m_pendingCaptureCp = nullptr;
+                pf.m_pendingCaptureStage = 0;
+            } else if (pf.m_pendingCaptureStage == 1) {
+                pf.m_pendingCaptureStage = 2;
+            }
+
             upd.incrementFrame();
             if (upd.m_logFrameIncrements)
                 logFrameIncrement("frameUpdateMidhook", upd.getFrame(), pl->m_player1);

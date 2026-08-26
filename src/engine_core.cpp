@@ -823,7 +823,7 @@ void GucciEngine::reloadMacroList() {
     jaMacros.clear(); giddeyMacros.clear(); toosiiMacros.clear();
     bamMacros.clear(); sexyyMacros.clear(); juiceMacros.clear(); butlerMacros.clear();
     saweetieMacros.clear(); maybachMacros.clear();
-    romoMacros.clear(); grizzleyMacros.clear();
+    romoMacros.clear(); grizzleyMacros.clear(); redKingdomMacros.clear();
     customThemeMacrosByExt.clear();
 
     auto dir = getReplayDir();
@@ -848,11 +848,13 @@ void GucciEngine::reloadMacroList() {
             if (ext == ".maybach")  maybachMacros.insert(stem);
             if (ext == ".romo")     romoMacros.insert(stem);
             if (ext == ".grizzley") grizzleyMacros.insert(stem);
+            if (ext == ".redkingdom") redKingdomMacros.insert(stem);
             if (!ext.empty()) {
                 std::string bare = ext.substr(1); // drop the leading '.'
                 bool isBuiltin = ext==".brrr"||ext==".toosii"||ext==".ja"||ext==".giddey"||
                     ext==".bam"||ext==".sexyy"||ext==".juice"||ext==".butler"||
-                    ext==".saweetie"||ext==".maybach"||ext==".romo"||ext==".grizzley";
+                    ext==".saweetie"||ext==".maybach"||ext==".romo"||ext==".grizzley"||
+                    ext==".redkingdom";
                 if (!isBuiltin) customThemeMacrosByExt[bare].insert(stem);
             }
         } else if (ext == ".gdr" || ext == ".xd" || ext == ".json" || ext == ".brr") {
@@ -1881,6 +1883,11 @@ void GucciEngine::fwTick() {
                       "(after {} frames, horizon {}, windowHigh {})",
                       fwProbeClick, fwProbeShift, fwProbeDied ? "YES" : "no",
                       fwProbeFrame, fwProbeHorizon, fwProbeWindowHigh);
+            logCalcDeathTrace(fmt::format(
+                "[CONCLUDE] click={} shift={:+d} died={} frame={} horizon={} "
+                "windowHigh={} survived={}",
+                fwProbeClick, fwProbeShift, fwProbeDied ? 1 : 0,
+                fwProbeFrame, fwProbeHorizon, fwProbeWindowHigh, survived ? 1 : 0));
             if (fwUseRecoveryRangeAlgorithm) advanceRecoverySweep(survived);
             else                             advanceOffsetSweep(survived);
         }

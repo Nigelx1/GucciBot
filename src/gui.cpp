@@ -293,7 +293,7 @@ static float bigBrrrFlickerAlpha(bool jupiterActive){
     float target=on?brrr->getBassLevel():0.f;
     float rate=(target>smoothed)?40.f:6.f; // fast attack, slower decay -- reads as punching on hits
     smoothed+=(target-smoothed)*std::min(1.f,rate*ImGui::GetIO().DeltaTime);
-    return 1.f-smoothed*smoothed*0.5f; // squared response, up to a 50% alpha dip at full intensity
+    return 1.f-smoothed*smoothed*brrr->flickerIntensity; // squared response; max dip now user-adjustable (was a fixed 50%)
 }
 
 static void applyBigBrrrShake(bool jupiterActive){
@@ -369,6 +369,7 @@ static std::string currentThemeExtension(MenuInterface* ui){
         case THEME_MAYBACH: return ".maybach";
         case THEME_ROMO: return ".romo";
         case THEME_GRIZZLEY: return ".grizzley";
+        case THEME_REDKINGDOM: return ".redkingdom";
         default: return ".brrr";
     }
 }
@@ -725,9 +726,35 @@ static const ThemePreset kThemePresets[]={
      ImVec4(0.975f,0.970f,0.965f,1.f),
      ImVec4(0.540f,0.460f,0.400f,1.f),
      5.f,0.96f},
+        {"Red Kingdom",
+     // Nigel, 2026-08-24: a theme for Tech N9ne's "Red Kingdom," deliberately
+     // "way more intense" than every other theme, not just another palette --
+     // no "Bot" suffix (every other theme has one, this one doesn't, on
+     // purpose). Pure saturated red with no pink (ButlerBot) or orange
+     // (GrizzleyBot) lean, near-black bg with a red undertone instead of
+     // neutral charcoal, sharp corners (0 vs everyone else's 5) and fully
+     // solid bgOpacity (1.0 vs ~0.96 everywhere else) so it reads as heavier
+     // and more present, not airier. The actual "way more intense" gimmick
+     // is a live one, not a static palette choice -- see
+     // ThemeEngine::getAccent()'s activePreset==THEME_REDKINGDOM branch (a
+     // slow pulse between two red shades, not a static color) and the
+     // picker's own special-cased card below, not just another flat
+     // PillButton.
+     ImVec4(0.820f,0.035f,0.035f,1.f),
+     ImVec4(0.028f,0.008f,0.008f,1.f),
+     ImVec4(0.055f,0.014f,0.014f,1.f),
+     ImVec4(0.960f,0.930f,0.930f,1.f),
+     ImVec4(0.520f,0.260f,0.260f,1.f),
+     0.f,1.0f},
 };
 
 ImVec4 ThemeEngine::getAccent() const{
+    // Red Kingdom's "way more intense than the other themes" ask (Nigel,
+    // 2026-08-24) -- a live effect, not just a bolder static palette. Gated
+    // on activePreset (ThemeEngine's own field, already the source of truth
+    // for "which built-in preset is live") rather than reaching out to
+    // MenuInterface::activeTheme, which ThemeEngine can't see anyway.
+    if(activePreset==THEME_REDKINGDOM)return computeRedKingdomPulse();
     if(glowCycleEnabled)return computeCycleColor(glowCycleRate);
     return accentColor;}
 ImVec4 ThemeEngine::getGlowAccent() const{return accentColor;}
@@ -737,6 +764,17 @@ ImVec4 ThemeEngine::computeCycleColor(float rate) const{
     float g=0.5f+0.5f*std::sin(t+2.094f);
     float b=0.5f+0.5f*std::sin(t+4.189f);
     return ImVec4(r,g,b,1.f);}
+ImVec4 ThemeEngine::computeRedKingdomPulse() const{
+    // Deliberately stays red the whole cycle (unlike computeCycleColor's
+    // full rainbow sweep) -- breathes between a darker blood red and a
+    // brighter hot red, ~2.6s per cycle, heartbeat-ish rather than strobing.
+    float pulse=0.5f+0.5f*std::sin((float)ImGui::GetTime()*2.4f);
+    ImVec4 dark(0.550f,0.020f,0.020f,1.f), hot(1.000f,0.140f,0.080f,1.f);
+    return ImVec4(
+        dark.x+(hot.x-dark.x)*pulse,
+        dark.y+(hot.y-dark.y)*pulse,
+        dark.z+(hot.z-dark.z)*pulse,
+        1.f);}
 ImU32 ThemeEngine::getAccentU32(float a) const{ImVec4 c=getAccent();c.w=a;return toU32(c);}
 ImU32 ThemeEngine::getAccentDimU32(float f) const{
     ImVec4 c=getAccent();c.x*=f;c.y*=f;c.z*=f;return toU32(c);}
@@ -1047,7 +1085,8 @@ void MenuInterface::drawTitleBar(){
         (activeTheme==THEME_SAWEETIE)?"SaweetieBot":
         (activeTheme==THEME_MAYBACH)?"MaybachBot":
         (activeTheme==THEME_ROMO)?"RomoBot":
-        (activeTheme==THEME_GRIZZLEY)?"GrizzleyBot":"GucciBot";
+        (activeTheme==THEME_GRIZZLEY)?"GrizzleyBot":
+        (activeTheme==THEME_REDKINGDOM)?"Red Kingdom":"GucciBot";
     const char* botName=botNameStr.c_str();
     ImVec2 npos(wp.x+40,wp.y+10);
     if(fontHeading)ImGui::PushFont(fontHeading);
@@ -1076,6 +1115,8 @@ void MenuInterface::drawTitleBar(){
             "v" MOD_VERSION "  -  Frame perfect. Definitely not over the limit.":
         (activeTheme==THEME_GRIZZLEY)?
             "v" MOD_VERSION "  -  First day out. Frame perfect.":
+        (activeTheme==THEME_REDKINGDOM)?
+            "v" MOD_VERSION "  -  Long live the kingdom. Frame perfect.":
         "v" MOD_VERSION "  -  Frame perfect. GBR6. Brrr.";
     const char* sub=subStr.c_str();
     ImVec2 spos(wp.x+40,wp.y+30);
@@ -1245,7 +1286,8 @@ void MenuInterface::drawStatusBar(){
         (activeTheme==THEME_SAWEETIE)?"Icy!":
         (activeTheme==THEME_MAYBACH)?"MMG!":
         (activeTheme==THEME_ROMO)?"Called it!":
-        (activeTheme==THEME_GRIZZLEY)?"Activated!":"Brrr.";
+        (activeTheme==THEME_GRIZZLEY)?"Activated!":
+        (activeTheme==THEME_REDKINGDOM)?"Kneel.":"Brrr.";
     const char* brand=brandStr.c_str();
     ImVec2 bts=ImGui::CalcTextSize(brand);
     dl->AddText(ImVec2(wp.x+ws.x-padX-bts.x-12,barY+(barH-bts.y)*0.5f),theme.getAccentU32(0.6f),brand);
@@ -1742,6 +1784,8 @@ void MenuInterface::drawReplayTab(){
         Widgets::GucciQuote("\"I called that replay before it even happened.\"","-- Tony Romo, probably",theme);
     else if(activeTheme==THEME_GRIZZLEY)
         Widgets::GucciQuote("\"First day out, first frame perfect.\"","-- Tee Grizzley, probably",theme);
+    else if(activeTheme==THEME_REDKINGDOM)
+        Widgets::GucciQuote("\"I don't practice. I conquer.\"","-- Tech N9ne, probably",theme);
     else
         Widgets::GucciQuote("\"I got so many replays I got files in my files.\"","-- Gucci Mane, probably",theme);
     Widgets::SectionHeader("Mode",theme);
@@ -1987,6 +2031,7 @@ void MenuInterface::drawReplayTab(){
             else if(eng3->maybachMacros.count(mn))fmtTagStr=".maybach";
             else if(eng3->romoMacros.count(mn))fmtTagStr=".romo";
             else if(eng3->grizzleyMacros.count(mn))fmtTagStr=".grizzley";
+            else if(eng3->redKingdomMacros.count(mn))fmtTagStr=".redkingdom";
             else fmtTagStr=".brrr";}
         const char* fmtTag=fmtTagStr.c_str();
         float fmtW=(!isIncompat)?(ImGui::CalcTextSize(fmtTag).x+8):0;
@@ -2050,6 +2095,7 @@ void MenuInterface::drawReplayTab(){
             else if(eng2->maybachMacros.count(mn)){tagStr=".maybach";tagCol=ImVec4(0.780f,0.780f,0.800f,1.f);}
             else if(eng2->romoMacros.count(mn)){tagStr=".romo";tagCol=ImVec4(0.760f,0.800f,0.850f,1.f);}
             else if(eng2->grizzleyMacros.count(mn)){tagStr=".grizzley";tagCol=ImVec4(0.870f,0.090f,0.070f,1.f);}
+            else if(eng2->redKingdomMacros.count(mn)){tagStr=".redkingdom";tagCol=ImVec4(0.820f,0.035f,0.035f,1.f);}
             const char* tag=tagStr.c_str();
             auto ts=ImGui::CalcTextSize(tag);tagX-=ts.x+4;
             wdl->AddText(ImVec2(tagX,iy+(ih-ts.y)*0.5f),toU32(tagCol),tag);}
@@ -2168,6 +2214,7 @@ void MenuInterface::drawReplayTab(){
                 eng4->butlerMacros.erase(replayDeleteName);
                 eng4->saweetieMacros.erase(replayDeleteName);eng4->maybachMacros.erase(replayDeleteName);
                 eng4->romoMacros.erase(replayDeleteName);eng4->grizzleyMacros.erase(replayDeleteName);
+                eng4->redKingdomMacros.erase(replayDeleteName);
                 for(auto& [ext,set] : eng4->customThemeMacrosByExt) set.erase(replayDeleteName);
                 replayDeleteName.clear();replayDeleteError.clear();
                 markReplayListDirty();refreshReplayListIfNeeded(true);ImGui::CloseCurrentPopup();}}
@@ -2364,6 +2411,8 @@ void MenuInterface::drawToolsTab(){
         Widgets::GucciQuote("\"I don't need speedhack. I've had worse rides.\"","-- Tony Romo, probably",theme);
     else if(activeTheme==THEME_GRIZZLEY)
         Widgets::GucciQuote("\"I don't need speedhack. I move different.\"","-- Tee Grizzley, probably",theme);
+    else if(activeTheme==THEME_REDKINGDOM)
+        Widgets::GucciQuote("\"I don't need speedhack. I run the kingdom at my own pace.\"","-- Tech N9ne, probably",theme);
     else
         Widgets::GucciQuote("\"I run this game at my own speed. You can't keep up.\"","-- Gucci Mane, on speedhacks",theme);
     Widgets::SectionHeader("TPS Control",theme);
@@ -2606,13 +2655,45 @@ static geode::Task<int> importFwAssetFilesTask(){
     }
     co_return copied;
 }
+// Juice's crash report (2026-08-24): clicking Import Sounds/Images or Import
+// Folder crashes the game. Traced with real evidence, not a guess -- symbolicated
+// his crash log (dumpbin/dbghelp against this exact build's matching PDB) to
+// importFwAssetFilesTask resuming inside Geode's own file::pickMany coroutine
+// machinery. Root cause: `SomeTask().listen(...)` created the Task as an
+// unstored temporary -- Task::m_handle is the ONLY thing keeping the async
+// operation's Handle alive (its own coroutine promise holds just a weak_ptr,
+// confirmed by reading Geode's actual Task.hpp), so the temporary's destructor
+// dropped the sole owning reference right as the picker's background thread
+// was still in flight, a real use-after-free window. Separately, and also
+// confirmed by reading the actual linked Geode SDK source (not assumed):
+// Task::listen()'s entire body is commented out in this exact Geode version --
+// it's a genuine no-op, meaning these Notification callbacks were silently
+// never firing regardless of the crash. Fixed both by storing the Task in a
+// static (keeps the Handle alive for the whole async round-trip) and polling
+// isFinished()/getFinishedValue() once per frame from drawFrameWindowsTab
+// instead of relying on the dead listen() callback.
+static geode::Task<int> s_fwAssetFilesTask;
+static geode::Task<int> s_fwAssetFolderTask;
 static void importFwAssetFiles(){
-    importFwAssetFilesTask().listen([](int* copied){
+    s_fwAssetFilesTask = importFwAssetFilesTask();
+}
+static void pollFwAssetImportTasks(){
+    if (s_fwAssetFilesTask.isFinished()) {
+        auto* copied = s_fwAssetFilesTask.getFinishedValue();
         if (copied && *copied > 0)
             Notification::create(fmt::format("Imported {} file(s) into fw_assets", *copied), NotificationIcon::Success)->show();
         else
             Notification::create("Import failed or cancelled", NotificationIcon::Warning)->show();
-    });
+        s_fwAssetFilesTask = {};
+    }
+    if (s_fwAssetFolderTask.isFinished()) {
+        auto* copied = s_fwAssetFolderTask.getFinishedValue();
+        if (copied && *copied > 0)
+            Notification::create(fmt::format("Imported {} file(s) into fw_assets", *copied), NotificationIcon::Success)->show();
+        else
+            Notification::create("Import failed or cancelled", NotificationIcon::Warning)->show();
+        s_fwAssetFolderTask = {};
+    }
 }
 
 static geode::Task<int> importFwAssetFolderTask(){
@@ -2642,15 +2723,11 @@ static geode::Task<int> importFwAssetFolderTask(){
     co_return copied;
 }
 static void importFwAssetFolder(){
-    importFwAssetFolderTask().listen([](int* copied){
-        if (copied && *copied > 0)
-            Notification::create(fmt::format("Imported {} file(s) into fw_assets", *copied), NotificationIcon::Success)->show();
-        else
-            Notification::create("Import failed or cancelled", NotificationIcon::Warning)->show();
-    });
+    s_fwAssetFolderTask = importFwAssetFolderTask();
 }
 
 void MenuInterface::drawFrameWindowsTab(){
+    pollFwAssetImportTasks();
     auto* engine=GucciEngine::get();
     // Renamed from drawHacksTab (1.5 GUI reorg) -- Frame Window/Calculate was
     // ~77% of that tab's content (432 of ~560 lines) buried two clicks deep
@@ -2914,11 +2991,21 @@ void MenuInterface::drawFrameWindowsTab(){
                 }
 
                 bool isRel=!a.m_holding;
+                char rowLabel[64];
+                if(pct>=0.f) snprintf(rowLabel,sizeof(rowLabel),"f=%u  p%d  %s  %.1f%%",a.m_frame,a.m_player2?2:1,isRel?"rel":"press",pct);
+                else snprintf(rowLabel,sizeof(rowLabel),"f=%u  p%d  %s",a.m_frame,a.m_player2?2:1,isRel?"rel":"press");
                 ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
-                if(pct>=0.f) ImGui::Text("f=%u  p%d  %s  %.1f%%",a.m_frame,a.m_player2?2:1,isRel?"rel":"press",pct);
-                else ImGui::Text("f=%u  p%d  %s",a.m_frame,a.m_player2?2:1,isRel?"rel":"press");
+                ImGui::TextUnformatted(rowLabel);
                 ImGui::PopStyleColor();
-                ImGui::SameLine(190);
+                // Juice's "text layering" report (2026-08-24): this used to be a
+                // fixed SameLine(190), which overlapped the InputInt whenever the
+                // label rendered wider than that -- high frame numbers (more
+                // digits), the "press"/percent variants, or just a bumped-up
+                // Text Scale setting (theme.textScale) all push the real width
+                // past 190px. Measure the actual label and only fall back to 190
+                // as a floor, not an assumption.
+                float labelW=ImGui::CalcTextSize(rowLabel).x;
+                ImGui::SameLine(std::max(190.f,labelW+12.f));
 
                 int win = mk?mk->window:0;
                 ImGui::SetNextItemWidth(60);
@@ -3630,7 +3717,31 @@ void MenuInterface::drawSettingsTab(){
     for(int i=0;i<pc;i++){
         if(i%2==1)ImGui::SameLine(0,8);
         bool active=(theme.activePreset==i);
-        if(Widgets::PillButton(presets[i].name,active,colW,theme,anim)){
+        // Red Kingdom's picker card (Nigel, 2026-08-24: "the theme selector
+        // thing should be different than the rest") deliberately does NOT
+        // use the plain PillButton every other preset does -- PillButton
+        // reads theme.getAccent(), the CURRENTLY ACTIVE theme's color, so
+        // Red Kingdom's own card would only pulse once it's already
+        // selected, not stand out beforehand. Draws its own pulse directly
+        // (computeRedKingdomPulse() doesn't depend on activePreset) so the
+        // card is visibly alive in the grid even before you pick it.
+        bool clickedRk=false;
+        if(i==(int)THEME_REDKINGDOM){
+            ImVec2 pos=ImGui::GetCursorScreenPos();
+            float h=32.f;
+            ImGui::InvisibleButton(presets[i].name,ImVec2(colW,h));
+            clickedRk=ImGui::IsItemClicked();
+            bool hoveredRk=ImGui::IsItemHovered();
+            ImVec4 pulse=theme.computeRedKingdomPulse();
+            ImU32 pulseU32=toU32(pulse);
+            ImDrawList* dl=ImGui::GetWindowDrawList();
+            ImVec4 bgFill=withAlpha(pulse,active?0.28f:(hoveredRk?0.16f:0.10f));
+            dl->AddRectFilled(pos,ImVec2(pos.x+colW,pos.y+h),toU32(bgFill),0.f);
+            dl->AddRect(pos,ImVec2(pos.x+colW,pos.y+h),pulseU32,0.f,0,active?2.2f:1.4f);
+            ImVec2 ts=ImGui::CalcTextSize(presets[i].name);
+            dl->AddText(ImVec2(pos.x+(colW-ts.x)*0.5f,pos.y+(h-ts.y)*0.5f),pulseU32,presets[i].name);
+        }
+        if(clickedRk||(i!=(int)THEME_REDKINGDOM&&Widgets::PillButton(presets[i].name,active,colW,theme,anim))){
             theme.applyPreset(i);
             if(i==0)activeTheme=THEME_GUCCI;
             else if(i==1)activeTheme=THEME_TOOSII;
@@ -3646,6 +3757,7 @@ void MenuInterface::drawSettingsTab(){
             else if(i==11)activeTheme=THEME_MAYBACH;
             else if(i==12)activeTheme=THEME_ROMO;
             else if(i==13)activeTheme=THEME_GRIZZLEY;
+            else if(i==14)activeTheme=THEME_REDKINGDOM;
             // Juice: switching themes while Big Brrr is already playing
             // changed the bounce speed live (kBpm() reads activeTheme every
             // frame) but not the actual track -- BigBrrrManager::start()
@@ -3773,6 +3885,10 @@ void MenuInterface::drawSettingsTab(){
         if(Widgets::ToggleSwitch("Bass Shake",&shakeOn,theme,anim))brrr->shakeEnabled=shakeOn;
         ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
         ImGui::TextWrapped("Reads the track's actual bass energy live and shakes/flickers the menu on hits -- not a beat guess, a real audio tap on the BRRRR channel. Deliberately intense by default, not a subtle wobble.");
+        ImGui::PopStyleColor();
+        Widgets::StyledSliderFloat("Flicker Intensity",&brrr->flickerIntensity,0.f,1.f,theme);
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.textSecondary);
+        ImGui::TextWrapped("How far the menu fades out on hard hits. 0 turns the flicker off (position shake stays); 1 lets it go fully transparent at peak bass.");
         ImGui::PopStyleColor();
     }
     ImGui::Dummy(ImVec2(0,12));
@@ -4683,8 +4799,16 @@ static geode::Task<bool> importTrainerMusicTask(){
     std::filesystem::copy_file(*pathOpt, dest, std::filesystem::copy_options::overwrite_existing, ec);
     co_return !ec;
 }
+// Same Task-lifetime + dead-listen() fix as the fw-asset importers above
+// (2026-08-24, Juice's crash report) -- stored instead of an unstored
+// temporary, polled instead of relying on listen()'s no-op callback.
+static geode::Task<bool> s_trainerMusicTask;
 static void importTrainerMusic(){
-    importTrainerMusicTask().listen([](bool* ok){
+    s_trainerMusicTask = importTrainerMusicTask();
+}
+static void pollTrainerMusicImportTask(){
+    if (s_trainerMusicTask.isFinished()) {
+        auto* ok = s_trainerMusicTask.getFinishedValue();
         auto* gb = GucciEngine::get();
         if (ok && *ok) {
             gb->trainerMusicImported = true;
@@ -4693,10 +4817,12 @@ static void importTrainerMusic(){
         } else {
             Notification::create("Import failed or cancelled", NotificationIcon::Warning)->show();
         }
-    });
+        s_trainerMusicTask = {};
+    }
 }
 
 void MenuInterface::drawTrainerClickTrainerPage(){
+    pollTrainerMusicImportTask();
     auto* engine=GucciEngine::get();
     auto* mod=Mod::get();
     engine->trainerClickBarPageVisible=true;
@@ -5165,6 +5291,7 @@ void MenuInterface::drawCreditsTab(){
         (activeTheme==THEME_MAYBACH)?"MMG | Boss | Huh":
         (activeTheme==THEME_ROMO)?"Analyst | Prophet | One Bad Afternoon":
         (activeTheme==THEME_GRIZZLEY)?"Detroit | Activated | First Day Out":
+        (activeTheme==THEME_REDKINGDOM)?"Kansas City | Strange Music | Long Live the Kingdom":
         "Concept | Vision | Brrr";
     const char* badge=badgeStr.c_str();
     ImVec2 bs=ImGui::CalcTextSize(badge);
@@ -5225,6 +5352,8 @@ void MenuInterface::drawCreditsTab(){
         Widgets::GucciQuote("\"Every frame, I saw coming. Every single one -- well, almost.\"","-- Tony Romo",theme);
     else if(activeTheme==THEME_GRIZZLEY)
         Widgets::GucciQuote("\"Every frame, I earned it.\"","-- Tee Grizzley",theme);
+    else if(activeTheme==THEME_REDKINGDOM)
+        Widgets::GucciQuote("\"Every frame bows to me.\"","-- Tech N9ne",theme);
     else
         Widgets::GucciQuote("\"I'm the foundation of all of this. Brrr.\"","-- Gucci Mane",theme);}
 void MenuInterface::drawHudTab(){

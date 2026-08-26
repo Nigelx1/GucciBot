@@ -37,6 +37,13 @@ public:
     // Separate opt-out from `enabled` itself since the shake is a lot more
     // aggressive than the existing beat-synced bounce.
     bool shakeEnabled = false;
+    // Max alpha dip at full bass intensity (0 = no flicker, 1 = fully
+    // transparent on the hardest hits). Nigel, 2026-08-24: wanted this
+    // adjustable rather than the flat 50% dip it shipped with -- see
+    // bigBrrrFlickerAlpha in gui.cpp, which reads this instead of a
+    // hardcoded constant now. Not persisted across restarts, matching
+    // shakeEnabled's own existing (also unpersisted) behavior.
+    float flickerIntensity = 0.5f;
 
     void setEnabled(bool on);
     std::filesystem::path getBrrrDir() const;
