@@ -2,10 +2,12 @@
 
 #include "colorspace.hpp"
 
-class RGB0Colorspace : public Colorspace {
-public:
-    const std::vector<RenderPass> getPasses() override {
-        const char* vertexShader = R"(#version 130
+namespace gucci {
+
+    class RGB0Colorspace : public Colorspace {
+    public:
+        const std::vector<RenderPass> getPasses() override {
+            const char* vertexShader = R"(#version 130
         in vec4 a_position;
         in vec2 a_texCoord;
 
@@ -17,17 +19,15 @@ public:
         }
         )";
 
-        return {
-            RenderPass{.m_width = m_alignedWidth,
-                       .m_height = m_alignedHeight,
-                       .m_vertexShader = nullptr,
-                       .m_fragmentShader = nullptr,
-                       .m_readPixels = [](float, float) {}},
-            RenderPass{
-                .m_width = m_alignedWidth,
-                .m_height = m_alignedHeight,
-                .m_vertexShader = vertexShader,
-                .m_fragmentShader = R"(#version 130
+            return {RenderPass{.m_width = m_alignedWidth,
+                               .m_height = m_alignedHeight,
+                               .m_vertexShader = nullptr,
+                               .m_fragmentShader = nullptr,
+                               .m_readPixels = [](float, float) {}},
+                    RenderPass{.m_width = m_alignedWidth,
+                               .m_height = m_alignedHeight,
+                               .m_vertexShader = vertexShader,
+                               .m_fragmentShader = R"(#version 130
                 precision highp float;
 
                 in vec2 v_texCoord;
@@ -40,23 +40,30 @@ public:
 
                     gl_FragData[0] = vec4(rgb, 1.0);
                 })",
-                .m_readPixels = [this](float x, float y) {
-                    glReadPixels(
-                        x, y, m_alignedWidth, m_alignedHeight, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-                }}};
-    }
-
-    size_t getBufferSize() override {
-        return m_alignedWidth * m_alignedHeight * 4;
-    }
-
-    geode::Result<> prepareFrame(AVFrame* frame, uint8_t* data, size_t size) override {
-        if (!frame || !data || size == 0) {
-            return geode::Err("Invalid parameters");
+                               .m_readPixels = [this](float x, float y) {
+                                   glReadPixels(x,
+                                                y,
+                                                m_alignedWidth,
+                                                m_alignedHeight,
+                                                GL_RGBA,
+                                                GL_UNSIGNED_BYTE,
+                                                nullptr);
+                               }}};
         }
 
-        frame->data[0] = data;
+        size_t getBufferSize() override {
+            return m_alignedWidth * m_alignedHeight * 4;
+        }
 
-        return geode::Ok();
-    }
-};
+        geode::Result<> prepareFrame(AVFrame* frame, uint8_t* data, size_t size) override {
+            if (!frame || !data || size == 0) {
+                return geode::Err("Invalid parameters");
+            }
+
+            frame->data[0] = data;
+
+            return geode::Ok();
+        }
+    };
+
+} // namespace gucci

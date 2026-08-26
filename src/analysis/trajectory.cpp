@@ -15,6 +15,8 @@
 #include <Geode/modify/PlayerObject.hpp>
 #include <Geode/modify/RingObject.hpp>
 
+using namespace gucci;
+
 namespace {
     constexpr int kMaxTraceFrames = 480;
     constexpr float kIndicatorFlashDuration = 0.15f;

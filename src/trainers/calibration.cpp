@@ -8,6 +8,8 @@
 
 using namespace geode::prelude;
 
+using namespace gucci;
+
 namespace {
     constexpr float kClickTimeoutSec = 2.5f;
 }

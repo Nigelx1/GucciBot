@@ -4,6 +4,8 @@
 
 using namespace geode::prelude;
 
+using namespace gucci;
+
 class PracticeRangeOverlay {
 public:
     static PracticeRangeOverlay* get() {
@@ -170,7 +172,7 @@ class $modify(PracticeRangePlayLayer, PlayLayer) {
     }
 };
 
-namespace gbpr {
+namespace gucci::gbpr {
     void renderPracticeRange(PlayLayer* pl) {
         PracticeRangeOverlay::get()->render(pl);
     }

@@ -7,6 +7,8 @@
 
 using namespace geode::prelude;
 
+using namespace gucci;
+
 namespace {
     std::unordered_set<int> loadKnownIds(std::filesystem::path const& path) {
         std::unordered_set<int> known;

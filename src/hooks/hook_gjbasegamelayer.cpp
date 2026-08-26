@@ -14,6 +14,8 @@
 
 using namespace geode::prelude;
 
+using namespace gucci;
+
 static void shakeRandomOverride(SafetyHookContext& ctx) {
     uint64_t& state = GucciEngine::get()->replay.m_shakeRandomState;
     state = (int)((214013 * state + 2531011) >> 16) & 0x7FFF;

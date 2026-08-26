@@ -23,6 +23,8 @@
 
 using namespace geode::prelude;
 
+using namespace gucci;
+
 static constexpr int kApiMixSampleRate = 44100;
 
 template <class T>

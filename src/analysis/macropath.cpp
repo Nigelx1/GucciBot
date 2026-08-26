@@ -8,6 +8,8 @@
 
 using namespace geode::prelude;
 
+using namespace gucci;
+
 namespace {
 
     std::vector<CCPoint> squareVertices(CCPoint center, float half) {

@@ -11,6 +11,7 @@
 #include <fmt/format.h>
 
 using namespace geode::prelude;
+using namespace gucci;
 
 class $modify(GB7PlayLayer, PlayLayer) {
 

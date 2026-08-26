@@ -3,6 +3,8 @@
 #include <Geode/modify/FMODAudioEngine.hpp>
 using namespace geode::prelude;
 
+using namespace gucci;
+
 class $modify(GB7FMODAudio, FMODAudioEngine) {
     void update(float dt) {
         FMODAudioEngine::update(dt);

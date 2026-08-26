@@ -3,6 +3,8 @@
 #include <Geode/modify/PlayerObject.hpp>
 using namespace geode::prelude;
 
+using namespace gucci;
+
 class $modify(GB7PlayerObject, PlayerObject) {
     void update(float dt) {
         auto& upd = GucciEngine::get()->updater;

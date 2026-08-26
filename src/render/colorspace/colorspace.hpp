@@ -3,7 +3,9 @@
 
 #include "../pass.hpp"
 
-extern "C" {
+namespace gucci {
+
+    extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavfilter/avfilter.h>
 #include <libavfilter/buffersink.h>
@@ -13,15 +15,17 @@ extern "C" {
 #include <libavutil/opt.h>
 #include <libswresample/swresample.h>
 #include <libswscale/swscale.h>
-}
+    }
 
-class Colorspace {
-public:
-    uint32_t m_alignedWidth, m_alignedHeight;
+    class Colorspace {
+    public:
+        uint32_t m_alignedWidth, m_alignedHeight;
 
-    virtual const std::vector<RenderPass> getPasses() = 0;
-    virtual size_t getBufferSize() = 0;
-    virtual geode::Result<> prepareFrame(AVFrame* frame, uint8_t* data, size_t size) = 0;
+        virtual const std::vector<RenderPass> getPasses() = 0;
+        virtual size_t getBufferSize() = 0;
+        virtual geode::Result<> prepareFrame(AVFrame* frame, uint8_t* data, size_t size) = 0;
 
-    virtual ~Colorspace() = default;
-};
+        virtual ~Colorspace() = default;
+    };
+
+} // namespace gucci

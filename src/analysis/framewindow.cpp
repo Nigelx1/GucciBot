@@ -10,6 +10,8 @@
 
 using namespace geode::prelude;
 
+using namespace gucci;
+
 static bool parentChainFlipped(cocos2d::CCNode* n) {
     float sx = 1.f;
     for (auto* p = n; p; p = p->getParent())
@@ -548,7 +550,7 @@ class $modify(FrameWindowPlayLayer, PlayLayer) {
     }
 };
 
-namespace gbfw {
+namespace gucci::gbfw {
     void renderFrameWindows(PlayLayer* pl, bool isRendering) {
         FrameWindowOverlay::get()->render(pl, isRendering);
     }

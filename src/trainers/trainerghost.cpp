@@ -9,7 +9,9 @@
 
 using namespace geode::prelude;
 
-namespace gbtr {
+using namespace gucci;
+
+namespace gucci::gbtr {
     bool isTrainerLevel(PlayLayer* pl) {
         auto* gb = GucciEngine::get();
         if (!pl || !pl->m_level || !gb->trainerMacro.loaded)
@@ -232,7 +234,7 @@ class $modify(TrainerGhostPlayLayer, PlayLayer) {
     }
 };
 
-namespace gbtr {
+namespace gucci::gbtr {
     void renderTrainerGhost(PlayLayer* pl) {
         TrainerGhostOverlay::get()->render(pl);
     }

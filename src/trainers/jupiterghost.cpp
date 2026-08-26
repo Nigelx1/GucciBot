@@ -9,7 +9,9 @@
 
 using namespace geode::prelude;
 
-namespace gbju {
+using namespace gucci;
+
+namespace gucci::gbju {
     bool isJupiterLevel(PlayLayer* pl) {
         if (!pl || !pl->m_level)
             return false;
@@ -227,7 +229,7 @@ class $modify(JupiterGhostPlayLayer, PlayLayer) {
     }
 };
 
-namespace gbju {
+namespace gucci::gbju {
     void renderJupiterGhost(PlayLayer* pl) {
         JupiterGhostOverlay::get()->render(pl);
     }

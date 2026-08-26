@@ -2,6 +2,8 @@
 
 #include <Geode/modify/PlayLayer.hpp>
 
+using namespace gucci;
+
 Autoclicker* Autoclicker::get() {
     static Autoclicker instance;
     return &instance;

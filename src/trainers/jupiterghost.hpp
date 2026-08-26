@@ -2,12 +2,16 @@
 
 class PlayLayer;
 
-namespace gbju {
-    bool isJupiterLevel(PlayLayer* pl);
+namespace gucci {
 
-    void renderJupiterGhost(PlayLayer* pl);
-    void notifyJupiterAttemptEnded();
+    namespace gbju {
+        bool isJupiterLevel(PlayLayer* pl);
 
-    void syncClickBarMusic(bool active, bool paused, double posSec);
-    void stopClickBarMusic();
-} // namespace gbju
+        void renderJupiterGhost(PlayLayer* pl);
+        void notifyJupiterAttemptEnded();
+
+        void syncClickBarMusic(bool active, bool paused, double posSec);
+        void stopClickBarMusic();
+    } // namespace gbju
+
+} // namespace gucci

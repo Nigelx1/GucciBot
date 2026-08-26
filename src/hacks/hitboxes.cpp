@@ -11,6 +11,8 @@
 
 using namespace cocos2d;
 
+using namespace gucci;
+
 namespace {
     constexpr ccColor4F kSolidColor = {0.00f, 0.25f, 1.00f, 1.00f};
     constexpr ccColor4F kDangerColor = {1.00f, 0.00f, 0.00f, 1.00f};

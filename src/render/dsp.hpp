@@ -7,64 +7,68 @@
 #include <cstdint>
 #include <vector>
 
-class AudioRecorder {
-public:
-    static AudioRecorder* get() {
-        static AudioRecorder i;
-        return &i;
-    }
-    static AudioRecorder* getMusic() {
-        static AudioRecorder i;
-        return &i;
-    }
-    static AudioRecorder* getSfx() {
-        static AudioRecorder i;
-        return &i;
-    }
-    static AudioRecorder* getFrameWindow() {
-        static AudioRecorder i;
-        return &i;
-    }
+namespace gucci {
 
-    void init(FMOD::ChannelGroup* group = nullptr);
-    void attach();
-    void detach();
-    void uninit();
+    class AudioRecorder {
+    public:
+        static AudioRecorder* get() {
+            static AudioRecorder i;
+            return &i;
+        }
+        static AudioRecorder* getMusic() {
+            static AudioRecorder i;
+            return &i;
+        }
+        static AudioRecorder* getSfx() {
+            static AudioRecorder i;
+            return &i;
+        }
+        static AudioRecorder* getFrameWindow() {
+            static AudioRecorder i;
+            return &i;
+        }
 
-    void haltWithData(float* data, unsigned int length);
+        void init(FMOD::ChannelGroup* group = nullptr);
+        void attach();
+        void detach();
+        void uninit();
 
-    static FMOD_RESULT F_CALLBACK
-    writeCallbackMain(FMOD_DSP_STATE*, float*, float*, unsigned int, int, int*);
-    static FMOD_RESULT F_CALLBACK
-    writeCallbackMusic(FMOD_DSP_STATE*, float*, float*, unsigned int, int, int*);
-    static FMOD_RESULT F_CALLBACK
-    writeCallbackSfx(FMOD_DSP_STATE*, float*, float*, unsigned int, int, int*);
-    static FMOD_RESULT F_CALLBACK
-    writeCallbackFrameWindow(FMOD_DSP_STATE*, float*, float*, unsigned int, int, int*);
+        void haltWithData(float* data, unsigned int length);
 
-    bool m_attached = false;
-    std::atomic_bool m_shouldUpdateFmod = false;
+        static FMOD_RESULT F_CALLBACK
+        writeCallbackMain(FMOD_DSP_STATE*, float*, float*, unsigned int, int, int*);
+        static FMOD_RESULT F_CALLBACK
+        writeCallbackMusic(FMOD_DSP_STATE*, float*, float*, unsigned int, int, int*);
+        static FMOD_RESULT F_CALLBACK
+        writeCallbackSfx(FMOD_DSP_STATE*, float*, float*, unsigned int, int, int*);
+        static FMOD_RESULT F_CALLBACK
+        writeCallbackFrameWindow(FMOD_DSP_STATE*, float*, float*, unsigned int, int, int*);
 
-    FMOD::ChannelGroup* m_master = nullptr;
+        bool m_attached = false;
+        std::atomic_bool m_shouldUpdateFmod = false;
 
-    double m_fmodTime = 0.0;
-    double m_time = 0.0;
-    uint32_t m_index = 0;
-    int m_sampleRate = 0;
-    int m_channels = 0;
-    size_t m_lastCollectedLength = 0;
+        FMOD::ChannelGroup* m_master = nullptr;
 
-    std::vector<float> m_buffer;
+        double m_fmodTime = 0.0;
+        double m_time = 0.0;
+        uint32_t m_index = 0;
+        int m_sampleRate = 0;
+        int m_channels = 0;
+        size_t m_lastCollectedLength = 0;
 
-private:
-    FMOD::DSP* m_dsp = nullptr;
-};
+        std::vector<float> m_buffer;
 
-namespace AudioEngineRenderState {
-    void enter(double musicVolume, double sfxVolume);
-    void exit();
+    private:
+        FMOD::DSP* m_dsp = nullptr;
+    };
 
-    void pump(float dt, bool split);
-} // namespace AudioEngineRenderState
+    namespace AudioEngineRenderState {
+        void enter(double musicVolume, double sfxVolume);
+        void exit();
+
+        void pump(float dt, bool split);
+    } // namespace AudioEngineRenderState
+
+} // namespace gucci
 
 #endif

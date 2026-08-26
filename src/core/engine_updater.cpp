@@ -12,6 +12,8 @@
 
 using namespace geode::prelude;
 
+using namespace gucci;
+
 static std::ofstream g_slopeLog;
 static void slopeLog(const std::string& line) {
     if (!g_slopeLog.is_open()) {
@@ -27,7 +29,7 @@ static void slopeLog(const std::string& line) {
 }
 
 static std::ofstream g_frameIncLog;
-void logFrameIncrement(const char* callSite, uint32_t frame, PlayerObject* p) {
+void gucci::logFrameIncrement(const char* callSite, uint32_t frame, PlayerObject* p) {
     if (!g_frameIncLog.is_open()) {
         auto path = Mod::get()->getSaveDir() / "guccibot_frameinc.log";
         g_frameIncLog.open(path, std::ios::out | std::ios::trunc);
@@ -46,7 +48,7 @@ void logFrameIncrement(const char* callSite, uint32_t frame, PlayerObject* p) {
 }
 
 static std::ofstream g_calcDeathLog;
-void logCalcDeathTrace(const std::string& line) {
+void gucci::logCalcDeathTrace(const std::string& line) {
     if (!g_calcDeathLog.is_open()) {
         auto path = Mod::get()->getSaveDir() / "guccibot_calcdeath.log";
         g_calcDeathLog.open(path, std::ios::out | std::ios::trunc);

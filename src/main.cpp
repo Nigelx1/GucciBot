@@ -4,6 +4,8 @@
 #include <Geode/Geode.hpp>
 #include <filesystem>
 using namespace geode::prelude;
+
+using namespace gucci;
 namespace fs = std::filesystem;
 
 static void ensureBundledAssets() {

@@ -5,7 +5,9 @@
 #include <Geode/modify/PlayLayer.hpp>
 using namespace geode::prelude;
 
-void triggerClickAudio(bool p2, int button, bool pressed) {
+using namespace gucci;
+
+void gucci::triggerClickAudio(bool p2, int button, bool pressed) {
     auto* csm = ClickSoundManager::get();
     if (!csm->enabled || button != 1)
         return;

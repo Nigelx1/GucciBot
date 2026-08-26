@@ -2,12 +2,16 @@
 
 class PlayLayer;
 
-namespace gbtr {
-    bool isTrainerLevel(PlayLayer* pl);
+namespace gucci {
 
-    void renderTrainerGhost(PlayLayer* pl);
-    void notifyTrainerAttemptEnded();
+    namespace gbtr {
+        bool isTrainerLevel(PlayLayer* pl);
 
-    void syncTrainerClickBarMusic(bool active, bool paused, double posSec);
-    void stopTrainerClickBarMusic();
-} // namespace gbtr
+        void renderTrainerGhost(PlayLayer* pl);
+        void notifyTrainerAttemptEnded();
+
+        void syncTrainerClickBarMusic(bool active, bool paused, double posSec);
+        void stopTrainerClickBarMusic();
+    } // namespace gbtr
+
+} // namespace gucci

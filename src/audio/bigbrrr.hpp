@@ -7,34 +7,38 @@
 
 using namespace geode::prelude;
 
-class BigBrrrManager {
-public:
-    static BigBrrrManager* get();
+namespace gucci {
 
-    static double kStartOffsetSec();
-    static double kBpm();
+    class BigBrrrManager {
+    public:
+        static BigBrrrManager* get();
 
-    bool enabled = false;
-    bool shakeEnabled = false;
-    float flickerIntensity = 0.5f;
+        static double kStartOffsetSec();
+        static double kBpm();
 
-    void setEnabled(bool on);
-    std::filesystem::path getBrrrDir() const;
-    void openBrrrFolder();
-    bool hasFile() const;
+        bool enabled = false;
+        bool shakeEnabled = false;
+        float flickerIntensity = 0.5f;
 
-    float getBassLevel() const {
-        return rawBassLevel.load();
-    }
+        void setEnabled(bool on);
+        std::filesystem::path getBrrrDir() const;
+        void openBrrrFolder();
+        bool hasFile() const;
 
-private:
-    FMOD::Sound* sound = nullptr;
-    FMOD::Channel* channel = nullptr;
-    FMOD::DSP* bassDsp = nullptr;
-    std::atomic<float> rawBassLevel{0.f};
-    bool audioMuteHeld = false;
-    void start();
-    void stop();
-    static FMOD_RESULT F_CALLBACK
-    bassDspCallback(FMOD_DSP_STATE*, float*, float*, unsigned int, int, int*);
-};
+        float getBassLevel() const {
+            return rawBassLevel.load();
+        }
+
+    private:
+        FMOD::Sound* sound = nullptr;
+        FMOD::Channel* channel = nullptr;
+        FMOD::DSP* bassDsp = nullptr;
+        std::atomic<float> rawBassLevel{0.f};
+        bool audioMuteHeld = false;
+        void start();
+        void stop();
+        static FMOD_RESULT F_CALLBACK
+        bassDspCallback(FMOD_DSP_STATE*, float*, float*, unsigned int, int, int*);
+    };
+
+} // namespace gucci

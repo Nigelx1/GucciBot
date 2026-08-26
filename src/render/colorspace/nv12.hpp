@@ -2,12 +2,14 @@
 
 #include "colorspace.hpp"
 
-class NV12Colorspace : public Colorspace {
-public:
-    const std::vector<RenderPass> getPasses() override {
-        const uintptr_t yPlaneSize = m_alignedWidth * m_alignedHeight;
+namespace gucci {
 
-        const char* vertexShader = R"(#version 130
+    class NV12Colorspace : public Colorspace {
+    public:
+        const std::vector<RenderPass> getPasses() override {
+            const uintptr_t yPlaneSize = m_alignedWidth * m_alignedHeight;
+
+            const char* vertexShader = R"(#version 130
         in vec4 a_position;
         in vec2 a_texCoord;
 
@@ -19,19 +21,19 @@ public:
         }
         )";
 
-        return {
-            RenderPass{
-                .m_width = m_alignedWidth,
-                .m_height = m_alignedHeight,
-                .m_vertexShader = nullptr,
-                .m_fragmentShader = nullptr,
-                .m_readPixels = [](float, float) {},
-            },
-            RenderPass{
-                .m_width = m_alignedWidth,
-                .m_height = m_alignedHeight,
-                .m_vertexShader = vertexShader,
-                .m_fragmentShader = R"(#version 130
+            return {
+                RenderPass{
+                    .m_width = m_alignedWidth,
+                    .m_height = m_alignedHeight,
+                    .m_vertexShader = nullptr,
+                    .m_fragmentShader = nullptr,
+                    .m_readPixels = [](float, float) {},
+                },
+                RenderPass{
+                    .m_width = m_alignedWidth,
+                    .m_height = m_alignedHeight,
+                    .m_vertexShader = vertexShader,
+                    .m_fragmentShader = R"(#version 130
                 precision highp float;
 
                 in vec2 v_texCoord;
@@ -51,22 +53,22 @@ public:
 
                     gl_FragData[0] = vec4(y, 0.0, 0.0, 1.0);
                 })",
-                .m_readPixels =
-                    [this](float x, float y) {
-                        glReadPixels(x,
-                                     y,
-                                     m_alignedWidth,
-                                     m_alignedHeight,
-                                     GL_RED,
-                                     GL_UNSIGNED_BYTE,
-                                     nullptr);
-                    },
-            },
-            RenderPass{
-                .m_width = m_alignedWidth / 2,
-                .m_height = m_alignedHeight / 2,
-                .m_vertexShader = vertexShader,
-                .m_fragmentShader = R"(#version 130
+                    .m_readPixels =
+                        [this](float x, float y) {
+                            glReadPixels(x,
+                                         y,
+                                         m_alignedWidth,
+                                         m_alignedHeight,
+                                         GL_RED,
+                                         GL_UNSIGNED_BYTE,
+                                         nullptr);
+                        },
+                },
+                RenderPass{
+                    .m_width = m_alignedWidth / 2,
+                    .m_height = m_alignedHeight / 2,
+                    .m_vertexShader = vertexShader,
+                    .m_fragmentShader = R"(#version 130
             precision highp float;
 
             in vec2 v_texCoord;
@@ -95,36 +97,38 @@ public:
             
                 gl_FragData[0] = vec4(u, v, 0.0, 1.0);
             })",
-                .m_readPixels =
-                    [this, yPlaneSize](float x, float y) {
-                        glReadPixels(x,
-                                     y,
-                                     m_alignedWidth / 2,
-                                     m_alignedHeight / 2,
-                                     GL_RG,
-                                     GL_UNSIGNED_BYTE,
-                                     reinterpret_cast<void*>(yPlaneSize));
-                    },
-            },
-        };
-    }
-
-    size_t getBufferSize() override {
-        const uintptr_t yPlaneSize = m_alignedWidth * m_alignedHeight;
-        const uintptr_t uvPlaneSize = yPlaneSize / 4;
-        return yPlaneSize + uvPlaneSize * 2;
-    }
-
-    geode::Result<> prepareFrame(AVFrame* frame, uint8_t* data, size_t size) override {
-        if (!frame || !data || size == 0) {
-            return geode::Err("Invalid parameters");
+                    .m_readPixels =
+                        [this, yPlaneSize](float x, float y) {
+                            glReadPixels(x,
+                                         y,
+                                         m_alignedWidth / 2,
+                                         m_alignedHeight / 2,
+                                         GL_RG,
+                                         GL_UNSIGNED_BYTE,
+                                         reinterpret_cast<void*>(yPlaneSize));
+                        },
+                },
+            };
         }
 
-        const uintptr_t yPlaneSize = m_alignedWidth * m_alignedHeight;
+        size_t getBufferSize() override {
+            const uintptr_t yPlaneSize = m_alignedWidth * m_alignedHeight;
+            const uintptr_t uvPlaneSize = yPlaneSize / 4;
+            return yPlaneSize + uvPlaneSize * 2;
+        }
 
-        frame->data[0] = data;
-        frame->data[1] = data + yPlaneSize;
+        geode::Result<> prepareFrame(AVFrame* frame, uint8_t* data, size_t size) override {
+            if (!frame || !data || size == 0) {
+                return geode::Err("Invalid parameters");
+            }
 
-        return geode::Ok();
-    }
-};
+            const uintptr_t yPlaneSize = m_alignedWidth * m_alignedHeight;
+
+            frame->data[0] = data;
+            frame->data[1] = data + yPlaneSize;
+
+            return geode::Ok();
+        }
+    };
+
+} // namespace gucci

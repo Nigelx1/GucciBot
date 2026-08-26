@@ -5,6 +5,8 @@
 #include <Geode/modify/CCKeyboardDispatcher.hpp>
 using namespace geode::prelude;
 
+using namespace gucci;
+
 static bool isJumpKey(enumKeyCodes key) {
     return key == enumKeyCodes::KEY_Space || key == enumKeyCodes::KEY_Up ||
            key == enumKeyCodes::KEY_W;

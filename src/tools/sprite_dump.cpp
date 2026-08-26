@@ -9,6 +9,8 @@
 
 using namespace geode::prelude;
 
+using namespace gucci;
+
 namespace {
 
     void writeBE32(std::vector<uint8_t>& buf, uint32_t v) {
