@@ -6,6 +6,15 @@ It's Gucci. GucciBot is a Geometry Dash macro bot (a [Geode](https://geode-sdk.o
 
 This is a private personal project. If you're reading this and you're not Nigel or Juice, you found a leak — say something nice about the themes on your way out.
 
+> **Design philosophy.** Every line of this project traces back to one guiding text, quoted here in full and without further comment:
+>
+> *"Yellow everything this time (Yellow), you know what I'm talking about?*
+> *Yellow rims (Lemons)*
+> *Yellow big booty yellowbones, ha (Yellow?)*
+> *Yellow Lambs (Yellow), yellow MPs (Yellow), yellow watch (Banana)*
+> *Yellow charm ring, chain (Yellow)*
+> *Yellow living room set (Chiquita, yellow)"*
+
 ---
 
 ## Table of Contents
