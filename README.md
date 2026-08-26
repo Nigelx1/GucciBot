@@ -80,7 +80,7 @@ The full current roster. Pick one, or build your own — Settings → Theme has 
 | **Red Kingdom** | `.redkingdom` | Blood red that *pulses*, because a static color wasn't intense enough |
 | *Yours* | — | Whatever you want. That's the point. |
 
-GucciBot's own color is gold, for the record. Yellow everything this time (yellow), you know what I'm talking about? Yellow rims (lemons). Yellow big booty yellowbones, ha (yellow?). Yellow Lambs (yellow), yellow MPs (yellow), yellow watch (banana). Yellow charm ring, chain (yellow). Yellow living room set (Chiquita, yellow).
+GucciBot's own color is gold, for the record. Yellow everything this time, you know what I'm talking about? Yellow rims. Yellow big booty yellowbones, ha. Yellow Lambs, yellow MPs, yellow watch. Yellow charm ring, chain. Yellow living room set.
 
 Also in Settings: **BIG BRRRR**, a joke toggle that does exactly what it sounds like, and **Bass Shake**, which makes the whole menu react to the track's actual bass in real time. You'll know it when you feel it.
 
