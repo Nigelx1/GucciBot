@@ -5292,8 +5292,10 @@ namespace gucci {
                 "on hits -- not a beat guess, a real audio tap on the BRRRR channel. "
                 "Deliberately intense by default, not a subtle wobble.");
             ImGui::PopStyleColor();
-            Widgets::StyledSliderFloat(
-                "Flicker Intensity", &brrr->flickerIntensity, 0.f, 1.f, theme);
+            if (Widgets::StyledSliderFloat(
+                    "Flicker Intensity", &brrr->flickerIntensity, 0.f, 1.f, theme))
+                Mod::get()->setSavedValue("bigbrrr_flicker_intensity",
+                                          (double)brrr->flickerIntensity);
             ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
             ImGui::TextWrapped(
                 "How far the menu fades out on hard hits. 0 turns the flicker off "
@@ -7379,6 +7381,8 @@ namespace gucci {
         eng->macroPathLineOpacity = mod->getSavedValue<float>("hack_macro_path_line_opacity", 0.6f);
         eng->trainerRevealEnabled = mod->getSavedValue<bool>("hack_trainer_reveal_enabled", true);
         eng->trainerRevealBuffer = mod->getSavedValue<float>("hack_trainer_reveal_buffer", 40.f);
+        BigBrrrManager::get()->flickerIntensity =
+            mod->getSavedValue<float>("bigbrrr_flicker_intensity", 0.5f);
         eng->jupiterNotes = mod->getSavedValue<std::string>("jupiter_notes", "");
         eng->jupiterSegmentsRaw = mod->getSavedValue<std::string>("jupiter_segments", "");
         eng->jupiterClickBarEnabled = mod->getSavedValue<bool>("jupiter_clickbar_enabled", true);

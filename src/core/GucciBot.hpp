@@ -1,31 +1,14 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-08-27-b (Big Brrr tracks wired in for both new themes, closing out the one piece left "  \
-    "undone in -a: LemonadeBot -> big_brrr_lemonade.mp3 (Nigel's real 'Lemonade 0.mp3'), 142bpm, "  \
-    "drop at 0:00 (no intro to skip). BrrrBot -> big_brrr_brrrbot.mp3 (Nigel's real St. Brick "    \
-    "Intro), 150bpm, drop at 38+19/30s. Both verified present in the packaged .geode via unzip -l "  \
-    "before calling it done, same habit as every prior per-theme track. -a's summary retained "    \
-    "below for context: Two new themes: LemonadeBot (bright yellow accent, dark warm-black bg, "   \
-    "'.lemonade') and BrrrBot (icy blue/white/silver, dark navy bg, '.icebrrr'), full parity "     \
-    "with the rest of the roster -- enum, palette, extension resolution across all 7 duplicated "  \
-    "list locations (gui.cpp/brr_format.cpp x3/customtheme.cpp x2/engine_core.cpp), macro-tagging " \
-    "unordered_sets wired through reloadMacroList/both list-UI tag sites/delete-cleanup, "          \
-    "name/subtitle/brand-tag/3x-GucciQuote/credits-badge, preset-picker index mapping (i==15/16). " \
-    "Verified complete via a systematic diff against every THEME_REDKINGDOM site in gui.cpp (12 "  \
-    "total) rather than assuming -- the only 3 deliberately NOT mirrored are Red Kingdom's own "   \
-    "special picker-card and live accent-pulse logic, which neither new theme was asked for. "     \
-    "BrrrBot also gets a real new feature: " \
-    "a dense (220-flake) animated snow overlay confined to the bot's own ImGui panel, ported in "  \
-    "spirit (not code -- different rendering pipeline entirely) from Silicate's real "             \
-    "shader-based 'Endothermic' menu theme (checked their actual source first, src/ui/manager.cpp" \
-    " -- a full-screen GLSL post-process over GD's own render, genuinely different scope from "    \
-    "GucciBot's panel-only theming). Implemented as persistent per-flake state (position/speed/"   \
-    "size/drift phase) drawn via ImDrawList circles each frame, clipped to the panel rect, gated " \
-    "on activeTheme==THEME_BRRR, wired into both window skins (classic + MegaHack rail). "         \
-    "Compiles clean on the first attempt. NOT yet confirmed in-game -- Nigel's explicit ask was "  \
-    "blizzard-density, not a few slow flakes, so the density/speed feel is the first thing worth " \
-    "checking.)"
+    "2026-08-27-c (Bass Shake's Flicker Intensity slider now persists across sessions -- it was "  \
+    "a pure in-memory BigBrrrManager field with no save/load anywhere, always resetting to 0.5 on " \
+    "every launch. Saved inline on slider change ('bigbrrr_flicker_intensity', matching every "    \
+    "other per-tab slider's established pattern) and restored in loadSettings(). Small, isolated " \
+    "fix -- compiles clean, NOT yet confirmed in-game. Found in passing, NOT touched: the Bass "   \
+    "Shake toggle itself and the master BIG BRRRR on/off toggle have the exact same gap (nothing " \
+    "saves BigBrrrManager::enabled or shakeEnabled either) -- flagged for Nigel, not fixed "        \
+    "unprompted since this was scoped as a one-slider patch.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
