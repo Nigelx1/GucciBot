@@ -1,7 +1,12 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-08-27-a (Two new themes: LemonadeBot (bright yellow accent, dark warm-black bg, "        \
+    "2026-08-27-b (Big Brrr tracks wired in for both new themes, closing out the one piece left "  \
+    "undone in -a: LemonadeBot -> big_brrr_lemonade.mp3 (Nigel's real 'Lemonade 0.mp3'), 142bpm, "  \
+    "drop at 0:00 (no intro to skip). BrrrBot -> big_brrr_brrrbot.mp3 (Nigel's real St. Brick "    \
+    "Intro), 150bpm, drop at 38+19/30s. Both verified present in the packaged .geode via unzip -l "  \
+    "before calling it done, same habit as every prior per-theme track. -a's summary retained "    \
+    "below for context: Two new themes: LemonadeBot (bright yellow accent, dark warm-black bg, "   \
     "'.lemonade') and BrrrBot (icy blue/white/silver, dark navy bg, '.icebrrr'), full parity "     \
     "with the rest of the roster -- enum, palette, extension resolution across all 7 duplicated "  \
     "list locations (gui.cpp/brr_format.cpp x3/customtheme.cpp x2/engine_core.cpp), macro-tagging " \
@@ -9,10 +14,8 @@
     "name/subtitle/brand-tag/3x-GucciQuote/credits-badge, preset-picker index mapping (i==15/16). " \
     "Verified complete via a systematic diff against every THEME_REDKINGDOM site in gui.cpp (12 "  \
     "total) rather than assuming -- the only 3 deliberately NOT mirrored are Red Kingdom's own "   \
-    "special picker-card and live accent-pulse logic, which neither new theme was asked for. Big " \
-    "Brrr tracks (Lemonade the song; BrrrBot getting St. Brick Intro) deliberately NOT wired into " \
-    "bigbrrr.cpp yet, same as Red Kingdom's own first build -- falls through to the default "      \
-    "track/BPM until Nigel sends the actual files+numbers. BrrrBot also gets a real new feature: " \
+    "special picker-card and live accent-pulse logic, which neither new theme was asked for. "     \
+    "BrrrBot also gets a real new feature: " \
     "a dense (220-flake) animated snow overlay confined to the bot's own ImGui panel, ported in "  \
     "spirit (not code -- different rendering pipeline entirely) from Silicate's real "             \
     "shader-based 'Endothermic' menu theme (checked their actual source first, src/ui/manager.cpp" \
