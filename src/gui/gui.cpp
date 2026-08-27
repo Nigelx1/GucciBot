@@ -4023,8 +4023,8 @@ namespace gucci {
                             engine->fwHasData = true;
                         }
                     }
-                    ImGui::SameLine();
                     if (mk) {
+                        ImGui::SameLine();
                         ImGui::PushStyleColor(ImGuiCol_Text,
                                               mk->manual ? theme.getAccent() : theme.textSecondary);
                         ImGui::TextUnformatted(mk->manual ? "manual" : "auto");

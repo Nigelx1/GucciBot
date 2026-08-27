@@ -1,31 +1,20 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-08-26-d (Namespace half of GWDdoS's refactor, deferred from -c. namespace_wrap.py "      \
-    "wrapped 49 files in namespace gucci{}, added using namespace gucci; to 19 hook files, on "    \
-    "top of a hand-done pilot on 4 files. Did NOT compile clean first try -- 6 distinct real "     \
-    "bugs found only by actually building through to link, none guessed: (1) 5 headers using "     \
-    "old #ifndef/#define/#endif guards (brr_format.hpp, frame_editor.hpp, dsp.hpp, ffmpeg.hpp, "   \
-    "render/renderer.hpp) had the script's closing } placed AFTER #endif instead of before it -- " \
-    "harmless on first #include, but a second/transitive inclusion skips the whole guarded "       \
-    "block (namespace-open included) while the unguarded close still fires, silently ejecting "    \
-    "everything after it in the includer out of namespace gucci. (2) jupiterghost.hpp/"            \
-    "trainerghost.hpp forward-declared 'class PlayLayer;' INSIDE namespace gucci, turning every "  \
-    "function in both headers into a phantom overload taking a permanently-incomplete "            \
-    "gucci::PlayLayer instead of the real global GD/Geode type -- moved back to global scope. "    \
-    "(3) render/pass.cpp and render/texture.cpp opened namespace gucci{ conditionally inside "     \
-    "#ifdef SILICATE_PROTECT (never defined in a normal build), so RenderPass/SLRenderTexture's "  \
-    "member-function definitions silently landed at global scope with a stray unmatched closing "  \
-    "brace at EOF. (4) jupiterghost.cpp/trainerghost.cpp/framewindow.cpp/practicerange.cpp each "  \
-    "still had their own free-standing namespace gbju/gbtr/gbfw/gbpr {} at global scope even "     \
-    "though the matching header now declares them under gucci:: -- two distinct namespaces with " \
-    "the same name, ambiguous-symbol errors. (5) engine_updater.cpp defined logFrameIncrement/ "   \
-    "logCalcDeathTrace unqualified at global scope against their gucci:: header declarations -- "  \
-    "ambiguous-call errors once a using-namespace-gucci call site existed. (6) audio/playsound.cpp"\
-    "'s triggerClickAudio had the identical unqualified-definition problem, caught only at link "  \
-    "time (LNK2019 unresolved external) since nothing ambiguous ever got called from within that " \
-    "same file. Global-externs question still unanswered; GWDdoS said ignore it for now. "         \
-    "Compiles, links, and packages clean. NOT yet confirmed in-game.)"
+    "2026-08-26-e (Fixed a real Manual Frame Windows bug Juice reported against build "            \
+    "2026-08-24-u -- distinct from that build's own SameLine(190)->CalcTextSize fix, which is "    \
+    "still correctly in place. Root cause: gui.cpp's per-row loop called ImGui::SameLine() "       \
+    "unconditionally right after the window-size InputInt, then only drew the 'auto'/'manual' "    \
+    "label and Clear button inside `if (mk)` -- for any click Calculate hasn't measured yet "      \
+    "(mk == nullptr, a common case), nothing consumed that pending SameLine(), so the very next "  \
+    "widget drawn (the FOLLOWING row's own label, first thing in the next loop iteration) "        \
+    "inherited it and rendered smashed onto the previous row's line instead of starting fresh -- " \
+    "exactly the garbled overlapping-rows screenshot Juice sent. Fixed by moving the SameLine() "  \
+    "inside the `if (mk)` block so it only fires when something will actually follow it. Small, "  \
+    "isolated, high-confidence UI fix -- compiles clean. NOT yet confirmed in-game. Separately, "  \
+    "Juice also reported the macro breaking often during playback (no repro yet, not touched -- " \
+    "asked for specifics rather than guessing) and asked for Themes/Settings to be split into "    \
+    "separate pages (feature request, not started, needs Nigel's priority call).)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
