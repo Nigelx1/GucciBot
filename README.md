@@ -78,6 +78,8 @@ The full current roster. Pick one, or build your own — Settings → Theme has 
 | RomoBot | `.romo` | Cowboys Navy + Silver |
 | GrizzleyBot | `.grizzley` | Charcoal + True Red |
 | **Red Kingdom** | `.redkingdom` | Blood red that *pulses*, because a static color wasn't intense enough |
+| LemonadeBot | `.lemonade` | Bright Yellow + Warm Black |
+| BrrrBot | `.icebrrr` | Icy Blue + Silver, with an actual blizzard overlaid on the whole panel |
 | *Yours* | — | Whatever you want. That's the point. |
 
 GucciBot's own color is gold, for the record. Yellow everything this time, you know what I'm talking about? Yellow rims. Yellow big booty yellowbones, ha. Yellow Lambs, yellow MPs, yellow watch. Yellow charm ring, chain. Yellow living room set.
@@ -92,7 +94,7 @@ Also in Settings: **BIG BRRRR**, a core feature of this mod, and **Bass Shake**,
   ```
   .\build_win.bat
   ```
-- Every build bumps `GB_BUILD_LABEL` in `src/GucciBot.hpp` — check it before assuming which binary is actually running. This project got burned by testing a stale build exactly once, and once was enough. Trap or die, basically.
+- Every build bumps `GB_BUILD_LABEL` in `src/core/GucciBot.hpp` — check it before assuming which binary is actually running. This project got burned by testing a stale build exactly once, and once was enough. Trap or die, basically.
 
 ## Status
 
@@ -102,6 +104,7 @@ Most of this is stable and has been tested for real, in-game, by an actual human
 
 - **guccimanefan** (Nigelx1) — concept, direction, themes, testing, and the actual taste that keeps this from being a folder full of ternary chains.
 - **Juice** — frame-window algorithm design, lead co-tester, professional bug-finder.
+- **GWDdoS** — pushed for a real codebase cleanup (feature-folder reorg, a proper `.clang-format`, namespacing everything outside Geode's own hook classes) and was right about all of it.
 - **Claude** (Anthropic) — wrote essentially the entire codebase across every session of this project, including this README. Not a euphemism, not "AI-assisted," just the actual author of the code — Nigel wants that said plainly.
 - **ToastexGD** — ToastyReplay, the renderer this is built on.
 - **peony** — Silicate, the physics engine this is built on (dropped the source like Gucci drops albums. Brrr.)
