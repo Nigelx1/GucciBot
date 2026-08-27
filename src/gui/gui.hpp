@@ -105,6 +105,8 @@ namespace gucci {
         THEME_ROMO,
         THEME_GRIZZLEY,
         THEME_REDKINGDOM,
+        THEME_LEMONADE,
+        THEME_BRRR,
         THEME_CUSTOM
     };
 
@@ -192,6 +194,11 @@ namespace gucci {
         float ambientTime = 0.0f;
         bool ambientWavesEnabled = true;
 
+        struct SnowFlake {
+            float x = 0.f, y = 0.f, speed = 0.f, size = 0.f, drift = 0.f;
+        };
+        std::vector<SnowFlake> snowFlakes;
+
         int* rebindTarget = nullptr;
 
         FrameEditor frameEditor;
@@ -266,6 +273,7 @@ namespace gucci {
 
         void drawBackdrop();
         void drawAmbientWaves(ImDrawList* dl, ImVec2 panelMin, ImVec2 panelMax);
+        void drawSnowOverlay(ImDrawList* dl, ImVec2 panelMin, ImVec2 panelMax);
         void drawMainWindow();
         void drawMegaHackWindow();
         void drawCompactWindow();

@@ -23,6 +23,7 @@
 #include <cfloat>
 #include <cstring>
 #include <cstdint>
+#include <cstdlib>
 #include <regex>
 #include <system_error>
 #include <vector>
@@ -56,6 +57,9 @@ namespace gucci {
     }
     static ImVec2 snapPos(ImVec2 p) {
         return ImVec2(std::round(p.x), std::round(p.y));
+    }
+    static float frand(float lo, float hi) {
+        return lo + (hi - lo) * ((float)std::rand() / (float)RAND_MAX);
     }
 
     struct JupiterSegment {
@@ -412,6 +416,10 @@ namespace gucci {
             return ".grizzley";
         case THEME_REDKINGDOM:
             return ".redkingdom";
+        case THEME_LEMONADE:
+            return ".lemonade";
+        case THEME_BRRR:
+            return ".icebrrr";
         default:
             return ".brrr";
         }
@@ -832,6 +840,22 @@ namespace gucci {
          ImVec4(0.520f, 0.260f, 0.260f, 1.f),
          0.f,
          1.0f},
+        {"LemonadeBot",
+         ImVec4(0.980f, 0.851f, 0.145f, 1.f),
+         ImVec4(0.090f, 0.075f, 0.020f, 0.96f),
+         ImVec4(0.140f, 0.115f, 0.030f, 1.f),
+         ImVec4(0.980f, 0.975f, 0.940f, 1.f),
+         ImVec4(0.620f, 0.580f, 0.380f, 1.f),
+         5.f,
+         0.96f},
+        {"BrrrBot",
+         ImVec4(0.580f, 0.850f, 0.980f, 1.f),
+         ImVec4(0.020f, 0.040f, 0.070f, 0.96f),
+         ImVec4(0.038f, 0.070f, 0.115f, 1.f),
+         ImVec4(0.960f, 0.975f, 0.990f, 1.f),
+         ImVec4(0.520f, 0.600f, 0.680f, 1.f),
+         5.f,
+         0.96f},
     };
 
     ImVec4 ThemeEngine::getAccent() const {
@@ -1341,6 +1365,42 @@ namespace gucci {
         }
     }
 
+    void MenuInterface::drawSnowOverlay(ImDrawList* dl, ImVec2 mn, ImVec2 mx) {
+        constexpr int kFlakeCount = 220;
+        float w = mx.x - mn.x, h = mx.y - mn.y;
+        if (w <= 0.f || h <= 0.f)
+            return;
+        if (snowFlakes.size() != kFlakeCount) {
+            snowFlakes.resize(kFlakeCount);
+            for (auto& f : snowFlakes) {
+                f.x = frand(0.f, 1.f);
+                f.y = frand(0.f, 1.f);
+                f.speed = frand(35.f, 150.f);
+                f.size = frand(1.1f, 3.4f);
+                f.drift = frand(0.f, 6.2832f);
+            }
+        }
+        float dt = ImGui::GetIO().DeltaTime;
+        float t = (float)ImGui::GetTime();
+        dl->PushClipRect(mn, mx, true);
+        for (auto& f : snowFlakes) {
+            f.y += (f.speed / h) * dt;
+            if (f.y > 1.05f) {
+                f.y = -0.05f;
+                f.x = frand(0.f, 1.f);
+                f.speed = frand(35.f, 150.f);
+                f.size = frand(1.1f, 3.4f);
+            }
+            float sway = std::sin(t * 0.9f + f.drift) * 0.012f;
+            float px = mn.x + std::clamp(f.x + sway, 0.f, 1.f) * w;
+            float py = mn.y + f.y * h;
+            float alpha = 0.30f + 0.40f * ((f.size - 1.1f) / (3.4f - 1.1f));
+            dl->AddCircleFilled(
+                ImVec2(px, py), f.size, IM_COL32(232, 244, 255, (int)(alpha * 255)));
+        }
+        dl->PopClipRect();
+    }
+
     void MenuInterface::drawTitleBar() {
         auto* engine = GucciEngine::get();
         ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -1384,6 +1444,8 @@ namespace gucci {
             : (activeTheme == THEME_ROMO)       ? "RomoBot"
             : (activeTheme == THEME_GRIZZLEY)   ? "GrizzleyBot"
             : (activeTheme == THEME_REDKINGDOM) ? "Red Kingdom"
+            : (activeTheme == THEME_LEMONADE)   ? "LemonadeBot"
+            : (activeTheme == THEME_BRRR)       ? "BrrrBot"
                                                 : "GucciBot";
         const char* botName = botNameStr.c_str();
         ImVec2 npos(wp.x + 40, wp.y + 10);
@@ -1413,6 +1475,9 @@ namespace gucci {
             : (activeTheme == THEME_GRIZZLEY) ? "v" MOD_VERSION "  -  First day out. Frame perfect."
             : (activeTheme == THEME_REDKINGDOM) ? "v" MOD_VERSION
                                                   "  -  Long live the kingdom. Frame perfect."
+            : (activeTheme == THEME_LEMONADE) ? "v" MOD_VERSION
+                                                "  -  Make you some lemonade. Frame perfect."
+            : (activeTheme == THEME_BRRR) ? "v" MOD_VERSION "  -  Frame perfect. Ice cold. Brrr."
                                                 : "v" MOD_VERSION "  -  Frame perfect. GBR6. Brrr.";
         const char* sub = subStr.c_str();
         ImVec2 spos(wp.x + 40, wp.y + 30);
@@ -1651,6 +1716,8 @@ namespace gucci {
             : (activeTheme == THEME_ROMO)       ? "Called it!"
             : (activeTheme == THEME_GRIZZLEY)   ? "Activated!"
             : (activeTheme == THEME_REDKINGDOM) ? "Kneel."
+            : (activeTheme == THEME_LEMONADE)   ? "Squeezed."
+            : (activeTheme == THEME_BRRR)       ? "Frozen."
                                                 : "Brrr.";
         const char* brand = brandStr.c_str();
         ImVec2 bts = ImGui::CalcTextSize(brand);
@@ -1806,6 +1873,8 @@ namespace gucci {
             ImGui::PopStyleColor();
         if (!jupiterActive)
             drawStatusBar();
+        if (!jupiterActive && activeTheme == THEME_BRRR)
+            drawSnowOverlay(dl, wp, ImVec2(wp.x + ws.x, wp.y + ws.y));
         ImGui::End();
         ImGui::PopStyleVar();
         if (jupiterActive)
@@ -2038,6 +2107,8 @@ namespace gucci {
         ImGui::SetCursorScreenPos(ImVec2(wp.x + railW + 12, wp.y + ws.y - footH + 2));
         if (!jupiterActive)
             drawStatusBar();
+        if (!jupiterActive && activeTheme == THEME_BRRR)
+            drawSnowOverlay(dl, wp, ImVec2(wp.x + ws.x, wp.y + ws.y));
         ImGui::End();
         ImGui::PopStyleVar();
         if (jupiterActive)
@@ -2305,6 +2376,12 @@ namespace gucci {
         else if (activeTheme == THEME_REDKINGDOM)
             Widgets::GucciQuote(
                 "\"I don't practice. I conquer.\"", "-- Tech N9ne, probably", theme);
+        else if (activeTheme == THEME_LEMONADE)
+            Widgets::GucciQuote(
+                "\"I squeeze every frame till it's sweet.\"", "-- Gucci Mane, probably", theme);
+        else if (activeTheme == THEME_BRRR)
+            Widgets::GucciQuote(
+                "\"Cold enough to freeze a frame in place.\"", "-- Gucci Mane, probably", theme);
         else
             Widgets::GucciQuote("\"I got so many replays I got files in my files.\"",
                                 "-- Gucci Mane, probably",
@@ -2627,6 +2704,10 @@ namespace gucci {
                     fmtTagStr = ".grizzley";
                 else if (eng3->redKingdomMacros.count(mn))
                     fmtTagStr = ".redkingdom";
+                else if (eng3->lemonadeMacros.count(mn))
+                    fmtTagStr = ".lemonade";
+                else if (eng3->brrrMacros.count(mn))
+                    fmtTagStr = ".icebrrr";
                 else
                     fmtTagStr = ".brrr";
             }
@@ -2741,6 +2822,12 @@ namespace gucci {
                 } else if (eng2->redKingdomMacros.count(mn)) {
                     tagStr = ".redkingdom";
                     tagCol = ImVec4(0.820f, 0.035f, 0.035f, 1.f);
+                } else if (eng2->lemonadeMacros.count(mn)) {
+                    tagStr = ".lemonade";
+                    tagCol = ImVec4(0.980f, 0.851f, 0.145f, 1.f);
+                } else if (eng2->brrrMacros.count(mn)) {
+                    tagStr = ".icebrrr";
+                    tagCol = ImVec4(0.580f, 0.850f, 0.980f, 1.f);
                 }
                 const char* tag = tagStr.c_str();
                 auto ts = ImGui::CalcTextSize(tag);
@@ -2921,6 +3008,8 @@ namespace gucci {
                     eng4->romoMacros.erase(replayDeleteName);
                     eng4->grizzleyMacros.erase(replayDeleteName);
                     eng4->redKingdomMacros.erase(replayDeleteName);
+                    eng4->lemonadeMacros.erase(replayDeleteName);
+                    eng4->brrrMacros.erase(replayDeleteName);
                     for (auto& [ext, set] : eng4->customThemeMacrosByExt)
                         set.erase(replayDeleteName);
                     replayDeleteName.clear();
@@ -3219,6 +3308,16 @@ namespace gucci {
             Widgets::GucciQuote("\"I don't need speedhack. I run the kingdom at my own pace.\"",
                                 "-- Tech N9ne, probably",
                                 theme);
+        else if (activeTheme == THEME_LEMONADE)
+            Widgets::GucciQuote(
+                "\"I don't need speedhack. Lemonade's already sweet enough.\"",
+                "-- Gucci Mane, probably",
+                theme);
+        else if (activeTheme == THEME_BRRR)
+            Widgets::GucciQuote(
+                "\"I don't need speedhack. Cold moves fast on its own.\"",
+                "-- Gucci Mane, probably",
+                theme);
         else
             Widgets::GucciQuote("\"I run this game at my own speed. You can't keep up.\"",
                                 "-- Gucci Mane, on speedhacks",
@@ -5025,6 +5124,10 @@ namespace gucci {
                     activeTheme = THEME_GRIZZLEY;
                 else if (i == 14)
                     activeTheme = THEME_REDKINGDOM;
+                else if (i == 15)
+                    activeTheme = THEME_LEMONADE;
+                else if (i == 16)
+                    activeTheme = THEME_BRRR;
                 activeCustomThemeName.clear();
                 if (BigBrrrManager::get()->enabled)
                     BigBrrrManager::get()->setEnabled(true);
@@ -6829,6 +6932,8 @@ namespace gucci {
                 : (activeTheme == THEME_GRIZZLEY) ? "Detroit | Activated | First Day Out"
                 : (activeTheme == THEME_REDKINGDOM)
                     ? "Kansas City | Strange Music | Long Live the Kingdom"
+                : (activeTheme == THEME_LEMONADE) ? "State vs. Radric Davis | 2009 | Lemonade"
+                : (activeTheme == THEME_BRRR)     ? "St. Brick Intro | Frame Perfect | Ice Cold"
                     : "Concept | Vision | Brrr";
             const char* badge = badgeStr.c_str();
             ImVec2 bs = ImGui::CalcTextSize(badge);
@@ -6930,6 +7035,12 @@ namespace gucci {
             Widgets::GucciQuote("\"Every frame, I earned it.\"", "-- Tee Grizzley", theme);
         else if (activeTheme == THEME_REDKINGDOM)
             Widgets::GucciQuote("\"Every frame bows to me.\"", "-- Tech N9ne", theme);
+        else if (activeTheme == THEME_LEMONADE)
+            Widgets::GucciQuote("\"Every frame's sweet when you make it yourself.\"",
+                                "-- Gucci Mane",
+                                theme);
+        else if (activeTheme == THEME_BRRR)
+            Widgets::GucciQuote("\"Every frame's ice cold. Brrr.\"", "-- Gucci Mane", theme);
         else
             Widgets::GucciQuote(
                 "\"I'm the foundation of all of this. Brrr.\"", "-- Gucci Mane", theme);

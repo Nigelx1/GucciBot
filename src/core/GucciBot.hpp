@@ -1,20 +1,28 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-08-26-e (Fixed a real Manual Frame Windows bug Juice reported against build "            \
-    "2026-08-24-u -- distinct from that build's own SameLine(190)->CalcTextSize fix, which is "    \
-    "still correctly in place. Root cause: gui.cpp's per-row loop called ImGui::SameLine() "       \
-    "unconditionally right after the window-size InputInt, then only drew the 'auto'/'manual' "    \
-    "label and Clear button inside `if (mk)` -- for any click Calculate hasn't measured yet "      \
-    "(mk == nullptr, a common case), nothing consumed that pending SameLine(), so the very next "  \
-    "widget drawn (the FOLLOWING row's own label, first thing in the next loop iteration) "        \
-    "inherited it and rendered smashed onto the previous row's line instead of starting fresh -- " \
-    "exactly the garbled overlapping-rows screenshot Juice sent. Fixed by moving the SameLine() "  \
-    "inside the `if (mk)` block so it only fires when something will actually follow it. Small, "  \
-    "isolated, high-confidence UI fix -- compiles clean. NOT yet confirmed in-game. Separately, "  \
-    "Juice also reported the macro breaking often during playback (no repro yet, not touched -- " \
-    "asked for specifics rather than guessing) and asked for Themes/Settings to be split into "    \
-    "separate pages (feature request, not started, needs Nigel's priority call).)"
+    "2026-08-27-a (Two new themes: LemonadeBot (bright yellow accent, dark warm-black bg, "        \
+    "'.lemonade') and BrrrBot (icy blue/white/silver, dark navy bg, '.icebrrr'), full parity "     \
+    "with the rest of the roster -- enum, palette, extension resolution across all 7 duplicated "  \
+    "list locations (gui.cpp/brr_format.cpp x3/customtheme.cpp x2/engine_core.cpp), macro-tagging " \
+    "unordered_sets wired through reloadMacroList/both list-UI tag sites/delete-cleanup, "          \
+    "name/subtitle/brand-tag/3x-GucciQuote/credits-badge, preset-picker index mapping (i==15/16). " \
+    "Verified complete via a systematic diff against every THEME_REDKINGDOM site in gui.cpp (12 "  \
+    "total) rather than assuming -- the only 3 deliberately NOT mirrored are Red Kingdom's own "   \
+    "special picker-card and live accent-pulse logic, which neither new theme was asked for. Big " \
+    "Brrr tracks (Lemonade the song; BrrrBot getting St. Brick Intro) deliberately NOT wired into " \
+    "bigbrrr.cpp yet, same as Red Kingdom's own first build -- falls through to the default "      \
+    "track/BPM until Nigel sends the actual files+numbers. BrrrBot also gets a real new feature: " \
+    "a dense (220-flake) animated snow overlay confined to the bot's own ImGui panel, ported in "  \
+    "spirit (not code -- different rendering pipeline entirely) from Silicate's real "             \
+    "shader-based 'Endothermic' menu theme (checked their actual source first, src/ui/manager.cpp" \
+    " -- a full-screen GLSL post-process over GD's own render, genuinely different scope from "    \
+    "GucciBot's panel-only theming). Implemented as persistent per-flake state (position/speed/"   \
+    "size/drift phase) drawn via ImDrawList circles each frame, clipped to the panel rect, gated " \
+    "on activeTheme==THEME_BRRR, wired into both window skins (classic + MegaHack rail). "         \
+    "Compiles clean on the first attempt. NOT yet confirmed in-game -- Nigel's explicit ask was "  \
+    "blizzard-density, not a few slow flakes, so the density/speed feel is the first thing worth " \
+    "checking.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -695,6 +703,8 @@ namespace gucci {
         std::unordered_set<std::string> romoMacros;
         std::unordered_set<std::string> grizzleyMacros;
         std::unordered_set<std::string> redKingdomMacros;
+        std::unordered_set<std::string> lemonadeMacros;
+        std::unordered_set<std::string> brrrMacros;
         std::unordered_map<std::string, std::unordered_set<std::string>> customThemeMacrosByExt;
 
         std::vector<BotSettingsPreset> settingsPresets;

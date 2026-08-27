@@ -684,6 +684,10 @@ namespace gucci {
             return ".grizzley";
         case THEME_REDKINGDOM:
             return ".redkingdom";
+        case THEME_LEMONADE:
+            return ".lemonade";
+        case THEME_BRRR:
+            return ".icebrrr";
         default:
             return ".brrr";
         }
@@ -707,7 +711,9 @@ namespace gucci {
                              ".maybach",
                              ".romo",
                              ".grizzley",
-                             ".redkingdom"}) {
+                             ".redkingdom",
+                             ".lemonade",
+                             ".icebrrr"}) {
                 std::error_code ec;
                 if (std::filesystem::exists(dir / (candidate + ext), ec))
                     return true;
@@ -776,7 +782,9 @@ namespace gucci {
                                                             ".maybach",
                                                             ".romo",
                                                             ".grizzley",
-                                                            ".redkingdom"}) {
+                                                            ".redkingdom",
+                                                            ".lemonade",
+                                                            ".icebrrr"}) {
             auto candidate = directory / (filename + ext);
             if (std::filesystem::exists(candidate)) {
                 path = candidate;

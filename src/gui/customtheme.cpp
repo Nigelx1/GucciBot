@@ -33,7 +33,9 @@ namespace gucci {
                                          "maybach",
                                          "romo",
                                          "grizzley",
-                                         "redkingdom"};
+                                         "redkingdom",
+                                         "lemonade",
+                                         "icebrrr"};
         for (auto* e : kBuiltin)
             if (ext == e)
                 return true;
@@ -136,7 +138,9 @@ namespace gucci {
                                          ".maybach",
                                          ".romo",
                                          ".grizzley",
-                                         ".redkingdom"};
+                                         ".redkingdom",
+                                         ".lemonade",
+                                         ".icebrrr"};
         if (auto* ui = MenuInterface::get()) {
             for (auto& t : ui->customThemes)
                 exts.push_back("." + t.extension);

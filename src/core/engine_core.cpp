@@ -865,6 +865,8 @@ namespace gucci {
         romoMacros.clear();
         grizzleyMacros.clear();
         redKingdomMacros.clear();
+        lemonadeMacros.clear();
+        brrrMacros.clear();
         customThemeMacrosByExt.clear();
 
         auto dir = getReplayDir();
@@ -906,13 +908,17 @@ namespace gucci {
                     grizzleyMacros.insert(stem);
                 if (ext == ".redkingdom")
                     redKingdomMacros.insert(stem);
+                if (ext == ".lemonade")
+                    lemonadeMacros.insert(stem);
+                if (ext == ".icebrrr")
+                    brrrMacros.insert(stem);
                 if (!ext.empty()) {
                     std::string bare = ext.substr(1);
                     bool isBuiltin = ext == ".brrr" || ext == ".toosii" || ext == ".ja" ||
                                      ext == ".giddey" || ext == ".bam" || ext == ".sexyy" ||
                                      ext == ".juice" || ext == ".butler" || ext == ".saweetie" ||
                                      ext == ".maybach" || ext == ".romo" || ext == ".grizzley" ||
-                                     ext == ".redkingdom";
+                                     ext == ".redkingdom" || ext == ".lemonade" || ext == ".icebrrr";
                     if (!isBuiltin)
                         customThemeMacrosByExt[bare].insert(stem);
                 }
