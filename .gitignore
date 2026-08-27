@@ -1,5 +1,11 @@
 build/
 *.geode
+# The built mod itself IS tracked, at this one fixed repo-root path --
+# build_win.bat copies it here after every build, overwritten each time, so
+# Juice (full repo access) always finds the latest build without a Discord
+# upload. Anything else named *.geode (stray copies under build/, etc.) stays
+# ignored.
+!/guccimanefan.guccibot.geode
 .claude/scheduled_tasks.lock
 .freebuff/
 
