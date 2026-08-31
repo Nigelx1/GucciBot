@@ -7,6 +7,7 @@
 #include <string>
 
 #include "gui/frame_editor.hpp"
+#include "render/video_decoder.hpp"
 
 namespace gucci {
 
@@ -199,6 +200,16 @@ namespace gucci {
         };
         std::vector<SnowFlake> snowFlakes;
 
+        // Video Mode runtime state -- the decoder and GL texture are pure
+        // runtime objects, not saved settings (those live on GucciEngine
+        // alongside the click bar's own fields). jupiterVideoLoadedPath
+        // tracks what's actually currently open so the decoder only gets
+        // (re)opened when the saved path changes, not every frame.
+        VideoDecoder jupiterVideoDecoder;
+        unsigned int jupiterVideoTexture = 0;
+        int jupiterVideoTexW = 0, jupiterVideoTexH = 0;
+        std::string jupiterVideoLoadedPath;
+
         int* rebindTarget = nullptr;
 
         FrameEditor frameEditor;
@@ -274,6 +285,7 @@ namespace gucci {
         void drawBackdrop();
         void drawAmbientWaves(ImDrawList* dl, ImVec2 panelMin, ImVec2 panelMax);
         void drawSnowOverlay(ImDrawList* dl, ImVec2 panelMin, ImVec2 panelMax);
+        void drawJupiterVideoOverlay();
         void drawMainWindow();
         void drawMegaHackWindow();
         void drawCompactWindow();

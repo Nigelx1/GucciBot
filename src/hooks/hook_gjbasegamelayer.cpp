@@ -309,6 +309,21 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
                 if (pressed) {
                     CalibrationService::get().onRealClick();
                 }
+                // Real-time click scoring for the Jupiter/Trainer Click
+                // Trainer pages -- timed off the actual input event, not
+                // polled from GUI draw code, so the number shown is the real
+                // error and not an estimate of it (matches the frame the
+                // click genuinely arrived in).
+                double tps = gb->updater.m_tps > 0.0 ? gb->updater.m_tps : 240.0;
+                double clickTimeSec = (double)gb->updater.getFrame() / tps;
+                if (gb->jupiterClickBarPageVisible && !gb->jupiterMacro.clickIntervalsSec.empty()) {
+                    gb->scoreRealClick(
+                        gb->jupiterMacro.clickIntervalsSec, gb->jupiterClickScore, clickTimeSec, pressed, tps);
+                }
+                if (gb->trainerClickBarPageVisible && !gb->trainerMacro.clickIntervalsSec.empty()) {
+                    gb->scoreRealClick(
+                        gb->trainerMacro.clickIntervalsSec, gb->trainerClickScore, clickTimeSec, pressed, tps);
+                }
             }
         }
         if (!gb->isRecording()) {

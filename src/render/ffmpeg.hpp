@@ -57,6 +57,24 @@ namespace gucci {
         FFMPEG_FN(swr_free)
         FFMPEG_FN(avcodec_free_context)
         FFMPEG_FN(av_packet_free)
+
+        // Decode-side -- added for Video Mode's synced video playback
+        // overlay. Nothing above this line touches decoding at all; the
+        // existing struct is purely an output/muxing pipeline.
+        FFMPEG_FN(avformat_open_input)
+        FFMPEG_FN(avformat_find_stream_info)
+        FFMPEG_FN(avformat_close_input)
+        FFMPEG_FN(avcodec_find_decoder)
+        FFMPEG_FN(avcodec_parameters_to_context)
+        FFMPEG_FN(av_read_frame)
+        FFMPEG_FN(avcodec_send_packet)
+        FFMPEG_FN(avcodec_receive_frame)
+        FFMPEG_FN(av_frame_free)
+        FFMPEG_FN(av_seek_frame)
+        FFMPEG_FN(avcodec_flush_buffers)
+        FFMPEG_FN(sws_getContext)
+        FFMPEG_FN(sws_scale)
+        FFMPEG_FN(sws_freeContext)
     } ff_t;
 
     static std::vector<std::string> DLL_FUNCTION_NAMES = {"avformat_alloc_output_context2",
@@ -89,7 +107,21 @@ namespace gucci {
                                                           "avio_close",
                                                           "swr_free",
                                                           "avcodec_free_context",
-                                                          "av_packet_free"};
+                                                          "av_packet_free",
+                                                          "avformat_open_input",
+                                                          "avformat_find_stream_info",
+                                                          "avformat_close_input",
+                                                          "avcodec_find_decoder",
+                                                          "avcodec_parameters_to_context",
+                                                          "av_read_frame",
+                                                          "avcodec_send_packet",
+                                                          "avcodec_receive_frame",
+                                                          "av_frame_free",
+                                                          "av_seek_frame",
+                                                          "avcodec_flush_buffers",
+                                                          "sws_getContext",
+                                                          "sws_scale",
+                                                          "sws_freeContext"};
 
     inline void* loadFunction(HMODULE* modules, size_t moduleSize, const char* name) {
         void* fn = 0;
@@ -109,7 +141,7 @@ namespace gucci {
         return fn;
     }
 
-    static_assert(sizeof(ff_t) == sizeof(void*) * 31);
+    static_assert(sizeof(ff_t) == sizeof(void*) * 45);
 
     inline bool loadFFmpegFunctions(void* ff) {
         std::vector<HMODULE> modules;

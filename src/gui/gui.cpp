@@ -1401,6 +1401,123 @@ namespace gucci {
         dl->PopClipRect();
     }
 
+    static void drawJupiterClickBar(ThemeEngine& theme,
+                                    AnimationState& anim,
+                                    GucciEngine* engine,
+                                    float windowSeconds,
+                                    bool externalWidgetJustReleased,
+                                    float h);
+
+    static unsigned int uploadOrUpdateRgbaTexture(unsigned int existing,
+                                                  int w,
+                                                  int h,
+                                                  const std::vector<uint8_t>& rgba) {
+        unsigned int tex = existing;
+        if (tex == 0) {
+            glGenTextures(1, &tex);
+            glBindTexture(GL_TEXTURE_2D, tex);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
+        } else {
+            glBindTexture(GL_TEXTURE_2D, tex);
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
+        }
+        return tex;
+    }
+
+    // Video Mode -- a review/playback overlay, not a live-gameplay one; no
+    // level needs to be open. Video plays full-screen (letterboxed to its
+    // own aspect ratio), riding the exact same clock drawJupiterClickBar
+    // already uses (jupiterClickBarPosSec), offset by jupiterVideoOffsetSec
+    // so the video's own timestamp and the macro's time-zero can be
+    // manually aligned. The click bar itself is drawn again here, in its
+    // own always-fully-opaque window near the bottom -- the ORIGINAL
+    // panel-embedded call site is untouched, this is a second, independent
+    // call into the same shared drawing function.
+    void MenuInterface::drawJupiterVideoOverlay() {
+        auto* engine = GucciEngine::get();
+        if (!engine->jupiterVideoModeEnabled || engine->jupiterVideoPath.empty())
+            return;
+
+        if (jupiterVideoLoadedPath != engine->jupiterVideoPath) {
+            jupiterVideoDecoder.close();
+            if (jupiterVideoDecoder.open(engine->jupiterVideoPath)) {
+                jupiterVideoLoadedPath = engine->jupiterVideoPath;
+            } else {
+                jupiterVideoLoadedPath.clear();
+                engine->jupiterVideoModeEnabled = false; // don't retry a broken path every frame
+                return;
+            }
+        }
+        if (!jupiterVideoDecoder.isOpen())
+            return;
+
+        double videoTimeSec =
+            engine->jupiterClickBarPosSec + (double)engine->jupiterVideoOffsetSec;
+        videoTimeSec = std::clamp(
+            videoTimeSec, 0.0, std::max(0.0, jupiterVideoDecoder.durationSec() - 0.001));
+
+        std::vector<uint8_t> rgba;
+        if (jupiterVideoDecoder.getFrameAt(videoTimeSec, rgba)) {
+            jupiterVideoTexture = uploadOrUpdateRgbaTexture(
+                jupiterVideoTexture, jupiterVideoDecoder.width(), jupiterVideoDecoder.height(), rgba);
+            jupiterVideoTexW = jupiterVideoDecoder.width();
+            jupiterVideoTexH = jupiterVideoDecoder.height();
+        }
+        if (jupiterVideoTexture == 0)
+            return;
+
+        auto* vp = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(vp->Pos);
+        ImGui::SetNextWindowSize(vp->Size);
+        ImGui::SetNextWindowBgAlpha(0.f);
+        ImGui::Begin("##jupiterVideoOverlay",
+                     nullptr,
+                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs |
+                         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                         ImGuiWindowFlags_NoBringToFrontOnFocus |
+                         ImGuiWindowFlags_NoFocusOnAppearing);
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+
+        float vw = vp->Size.x, vh = vp->Size.y;
+        float videoAspect = (float)jupiterVideoTexW / (float)jupiterVideoTexH;
+        float viewAspect = vw / vh;
+        float drawW, drawH;
+        if (videoAspect > viewAspect) {
+            drawW = vw;
+            drawH = vw / videoAspect;
+        } else {
+            drawH = vh;
+            drawW = vh * videoAspect;
+        }
+        ImVec2 topLeft(vp->Pos.x + (vw - drawW) * 0.5f, vp->Pos.y + (vh - drawH) * 0.5f);
+        ImVec2 bottomRight(topLeft.x + drawW, topLeft.y + drawH);
+
+        unsigned char alpha =
+            (unsigned char)(std::clamp(engine->jupiterVideoOpacity, 0.f, 1.f) * 255.f);
+        dl->AddImage((ImTextureID)(intptr_t)jupiterVideoTexture,
+                    topLeft,
+                    bottomRight,
+                    ImVec2(0, 0),
+                    ImVec2(1, 1),
+                    IM_COL32(255, 255, 255, alpha));
+        ImGui::End();
+
+        ImGui::SetNextWindowPos(
+            ImVec2(vp->Pos.x + vp->Size.x * 0.1f, vp->Pos.y + vp->Size.y * 0.82f));
+        ImGui::SetNextWindowSize(ImVec2(vp->Size.x * 0.8f, vp->Size.y * 0.14f));
+        ImGui::SetNextWindowBgAlpha(0.85f);
+        ImGui::Begin("##jupiterVideoClickBar",
+                     nullptr,
+                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar);
+        drawJupiterClickBar(theme, anim, engine, engine->jupiterClickBarWindow, false, 60.f);
+        ImGui::End();
+    }
+
     void MenuInterface::drawTitleBar() {
         auto* engine = GucciEngine::get();
         ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -5553,6 +5670,40 @@ namespace gucci {
         ImGui::PopStyleColor();
     }
 
+    // Shared display for a ClickIndicatorScore -- used by both the Jupiter
+    // and Trainer Click Trainer pages. Scoring itself happens event-driven,
+    // off the real handleButton hook (hook_gjbasegamelayer.cpp), not polled
+    // here; this function only renders whatever's already been recorded.
+    static void drawClickScorePanel(const ClickIndicatorScore& score) {
+        if (!score.hasLastReading) {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.f));
+            ImGui::TextWrapped("Waiting for your first click...");
+            ImGui::PopStyleColor();
+            return;
+        }
+        int f = score.lastDeltaFrames;
+        const char* verdict = f == 0 ? "on time" : (f < 0 ? "early" : "late");
+        ImVec4 lastCol = f == 0 ? ImVec4(0.3f, 0.9f, 0.4f, 1.f)
+                                : (std::abs(f) <= 3 ? ImVec4(0.95f, 0.85f, 0.3f, 1.f)
+                                                    : ImVec4(0.95f, 0.35f, 0.35f, 1.f));
+        ImGui::PushStyleColor(ImGuiCol_Text, lastCol);
+        ImGui::Text(
+            "Last click: %d frame%s %s", std::abs(f), std::abs(f) == 1 ? "" : "s", verdict);
+        ImGui::PopStyleColor();
+
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.9f, 0.4f, 1.f));
+        ImGui::Text("Perfect: %d", score.perfect);
+        ImGui::PopStyleColor();
+        ImGui::SameLine();
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.85f, 0.3f, 1.f));
+        ImGui::Text("OK: %d", score.ok);
+        ImGui::PopStyleColor();
+        ImGui::SameLine();
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.35f, 0.35f, 1.f));
+        ImGui::Text("Miss: %d", score.miss);
+        ImGui::PopStyleColor();
+    }
+
     static void drawJupiterClickBar(ThemeEngine& theme,
                                     AnimationState& anim,
                                     GucciEngine* engine,
@@ -5675,7 +5826,37 @@ namespace gucci {
         ImGui::Dummy(ImVec2(0, 4));
     }
 
+    static geode::Task<std::optional<std::filesystem::path>> pickJupiterVideoTask() {
+        auto pickResult = co_await geode::utils::file::pick(
+            geode::utils::file::PickMode::OpenFile,
+            geode::utils::file::FilePickOptions{
+                std::nullopt, {{"Video Files", {"mp4", "mov", "mkv", "webm", "avi"}}}});
+        if (pickResult.isErr())
+            co_return std::nullopt;
+        co_return pickResult.unwrap();
+    }
+    // Must stay a stored static, never an unstored temporary -- see
+    // s_fwAssetFilesTask's comment elsewhere in this file for why (real
+    // crash otherwise).
+    static geode::Task<std::optional<std::filesystem::path>> s_jupiterVideoPickTask;
+    static void pickJupiterVideo() {
+        s_jupiterVideoPickTask = pickJupiterVideoTask();
+    }
+    static void pollJupiterVideoPickTask() {
+        if (s_jupiterVideoPickTask.isFinished()) {
+            auto* result = s_jupiterVideoPickTask.getFinishedValue();
+            if (result && result->has_value()) {
+                auto* gb = GucciEngine::get();
+                gb->jupiterVideoPath = (*result)->string();
+                Mod::get()->setSavedValue("jupiter_video_path", gb->jupiterVideoPath);
+                Notification::create("Video selected", NotificationIcon::Success)->show();
+            }
+            s_jupiterVideoPickTask = {};
+        }
+    }
+
     void MenuInterface::drawJupiterClickTrainerPage() {
+        pollJupiterVideoPickTask();
         auto* engine = GucciEngine::get();
         auto* mod = Mod::get();
         engine->jupiterClickBarPageVisible = true;
@@ -5718,6 +5899,47 @@ namespace gucci {
         }
 
         ImGui::Dummy(ImVec2(0, 18));
+        Widgets::SectionHeader("Video Mode", theme);
+        ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+        ImGui::TextWrapped(
+            "A review overlay, not a live one -- no level needs to be open. Plays your own "
+            "footage full-screen, riding this exact same click bar clock, with the bar itself "
+            "overlaid near the bottom.");
+        ImGui::PopStyleColor();
+        if (Widgets::StyledButton("Choose Video File", ImVec2(180, 26), theme, anim))
+            pickJupiterVideo();
+        if (!engine->jupiterVideoPath.empty()) {
+            ImGui::SameLine();
+            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+            ImGui::TextWrapped(
+                "%s", std::filesystem::path(engine->jupiterVideoPath).filename().string().c_str());
+            ImGui::PopStyleColor();
+        }
+        bool videoPathEmpty = engine->jupiterVideoPath.empty();
+        ImGui::BeginDisabled(videoPathEmpty);
+        bool videoModeOn = engine->jupiterVideoModeEnabled;
+        if (Widgets::ToggleSwitch("Enable Video Mode", &videoModeOn, theme, anim))
+            engine->jupiterVideoModeEnabled = videoModeOn;
+        ImGui::EndDisabled();
+        if (videoPathEmpty) {
+            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+            ImGui::TextWrapped("Choose a video file first.");
+            ImGui::PopStyleColor();
+        }
+        if (Widgets::StyledSliderFloat(
+                "Opacity", &engine->jupiterVideoOpacity, 0.f, 1.f, theme))
+            mod->setSavedValue("jupiter_video_opacity", (double)engine->jupiterVideoOpacity);
+        if (Widgets::StyledSliderFloat(
+                "Alignment Offset (sec)", &engine->jupiterVideoOffsetSec, -10.f, 10.f, theme))
+            mod->setSavedValue("jupiter_video_offset_sec", (double)engine->jupiterVideoOffsetSec);
+        ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+        ImGui::TextWrapped(
+            "Debug slider -- nudge until the first click on the bar lines up with the first "
+            "click in the video, then leave it. Positive delays the video, negative brings it "
+            "earlier.");
+        ImGui::PopStyleColor();
+
+        ImGui::Dummy(ImVec2(0, 18));
         Widgets::SectionHeader("Click Deviation", theme);
         {
             auto* pl = PlayLayer::get();
@@ -5732,42 +5954,7 @@ namespace gucci {
                     "against the macro's.");
                 ImGui::PopStyleColor();
             } else {
-                bool holding = (bool)pl->m_player1->m_holdingButtons[1];
-                if (holding && !engine->jupiterDeviationHolding) {
-                    double tps = engine->jupiterMacro.clickBarTps > 0.0
-                                     ? engine->jupiterMacro.clickBarTps
-                                     : 240.0;
-                    double nowSec = (double)engine->updater.getFrame() / tps;
-                    double bestDelta = 1e9;
-                    for (auto const& iv : engine->jupiterMacro.clickIntervalsSec) {
-                        double d = iv.first - nowSec;
-                        if (std::fabs(d) < std::fabs(bestDelta))
-                            bestDelta = d;
-                    }
-                    if (bestDelta < 1e8) {
-                        engine->jupiterLastDeviationFrames = -(int)std::lround(bestDelta * tps);
-                        engine->jupiterHasDeviationReading = true;
-                    }
-                }
-                engine->jupiterDeviationHolding = holding;
-
-                if (!engine->jupiterHasDeviationReading) {
-                    ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-                    ImGui::TextWrapped("Waiting for your first click...");
-                    ImGui::PopStyleColor();
-                } else {
-                    int f = engine->jupiterLastDeviationFrames;
-                    const char* verdict = f == 0 ? "on time" : (f < 0 ? "early" : "late");
-                    ImVec4 col = f == 0 ? ImVec4(0.3f, 0.9f, 0.4f, 1.f)
-                                        : (std::abs(f) <= 3 ? ImVec4(0.95f, 0.85f, 0.3f, 1.f)
-                                                            : ImVec4(0.95f, 0.35f, 0.35f, 1.f));
-                    ImGui::PushStyleColor(ImGuiCol_Text, col);
-                    ImGui::Text("Last click: %d frame%s %s",
-                                std::abs(f),
-                                std::abs(f) == 1 ? "" : "s",
-                                verdict);
-                    ImGui::PopStyleColor();
-                }
+                drawClickScorePanel(engine->jupiterClickScore);
             }
         }
 
@@ -6404,42 +6591,7 @@ namespace gucci {
                     "against the macro's.");
                 ImGui::PopStyleColor();
             } else {
-                bool holding = (bool)pl->m_player1->m_holdingButtons[1];
-                if (holding && !engine->trainerDeviationHolding) {
-                    double tps = engine->trainerMacro.clickBarTps > 0.0
-                                     ? engine->trainerMacro.clickBarTps
-                                     : 240.0;
-                    double nowSec = (double)engine->updater.getFrame() / tps;
-                    double bestDelta = 1e9;
-                    for (auto const& iv : engine->trainerMacro.clickIntervalsSec) {
-                        double d = iv.first - nowSec;
-                        if (std::fabs(d) < std::fabs(bestDelta))
-                            bestDelta = d;
-                    }
-                    if (bestDelta < 1e8) {
-                        engine->trainerLastDeviationFrames = -(int)std::lround(bestDelta * tps);
-                        engine->trainerHasDeviationReading = true;
-                    }
-                }
-                engine->trainerDeviationHolding = holding;
-
-                if (!engine->trainerHasDeviationReading) {
-                    ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-                    ImGui::TextWrapped("Waiting for your first click...");
-                    ImGui::PopStyleColor();
-                } else {
-                    int f = engine->trainerLastDeviationFrames;
-                    const char* verdict = f == 0 ? "on time" : (f < 0 ? "early" : "late");
-                    ImVec4 col = f == 0 ? ImVec4(0.3f, 0.9f, 0.4f, 1.f)
-                                        : (std::abs(f) <= 3 ? ImVec4(0.95f, 0.85f, 0.3f, 1.f)
-                                                            : ImVec4(0.95f, 0.35f, 0.35f, 1.f));
-                    ImGui::PushStyleColor(ImGuiCol_Text, col);
-                    ImGui::Text("Last click: %d frame%s %s",
-                                std::abs(f),
-                                std::abs(f) == 1 ? "" : "s",
-                                verdict);
-                    ImGui::PopStyleColor();
-                }
+                drawClickScorePanel(engine->trainerClickScore);
             }
         }
 
@@ -7161,6 +7313,9 @@ namespace gucci {
         mod->setSavedValue("jupiter_clickbar_enabled", eng->jupiterClickBarEnabled);
         mod->setSavedValue("jupiter_clickbar_window", (double)eng->jupiterClickBarWindow);
         mod->setSavedValue("jupiter_clickbar_loop", eng->jupiterClickBarLoop);
+        mod->setSavedValue("jupiter_video_path", eng->jupiterVideoPath);
+        mod->setSavedValue("jupiter_video_offset_sec", (double)eng->jupiterVideoOffsetSec);
+        mod->setSavedValue("jupiter_video_opacity", (double)eng->jupiterVideoOpacity);
         mod->setSavedValue("jupiter_ghost_enabled", eng->jupiterGhostEnabled);
         mod->setSavedValue("jupiter_bestghost_enabled", eng->jupiterBestGhostEnabled);
         mod->setSavedValue("jupiter_music_enabled", eng->jupiterMusicEnabled);
@@ -7387,6 +7542,10 @@ namespace gucci {
         eng->jupiterSegmentsRaw = mod->getSavedValue<std::string>("jupiter_segments", "");
         eng->jupiterClickBarEnabled = mod->getSavedValue<bool>("jupiter_clickbar_enabled", true);
         eng->jupiterClickBarWindow = mod->getSavedValue<float>("jupiter_clickbar_window", 2.f);
+        eng->jupiterVideoPath = mod->getSavedValue<std::string>("jupiter_video_path", "");
+        eng->jupiterVideoOffsetSec =
+            mod->getSavedValue<float>("jupiter_video_offset_sec", 0.f);
+        eng->jupiterVideoOpacity = mod->getSavedValue<float>("jupiter_video_opacity", 0.6f);
         eng->jupiterClickBarLoop = mod->getSavedValue<bool>("jupiter_clickbar_loop", false);
         eng->jupiterGhostEnabled = mod->getSavedValue<bool>("jupiter_ghost_enabled", true);
         eng->jupiterBestGhostEnabled = mod->getSavedValue<bool>("jupiter_bestghost_enabled", false);
@@ -7613,6 +7772,7 @@ namespace gucci {
         }
         drawRenderCompletePopup();
         drawCustomThemeEditorPopup();
+        drawJupiterVideoOverlay();
     }
 
     void MenuInterface::drawRenderCompletePopup() {

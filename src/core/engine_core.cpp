@@ -9,6 +9,7 @@
 #include <Geode/binding/PauseLayer.hpp>
 #include <Geode/binding/FMODAudioEngine.hpp>
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <algorithm>
@@ -478,6 +479,47 @@ namespace gucci {
             out.clickIntervalsSec.size(),
             out.pathSamples.size(),
             out.levelName);
+    }
+
+    std::optional<int> GucciEngine::scoreRealClick(const std::vector<std::pair<double, double>>& intervals,
+                                                   ClickIndicatorScore& score,
+                                                   double clickTimeSec,
+                                                   bool isPress,
+                                                   double tps) {
+        if (score.answeredPress.size() != intervals.size())
+            score.reset(intervals.size());
+
+        auto& answered = isPress ? score.answeredPress : score.answeredRelease;
+        double best = 0.0;
+        int bestIdx = -1;
+        for (size_t i = 0; i < intervals.size(); i++) {
+            if (answered[i])
+                continue;
+            double target = isPress ? intervals[i].first : intervals[i].second;
+            double d = clickTimeSec - target;
+            if (bestIdx < 0 || std::fabs(d) < std::fabs(best)) {
+                best = d;
+                bestIdx = (int)i;
+            }
+        }
+        if (bestIdx < 0) {
+            score.miss++;
+            return std::nullopt;
+        }
+        answered[bestIdx] = true;
+
+        double deltaMs = best * 1000.0;
+        if (std::fabs(deltaMs) <= clickIndicatorPerfectMs)
+            score.perfect++;
+        else if (std::fabs(deltaMs) <= clickIndicatorOkMs)
+            score.ok++;
+        else
+            score.miss++;
+
+        int deltaFrames = (int)std::lround(best * tps);
+        score.lastDeltaFrames = deltaFrames;
+        score.hasLastReading = true;
+        return deltaFrames;
     }
 
     bool GucciEngine::loadTrainerMacro(const std::string& stem) {
