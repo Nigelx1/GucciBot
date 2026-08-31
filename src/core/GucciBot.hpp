@@ -1,20 +1,19 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-08-27-k (-j's on-screen debug text showed NOTHING NEW -- exact same dark-red+blue "      \
-    "screen, no text at all. Confirmed with Nigel: that blue region is the JMF tab's own "         \
-    "PRE-EXISTING full-viewport reskin (already there BEFORE toggling Video Mode), and disabling " \
-    "MegaHack changed nothing either -- rules out a cross-mod render conflict. Together this "     \
-    "means drawJupiterVideoOverlay() likely isn't drawing anything at all, not even the debug "    \
-    "text added in -j, which would only happen if it's returning at its very first line "          \
-    "(jupiterVideoModeEnabled false) -- but on-screen rendering itself was exactly what was in "   \
-    "question, so instead of trusting that inference, added a genuinely rendering-independent "    \
-    "diagnostic: a dedicated guccibot_videomode.log (same pattern as guccibot_calcdeath.log) that " \
-    "logs on every toggle click (with the new value) and roughly once a second from inside "       \
-    "drawJupiterVideoOverlay() itself (with the current jupiterVideoModeEnabled value) -- this "   \
-    "settles definitively whether the function is even being reached and what value it sees, "     \
-    "independent of whatever's wrong with on-screen rendering. Compiles clean. Purely "            \
-    "diagnostic, no behavior change -- need the log file after Nigel toggles it a couple times.)"
+    "2026-08-27-l (-k's toggle-state log came back completely clean and definitive: "              \
+    "jupiterVideoModeEnabled genuinely goes true right after the click and STAYS true every "      \
+    "second after -- so the early-return theory is dead, the function really is running with the " \
+    "flag correctly set. Whatever's wrong is deeper: decoder open, frame decode, texture upload, " \
+    "or the ImGui window/draw calls themselves. On-screen debug text still isn't trustworthy "     \
+    "either way (could be a real bug, could be the text itself silently not rendering for an "     \
+    "unrelated reason, e.g. no font pushed) -- so guccibot_videomode.log now covers the WHOLE "    \
+    "path, not just the top-level toggle: logs the (re)open attempt result, then once a second "   \
+    "logs decoder.isOpen(), ImGui::Begin()'s own return value (whether ImGui itself thinks the "   \
+    "overlay window is visible this frame), the viewport pos/size it's drawing against, the "      \
+    "requested playback timestamp, whether getFrameAt succeeded, the decoded byte count, and the " \
+    "resulting texture id/width/height. Compiles clean. Purely diagnostic, no behavior change -- " \
+    "need this log after another Video Mode toggle before writing any more fix code.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
