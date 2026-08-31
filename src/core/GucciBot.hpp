@@ -1,14 +1,14 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-08-27-c (Bass Shake's Flicker Intensity slider now persists across sessions -- it was "  \
-    "a pure in-memory BigBrrrManager field with no save/load anywhere, always resetting to 0.5 on " \
-    "every launch. Saved inline on slider change ('bigbrrr_flicker_intensity', matching every "    \
-    "other per-tab slider's established pattern) and restored in loadSettings(). Small, isolated " \
-    "fix -- compiles clean, NOT yet confirmed in-game. Found in passing, NOT touched: the Bass "   \
-    "Shake toggle itself and the master BIG BRRRR on/off toggle have the exact same gap (nothing " \
-    "saves BigBrrrManager::enabled or shakeEnabled either) -- flagged for Nigel, not fixed "        \
-    "unprompted since this was scoped as a one-slider patch.)"
+    "2026-08-27-e (Reverted -d's Silicate .slc v2/v3 import. Nigel's explicit scope call after "   \
+    "seeing it verified working: the Click Indicators macro-import piece stays native-BRR-family "  \
+    "only (.brrr + the theme-tagged variants) plus whatever's already pre-existing (.gdr/.xd's "   \
+    "hand-rolled GDR-1 parser, untouched, predates this whole effort) -- no .slc, no .gdr2. Clean " \
+    "git revert of 8e0c492, not a hand-deletion, so the paper trail stays honest: it was built, "  \
+    "tested against a real macro (byte-for-byte hand-verified against the raw file, not just "     \
+    "'it compiled'), and THEN explicitly scoped out, not abandoned half-working. "                 \
+    "Compiles clean.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
