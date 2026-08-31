@@ -1,24 +1,23 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-08-27-g (The real JMF showcase video now ships bundled as a mod resource "               \
-    "(resources/jmf_showcase.mp4, declared in mod.json) -- Video Mode works with zero setup, no "  \
-    "file picker needed unless you want a different video. Corrects -f's own first attempt, "      \
-    "which built a manual 'drop a file in a known folder' workaround (mirroring Big Brrr's "       \
-    "'brrr' folder) specifically to dodge GitHub's 100MB per-file limit on the git-tracked "        \
-    ".geode -- backwards: Nigel's actual point in killing that tracking was to REMOVE the size "   \
-    "ceiling so everything COULD be bundled for real, not to avoid bundling. Packaged .geode is "  \
-    "now 131MB, confirming untracking it from git was exactly the right call -- the bundled "      \
-    "video source file itself (62MB) stays well under GitHub's 100MB limit and is tracked "        \
-    "normally. -f's own summary is still accurate and worth keeping in mind: (1) click scoring "   \
-    "is now event-driven with correct nearest-unanswered-press matching, real running Perfect/"    \
-    "OK/Miss tally, for both Jupiter and Trainer pages. (2) Video Mode's decode+seek core is "     \
-    "VERIFIED against this exact real video via a standalone test harness (every timestamp "       \
-    "landed exactly on target across forward playback/backward seek/forward jump, byte-identical " \
-    "output re-decoding the same timestamp two different ways) -- the texture upload and "         \
-    "full-screen rendering are still genuinely UNTESTED in-game, can't be verified outside the "   \
-    "actual running process. Compiles clean, verified the video actually lands in the packaged "   \
-    ".geode via unzip -l, same habit as every other bundled resource. NOT yet confirmed in-game.)"
+    "2026-08-27-h (First real in-game feedback on Video Mode from Nigel: 'Choose a Different "     \
+    "Video' crashes, and the bundled default shows nothing. Found and fixed a real, well-"         \
+    "evidenced bug behind the 'nothing shows' half: read the actual gd-imgui-cocos backend "        \
+    "source (build/_deps/gd-imgui-cocos-src/src/backend.cpp) rather than guess, confirmed it "     \
+    "draws every texture via ccGLBindTexture2D -- cocos2d's STATE-CACHED bind, which skips the "   \
+    "real glBindTexture call if it thinks the requested texture is already bound. "                \
+    "uploadOrUpdateRgbaTexture's raw glGenTextures/glBindTexture/glTexImage2D calls are "          \
+    "completely invisible to that cache, so cocos2d could go on trusting a stale 'currently "      \
+    "bound' texture ID and never actually bind mine. Fixed by calling "                            \
+    "cocos2d::ccGLInvalidateStateCache() right after the raw texture calls -- confirmed via "      \
+    "cocos2d's own ccGLStateCache.h, which documents that exact function for this exact "          \
+    "situation. Real, reasoned fix, not a guess -- but NOT yet confirmed to be the whole story; " \
+    "the crash on 'Choose a Different Video' is still unexplained, the file-picker code looks "    \
+    "structurally identical to the already-working trainer-music-import precedent and nothing "   \
+    "jumped out from static reading, so didn't guess-fix it -- need real crash evidence from "     \
+    "Nigel (a crash dialog, a log, anything Geode/GD shows) before touching that one. Compiles "   \
+    "clean. NOT yet confirmed in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

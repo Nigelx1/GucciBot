@@ -1425,6 +1425,16 @@ namespace gucci {
             glBindTexture(GL_TEXTURE_2D, tex);
             glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
         }
+        // imgui-cocos's own renderer draws via ccGLBindTexture2D, cocos2d's
+        // STATE-CACHED bind (skips the real glBindTexture call if it thinks
+        // the requested texture is already bound -- see
+        // build/_deps/gd-imgui-cocos-src/src/backend.cpp). The raw
+        // glBindTexture calls above are invisible to that cache, so without
+        // this, cocos2d can go on trusting a stale "currently bound" texture
+        // ID and skip binding mine (or anyone else's) for real. Confirmed by
+        // reading cocos2d's own ccGLStateCache.h -- ccGLInvalidateStateCache
+        // is documented for exactly this situation.
+        cocos2d::ccGLInvalidateStateCache();
         return tex;
     }
 
