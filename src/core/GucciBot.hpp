@@ -1,14 +1,26 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-08-27-c (Bass Shake's Flicker Intensity slider now persists across sessions -- it was "  \
-    "a pure in-memory BigBrrrManager field with no save/load anywhere, always resetting to 0.5 on " \
-    "every launch. Saved inline on slider change ('bigbrrr_flicker_intensity', matching every "    \
-    "other per-tab slider's established pattern) and restored in loadSettings(). Small, isolated " \
-    "fix -- compiles clean, NOT yet confirmed in-game. Found in passing, NOT touched: the Bass "   \
-    "Shake toggle itself and the master BIG BRRRR on/off toggle have the exact same gap (nothing " \
-    "saves BigBrrrManager::enabled or shakeEnabled either) -- flagged for Nigel, not fixed "        \
-    "unprompted since this was scoped as a one-slider patch.)"
+    "2026-08-27-d (First slice of the Click Indicators port (Nigel's ask, comparing against "      \
+    "github.com/Bogdaner09/mod): Silicate .slc v2 ('SILL') and v3 ('SLC3RPLY') macro import. New " \
+    "core/slc_format.{hpp,cpp} -- a clean-room binary reader (no code copied from either "         \
+    "unlicensed source repo) built directly from the real slc library's actual source "            \
+    "(git.silicate.dev/silicate/slc, formats/v2.hpp + v3/*.hpp), not guessed at or taken from a "  \
+    "paraphrase. Handles v2's blob-table+packed-input layout and v3's atom/section stream "        \
+    "including the swift same-frame-press-release optimization and the Repeat section's "         \
+    "cluster-relative-delta re-application on each repetition -- both subtle enough to get wrong " \
+    "silently. Wired into the EXISTING convertToBRR() one-time-conversion pattern (.slc joins "    \
+    ".gdr/.xd/.json/.brr in incompatibleMacros, surfaces in the same generic 'Convert to BRR' "    \
+    "UI, no new UI code needed) rather than building a separate foreign-format live-reader, so "   \
+    "an imported Silicate macro gets Calculate/theme-tagging/everything else for free once "       \
+    "converted. Compiles clean. HONESTLY UNTESTED against any real .slc file -- this is exactly "  \
+    "the kind of bit-packing logic that can compile clean while still being subtly wrong (an "     \
+    "off-by-one in a shift, a swapped byte range), and no amount of careful reading substitutes "  \
+    "for a real file. Need an actual Silicate-recorded .slc from Nigel or Juice before trusting "  \
+    "this at all. Still to come: .gdr2 (real binary GDR v2, genuinely new work -- the existing "   \
+    "GDReplayFormat dependency is pinned to the OLD gdr1/msgpack schema despite the name, and "    \
+    "isn't used anywhere in our own code yet), level-matching logic, then the actual in-level "    \
+    "indicator/scoring build.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

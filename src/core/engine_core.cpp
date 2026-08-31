@@ -3,6 +3,7 @@
 #include <fmt/format.h>
 #include "core/brr_format.hpp"
 #include "core/gbr6_format.hpp"
+#include "core/slc_format.hpp"
 #include "tools/selfcheck.hpp"
 
 #include <Geode/Geode.hpp>
@@ -922,7 +923,8 @@ namespace gucci {
                     if (!isBuiltin)
                         customThemeMacrosByExt[bare].insert(stem);
                 }
-            } else if (ext == ".gdr" || ext == ".xd" || ext == ".json" || ext == ".brr") {
+            } else if (ext == ".gdr" || ext == ".xd" || ext == ".json" || ext == ".brr" ||
+                      ext == ".slc") {
                 incompatibleMacros.insert(stem);
             }
         }
@@ -1671,6 +1673,33 @@ namespace gucci {
                     "[GucciBot] Converted '{}' (GDR binary/msgpack, {} inputs) to native format",
                     name,
                     out.inputs.size());
+                return true;
+            }
+        }
+
+        {
+            double tps = 240.0;
+            if (auto slcInputs = parseSlcReplay(bytes, &tps)) {
+                BRRMacro out;
+                out.name = name;
+                out.framerate = tps;
+                for (auto& si : *slcInputs) {
+                    BRRInput bi;
+                    bi.tick = static_cast<int32_t>(std::min<uint64_t>(si.frame, INT32_MAX));
+                    bi.actionType = si.button;
+                    bi.setPlayer2(si.player2);
+                    bi.setPressed(si.holding);
+                    out.inputs.push_back(bi);
+                }
+                std::sort(
+                    out.inputs.begin(), out.inputs.end(), [](const BRRInput& x, const BRRInput& y) {
+                        return x.tick < y.tick;
+                    });
+                out.persist();
+                reloadMacroList();
+                log::info("[GucciBot] Converted '{}' (Silicate .slc, {} inputs) to native format",
+                          name,
+                          out.inputs.size());
                 return true;
             }
         }
