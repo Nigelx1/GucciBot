@@ -51,7 +51,15 @@ namespace gucci {
         // manually scrubbing/looping a short clip, not verified for anything
         // faster or longer. Returns false, leaving `outRgba` unchanged, if
         // nothing could be decoded at that position (e.g. past EOF or before
-        // the file's first frame).
+        // the file's first frame) -- ALSO returns false, by design, if
+        // `seconds` is still within about one frame's duration of what's
+        // already decoded (see kFrameTolerance in the .cpp): the caller
+        // should keep showing the current frame rather than get handed a
+        // "new" one, since without this a static/near-static `seconds` (e.g.
+        // Video Mode sitting open with no macro actually playing, so its
+        // driving clock never advances) made this oscillate between two
+        // adjacent frames on alternating calls -- a real, confirmed flicker
+        // bug, not a hypothetical one (2026-08-31).
         bool getFrameAt(double seconds, std::vector<uint8_t>& outRgba);
 
     private:

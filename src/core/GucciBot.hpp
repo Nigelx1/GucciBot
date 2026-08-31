@@ -1,18 +1,19 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-08-31-b (-a still showed nothing despite every logged value being correct -- found the "  \
-    "real cause by reading ImGui's own source, not guessing: the video overlay window set "         \
-    "NoBringToFrontOnFocus, which Begin() (imgui.cpp) handles by push_front-ing it into g.Windows "  \
-    "instead of push_back -- it paints at the very BACK of the whole z-stack, permanently, from "    \
-    "creation. The main Jupiter-tab window renders full-viewport at alpha=1.0 and is the window "    \
-    "you click to reach the toggle in the first place, so it was always winning z-order and "        \
-    "painting over the video/clickbar windows completely -- unrelated to texture correctness, "      \
-    "which is why 3 straight builds (-h's cache invalidate, -a's CCTexture2D rewrite) never "        \
-    "mattered. Fix: removed that flag from the video window, and both it and the clickbar window "   \
-    "now call SetWindowFocus() every frame to force themselves back to front, since a later click "  \
-    "in the main GUI (e.g. dragging Opacity/Offset) would otherwise reclaim front z-order. Compiles "\
-    "clean. NOT yet confirmed in-game.)"
+    "2026-08-31-c (-b WORKED -- Nigel confirmed the video actually shows now, first real "           \
+    "confirmation this whole Video Mode saga. Two real follow-up bugs from that same test: (1) "     \
+    "flicker -- traced to guccibot_videomode.log showing requestedT stuck at 0.000 the whole "       \
+    "session (no macro playing, jupiterClickBarPosSec never advances) combined with getFrameAt's "   \
+    "old strict seek check having zero tolerance, so it oscillated between two adjacent real "        \
+    "frames every other call forever -- both decoded/uploaded fine each time, which is why the log " \
+    "never showed anything wrong. Fixed with a ~1-frame tolerance window so a static/near-static "   \
+    "requested time just keeps showing the current frame instead of fighting itself. (2) no way to " \
+    "back out -- a real regression from -b itself: the only 'Enable Video Mode' toggle lives in the "\
+    "main GUI window, which -b's own fix now correctly buries behind the video/clickbar overlays, "  \
+    "and at opacity 1.0 it's invisible with nothing to click. Added a dedicated always-on-top "       \
+    "'Exit Video Mode' button so this can't happen regardless of opacity/layout. Compiles clean. "    \
+    "NOT yet confirmed in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

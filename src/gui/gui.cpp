@@ -1700,6 +1700,28 @@ namespace gucci {
         ImGui::SetWindowFocus();
         drawJupiterClickBar(theme, anim, engine, engine->jupiterClickBarWindow, false, 60.f);
         ImGui::End();
+
+        // Real regression this same z-order fix introduced (Nigel, same
+        // session: "i cant back out of it in any way i think"): the ONLY
+        // control that turns Video Mode off is the "Enable Video Mode"
+        // toggle inside the main GUI window -- which is now BEHIND these two
+        // overlay windows by design (that's the whole fix above), and the
+        // video draws at opacity up to 1.0, so the toggle can be completely
+        // invisible with no way to tell it's even there to click blind on.
+        // A dedicated, always-on-top, always-reachable exit control fixes
+        // this regardless of opacity/theme/window layout underneath, rather
+        // than relying on the user finding a hidden button.
+        ImGui::SetNextWindowPos(ImVec2(vp->Pos.x + vp->Size.x - 190.f, vp->Pos.y + 16.f));
+        ImGui::SetNextWindowBgAlpha(0.85f);
+        ImGui::Begin("##jupiterVideoExit",
+                     nullptr,
+                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize);
+        ImGui::SetWindowFocus();
+        if (ImGui::Button("Exit Video Mode", ImVec2(170.f, 0.f))) {
+            engine->jupiterVideoModeEnabled = false;
+        }
+        ImGui::End();
     }
 
     void MenuInterface::drawTitleBar() {

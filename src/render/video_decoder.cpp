@@ -187,7 +187,29 @@ namespace gucci {
             return false;
         auto* ff = SLRenderer::get()->ff;
 
-        bool needSeek = m_lastDecodedSec < 0.0 || seconds < m_lastDecodedSec ||
+        // Real, traced bug (2026-08-31): the old strict `seconds <
+        // m_lastDecodedSec` check had no tolerance, but "decode forward"
+        // below always lands on whatever the NEXT frame's actual pts happens
+        // to be -- essentially never exactly equal to the requested
+        // `seconds`. With a static or near-static requested time (Video Mode
+        // open but nothing actually advancing jupiterClickBarPosSec), that
+        // made this function oscillate call to call: decode-forward lands
+        // one frame past the target -> the following call sees `seconds <
+        // m_lastDecodedSec` -> seeks backward to the target frame -> the
+        // call after THAT decodes forward past it again -> repeat forever,
+        // alternating between two adjacent real frames every other call.
+        // Both frames decode and upload successfully every time -- that's
+        // why every CPU-side log line looked clean while Nigel still saw a
+        // real flicker. Fix: treat "still within about one frame's duration
+        // of what's already decoded" as "nothing to do" in both directions,
+        // rather than only guarding the forward-jump case.
+        constexpr double kFrameTolerance = 0.06; // ~1 frame at >=16fps, with margin
+        if (m_lastDecodedSec >= 0.0 && seconds >= m_lastDecodedSec - kFrameTolerance &&
+            seconds <= m_lastDecodedSec + kFrameTolerance) {
+            return false; // current frame is still the right one to show
+        }
+
+        bool needSeek = m_lastDecodedSec < 0.0 || seconds < m_lastDecodedSec - kFrameTolerance ||
                        (seconds - m_lastDecodedSec) > 2.0;
         if (needSeek) {
             int64_t targetTs = (int64_t)(seconds / m_timeBase);
