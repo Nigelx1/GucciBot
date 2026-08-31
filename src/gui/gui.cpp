@@ -1473,33 +1473,26 @@ namespace gucci {
                                        ? engine->jupiterVideoPath
                                        : getBundledJmfVideoPath().string();
 
+        // Debug Mode's own precedent (Frame Window analyzer) is the model
+        // here: this is the third build in a row where Video Mode's
+        // rendering has been wrong in a way static reading alone hasn't
+        // caught, so instead of shipping a fourth guess, this now always
+        // draws real on-screen diagnostic state -- the next screenshot
+        // should say exactly what's happening rather than needing another
+        // round of guessing.
+        bool openedThisFrame = false;
+        bool openFailed = false;
         if (jupiterVideoLoadedPath != effectivePath) {
             jupiterVideoDecoder.close();
             if (jupiterVideoDecoder.open(effectivePath)) {
                 jupiterVideoLoadedPath = effectivePath;
+                openedThisFrame = true;
             } else {
                 jupiterVideoLoadedPath.clear();
                 engine->jupiterVideoModeEnabled = false; // don't retry a broken path every frame
-                return;
+                openFailed = true;
             }
         }
-        if (!jupiterVideoDecoder.isOpen())
-            return;
-
-        double videoTimeSec =
-            engine->jupiterClickBarPosSec + (double)engine->jupiterVideoOffsetSec;
-        videoTimeSec = std::clamp(
-            videoTimeSec, 0.0, std::max(0.0, jupiterVideoDecoder.durationSec() - 0.001));
-
-        std::vector<uint8_t> rgba;
-        if (jupiterVideoDecoder.getFrameAt(videoTimeSec, rgba)) {
-            jupiterVideoTexture = uploadOrUpdateRgbaTexture(
-                jupiterVideoTexture, jupiterVideoDecoder.width(), jupiterVideoDecoder.height(), rgba);
-            jupiterVideoTexW = jupiterVideoDecoder.width();
-            jupiterVideoTexH = jupiterVideoDecoder.height();
-        }
-        if (jupiterVideoTexture == 0)
-            return;
 
         auto* vp = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(vp->Pos);
@@ -1512,6 +1505,57 @@ namespace gucci {
                          ImGuiWindowFlags_NoBringToFrontOnFocus |
                          ImGuiWindowFlags_NoFocusOnAppearing);
         ImDrawList* dl = ImGui::GetWindowDrawList();
+
+        if (openFailed) {
+            dl->AddText(ImVec2(vp->Pos.x + 20, vp->Pos.y + 20),
+                       IM_COL32(255, 80, 80, 255),
+                       ("VIDEO MODE DEBUG: failed to open: " + effectivePath).c_str());
+            ImGui::End();
+            return;
+        }
+        if (!jupiterVideoDecoder.isOpen()) {
+            dl->AddText(ImVec2(vp->Pos.x + 20, vp->Pos.y + 20),
+                       IM_COL32(255, 80, 80, 255),
+                       "VIDEO MODE DEBUG: decoder not open");
+            ImGui::End();
+            return;
+        }
+
+        double videoTimeSec =
+            engine->jupiterClickBarPosSec + (double)engine->jupiterVideoOffsetSec;
+        videoTimeSec = std::clamp(
+            videoTimeSec, 0.0, std::max(0.0, jupiterVideoDecoder.durationSec() - 0.001));
+
+        std::vector<uint8_t> rgba;
+        bool decodedThisFrame = jupiterVideoDecoder.getFrameAt(videoTimeSec, rgba);
+        if (decodedThisFrame) {
+            jupiterVideoTexture = uploadOrUpdateRgbaTexture(
+                jupiterVideoTexture, jupiterVideoDecoder.width(), jupiterVideoDecoder.height(), rgba);
+            jupiterVideoTexW = jupiterVideoDecoder.width();
+            jupiterVideoTexH = jupiterVideoDecoder.height();
+        }
+
+        char debugLine[512];
+        snprintf(debugLine,
+                sizeof(debugLine),
+                "VIDEO MODE DEBUG: path=%s opened=%d decoder.isOpen=%d requestedT=%.3f "
+                "decodeOk=%d tex=%u texW=%d texH=%d rgbaBytes=%zu",
+                effectivePath.c_str(),
+                (int)openedThisFrame,
+                (int)jupiterVideoDecoder.isOpen(),
+                videoTimeSec,
+                (int)decodedThisFrame,
+                jupiterVideoTexture,
+                jupiterVideoTexW,
+                jupiterVideoTexH,
+                rgba.size());
+        dl->AddText(
+            ImVec2(vp->Pos.x + 20, vp->Pos.y + 20), IM_COL32(80, 255, 120, 255), debugLine);
+
+        if (jupiterVideoTexture == 0) {
+            ImGui::End();
+            return;
+        }
 
         float vw = vp->Size.x, vh = vp->Size.y;
         float videoAspect = (float)jupiterVideoTexW / (float)jupiterVideoTexH;

@@ -1,21 +1,18 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-08-27-i (Nigel sent the real crash log for 'Choose a Different Video' -- a genuine "     \
-    "EXCEPTION_ACCESS_VIOLATION, reading 0xFFFFFFFFFFFFFFFF inside arc::Future::await_suspend, "   \
-    "resuming pickJupiterVideoTask's coroutine (arc-src/src/future/Context.cpp:61, "               \
-    "Future.hpp:100, gui.cpp:5861 -- the exact co_await line). That's the signature of a "         \
-    "resumed coroutine whose frame is already gone. Real mechanism found: pickJupiterVideo() had " \
-    "no guard against a second click re-invoking it while the first pick was still suspended on "  \
-    "the OS file dialog -- reassigning s_jupiterVideoPickTask destroys the still-pending Task "    \
-    "(and the coroutine frame it owns) out from under the callback that's eventually going to "    \
-    "try to resume it. Fixed with an explicit s_jupiterVideoPickPending guard (return early if "   \
-    "already pending; button disabled via ImGui::BeginDisabled while pending too, so it can't "    \
-    "even be double-clicked in the first place). Asked Nigel directly whether he actually "        \
-    "double-clicked it or clicked again before the dialog closed, to confirm this matches what "  \
-    "happened -- reasoned from the real trace, not a blind guess, but still worth that "           \
-    "confirmation. -h's ccGLInvalidateStateCache fix for the 'nothing shows' half is unchanged, "  \
-    "still unconfirmed. Compiles clean. NOT yet confirmed in-game.)"
+    "2026-08-27-j (Nigel's screenshot of 'Video Mode' after -i's fixes: NOT the JMF video, NOT a " \
+    "blank screen -- an unrecognizable dark-red patterned region plus a blue-black diagonal-"      \
+    "gradient region, no click bar visible anywhere. This is the third build in a row where "     \
+    "Video Mode's on-screen result has been wrong in a way static code reading hasn't caught, so " \
+    "instead of shipping a fourth speculative fix, drawJupiterVideoOverlay() now always draws "    \
+    "real on-screen debug text (green if things look normal, red if the decoder failed to open "  \
+    "or isn't open) showing: the effective video path, whether it opened/reopened this frame, "    \
+    "decoder.isOpen(), the requested playback timestamp, whether getFrameAt succeeded this "       \
+    "frame, and the resulting texture's GL id + width + height. Same 'stop guessing, make the "    \
+    "state visible' move as Frame Window's own Debug Mode and the calc-death log earlier in this " \
+    "project. Compiles clean. Purely diagnostic -- no behavior fix in this build, waiting on "     \
+    "Nigel's next screenshot to actually see what's happening before touching anything else.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
