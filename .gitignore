@@ -1,11 +1,11 @@
 build/
 *.geode
-# The built mod itself IS tracked, at this one fixed repo-root path --
-# build_win.bat copies it here after every build, overwritten each time, so
-# Juice (full repo access) always finds the latest build without a Discord
-# upload. Anything else named *.geode (stray copies under build/, etc.) stays
-# ignored.
-!/guccimanefan.guccibot.geode
+# Was tracked at the repo root for a while (2026-08-26 through -27) so Juice
+# could pull the latest build straight from GitHub without a Discord upload.
+# Reverted 2026-08-27 -- the built .geode was already ~71MB with just two
+# Big Brrr tracks bundled in, and kept growing every time a new resource got
+# added; not sustainable against GitHub's 100MB hard per-file limit. Back to
+# Discord for distributing builds.
 .claude/scheduled_tasks.lock
 .freebuff/
 
