@@ -9,6 +9,10 @@
 #include "gui/frame_editor.hpp"
 #include "render/video_decoder.hpp"
 
+namespace cocos2d {
+    class CCTexture2D;
+}
+
 namespace gucci {
 
     struct ThemePreset {
@@ -200,13 +204,19 @@ namespace gucci {
         };
         std::vector<SnowFlake> snowFlakes;
 
-        // Video Mode runtime state -- the decoder and GL texture are pure
+        // Video Mode runtime state -- the decoder and texture are pure
         // runtime objects, not saved settings (those live on GucciEngine
         // alongside the click bar's own fields). jupiterVideoLoadedPath
         // tracks what's actually currently open so the decoder only gets
         // (re)opened when the saved path changes, not every frame.
+        //
+        // jupiterVideoTexture is a cocos2d::CCTexture2D*, not a raw GLuint --
+        // see uploadOrUpdateRgbaTexture() in gui.cpp for why. It's a
+        // ref-counted CCObject: owns one reference while set, must be
+        // release()'d (not just overwritten/deleted) before being replaced
+        // or on shutdown.
         VideoDecoder jupiterVideoDecoder;
-        unsigned int jupiterVideoTexture = 0;
+        cocos2d::CCTexture2D* jupiterVideoTexture = nullptr;
         int jupiterVideoTexW = 0, jupiterVideoTexH = 0;
         std::string jupiterVideoLoadedPath;
 

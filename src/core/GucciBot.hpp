@@ -1,19 +1,18 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-08-27-l (-k's toggle-state log came back completely clean and definitive: "              \
-    "jupiterVideoModeEnabled genuinely goes true right after the click and STAYS true every "      \
-    "second after -- so the early-return theory is dead, the function really is running with the " \
-    "flag correctly set. Whatever's wrong is deeper: decoder open, frame decode, texture upload, " \
-    "or the ImGui window/draw calls themselves. On-screen debug text still isn't trustworthy "     \
-    "either way (could be a real bug, could be the text itself silently not rendering for an "     \
-    "unrelated reason, e.g. no font pushed) -- so guccibot_videomode.log now covers the WHOLE "    \
-    "path, not just the top-level toggle: logs the (re)open attempt result, then once a second "   \
-    "logs decoder.isOpen(), ImGui::Begin()'s own return value (whether ImGui itself thinks the "   \
-    "overlay window is visible this frame), the viewport pos/size it's drawing against, the "      \
-    "requested playback timestamp, whether getFrameAt succeeded, the decoded byte count, and the " \
-    "resulting texture id/width/height. Compiles clean. Purely diagnostic, no behavior change -- " \
-    "need this log after another Video Mode toggle before writing any more fix code.)"
+    "2026-08-31-a (-l's full-path log came back with EVERY step green -- open ok, decoder.isOpen, " \
+    "ImGui::Begin() returning true, sane viewport, correct decode, exact right byte count "         \
+    "(1920x1080x4), valid nonzero GL texture id/dims -- yet still nothing visible. That narrows "   \
+    "it to the actual GPU render/composite step, past what the earlier ccGLInvalidateStateCache() " \
+    "fix covers. Real architectural change, not another patch: jupiterVideoTexture is now a "       \
+    "cocos2d::CCTexture2D* built via CCTexture2D::initWithData(), cocos2d's own blessed way to "    \
+    "create a texture from raw pixels, instead of hand-rolled glGenTextures/glTexImage2D calls. "   \
+    "AddImage now draws texture->getName(). Ref-counted CCObject -- old texture is release()'d "    \
+    "before being replaced. Confirmed initWithData's signature and kCCTexture2DPixelFormat_RGBA8888"\
+    " against the real Geode SDK header. Compiles clean. NOT yet confirmed in-game -- if this "     \
+    "doesn't fix it, the GPU composite step needs a harder look, e.g. whether imgui-cocos's "       \
+    "renderer draws this window's draw-list at all.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

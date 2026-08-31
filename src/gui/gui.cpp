@@ -11,6 +11,7 @@
 #include "render/renderer.hpp"
 #include "tools/selfcheck.hpp"
 #include <Geode/Bindings.hpp>
+#include <Geode/cocos/textures/CCTexture2D.h>
 #include <Geode/modify/LoadingLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
 #include <Geode/utils/file.hpp>
@@ -1409,34 +1410,35 @@ namespace gucci {
                                     bool externalWidgetJustReleased,
                                     float h);
 
-    static unsigned int uploadOrUpdateRgbaTexture(unsigned int existing,
-                                                  int w,
-                                                  int h,
-                                                  const std::vector<uint8_t>& rgba) {
-        unsigned int tex = existing;
-        if (tex == 0) {
-            glGenTextures(1, &tex);
-            glBindTexture(GL_TEXTURE_2D, tex);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
-        } else {
-            glBindTexture(GL_TEXTURE_2D, tex);
-            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
+    // Every CPU-side step (decoder open, frame decode, byte count, texture
+    // id/dimensions, even ImGui::Begin()'s own "is this window visible"
+    // return value) has been confirmed correct via guccibot_videomode.log --
+    // real evidence, not assumption -- yet nothing actually appears on
+    // screen. ccGLInvalidateStateCache() alone (the earlier fix) wasn't
+    // enough, so this switches away from raw GL texture calls entirely:
+    // cocos2d::CCTexture2D::initWithData() is cocos2d's OWN blessed way to
+    // create a texture from raw pixels, and handles all of its internal GL
+    // state bookkeeping correctly by construction, instead of GucciBot
+    // hand-rolling glGenTextures/glTexImage2D and hoping one cache-invalidate
+    // call covers everything cocos2d cares about. A new CCTexture2D per
+    // decoded frame is wasteful (should be updated in place, not
+    // recreated) but correctness comes first -- optimize once this is
+    // confirmed to actually fix the real problem.
+    static void uploadOrUpdateRgbaTexture(cocos2d::CCTexture2D*& texObj,
+                                          int w,
+                                          int h,
+                                          const std::vector<uint8_t>& rgba) {
+        if (texObj) {
+            texObj->release();
+            texObj = nullptr;
         }
-        // imgui-cocos's own renderer draws via ccGLBindTexture2D, cocos2d's
-        // STATE-CACHED bind (skips the real glBindTexture call if it thinks
-        // the requested texture is already bound -- see
-        // build/_deps/gd-imgui-cocos-src/src/backend.cpp). The raw
-        // glBindTexture calls above are invisible to that cache, so without
-        // this, cocos2d can go on trusting a stale "currently bound" texture
-        // ID and skip binding mine (or anyone else's) for real. Confirmed by
-        // reading cocos2d's own ccGLStateCache.h -- ccGLInvalidateStateCache
-        // is documented for exactly this situation.
-        cocos2d::ccGLInvalidateStateCache();
-        return tex;
+        auto* newTex = new cocos2d::CCTexture2D();
+        newTex->initWithData(rgba.data(),
+                             cocos2d::kCCTexture2DPixelFormat_RGBA8888,
+                             (unsigned int)w,
+                             (unsigned int)h,
+                             cocos2d::CCSizeMake((float)w, (float)h));
+        texObj = newTex;
     }
 
     // The real JMF showcase video ships bundled as a mod resource (see
@@ -1563,10 +1565,10 @@ namespace gucci {
             decodedThisFrame = jupiterVideoDecoder.getFrameAt(videoTimeSec, rgba);
             rgbaBytes = rgba.size();
             if (decodedThisFrame) {
-                jupiterVideoTexture = uploadOrUpdateRgbaTexture(jupiterVideoTexture,
-                                                               jupiterVideoDecoder.width(),
-                                                               jupiterVideoDecoder.height(),
-                                                               rgba);
+                uploadOrUpdateRgbaTexture(jupiterVideoTexture,
+                                          jupiterVideoDecoder.width(),
+                                          jupiterVideoDecoder.height(),
+                                          rgba);
                 jupiterVideoTexW = jupiterVideoDecoder.width();
                 jupiterVideoTexH = jupiterVideoDecoder.height();
             }
@@ -1593,7 +1595,7 @@ namespace gucci {
                     videoTimeSec,
                     (int)decodedThisFrame,
                     rgbaBytes,
-                    jupiterVideoTexture,
+                    (unsigned int)(jupiterVideoTexture ? jupiterVideoTexture->getName() : 0),
                     jupiterVideoTexW,
                     jupiterVideoTexH);
             logVideoModeDebug(line);
@@ -1624,14 +1626,14 @@ namespace gucci {
                 (int)jupiterVideoDecoder.isOpen(),
                 videoTimeSec,
                 (int)decodedThisFrame,
-                jupiterVideoTexture,
+                (unsigned int)(jupiterVideoTexture ? jupiterVideoTexture->getName() : 0),
                 jupiterVideoTexW,
                 jupiterVideoTexH,
                 rgbaBytes);
         dl->AddText(
             ImVec2(vp->Pos.x + 20, vp->Pos.y + 20), IM_COL32(80, 255, 120, 255), debugLine);
 
-        if (jupiterVideoTexture == 0) {
+        if (!jupiterVideoTexture) {
             ImGui::End();
             return;
         }
@@ -1652,7 +1654,7 @@ namespace gucci {
 
         unsigned char alpha =
             (unsigned char)(std::clamp(engine->jupiterVideoOpacity, 0.f, 1.f) * 255.f);
-        dl->AddImage((ImTextureID)(intptr_t)jupiterVideoTexture,
+        dl->AddImage((ImTextureID)(intptr_t)jupiterVideoTexture->getName(),
                     topLeft,
                     bottomRight,
                     ImVec2(0, 0),
