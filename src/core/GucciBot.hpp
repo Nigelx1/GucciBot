@@ -1,18 +1,18 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-08-31-a (-l's full-path log came back with EVERY step green -- open ok, decoder.isOpen, " \
-    "ImGui::Begin() returning true, sane viewport, correct decode, exact right byte count "         \
-    "(1920x1080x4), valid nonzero GL texture id/dims -- yet still nothing visible. That narrows "   \
-    "it to the actual GPU render/composite step, past what the earlier ccGLInvalidateStateCache() " \
-    "fix covers. Real architectural change, not another patch: jupiterVideoTexture is now a "       \
-    "cocos2d::CCTexture2D* built via CCTexture2D::initWithData(), cocos2d's own blessed way to "    \
-    "create a texture from raw pixels, instead of hand-rolled glGenTextures/glTexImage2D calls. "   \
-    "AddImage now draws texture->getName(). Ref-counted CCObject -- old texture is release()'d "    \
-    "before being replaced. Confirmed initWithData's signature and kCCTexture2DPixelFormat_RGBA8888"\
-    " against the real Geode SDK header. Compiles clean. NOT yet confirmed in-game -- if this "     \
-    "doesn't fix it, the GPU composite step needs a harder look, e.g. whether imgui-cocos's "       \
-    "renderer draws this window's draw-list at all.)"
+    "2026-08-31-b (-a still showed nothing despite every logged value being correct -- found the "  \
+    "real cause by reading ImGui's own source, not guessing: the video overlay window set "         \
+    "NoBringToFrontOnFocus, which Begin() (imgui.cpp) handles by push_front-ing it into g.Windows "  \
+    "instead of push_back -- it paints at the very BACK of the whole z-stack, permanently, from "    \
+    "creation. The main Jupiter-tab window renders full-viewport at alpha=1.0 and is the window "    \
+    "you click to reach the toggle in the first place, so it was always winning z-order and "        \
+    "painting over the video/clickbar windows completely -- unrelated to texture correctness, "      \
+    "which is why 3 straight builds (-h's cache invalidate, -a's CCTexture2D rewrite) never "        \
+    "mattered. Fix: removed that flag from the video window, and both it and the clickbar window "   \
+    "now call SetWindowFocus() every frame to force themselves back to front, since a later click "  \
+    "in the main GUI (e.g. dragging Opacity/Offset) would otherwise reclaim front z-order. Compiles "\
+    "clean. NOT yet confirmed in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

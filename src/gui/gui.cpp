@@ -1549,8 +1549,25 @@ namespace gucci {
                                               ImGuiWindowFlags_NoInputs |
                                               ImGuiWindowFlags_NoMove |
                                               ImGuiWindowFlags_NoSavedSettings |
-                                              ImGuiWindowFlags_NoBringToFrontOnFocus |
                                               ImGuiWindowFlags_NoFocusOnAppearing);
+        // Confirmed against ImGui's own source (imgui.cpp, Begin()): a window
+        // created with NoBringToFrontOnFocus is push_front'd into g.Windows
+        // instead of push_back'd -- i.e. it paints at the very BACK of the
+        // whole z-stack, permanently, not just "doesn't jump forward on
+        // click." That flag used to be set here, which is almost certainly
+        // why every previous build's texture/decode fixes never mattered:
+        // the main Jupiter-tab window renders full-viewport at alpha=1.0
+        // (see jupiterActive branch below) and is the window you have to
+        // click to even reach this toggle, so it was always winning the
+        // z-order and painting over this window entirely, regardless of
+        // whether the texture itself was ever correct. Flag removed above.
+        // Still need this every frame (not just on first creation) since any
+        // later click back in the main window would otherwise push IT back
+        // to the front again -- SetWindowFocus() forces this window back on
+        // top each frame, undoing that. (ImGui source also confirms
+        // SetWindowFocus()/FocusWindow() itself no-ops the reorder if
+        // NoBringToFrontOnFocus is set, so removing the flag isn't optional.)
+        ImGui::SetWindowFocus();
         ImDrawList* dl = ImGui::GetWindowDrawList();
 
         double videoTimeSec = 0.0;
@@ -1670,6 +1687,17 @@ namespace gucci {
                      nullptr,
                      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
                          ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar);
+        // Same z-order fix as ##jupiterVideoOverlay above, and needs it
+        // independently: this window doesn't set NoBringToFrontOnFocus so
+        // it draws on top correctly the first time it's created, but with
+        // no per-frame reassertion, any later click back in the main GUI
+        // window (e.g. dragging the Opacity/Offset sliders) reclaims front
+        // z-order for the main window and buries this one again. Called
+        // after ##jupiterVideoOverlay's own SetWindowFocus() this same
+        // frame, so this one wins and stays visually on top of the video
+        // image, matching the original spec ("clickbar playing somewhere
+        // over it").
+        ImGui::SetWindowFocus();
         drawJupiterClickBar(theme, anim, engine, engine->jupiterClickBarWindow, false, 60.f);
         ImGui::End();
     }
