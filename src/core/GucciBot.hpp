@@ -1,18 +1,20 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-08-27-j (Nigel's screenshot of 'Video Mode' after -i's fixes: NOT the JMF video, NOT a " \
-    "blank screen -- an unrecognizable dark-red patterned region plus a blue-black diagonal-"      \
-    "gradient region, no click bar visible anywhere. This is the third build in a row where "     \
-    "Video Mode's on-screen result has been wrong in a way static code reading hasn't caught, so " \
-    "instead of shipping a fourth speculative fix, drawJupiterVideoOverlay() now always draws "    \
-    "real on-screen debug text (green if things look normal, red if the decoder failed to open "  \
-    "or isn't open) showing: the effective video path, whether it opened/reopened this frame, "    \
-    "decoder.isOpen(), the requested playback timestamp, whether getFrameAt succeeded this "       \
-    "frame, and the resulting texture's GL id + width + height. Same 'stop guessing, make the "    \
-    "state visible' move as Frame Window's own Debug Mode and the calc-death log earlier in this " \
-    "project. Compiles clean. Purely diagnostic -- no behavior fix in this build, waiting on "     \
-    "Nigel's next screenshot to actually see what's happening before touching anything else.)"
+    "2026-08-27-k (-j's on-screen debug text showed NOTHING NEW -- exact same dark-red+blue "      \
+    "screen, no text at all. Confirmed with Nigel: that blue region is the JMF tab's own "         \
+    "PRE-EXISTING full-viewport reskin (already there BEFORE toggling Video Mode), and disabling " \
+    "MegaHack changed nothing either -- rules out a cross-mod render conflict. Together this "     \
+    "means drawJupiterVideoOverlay() likely isn't drawing anything at all, not even the debug "    \
+    "text added in -j, which would only happen if it's returning at its very first line "          \
+    "(jupiterVideoModeEnabled false) -- but on-screen rendering itself was exactly what was in "   \
+    "question, so instead of trusting that inference, added a genuinely rendering-independent "    \
+    "diagnostic: a dedicated guccibot_videomode.log (same pattern as guccibot_calcdeath.log) that " \
+    "logs on every toggle click (with the new value) and roughly once a second from inside "       \
+    "drawJupiterVideoOverlay() itself (with the current jupiterVideoModeEnabled value) -- this "   \
+    "settles definitively whether the function is even being reached and what value it sees, "     \
+    "independent of whatever's wrong with on-screen rendering. Compiles clean. Purely "            \
+    "diagnostic, no behavior change -- need the log file after Nigel toggles it a couple times.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

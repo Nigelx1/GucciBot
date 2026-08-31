@@ -17,6 +17,7 @@
 #include <Geode/utils/Task.hpp>
 #include <fmt/format.h>
 #include <filesystem>
+#include <fstream>
 #include <cmath>
 #include <algorithm>
 #include <cctype>
@@ -1461,8 +1462,41 @@ namespace gucci {
     // own always-fully-opaque window near the bottom -- the ORIGINAL
     // panel-embedded call site is untouched, this is a second, independent
     // call into the same shared drawing function.
+    // On-screen debug text depends on rendering actually working, which is
+    // exactly what's in question here -- a log file doesn't, so this settles
+    // "is the function even being reached, and with what value" independent
+    // of any GL/ImGui rendering issue. Same dedicated-log-file pattern as
+    // guccibot_calcdeath.log. Deliberately logs on every call (throttled to
+    // roughly once a second) rather than only on toggle-change, so a case
+    // where the toggle visually flips but the value never reaches this
+    // function would also show up.
+    static void logVideoModeDebug(const std::string& line) {
+        static std::ofstream log;
+        if (!log.is_open()) {
+            auto path = Mod::get()->getSaveDir() / "guccibot_videomode.log";
+            log.open(path, std::ios::out | std::ios::trunc);
+            geode::log::info("[VIDEOMODE] log file at: {}", path.string());
+        }
+        if (log.is_open()) {
+            log << line << '\n';
+            log.flush();
+        }
+    }
+
     void MenuInterface::drawJupiterVideoOverlay() {
         auto* engine = GucciEngine::get();
+        static double s_lastVideoModeLogTime = -1000.0;
+        double nowT = ImGui::GetTime();
+        if (nowT - s_lastVideoModeLogTime > 1.0) {
+            s_lastVideoModeLogTime = nowT;
+            char line[128];
+            snprintf(line,
+                    sizeof(line),
+                    "[t=%.2f] drawJupiterVideoOverlay called, jupiterVideoModeEnabled=%d",
+                    nowT,
+                    (int)engine->jupiterVideoModeEnabled);
+            logVideoModeDebug(line);
+        }
         if (!engine->jupiterVideoModeEnabled)
             return;
 
@@ -6011,8 +6045,16 @@ namespace gucci {
         }
 
         bool videoModeOn = engine->jupiterVideoModeEnabled;
-        if (Widgets::ToggleSwitch("Enable Video Mode", &videoModeOn, theme, anim))
+        if (Widgets::ToggleSwitch("Enable Video Mode", &videoModeOn, theme, anim)) {
             engine->jupiterVideoModeEnabled = videoModeOn;
+            char line[128];
+            snprintf(line,
+                    sizeof(line),
+                    "[t=%.2f] toggle clicked, new jupiterVideoModeEnabled=%d",
+                    (double)ImGui::GetTime(),
+                    (int)videoModeOn);
+            logVideoModeDebug(line);
+        }
         if (Widgets::StyledSliderFloat(
                 "Opacity", &engine->jupiterVideoOpacity, 0.f, 1.f, theme))
             mod->setSavedValue("jupiter_video_opacity", (double)engine->jupiterVideoOpacity);
