@@ -1,23 +1,21 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-08-27-h (First real in-game feedback on Video Mode from Nigel: 'Choose a Different "     \
-    "Video' crashes, and the bundled default shows nothing. Found and fixed a real, well-"         \
-    "evidenced bug behind the 'nothing shows' half: read the actual gd-imgui-cocos backend "        \
-    "source (build/_deps/gd-imgui-cocos-src/src/backend.cpp) rather than guess, confirmed it "     \
-    "draws every texture via ccGLBindTexture2D -- cocos2d's STATE-CACHED bind, which skips the "   \
-    "real glBindTexture call if it thinks the requested texture is already bound. "                \
-    "uploadOrUpdateRgbaTexture's raw glGenTextures/glBindTexture/glTexImage2D calls are "          \
-    "completely invisible to that cache, so cocos2d could go on trusting a stale 'currently "      \
-    "bound' texture ID and never actually bind mine. Fixed by calling "                            \
-    "cocos2d::ccGLInvalidateStateCache() right after the raw texture calls -- confirmed via "      \
-    "cocos2d's own ccGLStateCache.h, which documents that exact function for this exact "          \
-    "situation. Real, reasoned fix, not a guess -- but NOT yet confirmed to be the whole story; " \
-    "the crash on 'Choose a Different Video' is still unexplained, the file-picker code looks "    \
-    "structurally identical to the already-working trainer-music-import precedent and nothing "   \
-    "jumped out from static reading, so didn't guess-fix it -- need real crash evidence from "     \
-    "Nigel (a crash dialog, a log, anything Geode/GD shows) before touching that one. Compiles "   \
-    "clean. NOT yet confirmed in-game.)"
+    "2026-08-27-i (Nigel sent the real crash log for 'Choose a Different Video' -- a genuine "     \
+    "EXCEPTION_ACCESS_VIOLATION, reading 0xFFFFFFFFFFFFFFFF inside arc::Future::await_suspend, "   \
+    "resuming pickJupiterVideoTask's coroutine (arc-src/src/future/Context.cpp:61, "               \
+    "Future.hpp:100, gui.cpp:5861 -- the exact co_await line). That's the signature of a "         \
+    "resumed coroutine whose frame is already gone. Real mechanism found: pickJupiterVideo() had " \
+    "no guard against a second click re-invoking it while the first pick was still suspended on "  \
+    "the OS file dialog -- reassigning s_jupiterVideoPickTask destroys the still-pending Task "    \
+    "(and the coroutine frame it owns) out from under the callback that's eventually going to "    \
+    "try to resume it. Fixed with an explicit s_jupiterVideoPickPending guard (return early if "   \
+    "already pending; button disabled via ImGui::BeginDisabled while pending too, so it can't "    \
+    "even be double-clicked in the first place). Asked Nigel directly whether he actually "        \
+    "double-clicked it or clicked again before the dialog closed, to confirm this matches what "  \
+    "happened -- reasoned from the real trace, not a blind guess, but still worth that "           \
+    "confirmation. -h's ccGLInvalidateStateCache fix for the 'nothing shows' half is unchanged, "  \
+    "still unconfirmed. Compiles clean. NOT yet confirmed in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

@@ -5870,11 +5870,23 @@ namespace gucci {
     // s_fwAssetFilesTask's comment elsewhere in this file for why (real
     // crash otherwise).
     static geode::Task<std::optional<std::filesystem::path>> s_jupiterVideoPickTask;
+    // Guards against a second click re-invoking pickJupiterVideo() while the
+    // first pick is still suspended waiting on the OS file dialog --
+    // reassigning s_jupiterVideoPickTask would destroy that still-pending
+    // Task (and the coroutine frame it owns) out from under the callback
+    // that's eventually going to try to resume it. Real crash this was
+    // actually hit with: EXCEPTION_ACCESS_VIOLATION reading 0xFFFFFFFFFFFFFFFF
+    // inside arc::Future::await_suspend, resuming pickJupiterVideoTask --
+    // exactly the shape of a resumed coroutine whose frame is already gone.
+    static bool s_jupiterVideoPickPending = false;
     static void pickJupiterVideo() {
+        if (s_jupiterVideoPickPending)
+            return;
+        s_jupiterVideoPickPending = true;
         s_jupiterVideoPickTask = pickJupiterVideoTask();
     }
     static void pollJupiterVideoPickTask() {
-        if (s_jupiterVideoPickTask.isFinished()) {
+        if (s_jupiterVideoPickPending && s_jupiterVideoPickTask.isFinished()) {
             auto* result = s_jupiterVideoPickTask.getFinishedValue();
             if (result && result->has_value()) {
                 auto* gb = GucciEngine::get();
@@ -5883,6 +5895,7 @@ namespace gucci {
                 Notification::create("Video selected", NotificationIcon::Success)->show();
             }
             s_jupiterVideoPickTask = {};
+            s_jupiterVideoPickPending = false;
         }
     }
 
@@ -5941,8 +5954,10 @@ namespace gucci {
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.9f, 0.4f, 1.f));
         ImGui::TextWrapped("The JMF showcase video ships built in -- works with zero setup.");
         ImGui::PopStyleColor();
+        ImGui::BeginDisabled(s_jupiterVideoPickPending);
         if (Widgets::StyledButton("Choose a Different Video", ImVec2(210, 26), theme, anim))
             pickJupiterVideo();
+        ImGui::EndDisabled();
         if (!engine->jupiterVideoPath.empty()) {
             ImGui::SameLine();
             ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
