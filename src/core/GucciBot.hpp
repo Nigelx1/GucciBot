@@ -1,30 +1,24 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-08-27-f (Two real pieces of the Click Indicators / Jupiter Trainer work. (1) Click "     \
-    "scoring is now event-driven off the real handleButton hook instead of polled from GUI "       \
-    "code, for both Jupiter and Trainer pages -- new ClickIndicatorScore (nearest-UNANSWERED-"     \
-    "press matching, not nearest-by-raw-delta, which the old single-click 'Click Deviation' "      \
-    "readout could double-match) gives a real running Perfect/OK/Miss tally per attempt instead "  \
-    "of just 'your last click'. (2) Video Mode, Nigel's own idea for the JMF trainer: a review "   \
-    "overlay (NOT live gameplay, no level needs open) that plays a local video full-screen, "      \
-    "riding the exact same clock drawJupiterClickBar already uses, with the click bar itself "     \
-    "overlaid near the bottom always fully opaque. New render/video_decoder.{hpp,cpp} -- FFmpeg "  \
-    "decode was genuinely new work, the existing wrapper (render/ffmpeg.hpp) was 100% encode-"     \
-    "only, added avformat_open_input/av_read_frame/avcodec_receive_frame/sws_scale/av_seek_frame/" \
-    "avcodec_flush_buffers etc to the same dynamically-loaded function table used for rendering. " \
-    "The decode+seek core is VERIFIED against a real file, not just compiled: a standalone test "  \
-    "harness (loads the same FFmpeg DLLs directly, no Geode needed) opened Nigel's real JMF "      \
-    "showcase video, hit forward playback, a backward seek, and a forward jump, and every "        \
-    "timestamp landed exactly on target -- including getting byte-identical output re-decoding "   \
-    "the same timestamp two different ways (linear vs seek+redecode). What's genuinely UNTESTED: " \
-    "the texture upload (glTexImage2D/glTexSubImage2D) and the ImGui::Image-equivalent full-"      \
-    "screen letterboxed rendering with adjustable opacity -- that half can't be verified outside " \
-    "the actual running game, unlike the decoder itself. Alignment offset slider is the 'debug "   \
-    "slider' Nigel asked for (nudge until the first click on the bar lines up with the first "     \
-    "click in the video). Compiles clean. NOT yet confirmed in-game -- and this build in "         \
-    "particular has a real, flagged gap between what's verified (decode) and what isn't "          \
-    "(rendering), not just the usual 'nobody's tried it yet'.)"
+    "2026-08-27-g (The real JMF showcase video now ships bundled as a mod resource "               \
+    "(resources/jmf_showcase.mp4, declared in mod.json) -- Video Mode works with zero setup, no "  \
+    "file picker needed unless you want a different video. Corrects -f's own first attempt, "      \
+    "which built a manual 'drop a file in a known folder' workaround (mirroring Big Brrr's "       \
+    "'brrr' folder) specifically to dodge GitHub's 100MB per-file limit on the git-tracked "        \
+    ".geode -- backwards: Nigel's actual point in killing that tracking was to REMOVE the size "   \
+    "ceiling so everything COULD be bundled for real, not to avoid bundling. Packaged .geode is "  \
+    "now 131MB, confirming untracking it from git was exactly the right call -- the bundled "      \
+    "video source file itself (62MB) stays well under GitHub's 100MB limit and is tracked "        \
+    "normally. -f's own summary is still accurate and worth keeping in mind: (1) click scoring "   \
+    "is now event-driven with correct nearest-unanswered-press matching, real running Perfect/"    \
+    "OK/Miss tally, for both Jupiter and Trainer pages. (2) Video Mode's decode+seek core is "     \
+    "VERIFIED against this exact real video via a standalone test harness (every timestamp "       \
+    "landed exactly on target across forward playback/backward seek/forward jump, byte-identical " \
+    "output re-decoding the same timestamp two different ways) -- the texture upload and "         \
+    "full-screen rendering are still genuinely UNTESTED in-game, can't be verified outside the "   \
+    "actual running process. Compiles clean, verified the video actually lands in the packaged "   \
+    ".geode via unzip -l, same habit as every other bundled resource. NOT yet confirmed in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

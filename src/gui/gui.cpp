@@ -1428,6 +1428,20 @@ namespace gucci {
         return tex;
     }
 
+    // The real JMF showcase video ships bundled as a mod resource (see
+    // mod.json) -- Video Mode works out of the box with zero setup. Nigel's
+    // explicit call: now that the built .geode isn't tracked in git anymore
+    // (see feedback_github_workflow), there's no GitHub size ceiling on the
+    // PACKAGE itself forcing a "drop it in a folder yourself" workaround --
+    // bundle it for real, same as every Big Brrr track already is. The file
+    // picker below still lets Nigel override with a different video; when
+    // set, the picked path takes priority over the bundled default, same
+    // precedence Big Brrr's own "brrr" folder already has over its bundled
+    // per-theme track.
+    static std::filesystem::path getBundledJmfVideoPath() {
+        return Mod::get()->getResourcesDir() / "jmf_showcase.mp4";
+    }
+
     // Video Mode -- a review/playback overlay, not a live-gameplay one; no
     // level needs to be open. Video plays full-screen (letterboxed to its
     // own aspect ratio), riding the exact same clock drawJupiterClickBar
@@ -1439,13 +1453,20 @@ namespace gucci {
     // call into the same shared drawing function.
     void MenuInterface::drawJupiterVideoOverlay() {
         auto* engine = GucciEngine::get();
-        if (!engine->jupiterVideoModeEnabled || engine->jupiterVideoPath.empty())
+        if (!engine->jupiterVideoModeEnabled)
             return;
 
-        if (jupiterVideoLoadedPath != engine->jupiterVideoPath) {
+        // A manually-picked video overrides the bundled default, same
+        // precedence Big Brrr gives an explicit user file over its bundled
+        // per-theme track.
+        std::string effectivePath = !engine->jupiterVideoPath.empty()
+                                       ? engine->jupiterVideoPath
+                                       : getBundledJmfVideoPath().string();
+
+        if (jupiterVideoLoadedPath != effectivePath) {
             jupiterVideoDecoder.close();
-            if (jupiterVideoDecoder.open(engine->jupiterVideoPath)) {
-                jupiterVideoLoadedPath = engine->jupiterVideoPath;
+            if (jupiterVideoDecoder.open(effectivePath)) {
+                jupiterVideoLoadedPath = effectivePath;
             } else {
                 jupiterVideoLoadedPath.clear();
                 engine->jupiterVideoModeEnabled = false; // don't retry a broken path every frame
@@ -5906,7 +5927,11 @@ namespace gucci {
             "footage full-screen, riding this exact same click bar clock, with the bar itself "
             "overlaid near the bottom.");
         ImGui::PopStyleColor();
-        if (Widgets::StyledButton("Choose Video File", ImVec2(180, 26), theme, anim))
+
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.9f, 0.4f, 1.f));
+        ImGui::TextWrapped("The JMF showcase video ships built in -- works with zero setup.");
+        ImGui::PopStyleColor();
+        if (Widgets::StyledButton("Choose a Different Video", ImVec2(210, 26), theme, anim))
             pickJupiterVideo();
         if (!engine->jupiterVideoPath.empty()) {
             ImGui::SameLine();
@@ -5915,17 +5940,10 @@ namespace gucci {
                 "%s", std::filesystem::path(engine->jupiterVideoPath).filename().string().c_str());
             ImGui::PopStyleColor();
         }
-        bool videoPathEmpty = engine->jupiterVideoPath.empty();
-        ImGui::BeginDisabled(videoPathEmpty);
+
         bool videoModeOn = engine->jupiterVideoModeEnabled;
         if (Widgets::ToggleSwitch("Enable Video Mode", &videoModeOn, theme, anim))
             engine->jupiterVideoModeEnabled = videoModeOn;
-        ImGui::EndDisabled();
-        if (videoPathEmpty) {
-            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-            ImGui::TextWrapped("Choose a video file first.");
-            ImGui::PopStyleColor();
-        }
         if (Widgets::StyledSliderFloat(
                 "Opacity", &engine->jupiterVideoOpacity, 0.f, 1.f, theme))
             mod->setSavedValue("jupiter_video_opacity", (double)engine->jupiterVideoOpacity);
