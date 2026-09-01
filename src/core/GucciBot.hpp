@@ -1,19 +1,19 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-08-31-i (-h's guess was WRONG -- Nigel's precise repro: pressing Enable Video Mode alone " \
-    "(first frame only) was fine, it broke the instant he pressed Play/Resume. First frame always "  \
-    "went through the safe initWithData path; Resume is what first triggers the glTexSubImage2D "    \
-    "update-in-place branch. That isolates the real culprit to the texture-update code from -g, "    \
-    "not the menu-skip change from -h -- my -h diagnosis was a guess and it was wrong, said so "     \
-    "plainly rather than defend it. Reverted uploadOrUpdateRgbaTexture to always recreating a fresh " \
-    "CCTexture2D per frame -- the exact approach confirmed working in build -f. Back to ~5fps, but " \
-    "correct. Real, not-fully-confirmed suspicion for why subImage2D broke unrelated widgets too "    \
-    "(the click bar/exit button, which don't touch this texture): ccGLBindTexture2D's cached "       \
-    "'currently bound' state may not have matched the real GL binding, so the update could have hit " \
-    "the wrong texture -- e.g. ImGui's own shared font atlas, which everything including the click "  \
-    "bar/exit button samples from. Not confirmed, not chased further -- reverting instead of "        \
-    "guessing at a second fix. Compiles clean. NOT yet confirmed in-game.)"
+    "2026-08-31-j (three separate items from one Nigel message, all in Video Mode: (1) real bug "    \
+    "found -- 'i dont see my inputs' on the video's click bar traced to jupiterClickBarPageVisible, " \
+    "the flag GB7KeyHandler gates real spacebar capture on, which is ONLY ever set true inside the "  \
+    "buried tab page -h/-i skip while Video Mode is on, so real presses were silently dropped the "   \
+    "whole time regardless of a level being open. drawJupiterVideoOverlay now asserts it directly. "  \
+    "(2) still ~5fps -- a SAFE perf attempt this time, no GL-state tricks after the last one broke "  \
+    "things: VideoDecoder now decodes straight to a capped 1280px-wide target (aspect preserved) "    \
+    "instead of the source's native 1080p, via sws_scale's own normal resize-during-convert, cutting " \
+    "both decode cost and per-frame upload size by more than half. (3) alignment UX -- a scrub "      \
+    "slider that previews any point in the video directly (independent of the click bar clock) plus " \
+    "a 'Snap Offset to This Frame' button that computes Alignment Offset from wherever it's scrubbed " \
+    "to, instead of trial-and-error nudging; also widened that slider's range since a real offset "   \
+    "can legitimately exceed +/-10s. Compiles clean. NONE of the three confirmed in-game yet.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -495,6 +495,18 @@ namespace gucci {
         bool jupiterVideoModeEnabled = false;
         float jupiterVideoOffsetSec = 0.f;
         float jupiterVideoOpacity = 0.6f;
+        // Alignment tool, added 2026-08-31 (Nigel: "any easier way to fix
+        // up the delay stuff, debug slider is tedious... heres a scroll bar
+        // for the video, scroll until right at the first click"). When
+        // active, drawJupiterVideoOverlay shows jupiterVideoAlignScrubSec
+        // directly instead of the click bar's live clock, so the video can
+        // be scrubbed by hand to find the exact moment of the macro's first
+        // click; a button then sets jupiterVideoOffsetSec FROM that scrub
+        // position automatically, replacing trial-and-error slider nudging.
+        // Not persisted -- a one-shot alignment aid, not an ongoing
+        // setting (jupiterVideoOffsetSec, the actual result, already is).
+        bool jupiterVideoAlignToolActive = false;
+        float jupiterVideoAlignScrubSec = 0.f;
 
         bool jupiterMusicEnabled = true;
         float jupiterMusicOffsetSec = 0.f;

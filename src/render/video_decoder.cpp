@@ -3,6 +3,8 @@
 
 #include <Geode/Geode.hpp>
 
+#include <algorithm>
+#include <cstdint>
 #include <cstring>
 
 namespace gucci {
@@ -68,6 +70,25 @@ namespace gucci {
         m_durationSec =
             m_formatCtx->duration > 0 ? (double)m_formatCtx->duration / AV_TIME_BASE : 0.0;
 
+        // Perf fix, 2026-08-31 (Nigel: Video Mode running ~5fps): decode
+        // straight to a capped-down resolution instead of the source's
+        // native size, aspect ratio preserved. sws_scale already does
+        // arbitrary source->dest resizing as a normal part of what it's
+        // doing here (the YUV->RGBA color conversion), so this is just
+        // changing its target dimensions -- no new GL/texture tricks, none
+        // of the risk that broke things in the glTexSubImage2D attempt
+        // (build -g, reverted -i). Cuts both the color-conversion cost and
+        // the per-frame RGBA-buffer/GPU-texture-upload cost roughly in
+        // proportion to the pixel count reduction.
+        constexpr int kMaxOutWidth = 1280;
+        if (m_width > kMaxOutWidth && m_width > 0) {
+            m_outWidth = kMaxOutWidth;
+            m_outHeight = std::max(2, (int)((int64_t)m_height * kMaxOutWidth / m_width) & ~1);
+        } else {
+            m_outWidth = m_width;
+            m_outHeight = m_height;
+        }
+
         m_frame = ff->av_frame_alloc();
         m_packet = ff->av_packet_alloc();
         if (!m_frame || !m_packet || m_timeBase <= 0.0) {
@@ -76,10 +97,12 @@ namespace gucci {
             return false;
         }
 
-        geode::log::info("[VideoDecoder] Opened {} ({}x{}, {:.2f}s)",
+        geode::log::info("[VideoDecoder] Opened {} (source {}x{}, decoding at {}x{}, {:.2f}s)",
                          path.string(),
                          m_width,
                          m_height,
+                         m_outWidth,
+                         m_outHeight,
                          m_durationSec);
         return true;
     }
@@ -107,6 +130,7 @@ namespace gucci {
         m_codecCtx = nullptr;
         m_videoStreamIndex = -1;
         m_width = m_height = 0;
+        m_outWidth = m_outHeight = 0;
         m_durationSec = 0.0;
         m_timeBase = 0.0;
         m_lastDecodedSec = -1.0;
@@ -140,11 +164,16 @@ namespace gucci {
     bool VideoDecoder::convertCurrentFrameToRgba(std::vector<uint8_t>& outRgba) {
         auto* ff = SLRenderer::get()->ff;
         if (!m_swsCtx) {
+            // Destination is m_outWidth/m_outHeight, not the source's own
+            // m_width/m_height -- sws_scale resizes as a normal part of the
+            // color-space conversion it's already doing, so decoding
+            // straight to a smaller target is free real estate, not a
+            // separate resize pass. See m_outWidth's declaration for why.
             m_swsCtx = ff->sws_getContext(m_width,
                                          m_height,
                                          (AVPixelFormat)m_codecCtx->pix_fmt,
-                                         m_width,
-                                         m_height,
+                                         m_outWidth,
+                                         m_outHeight,
                                          AV_PIX_FMT_RGBA,
                                          SWS_BILINEAR,
                                          nullptr,
@@ -158,8 +187,8 @@ namespace gucci {
             if (!m_rgbaFrame)
                 return false;
             m_rgbaFrame->format = AV_PIX_FMT_RGBA;
-            m_rgbaFrame->width = m_width;
-            m_rgbaFrame->height = m_height;
+            m_rgbaFrame->width = m_outWidth;
+            m_rgbaFrame->height = m_outHeight;
             if (ff->av_frame_get_buffer(m_rgbaFrame, 0) < 0)
                 return false;
         }
@@ -172,9 +201,9 @@ namespace gucci {
                      m_rgbaFrame->data,
                      m_rgbaFrame->linesize);
 
-        outRgba.resize((size_t)m_width * (size_t)m_height * 4);
-        int lineBytes = m_width * 4;
-        for (int y = 0; y < m_height; y++) {
+        outRgba.resize((size_t)m_outWidth * (size_t)m_outHeight * 4);
+        int lineBytes = m_outWidth * 4;
+        for (int y = 0; y < m_outHeight; y++) {
             std::memcpy(outRgba.data() + (size_t)y * lineBytes,
                        m_rgbaFrame->data[0] + (size_t)y * m_rgbaFrame->linesize[0],
                        lineBytes);

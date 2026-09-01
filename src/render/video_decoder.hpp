@@ -32,11 +32,16 @@ namespace gucci {
             return m_formatCtx != nullptr;
         }
 
+        // Returns the DECODE-TARGET dimensions (what getFrameAt actually
+        // fills outRgba with), not necessarily the source video's native
+        // resolution -- see m_outWidth/m_outHeight. Callers (texture
+        // upload, letterbox aspect-ratio math) should use these, not the
+        // source's own size.
         int width() const {
-            return m_width;
+            return m_outWidth;
         }
         int height() const {
-            return m_height;
+            return m_outHeight;
         }
         double durationSec() const {
             return m_durationSec;
@@ -73,7 +78,17 @@ namespace gucci {
         AVFrame* m_rgbaFrame = nullptr;
         AVPacket* m_packet = nullptr;
         int m_videoStreamIndex = -1;
-        int m_width = 0, m_height = 0;
+        int m_width = 0, m_height = 0; // source video's native resolution
+        // Decode/upload target resolution, computed at open() -- capped
+        // down from the source's native size (aspect ratio preserved) to
+        // cut per-frame sws_scale + RGBA-buffer + GPU-texture-upload cost.
+        // Nigel reported ~5fps in Video Mode; a full 1080p RGBA upload
+        // every displayed frame (recreated whole, not updated in place --
+        // see uploadOrUpdateRgbaTexture's revert history, build -i, for why
+        // it's not updated in place) is a real, substantial, easily-
+        // reducible cost that doesn't require any of the GL-state tricks
+        // that broke things before. See kMaxOutWidth in the .cpp.
+        int m_outWidth = 0, m_outHeight = 0;
         double m_durationSec = 0.0;
         double m_timeBase = 0.0; // stream's time_base as num/den
         double m_lastDecodedSec = -1.0;

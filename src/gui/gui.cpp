@@ -1514,6 +1514,22 @@ namespace gucci {
         if (!engine->jupiterVideoModeEnabled)
             return;
 
+        // Real bug found 2026-08-31 (Nigel: "on the video click bar, i dont
+        // see my inputs"): jupiterClickBarPageVisible is the flag
+        // GB7KeyHandler::dispatchKeyboardMSG (keybinds.cpp) gates real
+        // spacebar/click capture on -- but the ONLY place that ever sets it
+        // true is drawJupiterClickTrainerPage(), which lives inside
+        // drawMainWindow()/drawMegaHackWindow(). The -h/-i perf fix skips
+        // that whole window while Video Mode is on (drawInterface() resets
+        // this flag to false every frame, unconditionally, before either
+        // path runs) -- so with the main window skipped, nothing ever sets
+        // it back to true, and every real keypress was silently going
+        // uncaptured the entire time Video Mode was up, regardless of
+        // whether a level was open. Video Mode has its own independent
+        // click bar instance (the window below) and needs to assert this
+        // itself rather than depend on the buried tab page doing it.
+        engine->jupiterClickBarPageVisible = true;
+
         // Always the bundled default now -- the custom-video picker was
         // removed (see the comment on jupiterVideoModeEnabled in
         // GucciBot.hpp for why).
@@ -1601,7 +1617,14 @@ namespace gucci {
         bool decodedThisFrame = false;
         size_t rgbaBytes = 0;
         if (!openFailed && jupiterVideoDecoder.isOpen()) {
-            videoTimeSec = engine->jupiterClickBarPosSec + (double)engine->jupiterVideoOffsetSec;
+            // Alignment tool active: show the manually-scrubbed position
+            // directly instead of the click bar's live clock, so Nigel can
+            // find the exact frame of the macro's first click by eye. See
+            // jupiterVideoAlignToolActive's declaration (GucciBot.hpp).
+            if (engine->jupiterVideoAlignToolActive)
+                videoTimeSec = (double)engine->jupiterVideoAlignScrubSec;
+            else
+                videoTimeSec = engine->jupiterClickBarPosSec + (double)engine->jupiterVideoOffsetSec;
             videoTimeSec = std::clamp(
                 videoTimeSec, 0.0, std::max(0.0, jupiterVideoDecoder.durationSec() - 0.001));
 
@@ -6171,8 +6194,15 @@ namespace gucci {
         if (Widgets::StyledSliderFloat(
                 "Opacity", &engine->jupiterVideoOpacity, 0.f, 1.f, theme))
             mod->setSavedValue("jupiter_video_opacity", (double)engine->jupiterVideoOpacity);
+        // Range widened from the original +/-10s, 2026-08-31: the new snap
+        // tool below can legitimately produce a much larger offset (e.g.
+        // the bundled video has whatever lead-in before real gameplay
+        // starts, easily tens of seconds on a ~99s clip) -- a narrower
+        // range wouldn't clamp the underlying value, just make the slider
+        // handle sit uselessly at one end while the real number was
+        // something else, confusing to look at for no benefit.
         if (Widgets::StyledSliderFloat(
-                "Alignment Offset (sec)", &engine->jupiterVideoOffsetSec, -10.f, 10.f, theme))
+                "Alignment Offset (sec)", &engine->jupiterVideoOffsetSec, -10.f, 120.f, theme))
             mod->setSavedValue("jupiter_video_offset_sec", (double)engine->jupiterVideoOffsetSec);
         ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
         ImGui::TextWrapped(
@@ -6180,6 +6210,41 @@ namespace gucci {
             "click in the video, then leave it. Positive delays the video, negative brings it "
             "earlier.");
         ImGui::PopStyleColor();
+
+        // Alignment tool, added 2026-08-31 (Nigel: "any easier way to fix
+        // up the delay stuff, debug slider is tedious... heres a scroll
+        // bar for the video, scroll until right at the first click").
+        // Scrubs the video directly to find the first click by eye, then
+        // computes Alignment Offset from that instead of trial-and-error.
+        ImGui::Dummy(ImVec2(0, 6));
+        Widgets::ToggleSwitch("Alignment Tool", &engine->jupiterVideoAlignToolActive, theme, anim);
+        if (engine->jupiterVideoAlignToolActive) {
+            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+            if (!engine->jupiterVideoModeEnabled) {
+                ImGui::TextWrapped("Turn on Enable Video Mode too -- this scrubs the video "
+                                   "you're actually watching, it needs to be showing.");
+            } else if (engine->jupiterMacro.clickIntervalsSec.empty()) {
+                ImGui::TextWrapped("No click data loaded, nothing to align to.");
+            } else {
+                ImGui::TextWrapped("Scrub below until you're right on the FIRST click, then hit "
+                                   "the button below it.");
+            }
+            ImGui::PopStyleColor();
+            if (engine->jupiterVideoModeEnabled && !engine->jupiterMacro.clickIntervalsSec.empty()) {
+                float maxDur = (float)std::max(0.0, jupiterVideoDecoder.durationSec());
+                Widgets::StyledSliderFloat(
+                    "##videoAlignScrub", &engine->jupiterVideoAlignScrubSec, 0.f, maxDur, theme);
+                if (Widgets::StyledButton(
+                        "Snap Offset to This Frame", ImVec2(220, 26), theme, anim)) {
+                    double firstClick = engine->jupiterMacro.clickIntervalsSec.front().first;
+                    engine->jupiterVideoOffsetSec =
+                        engine->jupiterVideoAlignScrubSec - (float)firstClick;
+                    mod->setSavedValue("jupiter_video_offset_sec",
+                                       (double)engine->jupiterVideoOffsetSec);
+                    Notification::create("Offset set", NotificationIcon::Success)->show();
+                }
+            }
+        }
 
         ImGui::Dummy(ImVec2(0, 18));
         Widgets::SectionHeader("Click Deviation", theme);
