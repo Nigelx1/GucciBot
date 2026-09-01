@@ -1,19 +1,18 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-08-31-j (three separate items from one Nigel message, all in Video Mode: (1) real bug "    \
-    "found -- 'i dont see my inputs' on the video's click bar traced to jupiterClickBarPageVisible, " \
-    "the flag GB7KeyHandler gates real spacebar capture on, which is ONLY ever set true inside the "  \
-    "buried tab page -h/-i skip while Video Mode is on, so real presses were silently dropped the "   \
-    "whole time regardless of a level being open. drawJupiterVideoOverlay now asserts it directly. "  \
-    "(2) still ~5fps -- a SAFE perf attempt this time, no GL-state tricks after the last one broke "  \
-    "things: VideoDecoder now decodes straight to a capped 1280px-wide target (aspect preserved) "    \
-    "instead of the source's native 1080p, via sws_scale's own normal resize-during-convert, cutting " \
-    "both decode cost and per-frame upload size by more than half. (3) alignment UX -- a scrub "      \
-    "slider that previews any point in the video directly (independent of the click bar clock) plus " \
-    "a 'Snap Offset to This Frame' button that computes Alignment Offset from wherever it's scrubbed " \
-    "to, instead of trial-and-error nudging; also widened that slider's range since a real offset "   \
-    "can legitimately exceed +/-10s. Compiles clean. NONE of the three confirmed in-game yet.)"
+    "2026-08-31-k (-j confirmed working, nothing broke. Nigel's own sharp catch: 'way less frames "  \
+    "than mpv' while scrubbing -- not a perf/GPU problem at all. Verified with a standalone harness " \
+    "against the real bundled video: it's genuinely 60fps (30 raw frames decoded per 0.5s). "        \
+    "getFrameAt's stuck-clock-flicker tolerance was a flat 0.06s, over 3x a real 60fps frame's "     \
+    "duration -- so it was silently swallowing most genuine frame advances too, not just the "       \
+    "stuck-clock case it was built for, capping effective playback around 16fps no matter how fast " \
+    "decode actually was. That's the real 'way less frames' cause. Fixed: tolerance now computed "   \
+    "from the stream's own real frame rate (r_frame_rate/avg_frame_rate, read at open()) instead of " \
+    "a fixed guess, so it stays ~1.5 real frames wide for whatever video is loaded. -j's other 3 "    \
+    "items (missing-input-capture fix, resolution-cap perf attempt, alignment scrub tool) untouched " \
+    "-- Nigel confirmed those didn't break anything, this is additive. Compiles clean. NOT yet "      \
+    "confirmed in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

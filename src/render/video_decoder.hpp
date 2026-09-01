@@ -92,6 +92,19 @@ namespace gucci {
         double m_durationSec = 0.0;
         double m_timeBase = 0.0; // stream's time_base as num/den
         double m_lastDecodedSec = -1.0;
+        // Real source of the "way less frames than mpv" report (2026-08-31,
+        // not a decode/upload speed problem -- verified via a standalone
+        // harness against the actual bundled video: it's genuinely 60fps,
+        // 30 raw frames decoded per 0.5s of playback). getFrameAt's
+        // stuck-clock tolerance (see its own comment) was a flat 0.06s,
+        // over 3x a single 60fps frame's real duration -- so it was
+        // silently swallowing most real frame advances too, capping
+        // effective playback at ~16fps regardless of how fast decode
+        // actually was. Now computed from the stream's own real frame rate
+        // at open() instead of a fixed guess, so the tolerance stays
+        // "about 1.5 frames" for whatever video is actually loaded.
+        double m_frameDurationSec = 1.0 / 30.0; // safe fallback if the
+                                                 // stream doesn't report one
     };
 
 } // namespace gucci

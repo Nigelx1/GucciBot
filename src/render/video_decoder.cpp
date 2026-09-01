@@ -70,6 +70,19 @@ namespace gucci {
         m_durationSec =
             m_formatCtx->duration > 0 ? (double)m_formatCtx->duration / AV_TIME_BASE : 0.0;
 
+        // Real fix for "way less frames than mpv" (2026-08-31, NOT a decode
+        // speed problem -- see m_frameDurationSec's declaration). Prefer
+        // r_frame_rate (the stream's real base rate) over avg_frame_rate
+        // (duration/frame-count average, less reliable right at open() for
+        // some containers); fall back to the safe default if neither is
+        // populated. Plain AVRational field access, no new FFmpeg function
+        // needed.
+        AVRational fr = stream->r_frame_rate;
+        if (fr.num <= 0 || fr.den <= 0)
+            fr = stream->avg_frame_rate;
+        if (fr.num > 0 && fr.den > 0)
+            m_frameDurationSec = (double)fr.den / (double)fr.num;
+
         // Perf fix, 2026-08-31 (Nigel: Video Mode running ~5fps): decode
         // straight to a capped-down resolution instead of the source's
         // native size, aspect ratio preserved. sws_scale already does
@@ -232,7 +245,22 @@ namespace gucci {
         // real flicker. Fix: treat "still within about one frame's duration
         // of what's already decoded" as "nothing to do" in both directions,
         // rather than only guarding the forward-jump case.
-        constexpr double kFrameTolerance = 0.06; // ~1 frame at >=16fps, with margin
+        //
+        // Real follow-up bug, same day: this was originally a flat 0.06s
+        // constant ("~1 frame at >=16fps") -- but the bundled video is
+        // actually 60fps (confirmed via a standalone harness against the
+        // real file: 30 raw frames decoded per 0.5s), where one real frame
+        // is ~0.0167s. A 0.06s dead zone is well over 3 real frames wide at
+        // that rate, so it was silently swallowing most genuine frame
+        // advances too -- not just the stuck-clock case it was built for --
+        // capping effective playback at ~16fps no matter how fast decoding
+        // itself was. That's what Nigel actually meant by "way less frames
+        // than mpv," not a decode/GPU performance problem. Now derived from
+        // the stream's own real frame rate (m_frameDurationSec, set in
+        // open()) instead of a fixed guess, so it stays "about 1.5 frames"
+        // for whatever video is loaded rather than a constant tuned for one
+        // specific file.
+        const double kFrameTolerance = m_frameDurationSec * 1.5;
         if (m_lastDecodedSec >= 0.0 && seconds >= m_lastDecodedSec - kFrameTolerance &&
             seconds <= m_lastDecodedSec + kFrameTolerance) {
             return false; // current frame is still the right one to show
