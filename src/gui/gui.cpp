@@ -1502,12 +1502,10 @@ namespace gucci {
         if (!engine->jupiterVideoModeEnabled)
             return;
 
-        // A manually-picked video overrides the bundled default, same
-        // precedence Big Brrr gives an explicit user file over its bundled
-        // per-theme track.
-        std::string effectivePath = !engine->jupiterVideoPath.empty()
-                                       ? engine->jupiterVideoPath
-                                       : getBundledJmfVideoPath().string();
+        // Always the bundled default now -- the custom-video picker was
+        // removed (see the comment on jupiterVideoModeEnabled in
+        // GucciBot.hpp for why).
+        std::string effectivePath = getBundledJmfVideoPath().string();
 
         // -k's toggle-state log confirmed this function DOES get reached with
         // jupiterVideoModeEnabled correctly true -- so whatever's wrong is
@@ -6032,50 +6030,18 @@ namespace gucci {
         ImGui::Dummy(ImVec2(0, 4));
     }
 
-    static geode::Task<std::optional<std::filesystem::path>> pickJupiterVideoTask() {
-        auto pickResult = co_await geode::utils::file::pick(
-            geode::utils::file::PickMode::OpenFile,
-            geode::utils::file::FilePickOptions{
-                std::nullopt, {{"Video Files", {"mp4", "mov", "mkv", "webm", "avi"}}}});
-        if (pickResult.isErr())
-            co_return std::nullopt;
-        co_return pickResult.unwrap();
-    }
-    // Must stay a stored static, never an unstored temporary -- see
-    // s_fwAssetFilesTask's comment elsewhere in this file for why (real
-    // crash otherwise).
-    static geode::Task<std::optional<std::filesystem::path>> s_jupiterVideoPickTask;
-    // Guards against a second click re-invoking pickJupiterVideo() while the
-    // first pick is still suspended waiting on the OS file dialog --
-    // reassigning s_jupiterVideoPickTask would destroy that still-pending
-    // Task (and the coroutine frame it owns) out from under the callback
-    // that's eventually going to try to resume it. Real crash this was
-    // actually hit with: EXCEPTION_ACCESS_VIOLATION reading 0xFFFFFFFFFFFFFFFF
-    // inside arc::Future::await_suspend, resuming pickJupiterVideoTask --
-    // exactly the shape of a resumed coroutine whose frame is already gone.
-    static bool s_jupiterVideoPickPending = false;
-    static void pickJupiterVideo() {
-        if (s_jupiterVideoPickPending)
-            return;
-        s_jupiterVideoPickPending = true;
-        s_jupiterVideoPickTask = pickJupiterVideoTask();
-    }
-    static void pollJupiterVideoPickTask() {
-        if (s_jupiterVideoPickPending && s_jupiterVideoPickTask.isFinished()) {
-            auto* result = s_jupiterVideoPickTask.getFinishedValue();
-            if (result && result->has_value()) {
-                auto* gb = GucciEngine::get();
-                gb->jupiterVideoPath = (*result)->string();
-                Mod::get()->setSavedValue("jupiter_video_path", gb->jupiterVideoPath);
-                Notification::create("Video selected", NotificationIcon::Success)->show();
-            }
-            s_jupiterVideoPickTask = {};
-            s_jupiterVideoPickPending = false;
-        }
-    }
+    // The "choose a different video" picker (pickJupiterVideoTask and its
+    // guard/poll machinery) was removed 2026-08-31 -- Nigel: one click,
+    // immediate crash, every time ("for the jmf trainer, ditch the button").
+    // Not the same double-click race the earlier picker crash was (that
+    // guard was verified still intact and correct before this was pulled),
+    // something more fundamentally broken about this specific flow that
+    // wasn't chased further since the bundled JMF video already covers the
+    // real use case with zero setup. If this ever comes back, start from
+    // scratch rather than assuming the old guard-based approach was close --
+    // it wasn't the problem here.
 
     void MenuInterface::drawJupiterClickTrainerPage() {
-        pollJupiterVideoPickTask();
         auto* engine = GucciEngine::get();
         auto* mod = Mod::get();
         engine->jupiterClickBarPageVisible = true;
@@ -6121,25 +6087,14 @@ namespace gucci {
         Widgets::SectionHeader("Video Mode", theme);
         ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
         ImGui::TextWrapped(
-            "A review overlay, not a live one -- no level needs to be open. Plays your own "
-            "footage full-screen, riding this exact same click bar clock, with the bar itself "
-            "overlaid near the bottom.");
+            "A review overlay, not a live one -- no level needs to be open. Plays the bundled "
+            "JMF showcase footage full-screen, riding this exact same click bar clock, with the "
+            "bar itself overlaid near the bottom.");
         ImGui::PopStyleColor();
 
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.9f, 0.4f, 1.f));
         ImGui::TextWrapped("The JMF showcase video ships built in -- works with zero setup.");
         ImGui::PopStyleColor();
-        ImGui::BeginDisabled(s_jupiterVideoPickPending);
-        if (Widgets::StyledButton("Choose a Different Video", ImVec2(210, 26), theme, anim))
-            pickJupiterVideo();
-        ImGui::EndDisabled();
-        if (!engine->jupiterVideoPath.empty()) {
-            ImGui::SameLine();
-            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-            ImGui::TextWrapped(
-                "%s", std::filesystem::path(engine->jupiterVideoPath).filename().string().c_str());
-            ImGui::PopStyleColor();
-        }
 
         bool videoModeOn = engine->jupiterVideoModeEnabled;
         if (Widgets::ToggleSwitch("Enable Video Mode", &videoModeOn, theme, anim)) {
@@ -7539,7 +7494,6 @@ namespace gucci {
         mod->setSavedValue("jupiter_clickbar_enabled", eng->jupiterClickBarEnabled);
         mod->setSavedValue("jupiter_clickbar_window", (double)eng->jupiterClickBarWindow);
         mod->setSavedValue("jupiter_clickbar_loop", eng->jupiterClickBarLoop);
-        mod->setSavedValue("jupiter_video_path", eng->jupiterVideoPath);
         mod->setSavedValue("jupiter_video_offset_sec", (double)eng->jupiterVideoOffsetSec);
         mod->setSavedValue("jupiter_video_opacity", (double)eng->jupiterVideoOpacity);
         mod->setSavedValue("jupiter_ghost_enabled", eng->jupiterGhostEnabled);
@@ -7768,7 +7722,6 @@ namespace gucci {
         eng->jupiterSegmentsRaw = mod->getSavedValue<std::string>("jupiter_segments", "");
         eng->jupiterClickBarEnabled = mod->getSavedValue<bool>("jupiter_clickbar_enabled", true);
         eng->jupiterClickBarWindow = mod->getSavedValue<float>("jupiter_clickbar_window", 2.f);
-        eng->jupiterVideoPath = mod->getSavedValue<std::string>("jupiter_video_path", "");
         eng->jupiterVideoOffsetSec =
             mod->getSavedValue<float>("jupiter_video_offset_sec", 0.f);
         eng->jupiterVideoOpacity = mod->getSavedValue<float>("jupiter_video_opacity", 0.6f);

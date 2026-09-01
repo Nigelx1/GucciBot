@@ -1902,6 +1902,29 @@ namespace gucci {
                         loadJupiterMacroData(hidden, jupiterMacro);
                 }
             }
+
+            // Diagnostic added 2026-08-31: Nigel reported the Click Trainer's
+            // Resume button doing nothing, traced to drawJupiterClickBar's
+            // "No click data yet." early-out when jupiterMacro.clickIntervalsSec
+            // is empty -- but a standalone byte-for-byte replica of
+            // loadJupiterMacroData's own parsing logic, run against the exact
+            // .brrr file sitting in his save folder, decoded it cleanly (467
+            // real inputs, 233 matched click pairs, zero unmatched). So the
+            // default macro file itself isn't the problem -- this records
+            // what the LIVE game actually ends up with in jupiterMacro after
+            // this whole block runs, dedicated file since Geode's own
+            // console log isn't persisted anywhere reachable on this machine.
+            std::ofstream jmLog(Mod::get()->getSaveDir() / "guccibot_jupitermacro.log",
+                                std::ios::trunc);
+            if (jmLog) {
+                jmLog << "hidden_path_found=" << (!hidden.empty() ? hidden.string() : "<none>")
+                      << "\n";
+                jmLog << "jupiterMacro.loaded=" << (jupiterMacro.loaded ? 1 : 0) << "\n";
+                jmLog << "jupiterMacro.clickIntervalsSec.size()="
+                      << jupiterMacro.clickIntervalsSec.size() << "\n";
+                jmLog << "jupiterMacro.pathSamples.size()=" << jupiterMacro.pathSamples.size()
+                      << "\n";
+            }
         }
 
         auto* mod = Mod::get();

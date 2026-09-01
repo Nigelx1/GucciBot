@@ -1,19 +1,21 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-08-31-c (-b WORKED -- Nigel confirmed the video actually shows now, first real "           \
-    "confirmation this whole Video Mode saga. Two real follow-up bugs from that same test: (1) "     \
-    "flicker -- traced to guccibot_videomode.log showing requestedT stuck at 0.000 the whole "       \
-    "session (no macro playing, jupiterClickBarPosSec never advances) combined with getFrameAt's "   \
-    "old strict seek check having zero tolerance, so it oscillated between two adjacent real "        \
-    "frames every other call forever -- both decoded/uploaded fine each time, which is why the log " \
-    "never showed anything wrong. Fixed with a ~1-frame tolerance window so a static/near-static "   \
-    "requested time just keeps showing the current frame instead of fighting itself. (2) no way to " \
-    "back out -- a real regression from -b itself: the only 'Enable Video Mode' toggle lives in the "\
-    "main GUI window, which -b's own fix now correctly buries behind the video/clickbar overlays, "  \
-    "and at opacity 1.0 it's invisible with nothing to click. Added a dedicated always-on-top "       \
-    "'Exit Video Mode' button so this can't happen regardless of opacity/layout. Compiles clean. "    \
-    "NOT yet confirmed in-game.)"
+    "2026-08-31-d (Nigel: 'Choose a Different Video' crashed on one single click, every time, not "  \
+    "a double-click race like the earlier picker crash (that guard was verified still correct) -- "  \
+    "he said ditch the button rather than chase it further, since the bundled JMF video already "    \
+    "covers the real use case with zero setup. Removed the whole custom-video-picker feature "       \
+    "(button, coroutine task/guard machinery, jupiterVideoPath override + its save/load) -- Video "  \
+    "Mode now always plays the bundled video, no dead code left behind. Also: confirmed Resume-"      \
+    "not-working IS the 'macro shouldn't have to be loaded' complaint -- both trace to "              \
+    "drawJupiterClickBar's 'No click data yet.' gate on jupiterMacro.clickIntervalsSec being empty. "\
+    "Wrote a standalone Python replica of loadJupiterMacroData's exact parsing logic and ran it "     \
+    "against the real .brrr file already sitting in Nigel's save folder: it decodes CLEANLY (467 "   \
+    "real inputs, 233 matched click pairs, zero unmatched) -- so the default macro file itself "     \
+    "isn't corrupt/empty, the bug is elsewhere in why the live game ends up without it. Added a "     \
+    "one-time diagnostic log (guccibot_jupitermacro.log) at GucciEngine::initialize() reporting "     \
+    "what jupiterMacro actually ends up with, rather than guess further. Compiles clean. Button "     \
+    "removal should be done; the click-data mystery is NOT yet resolved, needs that log.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -485,8 +487,14 @@ namespace gucci {
         // exact same scrub/loop/pause clock as the click bar
         // (jupiterClickBarPosSec), offset by jupiterVideoOffsetSec seconds so
         // "video timestamp" and "macro time zero" can be manually aligned.
+        // Always plays the bundled JMF showcase video -- the "choose a
+        // different video" picker was removed 2026-08-31 (Nigel: it crashed
+        // on a single click, every time, "ditch the button" -- not a
+        // double-click race like the earlier picker crash, something more
+        // fundamentally broken about that specific flow) rather than chased
+        // further, since the bundled video already covers the actual use
+        // case with zero setup.
         bool jupiterVideoModeEnabled = false;
-        std::string jupiterVideoPath;
         float jupiterVideoOffsetSec = 0.f;
         float jupiterVideoOpacity = 0.6f;
 
