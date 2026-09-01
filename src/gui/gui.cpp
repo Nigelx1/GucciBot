@@ -6194,21 +6194,16 @@ namespace gucci {
         if (Widgets::StyledSliderFloat(
                 "Opacity", &engine->jupiterVideoOpacity, 0.f, 1.f, theme))
             mod->setSavedValue("jupiter_video_opacity", (double)engine->jupiterVideoOpacity);
-        // Range widened from the original +/-10s, 2026-08-31: the new snap
-        // tool below can legitimately produce a much larger offset (e.g.
-        // the bundled video has whatever lead-in before real gameplay
-        // starts, easily tens of seconds on a ~99s clip) -- a narrower
-        // range wouldn't clamp the underlying value, just make the slider
-        // handle sit uselessly at one end while the real number was
-        // something else, confusing to look at for no benefit.
-        if (Widgets::StyledSliderFloat(
-                "Alignment Offset (sec)", &engine->jupiterVideoOffsetSec, -10.f, 120.f, theme))
-            mod->setSavedValue("jupiter_video_offset_sec", (double)engine->jupiterVideoOffsetSec);
+        // Manual "Alignment Offset" debug slider removed 2026-08-31 --
+        // Nigel: "remove the delay slider" (its own description literally
+        // said "delays the video"), now that the Alignment Tool below
+        // covers the same job without trial-and-error nudging. The
+        // underlying value (jupiterVideoOffsetSec) is untouched and still
+        // drives playback -- it's just no longer directly draggable, only
+        // settable via "Snap Offset to This Frame". Shown read-only here
+        // so the current value isn't a total mystery between snaps.
         ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-        ImGui::TextWrapped(
-            "Debug slider -- nudge until the first click on the bar lines up with the first "
-            "click in the video, then leave it. Positive delays the video, negative brings it "
-            "earlier.");
+        ImGui::Text("Current offset: %.2fs", (double)engine->jupiterVideoOffsetSec);
         ImGui::PopStyleColor();
 
         // Alignment tool, added 2026-08-31 (Nigel: "any easier way to fix

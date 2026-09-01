@@ -1,18 +1,21 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-08-31-k (-j confirmed working, nothing broke. Nigel's own sharp catch: 'way less frames "  \
-    "than mpv' while scrubbing -- not a perf/GPU problem at all. Verified with a standalone harness " \
-    "against the real bundled video: it's genuinely 60fps (30 raw frames decoded per 0.5s). "        \
-    "getFrameAt's stuck-clock-flicker tolerance was a flat 0.06s, over 3x a real 60fps frame's "     \
-    "duration -- so it was silently swallowing most genuine frame advances too, not just the "       \
-    "stuck-clock case it was built for, capping effective playback around 16fps no matter how fast " \
-    "decode actually was. That's the real 'way less frames' cause. Fixed: tolerance now computed "   \
-    "from the stream's own real frame rate (r_frame_rate/avg_frame_rate, read at open()) instead of " \
-    "a fixed guess, so it stays ~1.5 real frames wide for whatever video is loaded. -j's other 3 "    \
-    "items (missing-input-capture fix, resolution-cap perf attempt, alignment scrub tool) untouched " \
-    "-- Nigel confirmed those didn't break anything, this is additive. Compiles clean. NOT yet "      \
-    "confirmed in-game.)"
+    "2026-08-31-l (Nigel: remove the delay slider, version bump to 1.5. Removed the manual "         \
+    "'Alignment Offset' debug slider (its own description literally said 'delays the video') now "   \
+    "that the Alignment Tool's snap button covers the same job without trial-and-error -- the "      \
+    "underlying value still drives playback, it's just read-only text now, only settable via Snap. " \
+    "Version bump: mod.json/CMakeLists.txt to 1.5.0, about.md fully audited (not just the header) "  \
+    "against actual current source -- added the 5 new themes (Romo/Grizzley/RedKingdom/Lemonade/"    \
+    "BrrrBot) to its table, added Survival Indicator and Click Indicators/Video Mode as real feature " \
+    "sections (both shipped, neither was ever documented there), synced Credits to match the actual " \
+    "in-game credits grid exactly (kepe/Gucci Mane/Toosii were missing). Also audited the external "  \
+    "guccibot.html the same way -- title/version badge, 3 separate stale theme-count spots (hero "    \
+    "stat, standalone stat-card, legal disclaimer), 5 new theme cards (CSS + HTML), a real pre-"      \
+    "existing bug caught along the way (GiddeyBot's card still showed its OLD red/white colors from " \
+    "before an earlier recolor -- fixed to match), Theme Inspiration card updated with Tony Romo/Tee " \
+    "Grizzley (verified against their actual in-code quote attributions, not guessed), and a fresh " \
+    "single 'What's actually new in 1.5' changelog block replacing the 1.4 one. Compiles clean.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

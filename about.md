@@ -1,4 +1,4 @@
-# GucciBot 1.4
+# GucciBot 1.5
 
 > Frame perfect. Ice cold. Brrr.
 
@@ -48,6 +48,23 @@ The same toolset as the Jupiter My Favourite Trainer, right next to it as its ow
 - **Synced music** — import your own track for it, with an adjustable sync offset (also added to the JMF tab).
 - Stats and ghosts activate automatically when you're on the level the macro was recorded on -- or on any level, with a clear heads-up, for macros that don't carry a recorded level name.
 
+## Survival Indicator
+
+A live green/red readout, right on screen while you play, for whether clicking *right now* survives what's coming:
+
+- 4 styles — Ring, Classic, Converge, Pulse — with adjustable opacity, colour, and lookahead window.
+- Flash-on-click feedback and a pitch-shifted click cue tied to how tight the margin is.
+- Metronome-based calibration per gamemode, to line the cue up with your actual reaction lead/jitter.
+- Accuracy/streak HUD (`Accuracy: N%  Streak: N (Best: N)`) tracked off the indicator's own safe/unsafe calls.
+
+## Click Indicators & Video Mode
+
+Real click-timing feedback and a synced video-review overlay, both built around the Jupiter My Favourite Trainer's click bar:
+
+- **Real scoring** — every real press/release you make against the macro's own click bar is matched to its nearest unanswered click and scored Perfect / OK / Miss, with the last timing delta shown live.
+- **Video Mode** — a full-screen review overlay (no level needs to be open) that plays your own footage back riding the exact same click-bar clock as the macro, for reviewing recorded runs against the timing data. The Jupiter My Favourite Trainer ships a real showcase video built in, working with zero setup.
+- **Alignment Tool** — scrub the video directly to the frame of the first real click, then snap the sync offset to it in one press instead of nudging a slider by trial and error.
+
 ## Rendering
 
 - Full gameplay capture to video via FFmpeg — configurable resolution, FPS, bitrate, codec (hardware encoders auto-detected per GPU vendor), and output extension.
@@ -72,6 +89,11 @@ The same toolset as the Jupiter My Favourite Trainer, right next to it as its ow
 | ButlerBot | `.butler` | Bulls Red + Black |
 | SaweetieBot | `.saweetie` | Hot Pink + Plum |
 | MaybachBot | `.maybach` | Platinum + Black |
+| RomoBot | `.romo` | Silver + Navy |
+| GrizzleyBot | `.grizzley` | Flare Red + Steel Black |
+| Red Kingdom | `.redkingdom` | Pulsing Red + Black |
+| LemonadeBot | `.lemonade` | Lemonade Yellow + Black |
+| BrrrBot | `.icebrrr` | Ice Blue + Navy, with a live snow overlay |
 
 ## Extras
 
@@ -83,7 +105,10 @@ The same toolset as the Jupiter My Favourite Trainer, right next to it as its ow
 ## Credits
 
 - **guccimanefan** (Nigelx1) — concept, direction, themes, testing
-- **Juice** — frame-window algorithm design, lead co-tester
+- **Juice** — frame-window algorithm design, lead co-tester, found the bugs nobody else caught
 - **Claude** — wrote the code and this page. Essentially the whole codebase, not a euphemism.
+- **kepe** — yBot, the file-size benchmark GBR6 was built to meet
 - **ToastexGD** — ToastyReplay engine base and improvements
+- **Gucci Mane** — he's the truth. Brrr.
+- **Toosii** — ToosiiBot theme
 - **peony** — Silicate (dropped the source like Gucci drops albums. Brrr.)
