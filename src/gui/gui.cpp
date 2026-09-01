@@ -1598,7 +1598,9 @@ namespace gucci {
                     sizeof(line),
                     "[t=%.2f] frame: openFailed=%d decoder.isOpen=%d windowVisible=%d "
                     "vpPos=(%.0f,%.0f) vpSize=(%.0f,%.0f) requestedT=%.3f decodeOk=%d "
-                    "rgbaBytes=%zu tex=%u texW=%d texH=%d",
+                    "rgbaBytes=%zu tex=%u texW=%d texH=%d clickBarPaused=%d "
+                    "clickBarPosSec=%.3f clickBarLastRealTime=%.3f clickBarEnabled=%d "
+                    "clickBarPageOpen=%d",
                     nowT2,
                     (int)openFailed,
                     (int)jupiterVideoDecoder.isOpen(),
@@ -1612,7 +1614,12 @@ namespace gucci {
                     rgbaBytes,
                     (unsigned int)(jupiterVideoTexture ? jupiterVideoTexture->getName() : 0),
                     jupiterVideoTexW,
-                    jupiterVideoTexH);
+                    jupiterVideoTexH,
+                    (int)engine->jupiterClickBarPaused,
+                    engine->jupiterClickBarPosSec,
+                    engine->jupiterClickBarLastRealTime,
+                    (int)engine->jupiterClickBarEnabled,
+                    (int)jupiterClickBarPageOpen);
             logVideoModeDebug(line);
         }
 
@@ -5950,8 +5957,21 @@ namespace gucci {
         gbju::syncClickBarMusic(true, engine->jupiterClickBarPaused, engine->jupiterClickBarPosSec);
 
         if (Widgets::StyledButton(
-                engine->jupiterClickBarPaused ? "Resume" : "Pause", ImVec2(80, 24), theme, anim))
+                engine->jupiterClickBarPaused ? "Resume" : "Pause", ImVec2(80, 24), theme, anim)) {
             engine->jupiterClickBarPaused = !engine->jupiterClickBarPaused;
+            // Diagnostic added 2026-08-31: Nigel pressed Resume in Video
+            // Mode and reported nothing happening -- logging the click
+            // itself (not just periodic state) since drawJupiterClickBar is
+            // called from two places (the normal tab AND Video Mode's own
+            // overlay) and it matters which one actually registered this.
+            char line[128];
+            snprintf(line,
+                    sizeof(line),
+                    "[t=%.2f] click bar Resume/Pause clicked, new jupiterClickBarPaused=%d",
+                    (double)ImGui::GetTime(),
+                    (int)engine->jupiterClickBarPaused);
+            logVideoModeDebug(line);
+        }
         ImGui::SameLine();
         if (Widgets::StyledButton("Reset", ImVec2(70, 24), theme, anim)) {
             engine->jupiterClickBarPosSec = 0.0;

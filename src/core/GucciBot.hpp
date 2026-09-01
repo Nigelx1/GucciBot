@@ -1,21 +1,20 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-08-31-d (Nigel: 'Choose a Different Video' crashed on one single click, every time, not "  \
-    "a double-click race like the earlier picker crash (that guard was verified still correct) -- "  \
-    "he said ditch the button rather than chase it further, since the bundled JMF video already "    \
-    "covers the real use case with zero setup. Removed the whole custom-video-picker feature "       \
-    "(button, coroutine task/guard machinery, jupiterVideoPath override + its save/load) -- Video "  \
-    "Mode now always plays the bundled video, no dead code left behind. Also: confirmed Resume-"      \
-    "not-working IS the 'macro shouldn't have to be loaded' complaint -- both trace to "              \
-    "drawJupiterClickBar's 'No click data yet.' gate on jupiterMacro.clickIntervalsSec being empty. "\
-    "Wrote a standalone Python replica of loadJupiterMacroData's exact parsing logic and ran it "     \
-    "against the real .brrr file already sitting in Nigel's save folder: it decodes CLEANLY (467 "   \
-    "real inputs, 233 matched click pairs, zero unmatched) -- so the default macro file itself "     \
-    "isn't corrupt/empty, the bug is elsewhere in why the live game ends up without it. Added a "     \
-    "one-time diagnostic log (guccibot_jupitermacro.log) at GucciEngine::initialize() reporting "     \
-    "what jupiterMacro actually ends up with, rather than guess further. Compiles clean. Button "     \
-    "removal should be done; the click-data mystery is NOT yet resolved, needs that log.)"
+    "2026-08-31-e (click-data mystery CLOSED: guccibot_jupitermacro.log confirmed jupiterMacro."     \
+    "loaded=1 with the full 233 click intervals -- default macro was fine all along, whatever Nigel "\
+    "hit earlier is gone now. New problem, same session: 'the clicks on the click bar are right, "   \
+    "the video just isnt playing back.' guccibot_videomode.log showed requestedT frozen at exactly "\
+    "0.000 for a full ~16s test -- the click bar clock never advanced. First guess (auto-resume on "\
+    "enabling Video Mode) was WRONG per Nigel -- he explicitly likes requiring a manual Resume "     \
+    "press, and says he's pressing it and nothing happens. Reverted that guess immediately, did NOT "\
+    "ship it. Real bug now, not assumed: added a log line right at the Resume/Pause button's own "   \
+    "click handler (so it's clear which of drawJupiterClickBar's two call sites -- the normal tab "  \
+    "vs Video Mode's own overlay -- actually receives the click and whether the pause flag really "  \
+    "flips), plus extended the periodic frame log with clickBarPaused/clickBarPosSec/"                \
+    "clickBarLastRealTime/clickBarEnabled/clickBarPageOpen so the tick math is fully visible over "  \
+    "time instead of guessed at. Compiles clean. Purely diagnostic on this part, no behavior change "\
+    "-- need this log after Nigel presses Resume again before writing any fix.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
