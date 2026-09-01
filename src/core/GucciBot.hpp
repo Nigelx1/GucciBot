@@ -1,12 +1,12 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-08-31-o (1.5.1 patch, Nigel: add the Click Indicators guy to credits. Added Bogdaner09 "   \
-    "(github.com/Bogdaner09/mod, Nigel's find -- confirmed from the real .slc-import commit message " \
-    "that first referenced this as Click Indicators' inspiration) to the in-game Credits tab "        \
-    "(gui.cpp entries[]), about.md, and guccibot.html's main Credits grid. Version bump 1.5.0 -> "    \
-    "1.5.1 (mod.json/CMakeLists.txt/HTML version badge), single changelog block replaced for 1.5.1 " \
-    "per the one-only rule. Compiles clean.)"
+    "2026-08-31-p (1.5.2 patch: Nigel's YouTube-mp3 downloader grabbed the wrong song entirely for " \
+    "LemonadeBot's Big Brrr track -- swapped resources/big_brrr_lemonade.mp3 for the correct file "  \
+    "he supplied directly. BPM (142) and drop offset (0:00, no intro) left untouched -- Nigel didn't " \
+    "flag those as wrong, only the track itself, so no reason to guess at new timing values. Version " \
+    "bump 1.5.1 -> 1.5.2, single changelog block replaced for 1.5.2 per the one-only rule. Compiles " \
+    "clean.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
