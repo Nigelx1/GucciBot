@@ -1,19 +1,18 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-08-31-f (the new click-handler log NEVER fired once across a whole test, despite real "   \
-    "repeated presses, while clickBarLastRealTime kept advancing every call -- so the function IS "  \
-    "running every frame, the click itself just wasn't registering at all. Read ImGui's real "       \
-    "source (FocusWindow(), imgui.cpp) and found it: 'steals active widgets' -- focusing a window "  \
-    "clears g.ActiveId if that id belongs to a DIFFERENT window. Video Mode draws 3 separate "       \
-    "windows (image/clickbar/exit) and called SetWindowFocus() on EACH one unconditionally every "   \
-    "frame -- so the instant you pressed Resume (setting ActiveId in the clickbar window), the "     \
-    "very next frame's SetWindowFocus() call on either of the OTHER two windows canceled that "      \
-    "press before release could ever complete it. Same bug in all 3 directions between all 3 "       \
-    "windows. Fixed by gating every SetWindowFocus() call on !ImGui::IsAnyItemActive() -- skip "     \
-    "reasserting front z-order for one frame while anything's actively being pressed/dragged "       \
-    "anywhere in the group, costs at most a 1-frame z-order delay, never a canceled click. Real, "   \
-    "source-confirmed mechanism, not a guess -- but NOT yet confirmed in-game.)"
+    "2026-08-31-g (Video Mode WORKS, but Nigel: ~5fps, asked to shut the rest of the menu down "     \
+    "while it runs. Two concrete, high-confidence perf fixes, not a profiler-guided guess: (1) the " \
+    "entire rest of the GUI -- backdrop/ambient waves, the whole active tab's sliders/buttons/"      \
+    "sections/its own click bar copy -- was still fully laid out and drawn by ImGui every frame "    \
+    "even though Video Mode's opaque overlay completely covers all of it. Now skipped entirely "     \
+    "while jupiterVideoModeEnabled is true -- click bar playback doesn't depend on it, Video Mode's " \
+    "own overlay ticks it independently. (2) uploadOrUpdateRgbaTexture was recreating a brand new "  \
+    "8MB CCTexture2D (full glGenTextures+glTexImage2D) on EVERY decoded frame, correctness-first "   \
+    "while the rendering bug was still being chased -- now update-in-place via glTexSubImage2D on "  \
+    "the same already-allocated GPU texture, only recreating if dimensions actually change. "        \
+    "Compiles clean. NOT yet confirmed in-game -- should meaningfully help, but 'meaningfully' "     \
+    "isn't 'confirmed.')"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

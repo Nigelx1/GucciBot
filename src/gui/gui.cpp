@@ -1410,35 +1410,46 @@ namespace gucci {
                                     bool externalWidgetJustReleased,
                                     float h);
 
-    // Every CPU-side step (decoder open, frame decode, byte count, texture
-    // id/dimensions, even ImGui::Begin()'s own "is this window visible"
-    // return value) has been confirmed correct via guccibot_videomode.log --
-    // real evidence, not assumption -- yet nothing actually appears on
-    // screen. ccGLInvalidateStateCache() alone (the earlier fix) wasn't
-    // enough, so this switches away from raw GL texture calls entirely:
-    // cocos2d::CCTexture2D::initWithData() is cocos2d's OWN blessed way to
-    // create a texture from raw pixels, and handles all of its internal GL
-    // state bookkeeping correctly by construction, instead of GucciBot
-    // hand-rolling glGenTextures/glTexImage2D and hoping one cache-invalidate
-    // call covers everything cocos2d cares about. A new CCTexture2D per
-    // decoded frame is wasteful (should be updated in place, not
-    // recreated) but correctness comes first -- optimize once this is
-    // confirmed to actually fix the real problem.
+    // Was recreating a brand new cocos2d::CCTexture2D (full glGenTextures +
+    // glTexImage2D allocation of an 8MB 1920x1080 RGBA buffer) on every
+    // single decoded video frame, correctness-first while the actual
+    // rendering bug was still being chased (see the CCTexture2D-vs-raw-GL
+    // saga above). Now that Video Mode genuinely works, Nigel reported ~5fps
+    // -- this per-frame full texture reallocation is almost certainly the
+    // biggest single cost, so it's now update-in-place: create the
+    // CCTexture2D object ONCE (its dimensions don't change frame to frame,
+    // same video the whole time now that the picker's gone), and on every
+    // later call just glTexSubImage2D new pixels into the SAME already-
+    // allocated GPU texture -- no new GL object, no reallocation. Uses the
+    // exact ccGLBindTexture2D/ccGLInvalidateStateCache pattern already
+    // proven correct in this function's raw-GL era (build -h) for making a
+    // manual GL texture update visible to imgui-cocos's state-cached
+    // renderer. Only recreates if the requested size actually changes
+    // (defensive; shouldn't happen with a single fixed-size source video).
     static void uploadOrUpdateRgbaTexture(cocos2d::CCTexture2D*& texObj,
                                           int w,
                                           int h,
                                           const std::vector<uint8_t>& rgba) {
-        if (texObj) {
-            texObj->release();
-            texObj = nullptr;
+        bool sizeChanged =
+            texObj && (texObj->getPixelsWide() != (unsigned int)w ||
+                      texObj->getPixelsHigh() != (unsigned int)h);
+        if (!texObj || sizeChanged) {
+            if (texObj) {
+                texObj->release();
+                texObj = nullptr;
+            }
+            auto* newTex = new cocos2d::CCTexture2D();
+            newTex->initWithData(rgba.data(),
+                                 cocos2d::kCCTexture2DPixelFormat_RGBA8888,
+                                 (unsigned int)w,
+                                 (unsigned int)h,
+                                 cocos2d::CCSizeMake((float)w, (float)h));
+            texObj = newTex;
+            return;
         }
-        auto* newTex = new cocos2d::CCTexture2D();
-        newTex->initWithData(rgba.data(),
-                             cocos2d::kCCTexture2DPixelFormat_RGBA8888,
-                             (unsigned int)w,
-                             (unsigned int)h,
-                             cocos2d::CCSizeMake((float)w, (float)h));
-        texObj = newTex;
+        cocos2d::ccGLBindTexture2D(texObj->getName());
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
+        cocos2d::ccGLInvalidateStateCache();
     }
 
     // The real JMF showcase video ships bundled as a mod resource (see
@@ -7989,17 +8000,32 @@ namespace gucci {
         if (shown && !anim.closing)
             PlatformToolbox::showCursor();
         theme.applyToImGuiStyle();
-        drawBackdrop();
-        if (anim.openProgress > 0.f) {
-            if (compactMode)
-                drawCompactWindow();
-            else if (megaHackLook)
-                drawMegaHackWindow();
-            else
-                drawMainWindow();
+        // Nigel, 2026-08-31: Video Mode working but running at ~5fps, asked
+        // to "shut down the rest of the menu when thats running." Real,
+        // worthwhile win, not just tidiness: the whole rest of the GUI
+        // (backdrop + ambient waves, and the entire active tab's worth of
+        // sliders/buttons/sections/its own click bar copy) was still being
+        // fully laid out and drawn by ImGui every single frame even though
+        // Video Mode's own opaque overlay completely covers all of it --
+        // 100% wasted CPU/draw-call work for something nobody can see.
+        // jupiterMacro/click-bar state itself doesn't depend on any of this
+        // running -- the click bar's own tick logic lives inside
+        // drawJupiterClickBar, and Video Mode's overlay calls that directly
+        // on its own, so skipping the main window entirely doesn't stop
+        // playback.
+        if (!engine->jupiterVideoModeEnabled) {
+            drawBackdrop();
+            if (anim.openProgress > 0.f) {
+                if (compactMode)
+                    drawCompactWindow();
+                else if (megaHackLook)
+                    drawMegaHackWindow();
+                else
+                    drawMainWindow();
+            }
+            drawRenderCompletePopup();
+            drawCustomThemeEditorPopup();
         }
-        drawRenderCompletePopup();
-        drawCustomThemeEditorPopup();
         drawJupiterVideoOverlay();
     }
 
