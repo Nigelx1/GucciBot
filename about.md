@@ -95,6 +95,8 @@ Real click-timing feedback and a synced video-review overlay, both built around 
 | LemonadeBot | `.lemonade` | Lemonade Yellow + Black |
 | BrrrBot | `.icebrrr` | Ice Blue + Navy, with a live snow overlay |
 
+**Make your own** — a full theme editor, not just a color picker: name, your own file extension, the complete color palette (accent, background, card, both text colors), corner radius and opacity, custom subtitle and brand tag, your own quotes on the Replay/Tools/Credits pages, and an optional Big Brrr track with its own BPM and drop offset. Saved and switchable right alongside the built-in themes.
+
 ## Extras
 
 - **Compact Mode** — a small corner panel (record/play, save/name/Calculate, macro picker, TPS/speed, frame stepping) instead of the full tabbed window, so the bot stays usable while you're actually playing.

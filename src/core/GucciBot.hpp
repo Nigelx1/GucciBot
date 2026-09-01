@@ -1,21 +1,13 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-08-31-l (Nigel: remove the delay slider, version bump to 1.5. Removed the manual "         \
-    "'Alignment Offset' debug slider (its own description literally said 'delays the video') now "   \
-    "that the Alignment Tool's snap button covers the same job without trial-and-error -- the "      \
-    "underlying value still drives playback, it's just read-only text now, only settable via Snap. " \
-    "Version bump: mod.json/CMakeLists.txt to 1.5.0, about.md fully audited (not just the header) "  \
-    "against actual current source -- added the 5 new themes (Romo/Grizzley/RedKingdom/Lemonade/"    \
-    "BrrrBot) to its table, added Survival Indicator and Click Indicators/Video Mode as real feature " \
-    "sections (both shipped, neither was ever documented there), synced Credits to match the actual " \
-    "in-game credits grid exactly (kepe/Gucci Mane/Toosii were missing). Also audited the external "  \
-    "guccibot.html the same way -- title/version badge, 3 separate stale theme-count spots (hero "    \
-    "stat, standalone stat-card, legal disclaimer), 5 new theme cards (CSS + HTML), a real pre-"      \
-    "existing bug caught along the way (GiddeyBot's card still showed its OLD red/white colors from " \
-    "before an earlier recolor -- fixed to match), Theme Inspiration card updated with Tony Romo/Tee " \
-    "Grizzley (verified against their actual in-code quote attributions, not guessed), and a fresh " \
-    "single 'What's actually new in 1.5' changelog block replacing the 1.4 one. Compiles clean.)"
+    "2026-08-31-m (doc-only follow-up to -l: Nigel caught that the 'create your own theme' editor "  \
+    "-- full color palette, own extension, own quotes, own optional Big Brrr track, saved/switchable " \
+    "alongside the built-in themes -- was real 1.5 scope I'd missed entirely from about.md and "      \
+    "guccibot.html despite it being a fully-shipped feature (CustomTheme struct, openCustomThemeEditor" \
+    "/drawCustomThemeEditorPopup, GucciBot.hpp/gui.cpp). Added it to both docs' feature lists and "    \
+    "changelog blurbs. No code changes -- rebuilt solely so the packaged .geode's about.md reflects "  \
+    "this before it gets attached to the actual GitHub release. Compiles clean.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
