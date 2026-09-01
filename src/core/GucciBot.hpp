@@ -1,20 +1,19 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-08-31-e (click-data mystery CLOSED: guccibot_jupitermacro.log confirmed jupiterMacro."     \
-    "loaded=1 with the full 233 click intervals -- default macro was fine all along, whatever Nigel "\
-    "hit earlier is gone now. New problem, same session: 'the clicks on the click bar are right, "   \
-    "the video just isnt playing back.' guccibot_videomode.log showed requestedT frozen at exactly "\
-    "0.000 for a full ~16s test -- the click bar clock never advanced. First guess (auto-resume on "\
-    "enabling Video Mode) was WRONG per Nigel -- he explicitly likes requiring a manual Resume "     \
-    "press, and says he's pressing it and nothing happens. Reverted that guess immediately, did NOT "\
-    "ship it. Real bug now, not assumed: added a log line right at the Resume/Pause button's own "   \
-    "click handler (so it's clear which of drawJupiterClickBar's two call sites -- the normal tab "  \
-    "vs Video Mode's own overlay -- actually receives the click and whether the pause flag really "  \
-    "flips), plus extended the periodic frame log with clickBarPaused/clickBarPosSec/"                \
-    "clickBarLastRealTime/clickBarEnabled/clickBarPageOpen so the tick math is fully visible over "  \
-    "time instead of guessed at. Compiles clean. Purely diagnostic on this part, no behavior change "\
-    "-- need this log after Nigel presses Resume again before writing any fix.)"
+    "2026-08-31-f (the new click-handler log NEVER fired once across a whole test, despite real "   \
+    "repeated presses, while clickBarLastRealTime kept advancing every call -- so the function IS "  \
+    "running every frame, the click itself just wasn't registering at all. Read ImGui's real "       \
+    "source (FocusWindow(), imgui.cpp) and found it: 'steals active widgets' -- focusing a window "  \
+    "clears g.ActiveId if that id belongs to a DIFFERENT window. Video Mode draws 3 separate "       \
+    "windows (image/clickbar/exit) and called SetWindowFocus() on EACH one unconditionally every "   \
+    "frame -- so the instant you pressed Resume (setting ActiveId in the clickbar window), the "     \
+    "very next frame's SetWindowFocus() call on either of the OTHER two windows canceled that "      \
+    "press before release could ever complete it. Same bug in all 3 directions between all 3 "       \
+    "windows. Fixed by gating every SetWindowFocus() call on !ImGui::IsAnyItemActive() -- skip "     \
+    "reasserting front z-order for one frame while anything's actively being pressed/dragged "       \
+    "anywhere in the group, costs at most a 1-frame z-order delay, never a canceled click. Real, "   \
+    "source-confirmed mechanism, not a guess -- but NOT yet confirmed in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

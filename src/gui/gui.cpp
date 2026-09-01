@@ -1565,7 +1565,24 @@ namespace gucci {
         // top each frame, undoing that. (ImGui source also confirms
         // SetWindowFocus()/FocusWindow() itself no-ops the reorder if
         // NoBringToFrontOnFocus is set, so removing the flag isn't optional.)
-        ImGui::SetWindowFocus();
+        //
+        // Real bug found 2026-08-31 from this exact line: FocusWindow()
+        // (imgui.cpp) "steals active widgets" -- if some OTHER window
+        // currently owns g.ActiveId (e.g. the click bar's own Resume button
+        // mid-press, in ##jupiterVideoClickBar below), focusing a DIFFERENT
+        // window calls ClearActiveID() and cancels that in-progress click
+        // outright. Since this ran unconditionally every frame, it was
+        // silently killing the Resume button's press-then-release cycle the
+        // very next frame after mouse-down, before release could ever
+        // register -- confirmed via a real click-handler log that never
+        // once fired despite genuine repeated presses. Skipping the call
+        // whenever ANYTHING is currently active anywhere fixes it: an
+        // active widget only lives 1-2 frames past its own window's own
+        // focus call (which is safe, see the matching comment below), so
+        // this costs at most a one-frame delay in reclaiming front z-order,
+        // never a stuck click.
+        if (!ImGui::IsAnyItemActive())
+            ImGui::SetWindowFocus();
         ImDrawList* dl = ImGui::GetWindowDrawList();
 
         double videoTimeSec = 0.0;
@@ -1701,8 +1718,13 @@ namespace gucci {
         // after ##jupiterVideoOverlay's own SetWindowFocus() this same
         // frame, so this one wins and stays visually on top of the video
         // image, matching the original spec ("clickbar playing somewhere
-        // over it").
-        ImGui::SetWindowFocus();
+        // over it"). Same IsAnyItemActive() guard as above -- this window's
+        // OWN Resume/Pause/Reset/Loop buttons live right below this call, so
+        // without the guard, THIS call would just as easily cancel the exit
+        // button's press (##jupiterVideoExit, below) or vice versa on the
+        // frame after either one goes down.
+        if (!ImGui::IsAnyItemActive())
+            ImGui::SetWindowFocus();
         drawJupiterClickBar(theme, anim, engine, engine->jupiterClickBarWindow, false, 60.f);
         ImGui::End();
 
@@ -1722,7 +1744,14 @@ namespace gucci {
                      nullptr,
                      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
                          ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize);
-        ImGui::SetWindowFocus();
+        // Same IsAnyItemActive() guard as the other two windows in this
+        // function -- see ##jupiterVideoOverlay's comment above for the
+        // real mechanism (FocusWindow() clears another window's in-progress
+        // active widget). Without it, THIS call could cancel a Resume press
+        // in ##jupiterVideoClickBar the frame after it goes down, same bug,
+        // different direction.
+        if (!ImGui::IsAnyItemActive())
+            ImGui::SetWindowFocus();
         if (ImGui::Button("Exit Video Mode", ImVec2(170.f, 0.f))) {
             engine->jupiterVideoModeEnabled = false;
         }
