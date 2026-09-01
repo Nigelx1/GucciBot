@@ -23,7 +23,7 @@ GucciBot is a Geometry Dash macro bot built on Silicate's physics engine, with a
 ## Practice & Analysis
 
 - Macro diff viewer — compare two replays frame by frame
-- Frame-window analyzer ("Calculate") — per-click timing windows across real game frames
+- Frame-window analyzer ("Calculate") — per-click timing windows across real game frames. Improved performance when using an external Practice Fix (native Practice Fix coming soon, hopefully).
 - TPS mid-macro changes, noclip accuracy display, macro trim/merge/surgery
 - Bot settings presets, metadata editor, autosave at level end and/or on a timer
 

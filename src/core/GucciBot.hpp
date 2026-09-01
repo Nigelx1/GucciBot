@@ -1,13 +1,12 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-08-31-m (doc-only follow-up to -l: Nigel caught that the 'create your own theme' editor "  \
-    "-- full color palette, own extension, own quotes, own optional Big Brrr track, saved/switchable " \
-    "alongside the built-in themes -- was real 1.5 scope I'd missed entirely from about.md and "      \
-    "guccibot.html despite it being a fully-shipped feature (CustomTheme struct, openCustomThemeEditor" \
-    "/drawCustomThemeEditorPopup, GucciBot.hpp/gui.cpp). Added it to both docs' feature lists and "    \
-    "changelog blurbs. No code changes -- rebuilt solely so the packaged .geode's about.md reflects "  \
-    "this before it gets attached to the actual GitHub release. Compiles clean.)"
+    "2026-08-31-n (second doc-only follow-up to -l: Nigel gave the exact line for the frame-window " \
+    "analyzer work from before this session -- 'improved frame window performance when using "      \
+    "external practice fix (native practice fix coming soon hopefully)' -- added verbatim to "       \
+    "about.md's Frame-window analyzer bullet and guccibot.html's 1.5 changelog blurb. No code "      \
+    "changes -- rebuilt so the packaged .geode's about.md is current before attaching to the "       \
+    "GitHub release. Compiles clean.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
