@@ -1410,46 +1410,47 @@ namespace gucci {
                                     bool externalWidgetJustReleased,
                                     float h);
 
-    // Was recreating a brand new cocos2d::CCTexture2D (full glGenTextures +
-    // glTexImage2D allocation of an 8MB 1920x1080 RGBA buffer) on every
-    // single decoded video frame, correctness-first while the actual
-    // rendering bug was still being chased (see the CCTexture2D-vs-raw-GL
-    // saga above). Now that Video Mode genuinely works, Nigel reported ~5fps
-    // -- this per-frame full texture reallocation is almost certainly the
-    // biggest single cost, so it's now update-in-place: create the
-    // CCTexture2D object ONCE (its dimensions don't change frame to frame,
-    // same video the whole time now that the picker's gone), and on every
-    // later call just glTexSubImage2D new pixels into the SAME already-
-    // allocated GPU texture -- no new GL object, no reallocation. Uses the
-    // exact ccGLBindTexture2D/ccGLInvalidateStateCache pattern already
-    // proven correct in this function's raw-GL era (build -h) for making a
-    // manual GL texture update visible to imgui-cocos's state-cached
-    // renderer. Only recreates if the requested size actually changes
-    // (defensive; shouldn't happen with a single fixed-size source video).
+    // REVERTED 2026-08-31 (build -i): the glTexSubImage2D update-in-place
+    // attempt below (kept in this comment for history, not live code) broke
+    // rendering the instant a SECOND frame was ever uploaded through it.
+    // Nigel's precise repro nailed it: pressing "Enable Video Mode" alone
+    // (first frame only, still goes through the initWithData branch below)
+    // was fine; pressing Play/Resume (which starts decoding/uploading
+    // frame 2 onward, the first time the subImage2D branch ever ran) is
+    // exactly when the screen went garbled -- including the click bar and
+    // exit button, which don't touch this texture at all, going missing
+    // too. That points at glTexSubImage2D (or the ccGLBindTexture2D call
+    // right before it) corrupting some OTHER piece of shared GL/render
+    // state -- a real candidate, not confirmed: ImGui's entire UI (all
+    // text, all widgets, including the click bar/exit button) samples from
+    // ONE shared font atlas texture, and if ccGLBindTexture2D's cached
+    // "currently bound" texture unit didn't actually match this texture's
+    // real GL binding at the moment this ran, the subImage2D call could
+    // have silently targeted the wrong texture -- e.g. overwriting part of
+    // that shared atlas -- which would explain unrelated widgets breaking
+    // too. Genuinely not confirmed, so not shipping a second guess at
+    // fixing THIS approach -- reverted to always recreating a fresh
+    // CCTexture2D per frame (the exact approach confirmed working in build
+    // -f), which is back to the ~5fps Nigel first reported, but correct.
+    // If this perf win is worth revisiting later, it needs real evidence
+    // first (e.g. glGetError() checks around the subImage2D call, or
+    // confirming the actual bound-texture-unit assumption some other way)
+    // rather than another blind attempt at the same technique.
     static void uploadOrUpdateRgbaTexture(cocos2d::CCTexture2D*& texObj,
                                           int w,
                                           int h,
                                           const std::vector<uint8_t>& rgba) {
-        bool sizeChanged =
-            texObj && (texObj->getPixelsWide() != (unsigned int)w ||
-                      texObj->getPixelsHigh() != (unsigned int)h);
-        if (!texObj || sizeChanged) {
-            if (texObj) {
-                texObj->release();
-                texObj = nullptr;
-            }
-            auto* newTex = new cocos2d::CCTexture2D();
-            newTex->initWithData(rgba.data(),
-                                 cocos2d::kCCTexture2DPixelFormat_RGBA8888,
-                                 (unsigned int)w,
-                                 (unsigned int)h,
-                                 cocos2d::CCSizeMake((float)w, (float)h));
-            texObj = newTex;
-            return;
+        if (texObj) {
+            texObj->release();
+            texObj = nullptr;
         }
-        cocos2d::ccGLBindTexture2D(texObj->getName());
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
-        cocos2d::ccGLInvalidateStateCache();
+        auto* newTex = new cocos2d::CCTexture2D();
+        newTex->initWithData(rgba.data(),
+                             cocos2d::kCCTexture2DPixelFormat_RGBA8888,
+                             (unsigned int)w,
+                             (unsigned int)h,
+                             cocos2d::CCSizeMake((float)w, (float)h));
+        texObj = newTex;
     }
 
     // The real JMF showcase video ships bundled as a mod resource (see

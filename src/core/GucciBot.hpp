@@ -1,17 +1,19 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-08-31-h (-g's 'skip the whole menu' change broke Video Mode visually -- Nigel's "          \
-    "screenshot showed a garbled screen with NEITHER the click bar NOR the exit button visible, "    \
-    "even though both are drawn unconditionally by drawJupiterVideoOverlay() regardless of that "    \
-    "gate. Their total absence points at something more fundamental than the texture-update change " \
-    "-- possibly tied to skipping drawBackdrop() specifically (always the first Begin() call every " \
-    "frame before this change; may be structurally relied on). Root cause not confirmed, so rather " \
-    "than guess further, pulled back to a safer partial revert: drawBackdrop() and the two popup "   \
-    "draws are unconditional again (cheap, and never actually implicated), ONLY the expensive full " \
-    "tab window (drawCompactWindow/drawMegaHackWindow/drawMainWindow -- by far the bulk of the "     \
-    "wasted work anyway) stays skipped while Video Mode is on. -g's texture update-in-place change " \
-    "is untouched, no direct evidence against it. Compiles clean. NOT yet confirmed in-game.)"
+    "2026-08-31-i (-h's guess was WRONG -- Nigel's precise repro: pressing Enable Video Mode alone " \
+    "(first frame only) was fine, it broke the instant he pressed Play/Resume. First frame always "  \
+    "went through the safe initWithData path; Resume is what first triggers the glTexSubImage2D "    \
+    "update-in-place branch. That isolates the real culprit to the texture-update code from -g, "    \
+    "not the menu-skip change from -h -- my -h diagnosis was a guess and it was wrong, said so "     \
+    "plainly rather than defend it. Reverted uploadOrUpdateRgbaTexture to always recreating a fresh " \
+    "CCTexture2D per frame -- the exact approach confirmed working in build -f. Back to ~5fps, but " \
+    "correct. Real, not-fully-confirmed suspicion for why subImage2D broke unrelated widgets too "    \
+    "(the click bar/exit button, which don't touch this texture): ccGLBindTexture2D's cached "       \
+    "'currently bound' state may not have matched the real GL binding, so the update could have hit " \
+    "the wrong texture -- e.g. ImGui's own shared font atlas, which everything including the click "  \
+    "bar/exit button samples from. Not confirmed, not chased further -- reverting instead of "        \
+    "guessing at a second fix. Compiles clean. NOT yet confirmed in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
