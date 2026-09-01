@@ -1,18 +1,17 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-08-31-g (Video Mode WORKS, but Nigel: ~5fps, asked to shut the rest of the menu down "     \
-    "while it runs. Two concrete, high-confidence perf fixes, not a profiler-guided guess: (1) the " \
-    "entire rest of the GUI -- backdrop/ambient waves, the whole active tab's sliders/buttons/"      \
-    "sections/its own click bar copy -- was still fully laid out and drawn by ImGui every frame "    \
-    "even though Video Mode's opaque overlay completely covers all of it. Now skipped entirely "     \
-    "while jupiterVideoModeEnabled is true -- click bar playback doesn't depend on it, Video Mode's " \
-    "own overlay ticks it independently. (2) uploadOrUpdateRgbaTexture was recreating a brand new "  \
-    "8MB CCTexture2D (full glGenTextures+glTexImage2D) on EVERY decoded frame, correctness-first "   \
-    "while the rendering bug was still being chased -- now update-in-place via glTexSubImage2D on "  \
-    "the same already-allocated GPU texture, only recreating if dimensions actually change. "        \
-    "Compiles clean. NOT yet confirmed in-game -- should meaningfully help, but 'meaningfully' "     \
-    "isn't 'confirmed.')"
+    "2026-08-31-h (-g's 'skip the whole menu' change broke Video Mode visually -- Nigel's "          \
+    "screenshot showed a garbled screen with NEITHER the click bar NOR the exit button visible, "    \
+    "even though both are drawn unconditionally by drawJupiterVideoOverlay() regardless of that "    \
+    "gate. Their total absence points at something more fundamental than the texture-update change " \
+    "-- possibly tied to skipping drawBackdrop() specifically (always the first Begin() call every " \
+    "frame before this change; may be structurally relied on). Root cause not confirmed, so rather " \
+    "than guess further, pulled back to a safer partial revert: drawBackdrop() and the two popup "   \
+    "draws are unconditional again (cheap, and never actually implicated), ONLY the expensive full " \
+    "tab window (drawCompactWindow/drawMegaHackWindow/drawMainWindow -- by far the bulk of the "     \
+    "wasted work anyway) stays skipped while Video Mode is on. -g's texture update-in-place change " \
+    "is untouched, no direct evidence against it. Compiles clean. NOT yet confirmed in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

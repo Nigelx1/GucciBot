@@ -8000,21 +8000,36 @@ namespace gucci {
         if (shown && !anim.closing)
             PlatformToolbox::showCursor();
         theme.applyToImGuiStyle();
+        drawBackdrop();
         // Nigel, 2026-08-31: Video Mode working but running at ~5fps, asked
         // to "shut down the rest of the menu when thats running." Real,
-        // worthwhile win, not just tidiness: the whole rest of the GUI
-        // (backdrop + ambient waves, and the entire active tab's worth of
-        // sliders/buttons/sections/its own click bar copy) was still being
-        // fully laid out and drawn by ImGui every single frame even though
-        // Video Mode's own opaque overlay completely covers all of it --
-        // 100% wasted CPU/draw-call work for something nobody can see.
-        // jupiterMacro/click-bar state itself doesn't depend on any of this
+        // worthwhile win, not just tidiness: the active tab's entire worth
+        // of sliders/buttons/sections/its own click bar copy was still
+        // being fully laid out and drawn by ImGui every single frame even
+        // though Video Mode's own opaque overlay completely covers all of
+        // it -- 100% wasted CPU/draw-call work for something nobody can
+        // see. jupiterMacro/click-bar state itself doesn't depend on this
         // running -- the click bar's own tick logic lives inside
         // drawJupiterClickBar, and Video Mode's overlay calls that directly
-        // on its own, so skipping the main window entirely doesn't stop
-        // playback.
+        // on its own, so skipping the main window doesn't stop playback.
+        //
+        // 2026-08-31 follow-up: originally also skipped drawBackdrop() and
+        // the two popup draws here, on the same "nobody can see it"
+        // reasoning. Nigel's next screenshot showed a broken screen with
+        // NEITHER the click bar NOR the exit button visible -- both drawn
+        // unconditionally by drawJupiterVideoOverlay() below regardless of
+        // this gate, so their total absence points at something more
+        // fundamental than a texture bug, possibly tied to skipping every
+        // single ImGui window for the frame (drawBackdrop used to always be
+        // the first Begin() call every frame; this may have been the first
+        // real frame where drawJupiterVideoOverlay() was the very first
+        // ImGui call of the frame at all). Root cause not confirmed -- so
+        // rather than guess further, pulled back to the safer, proven-
+        // correct half of this change: keep skipping only the actual
+        // expensive part (the full tab window, by far the bulk of the
+        // wasted work), restore the cheap backdrop + popup calls that were
+        // always running before and never implicated in the regression.
         if (!engine->jupiterVideoModeEnabled) {
-            drawBackdrop();
             if (anim.openProgress > 0.f) {
                 if (compactMode)
                     drawCompactWindow();
@@ -8023,9 +8038,9 @@ namespace gucci {
                 else
                     drawMainWindow();
             }
-            drawRenderCompletePopup();
-            drawCustomThemeEditorPopup();
         }
+        drawRenderCompletePopup();
+        drawCustomThemeEditorPopup();
         drawJupiterVideoOverlay();
     }
 
