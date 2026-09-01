@@ -114,3 +114,4 @@ Real click-timing feedback and a synced video-review overlay, both built around 
 - **Gucci Mane** — he's the truth. Brrr.
 - **Toosii** — ToosiiBot theme
 - **peony** — Silicate (dropped the source like Gucci drops albums. Brrr.)
+- **Bogdaner09** — Click Indicators inspiration ([github.com/Bogdaner09/mod](https://github.com/Bogdaner09/mod))

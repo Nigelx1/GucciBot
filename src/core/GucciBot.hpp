@@ -1,12 +1,12 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-08-31-n (second doc-only follow-up to -l: Nigel gave the exact line for the frame-window " \
-    "analyzer work from before this session -- 'improved frame window performance when using "      \
-    "external practice fix (native practice fix coming soon hopefully)' -- added verbatim to "       \
-    "about.md's Frame-window analyzer bullet and guccibot.html's 1.5 changelog blurb. No code "      \
-    "changes -- rebuilt so the packaged .geode's about.md is current before attaching to the "       \
-    "GitHub release. Compiles clean.)"
+    "2026-08-31-o (1.5.1 patch, Nigel: add the Click Indicators guy to credits. Added Bogdaner09 "   \
+    "(github.com/Bogdaner09/mod, Nigel's find -- confirmed from the real .slc-import commit message " \
+    "that first referenced this as Click Indicators' inspiration) to the in-game Credits tab "        \
+    "(gui.cpp entries[]), about.md, and guccibot.html's main Credits grid. Version bump 1.5.0 -> "    \
+    "1.5.1 (mod.json/CMakeLists.txt/HTML version badge), single changelog block replaced for 1.5.1 " \
+    "per the one-only rule. Compiles clean.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
