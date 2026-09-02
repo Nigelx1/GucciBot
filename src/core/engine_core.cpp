@@ -237,12 +237,49 @@ namespace gucci {
         backupExisting(getCurrentPath());
     }
 
+    // Juice's file-organization ask: .fw/.path/.trainer sidecars used to sit
+    // directly next to every macro in replays/ (macro.brrr, macro.brrr.fw,
+    // macro.brrr.path, macro.brrr.trainer, times every macro you've ever
+    // saved) -- "the macro folder looks atrocious". Sidecars now live in
+    // their own replays/sidecars/ subfolder instead, named after the macro's
+    // own filename. Scoped to relocating them, not merging the three
+    // formats into one container -- Juice's own phrasing ("or at least put
+    // them all in different folders") explicitly allows the lower-risk
+    // version, and three independent binary formats getting merged is a lot
+    // more surface area for a subtle bug than three path computations are.
+    //
+    // Migration is lazy and per-file: the first time a macro's sidecar is
+    // touched after this update, if it's still sitting in the old flat
+    // location and hasn't already been moved, it gets moved (renamed, or
+    // copy+delete if rename can't cross whatever boundary is in the way)
+    // into the new subfolder. No bulk migration step, no "did the migration
+    // run" state to track -- every access path (save or load) goes through
+    // this same function, so it self-heals the first time each macro is
+    // touched.
+    static fs::path sidecarPath(const fs::path& macroPath, const char* ext) {
+        auto dir = macroPath.parent_path() / "sidecars";
+        std::error_code ec;
+        fs::create_directories(dir, ec);
+        auto newPath = dir / (macroPath.filename().string() + ext);
+        auto oldPath = fs::path(macroPath.string() + ext);
+        if (!fs::exists(newPath, ec) && fs::exists(oldPath, ec)) {
+            fs::rename(oldPath, newPath, ec);
+            if (ec) {
+                ec.clear();
+                fs::copy_file(oldPath, newPath, fs::copy_options::overwrite_existing, ec);
+                if (!ec)
+                    fs::remove(oldPath, ec);
+            }
+        }
+        return newPath;
+    }
+
     static fs::path fwSidecarPath(const fs::path& macroPath) {
-        return fs::path(macroPath.string() + ".fw");
+        return sidecarPath(macroPath, ".fw");
     }
 
     static fs::path pathSamplesSidecarPath(const fs::path& macroPath) {
-        return fs::path(macroPath.string() + ".path");
+        return sidecarPath(macroPath, ".path");
     }
 
     static void savePathSamples(const fs::path& macroPath,
@@ -553,7 +590,7 @@ namespace gucci {
     }
 
     static fs::path trainerSidecarPath(const fs::path& macroPath) {
-        return fs::path(macroPath.string() + ".trainer");
+        return sidecarPath(macroPath, ".trainer");
     }
 
     static void saveTrainerProgress(const fs::path& macroPath, float bestX) {
@@ -2319,15 +2356,30 @@ namespace gucci {
 
                 mode = Mode::Idle;
                 fwSampling = false;
-                fwProbeClick = 0;
-                fwProbeShift = -1;
-                fwProbePhase = 0;
-                fwProbeLow = 0;
-                fwProbeHigh = 0;
-                fwProbeFrame = 0;
-                fwState = FwState::Probing;
                 muteAnalysisMusic();
-                beginOrSkipProbeClick();
+                // Capturing is genuinely shared infrastructure between both
+                // methods (fwCapStack is what lets Alignment-Independent
+                // reuse the nominal/p=0 predecessor checkpoint for free --
+                // see fwAiBeginClick). This is the ONLY branch point between
+                // them; everything past here (Probing/DebugPause below vs.
+                // AiBuildPred/AiSweepX/AiContinuation) is fully separate per
+                // method, per the spec's own hard requirement that the
+                // existing method stay unmodified.
+                if (fwUseAlignmentIndependent) {
+                    fwAiClickIdx = 0;
+                    fwAiResults.clear();
+                    fwState = FwState::AiBuildPred;
+                    fwAiBeginClick();
+                } else {
+                    fwProbeClick = 0;
+                    fwProbeShift = -1;
+                    fwProbePhase = 0;
+                    fwProbeLow = 0;
+                    fwProbeHigh = 0;
+                    fwProbeFrame = 0;
+                    fwState = FwState::Probing;
+                    beginOrSkipProbeClick();
+                }
             }
             break;
         }
@@ -2369,6 +2421,101 @@ namespace gucci {
                     advanceRecoverySweep(survived);
                 else
                     advanceOffsetSweep(survived);
+            }
+            break;
+        }
+
+        // ---- Alignment-Independent method (Juice's spec). See the field
+        // block in GucciBot.hpp for why every leg here uses RELATIVE tick
+        // counting (fwAiProbeFrame vs fwAiProbeHorizon), matching Probing
+        // above rather than absolute-frame comparison. ----
+
+        case FwState::AiBuildPred: {
+            fwAnalyzeStage = fmt::format("alignment-independent: click {}/{}, predecessor {:+d}",
+                                         fwAiClickIdx + 1,
+                                         fwClickSamples.size(),
+                                         fwAiPredShift);
+            fwAiProbeFrame++;
+            if (fwProbeDied || fwAiProbeFrame >= fwAiProbeHorizon)
+                fwAiConcludePredShift(fwProbeDied);
+            break;
+        }
+
+        case FwState::AiSweepX: {
+            fwAnalyzeStage = fmt::format("alignment-independent: click {}/{}, align {}/{}, x {:+d}",
+                                         fwAiClickIdx + 1,
+                                         fwClickSamples.size(),
+                                         fwAiAlignIdx + 1,
+                                         fwAiValidPredCkpts.size(),
+                                         fwAiXShift);
+            fwAiProbeFrame++;
+
+            if (fwAiWantContCkpt && !fwAiContCkptTaken && !fwProbeDied &&
+                fwAiProbeFrame >= fwAiContCkptFrame) {
+                if (auto* cp = pl->createCheckpoint()) {
+                    cp->retain();
+                    practiceFix.saveState(cp, frame);
+                    if (!practiceFix.m_storedFrames.empty()) {
+                        fwAiContBaseCkpt = practiceFix.m_storedFrames.back();
+                        practiceFix.m_storedFrames.pop_back();
+                        fwAiContCkptTaken = true;
+                    }
+                }
+            }
+
+            if (fwProbeDied || fwAiProbeFrame >= fwAiProbeHorizon) {
+                bool survived = !fwProbeDied;
+                bool reachedTarget = survived;
+                size_t nextIdx = fwAiClickIdx + 1;
+                if (survived && fwPositionCheckEnabled && nextIdx < fwClickSamples.size()) {
+                    auto const& nextS = fwClickSamples[nextIdx];
+                    auto* posPlayer = nextS.player2 ? pl->m_player2 : player1;
+                    if (posPlayer) {
+                        float dx = std::abs(posPlayer->m_position.x - nextS.x);
+                        float dy = std::abs(posPlayer->m_position.y - nextS.y);
+                        if (dx > fwPositionSlack || dy > fwPositionSlack)
+                            reachedTarget = false;
+                    }
+                }
+                FwAiStatus status = !survived            ? FwAiStatus::Dead
+                                    : !reachedTarget ? FwAiStatus::MissedTarget
+                                                      : FwAiStatus::Partial;
+                fwAiConcludeXShift(status);
+            }
+            break;
+        }
+
+        case FwState::AiContinuation: {
+            fwAnalyzeStage = fmt::format(
+                "alignment-independent: click {}/{}, align {}/{}, x {:+d}, continuation step {}",
+                fwAiClickIdx + 1,
+                fwClickSamples.size(),
+                fwAiAlignIdx + 1,
+                fwAiValidPredCkpts.size(),
+                fwAiXShift,
+                fwAiContStepIdx);
+            fwAiProbeFrame++;
+            if (fwProbeDied || fwAiProbeFrame >= fwAiProbeHorizon) {
+                bool survived = !fwProbeDied;
+                bool reachedTarget = survived;
+                size_t nnIdx = fwAiClickIdx + 2;
+                if (survived && fwPositionCheckEnabled && nnIdx < fwClickSamples.size()) {
+                    auto const& nnS = fwClickSamples[nnIdx];
+                    auto* posPlayer = nnS.player2 ? pl->m_player2 : player1;
+                    if (posPlayer) {
+                        float dx = std::abs(posPlayer->m_position.x - nnS.x);
+                        float dy = std::abs(posPlayer->m_position.y - nnS.y);
+                        if (dx > fwPositionSlack || dy > fwPositionSlack)
+                            reachedTarget = false;
+                    }
+                }
+                if (survived && reachedTarget) {
+                    fwState = FwState::AiSweepX;
+                    fwAiAdvanceXSweep(true);
+                } else {
+                    fwAiContStepIdx++;
+                    fwAiBeginContinuationCandidate();
+                }
             }
             break;
         }
@@ -3006,6 +3153,606 @@ namespace gucci {
 
         log::info("[GucciBot] Frame-window: analysis cancelled — {} result(s) kept",
                   fwMarks.size());
+    }
+
+    // ====================================================================
+    // Alignment-Independent frame-window method (Juice's spec). V1 scope --
+    // see the field block in GucciBot.hpp for exactly what's deliberately
+    // deferred (predecessor-state caching beyond the free p=0 reuse below,
+    // adaptive Z, result caching, parallel workers, arbitrary continuation
+    // depth). Entered from analyzeFrameWindows()'s existing Capturing pass
+    // when fwUseAlignmentIndependent is set -- see the one dispatch point
+    // there. Everything below is new; nothing here is called by, or alters,
+    // the Time-Based/Recovery Range path above.
+    // ====================================================================
+
+    int GucciEngine::fwAiNominalFirstOffset(int stepIdx) const {
+        // 0, -1, +1, -2, +2, -3, +3, ... (spec 19.4: test nominal first so
+        // an existential continuation search can exit as soon as the
+        // ordinary/expected timing already works, which is the common case).
+        if (stepIdx <= 0)
+            return 0;
+        int mag = (stepIdx + 1) / 2;
+        return (stepIdx % 2 == 1) ? -mag : mag;
+    }
+
+    void GucciEngine::fwAiBeginClick() {
+        fwAnalyzeCur = (int)fwAiClickIdx;
+        fwAnalyzeTotal = (int)fwClickSamples.size();
+        fwAnalyzeProgress = fwClickSamples.empty()
+                                ? 1.0f
+                                : 0.5f + 0.5f * (float)fwAiClickIdx / (float)fwClickSamples.size();
+
+        if (fwAiClickIdx >= fwClickSamples.size()) {
+            fwAiFinishAnalysis();
+            return;
+        }
+        fwAnalyzeStage = fmt::format(
+            "alignment-independent: click {}/{}", fwAiClickIdx + 1, fwClickSamples.size());
+
+        fwAiValidPredShifts.clear();
+        fwAiValidPredCkpts.clear();
+        fwAiWindowPerAlign.clear();
+
+        if (fwAiClickIdx == 0) {
+            // First measurable input -- no predecessor to shift (spec
+            // section 22). The single "alignment" is the state Capturing
+            // already built.
+            fwAiValidPredShifts.push_back(0);
+            fwAiValidPredCkpts.push_back(fwCapStack[0]);
+            fwAiBeginAlignSweep();
+            return;
+        }
+
+        uint32_t predFrame = fwClickSamples[fwAiClickIdx - 1].frame;
+        long negRoom = fwAiClickIdx >= 2
+                           ? (long)predFrame - (long)fwClickSamples[fwAiClickIdx - 2].frame - 1
+                           : (long)predFrame;
+        long posRoom = (long)fwClickSamples[fwAiClickIdx].frame - (long)predFrame - 1;
+        fwAiPredMaxNeg = (int)std::clamp((long)fwAiZ, 0L, std::max(0L, negRoom));
+        fwAiPredMaxPos = (int)std::clamp((long)fwAiZ, 0L, std::max(0L, posRoom));
+        // fwCapStack[predIdx] only reaches back fwSweepRange frames before
+        // click(ci-1)'s own nominal frame (the legacy Capturing pass' own
+        // margin, shared with the existing method) -- never ask it to
+        // restore further back than that.
+        fwAiPredMaxNeg = std::min(fwAiPredMaxNeg, std::max(0, fwSweepRange));
+
+        // p=0 (nominal predecessor) is exactly what the ordinary capture
+        // pass already produced for this click -- reuse it instead of
+        // re-simulating (spec 19.2's caching, the one piece of it this
+        // architecture gets for free), but ONLY when that capture's margin
+        // (fwSweepRange) actually reaches back at least as far as this
+        // click's own capture point needs (fwAiZ) -- otherwise build it
+        // fresh like every other shift so the margin is still correct.
+        bool freeZero = fwSweepRange >= fwAiZ;
+        if (freeZero) {
+            fwAiValidPredShifts.push_back(0);
+            fwAiValidPredCkpts.push_back(fwCapStack[fwAiClickIdx]);
+        }
+
+        fwAiPredShift = -fwAiPredMaxNeg;
+        if (freeZero && fwAiPredShift == 0)
+            fwAiPredShift = 1;
+        if (fwAiPredShift > fwAiPredMaxPos) {
+            fwAiBeginAlignSweep();
+            return;
+        }
+        fwState = FwState::AiBuildPred;
+        fwAiBeginPredShift();
+    }
+
+    void GucciEngine::fwAiBeginPredShift() {
+        auto* pl = PlayLayer::get();
+        if (!pl) {
+            fwAiFinishAnalysis();
+            return;
+        }
+
+        size_t predIdx = fwAiClickIdx - 1;
+        auto& predCkpt = fwCapStack[predIdx];
+
+        replay.m_actionAtom = fwSavedAtom;
+        auto& acts = replay.m_actionAtom.m_actions;
+        acts.erase(std::remove_if(acts.begin(),
+                                  acts.end(),
+                                  [](const gb::Action& a) {
+                                      return !a.isInput();
+                                  }),
+                   acts.end());
+        uint32_t predFrame = fwClickSamples[predIdx].frame;
+        bool predP2 = fwClickSamples[predIdx].player2;
+        bool predHolding = !fwClickSamples[predIdx].release;
+        for (auto& a : acts) {
+            if (a.m_frame == predFrame && a.m_player2 == predP2 && a.m_holding == predHolding) {
+                int64_t shifted = (int64_t)predFrame + fwAiPredShift;
+                a.m_frame = (uint32_t)std::max<int64_t>(shifted, 0);
+                break;
+            }
+        }
+        std::stable_sort(acts.begin(), acts.end(), [](const gb::Action& a, const gb::Action& b) {
+            return a.m_frame < b.m_frame;
+        });
+
+        practiceFix.m_savedCheckpoints.clear();
+        practiceFix.m_brokenObjects.clear();
+        practiceFix.m_storedFrames.clear();
+        practiceFix.m_storedFrames.push_back(predCkpt);
+        practiceFix.m_storedFrames.push_back(predCkpt);
+
+        // Horizon: plain frame distance from the checkpoint to click ci's
+        // OWN capture point (clickFrame(ci) - fwAiZ) -- not a survival-vs-
+        // shift comparison, just "can it physically get there alive",
+        // same convention as the original single-pass capture loop.
+        uint32_t targetFrame = fwClickSamples[fwAiClickIdx].frame;
+        uint32_t margin = (uint32_t)std::max(0, fwAiZ);
+        uint32_t captureFrame = targetFrame > margin ? targetFrame - margin : 0;
+        uint32_t ckptFrame = (uint32_t)predCkpt.frame;
+        fwAiProbeHorizon = captureFrame > ckptFrame ? captureFrame - ckptFrame : 0;
+        fwAiProbeFrame = 0;
+        fwProbeDied = false;
+
+        mode = Mode::Playing;
+        if (practiceFix.canRestoreState()) {
+            practiceFix.m_loadCheckpoint = true;
+            practiceFix.m_isBackstep = true;
+            pl->resetLevel();
+            practiceFix.m_loadCheckpoint = false;
+            practiceFix.m_isBackstep = false;
+        }
+    }
+
+    void GucciEngine::fwAiConcludePredShift(bool diedBeforeTarget) {
+        if (!diedBeforeTarget) {
+            if (auto* pl = PlayLayer::get()) {
+                if (auto* cp = pl->createCheckpoint()) {
+                    cp->retain();
+                    practiceFix.saveState(cp, updater.getFrame());
+                    if (!practiceFix.m_storedFrames.empty()) {
+                        fwAiValidPredShifts.push_back(fwAiPredShift);
+                        fwAiValidPredCkpts.push_back(practiceFix.m_storedFrames.back());
+                        practiceFix.m_storedFrames.pop_back();
+                    }
+                }
+            }
+        }
+
+        bool freeZero = fwSweepRange >= fwAiZ;
+        fwAiPredShift++;
+        if (freeZero && fwAiPredShift == 0)
+            fwAiPredShift++;
+        if (fwAiPredShift > fwAiPredMaxPos) {
+            fwAiBeginAlignSweep();
+            return;
+        }
+        fwAiBeginPredShift();
+    }
+
+    void GucciEngine::fwAiBeginAlignSweep() {
+        fwAiAlignIdx = 0;
+        fwAiWindowPerAlign.clear();
+        if (fwAiValidPredCkpts.empty()) {
+            // Every predecessor alignment (including p=0) died before
+            // reaching this click at all -- nothing measurable here.
+            fwAiFinishClick();
+            return;
+        }
+        fwState = FwState::AiSweepX;
+        fwAiXShift = 0;
+        fwAiXPhase = -1;
+        fwAiXNegContiguous = true;
+        fwAiXPosContiguous = true;
+        fwAiXLow = 0;
+        fwAiXHigh = 0;
+
+        uint32_t clickFrame = fwClickSamples[fwAiClickIdx].frame;
+        fwAiXMaxPos = fwAiZ;
+        if (fwAiClickIdx + 1 < fwClickSamples.size()) {
+            long room = (long)fwClickSamples[fwAiClickIdx + 1].frame - (long)clickFrame - 1;
+            fwAiXMaxPos = (int)std::clamp((long)fwAiZ, 0L, std::max(0L, room));
+        }
+        fwAiXMaxNeg = fwAiZ;
+        if (fwAiClickIdx > 0) {
+            long room = (long)clickFrame - (long)fwClickSamples[fwAiClickIdx - 1].frame - 1;
+            fwAiXMaxNeg = (int)std::clamp((long)fwAiZ, 0L, std::max(0L, room));
+        }
+        fwAiBeginXShift();
+    }
+
+    void GucciEngine::fwAiBeginXShift() {
+        auto* pl = PlayLayer::get();
+        if (!pl) {
+            fwAiFinishAnalysis();
+            return;
+        }
+
+        auto& alignCkpt = fwAiValidPredCkpts[fwAiAlignIdx];
+
+        replay.m_actionAtom = fwSavedAtom;
+        auto& acts = replay.m_actionAtom.m_actions;
+        acts.erase(std::remove_if(acts.begin(),
+                                  acts.end(),
+                                  [](const gb::Action& a) {
+                                      return !a.isInput();
+                                  }),
+                   acts.end());
+        uint32_t clickFrame = fwClickSamples[fwAiClickIdx].frame;
+        bool clickP2 = fwClickSamples[fwAiClickIdx].player2;
+        bool clickHolding = !fwClickSamples[fwAiClickIdx].release;
+        for (auto& a : acts) {
+            if (a.m_frame == clickFrame && a.m_player2 == clickP2 && a.m_holding == clickHolding) {
+                int64_t shifted = (int64_t)clickFrame + fwAiXShift;
+                a.m_frame = (uint32_t)std::max<int64_t>(shifted, 0);
+                break;
+            }
+        }
+        std::stable_sort(acts.begin(), acts.end(), [](const gb::Action& a, const gb::Action& b) {
+            return a.m_frame < b.m_frame;
+        });
+
+        practiceFix.m_savedCheckpoints.clear();
+        practiceFix.m_brokenObjects.clear();
+        practiceFix.m_storedFrames.clear();
+        practiceFix.m_storedFrames.push_back(alignCkpt);
+        practiceFix.m_storedFrames.push_back(alignCkpt);
+
+        bool hasNext = fwAiClickIdx + 1 < fwClickSamples.size();
+        int64_t shiftedXFrame = std::max<int64_t>((int64_t)clickFrame + fwAiXShift, 0);
+        uint32_t ckptFrame = (uint32_t)alignCkpt.frame;
+
+        if (hasNext) {
+            uint32_t nextFrame = fwClickSamples[fwAiClickIdx + 1].frame;
+            int64_t gap = std::max<int64_t>((int64_t)nextFrame - shiftedXFrame, 0);
+            int64_t high = std::max<int64_t>(gap - fwSlackWindow, 0);
+            int64_t warmup = std::max<int64_t>(shiftedXFrame - (int64_t)ckptFrame, 0);
+            fwAiProbeHorizon = (uint32_t)(high + warmup);
+        } else {
+            int64_t warmup = std::max<int64_t>(shiftedXFrame - (int64_t)ckptFrame, 0);
+            fwAiProbeHorizon = (uint32_t)fwMaxFramesMeasured + (uint32_t)warmup;
+        }
+
+        // Mid-run checkpoint for depth-1 continuation testing (spec step
+        // 9/Step 3) -- only worth taking if there's a next input to test
+        // continuations against and continuation depth is actually on.
+        fwAiWantContCkpt = hasNext && fwAiContinuationDepth >= 1;
+        fwAiContCkptTaken = false;
+        if (fwAiWantContCkpt) {
+            uint32_t nextFrame = fwClickSamples[fwAiClickIdx + 1].frame;
+            uint32_t margin = (uint32_t)std::max(0, fwAiZ);
+            uint32_t contCapture = nextFrame > margin ? nextFrame - margin : 0;
+            int64_t rel = (int64_t)contCapture - (int64_t)ckptFrame;
+            rel = std::clamp(rel, (int64_t)0, (int64_t)fwAiProbeHorizon);
+            fwAiContCkptFrame = (uint32_t)rel;
+        }
+
+        fwAiProbeFrame = 0;
+        fwProbeDied = false;
+        mode = Mode::Playing;
+        if (practiceFix.canRestoreState()) {
+            practiceFix.m_loadCheckpoint = true;
+            practiceFix.m_isBackstep = true;
+            pl->resetLevel();
+            practiceFix.m_loadCheckpoint = false;
+            practiceFix.m_isBackstep = false;
+        }
+    }
+
+    void GucciEngine::fwAiConcludeXShift(FwAiStatus status) {
+        fwAiPendingStatus = status;
+        bool hasNext = fwAiClickIdx + 1 < fwClickSamples.size();
+        if (status == FwAiStatus::Partial && fwAiContinuationDepth >= 1 && hasNext &&
+            fwAiContCkptTaken) {
+            fwAiContStepIdx = 0;
+            fwAiInContinuation = true;
+            fwState = FwState::AiContinuation;
+            fwAiBeginContinuationCandidate();
+            return;
+        }
+        // Depth 0, or no next input (terminal -- PARTIAL alone is enough,
+        // spec section 22's "remain alive through the horizon" terminal
+        // rule), or the continuation checkpoint never got taken because the
+        // branch died/missed before reaching it -- PARTIAL is VIABLE as-is.
+        fwAiInContinuation = false;
+        bool viable = (status == FwAiStatus::Partial);
+        fwState = FwState::AiSweepX;
+        fwAiAdvanceXSweep(viable);
+    }
+
+    void GucciEngine::fwAiBeginContinuationCandidate() {
+        size_t nIdx = fwAiClickIdx + 1;
+        int shift = fwAiNominalFirstOffset(fwAiContStepIdx);
+        if (std::abs(shift) > fwAiZ) {
+            // Exhausted every candidate in range -- this X shift is a dead
+            // end (VIABLE requires at least one successful continuation;
+            // none existed).
+            fwState = FwState::AiSweepX;
+            fwAiAdvanceXSweep(false);
+            return;
+        }
+
+        uint32_t nFrame = fwClickSamples[nIdx].frame;
+        // nIdx-1 == fwAiClickIdx; using ITS nominal frame (not the X-shifted
+        // one actually fired in this branch) as the neighbor-spacing bound
+        // is intentionally conservative -- a superset of "definitely safe",
+        // not an exact bound. Documented V1 scope-down, not an oversight.
+        long negRoom = (long)nFrame - (long)fwClickSamples[fwAiClickIdx].frame - 1;
+        long posRoom = nIdx + 1 < fwClickSamples.size()
+                           ? (long)fwClickSamples[nIdx + 1].frame - (long)nFrame - 1
+                           : (long)fwAiZ;
+        int maxNeg = (int)std::clamp((long)fwAiZ, 0L, std::max(0L, negRoom));
+        int maxPos = (int)std::clamp((long)fwAiZ, 0L, std::max(0L, posRoom));
+        if ((shift < 0 && -shift > maxNeg) || (shift > 0 && shift > maxPos)) {
+            fwAiContStepIdx++;
+            fwAiBeginContinuationCandidate();
+            return;
+        }
+
+        auto* pl = PlayLayer::get();
+        if (!pl) {
+            fwAiFinishAnalysis();
+            return;
+        }
+        bool nP2 = fwClickSamples[nIdx].player2;
+        bool nHolding = !fwClickSamples[nIdx].release;
+
+        replay.m_actionAtom = fwSavedAtom;
+        auto& acts = replay.m_actionAtom.m_actions;
+        acts.erase(std::remove_if(acts.begin(),
+                                  acts.end(),
+                                  [](const gb::Action& a) {
+                                      return !a.isInput();
+                                  }),
+                   acts.end());
+        for (auto& a : acts) {
+            if (a.m_frame == nFrame && a.m_player2 == nP2 && a.m_holding == nHolding) {
+                int64_t shifted = (int64_t)nFrame + shift;
+                a.m_frame = (uint32_t)std::max<int64_t>(shifted, 0);
+                break;
+            }
+        }
+        std::stable_sort(acts.begin(), acts.end(), [](const gb::Action& a, const gb::Action& b) {
+            return a.m_frame < b.m_frame;
+        });
+
+        practiceFix.m_savedCheckpoints.clear();
+        practiceFix.m_brokenObjects.clear();
+        practiceFix.m_storedFrames.clear();
+        practiceFix.m_storedFrames.push_back(fwAiContBaseCkpt);
+        practiceFix.m_storedFrames.push_back(fwAiContBaseCkpt);
+
+        bool hasNextNext = nIdx + 1 < fwClickSamples.size();
+        int64_t shiftedNFrame = std::max<int64_t>((int64_t)nFrame + shift, 0);
+        uint32_t ckptFrame = (uint32_t)fwAiContBaseCkpt.frame;
+        if (hasNextNext) {
+            uint32_t nnFrame = fwClickSamples[nIdx + 1].frame;
+            int64_t gap = std::max<int64_t>((int64_t)nnFrame - shiftedNFrame, 0);
+            int64_t high = std::max<int64_t>(gap - fwSlackWindow, 0);
+            int64_t warmup = std::max<int64_t>(shiftedNFrame - (int64_t)ckptFrame, 0);
+            fwAiProbeHorizon = (uint32_t)(high + warmup);
+        } else {
+            int64_t warmup = std::max<int64_t>(shiftedNFrame - (int64_t)ckptFrame, 0);
+            fwAiProbeHorizon = (uint32_t)fwMaxFramesMeasured + (uint32_t)warmup;
+        }
+
+        fwAiProbeFrame = 0;
+        fwProbeDied = false;
+        mode = Mode::Playing;
+        if (practiceFix.canRestoreState()) {
+            practiceFix.m_loadCheckpoint = true;
+            practiceFix.m_isBackstep = true;
+            pl->resetLevel();
+            practiceFix.m_loadCheckpoint = false;
+            practiceFix.m_isBackstep = false;
+        }
+    }
+
+    void GucciEngine::fwAiAdvanceXSweep(bool viable) {
+        if (fwAiXPhase == -1) {
+            if (viable) {
+                fwAiXLow = 0;
+                fwAiXHigh = 0;
+            } else {
+                fwAiXNegContiguous = false;
+                fwAiXPosContiguous = false;
+            }
+            if (fwAiXMaxNeg > 0) {
+                fwAiXPhase = 0;
+                fwAiXShift = -1;
+            } else if (fwAiXMaxPos > 0) {
+                fwAiXPhase = 1;
+                fwAiXShift = 1;
+            } else {
+                fwAiFinishAlignment();
+                return;
+            }
+            fwAiBeginXShift();
+            return;
+        }
+
+        if (fwAiXPhase == 0) {
+            if (viable) {
+                if (fwAiXNegContiguous)
+                    fwAiXLow = fwAiXShift;
+            } else {
+                fwAiXNegContiguous = false;
+            }
+            if (viable && fwAiXShift - 1 >= -fwAiXMaxNeg) {
+                fwAiXShift--;
+            } else {
+                fwAiXPhase = 1;
+                fwAiXShift = 1;
+                if (fwAiXMaxPos <= 0) {
+                    fwAiFinishAlignment();
+                    return;
+                }
+            }
+        } else {
+            if (viable) {
+                if (fwAiXPosContiguous)
+                    fwAiXHigh = fwAiXShift;
+            } else {
+                fwAiXPosContiguous = false;
+            }
+            if (viable && fwAiXShift + 1 <= fwAiXMaxPos) {
+                fwAiXShift++;
+            } else {
+                fwAiFinishAlignment();
+                return;
+            }
+        }
+        fwAiBeginXShift();
+    }
+
+    void GucciEngine::fwAiFinishAlignment() {
+        int window = fwAiXHigh - fwAiXLow + 1;
+        fwAiWindowPerAlign.push_back(window);
+
+        log::info(
+            "[GucciBot] Alignment-Independent: click {} pred[{}]={:+d} -> window={} (span {}..{})",
+            fwAiClickIdx,
+            fwAiAlignIdx,
+            fwAiValidPredShifts[fwAiAlignIdx],
+            window,
+            fwAiXLow,
+            fwAiXHigh);
+
+        fwAiAlignIdx++;
+        if (fwAiAlignIdx >= fwAiValidPredCkpts.size()) {
+            fwAiFinishClick();
+            return;
+        }
+        fwAiXShift = 0;
+        fwAiXPhase = -1;
+        fwAiXNegContiguous = true;
+        fwAiXPosContiguous = true;
+        fwAiXLow = 0;
+        fwAiXHigh = 0;
+        fwAiBeginXShift();
+    }
+
+    void GucciEngine::fwAiFinishClick() {
+        FwAiInputResult res;
+        auto const& s = fwClickSamples[fwAiClickIdx];
+        res.frame = s.frame;
+        res.player2 = s.player2;
+        res.isRelease = s.release;
+        const float levelLen = m_levelLength > 0.f ? m_levelLength : 1.f;
+        res.percent = std::clamp(s.x / levelLen * 100.f, 0.f, 100.f);
+
+        // Macro (legacy) window for this same click, purely for comparison
+        // in the results readout -- looked up if the legacy method already
+        // measured it, never runs the legacy method itself.
+        res.macroWindow = 0;
+        for (auto const& mk : fwMarks) {
+            if (mk.frame == s.frame && mk.player2 == s.player2 && mk.isRelease == s.release) {
+                res.macroWindow = mk.window;
+                break;
+            }
+        }
+
+        res.perAlignmentShift = fwAiValidPredShifts;
+        res.perAlignmentWindow = fwAiWindowPerAlign;
+        res.totalAlignments = (int)fwAiValidPredShifts.size();
+        res.validAlignments = (int)fwAiWindowPerAlign.size();
+
+        if (!fwAiWindowPerAlign.empty()) {
+            // Cluster by relative/log distance, not exact-value mode (spec
+            // section 13) -- group consecutive (sorted) windows whose ratio
+            // stays within fwAiClusterRatio, take the largest such group.
+            std::vector<int> sorted = fwAiWindowPerAlign;
+            std::sort(sorted.begin(), sorted.end());
+            res.observedMin = sorted.front();
+            res.observedMax = sorted.back();
+
+            size_t bestStart = 0, bestLen = 0, i = 0;
+            while (i < sorted.size()) {
+                size_t j = i;
+                while (j + 1 < sorted.size()) {
+                    float a = (float)std::max(1, sorted[j]);
+                    float b = (float)std::max(1, sorted[j + 1]);
+                    float ratio = std::max(a, b) / std::min(a, b);
+                    if (ratio > fwAiClusterRatio)
+                        break;
+                    j++;
+                }
+                if (j - i + 1 > bestLen) {
+                    bestLen = j - i + 1;
+                    bestStart = i;
+                }
+                i = j + 1;
+            }
+
+            res.dominantSupport = (int)bestLen;
+            res.dominantPercent = (float)bestLen / (float)sorted.size();
+
+            if (res.dominantPercent >= fwAiDominantThreshold) {
+                std::vector<int> cluster(sorted.begin() + (long)bestStart,
+                                         sorted.begin() + (long)(bestStart + bestLen));
+                size_t mid = cluster.size() / 2;
+                int median = (cluster.size() % 2 == 1)
+                                 ? cluster[mid]
+                                 : (cluster[mid - 1] + cluster[mid] + 1) / 2;
+                res.representativeWindow = median;
+            } else {
+                res.representativeWindow = -1; // fall back to macro window
+            }
+
+            if (res.representativeWindow > 0)
+                res.sensitivity =
+                    (float)(res.observedMax - res.observedMin) / (float)res.representativeWindow;
+        }
+
+        log::info("[GucciBot] Alignment-Independent: click {} @ frame {} ({:.1f}%) -- macro={} "
+                  "representative={} observed={}..{} validAlign={}/{} dominant={}/{} ({:.0f}%)",
+                  fwAiClickIdx,
+                  s.frame,
+                  res.percent,
+                  res.macroWindow,
+                  res.representativeWindow,
+                  res.observedMin,
+                  res.observedMax,
+                  res.validAlignments,
+                  res.totalAlignments,
+                  res.dominantSupport,
+                  res.validAlignments,
+                  res.dominantPercent * 100.f);
+
+        fwAiResults.push_back(res);
+
+        fwAiClickIdx++;
+        fwState = FwState::AiBuildPred;
+        fwAiBeginClick();
+    }
+
+    void GucciEngine::fwAiFinishAnalysis() {
+        fwState = FwState::Finishing;
+        auto* pl = PlayLayer::get();
+
+        practiceFix.m_storedFrames.clear();
+        practiceFix.m_loadCheckpoint = false;
+        practiceFix.m_isBackstep = false;
+        if (pl) {
+            updater.m_fullReset = true;
+            pl->resetLevel();
+            updater.m_fullReset = false;
+        }
+        updater.resetFrame();
+        setMode(Mode::Idle);
+
+        replay.m_actionAtom = fwSavedAtom;
+        replay.m_inputIndex = 0;
+        unmuteAnalysisMusic();
+
+        fwAnalyzing = false;
+        fwProbeDied = false;
+        fwAnalyzeRunning = false;
+        fwAnalyzeProgress = 1.0f;
+        fwAnalyzeStage = "done";
+        fwAiHasData = !fwAiResults.empty();
+        fwState = FwState::Idle;
+
+        log::info("[GucciBot] Alignment-Independent: analysis complete — {} click(s) measured, "
+                  "macro restored",
+                  fwAiResults.size());
     }
 
 } // namespace gucci

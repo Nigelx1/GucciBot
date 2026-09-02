@@ -625,6 +625,43 @@ namespace gucci {
         static std::filesystem::path getReplayDir() {
             return GucciEngine::get()->getReplayDir();
         }
+
+        // .fw/.path/.trainer sidecars are named after a macro's own full
+        // filename (see sidecarPath() in engine_core.cpp), so a rename or
+        // delete of the macro itself needs to carry its sidecars along --
+        // otherwise they're silently orphaned under the old name, which is
+        // exactly the kind of clutter Juice's file-organization ask was
+        // about in the first place. Handles both the current replays/
+        // sidecars/ location and any pre-reorganization file still sitting
+        // flat in replays/ (remove()/rename() on a path that doesn't exist
+        // just no-ops via the error_code overload, so it's safe to try both
+        // unconditionally).
+        static void removeSidecarsFor(const std::filesystem::path& dir,
+                                      const std::string& fullMacroName) {
+            std::error_code ec;
+            auto sidecarDir = dir / "sidecars";
+            for (const char* ext : {".fw", ".path", ".trainer"}) {
+                std::filesystem::remove(sidecarDir / (fullMacroName + ext), ec);
+                std::filesystem::remove(dir / (fullMacroName + ext), ec);
+            }
+        }
+        static void renameSidecarsFor(const std::filesystem::path& dir,
+                                      const std::string& oldFullName,
+                                      const std::string& newFullName) {
+            std::error_code ec;
+            auto sidecarDir = dir / "sidecars";
+            std::filesystem::create_directories(sidecarDir, ec);
+            for (const char* ext : {".fw", ".path", ".trainer"}) {
+                auto newPath = sidecarDir / (newFullName + ext);
+                auto oldInSidecars = sidecarDir / (oldFullName + ext);
+                auto oldFlat = dir / (oldFullName + ext);
+                if (std::filesystem::exists(oldInSidecars, ec))
+                    std::filesystem::rename(oldInSidecars, newPath, ec);
+                else if (std::filesystem::exists(oldFlat, ec))
+                    std::filesystem::rename(oldFlat, newPath, ec);
+            }
+        }
+
         static bool renameStoredReplay(const std::string& oldN,
                                        const std::string& req,
                                        std::string& finalN,
@@ -649,12 +686,14 @@ namespace gucci {
                 return false;
             }
             auto newName = sanitized;
+            auto oldFullName = oldPath.filename().string();
             auto newPath = dir / (newName + oldPath.extension().string());
             std::filesystem::rename(oldPath, newPath, ec);
             if (ec) {
                 err = "Rename failed: " + ec.message();
                 return false;
             }
+            renameSidecarsFor(dir, oldFullName, newPath.filename().string());
             finalN = newName;
             return true;
         }
@@ -674,11 +713,13 @@ namespace gucci {
                 err = "File not found.";
                 return false;
             }
+            auto fullName = found.filename().string();
             std::filesystem::remove(found, ec);
             if (ec) {
                 err = "Delete failed: " + ec.message();
                 return false;
             }
+            removeSidecarsFor(dir, fullName);
             return true;
         }
 
@@ -3248,12 +3289,21 @@ namespace gucci {
             ImGui::SetCursorScreenPos(ImVec2(xBtnX, btnY));
             if (ImGui::InvisibleButton("##del", ImVec2(xBtnW, xBtnW))) {
                 auto dir = getReplayDir();
+                std::string fullMacroName; // e.g. "xyz.brrr" -- sidecars are named after this
                 for (auto& e : std::filesystem::directory_iterator(dir)) {
                     if (e.is_regular_file() && e.path().stem().string() == mn) {
+                        fullMacroName = e.path().filename().string();
                         std::filesystem::remove(e.path());
                         break;
                     }
                 }
+                // Also remove this macro's .fw/.path/.trainer sidecars -- see
+                // removeSidecarsFor's comment. This used to only delete the
+                // macro itself, silently leaving its sidecars behind
+                // forever, which was itself part of why the macro folder
+                // accumulated clutter over time.
+                if (!fullMacroName.empty())
+                    removeSidecarsFor(dir, fullMacroName);
                 markReplayListDirty();
                 refreshReplayListIfNeeded(true);
             }
@@ -4153,11 +4203,15 @@ namespace gucci {
             bool locked = engine->fwAnalyzing;
             if (locked)
                 ImGui::BeginDisabled();
-            const char* algoNames[] = {"Time-Based", "Recovery Range"};
-            int algoIdx = engine->fwUseRecoveryRangeAlgorithm ? 1 : 0;
+            const char* algoNames[] = {"Time-Based", "Recovery Range", "Alignment-Independent"};
+            int algoIdx = engine->fwUseAlignmentIndependent
+                             ? 2
+                             : (engine->fwUseRecoveryRangeAlgorithm ? 1 : 0);
             ImGui::SetNextItemWidth(-1);
-            if (ImGui::Combo("##fwAlgo", &algoIdx, algoNames, 2)) {
+            if (ImGui::Combo("##fwAlgo", &algoIdx, algoNames, 3)) {
+                engine->fwUseAlignmentIndependent = (algoIdx == 2);
                 engine->fwUseRecoveryRangeAlgorithm = (algoIdx == 1);
+                Mod::get()->setSavedValue("fw_use_align_indep", engine->fwUseAlignmentIndependent);
                 Mod::get()->setSavedValue("fw_use_recovery_range",
                                           engine->fwUseRecoveryRangeAlgorithm);
             }
@@ -4175,13 +4229,65 @@ namespace gucci {
                       "still "
                       "work, which is more accurate but noticeably slower (extra probe runs per "
                       "shift). Unverified since being brought back -- worth A/B'ing against "
-                      "Time-Based on the same section.");
+                      "Time-Based on the same section. Alignment-Independent: Juice's new algorithm "
+                      "-- also shifts the PREVIOUS click's timing when testing this one (so a click "
+                      "right after a spam release gets tested under a few different real release "
+                      "timings, not just the exact recorded one), and only counts a timing as good "
+                      "if the click AFTER it also has some way to keep going. Brute-force and "
+                      "noticeably slower than either method above -- runs entirely separately from "
+                      "them and never changes what those show. Version 1: correctness first, no "
+                      "caching/parallelism yet.");
             ImGui::PopStyleColor();
             if (locked)
                 ImGui::BeginDisabled();
             if (engine->fwUseRecoveryRangeAlgorithm &&
                 Widgets::StyledSliderInt("Recovery Range", &engine->fwRecoveryRange, 1, 10, theme))
                 Mod::get()->setSavedValue("fw_recovery_range", (int64_t)engine->fwRecoveryRange);
+            if (engine->fwUseAlignmentIndependent) {
+                if (Widgets::StyledSliderInt(
+                        "Search Radius (Z)", &engine->fwAiZ, 1, std::max(1, engine->fwSweepRange), theme))
+                    Mod::get()->setSavedValue("fw_ai_z", (int64_t)engine->fwAiZ);
+                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                ImGui::TextWrapped(
+                    "How many frames each shifted click (both the previous one and this one) is "
+                    "tested across. Capped at Sweep Range below (Analysis Settings) -- the capture "
+                    "checkpoints only reach back that far. Cost grows fast: roughly "
+                    "(2*Z+1)^2 simulated runs per click before continuation testing, so keep this "
+                    "small (3-5) unless you're prepared to wait.");
+                ImGui::PopStyleColor();
+                int contIdx = std::clamp(engine->fwAiContinuationDepth, 0, 1);
+                const char* contNames[] = {"0 (off)", "1"};
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::Combo("##fwAiDepth", &contIdx, contNames, 2)) {
+                    engine->fwAiContinuationDepth = contIdx;
+                    Mod::get()->setSavedValue("fw_ai_cont_depth", (int64_t)engine->fwAiContinuationDepth);
+                }
+                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                ImGui::TextWrapped(
+                    "Continuation Depth: 0 means surviving to the next click's target is enough. 1 "
+                    "(default) also requires the click AFTER that to have some viable timing of "
+                    "its own -- Juice's spec's core idea. Only 0/1 are implemented in this version, "
+                    "not arbitrary depth.");
+                ImGui::PopStyleColor();
+                if (Widgets::StyledSliderFloat(
+                        "Cluster Ratio", &engine->fwAiClusterRatio, 1.02f, 2.f, theme))
+                    Mod::get()->setSavedValue("fw_ai_cluster_ratio", engine->fwAiClusterRatio);
+                if (Widgets::StyledSliderFloat("Dominant Cluster Threshold",
+                                               &engine->fwAiDominantThreshold,
+                                               0.1f,
+                                               1.f,
+                                               theme))
+                    Mod::get()->setSavedValue("fw_ai_dominant_threshold",
+                                              engine->fwAiDominantThreshold);
+                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                ImGui::TextWrapped(
+                    "How the windows measured under different previous-click timings get combined "
+                    "into one number: values within Cluster Ratio of each other count as the same "
+                    "cluster, and the largest cluster needs to cover at least this fraction of all "
+                    "valid alignments to be trusted. If nothing reaches that, the result falls back "
+                    "to whatever Time-Based/Recovery Range already measured for that click.");
+                ImGui::PopStyleColor();
+            }
             if (locked)
                 ImGui::EndDisabled();
         }
@@ -4225,6 +4331,30 @@ namespace gucci {
             "Marker stroke thickness for the concentric double-ring style. Only affects "
             "markers without a Tier-specific image configured.");
         ImGui::PopStyleColor();
+        if (Widgets::ToggleSwitch("Circle Skin", &engine->fwCircleSkinEnabled, theme, anim))
+            Mod::get()->setSavedValue("fw_circle_skin", engine->fwCircleSkinEnabled);
+        ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+        ImGui::TextWrapped(
+            "Juice's osu!mania-style idea: a small dot at the exact click timing, with an "
+            "unfilled ring around it that grows with that click's window size -- a wide-open "
+            "input reads as an obviously bigger halo instead of a same-size marker with a "
+            "different number next to it. Replaces Tier shapes/images while on.");
+        ImGui::PopStyleColor();
+        if (engine->fwCircleSkinEnabled) {
+            if (Widgets::StyledSliderFloat(
+                    "Dot Radius", &engine->fwCircleSkinDotRadius, 1.f, 20.f, theme))
+                Mod::get()->setSavedValue("fw_circleskin_dot_radius", engine->fwCircleSkinDotRadius);
+            if (Widgets::StyledSliderFloat("Ring Growth (per frame)",
+                                           &engine->fwCircleSkinRadiusPerFrame,
+                                           0.2f,
+                                           10.f,
+                                           theme))
+                Mod::get()->setSavedValue("fw_circleskin_radius_per_frame",
+                                          engine->fwCircleSkinRadiusPerFrame);
+            if (Widgets::StyledSliderFloat(
+                    "Max Ring Radius", &engine->fwCircleSkinMaxRadius, 10.f, 300.f, theme))
+                Mod::get()->setSavedValue("fw_circleskin_max_radius", engine->fwCircleSkinMaxRadius);
+        }
         if (Widgets::ToggleSwitch("Test Ship Releases", &engine->fwTestShipReleases, theme, anim))
             Mod::get()->setSavedValue("fw_test_ship_releases", engine->fwTestShipReleases);
         ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
@@ -4418,6 +4548,55 @@ namespace gucci {
                 "No analysis yet. Save a macro while in the level and choose Calculate "
                 "to simulate frame windows.");
         ImGui::PopStyleColor();
+
+        if (engine->fwAiHasData) {
+            ImGui::Dummy(ImVec2(0, 8));
+            Widgets::SectionHeader("Alignment-Independent Results", theme);
+            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+            ImGui::TextWrapped(
+                "Doesn't touch the markers above -- Time-Based/Recovery Range still drive those. "
+                "\"Representative\" is blank when no dominant cluster was found for that click, "
+                "meaning it fell back to the Macro column.");
+            ImGui::PopStyleColor();
+            ImGui::Dummy(ImVec2(0, 4));
+            float tblH = std::min((float)engine->fwAiResults.size() * 24.f + 28.f, 280.f);
+            if (ImGui::BeginTable("##fwAiResultsTbl",
+                                  6,
+                                  ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+                                      ImGuiTableFlags_ScrollY,
+                                  ImVec2(-1, tblH))) {
+                ImGui::TableSetupColumn("Click");
+                ImGui::TableSetupColumn("Macro");
+                ImGui::TableSetupColumn("Representative");
+                ImGui::TableSetupColumn("Observed");
+                ImGui::TableSetupColumn("Valid Align.");
+                ImGui::TableSetupColumn("Sensitivity");
+                ImGui::TableHeadersRow();
+                for (size_t i = 0; i < engine->fwAiResults.size(); ++i) {
+                    auto const& r = engine->fwAiResults[i];
+                    ImGui::TableNextRow();
+                    ImGui::TableSetColumnIndex(0);
+                    ImGui::Text("%.1f%% %s%s",
+                               r.percent,
+                               r.isRelease ? "rel" : "press",
+                               r.player2 ? " p2" : "");
+                    ImGui::TableSetColumnIndex(1);
+                    ImGui::Text("%d", r.macroWindow);
+                    ImGui::TableSetColumnIndex(2);
+                    if (r.representativeWindow > 0)
+                        ImGui::Text("%d", r.representativeWindow);
+                    else
+                        ImGui::TextColored(theme.textSecondary, "--");
+                    ImGui::TableSetColumnIndex(3);
+                    ImGui::Text("%d..%d", r.observedMin, r.observedMax);
+                    ImGui::TableSetColumnIndex(4);
+                    ImGui::Text("%d/%d", r.validAlignments, r.totalAlignments);
+                    ImGui::TableSetColumnIndex(5);
+                    ImGui::Text("%.2f", r.sensitivity);
+                }
+                ImGui::EndTable();
+            }
+        }
 
         ImGui::Dummy(ImVec2(0, 8));
         Widgets::SectionHeader("Manual Frame Windows", theme);
@@ -7944,8 +8123,18 @@ namespace gucci {
         eng->fwLegendEnabled = mod->getSavedValue<bool>("fw_legend", false);
         eng->fwLegendScale = mod->getSavedValue<float>("fw_legend_scale", 1.f);
         eng->fwRingBoldness = mod->getSavedValue<float>("fw_ring_boldness", 2.2f);
+        eng->fwCircleSkinEnabled = mod->getSavedValue<bool>("fw_circle_skin", false);
+        eng->fwCircleSkinDotRadius = mod->getSavedValue<float>("fw_circleskin_dot_radius", 5.f);
+        eng->fwCircleSkinRadiusPerFrame =
+            mod->getSavedValue<float>("fw_circleskin_radius_per_frame", 2.2f);
+        eng->fwCircleSkinMaxRadius = mod->getSavedValue<float>("fw_circleskin_max_radius", 60.f);
         eng->fwUseRecoveryRangeAlgorithm = mod->getSavedValue<bool>("fw_use_recovery_range", false);
         eng->fwRecoveryRange = mod->getSavedValue<int>("fw_recovery_range", 4);
+        eng->fwUseAlignmentIndependent = mod->getSavedValue<bool>("fw_use_align_indep", false);
+        eng->fwAiZ = mod->getSavedValue<int>("fw_ai_z", 3);
+        eng->fwAiContinuationDepth = mod->getSavedValue<int>("fw_ai_cont_depth", 1);
+        eng->fwAiClusterRatio = mod->getSavedValue<float>("fw_ai_cluster_ratio", 1.15f);
+        eng->fwAiDominantThreshold = mod->getSavedValue<float>("fw_ai_dominant_threshold", 0.5f);
         eng->fwDebugMode = mod->getSavedValue<bool>("fw_debug_mode", false);
         eng->fwDebugSlowdown = mod->getSavedValue<int>("fw_debug_slowdown", 30);
         eng->fwDelayMarkerCapture = mod->getSavedValue<bool>("fw_delay_marker_capture", false);

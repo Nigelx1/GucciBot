@@ -244,36 +244,49 @@ public:
                                          tier->textPulseFadeOut);
             }
 
-            bool drewSprite = false;
-            if (tier && tier->imageFile[0]) {
-                auto path = Mod::get()->getSaveDir() / "fw_assets" / tier->imageFile;
-                std::error_code ec;
-                if (std::filesystem::exists(path, ec)) {
-                    if (auto* spr = CCSprite::create(path.string().c_str())) {
-                        spr->setPosition(at);
-                        float maxDim =
-                            std::max(spr->getContentSize().width, spr->getContentSize().height);
-                        float sizeMul = std::max(0.1f, tier->sizeScale);
-                        if (maxDim > 0.f)
-                            spr->setScale((kRadius * 2.2f * sizeMul) / maxDim);
-                        spr->setColor({(GLubyte)(markerCol.r * 255),
-                                       (GLubyte)(markerCol.g * 255),
-                                       (GLubyte)(markerCol.b * 255)});
-                        if (mirrored)
-                            spr->setScaleX(-spr->getScaleX());
-                        m_labelLayer->addChild(spr);
-                        drewSprite = true;
+            if (gb->fwCircleSkinEnabled) {
+                drawCircleSkinMarker(at, mk.window, markerCol);
+            } else {
+                bool drewSprite = false;
+                if (tier && tier->imageFile[0]) {
+                    auto path = Mod::get()->getSaveDir() / "fw_assets" / tier->imageFile;
+                    std::error_code ec;
+                    if (std::filesystem::exists(path, ec)) {
+                        if (auto* spr = CCSprite::create(path.string().c_str())) {
+                            spr->setPosition(at);
+                            float maxDim = std::max(spr->getContentSize().width,
+                                                    spr->getContentSize().height);
+                            float sizeMul = std::max(0.1f, tier->sizeScale);
+                            if (maxDim > 0.f)
+                                spr->setScale((kRadius * 2.2f * sizeMul) / maxDim);
+                            spr->setColor({(GLubyte)(markerCol.r * 255),
+                                           (GLubyte)(markerCol.g * 255),
+                                           (GLubyte)(markerCol.b * 255)});
+                            if (mirrored)
+                                spr->setScaleX(-spr->getScaleX());
+                            m_labelLayer->addChild(spr);
+                            drewSprite = true;
+                        }
                     }
                 }
+                if (!drewSprite)
+                    drawMarkerShape(at, kRadius, markerCol, tier);
             }
-            if (!drewSprite)
-                drawMarkerShape(at, kRadius, markerCol, tier);
 
             auto* lbl = CCLabelBMFont::create(std::to_string(mk.window).c_str(), "bigFont.fnt");
             lbl->setScale(0.45f);
             if (mirrored)
                 lbl->setScaleX(-0.45f);
-            lbl->setPosition({at.x, at.y + kRadius + 11.f});
+            // Circle-skin's ring can grow well past kRadius (that's the
+            // whole point), so the label needs to clear the ring itself,
+            // not the normal marker's fixed radius.
+            float labelClearance = kRadius;
+            if (gb->fwCircleSkinEnabled)
+                labelClearance = std::min(gb->fwCircleSkinMaxRadius,
+                                          gb->fwCircleSkinDotRadius +
+                                              std::max(0, mk.window) *
+                                                  gb->fwCircleSkinRadiusPerFrame);
+            lbl->setPosition({at.x, at.y + labelClearance + 11.f});
             lbl->setColor({(GLubyte)(textCol.r * 255),
                            (GLubyte)(textCol.g * 255),
                            (GLubyte)(textCol.b * 255)});
@@ -327,6 +340,27 @@ private:
         float span = std::max(1, maxWindow - 1);
         float t = std::clamp(static_cast<float>(window - 1) / span, 0.f, 1.f);
         return ccColor4F{1.f - t, t, 0.15f, 1.f};
+    }
+
+    // Juice's "circle skin" -- a fixed-size filled dot at the macro's exact
+    // click timing, plus a thin unfilled ring around it whose radius grows
+    // with the window (leniency) size, capped so a very forgiving click
+    // doesn't blow up into an enormous circle covering the level. Ignores
+    // Tier shape/image settings entirely -- this is a whole alternate skin,
+    // not another marker shape option within the existing tier system.
+    void drawCircleSkinMarker(CCPoint center, int window, ccColor4F color) {
+        auto* gb = GucciEngine::get();
+        float dotR = std::max(1.f, gb->fwCircleSkinDotRadius);
+        float ringR = std::min(gb->fwCircleSkinMaxRadius,
+                               dotR + std::max(0, window) * gb->fwCircleSkinRadiusPerFrame);
+        ccColor4F clear4{0.f, 0.f, 0.f, 0.f};
+        m_node->drawDot(center, dotR, color);
+        if (ringR > dotR + 1.f) {
+            float stroke = std::clamp(gb->fwRingBoldness, 1.f, ringR - dotR);
+            ccColor4F ringCol = color;
+            ringCol.a = 0.85f;
+            m_node->drawCircle(center, ringR, clear4, stroke, ringCol, 28);
+        }
     }
 
     void drawMarkerShape(CCPoint center,

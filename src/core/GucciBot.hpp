@@ -1,12 +1,14 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-08-31-p (1.5.2 patch: Nigel's YouTube-mp3 downloader grabbed the wrong song entirely for " \
-    "LemonadeBot's Big Brrr track -- swapped resources/big_brrr_lemonade.mp3 for the correct file "  \
-    "he supplied directly. BPM (142) and drop offset (0:00, no intro) left untouched -- Nigel didn't " \
-    "flag those as wrong, only the track itself, so no reason to guess at new timing values. Version " \
-    "bump 1.5.1 -> 1.5.2, single changelog block replaced for 1.5.2 per the one-only rule. Compiles " \
-    "clean.)"
+    "2026-09-02-a (Juice's frame-window feedback batch, all three in one build per Nigel: (1) "     \
+    ".fw/.path/.trainer sidecars moved out of replays/ into replays/sidecars/, lazy per-file "      \
+    "migration on first touch, delete/rename now carry sidecars along instead of orphaning them; "  \
+    "(2) osu!mania-style 'Circle Skin' marker option for the frame-window overlay -- dot at exact "  \
+    "timing, ring grows with window size; (3) NEW 'Alignment-Independent' frame-window algorithm, "  \
+    "selectable alongside Time-Based/Recovery Range without touching either -- Version 1 scope "     \
+    "(correctness first, no caching/parallelism/arbitrary depth yet, see Juice's own spec doc). "    \
+    "UNTESTED -- none of this has run in-game yet. Compiles clean.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -588,6 +590,19 @@ namespace gucci {
         float fwLegendScale = 1.f;
         float fwRingBoldness = 2.2f;
 
+        // Juice's "circle skin" ask (osu!mania reference: image0.jpg) --
+        // an alternate marker style for the frame-window overlay. A small
+        // fixed-size filled dot marks the macro's exact click timing (the
+        // "note"); a separate unfilled ring around it grows with how
+        // lenient that click's window is, so a wide-open input reads as an
+        // obviously bigger halo at a glance instead of a same-size marker
+        // with a different number next to it. Purely additive rendering --
+        // doesn't touch fwMarks/analysis at all, default off.
+        bool fwCircleSkinEnabled = false;
+        float fwCircleSkinDotRadius = 5.f;
+        float fwCircleSkinRadiusPerFrame = 2.2f;
+        float fwCircleSkinMaxRadius = 60.f;
+
         bool practiceRangeEnabled = false;
         int fwMaxWindow = 25;
         struct FrameWindowMark {
@@ -626,7 +641,19 @@ namespace gucci {
         float fwSavedEffectsVolume = 0.f;
         bool fwMusicMuted = false;
 
-        enum class FwState { Idle, Capturing, Probing, DebugPause, Finishing };
+        enum class FwState {
+            Idle,
+            Capturing,
+            Probing,
+            DebugPause,
+            Finishing,
+            // Alignment-Independent method states -- entered from Capturing
+            // instead of Probing when fwUseAlignmentIndependent is set. See
+            // the "Alignment-Independent frame-window method" block below.
+            AiBuildPred,
+            AiSweepX,
+            AiContinuation
+        };
         FwState fwState = FwState::Idle;
         size_t fwCapIndex = 0;
         size_t fwXYIndex = 0;
@@ -699,6 +726,94 @@ namespace gucci {
         gb::ActionAtom fwSavedAtom;
         std::string fwAnalyzeStage;
         void analyzeFrameWindows();
+
+        // ---- Alignment-Independent frame-window method (Juice's spec,
+        // GD_alignment_independent_frame_window_spec.txt, 2026-09-01) ----
+        // Separate, independently-selectable method -- does not replace or
+        // modify Time-Based/Recovery Range above (spec's own hard
+        // requirement). Reuses the SAME capture pass (fwCapStack) as the
+        // existing method, since that capture already gives the p=0/nominal
+        // predecessor checkpoint for free; only the post-capture sweep is
+        // new. V1 scope deliberately, per the spec's own "Performance
+        // Strategy" section: correctness first. NOT implemented yet, on
+        // purpose, pending a confirmed-correct V1 and Nigel/Juice's say-so:
+        // predecessor-state caching beyond the free p=0 reuse, adaptive Z,
+        // result caching, checkpointing for long macros, and (the big one)
+        // parallel workers -- this analyzer drives ONE live PlayLayer via
+        // checkpoint restore, so "parallel" would need multiple simulator
+        // instances that don't exist here, not a thread pool bolted on.
+        // Continuation depth is capped at 0 or 1 (not arbitrary N) for the
+        // same reason. Ask before adding any of these.
+        bool fwUseAlignmentIndependent = false;
+        int fwAiZ = 3;
+        int fwAiContinuationDepth = 1; // 0 or 1 only in V1
+        float fwAiClusterRatio = 1.15f;
+        float fwAiDominantThreshold = 0.5f;
+
+        enum class FwAiStatus { Dead, MissedTarget, Partial, Viable, DeadEnd };
+
+        struct FwAiInputResult {
+            uint32_t frame = 0;
+            bool player2 = false;
+            bool isRelease = false;
+            float percent = 0.f;
+            int macroWindow = 0;           // this click's Time-Based/Recovery result, for comparison
+            int representativeWindow = -1; // -1 = no dominant cluster, fell back to macroWindow
+            int observedMin = 0, observedMax = 0;
+            int validAlignments = 0, totalAlignments = 0;
+            int dominantSupport = 0;
+            float dominantPercent = 0.f;
+            float sensitivity = 0.f;
+            std::vector<int> perAlignmentShift;  // raw data, index-aligned with the next vector
+            std::vector<int> perAlignmentWindow; // -- never discarded after picking the representative
+        };
+        std::vector<FwAiInputResult> fwAiResults;
+        bool fwAiHasData = false;
+
+        // -- live pipeline state, meaningful only while fwState is one of
+        // the Ai* states below --
+        size_t fwAiClickIdx = 0;
+        int fwAiPredShift = 0;
+        int fwAiPredMaxNeg = 0, fwAiPredMaxPos = 0;
+        std::vector<int> fwAiValidPredShifts;
+        std::vector<StoredFrame> fwAiValidPredCkpts;
+        size_t fwAiAlignIdx = 0;
+        int fwAiXShift = 0;
+        int fwAiXPhase = -1; // -1 nominal-first, 0 negative sweep, 1 positive sweep
+        int fwAiXMaxNeg = 0, fwAiXMaxPos = 0;
+        bool fwAiXNegContiguous = true, fwAiXPosContiguous = true;
+        int fwAiXLow = 0, fwAiXHigh = 0;
+        std::vector<int> fwAiWindowPerAlign;
+        // All three Ai* probe legs (AiBuildPred/AiSweepX/AiContinuation) use
+        // RELATIVE tick counting from their own restore point, same as the
+        // legacy method's fwProbeFrame/fwProbeHorizon -- deliberately NOT
+        // absolute-frame comparison, since a checkpoint restore's first tick
+        // isn't guaranteed to already show updater.getFrame() caught up to
+        // the checkpoint's own recorded frame (the legacy Probing state
+        // never relies on that equivalence either; matching it here rather
+        // than assuming otherwise).
+        uint32_t fwAiProbeFrame = 0;
+        uint32_t fwAiProbeHorizon = 0;
+        bool fwAiWantContCkpt = false;  // this leg should snapshot a mid-run checkpoint for depth-1 continuation
+        uint32_t fwAiContCkptFrame = 0; // relative tick (matching fwAiProbeFrame) to snapshot it at
+        bool fwAiContCkptTaken = false;
+        StoredFrame fwAiContBaseCkpt;
+        FwAiStatus fwAiPendingStatus = FwAiStatus::Dead; // status the current X shift reached before any continuation check
+        bool fwAiInContinuation = false;
+        int fwAiContStepIdx = 0;
+
+        void fwAiBeginClick();
+        void fwAiBeginPredShift();
+        void fwAiConcludePredShift(bool diedBeforeTarget);
+        void fwAiBeginAlignSweep();
+        void fwAiBeginXShift();
+        void fwAiConcludeXShift(FwAiStatus status);
+        void fwAiBeginContinuationCandidate();
+        void fwAiAdvanceXSweep(bool viable);
+        void fwAiFinishAlignment();
+        void fwAiFinishClick();
+        void fwAiFinishAnalysis();
+        int fwAiNominalFirstOffset(int stepIdx) const;
 
         enum class FwMarkerShape { Circle = 0, Star = 1, Spiral = 2, Polygon = 3 };
         enum class FwFillStyle { Inverted = 0, Normal = 1 };

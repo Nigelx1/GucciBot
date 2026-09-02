@@ -430,14 +430,30 @@ class $modify(GB7PlayLayer, PlayLayer) {
                 float xp = player ? player->m_position.x : -1.f;
                 float pct = m_levelLength > 0.f ? xp / m_levelLength * 100.f : -1.f;
                 log::info("[CAP-DIE] f={} x={:.1f} pct={:.1f}", upd.getFrame(), xp, pct);
-                logCalcDeathTrace(
-                    fmt::format("[DIE] click={} shift={:+d} probeFrame={} f={} x={:.1f} pct={:.1f}",
-                                gb->fwProbeClick,
-                                gb->fwProbeShift,
-                                gb->fwProbeFrame,
-                                upd.getFrame(),
-                                xp,
-                                pct));
+                bool aiState = gb->fwState == GucciEngine::FwState::AiBuildPred ||
+                               gb->fwState == GucciEngine::FwState::AiSweepX ||
+                               gb->fwState == GucciEngine::FwState::AiContinuation;
+                if (aiState) {
+                    logCalcDeathTrace(fmt::format(
+                        "[AI-DIE] click={} predShift={:+d} xShift={:+d} probeFrame={} f={} "
+                        "x={:.1f} pct={:.1f}",
+                        gb->fwAiClickIdx,
+                        gb->fwAiValidPredShifts.empty() ? 0 : gb->fwAiValidPredShifts.back(),
+                        gb->fwAiXShift,
+                        gb->fwAiProbeFrame,
+                        upd.getFrame(),
+                        xp,
+                        pct));
+                } else {
+                    logCalcDeathTrace(fmt::format(
+                        "[DIE] click={} shift={:+d} probeFrame={} f={} x={:.1f} pct={:.1f}",
+                        gb->fwProbeClick,
+                        gb->fwProbeShift,
+                        gb->fwProbeFrame,
+                        upd.getFrame(),
+                        xp,
+                        pct));
+                }
             }
             return;
         }
