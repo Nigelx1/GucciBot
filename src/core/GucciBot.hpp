@@ -1,14 +1,12 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-09-02-a (Juice's frame-window feedback batch, all three in one build per Nigel: (1) "     \
-    ".fw/.path/.trainer sidecars moved out of replays/ into replays/sidecars/, lazy per-file "      \
-    "migration on first touch, delete/rename now carry sidecars along instead of orphaning them; "  \
-    "(2) osu!mania-style 'Circle Skin' marker option for the frame-window overlay -- dot at exact "  \
-    "timing, ring grows with window size; (3) NEW 'Alignment-Independent' frame-window algorithm, "  \
-    "selectable alongside Time-Based/Recovery Range without touching either -- Version 1 scope "     \
-    "(correctness first, no caching/parallelism/arbitrary depth yet, see Juice's own spec doc). "    \
-    "UNTESTED -- none of this has run in-game yet. Compiles clean.)"
+    "2026-09-02-b (Same as -a (Juice's frame-window batch: sidecar reorg, Circle Skin, NEW "        \
+    "Alignment-Independent algorithm) -- -a wrongly bumped the product version to 1.6.0, which "     \
+    "Nigel didn't ask for. Version reverted to 1.5.2; this is still an untested build, not a "       \
+    "release. GB_BUILD_LABEL bumped anyway per Section 2, since -a is a different binary and "       \
+    "testing the wrong one wastes time. UNTESTED -- none of this has run in-game yet. Compiles "     \
+    "clean.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
