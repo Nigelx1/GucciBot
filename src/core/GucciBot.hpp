@@ -1,12 +1,18 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-09-02-b (Same as -a (Juice's frame-window batch: sidecar reorg, Circle Skin, NEW "        \
-    "Alignment-Independent algorithm) -- -a wrongly bumped the product version to 1.6.0, which "     \
-    "Nigel didn't ask for. Version reverted to 1.5.2; this is still an untested build, not a "       \
-    "release. GB_BUILD_LABEL bumped anyway per Section 2, since -a is a different binary and "       \
-    "testing the wrong one wastes time. UNTESTED -- none of this has run in-game yet. Compiles "     \
-    "clean.)"
+    "2026-09-02-c (Juice's first real Alignment-Independent test found a real bug: I'd copied "     \
+    "legacy's contiguous-span tracking (fwProbeLow/High) as if IT were the reported window, but "   \
+    "legacy actually reports a raw survived-count (fwProbeValidCount) and only uses the span for "  \
+    "logging -- got that backwards. Effect: whenever the nominal/X=0 shift specifically failed for "\
+    "a given predecessor alignment, that alignment reported window=1 no matter what OTHER shifts "  \
+    "survived, exactly matching Juice's 'should never be 1 frame' report. Fixed: new fwAiXValidCount "\
+    "mirrors fwProbeValidCount exactly. Also: Macro column showed misleading '0' when Time-Based/"   \
+    "Recovery Range simply hadn't measured that click -- now shows '--'. Added Alignment-"           \
+    "Independent branch recording + a 'Go' playback button (Juice's ask) so a specific predecessor/"\
+    "shift branch can be watched at regular speed -- also fixes 'Debug Mode flat out doesn't work' "\
+    "for this algorithm, since it was never wired up before. Still v1.5.2, no version bump. "        \
+    "UNTESTED against the fix -- Juice's original report predates it. Compiles clean.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -756,6 +762,7 @@ namespace gucci {
             bool isRelease = false;
             float percent = 0.f;
             int macroWindow = 0;           // this click's Time-Based/Recovery result, for comparison
+            bool hasMacroMatch = false;    // false = Time-Based/Recovery hasn't measured this click at all (not "measured as 0")
             int representativeWindow = -1; // -1 = no dominant cluster, fell back to macroWindow
             int observedMin = 0, observedMax = 0;
             int validAlignments = 0, totalAlignments = 0;
@@ -780,7 +787,8 @@ namespace gucci {
         int fwAiXPhase = -1; // -1 nominal-first, 0 negative sweep, 1 positive sweep
         int fwAiXMaxNeg = 0, fwAiXMaxPos = 0;
         bool fwAiXNegContiguous = true, fwAiXPosContiguous = true;
-        int fwAiXLow = 0, fwAiXHigh = 0;
+        int fwAiXLow = 0, fwAiXHigh = 0;   // contiguous span -- logging only, NOT the reported window (see fwAiXValidCount)
+        int fwAiXValidCount = 0;           // the actual per-alignment window: a raw count, matching fwProbeValidCount
         std::vector<int> fwAiWindowPerAlign;
         // All three Ai* probe legs (AiBuildPred/AiSweepX/AiContinuation) use
         // RELATIVE tick counting from their own restore point, same as the
@@ -799,6 +807,25 @@ namespace gucci {
         FwAiStatus fwAiPendingStatus = FwAiStatus::Dead; // status the current X shift reached before any continuation check
         bool fwAiInContinuation = false;
         int fwAiContStepIdx = 0;
+
+        // Juice's ask (2026-09-02): let him pick a specific tested (predecessor
+        // alignment, X shift) branch and watch it actually play out, at
+        // regular speed, to see what it tested and where it died -- this is
+        // also spec section 25's "Debug/Exhaustive mode" requirement, which
+        // V1 shipped without. Reuses the SAME fwDebugMode toggle as the
+        // legacy method's debug marks, populated separately here. Each
+        // branch stores its own predecessor checkpoint directly (not just an
+        // index) so "Go" can restore it without re-deriving anything.
+        struct FwAiDebugBranch {
+            size_t clickIdx = 0;
+            int predShift = 0;
+            int xShift = 0;
+            FwAiStatus status = FwAiStatus::Dead;
+            float x = 0.f, y = 0.f;
+            StoredFrame predCkpt;
+        };
+        std::vector<FwAiDebugBranch> fwAiDebugBranches;
+        void debugTeleportToAiBranch(size_t idx);
 
         void fwAiBeginClick();
         void fwAiBeginPredShift();

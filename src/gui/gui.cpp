@@ -4255,6 +4255,16 @@ namespace gucci {
                     "(2*Z+1)^2 simulated runs per click before continuation testing, so keep this "
                     "small (3-5) unless you're prepared to wait.");
                 ImGui::PopStyleColor();
+                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                ImGui::TextWrapped(
+                    "What \"predecessor\" means: for each click being measured, it re-tests the "
+                    "click BEFORE it at a few nearby timings too (not just the exact recorded "
+                    "frame), and re-measures the click under each of those -- since a real player's "
+                    "previous click landing 1-2 frames early or late can change what's actually "
+                    "reachable next. The progress bar's \"predecessor +2\" / \"align 3/7, x +1\" text "
+                    "reads as: which of those earlier-click timings is being tried, then which "
+                    "shift of THIS click is being tried under that specific earlier timing.");
+                ImGui::PopStyleColor();
                 int contIdx = std::clamp(engine->fwAiContinuationDepth, 0, 1);
                 const char* contNames[] = {"0 (off)", "1"};
                 ImGui::SetNextItemWidth(-1);
@@ -4550,18 +4560,22 @@ namespace gucci {
         ImGui::PopStyleColor();
 
         if (engine->fwAiHasData) {
+            static size_t s_aiDebugFilterClick = SIZE_MAX;
+
             ImGui::Dummy(ImVec2(0, 8));
             Widgets::SectionHeader("Alignment-Independent Results", theme);
             ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
             ImGui::TextWrapped(
                 "Doesn't touch the markers above -- Time-Based/Recovery Range still drive those. "
                 "\"Representative\" is blank when no dominant cluster was found for that click, "
-                "meaning it fell back to the Macro column.");
+                "meaning it fell back to the Macro column. Macro shows \"--\" if Time-Based/"
+                "Recovery Range hasn't measured this click at all yet (not the same as an actual "
+                "0-frame result) -- run one of those too if you want a real number there.");
             ImGui::PopStyleColor();
             ImGui::Dummy(ImVec2(0, 4));
             float tblH = std::min((float)engine->fwAiResults.size() * 24.f + 28.f, 280.f);
             if (ImGui::BeginTable("##fwAiResultsTbl",
-                                  6,
+                                  7,
                                   ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
                                       ImGuiTableFlags_ScrollY,
                                   ImVec2(-1, tblH))) {
@@ -4571,9 +4585,11 @@ namespace gucci {
                 ImGui::TableSetupColumn("Observed");
                 ImGui::TableSetupColumn("Valid Align.");
                 ImGui::TableSetupColumn("Sensitivity");
+                ImGui::TableSetupColumn("Branches");
                 ImGui::TableHeadersRow();
                 for (size_t i = 0; i < engine->fwAiResults.size(); ++i) {
                     auto const& r = engine->fwAiResults[i];
+                    ImGui::PushID((int)i + 12000);
                     ImGui::TableNextRow();
                     ImGui::TableSetColumnIndex(0);
                     ImGui::Text("%.1f%% %s%s",
@@ -4581,7 +4597,10 @@ namespace gucci {
                                r.isRelease ? "rel" : "press",
                                r.player2 ? " p2" : "");
                     ImGui::TableSetColumnIndex(1);
-                    ImGui::Text("%d", r.macroWindow);
+                    if (r.hasMacroMatch)
+                        ImGui::Text("%d", r.macroWindow);
+                    else
+                        ImGui::TextColored(theme.textSecondary, "--");
                     ImGui::TableSetColumnIndex(2);
                     if (r.representativeWindow > 0)
                         ImGui::Text("%d", r.representativeWindow);
@@ -4593,9 +4612,107 @@ namespace gucci {
                     ImGui::Text("%d/%d", r.validAlignments, r.totalAlignments);
                     ImGui::TableSetColumnIndex(5);
                     ImGui::Text("%.2f", r.sensitivity);
+                    ImGui::TableSetColumnIndex(6);
+                    bool hasBranches = std::any_of(
+                        engine->fwAiDebugBranches.begin(),
+                        engine->fwAiDebugBranches.end(),
+                        [i](auto const& br) {
+                            return br.clickIdx == i;
+                        });
+                    if (!hasBranches)
+                        ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.4f);
+                    if (Widgets::StyledButton("View", ImVec2(50, 20), theme, anim, 4.f) &&
+                        hasBranches) {
+                        s_aiDebugFilterClick = i;
+                        ImGui::OpenPopup("AiDebugHistory");
+                    }
+                    if (!hasBranches)
+                        ImGui::PopStyleVar();
+                    ImGui::PopID();
                 }
                 ImGui::EndTable();
             }
+            if (!engine->fwDebugMode) {
+                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                ImGui::TextWrapped(
+                    "Branches only get recorded when Debug Mode (Analysis Settings, below) is "
+                    "on during the Calculate run -- turn it on and re-run to fill these in.");
+                ImGui::PopStyleColor();
+            }
+
+            ImGui::SetNextWindowSize(ImVec2(460, 0), ImGuiCond_Appearing);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14, 12));
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.f);
+            ImGui::PushStyleColor(ImGuiCol_PopupBg, IM_COL32(0, 0, 0, 0));
+            ImGui::PushStyleColor(ImGuiCol_Border, IM_COL32(0, 0, 0, 0));
+            ImGui::PushStyleColor(ImGuiCol_ModalWindowDimBg, IM_COL32(0, 0, 0, 0));
+            if (ImGui::BeginPopupModal("AiDebugHistory",
+                                       nullptr,
+                                       ImGuiWindowFlags_AlwaysAutoResize |
+                                           ImGuiWindowFlags_NoTitleBar |
+                                           ImGuiWindowFlags_NoResize)) {
+                drawPopupChrome(*this, "Alignment-Independent Branches");
+                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                ImGui::TextWrapped(
+                    "\"Go\" restores the exact predecessor-alignment checkpoint this branch used "
+                    "and applies its click shift, then lets it play out at whatever speed you "
+                    "normally run at -- turn on \"Show Macro Path\" first if you want to see the "
+                    "recorded line to compare against.");
+                ImGui::PopStyleColor();
+                ImGui::Dummy(ImVec2(0, 6));
+                std::vector<size_t> shown;
+                for (size_t bi = 0; bi < engine->fwAiDebugBranches.size(); ++bi)
+                    if (engine->fwAiDebugBranches[bi].clickIdx == s_aiDebugFilterClick)
+                        shown.push_back(bi);
+                float listH = std::min((float)shown.size() * 26.f, 320.f);
+                ImGui::BeginChild("##aiDebugHistList", ImVec2(430, listH), true);
+                for (size_t bi : shown) {
+                    auto const& br = engine->fwAiDebugBranches[bi];
+                    ImGui::PushID((int)bi + 13000);
+                    const char* statusStr = "?";
+                    ImVec4 statusCol = ImVec4(1.f, 1.f, 1.f, 1.f);
+                    switch (br.status) {
+                    case GucciEngine::FwAiStatus::Dead:
+                        statusStr = "DEAD";
+                        statusCol = ImVec4(1.f, 0.3f, 0.3f, 1.f);
+                        break;
+                    case GucciEngine::FwAiStatus::MissedTarget:
+                        statusStr = "MISSED";
+                        statusCol = ImVec4(1.f, 0.6f, 0.2f, 1.f);
+                        break;
+                    case GucciEngine::FwAiStatus::Partial:
+                        statusStr = "PARTIAL";
+                        statusCol = ImVec4(0.9f, 0.9f, 0.3f, 1.f);
+                        break;
+                    case GucciEngine::FwAiStatus::Viable:
+                        statusStr = "VIABLE";
+                        statusCol = ImVec4(0.3f, 1.f, 0.4f, 1.f);
+                        break;
+                    case GucciEngine::FwAiStatus::DeadEnd:
+                        statusStr = "DEAD_END";
+                        statusCol = ImVec4(1.f, 0.4f, 0.4f, 1.f);
+                        break;
+                    }
+                    ImGui::TextColored(statusCol, "%s", statusStr);
+                    ImGui::SameLine();
+                    ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                    ImGui::Text("pred %+d, x %+d", br.predShift, br.xShift);
+                    ImGui::PopStyleColor();
+                    ImGui::SameLine();
+                    if (Widgets::StyledButton("Go", ImVec2(40, 20), theme, anim, 4.f)) {
+                        engine->debugTeleportToAiBranch(bi);
+                        ImGui::CloseCurrentPopup();
+                    }
+                    ImGui::PopID();
+                }
+                ImGui::EndChild();
+                ImGui::Dummy(ImVec2(0, 6));
+                if (Widgets::StyledButton("Close##aiDebugHist", ImVec2(-1, 28), theme, anim, 6.f))
+                    ImGui::CloseCurrentPopup();
+                ImGui::EndPopup();
+            }
+            ImGui::PopStyleColor(3);
+            ImGui::PopStyleVar(2);
         }
 
         ImGui::Dummy(ImVec2(0, 8));

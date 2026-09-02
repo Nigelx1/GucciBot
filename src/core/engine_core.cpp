@@ -2120,6 +2120,7 @@ namespace gucci {
         fwCapStack.clear();
         fwClickSamples.clear();
         fwDebugMarks.clear();
+        fwAiDebugBranches.clear();
 
         auto shouldTestRelease = [&](uint32_t frame, bool player2) -> bool {
             char gm = fwGamemodeAt(this, frame, player2);
@@ -2730,6 +2731,75 @@ namespace gucci {
                   markIndex,
                   mk.macroFrame,
                   mk.testedFrame);
+    }
+
+    // Alignment-Independent equivalent of debugTeleportToMark above -- Juice's
+    // playback ask (2026-09-02): restore the EXACT predecessor-alignment
+    // checkpoint a specific branch used (stored directly on the branch, not
+    // re-derived), apply that branch's X shift, and let it play out at
+    // whatever speed the bot is normally configured for (matching the
+    // legacy teleport -- neither function touches TPS/speedhack, so
+    // "regular speed" just falls out of not overriding it). Restoring the
+    // predecessor checkpoint directly means the previous click's own shift
+    // is already baked into the state Juice sees play out, not something he
+    // has to separately reconstruct.
+    void GucciEngine::debugTeleportToAiBranch(size_t idx) {
+        if (idx >= fwAiDebugBranches.size())
+            return;
+        auto const& br = fwAiDebugBranches[idx];
+        if (br.clickIdx >= fwClickSamples.size())
+            return;
+        auto* pl = PlayLayer::get();
+        if (!pl)
+            return;
+
+        if (fwAnalyzing)
+            cancelAnalysis();
+
+        replay.m_actionAtom = fwSavedAtom;
+        auto& acts = replay.m_actionAtom.m_actions;
+        acts.erase(std::remove_if(acts.begin(),
+                                  acts.end(),
+                                  [](const gb::Action& a) {
+                                      return !a.isInput();
+                                  }),
+                   acts.end());
+
+        uint32_t clickFrame = fwClickSamples[br.clickIdx].frame;
+        bool clickP2 = fwClickSamples[br.clickIdx].player2;
+        bool clickHolding = !fwClickSamples[br.clickIdx].release;
+        for (auto& a : acts) {
+            if (a.m_frame == clickFrame && a.m_player2 == clickP2 && a.m_holding == clickHolding) {
+                int64_t shifted = (int64_t)clickFrame + br.xShift;
+                a.m_frame = (uint32_t)std::max<int64_t>(shifted, 0);
+                break;
+            }
+        }
+        std::stable_sort(acts.begin(), acts.end(), [](const gb::Action& a, const gb::Action& b) {
+            return a.m_frame < b.m_frame;
+        });
+
+        practiceFix.m_savedCheckpoints.clear();
+        practiceFix.m_brokenObjects.clear();
+        practiceFix.m_storedFrames.clear();
+        practiceFix.m_storedFrames.push_back(br.predCkpt);
+        practiceFix.m_storedFrames.push_back(br.predCkpt);
+
+        mode = Mode::Playing;
+        if (practiceFix.canRestoreState()) {
+            practiceFix.m_loadCheckpoint = true;
+            practiceFix.m_isBackstep = true;
+            pl->resetLevel();
+            practiceFix.m_loadCheckpoint = false;
+            practiceFix.m_isBackstep = false;
+        }
+
+        log::info("[GucciBot] Alignment-Independent debug: teleported to branch {} (click={}, "
+                  "predShift={:+d}, xShift={:+d})",
+                  idx,
+                  br.clickIdx,
+                  br.predShift,
+                  br.xShift);
     }
 
     void GucciEngine::beginProbeRun() {
@@ -3343,6 +3413,7 @@ namespace gucci {
         fwAiXPosContiguous = true;
         fwAiXLow = 0;
         fwAiXHigh = 0;
+        fwAiXValidCount = 0;
 
         uint32_t clickFrame = fwClickSamples[fwAiClickIdx].frame;
         fwAiXMaxPos = fwAiZ;
@@ -3546,6 +3617,41 @@ namespace gucci {
     }
 
     void GucciEngine::fwAiAdvanceXSweep(bool viable) {
+        // The actual reported per-alignment window is this raw count, NOT
+        // the contiguous fwAiXLow/fwAiXHigh span below -- that span is kept
+        // only for the log line, matching how the legacy method's own
+        // fwProbeValidCount/fwProbeLow/fwProbeHigh relationship works
+        // (see finishProbeClick). Getting this backwards was a real bug,
+        // caught by Juice 2026-09-02: if the nominal (X=0) shift specifically
+        // failed for a given predecessor alignment, fwAiXLow/fwAiXHigh never
+        // moved off their 0/0 initial values for the rest of that
+        // alignment's sweep -- reporting window=1 regardless of what OTHER
+        // shifts on that alignment actually survived.
+        if (viable)
+            fwAiXValidCount++;
+
+        if (fwDebugMode) {
+            FwAiDebugBranch br;
+            br.clickIdx = fwAiClickIdx;
+            br.predShift = fwAiValidPredShifts[fwAiAlignIdx];
+            br.xShift = fwAiXShift;
+            if (fwAiPendingStatus == FwAiStatus::Dead)
+                br.status = FwAiStatus::Dead;
+            else if (fwAiPendingStatus == FwAiStatus::MissedTarget)
+                br.status = FwAiStatus::MissedTarget;
+            else
+                br.status = viable ? FwAiStatus::Viable : FwAiStatus::DeadEnd;
+            if (auto* pl = PlayLayer::get()) {
+                auto* p = fwClickSamples[fwAiClickIdx].player2 ? pl->m_player2 : pl->m_player1;
+                if (p) {
+                    br.x = p->m_position.x;
+                    br.y = p->m_position.y;
+                }
+            }
+            br.predCkpt = fwAiValidPredCkpts[fwAiAlignIdx];
+            fwAiDebugBranches.push_back(br);
+        }
+
         if (fwAiXPhase == -1) {
             if (viable) {
                 fwAiXLow = 0;
@@ -3603,17 +3709,17 @@ namespace gucci {
     }
 
     void GucciEngine::fwAiFinishAlignment() {
-        int window = fwAiXHigh - fwAiXLow + 1;
+        int window = fwAiXValidCount;
         fwAiWindowPerAlign.push_back(window);
 
-        log::info(
-            "[GucciBot] Alignment-Independent: click {} pred[{}]={:+d} -> window={} (span {}..{})",
-            fwAiClickIdx,
-            fwAiAlignIdx,
-            fwAiValidPredShifts[fwAiAlignIdx],
-            window,
-            fwAiXLow,
-            fwAiXHigh);
+        log::info("[GucciBot] Alignment-Independent: click {} pred[{}]={:+d} -> window={} "
+                  "(contiguous span {}..{})",
+                  fwAiClickIdx,
+                  fwAiAlignIdx,
+                  fwAiValidPredShifts[fwAiAlignIdx],
+                  window,
+                  fwAiXLow,
+                  fwAiXHigh);
 
         fwAiAlignIdx++;
         if (fwAiAlignIdx >= fwAiValidPredCkpts.size()) {
@@ -3626,6 +3732,7 @@ namespace gucci {
         fwAiXPosContiguous = true;
         fwAiXLow = 0;
         fwAiXHigh = 0;
+        fwAiXValidCount = 0;
         fwAiBeginXShift();
     }
 
@@ -3640,11 +3747,18 @@ namespace gucci {
 
         // Macro (legacy) window for this same click, purely for comparison
         // in the results readout -- looked up if the legacy method already
-        // measured it, never runs the legacy method itself.
+        // measured it, never runs the legacy method itself. hasMacroMatch
+        // distinguishes "not measured" from an actual 0 -- Juice's report
+        // (2026-09-02): every row showed "Macro 0" because he'd only run
+        // Alignment-Independent, never Time-Based/Recovery Range, and a bare
+        // "0" reads as a real (and alarming) frame-perfect-only result
+        // rather than "no data."
         res.macroWindow = 0;
+        res.hasMacroMatch = false;
         for (auto const& mk : fwMarks) {
             if (mk.frame == s.frame && mk.player2 == s.player2 && mk.isRelease == s.release) {
                 res.macroWindow = mk.window;
+                res.hasMacroMatch = true;
                 break;
             }
         }
