@@ -14,12 +14,27 @@ namespace gucci {
 
     namespace fs = std::filesystem;
 
-    // This list is duplicated (not shared) across several files -- gui.cpp's
-    // currentThemeExtension()/macro-tag lookups, brr_format.cpp's
-    // getThemeExtension() and its two disk-scan lists, engine_core.cpp's
-    // reloadMacroList(), and allKnownMacroExtensions() below. Adding a new
-    // built-in theme needs every one of these updated; missing one is a
-    // confirmed repeat failure mode on this project.
+    // This list is duplicated (not shared) across several files. Confirmed
+    // complete 2026-09-03 while adding Waka/Youngsta/Knockerz (this
+    // comment previously named five locations and MISSED a sixth --
+    // engine_core.cpp's reloadMacroList() has its own separate isBuiltin
+    // check, not just the macro-set population right above it):
+    //   - gui.cpp: currentThemeExtension(), the macro-tag lookup switch
+    //     (two copies -- one plain, one with colors), kThemePresets[], the
+    //     preset-index-to-BotTheme if/else chain, and the botName/
+    //     subtitle/brandTag/badge/quote (x3) chains keyed off activeTheme.
+    //   - gui.hpp: the BotTheme enum itself.
+    //   - brr_format.cpp: getThemeExtension() and its TWO disk-scan lists
+    //     (replayNameTaken(), loadFromDisk()).
+    //   - engine_core.cpp: reloadMacroList()'s macro-set population AND
+    //     its own separate isBuiltin bool check.
+    //   - GucciBot.hpp: one std::unordered_set<std::string> per theme.
+    //   - allKnownMacroExtensions() below.
+    //   - about.md's Themes table.
+    // Adding a new built-in theme needs EVERY one of these updated; missing
+    // one is a confirmed repeat failure mode on this project -- re-grep for
+    // every existing extension string (not just this list) rather than
+    // trusting this comment to still be complete, the way this one wasn't.
     static bool isBuiltinExtension(const std::string& ext) {
         static const char* kBuiltin[] = {"brrr",
                                          "toosii",
@@ -35,7 +50,10 @@ namespace gucci {
                                          "grizzley",
                                          "redkingdom",
                                          "lemonade",
-                                         "icebrrr"};
+                                         "icebrrr",
+                                         "waka",
+                                         "youngsta",
+                                         "knockerz"};
         for (auto* e : kBuiltin)
             if (ext == e)
                 return true;
@@ -140,7 +158,10 @@ namespace gucci {
                                          ".grizzley",
                                          ".redkingdom",
                                          ".lemonade",
-                                         ".icebrrr"};
+                                         ".icebrrr",
+                                         ".waka",
+                                         ".youngsta",
+                                         ".knockerz"};
         if (auto* ui = MenuInterface::get()) {
             for (auto& t : ui->customThemes)
                 exts.push_back("." + t.extension);

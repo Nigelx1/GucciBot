@@ -946,6 +946,9 @@ namespace gucci {
         redKingdomMacros.clear();
         lemonadeMacros.clear();
         brrrMacros.clear();
+        wakaMacros.clear();
+        youngstaMacros.clear();
+        knockerzMacros.clear();
         customThemeMacrosByExt.clear();
 
         auto dir = getReplayDir();
@@ -991,13 +994,27 @@ namespace gucci {
                     lemonadeMacros.insert(stem);
                 if (ext == ".icebrrr")
                     brrrMacros.insert(stem);
+                if (ext == ".waka")
+                    wakaMacros.insert(stem);
+                if (ext == ".youngsta")
+                    youngstaMacros.insert(stem);
+                if (ext == ".knockerz")
+                    knockerzMacros.insert(stem);
                 if (!ext.empty()) {
                     std::string bare = ext.substr(1);
+                    // This isBuiltin list is a SIXTH copy of the same set
+                    // (customtheme.cpp's own comment on the class only
+                    // names five) -- found while adding Waka/Youngsta/
+                    // Knockerz, 2026-09-03. Missing this one specifically
+                    // would silently register every macro saved under a
+                    // new built-in extension as if it were a user custom
+                    // theme instead.
                     bool isBuiltin = ext == ".brrr" || ext == ".toosii" || ext == ".ja" ||
                                      ext == ".giddey" || ext == ".bam" || ext == ".sexyy" ||
                                      ext == ".juice" || ext == ".butler" || ext == ".saweetie" ||
                                      ext == ".maybach" || ext == ".romo" || ext == ".grizzley" ||
-                                     ext == ".redkingdom" || ext == ".lemonade" || ext == ".icebrrr";
+                                     ext == ".redkingdom" || ext == ".lemonade" || ext == ".icebrrr" ||
+                                     ext == ".waka" || ext == ".youngsta" || ext == ".knockerz";
                     if (!isBuiltin)
                         customThemeMacrosByExt[bare].insert(stem);
                 }

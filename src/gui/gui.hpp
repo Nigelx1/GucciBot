@@ -112,7 +112,25 @@ namespace gucci {
         THEME_REDKINGDOM,
         THEME_LEMONADE,
         THEME_BRRR,
-        THEME_CUSTOM
+        // New built-in themes go HERE, right after the last one and before
+        // THEME_CUSTOM -- never in the middle of the existing list. Their
+        // ordinals must stay contiguous with the array they index into
+        // (kThemePresets, gui.cpp) starting right after THEME_BRRR's slot.
+        THEME_WAKA,
+        THEME_YOUNGSTA,
+        THEME_KNOCKERZ,
+        // THEME_CUSTOM is pinned to an explicit, far-away value on purpose
+        // (2026-09-03) -- `active_theme` is persisted as a raw int
+        // (saved.json), and this enum used to rely on THEME_CUSTOM simply
+        // being "whatever comes last." Every past new theme therefore had
+        // to be inserted immediately before it, which silently renumbers
+        // THEME_CUSTOM for anyone who currently has a custom theme active
+        // -- their saved "active_theme" int would resolve to a totally
+        // different theme after updating. Pinning it far outside any
+        // realistic preset count means new built-in themes can keep
+        // appending after THEME_BRRR (and whatever comes after these three)
+        // forever without ever touching this value again.
+        THEME_CUSTOM = 1000
     };
 
     std::vector<std::string> allKnownMacroExtensions();

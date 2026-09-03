@@ -1,12 +1,20 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-09-02-f (Nigel's ask: Debug Mode now drops a blue X at the icon's actual starting "        \
-    "position for every predecessor alignment Alignment-Independent has confirmed valid this click "  \
-    "-- read straight off that alignment's own stored checkpoint, no extra simulation needed. Unlike "\
-    "the pass/fail circles (reset per-alignment), these accumulate for the whole click so the spread "\
-    "across every valid alignment is visible at once -- directly answers Juice's earlier confusion "  \
-    "about what the predecessor phase is even doing. Still v1.5.2, no version bump. Compiles clean.)"
+    "2026-09-03-a (3 new built-in themes: WakaBot (Waka Flocka Flame), YoungstaBot (Blac "          \
+    "Youngsta), KnockerzBot (Speaker Knockerz) -- green/violet/teal, all previously unused colors. "  \
+    "Touched all 17 real locations this needed (enum, kThemePresets, the preset-picker index chain, " \
+    "2x currentThemeExtension/getThemeExtension, 2x disk-scan lists, 2x macro-tag lookups, 3x "       \
+    "GucciQuote chains, botName/subtitle/brandTag/badge chains, isBuiltinExtension, "                \
+    "allKnownMacroExtensions, 3 new macro-tracking sets + reloadMacroList, about.md) -- found and "  \
+    "fixed a 6th duplicate isBuiltin list in reloadMacroList() that wasn't even in the file's own "  \
+    "warning comment, updated that comment to actually be complete this time. Also pinned "          \
+    "THEME_CUSTOM to an explicit far-away enum value (was implicitly 'whatever comes last', which "  \
+    "would have silently corrupted any existing custom-theme user's persisted active_theme int the "  \
+    "next time a theme got added after it) so this never has to be touched again. No Big Brrr audio "\
+    "changes -- Waka's own default (Grove St. Party) already IS the mod's existing shared default "  \
+    "track, and the other two just use that same shared default like most of the roster already "   \
+    "does. Still v1.5.2, no version bump. Compiles clean.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -916,6 +924,9 @@ namespace gucci {
         std::unordered_set<std::string> redKingdomMacros;
         std::unordered_set<std::string> lemonadeMacros;
         std::unordered_set<std::string> brrrMacros;
+        std::unordered_set<std::string> wakaMacros;
+        std::unordered_set<std::string> youngstaMacros;
+        std::unordered_set<std::string> knockerzMacros;
         std::unordered_map<std::string, std::unordered_set<std::string>> customThemeMacrosByExt;
 
         std::vector<BotSettingsPreset> settingsPresets;

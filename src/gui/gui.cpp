@@ -422,6 +422,12 @@ namespace gucci {
             return ".lemonade";
         case THEME_BRRR:
             return ".icebrrr";
+        case THEME_WAKA:
+            return ".waka";
+        case THEME_YOUNGSTA:
+            return ".youngsta";
+        case THEME_KNOCKERZ:
+            return ".knockerz";
         default:
             return ".brrr";
         }
@@ -897,6 +903,33 @@ namespace gucci {
          ImVec4(0.038f, 0.070f, 0.115f, 1.f),
          ImVec4(0.960f, 0.975f, 0.990f, 1.f),
          ImVec4(0.520f, 0.600f, 0.680f, 1.f),
+         5.f,
+         0.96f},
+        // Nigel's pick, 2026-09-03: Waka Flocka Flame, Blac Youngsta,
+        // Speaker Knockerz -- see about.md for full color names. Green,
+        // violet, and teal deliberately weren't used by any theme above.
+        {"WakaBot",
+         ImVec4(0.204f, 0.780f, 0.302f, 1.f),
+         ImVec4(0.018f, 0.050f, 0.026f, 0.96f),
+         ImVec4(0.033f, 0.088f, 0.046f, 1.f),
+         ImVec4(0.955f, 0.980f, 0.955f, 1.f),
+         ImVec4(0.460f, 0.600f, 0.480f, 1.f),
+         5.f,
+         0.96f},
+        {"YoungstaBot",
+         ImVec4(0.580f, 0.220f, 0.980f, 1.f),
+         ImVec4(0.043f, 0.019f, 0.072f, 0.96f),
+         ImVec4(0.078f, 0.038f, 0.126f, 1.f),
+         ImVec4(0.968f, 0.955f, 0.988f, 1.f),
+         ImVec4(0.560f, 0.460f, 0.640f, 1.f),
+         5.f,
+         0.96f},
+        {"KnockerzBot",
+         ImVec4(0.070f, 0.780f, 0.720f, 1.f),
+         ImVec4(0.014f, 0.058f, 0.056f, 0.96f),
+         ImVec4(0.027f, 0.098f, 0.093f, 1.f),
+         ImVec4(0.938f, 0.984f, 0.978f, 1.f),
+         ImVec4(0.420f, 0.600f, 0.580f, 1.f),
          5.f,
          0.96f},
     };
@@ -1879,6 +1912,9 @@ namespace gucci {
             : (activeTheme == THEME_REDKINGDOM) ? "Red Kingdom"
             : (activeTheme == THEME_LEMONADE)   ? "LemonadeBot"
             : (activeTheme == THEME_BRRR)       ? "BrrrBot"
+            : (activeTheme == THEME_WAKA)       ? "WakaBot"
+            : (activeTheme == THEME_YOUNGSTA)   ? "YoungstaBot"
+            : (activeTheme == THEME_KNOCKERZ)   ? "KnockerzBot"
                                                 : "GucciBot";
         const char* botName = botNameStr.c_str();
         ImVec2 npos(wp.x + 40, wp.y + 10);
@@ -1911,6 +1947,12 @@ namespace gucci {
             : (activeTheme == THEME_LEMONADE) ? "v" MOD_VERSION
                                                 "  -  Make you some lemonade. Frame perfect."
             : (activeTheme == THEME_BRRR) ? "v" MOD_VERSION "  -  Frame perfect. Ice cold. Brrr."
+            : (activeTheme == THEME_WAKA)
+                ? "v" MOD_VERSION "  -  Hard in the paint. Frame perfect."
+            : (activeTheme == THEME_YOUNGSTA)
+                ? "v" MOD_VERSION "  -  Everyday's my birthday. Frame perfect."
+            : (activeTheme == THEME_KNOCKERZ)
+                ? "v" MOD_VERSION "  -  Two step. Frame perfect."
                                                 : "v" MOD_VERSION "  -  Frame perfect. GBR6. Brrr.";
         const char* sub = subStr.c_str();
         ImVec2 spos(wp.x + 40, wp.y + 30);
@@ -2151,6 +2193,9 @@ namespace gucci {
             : (activeTheme == THEME_REDKINGDOM) ? "Kneel."
             : (activeTheme == THEME_LEMONADE)   ? "Squeezed."
             : (activeTheme == THEME_BRRR)       ? "Frozen."
+            : (activeTheme == THEME_WAKA)       ? "OW!"
+            : (activeTheme == THEME_YOUNGSTA)   ? "Everyday!"
+            : (activeTheme == THEME_KNOCKERZ)   ? "Two step!"
                                                 : "Brrr.";
         const char* brand = brandStr.c_str();
         ImVec2 bts = ImGui::CalcTextSize(brand);
@@ -2815,6 +2860,16 @@ namespace gucci {
         else if (activeTheme == THEME_BRRR)
             Widgets::GucciQuote(
                 "\"Cold enough to freeze a frame in place.\"", "-- Gucci Mane, probably", theme);
+        else if (activeTheme == THEME_WAKA)
+            Widgets::GucciQuote(
+                "\"I don't walk in, I turn up in.\"", "-- Waka Flocka Flame, probably", theme);
+        else if (activeTheme == THEME_YOUNGSTA)
+            Widgets::GucciQuote(
+                "\"Everyday my birthday. Every frame a gift.\"", "-- Blac Youngsta, probably", theme);
+        else if (activeTheme == THEME_KNOCKERZ)
+            Widgets::GucciQuote("\"Every step's a two step. Every frame's a step ahead.\"",
+                                "-- Speaker Knockerz, probably",
+                                theme);
         else
             Widgets::GucciQuote("\"I got so many replays I got files in my files.\"",
                                 "-- Gucci Mane, probably",
@@ -3141,6 +3196,12 @@ namespace gucci {
                     fmtTagStr = ".lemonade";
                 else if (eng3->brrrMacros.count(mn))
                     fmtTagStr = ".icebrrr";
+                else if (eng3->wakaMacros.count(mn))
+                    fmtTagStr = ".waka";
+                else if (eng3->youngstaMacros.count(mn))
+                    fmtTagStr = ".youngsta";
+                else if (eng3->knockerzMacros.count(mn))
+                    fmtTagStr = ".knockerz";
                 else
                     fmtTagStr = ".brrr";
             }
@@ -3261,6 +3322,15 @@ namespace gucci {
                 } else if (eng2->brrrMacros.count(mn)) {
                     tagStr = ".icebrrr";
                     tagCol = ImVec4(0.580f, 0.850f, 0.980f, 1.f);
+                } else if (eng2->wakaMacros.count(mn)) {
+                    tagStr = ".waka";
+                    tagCol = ImVec4(0.204f, 0.780f, 0.302f, 1.f);
+                } else if (eng2->youngstaMacros.count(mn)) {
+                    tagStr = ".youngsta";
+                    tagCol = ImVec4(0.580f, 0.220f, 0.980f, 1.f);
+                } else if (eng2->knockerzMacros.count(mn)) {
+                    tagStr = ".knockerz";
+                    tagCol = ImVec4(0.070f, 0.780f, 0.720f, 1.f);
                 }
                 const char* tag = tagStr.c_str();
                 auto ts = ImGui::CalcTextSize(tag);
@@ -3760,6 +3830,19 @@ namespace gucci {
                 "\"I don't need speedhack. Cold moves fast on its own.\"",
                 "-- Gucci Mane, probably",
                 theme);
+        else if (activeTheme == THEME_WAKA)
+            Widgets::GucciQuote(
+                "\"I don't need speedhack. I'm already hard in the paint.\"",
+                "-- Waka Flocka Flame, probably",
+                theme);
+        else if (activeTheme == THEME_YOUNGSTA)
+            Widgets::GucciQuote("\"I don't need speedhack. I move like it's my birthday.\"",
+                                "-- Blac Youngsta, probably",
+                                theme);
+        else if (activeTheme == THEME_KNOCKERZ)
+            Widgets::GucciQuote("\"I don't need speedhack. I'm already a step ahead.\"",
+                                "-- Speaker Knockerz, probably",
+                                theme);
         else
             Widgets::GucciQuote("\"I run this game at my own speed. You can't keep up.\"",
                                 "-- Gucci Mane, on speedhacks",
@@ -5854,6 +5937,12 @@ namespace gucci {
                     activeTheme = THEME_LEMONADE;
                 else if (i == 16)
                     activeTheme = THEME_BRRR;
+                else if (i == 17)
+                    activeTheme = THEME_WAKA;
+                else if (i == 18)
+                    activeTheme = THEME_YOUNGSTA;
+                else if (i == 19)
+                    activeTheme = THEME_KNOCKERZ;
                 activeCustomThemeName.clear();
                 if (BigBrrrManager::get()->enabled)
                     BigBrrrManager::get()->setEnabled(true);
@@ -7724,6 +7813,9 @@ namespace gucci {
                     ? "Kansas City | Strange Music | Long Live the Kingdom"
                 : (activeTheme == THEME_LEMONADE) ? "State vs. Radric Davis | 2009 | Lemonade"
                 : (activeTheme == THEME_BRRR)     ? "St. Brick Intro | Frame Perfect | Ice Cold"
+                : (activeTheme == THEME_WAKA)     ? "Brick Squad | Grove St. Party | OW!"
+                : (activeTheme == THEME_YOUNGSTA) ? "Heatmakerz | Memphis | Everyday's My Birthday"
+                : (activeTheme == THEME_KNOCKERZ) ? "Two Step | South Carolina | Bow Bow Bow"
                     : "Concept | Vision | Brrr";
             const char* badge = badgeStr.c_str();
             ImVec2 bs = ImGui::CalcTextSize(badge);
@@ -7832,6 +7924,17 @@ namespace gucci {
                                 theme);
         else if (activeTheme == THEME_BRRR)
             Widgets::GucciQuote("\"Every frame's ice cold. Brrr.\"", "-- Gucci Mane", theme);
+        else if (activeTheme == THEME_WAKA)
+            Widgets::GucciQuote("\"Grove St. party never stopped. Frame perfect either.\"",
+                                "-- Gucci Mane",
+                                theme);
+        else if (activeTheme == THEME_YOUNGSTA)
+            Widgets::GucciQuote(
+                "\"Real recognize real. Real frames recognize real frames.\"",
+                "-- Gucci Mane",
+                theme);
+        else if (activeTheme == THEME_KNOCKERZ)
+            Widgets::GucciQuote("\"Two step in, frame perfect out.\"", "-- Gucci Mane", theme);
         else
             Widgets::GucciQuote(
                 "\"I'm the foundation of all of this. Brrr.\"", "-- Gucci Mane", theme);
