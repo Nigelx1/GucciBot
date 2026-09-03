@@ -1,18 +1,21 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-09-02-c (Juice's first real Alignment-Independent test found a real bug: I'd copied "     \
-    "legacy's contiguous-span tracking (fwProbeLow/High) as if IT were the reported window, but "   \
-    "legacy actually reports a raw survived-count (fwProbeValidCount) and only uses the span for "  \
-    "logging -- got that backwards. Effect: whenever the nominal/X=0 shift specifically failed for "\
-    "a given predecessor alignment, that alignment reported window=1 no matter what OTHER shifts "  \
-    "survived, exactly matching Juice's 'should never be 1 frame' report. Fixed: new fwAiXValidCount "\
-    "mirrors fwProbeValidCount exactly. Also: Macro column showed misleading '0' when Time-Based/"   \
-    "Recovery Range simply hadn't measured that click -- now shows '--'. Added Alignment-"           \
-    "Independent branch recording + a 'Go' playback button (Juice's ask) so a specific predecessor/"\
-    "shift branch can be watched at regular speed -- also fixes 'Debug Mode flat out doesn't work' "\
-    "for this algorithm, since it was never wired up before. Still v1.5.2, no version bump. "        \
-    "UNTESTED against the fix -- Juice's original report predates it. Compiles clean.)"
+    "2026-09-02-d (Second Alignment-Independent fix round from Juice's re-test. Real bug #2: "      \
+    "continuation-candidate testing rebuilt the action list fresh from fwSavedAtom but only "        \
+    "re-applied the NEXT click's shift, never the CURRENT click's own X shift -- so X's click could "\
+    "fire a second time at its original frame during continuation testing, corrupting the physics "  \
+    "and making most continuation checks fail regardless of what was tested. This is what was "      \
+    "behind BOTH 'most clicks show 0 frames on some alignments' and 'continuation only tests the "   \
+    "original frame' -- fixed by re-applying both shifts. Also: search radius (Z) decoupled from "   \
+    "the legacy method's Sweep Range slider (was silently capped by it, now independent, 1-30); "    \
+    "'View' branch popup fixed -- it was opened from inside a per-row PushID scope so its ID never "\
+    "matched the popup shown outside the table, same trap replayActionPopupRequested exists to "     \
+    "avoid elsewhere in this file, now deferred the same way; in-level pass/fail circles now populate "\
+    "for Alignment-Independent too and reset per predecessor alignment; new toggle lets the in-level "\
+    "markers show Alignment-Independent's results instead of Time-Based/Recovery Range's, switchable "\
+    "either way once both exist. Still v1.5.2, no version bump. UNTESTED -- Juice's report predates "\
+    "all of this. Compiles clean.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -594,6 +597,14 @@ namespace gucci {
         float fwLegendScale = 1.f;
         float fwRingBoldness = 2.2f;
 
+        // Juice's ask (2026-09-02): once an Alignment-Independent run has
+        // results, let the in-level marker overlay show THOSE numbers
+        // instead of Time-Based/Recovery Range's, toggleable so both stay
+        // available if a Time-Based run has also been done. Purely a
+        // display switch -- doesn't change what either method measures or
+        // touch fwMarks/fwAiResults themselves.
+        bool fwOverlayShowAlignmentIndependent = false;
+
         // Juice's "circle skin" ask (osu!mania reference: image0.jpg) --
         // an alternate marker style for the frame-window overlay. A small
         // fixed-size filled dot marks the macro's exact click timing (the
@@ -760,6 +771,7 @@ namespace gucci {
             uint32_t frame = 0;
             bool player2 = false;
             bool isRelease = false;
+            float x = 0.f, y = 0.f;
             float percent = 0.f;
             int macroWindow = 0;           // this click's Time-Based/Recovery result, for comparison
             bool hasMacroMatch = false;    // false = Time-Based/Recovery hasn't measured this click at all (not "measured as 0")

@@ -136,7 +136,36 @@ public:
         renderDebugMarks(pl, gb, isRendering);
 
         bool show = isRendering ? gb->fwEnabledRender : gb->fwEnabledLive;
-        if (!show || !gb->fwHasData) {
+        // Juice's ask (2026-09-02): once Alignment-Independent has results,
+        // let the in-level markers show THOSE instead, toggleable, without
+        // losing Time-Based/Recovery Range's own results. Purely a display
+        // switch -- builds a temporary FrameWindowMark-shaped view from
+        // fwAiResults, never touches fwMarks/fwAiResults themselves. A
+        // click with neither a representative nor a macro value at all is
+        // skipped (nothing meaningful to show).
+        bool useAi = gb->fwOverlayShowAlignmentIndependent && gb->fwAiHasData;
+        std::vector<GucciEngine::FrameWindowMark> aiSynthMarks;
+        if (useAi) {
+            aiSynthMarks.reserve(gb->fwAiResults.size());
+            for (auto const& r : gb->fwAiResults) {
+                int w = r.representativeWindow > 0 ? r.representativeWindow
+                                                   : (r.hasMacroMatch ? r.macroWindow : -1);
+                if (w < 0)
+                    continue;
+                GucciEngine::FrameWindowMark mk;
+                mk.x = r.x;
+                mk.y = r.y;
+                mk.window = w;
+                mk.player2 = r.player2;
+                mk.frame = r.frame;
+                mk.percent = r.percent;
+                mk.isRelease = r.isRelease;
+                aiSynthMarks.push_back(mk);
+            }
+        }
+        auto const& marks = useAi ? aiSynthMarks : gb->fwMarks;
+
+        if (!show || (useAi ? aiSynthMarks.empty() : !gb->fwHasData)) {
             if (m_builtForCount != 0) {
                 clear();
                 m_builtForCount = 0;
@@ -154,7 +183,7 @@ public:
 
         int visibleCount = 0;
         bool anyPulseActive = false;
-        for (auto const& mk : gb->fwMarks) {
+        for (auto const& mk : marks) {
             if (mk.frame > curFrame || mk.window > gb->fwMaxWindow)
                 continue;
             ++visibleCount;
@@ -184,21 +213,23 @@ public:
         int camBucketX = (int)std::floor(visRect.getMidX() / 20.f);
         int camBucketY = (int)std::floor(visRect.getMidY() / 20.f);
 
-        int sig = visibleCount * 100000 + static_cast<int>(gb->fwMarks.size()) * 100 +
-                  gb->fwMaxWindow + (mirrored ? 1 : 0) + camBucketX * 7919 + camBucketY * 104729;
+        int sig = visibleCount * 100000 + static_cast<int>(marks.size()) * 100 +
+                  gb->fwMaxWindow + (mirrored ? 1 : 0) + camBucketX * 7919 + camBucketY * 104729 +
+                  (useAi ? 1000000000 : 0);
         if (!anyPulseActive && sig == m_builtForCount)
             return;
         m_builtForCount = anyPulseActive ? -1 : sig;
 
         {
             int loosest = 0;
-            for (auto const& mk : gb->fwMarks)
+            for (auto const& mk : marks)
                 if (mk.window > loosest)
                     loosest = mk.window;
-            log::info("[GucciBot] Frame-window overlay: node={}, {} marks total, "
+            log::info("[GucciBot] Frame-window overlay: node={}, {} marks total ({}), "
                       "{} visible at threshold <= {} (loosest measured = {})",
                       m_node ? "attached" : "NULL",
-                      gb->fwMarks.size(),
+                      marks.size(),
+                      useAi ? "alignment-independent" : "macro",
                       visibleCount,
                       gb->fwMaxWindow,
                       loosest);
@@ -206,7 +237,7 @@ public:
 
         clear();
 
-        for (auto const& mk : gb->fwMarks) {
+        for (auto const& mk : marks) {
             if (mk.window > gb->fwMaxWindow)
                 continue;
             if (mk.frame > curFrame)

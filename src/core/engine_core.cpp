@@ -2267,7 +2267,20 @@ namespace gucci {
 
             while (fwCapIndex < fwClickSamples.size()) {
                 uint32_t clickFrame = fwClickSamples[fwCapIndex].frame;
-                uint32_t margin = (uint32_t)std::max(0, fwSweepRange);
+                // Alignment-Independent needs these SAME checkpoints to
+                // reach back at least fwAiZ frames too (it reuses them
+                // directly for p=0 -- see fwAiBeginClick), which used to
+                // just be capped at whatever fwSweepRange happened to be,
+                // an unrelated legacy-method setting. Juice's ask
+                // (2026-09-02): the search radius should be genuinely
+                // customizable, not silently limited by a different
+                // algorithm's slider. Widening the margin here (Time-Based/
+                // Recovery Range's own captures are UNCHANGED when
+                // Alignment-Independent isn't the active method).
+                int marginWanted = fwSweepRange;
+                if (fwUseAlignmentIndependent)
+                    marginWanted = std::max(fwSweepRange, fwAiZ);
+                uint32_t margin = (uint32_t)std::max(0, marginWanted);
                 uint32_t captureFrame = clickFrame > margin ? clickFrame - margin : 0;
                 if (captureFrame > frame)
                     break;
@@ -3281,28 +3294,23 @@ namespace gucci {
         long posRoom = (long)fwClickSamples[fwAiClickIdx].frame - (long)predFrame - 1;
         fwAiPredMaxNeg = (int)std::clamp((long)fwAiZ, 0L, std::max(0L, negRoom));
         fwAiPredMaxPos = (int)std::clamp((long)fwAiZ, 0L, std::max(0L, posRoom));
-        // fwCapStack[predIdx] only reaches back fwSweepRange frames before
-        // click(ci-1)'s own nominal frame (the legacy Capturing pass' own
-        // margin, shared with the existing method) -- never ask it to
-        // restore further back than that.
-        fwAiPredMaxNeg = std::min(fwAiPredMaxNeg, std::max(0, fwSweepRange));
+        // fwCapStack[predIdx] now always reaches back at least fwAiZ frames
+        // before click(ci-1)'s own nominal frame while Alignment-Independent
+        // is the active method (the shared Capturing pass' margin widens
+        // for exactly this -- see its own comment). No extra clamp needed
+        // here anymore.
 
         // p=0 (nominal predecessor) is exactly what the ordinary capture
         // pass already produced for this click -- reuse it instead of
         // re-simulating (spec 19.2's caching, the one piece of it this
-        // architecture gets for free), but ONLY when that capture's margin
-        // (fwSweepRange) actually reaches back at least as far as this
-        // click's own capture point needs (fwAiZ) -- otherwise build it
-        // fresh like every other shift so the margin is still correct.
-        bool freeZero = fwSweepRange >= fwAiZ;
-        if (freeZero) {
-            fwAiValidPredShifts.push_back(0);
-            fwAiValidPredCkpts.push_back(fwCapStack[fwAiClickIdx]);
-        }
+        // architecture gets for free). Always safe now that the capture
+        // margin above guarantees it reaches back far enough.
+        fwAiValidPredShifts.push_back(0);
+        fwAiValidPredCkpts.push_back(fwCapStack[fwAiClickIdx]);
 
         fwAiPredShift = -fwAiPredMaxNeg;
-        if (freeZero && fwAiPredShift == 0)
-            fwAiPredShift = 1;
+        if (fwAiPredShift == 0)
+            fwAiPredShift = 1; // already have p=0 for free, don't rebuild it
         if (fwAiPredShift > fwAiPredMaxPos) {
             fwAiBeginAlignSweep();
             return;
@@ -3386,10 +3394,9 @@ namespace gucci {
             }
         }
 
-        bool freeZero = fwSweepRange >= fwAiZ;
         fwAiPredShift++;
-        if (freeZero && fwAiPredShift == 0)
-            fwAiPredShift++;
+        if (fwAiPredShift == 0)
+            fwAiPredShift++; // already have p=0 for free, don't rebuild it
         if (fwAiPredShift > fwAiPredMaxPos) {
             fwAiBeginAlignSweep();
             return;
@@ -3400,6 +3407,10 @@ namespace gucci {
     void GucciEngine::fwAiBeginAlignSweep() {
         fwAiAlignIdx = 0;
         fwAiWindowPerAlign.clear();
+        // Juice's ask (2026-09-02): the in-level pass/fail circles (same
+        // ones Time-Based's Debug Mode already draws) should reset per
+        // alignment instead of piling up across the whole run.
+        fwDebugMarks.clear();
         if (fwAiValidPredCkpts.empty()) {
             // Every predecessor alignment (including p=0) died before
             // reaching this click at all -- nothing measurable here.
@@ -3573,6 +3584,26 @@ namespace gucci {
                                       return !a.isInput();
                                   }),
                    acts.end());
+        // Rebuilding fresh from fwSavedAtom puts click ci (fwAiClickIdx) back
+        // at its ORIGINAL frame -- re-apply its X shift here too, or it can
+        // fire a second time at the wrong frame during this continuation
+        // test (it already fired once, baked into fwAiContBaseCkpt's
+        // physics state, when this checkpoint was captured mid-leg). Found
+        // via Juice's report (2026-09-02): continuation appeared to only
+        // ever test the next input's ORIGINAL frame and most alignments
+        // were coming back with a 0-frame window -- this is why: the
+        // desynced double-fire was corrupting nearly every continuation
+        // candidate regardless of which shift was actually being tested.
+        uint32_t xClickFrame = fwClickSamples[fwAiClickIdx].frame;
+        bool xClickP2 = fwClickSamples[fwAiClickIdx].player2;
+        bool xClickHolding = !fwClickSamples[fwAiClickIdx].release;
+        for (auto& a : acts) {
+            if (a.m_frame == xClickFrame && a.m_player2 == xClickP2 && a.m_holding == xClickHolding) {
+                int64_t shiftedX = (int64_t)xClickFrame + fwAiXShift;
+                a.m_frame = (uint32_t)std::max<int64_t>(shiftedX, 0);
+                break;
+            }
+        }
         for (auto& a : acts) {
             if (a.m_frame == nFrame && a.m_player2 == nP2 && a.m_holding == nHolding) {
                 int64_t shifted = (int64_t)nFrame + shift;
@@ -3631,6 +3662,16 @@ namespace gucci {
             fwAiXValidCount++;
 
         if (fwDebugMode) {
+            auto const& sample = fwClickSamples[fwAiClickIdx];
+            float px = 0.f, py = 0.f;
+            if (auto* pl = PlayLayer::get()) {
+                auto* p = sample.player2 ? pl->m_player2 : pl->m_player1;
+                if (p) {
+                    px = p->m_position.x;
+                    py = p->m_position.y;
+                }
+            }
+
             FwAiDebugBranch br;
             br.clickIdx = fwAiClickIdx;
             br.predShift = fwAiValidPredShifts[fwAiAlignIdx];
@@ -3641,15 +3682,28 @@ namespace gucci {
                 br.status = FwAiStatus::MissedTarget;
             else
                 br.status = viable ? FwAiStatus::Viable : FwAiStatus::DeadEnd;
-            if (auto* pl = PlayLayer::get()) {
-                auto* p = fwClickSamples[fwAiClickIdx].player2 ? pl->m_player2 : pl->m_player1;
-                if (p) {
-                    br.x = p->m_position.x;
-                    br.y = p->m_position.y;
-                }
-            }
+            br.x = px;
+            br.y = py;
             br.predCkpt = fwAiValidPredCkpts[fwAiAlignIdx];
             fwAiDebugBranches.push_back(br);
+
+            // Same in-level pass/fail circles Time-Based's Debug Mode
+            // already draws (FrameWindowOverlay::renderDebugMarks doesn't
+            // care which algorithm populated fwDebugMarks) -- reset per
+            // alignment by fwAiBeginAlignSweep/fwAiFinishAlignment above,
+            // per Juice's ask, rather than accumulating for the whole run
+            // the way the legacy method's own marks do.
+            FwDebugMark mk;
+            mk.x = px;
+            mk.y = py;
+            mk.survived = viable;
+            mk.macroFrame = sample.frame;
+            mk.isRelease = sample.release;
+            mk.player2 = sample.player2;
+            mk.clickIndex = fwAiClickIdx;
+            mk.testedFrame = (uint32_t)std::max<int64_t>((int64_t)sample.frame + fwAiXShift, 0);
+            mk.inputNumber = fwComputeInputNumber(fwSavedAtom, sample.frame, sample.player2, !sample.release);
+            fwDebugMarks.push_back(mk);
         }
 
         if (fwAiXPhase == -1) {
@@ -3733,6 +3787,7 @@ namespace gucci {
         fwAiXLow = 0;
         fwAiXHigh = 0;
         fwAiXValidCount = 0;
+        fwDebugMarks.clear(); // reset the in-level pass/fail circles for the new alignment
         fwAiBeginXShift();
     }
 
@@ -3742,6 +3797,8 @@ namespace gucci {
         res.frame = s.frame;
         res.player2 = s.player2;
         res.isRelease = s.release;
+        res.x = s.x;
+        res.y = s.y;
         const float levelLen = m_levelLength > 0.f ? m_levelLength : 1.f;
         res.percent = std::clamp(s.x / levelLen * 100.f, 0.f, 100.f);
 

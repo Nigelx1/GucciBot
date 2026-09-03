@@ -4244,16 +4244,16 @@ namespace gucci {
                 Widgets::StyledSliderInt("Recovery Range", &engine->fwRecoveryRange, 1, 10, theme))
                 Mod::get()->setSavedValue("fw_recovery_range", (int64_t)engine->fwRecoveryRange);
             if (engine->fwUseAlignmentIndependent) {
-                if (Widgets::StyledSliderInt(
-                        "Search Radius (Z)", &engine->fwAiZ, 1, std::max(1, engine->fwSweepRange), theme))
+                if (Widgets::StyledSliderInt("Search Radius (Z)", &engine->fwAiZ, 1, 30, theme))
                     Mod::get()->setSavedValue("fw_ai_z", (int64_t)engine->fwAiZ);
                 ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
                 ImGui::TextWrapped(
                     "How many frames each shifted click (both the previous one and this one) is "
-                    "tested across. Capped at Sweep Range below (Analysis Settings) -- the capture "
-                    "checkpoints only reach back that far. Cost grows fast: roughly "
-                    "(2*Z+1)^2 simulated runs per click before continuation testing, so keep this "
-                    "small (3-5) unless you're prepared to wait.");
+                    "tested across. Independent of Sweep Range below (Analysis Settings) -- that's "
+                    "Time-Based/Recovery Range's own setting, this one no longer borrows or gets "
+                    "capped by it. Cost grows fast: roughly (2*Z+1)^2 simulated runs per click "
+                    "before continuation testing, so keep this small (3-5) unless you're prepared "
+                    "to wait.");
                 ImGui::PopStyleColor();
                 ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
                 ImGui::TextWrapped(
@@ -4317,6 +4317,29 @@ namespace gucci {
                 Mod::get()->setSavedValue("fw_legend", engine->fwLegendEnabled);
             if (recLocked)
                 ImGui::EndDisabled();
+        }
+        {
+            bool aiLocked = !engine->fwAiHasData;
+            if (aiLocked)
+                ImGui::BeginDisabled();
+            if (Widgets::ToggleSwitch("Show Alignment-Independent In-Level",
+                                      &engine->fwOverlayShowAlignmentIndependent,
+                                      theme,
+                                      anim))
+                Mod::get()->setSavedValue("fw_overlay_show_ai",
+                                          engine->fwOverlayShowAlignmentIndependent);
+            if (aiLocked)
+                ImGui::EndDisabled();
+            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+            ImGui::TextWrapped(
+                aiLocked ? "No Alignment-Independent results yet -- run Calculate with it selected "
+                           "above first."
+                         : "Off (default): the markers above show Time-Based/Recovery Range, same "
+                           "as always. On: they show Alignment-Independent's representative window "
+                           "instead (falling back to the Macro value for a click when no dominant "
+                           "cluster was found) -- switch back and forth freely, both results stay "
+                           "available once measured.");
+            ImGui::PopStyleColor();
         }
         ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
         ImGui::TextWrapped(
@@ -4561,6 +4584,7 @@ namespace gucci {
 
         if (engine->fwAiHasData) {
             static size_t s_aiDebugFilterClick = SIZE_MAX;
+            static bool s_aiDebugPopupRequested = false;
 
             ImGui::Dummy(ImVec2(0, 8));
             Widgets::SectionHeader("Alignment-Independent Results", theme);
@@ -4623,14 +4647,28 @@ namespace gucci {
                         ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.4f);
                     if (Widgets::StyledButton("View", ImVec2(50, 20), theme, anim, 4.f) &&
                         hasBranches) {
+                        // Can't call ImGui::OpenPopup here directly -- we're
+                        // inside this row's PushID, so the string-ID popup
+                        // it would open is scoped to THIS row and never
+                        // matches the BeginPopupModal call below (which runs
+                        // outside any PushID). Same trap the existing
+                        // replayActionPopupRequested/replayRenamePopupRequested
+                        // fields elsewhere in this file exist to avoid --
+                        // defer the actual OpenPopup call to after the table
+                        // closes, matching that pattern. This was exactly
+                        // why "View" did nothing (Juice, 2026-09-02).
                         s_aiDebugFilterClick = i;
-                        ImGui::OpenPopup("AiDebugHistory");
+                        s_aiDebugPopupRequested = true;
                     }
                     if (!hasBranches)
                         ImGui::PopStyleVar();
                     ImGui::PopID();
                 }
                 ImGui::EndTable();
+            }
+            if (s_aiDebugPopupRequested) {
+                ImGui::OpenPopup("AiDebugHistory");
+                s_aiDebugPopupRequested = false;
             }
             if (!engine->fwDebugMode) {
                 ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
@@ -8245,6 +8283,8 @@ namespace gucci {
         eng->fwCircleSkinRadiusPerFrame =
             mod->getSavedValue<float>("fw_circleskin_radius_per_frame", 2.2f);
         eng->fwCircleSkinMaxRadius = mod->getSavedValue<float>("fw_circleskin_max_radius", 60.f);
+        eng->fwOverlayShowAlignmentIndependent =
+            mod->getSavedValue<bool>("fw_overlay_show_ai", false);
         eng->fwUseRecoveryRangeAlgorithm = mod->getSavedValue<bool>("fw_use_recovery_range", false);
         eng->fwRecoveryRange = mod->getSavedValue<int>("fw_recovery_range", 4);
         eng->fwUseAlignmentIndependent = mod->getSavedValue<bool>("fw_use_align_indep", false);
