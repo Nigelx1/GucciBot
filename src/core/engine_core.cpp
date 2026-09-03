@@ -3481,10 +3481,23 @@ namespace gucci {
         int64_t shiftedXFrame = std::max<int64_t>((int64_t)clickFrame + fwAiXShift, 0);
         uint32_t ckptFrame = (uint32_t)alignCkpt.frame;
 
+        // kMinHorizon/kMaxHorizon match beginShiftTest's exact clamp
+        // (legacy). Missing this was a real bug, found from Juice's report
+        // (2026-09-02): "it does look like it reached the target but is
+        // marked wrong anyway". On a tight gap (a spam section -- exactly
+        // what both of Juice's tests have been), raw high = gap - slack can
+        // be very small or 0, so without a floor the outcome gets checked
+        // before the player has actually finished arriving/settling at the
+        // target -- legacy has always guarded against this with a 12-tick
+        // minimum; Alignment-Independent's own horizon math didn't carry
+        // that over when it was written.
+        const int64_t kMinHorizon = 12;
+        const int64_t kMaxHorizon = std::max(16, fwMaxFramesMeasured);
         if (hasNext) {
             uint32_t nextFrame = fwClickSamples[fwAiClickIdx + 1].frame;
             int64_t gap = std::max<int64_t>((int64_t)nextFrame - shiftedXFrame, 0);
             int64_t high = std::max<int64_t>(gap - fwSlackWindow, 0);
+            high = std::clamp(high, kMinHorizon, kMaxHorizon);
             int64_t warmup = std::max<int64_t>(shiftedXFrame - (int64_t)ckptFrame, 0);
             fwAiProbeHorizon = (uint32_t)(high + warmup);
         } else {
@@ -3624,10 +3637,16 @@ namespace gucci {
         bool hasNextNext = nIdx + 1 < fwClickSamples.size();
         int64_t shiftedNFrame = std::max<int64_t>((int64_t)nFrame + shift, 0);
         uint32_t ckptFrame = (uint32_t)fwAiContBaseCkpt.frame;
+        // Same kMinHorizon/kMaxHorizon floor as fwAiBeginXShift -- see its
+        // comment. Applies here too since a continuation candidate's own
+        // reach-target check is the same kind of time-based survival test.
+        const int64_t kMinHorizon = 12;
+        const int64_t kMaxHorizon = std::max(16, fwMaxFramesMeasured);
         if (hasNextNext) {
             uint32_t nnFrame = fwClickSamples[nIdx + 1].frame;
             int64_t gap = std::max<int64_t>((int64_t)nnFrame - shiftedNFrame, 0);
             int64_t high = std::max<int64_t>(gap - fwSlackWindow, 0);
+            high = std::clamp(high, kMinHorizon, kMaxHorizon);
             int64_t warmup = std::max<int64_t>(shiftedNFrame - (int64_t)ckptFrame, 0);
             fwAiProbeHorizon = (uint32_t)(high + warmup);
         } else {

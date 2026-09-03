@@ -1,21 +1,16 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-09-02-d (Second Alignment-Independent fix round from Juice's re-test. Real bug #2: "      \
-    "continuation-candidate testing rebuilt the action list fresh from fwSavedAtom but only "        \
-    "re-applied the NEXT click's shift, never the CURRENT click's own X shift -- so X's click could "\
-    "fire a second time at its original frame during continuation testing, corrupting the physics "  \
-    "and making most continuation checks fail regardless of what was tested. This is what was "      \
-    "behind BOTH 'most clicks show 0 frames on some alignments' and 'continuation only tests the "   \
-    "original frame' -- fixed by re-applying both shifts. Also: search radius (Z) decoupled from "   \
-    "the legacy method's Sweep Range slider (was silently capped by it, now independent, 1-30); "    \
-    "'View' branch popup fixed -- it was opened from inside a per-row PushID scope so its ID never "\
-    "matched the popup shown outside the table, same trap replayActionPopupRequested exists to "     \
-    "avoid elsewhere in this file, now deferred the same way; in-level pass/fail circles now populate "\
-    "for Alignment-Independent too and reset per predecessor alignment; new toggle lets the in-level "\
-    "markers show Alignment-Independent's results instead of Time-Based/Recovery Range's, switchable "\
-    "either way once both exist. Still v1.5.2, no version bump. UNTESTED -- Juice's report predates "\
-    "all of this. Compiles clean.)"
+    "2026-09-02-e (Third Alignment-Independent fix, from Juice's exact evidence: \"in some cases it "\
+    "does look like it reached the target but is marked wrong anyway.\" Real bug #3: the X-sweep and "\
+    "continuation-candidate horizon math computed high = max(0, gap - slack) with NO floor -- legacy's "\
+    "beginShiftTest has ALWAYS clamped this to a 12-tick minimum (kMinHorizon) specifically so a tight "\
+    "gap doesn't get checked before the player has actually finished arriving/settling at the target. "\
+    "I dropped that floor when writing Alignment-Independent's own horizon formula. On the tight/spam "\
+    "sections both of Juice's tests have used, this meant checking the outcome too early -- exactly "   \
+    "matching his report. Added the same clamp(high, 12, max(16, fwMaxFramesMeasured)) legacy already "\
+    "uses, in both fwAiBeginXShift and fwAiBeginContinuationCandidate. Still v1.5.2, no version bump. "  \
+    "UNTESTED -- Juice's report predates this fix. Compiles clean.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
