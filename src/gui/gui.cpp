@@ -917,11 +917,16 @@ namespace gucci {
          5.f,
          0.96f},
         {"YoungstaBot",
-         ImVec4(0.580f, 0.220f, 0.980f, 1.f),
-         ImVec4(0.043f, 0.019f, 0.072f, 0.96f),
-         ImVec4(0.078f, 0.038f, 0.126f, 1.f),
-         ImVec4(0.968f, 0.955f, 0.988f, 1.f),
-         ImVec4(0.560f, 0.460f, 0.640f, 1.f),
+         // Nigel's ask, 2026-09-03: black + red, #000000/#ff0000, to
+         // resemble the "223" album cover. bg is literal pure black; card
+         // is a hair off it (not also pure black) purely so card-based UI
+         // elements stay visible against the background, not a departure
+         // from the reference.
+         ImVec4(1.000f, 0.000f, 0.000f, 1.f),
+         ImVec4(0.000f, 0.000f, 0.000f, 0.96f),
+         ImVec4(0.070f, 0.020f, 0.020f, 1.f),
+         ImVec4(0.980f, 0.960f, 0.960f, 1.f),
+         ImVec4(0.620f, 0.320f, 0.320f, 1.f),
          5.f,
          0.96f},
         {"KnockerzBot",
@@ -3327,7 +3332,7 @@ namespace gucci {
                     tagCol = ImVec4(0.204f, 0.780f, 0.302f, 1.f);
                 } else if (eng2->youngstaMacros.count(mn)) {
                     tagStr = ".youngsta";
-                    tagCol = ImVec4(0.580f, 0.220f, 0.980f, 1.f);
+                    tagCol = ImVec4(1.000f, 0.000f, 0.000f, 1.f);
                 } else if (eng2->knockerzMacros.count(mn)) {
                     tagStr = ".knockerz";
                     tagCol = ImVec4(0.070f, 0.780f, 0.720f, 1.f);
