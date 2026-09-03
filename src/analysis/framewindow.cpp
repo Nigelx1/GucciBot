@@ -108,6 +108,22 @@ public:
             }
         }
 
+        // Nigel's ask (2026-09-02): where the icon actually starts from for
+        // each predecessor alignment Alignment-Independent has confirmed
+        // valid so far this click -- a blue X, distinct from the pass
+        // (green circle) / fail (red X) marks above, which those don't
+        // persist across (gb->fwAiStartMarks accumulates for the whole
+        // click on purpose -- see its own field comment).
+        for (auto const& mk : gb->fwAiStartMarks) {
+            CCPoint at{mk.x, mk.y};
+            if (!visRect.containsPoint(at))
+                continue;
+            ccColor4F col{0.2f, 0.55f, 1.f, 1.f};
+            float s = 7.f;
+            m_debugNode->drawSegment({at.x - s, at.y - s}, {at.x + s, at.y + s}, 3.f, col);
+            m_debugNode->drawSegment({at.x - s, at.y + s}, {at.x + s, at.y - s}, 3.f, col);
+        }
+
         if (gb->fwPositionCheckEnabled && gb->fwProbeHasNext) {
             CCPoint c{gb->fwProbeNextX, gb->fwProbeNextY};
             float s = gb->fwPositionSlack;

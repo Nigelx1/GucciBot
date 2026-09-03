@@ -1,16 +1,12 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-09-02-e (Third Alignment-Independent fix, from Juice's exact evidence: \"in some cases it "\
-    "does look like it reached the target but is marked wrong anyway.\" Real bug #3: the X-sweep and "\
-    "continuation-candidate horizon math computed high = max(0, gap - slack) with NO floor -- legacy's "\
-    "beginShiftTest has ALWAYS clamped this to a 12-tick minimum (kMinHorizon) specifically so a tight "\
-    "gap doesn't get checked before the player has actually finished arriving/settling at the target. "\
-    "I dropped that floor when writing Alignment-Independent's own horizon formula. On the tight/spam "\
-    "sections both of Juice's tests have used, this meant checking the outcome too early -- exactly "   \
-    "matching his report. Added the same clamp(high, 12, max(16, fwMaxFramesMeasured)) legacy already "\
-    "uses, in both fwAiBeginXShift and fwAiBeginContinuationCandidate. Still v1.5.2, no version bump. "  \
-    "UNTESTED -- Juice's report predates this fix. Compiles clean.)"
+    "2026-09-02-f (Nigel's ask: Debug Mode now drops a blue X at the icon's actual starting "        \
+    "position for every predecessor alignment Alignment-Independent has confirmed valid this click "  \
+    "-- read straight off that alignment's own stored checkpoint, no extra simulation needed. Unlike "\
+    "the pass/fail circles (reset per-alignment), these accumulate for the whole click so the spread "\
+    "across every valid alignment is visible at once -- directly answers Juice's earlier confusion "  \
+    "about what the predecessor phase is even doing. Still v1.5.2, no version bump. Compiles clean.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -833,6 +829,24 @@ namespace gucci {
         };
         std::vector<FwAiDebugBranch> fwAiDebugBranches;
         void debugTeleportToAiBranch(size_t idx);
+
+        // Nigel's ask (2026-09-02): a marker showing where the icon actually
+        // starts from for each predecessor alignment that passed as valid --
+        // i.e. the position baked into that alignment's own checkpoint,
+        // where every one of its X-shift tests restores from. Directly
+        // answers Juice's earlier "i dont understand what the predecessor
+        // phase is measuring" -- this makes it visible. Unlike the pass/
+        // fail circles (fwDebugMarks, reset per-alignment), these
+        // accumulate for the WHOLE CLICK so the spread across every valid
+        // alignment is visible at once, clearing only when moving to a new
+        // click. Read directly off the stored checkpoint's baked-in
+        // position -- no extra simulation needed.
+        struct FwAiStartMark {
+            float x = 0.f, y = 0.f;
+            int predShift = 0;
+        };
+        std::vector<FwAiStartMark> fwAiStartMarks;
+        void fwAiRecordAlignmentStartMark();
 
         void fwAiBeginClick();
         void fwAiBeginPredShift();

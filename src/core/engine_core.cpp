@@ -3276,6 +3276,7 @@ namespace gucci {
         fwAiValidPredShifts.clear();
         fwAiValidPredCkpts.clear();
         fwAiWindowPerAlign.clear();
+        fwAiStartMarks.clear(); // per-click, NOT per-alignment -- see the field's own comment
 
         if (fwAiClickIdx == 0) {
             // First measurable input -- no predecessor to shift (spec
@@ -3437,7 +3438,21 @@ namespace gucci {
             long room = (long)clickFrame - (long)fwClickSamples[fwAiClickIdx - 1].frame - 1;
             fwAiXMaxNeg = (int)std::clamp((long)fwAiZ, 0L, std::max(0L, room));
         }
+        fwAiRecordAlignmentStartMark();
         fwAiBeginXShift();
+    }
+
+    void GucciEngine::fwAiRecordAlignmentStartMark() {
+        if (!fwDebugMode || fwAiAlignIdx >= fwAiValidPredCkpts.size())
+            return;
+        auto const& ckpt = fwAiValidPredCkpts[fwAiAlignIdx];
+        bool p2 = fwClickSamples[fwAiClickIdx].player2;
+        auto const& pos = p2 ? ckpt.state.m_player2.m_position : ckpt.state.m_player1.m_position;
+        FwAiStartMark mk;
+        mk.x = pos.x;
+        mk.y = pos.y;
+        mk.predShift = fwAiValidPredShifts[fwAiAlignIdx];
+        fwAiStartMarks.push_back(mk);
     }
 
     void GucciEngine::fwAiBeginXShift() {
@@ -3807,6 +3822,7 @@ namespace gucci {
         fwAiXHigh = 0;
         fwAiXValidCount = 0;
         fwDebugMarks.clear(); // reset the in-level pass/fail circles for the new alignment
+        fwAiRecordAlignmentStartMark();
         fwAiBeginXShift();
     }
 
