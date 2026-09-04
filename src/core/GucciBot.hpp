@@ -1,9 +1,20 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-09-03-b (Nigel's ask: recolored YoungstaBot to black + red, #000000/#ff0000, to match "    \
-    "the '223' album cover -- was violet. Updated the theme preset, its macro-tag color, and "       \
-    "about.md's color description. Still v1.5.2, no version bump. Compiles clean.)"
+    "2026-09-03-c (Silicate 1.1.0 parity pass, two real ports after actually reading the updated "  \
+    "source (git.puppy.lgbt/silicate/silicate) rather than guessing off the changelog alone: (1) "   \
+    "Autoclicker reworked -- Hold/Release Ticks and a new Clicks Per Hold are now fully independent "\
+    "per player instead of one shared pair, with a one-shot 'Sync P2 to P1' button; old settings "   \
+    "migrate into Player 1's slot automatically. (2) Hitbox trail now dedupes consecutive samples "  \
+    "that land on the same on-screen PIXEL (accounting for camera zoom), cutting overdraw -- this "  \
+    "is new for GucciBot, not a fix, since there was no dedup step here before at all. Ruled out as "\
+    "NOT portable, for real architectural reasons: the teleport-portal/shake-trigger RNG fixes and "  \
+    "the Lock Delta/TPS internals all work by patching raw memory offsets inside the compiled game "  \
+    "directly (hardcoded addresses, register writes) -- a fundamentally different, far riskier "     \
+    "technique GucciBot has never used anywhere in its own codebase; adopting it for this would be " \
+    "a bad trade. Backwards-stepping's ghost-player rework and a CPS meter (GucciBot has none at "    \
+    "all currently) are real candidates but big enough to be their own separate efforts, not bundled "\
+    "here. Still v1.5.2, no version bump. Compiles clean.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

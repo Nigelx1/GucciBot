@@ -5783,21 +5783,54 @@ namespace gucci {
             Widgets::StatusBadge("ACTIVE", ImVec4(0.3f, 1.f, 0.4f, 1.f));
         }
         ImGui::Dummy(ImVec2(0, 8));
-        Widgets::SectionHeader("Players", theme);
-        if (Widgets::ToggleSwitch("Player 1", &ac->player1, theme, anim))
-            mod->setSavedValue("ac_player1", ac->player1);
-        if (Widgets::ToggleSwitch("Player 2", &ac->player2, theme, anim))
-            mod->setSavedValue("ac_player2", ac->player2);
+        // Per-player timing (Silicate 1.1.0 parity, 2026-09-03): each player
+        // used to share one Hold/Release Ticks pair -- now fully
+        // independent, with a one-shot "Sync to P1" copy button instead of
+        // a permanent link, matching how Silicate's own version works.
+        auto drawPlayerSettings = [&](const char* label,
+                                      Autoclicker::PlayerSettings& s,
+                                      const char* enabledKey,
+                                      const char* holdKey,
+                                      const char* releaseKey,
+                                      const char* clicksKey) {
+            ImGui::PushID(label);
+            Widgets::SectionHeader(label, theme);
+            if (Widgets::ToggleSwitch("Enabled", &s.enabled, theme, anim))
+                mod->setSavedValue(enabledKey, s.enabled);
+            if (Widgets::StyledSliderInt("Hold Ticks", &s.holdTicks, 1, 120, theme))
+                mod->setSavedValue(holdKey, s.holdTicks);
+            if (Widgets::StyledSliderInt("Release Ticks", &s.releaseTicks, 1, 120, theme))
+                mod->setSavedValue(releaseKey, s.releaseTicks);
+            if (Widgets::StyledSliderInt("Clicks Per Hold", &s.clicksPerHold, 1, 10, theme))
+                mod->setSavedValue(clicksKey, s.clicksPerHold);
+            float cps = (float)eng->updater.m_tps / (float)(s.holdTicks + s.releaseTicks);
+            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+            ImGui::Text("~%.1f clicks/sec at %.0f TPS%s",
+                        cps * (float)std::max(1, s.clicksPerHold),
+                        eng->updater.m_tps,
+                        s.clicksPerHold > 1 ? " (incl. extra clicks per hold)" : "");
+            ImGui::PopStyleColor();
+            ImGui::PopID();
+        };
+
+        drawPlayerSettings(
+            "Player 1", ac->p1, "ac_p1_enabled", "ac_p1_hold_ticks", "ac_p1_release_ticks", "ac_p1_clicks");
         ImGui::Dummy(ImVec2(0, 8));
-        Widgets::SectionHeader("Timing", theme);
-        if (Widgets::StyledSliderInt("Hold Ticks", &ac->holdTicks, 1, 120, theme))
-            mod->setSavedValue("ac_hold_ticks", ac->holdTicks);
-        if (Widgets::StyledSliderInt("Release Ticks", &ac->releaseTicks, 1, 120, theme))
-            mod->setSavedValue("ac_release_ticks", ac->releaseTicks);
-        float cps = (float)eng->updater.m_tps / (float)(ac->holdTicks + ac->releaseTicks);
+        drawPlayerSettings(
+            "Player 2", ac->p2, "ac_p2_enabled", "ac_p2_hold_ticks", "ac_p2_release_ticks", "ac_p2_clicks");
+        if (Widgets::StyledButton("Sync Player 2 to Player 1", ImVec2(-1, 28), theme, anim)) {
+            ac->syncP2FromP1();
+            mod->setSavedValue("ac_p2_enabled", ac->p2.enabled);
+            mod->setSavedValue("ac_p2_hold_ticks", ac->p2.holdTicks);
+            mod->setSavedValue("ac_p2_release_ticks", ac->p2.releaseTicks);
+            mod->setSavedValue("ac_p2_clicks", ac->p2.clicksPerHold);
+        }
         ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-        ImGui::Text("~%.1f clicks/sec at %.0f TPS", cps, eng->updater.m_tps);
+        ImGui::TextWrapped(
+            "A one-time copy, not a permanent link -- Player 2's settings can still be changed "
+            "independently afterward.");
         ImGui::PopStyleColor();
+
         ImGui::Dummy(ImVec2(0, 8));
         Widgets::SectionHeader("Options", theme);
         if (Widgets::ToggleSwitch("Only While Holding", &ac->onlyWhileHolding, theme, anim))
@@ -8121,10 +8154,14 @@ namespace gucci {
         mod->setSavedValue("render_audio_bitrate", std::string(renderAudioBitrateBuf));
         auto* ac = Autoclicker::get();
         mod->setSavedValue("ac_enabled", ac->enabled);
-        mod->setSavedValue("ac_player1", ac->player1);
-        mod->setSavedValue("ac_player2", ac->player2);
-        mod->setSavedValue("ac_hold_ticks", ac->holdTicks);
-        mod->setSavedValue("ac_release_ticks", ac->releaseTicks);
+        mod->setSavedValue("ac_p1_enabled", ac->p1.enabled);
+        mod->setSavedValue("ac_p1_hold_ticks", ac->p1.holdTicks);
+        mod->setSavedValue("ac_p1_release_ticks", ac->p1.releaseTicks);
+        mod->setSavedValue("ac_p1_clicks", ac->p1.clicksPerHold);
+        mod->setSavedValue("ac_p2_enabled", ac->p2.enabled);
+        mod->setSavedValue("ac_p2_hold_ticks", ac->p2.holdTicks);
+        mod->setSavedValue("ac_p2_release_ticks", ac->p2.releaseTicks);
+        mod->setSavedValue("ac_p2_clicks", ac->p2.clicksPerHold);
         mod->setSavedValue("ac_only_holding", ac->onlyWhileHolding);
 
         mod->setSavedValue("eng_tick_rate", (float)eng->updater.m_tps);
@@ -8335,10 +8372,23 @@ namespace gucci {
                  mod->getSavedValue<std::string>("render_audio_bitrate", "192k").c_str());
         auto* ac = Autoclicker::get();
         ac->enabled = mod->getSavedValue<bool>("ac_enabled", false);
-        ac->player1 = mod->getSavedValue<bool>("ac_player1", true);
-        ac->player2 = mod->getSavedValue<bool>("ac_player2", false);
-        ac->holdTicks = mod->getSavedValue<int>("ac_hold_ticks", 1);
-        ac->releaseTicks = mod->getSavedValue<int>("ac_release_ticks", 1);
+        // Migrate from the pre-2026-09-03 shared-settings scheme (one
+        // Hold/Release Ticks pair for both players) -- old "ac_player1"/
+        // "ac_hold_ticks" etc. become each player's starting point (via the
+        // default-value fallback below) instead of silently resetting
+        // everyone the first time this runs post-update.
+        bool oldPlayer1 = mod->getSavedValue<bool>("ac_player1", true);
+        bool oldPlayer2 = mod->getSavedValue<bool>("ac_player2", false);
+        int oldHoldTicks = mod->getSavedValue<int>("ac_hold_ticks", 1);
+        int oldReleaseTicks = mod->getSavedValue<int>("ac_release_ticks", 1);
+        ac->p1.enabled = mod->getSavedValue<bool>("ac_p1_enabled", oldPlayer1);
+        ac->p1.holdTicks = mod->getSavedValue<int>("ac_p1_hold_ticks", oldHoldTicks);
+        ac->p1.releaseTicks = mod->getSavedValue<int>("ac_p1_release_ticks", oldReleaseTicks);
+        ac->p1.clicksPerHold = mod->getSavedValue<int>("ac_p1_clicks", 1);
+        ac->p2.enabled = mod->getSavedValue<bool>("ac_p2_enabled", oldPlayer2);
+        ac->p2.holdTicks = mod->getSavedValue<int>("ac_p2_hold_ticks", oldHoldTicks);
+        ac->p2.releaseTicks = mod->getSavedValue<int>("ac_p2_release_ticks", oldReleaseTicks);
+        ac->p2.clicksPerHold = mod->getSavedValue<int>("ac_p2_clicks", 1);
         ac->onlyWhileHolding = mod->getSavedValue<bool>("ac_only_holding", false);
 
         eng->updater.m_tps = mod->getSavedValue<float>("eng_tick_rate", 240.f);

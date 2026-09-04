@@ -4,6 +4,7 @@
 #include <Geode/modify/PlayLayer.hpp>
 #include <Geode/modify/PlayerObject.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <deque>
@@ -222,9 +223,19 @@ namespace {
             }
         }
 
-        void appendShapes(std::vector<ShapeDescriptor>& out) const {
-            appendPlayerShapes(m_entries[0], out);
-            appendPlayerShapes(m_entries[1], out);
+        // layer is used only to convert each sample's world position to an
+        // actual on-screen pixel, so consecutive samples landing on the
+        // same pixel can be collapsed to one draw -- inspired by Silicate
+        // 1.1.0's trail dedup fix (git.puppy.lgbt/silicate/silicate,
+        // src/hacks/hitboxes.cpp): comparing at cocos2d POINT precision
+        // barely ever matched (points are sub-pixel at most zoom levels),
+        // so a naive point-based dedup wouldn't actually collapse anything
+        // most of the time. GucciBot never had a dedup step here at all
+        // before this -- this is new, not a fix to an existing one, just
+        // built the way Silicate's now-corrected version does it.
+        void appendShapes(std::vector<ShapeDescriptor>& out, GJBaseGameLayer* layer) const {
+            appendPlayerShapes(m_entries[0], out, layer);
+            appendPlayerShapes(m_entries[1], out, layer);
         }
 
     private:
@@ -235,8 +246,37 @@ namespace {
         }
 
         static void appendPlayerShapes(std::deque<PlayerHitboxSample> const& entries,
-                                       std::vector<ShapeDescriptor>& out) {
+                                       std::vector<ShapeDescriptor>& out,
+                                       GJBaseGameLayer* layer) {
+            bool haveObjectLayer = layer && layer->m_objectLayer;
+            CCAffineTransform objectToWorld = haveObjectLayer
+                                                  ? layer->m_objectLayer->nodeToWorldTransform()
+                                                  : CCAffineTransformIdentity;
+            auto* director = CCDirector::sharedDirector();
+            float pointToPixelRatio = 1.f;
+            if (director && director->getWinSize().width > 0.f &&
+                director->getWinSize().height > 0.f) {
+                pointToPixelRatio =
+                    std::max(director->getWinSizeInPixels().width / director->getWinSize().width,
+                            director->getWinSizeInPixels().height / director->getWinSize().height);
+            }
+
+            bool hasLast = false;
+            int lastPx = 0, lastPy = 0;
             for (auto const& sample : entries) {
+                if (haveObjectLayer) {
+                    CCPoint mid(sample.outer.getMidX(), sample.outer.getMidY());
+                    CCPoint screen = CCPointApplyAffineTransform(mid, objectToWorld);
+                    int px = static_cast<int>(std::floor(screen.x * pointToPixelRatio));
+                    int py = static_cast<int>(std::floor(screen.y * pointToPixelRatio));
+                    if (hasLast && px == lastPx && py == lastPy) {
+                        continue;
+                    }
+                    hasLast = true;
+                    lastPx = px;
+                    lastPy = py;
+                }
+
                 auto outer = makeRectangle(sample.outer, kPlayerColor);
                 auto inner = makeRectangle(sample.inner, kPlayerInnerColor);
 
@@ -490,7 +530,7 @@ namespace {
             auto shapes = extractor.collect(snapshot);
 
             if (engine->hitboxTrail) {
-                m_trails.appendShapes(shapes);
+                m_trails.appendShapes(shapes, layer);
             }
 
             painter.paint(shapes);

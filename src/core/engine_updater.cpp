@@ -575,10 +575,24 @@ static void frameUpdateMidhook(SafetyHookContext&) {
 
     if (auto* pll = PlayLayer::get()) {
         auto res = Autoclicker::get()->processTick();
-        if (res.p1Fire)
+        if (res.p1Fire) {
             pll->queueButton(1, res.p1Press, false, 0.0);
-        if (res.p2Fire)
+            // Extra clicks-per-hold (Silicate 1.1.0 parity): fire N-1 more
+            // full release/press cycles right away, only on the press that
+            // starts a new hold -- matches Silicate's own gating (never on
+            // the release side).
+            for (int i = 1; i < res.p1Clicks && res.p1Press; i++) {
+                pll->queueButton(1, false, false, 0.0);
+                pll->queueButton(1, true, false, 0.0);
+            }
+        }
+        if (res.p2Fire) {
             pll->queueButton(1, res.p2Press, true, 0.0);
+            for (int i = 1; i < res.p2Clicks && res.p2Press; i++) {
+                pll->queueButton(1, false, true, 0.0);
+                pll->queueButton(1, true, true, 0.0);
+            }
+        }
     }
 }
 
