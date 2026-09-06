@@ -59,6 +59,10 @@ namespace gucci {
             return 0.0;
         case THEME_BRRR:
             return 38.0 + 19.0 / 30.0;
+        case THEME_YOUNGSTA:
+            return 0.0;
+        case THEME_KNOCKERZ:
+            return 21.0 + 17.0 / 30.0;
         default:
             return 20.0 + 11.0 / 15.0;
         }
@@ -80,6 +84,10 @@ namespace gucci {
             return 142.0;
         case THEME_BRRR:
             return 150.0;
+        case THEME_YOUNGSTA:
+            return 144.0;
+        case THEME_KNOCKERZ:
+            return 90.0;
         default:
             return 140.0;
         }
@@ -157,9 +165,6 @@ namespace gucci {
                     break;
                 case THEME_BRRR:
                     bundledName = "big_brrr_brrrbot.mp3";
-                    break;
-                case THEME_WAKA:
-                    bundledName = "big_brrr_waka.mp3";
                     break;
                 case THEME_YOUNGSTA:
                     bundledName = "big_brrr_youngsta.mp3";

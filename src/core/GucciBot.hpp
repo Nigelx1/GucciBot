@@ -1,14 +1,12 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-09-06-d (Prep for the WakaBot/YoungstaBot/KnockerzBot BigBrrr songs Nigel wants to add "   \
-    "before the 1.6.0 push -- wired the theme->filename switch in bigbrrr.cpp (big_brrr_waka.mp3, "  \
-    "big_brrr_youngsta.mp3, big_brrr_knockerz.mp3, matching the existing "                           \
-    "big_brrr_<theme>.mp3 convention) same as every other themed BigBrrr song. Deliberately did "     \
-    "NOT touch mod.json's resource list yet -- those three files don't exist on disk, and listing "  \
-    "a missing resource there breaks packaging, so that's pending the actual mp3s. Falls back "       \
-    "silently to no BigBrrr sound for these three themes until then, same as any other unmapped "     \
-    "theme. Still v1.5.2, no version bump. Compiles clean, UNTESTED in-game.)"
+    "2026-09-06-e (Finished the BigBrrr songs from -d, with Nigel's real files this time -- no "     \
+    "song for WakaBot (Nigel's call, removed that case). YoungstaBot: Blac Youngsta.mp3 from "       \
+    "Downloads -> resources/big_brrr_youngsta.mp3, 144 BPM, 0:00 start offset. KnockerzBot: "         \
+    "Speaker Knockerz - Freak Hoe.mp3 -> resources/big_brrr_knockerz.mp3, 90 BPM, 21+17/30s start "  \
+    "offset. Added both to mod.json's resource list now that the real files exist -- packages "       \
+    "clean. Still v1.5.2, no version bump. Compiles clean, UNTESTED in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
