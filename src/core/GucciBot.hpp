@@ -1,12 +1,21 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                     \
-    "2026-09-06-m (Frame-window accuracy, fixes 1-7 + re-audit: ActionType-exact input "   \
-    "matching; shifted press carries an UNSAMPLED paired release (cube/ball/UFO) so a tap " \
-    "keeps its hold duration; sweeps bounded by the same input stream; Recovery Range "    \
-    "candidates survive 12 ticks past the recovery input; Position Tolerance compares "    \
-    "against m_pathSamples at the same absolute frame, and its debug box now draws there " \
-    "too; levelComplete suppressed mid-analysis; Full-Range Sweep drops survivor islands.)"
+    "2026-09-06-i (Merged anticroom's PR #2 -- Geode SDK bumped 5.7.1 -> 5.10.1 (our local "  \
+    "SDK checkout upgraded to match, geode sdk install-binaries re-run; verified our OWN "    \
+    "pre-PR code needed this too -- customtheme.cpp broke on 5.10.1 without the PR's added "  \
+    "Task.hpp include, so the version bump was real, not just their local toolchain). Frame " \
+    "-window accuracy, 7 fixes: ActionType-exact input matching (frame/player/holding alone " \
+    "could match the wrong action); shifted press carries its paired release along (cube/"    \
+    "ball/UFO taps were silently gaining/losing hold duration on every probed shift); "       \
+    "room/shift-bound calcs now check same player+action stream, not just array-adjacent "    \
+    "samples; a valid-shift counter that kept counting past a known survival gap; Position "  \
+    "Tolerance now reads m_pathSamples ground truth at the same absolute frame everywhere "   \
+    "(3 duplicated ad-hoc checks collapsed into one fwOffTrack helper); levelComplete "        \
+    "suppressed while Calculate is running its own internal simulation; Full-Range Sweep "    \
+    "drops survivor islands. Verified: builds clean. NOT yet confirmed in-game -- 7 fixes "    \
+    "bundled in one PR, worth testing broadly (two-player, cube/ball/UFO taps, all 3 "         \
+    "algorithms) rather than assuming it's all correct from the diff alone.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
