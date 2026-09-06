@@ -158,6 +158,15 @@ namespace gucci {
                 case THEME_BRRR:
                     bundledName = "big_brrr_brrrbot.mp3";
                     break;
+                case THEME_WAKA:
+                    bundledName = "big_brrr_waka.mp3";
+                    break;
+                case THEME_YOUNGSTA:
+                    bundledName = "big_brrr_youngsta.mp3";
+                    break;
+                case THEME_KNOCKERZ:
+                    bundledName = "big_brrr_knockerz.mp3";
+                    break;
                 default:
                     break;
                 }
