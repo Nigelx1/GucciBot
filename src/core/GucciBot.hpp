@@ -1,10 +1,14 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                     \
-    "2026-09-06-j (Version bump to 1.6.1 for anticroom's PR #2 (frame-window accuracy fixes " \
-    "+ the Geode 5.10.1 SDK bump, see build -i). Credited anticroom in about.md, README, and " \
-    "the in-game Credits tab. Still not confirmed in-game -- see -i's notes on what's worth " \
-    "testing first (two-player levels, cube/ball/UFO taps, all 3 Calculate algorithms).)"
+    "2026-09-06-k (Credits reconciled across about.md, README, in-game Credits tab, and the " \
+    "site -- same people, same order everywhere: guccimanefan, Claude, Juice, anticroom, "    \
+    "peony, ToastexGD, GWDdoS, Bogdaner09, Gucci Mane. Nigel's own line now says creator/"    \
+    "owner/final-call instead of a flat feature list. ToastexGD's credit says he's the "      \
+    "actual foundation GucciBot started as pre-Silicate, not just 'renderer'. kepe dropped "  \
+    "(no code taken, no personal involvement -- the yBot benchmark fact stays in the GBR6 "   \
+    "format description, just not as a personal credit). Bogdaner09's line notes Click "      \
+    "Indicators was vibecoded by his own admission. Text only, no logic change.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

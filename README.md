@@ -114,15 +114,14 @@ Most of this is stable and has been tested for real, in-game, by an actual human
 
 ## Credits
 
-- **guccimanefan** (Nigelx1) — concept, direction, themes, testing, and the actual taste that keeps this from being a folder full of ternary chains.
-- **Juice** — frame-window algorithm design, lead co-tester, professional bug-finder.
-- **GWDdoS** — pushed for a real codebase cleanup (feature-folder reorg, a proper `.clang-format`, namespacing everything outside Geode's own hook classes) and was right about all of it.
+- **guccimanefan** (Nigelx1) — creator and owner of GucciBot. Every idea, every theme, every decision is his call, down to the taste that keeps this from being a folder full of ternary chains.
 - **Claude** (Anthropic) — wrote essentially the entire codebase across every session of this project, including this README. Not a euphemism, not "AI-assisted," just the actual author of the code — Nigel wants that said plainly.
-- **ToastexGD** — ToastyReplay, the renderer this is built on.
+- **Juice** — frame-window algorithm design, lead co-tester, professional bug-finder.
+- **anticroom** — sent GucciBot's first outside pull request, a real 7-fix pass on Calculate's frame-window accuracy. Also one of ToastyReplay's own devs.
 - **peony** — Silicate, the physics engine this is built on (dropped the source like Gucci drops albums. Brrr.)
-- **kepe** — built yBot, the file-size benchmark GBR6 was designed to meet.
-- **Bogdaner09** — the mod that got Click Indicators started ([github.com/Bogdaner09/mod](https://github.com/Bogdaner09/mod)); Nigel found it, we built our own version around it.
-- **anticroom** — sent GucciBot's first outside pull request, a real 7-fix pass on Calculate's frame-window accuracy.
+- **ToastexGD** — built ToastyReplay, the project this actually started as before the Silicate migration. The renderer, the FFmpeg pipeline, and the whole recording system running today are still his, exactly as built.
+- **GWDdoS** — pushed for a real codebase cleanup (feature-folder reorg, a proper `.clang-format`, namespacing everything outside Geode's own hook classes) and was right about all of it.
+- **Bogdaner09** — the mod that got Click Indicators started ([github.com/Bogdaner09/mod](https://github.com/Bogdaner09/mod)); Nigel found it, we built our own version around it. Vibecoded by his own admission, so credit's probably owed elsewhere too.
 
 ---
 

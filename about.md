@@ -121,13 +121,13 @@ Real click-timing feedback and a synced video-review overlay, both built around 
 
 ## Credits
 
-- **guccimanefan** (Nigelx1) — concept, direction, themes, testing
-- **Juice** — frame-window algorithm design, lead co-tester, found the bugs nobody else caught
+- **guccimanefan** (Nigelx1) — creator and owner of GucciBot; every idea, every theme, every decision is his call
 - **Claude** — wrote the code and this page. Essentially the whole codebase, not a euphemism.
-- **kepe** — yBot, the file-size benchmark GBR6 was built to meet
-- **ToastexGD** — ToastyReplay engine base and improvements
-- **Gucci Mane** — he's the truth. Brrr.
-- **Toosii** — ToosiiBot theme
+- **Juice** — frame-window algorithm design, lead co-tester, ran the mod into the ground on purpose finding the bugs nobody else caught
+- **anticroom** — frame-window accuracy fixes, GucciBot's first outside pull request (also one of ToastyReplay's own devs)
 - **peony** — Silicate (dropped the source like Gucci drops albums. Brrr.)
-- **Bogdaner09** — Click Indicators inspiration ([github.com/Bogdaner09/mod](https://github.com/Bogdaner09/mod))
+- **ToastexGD** — built ToastyReplay, the project GucciBot actually started as before the Silicate migration; the renderer, the FFmpeg pipeline, and the whole recording system running today are still his, exactly as built
+- **GWDdoS** — Astral, and the codebase cleanup that got this repo public-ready
+- **Bogdaner09** — Click Indicators inspiration ([github.com/Bogdaner09/mod](https://github.com/Bogdaner09/mod)) — vibecoded by his own admission, so credit's probably owed to whichever model wrote that too
+- **Gucci Mane** — he's the truth. Brrr.
 - **anticroom** — frame-window accuracy fixes, GucciBot's first outside pull request

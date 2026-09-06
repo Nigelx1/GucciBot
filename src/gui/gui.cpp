@@ -7888,18 +7888,29 @@ namespace gucci {
             const char* name;
             const char* role;
         } entries[] = {
-            {"N", "guccimanefan (Nigelx1)", "Concept, direction & testing"},
+            {"N",
+             "guccimanefan (Nigelx1)",
+             "Creator & owner of GucciBot -- every idea, every call, his"},
+            {"C", "Claude", "Wrote the code. All of it. Not a euphemism."},
             {"J",
              "Juice",
-             "Frame-window algorithm design & lead co-tester -- found the bugs nobody else caught"},
-            {"C", "Claude", "Wrote the code. All of it. Not a euphemism."},
-            {"K", "kepe", "yBot -- the file-size benchmark GBR6 was built to meet"},
-            {"T", "ToastexGD", "Original ToastyReplay -- the GOAT"},
-            {"G", "Gucci Mane", "He's the truth. Brrr."},
-            {"T", "Toosii", "ToosiiBot theme & WR ambitions"},
+             "Frame-window algorithm design & lead co-tester -- ran the mod into the ground on "
+             "purpose finding the bugs nobody else caught"},
+            {"A",
+             "anticroom",
+             "Frame-window accuracy fixes -- GucciBot's first outside pull request (also one of "
+             "ToastyReplay's own devs)"},
             {"P", "peony", "Silicate dev -- dropped the source like Gucci drops albums. Brrr."},
-            {"B", "Bogdaner09", "Click Indicators inspiration -- github.com/Bogdaner09/mod"},
-            {"A", "anticroom", "Frame-window accuracy fixes -- GucciBot's first outside pull request"},
+            {"T",
+             "ToastexGD",
+             "Built ToastyReplay -- the project GucciBot actually started as before Silicate. "
+             "Still runs the renderer today, exactly as he built it."},
+            {"G", "GWDdoS", "Astral -- and the codebase cleanup that got this repo public-ready"},
+            {"B",
+             "Bogdaner09",
+             "Click Indicators inspiration -- github.com/Bogdaner09/mod. Vibecoded by his own "
+             "admission, so credit's probably owed elsewhere too."},
+            {"G", "Gucci Mane", "He's the truth. Brrr."},
         };
         for (auto& e : entries) {
             ImVec2 pos = ImGui::GetCursorScreenPos();
