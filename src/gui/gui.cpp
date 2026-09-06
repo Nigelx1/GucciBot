@@ -3039,6 +3039,13 @@ namespace gucci {
                     "still read off.");
                 ImGui::PopTextWrapPos();
                 ImGui::PopStyleColor();
+                ImGui::Dummy(ImVec2(0, 6));
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.f, 0.8f, 0.2f, 1.f));
+                ImGui::PushTextWrapPos(ImGui::GetFontSize() * 24.f);
+                ImGui::TextUnformatted(
+                    "Heavily recommended: have Megahack's Practice Fix enabled before calculating.");
+                ImGui::PopTextWrapPos();
+                ImGui::PopStyleColor();
                 ImGui::Dummy(ImVec2(0, 10));
                 float pbw = (ImGui::GetContentRegionAvail().x - 8) / 2.f;
                 if (Widgets::StyledButton("Calculate", ImVec2(pbw, 30), theme, anim, 6.f)) {

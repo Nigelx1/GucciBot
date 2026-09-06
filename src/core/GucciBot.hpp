@@ -1,10 +1,12 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-09-06-b (Nigel's ask: the Frame Window tab's Calculate area now says up top, in warning "  \
-    "yellow, that having Megahack's Practice Fix enabled is heavily recommended before running "     \
-    "Calculate. Text only, no logic change. Still v1.5.2, no version bump. Compiles clean, "         \
-    "UNTESTED in-game.)"
+    "2026-09-06-c (Nigel clarified which dialog he meant via a screenshot -- the 'Macro Saved' "     \
+    "popup that appears right after saving a macro (the one that asks 'Calculate frame windows "     \
+    "for this macro?'), not just the Frame Window tab from -b. Added the same Megahack Practice "    \
+    "Fix recommendation there too, right under the existing 'Known limitation' note. Kept -b's "      \
+    "tab note as well -- Nigel said it works too. Text only, no logic change. Still v1.5.2, no "      \
+    "version bump. Compiles clean, UNTESTED in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
