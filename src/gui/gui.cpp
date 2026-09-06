@@ -4267,6 +4267,11 @@ namespace gucci {
                             "-- Juice, keeping you honest",
                             theme);
         ImGui::Dummy(ImVec2(0, 4));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.f, 0.8f, 0.2f, 1.f));
+        ImGui::TextWrapped(
+            "Heavily recommended: have Megahack's Practice Fix enabled before running Calculate.");
+        ImGui::PopStyleColor();
+        ImGui::Dummy(ImVec2(0, 6));
         {
             auto& replay = engine->replay;
             bool hasActions = !replay.m_actionAtom.m_actions.empty();

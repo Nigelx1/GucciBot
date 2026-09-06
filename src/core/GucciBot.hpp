@@ -1,15 +1,10 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-09-06-a (Nigel caught two real problems in -c. (1) The TTR-missing message was still "     \
-    "one long cut-off line -- the toast Notification widget doesn't wrap, it's built for one "        \
-    "short line like every other Notification::create in this codebase, not a paragraph. Switched "  \
-    "showTtrMissingNotification() to createQuickPopup (a real FLAlertLayer dialog, single 'Got It' "  \
-    "button) which wraps properly. (2) The menu was still opening underneath the popup when TTR "     \
-    "was missing, defeating the point of 'standing down' -- the menu keybind now just re-shows the "  \
-    "popup and returns without opening the menu at all while TTR is missing. Still v1.5.2, no "       \
-    "version bump. Compiles clean, UNTESTED in-game. The six engine_updater.cpp enabled-guards from "  \
-    "-c are also still unconfirmed in-game.)"
+    "2026-09-06-b (Nigel's ask: the Frame Window tab's Calculate area now says up top, in warning "  \
+    "yellow, that having Megahack's Practice Fix enabled is heavily recommended before running "     \
+    "Calculate. Text only, no logic change. Still v1.5.2, no version bump. Compiles clean, "         \
+    "UNTESTED in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
