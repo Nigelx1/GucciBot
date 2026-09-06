@@ -1,12 +1,13 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-09-06-e (Finished the BigBrrr songs from -d, with Nigel's real files this time -- no "     \
-    "song for WakaBot (Nigel's call, removed that case). YoungstaBot: Blac Youngsta.mp3 from "       \
-    "Downloads -> resources/big_brrr_youngsta.mp3, 144 BPM, 0:00 start offset. KnockerzBot: "         \
-    "Speaker Knockerz - Freak Hoe.mp3 -> resources/big_brrr_knockerz.mp3, 90 BPM, 21+17/30s start "  \
-    "offset. Added both to mod.json's resource list now that the real files exist -- packages "       \
-    "clean. Still v1.5.2, no version bump. Compiles clean, UNTESTED in-game.)"
+    "2026-09-06-f (Closing the gap Nigel noticed: Toosii/Sexyy/Saweetie predate BigBrrr songs "      \
+    "being a thing and never got one retroactively. Wired the filename mapping ahead of the real "   \
+    "files, same prep-first pattern as -d -- all three Toosii variants (base/Syracuse/SacState, "     \
+    "just recolors of one persona per Nigel) share a single big_brrr_toosii.mp3, Sexyy gets "         \
+    "big_brrr_sexyy.mp3, Saweetie gets big_brrr_saweetie.mp3. mod.json and BPM/offset still "         \
+    "pending the actual mp3s + numbers from Nigel. Still v1.5.2, no version bump. Compiles clean, "   \
+    "UNTESTED in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

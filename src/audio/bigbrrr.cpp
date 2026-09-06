@@ -172,6 +172,17 @@ namespace gucci {
                 case THEME_KNOCKERZ:
                     bundledName = "big_brrr_knockerz.mp3";
                     break;
+                case THEME_TOOSII:
+                case THEME_TOOSII_SYRACUSE:
+                case THEME_TOOSII_SACSTATE:
+                    bundledName = "big_brrr_toosii.mp3";
+                    break;
+                case THEME_SEXYY:
+                    bundledName = "big_brrr_sexyy.mp3";
+                    break;
+                case THEME_SAWEETIE:
+                    bundledName = "big_brrr_saweetie.mp3";
+                    break;
                 default:
                     break;
                 }
