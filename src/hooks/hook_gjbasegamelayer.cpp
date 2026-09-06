@@ -226,8 +226,14 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         if (gb->fwSampling && action.m_holding) {
             auto* sp = action.m_player2 ? m_player2 : m_player1;
             if (sp)
-                gb->fwClickSamples.push_back(
-                    {action.m_frame, sp->m_position.x, sp->m_position.y, action.m_player2});
+                gb->fwClickSamples.push_back({action.m_frame,
+                                              sp->m_position.x,
+                                              sp->m_position.y,
+                                              action.m_player2,
+                                              false,
+                                              false,
+                                              false,
+                                              action.m_type});
         }
 
         bool fwSoundEnabled =

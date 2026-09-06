@@ -2125,6 +2125,115 @@ namespace gucci {
         return player2 ? gb->replay.m_pathSamples[frame].gamemode2
                        : gb->replay.m_pathSamples[frame].gamemode1;
     }
+    static gb::Action* fwFindAction(std::vector<gb::Action>& acts,
+                                    uint32_t frame,
+                                    bool player2,
+                                    bool holding,
+                                    gb::ActionType type) {
+        for (auto& a : acts) {
+            if (a.m_frame == frame && a.m_player2 == player2 && a.m_holding == holding &&
+                a.m_type == type)
+                return &a;
+        }
+        return nullptr;
+    }
+
+    static gb::Action* fwFindActionForSample(std::vector<gb::Action>& acts,
+                                             const GucciEngine::FwClickSample& s) {
+        return fwFindAction(acts, s.frame, s.player2, !s.release, s.type);
+    }
+    static bool fwOffTrack(GucciEngine* gb,
+                           PlayLayer* pl,
+                           uint32_t absFrame,
+                           bool player2,
+                           float slack) {
+        if (!pl || absFrame >= gb->replay.m_pathSamples.size())
+            return false;
+        auto* p = player2 ? pl->m_player2 : pl->m_player1;
+        if (!p)
+            return false;
+        auto const& gt = gb->replay.m_pathSamples[absFrame];
+        if (player2 && !gt.hasP2)
+            return false;
+        float ex = player2 ? gt.p2x : gt.p1x;
+        float ey = player2 ? gt.p2y : gt.p1y;
+        return std::abs(p->m_position.x - ex) > slack || std::abs(p->m_position.y - ey) > slack;
+    }
+    static constexpr int kFwMinHorizon = 12;
+
+    static bool fwSameStream(const GucciEngine::FwClickSample& a,
+                             const GucciEngine::FwClickSample& b) {
+        return a.player2 == b.player2 && a.type == b.type;
+    }
+
+    static long fwNegRoom(const std::vector<GucciEngine::FwClickSample>& v, size_t idx) {
+        for (size_t i = idx; i-- > 0;) {
+            if (fwSameStream(v[i], v[idx]))
+                return (long)v[idx].frame - (long)v[i].frame - 1;
+        }
+        return (long)v[idx].frame;
+    }
+
+    static long fwPosRoom(const std::vector<GucciEngine::FwClickSample>& v,
+                          size_t idx,
+                          long noNeighbour) {
+        for (size_t i = idx + 1; i < v.size(); ++i) {
+            if (fwSameStream(v[i], v[idx]))
+                return (long)v[i].frame - (long)v[idx].frame - 1;
+        }
+        return noNeighbour;
+    }
+
+    static void fwShiftInputWithPair(std::vector<gb::Action>& acts,
+                                     const std::vector<GucciEngine::FwClickSample>& samples,
+                                     const GucciEngine::FwClickSample& s,
+                                     int64_t delta) {
+        size_t idx = acts.size();
+        for (size_t i = 0; i < acts.size(); ++i) {
+            auto const& a = acts[i];
+            if (a.m_frame == s.frame && a.m_player2 == s.player2 && a.m_holding == !s.release &&
+                a.m_type == s.type) {
+                idx = i;
+                break;
+            }
+        }
+        if (idx == acts.size())
+            return;
+
+        int64_t effective = delta;
+        if ((int64_t)acts[idx].m_frame + effective < 0)
+            effective = -(int64_t)acts[idx].m_frame;
+
+        size_t pairIdx = acts.size();
+        if (!s.release) {
+            for (size_t i = idx + 1; i < acts.size(); ++i) {
+                auto const& a = acts[i];
+                if (a.m_player2 != s.player2 || a.m_type != s.type)
+                    continue;
+                if (!a.m_holding) {
+                    pairIdx = i;
+                    break;
+                }
+                break;
+            }
+        }
+
+        if (pairIdx != acts.size()) {
+            auto const& pa = acts[pairIdx];
+            for (auto const& os : samples) {
+                if (os.release && os.frame == pa.m_frame && os.player2 == pa.m_player2 &&
+                    os.type == pa.m_type) {
+                    pairIdx = acts.size();
+                    break;
+                }
+            }
+        }
+
+        acts[idx].m_frame = (uint32_t)std::max<int64_t>((int64_t)acts[idx].m_frame + effective, 0);
+        if (pairIdx != acts.size())
+            acts[pairIdx].m_frame =
+                (uint32_t)std::max<int64_t>((int64_t)acts[pairIdx].m_frame + effective, 0);
+    }
 
     static bool fwIsDashOrbType(GameObjectType type) {
         return type == GameObjectType::DashRing || type == GameObjectType::GravityDashRing;
@@ -2185,9 +2294,11 @@ namespace gucci {
             if (!a.isInput())
                 continue;
             if (a.m_holding)
-                fwClickSamples.push_back({a.m_frame, 0.f, 0.f, a.m_player2, false});
+                fwClickSamples.push_back(
+                    {a.m_frame, 0.f, 0.f, a.m_player2, false, false, false, a.m_type});
             else if (shouldTestRelease(a.m_frame, a.m_player2))
-                fwClickSamples.push_back({a.m_frame, 0.f, 0.f, a.m_player2, true});
+                fwClickSamples.push_back(
+                    {a.m_frame, 0.f, 0.f, a.m_player2, true, false, false, a.m_type});
         }
 
         if (fwClickSamples.empty()) {
@@ -2243,11 +2354,13 @@ namespace gucci {
             if (!a.isInput())
                 continue;
             if (a.m_holding) {
-                fwClickSamples.push_back({a.m_frame, 0.f, 0.f, a.m_player2, false});
+                fwClickSamples.push_back(
+                    {a.m_frame, 0.f, 0.f, a.m_player2, false, false, false, a.m_type});
                 continue;
             }
             if (shouldTestRelease(a.m_frame, a.m_player2))
-                fwClickSamples.push_back({a.m_frame, 0.f, 0.f, a.m_player2, true});
+                fwClickSamples.push_back(
+                    {a.m_frame, 0.f, 0.f, a.m_player2, true, false, false, a.m_type});
         }
         std::sort(fwClickSamples.begin(), fwClickSamples.end(), [](auto& a, auto& b) {
             return a.frame < b.frame;
@@ -2456,14 +2569,15 @@ namespace gucci {
 
             if (fwProbeDied || fwProbeFrame >= fwProbeHorizon) {
                 bool survived = !fwProbeDied;
-                if (survived && fwPositionCheckEnabled && fwProbeHasNext) {
-                    auto* posPlayer = fwProbeNextPlayer2 ? pl->m_player2 : player1;
-                    if (posPlayer) {
-                        float dx = std::abs(posPlayer->m_position.x - fwProbeNextX);
-                        float dy = std::abs(posPlayer->m_position.y - fwProbeNextY);
-                        if (dx > fwPositionSlack || dy > fwPositionSlack)
-                            survived = false;
-                    }
+                if (survived && fwPositionCheckEnabled && fwProbeClick < fwCapStack.size()) {
+                    uint32_t absFrame =
+                        (uint32_t)fwCapStack[fwProbeClick].frame + (uint32_t)fwProbeFrame;
+                    if (fwOffTrack(this,
+                                   pl,
+                                   absFrame,
+                                   fwClickSamples[fwProbeClick].player2,
+                                   fwPositionSlack))
+                        survived = false;
                 }
                 log::info("[GucciBot]   probe click {} shift {:+d}: died={} "
                           "(after {} frames, horizon {}, windowHigh {})",
@@ -2532,16 +2646,16 @@ namespace gucci {
             if (fwProbeDied || fwAiProbeFrame >= fwAiProbeHorizon) {
                 bool survived = !fwProbeDied;
                 bool reachedTarget = survived;
-                size_t nextIdx = fwAiClickIdx + 1;
-                if (survived && fwPositionCheckEnabled && nextIdx < fwClickSamples.size()) {
-                    auto const& nextS = fwClickSamples[nextIdx];
-                    auto* posPlayer = nextS.player2 ? pl->m_player2 : player1;
-                    if (posPlayer) {
-                        float dx = std::abs(posPlayer->m_position.x - nextS.x);
-                        float dy = std::abs(posPlayer->m_position.y - nextS.y);
-                        if (dx > fwPositionSlack || dy > fwPositionSlack)
-                            reachedTarget = false;
-                    }
+                if (survived && fwPositionCheckEnabled &&
+                    fwAiAlignIdx < fwAiValidPredCkpts.size()) {
+                    uint32_t absFrame = (uint32_t)fwAiValidPredCkpts[fwAiAlignIdx].frame +
+                                        (uint32_t)fwAiProbeFrame;
+                    if (fwOffTrack(this,
+                                   pl,
+                                   absFrame,
+                                   fwClickSamples[fwAiClickIdx].player2,
+                                   fwPositionSlack))
+                        reachedTarget = false;
                 }
                 FwAiStatus status = !survived            ? FwAiStatus::Dead
                                     : !reachedTarget ? FwAiStatus::MissedTarget
@@ -2564,16 +2678,13 @@ namespace gucci {
             if (fwProbeDied || fwAiProbeFrame >= fwAiProbeHorizon) {
                 bool survived = !fwProbeDied;
                 bool reachedTarget = survived;
-                size_t nnIdx = fwAiClickIdx + 2;
-                if (survived && fwPositionCheckEnabled && nnIdx < fwClickSamples.size()) {
-                    auto const& nnS = fwClickSamples[nnIdx];
-                    auto* posPlayer = nnS.player2 ? pl->m_player2 : player1;
-                    if (posPlayer) {
-                        float dx = std::abs(posPlayer->m_position.x - nnS.x);
-                        float dy = std::abs(posPlayer->m_position.y - nnS.y);
-                        if (dx > fwPositionSlack || dy > fwPositionSlack)
-                            reachedTarget = false;
-                    }
+                size_t nIdx = fwAiClickIdx + 1;
+                if (survived && fwPositionCheckEnabled && nIdx < fwClickSamples.size()) {
+                    uint32_t absFrame =
+                        (uint32_t)fwAiContBaseCkpt.frame + (uint32_t)fwAiProbeFrame;
+                    if (fwOffTrack(
+                            this, pl, absFrame, fwClickSamples[nIdx].player2, fwPositionSlack))
+                        reachedTarget = false;
                 }
                 if (survived && reachedTarget) {
                     fwState = FwState::AiSweepX;
@@ -2645,7 +2756,7 @@ namespace gucci {
                     (long)fwClickSamples[fwProbeClick].frame - (long)fwCapStack[fwProbeClick].frame;
             warmup = std::max(0L, warmup);
             const int kMaxHorizon = std::max(16, fwMaxFramesMeasured);
-            const int kMinHorizon = 12;
+            const int kMinHorizon = kFwMinHorizon;
             fwProbeWindowHigh = (int)high;
             fwProbeHorizon = (int)std::clamp(high, (long)kMinHorizon, (long)kMaxHorizon) +
                              (int)std::max(0L, warmup + (long)fwProbeShift);
@@ -2656,8 +2767,17 @@ namespace gucci {
     }
 
     void GucciEngine::advanceOffsetSweep(bool survived) {
-        if (survived)
+        bool counting = fwProbePhase == -1      ? true
+                        : fwProbePhase == 0 ? fwProbeNegCounting
+                                            : fwProbePosCounting;
+        if (survived && counting)
             fwProbeValidCount++;
+        if (!survived) {
+            if (fwProbePhase == 0)
+                fwProbeNegCounting = false;
+            else if (fwProbePhase == 1)
+                fwProbePosCounting = false;
+        }
 
         if (fwProbePhase == -1) {
             if (survived) {
@@ -2765,13 +2885,10 @@ namespace gucci {
                                   }),
                    acts.end());
 
-        for (auto& a : acts) {
-            if (a.m_frame == mk.macroFrame && a.m_player2 == mk.player2 &&
-                a.m_holding == !mk.isRelease) {
-                a.m_frame = mk.testedFrame;
-                break;
-            }
-        }
+        fwShiftInputWithPair(acts,
+                             fwClickSamples,
+                             fwClickSamples[mk.clickIndex],
+                             (int64_t)mk.testedFrame - (int64_t)mk.macroFrame);
         std::stable_sort(acts.begin(), acts.end(), [](const gb::Action& a, const gb::Action& b) {
             return a.m_frame < b.m_frame;
         });
@@ -2830,16 +2947,7 @@ namespace gucci {
                                   }),
                    acts.end());
 
-        uint32_t clickFrame = fwClickSamples[br.clickIdx].frame;
-        bool clickP2 = fwClickSamples[br.clickIdx].player2;
-        bool clickHolding = !fwClickSamples[br.clickIdx].release;
-        for (auto& a : acts) {
-            if (a.m_frame == clickFrame && a.m_player2 == clickP2 && a.m_holding == clickHolding) {
-                int64_t shifted = (int64_t)clickFrame + br.xShift;
-                a.m_frame = (uint32_t)std::max<int64_t>(shifted, 0);
-                break;
-            }
-        }
+        fwShiftInputWithPair(acts, fwClickSamples, fwClickSamples[br.clickIdx], br.xShift);
         std::stable_sort(acts.begin(), acts.end(), [](const gb::Action& a, const gb::Action& b) {
             return a.m_frame < b.m_frame;
         });
@@ -2887,16 +2995,7 @@ namespace gucci {
                    acts.end());
 
         uint32_t targetFrame = fwClickSamples[fwProbeClick].frame;
-        bool targetP2 = fwClickSamples[fwProbeClick].player2;
-        bool targetHolding = !fwClickSamples[fwProbeClick].release;
-        for (auto& a : acts) {
-            if (a.m_frame == targetFrame && a.m_player2 == targetP2 &&
-                a.m_holding == targetHolding) {
-                int64_t shifted = (int64_t)targetFrame + fwProbeShift;
-                a.m_frame = (uint32_t)std::max<int64_t>(shifted, 0);
-                break;
-            }
-        }
+        fwShiftInputWithPair(acts, fwClickSamples, fwClickSamples[fwProbeClick], fwProbeShift);
 
         std::stable_sort(acts.begin(), acts.end(), [](const gb::Action& a, const gb::Action& b) {
             return a.m_frame < b.m_frame;
@@ -2965,27 +3064,22 @@ namespace gucci {
                                   }),
                    acts.end());
 
-        uint32_t targetFrame = fwClickSamples[fwProbeClick].frame;
-        bool targetP2 = fwClickSamples[fwProbeClick].player2;
-        bool targetHolding = !fwClickSamples[fwProbeClick].release;
-        for (auto& a : acts) {
-            if (a.m_frame == targetFrame && a.m_player2 == targetP2 &&
-                a.m_holding == targetHolding) {
-                int64_t shifted = (int64_t)targetFrame + fwProbeShift;
-                a.m_frame = (uint32_t)std::max<int64_t>(shifted, 0);
-                break;
-            }
-        }
+        fwShiftInputWithPair(acts, fwClickSamples, fwClickSamples[fwProbeClick], fwProbeShift);
 
         if (fwProbeHasNext) {
-            acts.erase(std::remove_if(acts.begin(),
-                                      acts.end(),
-                                      [&](const gb::Action& a) {
-                                          return a.m_frame == fwProbeNextFrame &&
-                                                 a.m_player2 == fwProbeNextPlayer2 &&
-                                                 a.m_holding == !fwProbeNextIsRelease;
-                                      }),
-                       acts.end());
+            size_t nextIdx = fwProbeClick + 1;
+            if (nextIdx < fwClickSamples.size()) {
+                auto const& ns = fwClickSamples[nextIdx];
+                acts.erase(std::remove_if(acts.begin(),
+                                          acts.end(),
+                                          [&](const gb::Action& a) {
+                                              return a.m_frame == ns.frame &&
+                                                     a.m_player2 == ns.player2 &&
+                                                     a.m_holding == !ns.release &&
+                                                     a.m_type == ns.type;
+                                          }),
+                           acts.end());
+            }
         }
 
         std::stable_sort(acts.begin(), acts.end(), [](const gb::Action& a, const gb::Action& b) {
@@ -3032,27 +3126,14 @@ namespace gucci {
                    acts.end());
 
         uint32_t targetFrame = fwClickSamples[fwProbeClick].frame;
-        bool targetP2 = fwClickSamples[fwProbeClick].player2;
-        bool targetHolding = !fwClickSamples[fwProbeClick].release;
-        for (auto& a : acts) {
-            if (a.m_frame == targetFrame && a.m_player2 == targetP2 &&
-                a.m_holding == targetHolding) {
-                int64_t shifted = (int64_t)targetFrame + fwProbeShift;
-                a.m_frame = (uint32_t)std::max<int64_t>(shifted, 0);
-                break;
-            }
-        }
+        fwShiftInputWithPair(acts, fwClickSamples, fwClickSamples[fwProbeClick], fwProbeShift);
 
         int64_t shiftedNFrame = fwProbeNextFrame;
-        if (fwProbeHasNext) {
-            for (auto& a : acts) {
-                if (a.m_frame == fwProbeNextFrame && a.m_player2 == fwProbeNextPlayer2 &&
-                    a.m_holding == !fwProbeNextIsRelease) {
-                    shiftedNFrame =
-                        std::max<int64_t>((int64_t)fwProbeNextFrame + fwRecoveryOffset, 0);
-                    a.m_frame = (uint32_t)shiftedNFrame;
-                    break;
-                }
+        if (fwProbeHasNext && fwProbeClick + 1 < fwClickSamples.size()) {
+            auto const& ns = fwClickSamples[fwProbeClick + 1];
+            if (fwFindActionForSample(acts, ns)) {
+                shiftedNFrame = std::max<int64_t>((int64_t)fwProbeNextFrame + fwRecoveryOffset, 0);
+                fwShiftInputWithPair(acts, fwClickSamples, ns, fwRecoveryOffset);
             }
         }
 
@@ -3070,7 +3151,10 @@ namespace gucci {
         fwProbeFrame = 0;
 
         int64_t shiftedIFrame = std::max<int64_t>((int64_t)targetFrame + fwProbeShift, 0);
-        int64_t horizon = std::max<int64_t>(shiftedNFrame - shiftedIFrame, 0) + fwSlackWindow;
+        int64_t past = std::clamp((int64_t)fwSlackWindow,
+                                  (int64_t)kFwMinHorizon,
+                                  (int64_t)std::max(16, fwMaxFramesMeasured));
+        int64_t horizon = std::max<int64_t>(shiftedNFrame - shiftedIFrame, 0) + past;
         long margin = 0;
         if (fwProbeClick < fwCapStack.size())
             margin = (long)targetFrame - (long)fwCapStack[fwProbeClick].frame;
@@ -3174,22 +3258,19 @@ namespace gucci {
             fwProbeNextY = fwClickSamples[nextIdx].y;
         }
 
-        uint32_t clickFrame = fwClickSamples[fwProbeClick].frame;
-        fwProbeMaxPosShift = fwSweepRange;
-        if (fwProbeHasNext) {
-            long room = (long)fwProbeNextFrame - (long)clickFrame - 1;
-            fwProbeMaxPosShift = (int)std::clamp((long)fwSweepRange, 0L, std::max(0L, room));
-        }
-        fwProbeMaxNegShift = fwSweepRange;
-        if (fwProbeClick > 0) {
-            long room = (long)clickFrame - (long)fwClickSamples[fwProbeClick - 1].frame - 1;
-            fwProbeMaxNegShift = (int)std::clamp((long)fwSweepRange, 0L, std::max(0L, room));
-        }
+        fwProbeMaxPosShift = (int)std::clamp(
+            (long)fwSweepRange,
+            0L,
+            std::max(0L, fwPosRoom(fwClickSamples, fwProbeClick, (long)fwSweepRange)));
+        fwProbeMaxNegShift = (int)std::clamp(
+            (long)fwSweepRange, 0L, std::max(0L, fwNegRoom(fwClickSamples, fwProbeClick)));
 
         fwProbeLow = 0;
         fwProbeHigh = 0;
         fwProbeNegContiguous = true;
         fwProbePosContiguous = true;
+        fwProbeNegCounting = true;
+        fwProbePosCounting = true;
         fwProbeValidCount = 0;
         fwProbeTestedShifts.clear();
 
@@ -3340,11 +3421,10 @@ namespace gucci {
             return;
         }
 
-        uint32_t predFrame = fwClickSamples[fwAiClickIdx - 1].frame;
-        long negRoom = fwAiClickIdx >= 2
-                           ? (long)predFrame - (long)fwClickSamples[fwAiClickIdx - 2].frame - 1
-                           : (long)predFrame;
-        long posRoom = (long)fwClickSamples[fwAiClickIdx].frame - (long)predFrame - 1;
+        long negRoom = fwNegRoom(fwClickSamples, fwAiClickIdx - 1);
+        long posRoom = std::min(fwPosRoom(fwClickSamples, fwAiClickIdx - 1, (long)fwAiZ),
+                                (long)fwClickSamples[fwAiClickIdx].frame -
+                                    (long)fwClickSamples[fwAiClickIdx - 1].frame - 1);
         fwAiPredMaxNeg = (int)std::clamp((long)fwAiZ, 0L, std::max(0L, negRoom));
         fwAiPredMaxPos = (int)std::clamp((long)fwAiZ, 0L, std::max(0L, posRoom));
         // fwCapStack[predIdx] now always reaches back at least fwAiZ frames
@@ -3390,16 +3470,7 @@ namespace gucci {
                                       return !a.isInput();
                                   }),
                    acts.end());
-        uint32_t predFrame = fwClickSamples[predIdx].frame;
-        bool predP2 = fwClickSamples[predIdx].player2;
-        bool predHolding = !fwClickSamples[predIdx].release;
-        for (auto& a : acts) {
-            if (a.m_frame == predFrame && a.m_player2 == predP2 && a.m_holding == predHolding) {
-                int64_t shifted = (int64_t)predFrame + fwAiPredShift;
-                a.m_frame = (uint32_t)std::max<int64_t>(shifted, 0);
-                break;
-            }
-        }
+        fwShiftInputWithPair(acts, fwClickSamples, fwClickSamples[predIdx], fwAiPredShift);
         std::stable_sort(acts.begin(), acts.end(), [](const gb::Action& a, const gb::Action& b) {
             return a.m_frame < b.m_frame;
         });
@@ -3479,17 +3550,12 @@ namespace gucci {
         fwAiXHigh = 0;
         fwAiXValidCount = 0;
 
-        uint32_t clickFrame = fwClickSamples[fwAiClickIdx].frame;
-        fwAiXMaxPos = fwAiZ;
-        if (fwAiClickIdx + 1 < fwClickSamples.size()) {
-            long room = (long)fwClickSamples[fwAiClickIdx + 1].frame - (long)clickFrame - 1;
-            fwAiXMaxPos = (int)std::clamp((long)fwAiZ, 0L, std::max(0L, room));
-        }
-        fwAiXMaxNeg = fwAiZ;
-        if (fwAiClickIdx > 0) {
-            long room = (long)clickFrame - (long)fwClickSamples[fwAiClickIdx - 1].frame - 1;
-            fwAiXMaxNeg = (int)std::clamp((long)fwAiZ, 0L, std::max(0L, room));
-        }
+        fwAiXMaxPos = (int)std::clamp(
+            (long)fwAiZ,
+            0L,
+            std::max(0L, fwPosRoom(fwClickSamples, fwAiClickIdx, (long)fwAiZ)));
+        fwAiXMaxNeg = (int)std::clamp(
+            (long)fwAiZ, 0L, std::max(0L, fwNegRoom(fwClickSamples, fwAiClickIdx)));
         fwAiRecordAlignmentStartMark();
         fwAiBeginXShift();
     }
@@ -3525,15 +3591,7 @@ namespace gucci {
                                   }),
                    acts.end());
         uint32_t clickFrame = fwClickSamples[fwAiClickIdx].frame;
-        bool clickP2 = fwClickSamples[fwAiClickIdx].player2;
-        bool clickHolding = !fwClickSamples[fwAiClickIdx].release;
-        for (auto& a : acts) {
-            if (a.m_frame == clickFrame && a.m_player2 == clickP2 && a.m_holding == clickHolding) {
-                int64_t shifted = (int64_t)clickFrame + fwAiXShift;
-                a.m_frame = (uint32_t)std::max<int64_t>(shifted, 0);
-                break;
-            }
-        }
+        fwShiftInputWithPair(acts, fwClickSamples, fwClickSamples[fwAiClickIdx], fwAiXShift);
         std::stable_sort(acts.begin(), acts.end(), [](const gb::Action& a, const gb::Action& b) {
             return a.m_frame < b.m_frame;
         });
@@ -3558,7 +3616,7 @@ namespace gucci {
         // target -- legacy has always guarded against this with a 12-tick
         // minimum; Alignment-Independent's own horizon math didn't carry
         // that over when it was written.
-        const int64_t kMinHorizon = 12;
+        const int64_t kMinHorizon = kFwMinHorizon;
         const int64_t kMaxHorizon = std::max(16, fwMaxFramesMeasured);
         if (hasNext) {
             uint32_t nextFrame = fwClickSamples[fwAiClickIdx + 1].frame;
@@ -3636,10 +3694,8 @@ namespace gucci {
         // one actually fired in this branch) as the neighbor-spacing bound
         // is intentionally conservative -- a superset of "definitely safe",
         // not an exact bound. Documented V1 scope-down, not an oversight.
-        long negRoom = (long)nFrame - (long)fwClickSamples[fwAiClickIdx].frame - 1;
-        long posRoom = nIdx + 1 < fwClickSamples.size()
-                           ? (long)fwClickSamples[nIdx + 1].frame - (long)nFrame - 1
-                           : (long)fwAiZ;
+        long negRoom = fwNegRoom(fwClickSamples, nIdx);
+        long posRoom = fwPosRoom(fwClickSamples, nIdx, (long)fwAiZ);
         int maxNeg = (int)std::clamp((long)fwAiZ, 0L, std::max(0L, negRoom));
         int maxPos = (int)std::clamp((long)fwAiZ, 0L, std::max(0L, posRoom));
         if ((shift < 0 && -shift > maxNeg) || (shift > 0 && shift > maxPos)) {
@@ -3653,8 +3709,6 @@ namespace gucci {
             fwAiFinishAnalysis();
             return;
         }
-        bool nP2 = fwClickSamples[nIdx].player2;
-        bool nHolding = !fwClickSamples[nIdx].release;
 
         replay.m_actionAtom = fwSavedAtom;
         auto& acts = replay.m_actionAtom.m_actions;
@@ -3674,23 +3728,8 @@ namespace gucci {
         // were coming back with a 0-frame window -- this is why: the
         // desynced double-fire was corrupting nearly every continuation
         // candidate regardless of which shift was actually being tested.
-        uint32_t xClickFrame = fwClickSamples[fwAiClickIdx].frame;
-        bool xClickP2 = fwClickSamples[fwAiClickIdx].player2;
-        bool xClickHolding = !fwClickSamples[fwAiClickIdx].release;
-        for (auto& a : acts) {
-            if (a.m_frame == xClickFrame && a.m_player2 == xClickP2 && a.m_holding == xClickHolding) {
-                int64_t shiftedX = (int64_t)xClickFrame + fwAiXShift;
-                a.m_frame = (uint32_t)std::max<int64_t>(shiftedX, 0);
-                break;
-            }
-        }
-        for (auto& a : acts) {
-            if (a.m_frame == nFrame && a.m_player2 == nP2 && a.m_holding == nHolding) {
-                int64_t shifted = (int64_t)nFrame + shift;
-                a.m_frame = (uint32_t)std::max<int64_t>(shifted, 0);
-                break;
-            }
-        }
+        fwShiftInputWithPair(acts, fwClickSamples, fwClickSamples[fwAiClickIdx], fwAiXShift);
+        fwShiftInputWithPair(acts, fwClickSamples, fwClickSamples[nIdx], shift);
         std::stable_sort(acts.begin(), acts.end(), [](const gb::Action& a, const gb::Action& b) {
             return a.m_frame < b.m_frame;
         });
@@ -3707,7 +3746,7 @@ namespace gucci {
         // Same kMinHorizon/kMaxHorizon floor as fwAiBeginXShift -- see its
         // comment. Applies here too since a continuation candidate's own
         // reach-target check is the same kind of time-based survival test.
-        const int64_t kMinHorizon = 12;
+        const int64_t kMinHorizon = kFwMinHorizon;
         const int64_t kMaxHorizon = std::max(16, fwMaxFramesMeasured);
         if (hasNextNext) {
             uint32_t nnFrame = fwClickSamples[nIdx + 1].frame;
