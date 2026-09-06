@@ -122,6 +122,7 @@ Most of this is stable and has been tested for real, in-game, by an actual human
 - **peony** — Silicate, the physics engine this is built on (dropped the source like Gucci drops albums. Brrr.)
 - **kepe** — built yBot, the file-size benchmark GBR6 was designed to meet.
 - **Bogdaner09** — the mod that got Click Indicators started ([github.com/Bogdaner09/mod](https://github.com/Bogdaner09/mod)); Nigel found it, we built our own version around it.
+- **anticroom** — sent GucciBot's first outside pull request, a real 7-fix pass on Calculate's frame-window accuracy.
 
 ---
 

@@ -1,21 +1,10 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                     \
-    "2026-09-06-i (Merged anticroom's PR #2 -- Geode SDK bumped 5.7.1 -> 5.10.1 (our local "  \
-    "SDK checkout upgraded to match, geode sdk install-binaries re-run; verified our OWN "    \
-    "pre-PR code needed this too -- customtheme.cpp broke on 5.10.1 without the PR's added "  \
-    "Task.hpp include, so the version bump was real, not just their local toolchain). Frame " \
-    "-window accuracy, 7 fixes: ActionType-exact input matching (frame/player/holding alone " \
-    "could match the wrong action); shifted press carries its paired release along (cube/"    \
-    "ball/UFO taps were silently gaining/losing hold duration on every probed shift); "       \
-    "room/shift-bound calcs now check same player+action stream, not just array-adjacent "    \
-    "samples; a valid-shift counter that kept counting past a known survival gap; Position "  \
-    "Tolerance now reads m_pathSamples ground truth at the same absolute frame everywhere "   \
-    "(3 duplicated ad-hoc checks collapsed into one fwOffTrack helper); levelComplete "        \
-    "suppressed while Calculate is running its own internal simulation; Full-Range Sweep "    \
-    "drops survivor islands. Verified: builds clean. NOT yet confirmed in-game -- 7 fixes "    \
-    "bundled in one PR, worth testing broadly (two-player, cube/ball/UFO taps, all 3 "         \
-    "algorithms) rather than assuming it's all correct from the diff alone.)"
+    "2026-09-06-j (Version bump to 1.6.1 for anticroom's PR #2 (frame-window accuracy fixes " \
+    "+ the Geode 5.10.1 SDK bump, see build -i). Credited anticroom in about.md, README, and " \
+    "the in-game Credits tab. Still not confirmed in-game -- see -i's notes on what's worth " \
+    "testing first (two-player levels, cube/ball/UFO taps, all 3 Calculate algorithms).)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

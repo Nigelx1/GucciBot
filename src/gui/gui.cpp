@@ -7899,6 +7899,7 @@ namespace gucci {
             {"T", "Toosii", "ToosiiBot theme & WR ambitions"},
             {"P", "peony", "Silicate dev -- dropped the source like Gucci drops albums. Brrr."},
             {"B", "Bogdaner09", "Click Indicators inspiration -- github.com/Bogdaner09/mod"},
+            {"A", "anticroom", "Frame-window accuracy fixes -- GucciBot's first outside pull request"},
         };
         for (auto& e : entries) {
             ImVec2 pos = ImGui::GetCursorScreenPos();
