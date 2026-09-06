@@ -2061,10 +2061,11 @@ namespace gucci {
                       "(it doesn't need to be enabled) to use GucciBot.",
                       kTtrModId);
             Notification::create(
-                "GucciBot needs ToastyReplay Lite installed to run (it can stay disabled) -- "
-                "grab it from the mod index, then restart Geometry Dash.",
+                "GucciBot is standing down. ToastexGD only blessed this mod's release on one "
+                "condition -- ToastyReplay Lite installed, no exceptions (disabled is fine, "
+                "gone is not). Go get it from the mod index, restart, and GucciBot rides again.",
                 NotificationIcon::Warning,
-                6.f)
+                8.f)
                 ->show();
         }
 

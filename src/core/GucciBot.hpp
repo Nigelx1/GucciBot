@@ -1,15 +1,11 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-09-05-a (Nigel's condition with ToastexGD for GucciBot's public release: GucciBot now "    \
-    "requires ToastyReplay Lite (toastexgd.toastyreplay-lite) to be INSTALLED to run -- it can stay " \
-    "disabled, just has to be present. Checked via Geode's real Loader::isModInstalled() (verified "  \
-    "against the actual SDK header, not guessed) once per game launch in initialize(), not polled "  \
-    "continuously -- Geode mods can't be added/removed without a restart anyway, so a launch-time "   \
-    "check can't be 'unlocked once and forgotten.' If missing: GucciBot stays fully disabled and "    \
-    "shows a one-time notification pointing at the mod index. Still v1.5.2, no version bump. "        \
-    "UNTESTED -- needs Nigel to confirm both paths (TTR present -> works normally, TTR absent -> "    \
-    "GucciBot cleanly no-ops with the notification, not a crash). Compiles clean.)"
+    "2026-09-05-b (Nigel's ask: made the TTR-missing notification actually say why, with some "      \
+    "personality instead of a flat dependency message -- now names ToastexGD and the release "       \
+    "condition directly ('ToastexGD only blessed this mod's release on one condition...'), 8s "       \
+    "instead of 6 to fit the longer text. Logic unchanged from -a. Still v1.5.2, no version bump. "  \
+    "UNTESTED. Compiles clean.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
