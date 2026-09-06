@@ -2,9 +2,11 @@
 
 > Frame perfect. Ice cold. Brrr Brrr Brrr.
 
-It's Gucci. GucciBot is a Geometry Dash macro bot (a [Geode](https://geode-sdk.org/) mod) that records your inputs frame-perfectly and plays them back exactly, built on top of [Silicate](https://git.silicate.dev/silicate/silicate)'s physics engine and [ToastyReplay](https://github.com/silicate-bot)'s renderer. Think of it as a very expensive, very icy ghost of your best run — except the ghost never drops a frame, never has an off day, and definitely never forgets its jewelry. So icy.
+It's Gucci. GucciBot is a Geometry Dash macro bot (a [Geode](https://geode-sdk.org/) mod) that records your inputs frame-perfectly and plays them back exactly, built on top of [Silicate](https://git.puppy.lgbt/silicate/silicate)'s physics engine and ToastyReplay's renderer. Think of it as a very expensive, very icy ghost of your best run — except the ghost never drops a frame, never has an off day, and definitely never forgets its jewelry. So icy.
 
-This is a private personal project. If you're reading this and you're not Nigel, Juice, or GWDdoS, you found a leak — say something nice about the themes on your way out.
+GucciBot is public now — grab a build from [Releases](https://github.com/guccimanefan/GucciBot/releases/latest), drop it in your Geode mods folder, and you're in. It's not on the in-game Geode mod index (long story, not going into it here), so a manual install is the only way to get it for now.
+
+**Requires ToastyReplay Lite (`toastexgd.toastyreplay-lite`) to be installed** (it doesn't need to be enabled, just present in your mods folder) — GucciBot won't run without it. This is the one real condition on GucciBot's release, and it's checked every launch.
 
 ---
 
@@ -13,6 +15,7 @@ This is a private personal project. If you're reading this and you're not Nigel,
 - [What it actually does](#what-it-actually-does)
 - [GBR6 — the hypercompressed format](#gbr6--the-hypercompressed-format)
 - [Practice & analysis](#practice--analysis)
+- [Autoclicker](#autoclicker)
 - [Trainers](#trainers)
 - [Rendering](#rendering)
 - [Themes](#themes)
@@ -38,9 +41,15 @@ This is a private personal project. If you're reading this and you're not Nigel,
 ## Practice & analysis
 
 - Macro diff viewer — put two replays side by side, frame by frame.
-- Calculate — per-click survivability windows measured against real game frames, not a guess.
+- Calculate — per-click survivability windows measured against real game frames, not a guess. Three selectable algorithms now: Time-Based (default), Recovery Range, and Alignment-Independent (also re-tests the previous click's own timing, not just this one). Optional "Circle Skin" marker style. Megahack's Practice Fix is heavily recommended before running it.
 - Mid-macro TPS changes, noclip accuracy readout, macro trim/merge/surgery.
 - Bot settings presets, a metadata editor, autosave on a timer or at level end.
+
+## Autoclicker
+
+- Fully independent Hold Ticks / Release Ticks / Clicks Per Hold per player — no shared setting forced onto both, matching Silicate's own model.
+- One-shot "Sync Player 2 to Player 1" copy, not a permanent link.
+- Only While Holding — auto-clicks only while you're actually holding the jump input.
 
 ## Trainers
 
@@ -80,6 +89,9 @@ The full current roster. Pick one, or build your own — Settings → Theme has 
 | **Red Kingdom** | `.redkingdom` | Blood red that *pulses*, because a static color wasn't intense enough |
 | LemonadeBot | `.lemonade` | Bright Yellow + Warm Black |
 | BrrrBot | `.icebrrr` | Icy Blue + Silver, with an actual blizzard overlaid on the whole panel |
+| WakaBot | `.waka` | Grove Green + Black |
+| YoungstaBot | `.youngsta` | Black + Red (223) |
+| KnockerzBot | `.knockerz` | Teal + Black |
 | *Yours* | — | Whatever you want. That's the point. |
 
 GucciBot's own color is gold, for the record. Yellow everything this time, you know what I'm talking about? Yellow rims. Yellow big booty yellowbones, ha. Yellow Lambs, yellow MPs, yellow watch. Yellow charm ring, chain. Yellow living room set.
@@ -108,6 +120,8 @@ Most of this is stable and has been tested for real, in-game, by an actual human
 - **Claude** (Anthropic) — wrote essentially the entire codebase across every session of this project, including this README. Not a euphemism, not "AI-assisted," just the actual author of the code — Nigel wants that said plainly.
 - **ToastexGD** — ToastyReplay, the renderer this is built on.
 - **peony** — Silicate, the physics engine this is built on (dropped the source like Gucci drops albums. Brrr.)
+- **kepe** — built yBot, the file-size benchmark GBR6 was designed to meet.
+- **Bogdaner09** — the mod that got Click Indicators started ([github.com/Bogdaner09/mod](https://github.com/Bogdaner09/mod)); Nigel found it, we built our own version around it.
 
 ---
 
