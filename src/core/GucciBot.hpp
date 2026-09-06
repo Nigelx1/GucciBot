@@ -1,13 +1,12 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-09-06-f (Closing the gap Nigel noticed: Toosii/Sexyy/Saweetie predate BigBrrr songs "      \
-    "being a thing and never got one retroactively. Wired the filename mapping ahead of the real "   \
-    "files, same prep-first pattern as -d -- all three Toosii variants (base/Syracuse/SacState, "     \
-    "just recolors of one persona per Nigel) share a single big_brrr_toosii.mp3, Sexyy gets "         \
-    "big_brrr_sexyy.mp3, Saweetie gets big_brrr_saweetie.mp3. mod.json and BPM/offset still "         \
-    "pending the actual mp3s + numbers from Nigel. Still v1.5.2, no version bump. Compiles clean, "   \
-    "UNTESTED in-game.)"
+    "2026-09-06-g (Finished the Toosii/Sexyy/Saweetie BigBrrr songs from -f with Nigel's real "      \
+    "files + numbers. Toosii (all 3 variants, shared): 116 BPM, 33+25/30s offset. Sexyy Red: 178 "    \
+    "BPM, 11+2/30s offset. Saweetie: 105 BPM, 11+1/30s offset. Added all three to mod.json's "        \
+    "resource list -- packages clean. Every theme now either has a dedicated BigBrrr song or "         \
+    "deliberately doesn't (WakaBot, plus the handful of older ones nobody's asked for yet). Still "   \
+    "v1.5.2, no version bump. Compiles clean, UNTESTED in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

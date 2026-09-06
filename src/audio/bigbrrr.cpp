@@ -63,6 +63,14 @@ namespace gucci {
             return 0.0;
         case THEME_KNOCKERZ:
             return 21.0 + 17.0 / 30.0;
+        case THEME_TOOSII:
+        case THEME_TOOSII_SYRACUSE:
+        case THEME_TOOSII_SACSTATE:
+            return 33.0 + 25.0 / 30.0;
+        case THEME_SEXYY:
+            return 11.0 + 2.0 / 30.0;
+        case THEME_SAWEETIE:
+            return 11.0 + 1.0 / 30.0;
         default:
             return 20.0 + 11.0 / 15.0;
         }
@@ -88,6 +96,14 @@ namespace gucci {
             return 144.0;
         case THEME_KNOCKERZ:
             return 90.0;
+        case THEME_TOOSII:
+        case THEME_TOOSII_SYRACUSE:
+        case THEME_TOOSII_SACSTATE:
+            return 116.0;
+        case THEME_SEXYY:
+            return 178.0;
+        case THEME_SAWEETIE:
+            return 105.0;
         default:
             return 140.0;
         }
