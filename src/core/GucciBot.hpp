@@ -1,20 +1,15 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-09-03-c (Silicate 1.1.0 parity pass, two real ports after actually reading the updated "  \
-    "source (git.puppy.lgbt/silicate/silicate) rather than guessing off the changelog alone: (1) "   \
-    "Autoclicker reworked -- Hold/Release Ticks and a new Clicks Per Hold are now fully independent "\
-    "per player instead of one shared pair, with a one-shot 'Sync P2 to P1' button; old settings "   \
-    "migrate into Player 1's slot automatically. (2) Hitbox trail now dedupes consecutive samples "  \
-    "that land on the same on-screen PIXEL (accounting for camera zoom), cutting overdraw -- this "  \
-    "is new for GucciBot, not a fix, since there was no dedup step here before at all. Ruled out as "\
-    "NOT portable, for real architectural reasons: the teleport-portal/shake-trigger RNG fixes and "  \
-    "the Lock Delta/TPS internals all work by patching raw memory offsets inside the compiled game "  \
-    "directly (hardcoded addresses, register writes) -- a fundamentally different, far riskier "     \
-    "technique GucciBot has never used anywhere in its own codebase; adopting it for this would be " \
-    "a bad trade. Backwards-stepping's ghost-player rework and a CPS meter (GucciBot has none at "    \
-    "all currently) are real candidates but big enough to be their own separate efforts, not bundled "\
-    "here. Still v1.5.2, no version bump. Compiles clean.)"
+    "2026-09-05-a (Nigel's condition with ToastexGD for GucciBot's public release: GucciBot now "    \
+    "requires ToastyReplay Lite (toastexgd.toastyreplay-lite) to be INSTALLED to run -- it can stay " \
+    "disabled, just has to be present. Checked via Geode's real Loader::isModInstalled() (verified "  \
+    "against the actual SDK header, not guessed) once per game launch in initialize(), not polled "  \
+    "continuously -- Geode mods can't be added/removed without a restart anyway, so a launch-time "   \
+    "check can't be 'unlocked once and forgotten.' If missing: GucciBot stays fully disabled and "    \
+    "shows a one-time notification pointing at the mod index. Still v1.5.2, no version bump. "        \
+    "UNTESTED -- needs Nigel to confirm both paths (TTR present -> works normally, TTR absent -> "    \
+    "GucciBot cleanly no-ops with the notification, not a crash). Compiles clean.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -391,6 +386,17 @@ namespace gucci {
         HudConfig hud;
 
         bool enabled = false;
+        // Nigel's condition with ToastexGD for GucciBot's public release
+        // (2026-09-05): GucciBot only runs if ToastyReplay Lite is present
+        // in the mods folder (installed is enough -- it can be disabled).
+        // Checked once per game launch in initialize(), not continuously
+        // polled while playing, since Geode mods can't be added/removed
+        // without a restart anyway. This flag records WHY enabled stayed
+        // false, for the GUI to surface later if it ever grows a banner
+        // for this specifically -- not surfaced anywhere yet beyond the
+        // one-time startup notification.
+        bool ttrRequirementMissing = false;
+        static constexpr const char* kTtrModId = "toastexgd.toastyreplay-lite";
         Mode mode = Mode::Idle;
         double userTpsSaved = 0.0;
         std::string replayName = "";

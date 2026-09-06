@@ -2043,7 +2043,31 @@ namespace gucci {
         applyIntervalAutosave();
 
         reloadMacroList();
-        enabled = true;
+
+        // Nigel's condition with ToastexGD for GucciBot's public release
+        // (2026-09-05): only run if ToastyReplay Lite is present -- doesn't
+        // need to be enabled/active, just installed. Checked here (once per
+        // game launch, inside initialize()) rather than polled continuously,
+        // since Geode can't add/remove a mod without restarting anyway, so
+        // a launch-time check already can't be "unlocked once and forgotten"
+        // -- removing TTR and relaunching drops right back to disabled.
+        if (Loader::get()->isModInstalled(kTtrModId)) {
+            enabled = true;
+            ttrRequirementMissing = false;
+        } else {
+            enabled = false;
+            ttrRequirementMissing = true;
+            log::warn("[GucciBot] Disabled -- ToastyReplay Lite ({}) not found. Install it "
+                      "(it doesn't need to be enabled) to use GucciBot.",
+                      kTtrModId);
+            Notification::create(
+                "GucciBot needs ToastyReplay Lite installed to run (it can stay disabled) -- "
+                "grab it from the mod index, then restart Geometry Dash.",
+                NotificationIcon::Warning,
+                6.f)
+                ->show();
+        }
+
         log::info("[GucciBot] ========================================");
         log::info("[GucciBot] BUILD: {} | compiled {} {}", GB_BUILD_LABEL, __DATE__, __TIME__);
         log::info("[GucciBot] ========================================");
