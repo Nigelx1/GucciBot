@@ -526,8 +526,11 @@ class $modify(GB7PlayLayer, PlayLayer) {
     }
 
     void levelComplete() {
-        PlayLayer::levelComplete();
         auto* gb = GucciEngine::get();
+        if (gb->fwAnalyzing)
+            return;
+
+        PlayLayer::levelComplete();
         if (!gb->isPlaying() && gbju::isJupiterLevel(this)) {
             gb->jupiterSessionBestPct = 100.f;
             gbju::notifyJupiterAttemptEnded();

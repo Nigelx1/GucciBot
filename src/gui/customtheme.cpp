@@ -2,6 +2,7 @@
 #include "gui/gui.hpp"
 
 #include <Geode/Geode.hpp>
+#include <Geode/utils/Task.hpp>
 #include <algorithm>
 #include <cctype>
 #include <cstdio>

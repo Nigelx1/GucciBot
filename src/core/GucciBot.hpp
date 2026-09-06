@@ -1,15 +1,12 @@
 #pragma once
 
-#define GB_BUILD_LABEL                                                                             \
-    "2026-09-06-h (Version bump to 1.6.0 -- content audit for everything shipped since 1.5.2: "      \
-    "sidecar reorg, Circle Skin marker, the new Alignment-Independent frame-window algorithm, "       \
-    "WakaBot/YoungstaBot/KnockerzBot themes + the BigBrrr song backfill, Silicate 1.1.0 parity "       \
-    "(per-player autoclicker, hitbox trail dedup), and the ToastyReplay Lite install requirement. "   \
-    "about.md updated: version header, new Requirements section stating the TTR install "             \
-    "requirement outright, Frame-window analyzer bullet mentions all 3 algorithms + Circle Skin + "  \
-    "the Practice Fix recommendation, new Autoclicker section (never had one before), hitbox dedup "  \
-    "mentioned under Engine. mod.json + CMakeLists.txt bumped to 1.6.0. Compiles clean, UNTESTED "    \
-    "in-game.)"
+#define GB_BUILD_LABEL                                                                     \
+    "2026-09-06-m (Frame-window accuracy, fixes 1-7 + re-audit: ActionType-exact input "   \
+    "matching; shifted press carries an UNSAMPLED paired release (cube/ball/UFO) so a tap " \
+    "keeps its hold duration; sweeps bounded by the same input stream; Recovery Range "    \
+    "candidates survive 12 ticks past the recovery input; Position Tolerance compares "    \
+    "against m_pathSamples at the same absolute frame, and its debug box now draws there " \
+    "too; levelComplete suppressed mid-analysis; Full-Range Sweep drops survivor islands.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -652,6 +649,7 @@ namespace gucci {
             bool release;
             bool orbDash = false;
             bool orbNonDash = false;
+            gb::ActionType type = gb::ActionType::Jump;
         };
         std::vector<FwClickSample> fwClickSamples;
         bool fwSampling = false;
@@ -701,6 +699,8 @@ namespace gucci {
         std::set<int> fwProbeTestedShifts;
         bool fwProbeNegContiguous = true;
         bool fwProbePosContiguous = true;
+        bool fwProbeNegCounting = true;
+        bool fwProbePosCounting = true;
         int fwProbeValidCount = 0;
         int fwProbeMaxNegShift = 0;
         int fwProbeMaxPosShift = 0;

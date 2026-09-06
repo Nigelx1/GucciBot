@@ -124,8 +124,18 @@ public:
             m_debugNode->drawSegment({at.x - s, at.y + s}, {at.x + s, at.y - s}, 3.f, col);
         }
 
-        if (gb->fwPositionCheckEnabled && gb->fwProbeHasNext) {
-            CCPoint c{gb->fwProbeNextX, gb->fwProbeNextY};
+
+        if (gb->fwPositionCheckEnabled && gb->fwAnalyzing &&
+            gb->fwProbeClick < gb->fwCapStack.size() &&
+            gb->fwProbeClick < gb->fwClickSamples.size()) {
+            uint32_t absFrame = (uint32_t)gb->fwCapStack[gb->fwProbeClick].frame +
+                                (uint32_t)std::max(0, gb->fwProbeHorizon);
+            auto const& path = gb->replay.m_pathSamples;
+            bool p2 = gb->fwClickSamples[gb->fwProbeClick].player2;
+            if (absFrame >= path.size() || (p2 && !path[absFrame].hasP2))
+                return;
+            auto const& gt = path[absFrame];
+            CCPoint c{p2 ? gt.p2x : gt.p1x, p2 ? gt.p2y : gt.p1y};
             float s = gb->fwPositionSlack;
             ccColor4F clear4{0.f, 0.f, 0.f, 0.f};
             ccColor4F boxCol{0.2f, 0.7f, 1.f, 1.f};
