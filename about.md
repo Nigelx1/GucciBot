@@ -1,8 +1,13 @@
-# GucciBot 1.5
+# GucciBot 1.6
 
 > Frame perfect. Ice cold. Brrr.
 
 GucciBot is a Geometry Dash macro bot built on Silicate's physics engine, with a hypercompressed replay format and a full practice-trainer system -- one dedicated tab built around Jupiter My Favourite, and a second general-purpose one that works with any of your own saved macros.
+
+## Requirements
+
+- Geometry Dash 2.2081, Windows, Geode 5.7.1+
+- **ToastyReplay Lite must be installed** (`toastexgd.toastyreplay-lite`) -- it doesn't need to be enabled, just present in your mods folder. GucciBot won't run without it.
 
 ---
 
@@ -19,11 +24,18 @@ GucciBot is a Geometry Dash macro bot built on Silicate's physics engine, with a
 - Silicate's full physics engine — exact GD 2.2081 offsets, proper TPS bypass, SSB fix, lock delta, frame extrapolation
 - Intentional deaths, backwards stepping, mirror inputs, maintain gravity, auto-flip, prevent death
 - Complete player-state checkpoint capture
+- Hitbox trail dedupes consecutive samples landing on the same on-screen pixel (camera-zoom aware), instead of drawing every sample
+
+## Autoclicker
+
+- Fully independent Hold Ticks / Release Ticks / Clicks Per Hold per player -- no more one shared setting forced onto both
+- One-shot "Sync Player 2 to Player 1" copy, not a permanent link -- keep tweaking either side afterward
+- Only While Holding — auto-clicks only while you actually hold the jump input
 
 ## Practice & Analysis
 
 - Macro diff viewer — compare two replays frame by frame
-- Frame-window analyzer ("Calculate") — per-click timing windows across real game frames. Improved performance when using an external Practice Fix (native Practice Fix coming soon, hopefully).
+- Frame-window analyzer ("Calculate") — per-click timing windows across real game frames, with three selectable algorithms: Time-Based (default), Recovery Range, and the new Alignment-Independent (also re-tests the previous click's own timing, not just this one). Optional "Circle Skin" marker style. Megahack's Practice Fix is heavily recommended before running it.
 - TPS mid-macro changes, noclip accuracy display, macro trim/merge/surgery
 - Bot settings presets, metadata editor, autosave at level end and/or on a timer
 

@@ -1,12 +1,15 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-09-06-g (Finished the Toosii/Sexyy/Saweetie BigBrrr songs from -f with Nigel's real "      \
-    "files + numbers. Toosii (all 3 variants, shared): 116 BPM, 33+25/30s offset. Sexyy Red: 178 "    \
-    "BPM, 11+2/30s offset. Saweetie: 105 BPM, 11+1/30s offset. Added all three to mod.json's "        \
-    "resource list -- packages clean. Every theme now either has a dedicated BigBrrr song or "         \
-    "deliberately doesn't (WakaBot, plus the handful of older ones nobody's asked for yet). Still "   \
-    "v1.5.2, no version bump. Compiles clean, UNTESTED in-game.)"
+    "2026-09-06-h (Version bump to 1.6.0 -- content audit for everything shipped since 1.5.2: "      \
+    "sidecar reorg, Circle Skin marker, the new Alignment-Independent frame-window algorithm, "       \
+    "WakaBot/YoungstaBot/KnockerzBot themes + the BigBrrr song backfill, Silicate 1.1.0 parity "       \
+    "(per-player autoclicker, hitbox trail dedup), and the ToastyReplay Lite install requirement. "   \
+    "about.md updated: version header, new Requirements section stating the TTR install "             \
+    "requirement outright, Frame-window analyzer bullet mentions all 3 algorithms + Circle Skin + "  \
+    "the Practice Fix recommendation, new Autoclicker section (never had one before), hitbox dedup "  \
+    "mentioned under Engine. mod.json + CMakeLists.txt bumped to 1.6.0. Compiles clean, UNTESTED "    \
+    "in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
