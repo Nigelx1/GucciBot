@@ -278,11 +278,25 @@ void GucciUpdater::updateAudioSpeedhack() {
         master->setPitch(m_speedhackAudio ? (float)m_speedhack : 1.0f);
 }
 
+// 2026-09-05: none of the raw midhooks/hooks below used to check
+// GucciEngine::enabled at all -- harmless for as long as `enabled` was
+// unconditionally forced true at every launch, but the new
+// ToastyReplay-Lite-must-be-installed gate (see initialize()) means
+// `enabled` can now genuinely stay false for a whole session, and Nigel
+// caught it in-game: autoclicker (and everything else these drive) kept
+// working with the notification up. These are raw SafetyHook midhooks
+// and a direct CCActionManager::update replacement -- they run
+// unconditionally once installed, completely independent of the
+// GB7CCScheduler/GB7CCDirector path below that already respected
+// `enabled` correctly. Added the same guard to all six.
 static void physDtMidhook(SafetyHookContext& ctx) {
     auto* pl = GJBaseGameLayer::get();
     if (!pl)
         return;
-    auto& upd = GucciEngine::get()->updater;
+    auto* gb = GucciEngine::get();
+    if (!gb->enabled)
+        return;
+    auto& upd = gb->updater;
     if (upd.m_onlyRefresh)
         return;
     ctx.xmm1.f64[0] *= upd.m_tps / 60.0;
@@ -290,7 +304,10 @@ static void physDtMidhook(SafetyHookContext& ctx) {
 }
 
 static void physStepCountMidhook(SafetyHookContext& ctx) {
-    auto& upd = GucciEngine::get()->updater;
+    auto* gb = GucciEngine::get();
+    if (!gb->enabled)
+        return;
+    auto& upd = gb->updater;
     bool fastBypass = upd.useFastLockDelta() || !upd.m_lockDelta;
     if (!fastBypass && PlayLayer::get())
         return;
@@ -298,7 +315,10 @@ static void physStepCountMidhook(SafetyHookContext& ctx) {
 }
 
 static void restorePhysDtMidhook(SafetyHookContext& ctx) {
-    auto& upd = GucciEngine::get()->updater;
+    auto* gb = GucciEngine::get();
+    if (!gb->enabled)
+        return;
+    auto& upd = gb->updater;
     bool fastBypass = upd.useFastLockDelta() || !upd.m_lockDelta;
     if (!fastBypass && PlayLayer::get())
         return;
@@ -307,6 +327,8 @@ static void restorePhysDtMidhook(SafetyHookContext& ctx) {
 
 static void earlyUpdateMidhook(SafetyHookContext&) {
     auto* gb = GucciEngine::get();
+    if (!gb->enabled)
+        return;
     auto& upd = gb->updater;
     if (upd.m_onlyRefresh)
         return;
@@ -377,6 +399,8 @@ static void classifyOrbTouchForCapture(PlayerObject* player, bool& outDash, bool
 
 static void frameUpdateMidhook(SafetyHookContext&) {
     auto* gb = GucciEngine::get();
+    if (!gb->enabled)
+        return;
     auto& upd = gb->updater;
     auto* pl = GJBaseGameLayer::get();
     if (!pl || pl->m_resumeTimer > 0)
@@ -687,7 +711,13 @@ constexpr int ACTIONMGR_UPDATE_OFFSET = 0x38B90;
 static void (*actionMgrOrig)(void*, float) = nullptr;
 
 static void actionMgrHook(void* self, float dt) {
-    auto& upd = GucciEngine::get()->updater;
+    auto* gb = GucciEngine::get();
+    if (!gb->enabled) {
+        if (actionMgrOrig)
+            actionMgrOrig(self, dt);
+        return;
+    }
+    auto& upd = gb->updater;
     if (upd.m_onlyRefresh)
         return;
     if (actionMgrOrig)

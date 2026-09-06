@@ -1908,6 +1908,16 @@ namespace gucci {
         fs::remove(getPresetsDir() / (name + ".json"), ec);
     }
 
+    void GucciEngine::showTtrMissingNotification() {
+        Notification::create(
+            "GucciBot is standing down. ToastexGD only blessed this mod's release on one "
+            "condition -- ToastyReplay Lite installed, no exceptions (disabled is fine, "
+            "gone is not). Go get it from the mod index, restart, and GucciBot rides again.",
+            NotificationIcon::Warning,
+            8.f)
+            ->show();
+    }
+
     void GucciEngine::initialize() {
         fs::create_directories(getReplayDir());
         fs::create_directories(getPresetsDir());
@@ -2060,13 +2070,7 @@ namespace gucci {
             log::warn("[GucciBot] Disabled -- ToastyReplay Lite ({}) not found. Install it "
                       "(it doesn't need to be enabled) to use GucciBot.",
                       kTtrModId);
-            Notification::create(
-                "GucciBot is standing down. ToastexGD only blessed this mod's release on one "
-                "condition -- ToastyReplay Lite installed, no exceptions (disabled is fine, "
-                "gone is not). Go get it from the mod index, restart, and GucciBot rides again.",
-                NotificationIcon::Warning,
-                8.f)
-                ->show();
+            showTtrMissingNotification();
         }
 
         log::info("[GucciBot] ========================================");

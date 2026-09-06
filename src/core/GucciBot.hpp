@@ -1,11 +1,20 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-09-05-b (Nigel's ask: made the TTR-missing notification actually say why, with some "      \
-    "personality instead of a flat dependency message -- now names ToastexGD and the release "       \
-    "condition directly ('ToastexGD only blessed this mod's release on one condition...'), 8s "       \
-    "instead of 6 to fit the longer text. Logic unchanged from -a. Still v1.5.2, no version bump. "  \
-    "UNTESTED. Compiles clean.)"
+    "2026-09-05-c (Two things. (1) Nigel's actual ask: the TTR-missing notification now re-fires "   \
+    "every time the menu keybind is pressed while TTR is still missing, not just once at startup "   \
+    "-- easy to miss the launch-time one. Notification text deduped into a single "                  \
+    "GucciEngine::showTtrMissingNotification() called from both initialize() and the keybind "       \
+    "handler instead of copy-pasted. (2) A separate, independently-found gap, NOT confirmed as "      \
+    "what Nigel actually saw (he'd only tested that the menu opens, not real bot function) -- six "  \
+    "raw hook functions in engine_updater.cpp (physDtMidhook, physStepCountMidhook, "                \
+    "restorePhysDtMidhook, earlyUpdateMidhook, frameUpdateMidhook, actionMgrHook) never checked "     \
+    "GucciEngine::enabled at all, since they're raw SafetyHook midhooks / a direct "                 \
+    "CCActionManager::update replacement, architecturally separate from the "                        \
+    "GB7CCScheduler/GB7CCDirector path that already respected it. Harmless while enabled was "        \
+    "always force-true; the new TTR gate is the first time enabled=false can persist for a real "     \
+    "session, so this needs real in-game testing with TTR removed to confirm it was worth fixing. "   \
+    "Still v1.5.2, no version bump. Compiles clean, UNTESTED in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -393,6 +402,11 @@ namespace gucci {
         // one-time startup notification.
         bool ttrRequirementMissing = false;
         static constexpr const char* kTtrModId = "toastexgd.toastyreplay-lite";
+        // Shared so the wording only lives in one place -- shown once at
+        // startup (initialize()) and again every time someone tries to
+        // open the menu while it's still missing (hacks/keybinds.cpp),
+        // since the startup one is easy to miss.
+        static void showTtrMissingNotification();
         Mode mode = Mode::Idle;
         double userTpsSaved = 0.0;
         std::string replayName = "";

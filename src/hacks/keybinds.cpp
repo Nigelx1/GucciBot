@@ -66,6 +66,14 @@ class $modify(GB7KeyHandler, CCKeyboardDispatcher) {
                     ui->shown = true;
                     ui->anim.opening = true;
                     ui->anim.openProgress = 0.f;
+                    // Nigel's ask (2026-09-05): the startup notification is
+                    // easy to miss if you weren't looking right when the
+                    // game launched -- re-show it every time someone
+                    // actually tries to open the menu while ToastyReplay
+                    // Lite is still missing, not just once at launch.
+                    if (gb->ttrRequirementMissing) {
+                        GucciEngine::showTtrMissingNotification();
+                    }
                 } else {
                     ui->anim.closing = true;
                     ui->anim.opening = false;
