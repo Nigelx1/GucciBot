@@ -1,14 +1,10 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                     \
-    "2026-09-06-k (Credits reconciled across about.md, README, in-game Credits tab, and the " \
-    "site -- same people, same order everywhere: guccimanefan, Claude, Juice, anticroom, "    \
-    "peony, ToastexGD, GWDdoS, Bogdaner09, Gucci Mane. Nigel's own line now says creator/"    \
-    "owner/final-call instead of a flat feature list. ToastexGD's credit says he's the "      \
-    "actual foundation GucciBot started as pre-Silicate, not just 'renderer'. kepe dropped "  \
-    "(no code taken, no personal involvement -- the yBot benchmark fact stays in the GBR6 "   \
-    "format description, just not as a personal credit). Bogdaner09's line notes Click "      \
-    "Indicators was vibecoded by his own admission. Text only, no logic change.)"
+    "2026-09-06-l (Version bump to 1.6.2. Also fixed two spots on the site that wrongly "     \
+    "credited Nigel with writing the fake Gucci Mane quotes -- his own credit card and the "  \
+    "legal disclaimer's 'written by the developer' line, both now correctly say Claude.ai. "  \
+    "Text only, no logic change.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
