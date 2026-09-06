@@ -1,20 +1,15 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                             \
-    "2026-09-05-c (Two things. (1) Nigel's actual ask: the TTR-missing notification now re-fires "   \
-    "every time the menu keybind is pressed while TTR is still missing, not just once at startup "   \
-    "-- easy to miss the launch-time one. Notification text deduped into a single "                  \
-    "GucciEngine::showTtrMissingNotification() called from both initialize() and the keybind "       \
-    "handler instead of copy-pasted. (2) A separate, independently-found gap, NOT confirmed as "      \
-    "what Nigel actually saw (he'd only tested that the menu opens, not real bot function) -- six "  \
-    "raw hook functions in engine_updater.cpp (physDtMidhook, physStepCountMidhook, "                \
-    "restorePhysDtMidhook, earlyUpdateMidhook, frameUpdateMidhook, actionMgrHook) never checked "     \
-    "GucciEngine::enabled at all, since they're raw SafetyHook midhooks / a direct "                 \
-    "CCActionManager::update replacement, architecturally separate from the "                        \
-    "GB7CCScheduler/GB7CCDirector path that already respected it. Harmless while enabled was "        \
-    "always force-true; the new TTR gate is the first time enabled=false can persist for a real "     \
-    "session, so this needs real in-game testing with TTR removed to confirm it was worth fixing. "   \
-    "Still v1.5.2, no version bump. Compiles clean, UNTESTED in-game.)"
+    "2026-09-06-a (Nigel caught two real problems in -c. (1) The TTR-missing message was still "     \
+    "one long cut-off line -- the toast Notification widget doesn't wrap, it's built for one "        \
+    "short line like every other Notification::create in this codebase, not a paragraph. Switched "  \
+    "showTtrMissingNotification() to createQuickPopup (a real FLAlertLayer dialog, single 'Got It' "  \
+    "button) which wraps properly. (2) The menu was still opening underneath the popup when TTR "     \
+    "was missing, defeating the point of 'standing down' -- the menu keybind now just re-shows the "  \
+    "popup and returns without opening the menu at all while TTR is missing. Still v1.5.2, no "       \
+    "version bump. Compiles clean, UNTESTED in-game. The six engine_updater.cpp enabled-guards from "  \
+    "-c are also still unconfirmed in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

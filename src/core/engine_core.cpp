@@ -1909,13 +1909,19 @@ namespace gucci {
     }
 
     void GucciEngine::showTtrMissingNotification() {
-        Notification::create(
-            "GucciBot is standing down. ToastexGD only blessed this mod's release on one "
-            "condition -- ToastyReplay Lite installed, no exceptions (disabled is fine, "
-            "gone is not). Go get it from the mod index, restart, and GucciBot rides again.",
-            NotificationIcon::Warning,
-            8.f)
-            ->show();
+        // Nigel caught (2026-09-06): the toast Notification widget doesn't
+        // wrap -- it's built for one short line (see every other
+        // Notification::create in this codebase), and this message is a
+        // paragraph, so it was rendering as one cut-off line. Switched to
+        // createQuickPopup (a real FLAlertLayer dialog), which wraps long
+        // text properly and is what Geode's own long-message popups use.
+        createQuickPopup(
+            "GucciBot Is Standing Down",
+            "<cy>ToastexGD</c> only blessed this mod's release on <cr>one condition</c>: "
+            "<co>ToastyReplay Lite</c> has to be installed, no exceptions (disabled is fine, "
+            "gone is not). Grab it from the mod index, restart, and GucciBot rides again.",
+            "Got It", nullptr,
+            [](auto, bool) {});
     }
 
     void GucciEngine::initialize() {
