@@ -377,22 +377,58 @@ namespace gucci {
 
         if (died) {
             if (confirming) {
-                log::info("[Pathfinder] confirmation run FAILED -- died again @f={} x={:.1f} on a "
-                          "genuine frame-0 replay of the exact committed macro. The search's chained-"
-                          "checkpoint result was not reproducible end to end -- checkpoint-restore "
-                          "fidelity is the real bug here, not frame numbering. Discarding the result "
-                          "rather than shipping something that won't play back.",
+                // A real test round (2026-09-06, builds -t/-u/-v) proved the
+                // checkpoint-chained search can commit a candidate that a
+                // genuine continuous replay of the SAME macro doesn't
+                // survive -- confirmed via direct field comparison to be a
+                // real one-frame X-position drift the restore chain
+                // silently accumulates, not a click-registration or frame-
+                // numbering bug. Rather than discard the whole search on a
+                // confirmation failure (throwing away 500 runs' worth of
+                // real progress) or chase the exact native-engine cause of
+                // the drift, treat the failure as real, trustworthy ground
+                // truth: this run IS a genuine continuous replay, so its
+                // own death is the actual truth the checkpoint chain got
+                // wrong. Keep whatever committed prefix survives past it,
+                // drop the rest, and reopen the search from HERE -- using
+                // the ring checkpoints this very run just took (see the
+                // takeRingCheckpoint call below, now unconditional) as the
+                // new, trustworthy restore basis going forward.
+                size_t before = committed.size();
+                committed.erase(std::remove_if(committed.begin(),
+                                                committed.end(),
+                                                [this](const gb::Action& a) {
+                                                    return a.m_frame >= deathFrame;
+                                                }),
+                                 committed.end());
+                log::info("[Pathfinder] confirmation FAILED -- a genuine frame-0 replay of the "
+                          "committed macro died @f={} x={:.1f} instead of reaching the end. Dropped "
+                          "{} of {} committed inputs that didn't survive a clean run and reopening "
+                          "the search from this real death instead of shipping something unproven.",
                           deathFrame,
-                          deathX);
-                finish(false);
-                stage = "confirm-failed";
+                          deathX,
+                          before - committed.size(),
+                          before);
+                confirming = false;
+                for (auto& n : stack)
+                    releaseStoredFrame(n.ckpt);
+                stack.clear();
+                depth = 0;
+                stage = fmt::format("confirmation didn't hold up @f={} -- resuming search", deathFrame);
+                buildNodeFromDeath(deathFrame);
+                startNextCandidateOrBacktrack();
                 return;
             }
             handleDeath();
             return;
         }
 
-        if (!confirming && checkpointInterval > 0 && f > 0 && (f % (uint32_t)checkpointInterval) == 0)
+        // Unconditional now (previously skipped during confirm): a
+        // confirmation run needs its own rolling checkpoints too, so that
+        // if it fails, the search reopening above has a genuinely trustworthy
+        // restore point close to the real failure instead of only a cold
+        // full reset.
+        if (checkpointInterval > 0 && f > 0 && (f % (uint32_t)checkpointInterval) == 0)
             takeRingCheckpoint(f);
     }
 

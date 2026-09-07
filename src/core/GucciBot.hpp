@@ -1,21 +1,21 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                     \
-    "2026-09-06-v (Same result on -u: confirmation still died @f=161. But CAP-IN logging "     \
-    "proves the click DOES fire this time, at exactly the validated frame -- so the -u fix "   \
-    "was real, it just wasn't the whole story. Ruled out a moving/animated hazard at the "     \
-    "death spot (Nigel confirmed it's static). That leaves the search's own architecture: "    \
-    "every decision point is validated by restoring a checkpoint and continuing, never a "     \
-    "genuine continuous run -- so a click validated that way can rely on the checkpoint's "    \
-    "restored state being identical to what continuous play actually has there, and there's "  \
-    "no proof it is, even with RNG fixed and an exhaustive field-for-field player snapshot. "  \
-    "Rather than guess which of ~250 captured fields might be the gap, added targeted "        \
-    "instrumentation: [PF-CKPT-SAVE] logs player state the instant a rolling checkpoint is "   \
-    "captured, [PF-CKPT-LOAD] logs it the instant that same checkpoint is restored, and "       \
-    "[PF-CONFIRM] traces the confirmation run's own genuine continuous trajectory frame by "   \
-    "frame. Diffing all three at the same frame number will show exactly where -- capture, "   \
-    "restore, or neither -- the divergence actually originates. Compiles clean, no behavior "  \
-    "change, diagnostic only.)"
+    "2026-09-06-w (Diffed [PF-CKPT-SAVE]/[PF-CKPT-LOAD]/[PF-CONFIRM] at matching frames: Y, "  \
+    "velocity and rotation match EXACTLY between the search's checkpoint-chained branch and "  \
+    "a genuine continuous replay, every single time -- but X is consistently off by exactly "  \
+    "one frame's worth (181.710 vs 182.757 @f=160, same pattern @f=152/168/etc), on every "    \
+    "checkpoint the search's own winning branch took. The restore chain silently accumulates "\
+    "a real one-frame X-drift that compounds across decision points and only ever surfaces "  \
+    "at the very end. Rather than chase the exact native-engine cause of that drift, made "    \
+    "confirmation failure PRODUCTIVE instead of a dead end: a failed confirmation run IS a "   \
+    "genuine continuous replay, so its own death is real, trustworthy ground truth. On "       \
+    "failure, keep whatever committed prefix survives past that point, drop the rest, and "    \
+    "reopen the search from there using ring checkpoints the confirmation run itself just "    \
+    "took (checkpoint-taking during confirm is no longer skipped) -- instead of discarding "  \
+    "500 runs of real progress and reporting 'didn't hold up.' Loops naturally: complete -> "  \
+    "confirm -> ship it, or reopen and try again, bounded by the existing max-runs cap. "      \
+    "Compiles clean.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

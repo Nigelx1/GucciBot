@@ -4369,15 +4369,6 @@ namespace gucci {
                 ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
                 ImGui::TextWrapped("Go to the Macro tab to name and save it, or hit Playback to watch it.");
                 ImGui::PopStyleColor();
-            } else if (pf->stage == "confirm-failed") {
-                Widgets::StatusBadge("DIDN'T HOLD UP", ImVec4(1.f, 0.5f, 0.3f, 1.f));
-                ImGui::SameLine();
-                ImGui::Text("best %.1f%% after %d runs", pf->bestPct, pf->runs);
-                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-                ImGui::TextWrapped("Found a path, but it failed a clean re-run before handoff, so your "
-                                   "previous macro was left untouched instead of shipping something "
-                                   "broken. Try again -- it may find a more solid route.");
-                ImGui::PopStyleColor();
             } else {
                 Widgets::StatusBadge(pf->stage == "cancelled" ? "CANCELLED" : "GAVE UP",
                                      ImVec4(1.f, 0.5f, 0.3f, 1.f));
