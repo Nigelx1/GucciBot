@@ -8917,6 +8917,12 @@ namespace gucci {
         ImGui::End();
     }
 
+    // Full-screen opaque cover while Pathfinder runs -- Nigel's ask: don't
+    // show the search chewing through the level ("surprises are cool"),
+    // just "Calculating..." and the best % reached until a macro exists,
+    // like camila314's mod does. Drawn BEFORE the menu (see the draw
+    // lambda) with NoBringToFrontOnFocus so the menu can still open on
+    // top of it. The game keeps running underneath; only the view is hidden.
     void displayPathfinderHUD() {
         auto* ui = MenuInterface::get();
         auto* pf = Pathfinder::get();
@@ -8924,29 +8930,67 @@ namespace gucci {
             return;
 
         auto* vp = ImGui::GetMainViewport();
-        ImGui::SetNextWindowPos(
-            ImVec2(vp->Pos.x + vp->Size.x - 10, vp->Pos.y + 10), ImGuiCond_Always, ImVec2(1, 0));
-        ImGui::SetNextWindowSize(ImVec2(0, 0), ImGuiCond_Always);
-        ImGui::SetNextWindowBgAlpha(0.75f);
-        ImGui::Begin("##pathfinderHud",
+        ImGui::SetNextWindowPos(vp->Pos, ImGuiCond_Always);
+        ImGui::SetNextWindowSize(vp->Size, ImGuiCond_Always);
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.02f, 0.02f, 0.02f, 1.f));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.f);
+        ImGui::Begin("##pathfinderCover",
                      nullptr,
-                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
-                         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
-                         ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoBringToFrontOnFocus);
-        if (ui->fontBody)
-            ImGui::PushFont(ui->fontBody);
-        float pulse = 0.55f + 0.45f * std::sin((float)ImGui::GetTime() * 4.f);
+                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                         ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings |
+                         ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
+                         ImGuiWindowFlags_NoBringToFrontOnFocus);
+
         ImVec4 accent = ui->theme.getAccent();
-        ImGui::TextColored(ImVec4(accent.x, accent.y, accent.z, pulse), "Pathfinding...");
-        if (ui->fontBody)
-            ImGui::PopFont();
-        ImGui::PushStyleColor(ImGuiCol_Text, ui->theme.textSecondary);
-        ImGui::Text("best %.1f%%  |  run %d  |  depth %zu", pf->bestPct, pf->runs, pf->depth);
-        ImGui::Text("%s", pf->stage.c_str());
+        float pulse = 0.6f + 0.4f * std::sin((float)ImGui::GetTime() * 3.f);
+        float cx = vp->Size.x * 0.5f;
+        float cy = vp->Size.y * 0.5f;
+
+        auto centered = [&](const char* text, float y) {
+            ImVec2 sz = ImGui::CalcTextSize(text);
+            ImGui::SetCursorPos(ImVec2(cx - sz.x * 0.5f, y));
+            ImGui::TextUnformatted(text);
+        };
+
+        if (ui->fontHeading)
+            ImGui::PushFont(ui->fontHeading);
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(accent.x, accent.y, accent.z, pulse));
+        centered("Calculating...", cy - 70.f);
         ImGui::PopStyleColor();
-        if (Widgets::StyledButton("Cancel", ImVec2(-1, 24), ui->theme, ui->anim, 4.f))
+        char pct[32];
+        snprintf(pct, sizeof(pct), "%.1f%%", pf->bestPct);
+        ImGui::PushStyleColor(ImGuiCol_Text, ui->theme.textPrimary);
+        centered(pct, cy - 28.f);
+        ImGui::PopStyleColor();
+        if (ui->fontHeading)
+            ImGui::PopFont();
+
+        float barW = 320.f;
+        ImGui::SetCursorPos(ImVec2(cx - barW * 0.5f, cy + 14.f));
+        ImGui::PushStyleColor(ImGuiCol_PlotHistogram, accent);
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(1.f, 1.f, 1.f, 0.06f));
+        ImGui::ProgressBar(std::clamp(pf->bestPct / 100.f, 0.f, 1.f), ImVec2(barW, 6.f), "");
+        ImGui::PopStyleColor(2);
+
+        if (ui->fontSmall)
+            ImGui::PushFont(ui->fontSmall);
+        ImGui::PushStyleColor(ImGuiCol_Text, ui->theme.textSecondary);
+        char sub[64];
+        snprintf(sub, sizeof(sub), "best percentage reached  |  run %d", pf->runs);
+        centered(sub, cy + 30.f);
+        ImGui::PopStyleColor();
+        if (ui->fontSmall)
+            ImGui::PopFont();
+
+        float btnW = 160.f;
+        ImGui::SetCursorPos(ImVec2(cx - btnW * 0.5f, cy + 64.f));
+        if (Widgets::StyledButton("Cancel", ImVec2(btnW, 26), ui->theme, ui->anim, 4.f))
             pf->cancel();
+
         ImGui::End();
+        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor();
     }
 
     void displayFwLegendHUD() {
@@ -9142,11 +9186,12 @@ namespace gucci {
             })
             .draw([] {
                 auto* ui = MenuInterface::get();
+                // Cover goes first so the menu (drawn next) stacks above it.
+                displayPathfinderHUD();
                 ui->drawInterface();
                 displayOverlayBranding();
                 displayRenderHUD();
                 displayCalculatingHUD();
-                displayPathfinderHUD();
                 displayFwLegendHUD();
                 displayGameplayHUD();
                 displayAccuracyHUD();

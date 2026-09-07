@@ -1,18 +1,12 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                     \
-    "2026-09-06-n (PATHFINDER v1 -- first real build. New tab (before Credits). Death-"        \
-    "driven search: runs the real game with no input until GD kills the player at frame D, "   \
-    "then tries presses (tap + 5 hold lengths, nearest-to-D first) in a window before D, "     \
-    "commits whichever gets further, backtracks through real checkpoints (DFS, never "         \
-    "re-tries a failed candidate at the same decision point) when a branch dead-ends. No "     \
-    "physics reimplemented, no level geometry parsed: input goes through the ordinary "        \
-    "macro-playback path, survival is whatever destroyPlayer says. Reuses fwAnalyzing as "     \
-    "the headless-sim flag on purpose (fwState stays Idle). Result loads as the current "      \
-    "macro on success; previous macro restored on cancel/give-up. v1 limits: player 1 "        \
-    "only, strictly sequential non-overlapping inputs, no speed-up (grinds at normal "         \
-    "rate). Compiles clean, UNTESTED in-game -- expect rough edges, this is the first "        \
-    "time this codebase has ever searched for input instead of verifying it.)"
+    "2026-09-06-o (Pathfinder: full-screen cover while searching -- Nigel: don't show the "    \
+    "search chewing through the level, surprises are cool. Opaque cover with just "            \
+    "Calculating..., the best % reached, a thin bar, run count, Cancel -- like camila314's "   \
+    "mod. Drawn before the menu with NoBringToFrontOnFocus so the menu still opens on top. "   \
+    "Game keeps running underneath, only the view is hidden. GUI only, no search change. "     \
+    "Compiles clean, UNTESTED in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
