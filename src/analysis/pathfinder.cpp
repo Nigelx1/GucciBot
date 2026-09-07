@@ -198,7 +198,6 @@ namespace gucci {
     }
 
     void Pathfinder::startConfirmRun() {
-        auto* gb = GucciEngine::get();
         auto* pl = PlayLayer::get();
         if (!pl) {
             // Can't run a confirmation without a level to run it in -- ship
@@ -209,38 +208,26 @@ namespace gucci {
         }
 
         confirming = true;
-        died = false;
-        completed = false;
-        runFrames = 0;
         bestX = 0.f;
         bestFrame = 0;
         bestPct = 0.f;
-        gb->fwProbeDied = false;
         stage = "confirming the solution with a clean run";
 
-        releaseRing();
-        auto& pf = gb->practiceFix;
-        pf.m_savedCheckpoints.clear();
-        pf.m_brokenObjects.clear();
-        pf.m_storedFrames.clear();
-        pf.m_loadCheckpoint = false;
-        pf.m_isBackstep = false;
-
-        gb->updater.m_fullReset = true;
-        pl->resetLevel();
-        gb->updater.m_fullReset = false;
-        gb->updater.resetFrame();
-
-        // The raw (still un-shifted) committed frames -- fwAnalyzing stays
-        // true through this run, so this is the exact same frame-lookup
-        // convention the search validated every one of these under.
-        auto& acts = gb->replay.m_actionAtom.m_actions;
-        acts = committed;
-        std::stable_sort(acts.begin(), acts.end(), [](const gb::Action& a, const gb::Action& b) {
-            return a.m_frame < b.m_frame;
-        });
-        gb->replay.m_inputIndex = 0;
-        gb->mode = GucciEngine::Mode::Playing;
+        // Delegate to the exact same cold-start path the search's own first
+        // probe already uses (startRun(nullptr)), on purpose -- NOT a hand-
+        // rolled duplicate. A real test proved why that matters: this
+        // function used to set gb->replay.m_actionAtom itself AFTER calling
+        // pl->resetLevel(), whereas applyAtom() (which startRun() always
+        // calls first) sets it BEFORE resetLevel() -- and the confirmation
+        // run registered exactly zero clicks as a result (Nigel: "it seemed
+        // to not even attempt a click"), because whatever resetLevel()'s
+        // hook does with the current action-atom state at the moment it
+        // runs, doing it against an empty atom breaks input consumption for
+        // the rest of that run even after the atom is filled in afterward.
+        // `committed` already holds the full solution and haveCandidate is
+        // false by this point, so applyAtom() inside startRun() loads
+        // exactly what we want.
+        startRun(nullptr);
     }
 
     void Pathfinder::takeRingCheckpoint(uint32_t frame) {

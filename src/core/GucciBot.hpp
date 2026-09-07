@@ -1,21 +1,18 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                     \
-    "2026-09-06-t (Nigel: 'I see it trying to click but it's 1 frame too late.' Pulled the "   \
-    "log myself -- the click DOES fire now (a real jump, g=0/ys negative/rot spinning from "   \
-    "f=150 on), and the search itself logged this exact press as a huge win during the "       \
-    "search ('press@149 got from f=161 to f=248'). But real playback still dies at f=161 "     \
-    "regardless -- the same frame as zero input. A frame-numbering bug can't explain a click "  \
-    "that fires at the validated frame and still fails by that much. Real cause: DFS 'success' "\
-    "is a CHAIN of checkpoint-restore-and-continue segments, never one continuous frame-0 "     \
-    "run -- so a chain reaching LEVEL COMPLETE was never actually proof it holds up end to "    \
-    "end. Added a mandatory confirmation pass: before handing off a solution, replay the "      \
-    "whole committed macro from a genuine cold reset (still under fwAnalyzing, so the exact "  \
-    "same frame convention it was built under) and require THAT to independently reach LEVEL " \
-    "COMPLETE too, discarding the result with a clear 'didn't hold up' status instead of "      \
-    "shipping it if it doesn't. This will either ship a macro that's actually been proven "     \
-    "end-to-end, or tell us for certain that checkpoint-restore fidelity (not frame math) is "  \
-    "the real bug still to fix. Compiles clean.)"
+    "2026-09-06-u (Nigel on the confirmation-pass build: 'says didnt hold up but it seemed "   \
+    "to not even attempt a click.' Pulled the log -- confirmed literally: the confirm run "    \
+    "died @f=161, the exact zero-input baseline frame, same as before the search ever ran. "   \
+    "Root cause was in the confirmation pass itself, not checkpoint fidelity: every existing " \
+    "startRun() populates gb->replay.m_actionAtom via applyAtom() BEFORE calling "              \
+    "pl->resetLevel() -- startConfirmRun() did it the other way around, setting the atom "     \
+    "AFTER resetLevel() ran. Whatever resetLevel()'s hook does with the action-atom's state "  \
+    "at the moment it fires, doing it against an empty atom broke input consumption for the "  \
+    "rest of that run even once the atom got filled in a moment later. Fix: "                  \
+    "startConfirmRun() now just delegates straight to startRun(nullptr), the exact same "      \
+    "cold-start path the search's own first probe already uses, instead of a hand-rolled "     \
+    "near-duplicate with a subtly different order. Compiles clean.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
