@@ -1,10 +1,19 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                     \
-    "2026-09-06-l (Version bump to 1.6.2. Also fixed two spots on the site that wrongly "     \
-    "credited Nigel with writing the fake Gucci Mane quotes -- his own credit card and the "  \
-    "legal disclaimer's 'written by the developer' line, both now correctly say Claude.ai. "  \
-    "Text only, no logic change.)"
+    "2026-09-06-m (Pathfinder prep, step 1: fixed a real per-checkpoint RNG gap found "        \
+    "during design research -- GD's fast-rand global only ever got rewound to the "           \
+    "attempt-START value on every reset (updateRandomSeedOnReset, hook_playlayer.cpp), "      \
+    "never to the value it actually had AT a given checkpoint's frame. Harmless for "         \
+    "Calculate (always replays the same fixed macro the same way) but a real desync risk "    \
+    "for anything that restores the same checkpoint from many different branches, on any "    \
+    "level with RNG-driven physics-relevant objects between attempt-start and that "          \
+    "checkpoint. SavedCheckpointState now captures/restores this value "                      \
+    "(GucciBot.hpp/engine_core.cpp) -- this is a real bugfix for existing Calculate/"          \
+    "backstepping too, not just prep work. Compiles clean, UNTESTED in-game -- this is "      \
+    "genuinely hard to observe without a level built specifically to expose it, so a clean "  \
+    "playtest won't prove it's right; flagging that honestly rather than claiming false "      \
+    "confidence.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -65,6 +74,19 @@ namespace gucci {
         GJGameState m_gameState;
 
         std::vector<GameObject*> m_brokenObjects;
+
+        // GD's own fast-rand global (see hook_playlayer.cpp's
+        // updateRandomSeedOnReset, address 0x6c2e90) only used to get
+        // rewound to the value it had at the START OF THE ATTEMPT on every
+        // reset, never to the value it actually had at a given checkpoint's
+        // frame. Harmless for Calculate, which always replays the same
+        // fixed macro the same way every time -- a real problem for a
+        // future search-based feature (Pathfinder) that restores the SAME
+        // checkpoint from many different explored branches, since any
+        // RNG-consuming, physics-relevant object (e.g. a Random trigger)
+        // between attempt-start and the checkpoint would desync downstream
+        // otherwise. Captured/restored alongside everything else here.
+        uint64_t m_rngState = 0;
     };
 
     struct StoredFrame {

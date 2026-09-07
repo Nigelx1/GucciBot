@@ -64,6 +64,11 @@ namespace gucci {
 
         state.m_brokenObjects = m_brokenObjects;
 
+        // Same GD fast-rand global updateRandomSeedOnReset() rewinds on
+        // every reset -- see the comment on SavedCheckpointState::m_rngState
+        // for why this needs to be captured per-checkpoint now.
+        state.m_rngState = *reinterpret_cast<uint64_t*>(geode::base::get() + 0x6c2e90);
+
         m_savedCheckpoints.push_back(state);
 
         StoredFrame sf;
@@ -118,6 +123,12 @@ namespace gucci {
             obj->m_isDisabled2 = true;
             obj->setOpacity(0.f);
         }
+
+        // Runs after updateRandomSeedOnReset() (hook_playlayer.cpp) has
+        // already rewound this to the attempt-start value earlier in the
+        // same resetLevel() call -- restoring the checkpoint's own captured
+        // value here is what actually fixes the per-checkpoint RNG gap.
+        *reinterpret_cast<uint64_t*>(geode::base::get() + 0x6c2e90) = state.m_rngState;
     }
 
     void GucciPracticeFix::dropLastStoredFrame() {
