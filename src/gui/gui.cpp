@@ -2,6 +2,7 @@
 #include "core/GucciBot.hpp"
 #include "audio/clicksounds.hpp"
 #include "hacks/autoclicker.hpp"
+#include "analysis/pathfinder.hpp"
 #include "trainers/calibration.hpp"
 #include "audio/bigbrrr.hpp"
 #include "trainers/jupiterghost.hpp"
@@ -1997,6 +1998,7 @@ namespace gucci {
                                "Trainer",
                                "HUD",
                                "Settings",
+                               "Pathfinder",
                                "Credits"};
         const int N = 10;
         float tabW = width / N, tabH = 34.f;
@@ -2263,6 +2265,9 @@ namespace gucci {
             drawSettingsTab();
             break;
         case 9:
+            drawPathfinderTab();
+            break;
+        case 10:
             drawCreditsTab();
             break;
         }
@@ -2472,6 +2477,7 @@ namespace gucci {
                                "Trainer",
                                "HUD",
                                "Settings",
+                               "Pathfinder",
                                "Credits"};
         float rowH = 34.f, railTop = headH + 10.f;
         for (int i = 0; i < 10; i++) {
@@ -4265,6 +4271,103 @@ namespace gucci {
     }
     static void importFwAssetFolder() {
         s_fwAssetFolderTask = importFwAssetFolderTask();
+    }
+
+    void MenuInterface::drawPathfinderTab() {
+        auto* pf = Pathfinder::get();
+        auto* engine = GucciEngine::get();
+        Widgets::GucciQuote("\"I don't find the path. The path finds me. Then I take it anyway.\"",
+                            "-- Gucci Mane, probably",
+                            theme);
+        ImGui::Dummy(ImVec2(0, 4));
+        ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+        ImGui::TextWrapped(
+            "Searches for a click sequence that beats this level with no macro to start from. "
+            "Runs the real game forward with no input until it dies, then works backward from "
+            "that death for a press (and hold length) that gets further, backtracking through "
+            "real checkpoints when a branch dead-ends. Nothing is simulated separately -- "
+            "survival is whatever GD itself says. v1: player 1 only, one press at a time. Let "
+            "it grind; when it finishes, the result is loaded as the current macro -- go to the "
+            "Macro tab to name and save it.");
+        ImGui::PopStyleColor();
+        ImGui::Dummy(ImVec2(0, 8));
+
+        Widgets::SectionHeader("Search", theme);
+        bool locked = pf->active;
+        if (locked)
+            ImGui::BeginDisabled();
+        if (Widgets::StyledSliderInt("Window (frames back from death)", &pf->windowFrames, 5, 240, theme))
+            pf->saveSettings();
+        ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+        ImGui::TextWrapped("How far before each death it looks for the click that was needed. Bigger "
+                           "finds longer-lead jumps but costs more per decision point.");
+        ImGui::PopStyleColor();
+        if (Widgets::StyledSliderInt("Checkpoint every N frames", &pf->checkpointInterval, 1, 60, theme))
+            pf->saveSettings();
+        if (Widgets::StyledSliderInt("Max runs", &pf->maxRuns, 100, 200000, theme))
+            pf->saveSettings();
+        if (locked)
+            ImGui::EndDisabled();
+        ImGui::Dummy(ImVec2(0, 8));
+
+        bool inLevel = PlayLayer::get() != nullptr;
+        if (!pf->active) {
+            if (!inLevel)
+                ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.4f);
+            bool clicked = Widgets::StyledButton("Start Pathfinder", ImVec2(-1, 30), theme, anim, 6.f);
+            if (!inLevel)
+                ImGui::PopStyleVar();
+            if (clicked && inLevel)
+                pf->begin();
+            if (!inLevel) {
+                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                ImGui::TextWrapped("Enter the level to start.");
+                ImGui::PopStyleColor();
+            }
+        } else {
+            if (Widgets::StyledButton("Cancel", ImVec2(-1, 30), theme, anim, 6.f))
+                pf->cancel();
+        }
+
+        ImGui::Dummy(ImVec2(0, 8));
+        Widgets::SectionHeader("Status", theme);
+        if (pf->active) {
+            Widgets::StatusBadge("SEARCHING", ImVec4(0.3f, 1.f, 0.4f, 1.f));
+            ImGui::SameLine();
+            ImGui::Text("%s", pf->stage.c_str());
+            ImGui::PushStyleColor(ImGuiCol_PlotHistogram, theme.getAccent());
+            char ov[64];
+            snprintf(ov, sizeof(ov), "best %.1f%%", pf->bestPct);
+            ImGui::ProgressBar(std::clamp(pf->bestPct / 100.f, 0.f, 1.f), ImVec2(-1, 18), ov);
+            ImGui::PopStyleColor();
+            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+            ImGui::Text("runs %d  |  depth %zu  |  best frame %u", pf->runs, pf->depth, pf->bestFrame);
+            ImGui::PopStyleColor();
+        } else if (pf->hasResult) {
+            if (pf->lastResultSuccess) {
+                Widgets::StatusBadge("SOLVED", ImVec4(0.3f, 1.f, 0.4f, 1.f));
+                ImGui::SameLine();
+                ImGui::Text("%zu inputs, %d runs -- loaded as the current macro", pf->resultInputCount, pf->runs);
+                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                ImGui::TextWrapped("Go to the Macro tab to name and save it, or hit Playback to watch it.");
+                ImGui::PopStyleColor();
+            } else {
+                Widgets::StatusBadge(pf->stage == "cancelled" ? "CANCELLED" : "GAVE UP",
+                                     ImVec4(1.f, 0.5f, 0.3f, 1.f));
+                ImGui::SameLine();
+                ImGui::Text("best %.1f%% after %d runs", pf->bestPct, pf->runs);
+                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                ImGui::TextWrapped("Your previous macro was left untouched. Try a bigger window if it kept "
+                                   "dying in the same spot -- the click it needed may be earlier than the "
+                                   "window reaches.");
+                ImGui::PopStyleColor();
+            }
+        } else {
+            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+            ImGui::TextWrapped("Nothing run yet.");
+            ImGui::PopStyleColor();
+        }
+        (void)engine;
     }
 
     void MenuInterface::drawFrameWindowsTab() {
@@ -8774,6 +8877,10 @@ namespace gucci {
         auto* engine = GucciEngine::get();
         if (!ui || !ui->setupComplete || !engine)
             return;
+        // Pathfinder reuses fwAnalyzing as its headless-sim flag -- it has
+        // its own HUD below, don't show "Calculating..." over it.
+        if (Pathfinder::get()->active)
+            return;
         if (!engine->fwAnalyzing)
             return;
 
@@ -8807,6 +8914,38 @@ namespace gucci {
         ImGui::PopStyleColor();
         if (Widgets::StyledButton("Cancel", ImVec2(-1, 24), ui->theme, ui->anim, 4.f))
             engine->cancelAnalysis();
+        ImGui::End();
+    }
+
+    void displayPathfinderHUD() {
+        auto* ui = MenuInterface::get();
+        auto* pf = Pathfinder::get();
+        if (!ui || !ui->setupComplete || !pf->active)
+            return;
+
+        auto* vp = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(
+            ImVec2(vp->Pos.x + vp->Size.x - 10, vp->Pos.y + 10), ImGuiCond_Always, ImVec2(1, 0));
+        ImGui::SetNextWindowSize(ImVec2(0, 0), ImGuiCond_Always);
+        ImGui::SetNextWindowBgAlpha(0.75f);
+        ImGui::Begin("##pathfinderHud",
+                     nullptr,
+                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+                         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
+                         ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoBringToFrontOnFocus);
+        if (ui->fontBody)
+            ImGui::PushFont(ui->fontBody);
+        float pulse = 0.55f + 0.45f * std::sin((float)ImGui::GetTime() * 4.f);
+        ImVec4 accent = ui->theme.getAccent();
+        ImGui::TextColored(ImVec4(accent.x, accent.y, accent.z, pulse), "Pathfinding...");
+        if (ui->fontBody)
+            ImGui::PopFont();
+        ImGui::PushStyleColor(ImGuiCol_Text, ui->theme.textSecondary);
+        ImGui::Text("best %.1f%%  |  run %d  |  depth %zu", pf->bestPct, pf->runs, pf->depth);
+        ImGui::Text("%s", pf->stage.c_str());
+        ImGui::PopStyleColor();
+        if (Widgets::StyledButton("Cancel", ImVec2(-1, 24), ui->theme, ui->anim, 4.f))
+            pf->cancel();
         ImGui::End();
     }
 
@@ -9007,6 +9146,7 @@ namespace gucci {
                 displayOverlayBranding();
                 displayRenderHUD();
                 displayCalculatingHUD();
+                displayPathfinderHUD();
                 displayFwLegendHUD();
                 displayGameplayHUD();
                 displayAccuracyHUD();

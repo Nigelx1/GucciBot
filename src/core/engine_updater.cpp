@@ -1,6 +1,7 @@
 #include "core/GucciBot.hpp"
 #include "hacks/autoclicker.hpp"
 #include "analysis/trajectory.hpp"
+#include "analysis/pathfinder.hpp"
 #include "hooks/util_midhook.hpp"
 #include "render/renderer.hpp"
 
@@ -541,6 +542,8 @@ static void frameUpdateMidhook(SafetyHookContext&) {
     gb->fwCkptCreatedThisFrame = false;
     if (gb->fwAnalyzing)
         gb->fwTick();
+    if (Pathfinder::get()->active)
+        Pathfinder::get()->tick();
 
     bool slRender = SLRenderer::get()->isRecording();
     if (gb->isPlaying() || slRender) {

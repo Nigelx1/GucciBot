@@ -1,19 +1,18 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                     \
-    "2026-09-06-m (Pathfinder prep, step 1: fixed a real per-checkpoint RNG gap found "        \
-    "during design research -- GD's fast-rand global only ever got rewound to the "           \
-    "attempt-START value on every reset (updateRandomSeedOnReset, hook_playlayer.cpp), "      \
-    "never to the value it actually had AT a given checkpoint's frame. Harmless for "         \
-    "Calculate (always replays the same fixed macro the same way) but a real desync risk "    \
-    "for anything that restores the same checkpoint from many different branches, on any "    \
-    "level with RNG-driven physics-relevant objects between attempt-start and that "          \
-    "checkpoint. SavedCheckpointState now captures/restores this value "                      \
-    "(GucciBot.hpp/engine_core.cpp) -- this is a real bugfix for existing Calculate/"          \
-    "backstepping too, not just prep work. Compiles clean, UNTESTED in-game -- this is "      \
-    "genuinely hard to observe without a level built specifically to expose it, so a clean "  \
-    "playtest won't prove it's right; flagging that honestly rather than claiming false "      \
-    "confidence.)"
+    "2026-09-06-n (PATHFINDER v1 -- first real build. New tab (before Credits). Death-"        \
+    "driven search: runs the real game with no input until GD kills the player at frame D, "   \
+    "then tries presses (tap + 5 hold lengths, nearest-to-D first) in a window before D, "     \
+    "commits whichever gets further, backtracks through real checkpoints (DFS, never "         \
+    "re-tries a failed candidate at the same decision point) when a branch dead-ends. No "     \
+    "physics reimplemented, no level geometry parsed: input goes through the ordinary "        \
+    "macro-playback path, survival is whatever destroyPlayer says. Reuses fwAnalyzing as "     \
+    "the headless-sim flag on purpose (fwState stays Idle). Result loads as the current "      \
+    "macro on success; previous macro restored on cancel/give-up. v1 limits: player 1 "        \
+    "only, strictly sequential non-overlapping inputs, no speed-up (grinds at normal "         \
+    "rate). Compiles clean, UNTESTED in-game -- expect rough edges, this is the first "        \
+    "time this codebase has ever searched for input instead of verifying it.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

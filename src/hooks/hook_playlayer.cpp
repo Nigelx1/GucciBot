@@ -1,6 +1,7 @@
 #include "core/GucciBot.hpp"
 #include "hacks/autoclicker.hpp"
 #include "analysis/trajectory.hpp"
+#include "analysis/pathfinder.hpp"
 #include "hacks/hitboxes.hpp"
 #include "trainers/jupiterghost.hpp"
 #include "trainers/trainerghost.hpp"
@@ -130,7 +131,9 @@ class $modify(GB7PlayLayer, PlayLayer) {
 
     void onQuit() {
         auto* gb = GucciEngine::get();
-        if (gb->fwAnalyzing)
+        if (Pathfinder::get()->active)
+            Pathfinder::get()->cancel();
+        else if (gb->fwAnalyzing)
             gb->cancelAnalysis();
         if (gb->renderer.recording)
             gb->renderer.stop(gb->updater.getFrame());
@@ -424,6 +427,15 @@ class $modify(GB7PlayLayer, PlayLayer) {
         auto* gb = GucciEngine::get();
         auto& upd = gb->updater;
 
+        if (Pathfinder::get()->active) {
+            // Same GD-native death signal Calculate relies on, minus the
+            // end-of-level anticheat spike -- native death path suppressed
+            // so the search keeps driving the same PlayLayer.
+            if (obj != m_anticheatSpike)
+                Pathfinder::get()->noteDeath(upd.getFrame(), player ? player->m_position.x : 0.f);
+            return;
+        }
+
         if (gb->fwAnalyzing) {
             if (obj != m_anticheatSpike) {
                 gb->fwProbeDied = true;
@@ -527,6 +539,10 @@ class $modify(GB7PlayLayer, PlayLayer) {
 
     void levelComplete() {
         auto* gb = GucciEngine::get();
+        if (Pathfinder::get()->active) {
+            Pathfinder::get()->noteLevelComplete();
+            return;
+        }
         if (gb->fwAnalyzing)
             return;
 
