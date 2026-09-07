@@ -1,18 +1,21 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                     \
-    "2026-09-06-u (Nigel on the confirmation-pass build: 'says didnt hold up but it seemed "   \
-    "to not even attempt a click.' Pulled the log -- confirmed literally: the confirm run "    \
-    "died @f=161, the exact zero-input baseline frame, same as before the search ever ran. "   \
-    "Root cause was in the confirmation pass itself, not checkpoint fidelity: every existing " \
-    "startRun() populates gb->replay.m_actionAtom via applyAtom() BEFORE calling "              \
-    "pl->resetLevel() -- startConfirmRun() did it the other way around, setting the atom "     \
-    "AFTER resetLevel() ran. Whatever resetLevel()'s hook does with the action-atom's state "  \
-    "at the moment it fires, doing it against an empty atom broke input consumption for the "  \
-    "rest of that run even once the atom got filled in a moment later. Fix: "                  \
-    "startConfirmRun() now just delegates straight to startRun(nullptr), the exact same "      \
-    "cold-start path the search's own first probe already uses, instead of a hand-rolled "     \
-    "near-duplicate with a subtly different order. Compiles clean.)"
+    "2026-09-06-v (Same result on -u: confirmation still died @f=161. But CAP-IN logging "     \
+    "proves the click DOES fire this time, at exactly the validated frame -- so the -u fix "   \
+    "was real, it just wasn't the whole story. Ruled out a moving/animated hazard at the "     \
+    "death spot (Nigel confirmed it's static). That leaves the search's own architecture: "    \
+    "every decision point is validated by restoring a checkpoint and continuing, never a "     \
+    "genuine continuous run -- so a click validated that way can rely on the checkpoint's "    \
+    "restored state being identical to what continuous play actually has there, and there's "  \
+    "no proof it is, even with RNG fixed and an exhaustive field-for-field player snapshot. "  \
+    "Rather than guess which of ~250 captured fields might be the gap, added targeted "        \
+    "instrumentation: [PF-CKPT-SAVE] logs player state the instant a rolling checkpoint is "   \
+    "captured, [PF-CKPT-LOAD] logs it the instant that same checkpoint is restored, and "       \
+    "[PF-CONFIRM] traces the confirmation run's own genuine continuous trajectory frame by "   \
+    "frame. Diffing all three at the same frame number will show exactly where -- capture, "   \
+    "restore, or neither -- the divergence actually originates. Compiles clean, no behavior "  \
+    "change, diagnostic only.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

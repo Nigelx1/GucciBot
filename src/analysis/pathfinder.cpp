@@ -194,6 +194,24 @@ namespace gucci {
             pl->resetLevel();
             pf.m_loadCheckpoint = false;
             pf.m_isBackstep = false;
+            // Diagnostic (build -v): dump the player's state the instant it
+            // comes out of a checkpoint restore, so it can be diffed against
+            // [PF-CKPT-SAVE] (state at the moment that same checkpoint was
+            // captured) and [PF-CONFIRM] (state a genuine continuous run
+            // reaches at the same frame) for the same frame number. If any
+            // of the three disagree, that's the checkpoint-restore fidelity
+            // gap the last two builds' evidence points at.
+            if (pl->m_player1) {
+                auto* p1 = pl->m_player1;
+                log::info("[PF-CKPT-LOAD] f={} x={:.3f} y={:.3f} xs={:.3f} ys={:.3f} rot={:.3f} g={}",
+                          gb->updater.getFrame(),
+                          (double)p1->m_position.x,
+                          (double)p1->m_position.y,
+                          (double)p1->m_playerSpeed,
+                          (double)p1->m_yVelocity,
+                          (double)p1->getRotation(),
+                          p1->m_isOnGround ? 1 : 0);
+            }
         }
     }
 
@@ -242,6 +260,20 @@ namespace gucci {
         gb->fwCkptCreatedThisFrame = true;
         auto& pf = gb->practiceFix;
         pf.saveState(cp, frame);
+        // Diagnostic (build -v): state as captured, to diff against
+        // [PF-CKPT-LOAD] (same checkpoint, right after being restored) and
+        // [PF-CONFIRM] (a genuine continuous run reaching this same frame).
+        if (pl->m_player1) {
+            auto* p1 = pl->m_player1;
+            log::info("[PF-CKPT-SAVE] f={} x={:.3f} y={:.3f} xs={:.3f} ys={:.3f} rot={:.3f} g={}",
+                      frame,
+                      (double)p1->m_position.x,
+                      (double)p1->m_position.y,
+                      (double)p1->m_playerSpeed,
+                      (double)p1->m_yVelocity,
+                      (double)p1->getRotation(),
+                      p1->m_isOnGround ? 1 : 0);
+        }
         StoredFrame sf;
         sf.frame = frame;
         if (!pf.m_storedFrames.empty()) {
@@ -304,6 +336,25 @@ namespace gucci {
         runFrames++;
         uint32_t f = gb->updater.getFrame();
         float x = pl->m_player1 ? pl->m_player1->m_position.x : 0.f;
+
+        // Diagnostic (build -v): full per-frame trace, but ONLY during the
+        // one-shot confirmation run -- this is the only place in Pathfinder
+        // with a genuine continuous trajectory to compare against the
+        // search's checkpoint-restored one ([PF-CKPT-SAVE]/[PF-CKPT-LOAD]).
+        // Doing this during the search itself would be ~500 runs' worth of
+        // spam for no reason; one run's worth here is not.
+        if (confirming && pl->m_player1) {
+            auto* p1 = pl->m_player1;
+            log::info("[PF-CONFIRM] f={} x={:.3f} y={:.3f} xs={:.3f} ys={:.3f} rot={:.3f} g={}",
+                      f,
+                      (double)p1->m_position.x,
+                      (double)p1->m_position.y,
+                      (double)p1->m_playerSpeed,
+                      (double)p1->m_yVelocity,
+                      (double)p1->getRotation(),
+                      p1->m_isOnGround ? 1 : 0);
+        }
+
         if (x > bestX) {
             bestX = x;
             bestFrame = f;
