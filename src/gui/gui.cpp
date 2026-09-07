@@ -4305,6 +4305,14 @@ namespace gucci {
         ImGui::PopStyleColor();
         if (Widgets::StyledSliderInt("Checkpoint every N frames", &pf->checkpointInterval, 1, 60, theme))
             pf->saveSettings();
+        if (Widgets::StyledSliderInt("Min progress to count (frames)", &pf->minProgressFrames, 1, 60, theme))
+            pf->saveSettings();
+        ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+        ImGui::TextWrapped("How much further a click has to survive before it counts as real progress, "
+                           "instead of just delaying the same death by a frame or two. Too low and it "
+                           "can get stuck accepting non-answers; too high and it may reject a genuinely "
+                           "tight escape.");
+        ImGui::PopStyleColor();
         if (Widgets::StyledSliderInt("Max runs", &pf->maxRuns, 100, 200000, theme))
             pf->saveSettings();
         if (locked)

@@ -25,9 +25,11 @@ namespace gucci {
         checkpointInterval = (int)mod->getSavedValue<int64_t>("pf_ckpt_interval", 8);
         maxRuns = (int)mod->getSavedValue<int64_t>("pf_max_runs", 20000);
         hideSearch = mod->getSavedValue<bool>("pf_hide_search", true);
+        minProgressFrames = (int)mod->getSavedValue<int64_t>("pf_min_progress", 8);
         windowFrames = std::clamp(windowFrames, 5, 240);
         checkpointInterval = std::clamp(checkpointInterval, 1, 60);
         maxRuns = std::clamp(maxRuns, 100, 1000000);
+        minProgressFrames = std::clamp(minProgressFrames, 1, 60);
     }
 
     void Pathfinder::saveSettings() const {
@@ -36,6 +38,7 @@ namespace gucci {
         mod->setSavedValue("pf_ckpt_interval", (int64_t)checkpointInterval);
         mod->setSavedValue("pf_max_runs", (int64_t)maxRuns);
         mod->setSavedValue("pf_hide_search", hideSearch);
+        mod->setSavedValue("pf_min_progress", (int64_t)minProgressFrames);
     }
 
     void Pathfinder::releaseStoredFrame(StoredFrame& sf) {
@@ -261,7 +264,12 @@ namespace gucci {
         if (x > bestX) {
             bestX = x;
             bestFrame = f;
-            bestPct = gb->m_levelLength > 0.f ? std::min(100.f, x / gb->m_levelLength * 100.f)
+            // pl->m_levelLength directly, NOT the cached gb->m_levelLength --
+            // confirmed via a real test run that the cache reads 0 even mid-
+            // level (GB7PlayLayer::init() captures it too early, before GD
+            // finishes computing it). destroyPlayer's own [CAP-DIE] log line
+            // already reads the live field this same way; follow that.
+            bestPct = pl->m_levelLength > 0.f ? std::min(100.f, x / pl->m_levelLength * 100.f)
                                               : 0.f;
         }
 
@@ -294,9 +302,18 @@ namespace gucci {
         }
 
         Node& top = stack.back();
-        if (d > top.deathFrame) {
-            // Progress: this candidate got further than the death that
-            // created its decision point. Commit it, open a new one.
+        // Real test run (2026-09-06) exposed a trap here: accepting ANY
+        // single extra frame as "progress" lets the search commit a
+        // candidate that only delays death by the hold-length difference --
+        // same hazard, hit one frame later, x unchanged -- which then opens
+        // a decision point whose window is immediately empty (lastCommitted
+        // sits right up against the new death frame), forcing an instant
+        // backtrack. The whole run thrashed on exactly that instead of
+        // searching for a real escape. Requiring a real minimum gain forces
+        // rejected-as-failure instead of falsely-accepted-as-progress.
+        if (d >= top.deathFrame + (uint32_t)std::max(1, minProgressFrames)) {
+            // Progress: this candidate got meaningfully further than the
+            // death that created its decision point. Commit it, open a new one.
             gb::Action press;
             press.m_frame = cur.pressFrame;
             press.m_type = gb::ActionType::Jump;

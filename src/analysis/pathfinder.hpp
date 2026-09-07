@@ -42,6 +42,12 @@ namespace gucci {
         int checkpointInterval = 8;   // frames between rolling restore points
         int maxRuns = 20000;          // total candidate runs before giving up
         int maxRunFrames = 240 * 180; // stuck-guard: one run never exceeds this
+        // How many frames further a candidate must survive past the death
+        // that opened its decision point before it counts as real progress
+        // (not just "the same hazard, hit slightly later"). See the comment
+        // at its use in Pathfinder::handleDeath -- a real test run showed
+        // accepting any single-frame gain traps the search in place forever.
+        int minProgressFrames = 8;
         // Nigel's ask (2026-09-06): the full-screen "Calculating..." cover
         // is a toggle, not forced -- default on ("surprises are cool"), off
         // falls back to a small corner status HUD so the level is actually

@@ -1,14 +1,17 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                     \
-    "2026-09-06-p (Two real bugs found from Nigel testing build -o: (1) adding the "           \
-    "Pathfinder tab made 11 tabs, but two separate tab-bar renderers hardcoded a count "       \
-    "of 10 (const int N = 10 in drawTabBar, for i<10 in the compact rail renderer) -- "        \
-    "Credits silently fell off the end of both. Both now derive their count from "             \
-    "sizeof(names)/sizeof(names[0]) so this can't drift again. (2) the full-screen "           \
-    "search cover is now a real toggle (Pathfinder::hideSearch, default on) -- off "           \
-    "falls back to the small corner status HUD instead, so the level is actually "             \
-    "visible while it searches. Compiles clean, UNTESTED in-game.)"
+    "2026-09-06-q (Two real Pathfinder bugs found from Nigel's actual test log, not "          \
+    "guessed: (1) bestPct read 0.0% the whole run because it used the cached "                 \
+    "gb->m_levelLength (set too early in PlayLayer::init, before GD finishes computing "       \
+    "it) instead of the live pl->m_levelLength destroyPlayer already reads correctly -- "      \
+    "switched to the live field. (2) the real one: the search accepted ANY single-frame "      \
+    "survival gain as progress, which committed candidates that just delayed the SAME "        \
+    "death by a frame or two (x frozen the entire 1069-run test), each one immediately "       \
+    "opening a decision point with an empty candidate window and forcing a backtrack -- "      \
+    "the whole run thrashed on this instead of searching for a real escape. Added a "          \
+    "tunable minimum-progress-frames requirement (default 8, new slider) before a "            \
+    "candidate counts as solving a decision point. Compiles clean, UNTESTED in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
