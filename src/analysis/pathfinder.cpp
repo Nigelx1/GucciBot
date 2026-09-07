@@ -24,6 +24,7 @@ namespace gucci {
         windowFrames = (int)mod->getSavedValue<int64_t>("pf_window", 30);
         checkpointInterval = (int)mod->getSavedValue<int64_t>("pf_ckpt_interval", 8);
         maxRuns = (int)mod->getSavedValue<int64_t>("pf_max_runs", 20000);
+        hideSearch = mod->getSavedValue<bool>("pf_hide_search", true);
         windowFrames = std::clamp(windowFrames, 5, 240);
         checkpointInterval = std::clamp(checkpointInterval, 1, 60);
         maxRuns = std::clamp(maxRuns, 100, 1000000);
@@ -34,6 +35,7 @@ namespace gucci {
         mod->setSavedValue("pf_window", (int64_t)windowFrames);
         mod->setSavedValue("pf_ckpt_interval", (int64_t)checkpointInterval);
         mod->setSavedValue("pf_max_runs", (int64_t)maxRuns);
+        mod->setSavedValue("pf_hide_search", hideSearch);
     }
 
     void Pathfinder::releaseStoredFrame(StoredFrame& sf) {

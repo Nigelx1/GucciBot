@@ -1,12 +1,14 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                     \
-    "2026-09-06-o (Pathfinder: full-screen cover while searching -- Nigel: don't show the "    \
-    "search chewing through the level, surprises are cool. Opaque cover with just "            \
-    "Calculating..., the best % reached, a thin bar, run count, Cancel -- like camila314's "   \
-    "mod. Drawn before the menu with NoBringToFrontOnFocus so the menu still opens on top. "   \
-    "Game keeps running underneath, only the view is hidden. GUI only, no search change. "     \
-    "Compiles clean, UNTESTED in-game.)"
+    "2026-09-06-p (Two real bugs found from Nigel testing build -o: (1) adding the "           \
+    "Pathfinder tab made 11 tabs, but two separate tab-bar renderers hardcoded a count "       \
+    "of 10 (const int N = 10 in drawTabBar, for i<10 in the compact rail renderer) -- "        \
+    "Credits silently fell off the end of both. Both now derive their count from "             \
+    "sizeof(names)/sizeof(names[0]) so this can't drift again. (2) the full-screen "           \
+    "search cover is now a real toggle (Pathfinder::hideSearch, default on) -- off "           \
+    "falls back to the small corner status HUD instead, so the level is actually "             \
+    "visible while it searches. Compiles clean, UNTESTED in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

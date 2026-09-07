@@ -2000,7 +2000,7 @@ namespace gucci {
                                "Settings",
                                "Pathfinder",
                                "Credits"};
-        const int N = 10;
+        const int N = (int)(sizeof(names) / sizeof(names[0]));
         float tabW = width / N, tabH = 34.f;
         float dt = ImGui::GetIO().DeltaTime;
         if (tabIndicatorX < 0)
@@ -2479,8 +2479,9 @@ namespace gucci {
                                "Settings",
                                "Pathfinder",
                                "Credits"};
+        const int railTabCount = (int)(sizeof(names) / sizeof(names[0]));
         float rowH = 34.f, railTop = headH + 10.f;
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < railTabCount; i++) {
             ImVec2 rMin(wp.x, wp.y + railTop + i * rowH), rMax(wp.x + railW, rMin.y + rowH);
             char rid[24];
             snprintf(rid, sizeof(rid), "##mhTab%d", i);
@@ -4308,6 +4309,15 @@ namespace gucci {
             pf->saveSettings();
         if (locked)
             ImGui::EndDisabled();
+        if (Widgets::ToggleSwitch("Hide the search (surprise me)", &pf->hideSearch, theme, anim))
+            pf->saveSettings();
+        ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+        ImGui::TextWrapped(pf->hideSearch
+                                ? "On: a full-screen cover hides the search, just Calculating... and "
+                                  "the best percentage reached until a macro exists."
+                                : "Off: no cover -- watch the level play out while it searches, with "
+                                  "a small status readout in the corner instead.");
+        ImGui::PopStyleColor();
         ImGui::Dummy(ImVec2(0, 8));
 
         bool inLevel = PlayLayer::get() != nullptr;
@@ -8917,17 +8927,53 @@ namespace gucci {
         ImGui::End();
     }
 
+    // Small corner status readout, shown instead of the full-screen cover
+    // when Pathfinder's "hide the search" toggle is off -- Nigel wants to
+    // actually watch the level play out sometimes, not just be surprised.
+    static void displayPathfinderCornerHUD(MenuInterface* ui, Pathfinder* pf) {
+        auto* vp = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(
+            ImVec2(vp->Pos.x + vp->Size.x - 10, vp->Pos.y + 10), ImGuiCond_Always, ImVec2(1, 0));
+        ImGui::SetNextWindowSize(ImVec2(0, 0), ImGuiCond_Always);
+        ImGui::SetNextWindowBgAlpha(0.75f);
+        ImGui::Begin("##pathfinderHud",
+                     nullptr,
+                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+                         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
+                         ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoBringToFrontOnFocus);
+        if (ui->fontBody)
+            ImGui::PushFont(ui->fontBody);
+        float pulse = 0.55f + 0.45f * std::sin((float)ImGui::GetTime() * 4.f);
+        ImVec4 accent = ui->theme.getAccent();
+        ImGui::TextColored(ImVec4(accent.x, accent.y, accent.z, pulse), "Pathfinding...");
+        if (ui->fontBody)
+            ImGui::PopFont();
+        ImGui::PushStyleColor(ImGuiCol_Text, ui->theme.textSecondary);
+        ImGui::Text("best %.1f%%  |  run %d  |  depth %zu", pf->bestPct, pf->runs, pf->depth);
+        ImGui::Text("%s", pf->stage.c_str());
+        ImGui::PopStyleColor();
+        if (Widgets::StyledButton("Cancel", ImVec2(-1, 24), ui->theme, ui->anim, 4.f))
+            pf->cancel();
+        ImGui::End();
+    }
+
     // Full-screen opaque cover while Pathfinder runs -- Nigel's ask: don't
     // show the search chewing through the level ("surprises are cool"),
     // just "Calculating..." and the best % reached until a macro exists,
     // like camila314's mod does. Drawn BEFORE the menu (see the draw
     // lambda) with NoBringToFrontOnFocus so the menu can still open on
     // top of it. The game keeps running underneath; only the view is hidden.
+    // Toggle-able (Pathfinder::hideSearch) -- off falls back to the small
+    // corner HUD above instead, so the level is actually visible.
     void displayPathfinderHUD() {
         auto* ui = MenuInterface::get();
         auto* pf = Pathfinder::get();
         if (!ui || !ui->setupComplete || !pf->active)
             return;
+        if (!pf->hideSearch) {
+            displayPathfinderCornerHUD(ui, pf);
+            return;
+        }
 
         auto* vp = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(vp->Pos, ImGuiCond_Always);

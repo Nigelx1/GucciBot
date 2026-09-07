@@ -42,6 +42,11 @@ namespace gucci {
         int checkpointInterval = 8;   // frames between rolling restore points
         int maxRuns = 20000;          // total candidate runs before giving up
         int maxRunFrames = 240 * 180; // stuck-guard: one run never exceeds this
+        // Nigel's ask (2026-09-06): the full-screen "Calculating..." cover
+        // is a toggle, not forced -- default on ("surprises are cool"), off
+        // falls back to a small corner status HUD so the level is actually
+        // visible while it searches.
+        bool hideSearch = true;
 
         // --- live status (read by the GUI) ---
         bool active = false;
