@@ -1,17 +1,18 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                     \
-    "2026-09-06-q (Two real Pathfinder bugs found from Nigel's actual test log, not "          \
-    "guessed: (1) bestPct read 0.0% the whole run because it used the cached "                 \
-    "gb->m_levelLength (set too early in PlayLayer::init, before GD finishes computing "       \
-    "it) instead of the live pl->m_levelLength destroyPlayer already reads correctly -- "      \
-    "switched to the live field. (2) the real one: the search accepted ANY single-frame "      \
-    "survival gain as progress, which committed candidates that just delayed the SAME "        \
-    "death by a frame or two (x frozen the entire 1069-run test), each one immediately "       \
-    "opening a decision point with an empty candidate window and forcing a backtrack -- "      \
-    "the whole run thrashed on this instead of searching for a real escape. Added a "          \
-    "tunable minimum-progress-frames requirement (default 8, new slider) before a "            \
-    "candidate counts as solving a decision point. Compiles clean, UNTESTED in-game.)"
+    "2026-09-06-r (Real bug from Nigel: it calculated correctly but failed on playback. "      \
+    "Root cause: processQueuedButtons (hook_gjbasegamelayer.cpp) consumes an action at "       \
+    "real frame R when R==m_frame under fwAnalyzing (what every Pathfinder search run "        \
+    "executes under), but only at R==m_frame-1 for normal playback -- a normally-played "      \
+    "action fires one frame EARLIER than its label. Every frame number Pathfinder "            \
+    "validates during search is in the fwAnalyzing convention, so the whole committed "        \
+    "macro was off by one frame the instant fwAnalyzing went false for real playback. "        \
+    "Fixed by shifting every committed action +1 frame in finish() before it becomes "         \
+    "the saved macro. This is why Calculate never hit this: it only ever measures slack "      \
+    "around an already-normally-recorded macro's existing frame numbers, it never "            \
+    "manufactures new ones for playback -- Pathfinder is the first thing in this "             \
+    "codebase that does. Compiles clean, UNTESTED in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

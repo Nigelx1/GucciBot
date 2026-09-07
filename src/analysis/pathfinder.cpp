@@ -447,6 +447,18 @@ namespace gucci {
         gb->setMode(GucciEngine::Mode::Idle);
 
         if (success) {
+            // processQueuedButtons (hook_gjbasegamelayer.cpp) consumes an
+            // action at real frame R when R == m_frame under fwAnalyzing
+            // (what every search run here executes under), but only at
+            // R == m_frame - 1 for normal playback -- i.e. a normally-
+            // played action fires one frame EARLIER than its label. Every
+            // committed frame number here was validated against the
+            // fwAnalyzing convention, so it has to shift +1 to land on the
+            // same real frame once fwAnalyzing goes false for actual
+            // playback -- confirmed as the cause of a real test run that
+            // "calculated correctly" but failed on playback.
+            for (auto& a : committed)
+                a.m_frame += 1;
             std::stable_sort(committed.begin(), committed.end(), [](const gb::Action& a, const gb::Action& b) {
                 return a.m_frame < b.m_frame;
             });
