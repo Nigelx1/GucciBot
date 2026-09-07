@@ -394,13 +394,29 @@ namespace gucci {
                 // the ring checkpoints this very run just took (see the
                 // takeRingCheckpoint call below, now unconditional) as the
                 // new, trustworthy restore basis going forward.
+                // committed is always built as whole (press, release) pairs
+                // -- handleDeath()'s progress branch and the completed-fold
+                // above both push exactly two actions per commit, never one.
+                // Truncating action-by-action (the first version of this
+                // fix) can drop a pair's release while keeping its press
+                // (whenever the release's frame >= deathFrame but the
+                // press's isn't), leaving a dangling press with no release
+                // -- a real test proved this: it pinned lastCommitted right
+                // up against the next death with zero frames of room left
+                // for a new candidate, an unrecoverable "0 candidates"
+                // dead end that looked like the search had genuinely run
+                // out of options when it had actually just corrupted its
+                // own state. Truncate by whole pairs instead -- a pair only
+                // survives if BOTH its press and release do.
                 size_t before = committed.size();
-                committed.erase(std::remove_if(committed.begin(),
-                                                committed.end(),
-                                                [this](const gb::Action& a) {
-                                                    return a.m_frame >= deathFrame;
-                                                }),
-                                 committed.end());
+                size_t keepPairs = 0;
+                for (size_t i = 0; i + 1 < committed.size(); i += 2) {
+                    if (committed[i].m_frame < deathFrame && committed[i + 1].m_frame < deathFrame)
+                        keepPairs = i + 2;
+                    else
+                        break;
+                }
+                committed.resize(keepPairs);
                 log::info("[Pathfinder] confirmation FAILED -- a genuine frame-0 replay of the "
                           "committed macro died @f={} x={:.1f} instead of reaching the end. Dropped "
                           "{} of {} committed inputs that didn't survive a clean run and reopening "

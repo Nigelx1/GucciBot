@@ -1,21 +1,16 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                     \
-    "2026-09-06-w (Diffed [PF-CKPT-SAVE]/[PF-CKPT-LOAD]/[PF-CONFIRM] at matching frames: Y, "  \
-    "velocity and rotation match EXACTLY between the search's checkpoint-chained branch and "  \
-    "a genuine continuous replay, every single time -- but X is consistently off by exactly "  \
-    "one frame's worth (181.710 vs 182.757 @f=160, same pattern @f=152/168/etc), on every "    \
-    "checkpoint the search's own winning branch took. The restore chain silently accumulates "\
-    "a real one-frame X-drift that compounds across decision points and only ever surfaces "  \
-    "at the very end. Rather than chase the exact native-engine cause of that drift, made "    \
-    "confirmation failure PRODUCTIVE instead of a dead end: a failed confirmation run IS a "   \
-    "genuine continuous replay, so its own death is real, trustworthy ground truth. On "       \
-    "failure, keep whatever committed prefix survives past that point, drop the rest, and "    \
-    "reopen the search from there using ring checkpoints the confirmation run itself just "    \
-    "took (checkpoint-taking during confirm is no longer skipped) -- instead of discarding "  \
-    "500 runs of real progress and reporting 'didn't hold up.' Loops naturally: complete -> "  \
-    "confirm -> ship it, or reopen and try again, bounded by the existing max-runs cap. "      \
-    "Compiles clean.)"
+    "2026-09-06-x (Nigel: 'calculated twice.' Correct -- the -w reopen loop worked exactly "   \
+    "as designed (506 runs, confirm-failed, reopened, 946 runs, confirm-failed again), but "   \
+    "the second reopen hit '0 candidates' and gave up immediately, which was wrong -- traced " \
+    "it to a real bug in the truncation itself: dropping committed actions one at a time by "  \
+    "frame >= deathFrame can strip a pair's release while keeping its press (whenever the "    \
+    "release's frame crosses the line but the press's doesn't), leaving a dangling held-"      \
+    "forever press with no release. That pinned lastCommitted one frame before the death "     \
+    "with zero room for a new candidate -- a corrupted-state artifact, not genuine search "    \
+    "exhaustion. Fixed: truncate by whole (press, release) pairs, a pair only survives if "    \
+    "BOTH actions do. Compiles clean.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
