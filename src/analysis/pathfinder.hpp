@@ -105,10 +105,23 @@ namespace gucci {
         bool haveCandidate = false;
         Candidate cur{0, 1};
 
+        // DFS "success" is a chain of checkpoint-restore-and-continue
+        // segments, never one continuous frame-0 run -- so before trusting
+        // it, replay the whole committed list from a genuine cold reset
+        // (still under fwAnalyzing, same frame convention it was built
+        // under) and require it to independently reach LEVEL COMPLETE too.
+        // See the 2026-09-06 build -t log analysis this fixes: the search
+        // reported "press@149 got from f=161 to f=248", a huge margin, yet
+        // real playback of the exact same frame died at f=161 regardless --
+        // proof the chained-checkpoint result wasn't reproducible end to
+        // end, which a frame-numbering fix alone could never explain.
+        bool confirming = false;
+
         void handleDeath();
         void buildNodeFromDeath(uint32_t d);
         void startNextCandidateOrBacktrack();
         void startRun(const Node* node);
+        void startConfirmRun();
         void applyAtom();
         void takeRingCheckpoint(uint32_t frame);
         void releaseRing();

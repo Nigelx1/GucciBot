@@ -77,6 +77,7 @@ namespace gucci {
         haveCandidate = false;
         died = false;
         completed = false;
+        confirming = false;
 
         // Same pause-dismiss Calculate does before a headless run -- the
         // GUI is usually open (and GD paused) when Start gets pressed.
@@ -196,6 +197,52 @@ namespace gucci {
         }
     }
 
+    void Pathfinder::startConfirmRun() {
+        auto* gb = GucciEngine::get();
+        auto* pl = PlayLayer::get();
+        if (!pl) {
+            // Can't run a confirmation without a level to run it in -- ship
+            // what the search found rather than get stuck with no path
+            // forward at all.
+            finish(true);
+            return;
+        }
+
+        confirming = true;
+        died = false;
+        completed = false;
+        runFrames = 0;
+        bestX = 0.f;
+        bestFrame = 0;
+        bestPct = 0.f;
+        gb->fwProbeDied = false;
+        stage = "confirming the solution with a clean run";
+
+        releaseRing();
+        auto& pf = gb->practiceFix;
+        pf.m_savedCheckpoints.clear();
+        pf.m_brokenObjects.clear();
+        pf.m_storedFrames.clear();
+        pf.m_loadCheckpoint = false;
+        pf.m_isBackstep = false;
+
+        gb->updater.m_fullReset = true;
+        pl->resetLevel();
+        gb->updater.m_fullReset = false;
+        gb->updater.resetFrame();
+
+        // The raw (still un-shifted) committed frames -- fwAnalyzing stays
+        // true through this run, so this is the exact same frame-lookup
+        // convention the search validated every one of these under.
+        auto& acts = gb->replay.m_actionAtom.m_actions;
+        acts = committed;
+        std::stable_sort(acts.begin(), acts.end(), [](const gb::Action& a, const gb::Action& b) {
+            return a.m_frame < b.m_frame;
+        });
+        gb->replay.m_inputIndex = 0;
+        gb->mode = GucciEngine::Mode::Playing;
+    }
+
     void Pathfinder::takeRingCheckpoint(uint32_t frame) {
         auto* gb = GucciEngine::get();
         auto* pl = PlayLayer::get();
@@ -239,7 +286,16 @@ namespace gucci {
             return;
 
         if (completed) {
-            log::info("[Pathfinder] LEVEL COMPLETE after {} runs, {} committed inputs",
+            if (confirming) {
+                log::info("[Pathfinder] confirmation run PASSED -- the committed macro reaches LEVEL "
+                          "COMPLETE on its own from a genuine frame-0 replay, not just as a chain of "
+                          "checkpoint restores. Shipping it.");
+                finish(true);
+                return;
+            }
+            log::info("[Pathfinder] LEVEL COMPLETE after {} runs, {} committed inputs -- verifying with "
+                      "a clean frame-0 replay before handing it off (a chain of checkpoint-restored "
+                      "segments isn't proof it holds up end to end)",
                       runs,
                       committed.size() + (haveCandidate ? 2 : 0));
             if (haveCandidate) {
@@ -254,7 +310,7 @@ namespace gucci {
                 committed.push_back(release);
                 haveCandidate = false;
             }
-            finish(true);
+            startConfirmRun();
             return;
         }
 
@@ -282,11 +338,23 @@ namespace gucci {
         }
 
         if (died) {
+            if (confirming) {
+                log::info("[Pathfinder] confirmation run FAILED -- died again @f={} x={:.1f} on a "
+                          "genuine frame-0 replay of the exact committed macro. The search's chained-"
+                          "checkpoint result was not reproducible end to end -- checkpoint-restore "
+                          "fidelity is the real bug here, not frame numbering. Discarding the result "
+                          "rather than shipping something that won't play back.",
+                          deathFrame,
+                          deathX);
+                finish(false);
+                stage = "confirm-failed";
+                return;
+            }
             handleDeath();
             return;
         }
 
-        if (checkpointInterval > 0 && f > 0 && (f % (uint32_t)checkpointInterval) == 0)
+        if (!confirming && checkpointInterval > 0 && f > 0 && (f % (uint32_t)checkpointInterval) == 0)
             takeRingCheckpoint(f);
     }
 
@@ -427,6 +495,7 @@ namespace gucci {
         auto* pl = PlayLayer::get();
 
         active = false;
+        confirming = false;
         releaseRing();
         for (auto& n : stack)
             releaseStoredFrame(n.ckpt);

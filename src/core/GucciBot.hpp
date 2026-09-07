@@ -1,18 +1,21 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                     \
-    "2026-09-06-s (Pulled the real playback log from Nigel's build -r test: EVERY committed "  \
-    "click failed to fire -- hold=1 never appears once in the whole playback trace (all 506 "  \
-    "real occurrences are from the search phase), and the player dies at the exact same "      \
-    "frame as a completely unassisted run, every single restart. That rules out mistimed by "  \
-    "a frame or two -- this is total non-registration, not the +1 shift being slightly "       \
-    "wrong. Ruled out the obvious suspects by reading the real code: the Play button uses "    \
-    "the in-memory action atom directly (no file reload), and setMode(Playing) doesn't "       \
-    "touch the atom's contents. Rather than ship a second guess, added real diagnostics: a "   \
-    "one-time [PLAY-START] log of the atom's size/contents the instant Playing starts, and "   \
-    "extended the existing input-consumption log to cover normal playback too (previously "    \
-    "only logged during the search itself). Compiles clean -- this build is diagnostic, not "  \
-    "a fix; need the next log before touching the actual bug.)"
+    "2026-09-06-t (Nigel: 'I see it trying to click but it's 1 frame too late.' Pulled the "   \
+    "log myself -- the click DOES fire now (a real jump, g=0/ys negative/rot spinning from "   \
+    "f=150 on), and the search itself logged this exact press as a huge win during the "       \
+    "search ('press@149 got from f=161 to f=248'). But real playback still dies at f=161 "     \
+    "regardless -- the same frame as zero input. A frame-numbering bug can't explain a click "  \
+    "that fires at the validated frame and still fails by that much. Real cause: DFS 'success' "\
+    "is a CHAIN of checkpoint-restore-and-continue segments, never one continuous frame-0 "     \
+    "run -- so a chain reaching LEVEL COMPLETE was never actually proof it holds up end to "    \
+    "end. Added a mandatory confirmation pass: before handing off a solution, replay the "      \
+    "whole committed macro from a genuine cold reset (still under fwAnalyzing, so the exact "  \
+    "same frame convention it was built under) and require THAT to independently reach LEVEL " \
+    "COMPLETE too, discarding the result with a clear 'didn't hold up' status instead of "      \
+    "shipping it if it doesn't. This will either ship a macro that's actually been proven "     \
+    "end-to-end, or tell us for certain that checkpoint-restore fidelity (not frame math) is "  \
+    "the real bug still to fix. Compiles clean.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
