@@ -1,18 +1,18 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                     \
-    "2026-09-06-r (Real bug from Nigel: it calculated correctly but failed on playback. "      \
-    "Root cause: processQueuedButtons (hook_gjbasegamelayer.cpp) consumes an action at "       \
-    "real frame R when R==m_frame under fwAnalyzing (what every Pathfinder search run "        \
-    "executes under), but only at R==m_frame-1 for normal playback -- a normally-played "      \
-    "action fires one frame EARLIER than its label. Every frame number Pathfinder "            \
-    "validates during search is in the fwAnalyzing convention, so the whole committed "        \
-    "macro was off by one frame the instant fwAnalyzing went false for real playback. "        \
-    "Fixed by shifting every committed action +1 frame in finish() before it becomes "         \
-    "the saved macro. This is why Calculate never hit this: it only ever measures slack "      \
-    "around an already-normally-recorded macro's existing frame numbers, it never "            \
-    "manufactures new ones for playback -- Pathfinder is the first thing in this "             \
-    "codebase that does. Compiles clean, UNTESTED in-game.)"
+    "2026-09-06-s (Pulled the real playback log from Nigel's build -r test: EVERY committed "  \
+    "click failed to fire -- hold=1 never appears once in the whole playback trace (all 506 "  \
+    "real occurrences are from the search phase), and the player dies at the exact same "      \
+    "frame as a completely unassisted run, every single restart. That rules out mistimed by "  \
+    "a frame or two -- this is total non-registration, not the +1 shift being slightly "       \
+    "wrong. Ruled out the obvious suspects by reading the real code: the Play button uses "    \
+    "the in-memory action atom directly (no file reload), and setMode(Playing) doesn't "       \
+    "touch the atom's contents. Rather than ship a second guess, added real diagnostics: a "   \
+    "one-time [PLAY-START] log of the atom's size/contents the instant Playing starts, and "   \
+    "extended the existing input-consumption log to cover normal playback too (previously "    \
+    "only logged during the search itself). Compiles clean -- this build is diagnostic, not "  \
+    "a fix; need the next log before touching the actual bug.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

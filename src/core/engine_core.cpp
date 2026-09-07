@@ -901,6 +901,17 @@ namespace gucci {
             replay.m_inputIndex = 0;
             fwClickSamples.clear();
             fwSampling = true;
+            // Diagnostic for the "calculated correctly, failed on playback" bug
+            // -- confirms what's actually in the atom the instant playback
+            // starts, before blaming timing/consumption logic further.
+            auto& acts = replay.m_actionAtom.m_actions;
+            std::string first5;
+            for (size_t i = 0; i < acts.size() && i < 5; ++i)
+                first5 += fmt::format("{}({},h={}) ", acts[i].m_frame, (int)acts[i].m_type,
+                                      acts[i].m_holding ? 1 : 0);
+            log::info("[PLAY-START] {} actions in atom, inputIndex reset to 0, first 5: {}",
+                      acts.size(),
+                      first5);
         } else {
             if (prev == Mode::Playing && userTpsSaved > 0.0) {
                 updater.setTps(userTpsSaved);

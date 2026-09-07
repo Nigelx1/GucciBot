@@ -363,13 +363,23 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
             uint32_t frame = gb->updater.getFrame();
             uint32_t lookupFrame = gb->fwAnalyzing ? frame : frame + 1;
             while (auto input = gb->replay.getNextInput(lookupFrame)) {
-                if (gb->fwAnalyzing) {
-                    log::info("[CAP-IN] f={} inputFrame={} hold={} p2={}",
-                              frame,
-                              input->m_frame,
-                              input->m_holding ? 1 : 0,
-                              input->m_player2 ? 1 : 0);
-                }
+                // Nigel's real test (2026-09-06): a Pathfinder result "calculated
+                // correctly" but every one of its inputs failed to fire on normal
+                // playback (fwAnalyzing == false) -- died at the exact same frame
+                // as with no macro at all. [CAP-IN] only ever covered the
+                // fwAnalyzing branch, so normal playback had zero visibility into
+                // whether getNextInput was even matching anything. Logging both
+                // branches (tagged separately) until this is actually diagnosed
+                // with real data instead of another guess.
+                log::info("[{}] f={} lookupFrame={} inputFrame={} idx={}/{} hold={} p2={}",
+                          gb->fwAnalyzing ? "CAP-IN" : "PLAY-IN",
+                          frame,
+                          lookupFrame,
+                          input->m_frame,
+                          gb->replay.m_inputIndex,
+                          gb->replay.m_actionAtom.m_actions.size(),
+                          input->m_holding ? 1 : 0,
+                          input->m_player2 ? 1 : 0);
                 processReplayAction(input.value());
             }
         }
