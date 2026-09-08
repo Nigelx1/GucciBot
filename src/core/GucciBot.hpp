@@ -1,16 +1,12 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                     \
-    "2026-09-06-x (Nigel: 'calculated twice.' Correct -- the -w reopen loop worked exactly "   \
-    "as designed (506 runs, confirm-failed, reopened, 946 runs, confirm-failed again), but "   \
-    "the second reopen hit '0 candidates' and gave up immediately, which was wrong -- traced " \
-    "it to a real bug in the truncation itself: dropping committed actions one at a time by "  \
-    "frame >= deathFrame can strip a pair's release while keeping its press (whenever the "    \
-    "release's frame crosses the line but the press's doesn't), leaving a dangling held-"      \
-    "forever press with no release. That pinned lastCommitted one frame before the death "     \
-    "with zero room for a new candidate -- a corrupted-state artifact, not genuine search "    \
-    "exhaustion. Fixed: truncate by whole (press, release) pairs, a pair only survives if "    \
-    "BOTH actions do. Compiles clean.)"
+    "2026-09-07-a (Rebrand: Nigel changed his GitHub username away from guccimanefan to "      \
+    "Nigelx1, and asked to drop guccimanefan everywhere -- mod id (guccimanefan.guccibot -> "  \
+    "nigelx1.guccibot), developer field, in-game credits, README/about/CLAUDE.md, and the "     \
+    "website. Confirmed explicitly this should change the mod ID itself even though that "     \
+    "breaks auto-update for existing installs -- GucciBot isn't on the Geode index, so this "  \
+    "is a clean break rather than an index-listing problem. No functional changes.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

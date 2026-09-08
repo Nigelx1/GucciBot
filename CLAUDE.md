@@ -29,7 +29,7 @@ You will be tempted to "just fix everything at once" because you can see several
 
 ## 1. What GucciBot is
 
-GucciBot is a **Geometry Dash macro bot**, distributed as a **Geode mod** (`guccimanefan.guccibot`). It records the player's inputs frame-perfectly and plays them back. The author is **Nigel**, who goes by **"Nigel"** or **"Nigelx1"** in the GD community.
+GucciBot is a **Geometry Dash macro bot**, distributed as a **Geode mod** (`nigelx1.guccibot`). It records the player's inputs frame-perfectly and plays them back. The author is **Nigel**, who goes by **"Nigel"** or **"Nigelx1"** in the GD community.
 
 It is built on top of three other projects:
 

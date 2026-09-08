@@ -4,7 +4,7 @@
 
 It's Gucci. GucciBot is a Geometry Dash macro bot (a [Geode](https://geode-sdk.org/) mod) that records your inputs frame-perfectly and plays them back exactly, built on top of [Silicate](https://git.puppy.lgbt/silicate/silicate)'s physics engine and ToastyReplay's renderer. Think of it as a very expensive, very icy ghost of your best run — except the ghost never drops a frame, never has an off day, and definitely never forgets its jewelry. So icy.
 
-GucciBot is public now — grab a build from [Releases](https://github.com/guccimanefan/GucciBot/releases/latest), drop it in your Geode mods folder, and you're in. It's not on the in-game Geode mod index (long story, not going into it here), so a manual install is the only way to get it for now.
+GucciBot is public now — grab a build from [Releases](https://github.com/Nigelx1/GucciBot/releases/latest), drop it in your Geode mods folder, and you're in. It's not on the in-game Geode mod index (long story, not going into it here), so a manual install is the only way to get it for now.
 
 **Requires ToastyReplay Lite (`toastexgd.toastyreplay-lite`) to be installed** (it doesn't need to be enabled, just present in your mods folder) — GucciBot won't run without it. This is the one real condition on GucciBot's release, and it's checked every launch.
 
@@ -114,7 +114,7 @@ Most of this is stable and has been tested for real, in-game, by an actual human
 
 ## Credits
 
-- **guccimanefan** (Nigelx1) — creator and owner of GucciBot. Every idea, every theme, every decision is his call, down to the taste that keeps this from being a folder full of ternary chains.
+- **Nigelx1** — creator and owner of GucciBot. Every idea, every theme, every decision is his call, down to the taste that keeps this from being a folder full of ternary chains.
 - **Claude** (Anthropic) — wrote essentially the entire codebase across every session of this project, including this README. Not a euphemism, not "AI-assisted," just the actual author of the code — Nigel wants that said plainly.
 - **Juice** — frame-window algorithm design, lead co-tester, professional bug-finder.
 - **anticroom** — sent GucciBot's first outside pull request, a real 7-fix pass on Calculate's frame-window accuracy. Also one of ToastyReplay's own devs.

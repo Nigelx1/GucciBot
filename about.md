@@ -121,7 +121,7 @@ Real click-timing feedback and a synced video-review overlay, both built around 
 
 ## Credits
 
-- **guccimanefan** (Nigelx1) — creator and owner of GucciBot; every idea, every theme, every decision is his call
+- **Nigelx1** — creator and owner of GucciBot; every idea, every theme, every decision is his call
 - **Claude** — wrote the code and this page. Essentially the whole codebase, not a euphemism.
 - **Juice** — frame-window algorithm design, lead co-tester, ran the mod into the ground on purpose finding the bugs nobody else caught
 - **anticroom** — frame-window accuracy fixes, GucciBot's first outside pull request (also one of ToastyReplay's own devs)

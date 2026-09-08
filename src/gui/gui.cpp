@@ -8010,7 +8010,7 @@ namespace gucci {
             const char* role;
         } entries[] = {
             {"N",
-             "guccimanefan (Nigelx1)",
+             "Nigelx1",
              "Creator & owner of GucciBot -- every idea, every call, his"},
             {"C", "Claude", "Wrote the code. All of it. Not a euphemism."},
             {"J",
