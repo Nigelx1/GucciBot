@@ -1,12 +1,10 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                     \
-    "2026-09-07-a (Rebrand: Nigel changed his GitHub username away from guccimanefan to "      \
-    "Nigelx1, and asked to drop guccimanefan everywhere -- mod id (guccimanefan.guccibot -> "  \
-    "nigelx1.guccibot), developer field, in-game credits, README/about/CLAUDE.md, and the "     \
-    "website. Confirmed explicitly this should change the mod ID itself even though that "     \
-    "breaks auto-update for existing installs -- GucciBot isn't on the Geode index, so this "  \
-    "is a clean break rather than an index-listing problem. No functional changes.)"
+    "2026-09-07-b (Version bump to 1.6.3 for the guccimanefan -> Nigelx1 rename itself -- "     \
+    "mod.json/CMakeLists.txt version strings, about.md/site version badges, a new changelog "  \
+    "entry, and a real GitHub Release tagged v1.6.3 under the new nigelx1.guccibot identity. "  \
+    "No functional changes.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
