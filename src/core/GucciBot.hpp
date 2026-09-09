@@ -1,17 +1,10 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                     \
-    "2026-09-08-b (Fixed a real crash from GitHub issue #1 (MoriiiLL): symbolized their "       \
-    "crash log against a rebuilt-from-source v1.6.3 PDB (git worktree at the exact release "    \
-    "commit + llvm-symbolizer) and got an exact hit -- arc::Context::shouldCoopYield, called "  \
-    "resuming importFwAssetFilesTask's co_await file::pickMany at gui.cpp:4185. The static "     \
-    "Task<> that keeps an in-flight file-picker coroutine alive had no guard against being "    \
-    "re-triggered while still pending, so clicking Import again before the first OS dialog "    \
-    "closed (easy to do -- native dialogs can open behind a fullscreen GD window with no "      \
-    "visible cue) destroyed the still-suspended coroutine out from under its own pending "      \
-    "resume. Same exact pattern existed at 4 sites total; all 4 now check isPending() before "  \
-    "reassigning: importFwAssetFiles/importFwAssetFolder/importTrainerMusic (gui.cpp) and "     \
-    "importCustomThemeAudio (customtheme.cpp).)"
+    "2026-09-09-a (Version bump to 1.6.4 -- packaging the two real crash fixes from build "     \
+    "2026-09-08-a/-b (custom-theme macro extension bug, file-picker Task<> reentry "            \
+    "use-after-free from GitHub issue #1) as an actual release so MoriiiLL and anyone else "    \
+    "hitting them has something to grab. No new functional changes beyond those two.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
