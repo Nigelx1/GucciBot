@@ -1,10 +1,14 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                     \
-    "2026-09-07-b (Version bump to 1.6.3 for the guccimanefan -> Nigelx1 rename itself -- "     \
-    "mod.json/CMakeLists.txt version strings, about.md/site version badges, a new changelog "  \
-    "entry, and a real GitHub Release tagged v1.6.3 under the new nigelx1.guccibot identity. "  \
-    "No functional changes.)"
+    "2026-09-08-a (Two real bugs from anticroom's Discord relay: 1. custom-theme macro "        \
+    "saves used a bare extension with no leading dot, so the file had no extension at all "    \
+    "and silently vanished from every macro list on the next scan -- fixed at the two "        \
+    "duplicated getters (gui.cpp currentThemeExtension, brr_format.cpp getThemeExtension). "    \
+    "2. ToastyReplay Lite being installed AND enabled at the same time as GucciBot crashed "    \
+    "macro playback with zero in-app explanation -- GucciBot now detects that combination "     \
+    "at startup and stands down with a clear popup, same pattern as the existing "              \
+    "missing-entirely gate, instead of a silent crash.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -404,12 +408,24 @@ namespace gucci {
         // for this specifically -- not surfaced anywhere yet beyond the
         // one-time startup notification.
         bool ttrRequirementMissing = false;
+        // A THIRD state alongside "missing"/"fine": ToastyReplay Lite is
+        // installed (satisfies the requirement above) but also currently
+        // *enabled*, which is what actually crashed macro playback for a
+        // real user (anticroom's Discord report, 2026-09-08, screenshot
+        // showed him telling someone to "install Toasty, disable it, then
+        // use gucci" -- a real requirement that was never surfaced in-app,
+        // so people were finding out about it from crashes, not GucciBot
+        // itself). Both mods running live at once isn't safe; stand down
+        // the same way the missing-entirely case does, with different
+        // wording, rather than letting the crash happen and saying nothing.
+        bool ttrEnabledConflict = false;
         static constexpr const char* kTtrModId = "toastexgd.toastyreplay-lite";
         // Shared so the wording only lives in one place -- shown once at
         // startup (initialize()) and again every time someone tries to
         // open the menu while it's still missing (hacks/keybinds.cpp),
         // since the startup one is easy to miss.
         static void showTtrMissingNotification();
+        static void showTtrEnabledNotification();
         Mode mode = Mode::Idle;
         double userTpsSaved = 0.0;
         std::string replayName = "";

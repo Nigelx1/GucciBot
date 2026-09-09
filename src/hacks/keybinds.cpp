@@ -74,6 +74,10 @@ class $modify(GB7KeyHandler, CCKeyboardDispatcher) {
                     GucciEngine::showTtrMissingNotification();
                     return;
                 }
+                if (gb->ttrEnabledConflict) {
+                    GucciEngine::showTtrEnabledNotification();
+                    return;
+                }
                 if (!ui->shown) {
                     ui->shown = true;
                     ui->anim.opening = true;

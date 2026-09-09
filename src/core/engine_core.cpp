@@ -1946,6 +1946,18 @@ namespace gucci {
             [](auto, bool) {});
     }
 
+    void GucciEngine::showTtrEnabledNotification() {
+        createQuickPopup(
+            "GucciBot Is Standing Down",
+            "<co>ToastyReplay Lite</c> is installed, which is required -- but it's also "
+            "currently <cr>enabled</c>, and the two mods can't both run live at the same "
+            "time (this is what's behind crashes on macro playback). Open the Geode mod "
+            "list, toggle ToastyReplay Lite off (leave it installed), and restart. "
+            "GucciBot rides again from there.",
+            "Got It", nullptr,
+            [](auto, bool) {});
+    }
+
     void GucciEngine::initialize() {
         fs::create_directories(getReplayDir());
         fs::create_directories(getPresetsDir());
@@ -2089,16 +2101,29 @@ namespace gucci {
         // since Geode can't add/remove a mod without restarting anyway, so
         // a launch-time check already can't be "unlocked once and forgotten"
         // -- removing TTR and relaunching drops right back to disabled.
-        if (Loader::get()->isModInstalled(kTtrModId)) {
-            enabled = true;
-            ttrRequirementMissing = false;
-        } else {
+        if (!Loader::get()->isModInstalled(kTtrModId)) {
             enabled = false;
             ttrRequirementMissing = true;
+            ttrEnabledConflict = false;
             log::warn("[GucciBot] Disabled -- ToastyReplay Lite ({}) not found. Install it "
                       "(it doesn't need to be enabled) to use GucciBot.",
                       kTtrModId);
             showTtrMissingNotification();
+        } else if (Loader::get()->isModLoaded(kTtrModId)) {
+            // Installed satisfies the requirement above, but running it
+            // enabled alongside GucciBot is what actually crashes macro
+            // playback -- see ttrEnabledConflict's comment in GucciBot.hpp.
+            enabled = false;
+            ttrRequirementMissing = false;
+            ttrEnabledConflict = true;
+            log::warn("[GucciBot] Disabled -- ToastyReplay Lite ({}) is installed but "
+                      "currently enabled. Disable it (keep it installed) to use GucciBot.",
+                      kTtrModId);
+            showTtrEnabledNotification();
+        } else {
+            enabled = true;
+            ttrRequirementMissing = false;
+            ttrEnabledConflict = false;
         }
 
         log::info("[GucciBot] ========================================");
