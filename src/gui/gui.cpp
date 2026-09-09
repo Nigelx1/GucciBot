@@ -4224,6 +4224,23 @@ namespace gucci {
     static geode::Task<int> s_fwAssetFilesTask;
     static geode::Task<int> s_fwAssetFolderTask;
     static void importFwAssetFiles() {
+        // Guard against re-triggering while a pick dialog is still open --
+        // reassigning s_fwAssetFilesTask destroys whatever Task it currently
+        // holds, and if that Task's coroutine is still suspended at co_await
+        // (waiting on the OS file dialog's background thread), destroying it
+        // out from under that pending resume is a real use-after-free. This
+        // was reachable from the UI: the Import button has no disabled state
+        // while a pick is in flight, and native file dialogs can spawn
+        // behind a fullscreen GD window without stealing focus, so clicking
+        // it again (thinking the first click did nothing) crashed on resume
+        // inside arc's coroutine machinery. Confirmed via a real crash log
+        // (MoriiiLL, GitHub issue #1, 2026-09-08) symbolized against a
+        // matching v1.6.3 PDB -- crash was in arc::Context::shouldCoopYield,
+        // called from Future::await_suspend, called from this coroutine's
+        // resume, which only makes sense if the coroutine frame itself was
+        // already freed.
+        if (s_fwAssetFilesTask.isPending())
+            return;
         s_fwAssetFilesTask = importFwAssetFilesTask();
     }
     static void pollFwAssetImportTasks() {
@@ -4282,6 +4299,9 @@ namespace gucci {
         co_return copied;
     }
     static void importFwAssetFolder() {
+        // Same guard as importFwAssetFiles() above, same reason.
+        if (s_fwAssetFolderTask.isPending())
+            return;
         s_fwAssetFolderTask = importFwAssetFolderTask();
     }
 
@@ -7422,6 +7442,11 @@ namespace gucci {
     // s_fwAssetFilesTask's comment above for why (real crash otherwise).
     static geode::Task<bool> s_trainerMusicTask;
     static void importTrainerMusic() {
+        // Guard against re-triggering while a pick dialog is still open --
+        // see importFwAssetFiles()'s full explanation earlier in this file,
+        // same real crash class.
+        if (s_trainerMusicTask.isPending())
+            return;
         s_trainerMusicTask = importTrainerMusicTask();
     }
     static void pollTrainerMusicImportTask() {

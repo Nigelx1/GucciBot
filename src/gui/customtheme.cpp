@@ -361,6 +361,11 @@ namespace gucci {
     // no-op in this Geode version.
     static geode::Task<bool> s_customThemeAudioTask;
     static void importCustomThemeAudio() {
+        // Guard against re-triggering while a pick dialog is still open --
+        // see the identical fix (and its full explanation) on
+        // importFwAssetFiles() in gui.cpp, same real crash class.
+        if (s_customThemeAudioTask.isPending())
+            return;
         s_customThemeAudioTask = importCustomThemeAudioTask();
     }
     void pollCustomThemeAudioImportTask() {

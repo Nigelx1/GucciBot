@@ -1,14 +1,17 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                     \
-    "2026-09-08-a (Two real bugs from anticroom's Discord relay: 1. custom-theme macro "        \
-    "saves used a bare extension with no leading dot, so the file had no extension at all "    \
-    "and silently vanished from every macro list on the next scan -- fixed at the two "        \
-    "duplicated getters (gui.cpp currentThemeExtension, brr_format.cpp getThemeExtension). "    \
-    "2. ToastyReplay Lite being installed AND enabled at the same time as GucciBot crashed "    \
-    "macro playback with zero in-app explanation -- GucciBot now detects that combination "     \
-    "at startup and stands down with a clear popup, same pattern as the existing "              \
-    "missing-entirely gate, instead of a silent crash.)"
+    "2026-09-08-b (Fixed a real crash from GitHub issue #1 (MoriiiLL): symbolized their "       \
+    "crash log against a rebuilt-from-source v1.6.3 PDB (git worktree at the exact release "    \
+    "commit + llvm-symbolizer) and got an exact hit -- arc::Context::shouldCoopYield, called "  \
+    "resuming importFwAssetFilesTask's co_await file::pickMany at gui.cpp:4185. The static "     \
+    "Task<> that keeps an in-flight file-picker coroutine alive had no guard against being "    \
+    "re-triggered while still pending, so clicking Import again before the first OS dialog "    \
+    "closed (easy to do -- native dialogs can open behind a fullscreen GD window with no "      \
+    "visible cue) destroyed the still-suspended coroutine out from under its own pending "      \
+    "resume. Same exact pattern existed at 4 sites total; all 4 now check isPending() before "  \
+    "reassigning: importFwAssetFiles/importFwAssetFolder/importTrainerMusic (gui.cpp) and "     \
+    "importCustomThemeAudio (customtheme.cpp).)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
