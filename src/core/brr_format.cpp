@@ -655,8 +655,10 @@ namespace gucci {
         auto* ui = MenuInterface::get();
         if (!ui)
             return ".brrr";
+        // See currentThemeExtension()'s comment in gui.cpp -- CustomTheme::extension
+        // is stored bare, this getter must add the dot back itself.
         if (auto* c = ui->getActiveCustomTheme())
-            return c->extension;
+            return "." + c->extension;
         switch (ui->activeTheme) {
         case THEME_TOOSII:
         case THEME_TOOSII_SYRACUSE:

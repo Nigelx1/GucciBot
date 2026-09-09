@@ -390,8 +390,19 @@ namespace gucci {
     }
 
     static std::string currentThemeExtension(MenuInterface* ui) {
+        // CustomTheme::extension is always stored bare (alnum only, no dot --
+        // see deriveCustomThemeExtension/sanitizeCustomExtension), but every
+        // built-in branch below returns a dot-prefixed extension and callers
+        // (both here and getThemeExtension() in brr_format.cpp) append this
+        // return value directly after a macro name expecting the dot to
+        // already be there. Returning it bare produced filenames like
+        // "MacroNamemytheme" with no extension at all, which then couldn't
+        // match anything in allKnownMacroExtensions()'s dot-prefixed list on
+        // the next directory scan -- the macro silently vanished from every
+        // macro list after saving under a custom theme (reported by
+        // anticroom, 2026-09-08).
         if (auto* c = ui->getActiveCustomTheme())
-            return c->extension;
+            return "." + c->extension;
         switch (ui->activeTheme) {
         case THEME_TOOSII:
         case THEME_TOOSII_SYRACUSE:
