@@ -4223,23 +4223,32 @@ namespace gucci {
     // .listen() call back in.
     static geode::Task<int> s_fwAssetFilesTask;
     static geode::Task<int> s_fwAssetFolderTask;
+    static geode::Task<bool> s_trainerMusicTask;
+    // Shared guard across every GucciBot button that opens a native OS file
+    // picker via Geode's async file::pick()/pickMany(). One re-click on the
+    // SAME button is already blocked per-site below, but that alone wasn't
+    // enough: GitHub issue #3 (MoriiiLL, 2026-09-10) crashed again on v1.6.4,
+    // this time resuming importFwAssetFolderTask instead of the files one --
+    // symbolized the same way as issue #1 (matching PDB + llvm-symbolizer),
+    // same exact crash signature (arc::Context::shouldCoopYield on a freed
+    // coroutine). "Import Sounds/Images" and "Import Folder" sit on the same
+    // row in the UI, so clicking one, seeing nothing happen (the OS dialog
+    // can open behind a fullscreen GD window), and clicking the OTHER one
+    // right next to it is an easy real sequence a per-button guard can't
+    // catch. Checking every known picker before starting a new one closes
+    // that gap. NOTE: this narrows how OFTEN the crash can trigger but may
+    // not be the full story -- Geode's own Task<T>/coroutine cancellation
+    // path (Task.hpp) has real dead/commented-out cancel-propagation code at
+    // this SDK version, so there may be a genuine lifetime gap inside Geode
+    // itself between a Task's Handle being destroyed and its still-running
+    // background OS-dialog thread later writing back into freed memory --
+    // not something GucciBot can fully close from this side alone.
+    static bool anyFwPickerPending() {
+        return s_fwAssetFilesTask.isPending() || s_fwAssetFolderTask.isPending() ||
+               s_trainerMusicTask.isPending();
+    }
     static void importFwAssetFiles() {
-        // Guard against re-triggering while a pick dialog is still open --
-        // reassigning s_fwAssetFilesTask destroys whatever Task it currently
-        // holds, and if that Task's coroutine is still suspended at co_await
-        // (waiting on the OS file dialog's background thread), destroying it
-        // out from under that pending resume is a real use-after-free. This
-        // was reachable from the UI: the Import button has no disabled state
-        // while a pick is in flight, and native file dialogs can spawn
-        // behind a fullscreen GD window without stealing focus, so clicking
-        // it again (thinking the first click did nothing) crashed on resume
-        // inside arc's coroutine machinery. Confirmed via a real crash log
-        // (MoriiiLL, GitHub issue #1, 2026-09-08) symbolized against a
-        // matching v1.6.3 PDB -- crash was in arc::Context::shouldCoopYield,
-        // called from Future::await_suspend, called from this coroutine's
-        // resume, which only makes sense if the coroutine frame itself was
-        // already freed.
-        if (s_fwAssetFilesTask.isPending())
+        if (anyFwPickerPending())
             return;
         s_fwAssetFilesTask = importFwAssetFilesTask();
     }
@@ -4299,8 +4308,7 @@ namespace gucci {
         co_return copied;
     }
     static void importFwAssetFolder() {
-        // Same guard as importFwAssetFiles() above, same reason.
-        if (s_fwAssetFolderTask.isPending())
+        if (anyFwPickerPending())
             return;
         s_fwAssetFolderTask = importFwAssetFolderTask();
     }
@@ -7440,12 +7448,10 @@ namespace gucci {
     }
     // Must stay a stored static, never an unstored temporary -- see
     // s_fwAssetFilesTask's comment above for why (real crash otherwise).
-    static geode::Task<bool> s_trainerMusicTask;
+    // Declared earlier in this file (with s_fwAssetFilesTask/s_fwAssetFolderTask)
+    // so anyFwPickerPending() can see it too.
     static void importTrainerMusic() {
-        // Guard against re-triggering while a pick dialog is still open --
-        // see importFwAssetFiles()'s full explanation earlier in this file,
-        // same real crash class.
-        if (s_trainerMusicTask.isPending())
+        if (anyFwPickerPending())
             return;
         s_trainerMusicTask = importTrainerMusicTask();
     }
