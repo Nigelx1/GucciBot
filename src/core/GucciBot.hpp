@@ -1,9 +1,13 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                     \
-    "2026-09-12-b (Version bump to 1.6.5 -- packaging build 2026-09-12-a's cross-button "       \
-    "file-picker guard (GitHub issue #3 follow-up to issue #1's crash class) as an actual "     \
-    "release. No new functional changes beyond that fix.)"
+    "2026-09-12-c (Nigel's ask: an update checker on launch. Best-effort, one-shot GET "         \
+    "against GitHub's releases API; if the latest tag is numerically newer than MOD_VERSION, "  \
+    "shows a popup with a direct link, otherwise silent (offline/rate-limited/API-shape-change "\
+    "all fail quietly -- purely informational, never worth bothering the user about on its "    \
+    "own). Popup creation is explicitly queued onto the main thread with by-value string "      \
+    "captures, not called straight from the coroutine's own continuation -- cheap insurance "   \
+    "given this project's actual history with file-picker coroutines (issues #1/#3).)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

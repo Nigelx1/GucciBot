@@ -8,6 +8,9 @@
 #include <Geode/Geode.hpp>
 #include <Geode/binding/PauseLayer.hpp>
 #include <Geode/binding/FMODAudioEngine.hpp>
+#include <Geode/utils/Task.hpp>
+#include <Geode/utils/web.hpp>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
@@ -1958,6 +1961,90 @@ namespace gucci {
             [](auto, bool) {});
     }
 
+    // Parses "X.Y.Z" (an optional leading 'v' on either side is stripped) into
+    // a 3-part tuple and compares numerically -- a plain string compare would
+    // wrongly treat "1.6.10" as less than "1.6.9".
+    static std::array<int, 3> parseVersionTuple(std::string_view s) {
+        if (!s.empty() && (s.front() == 'v' || s.front() == 'V'))
+            s.remove_prefix(1);
+        std::array<int, 3> parts{0, 0, 0};
+        size_t idx = 0, i = 0;
+        while (idx < 3) {
+            size_t dot = s.find('.', i);
+            std::string_view piece = (dot == std::string_view::npos) ? s.substr(i) : s.substr(i, dot - i);
+            try {
+                parts[idx++] = std::stoi(std::string(piece));
+            } catch (...) {
+                break;
+            }
+            if (dot == std::string_view::npos)
+                break;
+            i = dot + 1;
+        }
+        return parts;
+    }
+    static bool isNewerVersion(std::string_view remote, std::string_view local) {
+        return parseVersionTuple(remote) > parseVersionTuple(local);
+    }
+
+    // One-shot, best-effort update check against GitHub's releases API --
+    // Nigel's ask (2026-09-12): "an update checker on launch." Silent on any
+    // failure (offline, rate-limited, API shape change) since this is purely
+    // informational, never anything worth bothering the user about on its
+    // own. Popup creation is explicitly queued onto the main thread rather
+    // than called directly from the coroutine's own continuation -- cheap
+    // insurance given this project's actual history with file-picker
+    // coroutines resuming in unexpected contexts (see the isPending()/
+    // anyFwPickerPending() fixes in gui.cpp), and the lambda captures its
+    // strings BY VALUE so it stays fully valid even if s_updateCheckTask is
+    // reset the instant this coroutine returns.
+    static geode::Task<void> s_updateCheckTask;
+    static geode::Task<void> checkForUpdateTask() {
+        auto res = co_await geode::utils::web::WebRequest().get(
+            "https://api.github.com/repos/Nigelx1/GucciBot/releases/latest");
+        if (!res.ok()) {
+            log::warn("[GucciBot] Update check: request failed (HTTP {})", res.code());
+            co_return;
+        }
+        auto jsonRes = res.json();
+        if (jsonRes.isErr()) {
+            log::warn("[GucciBot] Update check: bad JSON response ({})", jsonRes.unwrapErr());
+            co_return;
+        }
+        auto release = jsonRes.unwrap();
+        auto tagRes = release["tag_name"].as<std::string>();
+        if (tagRes.isErr())
+            co_return;
+        std::string remoteTag = tagRes.unwrap();
+        if (!isNewerVersion(remoteTag, MOD_VERSION))
+            co_return;
+
+        std::string htmlUrl;
+        if (auto urlRes = release["html_url"].as<std::string>(); urlRes.isOk())
+            htmlUrl = urlRes.unwrap();
+        else
+            htmlUrl = "https://github.com/Nigelx1/GucciBot/releases/latest";
+
+        Loader::get()->queueInMainThread([remoteTag, htmlUrl] {
+            createQuickPopup(
+                "GucciBot Update Available",
+                fmt::format("A new version is out -- <cy>{}</c>, you're on <cr>{}</c>. Grab it "
+                            "whenever you get a chance.",
+                            remoteTag,
+                            MOD_VERSION),
+                "Later", "Get It",
+                [htmlUrl](auto, bool getIt) {
+                    if (getIt)
+                        geode::utils::web::openLinkUnsafe(htmlUrl);
+                });
+        });
+    }
+    static void checkForUpdate() {
+        if (s_updateCheckTask.isPending())
+            return;
+        s_updateCheckTask = checkForUpdateTask();
+    }
+
     void GucciEngine::initialize() {
         fs::create_directories(getReplayDir());
         fs::create_directories(getPresetsDir());
@@ -2130,6 +2217,8 @@ namespace gucci {
         log::info("[GucciBot] BUILD: {} | compiled {} {}", GB_BUILD_LABEL, __DATE__, __TIME__);
         log::info("[GucciBot] ========================================");
         log::info("[GucciBot] " MOD_VERSION " initialized — {} macros", storedMacros.size());
+
+        checkForUpdate();
 
         gbcheck::run(5, 4, GBR6_VERSION, BRR_FORMAT_VERSION, MOD_VERSION);
     }
