@@ -3,7 +3,7 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 
-project(GucciBot VERSION 1.6.4 LANGUAGES CXX)
+project(GucciBot VERSION 1.6.5 LANGUAGES CXX)
 
 file(GLOB_RECURSE SOURCES src/*.cpp)
 
@@ -46,7 +46,7 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
-    MOD_VERSION="1.6.4"
+    MOD_VERSION="1.6.5"
     NOMINMAX
     _HAS_ITERATOR_DEBUGGING=0
 )

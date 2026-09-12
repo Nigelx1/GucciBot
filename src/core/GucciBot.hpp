@@ -1,16 +1,9 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                     \
-    "2026-09-12-a (GitHub issue #3: same crash class as issue #1 recurred on v1.6.4, this "     \
-    "time resuming importFwAssetFolderTask instead of the files one -- symbolized the same "    \
-    "way (matching PDB + llvm-symbolizer), identical signature. The per-button isPending() "    \
-    "guard from -08-b only catches re-clicking the SAME button; 'Import Sounds/Images' and "    \
-    "'Import Folder' sit on the same row, so clicking one then the other (a real thing to do "  \
-    "if the first click's dialog opened behind the game window) wasn't covered. Added a "       \
-    "shared anyFwPickerPending() check across all 3 gui.cpp file-picker sites. NOT confirmed "  \
-    "to be the full fix -- Task.hpp has real dead/commented-out cancel-propagation code at "    \
-    "this Geode SDK version, so there may be a genuine lifetime gap inside Geode's own async "  \
-    "file-picker that GucciBot can't fully close from this side.)"
+    "2026-09-12-b (Version bump to 1.6.5 -- packaging build 2026-09-12-a's cross-button "       \
+    "file-picker guard (GitHub issue #3 follow-up to issue #1's crash class) as an actual "     \
+    "release. No new functional changes beyond that fix.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
