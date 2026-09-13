@@ -1,14 +1,13 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-13-h (Legend rebuilt to actually match NaN's. The old one was an ImGui panel "\
-    "with a hand-rolled black outline, which was never going to look right -- every GD HUD, "\
-    "the reference included, uses the game's own bigFont.fnt, and that font already carries "\
-    "the heavy outline. It is now real CCLabelBMFont nodes drawn by the cocos overlay "   \
-    "(framewindow.cpp renderLegend) on a screen-fixed layer (m_uiLayer, not the scrolling "\
-    "object layer the markers use), label left and count in its own column aligned off the "\
-    "widest label, sized from the font's real metrics. Runs before render()'s early-out " \
-    "since the counts climb every frame. Size still driven by the Legend Size slider.)"
+    "2026-09-13-i (Version bump to 1.7. Everything since v1.6.5 shipped: the settled-point "\
+    "checkpoint capture fix (THE big one -- confirmed in-game, Pathfinder now solves end to "\
+    "end and its confirmation pass passes), the launch-crashing update checker removed, " \
+    "Pathfinder auto-saving its solution named after the level, the 374ms of leading silence "\
+    "trimmed out of fw_default.mp3, the Default Look overlay preset + bell sounds, the legend "\
+    "rebuilt with GD bigFont.fnt, Convert to .brrr and Calculate in the macro menu, and the "\
+    "obsolete Megahack Practice Fix advice dropped.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

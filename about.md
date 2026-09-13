@@ -1,4 +1,4 @@
-# GucciBot 1.6
+# GucciBot 1.7
 
 > Frame perfect. Ice cold. Brrr.
 
