@@ -72,9 +72,17 @@ namespace gucci {
         // Without these the only evidence the new backtracking is doing
         // anything lives in a log Geode doesn't persist, which makes "it
         // looks the same" impossible to tell from "it is the same".
+        // Cumulative across the whole search, not per run -- a per-run count
+        // resets thousands of times a second and reads as 0 whatever happens.
         int probeRuns = 0;          // probes attempted this search
         int probeFails = 0;         // probes that couldn't run at all
-        int agencyFramesThisRun = 0;
+        int agencyFramesSeen = 0;   // probes that came back "this mattered"
+        // Enough to tell the two failure shapes apart: a fork that dies on
+        // frame 0 (holdSurvived stays 0) versus a fork that runs fine but
+        // whose press changes nothing (survives fully, gap stays 0).
+        float maxGapSeen = 0.0f;
+        int lastHoldSurvived = -1;
+        int lastReleaseSurvived = -1;
         int lastPointCount = 0;     // decision points found at the last death
         int lastLookback = 0;       // frames between that death and the earliest
         bool lastUsedAgency = false;

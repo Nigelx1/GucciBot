@@ -1,13 +1,12 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-15-d (Pathfinder v2 step 2 diagnostics: step 2 looked like it changed "\
-    "nothing, and the only evidence either way was in a log Geode does not persist. The "\
-    "search status now shows agency frames recorded this run, probes attempted and "\
-    "failed, and how many decision points the last death found and how far back they "\
-    "reached -- in orange if it fell back to a fixed window. Also fixes a missing pair of "\
-    "braces at the probe call site: serviceAgencyProbe sat outside the if that guards it, "\
-    "harmless only because it re-checks the same condition itself.)"
+    "2026-09-15-e (Pathfinder agency diagnostics, take two. The previous readout counted "\
+    "agency frames per run and startRun resets thousands of times a second, so it read 0 "\
+    "whatever was happening -- useless. Counts are cumulative across the search now, and "\
+    "it also reports the biggest gap the fork ever measured and how many frames each side "\
+    "of the last probe survived. That separates the two ways this can fail: a fork dying "\
+    "on frame 0 versus a fork running fine whose press changes nothing.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

@@ -81,7 +81,10 @@ namespace gucci {
         depth = 0;
         probeRuns = 0;
         probeFails = 0;
-        agencyFramesThisRun = 0;
+        agencyFramesSeen = 0;
+        maxGapSeen = 0.0f;
+        lastHoldSurvived = -1;
+        lastReleaseSurvived = -1;
         lastPointCount = 0;
         lastLookback = 0;
         lastUsedAgency = false;
@@ -156,9 +159,14 @@ namespace gucci {
 
         if (agencyMap.size() <= (size_t)frame)
             agencyMap.resize((size_t)frame + 512, 0);
-        if (agency.matters && !agencyMap[(size_t)frame])
-            agencyFramesThisRun++;
         agencyMap[(size_t)frame] = agency.matters ? 1 : 0;
+
+        if (agency.matters)
+            agencyFramesSeen++;
+        if (agency.divergence > maxGapSeen)
+            maxGapSeen = agency.divergence;
+        lastHoldSurvived = agency.holdSurvived;
+        lastReleaseSurvived = agency.releaseSurvived;
     }
 
     void Pathfinder::noteDeath(uint32_t frame, float x) {
@@ -210,7 +218,6 @@ namespace gucci {
         completed = false;
         runFrames = 0;
         agencyMap.clear();
-        agencyFramesThisRun = 0;
         gb->fwProbeDied = false;
 
         auto& pf = gb->practiceFix;

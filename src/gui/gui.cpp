@@ -1,4 +1,6 @@
 #include "gui/gui.hpp"
+
+#include "analysis/trajectory.hpp"
 #include "core/GucciBot.hpp"
 #include "audio/clicksounds.hpp"
 #include "hacks/autoclicker.hpp"
@@ -4541,10 +4543,15 @@ namespace gucci {
             ImGui::PopStyleColor();
             ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
             ImGui::Text("runs %d  |  depth %zu  |  best frame %u", pf->runs, pf->depth, pf->bestFrame);
-            ImGui::Text("agency frames this run %d  |  probes %d, failed %d",
-                        pf->agencyFramesThisRun,
+            ImGui::Text("probed %d frames  |  %d had agency  |  failed %d",
                         pf->probeRuns,
+                        pf->agencyFramesSeen,
                         pf->probeFails);
+            ImGui::Text("biggest gap %.3f  |  fork survived: hold %d, release %d (of %d)",
+                        pf->maxGapSeen,
+                        pf->lastHoldSurvived,
+                        pf->lastReleaseSurvived,
+                        gucci::kAgencyProbeFrames);
             if (pf->lastUsedAgency) {
                 ImGui::Text("last decision point: %d frames with agency, reaching back %d",
                             pf->lastPointCount,
