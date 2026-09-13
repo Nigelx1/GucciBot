@@ -1,16 +1,11 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-14-a (Crash fix for a 1.7 regression, from a user report: GucciBot giving up on "\
-    "level entry with no crash log. The frame-window overlay caches raw child-node pointers "\
-    "and only re-attaches when m_node is null, but detach() only ever runs from onQuit() -- so "\
-    "any level exit that skips onQuit (level complete to menu, a restart rebuilding the layer) "\
-    "left them dangling. 1.7 made that reachable: the new renderLegend dereferences "     \
-    "m_legendLayer EVERY frame before any early-out, and it lives on m_uiLayer, which the "\
-    "m_node attach guard never covered. Now tracks which PlayLayer the nodes belong to and "\
-    "forgets them (without dereferencing -- they died with the old layer) when it changes. "\
-    "Also: deleting a macro now removes every file belonging to it by prefix, instead of a "\
-    "hardcoded .fw/.path/.trainer list that left .bak backups behind.)"
+    "2026-09-14-b (Version bump to 1.7.1. Packages build -a: the stale-overlay-node fix for "\
+    "the 1.7 level-entry regression (cached child pointers outliving their PlayLayer, made "\
+    "reachable by the new legend dereferencing m_legendLayer every frame on m_uiLayer, which "\
+    "the m_node attach guard never covered), plus macro deletion now removing every file "\
+    "belonging to a macro by prefix instead of a hardcoded sidecar list.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
