@@ -1,16 +1,14 @@
 #pragma once
 
-#define GB_BUILD_LABEL                                                                     \
-    "2026-09-13-g (Pathfinder names its auto-saved macro after the LEVEL now, not "             \
-    "'pathfinder' -- filename-illegal characters stripped, trailing dots/spaces trimmed, "      \
-    "falls back to 'pathfinder' if nothing usable is left, still de-duplicates with a numeric " \
-    "suffix. Carried from -e/-f: the 'Default Look' overlay override (one plain ring, fixed "   \
-    "red..blue ramp, number LEFT of the ring, optional bundled bell sounds instead of the "     \
-    "Brrr, tier/shape/circle-skin settings bypassed but kept), the restyled legend "            \
-    "(free-floating outlined text on the background draw list, no panel, count in its own "     \
-    "aligned column), and the macro three-dots additions -- 'Convert to .brrr' for other "      \
-    "theme extensions (a rename, sidecars carried across; foreign formats keep using the "      \
-    "existing Incompatible-row flow) and 'Calculate'.)"
+#define GB_BUILD_LABEL                                                                    \
+    "2026-09-13-h (Legend rebuilt to actually match NaN's. The old one was an ImGui panel "\
+    "with a hand-rolled black outline, which was never going to look right -- every GD HUD, "\
+    "the reference included, uses the game's own bigFont.fnt, and that font already carries "\
+    "the heavy outline. It is now real CCLabelBMFont nodes drawn by the cocos overlay "   \
+    "(framewindow.cpp renderLegend) on a screen-fixed layer (m_uiLayer, not the scrolling "\
+    "object layer the markers use), label left and count in its own column aligned off the "\
+    "widest label, sized from the font's real metrics. Runs before render()'s early-out " \
+    "since the counts climb every frame. Size still driven by the Legend Size slider.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

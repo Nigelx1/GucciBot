@@ -57,7 +57,145 @@ public:
             m_debugNode->removeFromParent();
             m_debugNode = nullptr;
         }
+        if (m_legendLayer) {
+            m_legendLayer->removeFromParent();
+            m_legendLayer = nullptr;
+        }
         m_builtForCount = -1;
+    }
+
+    // The legend used to be an ImGui panel (gui.cpp). Nigel, 2026-09-13: it
+    // looked nothing like the reference. The reason is the typeface -- every
+    // GD HUD, NaN's counter included, uses the game's own bigFont.fnt, which
+    // already carries the heavy black outline. ImGui text with a hand-rolled
+    // outline was never going to match it, so this draws real CCLabelBMFont
+    // nodes instead, on a screen-fixed layer (m_uiLayer, not the scrolling
+    // object layer the markers live on).
+    void renderLegend(PlayLayer* pl,
+                      GucciEngine* gb,
+                      const std::vector<GucciEngine::FrameWindowMark>& marks,
+                      uint32_t curFrame) {
+        if (!m_legendLayer) {
+            CCNode* anchor = pl->m_uiLayer ? static_cast<CCNode*>(pl->m_uiLayer)
+                                           : static_cast<CCNode*>(pl);
+            if (!anchor)
+                return;
+            auto* n = CCNode::create();
+            anchor->addChild(n, 1405);
+            m_legendLayer = n;
+        }
+        m_legendLayer->removeAllChildren();
+
+        if (!gb->fwLegendEnabled || !gb->fwHasData)
+            return;
+        if (!gb->fwDefaultLook && gb->fwTiers.empty())
+            return;
+
+        struct Row {
+            std::string label;
+            int count = 0;
+            ccColor3B color{255, 255, 255};
+        };
+        std::vector<Row> rows;
+
+        auto countIn = [&](int lo, int hi) {
+            int c = 0;
+            for (auto const& mk : marks) {
+                if (mk.frame > curFrame)
+                    continue;
+                if (mk.window >= lo && mk.window <= hi)
+                    c++;
+            }
+            return c;
+        };
+
+        if (gb->fwDefaultLook) {
+            for (auto const& r : GucciEngine::fwDefaultLookRows()) {
+                auto c = GucciEngine::fwDefaultLookColor(r.lo);
+                rows.push_back({r.lo == r.hi ? fmt::format("{}:", r.lo)
+                                             : fmt::format("{}-{}:", r.lo, r.hi),
+                                countIn(r.lo, r.hi),
+                                {(GLubyte)(c.r * 255), (GLubyte)(c.g * 255), (GLubyte)(c.b * 255)}});
+            }
+        } else {
+            // Same grouping the tier legend always used: tiers sharing a
+            // legendGroup name collapse into one row, ordered coarsest first.
+            struct Group {
+                int lo = INT_MAX, hi = INT_MIN;
+                float r = 1, g = 1, b = 1;
+                bool colorSet = false;
+            };
+            std::unordered_map<std::string, Group> groups;
+            for (size_t i = 0; i < gb->fwTiers.size(); ++i) {
+                auto const& t = gb->fwTiers[i];
+                std::string key =
+                    t.legendGroup[0] ? std::string(t.legendGroup) : ("##solo" + std::to_string(i));
+                auto& g = groups[key];
+                if (!g.colorSet) {
+                    g.r = t.r;
+                    g.g = t.g;
+                    g.b = t.b;
+                    g.colorSet = true;
+                }
+                g.lo = std::min(g.lo, t.lo);
+                g.hi = std::max(g.hi, t.hi);
+            }
+            std::vector<Group> sorted;
+            sorted.reserve(groups.size());
+            for (auto const& kv : groups)
+                sorted.push_back(kv.second);
+            std::sort(sorted.begin(), sorted.end(), [](auto const& a, auto const& b) {
+                return a.hi > b.hi;
+            });
+            for (auto const& g : sorted)
+                rows.push_back(
+                    {g.lo == g.hi ? fmt::format("{}:", g.lo) : fmt::format("{}-{}:", g.lo, g.hi),
+                     countIn(g.lo, g.hi),
+                     {(GLubyte)(g.r * 255), (GLubyte)(g.g * 255), (GLubyte)(g.b * 255)}});
+        }
+        if (rows.empty())
+            return;
+
+        auto* director = CCDirector::sharedDirector();
+        CCSize vis = director->getVisibleSize();
+        CCPoint origin = director->getVisibleOrigin();
+        const float scale = 0.5f * std::max(0.1f, gb->fwLegendScale);
+        const float padX = 8.f;
+        const float padY = 6.f;
+
+        // Build the labels first so the count column can be aligned off the
+        // widest label instead of guessing at a fixed offset.
+        std::vector<CCLabelBMFont*> labelNodes;
+        std::vector<CCLabelBMFont*> countNodes;
+        float widestLabel = 0.f;
+        float lineH = 0.f;
+        for (auto const& r : rows) {
+            auto* l = CCLabelBMFont::create(r.label.c_str(), "bigFont.fnt");
+            auto* c = CCLabelBMFont::create(std::to_string(r.count).c_str(), "bigFont.fnt");
+            if (!l || !c)
+                return;
+            l->setScale(scale);
+            c->setScale(scale);
+            l->setColor(r.color);
+            c->setColor(r.color);
+            l->setAnchorPoint({0.f, 1.f});
+            c->setAnchorPoint({0.f, 1.f});
+            widestLabel = std::max(widestLabel, l->getContentSize().width * scale);
+            lineH = std::max(lineH, l->getContentSize().height * scale);
+            labelNodes.push_back(l);
+            countNodes.push_back(c);
+        }
+
+        const float step = lineH * 1.02f;
+        const float countX = origin.x + padX + widestLabel + lineH * 0.75f;
+        float y = origin.y + vis.height - padY;
+        for (size_t i = 0; i < rows.size(); ++i) {
+            labelNodes[i]->setPosition({origin.x + padX, y});
+            countNodes[i]->setPosition({countX, y});
+            m_legendLayer->addChild(labelNodes[i]);
+            m_legendLayer->addChild(countNodes[i]);
+            y -= step;
+        }
     }
 
     CCRect computeVisibleRect() {
@@ -238,6 +376,11 @@ public:
 
         int camBucketX = (int)std::floor(visRect.getMidX() / 20.f);
         int camBucketY = (int)std::floor(visRect.getMidY() / 20.f);
+
+        // Before the early-out below: the legend's counts climb as the run
+        // progresses, so it has to refresh every frame even when the markers
+        // themselves are unchanged and get skipped.
+        renderLegend(pl, gb, marks, curFrame);
 
         int sig = visibleCount * 100000 + static_cast<int>(marks.size()) * 100 +
                   gb->fwMaxWindow + (mirrored ? 1 : 0) + camBucketX * 7919 + camBucketY * 104729 +
@@ -648,6 +791,8 @@ private:
     CCDrawNode* m_node = nullptr;
     CCNode* m_labelLayer = nullptr;
     CCDrawNode* m_debugNode = nullptr;
+    // Screen-fixed, unlike m_node/m_labelLayer which ride the object layer.
+    CCNode* m_legendLayer = nullptr;
     int m_builtForCount = -1;
 };
 

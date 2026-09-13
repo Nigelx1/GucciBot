@@ -9218,140 +9218,11 @@ namespace gucci {
         ImGui::PopStyleColor();
     }
 
-    void displayFwLegendHUD() {
-        auto* ui = MenuInterface::get();
-        auto* engine = GucciEngine::get();
-        if (!ui || !ui->setupComplete || !engine)
-            return;
-        // Default Look supplies its own fixed rows, so an empty tier list is
-        // fine there -- only the tier-driven legend needs tiers to exist.
-        if (!engine->fwLegendEnabled || !engine->fwHasData)
-            return;
-        if (!engine->fwDefaultLook && engine->fwTiers.empty())
-            return;
-        if (!PlayLayer::get())
-            return;
-
-        uint32_t curFrame = engine->updater.getFrame();
-
-        struct LegendGroup {
-            int lo = INT_MAX, hi = INT_MIN;
-            int count = 0;
-            float r = 1, g = 1, b = 1;
-            bool colorSet = false;
-        };
-        std::unordered_map<std::string, LegendGroup> groups;
-        auto groupKey = [&](size_t i) -> std::string {
-            auto const& t = engine->fwTiers[i];
-            return t.legendGroup[0] ? std::string(t.legendGroup) : ("##solo" + std::to_string(i));
-        };
-        for (size_t i = 0; i < engine->fwTiers.size(); ++i) {
-            auto const& t = engine->fwTiers[i];
-            auto& g = groups[groupKey(i)];
-            if (!g.colorSet) {
-                g.r = t.r;
-                g.g = t.g;
-                g.b = t.b;
-                g.colorSet = true;
-            }
-            g.lo = std::min(g.lo, t.lo);
-            g.hi = std::max(g.hi, t.hi);
-        }
-        for (auto const& mk : engine->fwMarks) {
-            if (mk.frame > curFrame)
-                continue;
-            for (size_t i = 0; i < engine->fwTiers.size(); ++i) {
-                auto const& t = engine->fwTiers[i];
-                if (mk.window >= t.lo && mk.window <= t.hi) {
-                    groups[groupKey(i)].count++;
-                    break;
-                }
-            }
-        }
-
-        std::vector<LegendGroup> sorted;
-        if (engine->fwDefaultLook) {
-            // Fixed rows + fixed ramp, matching the markers exactly.
-            for (auto const& row : GucciEngine::fwDefaultLookRows()) {
-                LegendGroup g;
-                g.lo = row.lo;
-                g.hi = row.hi;
-                auto c = GucciEngine::fwDefaultLookColor(row.lo);
-                g.r = c.r;
-                g.g = c.g;
-                g.b = c.b;
-                for (auto const& mk : engine->fwMarks) {
-                    if (mk.frame > curFrame)
-                        continue;
-                    if (mk.window >= row.lo && mk.window <= row.hi)
-                        g.count++;
-                }
-                sorted.push_back(g);
-            }
-        } else {
-            sorted.reserve(groups.size());
-            for (auto const& kv : groups)
-                sorted.push_back(kv.second);
-            std::sort(sorted.begin(), sorted.end(), [](auto const& a, auto const& b) {
-                return a.hi > b.hi;
-            });
-        }
-
-        // Drawn as free-floating outlined text straight onto the foreground
-        // draw list rather than as a themed ImGui panel. Nigel (2026-09-13):
-        // the old one looked "embedded to guccibot"; this matches the
-        // reference overlay -- no background, no border, label left and count
-        // in its own right-aligned column, black outline so it stays readable
-        // over both the bright and dark parts of a level.
-        auto* vp = ImGui::GetMainViewport();
-        // Background list, not foreground: this draws over the game but still
-        // UNDER GucciBot's own windows, which is how the old panel stacked.
-        // The foreground list would paint the legend on top of the menu.
-        auto* dl = ImGui::GetBackgroundDrawList();
-        ImFont* font = ui->fontBody ? ui->fontBody : ImGui::GetFont();
-        float scale = std::max(0.1f, engine->fwLegendScale);
-        float fontSize = ImGui::GetFontSize() * scale * 1.35f;
-        float lineStep = fontSize * 1.18f;
-        float originX = vp->Pos.x + 14.f;
-        float originY = vp->Pos.y + 12.f;
-
-        // Widest label decides where the count column starts, so the numbers
-        // line up in a column instead of ragging off the end of each label.
-        float labelW = 0.f;
-        std::vector<std::string> labels;
-        std::vector<std::string> counts;
-        labels.reserve(sorted.size());
-        counts.reserve(sorted.size());
-        for (auto const& g : sorted) {
-            labels.push_back(g.lo == g.hi ? fmt::format("{}:", g.lo)
-                                          : fmt::format("{}-{}:", g.lo, g.hi));
-            counts.push_back(fmt::format("{}", g.count));
-            labelW = std::max(labelW,
-                              font->CalcTextSizeA(fontSize, FLT_MAX, 0.f, labels.back().c_str()).x);
-        }
-        float countX = originX + labelW + fontSize * 0.9f;
-
-        auto outlinedText = [&](ImVec2 pos, ImU32 col, const char* text) {
-            const float o = std::max(1.f, fontSize * 0.075f);
-            const ImU32 black = IM_COL32(0, 0, 0, 235);
-            for (int dx = -1; dx <= 1; ++dx)
-                for (int dy = -1; dy <= 1; ++dy) {
-                    if (!dx && !dy)
-                        continue;
-                    dl->AddText(font, fontSize, ImVec2(pos.x + dx * o, pos.y + dy * o), black, text);
-                }
-            dl->AddText(font, fontSize, pos, col, text);
-        };
-
-        for (size_t i = 0; i < sorted.size(); ++i) {
-            auto const& g = sorted[i];
-            ImU32 col = ImGui::ColorConvertFloat4ToU32(ImVec4(g.r, g.g, g.b, 1.f));
-            float y = originY + lineStep * (float)i;
-            outlinedText(ImVec2(originX, y), col, labels[i].c_str());
-            outlinedText(ImVec2(countX, y), col, counts[i].c_str());
-        }
-    }
-
+    // The frame-window legend is drawn by the cocos overlay now
+    // (framewindow.cpp, renderLegend), not here. It has to use GD's own
+    // bigFont.fnt to match the reference overlay -- that font carries the
+    // heavy black outline every GD HUD has, and ImGui text with a
+    // hand-rolled outline never looked like it.
     void displayGameplayHUD() {
         auto* ui = MenuInterface::get();
         auto* engine = GucciEngine::get();
@@ -9469,7 +9340,6 @@ namespace gucci {
                 displayOverlayBranding();
                 displayRenderHUD();
                 displayCalculatingHUD();
-                displayFwLegendHUD();
                 displayGameplayHUD();
                 displayAccuracyHUD();
             });
