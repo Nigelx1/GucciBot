@@ -9,8 +9,10 @@
     "restyled to match: free-floating outlined text on the background draw list, no panel or "  \
     "border, label left and count in its own aligned column. 3. Macro three-dots menu gained "  \
     "'Convert to .brrr' (real conversion for foreign formats, rename+sidecar-carry for other "  \
-    "theme extensions, since convertToBRR skips native ones) and 'Calculate', which loads the " \
-    "macro and runs the analyzer without a trip to the Macro tab.)"
+    "theme extensions only -- .toosii/.icebrrr/etc are already BRR data, so it's a rename that " \
+    "carries the sidecars across; foreign formats stay with the existing Incompatible-row "     \
+    "flow) and 'Calculate', which loads the macro and runs the analyzer without a trip to the " \
+    "Macro tab.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

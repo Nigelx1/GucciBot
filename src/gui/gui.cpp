@@ -3470,50 +3470,40 @@ namespace gucci {
                 }
             }
 
-            // Convert to .brrr. Two genuinely different jobs behind one
-            // button: a foreign format (.gdr/.xd/.json/.brr) needs a real
-            // format conversion, while another GucciBot theme's extension
-            // (.icebrrr, .toosii, ...) is already BRR data and only needs the
-            // file renamed. convertToBRR() deliberately skips native
-            // extensions, so it can't do the second case on its own.
+            // Convert to .brrr -- for macros saved under another GucciBot
+            // theme's extension (.toosii, .icebrrr, ...). Those are already
+            // BRR data, so this is purely a rename; no format conversion is
+            // involved. Foreign formats (.gdr/.xd/.json) are NOT handled here
+            // -- clicking an "Incompatible" row already converts those.
             {
                 auto rdir = Mod::get()->getSaveDir() / "replays";
                 std::error_code exEc;
-                std::filesystem::path nativeFile;
+                std::filesystem::path themeFile;
                 for (auto& ext : allKnownMacroExtensions()) {
                     auto cand = rdir / (replayActionMacroName + ext);
                     if (std::filesystem::exists(cand, exEc)) {
-                        nativeFile = cand;
+                        themeFile = cand;
                         break;
                     }
                 }
-                bool isForeign = nativeFile.empty();
-                bool alreadyBrrr = !isForeign && nativeFile.extension() == ".brrr";
-                if (!alreadyBrrr) {
+                if (!themeFile.empty() && themeFile.extension() != ".brrr") {
                     ImGui::Dummy(ImVec2(0, 4));
-                    if (Widgets::StyledButton("Convert to .brrr##acv", ImVec2(aw, 30), theme, anim, 6.f)) {
+                    if (Widgets::StyledButton(
+                            "Convert to .brrr##acv", ImVec2(aw, 30), theme, anim, 6.f)) {
                         auto dest = rdir / (replayActionMacroName + ".brrr");
                         std::error_code destEc;
                         if (std::filesystem::exists(dest, destEc)) {
                             Notification::create("A .brrr with that name already exists",
                                                  NotificationIcon::Warning)
                                 ->show();
-                        } else if (isForeign) {
-                            if (engine->convertToBRR(replayActionMacroName))
-                                Notification::create("Converted to .brrr", NotificationIcon::Success)
-                                    ->show();
-                            else
-                                Notification::create("Couldn't convert that macro",
-                                                     NotificationIcon::Error)
-                                    ->show();
                         } else {
-                            // Same data, different extension -- rename it, and
-                            // carry the sidecars (<name>.<ext>.fw/.path/.trainer
-                            // /.bak) along so they don't get orphaned.
                             std::error_code mvEc;
-                            std::filesystem::rename(nativeFile, dest, mvEc);
+                            std::filesystem::rename(themeFile, dest, mvEc);
                             if (!mvEc) {
-                                std::string oldBase = nativeFile.filename().string();
+                                // Carry the sidecars (<name>.<ext>.fw/.path/
+                                // .trainer/.bak) across too, or they'd be
+                                // orphaned by the rename.
+                                std::string oldBase = themeFile.filename().string();
                                 std::string newBase = dest.filename().string();
                                 std::error_code itEc;
                                 std::vector<std::pair<std::filesystem::path,
