@@ -673,7 +673,27 @@ namespace gucci {
             if (gb->replayName.empty()) {
                 auto dir = Mod::get()->getSaveDir() / "replays";
                 std::string ext = currentThemeExtension(MenuInterface::get());
-                std::string base = "pathfinder";
+                // Named after the level rather than "pathfinder" (Nigel's ask,
+                // 2026-09-13). Level names are free text and routinely contain
+                // characters that aren't legal in a Windows filename, so strip
+                // those instead of letting the save quietly fail. Trailing
+                // dots/spaces are stripped too -- Windows won't store them.
+                std::string base;
+                if (pl && pl->m_level) {
+                    static constexpr std::string_view kIllegal = "\\/:*?\"<>|";
+                    for (char c : std::string(pl->m_level->m_levelName)) {
+                        if ((unsigned char)c < 0x20 ||
+                            kIllegal.find(c) != std::string_view::npos)
+                            continue;
+                        base += c;
+                    }
+                    while (!base.empty() && (base.back() == ' ' || base.back() == '.'))
+                        base.pop_back();
+                    size_t firstReal = base.find_first_not_of(' ');
+                    base = (firstReal == std::string::npos) ? std::string() : base.substr(firstReal);
+                }
+                if (base.empty())
+                    base = "pathfinder";
                 std::string name = base;
                 std::error_code ec;
                 for (int n = 2; std::filesystem::exists(dir / (name + ext), ec); ++n)

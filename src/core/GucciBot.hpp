@@ -1,18 +1,16 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                     \
-    "2026-09-13-e (Three asks from Nigel. 1. 'Default Look' toggle: a hard override of the "    \
-    "whole tier/shape/circle-skin system that draws the overlay the way NaN's videos do -- "    \
-    "one plain ring per click, fixed colour ramp (red=tightest .. blue=most lenient), number "  \
-    "to the LEFT of the ring, plus a sub-toggle for the bundled per-window bell sounds "        \
-    "instead of the Brrr. Tier settings are ignored while it's on, not lost. 2. Legend "        \
-    "restyled to match: free-floating outlined text on the background draw list, no panel or "  \
-    "border, label left and count in its own aligned column. 3. Macro three-dots menu gained "  \
-    "'Convert to .brrr' (real conversion for foreign formats, rename+sidecar-carry for other "  \
-    "theme extensions only -- .toosii/.icebrrr/etc are already BRR data, so it's a rename that " \
-    "carries the sidecars across; foreign formats stay with the existing Incompatible-row "     \
-    "flow) and 'Calculate', which loads the macro and runs the analyzer without a trip to the " \
-    "Macro tab.)"
+    "2026-09-13-g (Pathfinder names its auto-saved macro after the LEVEL now, not "             \
+    "'pathfinder' -- filename-illegal characters stripped, trailing dots/spaces trimmed, "      \
+    "falls back to 'pathfinder' if nothing usable is left, still de-duplicates with a numeric " \
+    "suffix. Carried from -e/-f: the 'Default Look' overlay override (one plain ring, fixed "   \
+    "red..blue ramp, number LEFT of the ring, optional bundled bell sounds instead of the "     \
+    "Brrr, tier/shape/circle-skin settings bypassed but kept), the restyled legend "            \
+    "(free-floating outlined text on the background draw list, no panel, count in its own "     \
+    "aligned column), and the macro three-dots additions -- 'Convert to .brrr' for other "      \
+    "theme extensions (a rename, sidecars carried across; foreign formats keep using the "      \
+    "existing Incompatible-row flow) and 'Calculate'.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
