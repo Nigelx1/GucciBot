@@ -387,4 +387,12 @@ namespace gucci {
 
     void displayOverlayBranding();
 
+    // The active theme's macro file extension, dot-prefixed (".brrr",
+    // ".icebrrr", or a custom theme's own). Exposed rather than duplicated:
+    // this logic already exists in too many copies (see the list in
+    // customtheme.cpp), and one of them silently dropping the leading dot was
+    // a real bug. Anything that needs to build a macro filename should call
+    // this instead of rolling its own.
+    std::string currentThemeExtension(MenuInterface* ui);
+
 } // namespace gucci

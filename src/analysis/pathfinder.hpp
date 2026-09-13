@@ -65,6 +65,8 @@ namespace gucci {
         bool hasResult = false;
         bool lastResultSuccess = false;
         size_t resultInputCount = 0;
+        // Name the solution was auto-saved under, for the result UI to show.
+        std::string savedAs;
 
         void begin();
         void cancel();

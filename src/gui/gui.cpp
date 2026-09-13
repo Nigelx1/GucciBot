@@ -389,7 +389,7 @@ namespace gucci {
         return ImVec4(0.30f, 0.70f, 1.0f, 1.0f);
     }
 
-    static std::string currentThemeExtension(MenuInterface* ui) {
+    std::string currentThemeExtension(MenuInterface* ui) {
         // CustomTheme::extension is always stored bare (alnum only, no dot --
         // see deriveCustomThemeExtension/sanitizeCustomExtension), but every
         // built-in branch below returns a dot-prefixed extension and callers
@@ -3057,13 +3057,6 @@ namespace gucci {
                     "still read off.");
                 ImGui::PopTextWrapPos();
                 ImGui::PopStyleColor();
-                ImGui::Dummy(ImVec2(0, 6));
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.f, 0.8f, 0.2f, 1.f));
-                ImGui::PushTextWrapPos(ImGui::GetFontSize() * 24.f);
-                ImGui::TextUnformatted(
-                    "Heavily recommended: have Megahack's Practice Fix enabled before calculating.");
-                ImGui::PopTextWrapPos();
-                ImGui::PopStyleColor();
                 ImGui::Dummy(ImVec2(0, 10));
                 float pbw = (ImGui::GetContentRegionAvail().x - 8) / 2.f;
                 if (Widgets::StyledButton("Calculate", ImVec2(pbw, 30), theme, anim, 6.f)) {
@@ -4404,9 +4397,17 @@ namespace gucci {
             if (pf->lastResultSuccess) {
                 Widgets::StatusBadge("SOLVED", ImVec4(0.3f, 1.f, 0.4f, 1.f));
                 ImGui::SameLine();
-                ImGui::Text("%zu inputs, %d runs -- loaded as the current macro", pf->resultInputCount, pf->runs);
+                ImGui::Text("%zu inputs, %d runs", pf->resultInputCount, pf->runs);
                 ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-                ImGui::TextWrapped("Go to the Macro tab to name and save it, or hit Playback to watch it.");
+                if (!pf->savedAs.empty())
+                    ImGui::TextWrapped(
+                        "Loaded as the current macro and saved as \"%s\" -- hit Playback to watch it, "
+                        "or rename it from the Macro tab.",
+                        pf->savedAs.c_str());
+                else
+                    ImGui::TextWrapped(
+                        "Loaded as the current macro and saved under your existing macro name -- hit "
+                        "Playback to watch it.");
                 ImGui::PopStyleColor();
             } else {
                 Widgets::StatusBadge(pf->stage == "cancelled" ? "CANCELLED" : "GAVE UP",
@@ -4433,11 +4434,6 @@ namespace gucci {
         Widgets::GucciQuote("\"Speed doesn't mean much if the frame windows are wrong.\"",
                             "-- Juice, keeping you honest",
                             theme);
-        ImGui::Dummy(ImVec2(0, 4));
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.f, 0.8f, 0.2f, 1.f));
-        ImGui::TextWrapped(
-            "Heavily recommended: have Megahack's Practice Fix enabled before running Calculate.");
-        ImGui::PopStyleColor();
         ImGui::Dummy(ImVec2(0, 6));
         {
             auto& replay = engine->replay;

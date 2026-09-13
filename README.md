@@ -41,7 +41,7 @@ GucciBot is public now — grab a build from [Releases](https://github.com/Nigel
 ## Practice & analysis
 
 - Macro diff viewer — put two replays side by side, frame by frame.
-- Calculate — per-click survivability windows measured against real game frames, not a guess. Three selectable algorithms now: Time-Based (default), Recovery Range, and Alignment-Independent (also re-tests the previous click's own timing, not just this one). Optional "Circle Skin" marker style. Megahack's Practice Fix is heavily recommended before running it.
+- Calculate — per-click survivability windows measured against real game frames, not a guess. Three selectable algorithms now: Time-Based (default), Recovery Range, and Alignment-Independent (also re-tests the previous click's own timing, not just this one). Optional "Circle Skin" marker style.
 - Mid-macro TPS changes, noclip accuracy readout, macro trim/merge/surgery.
 - Bot settings presets, a metadata editor, autosave on a timer or at level end.
 

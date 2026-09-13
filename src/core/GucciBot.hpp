@@ -1,15 +1,15 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                     \
-    "2026-09-13-b (HOTFIX: removed the launch update checker added in -c/v1.6.5 -- it "         \
-    "crashed the game on startup for real users. It was a geode::Task<void> coroutine "         \
-    "co_awaiting web::WebRequest().get(), which is an arc future; awaiting an arc pollable "    \
-    "from a geode::Task coroutine leaves arc without a valid Context/waker and dies in "        \
-    "arc::Context::cloneWaker on a 0xFFFF.. pointer. Same crash family as the file-picker "     \
-    "crashes in issues #1/#3, which are the identical geode::Task-awaiting-arc-future "         \
-    "mismatch -- so those guards were likely treating a symptom. Also still in this build: "    \
-    "build -a's checkpoint settled-point capture fix for the X-drift (unchanged, still needs "  \
-    "its own test -- [PF-CKPT-SAVE] @f=N should match [PF-CONFIRM] @f=N).)"
+    "2026-09-13-c (Build -a's checkpoint settled-point fix is CONFIRMED WORKING -- Nigel "      \
+    "tested on 8joh, both Pathfinder and frame windows work, and the log shows the "            \
+    "confirmation run PASSING on the first try after failing at f=161 on every build from -t "  \
+    "through -x. This build is his follow-ups: Pathfinder now auto-saves its solution to disk " \
+    "instead of leaving you to press Playback then Save by hand (auto-names 'pathfinder', "     \
+    "'pathfinder 2', ... only when you haven't named one yourself), and the now-obsolete "      \
+    "'heavily recommended: enable Megahack's Practice Fix' warnings are gone from both "        \
+    "Calculate surfaces plus about.md/README. Also exposed currentThemeExtension() in gui.hpp " \
+    "rather than adding a 7th private copy of that logic.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

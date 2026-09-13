@@ -1,8 +1,11 @@
 #include "analysis/pathfinder.hpp"
 
+#include "gui/gui.hpp" // currentThemeExtension, for auto-saving the solved macro
+
 #include <Geode/Geode.hpp>
 #include <Geode/binding/PauseLayer.hpp>
 #include <algorithm>
+#include <filesystem>
 
 using namespace geode::prelude;
 
@@ -661,8 +664,36 @@ namespace gucci {
             });
             gb->replay.m_actionAtom.m_actions = committed;
             resultInputCount = committed.size();
-            if (gb->replayName.empty())
-                gb->replayName = "pathfinder";
+
+            // Save it to disk here rather than leaving the user to press
+            // Playback and then Save by hand -- Nigel (2026-09-13): a solved
+            // search that looks like nothing happened is a bad hand-off.
+            // Only auto-names when the user hasn't already named something;
+            // if they have, that name is theirs and we don't touch it.
+            if (gb->replayName.empty()) {
+                auto dir = Mod::get()->getSaveDir() / "replays";
+                std::string ext = currentThemeExtension(MenuInterface::get());
+                std::string base = "pathfinder";
+                std::string name = base;
+                std::error_code ec;
+                for (int n = 2; std::filesystem::exists(dir / (name + ext), ec); ++n)
+                    name = fmt::format("{} {}", base, n);
+                gb->replayName = name;
+            }
+
+            auto savePath =
+                Mod::get()->getSaveDir() / "replays" / (gb->replayName + currentThemeExtension(MenuInterface::get()));
+            if (gb->replayBackupsEnabled)
+                gb->replay.backupExisting(savePath);
+            gb->replay.save(savePath);
+            savedAs = gb->replayName;
+            // No explicit macro-list refresh needed: the list checks the
+            // replays directory's own mtime (refreshReplayListIfNeeded), and
+            // writing this file changes it.
+            log::info("[Pathfinder] auto-saved solution as \"{}\"", gb->replayName);
+            Notification::create(fmt::format("Macro saved as \"{}\"", gb->replayName),
+                                 NotificationIcon::Success)
+                ->show();
             stage = "done";
         } else {
             gb->replay.m_actionAtom = savedAtom;
