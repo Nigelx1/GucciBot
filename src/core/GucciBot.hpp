@@ -1,14 +1,16 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                     \
-    "2026-09-13-d (Frame-window sound lag FIXED, and it was the asset, not the code, exactly "  \
-    "as Nigel guessed: resources/fw_default.mp3 had 374ms of leading silence before the "       \
-    "'Brrr' even starts, so the sound fired on the correct frame and you heard nothing for a "  \
-    "third of a second. Trimmed to 14ms of lead-in with the full 375ms of audio intact; file "  \
-    "also drops 7.87s -> 0.50s and 158KB -> 11KB since it had 7.1s of trailing silence too. "   \
-    "Also: deleted resources/fw_default(1).mp3 (unreferenced duplicate, not in mod.json), and " \
-    "the tier Sound help text no longer calls the default a 'chime' -- it's Gucci saying "      \
-    "Brrr, which is what made GitHub issue #4's reporter think it was broken.)"
+    "2026-09-13-e (Three asks from Nigel. 1. 'Default Look' toggle: a hard override of the "    \
+    "whole tier/shape/circle-skin system that draws the overlay the way NaN's videos do -- "    \
+    "one plain ring per click, fixed colour ramp (red=tightest .. blue=most lenient), number "  \
+    "to the LEFT of the ring, plus a sub-toggle for the bundled per-window bell sounds "        \
+    "instead of the Brrr. Tier settings are ignored while it's on, not lost. 2. Legend "        \
+    "restyled to match: free-floating outlined text on the background draw list, no panel or "  \
+    "border, label left and count in its own aligned column. 3. Macro three-dots menu gained "  \
+    "'Convert to .brrr' (real conversion for foreign formats, rename+sidecar-carry for other "  \
+    "theme extensions, since convertToBRR skips native ones) and 'Calculate', which loads the " \
+    "macro and runs the analyzer without a trip to the Macro tab.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -651,6 +653,49 @@ namespace gucci {
         float fwCircleSkinDotRadius = 5.f;
         float fwCircleSkinRadiusPerFrame = 2.2f;
         float fwCircleSkinMaxRadius = 60.f;
+
+        // Nigel's ask (2026-09-13): the tier/shape/circle-skin system is
+        // Juice's, and he doesn't use it. This is a hard override that makes
+        // the overlay look like the frame-window counter in NaN's videos --
+        // one plain ring per click, the fixed colour ramp below, and the
+        // number to the LEFT of the ring rather than above it. When on it
+        // ignores tiers, shapes, images and circle skin entirely; nothing
+        // about those settings is lost, they just stop being consulted.
+        bool fwDefaultLook = false;
+        // Sub-option: the per-window bundled tier sounds (fw_1.wav ...
+        // fw_9_12.wav, seeded into fw_assets on first run) instead of
+        // GucciBot's own "Brrr". Those are what this style normally uses;
+        // the Brrr is a GucciBot thing, so it stays the default.
+        bool fwDefaultLookBells = false;
+
+        // The fixed ramp from NaN's overlay: hot = tight window, cool =
+        // lenient. Shared by the markers and the legend so they can't drift
+        // apart.
+        static cocos2d::ccColor4F fwDefaultLookColor(int window) {
+            if (window <= 1)
+                return {1.00f, 0.27f, 0.27f, 1.f}; // red
+            if (window == 2)
+                return {1.00f, 0.60f, 0.20f, 1.f}; // orange
+            if (window == 3)
+                return {1.00f, 0.85f, 0.27f, 1.f}; // yellow
+            if (window == 4)
+                return {1.00f, 1.00f, 1.00f, 1.f}; // white
+            if (window <= 6)
+                return {0.40f, 0.87f, 0.53f, 1.f}; // green
+            if (window <= 8)
+                return {0.40f, 0.67f, 1.00f, 1.f}; // light blue
+            return {0.36f, 0.42f, 0.93f, 1.f};     // blue
+        }
+        // Row labels for the legend, coarsest first (top of the list), so the
+        // legend reads 9-10 / 7-8 / 5-6 / 4 / 3 / 2 / 1 exactly like NaN's.
+        struct FwDefaultLookRow {
+            int lo, hi;
+        };
+        static const std::vector<FwDefaultLookRow>& fwDefaultLookRows() {
+            static const std::vector<FwDefaultLookRow> rows = {
+                {9, 10}, {7, 8}, {5, 6}, {4, 4}, {3, 3}, {2, 2}, {1, 1}};
+            return rows;
+        }
 
         bool practiceRangeEnabled = false;
         int fwMaxWindow = 25;

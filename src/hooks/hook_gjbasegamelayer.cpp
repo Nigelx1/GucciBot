@@ -245,7 +245,9 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
                     continue;
                 if (mk.window > gb->fwMaxWindow)
                     break;
-                if (!gb->fwTiers.empty() && !gb->fwTierFor(mk.window))
+                // Default Look ignores tiers, so a tier setup that doesn't
+                // cover this window must not silence it.
+                if (!gb->fwDefaultLook && !gb->fwTiers.empty() && !gb->fwTierFor(mk.window))
                     break;
                 gbfw::playTierSound(mk.window);
                 break;

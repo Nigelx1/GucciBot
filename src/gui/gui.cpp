@@ -3470,6 +3470,124 @@ namespace gucci {
                 }
             }
 
+            // Convert to .brrr. Two genuinely different jobs behind one
+            // button: a foreign format (.gdr/.xd/.json/.brr) needs a real
+            // format conversion, while another GucciBot theme's extension
+            // (.icebrrr, .toosii, ...) is already BRR data and only needs the
+            // file renamed. convertToBRR() deliberately skips native
+            // extensions, so it can't do the second case on its own.
+            {
+                auto rdir = Mod::get()->getSaveDir() / "replays";
+                std::error_code exEc;
+                std::filesystem::path nativeFile;
+                for (auto& ext : allKnownMacroExtensions()) {
+                    auto cand = rdir / (replayActionMacroName + ext);
+                    if (std::filesystem::exists(cand, exEc)) {
+                        nativeFile = cand;
+                        break;
+                    }
+                }
+                bool isForeign = nativeFile.empty();
+                bool alreadyBrrr = !isForeign && nativeFile.extension() == ".brrr";
+                if (!alreadyBrrr) {
+                    ImGui::Dummy(ImVec2(0, 4));
+                    if (Widgets::StyledButton("Convert to .brrr##acv", ImVec2(aw, 30), theme, anim, 6.f)) {
+                        auto dest = rdir / (replayActionMacroName + ".brrr");
+                        std::error_code destEc;
+                        if (std::filesystem::exists(dest, destEc)) {
+                            Notification::create("A .brrr with that name already exists",
+                                                 NotificationIcon::Warning)
+                                ->show();
+                        } else if (isForeign) {
+                            if (engine->convertToBRR(replayActionMacroName))
+                                Notification::create("Converted to .brrr", NotificationIcon::Success)
+                                    ->show();
+                            else
+                                Notification::create("Couldn't convert that macro",
+                                                     NotificationIcon::Error)
+                                    ->show();
+                        } else {
+                            // Same data, different extension -- rename it, and
+                            // carry the sidecars (<name>.<ext>.fw/.path/.trainer
+                            // /.bak) along so they don't get orphaned.
+                            std::error_code mvEc;
+                            std::filesystem::rename(nativeFile, dest, mvEc);
+                            if (!mvEc) {
+                                std::string oldBase = nativeFile.filename().string();
+                                std::string newBase = dest.filename().string();
+                                std::error_code itEc;
+                                std::vector<std::pair<std::filesystem::path,
+                                                      std::filesystem::path>> sidecars;
+                                for (auto& it : std::filesystem::directory_iterator(rdir, itEc)) {
+                                    if (itEc)
+                                        break;
+                                    if (!it.is_regular_file())
+                                        continue;
+                                    auto fn = it.path().filename().string();
+                                    if (fn.size() > oldBase.size() + 1 &&
+                                        fn.compare(0, oldBase.size(), oldBase) == 0 &&
+                                        fn[oldBase.size()] == '.') {
+                                        sidecars.emplace_back(
+                                            it.path(), rdir / (newBase + fn.substr(oldBase.size())));
+                                    }
+                                }
+                                for (auto& [from, to] : sidecars) {
+                                    std::error_code scEc;
+                                    std::filesystem::rename(from, to, scEc);
+                                }
+                                Notification::create("Converted to .brrr", NotificationIcon::Success)
+                                    ->show();
+                            } else {
+                                Notification::create("Couldn't rename that macro",
+                                                     NotificationIcon::Error)
+                                    ->show();
+                            }
+                        }
+                        markReplayListDirty();
+                        refreshReplayListIfNeeded(true);
+                        ImGui::CloseCurrentPopup();
+                    }
+                }
+            }
+
+            // Run Calculate straight from here instead of making the user
+            // load the macro first and then go find the button.
+            {
+                bool inLevel = PlayLayer::get() != nullptr;
+                ImGui::Dummy(ImVec2(0, 4));
+                if (!inLevel)
+                    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.4f);
+                bool calcClicked =
+                    Widgets::StyledButton("Calculate##acalc", ImVec2(aw, 30), theme, anim, 6.f);
+                if (!inLevel)
+                    ImGui::PopStyleVar();
+                if (calcClicked && inLevel) {
+                    auto rdir = Mod::get()->getSaveDir() / "replays";
+                    std::string extFound;
+                    std::error_code exEc;
+                    for (auto& ext : allKnownMacroExtensions()) {
+                        if (std::filesystem::exists(rdir / (replayActionMacroName + ext), exEc)) {
+                            extFound = ext;
+                            break;
+                        }
+                    }
+                    if (!extFound.empty()) {
+                        engine->replay.load(rdir / (replayActionMacroName + extFound));
+                        engine->replayName = replayActionMacroName;
+                        engine->analyzeFrameWindows();
+                    } else {
+                        Notification::create("Convert this macro first", NotificationIcon::Warning)
+                            ->show();
+                    }
+                    ImGui::CloseCurrentPopup();
+                }
+                if (!inLevel) {
+                    ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                    ImGui::TextWrapped("Open a level to run Calculate.");
+                    ImGui::PopStyleColor();
+                }
+            }
+
             ImGui::Dummy(ImVec2(0, 4));
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.55f, 0.12f, 0.12f, 1.f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.75f, 0.18f, 0.18f, 1.f));
@@ -4573,6 +4691,28 @@ namespace gucci {
                 Mod::get()->setSavedValue("fw_legend", engine->fwLegendEnabled);
             if (recLocked)
                 ImGui::EndDisabled();
+
+            ImGui::Dummy(ImVec2(0, 6));
+            if (Widgets::ToggleSwitch("Default Look", &engine->fwDefaultLook, theme, anim))
+                Mod::get()->setSavedValue("fw_default_look", engine->fwDefaultLook);
+            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+            ImGui::TextWrapped(
+                "Overrides everything below: one plain ring per click, a fixed colour ramp "
+                "(red = tightest, blue = most lenient), and the number to the left of the ring. "
+                "Tiers, shapes, marker images and Circle Skin are all ignored while this is on -- "
+                "your settings for them are kept, just not used.");
+            ImGui::PopStyleColor();
+            if (engine->fwDefaultLook) {
+                if (Widgets::ToggleSwitch(
+                        "   Use Bell Sounds", &engine->fwDefaultLookBells, theme, anim))
+                    Mod::get()->setSavedValue("fw_default_look_bells", engine->fwDefaultLookBells);
+                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                ImGui::TextWrapped("Off: Gucci Mane saying \"Brrr\" (GucciBot's own default). "
+                                   "On: the bundled per-window bell set, which is what this style "
+                                   "normally uses.");
+                ImGui::PopStyleColor();
+            }
+            ImGui::Dummy(ImVec2(0, 6));
         }
         {
             bool aiLocked = !engine->fwAiHasData;
@@ -8619,6 +8759,8 @@ namespace gucci {
         eng->fwOrbAwareReleaseSkip = mod->getSavedValue<bool>("fw_orb_aware_release_skip", true);
         eng->fwLegendEnabled = mod->getSavedValue<bool>("fw_legend", false);
         eng->fwLegendScale = mod->getSavedValue<float>("fw_legend_scale", 1.f);
+        eng->fwDefaultLook = mod->getSavedValue<bool>("fw_default_look", false);
+        eng->fwDefaultLookBells = mod->getSavedValue<bool>("fw_default_look_bells", false);
         eng->fwRingBoldness = mod->getSavedValue<float>("fw_ring_boldness", 2.2f);
         eng->fwCircleSkinEnabled = mod->getSavedValue<bool>("fw_circle_skin", false);
         eng->fwCircleSkinDotRadius = mod->getSavedValue<float>("fw_circleskin_dot_radius", 5.f);
@@ -9091,7 +9233,11 @@ namespace gucci {
         auto* engine = GucciEngine::get();
         if (!ui || !ui->setupComplete || !engine)
             return;
-        if (!engine->fwLegendEnabled || !engine->fwHasData || engine->fwTiers.empty())
+        // Default Look supplies its own fixed rows, so an empty tier list is
+        // fine there -- only the tier-driven legend needs tiers to exist.
+        if (!engine->fwLegendEnabled || !engine->fwHasData)
+            return;
+        if (!engine->fwDefaultLook && engine->fwTiers.empty())
             return;
         if (!PlayLayer::get())
             return;
@@ -9134,38 +9280,86 @@ namespace gucci {
         }
 
         std::vector<LegendGroup> sorted;
-        sorted.reserve(groups.size());
-        for (auto const& kv : groups)
-            sorted.push_back(kv.second);
-        std::sort(sorted.begin(), sorted.end(), [](auto const& a, auto const& b) {
-            return a.hi > b.hi;
-        });
-
-        auto* vp = ImGui::GetMainViewport();
-        ImGui::SetNextWindowPos(
-            ImVec2(vp->Pos.x + 10, vp->Pos.y + 10), ImGuiCond_Always, ImVec2(0, 0));
-        ImGui::SetNextWindowSize(ImVec2(0, 0), ImGuiCond_Always);
-        ImGui::SetNextWindowBgAlpha(0.5f);
-        ImGui::Begin("##fwLegend",
-                     nullptr,
-                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs |
-                         ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
-                         ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
-                         ImGuiWindowFlags_NoBringToFrontOnFocus);
-        if (ui->fontBody)
-            ImGui::PushFont(ui->fontBody);
-        ImGui::SetWindowFontScale(engine->fwLegendScale);
-        for (auto const& g : sorted) {
-            ImVec4 col(g.r, g.g, g.b, 1.f);
-            if (g.lo == g.hi)
-                ImGui::TextColored(col, "%d: %d", g.lo, g.count);
-            else
-                ImGui::TextColored(col, "%d-%d: %d", g.lo, g.hi, g.count);
+        if (engine->fwDefaultLook) {
+            // Fixed rows + fixed ramp, matching the markers exactly.
+            for (auto const& row : GucciEngine::fwDefaultLookRows()) {
+                LegendGroup g;
+                g.lo = row.lo;
+                g.hi = row.hi;
+                auto c = GucciEngine::fwDefaultLookColor(row.lo);
+                g.r = c.r;
+                g.g = c.g;
+                g.b = c.b;
+                for (auto const& mk : engine->fwMarks) {
+                    if (mk.frame > curFrame)
+                        continue;
+                    if (mk.window >= row.lo && mk.window <= row.hi)
+                        g.count++;
+                }
+                sorted.push_back(g);
+            }
+        } else {
+            sorted.reserve(groups.size());
+            for (auto const& kv : groups)
+                sorted.push_back(kv.second);
+            std::sort(sorted.begin(), sorted.end(), [](auto const& a, auto const& b) {
+                return a.hi > b.hi;
+            });
         }
-        ImGui::SetWindowFontScale(1.0f);
-        if (ui->fontBody)
-            ImGui::PopFont();
-        ImGui::End();
+
+        // Drawn as free-floating outlined text straight onto the foreground
+        // draw list rather than as a themed ImGui panel. Nigel (2026-09-13):
+        // the old one looked "embedded to guccibot"; this matches the
+        // reference overlay -- no background, no border, label left and count
+        // in its own right-aligned column, black outline so it stays readable
+        // over both the bright and dark parts of a level.
+        auto* vp = ImGui::GetMainViewport();
+        // Background list, not foreground: this draws over the game but still
+        // UNDER GucciBot's own windows, which is how the old panel stacked.
+        // The foreground list would paint the legend on top of the menu.
+        auto* dl = ImGui::GetBackgroundDrawList();
+        ImFont* font = ui->fontBody ? ui->fontBody : ImGui::GetFont();
+        float scale = std::max(0.1f, engine->fwLegendScale);
+        float fontSize = ImGui::GetFontSize() * scale * 1.35f;
+        float lineStep = fontSize * 1.18f;
+        float originX = vp->Pos.x + 14.f;
+        float originY = vp->Pos.y + 12.f;
+
+        // Widest label decides where the count column starts, so the numbers
+        // line up in a column instead of ragging off the end of each label.
+        float labelW = 0.f;
+        std::vector<std::string> labels;
+        std::vector<std::string> counts;
+        labels.reserve(sorted.size());
+        counts.reserve(sorted.size());
+        for (auto const& g : sorted) {
+            labels.push_back(g.lo == g.hi ? fmt::format("{}:", g.lo)
+                                          : fmt::format("{}-{}:", g.lo, g.hi));
+            counts.push_back(fmt::format("{}", g.count));
+            labelW = std::max(labelW,
+                              font->CalcTextSizeA(fontSize, FLT_MAX, 0.f, labels.back().c_str()).x);
+        }
+        float countX = originX + labelW + fontSize * 0.9f;
+
+        auto outlinedText = [&](ImVec2 pos, ImU32 col, const char* text) {
+            const float o = std::max(1.f, fontSize * 0.075f);
+            const ImU32 black = IM_COL32(0, 0, 0, 235);
+            for (int dx = -1; dx <= 1; ++dx)
+                for (int dy = -1; dy <= 1; ++dy) {
+                    if (!dx && !dy)
+                        continue;
+                    dl->AddText(font, fontSize, ImVec2(pos.x + dx * o, pos.y + dy * o), black, text);
+                }
+            dl->AddText(font, fontSize, pos, col, text);
+        };
+
+        for (size_t i = 0; i < sorted.size(); ++i) {
+            auto const& g = sorted[i];
+            ImU32 col = ImGui::ColorConvertFloat4ToU32(ImVec4(g.r, g.g, g.b, 1.f));
+            float y = originY + lineStep * (float)i;
+            outlinedText(ImVec2(originX, y), col, labels[i].c_str());
+            outlinedText(ImVec2(countX, y), col, counts[i].c_str());
+        }
     }
 
     void displayGameplayHUD() {

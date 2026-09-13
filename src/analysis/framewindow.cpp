@@ -270,15 +270,20 @@ public:
                 continue;
 
             auto* tier = gb->fwTierFor(mk.window);
-            if (!gb->fwTiers.empty() && !tier)
+            // Default Look deliberately ignores the tier system, so a tier
+            // setup that would normally filter this mark out doesn't apply.
+            if (!gb->fwDefaultLook && !gb->fwTiers.empty() && !tier)
                 continue;
+            if (gb->fwDefaultLook)
+                tier = nullptr;
 
             CCPoint at{mk.x, mk.y};
             if (!visRect.containsPoint(at))
                 continue;
 
-            ccColor4F col = tier ? ccColor4F{tier->r, tier->g, tier->b, 1.f}
-                                 : gradeColor(mk.window, gb->fwMaxWindow);
+            ccColor4F col = gb->fwDefaultLook ? GucciEngine::fwDefaultLookColor(mk.window)
+                            : tier             ? ccColor4F{tier->r, tier->g, tier->b, 1.f}
+                                               : gradeColor(mk.window, gb->fwMaxWindow);
 
             ccColor4F markerCol = col;
             ccColor4F textCol = col;
@@ -301,7 +306,15 @@ public:
                                          tier->textPulseFadeOut);
             }
 
-            if (gb->fwCircleSkinEnabled) {
+            if (gb->fwDefaultLook) {
+                // One plain ring, nothing else -- no inner circle, no fill,
+                // no sprite. drawCircleShape's Inverted style draws a second
+                // ring at 0.55r, which reads as a double ring rather than the
+                // single donut this style uses.
+                ccColor4F clear4{0.f, 0.f, 0.f, 0.f};
+                m_node->drawCircle(
+                    at, kRadius, clear4, std::max(1.5f, gb->fwRingBoldness), markerCol, 32);
+            } else if (gb->fwCircleSkinEnabled) {
                 drawCircleSkinMarker(at, mk.window, markerCol);
             } else {
                 bool drewSprite = false;
@@ -338,12 +351,23 @@ public:
             // whole point), so the label needs to clear the ring itself,
             // not the normal marker's fixed radius.
             float labelClearance = kRadius;
-            if (gb->fwCircleSkinEnabled)
+            if (gb->fwCircleSkinEnabled && !gb->fwDefaultLook)
                 labelClearance = std::min(gb->fwCircleSkinMaxRadius,
                                           gb->fwCircleSkinDotRadius +
                                               std::max(0, mk.window) *
                                                   gb->fwCircleSkinRadiusPerFrame);
-            lbl->setPosition({at.x, at.y + labelClearance + 11.f});
+            if (gb->fwDefaultLook) {
+                // Number sits to the LEFT of the ring, vertically centred --
+                // how NaN's reads, and the same thing GitHub issue #4's
+                // reporter asked for ("if the 1 could be at the left of the
+                // circle"). Anchor on the right edge of the label so digit
+                // count doesn't shift it toward the ring.
+                lbl->setAnchorPoint({1.f, 0.5f});
+                float gap = kRadius + 7.f;
+                lbl->setPosition({mirrored ? at.x + gap : at.x - gap, at.y});
+            } else {
+                lbl->setPosition({at.x, at.y + labelClearance + 11.f});
+            }
             lbl->setColor({(GLubyte)(textCol.r * 255),
                            (GLubyte)(textCol.g * 255),
                            (GLubyte)(textCol.b * 255)});
@@ -669,7 +693,29 @@ namespace gucci::gbfw {
         auto* tier = gb->fwTierFor(window);
 
         std::filesystem::path path;
-        if (tier && std::string(tier->soundFile) == "none") {
+        if (gb->fwDefaultLook) {
+            // Default Look ignores tiers, so it picks its own sound: either
+            // the bundled per-window set (seeded into fw_assets on first run
+            // by main.cpp) or GucciBot's own Brrr.
+            if (gb->fwDefaultLookBells) {
+                const char* file = "fw_9_12.wav";
+                if (window <= 1)
+                    file = "fw_1.wav";
+                else if (window == 2)
+                    file = "fw_2.wav";
+                else if (window == 3)
+                    file = "fw_3.wav";
+                else if (window == 4)
+                    file = "fw_4.wav";
+                else if (window <= 6)
+                    file = "fw_5_6.wav";
+                else if (window <= 8)
+                    file = "fw_7_8.wav";
+                path = Mod::get()->getSaveDir() / "fw_assets" / file;
+            } else {
+                path = Mod::get()->getResourcesDir() / "fw_default.mp3";
+            }
+        } else if (tier && std::string(tier->soundFile) == "none") {
             return;
         } else if (tier && tier->soundFile[0]) {
             path = Mod::get()->getSaveDir() / "fw_assets" / tier->soundFile;
@@ -699,7 +745,8 @@ namespace gucci::gbfw {
         FMOD::Channel* channel = nullptr;
         system->playSound(sound, frameWindowChannelGroup(), true, &channel);
         if (channel) {
-            channel->setVolume(tier ? std::clamp(tier->volume, 0.f, 1.f) : 1.f);
+            channel->setVolume((tier && !gb->fwDefaultLook) ? std::clamp(tier->volume, 0.f, 1.f)
+                                                            : 1.f);
             channel->setPaused(false);
         }
     }
