@@ -5133,9 +5133,10 @@ namespace gucci {
         ImGui::TextWrapped(
             "Tiers map gap sizes to a marker image and sound. Put PNG/audio files in the mod's "
             "fw_assets folder and enter the filenames. No tier = default colored ring.");
-        ImGui::TextWrapped("Sound: leave blank for the built-in default chime, type a filename for "
-                           "custom, or 'none' "
-                           "to silence that tier. Markers appear as the bot reaches each click.");
+        ImGui::TextWrapped("Sound: leave blank for the built-in default (Gucci Mane saying \"Brrr\" "
+                           "-- that's intentional, not a broken file), type a filename for custom, "
+                           "or 'none' to silence that tier. Markers appear as the bot reaches each "
+                           "click.");
         ImGui::PopStyleColor();
         {
             float halfW = (ImGui::GetContentRegionAvail().x - 8) / 2.f;

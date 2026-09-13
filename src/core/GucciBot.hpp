@@ -1,15 +1,14 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                     \
-    "2026-09-13-c (Build -a's checkpoint settled-point fix is CONFIRMED WORKING -- Nigel "      \
-    "tested on 8joh, both Pathfinder and frame windows work, and the log shows the "            \
-    "confirmation run PASSING on the first try after failing at f=161 on every build from -t "  \
-    "through -x. This build is his follow-ups: Pathfinder now auto-saves its solution to disk " \
-    "instead of leaving you to press Playback then Save by hand (auto-names 'pathfinder', "     \
-    "'pathfinder 2', ... only when you haven't named one yourself), and the now-obsolete "      \
-    "'heavily recommended: enable Megahack's Practice Fix' warnings are gone from both "        \
-    "Calculate surfaces plus about.md/README. Also exposed currentThemeExtension() in gui.hpp " \
-    "rather than adding a 7th private copy of that logic.)"
+    "2026-09-13-d (Frame-window sound lag FIXED, and it was the asset, not the code, exactly "  \
+    "as Nigel guessed: resources/fw_default.mp3 had 374ms of leading silence before the "       \
+    "'Brrr' even starts, so the sound fired on the correct frame and you heard nothing for a "  \
+    "third of a second. Trimmed to 14ms of lead-in with the full 375ms of audio intact; file "  \
+    "also drops 7.87s -> 0.50s and 158KB -> 11KB since it had 7.1s of trailing silence too. "   \
+    "Also: deleted resources/fw_default(1).mp3 (unreferenced duplicate, not in mod.json), and " \
+    "the tier Sound help text no longer calls the default a 'chime' -- it's Gucci saying "      \
+    "Brrr, which is what made GitHub issue #4's reporter think it was broken.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
