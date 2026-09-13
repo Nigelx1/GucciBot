@@ -116,7 +116,6 @@ Real click-timing feedback and a synced video-review overlay, both built around 
 
 - **Compact Mode** — a small corner panel (record/play, save/name/Calculate, macro picker, TPS/speed, frame stepping) instead of the full tabbed window, so the bot stays usable while you're actually playing.
 - **BIG BRRRR** — a joke toggle in Settings. You'll know it when you see it.
-- **Update Checker** — a quiet check against GitHub on launch. If a newer release exists, you get a popup with a link straight to it; if not, you never see anything.
 
 ---
 

@@ -1,16 +1,15 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                     \
-    "2026-09-13-a (ROOT CAUSE FIX for the checkpoint X-drift, found by diffing Silicate's "     \
-    "checkpoint code: Calculate and Pathfinder both captured their checkpoints from their own " \
-    "tick()s, which run AFTER incrementFrame() but BEFORE that frame's physics -- so every "    \
-    "checkpoint paired a position with a frame label one ahead of it, and since restore trusts "\
-    "the label, every restore silently lost one frame of X. Compounds per restore; that's the " \
-    "~1.047-unit gap build -w measured with Y/vel/rot exact. Both now capture at the settled "  \
-    "point (top of frameUpdateMidhook, before incrementFrame) -- the SAME fix already applied " \
-    "to storeCheckpoint, whose own comment calls it 'compounding per-checkpoint position "      \
-    "drift' but which was never propagated to the other sites. Test: [PF-CKPT-SAVE] @f=N "      \
-    "should now match [PF-CONFIRM] @f=N exactly instead of trailing by ~1.047.)"
+    "2026-09-13-b (HOTFIX: removed the launch update checker added in -c/v1.6.5 -- it "         \
+    "crashed the game on startup for real users. It was a geode::Task<void> coroutine "         \
+    "co_awaiting web::WebRequest().get(), which is an arc future; awaiting an arc pollable "    \
+    "from a geode::Task coroutine leaves arc without a valid Context/waker and dies in "        \
+    "arc::Context::cloneWaker on a 0xFFFF.. pointer. Same crash family as the file-picker "     \
+    "crashes in issues #1/#3, which are the identical geode::Task-awaiting-arc-future "         \
+    "mismatch -- so those guards were likely treating a symptom. Also still in this build: "    \
+    "build -a's checkpoint settled-point capture fix for the X-drift (unchanged, still needs "  \
+    "its own test -- [PF-CKPT-SAVE] @f=N should match [PF-CONFIRM] @f=N).)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
