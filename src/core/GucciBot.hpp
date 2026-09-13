@@ -1,11 +1,13 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-14-b (Version bump to 1.7.1. Packages build -a: the stale-overlay-node fix for "\
-    "the 1.7 level-entry regression (cached child pointers outliving their PlayLayer, made "\
-    "reachable by the new legend dereferencing m_legendLayer every frame on m_uiLayer, which "\
-    "the m_node attach guard never covered), plus macro deletion now removing every file "\
-    "belonging to a macro by prefix instead of a hardcoded sidecar list.)"
+    "2026-09-15-a (Pathfinder v2 step 0: cut the drift-era diagnostics. The per-frame "\
+    "[PF-CONFIRM] trace, the [PF-CKPT-SAVE] dump on every ring checkpoint and the "\
+    "[PF-CKPT-LOAD] dump on every candidate run existed only to chase the restore-chain X "\
+    "drift fixed on 2026-09-13 -- during a search they were tens of thousands of log "\
+    "lines burying the search output itself. The confirmation-failure recovery stays, "\
+    "since its reasoning holds for a failure from any cause, but now logs as a warning "\
+    "rather than as an expected path.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

@@ -197,24 +197,6 @@ namespace gucci {
             pl->resetLevel();
             pf.m_loadCheckpoint = false;
             pf.m_isBackstep = false;
-            // Diagnostic (build -v): dump the player's state the instant it
-            // comes out of a checkpoint restore, so it can be diffed against
-            // [PF-CKPT-SAVE] (state at the moment that same checkpoint was
-            // captured) and [PF-CONFIRM] (state a genuine continuous run
-            // reaches at the same frame) for the same frame number. If any
-            // of the three disagree, that's the checkpoint-restore fidelity
-            // gap the last two builds' evidence points at.
-            if (pl->m_player1) {
-                auto* p1 = pl->m_player1;
-                log::info("[PF-CKPT-LOAD] f={} x={:.3f} y={:.3f} xs={:.3f} ys={:.3f} rot={:.3f} g={}",
-                          gb->updater.getFrame(),
-                          (double)p1->m_position.x,
-                          (double)p1->m_position.y,
-                          (double)p1->m_playerSpeed,
-                          (double)p1->m_yVelocity,
-                          (double)p1->getRotation(),
-                          p1->m_isOnGround ? 1 : 0);
-            }
         }
     }
 
@@ -263,20 +245,6 @@ namespace gucci {
         gb->fwCkptCreatedThisFrame = true;
         auto& pf = gb->practiceFix;
         pf.saveState(cp, frame);
-        // Diagnostic (build -v): state as captured, to diff against
-        // [PF-CKPT-LOAD] (same checkpoint, right after being restored) and
-        // [PF-CONFIRM] (a genuine continuous run reaching this same frame).
-        if (pl->m_player1) {
-            auto* p1 = pl->m_player1;
-            log::info("[PF-CKPT-SAVE] f={} x={:.3f} y={:.3f} xs={:.3f} ys={:.3f} rot={:.3f} g={}",
-                      frame,
-                      (double)p1->m_position.x,
-                      (double)p1->m_position.y,
-                      (double)p1->m_playerSpeed,
-                      (double)p1->m_yVelocity,
-                      (double)p1->getRotation(),
-                      p1->m_isOnGround ? 1 : 0);
-        }
         StoredFrame sf;
         sf.frame = frame;
         if (!pf.m_storedFrames.empty()) {
@@ -340,24 +308,6 @@ namespace gucci {
         uint32_t f = gb->updater.getFrame();
         float x = pl->m_player1 ? pl->m_player1->m_position.x : 0.f;
 
-        // Diagnostic (build -v): full per-frame trace, but ONLY during the
-        // one-shot confirmation run -- this is the only place in Pathfinder
-        // with a genuine continuous trajectory to compare against the
-        // search's checkpoint-restored one ([PF-CKPT-SAVE]/[PF-CKPT-LOAD]).
-        // Doing this during the search itself would be ~500 runs' worth of
-        // spam for no reason; one run's worth here is not.
-        if (confirming && pl->m_player1) {
-            auto* p1 = pl->m_player1;
-            log::info("[PF-CONFIRM] f={} x={:.3f} y={:.3f} xs={:.3f} ys={:.3f} rot={:.3f} g={}",
-                      f,
-                      (double)p1->m_position.x,
-                      (double)p1->m_position.y,
-                      (double)p1->m_playerSpeed,
-                      (double)p1->m_yVelocity,
-                      (double)p1->getRotation(),
-                      p1->m_isOnGround ? 1 : 0);
-        }
-
         if (x > bestX) {
             bestX = x;
             bestFrame = f;
@@ -380,37 +330,26 @@ namespace gucci {
 
         if (died) {
             if (confirming) {
-                // A real test round (2026-09-06, builds -t/-u/-v) proved the
-                // checkpoint-chained search can commit a candidate that a
-                // genuine continuous replay of the SAME macro doesn't
-                // survive -- confirmed via direct field comparison to be a
-                // real one-frame X-position drift the restore chain
-                // silently accumulates, not a click-registration or frame-
-                // numbering bug. Rather than discard the whole search on a
-                // confirmation failure (throwing away 500 runs' worth of
-                // real progress) or chase the exact native-engine cause of
-                // the drift, treat the failure as real, trustworthy ground
-                // truth: this run IS a genuine continuous replay, so its
-                // own death is the actual truth the checkpoint chain got
-                // wrong. Keep whatever committed prefix survives past it,
-                // drop the rest, and reopen the search from HERE -- using
-                // the ring checkpoints this very run just took (see the
-                // takeRingCheckpoint call below, now unconditional) as the
-                // new, trustworthy restore basis going forward.
-                // committed is always built as whole (press, release) pairs
-                // -- handleDeath()'s progress branch and the completed-fold
-                // above both push exactly two actions per commit, never one.
-                // Truncating action-by-action (the first version of this
-                // fix) can drop a pair's release while keeping its press
-                // (whenever the release's frame >= deathFrame but the
-                // press's isn't), leaving a dangling press with no release
-                // -- a real test proved this: it pinned lastCommitted right
-                // up against the next death with zero frames of room left
-                // for a new candidate, an unrecoverable "0 candidates"
-                // dead end that looked like the search had genuinely run
-                // out of options when it had actually just corrupted its
-                // own state. Truncate by whole pairs instead -- a pair only
-                // survives if BOTH its press and release do.
+                // This should now be rare. It was written when the restore
+                // chain accumulated a one-frame X drift, which made the
+                // search commit candidates a continuous replay wouldn't
+                // survive; that drift was fixed on 2026-09-13 (capture moved
+                // to the settled point) and confirmed in-game. Kept anyway,
+                // because the reasoning holds for a failure from any cause:
+                // this run IS a genuine continuous replay, so its death is
+                // ground truth and the checkpoint chain is what got it
+                // wrong. Salvage rather than discard -- keep the committed
+                // prefix that survives past it, drop the rest, and reopen
+                // from here on the ring checkpoints this run just took.
+                //
+                // Truncate by whole (press, release) pairs, never action by
+                // action. committed is only ever built in pairs, and dropping
+                // a release while keeping its press leaves a dangling press
+                // that pins lastCommitted against the next death with no room
+                // for a candidate -- an unrecoverable dead end that reads
+                // exactly like the search legitimately running out of
+                // options. The first version of this fix did that; a real
+                // test caught it.
                 size_t before = committed.size();
                 size_t keepPairs = 0;
                 for (size_t i = 0; i + 1 < committed.size(); i += 2) {
@@ -420,7 +359,7 @@ namespace gucci {
                         break;
                 }
                 committed.resize(keepPairs);
-                log::info("[Pathfinder] confirmation FAILED -- a genuine frame-0 replay of the "
+                log::warn("[Pathfinder] confirmation FAILED -- a genuine frame-0 replay of the "
                           "committed macro died @f={} x={:.1f} instead of reaching the end. Dropped "
                           "{} of {} committed inputs that didn't survive a clean run and reopening "
                           "the search from this real death instead of shipping something unproven.",
