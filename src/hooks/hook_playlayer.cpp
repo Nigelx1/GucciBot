@@ -428,6 +428,16 @@ class $modify(GB7PlayLayer, PlayLayer) {
         auto& upd = gb->updater;
 
         if (Pathfinder::get()->active) {
+            // A simulated player dying inside an agency probe is not the run
+            // dying. Without this the search treats every fork that clips
+            // something as a real death of its own attempt, which would flood
+            // it with deaths that never happened. Depends on hook order
+            // otherwise, which is not something to leave to chance.
+            auto& traj = TrajectoryPredictionService::get();
+            if (traj.isActiveSimulation() || traj.ownsPreviewPlayer(player)) {
+                traj.noteSimulatedDeath(player);
+                return;
+            }
             // Same GD-native death signal Calculate relies on, minus the
             // end-of-level anticheat spike -- native death path suppressed
             // so the search keeps driving the same PlayLayer.

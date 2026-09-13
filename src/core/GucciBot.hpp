@@ -1,12 +1,14 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-15-e (Pathfinder agency diagnostics, take two. The previous readout counted "\
-    "agency frames per run and startRun resets thousands of times a second, so it read 0 "\
-    "whatever was happening -- useless. Counts are cumulative across the search now, and "\
-    "it also reports the biggest gap the fork ever measured and how many frames each side "\
-    "of the last probe survived. That separates the two ways this can fail: a fork dying "\
-    "on frame 0 versus a fork running fine whose press changes nothing.)"
+    "2026-09-15-f (Pathfinder: two real bugs behind the agency probe reading nothing. The "\
+    "fork stepped at whatever delta was left over from the last PlayerObject::update "\
+    "rather than the engine's physics step -- outside a search those match, inside one "\
+    "they do not, and a fork stepped too far hits geometry on its first frame. Every "\
+    "probe reported both branches dying at frame 0, so nothing was ever measured. Second: "\
+    "with Pathfinder active, destroyPlayer claimed every death as the run's own, "\
+    "including a fork's, depending on hook order. Simulated deaths are now routed to the "\
+    "trajectory service explicitly.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

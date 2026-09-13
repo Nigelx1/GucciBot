@@ -181,6 +181,7 @@ namespace gucci {
         void detach();
         void updatePreview(PlayLayer* playLayer);
         bool probeAgency(PlayLayer* playLayer, PlayerObject* source, AgencyResult& out, int frames);
+        float lastProbeStep() const { return m_lastProbeStep; }
         void captureFrameDelta(float dt);
         void noteSimulatedDeath(PlayerObject* player);
         bool ownsPreviewPlayer(PlayerObject* player) const;
@@ -197,6 +198,7 @@ namespace gucci {
 
     private:
         PredictionContext m_context;
+        float m_lastProbeStep = 0.0f;
         cocos2d::CCDrawNode* m_drawNode = nullptr;
         cocos2d::ccColor4F m_holdColor = ccc4f(0.29f, 0.89f, 0.33f, 1.0f);
         cocos2d::ccColor4F m_holdColorP2 = ccc4f(0.20f, 0.50f, 0.95f, 1.0f);

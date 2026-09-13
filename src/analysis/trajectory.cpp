@@ -832,6 +832,20 @@ bool TrajectoryPredictionService::probeAgency(PlayLayer* playLayer,
     double savedTotalTime = playLayer->m_gameState.m_totalTime;
     unsigned int savedCommandIndex = playLayer->m_gameState.m_commandIndex;
 
+    // Step the fork at the engine's real physics step, not at whatever delta
+    // was left over from the last PlayerObject::update. Outside a search those
+    // are the same thing. Inside one they are not, and a fork stepped too far
+    // ploughs straight into the nearest geometry on its first frame -- which
+    // is exactly what it was doing: every probe reported both branches dying
+    // at frame 0, so nothing was ever measured.
+    float savedStep = m_context.stepDelta;
+    double tps = GucciEngine::get()->updater.m_tps;
+    if (tps > 1.0) {
+        m_context.stepDelta = (float)(1.0 / tps);
+    }
+
+    m_lastProbeStep = m_context.stepDelta;
+
     m_context.activeSimulation = true;
     m_context.processedOrbs.clear();
     m_context.probeFrames = std::clamp(frames, 2, 60);
@@ -845,6 +859,7 @@ bool TrajectoryPredictionService::probeAgency(PlayLayer* playLayer,
     traceInputPath(playLayer, preview, source, false);
 
     m_context.probeFrames = 0;
+    m_context.stepDelta = savedStep;
 
     playLayer->m_gameState.m_currentProgress = savedProgress;
     playLayer->m_gameState.m_levelTime = savedLevelTime;

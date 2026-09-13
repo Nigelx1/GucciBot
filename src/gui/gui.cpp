@@ -4547,11 +4547,12 @@ namespace gucci {
                         pf->probeRuns,
                         pf->agencyFramesSeen,
                         pf->probeFails);
-            ImGui::Text("biggest gap %.3f  |  fork survived: hold %d, release %d (of %d)",
+            ImGui::Text("biggest gap %.3f  |  fork survived: hold %d, release %d (of %d)  |  step %.5f",
                         pf->maxGapSeen,
                         pf->lastHoldSurvived,
                         pf->lastReleaseSurvived,
-                        gucci::kAgencyProbeFrames);
+                        gucci::kAgencyProbeFrames,
+                        TrajectoryPredictionService::get().lastProbeStep());
             if (pf->lastUsedAgency) {
                 ImGui::Text("last decision point: %d frames with agency, reaching back %d",
                             pf->lastPointCount,
