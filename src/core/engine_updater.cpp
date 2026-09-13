@@ -428,6 +428,20 @@ static void frameUpdateMidhook(SafetyHookContext&) {
                 pf.m_pendingCaptureStage = 2;
             }
 
+            // THE settled point -- this exact spot, before incrementFrame().
+            // getFrame() still reads the frame whose physics just finished, and
+            // the live player state is that frame's completed state, so a
+            // checkpoint taken here matches the label it gets filed under.
+            // Calculate and Pathfinder both used to capture from their own
+            // tick()s instead (after incrementFrame, before the new frame's
+            // physics), which paired every checkpoint with a label one frame
+            // ahead of its position and made every restore lose a frame of X.
+            // Same bug the deferred capture right above this already fixes for
+            // GD's own practice checkpoints. Don't move these back into tick().
+            gb->fwServiceSettledCapture();
+            if (Pathfinder::get()->active)
+                Pathfinder::get()->serviceSettledCapture();
+
             upd.incrementFrame();
             if (upd.m_logFrameIncrements)
                 logFrameIncrement("frameUpdateMidhook", upd.getFrame(), pl->m_player1);

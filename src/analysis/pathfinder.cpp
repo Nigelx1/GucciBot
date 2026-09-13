@@ -439,11 +439,49 @@ namespace gucci {
             return;
         }
 
-        // Unconditional now (previously skipped during confirm): a
-        // confirmation run needs its own rolling checkpoints too, so that
-        // if it fails, the search reopening above has a genuinely trustworthy
-        // restore point close to the real failure instead of only a cold
-        // full reset.
+        // Ring checkpoints are NOT taken here any more -- see
+        // serviceSettledCapture(), called from the settled point in
+        // frameUpdateMidhook. tick() runs after incrementFrame() but before
+        // this frame's physics has actually run, so anything captured here
+        // holds the previous frame's position under this frame's label.
+    }
+
+    // Runs at the "settled point": the top of frameUpdateMidhook, BEFORE
+    // incrementFrame(). At that instant getFrame() reads the frame whose
+    // physics has just finished, and the live player state is that frame's
+    // completed state -- so capturing here and labelling with getFrame() is
+    // correct by construction.
+    //
+    // Capturing from tick() instead (what this used to do) pairs a position
+    // with a label one frame ahead of it. Restore then trusts the label
+    // (hook_playlayer.cpp sets m_frameOnLastAttempt from it), so every
+    // restore silently dropped exactly one frame of X advancement, and the
+    // error compounded across decision points. That is the ~1.047-unit X gap
+    // build 2026-09-06-w measured with Y/velocity/rotation matching exactly
+    // (X is the only value that moves every single frame regardless of what
+    // the player is doing, so it was the only field that showed it).
+    //
+    // This is the same bug, and the same fix, as the deferred capture in
+    // storeCheckpoint (hook_playlayer.cpp) -- that one is even commented
+    // "compounding per-checkpoint position drift". That fix was only ever
+    // applied to that one call site. Silicate avoids the whole class
+    // structurally by reading the frame inside its own createCheckpoint
+    // rather than letting callers pass a label; this is the same idea.
+    void Pathfinder::serviceSettledCapture() {
+        if (!active)
+            return;
+        auto* gb = GucciEngine::get();
+        auto* pl = PlayLayer::get();
+        if (!pl || pl->m_playerDied)
+            return;
+        if (completed || died)
+            return;
+
+        uint32_t f = gb->updater.getFrame();
+        // Unconditional during confirm runs too: a confirmation run needs its
+        // own rolling checkpoints, so that if it fails, the search reopening
+        // has a genuinely trustworthy restore point close to the real failure
+        // instead of only a cold full reset.
         if (checkpointInterval > 0 && f > 0 && (f % (uint32_t)checkpointInterval) == 0)
             takeRingCheckpoint(f);
     }

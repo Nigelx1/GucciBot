@@ -1,13 +1,16 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                     \
-    "2026-09-12-c (Nigel's ask: an update checker on launch. Best-effort, one-shot GET "         \
-    "against GitHub's releases API; if the latest tag is numerically newer than MOD_VERSION, "  \
-    "shows a popup with a direct link, otherwise silent (offline/rate-limited/API-shape-change "\
-    "all fail quietly -- purely informational, never worth bothering the user about on its "    \
-    "own). Popup creation is explicitly queued onto the main thread with by-value string "      \
-    "captures, not called straight from the coroutine's own continuation -- cheap insurance "   \
-    "given this project's actual history with file-picker coroutines (issues #1/#3).)"
+    "2026-09-13-a (ROOT CAUSE FIX for the checkpoint X-drift, found by diffing Silicate's "     \
+    "checkpoint code: Calculate and Pathfinder both captured their checkpoints from their own " \
+    "tick()s, which run AFTER incrementFrame() but BEFORE that frame's physics -- so every "    \
+    "checkpoint paired a position with a frame label one ahead of it, and since restore trusts "\
+    "the label, every restore silently lost one frame of X. Compounds per restore; that's the " \
+    "~1.047-unit gap build -w measured with Y/vel/rot exact. Both now capture at the settled "  \
+    "point (top of frameUpdateMidhook, before incrementFrame) -- the SAME fix already applied " \
+    "to storeCheckpoint, whose own comment calls it 'compounding per-checkpoint position "      \
+    "drift' but which was never propagated to the other sites. Test: [PF-CKPT-SAVE] @f=N "      \
+    "should now match [PF-CONFIRM] @f=N exactly instead of trailing by ~1.047.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -753,6 +756,11 @@ namespace gucci {
         void debugPauseOrContinue(bool survived);
         void debugTeleportToMark(size_t markIndex);
         void fwTick();
+        // Calculate's capture-pass checkpoints MUST be taken from here, not
+        // from fwTick(). See the definition's comment in engine_core.cpp --
+        // capturing from fwTick() files a position under a frame label one
+        // ahead of it, which is the checkpoint X-drift bug.
+        void fwServiceSettledCapture();
         void beginProbeRun();
         void beginOrSkipProbeClick();
         void beginShiftTest();

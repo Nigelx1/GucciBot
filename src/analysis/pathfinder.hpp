@@ -69,6 +69,12 @@ namespace gucci {
         void begin();
         void cancel();
         void tick();
+        // Ring checkpoints MUST be taken from here, not from tick(). Called
+        // from the settled point in frameUpdateMidhook -- see the comment on
+        // the definition (pathfinder.cpp). Capturing from tick() records a
+        // position one frame staler than the label it gets filed under, which
+        // is the whole checkpoint X-drift bug.
+        void serviceSettledCapture();
         void noteDeath(uint32_t frame, float x);
         void noteLevelComplete();
         void saveSettings() const;

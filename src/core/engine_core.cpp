@@ -2566,46 +2566,12 @@ namespace gucci {
                 fwXYIndex++;
             }
 
-            while (fwCapIndex < fwClickSamples.size()) {
-                uint32_t clickFrame = fwClickSamples[fwCapIndex].frame;
-                // Alignment-Independent needs these SAME checkpoints to
-                // reach back at least fwAiZ frames too (it reuses them
-                // directly for p=0 -- see fwAiBeginClick), which used to
-                // just be capped at whatever fwSweepRange happened to be,
-                // an unrelated legacy-method setting. Juice's ask
-                // (2026-09-02): the search radius should be genuinely
-                // customizable, not silently limited by a different
-                // algorithm's slider. Widening the margin here (Time-Based/
-                // Recovery Range's own captures are UNCHANGED when
-                // Alignment-Independent isn't the active method).
-                int marginWanted = fwSweepRange;
-                if (fwUseAlignmentIndependent)
-                    marginWanted = std::max(fwSweepRange, fwAiZ);
-                uint32_t margin = (uint32_t)std::max(0, marginWanted);
-                uint32_t captureFrame = clickFrame > margin ? clickFrame - margin : 0;
-                if (captureFrame > frame)
-                    break;
-
-                CheckpointObject* cp = pl->createCheckpoint();
-                fwCkptCreatedThisFrame = true;
-                log::info("[CAP] createCheckpoint @ f={} (click {} @ f={})",
-                          frame,
-                          fwCapIndex,
-                          clickFrame);
-                StoredFrame sf;
-                sf.frame = frame;
-                if (cp) {
-                    cp->retain();
-                    practiceFix.saveState(cp, frame);
-                    if (!practiceFix.m_storedFrames.empty()) {
-                        sf.state = practiceFix.m_storedFrames.back().state;
-                        practiceFix.m_storedFrames.pop_back();
-                    }
-                }
-                fwCapStack.push_back(sf);
-                fwCapIndex++;
-                fwAnalyzeProgress = 0.5f * (float)fwCapIndex / (float)fwClickSamples.size();
-            }
+            // The capture-pass checkpoints themselves are taken in
+            // fwServiceSettledCapture() (defined just after this function),
+            // from the settled point in frameUpdateMidhook -- NOT here.
+            // fwTick() runs after incrementFrame() but before this frame's
+            // physics has actually run, so a checkpoint taken here holds the
+            // PREVIOUS frame's position under this frame's label.
 
             if (fwXYIndex >= fwClickSamples.size() && fwCapIndex >= fwClickSamples.size()) {
                 log::info("[GucciBot] Frame-window: capture done — {} checkpoints",
@@ -2848,6 +2814,72 @@ namespace gucci {
         case FwState::Idle:
         default:
             break;
+        }
+    }
+
+    // Takes Calculate's capture-pass checkpoints at the "settled point": the
+    // top of frameUpdateMidhook, BEFORE incrementFrame(). At that instant
+    // getFrame() reads the frame whose physics has just finished, and the live
+    // player state IS that frame's completed state -- so capturing here and
+    // labelling with getFrame() is correct by construction.
+    //
+    // This used to run inside fwTick(), which is after incrementFrame() but
+    // before the new frame's physics has run -- so every capture paired a
+    // position with a label one frame ahead of it. Restore trusts the label
+    // (hook_playlayer.cpp sets m_frameOnLastAttempt from it), so each restore
+    // silently dropped one frame of X advancement. See
+    // Pathfinder::serviceSettledCapture() for the full write-up and the
+    // measured evidence; this is the same bug and the same fix as the deferred
+    // capture already in storeCheckpoint (hook_playlayer.cpp), which that
+    // call site's own comment calls "compounding per-checkpoint position
+    // drift". That fix was only ever applied there.
+    void GucciEngine::fwServiceSettledCapture() {
+        if (!fwAnalyzing || fwState != FwState::Capturing)
+            return;
+        auto* pl = PlayLayer::get();
+        if (!pl || pl->m_playerDied)
+            return;
+
+        uint32_t frame = updater.getFrame();
+
+        while (fwCapIndex < fwClickSamples.size()) {
+            uint32_t clickFrame = fwClickSamples[fwCapIndex].frame;
+            // Alignment-Independent needs these SAME checkpoints to reach back
+            // at least fwAiZ frames too (it reuses them directly for p=0 --
+            // see fwAiBeginClick), which used to just be capped at whatever
+            // fwSweepRange happened to be, an unrelated legacy-method setting.
+            // Juice's ask (2026-09-02): the search radius should be genuinely
+            // customizable, not silently limited by a different algorithm's
+            // slider. Widening the margin here (Time-Based/Recovery Range's
+            // own captures are UNCHANGED when Alignment-Independent isn't the
+            // active method).
+            int marginWanted = fwSweepRange;
+            if (fwUseAlignmentIndependent)
+                marginWanted = std::max(fwSweepRange, fwAiZ);
+            uint32_t margin = (uint32_t)std::max(0, marginWanted);
+            uint32_t captureFrame = clickFrame > margin ? clickFrame - margin : 0;
+            if (captureFrame > frame)
+                break;
+
+            CheckpointObject* cp = pl->createCheckpoint();
+            fwCkptCreatedThisFrame = true;
+            log::info("[CAP] createCheckpoint @ f={} (click {} @ f={})",
+                      frame,
+                      fwCapIndex,
+                      clickFrame);
+            StoredFrame sf;
+            sf.frame = frame;
+            if (cp) {
+                cp->retain();
+                practiceFix.saveState(cp, frame);
+                if (!practiceFix.m_storedFrames.empty()) {
+                    sf.state = practiceFix.m_storedFrames.back().state;
+                    practiceFix.m_storedFrames.pop_back();
+                }
+            }
+            fwCapStack.push_back(sf);
+            fwCapIndex++;
+            fwAnalyzeProgress = 0.5f * (float)fwCapIndex / (float)fwClickSamples.size();
         }
     }
 
