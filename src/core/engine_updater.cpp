@@ -441,6 +441,7 @@ static void frameUpdateMidhook(SafetyHookContext&) {
             gb->fwServiceSettledCapture();
             if (Pathfinder::get()->active)
                 Pathfinder::get()->serviceSettledCapture();
+                Pathfinder::get()->serviceAgencyProbe();
 
             upd.incrementFrame();
             if (upd.m_logFrameIncrements)

@@ -77,6 +77,10 @@ namespace gucci {
         // position one frame staler than the label it gets filed under, which
         // is the whole checkpoint X-drift bug.
         void serviceSettledCapture();
+        // Runs the hold-vs-release fork for the frame that just settled and
+        // records whether it mattered. Search-only -- normal play never calls
+        // this, so a fault here can only ever reach an active search.
+        void serviceAgencyProbe();
         void noteDeath(uint32_t frame, float x);
         void noteLevelComplete();
         void saveSettings() const;
@@ -99,6 +103,12 @@ namespace gucci {
             // node's own (later-appended) successful candidate.
             size_t committedBefore = 0;
         };
+
+        // Which frames of the CURRENT run the player actually had a say on,
+        // indexed by absolute frame. Filled by the agency probe as the run
+        // plays; cleared per run, since a different branch is a different
+        // trajectory and its measurements don't carry over.
+        std::vector<uint8_t> agencyMap;
 
         std::vector<Node> stack;
         std::vector<gb::Action> committed;

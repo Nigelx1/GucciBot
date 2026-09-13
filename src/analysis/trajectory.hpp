@@ -158,6 +158,10 @@ namespace gucci {
     // bit-identical and the answer is no; on the ground they separate on the
     // next frame and the answer is yes. No level geometry is read to decide
     // this, which is why it comes out right per gamemode for free.
+    // Long enough for a Cube jump to visibly separate from standing still,
+    // short enough that running it every frame stays cheap.
+    inline constexpr int kAgencyProbeFrames = 6;
+
     struct AgencyResult {
         bool matters = false;
         float divergence = 0.0f;   // furthest the two futures got apart, in units

@@ -19,9 +19,6 @@ using namespace gucci;
 
 namespace {
     constexpr int kMaxTraceFrames = 480;
-    // Long enough for a Cube jump to visibly separate from standing still,
-    // short enough that running it every frame stays cheap.
-    constexpr int kAgencyProbeFrames = 6;
     constexpr float kIndicatorFlashDuration = 0.15f;
 
     const std::unordered_set<int> kInteractivePortalIds = {

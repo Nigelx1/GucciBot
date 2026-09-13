@@ -1,13 +1,14 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-15-b (Pathfinder v2 step 1: the agency map. A new diagnostic toggle in the "\
-    "Pathfinder tab drops a dot at the player every frame, lit when pressing would have "\
-    "changed anything from there and dim when it would not. Measured by forking the real "\
-    "player twice from the same state -- once pressing, once not -- and seeing whether "\
-    "the two futures separate at all, reusing trajectory.cpp's existing preview fork with "\
-    "a 6-frame horizon and no drawing. Diagnostic only: the search does not consult it "\
-    "yet.)"
+    "2026-09-15-c (Pathfinder v2 step 2: the search now backtracks to where the player "\
+    "actually had a say. A decision point no longer opens on a fixed 30-frame window "\
+    "before the death -- it walks back collecting only frames the agency probe marked, "\
+    "skipping stretches where pressing changes nothing, up to 960 frames. Falling off a "\
+    "ledge put the real decision hundreds of frames before the death and every candidate "\
+    "v1 generated was identical; those candidates are no longer generated. The "\
+    "restore-point ring was deepened to cover the new reach. Falls back to the old fixed "\
+    "window when there is no reading.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

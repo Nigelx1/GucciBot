@@ -1,5 +1,7 @@
 #include "analysis/pathfinder.hpp"
 
+#include "analysis/trajectory.hpp"
+
 #include "gui/gui.hpp" // currentThemeExtension, for auto-saving the solved macro
 
 #include <Geode/Geode.hpp>
@@ -16,6 +18,12 @@ namespace gucci {
     // (all holds at the frame nearest the death before moving one frame
     // earlier) because "just before the hazard" is the common case.
     static const int kHoldSet[] = {1, 3, 6, 10, 16, 24};
+
+    // How far back a decision point may reach when the frames in between had
+    // no agency -- a long fall can put the real decision hundreds of frames
+    // before the death. Bounded because the ring of restore points has to
+    // cover whatever this allows.
+    static constexpr int kMaxAgencyLookback = 960;   // 4s at 240 TPS
 
     Pathfinder* Pathfinder::get() {
         static Pathfinder inst;
@@ -95,6 +103,12 @@ namespace gucci {
         pl->m_isPaused = false;
         pl->m_isPracticeMode = false;
 
+        // Create the fork's preview players up front. probeAgency would do it
+        // on demand, but that would land mid-physics-step on the first frame
+        // of the search; doing it here keeps allocation out of that path.
+        TrajectoryPredictionService::get().attach(pl);
+        agencyMap.clear();
+
         gb->fwAnalyzing = true;
         gb->fwState = GucciEngine::FwState::Idle;
         gb->fwProbeDied = false;
@@ -115,6 +129,25 @@ namespace gucci {
         log::info("[Pathfinder] cancelled after {} runs, best {:.1f}%", runs, bestPct);
         finish(false);
         stage = "cancelled";
+    }
+
+    void Pathfinder::serviceAgencyProbe() {
+        if (!active || confirming)
+            return;
+        auto* pl = PlayLayer::get();
+        if (!pl || !pl->m_player1)
+            return;
+        auto* gb = GucciEngine::get();
+        uint32_t frame = gb->updater.getFrame();
+
+        AgencyResult agency;
+        if (!TrajectoryPredictionService::get().probeAgency(
+                pl, pl->m_player1, agency, kAgencyProbeFrames))
+            return;
+
+        if (agencyMap.size() <= (size_t)frame)
+            agencyMap.resize((size_t)frame + 512, 0);
+        agencyMap[(size_t)frame] = agency.matters ? 1 : 0;
     }
 
     void Pathfinder::noteDeath(uint32_t frame, float x) {
@@ -165,6 +198,7 @@ namespace gucci {
         died = false;
         completed = false;
         runFrames = 0;
+        agencyMap.clear();
         gb->fwProbeDied = false;
 
         auto& pf = gb->practiceFix;
@@ -260,7 +294,12 @@ namespace gucci {
         // Only need to reach back windowFrames from wherever the next death
         // lands -- m_maxBackstepFrames-style unbounded growth is exactly
         // what to avoid here.
-        size_t cap = (size_t)std::max(8, windowFrames / std::max(1, checkpointInterval) + 4);
+        // Deep enough to cover the furthest back a decision point can now
+        // reach: with no agency for a long stretch, the restore point has to
+        // be older than the whole stretch or the search can't branch there.
+        size_t cap = (size_t)std::clamp(kMaxAgencyLookback / std::max(1, checkpointInterval) + 4,
+                                        8,
+                                        128);
         while (ring.size() > cap) {
             releaseStoredFrame(ring.front());
             ring.erase(ring.begin());
@@ -485,11 +524,38 @@ namespace gucci {
         n.committedBefore = committed.size();
 
         // Candidates must start strictly after the last committed input so
-        // committed holds and new presses never overlap (v1: strictly
-        // sequential, non-overlapping inputs, player 1 only).
+        // committed holds and new presses never overlap (strictly sequential,
+        // non-overlapping inputs, player 1 only).
         uint32_t lastCommitted = committed.empty() ? 0 : committed.back().m_frame;
-        int64_t start = std::max<int64_t>((int64_t)d - windowFrames, (int64_t)lastCommitted + 1);
-        start = std::max<int64_t>(start, 1);
+        int64_t floor = std::max<int64_t>((int64_t)lastCommitted + 1, 1);
+        floor = std::max<int64_t>(floor, (int64_t)d - kMaxAgencyLookback);
+
+        // Walk back from the death collecting only the frames the player had
+        // a say on. Frames without agency produce a bit-identical run whatever
+        // is pressed, so they can never be the answer -- and they are the bulk
+        // of what a fixed window contains whenever a death is delayed. Falling
+        // off a ledge is the clear case: the whole descent has no agency, and
+        // the frame that decided it sits before all of it.
+        std::vector<uint32_t> points;
+        for (int64_t f = (int64_t)d - 1;
+             f >= floor && (int)points.size() < windowFrames;
+             --f) {
+            if ((size_t)f < agencyMap.size() && agencyMap[(size_t)f])
+                points.push_back((uint32_t)f);
+        }
+
+        bool usedAgency = !points.empty();
+        if (!usedAgency) {
+            // No measurement to go on -- either the probe never ran here or
+            // the lookback genuinely held no agency at all. Fall back to the
+            // old fixed window rather than dead-end on a missing reading.
+            for (int64_t f = (int64_t)d - 1;
+                 f >= std::max<int64_t>(floor, (int64_t)d - windowFrames);
+                 --f)
+                points.push_back((uint32_t)f);
+        }
+
+        int64_t start = points.empty() ? (int64_t)d : (int64_t)points.back();
 
         // Restore point: the latest rolling checkpoint strictly before the
         // earliest candidate, else a cold full reset.
@@ -507,15 +573,22 @@ namespace gucci {
         }
         releaseRing();
 
-        for (int64_t f = (int64_t)d - 1; f >= start; --f)
-            for (int hold : kHoldSet)
-                n.cands.push_back({(uint32_t)f, hold});
+        // points is already ordered nearest-the-death first, which is the
+        // common case and the order v1 searched in.
+        for (uint32_t f : points)
+            if ((int64_t)f >= start)
+                for (int hold : kHoldSet)
+                    n.cands.push_back({f, hold});
 
-        log::info("[Pathfinder] decision point @f={} : {} candidates over [{}..{}], restore {}",
+        log::info("[Pathfinder] decision point @f={} : {} candidates at {} {} over [{}..{}], "
+                  "reaching back {} frames, restore {}",
                   d,
                   n.cands.size(),
+                  n.cands.size() / (sizeof(kHoldSet) / sizeof(kHoldSet[0])),
+                  usedAgency ? "frames with agency" : "frames (no agency data -- fixed window)",
                   start,
                   (int64_t)d - 1,
+                  (int64_t)d - start,
                   n.fullResetInstead ? std::string("full reset")
                                      : fmt::format("ckpt@f={}", n.ckpt.frame));
         stack.push_back(std::move(n));
