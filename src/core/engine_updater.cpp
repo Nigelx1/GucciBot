@@ -439,9 +439,10 @@ static void frameUpdateMidhook(SafetyHookContext&) {
             // Same bug the deferred capture right above this already fixes for
             // GD's own practice checkpoints. Don't move these back into tick().
             gb->fwServiceSettledCapture();
-            if (Pathfinder::get()->active)
+            if (Pathfinder::get()->active) {
                 Pathfinder::get()->serviceSettledCapture();
                 Pathfinder::get()->serviceAgencyProbe();
+            }
 
             upd.incrementFrame();
             if (upd.m_logFrameIncrements)

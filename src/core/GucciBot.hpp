@@ -1,14 +1,13 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-15-c (Pathfinder v2 step 2: the search now backtracks to where the player "\
-    "actually had a say. A decision point no longer opens on a fixed 30-frame window "\
-    "before the death -- it walks back collecting only frames the agency probe marked, "\
-    "skipping stretches where pressing changes nothing, up to 960 frames. Falling off a "\
-    "ledge put the real decision hundreds of frames before the death and every candidate "\
-    "v1 generated was identical; those candidates are no longer generated. The "\
-    "restore-point ring was deepened to cover the new reach. Falls back to the old fixed "\
-    "window when there is no reading.)"
+    "2026-09-15-d (Pathfinder v2 step 2 diagnostics: step 2 looked like it changed "\
+    "nothing, and the only evidence either way was in a log Geode does not persist. The "\
+    "search status now shows agency frames recorded this run, probes attempted and "\
+    "failed, and how many decision points the last death found and how far back they "\
+    "reached -- in orange if it fell back to a fixed window. Also fixes a missing pair of "\
+    "braces at the probe call site: serviceAgencyProbe sat outside the if that guards it, "\
+    "harmless only because it re-checks the same condition itself.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

@@ -79,6 +79,12 @@ namespace gucci {
         releaseRing();
         runs = 0;
         depth = 0;
+        probeRuns = 0;
+        probeFails = 0;
+        agencyFramesThisRun = 0;
+        lastPointCount = 0;
+        lastLookback = 0;
+        lastUsedAgency = false;
         bestFrame = 0;
         bestX = 0.f;
         bestPct = 0.f;
@@ -140,13 +146,18 @@ namespace gucci {
         auto* gb = GucciEngine::get();
         uint32_t frame = gb->updater.getFrame();
 
+        probeRuns++;
         AgencyResult agency;
         if (!TrajectoryPredictionService::get().probeAgency(
-                pl, pl->m_player1, agency, kAgencyProbeFrames))
+                pl, pl->m_player1, agency, kAgencyProbeFrames)) {
+            probeFails++;
             return;
+        }
 
         if (agencyMap.size() <= (size_t)frame)
             agencyMap.resize((size_t)frame + 512, 0);
+        if (agency.matters && !agencyMap[(size_t)frame])
+            agencyFramesThisRun++;
         agencyMap[(size_t)frame] = agency.matters ? 1 : 0;
     }
 
@@ -199,6 +210,7 @@ namespace gucci {
         completed = false;
         runFrames = 0;
         agencyMap.clear();
+        agencyFramesThisRun = 0;
         gb->fwProbeDied = false;
 
         auto& pf = gb->practiceFix;
@@ -556,6 +568,9 @@ namespace gucci {
         }
 
         int64_t start = points.empty() ? (int64_t)d : (int64_t)points.back();
+        lastPointCount = (int)points.size();
+        lastLookback = (int)((int64_t)d - start);
+        lastUsedAgency = usedAgency;
 
         // Restore point: the latest rolling checkpoint strictly before the
         // earliest candidate, else a cold full reset.

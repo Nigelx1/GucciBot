@@ -4541,6 +4541,20 @@ namespace gucci {
             ImGui::PopStyleColor();
             ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
             ImGui::Text("runs %d  |  depth %zu  |  best frame %u", pf->runs, pf->depth, pf->bestFrame);
+            ImGui::Text("agency frames this run %d  |  probes %d, failed %d",
+                        pf->agencyFramesThisRun,
+                        pf->probeRuns,
+                        pf->probeFails);
+            if (pf->lastUsedAgency) {
+                ImGui::Text("last decision point: %d frames with agency, reaching back %d",
+                            pf->lastPointCount,
+                            pf->lastLookback);
+            } else {
+                ImGui::PopStyleColor();
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.f, 0.55f, 0.2f, 1.f));
+                ImGui::Text("last decision point: NO AGENCY DATA -- fell back to a %d frame window",
+                            pf->lastLookback);
+            }
             ImGui::PopStyleColor();
         } else if (pf->hasResult) {
             if (pf->lastResultSuccess) {

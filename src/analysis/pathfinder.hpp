@@ -68,6 +68,17 @@ namespace gucci {
         // Name the solution was auto-saved under, for the result UI to show.
         std::string savedAs;
 
+        // --- agency diagnostics, read by the GUI ---
+        // Without these the only evidence the new backtracking is doing
+        // anything lives in a log Geode doesn't persist, which makes "it
+        // looks the same" impossible to tell from "it is the same".
+        int probeRuns = 0;          // probes attempted this search
+        int probeFails = 0;         // probes that couldn't run at all
+        int agencyFramesThisRun = 0;
+        int lastPointCount = 0;     // decision points found at the last death
+        int lastLookback = 0;       // frames between that death and the earliest
+        bool lastUsedAgency = false;
+
         void begin();
         void cancel();
         void tick();
