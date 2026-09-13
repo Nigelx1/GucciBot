@@ -1,13 +1,16 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-13-i (Version bump to 1.7. Everything since v1.6.5 shipped: the settled-point "\
-    "checkpoint capture fix (THE big one -- confirmed in-game, Pathfinder now solves end to "\
-    "end and its confirmation pass passes), the launch-crashing update checker removed, " \
-    "Pathfinder auto-saving its solution named after the level, the 374ms of leading silence "\
-    "trimmed out of fw_default.mp3, the Default Look overlay preset + bell sounds, the legend "\
-    "rebuilt with GD bigFont.fnt, Convert to .brrr and Calculate in the macro menu, and the "\
-    "obsolete Megahack Practice Fix advice dropped.)"
+    "2026-09-14-a (Crash fix for a 1.7 regression, from a user report: GucciBot giving up on "\
+    "level entry with no crash log. The frame-window overlay caches raw child-node pointers "\
+    "and only re-attaches when m_node is null, but detach() only ever runs from onQuit() -- so "\
+    "any level exit that skips onQuit (level complete to menu, a restart rebuilding the layer) "\
+    "left them dangling. 1.7 made that reachable: the new renderLegend dereferences "     \
+    "m_legendLayer EVERY frame before any early-out, and it lives on m_uiLayer, which the "\
+    "m_node attach guard never covered. Now tracks which PlayLayer the nodes belong to and "\
+    "forgets them (without dereferencing -- they died with the old layer) when it changes. "\
+    "Also: deleting a macro now removes every file belonging to it by prefix, instead of a "\
+    "hardcoded .fw/.path/.trainer list that left .bak backups behind.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

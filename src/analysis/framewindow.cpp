@@ -29,6 +29,7 @@ public:
     void attach(PlayLayer* pl) {
         if (m_node || !pl)
             return;
+        m_attachedTo = pl;
         auto* anchor = pl->m_objectLayer;
         if (!anchor)
             return;
@@ -42,6 +43,17 @@ public:
         auto* labels = CCNode::create();
         anchor->addChild(labels, 1404);
         m_labelLayer = labels;
+    }
+
+    // Drop cached child pointers without dereferencing them. Used when the
+    // PlayLayer they belonged to has already been destroyed.
+    void forgetStaleNodes() {
+        m_node = nullptr;
+        m_labelLayer = nullptr;
+        m_debugNode = nullptr;
+        m_legendLayer = nullptr;
+        m_attachedTo = nullptr;
+        m_builtForCount = -1;
     }
 
     void detach() {
@@ -61,6 +73,7 @@ public:
             m_legendLayer->removeFromParent();
             m_legendLayer = nullptr;
         }
+        m_attachedTo = nullptr;
         m_builtForCount = -1;
     }
 
@@ -291,6 +304,15 @@ public:
         auto* gb = GucciEngine::get();
         if (!gb || !pl)
             return;
+        // The old PlayLayer can go away without onQuit() ever firing (level
+        // complete straight to the menu, a restart that rebuilds the layer,
+        // a new level created over the top). Everything we cached was a child
+        // of THAT layer, so it is already destroyed -- just forget the
+        // pointers. Calling removeFromParent() on them here would be the
+        // use-after-free, not the fix for it.
+        if (pl != m_attachedTo) {
+            forgetStaleNodes();
+        }
         if (!m_node) {
             attach(pl);
             if (!m_node)
@@ -793,6 +815,9 @@ private:
     CCDrawNode* m_debugNode = nullptr;
     // Screen-fixed, unlike m_node/m_labelLayer which ride the object layer.
     CCNode* m_legendLayer = nullptr;
+    // Which PlayLayer the cached nodes above belong to. If the live one
+    // differs, they are stale and must be forgotten, not reused.
+    PlayLayer* m_attachedTo = nullptr;
     int m_builtForCount = -1;
 };
 

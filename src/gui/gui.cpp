@@ -654,13 +654,39 @@ namespace gucci {
         // flat in replays/ (remove()/rename() on a path that doesn't exist
         // just no-ops via the error_code overload, so it's safe to try both
         // unconditionally).
+        // Everything belonging to a macro, not a fixed list of extensions.
+        // This used to hardcode .fw/.path/.trainer, which silently left .bak
+        // backups behind and would have missed any sidecar type added later.
+        // Nigel's ask (2026-09-14): deleting a macro should take all of its
+        // files with it.
+        //
+        // Matches on "<macro file name>." as a prefix -- the trailing dot
+        // matters, otherwise deleting "test.brrr" would also take out
+        // "test2.brrr"'s sidecars.
         static void removeSidecarsFor(const std::filesystem::path& dir,
                                       const std::string& fullMacroName) {
+            if (fullMacroName.empty())
+                return;
             std::error_code ec;
-            auto sidecarDir = dir / "sidecars";
-            for (const char* ext : {".fw", ".path", ".trainer"}) {
-                std::filesystem::remove(sidecarDir / (fullMacroName + ext), ec);
-                std::filesystem::remove(dir / (fullMacroName + ext), ec);
+            const std::string prefix = fullMacroName + ".";
+            for (const auto& folder : {dir, dir / "sidecars"}) {
+                std::error_code itEc;
+                if (!std::filesystem::exists(folder, itEc))
+                    continue;
+                std::vector<std::filesystem::path> doomed;
+                for (const auto& e : std::filesystem::directory_iterator(folder, itEc)) {
+                    if (itEc)
+                        break;
+                    if (!e.is_regular_file())
+                        continue;
+                    const auto fn = e.path().filename().string();
+                    if (fn.size() > prefix.size() && fn.compare(0, prefix.size(), prefix) == 0)
+                        doomed.push_back(e.path());
+                }
+                // Collected first, removed after -- deleting while iterating a
+                // directory_iterator is asking for trouble.
+                for (const auto& f : doomed)
+                    std::filesystem::remove(f, ec);
             }
         }
         static void renameSidecarsFor(const std::filesystem::path& dir,
