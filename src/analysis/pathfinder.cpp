@@ -667,3 +667,140 @@ namespace gucci {
     }
 
 } // namespace gucci
+
+namespace gucci {
+
+namespace {
+
+    // Pathfinder v2 step 1 -- the agency map, drawn live.
+    //
+    // One dot per frame at the player's position: lit when pressing would
+    // have changed something from there, dim when it would not. Walk off a
+    // ledge in Cube and the trail goes dim the instant you leave the ground
+    // and stays dim the whole way down -- that stretch is exactly what v1
+    // wastes its entire search budget inside.
+    //
+    // Nothing here feeds the search yet. This step exists to check the idea
+    // holds up in the real game before anything is built on it.
+    struct AgencyOverlay {
+        static AgencyOverlay* get() {
+            static AgencyOverlay inst;
+            return &inst;
+        }
+
+        struct Sample {
+            cocos2d::CCPoint pos;
+            bool matters;
+        };
+
+        cocos2d::CCDrawNode* m_trail = nullptr;
+        cocos2d::CCLabelBMFont* m_readout = nullptr;
+        PlayLayer* m_attachedTo = nullptr;
+        std::vector<Sample> m_samples;
+        uint32_t m_lastFrame = UINT32_MAX;
+        bool m_needsRedraw = false;
+
+        // Same lesson as the 1.7 overlay crash: drop cached child pointers
+        // without touching them once the PlayLayer they belonged to is gone.
+        void forgetStaleNodes() {
+            m_trail = nullptr;
+            m_readout = nullptr;
+            m_attachedTo = nullptr;
+            m_samples.clear();
+            m_lastFrame = UINT32_MAX;
+        }
+
+        void detach() {
+            if (m_trail)
+                m_trail->removeFromParent();
+            if (m_readout)
+                m_readout->removeFromParent();
+            forgetStaleNodes();
+        }
+
+        void attach(PlayLayer* pl) {
+            if (m_trail || !pl || !pl->m_objectLayer || !pl->m_uiLayer)
+                return;
+            m_attachedTo = pl;
+
+            m_trail = cocos2d::CCDrawNode::create();
+            m_trail->setZOrder(9000);
+            pl->m_objectLayer->addChild(m_trail);
+
+            m_readout = cocos2d::CCLabelBMFont::create("", "bigFont.fnt");
+            m_readout->setScale(0.32f);
+            m_readout->setAnchorPoint({0.f, 0.5f});
+            m_readout->setZOrder(9000);
+            auto win = cocos2d::CCDirector::sharedDirector()->getWinSize();
+            m_readout->setPosition({14.f, win.height - 26.f});
+            pl->m_uiLayer->addChild(m_readout);
+        }
+
+        void render(PlayLayer* pl) {
+            auto* gb = GucciEngine::get();
+            if (!gb->pfAgencyDebug) {
+                if (m_trail)
+                    detach();
+                return;
+            }
+            if (!pl || !pl->m_player1)
+                return;
+            if (pl != m_attachedTo)
+                forgetStaleNodes();
+            if (!m_trail) {
+                attach(pl);
+                if (!m_trail)
+                    return;
+            }
+
+            uint32_t frame = gb->updater.getFrame();
+            if (frame < m_lastFrame) {   // reset or respawn -- start a new map
+                m_samples.clear();
+                m_needsRedraw = true;
+            }
+            if (gb->pfAgencyValid && frame != m_lastFrame) {
+                if (m_samples.size() >= 900)
+                    m_samples.erase(m_samples.begin());
+                m_samples.push_back({pl->m_player1->getPosition(), gb->pfAgencyMatters});
+                m_needsRedraw = true;
+            }
+            m_lastFrame = frame;
+
+            if (m_needsRedraw) {
+                m_needsRedraw = false;
+                m_trail->clear();
+                const cocos2d::ccColor4F live{0.83f, 0.69f, 0.22f, 0.95f};
+                const cocos2d::ccColor4F dead{0.35f, 0.35f, 0.38f, 0.55f};
+                for (auto const& sample : m_samples)
+                    m_trail->drawDot(sample.pos, sample.matters ? 2.6f : 1.6f,
+                                     sample.matters ? live : dead);
+            }
+
+            if (m_readout) {
+                if (!gb->pfAgencyValid) {
+                    m_readout->setString("");
+                } else if (gb->pfAgencyMatters) {
+                    m_readout->setString(
+                        fmt::format("AGENCY  gap {:.2f}", gb->pfAgencyDivergence).c_str());
+                    m_readout->setColor({212, 175, 55});
+                } else {
+                    m_readout->setString("NO AGENCY");
+                    m_readout->setColor({120, 120, 128});
+                }
+            }
+        }
+    };
+
+} // namespace
+
+namespace gbpf {
+    void renderAgencyDebug(PlayLayer* pl) {
+        AgencyOverlay::get()->render(pl);
+    }
+
+    void detachAgencyDebug() {
+        AgencyOverlay::get()->detach();
+    }
+}
+
+} // namespace gucci

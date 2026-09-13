@@ -137,6 +137,7 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
 
         if (auto* fpl = PlayLayer::get()) {
             gbfw::renderFrameWindows(fpl, SLRenderer::get()->isRecording());
+            gbpf::renderAgencyDebug(fpl);
             gbpr::renderPracticeRange(fpl);
             gbju::renderJupiterGhost(fpl);
             gbtr::renderTrainerGhost(fpl);

@@ -1,13 +1,13 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-15-a (Pathfinder v2 step 0: cut the drift-era diagnostics. The per-frame "\
-    "[PF-CONFIRM] trace, the [PF-CKPT-SAVE] dump on every ring checkpoint and the "\
-    "[PF-CKPT-LOAD] dump on every candidate run existed only to chase the restore-chain X "\
-    "drift fixed on 2026-09-13 -- during a search they were tens of thousands of log "\
-    "lines burying the search output itself. The confirmation-failure recovery stays, "\
-    "since its reasoning holds for a failure from any cause, but now logs as a warning "\
-    "rather than as an expected path.)"
+    "2026-09-15-b (Pathfinder v2 step 1: the agency map. A new diagnostic toggle in the "\
+    "Pathfinder tab drops a dot at the player every frame, lit when pressing would have "\
+    "changed anything from there and dim when it would not. Measured by forking the real "\
+    "player twice from the same state -- once pressing, once not -- and seeing whether "\
+    "the two futures separate at all, reusing trajectory.cpp's existing preview fork with "\
+    "a 6-frame horizon and no drawing. Diagnostic only: the search does not consult it "\
+    "yet.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
@@ -466,6 +466,15 @@ namespace gucci {
         int hitboxTrailLength = 240;
         bool pathPreview = false;
         int pathLength = 240;
+        // Pathfinder v2 step 1: draw, per frame, whether pressing would change
+        // anything at all from here. Diagnostic only -- the search does not
+        // consult it yet. See the Pathfinder tab.
+        bool pfAgencyDebug = false;
+        bool pfAgencyValid = false;
+        bool pfAgencyMatters = false;
+        float pfAgencyDivergence = 0.0f;
+        int pfAgencyHoldSurvived = 0;
+        int pfAgencyReleaseSurvived = 0;
         bool survivalIndicator = false;
         int indicatorLookahead = 20;
         int indicatorStyle = 0;
@@ -1051,6 +1060,11 @@ namespace gucci {
     private:
         GucciEngine() = default;
     };
+
+    namespace gbpf {
+        void renderAgencyDebug(PlayLayer* pl);
+        void detachAgencyDebug();
+    }
 
     namespace gbfw {
         void renderFrameWindows(PlayLayer* pl, bool isRecording);

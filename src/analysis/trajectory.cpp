@@ -19,6 +19,9 @@ using namespace gucci;
 
 namespace {
     constexpr int kMaxTraceFrames = 480;
+    // Long enough for a Cube jump to visibly separate from standing still,
+    // short enough that running it every frame stays cheap.
+    constexpr int kAgencyProbeFrames = 6;
     constexpr float kIndicatorFlashDuration = 0.15f;
 
     const std::unordered_set<int> kInteractivePortalIds = {
@@ -700,8 +703,14 @@ void TrajectoryPredictionService::traceInputPath(PlayLayer* playLayer,
         previewPlayer->m_potentialSlopeMap.insert({key, value});
     }
 
+    bool probing = m_context.probeFrames > 0;
     int frameCount = std::clamp(GucciEngine::get()->pathLength, 0, kMaxTraceFrames);
-    if (!GucciEngine::get()->pathPreview && GucciEngine::get()->survivalIndicator) {
+    if (probing) {
+        // An agency probe only needs to see whether the two futures separate
+        // at all, which happens on the first frame or not at all -- a few
+        // frames of margin is enough and keeps it cheap.
+        frameCount = std::clamp(m_context.probeFrames, 2, kMaxTraceFrames);
+    } else if (!GucciEngine::get()->pathPreview && GucciEngine::get()->survivalIndicator) {
         frameCount = std::clamp(GucciEngine::get()->indicatorLookahead + 5, 5, kMaxTraceFrames);
     }
     m_context.traceCancelled = false;
@@ -751,7 +760,7 @@ void TrajectoryPredictionService::traceInputPath(PlayLayer* playLayer,
 
         if (m_context.traceCancelled) {
             survivedFrames = frameIndex;
-            if (GucciEngine::get()->pathPreview) {
+            if (GucciEngine::get()->pathPreview && !probing) {
                 drawPredictionBounds(previewPlayer);
             }
             break;
@@ -761,11 +770,22 @@ void TrajectoryPredictionService::traceInputPath(PlayLayer* playLayer,
             holdingInput ? (isSecondPlayer ? m_holdColorP2 : m_holdColor) : m_releaseColor;
 
         if (!holdingInput) {
-            bool overlapsHoldPath = isSecondPlayer
-                                        ? (m_context.holdPathP2[frameIndex] == previousPosition)
-                                        : (m_context.holdPathP1[frameIndex] == previousPosition);
+            CCPoint heldAt = isSecondPlayer ? m_context.holdPathP2[frameIndex]
+                                            : m_context.holdPathP1[frameIndex];
+            bool overlapsHoldPath = (heldAt == previousPosition);
             if (overlapsHoldPath) {
                 lineColor = isSecondPlayer ? m_overlapColorP2 : m_overlapColor;
+            }
+            // The same comparison the overlap colour has always made, kept as
+            // a distance instead of a yes/no. This is the agency measurement.
+            if (probing && frameIndex < m_context.holdSurvivedFrames[isSecondPlayer ? 1 : 0]) {
+                float dx = previousPosition.x - heldAt.x;
+                float dy = previousPosition.y - heldAt.y;
+                float gap = std::sqrt(dx * dx + dy * dy);
+                if (gap > m_context.probeMaxDivergence) {
+                    m_context.probeMaxDivergence = gap;
+                }
+                m_context.probeComparedFrames = frameIndex + 1;
             }
         }
 
@@ -773,7 +793,7 @@ void TrajectoryPredictionService::traceInputPath(PlayLayer* playLayer,
             lineColor.a = static_cast<float>(frameCount - frameIndex) / 40.0f;
         }
 
-        if (drawNode && GucciEngine::get()->pathPreview) {
+        if (drawNode && GucciEngine::get()->pathPreview && !probing) {
             drawNode->drawSegment(previousPosition, previewPlayer->getPosition(), 0.6f, lineColor);
         }
     }
@@ -788,6 +808,69 @@ void TrajectoryPredictionService::traceInputPath(PlayLayer* playLayer,
     } else {
         m_context.releaseSurvivedFrames[playerIndex] = survivedFrames;
     }
+}
+
+bool TrajectoryPredictionService::probeAgency(PlayLayer* playLayer,
+                                              PlayerObject* source,
+                                              AgencyResult& out,
+                                              int frames) {
+    out = AgencyResult{};
+    if (!playLayer || !source || m_context.activeSimulation) {
+        return false;
+    }
+    if (!m_context.previewPlayers[0]) {
+        attach(playLayer);
+    }
+
+    bool isSecondPlayer = playLayer->m_player2 == source;
+    auto* preview = m_context.previewPlayers[isSecondPlayer ? 1 : 0];
+    if (!preview) {
+        return false;
+    }
+
+    // Same save/restore discipline rebuildPreview uses -- the fork walks the
+    // real collision code, which touches these.
+    unsigned int savedProgress = playLayer->m_gameState.m_currentProgress;
+    double savedLevelTime = playLayer->m_gameState.m_levelTime;
+    double savedTotalTime = playLayer->m_gameState.m_totalTime;
+    unsigned int savedCommandIndex = playLayer->m_gameState.m_commandIndex;
+
+    m_context.activeSimulation = true;
+    m_context.processedOrbs.clear();
+    m_context.probeFrames = std::clamp(frames, 2, 60);
+    m_context.probeMaxDivergence = 0.0f;
+    m_context.probeComparedFrames = 0;
+
+    // Hold first, then release: the release pass compares itself against the
+    // hold path recorded by the first, so the order is load-bearing.
+    traceInputPath(playLayer, preview, source, true);
+    m_context.processedOrbs.clear();
+    traceInputPath(playLayer, preview, source, false);
+
+    m_context.probeFrames = 0;
+
+    playLayer->m_gameState.m_currentProgress = savedProgress;
+    playLayer->m_gameState.m_levelTime = savedLevelTime;
+    playLayer->m_gameState.m_totalTime = savedTotalTime;
+    playLayer->m_gameState.m_commandIndex = savedCommandIndex;
+    m_context.activeSimulation = false;
+
+    int index = isSecondPlayer ? 1 : 0;
+    out.divergence = m_context.probeMaxDivergence;
+    out.holdSurvived = m_context.holdSurvivedFrames[index];
+    out.releaseSurvived = m_context.releaseSurvivedFrames[index];
+    // Identical futures are bit-identical, not approximately equal -- the two
+    // passes run the same code from the same state. Any real separation, or
+    // one branch dying while the other doesn't, means the input mattered.
+    out.matters = out.divergence > 0.0001f || out.holdSurvived != out.releaseSurvived;
+
+    // The probe has overwritten the survived-frame slots and the hold path the
+    // real preview relies on, so make it rebuild rather than draw stale data.
+    auto* gb = GucciEngine::get();
+    if (gb->pathPreview || gb->survivalIndicator) {
+        m_context.dirty = true;
+    }
+    return true;
 }
 
 int TrajectoryPredictionService::getSurvivedFrames(bool player2, bool held) const {
@@ -857,7 +940,8 @@ void TrajectoryPredictionService::updatePreview(PlayLayer* playLayer) {
     }
 
     auto* gb = GucciEngine::get();
-    bool wantsSimulation = gb->pathPreview || gb->survivalIndicator;
+    bool wantsPreview = gb->pathPreview || gb->survivalIndicator;
+    bool wantsSimulation = wantsPreview || gb->pfAgencyDebug;
     if (!wantsSimulation) {
         m_context.dirty = true;
         clearOverlay();
@@ -889,8 +973,21 @@ void TrajectoryPredictionService::updatePreview(PlayLayer* playLayer) {
         needsRebuild = watchChanged(buildWatchKey(playLayer->m_player2), m_context.watchKeys[1]);
     }
 
-    if (needsRebuild) {
+    if (needsRebuild && wantsPreview) {
         rebuildPreview(playLayer);
+    }
+
+    if (gb->pfAgencyDebug && playLayer->m_player1) {
+        AgencyResult agency;
+        if (probeAgency(playLayer, playLayer->m_player1, agency, kAgencyProbeFrames)) {
+            gb->pfAgencyMatters = agency.matters;
+            gb->pfAgencyDivergence = agency.divergence;
+            gb->pfAgencyHoldSurvived = agency.holdSurvived;
+            gb->pfAgencyReleaseSurvived = agency.releaseSurvived;
+            gb->pfAgencyValid = true;
+        }
+    } else {
+        gb->pfAgencyValid = false;
     }
 }
 void TrajectoryPredictionService::simulateCollisionBatch(GJBaseGameLayer* layer,

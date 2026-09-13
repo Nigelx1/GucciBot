@@ -144,6 +144,25 @@ namespace gucci {
         std::unordered_set<GameObject*> processedOrbs;
         std::unordered_set<GameObject*> touchingPads;
         std::unordered_set<GameObject*> frameTouchingPads;
+        // Non-zero while an agency probe is running: overrides the trace
+        // horizon and suppresses drawing, so the probe can't disturb the
+        // path preview it borrows the machinery from.
+        int probeFrames = 0;
+        float probeMaxDivergence = 0.0f;
+        int probeComparedFrames = 0;
+    };
+
+    // Does the player have any say in what happens next? Answered by running
+    // the fork twice from the same state -- once pressing, once not -- and
+    // seeing whether the two futures differ at all. Mid-air in Cube they are
+    // bit-identical and the answer is no; on the ground they separate on the
+    // next frame and the answer is yes. No level geometry is read to decide
+    // this, which is why it comes out right per gamemode for free.
+    struct AgencyResult {
+        bool matters = false;
+        float divergence = 0.0f;   // furthest the two futures got apart, in units
+        int holdSurvived = 0;
+        int releaseSurvived = 0;
     };
 
     class TrajectoryPredictionService {
@@ -157,6 +176,7 @@ namespace gucci {
         void attach(PlayLayer* playLayer);
         void detach();
         void updatePreview(PlayLayer* playLayer);
+        bool probeAgency(PlayLayer* playLayer, PlayerObject* source, AgencyResult& out, int frames);
         void captureFrameDelta(float dt);
         void noteSimulatedDeath(PlayerObject* player);
         bool ownsPreviewPlayer(PlayerObject* player) const;

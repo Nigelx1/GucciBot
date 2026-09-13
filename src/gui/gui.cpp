@@ -4494,6 +4494,21 @@ namespace gucci {
         ImGui::PopStyleColor();
         ImGui::Dummy(ImVec2(0, 8));
 
+        Widgets::SectionHeader("Agency Map (diagnostic)", theme);
+        if (Widgets::ToggleSwitch("Show the agency map", &engine->pfAgencyDebug, theme, anim)) {
+            if (!engine->pfAgencyDebug)
+                gucci::gbpf::detachAgencyDebug();
+        }
+        ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+        ImGui::TextWrapped(
+            "Drops a dot at the player every frame, lit when pressing would have changed "
+            "anything from there and dim when it would not. Just play -- on the ground the "
+            "trail lights up, in mid-air it goes dim, and in Ship it stays lit the whole way. "
+            "Groundwork for the next Pathfinder: the search currently spends most of its time "
+            "in the dim stretches, where no input it could try would have mattered.");
+        ImGui::PopStyleColor();
+        ImGui::Dummy(ImVec2(0, 8));
+
         bool inLevel = PlayLayer::get() != nullptr;
         if (!pf->active) {
             if (!inLevel)
