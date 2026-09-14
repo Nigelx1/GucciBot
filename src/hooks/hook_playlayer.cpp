@@ -435,7 +435,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
             // otherwise, which is not something to leave to chance.
             auto& traj = TrajectoryPredictionService::get();
             if (traj.isActiveSimulation() || traj.ownsPreviewPlayer(player)) {
-                traj.noteSimulatedDeath(player);
+                traj.noteSimulatedDeath(player, obj);
                 return;
             }
             // Same GD-native death signal Calculate relies on, minus the

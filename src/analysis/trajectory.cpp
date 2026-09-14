@@ -403,13 +403,17 @@ bool TrajectoryPredictionService::ownsPreviewPlayer(PlayerObject* player) const 
            (player == m_context.previewPlayers[0] || player == m_context.previewPlayers[1]);
 }
 
-void TrajectoryPredictionService::noteSimulatedDeath(PlayerObject* player) {
+void TrajectoryPredictionService::noteSimulatedDeath(PlayerObject* player, GameObject* killer) {
     if (!player) {
         return;
     }
 
     m_context.collisionRotation = player->getRotation();
     m_context.traceCancelled = true;
+
+    m_forkDeaths++;
+    m_lastKillerId = killer ? killer->m_objectID : -1;
+    m_lastKillerType = killer ? static_cast<int>(killer->m_objectType) : -1;
 }
 
 void TrajectoryPredictionService::recalculateOverlapColors() {
@@ -1021,6 +1025,16 @@ void TrajectoryPredictionService::simulateCollisionBatch(GJBaseGameLayer* layer,
         if (!object) {
             continue;
         }
+        // GD's hidden anti-cheat spike is not level geometry, and every death
+        // check elsewhere in this codebase already ignores it -- noclip,
+        // auto-retry, prevent-death, the search's own death capture. The fork
+        // was the one path that didn't. During a Pathfinder search the spike
+        // can sit on the player; the real run ignores it, but the fork copies
+        // the player's position and died on it at frame 0 of every probe,
+        // so nothing was ever measured.
+        if (object == layer->m_anticheatSpike) {
+            continue;
+        }
 
         auto type = object->m_objectType;
         if (type == GameObjectType::Solid || type == GameObjectType::Hazard ||
@@ -1150,7 +1164,7 @@ class $modify(TrajectoryPreviewPlayLayer, PlayLayer) {
     void destroyPlayer(PlayerObject* player, GameObject* gameObject) {
         auto& service = TrajectoryPredictionService::get();
         if (service.isActiveSimulation() || service.ownsPreviewPlayer(player)) {
-            service.noteSimulatedDeath(player);
+            service.noteSimulatedDeath(player, gameObject);
             return;
         }
 

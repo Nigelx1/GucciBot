@@ -182,8 +182,14 @@ namespace gucci {
         void updatePreview(PlayLayer* playLayer);
         bool probeAgency(PlayLayer* playLayer, PlayerObject* source, AgencyResult& out, int frames);
         float lastProbeStep() const { return m_lastProbeStep; }
+        // What ended the last simulated run, for diagnosing forks that die
+        // before they measure anything. -1 means no object (a non-collision
+        // death, or nothing recorded yet).
+        int lastForkKillerId() const { return m_lastKillerId; }
+        int lastForkKillerType() const { return m_lastKillerType; }
+        int forkDeaths() const { return m_forkDeaths; }
         void captureFrameDelta(float dt);
-        void noteSimulatedDeath(PlayerObject* player);
+        void noteSimulatedDeath(PlayerObject* player, GameObject* killer = nullptr);
         bool ownsPreviewPlayer(PlayerObject* player) const;
         int getSurvivedFrames(bool player2, bool held) const;
         void onRealClick(bool player2, bool pressed);
@@ -199,6 +205,9 @@ namespace gucci {
     private:
         PredictionContext m_context;
         float m_lastProbeStep = 0.0f;
+        int m_lastKillerId = -1;
+        int m_lastKillerType = -1;
+        int m_forkDeaths = 0;
         cocos2d::CCDrawNode* m_drawNode = nullptr;
         cocos2d::ccColor4F m_holdColor = ccc4f(0.29f, 0.89f, 0.33f, 1.0f);
         cocos2d::ccColor4F m_holdColorP2 = ccc4f(0.20f, 0.50f, 0.95f, 1.0f);

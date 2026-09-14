@@ -4553,6 +4553,14 @@ namespace gucci {
                         pf->lastReleaseSurvived,
                         gucci::kAgencyProbeFrames,
                         TrajectoryPredictionService::get().lastProbeStep());
+            {
+                auto& traj = TrajectoryPredictionService::get();
+                ImGui::Text("fork deaths %d  |  last killed by object id %d, type %d%s",
+                            traj.forkDeaths(),
+                            traj.lastForkKillerId(),
+                            traj.lastForkKillerType(),
+                            traj.lastForkKillerId() < 0 ? " (no object)" : "");
+            }
             if (pf->lastUsedAgency) {
                 ImGui::Text("last decision point: %d frames with agency, reaching back %d",
                             pf->lastPointCount,

@@ -1,14 +1,13 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-15-f (Pathfinder: two real bugs behind the agency probe reading nothing. The "\
-    "fork stepped at whatever delta was left over from the last PlayerObject::update "\
-    "rather than the engine's physics step -- outside a search those match, inside one "\
-    "they do not, and a fork stepped too far hits geometry on its first frame. Every "\
-    "probe reported both branches dying at frame 0, so nothing was ever measured. Second: "\
-    "with Pathfinder active, destroyPlayer claimed every death as the run's own, "\
-    "including a fork's, depending on hook order. Simulated deaths are now routed to the "\
-    "trajectory service explicitly.)"
+    "2026-09-15-g (Pathfinder: the fork no longer collides with GD's anti-cheat spike. "\
+    "Every death check in the codebase already ignored it except the fork's own collision "\
+    "batch. The real run ignores the spike during a search, but the fork copies the "\
+    "player's position and was dying on it at frame 0 of every probe, so the agency map "\
+    "stayed empty. Also records what killed the last simulated run -- object id and type, "\
+    "or no object -- and shows it in the search status, so if this is not the cause the "\
+    "next test names what is.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>
