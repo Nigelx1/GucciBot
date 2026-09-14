@@ -1,13 +1,14 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-15-g (Pathfinder: the fork no longer collides with GD's anti-cheat spike. "\
-    "Every death check in the codebase already ignored it except the fork's own collision "\
-    "batch. The real run ignores the spike during a search, but the fork copies the "\
-    "player's position and was dying on it at frame 0 of every probe, so the agency map "\
-    "stayed empty. Also records what killed the last simulated run -- object id and type, "\
-    "or no object -- and shows it in the search status, so if this is not the cause the "\
-    "next test names what is.)"
+    "2026-09-15-h (Pathfinder v2 step 3: try the previous input again before searching a "\
+    "cramped window. A candidate that makes progress but leaves fewer than 8 agency "\
+    "frames between its release and the new death is held back instead of committed -- "\
+    "the next decision point would be pinned against it, which is what made falls slow. "\
+    "The decision point's other candidates, which are the alternatives for that same "\
+    "input, get tried first. If none of them works, the held-back one is replayed and "\
+    "committed, so nothing is lost. minProgressFrames stays for now. Status shows how "\
+    "often each happens.)"
 
 #include <Geode/Geode.hpp>
 #include <filesystem>

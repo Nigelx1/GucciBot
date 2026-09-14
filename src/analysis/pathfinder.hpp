@@ -86,6 +86,10 @@ namespace gucci {
         int lastPointCount = 0;     // decision points found at the last death
         int lastLookback = 0;       // frames between that death and the earliest
         bool lastUsedAgency = false;
+        // Candidates that made progress but left almost no room for the next
+        // decision point, and how many of those later had to be used anyway.
+        int deferredCramped = 0;
+        int deferredReplayed = 0;
 
         void begin();
         void cancel();
@@ -121,6 +125,14 @@ namespace gucci {
             // truncates committed back to this, which drops exactly this
             // node's own (later-appended) successful candidate.
             size_t committedBefore = 0;
+            // A candidate that got further but would have left the next
+            // decision point cramped against it. Held back while this node's
+            // other candidates -- the alternatives for that same input -- get
+            // their turn, and used only if none of them works out.
+            bool hasDeferred = false;
+            bool deferredUsed = false;
+            Candidate deferred{0, 1};
+            uint32_t deferredDeath = 0;
         };
 
         // Which frames of the CURRENT run the player actually had a say on,
@@ -153,9 +165,13 @@ namespace gucci {
         // proof the chained-checkpoint result wasn't reproducible end to
         // end, which a frame-numbering fix alone could never explain.
         bool confirming = false;
+        // The run in flight is a deferred candidate being replayed so its
+        // death (and this run's ring and agency map) can seed its node.
+        bool replayingDeferred = false;
 
         void handleDeath();
         void buildNodeFromDeath(uint32_t d);
+        int agencyPointsBetween(int64_t floor, uint32_t d) const;
         void startNextCandidateOrBacktrack();
         void startRun(const Node* node);
         void startConfirmRun();

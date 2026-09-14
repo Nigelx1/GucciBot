@@ -25,6 +25,13 @@ namespace gucci {
     // cover whatever this allows.
     static constexpr int kMaxAgencyLookback = 960;   // 4s at 240 TPS
 
+    // Below this many agency frames between a candidate's release and the
+    // death it reached, the decision point it would open is cramped: pinned
+    // against the input just committed, with too little room for anything
+    // meaningfully different. The fall that prompted this showed "6 frames
+    // with agency, reaching back 9" -- the real fix was the input before.
+    static constexpr int kCrampedPoints = 8;
+
     Pathfinder* Pathfinder::get() {
         static Pathfinder inst;
         return &inst;
@@ -88,6 +95,9 @@ namespace gucci {
         lastPointCount = 0;
         lastLookback = 0;
         lastUsedAgency = false;
+        deferredCramped = 0;
+        deferredReplayed = 0;
+        replayingDeferred = false;
         bestFrame = 0;
         bestX = 0.f;
         bestPct = 0.f;
@@ -358,6 +368,7 @@ namespace gucci {
                 committed.push_back(release);
                 haveCandidate = false;
             }
+            replayingDeferred = false;
             startConfirmRun();
             return;
         }
@@ -486,6 +497,15 @@ namespace gucci {
             takeRingCheckpoint(f);
     }
 
+    int Pathfinder::agencyPointsBetween(int64_t floor, uint32_t d) const {
+        floor = std::max<int64_t>(floor, std::max<int64_t>((int64_t)d - kMaxAgencyLookback, 1));
+        int points = 0;
+        for (int64_t f = (int64_t)d - 1; f >= floor && points < windowFrames; --f)
+            if ((size_t)f < agencyMap.size() && agencyMap[(size_t)f])
+                points++;
+        return points;
+    }
+
     void Pathfinder::handleDeath() {
         died = false;
         uint32_t d = deathFrame;
@@ -507,9 +527,14 @@ namespace gucci {
         // backtrack. The whole run thrashed on exactly that instead of
         // searching for a real escape. Requiring a real minimum gain forces
         // rejected-as-failure instead of falsely-accepted-as-progress.
-        if (d >= top.deathFrame + (uint32_t)std::max(1, minProgressFrames)) {
-            // Progress: this candidate got meaningfully further than the
-            // death that created its decision point. Commit it, open a new one.
+        bool progressed = d >= top.deathFrame + (uint32_t)std::max(1, minProgressFrames);
+        bool wasDeferredReplay = replayingDeferred;
+        replayingDeferred = false;
+
+        // Commits `cur` and opens the decision point its death creates. Logs
+        // before buildNodeFromDeath, which can reallocate the stack `top`
+        // refers into.
+        auto commitCurrent = [&](const char* how) {
             gb::Action press;
             press.m_frame = cur.pressFrame;
             press.m_type = gb::ActionType::Jump;
@@ -520,21 +545,60 @@ namespace gucci {
             committed.push_back(press);
             committed.push_back(release);
             haveCandidate = false;
-            log::info("[Pathfinder] press@{} hold {} got from f={} to f={} (x={:.1f}) -- committed, "
+            log::info("[Pathfinder] press@{} hold {} got from f={} to f={} (x={:.1f}) -- {}, "
                       "{} inputs so far",
                       cur.pressFrame,
                       cur.holdFrames,
                       top.deathFrame,
                       d,
                       deathX,
+                      how,
                       committed.size());
             buildNodeFromDeath(d);
+            startNextCandidateOrBacktrack();
+        };
+
+        if (!progressed) {
+            // No progress -- next candidate at this decision point (or backtrack).
             startNextCandidateOrBacktrack();
             return;
         }
 
-        // No progress -- next candidate at this decision point (or backtrack).
-        startNextCandidateOrBacktrack();
+        if (wasDeferredReplay) {
+            // Already judged: it made progress, and nothing with more room did.
+            commitCurrent("committed after nothing roomier worked");
+            return;
+        }
+
+        // Progress, but how much room does it leave? If the next decision
+        // point would be pinned right behind this input, the likelier fix is
+        // a different version of this input -- and those are exactly this
+        // node's remaining candidates. Try them first; keep this one in
+        // reserve. Only judged when this run actually measured up to the death.
+        uint32_t release = cur.pressFrame + (uint32_t)std::max(1, cur.holdFrames);
+        bool measured = agencyMap.size() >= (size_t)d;
+        int room = measured ? agencyPointsBetween((int64_t)release + 1, d) : windowFrames;
+        if (room < kCrampedPoints) {
+            if (!top.hasDeferred || d > top.deferredDeath) {
+                top.hasDeferred = true;
+                top.deferred = cur;
+                top.deferredDeath = d;
+            }
+            deferredCramped++;
+            haveCandidate = false;
+            log::info("[Pathfinder] press@{} hold {} got from f={} to f={} but leaves only {} frames "
+                      "with agency behind it -- held back while this decision point's other "
+                      "candidates get a turn",
+                      cur.pressFrame,
+                      cur.holdFrames,
+                      top.deathFrame,
+                      d,
+                      room);
+            startNextCandidateOrBacktrack();
+            return;
+        }
+
+        commitCurrent("committed");
     }
 
     void Pathfinder::buildNodeFromDeath(uint32_t d) {
@@ -639,6 +703,37 @@ namespace gucci {
                     return;
                 }
                 stage = fmt::format("f={} press@{} hold {}", top.deathFrame, cur.pressFrame, cur.holdFrames);
+                startRun(&top);
+                return;
+            }
+            // Out of candidates, but one made progress and was held back for
+            // leaving too little room. Nothing roomier worked, so use it:
+            // replay it to get its death, ring and agency map back, then
+            // commit it from handleDeath.
+            if (top.hasDeferred && !top.deferredUsed) {
+                top.deferredUsed = true;
+                cur = top.deferred;
+                haveCandidate = true;
+                replayingDeferred = true;
+                deferredReplayed++;
+                runs++;
+                if (runs > maxRuns) {
+                    log::info("[Pathfinder] hit max runs ({}) -- giving up, best {:.1f}%",
+                              maxRuns,
+                              bestPct);
+                    finish(false);
+                    return;
+                }
+                log::info("[Pathfinder] decision point @f={} found nothing roomier -- replaying the "
+                          "held-back press@{} hold {} (reached f={})",
+                          top.deathFrame,
+                          cur.pressFrame,
+                          cur.holdFrames,
+                          top.deferredDeath);
+                stage = fmt::format("f={} replaying press@{} hold {}",
+                                    top.deathFrame,
+                                    cur.pressFrame,
+                                    cur.holdFrames);
                 startRun(&top);
                 return;
             }

@@ -4561,6 +4561,9 @@ namespace gucci {
                             traj.lastForkKillerType(),
                             traj.lastForkKillerId() < 0 ? " (no object)" : "");
             }
+            ImGui::Text("held back for leaving no room %d  |  used anyway %d",
+                        pf->deferredCramped,
+                        pf->deferredReplayed);
             if (pf->lastUsedAgency) {
                 ImGui::Text("last decision point: %d frames with agency, reaching back %d",
                             pf->lastPointCount,
