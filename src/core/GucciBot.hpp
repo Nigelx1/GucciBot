@@ -1,17 +1,18 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-15-h (Pathfinder v2 step 3: try the previous input again before searching a "\
-    "cramped window. A candidate that makes progress but leaves fewer than 8 agency "\
-    "frames between its release and the new death is held back instead of committed -- "\
-    "the next decision point would be pinned against it, which is what made falls slow. "\
-    "The decision point's other candidates, which are the alternatives for that same "\
-    "input, get tried first. If none of them works, the held-back one is replayed and "\
-    "committed, so nothing is lost. minProgressFrames stays for now. Status shows how "\
-    "often each happens.)"
+    "2026-09-15-i (Frame Windows, GitHub issue #4: marks with no position. "\
+    "FrameWindowMark's x/y had no default, so a manual entry on a macro without a "\
+    "recorded path carried garbage coordinates -- counted in the legend, never drawn. "\
+    "Positions now default to unknown, a manual entry borrows the position Calculate "\
+    "captured for the same click when the path has none, the overlay skips marks without "\
+    "one explicitly, and the Frame Windows tab says how many shown clicks have no "\
+    "position. Includes Pathfinder step 3 from build -h, still untested.)"
 
 #include <Geode/Geode.hpp>
+#include <cmath>
 #include <filesystem>
+#include <limits>
 #include <functional>
 #include <forward_list>
 #include <optional>
@@ -707,14 +708,25 @@ namespace gucci {
         bool practiceRangeEnabled = false;
         int fwMaxWindow = 25;
         struct FrameWindowMark {
-            float x;
-            float y;
+            // Unknown until something measures where the click happened. A
+            // mark created without a position -- a manual entry on a macro
+            // with no recorded path -- used to carry whatever was on the
+            // stack: the legend still counted it, but its ring landed off in
+            // nowhere and never showed. See hasPosition().
+            float x = std::numeric_limits<float>::quiet_NaN();
+            float y = std::numeric_limits<float>::quiet_NaN();
             int window;
             bool player2;
             uint32_t frame;
             float percent;
             bool manual = false;
             bool isRelease = false;
+            // (0,0) is also treated as missing: it is what a Calculate sample
+            // keeps if the position capture never reached its frame, and no
+            // real click happens at the level origin.
+            bool hasPosition() const {
+                return std::isfinite(x) && std::isfinite(y) && !(x == 0.f && y == 0.f);
+            }
         };
         std::vector<FrameWindowMark> fwMarks;
         bool fwHasData = false;

@@ -442,6 +442,9 @@ public:
             if (gb->fwDefaultLook)
                 tier = nullptr;
 
+            // A mark with no measured position has nowhere to be drawn.
+            if (!mk.hasPosition())
+                continue;
             CCPoint at{mk.x, mk.y};
             if (!visRect.containsPoint(at))
                 continue;

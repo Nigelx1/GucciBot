@@ -5020,10 +5020,13 @@ namespace gucci {
         }
         ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
         if (engine->fwHasData) {
-            int vis = 0, loosest = 0;
+            int vis = 0, loosest = 0, noPos = 0;
             for (auto const& mk : engine->fwMarks) {
-                if (mk.window <= engine->fwMaxWindow)
+                if (mk.window <= engine->fwMaxWindow) {
                     ++vis;
+                    if (!mk.hasPosition())
+                        ++noPos;
+                }
                 if (mk.window > loosest)
                     loosest = mk.window;
             }
@@ -5036,6 +5039,10 @@ namespace gucci {
                                    "%d). Raise Max Window to see them.",
                                    engine->fwMaxWindow,
                                    loosest);
+            if (noPos > 0)
+                ImGui::TextWrapped("%d of the shown clicks have no position recorded, so they are "
+                                   "counted in the legend but cannot be drawn in the level.",
+                                   noPos);
         } else if (!engine->fwAnalyzeRunning)
             ImGui::TextWrapped(
                 "No analysis yet. Save a macro while in the level and choose Calculate "
@@ -5302,6 +5309,17 @@ namespace gucci {
                                     a.m_player2 ? samples[a.m_frame].p2x : samples[a.m_frame].p1x;
                                 nm.y =
                                     a.m_player2 ? samples[a.m_frame].p2y : samples[a.m_frame].p1y;
+                            }
+                            if (!nm.hasPosition()) {
+                                // No recorded path at this frame: borrow the
+                                // position Calculate captured for the same click.
+                                for (auto const& cs : engine->fwClickSamples)
+                                    if (cs.frame == a.m_frame && cs.player2 == a.m_player2 &&
+                                        (cs.x != 0.f || cs.y != 0.f)) {
+                                        nm.x = cs.x;
+                                        nm.y = cs.y;
+                                        break;
+                                    }
                             }
                             nm.percent = pct >= 0.f ? pct : 0.f;
                             engine->fwMarks.push_back(nm);
