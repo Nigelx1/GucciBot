@@ -4,9 +4,11 @@
 
 GucciBot is a Geometry Dash macro bot built on Silicate's physics engine, with a hypercompressed replay format and a full practice-trainer system -- one dedicated tab built around Jupiter My Favourite, and a second general-purpose one that works with any of your own saved macros.
 
+**Website:** [guccibot.net](https://guccibot.net)
+
 ## Requirements
 
-- Geometry Dash 2.2081, Windows, Geode 5.7.1+
+- Geometry Dash 2.2081, Windows, Geode 5.10.1+
 - **ToastyReplay Lite must be installed** (`toastexgd.toastyreplay-lite`) -- it doesn't need to be enabled, just present in your mods folder. GucciBot won't run without it.
 
 ---
@@ -35,9 +37,20 @@ GucciBot is a Geometry Dash macro bot built on Silicate's physics engine, with a
 ## Practice & Analysis
 
 - Macro diff viewer — compare two replays frame by frame
-- Frame-window analyzer ("Calculate") — per-click timing windows across real game frames, with three selectable algorithms: Time-Based (default), Recovery Range, and the new Alignment-Independent (also re-tests the previous click's own timing, not just this one). Optional "Circle Skin" marker style.
+- Frame-window analyzer ("Calculate") — per-click timing windows across real game frames, with three selectable algorithms: Time-Based (default), Recovery Range, and the new Alignment-Independent (also re-tests the previous click's own timing, not just this one). Optional "Circle Skin" marker style, a **Default Look** preset matching the frame-window overlay style people already know, and an in-level legend counting how many clicks landed in each window.
 - TPS mid-macro changes, noclip accuracy display, macro trim/merge/surgery
 - Bot settings presets, metadata editor, autosave at level end and/or on a timer
+
+## Pathfinder
+
+Makes a macro for you. Open a level with nothing recorded, start Pathfinder, and it plays the level itself until it has a run that reaches the end -- then saves that run as a macro named after the level.
+
+- **Searches where it matters** — it checks, frame by frame, whether pressing would change anything at all. When a death comes long after the mistake behind it (walking off a ledge and dying at the bottom), it looks back past the stretch where no input could have helped instead of burning attempts inside it.
+- **Tries the earlier press again first** — when a fix only buys a few frames, it tries different versions of the press before it rather than settling.
+- **Real backtracking** — every option it tries at a decision point is ruled out there for good; dead ends restore a real checkpoint further back.
+- **Proves its own answer** — a solution only counts once it plays from the very start of the level on its own.
+- **Agency Map** — an optional overlay showing, as you play, which frames an input could actually change.
+- Strongest on Cube-style sections so far. Modes where letting go is its own decision -- Ship, Wave, Robot, Swing -- are the next part of the work.
 
 ## Nigel's Jupiter My Favourite Trainer
 
@@ -130,4 +143,3 @@ Real click-timing feedback and a synced video-review overlay, both built around 
 - **GWDdoS** — Astral, and the codebase cleanup that got this repo public-ready
 - **Bogdaner09** — Click Indicators inspiration ([github.com/Bogdaner09/mod](https://github.com/Bogdaner09/mod)) — vibecoded by his own admission, so credit's probably owed to whichever model wrote that too
 - **Gucci Mane** — he's the truth. Brrr.
-- **anticroom** — frame-window accuracy fixes, GucciBot's first outside pull request

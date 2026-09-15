@@ -1,14 +1,11 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-15-k (Editor playtest ran at 1.5x speed on a 360 FPS cap. The game update "\
-    "hook forced GD's update every frame whenever the lock delta setting was on, but lock "\
-    "delta only drives stepping inside a real level. In the editor that meant frames "\
-    "where real time said zero steps were due still took one, so steps followed the frame "\
-    "rate: 360 a second instead of 240. The force now only applies in a real level; the "\
-    "editor updates only when a step is due. Normal levels unchanged; editor song "\
-    "playback keeps its old behaviour. Predates 1.7.2 -- in the original import. Includes "\
-    "-h, -i and -j.)"
+    "2026-09-15-l (Version bump to 1.7.2. Packages builds -a through -k: Pathfinder v2 "\
+    "steps 0-3 -- agency-based decision points, holding back candidates that leave no "\
+    "room, and the fork fixes behind them -- the Frame Windows no-position fix for GitHub "\
+    "issue #4, and the editor playtest fixes: Silicate's playtest reset hook and the 1.5x "\
+    "speed at FPS caps above 240.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
