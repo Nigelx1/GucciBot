@@ -1,14 +1,14 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-15-j (Editor playtest, from a YouTube report of macros activating one frame "\
-    "early in the editor. GucciBot never hooked LevelEditorLayer::onPlaytest, so none of "\
-    "the reset work a normal level gets on restart ran when a playtest started. Ported "\
-    "Silicate's hook: resets frame and death state, pauses the editor song, rewinds the "\
-    "replay to frame 0, and releases a jump held going in -- without recording those "\
-    "releases. Also halves the editor frame counter to match Silicate's m_currentProgress "\
-    "/ 2 - 1; the original port dropped the halving. Includes the untested Pathfinder "\
-    "step 3 and issue #4 fix.)"
+    "2026-09-15-k (Editor playtest ran at 1.5x speed on a 360 FPS cap. The game update "\
+    "hook forced GD's update every frame whenever the lock delta setting was on, but lock "\
+    "delta only drives stepping inside a real level. In the editor that meant frames "\
+    "where real time said zero steps were due still took one, so steps followed the frame "\
+    "rate: 360 a second instead of 240. The force now only applies in a real level; the "\
+    "editor updates only when a step is due. Normal levels unchanged; editor song "\
+    "playback keeps its old behaviour. Predates 1.7.2 -- in the original import. Includes "\
+    "-h, -i and -j.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -106,7 +106,12 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
             return;
         }
 
-        if (!upd.isLockDelta() || !PlayLayer::get())
+        // Lock delta only drives stepping inside a real level, where
+        // runSlowLockDelta hands this update exactly one step at a time.
+        // Anywhere else -- the editor -- the step count comes from real time,
+        // right here.
+        bool lockDeltaActive = upd.isLockDelta() && PlayLayer::get();
+        if (!lockDeltaActive)
             upd.calculateSteps(dt, (float)upd.getPhysicsDt());
 
         if (upd.m_respawnTimer > 0) {
@@ -124,7 +129,17 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
                 storeActualState();
             }
         } else {
-            if (upd.isLockDelta() || upd.estimatedStepCount != 0) {
+            // This used to test the raw lock-delta setting, which is true in
+            // the editor too. So in an editor playtest GD's update ran on every
+            // drawn frame, including frames where real time said zero steps
+            // were due -- and the step-count midhook still produces one step
+            // for those. At 360 FPS that is 360 steps a second instead of 240:
+            // exactly the 1.5x Nigel measured. Only real-level lock delta may
+            // force the call now. The editor's song playback preview runs on
+            // GD's own timing, so it keeps the old every-frame behaviour.
+            auto* lel = LevelEditorLayer::get();
+            bool editorPlayback = lel && lel->m_playbackActive;
+            if (lockDeltaActive || upd.estimatedStepCount != 0 || editorPlayback) {
                 GJBaseGameLayer::update(dt);
                 storeActualState();
             }
