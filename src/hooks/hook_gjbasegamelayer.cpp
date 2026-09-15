@@ -309,6 +309,10 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
 
     void handleButton(bool pressed, int button, bool player1) {
         auto* gb = GucciEngine::get();
+        // GucciBot's own button events (editor playtest start) are not the
+        // player's: no click sound, no scoring, and never recorded.
+        if (gb->suppressInputCapture)
+            return GJBaseGameLayer::handleButton(pressed, button, player1);
         if (button == 1) {
             triggerClickAudio(!player1, button, pressed);
             if (!gb->isPlaying()) {

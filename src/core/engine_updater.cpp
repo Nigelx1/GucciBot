@@ -73,7 +73,12 @@ uint32_t GucciUpdater::getFrame() const {
     if (PlayLayer::get())
         return m_frame + static_cast<uint32_t>(m_frameOnLastAttempt);
     if (auto* lel = LevelEditorLayer::get())
-        return static_cast<uint32_t>(std::max(0, (int)lel->m_gameState.m_currentProgress - 1));
+        // Halved to match Silicate's own editor convention (src/bot/updater.cpp,
+        // "m_currentProgress / 2 - 1"). This line came over in the original
+        // port without the halving, putting editor frames out of step with
+        // Silicate's and with how in-level frames count.
+        return static_cast<uint32_t>(
+            std::max(0, (int)(lel->m_gameState.m_currentProgress / 2) - 1));
     return 0;
 }
 

@@ -1,13 +1,14 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-15-i (Frame Windows, GitHub issue #4: marks with no position. "\
-    "FrameWindowMark's x/y had no default, so a manual entry on a macro without a "\
-    "recorded path carried garbage coordinates -- counted in the legend, never drawn. "\
-    "Positions now default to unknown, a manual entry borrows the position Calculate "\
-    "captured for the same click when the path has none, the overlay skips marks without "\
-    "one explicitly, and the Frame Windows tab says how many shown clicks have no "\
-    "position. Includes Pathfinder step 3 from build -h, still untested.)"
+    "2026-09-15-j (Editor playtest, from a YouTube report of macros activating one frame "\
+    "early in the editor. GucciBot never hooked LevelEditorLayer::onPlaytest, so none of "\
+    "the reset work a normal level gets on restart ran when a playtest started. Ported "\
+    "Silicate's hook: resets frame and death state, pauses the editor song, rewinds the "\
+    "replay to frame 0, and releases a jump held going in -- without recording those "\
+    "releases. Also halves the editor frame counter to match Silicate's m_currentProgress "\
+    "/ 2 - 1; the original port dropped the halving. Includes the untested Pathfinder "\
+    "step 3 and issue #4 fix.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -471,6 +472,10 @@ namespace gucci {
         // Pathfinder v2 step 1: draw, per frame, whether pressing would change
         // anything at all from here. Diagnostic only -- the search does not
         // consult it yet. See the Pathfinder tab.
+        // Set while GucciBot sends GD a button event of its own -- the jump
+        // releases at the start of an editor playtest -- so the recorder does
+        // not store it as a real input.
+        bool suppressInputCapture = false;
         bool pfAgencyDebug = false;
         bool pfAgencyValid = false;
         bool pfAgencyMatters = false;
