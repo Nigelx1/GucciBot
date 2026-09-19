@@ -1,11 +1,11 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-19-a (Robot frame windows: when a robot press is tested at a shifted frame, "\
-    "its paired release now moves with it instead of staying put, so the hold keeps the "\
-    "length the macro recorded. Holding a fixed release shortened the hold by exactly the "\
-    "shift, so the leg died on jump height rather than on press timing and the window came "\
-    "back too narrow. Ported from anticroom's robot handling in Silicate.)"
+    "2026-09-19-b (Reverts build -a. The robot release-pairing change was built on a wrong "\
+    "premise: GucciBot's robot windows were never the broken ones -- the robot bug was in "\
+    "anticroom's Silicate, not here. Juice's design, where a robot release is measured as "\
+    "its own sample rather than dragged along by the press, stands untouched. Back to the "\
+    "1.7.2 behaviour exactly.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
