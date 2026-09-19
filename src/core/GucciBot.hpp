@@ -1,11 +1,11 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-15-l (Version bump to 1.7.2. Packages builds -a through -k: Pathfinder v2 "\
-    "steps 0-3 -- agency-based decision points, holding back candidates that leave no "\
-    "room, and the fork fixes behind them -- the Frame Windows no-position fix for GitHub "\
-    "issue #4, and the editor playtest fixes: Silicate's playtest reset hook and the 1.5x "\
-    "speed at FPS caps above 240.)"
+    "2026-09-19-a (Robot frame windows: when a robot press is tested at a shifted frame, "\
+    "its paired release now moves with it instead of staying put, so the hold keeps the "\
+    "length the macro recorded. Holding a fixed release shortened the hold by exactly the "\
+    "shift, so the leg died on jump height rather than on press timing and the window came "\
+    "back too narrow. Ported from anticroom's robot handling in Silicate.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

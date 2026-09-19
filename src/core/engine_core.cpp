@@ -2257,7 +2257,16 @@ namespace gucci {
         return noNeighbour;
     }
 
-    static void fwShiftInputWithPair(std::vector<gb::Action>& acts,
+    // Hold length is load-bearing on the robot: the jump's height comes from how
+    // long the button is held, so a press tested 3 frames late against a release
+    // left where it was isn't "the same jump, mistimed" -- it's a 3-frame-shorter
+    // jump, and the leg dies on height rather than on timing. For those modes the
+    // release travels with the press even when it's a test sample of its own; it
+    // still gets measured independently on its own leg, from the restored atom.
+    static bool fwHoldLengthMatters(char gamemode) { return gamemode == 'R'; }
+
+    static void fwShiftInputWithPair(GucciEngine* gb,
+                                     std::vector<gb::Action>& acts,
                                      const std::vector<GucciEngine::FwClickSample>& samples,
                                      const GucciEngine::FwClickSample& s,
                                      int64_t delta) {
@@ -2291,7 +2300,7 @@ namespace gucci {
             }
         }
 
-        if (pairIdx != acts.size()) {
+        if (pairIdx != acts.size() && !fwHoldLengthMatters(fwGamemodeAt(gb, s.frame, s.player2))) {
             auto const& pa = acts[pairIdx];
             for (auto const& os : samples) {
                 if (os.release && os.frame == pa.m_frame && os.player2 == pa.m_player2 &&
@@ -2990,7 +2999,7 @@ namespace gucci {
                                   }),
                    acts.end());
 
-        fwShiftInputWithPair(acts,
+        fwShiftInputWithPair(this, acts,
                              fwClickSamples,
                              fwClickSamples[mk.clickIndex],
                              (int64_t)mk.testedFrame - (int64_t)mk.macroFrame);
@@ -3052,7 +3061,7 @@ namespace gucci {
                                   }),
                    acts.end());
 
-        fwShiftInputWithPair(acts, fwClickSamples, fwClickSamples[br.clickIdx], br.xShift);
+        fwShiftInputWithPair(this, acts, fwClickSamples, fwClickSamples[br.clickIdx], br.xShift);
         std::stable_sort(acts.begin(), acts.end(), [](const gb::Action& a, const gb::Action& b) {
             return a.m_frame < b.m_frame;
         });
@@ -3100,7 +3109,7 @@ namespace gucci {
                    acts.end());
 
         uint32_t targetFrame = fwClickSamples[fwProbeClick].frame;
-        fwShiftInputWithPair(acts, fwClickSamples, fwClickSamples[fwProbeClick], fwProbeShift);
+        fwShiftInputWithPair(this, acts, fwClickSamples, fwClickSamples[fwProbeClick], fwProbeShift);
 
         std::stable_sort(acts.begin(), acts.end(), [](const gb::Action& a, const gb::Action& b) {
             return a.m_frame < b.m_frame;
@@ -3169,7 +3178,7 @@ namespace gucci {
                                   }),
                    acts.end());
 
-        fwShiftInputWithPair(acts, fwClickSamples, fwClickSamples[fwProbeClick], fwProbeShift);
+        fwShiftInputWithPair(this, acts, fwClickSamples, fwClickSamples[fwProbeClick], fwProbeShift);
 
         if (fwProbeHasNext) {
             size_t nextIdx = fwProbeClick + 1;
@@ -3231,14 +3240,14 @@ namespace gucci {
                    acts.end());
 
         uint32_t targetFrame = fwClickSamples[fwProbeClick].frame;
-        fwShiftInputWithPair(acts, fwClickSamples, fwClickSamples[fwProbeClick], fwProbeShift);
+        fwShiftInputWithPair(this, acts, fwClickSamples, fwClickSamples[fwProbeClick], fwProbeShift);
 
         int64_t shiftedNFrame = fwProbeNextFrame;
         if (fwProbeHasNext && fwProbeClick + 1 < fwClickSamples.size()) {
             auto const& ns = fwClickSamples[fwProbeClick + 1];
             if (fwFindActionForSample(acts, ns)) {
                 shiftedNFrame = std::max<int64_t>((int64_t)fwProbeNextFrame + fwRecoveryOffset, 0);
-                fwShiftInputWithPair(acts, fwClickSamples, ns, fwRecoveryOffset);
+                fwShiftInputWithPair(this, acts, fwClickSamples, ns, fwRecoveryOffset);
             }
         }
 
@@ -3575,7 +3584,7 @@ namespace gucci {
                                       return !a.isInput();
                                   }),
                    acts.end());
-        fwShiftInputWithPair(acts, fwClickSamples, fwClickSamples[predIdx], fwAiPredShift);
+        fwShiftInputWithPair(this, acts, fwClickSamples, fwClickSamples[predIdx], fwAiPredShift);
         std::stable_sort(acts.begin(), acts.end(), [](const gb::Action& a, const gb::Action& b) {
             return a.m_frame < b.m_frame;
         });
@@ -3696,7 +3705,7 @@ namespace gucci {
                                   }),
                    acts.end());
         uint32_t clickFrame = fwClickSamples[fwAiClickIdx].frame;
-        fwShiftInputWithPair(acts, fwClickSamples, fwClickSamples[fwAiClickIdx], fwAiXShift);
+        fwShiftInputWithPair(this, acts, fwClickSamples, fwClickSamples[fwAiClickIdx], fwAiXShift);
         std::stable_sort(acts.begin(), acts.end(), [](const gb::Action& a, const gb::Action& b) {
             return a.m_frame < b.m_frame;
         });
@@ -3833,8 +3842,8 @@ namespace gucci {
         // were coming back with a 0-frame window -- this is why: the
         // desynced double-fire was corrupting nearly every continuation
         // candidate regardless of which shift was actually being tested.
-        fwShiftInputWithPair(acts, fwClickSamples, fwClickSamples[fwAiClickIdx], fwAiXShift);
-        fwShiftInputWithPair(acts, fwClickSamples, fwClickSamples[nIdx], shift);
+        fwShiftInputWithPair(this, acts, fwClickSamples, fwClickSamples[fwAiClickIdx], fwAiXShift);
+        fwShiftInputWithPair(this, acts, fwClickSamples, fwClickSamples[nIdx], shift);
         std::stable_sort(acts.begin(), acts.end(), [](const gb::Action& a, const gb::Action& b) {
             return a.m_frame < b.m_frame;
         });
