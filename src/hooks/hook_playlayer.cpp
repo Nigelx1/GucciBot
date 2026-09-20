@@ -59,6 +59,15 @@ class $modify(GB7PlayLayer, PlayLayer) {
         if (!GucciEngine::get()->enabled)
             return PlayLayer::loadFromCheckpoint(obj);
         auto& pf = GucciEngine::get()->practiceFix;
+        // Checked before everything else: when m_forcedState is set, a caller
+        // (resetWithState) has named the exact state to come back to, so any
+        // other branch winning here would restore the wrong one. Silicate
+        // checks it first in this function too.
+        if (pf.m_forcedState) {
+            PlayLayer::loadFromCheckpoint(pf.m_forcedState->m_checkpoint);
+            pf.applyCheckpoint(*pf.m_forcedState);
+            return;
+        }
         if (pf.m_loadCheckpoint) {
             pf.restorePreviousFrame([this](auto* cp) {
                 this->PlayLayer::loadFromCheckpoint(cp);
@@ -215,6 +224,18 @@ class $modify(GB7PlayLayer, PlayLayer) {
                       !pf.m_savedCheckpoints.empty(),
                       pf.m_storedFrames.size());
 
+        // The other half of the m_forcedState mechanism (see
+        // GucciPracticeFix::resetWithState). First for the same reason it is
+        // first in loadFromCheckpoint: a named state beats every heuristic
+        // below it. Note this function's branch order is load-bearing -- it is
+        // where the 233->107 bug lived, CLAUDE.md section 4 -- so this goes in
+        // front of the existing chain rather than somewhere inside it, and
+        // changes nothing about the order of what follows.
+        if (pf.m_forcedState && pf.m_forcedState->m_checkpoint) {
+            upd.m_frameOnLastAttempt = pf.m_forcedState->m_frameOffset;
+            m_checkpointArray->addObject(pf.m_forcedState->m_checkpoint);
+            return true;
+        }
         if (!pf.m_savedCheckpoints.empty() && !pf.m_isBackstep && !upd.m_canDie) {
             upd.m_frameOnLastAttempt = pf.m_savedCheckpoints.back().m_frameOffset;
             m_checkpointArray->addObject(pf.m_savedCheckpoints.back().m_checkpoint);

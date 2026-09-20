@@ -47,14 +47,25 @@ namespace gucci {
         }
     }
 
-    void GucciPracticeFix::saveCurrent(CheckpointObject* cp, uint64_t frameOffset) {
+    // Builds a checkpoint state and hands it back WITHOUT storing it, matching
+    // Silicate's PracticeFix::createCheckpoint. saveCurrent below is the
+    // storing version and is unchanged in behaviour -- this is a straight
+    // extraction of the capture half, so that a caller can hold a private
+    // state and restore to it (resetWithState) without it entering
+    // m_savedCheckpoints and confusing the normal respawn path.
+    //
+    // Deliberately NOT touched while extracting: what and when this captures.
+    // See the checkpoint-capture-drift work -- capture timing here is its own
+    // open question and must not be quietly altered by a refactor.
+    SavedCheckpointState GucciPracticeFix::createCheckpoint(CheckpointObject* cp,
+                                                            uint64_t frameOffset) {
+        SavedCheckpointState state;
         if (!cp)
-            return;
+            return state;
         auto* pl = PlayLayer::get();
         if (!pl)
-            return;
+            return state;
 
-        SavedCheckpointState state;
         state.m_checkpoint = cp;
         state.m_frameOffset = frameOffset;
         state.m_gameState = pl->m_gameState;
@@ -71,6 +82,19 @@ namespace gucci {
         // every reset -- see the comment on SavedCheckpointState::m_rngState
         // for why this needs to be captured per-checkpoint now.
         state.m_rngState = *reinterpret_cast<uint64_t*>(geode::base::get() + 0x6c2e90);
+
+        return state;
+    }
+
+    void GucciPracticeFix::saveCurrent(CheckpointObject* cp, uint64_t frameOffset) {
+        if (!cp)
+            return;
+        auto* pl = PlayLayer::get();
+        if (!pl)
+            return;
+
+        // Capture lives in createCheckpoint now -- one capture, one moment.
+        SavedCheckpointState state = this->createCheckpoint(cp, frameOffset);
 
         m_savedCheckpoints.push_back(state);
 
@@ -137,6 +161,31 @@ namespace gucci {
     void GucciPracticeFix::dropLastStoredFrame() {
         if (!m_storedFrames.empty())
             m_storedFrames.pop_back();
+    }
+
+    // Restore to one specific captured state rather than to whatever the
+    // normal reset path would pick. m_forcedState is only non-null for the
+    // duration of the resetLevel() call below; hook_playlayer.cpp's
+    // loadFromCheckpoint and the checkpoint-array path both check it and use
+    // that state instead of their usual choice. Ported from Silicate's
+    // PracticeFix::resetWithState 2026-09-20 -- GucciBot had m_forcedState
+    // declared but nothing ever set OR read it, so this whole mechanism was
+    // dead code until now.
+    void GucciPracticeFix::resetWithState(const SavedCheckpointState& state) {
+        auto* pl = PlayLayer::get();
+        if (!pl)
+            return;
+        m_forcedState = const_cast<SavedCheckpointState*>(&state);
+        pl->resetLevel();
+        m_forcedState = nullptr;
+    }
+
+    // Silicate also clears m_brokenOpacity and m_advancedRandom here; GucciBot
+    // has neither, so this clears the two it does have. If either gets ported
+    // later, add it here too.
+    void GucciPracticeFix::removeAll() {
+        m_brokenObjects.clear();
+        m_savedCheckpoints.clear();
     }
 
     void GucciPracticeFix::clearPlatformer(bool full) {
@@ -834,6 +883,7 @@ namespace gucci {
             }
             auto& f = *result;
             gb->updater.setTps(f.header.tps);
+            m_initialTPS = f.header.tps;
             m_startingSeed = f.header.rngSeed;
             m_replayName = f.header.name;
             gb->loadedMacroLevelName = f.header.levelName;
@@ -873,6 +923,7 @@ namespace gucci {
                     static_cast<uint32_t>(inp.tick), t, inp.isPressed(), inp.isPlayer2());
             }
             gb->updater.setTps(legacy->framerate);
+            m_initialTPS = legacy->framerate;
             gb->setMode(GucciEngine::Mode::Playing);
             log::info("[GucciBot] Loaded legacy BRR: {} inputs", m_actionAtom.length());
             loadFwMarks(path);

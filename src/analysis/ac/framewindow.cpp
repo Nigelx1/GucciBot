@@ -732,7 +732,7 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::start(PlayLayer* pl) {
     m_resyncFailures = 0;
     m_resyncGaveUp = false;
     m_pathDiverged = false;
-    m_baseTps = Bot::get()->updater().m_tps->inner();
+    m_baseTps = Bot::get()->updater().m_tps;
     m_resultsTps = m_baseTps;
     m_probeDied = false;
     m_captureHeartbeat = 0;

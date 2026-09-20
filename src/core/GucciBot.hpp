@@ -1,11 +1,14 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-19-b (Reverts build -a. The robot release-pairing change was built on a wrong "\
-    "premise: GucciBot's robot windows were never the broken ones -- the robot bug was in "\
-    "anticroom's Silicate, not here. Juice's design, where a robot release is measured as "\
-    "its own sample rather than dragged along by the press, stands untouched. Back to the "\
-    "1.7.2 behaviour exactly.)"
+    "2026-09-20-a (Analyzer port phase 1: anticroom's analyzer now COMPILES into GucciBot, "\
+    "but nothing calls it yet -- Calculate still runs GucciBot's own analyzer exactly as in "\
+    "1.7.2. Restored four mechanisms our Silicate port had dropped: PracticeFix's "\
+    "createCheckpoint/resetWithState/removeAll, and the m_forcedState readers in "\
+    "loadFromCheckpoint -- m_forcedState was declared here but set and read by nothing, the "\
+    "same half-ported pattern as registerBrokenObject. Also added m_initialTPS, the TPS a "\
+    "macro was recorded at. Checkpoint capture logic itself is unchanged: saveCurrent now "\
+    "calls createCheckpoint instead of inlining the same capture.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -120,8 +123,16 @@ namespace gucci {
         uint64_t m_pendingCaptureFrameOffset = 0;
         int m_pendingCaptureStage = 0;
 
+        SavedCheckpointState createCheckpoint(CheckpointObject* cp, uint64_t frameOffset);
         void saveCurrent(CheckpointObject* cp, uint64_t frameOffset);
         void saveState(CheckpointObject* cp, uint64_t frameOffset);
+        // Both ported from Silicate 2026-09-20 during the analyzer port.
+        // m_forcedState above was already here, declared and read by nothing --
+        // the same half-a-mechanism pattern as registerBrokenObject (CLAUDE.md
+        // section "Reference codebases"). resetWithState is the half that was
+        // missing; the readers in hook_playlayer.cpp are the rest of it.
+        void resetWithState(const SavedCheckpointState& state);
+        void removeAll();
         void restorePreviousFrame(std::function<void(CheckpointObject*)> loadFn);
         void applyLatest();
         void applyCheckpoint(SavedCheckpointState& state);
@@ -197,6 +208,14 @@ namespace gucci {
 
         std::vector<std::pair<double, double>> m_clickIntervalsSec;
         double m_clickBarTps = 240.0;
+
+        // The TPS the loaded macro was actually recorded at, as opposed to the
+        // TPS the game is running now. Silicate keeps this; GucciBot's port
+        // dropped it and kept only the TPS *actions* inside the atom, which
+        // say when TPS changes mid-run but not what the macro started at.
+        // Used to warn when a macro recorded at one rate is played back at
+        // another, which silently changes what every frame window means.
+        double m_initialTPS = 240.0;
         void buildClickIntervals(double tps);
 
         float m_trainerBestX = 0.f;
@@ -222,6 +241,14 @@ namespace gucci {
             m_inputIndex++;
         }
         void onReset(uint32_t respawnFrame, uint32_t deathFrame);
+        // Silicate's signature. GucciBot added deathFrame, which is used only
+        // in this function's log lines -- respawnFrame does all the actual
+        // work -- so passing the same frame for both is faithful, not a
+        // shortcut. Kept so Silicate-side code (the ported analyzer) calls
+        // this unmodified.
+        void onReset(uint32_t frame) {
+            this->onReset(frame, frame);
+        }
         void onExit() {
             m_inputIndex = 0;
         }
