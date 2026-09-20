@@ -4671,22 +4671,34 @@ namespace gucci {
             bool locked = engine->fwAnalyzing;
             if (locked)
                 ImGui::BeginDisabled();
-            const char* algoNames[] = {
-                "Time-Based", "Recovery Range", "Alignment-Independent", "anticroom (Silicate)"};
+            // 0-2 are GucciBot's own. 3-4 are anticroom's analyzer, which has
+            // its own two modes (Algorithm::TimeBased / RecoveryRange) -- they
+            // are listed here as separate entries rather than hidden behind a
+            // second dropdown, because picking an algorithm is one decision.
+            // His mode lives in his settings struct and is read by his start().
+            const char* algoNames[] = {"Time-Based",
+                                       "Recovery Range",
+                                       "Alignment-Independent",
+                                       "anticroom: Time-Based",
+                                       "anticroom: Recovery Range"};
             int algoIdx = engine->fwUseAcAnalyzer
-                              ? 3
+                              ? (SLSettings::get()->frameWindow.algorithm == 1 ? 4 : 3)
                               : (engine->fwUseAlignmentIndependent
                                      ? 2
                                      : (engine->fwUseRecoveryRangeAlgorithm ? 1 : 0));
             ImGui::SetNextItemWidth(-1);
-            if (ImGui::Combo("##fwAlgo", &algoIdx, algoNames, 4)) {
-                engine->fwUseAcAnalyzer = (algoIdx == 3);
+            if (ImGui::Combo("##fwAlgo", &algoIdx, algoNames, 5)) {
+                engine->fwUseAcAnalyzer = (algoIdx >= 3);
                 engine->fwUseAlignmentIndependent = (algoIdx == 2);
                 engine->fwUseRecoveryRangeAlgorithm = (algoIdx == 1);
+                if (algoIdx >= 3)
+                    SLSettings::get()->frameWindow.algorithm = (algoIdx == 4) ? 1 : 0;
                 Mod::get()->setSavedValue("fw_use_align_indep", engine->fwUseAlignmentIndependent);
                 Mod::get()->setSavedValue("fw_use_recovery_range",
                                           engine->fwUseRecoveryRangeAlgorithm);
                 Mod::get()->setSavedValue("fw_use_ac_analyzer", engine->fwUseAcAnalyzer);
+                Mod::get()->setSavedValue("fw_ac_algo",
+                                          SLSettings::get()->frameWindow.algorithm);
             }
             if (locked)
                 ImGui::EndDisabled();
@@ -8890,6 +8902,7 @@ namespace gucci {
         eng->fwRecoveryRange = mod->getSavedValue<int>("fw_recovery_range", 4);
         eng->fwUseAlignmentIndependent = mod->getSavedValue<bool>("fw_use_align_indep", false);
         eng->fwUseAcAnalyzer = mod->getSavedValue<bool>("fw_use_ac_analyzer", false);
+        SLSettings::get()->frameWindow.algorithm = mod->getSavedValue<int>("fw_ac_algo", 0);
         eng->fwAiZ = mod->getSavedValue<int>("fw_ai_z", 3);
         eng->fwAiContinuationDepth = mod->getSavedValue<int>("fw_ai_cont_depth", 1);
         eng->fwAiClusterRatio = mod->getSavedValue<float>("fw_ai_cluster_ratio", 1.15f);

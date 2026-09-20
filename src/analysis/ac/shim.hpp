@@ -97,14 +97,12 @@ struct FrameWindowSettings {
     int slack = 2;
     int recoveryRange = 8;
 
-    // HIS DEFAULT IS true. Held off here on Nigel's standing instruction: the
-    // CBF sub-tick windows have a known bug on the cube that anticroom is
-    // still chasing (as of 2026-09-20 he has instrumentation in but no fix --
-    // notePress/m_tickBuffered is written and never read). m_fine stays 1
-    // while this is false, which keeps the whole sub-tick path inert, so
-    // flipping this to true is the entire "turn CBF on" switch once he lands
-    // the fix. Don't flip it without asking Nigel.
-    bool subframeProbe = false;
+    // CBF sub-tick windows. On, at anticroom's own default, since 2026-09-20:
+    // he confirmed the cube bug fixed in this source. The fix is visible here
+    // -- a CBF leg is forced into Buffer mode, and bufferShiftValid() now
+    // rejects a sub-tick shift that lands on or past a neighbouring input
+    // (m_fineCrossedNeighbour), which is where dense cube inputs went wrong.
+    bool subframeProbe = true;
 
     int64_t cbfInputHz = 24000;
     bool cbfWholeMarkers = true;

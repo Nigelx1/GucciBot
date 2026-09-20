@@ -1,14 +1,13 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-b (Analyzer port phase 2: anticroom's analyzer is now RUNNABLE. Pick "\
-    "\"anticroom (Silicate)\" as the algorithm in the Frame Windows tab and hit Calculate; "\
-    "it reports and cancels on its own line under the button. Every other algorithm is "\
-    "untouched, and with the option off nothing of his runs at all. Wired: tick from the UI "\
-    "draw, render from the updater, notePress from the action path, batched stepping, and "\
-    "the PlayLayer gates (isRestoring, onSuppressedDeath, levelComplete). NOT wired yet: the "\
-    "45 settings are at defaults with no UI, the trail desync check is stubbed, and CBF "\
-    "sub-tick stays OFF while his cube bug is open. Expect rough edges -- first run.)"
+    "2026-09-20-c (Both of anticroom's modes are now selectable -- the Frame Windows "\
+    "algorithm list has \"anticroom: Time-Based\" and \"anticroom: Recovery Range\" "\
+    "alongside GucciBot's three, and his mode persists across launches. CBF sub-tick "\
+    "windows are ON, at his own default: he confirmed the cube bug fixed in this source, "\
+    "and the fix is visible in it -- bufferShiftValid() now rejects a sub-tick shift "\
+    "landing on or past a neighbouring input, which is where dense cube inputs went wrong. "\
+    "His other 43 settings still run at defaults with no UI.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
