@@ -17,7 +17,10 @@
 namespace gbshape {
 
     enum class Shape : int { Circle = 0, Star = 1, Spiral = 2, Polygon = 3 };
-    enum class Fill : int { Inverted = 0, Normal = 1 };
+    // Inverted draws an outer AND an inner outline -- the concentric look.
+    // Normal is a filled donut. Single is just the outer outline, which is
+    // what "a star" or "a pentagon" usually means to someone picking one.
+    enum class Fill : int { Inverted = 0, Normal = 1, Single = 2 };
 
     struct Style {
         Shape shape = Shape::Circle;

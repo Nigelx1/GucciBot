@@ -91,7 +91,7 @@ struct FrameWindowTier {
 
     // Juice's marker shapes, per band -- circles, stars, spirals, polygons,
     // each Inverted (two concentric outlines) or Normal (filled donut).
-    gbshape::Style style;
+    gbshape::Style style{gbshape::Shape::Circle, gbshape::Fill::Single};
 };
 
 // Copied field-for-field from anticroom's settings.hpp. Defaults are his --

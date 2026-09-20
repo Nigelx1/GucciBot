@@ -48,6 +48,8 @@ void drawCircleShape(CCDrawNode* node,
         drawDonutRing(node, radius, innerR, color, noBorder, stroke, [&](float r) {
             return regularPolygonVerts(center, r, segs, 0.f);
         });
+    } else if (fillStyle == FwFillStyle::Single) {
+        node->drawCircle(center, radius, clear4, stroke, color, segs);
     } else {
         node->drawCircle(center, radius, clear4, stroke, color, segs);
         node->drawCircle(center, innerR, clear4, stroke, color, segs);
@@ -69,6 +71,9 @@ void drawPolygonShape(CCDrawNode* node,
         drawDonutRing(node, radius, innerR, color, noBorder, stroke, [&](float r) {
             return regularPolygonVerts(center, r, sides, 0.f);
         });
+    } else if (fillStyle == FwFillStyle::Single) {
+        auto outer = roundedPolygonVerts(center, radius, sides, cornerRadius);
+        node->drawPolygon(outer.data(), (int)outer.size(), clear4, stroke, color);
     } else {
         auto outer = roundedPolygonVerts(center, radius, sides, cornerRadius);
         auto inner = roundedPolygonVerts(center, innerR, sides, cornerRadius);
@@ -91,6 +96,9 @@ void drawStarShape(CCDrawNode* node,
         drawDonutRing(node, radius, radius * innerScale, color, noBorder, stroke, [&](float r) {
             return starVerts(center, r, r * 0.42f, points);
         });
+    } else if (fillStyle == FwFillStyle::Single) {
+        auto outer = starVerts(center, radius, radius * 0.42f, points);
+        node->drawPolygon(outer.data(), (int)outer.size(), clear4, stroke, color);
     } else {
         auto outer = starVerts(center, radius, radius * 0.42f, points);
         auto inner =

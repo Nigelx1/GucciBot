@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-z (Juice's marker shapes are back, per band: Circle, Star, Spiral and Polygon, each drawn either as two concentric outlines (the inner-ring look) or as a filled donut, with size, stroke, polygon sides and corner rounding. Lifted from 1.7.2 essentially unchanged into its own module. Bands also cap at 10 again rather than anticroom's 999 -- past 10 the exact number stops meaning much. The earlier NaN colour preset stays but is no longer labelled as Juice's: it never was, and anticroom already draws the single ring with the number to its left.)"
+    "2026-09-20-aa (Two fixes on the shapes. Every shape drew twice because the only two fill modes were Inverted, which is deliberately an outer AND an inner outline, and Filled. Added Single -- just the one outline -- and made it what a band starts with, since one star is what picking Star should give you. Also removed the NaN Look preset: anticroom's own default bands are already that ramp, same seven bands and ranges with colours within a few percent, so it and Reset Bands did virtually the same thing.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

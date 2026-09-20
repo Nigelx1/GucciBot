@@ -5156,10 +5156,10 @@ namespace gucci {
                     dirty = true;
                 }
                 ImGui::SameLine(0, 6);
-                const char* fillNames[] = {"Inner ring", "Filled"};
+                const char* fillNames[] = {"Inner ring", "Filled", "Single"};
                 int fillIdx = (int)t.style.fill;
                 ImGui::SetNextItemWidth(88);
-                if (ImGui::Combo("##fill", &fillIdx, fillNames, 2)) {
+                if (ImGui::Combo("##fill", &fillIdx, fillNames, 3)) {
                     t.style.fill = (gbshape::Fill)fillIdx;
                     dirty = true;
                 }
@@ -5201,45 +5201,10 @@ namespace gucci {
                 dirty = true;
             }
 
-            // "Default Look" from 1.7.2 (build -e removed it with GucciBot's
-            // analyzer). NOT Juice's -- the tier/shape/circle-skin system is
-            // his; this was Nigel's own ask, a preset that makes the overlay
-            // read like the counter in NaN's videos.
-            //
-            // In 1.7.2 it had to override three things: a single plain ring
-            // instead of the double ring, the window number to the LEFT of the
-            // ring rather than above it, and this colour ramp. anticroom's
-            // renderer already draws the first two that way by default, so all
-            // that is left to apply is the ramp -- hot for a tight window,
-            // cool for a lenient one, over the same 9-10 / 7-8 / 5-6 / 4 / 3 /
-            // 2 / 1 bands the old legend showed.
-            if (Widgets::StyledButton("NaN Look", ImVec2(-1, 22), theme, anim, 6.f)) {
-                auto band = [](int id, int lo, int hi, float r, float g, float b) {
-                    FrameWindowTier t;
-                    t.id = id;
-                    t.minWindow = lo;
-                    t.maxWindow = hi;
-                    t.color = {r, g, b, 1.f};
-                    t.showInHud = true;
-                    return t;
-                };
-                fw.tiers = {
-                    band(1, 0, 1, 1.00f, 0.27f, 0.27f),
-                    band(2, 2, 2, 1.00f, 0.60f, 0.20f),
-                    band(3, 3, 3, 1.00f, 0.85f, 0.27f),
-                    band(4, 4, 4, 1.00f, 1.00f, 1.00f),
-                    band(5, 5, 6, 0.40f, 0.87f, 0.53f),
-                    band(6, 7, 8, 0.40f, 0.67f, 1.00f),
-                    band(7, 9, 10, 0.36f, 0.42f, 0.93f),
-                };
-                dirty = true;
-            }
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip(
-                    "Colours the bands the way the frame-window counter in NaN's videos does: "
-                    "red for the tightest windows, through orange, yellow, white, green and "
-                    "light blue, to blue for the most lenient. The single ring and the number "
-                    "to the left of it are already how markers draw here.");
+            // A "NaN Look" preset used to sit here. Removed: anticroom's own
+            // default bands are already that ramp -- same seven bands, same
+            // ranges, colours within a few percent -- so it and Reset Bands
+            // produced virtually the same thing.
 
             ImGui::Dummy(ImVec2(0, 6));
             Widgets::SectionHeader("Sounds", theme);
