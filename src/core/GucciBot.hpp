@@ -265,6 +265,18 @@ namespace gucci {
         bool m_stepOnce_ = false;
         bool m_onlyRefresh = false;
 
+        // Wanted by anticroom's frame-window analyzer. Declared here so the
+        // port compiles and reads/writes real state; NEITHER IS HONOURED BY
+        // THE UPDATE LOOP YET -- wiring them is phase 2 of the port, and until
+        // then the analyzer runs one step per frame like the existing one.
+        // m_analysisBatch: how many physics steps to run per drawn frame while
+        // analysing, so a long sweep doesn't take real-time minutes.
+        // m_droppedTimeFrame: the frame at which the loop last had to drop
+        // accumulated time; the analyzer warns on it because a drop there
+        // means the run it just measured isn't trustworthy.
+        uint32_t m_analysisBatch = 0;
+        uint32_t m_droppedTimeFrame = UINT32_MAX;
+
         bool m_backwardsStepping = false;
         bool m_ssbFix = true;
         bool m_extrapolateFrames = false;
@@ -324,6 +336,12 @@ namespace gucci {
             bool s = m_stepOnce_;
             m_stepOnce_ = false;
             return s;
+        }
+        // Arms a single frame advance. GucciBot's own callers set m_stepOnce_
+        // directly; this is the name anticroom's analyzer asks for, and it is
+        // the same one-shot flag consumeStep() drains.
+        void stepOnce() {
+            m_stepOnce_ = true;
         }
         bool isPaused() const {
             return m_paused;
