@@ -416,6 +416,13 @@ namespace gucci {
         return sidecarPath(macroPath, ".fw");
     }
 
+    // anticroom's analyzer stores results as JSON, so they get their own
+    // extension rather than overwriting a 1.7.2 .fw sidecar. An old .fw stays
+    // on disk untouched, which matters if this branch is ever rolled back.
+    static fs::path fwAcSidecarPath(const fs::path& macroPath) {
+        return sidecarPath(macroPath, ".fwac");
+    }
+
     static fs::path pathSamplesSidecarPath(const fs::path& macroPath) {
         return sidecarPath(macroPath, ".path");
     }
@@ -765,6 +772,36 @@ namespace gucci {
         saveTrainerProgress(getCurrentPath(), m_trainerBestX);
     }
 
+    // Results follow the macro. GucciBot's own analyzer wrote a sidecar on
+    // every save and read it back on load; that went out with it in build -e,
+    // so a measured macro came back blank. anticroom's analyzer has the same
+    // pair -- they were simply never wired to anything.
+    static void saveAcResults(const fs::path& macroPath) {
+        auto& acfw = ::Bot::get()->frameWindow();
+        auto const sc = fwAcSidecarPath(macroPath);
+        std::error_code ec;
+        if (acfw.results().empty()) {
+            fs::remove(sc, ec);
+            return;
+        }
+        if (acfw.saveResults(sc))
+            log::info("[GucciBot] frame windows: saved {} result(s) alongside {}",
+                      acfw.results().size(),
+                      macroPath.filename().string());
+    }
+
+    static void loadAcResults(const fs::path& macroPath) {
+        auto& acfw = ::Bot::get()->frameWindow();
+        acfw.clear();
+        auto const sc = fwAcSidecarPath(macroPath);
+        if (!fs::exists(sc))
+            return;
+        if (acfw.loadResults(sc))
+            log::info("[GucciBot] frame windows: loaded {} result(s) alongside {}",
+                      acfw.results().size(),
+                      macroPath.filename().string());
+    }
+
     static void saveFwMarks(const fs::path& macroPath) {
         auto* gb = GucciEngine::get();
         auto sc = fwSidecarPath(macroPath);
@@ -845,6 +882,7 @@ namespace gucci {
 
     void GucciEngine::saveFwMarksNow() {
         saveFwMarks(replay.getCurrentPath());
+        saveAcResults(replay.getCurrentPath());
     }
 
     bool GucciEngine::fwHasManualMarkAt(uint32_t frame, bool player2) const {
@@ -908,6 +946,7 @@ namespace gucci {
             log::info("[GucciBot] Saved with {} intentional-death marker(s)", f.deaths.size());
         }
         saveFwMarks(path);
+        saveAcResults(path);
         savePathSamples(path, m_pathSamples);
         saveTrainerProgress(path, m_trainerBestX);
     }
@@ -978,6 +1017,7 @@ namespace gucci {
                       m_actionAtom.length(),
                       f.deaths.size());
             loadFwMarks(path);
+            loadAcResults(path);
             loadPathSamples(path, m_pathSamples);
             m_trainerBestX = loadTrainerProgress(path);
             buildClickIntervals(gb->updater.m_tps);
@@ -1002,6 +1042,7 @@ namespace gucci {
             gb->setMode(GucciEngine::Mode::Playing);
             log::info("[GucciBot] Loaded legacy BRR: {} inputs", m_actionAtom.length());
             loadFwMarks(path);
+            loadAcResults(path);
             m_pathSamples.clear();
             m_trainerBestX = 0.f;
             buildClickIntervals(gb->updater.m_tps);
@@ -2336,6 +2377,13 @@ namespace gucci {
     // and cancel a frame-window analysis -- but the analysis they drive is now
     // anticroom's. Every existing caller (setMode, the pause/quit paths, the
     // UI) keeps working without knowing which analyzer is underneath.
+    void GucciEngine::saveAcFrameWindowResults() {
+        auto const path = replay.getCurrentPath();
+        if (path.empty())
+            return;
+        saveAcResults(path);
+    }
+
     bool GucciEngine::analyzerOwnsRun() const {
         return ::Bot::get()->frameWindow().running();
     }

@@ -9199,6 +9199,19 @@ namespace gucci {
                 // from inside the update would be re-entrant. Both calls
                 // return immediately while it isn't running, which is always,
                 // until something calls start(). Nothing does yet.
+                // Save results the moment a run finishes, not only when the
+                // macro is next saved. Calculate is normally run on a macro
+                // that is already on disk, so waiting for a save meant the
+                // results were never written and the macro came back blank.
+                {
+                    static bool s_wasRunning = false;
+                    auto& acfw = ::Bot::get()->frameWindow();
+                    bool const nowRunning = acfw.running();
+                    if (s_wasRunning && !nowRunning)
+                        GucciEngine::get()->saveAcFrameWindowResults();
+                    s_wasRunning = nowRunning;
+                }
+
                 ::Bot::get()->frameWindow().tick(PlayLayer::get());
                 if (auto* fwPl = PlayLayer::get())
                     ::Bot::get()->frameWindow().updateProgressOverlay(fwPl);

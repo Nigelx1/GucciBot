@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-x (Juice's cosmetics and the Brrr are back. Default Look is rebuilt as a one-click band preset -- the same hot-to-cool ramp and 9-10 / 7-8 / 5-6 / 4 / 3 / 2 / 1 rows as 1.7.2 -- rather than a second rendering path, so it edits like any other band set afterwards. Brrr and Bells are one click each: Brrr is GucciBot's own single sound, Bells the per-window set. Circle Skin is back too, sizing each marker by how tight its window is, with its dot radius, growth per frame and cap all adjustable, plus a HUD scale that upstream hardcodes.)"
+    "2026-09-20-y (Results save again. GucciBot's analyzer wrote a sidecar next to the macro and read it back on load; that went out with it in build -e, so a measured macro came back blank -- anticroom's analyzer has the same save/load pair and they were simply never wired. Now written when a run finishes, not only when the macro is next saved, since Calculate is normally run on a macro already on disk. They use a .fwac extension so a 1.7.2 .fw sidecar is left untouched.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -912,6 +912,8 @@ namespace gucci {
         void unmuteAnalysisMusic();
         void computeProbeHorizon();
         void saveFwMarksNow();
+        // Writes the analyzer's results next to the current macro.
+        void saveAcFrameWindowResults();
         float fwAnalyzeProgress = 0.0f;
         int fwAnalyzeCur = 0;
         int fwAnalyzeTotal = 0;
