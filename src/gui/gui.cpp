@@ -3052,52 +3052,12 @@ namespace gucci {
                     engine->replay.save(savePath);
                     markReplayListDirty();
                     refreshReplayListIfNeeded(true);
-                    ImGui::OpenPopup("SaveFrameWindows");
                 }
             }
-            if (ImGui::BeginPopupModal("SaveFrameWindows",
-                                       nullptr,
-                                       ImGuiWindowFlags_AlwaysAutoResize |
-                                           ImGuiWindowFlags_NoTitleBar)) {
-                if (fontHeading)
-                    ImGui::PushFont(fontHeading);
-                ImGui::PushStyleColor(ImGuiCol_Text, theme.getAccent());
-                ImGui::TextUnformatted("Macro Saved");
-                ImGui::PopStyleColor();
-                if (fontHeading)
-                    ImGui::PopFont();
-                ImGui::Dummy(ImVec2(0, 6));
-                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-                ImGui::PushTextWrapPos(ImGui::GetFontSize() * 24.f);
-                ImGui::TextUnformatted(
-                    "Calculate frame windows for this macro? This replays the macro and simulates "
-                    "each "
-                    "click against the real engine to measure how tight it is. You must be in the "
-                    "level. May take a moment for long macros.");
-                ImGui::PopTextWrapPos();
-                ImGui::PopStyleColor();
-                ImGui::Dummy(ImVec2(0, 6));
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.f, 0.8f, 0.2f, 1.f));
-                ImGui::PushTextWrapPos(ImGui::GetFontSize() * 24.f);
-                ImGui::TextUnformatted(
-                    "Known limitation: the replay itself is accurate now (2026-08-13, "
-                    "ground-truth-forced), but each click's tested timing shifts still fall back "
-                    "to "
-                    "real simulation past that click -- so windows near tricky slope sections may "
-                    "still read off.");
-                ImGui::PopTextWrapPos();
-                ImGui::PopStyleColor();
-                ImGui::Dummy(ImVec2(0, 10));
-                float pbw = (ImGui::GetContentRegionAvail().x - 8) / 2.f;
-                if (Widgets::StyledButton("Calculate", ImVec2(pbw, 30), theme, anim, 6.f)) {
-                    engine->analyzeFrameWindows();
-                    ImGui::CloseCurrentPopup();
-                }
-                ImGui::SameLine(0, 8);
-                if (Widgets::StyledButton("Skip", ImVec2(pbw, 30), theme, anim, 6.f))
-                    ImGui::CloseCurrentPopup();
-                ImGui::EndPopup();
-            }
+            // The "Macro Saved -- calculate frame windows?" prompt used to open
+            // here on every save. Removed at Nigel's request: saving a macro and
+            // analysing one are separate decisions, and the Frame Windows tab is
+            // where the second one belongs.
             ImGui::SameLine(0, 10);
             if (Widgets::StyledButton("Stop", ImVec2(bw, 30), theme, anim)) {
                 engine->setMode(GucciEngine::Mode::Idle);
@@ -4680,6 +4640,72 @@ namespace gucci {
         };
     }
 
+    // The bands are a vector of structs, so they persist as one JSON string
+    // rather than as numbered keys -- adding or removing a band would otherwise
+    // leave orphaned keys behind that the next load would half-read.
+    static std::string acTiersToJson(std::vector<FrameWindowTier> const& tiers) {
+        std::vector<matjson::Value> out;
+        out.reserve(tiers.size());
+        for (auto const& t : tiers) {
+            out.push_back(matjson::makeObject({
+                {"id", (int64_t)t.id},
+                {"min", (int64_t)t.minWindow},
+                {"max", (int64_t)t.maxWindow},
+                {"text", t.text},
+                {"audio", t.audioPath},
+                {"hud", t.showInHud},
+                {"r", (double)t.color[0]},
+                {"g", (double)t.color[1]},
+                {"b", (double)t.color[2]},
+                {"a", (double)t.color[3]},
+            }));
+        }
+        return matjson::Value(out).dump();
+    }
+
+    static bool acTiersFromJson(std::string const& text,
+                                std::vector<FrameWindowTier>& out) {
+        auto parsed = matjson::parse(text);
+        if (!parsed.isOk())
+            return false;
+        auto const root = parsed.unwrap();
+        if (!root.isArray())
+            return false;
+
+        std::vector<FrameWindowTier> tiers;
+        for (size_t i = 0; i < root.size(); i++) {
+            auto const& j = root[i];
+            FrameWindowTier t;
+            auto num = [&](char const* k, int def) {
+                auto r = j[k].as<int64_t>();
+                return r.isOk() ? (int)r.unwrap() : def;
+            };
+            auto real = [&](char const* k, float def) {
+                auto r = j[k].as<double>();
+                return r.isOk() ? (float)r.unwrap() : def;
+            };
+            auto str = [&](char const* k) {
+                auto r = j[k].as<std::string>();
+                return r.isOk() ? r.unwrap() : std::string();
+            };
+            t.id = num("id", (int)i + 1);
+            t.minWindow = num("min", 0);
+            t.maxWindow = num("max", 999);
+            t.text = str("text");
+            t.audioPath = str("audio");
+            auto hud = j["hud"].as<bool>();
+            t.showInHud = hud.isOk() ? hud.unwrap() : true;
+            t.color = {real("r", 1.f), real("g", 1.f), real("b", 1.f), real("a", 1.f)};
+            tiers.push_back(t);
+        }
+        // An empty list would silently mean "no colours at all"; keep the
+        // defaults rather than load a file into a blank slate.
+        if (tiers.empty())
+            return false;
+        out = std::move(tiers);
+        return true;
+    }
+
     void MenuInterface::loadAcFrameWindowSettings() {
         auto* mod = Mod::get();
         auto& fw = SLSettings::get()->frameWindow;
@@ -4691,6 +4717,9 @@ namespace gucci {
         for (auto const& e : kAcFloats)
             fw.*e.field = (float)mod->getSavedValue<double>(e.key, (double)(d.*e.field));
         fw.cbfInputHz = (int64_t)mod->getSavedValue<int>("fwac_cbf_input_hz", (int)d.cbfInputHz);
+        if (auto const t = mod->getSavedValue<std::string>("fwac_tiers", "");
+            !t.empty())
+            acTiersFromJson(t, fw.tiers);
     }
 
     void MenuInterface::saveAcFrameWindowSettings() {
@@ -4703,6 +4732,7 @@ namespace gucci {
         for (auto const& e : kAcFloats)
             mod->setSavedValue(e.key, (double)(fw.*e.field));
         mod->setSavedValue("fwac_cbf_input_hz", (int)fw.cbfInputHz);
+        mod->setSavedValue("fwac_tiers", acTiersToJson(fw.tiers));
     }
 
     void MenuInterface::drawFrameWindowsTab() {
@@ -4887,6 +4917,96 @@ namespace gucci {
             toggle("Show Setup Range", &fw.showSetupRange, nullptr);
             sliderFloat("Marker Radius", &fw.markerRadius, 2.f, 40.f, nullptr);
             sliderFloat("Label Scale", &fw.markerScale, 0.1f, 2.f, nullptr);
+        }
+
+        // --- colour bands ---------------------------------------------------
+        if (ImGui::CollapsingHeader("Bands")) {
+            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+            ImGui::TextWrapped(
+                "A window falls into the first band whose range covers it. The band gives "
+                "it its colour, its label, and the sound that plays when it is measured.");
+            ImGui::PopStyleColor();
+            ImGui::Dummy(ImVec2(0, 4));
+
+            int removeAt = -1;
+            for (size_t i = 0; i < fw.tiers.size(); i++) {
+                auto& t = fw.tiers[i];
+                ImGui::PushID((int)i);
+
+                ImVec4 col(t.color[0], t.color[1], t.color[2], t.color[3]);
+                if (ImGui::ColorEdit4("##col",
+                                      (float*)&col,
+                                      ImGuiColorEditFlags_NoInputs |
+                                          ImGuiColorEditFlags_AlphaPreview)) {
+                    t.color = {col.x, col.y, col.z, col.w};
+                    dirty = true;
+                }
+
+                ImGui::SameLine(0, 8);
+                ImGui::SetNextItemWidth(52);
+                if (ImGui::DragInt("##min", &t.minWindow, 0.2f, 0, 999)) {
+                    if (t.maxWindow < t.minWindow)
+                        t.maxWindow = t.minWindow;
+                    dirty = true;
+                }
+                ImGui::SameLine(0, 4);
+                ImGui::TextUnformatted("-");
+                ImGui::SameLine(0, 4);
+                ImGui::SetNextItemWidth(52);
+                if (ImGui::DragInt("##max", &t.maxWindow, 0.2f, 0, 999)) {
+                    if (t.maxWindow < t.minWindow)
+                        t.minWindow = t.maxWindow;
+                    dirty = true;
+                }
+
+                ImGui::SameLine(0, 8);
+                char label[64];
+                std::snprintf(label, sizeof(label), "%s", t.text.c_str());
+                ImGui::SetNextItemWidth(90);
+                if (ImGui::InputTextWithHint("##text", "label", label, sizeof(label))) {
+                    t.text = label;
+                    dirty = true;
+                }
+
+                ImGui::SameLine(0, 8);
+                if (ImGui::Checkbox("HUD", &t.showInHud))
+                    dirty = true;
+
+                ImGui::SameLine(0, 8);
+                if (ImGui::SmallButton("x"))
+                    removeAt = (int)i;
+
+                char audio[260];
+                std::snprintf(audio, sizeof(audio), "%s", t.audioPath.c_str());
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::InputTextWithHint(
+                        "##audio", "sound file (optional)", audio, sizeof(audio))) {
+                    t.audioPath = audio;
+                    dirty = true;
+                }
+
+                ImGui::PopID();
+                ImGui::Dummy(ImVec2(0, 2));
+            }
+
+            if (removeAt >= 0 && fw.tiers.size() > 1) {
+                fw.tiers.erase(fw.tiers.begin() + removeAt);
+                dirty = true;
+            }
+
+            if (Widgets::StyledButton("Add Band", ImVec2(-1, 24), theme, anim, 6.f)) {
+                FrameWindowTier t;
+                t.id = fw.tiers.empty() ? 1 : fw.tiers.back().id + 1;
+                t.minWindow = fw.tiers.empty() ? 0 : fw.tiers.back().maxWindow + 1;
+                t.maxWindow = t.minWindow;
+                fw.tiers.push_back(t);
+                dirty = true;
+            }
+            if (Widgets::StyledButton("Reset Bands", ImVec2(-1, 22), theme, anim, 6.f)) {
+                FrameWindowSettings const def;
+                fw.tiers = def.tiers;
+                dirty = true;
+            }
         }
 
         // --- during the run -----------------------------------------------

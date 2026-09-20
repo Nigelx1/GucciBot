@@ -1,14 +1,12 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-j (THE analyzer bug, found from the new log file. Every restore was putting "\
-    "the player at the right position with the frame counter reset to 0, so every leg ran as "\
-    "if from the start of the level, died within ~18 frames, and every window came out 0 / "\
-    "IMPOSSIBLE. Cause was mine: Silicate's SavedCheckpoint has two frame fields -- the "\
-    "attempt start, which his call passes, and the real capture frame, which it fills itself "\
-    "-- while GucciBot's has one, filled from that argument, and the restore path feeds it "\
-    "straight back into the frame counter. So the snapshot now records the frame it is "\
-    "actually taken at.)"
+    "2026-09-20-k (Colour bands are editable, and the post-save popup is gone. Bands: range, "\
+    "colour, label, HUD visibility and a per-band sound, with Add and Reset, saved as one "\
+    "JSON blob so adding or removing one cannot leave orphaned keys behind. The \"Macro "\
+    "Saved -- calculate frame windows?\" prompt no longer appears on every save; saving a "\
+    "macro and analysing one are separate decisions and the Frame Windows tab is where the "\
+    "second one lives.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
