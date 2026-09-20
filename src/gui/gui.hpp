@@ -326,6 +326,8 @@ namespace gucci {
         void drawReplayTab();
         void drawToolsTab();
         void drawFrameWindowsTab();
+        void loadAcFrameWindowSettings();
+        void saveAcFrameWindowSettings();
         void drawPathfinderTab();
         void drawRenderTab();
         void drawClicksTab();

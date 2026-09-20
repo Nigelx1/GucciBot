@@ -1,15 +1,14 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-f (Checkpoints: fixes respawning at the checkpoint BEFORE the one you just "\
-    "placed, and hitboxes coming back wrong -- one cause, both symptoms, and it predates "\
-    "today. Placing a checkpoint only QUEUED the save; the save completed two ticks later "\
-    "and only while alive, so dying in between abandoned it and left the checkpoint out of "\
-    "the list entirely. The abandoned capture then completed during a LATER attempt, filing "\
-    "that attempt's state -- different position, often a different gamemode -- under the old "\
-    "checkpoint. Now a checkpoint is saved provisionally the moment it is placed and the "\
-    "settled capture replaces it in place, and a pending capture is dropped on death. "\
-    "UNTESTED -- Nigel has not run this yet.)"
+    "2026-09-20-g (BUILD 2: the Frame Windows tab is real. All of anticroom's settings are "\
+    "now exposed and saved -- Measurement (algorithm, sweep range, Horizon, slack, recovery "\
+    "window, full-range sweep), Sub-Tick CBF (input Hz, bisect, stride, decimals), Which "\
+    "Inputs (ship/swing and all releases, the orb-aware robot skip, joint setup and entry "\
+    "sweeps), Display, During Analysis, Speed and Diagnostics. Everything persists under "\
+    "fwac_ keys, kept separate from the old fw_ keys so a stale value from GucciBot's "\
+    "removed analyzer can never be read back into his. Settings lock while a run is going, "\
+    "since changing one mid-sweep would mix two configurations into one result.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

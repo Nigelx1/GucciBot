@@ -4612,92 +4612,324 @@ namespace gucci {
         (void)engine;
     }
 
+    // Every one of anticroom's settings is a plain field on his
+    // FrameWindowSettings struct, so persistence is one table rather than 45
+    // hand-written save/load lines. Keys are prefixed fwac_ so they cannot
+    // collide with the fw_ keys GucciBot's own analyzer used before it was
+    // removed -- a stale fw_ value must never be read back into his settings.
+    namespace {
+        template <typename T>
+        struct AcSetting {
+            char const* key;
+            T FrameWindowSettings::*field;
+        };
+
+        constexpr AcSetting<bool> kAcBools[] = {
+            {"fwac_enabled", &FrameWindowSettings::enabled},
+            {"fwac_subframe_probe", &FrameWindowSettings::subframeProbe},
+            {"fwac_cbf_whole_markers", &FrameWindowSettings::cbfWholeMarkers},
+            {"fwac_cbf_tick_ground", &FrameWindowSettings::cbfTickGround},
+            {"fwac_subframe_bisect", &FrameWindowSettings::subframeBisect},
+            {"fwac_subframe_all", &FrameWindowSettings::subframeAll},
+            {"fwac_joint_setup_sweep", &FrameWindowSettings::jointSetupSweep},
+            {"fwac_entry_sweep", &FrameWindowSettings::entrySweep},
+            {"fwac_show_setup_range", &FrameWindowSettings::showSetupRange},
+            {"fwac_mark_setup_varying", &FrameWindowSettings::markSetupVarying},
+            {"fwac_setup_hold_modes", &FrameWindowSettings::setupHoldModes},
+            {"fwac_show_hz", &FrameWindowSettings::showHzReadout},
+            {"fwac_analysis_visuals", &FrameWindowSettings::analysisVisuals},
+            {"fwac_lock_camera", &FrameWindowSettings::lockCamera},
+            {"fwac_hide_spawn", &FrameWindowSettings::hideSpawnEffects},
+            {"fwac_adaptive_budget", &FrameWindowSettings::adaptiveBudget},
+            {"fwac_full_range_sweep", &FrameWindowSettings::fullRangeSweep},
+            {"fwac_test_ship_releases", &FrameWindowSettings::testShipReleases},
+            {"fwac_test_all_releases", &FrameWindowSettings::testAllReleases},
+            {"fwac_orb_aware_skip", &FrameWindowSettings::orbAwareReleaseSkip},
+            {"fwac_show_labels", &FrameWindowSettings::showLabels},
+            {"fwac_show_totals", &FrameWindowSettings::showTotals},
+            {"fwac_verbose", &FrameWindowSettings::verbose},
+            {"fwac_analysis_overlay", &FrameWindowSettings::analysisOverlay},
+            {"fwac_state_player_diff", &FrameWindowSettings::statePlayerDiff},
+            {"fwac_show_markers", &FrameWindowSettings::showMarkers},
+            {"fwac_show_desynced", &FrameWindowSettings::showDesynced},
+            {"fwac_show_timing", &FrameWindowSettings::showTiming},
+            {"fwac_show_hud", &FrameWindowSettings::showHud},
+            {"fwac_play_sounds", &FrameWindowSettings::playSounds},
+        };
+
+        constexpr AcSetting<int> kAcInts[] = {
+            {"fwac_algorithm", &FrameWindowSettings::algorithm},
+            {"fwac_sweep_range", &FrameWindowSettings::sweepRange},
+            {"fwac_max_frames", &FrameWindowSettings::maxFrames},
+            {"fwac_slack", &FrameWindowSettings::slack},
+            {"fwac_recovery_range", &FrameWindowSettings::recoveryRange},
+            {"fwac_cbf_readout_threshold", &FrameWindowSettings::cbfReadoutThreshold},
+            {"fwac_subframe_scan_percent", &FrameWindowSettings::subframeScanPercent},
+            {"fwac_tight_threshold", &FrameWindowSettings::tightThreshold},
+            {"fwac_budget_ms", &FrameWindowSettings::budgetMs},
+            {"fwac_budget_share", &FrameWindowSettings::budgetSharePercent},
+            {"fwac_max_budget_ms", &FrameWindowSettings::maxBudgetMs},
+            {"fwac_step_batch", &FrameWindowSettings::stepBatch},
+            {"fwac_subframe_decimals", &FrameWindowSettings::subframeDecimals},
+        };
+
+        constexpr AcSetting<float> kAcFloats[] = {
+            {"fwac_sound_volume", &FrameWindowSettings::soundVolume},
+            {"fwac_marker_radius", &FrameWindowSettings::markerRadius},
+            {"fwac_marker_scale", &FrameWindowSettings::markerScale},
+        };
+    }
+
+    void MenuInterface::loadAcFrameWindowSettings() {
+        auto* mod = Mod::get();
+        auto& fw = SLSettings::get()->frameWindow;
+        FrameWindowSettings const d;
+        for (auto const& e : kAcBools)
+            fw.*e.field = mod->getSavedValue<bool>(e.key, d.*e.field);
+        for (auto const& e : kAcInts)
+            fw.*e.field = mod->getSavedValue<int>(e.key, d.*e.field);
+        for (auto const& e : kAcFloats)
+            fw.*e.field = (float)mod->getSavedValue<double>(e.key, (double)(d.*e.field));
+        fw.cbfInputHz = (int64_t)mod->getSavedValue<int>("fwac_cbf_input_hz", (int)d.cbfInputHz);
+    }
+
+    void MenuInterface::saveAcFrameWindowSettings() {
+        auto* mod = Mod::get();
+        auto const& fw = SLSettings::get()->frameWindow;
+        for (auto const& e : kAcBools)
+            mod->setSavedValue(e.key, fw.*e.field);
+        for (auto const& e : kAcInts)
+            mod->setSavedValue(e.key, fw.*e.field);
+        for (auto const& e : kAcFloats)
+            mod->setSavedValue(e.key, (double)(fw.*e.field));
+        mod->setSavedValue("fwac_cbf_input_hz", (int)fw.cbfInputHz);
+    }
+
     void MenuInterface::drawFrameWindowsTab() {
         auto* engine = GucciEngine::get();
+        auto& fw = SLSettings::get()->frameWindow;
+        auto& acfw = ::Bot::get()->frameWindow();
+
         Widgets::GucciQuote("\"Speed doesn't mean much if the frame windows are wrong.\"",
                             "-- Juice, keeping you honest",
                             theme);
         ImGui::Dummy(ImVec2(0, 6));
 
-        // GucciBot's own analyzer and its ~980-line tab were removed 2026-09-20;
-        // anticroom's analyzer replaces it outright. This is the minimum needed
-        // to drive his -- the real tab, exposing his 45 settings, is the next
-        // job. Until then everything of his runs at its own defaults.
-        auto& acfw = ::Bot::get()->frameWindow();
-        auto& replay = engine->replay;
-        bool const hasActions = !replay.m_actionAtom.m_actions.empty();
-        bool const canCalc = PlayLayer::get() != nullptr && hasActions;
+        // Anything that changes mid-run would be read halfway through a sweep
+        // and make the results a mix of two configurations.
+        bool const running = acfw.running();
+        bool dirty = false;
 
-        Widgets::SectionHeader("Analyzer", theme);
+        auto toggle = [&](char const* label, bool* v, char const* help) {
+            if (Widgets::ToggleSwitch(label, v, theme, anim))
+                dirty = true;
+            if (help && ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", help);
+        };
+        auto sliderInt = [&](char const* label, int* v, int lo, int hi, char const* help) {
+            if (Widgets::StyledSliderInt(label, v, lo, hi, theme))
+                dirty = true;
+            if (help && ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", help);
+        };
+        auto sliderFloat = [&](char const* label, float* v, float lo, float hi, char const* help) {
+            if (Widgets::StyledSliderFloat(label, v, lo, hi, theme))
+                dirty = true;
+            if (help && ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", help);
+        };
 
+        // --- run controls -------------------------------------------------
         {
-            bool const locked = acfw.running();
-            if (locked)
-                ImGui::BeginDisabled();
-            const char* modeNames[] = {"Time-Based", "Recovery Range"};
-            int mode = SLSettings::get()->frameWindow.algorithm == 1 ? 1 : 0;
-            ImGui::SetNextItemWidth(-1);
-            if (ImGui::Combo("##fwAcMode", &mode, modeNames, 2)) {
-                SLSettings::get()->frameWindow.algorithm = mode;
-                Mod::get()->setSavedValue("fw_ac_algo", mode);
+            auto& replay = engine->replay;
+            bool const hasActions = !replay.m_actionAtom.m_actions.empty();
+            bool const canCalc = PlayLayer::get() != nullptr && hasActions;
+
+            if (running) {
+                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                ImGui::TextWrapped("%s", acfw.status().c_str());
+                ImGui::PopStyleColor();
+                if (Widgets::StyledButton("Cancel", ImVec2(-1, 30), theme, anim, 6.f)) {
+                    acfw.cancel();
+                    engine->fwAcReport = acfw.status();
+                    engine->fwAcOk = false;
+                }
+            } else {
+                if (!canCalc)
+                    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.4f);
+                bool const clicked =
+                    Widgets::StyledButton("Calculate", ImVec2(-1, 30), theme, anim, 6.f);
+                if (!canCalc)
+                    ImGui::PopStyleVar();
+                if (clicked && canCalc)
+                    engine->analyzeFrameWindows();
+                if (!canCalc) {
+                    ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                    ImGui::TextWrapped(PlayLayer::get()
+                                           ? "Record or load a macro with actions first."
+                                           : "Enter the level to Calculate.");
+                    ImGui::PopStyleColor();
+                }
+                if (!engine->fwAcReport.empty()) {
+                    ImGui::PushStyleColor(
+                        ImGuiCol_Text,
+                        engine->fwAcOk ? theme.textSecondary : ImVec4(0.90f, 0.35f, 0.35f, 1.f));
+                    ImGui::TextWrapped("%s", engine->fwAcReport.c_str());
+                    ImGui::PopStyleColor();
+                }
+                if (!acfw.results().empty()) {
+                    ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                    ImGui::TextWrapped("%d window(s) measured.", (int)acfw.results().size());
+                    ImGui::PopStyleColor();
+                    if (Widgets::StyledButton("Clear Results", ImVec2(-1, 24), theme, anim, 6.f)) {
+                        acfw.clear();
+                        engine->fwAcReport.clear();
+                    }
+                }
             }
-            if (locked)
-                ImGui::EndDisabled();
-            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-            ImGui::TextWrapped(locked ? "Locked while a run is in progress."
-                                      : "anticroom's analyzer, ported from Silicate.");
-            ImGui::PopStyleColor();
         }
 
         ImGui::Dummy(ImVec2(0, 8));
 
-        if (acfw.running()) {
-            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-            ImGui::TextWrapped("%s", acfw.status().c_str());
-            ImGui::PopStyleColor();
-            if (Widgets::StyledButton("Cancel", ImVec2(-1, 30), theme, anim, 6.f)) {
-                acfw.cancel();
-                engine->fwAcReport = acfw.status();
-                engine->fwAcOk = false;
+        if (running)
+            ImGui::BeginDisabled();
+
+        // --- measurement --------------------------------------------------
+        if (ImGui::CollapsingHeader("Measurement", ImGuiTreeNodeFlags_DefaultOpen)) {
+            const char* modes[] = {"Time-Based", "Recovery Range"};
+            int mode = fw.algorithm == 1 ? 1 : 0;
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::Combo("##fwAcMode", &mode, modes, 2)) {
+                fw.algorithm = mode;
+                dirty = true;
             }
-        } else {
-            if (!canCalc)
-                ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.4f);
-            bool const clicked =
-                Widgets::StyledButton("Calculate", ImVec2(-1, 30), theme, anim, 6.f);
-            if (!canCalc)
-                ImGui::PopStyleVar();
-            if (clicked && canCalc) {
-                auto const r = acfw.start(PlayLayer::get());
-                engine->fwAcReport = r.message;
-                engine->fwAcOk = r.ok;
-                log::info("[GucciBot] frame windows: start ok={} msg={}", r.ok, r.message);
-            }
-            if (!canCalc) {
-                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-                ImGui::TextWrapped(PlayLayer::get()
-                                       ? "Record or load a macro with actions first."
-                                       : "Enter the level to Calculate.");
-                ImGui::PopStyleColor();
-            }
-            if (!engine->fwAcReport.empty()) {
-                ImGui::PushStyleColor(
-                    ImGuiCol_Text,
-                    engine->fwAcOk ? theme.textSecondary : ImVec4(0.90f, 0.35f, 0.35f, 1.f));
-                ImGui::TextWrapped("%s", engine->fwAcReport.c_str());
-                ImGui::PopStyleColor();
-            }
-            if (!acfw.results().empty()) {
-                ImGui::Dummy(ImVec2(0, 6));
-                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-                ImGui::TextWrapped("%d window(s) measured.", (int)acfw.results().size());
-                ImGui::PopStyleColor();
-                if (Widgets::StyledButton("Clear", ImVec2(-1, 24), theme, anim, 6.f)) {
-                    acfw.clear();
-                    engine->fwAcReport.clear();
+            sliderInt("Sweep Range", &fw.sweepRange, 1, 60,
+                      "How many frames either side of each input to test.");
+            sliderInt("Horizon", &fw.maxFrames, 12, 1200,
+                      "How far past a shifted input the run has to survive before that shift "
+                      "counts as safe. Longer catches delayed consequences; shorter is faster.");
+            sliderInt("Slack", &fw.slack, 0, 30,
+                      "Stop judging a shifted input this many frames before the NEXT input, so a "
+                      "death that belongs to the next input isn't blamed on this one.");
+            if (fw.algorithm == 1)
+                sliderInt("Recovery Window", &fw.recoveryRange, 1, 40,
+                          "Recovery Range only: how far the next input may be retimed to try to "
+                          "rescue a shift.");
+            toggle("Full Range Sweep", &fw.fullRangeSweep,
+                   "Test every offset in range instead of stopping shortly after the first death. "
+                   "Slower, but finds windows split in two.");
+            sliderInt("Tight Threshold", &fw.tightThreshold, 0, 20,
+                      "Windows at or under this many frames count as tight.");
+        }
+
+        // --- sub-tick (CBF) -----------------------------------------------
+        if (ImGui::CollapsingHeader("Sub-Tick (CBF)")) {
+            toggle("Enabled", &fw.subframeProbe,
+                   "Measure windows finer than one frame, by placing the input between physics "
+                   "steps the way Click Between Frames does.");
+            if (fw.subframeProbe) {
+                int hz = (int)fw.cbfInputHz;
+                if (Widgets::StyledSliderInt("Input Hz", &hz, 240, 240000, theme)) {
+                    fw.cbfInputHz = hz;
+                    dirty = true;
                 }
+                toggle("Bisect Edges", &fw.subframeBisect,
+                       "Binary-search the sub-tick edges instead of scanning every slot. Much "
+                       "faster; assumes the surviving band has no holes in it.");
+                toggle("Count Every Input", &fw.subframeAll,
+                       "Run the sub-tick pass on every input rather than only the tight ones.");
+                sliderInt("Search Stride (%)", &fw.subframeScanPercent, 1, 100,
+                          "Step size for the sub-tick scan, as a percentage of a tick.");
+                toggle("Whole Numbers On Markers", &fw.cbfWholeMarkers,
+                       "Show markers as whole frames even when a sub-tick window was measured.");
+                sliderInt("Readout Under", &fw.cbfReadoutThreshold, 0, 20,
+                          "Only show the sub-tick readout for windows at or under this size.");
+                toggle("Tick-Quantised Ground", &fw.cbfTickGround,
+                       "Hold ground state steady within a tick while splitting it.");
+                sliderInt("Decimals", &fw.subframeDecimals, 0, 4,
+                          "Decimal places for sub-tick windows on markers and labels.");
             }
         }
+
+        // --- which inputs -------------------------------------------------
+        if (ImGui::CollapsingHeader("Which Inputs")) {
+            toggle("Test Ship / Swing Releases", &fw.testShipReleases,
+                   "Measure releases in ship and swing, where letting go has its own timing.");
+            toggle("Test All Releases", &fw.testAllReleases,
+                   "Also measure releases in cube, ball, UFO and spider. Holding changes physics "
+                   "in every mode, so those releases do have timing -- just less of it. Roughly "
+                   "doubles the run.");
+            toggle("Orb Aware Release Skip", &fw.orbAwareReleaseSkip,
+                   "Skip a robot release when the click before it touched a non-dash orb, where "
+                   "the release can't be retimed on its own.");
+            toggle("Joint Setup Sweep", &fw.jointSetupSweep,
+                   "Resolve groups of inputs together where one sets up the next.");
+            toggle("Entry Sweep", &fw.entrySweep,
+                   "Also vary how the player entered the section being measured.");
+        }
+
+        // --- display ------------------------------------------------------
+        if (ImGui::CollapsingHeader("Display")) {
+            toggle("Show Markers", &fw.showMarkers, "Draw the circles in the level.");
+            toggle("Show HUD", &fw.showHud, "The tier counts in the corner.");
+            toggle("Show Labels", &fw.showLabels, "Numbers on the markers.");
+            toggle("Show Totals", &fw.showTotals, nullptr);
+            toggle("Show Rate", &fw.showHzReadout, "Show windows as a click rate as well.");
+            toggle("Show Timing", &fw.showTiming, nullptr);
+            toggle("Show Desynced", &fw.showDesynced,
+                   "Also draw inputs whose run desynced, which are not trustworthy.");
+            toggle("Setup Suffixes", &fw.markSetupVarying,
+                   "Mark windows that depend on setup: ship and swing get ^, inputs resolved by a "
+                   "joint sweep get ~.");
+            if (fw.markSetupVarying)
+                toggle("Include Hold Modes", &fw.setupHoldModes,
+                       "Also put ^ on UFO, wave and robot.");
+            toggle("Show Setup Range", &fw.showSetupRange, nullptr);
+            sliderFloat("Marker Radius", &fw.markerRadius, 2.f, 40.f, nullptr);
+            sliderFloat("Label Scale", &fw.markerScale, 0.1f, 2.f, nullptr);
+        }
+
+        // --- during the run -----------------------------------------------
+        if (ImGui::CollapsingHeader("During Analysis")) {
+            toggle("Analysis Visuals", &fw.analysisVisuals,
+                   "Draw the level while analysing. Off is faster.");
+            toggle("Lock Camera", &fw.lockCamera, "Hold the camera still during a run.");
+            toggle("Hide Spawn Effects", &fw.hideSpawnEffects,
+                   "Suppress respawn flashes while the analyzer restarts constantly.");
+            toggle("Play Sounds", &fw.playSounds, "Tier sounds as each window is measured.");
+            if (fw.playSounds)
+                sliderFloat("Volume", &fw.soundVolume, 0.f, 1.f, nullptr);
+        }
+
+        // --- speed ----------------------------------------------------------
+        if (ImGui::CollapsingHeader("Speed")) {
+            toggle("Adaptive Budget", &fw.adaptiveBudget,
+                   "Spend a share of each frame analysing rather than a fixed slice, so a level "
+                   "that already runs slowly counts faster instead of leaving the gap idle.");
+            if (fw.adaptiveBudget) {
+                sliderInt("Budget Share (%)", &fw.budgetSharePercent, 1, 90, nullptr);
+                sliderInt("Max Budget (ms)", &fw.maxBudgetMs, 1, 200, nullptr);
+            } else {
+                sliderInt("Frame Budget (ms)", &fw.budgetMs, 1, 100, nullptr);
+            }
+            sliderInt("Tick Batch", &fw.stepBatch, 1, 200,
+                      "How many physics steps to run per drawn frame while analysing.");
+        }
+
+        // --- diagnostics ----------------------------------------------------
+        if (ImGui::CollapsingHeader("Diagnostics")) {
+            toggle("Verbose Log", &fw.verbose, "Full per-leg detail in the log.");
+            toggle("Analysis Overlay", &fw.analysisOverlay,
+                   "Live progress readout in the level while analysing.");
+            toggle("Player State Diff", &fw.statePlayerDiff,
+                   "Report which player fields changed across a restore. Very noisy.");
+        }
+
+        if (running)
+            ImGui::EndDisabled();
+
+        if (dirty)
+            this->saveAcFrameWindowSettings();
     }
 
     void MenuInterface::drawRenderTab() {
@@ -8010,8 +8242,8 @@ namespace gucci {
         eng->fwUseRecoveryRangeAlgorithm = mod->getSavedValue<bool>("fw_use_recovery_range", false);
         eng->fwRecoveryRange = mod->getSavedValue<int>("fw_recovery_range", 4);
         eng->fwUseAlignmentIndependent = mod->getSavedValue<bool>("fw_use_align_indep", false);
-        eng->fwUseAcAnalyzer = mod->getSavedValue<bool>("fw_use_ac_analyzer", false);
-        SLSettings::get()->frameWindow.algorithm = mod->getSavedValue<int>("fw_ac_algo", 0);
+        // All of anticroom's settings, loaded from the fwac_ keys.
+        MenuInterface::get()->loadAcFrameWindowSettings();
         eng->fwAiZ = mod->getSavedValue<int>("fw_ai_z", 3);
         eng->fwAiContinuationDepth = mod->getSavedValue<int>("fw_ai_cont_depth", 1);
         eng->fwAiClusterRatio = mod->getSavedValue<float>("fw_ai_cluster_ratio", 1.15f);
