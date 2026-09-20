@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-u (Windows are accurate now -- the capture replays the whole macro cleanly and 89 of 145 clicks measure. What is left is spam: restoring to a checkpoint and replaying does not reproduce the capture, drifting by one physics sub-step. Ruled out with evidence: player fields (his byte diff is clean bar 3 cosmetic bytes), the respawn step clamp (identical to Silicate), rotation and position restore (both correct). His own diagnostic points at level objects, naming the ones that kill the replay. Also filled m_ccPosition, declared since the original port and never written, which made his restore check warn on every restore claiming the checkpoint held the origin.)"
+    "2026-09-20-v (Diagnostic build for the spam desyncs. A nominal leg replays the macro at its own timing, so it should retrace the capture exactly -- it now logs EVERY frame of that comparison instead of only the first one that differs, plus the frame advance per step and the physics step count whenever the post-reset clamp changes it. Drift that appears all at once means a lost or doubled step; drift that grows each frame means state. A frame advancing by anything but 1 means the leg is not stepping in step with the capture at all. One Calculate is enough -- the first spam click tells us.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -34,6 +34,11 @@ namespace gucci {
 
     void logFrameIncrement(const char* callSite, uint32_t frame, PlayerObject* p = nullptr);
     void logCalcDeathTrace(const std::string& line);
+    // Writes into anticroom's analyzer log (guccibot_fw.log) from engine-side
+    // code, so a run's diagnostics all land in one file in one order instead
+    // of being split across two logs that have to be interleaved by hand.
+    // Defined in analysis/ac/framewindow.cpp.
+    void fwEngineLog(const std::string& line);
 
     class GucciScheduler {
     public:

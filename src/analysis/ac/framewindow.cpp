@@ -25,7 +25,12 @@ static constexpr uint32_t MAX_STEPS_PER_LEG = 200000;
 
 static Clock::time_point g_deadline;
 
+// Last frame seen by the nominal-leg trace, to spot a leg stepping out of
+// step with the capture. Diagnostic only.
+static uint32_t g_traceLastFrame = UINT32_MAX;
+
 static std::ofstream g_fwLog;
+
 void fwFileLog(std::string const& line) {
     if (!g_fwLog.is_open()) {
         auto path = geode::Mod::get()->getSaveDir() / "guccibot_fw.log";
@@ -43,6 +48,10 @@ void fwFileLog(std::string const& line) {
         g_fwLog << line << "\n";
         g_fwLog.flush();
     }
+}
+
+void gucci::fwEngineLog(std::string const& line) {
+    fwFileLog(line);
 }
 
 // Mirrored to a file as well as the console. Geode's console log is not
@@ -361,16 +370,56 @@ FrameWindowAnalyzer::StepResult FrameWindowAnalyzer::stepToward(PlayLayer* pl,
                                          cocos2d::CCPoint(-1e9f, -1e9f));
                 m_capturePath[cf] = pl->m_player1->getPosition();
                 this->checkCaptureAgainstTrail(pl, cf);
-            } else if (!m_pathDiverged && m_phase == Phase::Nominal &&
-                       m_shift == 0 &&
+            } else if (m_phase == Phase::Nominal && m_shift == 0 &&
                        cf < m_capturePath.size() &&
                        m_capturePath[cf].x > -1e8f) {
                 auto const np = pl->m_player1->getPosition();
                 float const dx = np.x - m_capturePath[cf].x;
                 float const dy = np.y - m_capturePath[cf].y;
-                if (dx * dx + dy * dy > 0.0025f) {
+
+                // Full trace of a nominal leg against the captured path, not
+                // just the first frame that differs. A nominal leg replays the
+                // macro at its own timing, so it is supposed to retrace the
+                // capture exactly -- when it does not, the shape of the drift
+                // says what kind of fault it is. A single step's worth
+                // appearing at once means a lost or doubled physics step;
+                // drift that grows every frame means a state difference.
+                //
+                // g_traceLastFrame catches the other half: if the frame
+                // counter advances by anything other than 1 between steps, the
+                // leg ran a different number of steps than the capture did,
+                // which is invisible in position alone.
+                int const advanced =
+                    g_traceLastFrame == UINT32_MAX
+                        ? 1
+                        : static_cast<int>(cf) -
+                              static_cast<int>(g_traceLastFrame);
+                g_traceLastFrame = cf;
+
+                FWLOG(
+                    "[fw][trace] click {} frame={} adv={} leg=({:.3f},{:.3f}) "
+                    "capture=({:.3f},{:.3f}) d=({:.4f},{:.4f}) yvel={:.4f} "
+                    "ground={} hold={}",
+                    m_index + 1, cf, advanced, np.x, np.y, m_capturePath[cf].x,
+                    m_capturePath[cf].y, dx, dy, pl->m_player1->m_yVelocity,
+                    pl->m_player1->m_isOnGround ? 1 : 0,
+                    [&] {
+                        auto it = pl->m_player1->m_holdingButtons.find(1);
+                        return it == pl->m_player1->m_holdingButtons.end()
+                                   ? -1
+                                   : (it->second ? 1 : 0);
+                    }());
+
+                if (advanced != 1)
+                    FWWARN(
+                        "[fw][trace] click {}: frame jumped {} -> {} ({} "
+                        "frames) inside a leg -- the leg is not stepping in "
+                        "step with the capture",
+                        m_index + 1, cf - advanced, cf, advanced);
+
+                if (!m_pathDiverged && dx * dx + dy * dy > 0.0025f) {
                     m_pathDiverged = true;
-                    FWLOG(
+                    FWWARN(
                         "[fw][diverge] click {} first differs at frame {}: "
                         "leg=({:.2f},{:.2f}) capture=({:.2f},{:.2f}) "
                         "d=({:.3f},{:.3f})",
@@ -1730,6 +1779,7 @@ void FrameWindowAnalyzer::beginShift(int64_t shift, ShiftMode mode) {
     }
 
     m_pathDiverged = false;
+    g_traceLastFrame = UINT32_MAX;
     m_shift = shift;
     m_legPressFrame = static_cast<uint32_t>(std::max<int64_t>(shifted, 0));
     m_legPressBuffered = false;

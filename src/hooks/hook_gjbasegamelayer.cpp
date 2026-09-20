@@ -117,11 +117,24 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         if (!lockDeltaActive)
             upd.calculateSteps(dt, (float)upd.getPhysicsDt());
 
+        // Diagnostic: the analyzer's legs are supposed to step exactly as the
+        // capture pass did. This prints what the step count actually is per
+        // frame while a run is in progress, and whether the post-reset clamp
+        // is the thing changing it -- the capture never resets, so it never
+        // meets the clamp, while every leg starts with one.
+        int const stepsBeforeClamp = upd.estimatedStepCount;
+
         if (upd.m_respawnTimer > 0) {
             upd.m_respawnTimer--;
             upd.totalStepCount = std::min(upd.totalStepCount, 1);
             upd.estimatedStepCount = std::min(upd.estimatedStepCount, 1);
         }
+
+        if (gb->analyzerOwnsRun() && stepsBeforeClamp != upd.estimatedStepCount)
+            gucci::fwEngineLog(fmt::format(
+                "[fw][steps] frame={} steps {} -> {} (respawn clamp, {} left)",
+                upd.getFrame(), stepsBeforeClamp, upd.estimatedStepCount,
+                upd.m_respawnTimer));
 
         if (upd.m_extrapolateFrames && upd.getFrame() > upd.m_frameOnLastAttempt) {
             if (shouldExtrapolate()) {
