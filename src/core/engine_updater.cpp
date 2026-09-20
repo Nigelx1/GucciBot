@@ -661,7 +661,10 @@ static void frameUpdateMidhook(SafetyHookContext&) {
         }
     }
 
-    if (auto* pll = PlayLayer::get()) {
+    // The autoclicker queues real buttons. Firing one inside an analyzer leg
+    // would put an input into the run that the macro never contained, and the
+    // window measured from it would be meaningless. Analyzer wins.
+    if (auto* pll = PlayLayer::get(); pll && !gb->analyzerOwnsRun()) {
         auto res = Autoclicker::get()->processTick();
         if (res.p1Fire) {
             pll->queueButton(1, res.p1Press, false, 0.0);

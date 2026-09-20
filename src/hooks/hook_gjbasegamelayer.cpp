@@ -153,14 +153,20 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
                 gb->renderer.handleRecording(rpl, (int)upd.getFrame());
         }
 
-        if (auto* fpl = PlayLayer::get()) {
+        // Ghosts, ranges and debug overlays are decoration. During a run they
+        // are drawn hundreds of times a second over a level that is being
+        // restarted constantly, and none of it is being looked at. Analyzer
+        // gets the frame budget.
+        if (auto* fpl = PlayLayer::get(); fpl && !gb->analyzerOwnsRun()) {
             gbpf::renderAgencyDebug(fpl);
             gbpr::renderPracticeRange(fpl);
             gbju::renderJupiterGhost(fpl);
             gbtr::renderTrainerGhost(fpl);
         }
 
-        if (gb->pendingAutoRetry > 0.0f) {
+        // Auto-retry calls resetLevel(). Doing that in the middle of a leg
+        // would throw away the run the analyzer is measuring.
+        if (gb->pendingAutoRetry > 0.0f && !gb->analyzerOwnsRun()) {
             gb->pendingAutoRetry -= dt;
             if (gb->pendingAutoRetry <= 0.0f) {
                 gb->pendingAutoRetry = 0.0f;

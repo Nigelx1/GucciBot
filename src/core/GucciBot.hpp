@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-o (Spam sections and the missing sounds. Every input in one of his legs was firing a frame late: GucciBot looks inputs up at frame+1 during normal playback and at frame during a simulation, keyed on fwAnalyzing -- a flag his analyzer has never heard of. So the press being measured had not happened on its own frame, the leg diverged by one frame of movement, and the click was written off as desynced. Tight spam died of it while roomier sections absorbed it, which is exactly the pattern Nigel saw. The flag is now kept in step. Sounds: the seven tier clips were copied into resources but mod.json lists its resources explicitly, so they were never packaged.)"
+    "2026-09-20-p (Standing rule from Nigel: where anything GucciBot does conflicts with what anticroom's analyzer needs, the analyzer wins. Added GucciEngine::analyzerOwnsRun() and put it in front of everything that could perturb a leg. Worst of them: the autoclicker ran unconditionally and QUEUES REAL BUTTONS, so with it on it was injecting inputs the macro never contained into every leg. Auto-retry could call resetLevel() mid-leg and throw the run away. Ghosts, practice range and debug overlays were being drawn hundreds of times a second over a level nobody was watching.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -489,6 +489,18 @@ namespace gucci {
         bool isRecording() const {
             return mode == Mode::Recording;
         }
+        // True while anticroom's frame-window analyzer owns the run.
+        //
+        // Nigel's standing rule, 2026-09-20: where anything GucciBot does
+        // conflicts with what the analyzer needs, the analyzer wins. A leg
+        // only means something if it reproduces the macro exactly, so while
+        // one is running nothing else may inject inputs, reset the level, or
+        // spend the frame budget on decoration.
+        //
+        // Defined in engine_core.cpp, since GucciBot.hpp cannot see the
+        // analyzer's header (it includes this one).
+        bool analyzerOwnsRun() const;
+
         bool isPlaying() const {
             return mode == Mode::Playing;
         }

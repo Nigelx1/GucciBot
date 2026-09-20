@@ -2300,6 +2300,10 @@ namespace gucci {
     // and cancel a frame-window analysis -- but the analysis they drive is now
     // anticroom's. Every existing caller (setMode, the pause/quit paths, the
     // UI) keeps working without knowing which analyzer is underneath.
+    bool GucciEngine::analyzerOwnsRun() const {
+        return ::Bot::get()->frameWindow().running();
+    }
+
     void GucciEngine::analyzeFrameWindows() {
         auto* pl = PlayLayer::get();
         if (!pl)
