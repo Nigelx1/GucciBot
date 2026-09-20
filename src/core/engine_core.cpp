@@ -84,6 +84,16 @@ namespace gucci {
         // for why this needs to be captured per-checkpoint now.
         state.m_rngState = *reinterpret_cast<uint64_t*>(geode::base::get() + 0x6c2e90);
 
+        // Level state, alongside the player state. Without these a restore
+        // rewinds the player into a level that never rewound -- see the
+        // comment on SavedCheckpointState.
+        if (pl->m_effectManager)
+            state.m_persistentItemMap = pl->m_effectManager->m_persistentItemCountMap;
+        state.m_varianceValues = pl->m_varianceValues;
+        state.m_calcNonEffectObjects = pl->m_calcNonEffectObjects;
+        state.m_calcNonEffectObjectsSize = pl->m_calcNonEffectObjectsSize;
+        state.m_hasLevelState = true;
+
         return state;
     }
 
@@ -153,6 +163,19 @@ namespace gucci {
             state.m_player1.apply(p1);
         if (p2)
             state.m_player2.apply(p2);
+
+        // Rewind the level alongside the player. Guarded on m_hasLevelState so
+        // a checkpoint captured before this existed -- one loaded from an old
+        // save, or created by a path that does not fill it -- restores exactly
+        // as it used to instead of stamping the level with a zeroed variance
+        // table and an empty object list.
+        if (state.m_hasLevelState) {
+            if (pl->m_effectManager)
+                pl->m_effectManager->m_persistentItemCountMap = state.m_persistentItemMap;
+            pl->m_varianceValues = state.m_varianceValues;
+            pl->m_calcNonEffectObjects = state.m_calcNonEffectObjects;
+            pl->m_calcNonEffectObjectsSize = state.m_calcNonEffectObjectsSize;
+        }
         if (GucciEngine::get()->updater.m_logFrameIncrements) {
             logFrameIncrement(
                 "applyCheckpoint(restored, label)", (uint32_t)state.m_frameOffset, p1);

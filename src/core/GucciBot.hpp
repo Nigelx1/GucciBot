@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-l (Sound packs, and the bells finally have something to play. Every band starts with NO sound file, and his player returns immediately on an empty path -- so no bells were possible until a pack was loaded, which is what Nigel heard. The seven built-in clips now ship with GucciBot and Import assigns them by band size; Export writes the current bands out as a named pack. Same folder layout anticroom uses, so packs move between Silicate and GucciBot unchanged.)"
+    "2026-09-20-m (Checkpoints now rewind the LEVEL as well as the player. GucciBot restored player state faithfully and left the level where it was, so after a restore the moving objects, trigger variance and persistent item counters were still wherever the run had reached -- replaying a macro from that checkpoint met a different world and died, which the analyzer reported as \"the macro's own timing does not reproduce here\" and refused to measure. That is why windows past the first few came back desynced and read 0. Ported from Silicate: persistent item map, variance values and the non-effect object list.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -77,6 +77,22 @@ namespace gucci {
         // between attempt-start and the checkpoint would desync downstream
         // otherwise. Captured/restored alongside everything else here.
         uint64_t m_rngState = 0;
+
+        // Level simulation state, ported from Silicate 2026-09-20. GucciBot's
+        // checkpoints restored the PLAYER faithfully and left the LEVEL where
+        // it was, so after a restore the moving objects, trigger variance and
+        // persistent item counters were still wherever the run had got to.
+        // Replaying the macro from such a checkpoint then diverges -- the
+        // player meets a world that is not the one it met the first time --
+        // and anticroom's analyzer, which restores hundreds of times per run,
+        // reported that as "the macro's own timing does not reproduce here"
+        // and refused to measure the click at all. That is what made every
+        // window past the first few come back desynced.
+        std::unordered_map<int, int> m_persistentItemMap;
+        std::array<float, 2000> m_varianceValues{};
+        std::vector<GameObject*> m_calcNonEffectObjects;
+        int m_calcNonEffectObjectsSize = 0;
+        bool m_hasLevelState = false;
     };
 
     struct StoredFrame {
