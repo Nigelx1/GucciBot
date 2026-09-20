@@ -406,7 +406,24 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
             saveQueuedButtons();
         } else if (gb->isPlaying()) {
             uint32_t frame = gb->updater.getFrame();
-            uint32_t lookupFrame = gb->fwAnalyzing ? frame : frame + 1;
+            // The unshifted branch exists for GucciBot's own analyzer (Juice's
+            // design, commit 77b0dad): store the true frame everywhere and
+            // compensate only where normal playback applies a queued input.
+            //
+            // anticroom's analyzer is not that analyzer. It replays GucciBot
+            // macros through the ordinary update path, so it needs the same
+            // compensation ordinary playback needs. Without it the capture
+            // pass -- a plain replay from frame 0, no restores involved --
+            // died at frame 193 on a macro that plays fine normally, while
+            // with it the same pass reached 3943. Capture and legs were both
+            // unshifted, so they agreed with each other and desyncs looked
+            // low, but both were running a macro that was not the real one.
+            // That is the "counts everything, numbers aren't right" symptom.
+            //
+            // Pathfinder keeps the unshifted branch: it is GucciBot-native and
+            // was built against it.
+            bool const acRun = gb->analyzerOwnsRun();
+            uint32_t lookupFrame = (gb->fwAnalyzing && !acRun) ? frame : frame + 1;
             while (auto input = gb->replay.getNextInput(lookupFrame)) {
                 // Nigel's real test (2026-09-06): a Pathfinder result "calculated
                 // correctly" but every one of its inputs failed to fire on normal

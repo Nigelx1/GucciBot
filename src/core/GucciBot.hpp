@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-s (His own state diff settles it: across 510 restores the ONLY PlayerObject field that comes back wrong is m_audioScale, 3 cosmetic bytes. GucciBot restores the player faithfully -- so the engine is not the problem and replacing the physics would have fixed nothing. What kills the run is a LEVEL OBJECT, id 1707, that is not rewound. Also backed out restoring m_calcNonEffectObjects: it is a raw pointer list that GD rebuilds itself during loadFromCheckpoint, so writing a captured copy over it replaced a fresh list with a stale one -- suspected cause of the capture pass dying at frame 193 where it used to reach 3943.)"
+    "2026-09-20-t (anticroom's analyzer now replays macros the way normal playback does. The capture pass is a plain replay from frame 0 with no restores in it, and it was dying at frame 193 on a macro that plays fine normally -- while the same pass reached 3943 back when the analyzer was still using playback's input lookup. Capture and legs were both running unshifted so they agreed with each other and desyncs read low, but both were replaying a macro that was not the real one, which is exactly the "counts everything, numbers are wrong" symptom. Pathfinder keeps the unshifted lookup.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
