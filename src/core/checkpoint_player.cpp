@@ -265,6 +265,12 @@ namespace gucci {
 
     SavedPlayerCheckpoint SavedPlayerCheckpoint::create(PlayerObject* p) {
         SavedPlayerCheckpoint c;
+        // Declared here since the original port and never written until now,
+        // so it read (0,0) forever. Nothing restores from it -- Silicate keeps
+        // it as a diagnostic too -- but anticroom's analyzer prints it to check
+        // where a restore landed, and a zero made that warning fire on every
+        // single restore while claiming the checkpoint held the origin.
+        c.m_ccPosition = p->getPosition();
         c.m_ccRotation = p->getRotation();
         c.m_mainLayer = p->m_mainLayer;
         c.m_wasTeleported = p->m_wasTeleported;

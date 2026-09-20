@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-t (anticroom's analyzer now replays macros the way normal playback does. The capture pass is a plain replay from frame 0 with no restores in it, and it was dying at frame 193 on a macro that plays fine normally -- while the same pass reached 3943 back when the analyzer was still using playback input lookup. Capture and legs were both running unshifted so they agreed with each other and desyncs read low, but both were replaying a macro that was not the real one, which is exactly the counts-everything-but-the-numbers-are-wrong symptom. Pathfinder keeps the unshifted lookup.)"
+    "2026-09-20-u (Windows are accurate now -- the capture replays the whole macro cleanly and 89 of 145 clicks measure. What is left is spam: restoring to a checkpoint and replaying does not reproduce the capture, drifting by one physics sub-step. Ruled out with evidence: player fields (his byte diff is clean bar 3 cosmetic bytes), the respawn step clamp (identical to Silicate), rotation and position restore (both correct). His own diagnostic points at level objects, naming the ones that kill the replay. Also filled m_ccPosition, declared since the original port and never written, which made his restore check warn on every restore claiming the checkpoint held the origin.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
