@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-m (Checkpoints now rewind the LEVEL as well as the player. GucciBot restored player state faithfully and left the level where it was, so after a restore the moving objects, trigger variance and persistent item counters were still wherever the run had reached -- replaying a macro from that checkpoint met a different world and died, which the analyzer reported as \"the macro's own timing does not reproduce here\" and refused to measure. That is why windows past the first few came back desynced and read 0. Ported from Silicate: persistent item map, variance values and the non-effect object list.)"
+    "2026-09-20-n (Full sweep of everything in Silicate that hooks the analyzer. The big one: the CBF sub-step splitting in PlayerObject was never ported, so although CBF was on and the analyzer armed it and printed sub-tick numbers, no tick was ever actually split -- every sub-tick leg was a whole-frame leg and the fractions measured nothing. Now ported, with the rotation and ship-rotation handling it needs, plus the CBF input capture in the action dispatch, hideSpawnEffects, spawnCircle and Lock Camera, which until now saved and loaded and did nothing. Player checkpoint fields audited field by field: identical, 246 to 246.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

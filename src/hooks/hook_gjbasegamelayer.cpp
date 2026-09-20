@@ -259,6 +259,17 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
                            actor ? actor->m_yVelocity : 0.0);
         }
 
+        // Hand the input to the CBF engine. If it is armed for this frame, it
+        // holds the input back and fires it between physics sub-steps instead
+        // of at the tick boundary -- which is the whole point of a sub-tick
+        // window. Returning true means "taken, do not queue it normally".
+        {
+            bool const flipped2 = gb->replay.playerFlipped(action.m_player2);
+            if (cbf::Engine::get()->capture(
+                    action.m_frame, button, action.m_holding, flipped2))
+                return;
+        }
+
         if (gb->fwSampling && action.m_holding) {
             auto* sp = action.m_player2 ? m_player2 : m_player1;
             if (sp)
@@ -419,6 +430,20 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         auto& upd = GucciEngine::get()->updater;
         upd.m_lastCameraPos = upd.m_currentCameraPos;
         GJBaseGameLayer::updateCamera(dt);
+
+        // Holds the camera on the click being measured instead of letting it
+        // fly around as the analyzer restarts the level hundreds of times.
+        // This is what the "Lock Camera" setting does -- without it that
+        // setting saved, loaded and changed nothing at all.
+        if (auto& acfw = ::Bot::get()->frameWindow();
+            acfw.cameraLocked() && m_objectLayer) {
+            auto const win = cocos2d::CCDirector::sharedDirector()->getWinSize();
+            auto const target = acfw.cameraPoint();
+            float const sc = m_objectLayer->getScale();
+            m_objectLayer->setPosition(
+                {win.width / 2.f - target.x * sc, m_objectLayer->getPositionY()});
+        }
+
         upd.m_currentCameraPos = m_objectLayer->getPosition();
     }
 
