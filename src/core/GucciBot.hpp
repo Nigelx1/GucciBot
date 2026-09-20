@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-p (Standing rule from Nigel: where anything GucciBot does conflicts with what anticroom's analyzer needs, the analyzer wins. Added GucciEngine::analyzerOwnsRun() and put it in front of everything that could perturb a leg. Worst of them: the autoclicker ran unconditionally and QUEUES REAL BUTTONS, so with it on it was injecting inputs the macro never contained into every leg. Auto-retry could call resetLevel() mid-leg and throw the run away. Ghosts, practice range and debug overlays were being drawn hundreds of times a second over a level nobody was watching.)"
+    "2026-09-20-q (Diagnostic. The Player State Diff run said nothing, and that reading was worthless: his state-diff reports through log::warn, which the file log did not capture, so its output went to a console this machine does not persist. All 19 warn-level diagnostics in the analyzer now mirror to guccibot_fw.log with a WARN prefix. Turn Player State Diff on, run one Calculate, and the log will name any PlayerObject field that comes back wrong after a restore -- or say nothing at all, which this time would actually mean something.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

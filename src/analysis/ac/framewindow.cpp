@@ -45,6 +45,8 @@ void fwFileLog(std::string const& line) {
 // directory, truncated each launch, and only while Verbose Log is on.
 void fwFileLog(std::string const& line);
 
+#define FWWARN(...)                                  do {                                                    auto const fww_ = fmt::format(__VA_ARGS__);         geode::log::warn("{}", fww_);                       fwFileLog("WARN " + fww_);                      } while (0)
+
 #define FWLOG(...)                                           do {                                                         if (m_verbose->inner()) {                                    auto const fwl_ = fmt::format(__VA_ARGS__);              geode::log::info("{}", fwl_);                            fwFileLog(fwl_);                                     }                                                    } while (0)
 
 
@@ -272,7 +274,7 @@ FrameWindowAnalyzer::StepResult FrameWindowAnalyzer::stepToward(PlayLayer* pl,
     auto& updater = Bot::get()->updater();
 
     if (m_stageId == Stage::Probe && updater.getFrame() > until)
-        log::warn(
+        FWWARN(
             "[fw] leg target {} is behind the current frame {} -- the shift "
             "was judged on a short run",
             until, updater.getFrame());
@@ -1191,7 +1193,7 @@ void FrameWindowAnalyzer::checkCaptureAgainstTrail(PlayLayer* pl,
 
     m_trailChecked = true;
     m_trailDiverged = true;
-    log::warn(
+    FWWARN(
         "[fw][capture] left the macro's recorded path at frame {}: the "
         "recording was at ({:.2f},{:.2f}), the capture is at ({:.2f},{:.2f}), "
         "off by ({:.2f},{:.2f}). The macro is not at fault -- the capture "
@@ -1488,7 +1490,7 @@ void FrameWindowAnalyzer::reportStateDiff(PlayLayer* pl) {
     }
 
     m_stateDiffReal++;
-    log::warn(
+    FWWARN(
         "[fw][statediff] click {}: {} differing run(s) in PlayerObject after "
         "restore, outside the lazily rebuilt caches{}{}",
         m_index + 1, realRuns, out,
@@ -1580,7 +1582,7 @@ bool FrameWindowAnalyzer::restoreToBranch() {
         float const dy = got.y - want.y;
         if (std::fabs(dx) > POSITION_EPSILON ||
             std::fabs(dy) > POSITION_EPSILON) {
-            log::warn(
+            FWWARN(
                 "[fw][restore] player landed at ({:.4f},{:.4f}) but the "
                 "checkpoint holds ({:.4f},{:.4f}) -- off by ({:.4f},{:.4f}) "
                 "at frame {}",
@@ -1856,7 +1858,7 @@ void FrameWindowAnalyzer::advanceSweep(bool survived) {
                     m_desynced++;
                     m_desyncPending = true;
                 }
-                log::warn(
+                FWWARN(
                     "[fw][click {}] RESTORE MISMATCH @ frame {}: the replay "
                     "left the captured path before dying (at frame {}). The "
                     "macro is fine; the checkpoint did not reproduce the "
@@ -1868,7 +1870,7 @@ void FrameWindowAnalyzer::advanceSweep(bool survived) {
                     m_desynced++;
                     m_desyncPending = true;
                 }
-                log::warn(
+                FWWARN(
                     "[fw][click {}] DESYNC @ frame {}: the unmodified macro "
                     "died during its own probe (died at frame {}), killed by "
                     "object id {} at ({:.1f},{:.1f}). The player followed the "
@@ -2114,7 +2116,7 @@ void FrameWindowAnalyzer::noteSweepStep(bool survived, bool counting) {
 
     m_splitWindow = true;
     m_splitShift = m_shift;
-    log::warn(
+    FWWARN(
         "[fw][click {}] shift {:+d} survives on the far side of a gap. The "
         "reported window is only the run of offsets touching the macro's own "
         "timing -- this input also works somewhere the window does not cover, "
@@ -2141,7 +2143,7 @@ void FrameWindowAnalyzer::noteCaptureDeath(uint32_t frame) {
 
     m_captureDeaths.push_back(frame);
     if (m_captureDeaths.size() > 1)
-        log::warn(
+        FWWARN(
             "[fw][capture] died again at frame {} ({} deaths so far) -- still "
             "running on noclip",
             frame, m_captureDeaths.size());
@@ -2388,7 +2390,7 @@ FrameWindowMark FrameWindowAnalyzer::buildMark() const {
         mk.saturatedLow = maxNeg > 0 && low <= -maxNeg;
         mk.saturatedHigh = maxPos > 0 && high >= maxPos;
         if ((mk.saturatedLow || mk.saturatedHigh) && !mk.unbounded)
-            log::warn(
+            FWWARN(
                 "[fw][click {}] window {}..{} rests on the sweep limit ({}{}{}"
                 "): that edge was never found, so {} is a floor, not the "
                 "window. Raise Sweep Range to close it",
@@ -2496,7 +2498,7 @@ void FrameWindowAnalyzer::finishClick() {
                 if (h > 0 && h - 1 < runHi) runHi = h - 1;
             }
 
-            log::warn(
+            FWWARN(
                 "[fw][click {}] window {}..{} is NOT SOLID: {} sampled "
                 "offset(s) inside it died ({}). Reported span {} is an upper "
                 "bound; the unbroken run around the macro's timing is at most "
@@ -2516,7 +2518,7 @@ void FrameWindowAnalyzer::finishClick() {
         char const gm = m_samples[m_index].gamemode;
         bool const heldThrust = gm == 'R' || gm == 'H' || gm == 'W' ||
                                 gm == 'V' || gm == 'U';
-        log::warn(
+        FWWARN(
             "[fw][click {}] {} offset(s) in this window survived only as an "
             "isolated shift -- this input moved on its own, with the rest of "
             "the macro left at the timing it was recorded on{}",
@@ -2666,7 +2668,7 @@ bool FrameWindowAnalyzer::advanceEntryPass(FrameWindowMark const& mk) {
 }
 
 void FrameWindowAnalyzer::abortClick(char const* why) {
-    log::warn("[fw][click {}] NOT MEASURED @ frame {}: {}", m_index + 1,
+    FWWARN("[fw][click {}] NOT MEASURED @ frame {}: {}", m_index + 1,
               m_recorded, why);
     m_skipped++;
     this->nextClick();
@@ -2788,7 +2790,7 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
     m_status = std::move(message);
     m_generation++;
 
-    if (!ok) log::warn("[FrameWindow] {}", m_status);
+    if (!ok) FWWARN("[FrameWindow] {}", m_status);
 }
 
 void FrameWindowAnalyzer::cancel() {
@@ -2863,7 +2865,7 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
                             size_t const dropped = before - m_samples.size();
                             m_filtered += static_cast<int>(dropped);
                             if (dropped > 0)
-                                log::warn(
+                                FWWARN(
                                     "[fw][capture] dropping the {} input(s) "
                                     "recorded past frame {}: {}",
                                     dropped, m_captureDeathFrame,
@@ -2891,7 +2893,7 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
                         }
 
                         if (hitchDuringSession)
-                            log::warn(
+                            FWWARN(
                                 "[fw][capture] a frame hitch skipped game time "
                                 "at frame {} in this session. A macro recorded "
                                 "across a hitch replays as a different run "
@@ -2938,7 +2940,7 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
                         m_captureNoclip = true;
                         m_captureDeathFrame = deathFrame;
                         m_noclip = true;
-                        log::warn(
+                        FWWARN(
                             "[fw][capture] DIED at frame {} after capturing "
                             "{}/{} samples -- continuing through it with "
                             "noclip",
@@ -2972,7 +2974,7 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
                 if (r == StepResult::Reached && m_pathDiverged) {
                     if (!m_triedHardReset && !m_resyncGaveUp) {
                         m_triedHardReset = true;
-                        log::warn(
+                        FWWARN(
                             "[fw][click {}] the advance to branch {} left the "
                             "captured path -- the checkpoint carried over from "
                             "an earlier click no longer reproduces the "
@@ -2986,7 +2988,7 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
                         if (m_resyncFailures >= MAX_RESYNC_FAILURES &&
                             !m_resyncGaveUp) {
                             m_resyncGaveUp = true;
-                            log::warn(
+                            FWWARN(
                                 "[fw][click {}] a clean replay from frame 0 "
                                 "still does not reproduce the capture. The "
                                 "run itself is not deterministic here, so "
