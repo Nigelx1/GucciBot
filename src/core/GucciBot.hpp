@@ -1,12 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-k (Colour bands are editable, and the post-save popup is gone. Bands: range, "\
-    "colour, label, HUD visibility and a per-band sound, with Add and Reset, saved as one "\
-    "JSON blob so adding or removing one cannot leave orphaned keys behind. The \"Macro "\
-    "Saved -- calculate frame windows?\" prompt no longer appears on every save; saving a "\
-    "macro and analysing one are separate decisions and the Frame Windows tab is where the "\
-    "second one lives.)"
+    "2026-09-20-l (Sound packs, and the bells finally have something to play. Every band starts with NO sound file, and his player returns immediately on an empty path -- so no bells were possible until a pack was loaded, which is what Nigel heard. The seven built-in clips now ship with GucciBot and Import assigns them by band size; Export writes the current bands out as a named pack. Same folder layout anticroom uses, so packs move between Silicate and GucciBot unchanged.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

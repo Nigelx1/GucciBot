@@ -4706,6 +4706,137 @@ namespace gucci {
         return true;
     }
 
+    // Sound packs. A pack is a folder of clips named "<N>f SFX.<ext>", where N
+    // matches a band's lower bound -- so importing a pack is "give every band
+    // the clip for its size". The built-in pack is the set shipped in the mod's
+    // resources. Same layout anticroom uses in Silicate, so packs are portable
+    // between the two.
+    static constexpr char const* kPackDir = "sounds";
+    static constexpr char const* kPackBuiltin = "Default (built-in)";
+
+    static std::string packClipStem(int window) {
+        return fmt::format("{}f SFX", window);
+    }
+
+    static std::filesystem::path findPackClip(std::filesystem::path const& dir, int window) {
+        static char const* exts[] = {".mp3", ".ogg", ".wav"};
+        auto const stem = packClipStem(window);
+        for (auto const* ext : exts) {
+            auto const candidate = dir / (stem + ext);
+            std::error_code ec;
+            if (std::filesystem::exists(candidate, ec))
+                return candidate;
+        }
+        return {};
+    }
+
+    std::vector<std::string> MenuInterface::acSoundPackNames() {
+        std::vector<std::string> names{kPackBuiltin};
+        std::error_code ec;
+        auto const root = Mod::get()->getSaveDir() / kPackDir;
+        if (std::filesystem::exists(root, ec)) {
+            for (auto const& entry : std::filesystem::directory_iterator(root, ec)) {
+                if (entry.is_directory(ec))
+                    names.push_back(entry.path().filename().string());
+            }
+        }
+        return names;
+    }
+
+    void MenuInterface::importAcSoundPack(std::string const& name) {
+        auto& fw = SLSettings::get()->frameWindow;
+        bool const builtin = name.empty() || name == kPackBuiltin;
+        auto const dir = Mod::get()->getSaveDir() / kPackDir / name;
+
+        if (!builtin) {
+            std::error_code ec;
+            if (!std::filesystem::exists(dir, ec)) {
+                m_acPackReport = fmt::format("No pack named \"{}\"", name);
+                m_acPackOk = false;
+                return;
+            }
+        }
+
+        int assigned = 0, missing = 0;
+        for (auto& tier : fw.tiers) {
+            if (builtin) {
+                auto const clip = packClipStem(tier.minWindow) + ".mp3";
+                std::error_code ec;
+                if (!std::filesystem::exists(Mod::get()->getResourcesDir() / clip, ec)) {
+                    missing++;
+                    continue;
+                }
+                // Stored as a bare filename: FrameWindowSound resolves a
+                // relative path against the resources directory itself, so the
+                // built-in pack keeps working if the mod folder moves.
+                tier.audioPath = clip;
+                assigned++;
+                continue;
+            }
+            auto const clip = findPackClip(dir, tier.minWindow);
+            if (clip.empty()) {
+                missing++;
+                continue;
+            }
+            tier.audioPath = clip.string();
+            assigned++;
+        }
+
+        FrameWindowSound::clearCache();
+        m_acPackOk = assigned > 0;
+        m_acPackReport =
+            missing == 0
+                ? fmt::format("Loaded {} clip(s).", assigned)
+                : fmt::format("Loaded {} clip(s); {} band(s) had no matching clip.",
+                              assigned, missing);
+        this->saveAcFrameWindowSettings();
+    }
+
+    void MenuInterface::exportAcSoundPack(std::string const& name) {
+        if (name.empty() || name == kPackBuiltin) {
+            m_acPackReport = "Give the pack a name of its own first.";
+            m_acPackOk = false;
+            return;
+        }
+
+        auto const dir = Mod::get()->getSaveDir() / kPackDir / name;
+        std::error_code ec;
+        std::filesystem::create_directories(dir, ec);
+        if (ec) {
+            m_acPackReport = "Could not create the pack folder.";
+            m_acPackOk = false;
+            return;
+        }
+
+        int written = 0, skipped = 0;
+        for (auto const& tier : SLSettings::get()->frameWindow.tiers) {
+            if (tier.audioPath.empty()) {
+                skipped++;
+                continue;
+            }
+            std::filesystem::path src(tier.audioPath);
+            if (!src.is_absolute())
+                src = Mod::get()->getResourcesDir() / tier.audioPath;
+            std::error_code fc;
+            if (!std::filesystem::exists(src, fc)) {
+                skipped++;
+                continue;
+            }
+            auto const dest = dir / (packClipStem(tier.minWindow) + src.extension().string());
+            std::filesystem::copy_file(
+                src, dest, std::filesystem::copy_options::overwrite_existing, fc);
+            if (fc)
+                skipped++;
+            else
+                written++;
+        }
+
+        m_acPackOk = written > 0;
+        m_acPackReport = fmt::format("Wrote {} clip(s){}.",
+                                     written,
+                                     skipped ? fmt::format(", skipped {}", skipped) : "");
+    }
+
     void MenuInterface::loadAcFrameWindowSettings() {
         auto* mod = Mod::get();
         auto& fw = SLSettings::get()->frameWindow;
@@ -5006,6 +5137,54 @@ namespace gucci {
                 FrameWindowSettings const def;
                 fw.tiers = def.tiers;
                 dirty = true;
+            }
+
+            ImGui::Dummy(ImVec2(0, 8));
+            Widgets::SectionHeader("Sound Pack", theme);
+            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+            ImGui::TextWrapped(
+                "A pack is a folder of clips named \"<N>f SFX\", one per band size. Import "
+                "gives every band the clip matching its lower bound; Export copies the "
+                "bands' current clips out under that name. Bands start with no sound at "
+                "all, so nothing plays until a pack is imported.");
+            ImGui::PopStyleColor();
+
+            {
+                auto const names = acSoundPackNames();
+                std::string current = m_acPackName.empty() ? names.front() : m_acPackName;
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::BeginCombo("##acPack", current.c_str())) {
+                    for (auto const& n : names) {
+                        bool const sel = (n == current);
+                        if (ImGui::Selectable(n.c_str(), sel))
+                            m_acPackName = n;
+                        if (sel)
+                            ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
+
+                char buf[128];
+                std::snprintf(buf, sizeof(buf), "%s", m_acPackName.c_str());
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::InputTextWithHint(
+                        "##acPackName", "or type a name to export as", buf, sizeof(buf)))
+                    m_acPackName = buf;
+
+                float const half = (ImGui::GetContentRegionAvail().x - 8) / 2.f;
+                if (Widgets::StyledButton("Import", ImVec2(half, 24), theme, anim, 6.f))
+                    this->importAcSoundPack(m_acPackName);
+                ImGui::SameLine(0, 8);
+                if (Widgets::StyledButton("Export", ImVec2(half, 24), theme, anim, 6.f))
+                    this->exportAcSoundPack(m_acPackName);
+
+                if (!m_acPackReport.empty()) {
+                    ImGui::PushStyleColor(
+                        ImGuiCol_Text,
+                        m_acPackOk ? theme.textSecondary : ImVec4(0.90f, 0.35f, 0.35f, 1.f));
+                    ImGui::TextWrapped("%s", m_acPackReport.c_str());
+                    ImGui::PopStyleColor();
+                }
             }
         }
 

@@ -327,6 +327,12 @@ namespace gucci {
         void drawToolsTab();
         void drawFrameWindowsTab();
         void loadAcFrameWindowSettings();
+        std::vector<std::string> acSoundPackNames();
+        void importAcSoundPack(std::string const& name);
+        void exportAcSoundPack(std::string const& name);
+        std::string m_acPackName;
+        std::string m_acPackReport;
+        bool m_acPackOk = false;
         void saveAcFrameWindowSettings();
         void drawPathfinderTab();
         void drawRenderTab();
