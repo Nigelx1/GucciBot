@@ -17,6 +17,12 @@ class FrameWindowSound {
     // needs the group to attach to. Creates it on demand, like play() does.
     static FMOD::ChannelGroup* channelGroup();
 
+    // Set while GucciBot is rendering. A render sets the engine's effects
+    // volume to the render's SFX setting, which is routinely 0 -- and that
+    // silenced these entirely, so nothing reached the recording. These have
+    // their own volume; the game's SFX slider should not mute them.
+    static void setRenderMode(bool on) { s_renderMode = on; }
+
    private:
     static bool ensureChannelGroup(FMOD::System* sys);
 
@@ -24,6 +30,7 @@ class FrameWindowSound {
 
     static std::unordered_map<std::string, FMOD::Sound*> s_cache;
     static FMOD::ChannelGroup* s_group;
+    static bool s_renderMode;
 };
 
 #endif  // ANALYSIS_SOUND_HPP

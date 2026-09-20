@@ -7,6 +7,7 @@ using namespace geode::prelude;
 
 std::unordered_map<std::string, FMOD::Sound*> FrameWindowSound::s_cache;
 FMOD::ChannelGroup* FrameWindowSound::s_group = nullptr;
+bool FrameWindowSound::s_renderMode = false;
 
 static std::unordered_map<std::string, std::vector<FMOD::Channel*>>
     s_activeChannels;
@@ -24,12 +25,18 @@ void FrameWindowSound::play(std::string const& path, float volume) {
 
     auto* engine = FMODAudioEngine::sharedEngine();
     if (!engine || !engine->m_system) return;
-    if (engine->m_sfxVolume <= 0.f) return;
+
+    // While rendering, the engine's effects volume is the render's SFX
+    // setting, not the player's -- and it is commonly 0, which used to gate
+    // these out before they ever played. Rendering therefore ignores it and
+    // uses this sound's own volume alone.
+    float const engineSfx = s_renderMode ? 1.f : engine->m_sfxVolume;
+    if (engineSfx <= 0.f) return;
 
     FMOD::System* sys = engine->m_system;
     if (!ensureChannelGroup(sys)) return;
 
-    s_group->setVolume(engine->m_sfxVolume * std::clamp(volume, 0.f, 1.f));
+    s_group->setVolume(engineSfx * std::clamp(volume, 0.f, 1.f));
 
     std::filesystem::path audioPath(path);
     if (!audioPath.is_absolute()) {

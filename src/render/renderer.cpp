@@ -445,6 +445,7 @@ namespace gucci {
         if (m_collectAudio) {
             FrameWindowSound::channelGroup();
             AudioEngineRenderState::enter(m_settings.m_musicVolume, m_settings.m_sfxVolume);
+            FrameWindowSound::setRenderMode(true);
 
             AudioRecorder::get()->init();
             AudioRecorder::get()->attach();
@@ -588,6 +589,7 @@ namespace gucci {
             AudioRecorder::getFrameWindow()->detach();
             AudioRecorder::getFrameWindow()->uninit();
         }
+        FrameWindowSound::setRenderMode(false);
         AudioEngineRenderState::exit();
 
         if (m_pkt && m_videoCodecCtx && m_formatCtx && m_videoStream) {

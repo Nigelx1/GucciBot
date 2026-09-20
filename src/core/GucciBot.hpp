@@ -1,14 +1,14 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-g (BUILD 2: the Frame Windows tab is real. All of anticroom's settings are "\
-    "now exposed and saved -- Measurement (algorithm, sweep range, Horizon, slack, recovery "\
-    "window, full-range sweep), Sub-Tick CBF (input Hz, bisect, stride, decimals), Which "\
-    "Inputs (ship/swing and all releases, the orb-aware robot skip, joint setup and entry "\
-    "sweeps), Display, During Analysis, Speed and Diagnostics. Everything persists under "\
-    "fwac_ keys, kept separate from the old fw_ keys so a stale value from GucciBot's "\
-    "removed analyzer can never be read back into his. Settings lock while a run is going, "\
-    "since changing one mid-sweep would mix two configurations into one result.)"
+    "2026-09-20-h (Two fixes Nigel hit in anticroom's analyzer. Calculate no longer crashes "\
+    "when started from the pause menu: his start() checks six things but not whether the "\
+    "game is paused, and resetting the level behind an open PauseLayer is what killed it -- "\
+    "GucciBot's own analyzer dismissed the menu first and that handling was removed with it, "\
+    "so it is back. And the tier bells now reach renders: a render sets the engine's effects "\
+    "volume to the render's SFX setting, commonly 0, and his sound bailed out on exactly "\
+    "that before playing anything -- so during a render the bells follow their own volume "\
+    "setting instead of the game's SFX slider.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
