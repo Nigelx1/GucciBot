@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-r (The analyzer log APPENDS now instead of wiping itself every launch. Nigel tested VSC and then opened another session, which destroyed the run I was about to read -- so the log I read was a fresh session, not his test, and I nearly drew a conclusion from it. Sessions are separated by a banner. Combined with build -q, which routes the warn-level diagnostics into the file at all, a run can now be tested and read afterwards without having to stay in the same session.)"
+    "2026-09-20-s (His own state diff settles it: across 510 restores the ONLY PlayerObject field that comes back wrong is m_audioScale, 3 cosmetic bytes. GucciBot restores the player faithfully -- so the engine is not the problem and replacing the physics would have fixed nothing. What kills the run is a LEVEL OBJECT, id 1707, that is not rewound. Also backed out restoring m_calcNonEffectObjects: it is a raw pointer list that GD rebuilds itself during loadFromCheckpoint, so writing a captured copy over it replaced a fresh list with a stale one -- suspected cause of the capture pass dying at frame 193 where it used to reach 3943.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

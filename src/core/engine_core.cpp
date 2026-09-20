@@ -90,6 +90,8 @@ namespace gucci {
         if (pl->m_effectManager)
             state.m_persistentItemMap = pl->m_effectManager->m_persistentItemCountMap;
         state.m_varianceValues = pl->m_varianceValues;
+        // Captured but no longer restored -- see applyCheckpoint. Kept so the
+        // data is there if the restore side is ever revisited.
         state.m_calcNonEffectObjects = pl->m_calcNonEffectObjects;
         state.m_calcNonEffectObjectsSize = pl->m_calcNonEffectObjectsSize;
         state.m_hasLevelState = true;
@@ -173,8 +175,19 @@ namespace gucci {
             if (pl->m_effectManager)
                 pl->m_effectManager->m_persistentItemCountMap = state.m_persistentItemMap;
             pl->m_varianceValues = state.m_varianceValues;
-            pl->m_calcNonEffectObjects = state.m_calcNonEffectObjects;
-            pl->m_calcNonEffectObjectsSize = state.m_calcNonEffectObjectsSize;
+
+            // m_calcNonEffectObjects is a list of RAW POINTERS into the level's
+            // working set, and GD's own loadFromCheckpoint -- which runs just
+            // before this -- has already rebuilt it for the frame being
+            // restored to. Writing a captured copy over that replaces GD's
+            // fresh list with a stale one.
+            //
+            // Silicate restores it, but Silicate's checkpoints are its own;
+            // here GD's native restore has already done the work, so this was
+            // undoing it. Suspected cause of the capture pass dying at frame
+            // 193 in build -r where it previously reached 3943. The two
+            // value-typed fields above are kept: they are plain data, GD does
+            // not rebuild them, and they are what a restore genuinely loses.
         }
         if (GucciEngine::get()->updater.m_logFrameIncrements) {
             logFrameIncrement(
