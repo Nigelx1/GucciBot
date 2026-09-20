@@ -3052,8 +3052,18 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
                     return;
                 }
                 m_cpObject->retain();
-                m_saved =
-                    pf.createCheckpoint(m_cpObject, updater.m_frameOnLastAttempt);
+                // Upstream passes m_frameOnLastAttempt here because Silicate's
+                // SavedCheckpoint carries TWO frame fields: m_attemptStartFrame
+                // (this argument) and m_frame, which it fills itself from
+                // getFrame(). GucciBot's SavedCheckpointState has only one,
+                // m_frameOffset, and fills it FROM this argument -- and that
+                // single field is what the restore path feeds back into
+                // m_frameOnLastAttempt. Passing the attempt start therefore
+                // restored every leg to frame 0: right position, wrong clock,
+                // so each leg died within ~18 frames and every window measured
+                // 0 with "IMPOSSIBLE". Pass the frame the snapshot is actually
+                // taken at, which is what GucciBot's field means.
+                m_saved = pf.createCheckpoint(m_cpObject, updater.getFrame());
                 m_haveCheckpoint = true;
                 this->captureStateBytes(pl);
 

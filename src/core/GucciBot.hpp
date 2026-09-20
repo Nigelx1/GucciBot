@@ -1,13 +1,14 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-i (Diagnostics build. anticroom's analyzer logs heavily, but only to Geode's "\
-    "console, which is not persisted on this machine -- so every question about what a run "\
-    "actually did has been answered by reading code and guessing, and three of those guesses "\
-    "were wrong. Its whole verbose log now also goes to guccibot_fw.log in the mod's save "\
-    "folder (Verbose Log must be on, it already is). Run a Calculate, then the log says what "\
-    "it measured, where each mark landed, and whether anything was drawn -- no behaviour "\
-    "change otherwise.)"
+    "2026-09-20-j (THE analyzer bug, found from the new log file. Every restore was putting "\
+    "the player at the right position with the frame counter reset to 0, so every leg ran as "\
+    "if from the start of the level, died within ~18 frames, and every window came out 0 / "\
+    "IMPOSSIBLE. Cause was mine: Silicate's SavedCheckpoint has two frame fields -- the "\
+    "attempt start, which his call passes, and the real capture frame, which it fills itself "\
+    "-- while GucciBot's has one, filled from that argument, and the restore path feeds it "\
+    "straight back into the frame counter. So the snapshot now records the frame it is "\
+    "actually taken at.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
