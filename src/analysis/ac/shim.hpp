@@ -24,6 +24,7 @@
 #include "core/GucciBot.hpp"
 #include "core/action_types.hpp"
 #include "core/checkpoint_player.hpp"
+#include "analysis/ac/shapes.hpp"
 
 // --- Silicate's action type is ours under a different name ------------------
 
@@ -80,11 +81,17 @@ public:
 struct FrameWindowTier {
     int id = 1;
     int minWindow = 0;
-    int maxWindow = 999;
+    // GucciBot's bands top out at 10 -- past that a window is lenient enough
+    // that the exact number stops mattering. anticroom's default is 999.
+    int maxWindow = 10;
     std::string text = "";
     std::string audioPath = "";
     std::array<float, 4> color = {1.f, 1.f, 1.f, 1.f};
     bool showInHud = true;
+
+    // Juice's marker shapes, per band -- circles, stars, spirals, polygons,
+    // each Inverted (two concentric outlines) or Normal (filled donut).
+    gbshape::Style style;
 };
 
 // Copied field-for-field from anticroom's settings.hpp. Defaults are his --
@@ -170,7 +177,7 @@ struct FrameWindowSettings {
         {4, 4, 4, "", "", {0.996f, 0.996f, 0.996f, 1.f}, true},
         {5, 5, 6, "", "", {0.545f, 0.996f, 0.545f, 1.f}, true},
         {6, 7, 8, "", "", {0.553f, 0.780f, 0.996f, 1.f}, true},
-        {7, 9, 12, "", "", {0.471f, 0.467f, 0.996f, 1.f}, true},
+        {7, 9, 10, "", "", {0.471f, 0.467f, 0.996f, 1.f}, true},
     };
 };
 

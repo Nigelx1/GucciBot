@@ -4659,6 +4659,13 @@ namespace gucci {
                 {"text", t.text},
                 {"audio", t.audioPath},
                 {"hud", t.showInHud},
+                {"shape", (int64_t)t.style.shape},
+                {"fill", (int64_t)t.style.fill},
+                {"sides", (int64_t)t.style.polygonSides},
+                {"corner", (double)t.style.polygonCornerRadius},
+                {"noborder", t.style.noBorder},
+                {"stroke", (double)t.style.strokeSize},
+                {"sizescale", (double)t.style.sizeScale},
                 {"r", (double)t.color[0]},
                 {"g", (double)t.color[1]},
                 {"b", (double)t.color[2]},
@@ -4701,6 +4708,14 @@ namespace gucci {
             auto hud = j["hud"].as<bool>();
             t.showInHud = hud.isOk() ? hud.unwrap() : true;
             t.color = {real("r", 1.f), real("g", 1.f), real("b", 1.f), real("a", 1.f)};
+            t.style.shape = (gbshape::Shape)num("shape", 0);
+            t.style.fill = (gbshape::Fill)num("fill", 0);
+            t.style.polygonSides = num("sides", 5);
+            t.style.polygonCornerRadius = real("corner", 0.f);
+            auto nb = j["noborder"].as<bool>();
+            t.style.noBorder = nb.isOk() ? nb.unwrap() : false;
+            t.style.strokeSize = real("stroke", 2.2f);
+            t.style.sizeScale = real("sizescale", 1.f);
             tiers.push_back(t);
         }
         // An empty list would silently mean "no colours at all"; keep the
@@ -5092,7 +5107,7 @@ namespace gucci {
 
                 ImGui::SameLine(0, 8);
                 ImGui::SetNextItemWidth(52);
-                if (ImGui::DragInt("##min", &t.minWindow, 0.2f, 0, 999)) {
+                if (ImGui::DragInt("##min", &t.minWindow, 0.2f, 0, 10)) {
                     if (t.maxWindow < t.minWindow)
                         t.maxWindow = t.minWindow;
                     dirty = true;
@@ -5101,7 +5116,7 @@ namespace gucci {
                 ImGui::TextUnformatted("-");
                 ImGui::SameLine(0, 4);
                 ImGui::SetNextItemWidth(52);
-                if (ImGui::DragInt("##max", &t.maxWindow, 0.2f, 0, 999)) {
+                if (ImGui::DragInt("##max", &t.maxWindow, 0.2f, 0, 10)) {
                     if (t.maxWindow < t.minWindow)
                         t.minWindow = t.maxWindow;
                     dirty = true;
@@ -5133,6 +5148,36 @@ namespace gucci {
                     dirty = true;
                 }
 
+                const char* shapeNames[] = {"Circle", "Star", "Spiral", "Polygon"};
+                int shapeIdx = (int)t.style.shape;
+                ImGui::SetNextItemWidth(84);
+                if (ImGui::Combo("##shape", &shapeIdx, shapeNames, 4)) {
+                    t.style.shape = (gbshape::Shape)shapeIdx;
+                    dirty = true;
+                }
+                ImGui::SameLine(0, 6);
+                const char* fillNames[] = {"Inner ring", "Filled"};
+                int fillIdx = (int)t.style.fill;
+                ImGui::SetNextItemWidth(88);
+                if (ImGui::Combo("##fill", &fillIdx, fillNames, 2)) {
+                    t.style.fill = (gbshape::Fill)fillIdx;
+                    dirty = true;
+                }
+                ImGui::SameLine(0, 6);
+                ImGui::SetNextItemWidth(56);
+                if (ImGui::DragFloat("##size", &t.style.sizeScale, 0.01f, 0.1f, 4.f, "x%.2f"))
+                    dirty = true;
+                if (t.style.shape == gbshape::Shape::Polygon) {
+                    ImGui::SetNextItemWidth(56);
+                    if (ImGui::DragInt("##sides", &t.style.polygonSides, 0.1f, 3, 12))
+                        dirty = true;
+                    ImGui::SameLine(0, 6);
+                    ImGui::SetNextItemWidth(78);
+                    if (ImGui::DragFloat("##corner", &t.style.polygonCornerRadius,
+                                         0.01f, 0.f, 1.f, "round %.2f"))
+                        dirty = true;
+                }
+
                 ImGui::PopID();
                 ImGui::Dummy(ImVec2(0, 2));
             }
@@ -5145,7 +5190,7 @@ namespace gucci {
             if (Widgets::StyledButton("Add Band", ImVec2(-1, 24), theme, anim, 6.f)) {
                 FrameWindowTier t;
                 t.id = fw.tiers.empty() ? 1 : fw.tiers.back().id + 1;
-                t.minWindow = fw.tiers.empty() ? 0 : fw.tiers.back().maxWindow + 1;
+                t.minWindow = fw.tiers.empty() ? 0 : std::min(10, fw.tiers.back().maxWindow + 1);
                 t.maxWindow = t.minWindow;
                 fw.tiers.push_back(t);
                 dirty = true;
@@ -5156,11 +5201,19 @@ namespace gucci {
                 dirty = true;
             }
 
-            // Juice's look from 1.7.2, rebuilt as a band preset rather than a
-            // second rendering path: the ramp runs hot for a tight window and
-            // cool for a lenient one, with the same 9-10 / 7-8 / 5-6 / 4 / 3 /
-            // 2 / 1 rows the old legend used.
-            if (Widgets::StyledButton("Default Look (Juice)", ImVec2(-1, 22), theme, anim, 6.f)) {
+            // "Default Look" from 1.7.2 (build -e removed it with GucciBot's
+            // analyzer). NOT Juice's -- the tier/shape/circle-skin system is
+            // his; this was Nigel's own ask, a preset that makes the overlay
+            // read like the counter in NaN's videos.
+            //
+            // In 1.7.2 it had to override three things: a single plain ring
+            // instead of the double ring, the window number to the LEFT of the
+            // ring rather than above it, and this colour ramp. anticroom's
+            // renderer already draws the first two that way by default, so all
+            // that is left to apply is the ramp -- hot for a tight window,
+            // cool for a lenient one, over the same 9-10 / 7-8 / 5-6 / 4 / 3 /
+            // 2 / 1 bands the old legend showed.
+            if (Widgets::StyledButton("NaN Look", ImVec2(-1, 22), theme, anim, 6.f)) {
                 auto band = [](int id, int lo, int hi, float r, float g, float b) {
                     FrameWindowTier t;
                     t.id = id;
@@ -5177,10 +5230,16 @@ namespace gucci {
                     band(4, 4, 4, 1.00f, 1.00f, 1.00f),
                     band(5, 5, 6, 0.40f, 0.87f, 0.53f),
                     band(6, 7, 8, 0.40f, 0.67f, 1.00f),
-                    band(7, 9, 999, 0.36f, 0.42f, 0.93f),
+                    band(7, 9, 10, 0.36f, 0.42f, 0.93f),
                 };
                 dirty = true;
             }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip(
+                    "Colours the bands the way the frame-window counter in NaN's videos does: "
+                    "red for the tightest windows, through orange, yellow, white, green and "
+                    "light blue, to blue for the most lenient. The single ring and the number "
+                    "to the left of it are already how markers draw here.");
 
             ImGui::Dummy(ImVec2(0, 6));
             Widgets::SectionHeader("Sounds", theme);

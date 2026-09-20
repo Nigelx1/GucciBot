@@ -3805,17 +3805,28 @@ void FrameWindowAnalyzer::spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
                             std::max(1.f, fwcfg.circleSkinMaxRadius));
     }
     auto* circle = CCDrawNode::create();
-    CCPoint verts[64];
-    for (int i = 0; i < 64; i++) {
-        float const angle = static_cast<float>(i) * 6.2831853f / 64.f;
-        verts[i] = CCPoint{radius * std::cos(angle), radius * std::sin(angle)};
-    }
-
     float const a = color.a;
-    circle->drawPolygon(verts, 64, {0.f, 0.f, 0.f, 0.f}, 4.f,
-                        {0.f, 0.f, 0.f, a});
-    circle->drawPolygon(verts, 64, {0.f, 0.f, 0.f, 0.f}, 2.f,
-                        {color.r * a, color.g * a, color.b * a, a});
+
+    // A band can carry one of Juice's shapes. Without one this is the plain
+    // ring anticroom draws, kept exactly as it was -- two passes so the marker
+    // reads against a bright background as well as a dark one.
+    if (tier && tier->style.shape != gbshape::Shape::Circle) {
+        gbshape::draw(circle, {0.f, 0.f}, radius,
+                      {color.r * a, color.g * a, color.b * a, a}, tier->style);
+    } else if (tier && tier->style.fill == gbshape::Fill::Normal) {
+        gbshape::draw(circle, {0.f, 0.f}, radius,
+                      {color.r * a, color.g * a, color.b * a, a}, tier->style);
+    } else {
+        CCPoint verts[64];
+        for (int i = 0; i < 64; i++) {
+            float const angle = static_cast<float>(i) * 6.2831853f / 64.f;
+            verts[i] = CCPoint{radius * std::cos(angle), radius * std::sin(angle)};
+        }
+        circle->drawPolygon(verts, 64, {0.f, 0.f, 0.f, 0.f}, 4.f,
+                            {0.f, 0.f, 0.f, a});
+        circle->drawPolygon(verts, 64, {0.f, 0.f, 0.f, 0.f}, 2.f,
+                            {color.r * a, color.g * a, color.b * a, a});
+    }
     node->addChild(circle);
 
     auto* label = CCLabelBMFont::create(text.c_str(), "bigFont.fnt");

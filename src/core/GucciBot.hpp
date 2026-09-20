@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-y (Results save again. GucciBot's analyzer wrote a sidecar next to the macro and read it back on load; that went out with it in build -e, so a measured macro came back blank -- anticroom's analyzer has the same save/load pair and they were simply never wired. Now written when a run finishes, not only when the macro is next saved, since Calculate is normally run on a macro already on disk. They use a .fwac extension so a 1.7.2 .fw sidecar is left untouched.)"
+    "2026-09-20-z (Juice's marker shapes are back, per band: Circle, Star, Spiral and Polygon, each drawn either as two concentric outlines (the inner-ring look) or as a filled donut, with size, stroke, polygon sides and corner rounding. Lifted from 1.7.2 essentially unchanged into its own module. Bands also cap at 10 again rather than anticroom's 999 -- past 10 the exact number stops meaning much. The earlier NaN colour preset stays but is no longer labelled as Juice's: it never was, and anticroom already draws the single ring with the number to its left.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
