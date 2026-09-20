@@ -29,7 +29,14 @@ static std::ofstream g_fwLog;
 void fwFileLog(std::string const& line) {
     if (!g_fwLog.is_open()) {
         auto path = geode::Mod::get()->getSaveDir() / "guccibot_fw.log";
-        g_fwLog.open(path, std::ios::out | std::ios::trunc);
+        // Appends rather than truncates: the log used to be wiped on every
+        // launch, so testing and then relaunching destroyed the run we were
+        // about to read -- which happened, and cost a round trip. Each session
+        // gets a banner instead so runs stay separable.
+        bool const fresh = !std::filesystem::exists(path);
+        g_fwLog.open(path, std::ios::out | std::ios::app);
+        if (!fresh && g_fwLog.is_open())
+            g_fwLog << "\n===== new session =====\n";
         geode::log::info("[fw] log file at: {}", path.string());
     }
     if (g_fwLog.is_open()) {

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-q (Diagnostic. The Player State Diff run said nothing, and that reading was worthless: his state-diff reports through log::warn, which the file log did not capture, so its output went to a console this machine does not persist. All 19 warn-level diagnostics in the analyzer now mirror to guccibot_fw.log with a WARN prefix. Turn Player State Diff on, run one Calculate, and the log will name any PlayerObject field that comes back wrong after a restore -- or say nothing at all, which this time would actually mean something.)"
+    "2026-09-20-r (The analyzer log APPENDS now instead of wiping itself every launch. Nigel tested VSC and then opened another session, which destroyed the run I was about to read -- so the log I read was a fresh session, not his test, and I nearly drew a conclusion from it. Sessions are separated by a banner. Combined with build -q, which routes the warn-level diagnostics into the file at all, a run can now be tested and read afterwards without having to stay in the same session.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
