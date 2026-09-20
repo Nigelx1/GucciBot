@@ -317,13 +317,36 @@ namespace gucci {
                 m_inputIndex = 0;
                 return;
             }
-            m_inputIndex =
-                static_cast<size_t>(std::distance(m_actionAtom.m_actions.begin(),
-                                                  std::find_if(m_actionAtom.m_actions.begin(),
-                                                               m_actionAtom.m_actions.end(),
-                                                               [respawnFrame](const gb::Action& a) {
-                                                                   return a.m_frame >= respawnFrame;
-                                                               })));
+            // getNextInput matches the frame EXACTLY, and playback looks a
+            // frame ahead (lookupFrame = frame + 1). So an action stored at
+            // frame F is dispatched while the game is at F-1 -- meaning by the
+            // time the game is AT F, that action has already been applied and
+            // will never be matched again.
+            //
+            // Starting the index at ">= respawnFrame" therefore parks it on an
+            // action it can never consume, and because the index only advances
+            // on a match, it jams there and every later input is blocked too.
+            // Restoring to a frame that happens to hold an input silently ends
+            // the macro.
+            //
+            // It survived because a respawn rarely lands exactly on an input
+            // -- but anticroom's analyzer restores to a click's own
+            // neighbourhood hundreds of times, and in dense sections the branch
+            // frame IS an input frame. That is why spam sections measured
+            // nothing while sparse ones were fine.
+            //
+            // Scoped to the analyzer for now: normal playback has the same
+            // latent bug, but changing respawn behaviour for every macro needs
+            // its own change and its own test.
+            bool const exclusive = GucciEngine::get()->analyzerOwnsRun();
+            m_inputIndex = static_cast<size_t>(std::distance(
+                m_actionAtom.m_actions.begin(),
+                std::find_if(m_actionAtom.m_actions.begin(),
+                             m_actionAtom.m_actions.end(),
+                             [respawnFrame, exclusive](const gb::Action& a) {
+                                 return exclusive ? a.m_frame > respawnFrame
+                                                  : a.m_frame >= respawnFrame;
+                             })));
         }
     }
 

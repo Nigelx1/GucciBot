@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-v (Diagnostic build for the spam desyncs. A nominal leg replays the macro at its own timing, so it should retrace the capture exactly -- it now logs EVERY frame of that comparison instead of only the first one that differs, plus the frame advance per step and the physics step count whenever the post-reset clamp changes it. Drift that appears all at once means a lost or doubled step; drift that grows each frame means state. A frame advancing by anything but 1 means the leg is not stepping in step with the capture at all. One Calculate is enough -- the first spam click tells us.)"
+    "2026-09-20-w (The spam bug, found. getNextInput matches a frame EXACTLY while playback looks a frame ahead, so an action at frame F is dispatched at F-1 and can never be matched once the game is at F. onReset started the input index at the first action >= the restore frame, parking it on an action it could never consume -- and since the index only advances on a match, it jammed there and blocked every later input. Restoring onto a frame that holds an input silently ended the macro. Sparse sections never coincided; dense ones always did, which is exactly why spam measured nothing. The index now starts past the restore frame during analysis.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
