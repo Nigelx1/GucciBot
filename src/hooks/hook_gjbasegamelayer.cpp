@@ -154,7 +154,6 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         }
 
         if (auto* fpl = PlayLayer::get()) {
-            gbfw::renderFrameWindows(fpl, SLRenderer::get()->isRecording());
             gbpf::renderAgencyDebug(fpl);
             gbpr::renderPracticeRange(fpl);
             gbju::renderJupiterGhost(fpl);
@@ -273,23 +272,9 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
                                               action.m_type});
         }
 
-        bool fwSoundEnabled =
-            SLRenderer::get()->isRecording() ? gb->fwEnabledRender : gb->fwEnabledLive;
-        if (fwSoundEnabled && !gb->fwAnalyzing && gb->fwHasData) {
-            bool actionIsRelease = !action.m_holding;
-            for (auto const& mk : gb->fwMarks) {
-                if (mk.frame != action.m_frame || mk.isRelease != actionIsRelease)
-                    continue;
-                if (mk.window > gb->fwMaxWindow)
-                    break;
-                // Default Look ignores tiers, so a tier setup that doesn't
-                // cover this window must not silence it.
-                if (!gb->fwDefaultLook && !gb->fwTiers.empty() && !gb->fwTierFor(mk.window))
-                    break;
-                gbfw::playTierSound(mk.window);
-                break;
-            }
-        }
+        // GucciBot's tier sounds were driven from here off its own fwMarks.
+        // anticroom's analyzer plays its tier sounds itself, from its render
+        // path, so there is nothing to drive from the action dispatch now.
 
         queueButton(button, action.m_holding, gb->replay.playerFlipped(action.m_player2), 0.0);
     }

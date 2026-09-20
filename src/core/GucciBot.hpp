@@ -1,11 +1,14 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-d (Fixes the glitched legend from build -c: GucciBot's own frame-window "\
-    "overlay and anticroom's were drawing at the same time. A loaded .fw sidecar keeps "\
-    "fwHasData true no matter which analyzer produced what is on screen, so GucciBot kept "\
-    "drawing its markers over his. GucciBot's overlay now stands down entirely whenever his "\
-    "analyzer is the selected algorithm, and his does the drawing on its own.)"
+    "2026-09-20-e (BUILD 1 of 2: GucciBot's own frame-window analyzer is GONE -- 3,848 "\
+    "lines: the Calculate state machine, all three algorithms, the marker/legend overlay, "\
+    "the tier sounds, the .fw sidecar and the 977-line Frame Windows tab. anticroom's is "\
+    "now the only analyzer, and the Frame Windows tab is a minimal shell that drives it. "\
+    "Pathfinder is untouched: it borrows fwAnalyzing as its headless-simulation flag, so "\
+    "that flag and the analysis music helpers were deliberately kept. Dead fw* field "\
+    "declarations still remain in the header -- removing those is its own pass. NOTE: his "\
+    "markers still do not draw. That bug is unaddressed here; build 1 only clears the way.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

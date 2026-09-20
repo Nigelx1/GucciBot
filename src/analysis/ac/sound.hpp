@@ -13,6 +13,10 @@ class FrameWindowSound {
     static void stopAll();
     static void clearCache();
 
+    // GucciBot's renderer records frame-window audio onto its own track and
+    // needs the group to attach to. Creates it on demand, like play() does.
+    static FMOD::ChannelGroup* channelGroup();
+
    private:
     static bool ensureChannelGroup(FMOD::System* sys);
 

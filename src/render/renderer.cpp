@@ -1,5 +1,6 @@
 #include "renderer.hpp"
 #include "core/GucciBot.hpp"
+#include "analysis/ac/sound.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/binding/PlayLayer.hpp>
@@ -442,7 +443,7 @@ namespace gucci {
         geode::log::info("[GucciBot] SLRenderer capture ready — buffer {}", m_bufferSize);
 
         if (m_collectAudio) {
-            gbfw::frameWindowChannelGroup();
+            FrameWindowSound::channelGroup();
             AudioEngineRenderState::enter(m_settings.m_musicVolume, m_settings.m_sfxVolume);
 
             AudioRecorder::get()->init();
@@ -453,7 +454,7 @@ namespace gucci {
                 AudioRecorder::getMusic()->attach();
                 AudioRecorder::getSfx()->init(engine->m_globalChannel);
                 AudioRecorder::getSfx()->attach();
-                AudioRecorder::getFrameWindow()->init(gbfw::frameWindowChannelGroup());
+                AudioRecorder::getFrameWindow()->init(FrameWindowSound::channelGroup());
                 AudioRecorder::getFrameWindow()->attach();
             }
         }

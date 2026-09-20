@@ -460,7 +460,6 @@ static void frameUpdateMidhook(SafetyHookContext&) {
             // ahead of its position and made every restore lose a frame of X.
             // Same bug the deferred capture right above this already fixes for
             // GD's own practice checkpoints. Don't move these back into tick().
-            gb->fwServiceSettledCapture();
             if (Pathfinder::get()->active) {
                 Pathfinder::get()->serviceSettledCapture();
                 Pathfinder::get()->serviceAgencyProbe();
@@ -577,9 +576,10 @@ static void frameUpdateMidhook(SafetyHookContext&) {
         }
     }
 
+    // fwCkptCreatedThisFrame stays: Pathfinder sets it, it is not analyzer
+    // state. The fwTick() call that used to follow is gone with GucciBot's
+    // analyzer -- anticroom's ticks from the UI draw instead.
     gb->fwCkptCreatedThisFrame = false;
-    if (gb->fwAnalyzing)
-        gb->fwTick();
     if (Pathfinder::get()->active)
         Pathfinder::get()->tick();
     // Draws anticroom's markers and HUD. Called every frame regardless of

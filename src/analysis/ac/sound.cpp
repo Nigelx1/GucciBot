@@ -100,3 +100,10 @@ void FrameWindowSound::clearCache() {
         s_group = nullptr;
     }
 }
+
+FMOD::ChannelGroup* FrameWindowSound::channelGroup() {
+    auto* engine = FMODAudioEngine::get();
+    if (!engine || !engine->m_system) return nullptr;
+    if (!ensureChannelGroup(engine->m_system)) return nullptr;
+    return s_group;
+}
