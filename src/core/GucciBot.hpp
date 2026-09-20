@@ -1,14 +1,13 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-h (Two fixes Nigel hit in anticroom's analyzer. Calculate no longer crashes "\
-    "when started from the pause menu: his start() checks six things but not whether the "\
-    "game is paused, and resetting the level behind an open PauseLayer is what killed it -- "\
-    "GucciBot's own analyzer dismissed the menu first and that handling was removed with it, "\
-    "so it is back. And the tier bells now reach renders: a render sets the engine's effects "\
-    "volume to the render's SFX setting, commonly 0, and his sound bailed out on exactly "\
-    "that before playing anything -- so during a render the bells follow their own volume "\
-    "setting instead of the game's SFX slider.)"
+    "2026-09-20-i (Diagnostics build. anticroom's analyzer logs heavily, but only to Geode's "\
+    "console, which is not persisted on this machine -- so every question about what a run "\
+    "actually did has been answered by reading code and guessing, and three of those guesses "\
+    "were wrong. Its whole verbose log now also goes to guccibot_fw.log in the mod's save "\
+    "folder (Verbose Log must be on, it already is). Run a Calculate, then the log says what "\
+    "it measured, where each mark landed, and whether anything was drawn -- no behaviour "\
+    "change otherwise.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

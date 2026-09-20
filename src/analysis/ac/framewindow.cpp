@@ -25,11 +25,27 @@ static constexpr uint32_t MAX_STEPS_PER_LEG = 200000;
 
 static Clock::time_point g_deadline;
 
-#define FWLOG(...)                            \
-    do {                                      \
-        if (m_verbose->inner())               \
-            geode::log::info(__VA_ARGS__);    \
-    } while (0)
+static std::ofstream g_fwLog;
+void fwFileLog(std::string const& line) {
+    if (!g_fwLog.is_open()) {
+        auto path = geode::Mod::get()->getSaveDir() / "guccibot_fw.log";
+        g_fwLog.open(path, std::ios::out | std::ios::trunc);
+        geode::log::info("[fw] log file at: {}", path.string());
+    }
+    if (g_fwLog.is_open()) {
+        g_fwLog << line << "\n";
+        g_fwLog.flush();
+    }
+}
+
+// Mirrored to a file as well as the console. Geode's console log is not
+// persisted on this machine, so console-only output means every question about
+// what a run actually did gets answered by guessing at the code instead of
+// reading what happened. Written to guccibot_fw.log in the mod's save
+// directory, truncated each launch, and only while Verbose Log is on.
+void fwFileLog(std::string const& line);
+
+#define FWLOG(...)                                           do {                                                         if (m_verbose->inner()) {                                    auto const fwl_ = fmt::format(__VA_ARGS__);              geode::log::info("{}", fwl_);                            fwFileLog(fwl_);                                     }                                                    } while (0)
 
 
 cocos2d::ccColor3B FrameWindowAnalyzer::colorForWindow(int window) {
