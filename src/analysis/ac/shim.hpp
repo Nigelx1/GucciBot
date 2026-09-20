@@ -39,6 +39,8 @@ using gucci::SavedPlayerCheckpoint;
 // (m_frame vs m_frameOffset), which is renamed at the call sites.
 using SavedCheckpoint = gucci::SavedCheckpointState;
 
+class FrameWindowAnalyzer;
+
 // --- trail buffer -----------------------------------------------------------
 
 // Silicate draws the player's path with a buffer of per-frame rects. GucciBot
@@ -219,6 +221,12 @@ public:
     gucci::GucciPracticeFix& practiceFix() {
         return gucci::GucciEngine::get()->practiceFix;
     }
+
+    // Silicate keeps the analyzer as a member of Bot. Here it is a function
+    // local static defined in shim.cpp, because GucciBot.hpp cannot include
+    // framewindow.hpp (framewindow.hpp includes this file, which includes
+    // GucciBot.hpp) -- so it is forward declared and handed back by reference.
+    FrameWindowAnalyzer& frameWindow();
     bool isPlaying() const { return gucci::GucciEngine::get()->isPlaying(); }
 
     TrailBufferStub& trailBuffer() { return m_trail; }

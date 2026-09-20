@@ -18,6 +18,8 @@
 #include <Geode/modify/LoadingLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
 #include <Geode/utils/file.hpp>
+
+#include "analysis/ac/framewindow.hpp"
 #include <Geode/utils/Task.hpp>
 #include <fmt/format.h>
 #include <filesystem>
@@ -4626,8 +4628,36 @@ namespace gucci {
             bool calcClicked = Widgets::StyledButton("Calculate", ImVec2(-1, 30), theme, anim, 6.f);
             if (!canCalc)
                 ImGui::PopStyleVar();
-            if (calcClicked && canCalc)
-                engine->analyzeFrameWindows();
+            if (calcClicked && canCalc) {
+                if (engine->fwUseAcAnalyzer) {
+                    auto const r = ::Bot::get()->frameWindow().start(PlayLayer::get());
+                    engine->fwAcReport = r.message;
+                    engine->fwAcOk = r.ok;
+                    log::info("[GucciBot] anticroom analyzer start: ok={} msg={}", r.ok, r.message);
+                } else {
+                    engine->analyzeFrameWindows();
+                }
+            }
+            // His analyzer reports through its own status rather than
+            // GucciBot's fwAnalyzing/fwAnalyzeStage, so it needs its own
+            // readout and its own cancel -- the existing ones below are wired
+            // to GucciBot's analyzer and would show nothing for his.
+            if (auto& acfw = ::Bot::get()->frameWindow(); acfw.running()) {
+                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                ImGui::TextWrapped("anticroom: %s", acfw.status().c_str());
+                ImGui::PopStyleColor();
+                if (Widgets::StyledButton("Cancel##acfw", ImVec2(-1, 24), theme, anim, 6.f)) {
+                    acfw.cancel();
+                    engine->fwAcReport = acfw.status();
+                    engine->fwAcOk = false;
+                }
+            } else if (!engine->fwAcReport.empty()) {
+                ImGui::PushStyleColor(
+                    ImGuiCol_Text,
+                    engine->fwAcOk ? theme.textSecondary : ImVec4(0.90f, 0.35f, 0.35f, 1.f));
+                ImGui::TextWrapped("anticroom: %s", engine->fwAcReport.c_str());
+                ImGui::PopStyleColor();
+            }
             if (!canCalc) {
                 ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
                 ImGui::TextWrapped(PlayLayer::get() ? "Record or load a macro with actions first."
@@ -4641,17 +4671,22 @@ namespace gucci {
             bool locked = engine->fwAnalyzing;
             if (locked)
                 ImGui::BeginDisabled();
-            const char* algoNames[] = {"Time-Based", "Recovery Range", "Alignment-Independent"};
-            int algoIdx = engine->fwUseAlignmentIndependent
-                             ? 2
-                             : (engine->fwUseRecoveryRangeAlgorithm ? 1 : 0);
+            const char* algoNames[] = {
+                "Time-Based", "Recovery Range", "Alignment-Independent", "anticroom (Silicate)"};
+            int algoIdx = engine->fwUseAcAnalyzer
+                              ? 3
+                              : (engine->fwUseAlignmentIndependent
+                                     ? 2
+                                     : (engine->fwUseRecoveryRangeAlgorithm ? 1 : 0));
             ImGui::SetNextItemWidth(-1);
-            if (ImGui::Combo("##fwAlgo", &algoIdx, algoNames, 3)) {
+            if (ImGui::Combo("##fwAlgo", &algoIdx, algoNames, 4)) {
+                engine->fwUseAcAnalyzer = (algoIdx == 3);
                 engine->fwUseAlignmentIndependent = (algoIdx == 2);
                 engine->fwUseRecoveryRangeAlgorithm = (algoIdx == 1);
                 Mod::get()->setSavedValue("fw_use_align_indep", engine->fwUseAlignmentIndependent);
                 Mod::get()->setSavedValue("fw_use_recovery_range",
                                           engine->fwUseRecoveryRangeAlgorithm);
+                Mod::get()->setSavedValue("fw_use_ac_analyzer", engine->fwUseAcAnalyzer);
             }
             if (locked)
                 ImGui::EndDisabled();
@@ -8854,6 +8889,7 @@ namespace gucci {
         eng->fwUseRecoveryRangeAlgorithm = mod->getSavedValue<bool>("fw_use_recovery_range", false);
         eng->fwRecoveryRange = mod->getSavedValue<int>("fw_recovery_range", 4);
         eng->fwUseAlignmentIndependent = mod->getSavedValue<bool>("fw_use_align_indep", false);
+        eng->fwUseAcAnalyzer = mod->getSavedValue<bool>("fw_use_ac_analyzer", false);
         eng->fwAiZ = mod->getSavedValue<int>("fw_ai_z", 3);
         eng->fwAiContinuationDepth = mod->getSavedValue<int>("fw_ai_cont_depth", 1);
         eng->fwAiClusterRatio = mod->getSavedValue<float>("fw_ai_cluster_ratio", 1.15f);
@@ -9425,6 +9461,17 @@ namespace gucci {
                 MenuInterface::get()->initialize();
             })
             .draw([] {
+                // anticroom's analyzer is driven from here, the same place
+                // Silicate drives it (UIManager::draw), and NOT from the
+                // updater where GucciBot's own fwTick runs -- his tick()
+                // pauses and single-steps the updater itself, so calling it
+                // from inside the update would be re-entrant. Both calls
+                // return immediately while it isn't running, which is always,
+                // until something calls start(). Nothing does yet.
+                ::Bot::get()->frameWindow().tick(PlayLayer::get());
+                if (auto* fwPl = PlayLayer::get())
+                    ::Bot::get()->frameWindow().updateProgressOverlay(fwPl);
+
                 auto* ui = MenuInterface::get();
                 // Cover goes first so the menu (drawn next) stacks above it.
                 displayPathfinderHUD();

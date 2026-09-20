@@ -2,6 +2,7 @@
 #include "hacks/autoclicker.hpp"
 #include "analysis/trajectory.hpp"
 #include "analysis/pathfinder.hpp"
+#include "analysis/ac/framewindow.hpp"
 #include "hacks/hitboxes.hpp"
 #include "trainers/jupiterghost.hpp"
 #include "trainers/trainerghost.hpp"
@@ -305,7 +306,11 @@ class $modify(GB7PlayLayer, PlayLayer) {
             upd.m_canDie = false;
             upd.m_inputIsDeath = false;
             upd.m_expectsDeath = false;
-            processQueuedButtons(0.0, true);
+            // Not while anticroom's analyzer is mid-restore: it is putting the
+            // player back to a captured state, and replaying queued buttons on
+            // top of that would apply inputs it did not ask for.
+            if (!::Bot::get()->frameWindow().isRestoring())
+                processQueuedButtons(0.0, true);
             upd.m_tpsOverflow = 0.0;
             return;
         }
@@ -425,7 +430,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
         restoreHoldOnReset(deathFrame);
         addDeathInput(deathFrame);
 
-        if (!upd.m_canDie) {
+        if (!upd.m_canDie && !::Bot::get()->frameWindow().isRestoring()) {
             gb->replay.m_flipProcessingInputs = true;
             processQueuedButtons(0.0, true);
             gb->replay.m_flipProcessingInputs = false;
@@ -464,6 +469,16 @@ class $modify(GB7PlayLayer, PlayLayer) {
             // so the search keeps driving the same PlayLayer.
             if (obj != m_anticheatSpike)
                 Pathfinder::get()->noteDeath(upd.getFrame(), player ? player->m_position.x : 0.f);
+            return;
+        }
+
+        // anticroom's analyzer swallows deaths it caused itself, the same way
+        // the Pathfinder branch above does. Conditions are Silicate's: never
+        // for the end-of-level anticheat spike, and never for a simulated
+        // player, so a fork dying is not mistaken for the run dying.
+        if (obj != m_anticheatSpike &&
+            !TrajectoryPredictionService::get().ownsPreviewPlayer(player) &&
+            ::Bot::get()->frameWindow().onSuppressedDeath(player, obj)) {
             return;
         }
 
@@ -574,7 +589,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
             Pathfinder::get()->noteLevelComplete();
             return;
         }
-        if (gb->fwAnalyzing)
+        if (gb->fwAnalyzing || ::Bot::get()->frameWindow().running())
             return;
 
         PlayLayer::levelComplete();

@@ -12,6 +12,9 @@
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/binding/GJGroundLayer.hpp>
 
+#include "analysis/ac/cbf.hpp"
+#include "analysis/ac/framewindow.hpp"
+
 using namespace geode::prelude;
 
 using namespace gucci;
@@ -238,6 +241,24 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         int button = (int)action.m_type;
         if (button < 1 || button > 3)
             return;
+
+        // Tell anticroom's analyzer the moment a press is actually applied,
+        // and in what state the player was when it landed -- notably whether
+        // the input could be split within the tick or had to be buffered,
+        // which is what his cube CBF investigation hangs on. Inert unless his
+        // analyzer is running, which GucciBot's own Calculate never makes it.
+        // Placed exactly where Silicate places it: after the button filter,
+        // before the input is handed onward.
+        if (auto& acfw = ::Bot::get()->frameWindow(); acfw.running()) {
+            bool const flipped = gb->replay.playerFlipped(action.m_player2);
+            auto* actor = flipped ? m_player2 : m_player1;
+            acfw.notePress(action.m_frame,
+                           action.m_player2,
+                           cbf::canSplit(actor,
+                                         SLSettings::get()->frameWindow.cbfTickGround),
+                           actor && actor->m_isOnGround,
+                           actor ? actor->m_yVelocity : 0.0);
+        }
 
         if (gb->fwSampling && action.m_holding) {
             auto* sp = action.m_player2 ? m_player2 : m_player1;

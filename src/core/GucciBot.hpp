@@ -1,14 +1,14 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-a (Analyzer port phase 1: anticroom's analyzer now COMPILES into GucciBot, "\
-    "but nothing calls it yet -- Calculate still runs GucciBot's own analyzer exactly as in "\
-    "1.7.2. Restored four mechanisms our Silicate port had dropped: PracticeFix's "\
-    "createCheckpoint/resetWithState/removeAll, and the m_forcedState readers in "\
-    "loadFromCheckpoint -- m_forcedState was declared here but set and read by nothing, the "\
-    "same half-ported pattern as registerBrokenObject. Also added m_initialTPS, the TPS a "\
-    "macro was recorded at. Checkpoint capture logic itself is unchanged: saveCurrent now "\
-    "calls createCheckpoint instead of inlining the same capture.)"
+    "2026-09-20-b (Analyzer port phase 2: anticroom's analyzer is now RUNNABLE. Pick "\
+    "\"anticroom (Silicate)\" as the algorithm in the Frame Windows tab and hit Calculate; "\
+    "it reports and cancels on its own line under the button. Every other algorithm is "\
+    "untouched, and with the option off nothing of his runs at all. Wired: tick from the UI "\
+    "draw, render from the updater, notePress from the action path, batched stepping, and "\
+    "the PlayLayer gates (isRestoring, onSuppressedDeath, levelComplete). NOT wired yet: the "\
+    "45 settings are at defaults with no UI, the trail desync check is stubbed, and CBF "\
+    "sub-tick stays OFF while his cube bug is open. Expect rough edges -- first run.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -913,6 +913,17 @@ namespace gucci {
         // Continuation depth is capped at 0 or 1 (not arbitrary N) for the
         // same reason. Ask before adding any of these.
         bool fwUseAlignmentIndependent = false;
+
+        // Selects anticroom's analyzer (src/analysis/ac/) instead of
+        // GucciBot's own for a Calculate run. Off by default: while it is off,
+        // his analyzer never starts, every gate that asks whether it is
+        // running answers no, and Calculate behaves exactly as it always has.
+        // It is an ADDITIONAL algorithm rather than a replacement so that
+        // Alignment-Independent -- Juice's, which his port predates and does
+        // not have -- survives, and so the two can be compared on one macro.
+        bool fwUseAcAnalyzer = false;
+        std::string fwAcReport;
+        bool fwAcOk = false;
         int fwAiZ = 3;
         int fwAiContinuationDepth = 1; // 0 or 1 only in V1
         float fwAiClusterRatio = 1.15f;

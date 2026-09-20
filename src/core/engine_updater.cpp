@@ -2,6 +2,7 @@
 #include "hacks/autoclicker.hpp"
 #include "analysis/trajectory.hpp"
 #include "analysis/pathfinder.hpp"
+#include "analysis/ac/framewindow.hpp"
 #include "hooks/util_midhook.hpp"
 #include "render/renderer.hpp"
 
@@ -189,6 +190,22 @@ void GucciUpdater::runUpdates(std::function<void(float)> update, float realDt, b
         m_onlyRefresh = false;
         if (PlayLayer::get())
             TrajectoryPredictionService::get().updatePreview(PlayLayer::get());
+        return;
+    }
+
+    // Batched stepping for anticroom's analyzer: run m_analysisBatch physics
+    // steps in one pass instead of one per drawn frame, so a sweep finishes in
+    // seconds rather than minutes. Ported from Silicate's updater, and placed
+    // where Silicate places it -- ahead of the normal step calculation, which
+    // it deliberately bypasses. m_analysisBatch is only ever non-zero for the
+    // duration of one of his stepping calls, so nothing else sees this path.
+    if (m_analysisBatch > 0) {
+        consumeStep();
+        totalStepCount = (int)m_analysisBatch;
+        estimatedStepCount = (int)m_analysisBatch;
+        m_tpsOverflow = 0.0;
+        m_shouldRender = true;
+        update((float)(getPhysicsDt() * m_analysisBatch));
         return;
     }
 
@@ -565,6 +582,12 @@ static void frameUpdateMidhook(SafetyHookContext&) {
         gb->fwTick();
     if (Pathfinder::get()->active)
         Pathfinder::get()->tick();
+    // Draws anticroom's markers and HUD. Called every frame regardless of
+    // whether his analyzer is running, matching Silicate -- render() also
+    // tears its own nodes down when there is nothing to show. Its nodes have
+    // their own IDs ("framewindow-markers"/"framewindow-hud"), so they do not
+    // collide with GucciBot's own FrameWindowOverlay.
+    ::Bot::get()->frameWindow().render(PlayLayer::get());
 
     bool slRender = SLRenderer::get()->isRecording();
     if (gb->isPlaying() || slRender) {
