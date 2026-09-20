@@ -184,6 +184,23 @@ void GucciUpdater::runUpdates(std::function<void(float)> update, float realDt, b
     auto* gb = GucciEngine::get();
     m_allowedToProcessActions = true;
 
+    // fwAnalyzing is GucciBot's engine-wide "a headless simulation is running,
+    // behave accordingly" flag -- it long outlived the analyzer it was named
+    // after, and Pathfinder already borrows it. anticroom's analyzer has no
+    // idea it exists, so it is kept in step here.
+    //
+    // This matters most at hook_gjbasegamelayer.cpp's input dispatch, which
+    // looks inputs up at frame+1 during normal playback and at frame during a
+    // simulation. Without this every input in one of his legs fired a frame
+    // late: the press on the click being measured had not happened yet on its
+    // own frame, so the leg diverged from the capture by exactly one frame of
+    // movement and the click was written off as desynced. Tight sections died
+    // of it; sections with room absorbed it, which is why spam was worst.
+    //
+    // Pathfinder owns the flag while it is running -- don't fight it for it.
+    if (!Pathfinder::get()->active)
+        gb->fwAnalyzing = ::Bot::get()->frameWindow().running();
+
     if (frozen) {
         m_onlyRefresh = true;
         update(realDt);

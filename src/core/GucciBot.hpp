@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-n (Full sweep of everything in Silicate that hooks the analyzer. The big one: the CBF sub-step splitting in PlayerObject was never ported, so although CBF was on and the analyzer armed it and printed sub-tick numbers, no tick was ever actually split -- every sub-tick leg was a whole-frame leg and the fractions measured nothing. Now ported, with the rotation and ship-rotation handling it needs, plus the CBF input capture in the action dispatch, hideSpawnEffects, spawnCircle and Lock Camera, which until now saved and loaded and did nothing. Player checkpoint fields audited field by field: identical, 246 to 246.)"
+    "2026-09-20-o (Spam sections and the missing sounds. Every input in one of his legs was firing a frame late: GucciBot looks inputs up at frame+1 during normal playback and at frame during a simulation, keyed on fwAnalyzing -- a flag his analyzer has never heard of. So the press being measured had not happened on its own frame, the leg diverged by one frame of movement, and the click was written off as desynced. Tight spam died of it while roomier sections absorbed it, which is exactly the pattern Nigel saw. The flag is now kept in step. Sounds: the seven tier clips were copied into resources but mod.json lists its resources explicitly, so they were never packaged.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
