@@ -5092,6 +5092,7 @@ namespace gucci {
             ImGui::Dummy(ImVec2(0, 4));
 
             int removeAt = -1;
+            int moveFrom = -1, moveTo = -1;
             for (size_t i = 0; i < fw.tiers.size(); i++) {
                 auto& t = fw.tiers[i];
                 ImGui::PushID((int)i);
@@ -5134,6 +5135,22 @@ namespace gucci {
                 ImGui::SameLine(0, 8);
                 if (ImGui::Checkbox("HUD", &t.showInHud))
                     dirty = true;
+
+                // Order is not cosmetic: a window takes the first band whose
+                // range covers it, so moving a band changes which one wins.
+                // Without this, inserting a band meant retyping the ranges of
+                // every band after it.
+                ImGui::SameLine(0, 8);
+                ImGui::BeginDisabled(i == 0);
+                if (ImGui::ArrowButton("##up", ImGuiDir_Up))
+                    moveFrom = (int)i, moveTo = (int)i - 1;
+                ImGui::EndDisabled();
+
+                ImGui::SameLine(0, 2);
+                ImGui::BeginDisabled(i + 1 >= fw.tiers.size());
+                if (ImGui::ArrowButton("##down", ImGuiDir_Down))
+                    moveFrom = (int)i, moveTo = (int)i + 1;
+                ImGui::EndDisabled();
 
                 ImGui::SameLine(0, 8);
                 if (ImGui::SmallButton("x"))
@@ -5182,6 +5199,11 @@ namespace gucci {
                 ImGui::Dummy(ImVec2(0, 2));
             }
 
+            if (moveFrom >= 0 && moveTo >= 0 && moveTo < (int)fw.tiers.size()) {
+                std::swap(fw.tiers[moveFrom], fw.tiers[moveTo]);
+                dirty = true;
+            }
+
             if (removeAt >= 0 && fw.tiers.size() > 1) {
                 fw.tiers.erase(fw.tiers.begin() + removeAt);
                 dirty = true;
@@ -5189,7 +5211,10 @@ namespace gucci {
 
             if (Widgets::StyledButton("Add Band", ImVec2(-1, 24), theme, anim, 6.f)) {
                 FrameWindowTier t;
-                t.id = fw.tiers.empty() ? 1 : fw.tiers.back().id + 1;
+                int maxId = 0;
+                for (auto const& e : fw.tiers)
+                    maxId = std::max(maxId, e.id);
+                t.id = maxId + 1;
                 t.minWindow = fw.tiers.empty() ? 0 : std::min(10, fw.tiers.back().maxWindow + 1);
                 t.maxWindow = t.minWindow;
                 fw.tiers.push_back(t);

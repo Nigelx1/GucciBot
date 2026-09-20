@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-aa (Two fixes on the shapes. Every shape drew twice because the only two fill modes were Inverted, which is deliberately an outer AND an inner outline, and Filled. Added Single -- just the one outline -- and made it what a band starts with, since one star is what picking Star should give you. Also removed the NaN Look preset: anticroom's own default bands are already that ramp, same seven bands and ranges with colours within a few percent, so it and Reset Bands did virtually the same thing.)"
+    "2026-09-20-ab (Bands can be reordered. Up and down arrows on each row, because a window takes the first band whose range covers it -- so order decides which band wins, and adding one used to mean retyping the ranges of every band after it. Also fixed new bands reusing an id when an earlier band had been deleted.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
