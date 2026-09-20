@@ -151,6 +151,17 @@ struct FrameWindowSettings {
     bool playSounds = true;
     float soundVolume = 1.f;
     float markerRadius = 11.f;
+
+    // Circle skin: marker radius grows with the window instead of being one
+    // fixed size, so how tight a click is reads at a glance without looking at
+    // the number. Carried over from GucciBot 1.7.2, where it was Juice's.
+    bool circleSkin = false;
+    float circleSkinDotRadius = 5.f;
+    float circleSkinRadiusPerFrame = 2.2f;
+    float circleSkinMaxRadius = 60.f;
+
+    // Scale of the tier-count HUD. Upstream hardcodes 0.6.
+    float hudScale = 0.6f;
     float markerScale = 0.5f;
     std::vector<FrameWindowTier> tiers = {
         {1, 0, 1, "", "", {0.996f, 0.310f, 0.314f, 1.f}, true},

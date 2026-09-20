@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-w (The spam bug, found. getNextInput matches a frame EXACTLY while playback looks a frame ahead, so an action at frame F is dispatched at F-1 and can never be matched once the game is at F. onReset started the input index at the first action >= the restore frame, parking it on an action it could never consume -- and since the index only advances on a match, it jammed there and blocked every later input. Restoring onto a frame that holds an input silently ended the macro. Sparse sections never coincided; dense ones always did, which is exactly why spam measured nothing. The index now starts past the restore frame during analysis.)"
+    "2026-09-20-x (Juice's cosmetics and the Brrr are back. Default Look is rebuilt as a one-click band preset -- the same hot-to-cool ramp and 9-10 / 7-8 / 5-6 / 4 / 3 / 2 / 1 rows as 1.7.2 -- rather than a second rendering path, so it edits like any other band set afterwards. Brrr and Bells are one click each: Brrr is GucciBot's own single sound, Bells the per-window set. Circle Skin is back too, sizing each marker by how tight its window is, with its dot radius, growth per frame and cap all adjustable, plus a HUD scale that upstream hardcodes.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -3792,7 +3792,18 @@ void FrameWindowAnalyzer::spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
     node->setPosition(mk.position);
     node->setZOrder(9999);
 
-    float const radius = std::max(1.f, m_markerRadius->inner());
+    // Circle skin sizes the ring by how tight the window is, so a 2-frame
+    // click is visibly smaller than a 12-frame one. Off by default, in which
+    // case every marker is the one configured size.
+    auto const& fwcfg = SLSettings::get()->frameWindow;
+    float radius = std::max(1.f, m_markerRadius->inner());
+    if (fwcfg.circleSkin) {
+        int const w = std::max(0, this->displayWindow(mk));
+        radius = std::clamp(fwcfg.circleSkinDotRadius +
+                                static_cast<float>(w) * fwcfg.circleSkinRadiusPerFrame,
+                            1.f,
+                            std::max(1.f, fwcfg.circleSkinMaxRadius));
+    }
     auto* circle = CCDrawNode::create();
     CCPoint verts[64];
     for (int i = 0; i < 64; i++) {
@@ -3939,7 +3950,7 @@ void FrameWindowAnalyzer::rebuildHud(PlayLayer* pl) {
             std::clamp(v + (1.f - v) * 0.10f, 0.f, 1.f) * 255.f);
     };
 
-    float constexpr scale = 0.6f;
+    float const scale = std::max(0.1f, SLSettings::get()->frameWindow.hudScale);
     float constexpr gutter = 6.f;
 
     struct Row {

@@ -4615,6 +4615,7 @@ namespace gucci {
             {"fwac_show_timing", &FrameWindowSettings::showTiming},
             {"fwac_show_hud", &FrameWindowSettings::showHud},
             {"fwac_play_sounds", &FrameWindowSettings::playSounds},
+            {"fwac_circle_skin", &FrameWindowSettings::circleSkin},
         };
 
         constexpr AcSetting<int> kAcInts[] = {
@@ -4637,6 +4638,10 @@ namespace gucci {
             {"fwac_sound_volume", &FrameWindowSettings::soundVolume},
             {"fwac_marker_radius", &FrameWindowSettings::markerRadius},
             {"fwac_marker_scale", &FrameWindowSettings::markerScale},
+            {"fwac_circle_dot", &FrameWindowSettings::circleSkinDotRadius},
+            {"fwac_circle_per_frame", &FrameWindowSettings::circleSkinRadiusPerFrame},
+            {"fwac_circle_max", &FrameWindowSettings::circleSkinMaxRadius},
+            {"fwac_hud_scale", &FrameWindowSettings::hudScale},
         };
     }
 
@@ -5046,8 +5051,20 @@ namespace gucci {
                 toggle("Include Hold Modes", &fw.setupHoldModes,
                        "Also put ^ on UFO, wave and robot.");
             toggle("Show Setup Range", &fw.showSetupRange, nullptr);
-            sliderFloat("Marker Radius", &fw.markerRadius, 2.f, 40.f, nullptr);
+            toggle("Circle Skin", &fw.circleSkin,
+                   "Size each marker by how tight its window is, instead of drawing them all "
+                   "the same size.");
+            if (fw.circleSkin) {
+                sliderFloat("Dot Radius", &fw.circleSkinDotRadius, 1.f, 30.f,
+                            "Radius for a 0-frame window, before any growth.");
+                sliderFloat("Radius Per Frame", &fw.circleSkinRadiusPerFrame, 0.2f, 10.f,
+                            "How much bigger the ring gets for each extra frame of window.");
+                sliderFloat("Max Radius", &fw.circleSkinMaxRadius, 5.f, 120.f, nullptr);
+            } else {
+                sliderFloat("Marker Radius", &fw.markerRadius, 2.f, 40.f, nullptr);
+            }
             sliderFloat("Label Scale", &fw.markerScale, 0.1f, 2.f, nullptr);
+            sliderFloat("HUD Scale", &fw.hudScale, 0.2f, 2.f, nullptr);
         }
 
         // --- colour bands ---------------------------------------------------
@@ -5136,6 +5153,67 @@ namespace gucci {
             if (Widgets::StyledButton("Reset Bands", ImVec2(-1, 22), theme, anim, 6.f)) {
                 FrameWindowSettings const def;
                 fw.tiers = def.tiers;
+                dirty = true;
+            }
+
+            // Juice's look from 1.7.2, rebuilt as a band preset rather than a
+            // second rendering path: the ramp runs hot for a tight window and
+            // cool for a lenient one, with the same 9-10 / 7-8 / 5-6 / 4 / 3 /
+            // 2 / 1 rows the old legend used.
+            if (Widgets::StyledButton("Default Look (Juice)", ImVec2(-1, 22), theme, anim, 6.f)) {
+                auto band = [](int id, int lo, int hi, float r, float g, float b) {
+                    FrameWindowTier t;
+                    t.id = id;
+                    t.minWindow = lo;
+                    t.maxWindow = hi;
+                    t.color = {r, g, b, 1.f};
+                    t.showInHud = true;
+                    return t;
+                };
+                fw.tiers = {
+                    band(1, 0, 1, 1.00f, 0.27f, 0.27f),
+                    band(2, 2, 2, 1.00f, 0.60f, 0.20f),
+                    band(3, 3, 3, 1.00f, 0.85f, 0.27f),
+                    band(4, 4, 4, 1.00f, 1.00f, 1.00f),
+                    band(5, 5, 6, 0.40f, 0.87f, 0.53f),
+                    band(6, 7, 8, 0.40f, 0.67f, 1.00f),
+                    band(7, 9, 999, 0.36f, 0.42f, 0.93f),
+                };
+                dirty = true;
+            }
+
+            ImGui::Dummy(ImVec2(0, 6));
+            Widgets::SectionHeader("Sounds", theme);
+            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+            ImGui::TextWrapped(
+                "Brrr is GucciBot's own, one sound for every window. Bells are the per-window "
+                "set the Default Look normally uses.");
+            ImGui::PopStyleColor();
+
+            float const halfW = (ImGui::GetContentRegionAvail().x - 8) / 2.f;
+            if (Widgets::StyledButton("Brrr", ImVec2(halfW, 22), theme, anim, 6.f)) {
+                for (auto& t : fw.tiers)
+                    t.audioPath = "fw_default.mp3";
+                FrameWindowSound::clearCache();
+                dirty = true;
+            }
+            ImGui::SameLine(0, 8);
+            if (Widgets::StyledButton("Bells", ImVec2(halfW, 22), theme, anim, 6.f)) {
+                // Seeded into fw_assets on first run; named by the window range
+                // they cover rather than by band index.
+                auto clip = [](int lo) -> char const* {
+                    if (lo <= 1) return "fw_1.wav";
+                    if (lo == 2) return "fw_2.wav";
+                    if (lo == 3) return "fw_3.wav";
+                    if (lo == 4) return "fw_4.wav";
+                    if (lo <= 6) return "fw_5_6.wav";
+                    if (lo <= 8) return "fw_7_8.wav";
+                    return "fw_9_12.wav";
+                };
+                auto const dir = Mod::get()->getSaveDir() / "fw_assets";
+                for (auto& t : fw.tiers)
+                    t.audioPath = (dir / clip(t.minWindow)).string();
+                FrameWindowSound::clearCache();
                 dirty = true;
             }
 
