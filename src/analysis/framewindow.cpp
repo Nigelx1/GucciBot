@@ -99,6 +99,13 @@ public:
         }
         m_legendLayer->removeAllChildren();
 
+        // anticroom's analyzer draws its own HUD and markers. When it is
+        // the selected algorithm, GucciBot's overlay stands down entirely --
+        // otherwise both draw at once, which is what made the legend look
+        // glitched: a loaded .fw sidecar keeps fwHasData true regardless of
+        // which analyzer actually produced the run on screen.
+        if (gb->fwUseAcAnalyzer)
+            return;
         if (!gb->fwLegendEnabled || !gb->fwHasData)
             return;
         if (!gb->fwDefaultLook && gb->fwTiers.empty())
@@ -321,7 +328,8 @@ public:
 
         renderDebugMarks(pl, gb, isRendering);
 
-        bool show = isRendering ? gb->fwEnabledRender : gb->fwEnabledLive;
+        bool show = (isRendering ? gb->fwEnabledRender : gb->fwEnabledLive) &&
+                    !gb->fwUseAcAnalyzer;
         // Juice's ask (2026-09-02): once Alignment-Independent has results,
         // let the in-level markers show THOSE instead, toggleable, without
         // losing Time-Based/Recovery Range's own results. Purely a display

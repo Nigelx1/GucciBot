@@ -1,13 +1,11 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-c (Both of anticroom's modes are now selectable -- the Frame Windows "\
-    "algorithm list has \"anticroom: Time-Based\" and \"anticroom: Recovery Range\" "\
-    "alongside GucciBot's three, and his mode persists across launches. CBF sub-tick "\
-    "windows are ON, at his own default: he confirmed the cube bug fixed in this source, "\
-    "and the fix is visible in it -- bufferShiftValid() now rejects a sub-tick shift "\
-    "landing on or past a neighbouring input, which is where dense cube inputs went wrong. "\
-    "His other 43 settings still run at defaults with no UI.)"
+    "2026-09-20-d (Fixes the glitched legend from build -c: GucciBot's own frame-window "\
+    "overlay and anticroom's were drawing at the same time. A loaded .fw sidecar keeps "\
+    "fwHasData true no matter which analyzer produced what is on screen, so GucciBot kept "\
+    "drawing its markers over his. GucciBot's overlay now stands down entirely whenever his "\
+    "analyzer is the selected algorithm, and his does the drawing on its own.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
