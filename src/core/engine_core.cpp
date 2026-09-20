@@ -97,6 +97,21 @@ namespace gucci {
         // Capture lives in createCheckpoint now -- one capture, one moment.
         SavedCheckpointState state = this->createCheckpoint(cp, frameOffset);
 
+        // A checkpoint is saved twice: provisionally the instant it is placed
+        // (storeCheckpoint), then again two ticks later once that frame's
+        // physics have settled, which is the accurate one. The second save
+        // REPLACES the first rather than stacking a second entry for the same
+        // checkpoint -- otherwise one placement would leave two entries and
+        // every respawn would be a checkpoint behind.
+        if (!m_savedCheckpoints.empty() && m_savedCheckpoints.back().m_checkpoint == cp) {
+            m_savedCheckpoints.back() = state;
+            if (!m_storedFrames.empty() && m_storedFrames.back().state.m_checkpoint == cp) {
+                m_storedFrames.back().state = state;
+                m_storedFrames.back().frame = frameOffset;
+            }
+            return;
+        }
+
         m_savedCheckpoints.push_back(state);
 
         StoredFrame sf;

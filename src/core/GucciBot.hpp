@@ -1,14 +1,15 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-e (BUILD 1 of 2: GucciBot's own frame-window analyzer is GONE -- 3,848 "\
-    "lines: the Calculate state machine, all three algorithms, the marker/legend overlay, "\
-    "the tier sounds, the .fw sidecar and the 977-line Frame Windows tab. anticroom's is "\
-    "now the only analyzer, and the Frame Windows tab is a minimal shell that drives it. "\
-    "Pathfinder is untouched: it borrows fwAnalyzing as its headless-simulation flag, so "\
-    "that flag and the analysis music helpers were deliberately kept. Dead fw* field "\
-    "declarations still remain in the header -- removing those is its own pass. NOTE: his "\
-    "markers still do not draw. That bug is unaddressed here; build 1 only clears the way.)"
+    "2026-09-20-f (Checkpoints: fixes respawning at the checkpoint BEFORE the one you just "\
+    "placed, and hitboxes coming back wrong -- one cause, both symptoms, and it predates "\
+    "today. Placing a checkpoint only QUEUED the save; the save completed two ticks later "\
+    "and only while alive, so dying in between abandoned it and left the checkpoint out of "\
+    "the list entirely. The abandoned capture then completed during a LATER attempt, filing "\
+    "that attempt's state -- different position, often a different gamemode -- under the old "\
+    "checkpoint. Now a checkpoint is saved provisionally the moment it is placed and the "\
+    "settled capture replaces it in place, and a pending capture is dropped on death. "\
+    "UNTESTED -- Nigel has not run this yet.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
