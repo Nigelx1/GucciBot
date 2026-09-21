@@ -5422,7 +5422,8 @@ namespace gucci {
 
             renderIncludeAudio = true;
             renderMusicVol = 1.0f;
-            renderSfxVol = 0.0f;
+            renderSfxVol = 0.0f;         // death, orbs, pads -- the run's own noise
+            renderTriggerSfxVol = 1.0f;  // the level's own sound, kept
 
             // These three load as int64_t (loadSV<int64_t>), so they have to be
             // stored as numbers -- saved as strings they read back as the
@@ -5438,6 +5439,7 @@ namespace gucci {
             mod->setSavedValue("render_include_audio", renderIncludeAudio);
             mod->setSavedValue("render_music_volume", (double)renderMusicVol);
             mod->setSavedValue("render_sfx_volume", (double)renderSfxVol);
+            mod->setSavedValue("render_trigger_sfx_volume", (double)renderTriggerSfxVol);
 
             log::info("[GucciBot] render: applied the showcase preset ({} threads)", threads);
         }
@@ -5808,7 +5810,17 @@ namespace gucci {
                 "frame-window cues isolated separately.");
             ImGui::PopStyleColor();
             Widgets::StyledSliderFloat("Music Volume", &renderMusicVol, 0.f, 2.f, theme, true);
-            Widgets::StyledSliderFloat("SFX Volume", &renderSfxVol, 0.f, 2.f, theme, true);
+            Widgets::StyledSliderFloat("Gameplay SFX", &renderSfxVol, 0.f, 2.f, theme, true);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip(
+                    "Death, orbs, pads, portals, checkpoints, level complete and UI -- the "
+                    "sound the run itself makes.");
+            Widgets::StyledSliderFloat(
+                "Level SFX (triggers)", &renderTriggerSfxVol, 0.f, 2.f, theme, true);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip(
+                    "Sound the level's creator placed with SFX triggers. On many modern "
+                    "levels this is part of the song rather than decoration.");
         }
         if (Widgets::ToggleSwitch("Auto Color Fix", &renderColorFix, theme, anim))
             mod->setSavedValue("render_color_fix", renderColorFix);
@@ -8455,6 +8467,7 @@ namespace gucci {
         mod->setSavedValue("render_include_clicks", renderIncludeClicks);
         mod->setSavedValue("render_sfx_volume", (double)renderSfxVol);
         mod->setSavedValue("render_music_volume", (double)renderMusicVol);
+        mod->setSavedValue("render_trigger_sfx_volume", (double)renderTriggerSfxVol);
         mod->setSavedValue("render_hide_endscreen", renderHideEndscreen);
         mod->setSavedValue("render_hide_levelcomplete", renderHideLevelComplete);
         auto* csm = ClickSoundManager::get();
@@ -8496,6 +8509,8 @@ namespace gucci {
         renderIncludeClicks = loadSV<bool>(mod, "render_include_clicks", false);
         renderSfxVol = (float)loadSV<double>(mod, "render_sfx_volume", 1.0);
         renderMusicVol = (float)loadSV<double>(mod, "render_music_volume", 1.0);
+        renderTriggerSfxVol =
+            (float)loadSV<double>(mod, "render_trigger_sfx_volume", 1.0);
         renderHideEndscreen = loadSV<bool>(mod, "render_hide_endscreen", false);
         renderHideLevelComplete = loadSV<bool>(mod, "render_hide_levelcomplete", false);
         snprintf(renderNameBuf, sizeof(renderNameBuf), "%s", rn.c_str());

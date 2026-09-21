@@ -272,6 +272,8 @@ namespace gucci {
         bool renderSplitAudioTracks = false;
         bool renderIncludeClicks = false;
         float renderSfxVol = 1.f, renderMusicVol = 1.f;
+        // Level SFX-trigger audio, separate from gameplay sound.
+        float renderTriggerSfxVol = 1.f;
         bool renderHideEndscreen = false, renderHideLevelComplete = false;
         bool renderBufsInit = false;
         bool advancedWarningAccepted = false, showAdvancedWarning = false;

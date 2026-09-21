@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-ac (One-press render preset, Nigel's Awesome Showcase Preset, at the top of Render Presets: 8K 60, lossless x264 at -qp 0 in yuv444p with the bt709 colorspace filter, FLAC audio, music at 1.00 and SFX at 0.00, nothing after the end. The thread count is read from the machine rather than hardcoded, since that is the one value in the list that is per-CPU.)"
+    "2026-09-20-ad (Level SFX and gameplay sound are now separate render volumes. GD plays them through different calls -- gameplay uses playEffect, an SFX trigger uses playEffectAdvanced, the only one carrying an effect id and SFX group -- so they can be scaled apart without matching filenames. Showcase preset keeps the level's own trigger audio at 1.00 and drops death, orbs, pads and UI to 0.00. The global effects volume stays at full during a render now, since setting that one knob would mute both.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

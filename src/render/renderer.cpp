@@ -185,6 +185,8 @@ namespace gucci {
         m_settings.m_audioCodec = mod->getSavedValue<std::string>("render_audio_codec", "aac");
         m_settings.m_musicVolume = mod->getSavedValue<double>("render_music_volume", 1.0);
         m_settings.m_sfxVolume = mod->getSavedValue<double>("render_sfx_volume", 1.0);
+        m_settings.m_triggerSfxVolume =
+            mod->getSavedValue<double>("render_trigger_sfx_volume", 1.0);
 
         m_collectAudio = mod->getSavedValue<bool>("render_include_audio", true);
         m_settings.m_splitAudioTracks =
