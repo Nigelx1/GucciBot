@@ -142,7 +142,14 @@ namespace gucci {
             auto engine = FMODAudioEngine::get();
             s_previousMusicVolume = engine->getBackgroundMusicVolume();
             s_previousSFXVolume = engine->getEffectsVolume();
-            engine->setEffectsVolume((float)sfxVolume);
+            // Left at full. The two SFX categories are scaled where they are
+            // played instead (audio_hook.cpp), because this one knob is global
+            // -- setting it to the gameplay volume would silence the level's
+            // own SFX-trigger audio along with the death sound, which is the
+            // whole distinction. sfxVolume is still passed in and still means
+            // gameplay sound; it is just applied per call now.
+            (void)sfxVolume;
+            engine->setEffectsVolume(1.f);
             engine->setBackgroundMusicVolume((float)musicVolume);
             engine->m_system->setOutput(FMOD_OUTPUTTYPE_NOSOUND_NRT);
             s_active = true;

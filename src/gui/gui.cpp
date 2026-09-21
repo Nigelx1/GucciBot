@@ -18,6 +18,8 @@
 #include <Geode/modify/LoadingLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
 #include <Geode/utils/file.hpp>
+
+#include "analysis/ac/framewindow.hpp"
 #include <Geode/utils/Task.hpp>
 #include <fmt/format.h>
 #include <filesystem>
@@ -3050,52 +3052,12 @@ namespace gucci {
                     engine->replay.save(savePath);
                     markReplayListDirty();
                     refreshReplayListIfNeeded(true);
-                    ImGui::OpenPopup("SaveFrameWindows");
                 }
             }
-            if (ImGui::BeginPopupModal("SaveFrameWindows",
-                                       nullptr,
-                                       ImGuiWindowFlags_AlwaysAutoResize |
-                                           ImGuiWindowFlags_NoTitleBar)) {
-                if (fontHeading)
-                    ImGui::PushFont(fontHeading);
-                ImGui::PushStyleColor(ImGuiCol_Text, theme.getAccent());
-                ImGui::TextUnformatted("Macro Saved");
-                ImGui::PopStyleColor();
-                if (fontHeading)
-                    ImGui::PopFont();
-                ImGui::Dummy(ImVec2(0, 6));
-                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-                ImGui::PushTextWrapPos(ImGui::GetFontSize() * 24.f);
-                ImGui::TextUnformatted(
-                    "Calculate frame windows for this macro? This replays the macro and simulates "
-                    "each "
-                    "click against the real engine to measure how tight it is. You must be in the "
-                    "level. May take a moment for long macros.");
-                ImGui::PopTextWrapPos();
-                ImGui::PopStyleColor();
-                ImGui::Dummy(ImVec2(0, 6));
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.f, 0.8f, 0.2f, 1.f));
-                ImGui::PushTextWrapPos(ImGui::GetFontSize() * 24.f);
-                ImGui::TextUnformatted(
-                    "Known limitation: the replay itself is accurate now (2026-08-13, "
-                    "ground-truth-forced), but each click's tested timing shifts still fall back "
-                    "to "
-                    "real simulation past that click -- so windows near tricky slope sections may "
-                    "still read off.");
-                ImGui::PopTextWrapPos();
-                ImGui::PopStyleColor();
-                ImGui::Dummy(ImVec2(0, 10));
-                float pbw = (ImGui::GetContentRegionAvail().x - 8) / 2.f;
-                if (Widgets::StyledButton("Calculate", ImVec2(pbw, 30), theme, anim, 6.f)) {
-                    engine->analyzeFrameWindows();
-                    ImGui::CloseCurrentPopup();
-                }
-                ImGui::SameLine(0, 8);
-                if (Widgets::StyledButton("Skip", ImVec2(pbw, 30), theme, anim, 6.f))
-                    ImGui::CloseCurrentPopup();
-                ImGui::EndPopup();
-            }
+            // The "Macro Saved -- calculate frame windows?" prompt used to open
+            // here on every save. Removed at Nigel's request: saving a macro and
+            // analysing one are separate decisions, and the Frame Windows tab is
+            // where the second one belongs.
             ImGui::SameLine(0, 10);
             if (Widgets::StyledButton("Stop", ImVec2(bw, 30), theme, anim)) {
                 engine->setMode(GucciEngine::Mode::Idle);
@@ -4610,938 +4572,790 @@ namespace gucci {
         (void)engine;
     }
 
+    // Every one of anticroom's settings is a plain field on his
+    // FrameWindowSettings struct, so persistence is one table rather than 45
+    // hand-written save/load lines. Keys are prefixed fwac_ so they cannot
+    // collide with the fw_ keys GucciBot's own analyzer used before it was
+    // removed -- a stale fw_ value must never be read back into his settings.
+    namespace {
+        template <typename T>
+        struct AcSetting {
+            char const* key;
+            T FrameWindowSettings::*field;
+        };
+
+        constexpr AcSetting<bool> kAcBools[] = {
+            {"fwac_enabled", &FrameWindowSettings::enabled},
+            {"fwac_subframe_probe", &FrameWindowSettings::subframeProbe},
+            {"fwac_cbf_whole_markers", &FrameWindowSettings::cbfWholeMarkers},
+            {"fwac_cbf_tick_ground", &FrameWindowSettings::cbfTickGround},
+            {"fwac_subframe_bisect", &FrameWindowSettings::subframeBisect},
+            {"fwac_subframe_all", &FrameWindowSettings::subframeAll},
+            {"fwac_joint_setup_sweep", &FrameWindowSettings::jointSetupSweep},
+            {"fwac_entry_sweep", &FrameWindowSettings::entrySweep},
+            {"fwac_show_setup_range", &FrameWindowSettings::showSetupRange},
+            {"fwac_mark_setup_varying", &FrameWindowSettings::markSetupVarying},
+            {"fwac_setup_hold_modes", &FrameWindowSettings::setupHoldModes},
+            {"fwac_show_hz", &FrameWindowSettings::showHzReadout},
+            {"fwac_analysis_visuals", &FrameWindowSettings::analysisVisuals},
+            {"fwac_lock_camera", &FrameWindowSettings::lockCamera},
+            {"fwac_hide_spawn", &FrameWindowSettings::hideSpawnEffects},
+            {"fwac_adaptive_budget", &FrameWindowSettings::adaptiveBudget},
+            {"fwac_full_range_sweep", &FrameWindowSettings::fullRangeSweep},
+            {"fwac_test_ship_releases", &FrameWindowSettings::testShipReleases},
+            {"fwac_test_all_releases", &FrameWindowSettings::testAllReleases},
+            {"fwac_orb_aware_skip", &FrameWindowSettings::orbAwareReleaseSkip},
+            {"fwac_show_labels", &FrameWindowSettings::showLabels},
+            {"fwac_show_totals", &FrameWindowSettings::showTotals},
+            {"fwac_verbose", &FrameWindowSettings::verbose},
+            {"fwac_analysis_overlay", &FrameWindowSettings::analysisOverlay},
+            {"fwac_state_player_diff", &FrameWindowSettings::statePlayerDiff},
+            {"fwac_show_markers", &FrameWindowSettings::showMarkers},
+            {"fwac_show_desynced", &FrameWindowSettings::showDesynced},
+            {"fwac_show_timing", &FrameWindowSettings::showTiming},
+            {"fwac_show_hud", &FrameWindowSettings::showHud},
+            {"fwac_play_sounds", &FrameWindowSettings::playSounds},
+            {"fwac_circle_skin", &FrameWindowSettings::circleSkin},
+        };
+
+        constexpr AcSetting<int> kAcInts[] = {
+            {"fwac_algorithm", &FrameWindowSettings::algorithm},
+            {"fwac_sweep_range", &FrameWindowSettings::sweepRange},
+            {"fwac_max_frames", &FrameWindowSettings::maxFrames},
+            {"fwac_slack", &FrameWindowSettings::slack},
+            {"fwac_recovery_range", &FrameWindowSettings::recoveryRange},
+            {"fwac_cbf_readout_threshold", &FrameWindowSettings::cbfReadoutThreshold},
+            {"fwac_subframe_scan_percent", &FrameWindowSettings::subframeScanPercent},
+            {"fwac_tight_threshold", &FrameWindowSettings::tightThreshold},
+            {"fwac_budget_ms", &FrameWindowSettings::budgetMs},
+            {"fwac_budget_share", &FrameWindowSettings::budgetSharePercent},
+            {"fwac_max_budget_ms", &FrameWindowSettings::maxBudgetMs},
+            {"fwac_step_batch", &FrameWindowSettings::stepBatch},
+            {"fwac_subframe_decimals", &FrameWindowSettings::subframeDecimals},
+        };
+
+        constexpr AcSetting<float> kAcFloats[] = {
+            {"fwac_sound_volume", &FrameWindowSettings::soundVolume},
+            {"fwac_marker_radius", &FrameWindowSettings::markerRadius},
+            {"fwac_marker_scale", &FrameWindowSettings::markerScale},
+            {"fwac_circle_dot", &FrameWindowSettings::circleSkinDotRadius},
+            {"fwac_circle_per_frame", &FrameWindowSettings::circleSkinRadiusPerFrame},
+            {"fwac_circle_max", &FrameWindowSettings::circleSkinMaxRadius},
+            {"fwac_hud_scale", &FrameWindowSettings::hudScale},
+        };
+    }
+
+    // The bands are a vector of structs, so they persist as one JSON string
+    // rather than as numbered keys -- adding or removing a band would otherwise
+    // leave orphaned keys behind that the next load would half-read.
+    static std::string acTiersToJson(std::vector<FrameWindowTier> const& tiers) {
+        std::vector<matjson::Value> out;
+        out.reserve(tiers.size());
+        for (auto const& t : tiers) {
+            out.push_back(matjson::makeObject({
+                {"id", (int64_t)t.id},
+                {"min", (int64_t)t.minWindow},
+                {"max", (int64_t)t.maxWindow},
+                {"text", t.text},
+                {"audio", t.audioPath},
+                {"hud", t.showInHud},
+                {"shape", (int64_t)t.style.shape},
+                {"fill", (int64_t)t.style.fill},
+                {"sides", (int64_t)t.style.polygonSides},
+                {"corner", (double)t.style.polygonCornerRadius},
+                {"noborder", t.style.noBorder},
+                {"stroke", (double)t.style.strokeSize},
+                {"sizescale", (double)t.style.sizeScale},
+                {"r", (double)t.color[0]},
+                {"g", (double)t.color[1]},
+                {"b", (double)t.color[2]},
+                {"a", (double)t.color[3]},
+            }));
+        }
+        return matjson::Value(out).dump();
+    }
+
+    static bool acTiersFromJson(std::string const& text,
+                                std::vector<FrameWindowTier>& out) {
+        auto parsed = matjson::parse(text);
+        if (!parsed.isOk())
+            return false;
+        auto const root = parsed.unwrap();
+        if (!root.isArray())
+            return false;
+
+        std::vector<FrameWindowTier> tiers;
+        for (size_t i = 0; i < root.size(); i++) {
+            auto const& j = root[i];
+            FrameWindowTier t;
+            auto num = [&](char const* k, int def) {
+                auto r = j[k].as<int64_t>();
+                return r.isOk() ? (int)r.unwrap() : def;
+            };
+            auto real = [&](char const* k, float def) {
+                auto r = j[k].as<double>();
+                return r.isOk() ? (float)r.unwrap() : def;
+            };
+            auto str = [&](char const* k) {
+                auto r = j[k].as<std::string>();
+                return r.isOk() ? r.unwrap() : std::string();
+            };
+            t.id = num("id", (int)i + 1);
+            t.minWindow = num("min", 0);
+            t.maxWindow = num("max", 999);
+            t.text = str("text");
+            t.audioPath = str("audio");
+            auto hud = j["hud"].as<bool>();
+            t.showInHud = hud.isOk() ? hud.unwrap() : true;
+            t.color = {real("r", 1.f), real("g", 1.f), real("b", 1.f), real("a", 1.f)};
+            t.style.shape = (gbshape::Shape)num("shape", 0);
+            t.style.fill = (gbshape::Fill)num("fill", 0);
+            t.style.polygonSides = num("sides", 5);
+            t.style.polygonCornerRadius = real("corner", 0.f);
+            auto nb = j["noborder"].as<bool>();
+            t.style.noBorder = nb.isOk() ? nb.unwrap() : false;
+            t.style.strokeSize = real("stroke", 2.2f);
+            t.style.sizeScale = real("sizescale", 1.f);
+            tiers.push_back(t);
+        }
+        // An empty list would silently mean "no colours at all"; keep the
+        // defaults rather than load a file into a blank slate.
+        if (tiers.empty())
+            return false;
+        out = std::move(tiers);
+        return true;
+    }
+
+    // Sound packs. A pack is a folder of clips named "<N>f SFX.<ext>", where N
+    // matches a band's lower bound -- so importing a pack is "give every band
+    // the clip for its size". The built-in pack is the set shipped in the mod's
+    // resources. Same layout anticroom uses in Silicate, so packs are portable
+    // between the two.
+    static constexpr char const* kPackDir = "sounds";
+    static constexpr char const* kPackBuiltin = "Default (built-in)";
+
+    static std::string packClipStem(int window) {
+        return fmt::format("{}f SFX", window);
+    }
+
+    static std::filesystem::path findPackClip(std::filesystem::path const& dir, int window) {
+        static char const* exts[] = {".mp3", ".ogg", ".wav"};
+        auto const stem = packClipStem(window);
+        for (auto const* ext : exts) {
+            auto const candidate = dir / (stem + ext);
+            std::error_code ec;
+            if (std::filesystem::exists(candidate, ec))
+                return candidate;
+        }
+        return {};
+    }
+
+    std::vector<std::string> MenuInterface::acSoundPackNames() {
+        std::vector<std::string> names{kPackBuiltin};
+        std::error_code ec;
+        auto const root = Mod::get()->getSaveDir() / kPackDir;
+        if (std::filesystem::exists(root, ec)) {
+            for (auto const& entry : std::filesystem::directory_iterator(root, ec)) {
+                if (entry.is_directory(ec))
+                    names.push_back(entry.path().filename().string());
+            }
+        }
+        return names;
+    }
+
+    void MenuInterface::importAcSoundPack(std::string const& name) {
+        auto& fw = SLSettings::get()->frameWindow;
+        bool const builtin = name.empty() || name == kPackBuiltin;
+        auto const dir = Mod::get()->getSaveDir() / kPackDir / name;
+
+        if (!builtin) {
+            std::error_code ec;
+            if (!std::filesystem::exists(dir, ec)) {
+                m_acPackReport = fmt::format("No pack named \"{}\"", name);
+                m_acPackOk = false;
+                return;
+            }
+        }
+
+        int assigned = 0, missing = 0;
+        for (auto& tier : fw.tiers) {
+            if (builtin) {
+                auto const clip = packClipStem(tier.minWindow) + ".mp3";
+                std::error_code ec;
+                if (!std::filesystem::exists(Mod::get()->getResourcesDir() / clip, ec)) {
+                    missing++;
+                    continue;
+                }
+                // Stored as a bare filename: FrameWindowSound resolves a
+                // relative path against the resources directory itself, so the
+                // built-in pack keeps working if the mod folder moves.
+                tier.audioPath = clip;
+                assigned++;
+                continue;
+            }
+            auto const clip = findPackClip(dir, tier.minWindow);
+            if (clip.empty()) {
+                missing++;
+                continue;
+            }
+            tier.audioPath = clip.string();
+            assigned++;
+        }
+
+        FrameWindowSound::clearCache();
+        m_acPackOk = assigned > 0;
+        m_acPackReport =
+            missing == 0
+                ? fmt::format("Loaded {} clip(s).", assigned)
+                : fmt::format("Loaded {} clip(s); {} band(s) had no matching clip.",
+                              assigned, missing);
+        this->saveAcFrameWindowSettings();
+    }
+
+    void MenuInterface::exportAcSoundPack(std::string const& name) {
+        if (name.empty() || name == kPackBuiltin) {
+            m_acPackReport = "Give the pack a name of its own first.";
+            m_acPackOk = false;
+            return;
+        }
+
+        auto const dir = Mod::get()->getSaveDir() / kPackDir / name;
+        std::error_code ec;
+        std::filesystem::create_directories(dir, ec);
+        if (ec) {
+            m_acPackReport = "Could not create the pack folder.";
+            m_acPackOk = false;
+            return;
+        }
+
+        int written = 0, skipped = 0;
+        for (auto const& tier : SLSettings::get()->frameWindow.tiers) {
+            if (tier.audioPath.empty()) {
+                skipped++;
+                continue;
+            }
+            std::filesystem::path src(tier.audioPath);
+            if (!src.is_absolute())
+                src = Mod::get()->getResourcesDir() / tier.audioPath;
+            std::error_code fc;
+            if (!std::filesystem::exists(src, fc)) {
+                skipped++;
+                continue;
+            }
+            auto const dest = dir / (packClipStem(tier.minWindow) + src.extension().string());
+            std::filesystem::copy_file(
+                src, dest, std::filesystem::copy_options::overwrite_existing, fc);
+            if (fc)
+                skipped++;
+            else
+                written++;
+        }
+
+        m_acPackOk = written > 0;
+        m_acPackReport = fmt::format("Wrote {} clip(s){}.",
+                                     written,
+                                     skipped ? fmt::format(", skipped {}", skipped) : "");
+    }
+
+    void MenuInterface::loadAcFrameWindowSettings() {
+        auto* mod = Mod::get();
+        auto& fw = SLSettings::get()->frameWindow;
+        FrameWindowSettings const d;
+        for (auto const& e : kAcBools)
+            fw.*e.field = mod->getSavedValue<bool>(e.key, d.*e.field);
+        for (auto const& e : kAcInts)
+            fw.*e.field = mod->getSavedValue<int>(e.key, d.*e.field);
+        for (auto const& e : kAcFloats)
+            fw.*e.field = (float)mod->getSavedValue<double>(e.key, (double)(d.*e.field));
+        fw.cbfInputHz = (int64_t)mod->getSavedValue<int>("fwac_cbf_input_hz", (int)d.cbfInputHz);
+        if (auto const t = mod->getSavedValue<std::string>("fwac_tiers", "");
+            !t.empty())
+            acTiersFromJson(t, fw.tiers);
+    }
+
+    void MenuInterface::saveAcFrameWindowSettings() {
+        auto* mod = Mod::get();
+        auto const& fw = SLSettings::get()->frameWindow;
+        for (auto const& e : kAcBools)
+            mod->setSavedValue(e.key, fw.*e.field);
+        for (auto const& e : kAcInts)
+            mod->setSavedValue(e.key, fw.*e.field);
+        for (auto const& e : kAcFloats)
+            mod->setSavedValue(e.key, (double)(fw.*e.field));
+        mod->setSavedValue("fwac_cbf_input_hz", (int)fw.cbfInputHz);
+        mod->setSavedValue("fwac_tiers", acTiersToJson(fw.tiers));
+    }
+
     void MenuInterface::drawFrameWindowsTab() {
-        pollFwAssetImportTasks();
         auto* engine = GucciEngine::get();
+        auto& fw = SLSettings::get()->frameWindow;
+        auto& acfw = ::Bot::get()->frameWindow();
+
         Widgets::GucciQuote("\"Speed doesn't mean much if the frame windows are wrong.\"",
                             "-- Juice, keeping you honest",
                             theme);
         ImGui::Dummy(ImVec2(0, 6));
+
+        // Anything that changes mid-run would be read halfway through a sweep
+        // and make the results a mix of two configurations.
+        bool const running = acfw.running();
+        bool dirty = false;
+
+        auto toggle = [&](char const* label, bool* v, char const* help) {
+            if (Widgets::ToggleSwitch(label, v, theme, anim))
+                dirty = true;
+            if (help && ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", help);
+        };
+        auto sliderInt = [&](char const* label, int* v, int lo, int hi, char const* help) {
+            if (Widgets::StyledSliderInt(label, v, lo, hi, theme))
+                dirty = true;
+            if (help && ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", help);
+        };
+        auto sliderFloat = [&](char const* label, float* v, float lo, float hi, char const* help) {
+            if (Widgets::StyledSliderFloat(label, v, lo, hi, theme))
+                dirty = true;
+            if (help && ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", help);
+        };
+
+        // --- run controls -------------------------------------------------
         {
             auto& replay = engine->replay;
-            bool hasActions = !replay.m_actionAtom.m_actions.empty();
-            bool canCalc = PlayLayer::get() != nullptr && hasActions;
-            if (!canCalc)
-                ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.4f);
-            bool calcClicked = Widgets::StyledButton("Calculate", ImVec2(-1, 30), theme, anim, 6.f);
-            if (!canCalc)
-                ImGui::PopStyleVar();
-            if (calcClicked && canCalc)
-                engine->analyzeFrameWindows();
-            if (!canCalc) {
+            bool const hasActions = !replay.m_actionAtom.m_actions.empty();
+            bool const canCalc = PlayLayer::get() != nullptr && hasActions;
+
+            if (running) {
                 ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-                ImGui::TextWrapped(PlayLayer::get() ? "Record or load a macro with actions first."
-                                                    : "Enter the level to Calculate.");
+                ImGui::TextWrapped("%s", acfw.status().c_str());
                 ImGui::PopStyleColor();
+                if (Widgets::StyledButton("Cancel", ImVec2(-1, 30), theme, anim, 6.f)) {
+                    acfw.cancel();
+                    engine->fwAcReport = acfw.status();
+                    engine->fwAcOk = false;
+                }
+            } else {
+                if (!canCalc)
+                    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.4f);
+                bool const clicked =
+                    Widgets::StyledButton("Calculate", ImVec2(-1, 30), theme, anim, 6.f);
+                if (!canCalc)
+                    ImGui::PopStyleVar();
+                if (clicked && canCalc)
+                    engine->analyzeFrameWindows();
+                if (!canCalc) {
+                    ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                    ImGui::TextWrapped(PlayLayer::get()
+                                           ? "Record or load a macro with actions first."
+                                           : "Enter the level to Calculate.");
+                    ImGui::PopStyleColor();
+                }
+                if (!engine->fwAcReport.empty()) {
+                    ImGui::PushStyleColor(
+                        ImGuiCol_Text,
+                        engine->fwAcOk ? theme.textSecondary : ImVec4(0.90f, 0.35f, 0.35f, 1.f));
+                    ImGui::TextWrapped("%s", engine->fwAcReport.c_str());
+                    ImGui::PopStyleColor();
+                }
+                if (!acfw.results().empty()) {
+                    ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                    ImGui::TextWrapped("%d window(s) measured.", (int)acfw.results().size());
+                    ImGui::PopStyleColor();
+                    if (Widgets::StyledButton("Clear Results", ImVec2(-1, 24), theme, anim, 6.f)) {
+                        acfw.clear();
+                        engine->fwAcReport.clear();
+                    }
+                }
             }
         }
+
         ImGui::Dummy(ImVec2(0, 8));
-        Widgets::SectionHeader("Frame Window Tracker", theme);
-        {
-            bool locked = engine->fwAnalyzing;
-            if (locked)
-                ImGui::BeginDisabled();
-            const char* algoNames[] = {"Time-Based", "Recovery Range", "Alignment-Independent"};
-            int algoIdx = engine->fwUseAlignmentIndependent
-                             ? 2
-                             : (engine->fwUseRecoveryRangeAlgorithm ? 1 : 0);
+
+        if (running)
+            ImGui::BeginDisabled();
+
+        // --- measurement --------------------------------------------------
+        if (ImGui::CollapsingHeader("Measurement", ImGuiTreeNodeFlags_DefaultOpen)) {
+            const char* modes[] = {"Time-Based", "Recovery Range"};
+            int mode = fw.algorithm == 1 ? 1 : 0;
             ImGui::SetNextItemWidth(-1);
-            if (ImGui::Combo("##fwAlgo", &algoIdx, algoNames, 3)) {
-                engine->fwUseAlignmentIndependent = (algoIdx == 2);
-                engine->fwUseRecoveryRangeAlgorithm = (algoIdx == 1);
-                Mod::get()->setSavedValue("fw_use_align_indep", engine->fwUseAlignmentIndependent);
-                Mod::get()->setSavedValue("fw_use_recovery_range",
-                                          engine->fwUseRecoveryRangeAlgorithm);
+            if (ImGui::Combo("##fwAcMode", &mode, modes, 2)) {
+                fw.algorithm = mode;
+                dirty = true;
             }
-            if (locked)
-                ImGui::EndDisabled();
-            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-            ImGui::TextWrapped(
-                locked
-                    ? "Locked while Calculate is running -- finish or cancel the current run to "
-                      "switch algorithms."
-                    : "Time-Based (default): faster, watches the shifted click survive on its own "
-                      "-- good for most levels. Recovery Range: Juice's original algorithm, "
-                      "revived "
-                      "-- also checks whether the NEXT click's timing could shift slightly to "
-                      "still "
-                      "work, which is more accurate but noticeably slower (extra probe runs per "
-                      "shift). Unverified since being brought back -- worth A/B'ing against "
-                      "Time-Based on the same section. Alignment-Independent: Juice's new algorithm "
-                      "-- also shifts the PREVIOUS click's timing when testing this one (so a click "
-                      "right after a spam release gets tested under a few different real release "
-                      "timings, not just the exact recorded one), and only counts a timing as good "
-                      "if the click AFTER it also has some way to keep going. Brute-force and "
-                      "noticeably slower than either method above -- runs entirely separately from "
-                      "them and never changes what those show. Version 1: correctness first, no "
-                      "caching/parallelism yet.");
-            ImGui::PopStyleColor();
-            if (locked)
-                ImGui::BeginDisabled();
-            if (engine->fwUseRecoveryRangeAlgorithm &&
-                Widgets::StyledSliderInt("Recovery Range", &engine->fwRecoveryRange, 1, 10, theme))
-                Mod::get()->setSavedValue("fw_recovery_range", (int64_t)engine->fwRecoveryRange);
-            if (engine->fwUseAlignmentIndependent) {
-                if (Widgets::StyledSliderInt("Search Radius (Z)", &engine->fwAiZ, 1, 30, theme))
-                    Mod::get()->setSavedValue("fw_ai_z", (int64_t)engine->fwAiZ);
-                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-                ImGui::TextWrapped(
-                    "How many frames each shifted click (both the previous one and this one) is "
-                    "tested across. Independent of Sweep Range below (Analysis Settings) -- that's "
-                    "Time-Based/Recovery Range's own setting, this one no longer borrows or gets "
-                    "capped by it. Cost grows fast: roughly (2*Z+1)^2 simulated runs per click "
-                    "before continuation testing, so keep this small (3-5) unless you're prepared "
-                    "to wait.");
-                ImGui::PopStyleColor();
-                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-                ImGui::TextWrapped(
-                    "What \"predecessor\" means: for each click being measured, it re-tests the "
-                    "click BEFORE it at a few nearby timings too (not just the exact recorded "
-                    "frame), and re-measures the click under each of those -- since a real player's "
-                    "previous click landing 1-2 frames early or late can change what's actually "
-                    "reachable next. The progress bar's \"predecessor +2\" / \"align 3/7, x +1\" text "
-                    "reads as: which of those earlier-click timings is being tried, then which "
-                    "shift of THIS click is being tried under that specific earlier timing.");
-                ImGui::PopStyleColor();
-                int contIdx = std::clamp(engine->fwAiContinuationDepth, 0, 1);
-                const char* contNames[] = {"0 (off)", "1"};
-                ImGui::SetNextItemWidth(-1);
-                if (ImGui::Combo("##fwAiDepth", &contIdx, contNames, 2)) {
-                    engine->fwAiContinuationDepth = contIdx;
-                    Mod::get()->setSavedValue("fw_ai_cont_depth", (int64_t)engine->fwAiContinuationDepth);
-                }
-                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-                ImGui::TextWrapped(
-                    "Continuation Depth: 0 means surviving to the next click's target is enough. 1 "
-                    "(default) also requires the click AFTER that to have some viable timing of "
-                    "its own -- Juice's spec's core idea. Only 0/1 are implemented in this version, "
-                    "not arbitrary depth.");
-                ImGui::PopStyleColor();
-                if (Widgets::StyledSliderFloat(
-                        "Cluster Ratio", &engine->fwAiClusterRatio, 1.02f, 2.f, theme))
-                    Mod::get()->setSavedValue("fw_ai_cluster_ratio", engine->fwAiClusterRatio);
-                if (Widgets::StyledSliderFloat("Dominant Cluster Threshold",
-                                               &engine->fwAiDominantThreshold,
-                                               0.1f,
-                                               1.f,
-                                               theme))
-                    Mod::get()->setSavedValue("fw_ai_dominant_threshold",
-                                              engine->fwAiDominantThreshold);
-                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-                ImGui::TextWrapped(
-                    "How the windows measured under different previous-click timings get combined "
-                    "into one number: values within Cluster Ratio of each other count as the same "
-                    "cluster, and the largest cluster needs to cover at least this fraction of all "
-                    "valid alignments to be trusted. If nothing reaches that, the result falls back "
-                    "to whatever Time-Based/Recovery Range already measured for that click.");
-                ImGui::PopStyleColor();
-            }
-            if (locked)
-                ImGui::EndDisabled();
+            sliderInt("Sweep Range", &fw.sweepRange, 1, 60,
+                      "How many frames either side of each input to test.");
+            sliderInt("Horizon", &fw.maxFrames, 12, 1200,
+                      "How far past a shifted input the run has to survive before that shift "
+                      "counts as safe. Longer catches delayed consequences; shorter is faster.");
+            sliderInt("Slack", &fw.slack, 0, 30,
+                      "Stop judging a shifted input this many frames before the NEXT input, so a "
+                      "death that belongs to the next input isn't blamed on this one.");
+            if (fw.algorithm == 1)
+                sliderInt("Recovery Window", &fw.recoveryRange, 1, 40,
+                          "Recovery Range only: how far the next input may be retimed to try to "
+                          "rescue a shift.");
+            toggle("Full Range Sweep", &fw.fullRangeSweep,
+                   "Test every offset in range instead of stopping shortly after the first death. "
+                   "Slower, but finds windows split in two.");
+            sliderInt("Tight Threshold", &fw.tightThreshold, 0, 20,
+                      "Windows at or under this many frames count as tight.");
         }
-        {
-            bool recLocked = engine->isRecording();
-            if (recLocked)
-                ImGui::BeginDisabled();
-            if (Widgets::ToggleSwitch("Show Live", &engine->fwEnabledLive, theme, anim))
-                Mod::get()->setSavedValue("fw_live", engine->fwEnabledLive);
-            if (recLocked)
-                ImGui::EndDisabled();
-            if (Widgets::ToggleSwitch("Show in Renders", &engine->fwEnabledRender, theme, anim))
-                Mod::get()->setSavedValue("fw_render", engine->fwEnabledRender);
-            if (recLocked)
-                ImGui::BeginDisabled();
-            if (Widgets::ToggleSwitch("Show Legend", &engine->fwLegendEnabled, theme, anim))
-                Mod::get()->setSavedValue("fw_legend", engine->fwLegendEnabled);
-            if (recLocked)
-                ImGui::EndDisabled();
 
-            ImGui::Dummy(ImVec2(0, 6));
-            if (Widgets::ToggleSwitch("Default Look", &engine->fwDefaultLook, theme, anim))
-                Mod::get()->setSavedValue("fw_default_look", engine->fwDefaultLook);
-            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-            ImGui::TextWrapped(
-                "Overrides everything below: one plain ring per click, a fixed colour ramp "
-                "(red = tightest, blue = most lenient), and the number to the left of the ring. "
-                "Tiers, shapes, marker images and Circle Skin are all ignored while this is on -- "
-                "your settings for them are kept, just not used.");
-            ImGui::PopStyleColor();
-            if (engine->fwDefaultLook) {
-                if (Widgets::ToggleSwitch(
-                        "   Use Bell Sounds", &engine->fwDefaultLookBells, theme, anim))
-                    Mod::get()->setSavedValue("fw_default_look_bells", engine->fwDefaultLookBells);
-                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-                ImGui::TextWrapped("Off: Gucci Mane saying \"Brrr\" (GucciBot's own default). "
-                                   "On: the bundled per-window bell set, which is what this style "
-                                   "normally uses.");
-                ImGui::PopStyleColor();
-            }
-            ImGui::Dummy(ImVec2(0, 6));
-        }
-        {
-            bool aiLocked = !engine->fwAiHasData;
-            if (aiLocked)
-                ImGui::BeginDisabled();
-            if (Widgets::ToggleSwitch("Show Alignment-Independent In-Level",
-                                      &engine->fwOverlayShowAlignmentIndependent,
-                                      theme,
-                                      anim))
-                Mod::get()->setSavedValue("fw_overlay_show_ai",
-                                          engine->fwOverlayShowAlignmentIndependent);
-            if (aiLocked)
-                ImGui::EndDisabled();
-            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-            ImGui::TextWrapped(
-                aiLocked ? "No Alignment-Independent results yet -- run Calculate with it selected "
-                           "above first."
-                         : "Off (default): the markers above show Time-Based/Recovery Range, same "
-                           "as always. On: they show Alignment-Independent's representative window "
-                           "instead (falling back to the Macro value for a click when no dominant "
-                           "cluster was found) -- switch back and forth freely, both results stay "
-                           "available once measured.");
-            ImGui::PopStyleColor();
-        }
-        ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-        ImGui::TextWrapped(
-            engine->isRecording()
-                ? "Show Live and Show Legend are locked off while recording -- both read state "
-                  "that "
-                  "doesn't exist yet mid-recording. Available again once recording stops."
-                : "Juice's idea: a running tally in the top-left corner, like the frame-window "
-                  "counter "
-                  "overlays in some GD YouTube videos -- how many of the clicks reached so far "
-                  "landed "
-                  "in each Tier's window range below. Shows nothing until at least one Tier is "
-                  "configured and Calculate has results.");
-        ImGui::PopStyleColor();
-        if (engine->fwLegendEnabled &&
-            Widgets::StyledSliderFloat("Legend Size", &engine->fwLegendScale, 0.5f, 3.f, theme))
-            Mod::get()->setSavedValue("fw_legend_scale", engine->fwLegendScale);
-        if (Widgets::StyledSliderFloat("Ring Boldness", &engine->fwRingBoldness, 0.5f, 8.f, theme))
-            Mod::get()->setSavedValue("fw_ring_boldness", engine->fwRingBoldness);
-        ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-        ImGui::TextWrapped(
-            "Marker stroke thickness for the concentric double-ring style. Only affects "
-            "markers without a Tier-specific image configured.");
-        ImGui::PopStyleColor();
-        if (Widgets::ToggleSwitch("Circle Skin", &engine->fwCircleSkinEnabled, theme, anim))
-            Mod::get()->setSavedValue("fw_circle_skin", engine->fwCircleSkinEnabled);
-        ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-        ImGui::TextWrapped(
-            "Juice's osu!mania-style idea: a small dot at the exact click timing, with an "
-            "unfilled ring around it that grows with that click's window size -- a wide-open "
-            "input reads as an obviously bigger halo instead of a same-size marker with a "
-            "different number next to it. Replaces Tier shapes/images while on.");
-        ImGui::PopStyleColor();
-        if (engine->fwCircleSkinEnabled) {
-            if (Widgets::StyledSliderFloat(
-                    "Dot Radius", &engine->fwCircleSkinDotRadius, 1.f, 20.f, theme))
-                Mod::get()->setSavedValue("fw_circleskin_dot_radius", engine->fwCircleSkinDotRadius);
-            if (Widgets::StyledSliderFloat("Ring Growth (per frame)",
-                                           &engine->fwCircleSkinRadiusPerFrame,
-                                           0.2f,
-                                           10.f,
-                                           theme))
-                Mod::get()->setSavedValue("fw_circleskin_radius_per_frame",
-                                          engine->fwCircleSkinRadiusPerFrame);
-            if (Widgets::StyledSliderFloat(
-                    "Max Ring Radius", &engine->fwCircleSkinMaxRadius, 10.f, 300.f, theme))
-                Mod::get()->setSavedValue("fw_circleskin_max_radius", engine->fwCircleSkinMaxRadius);
-        }
-        if (Widgets::ToggleSwitch("Test Ship Releases", &engine->fwTestShipReleases, theme, anim))
-            Mod::get()->setSavedValue("fw_test_ship_releases", engine->fwTestShipReleases);
-        ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-        ImGui::TextWrapped("Calculate measures release timing windows too now, for Wave/Ship/Robot "
-                           "(the only gamemodes where a release's timing matters) -- Ship's can be "
-                           "finicky to probe reliably, so it has its own switch here.");
-        ImGui::PopStyleColor();
-        if (Widgets::ToggleSwitch(
-                "Orb-Aware Release Skip", &engine->fwOrbAwareReleaseSkip, theme, anim))
-            Mod::get()->setSavedValue("fw_orb_aware_release_skip", engine->fwOrbAwareReleaseSkip);
-        ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-        ImGui::TextWrapped(
-            "In Robot mode, a release right after clicking a non-dash orb isn't treated "
-            "as its own measurable input (dash orbs and non-orb clicks still are). Turn "
-            "off to go back to testing every Robot release, no exceptions.");
-        ImGui::PopStyleColor();
-        ImGui::Dummy(ImVec2(0, 8));
-        Widgets::SectionHeader("Practice Range", theme);
-        if (Widgets::ToggleSwitch(
-                "Show During Playback", &engine->practiceRangeEnabled, theme, anim))
-            Mod::get()->setSavedValue("practice_range", engine->practiceRangeEnabled);
-        ImGui::Dummy(ImVec2(0, 8));
-        Widgets::SectionHeader("Analysis Settings", theme);
-        if (engine->fwMaxWindow > 2 * engine->fwSweepRange) {
-            engine->fwMaxWindow = 2 * engine->fwSweepRange;
-            Mod::get()->setSavedValue("fw_maxwindow", (int64_t)engine->fwMaxWindow);
-        }
-        if (Widgets::StyledSliderInt(
-                "Max Window (frames)", &engine->fwMaxWindow, 1, 2 * engine->fwSweepRange, theme))
-            Mod::get()->setSavedValue("fw_maxwindow", (int64_t)engine->fwMaxWindow);
-        if (Widgets::StyledSliderInt(
-                "Sweep Range (+/- frames)", &engine->fwSweepRange, 1, 30, theme))
-            Mod::get()->setSavedValue("fw_sweeprange", (int64_t)engine->fwSweepRange);
-        if (Widgets::StyledSliderInt("Slack Window (frames)", &engine->fwSlackWindow, 0, 20, theme))
-            Mod::get()->setSavedValue("fw_slackwindow", (int64_t)engine->fwSlackWindow);
-        ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-        ImGui::TextWrapped("A shift survives if it stays alive through roughly how long the "
-                           "original macro takes to "
-                           "reach the next input, MINUS this many frames of slack (a shorter "
-                           "survival still counts as "
-                           "a pass -- it never needs to survive longer than the original gap). The "
-                           "next input itself "
-                           "is never moved -- it always fires at its own original frame.");
-        ImGui::PopStyleColor();
-        if (Widgets::ToggleSwitch(
-                "Position Tolerance", &engine->fwPositionCheckEnabled, theme, anim))
-            Mod::get()->setSavedValue("fw_position_check", engine->fwPositionCheckEnabled);
-        ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-        ImGui::TextWrapped(
-            "Juice's request: surviving isn't proof a shift actually worked -- the "
-            "player could be alive but far off the real path. When on, a survived shift "
-            "only counts if the player ends up within the slack below of the next "
-            "input's TRUE position (both axes); otherwise it's treated as failed.");
-        ImGui::PopStyleColor();
-        if (engine->fwPositionCheckEnabled &&
-            Widgets::StyledSliderFloat(
-                "Position Slack (units)", &engine->fwPositionSlack, 1.f, 200.f, theme))
-            Mod::get()->setSavedValue("fw_position_slack", engine->fwPositionSlack);
-        if (Widgets::ToggleSwitch("Full-Range Sweep", &engine->fwFullRangeSweep, theme, anim))
-            Mod::get()->setSavedValue("fw_full_range_sweep", engine->fwFullRangeSweep);
-        ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-        ImGui::TextWrapped(
-            "Off (default): stop expanding a direction the moment one shift fails "
-            "there. On: keep testing every shift out to the sweep range regardless of "
-            "failures in between, so non-contiguous survivable windows actually show up "
-            "instead of being silently missed. Slower.");
-        ImGui::PopStyleColor();
-        if (Widgets::StyledSliderInt(
-                "Max Frames Measured", &engine->fwMaxFramesMeasured, 16, 480, theme))
-            Mod::get()->setSavedValue("fw_maxframes", (int64_t)engine->fwMaxFramesMeasured);
-        if (Widgets::StyledSliderInt("Simulation Speed", &engine->fwSimSpeed, 1, 8, theme))
-            Mod::get()->setSavedValue("fw_simspeed", (int64_t)engine->fwSimSpeed);
-        if (Widgets::ToggleSwitch("Debug Mode", &engine->fwDebugMode, theme, anim))
-            Mod::get()->setSavedValue("fw_debug_mode", engine->fwDebugMode);
-        ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-        ImGui::TextWrapped(
-            "Pauses briefly after every individual shift test and drops a green/red "
-            "mark where the player ended up, so you can watch Calculate work through a "
-            "click instead of only seeing the final number.");
-        ImGui::PopStyleColor();
-        if (Widgets::ToggleSwitch(
-                "Delay Marker Capture (diagnostic)", &engine->fwDelayMarkerCapture, theme, anim))
-            Mod::get()->setSavedValue("fw_delay_marker_capture", engine->fwDelayMarkerCapture);
-        ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-        ImGui::TextWrapped(
-            "Juice's position-lag report: run Calculate once with this off, once with "
-            "it on, on the same macro/click. Doesn't change any measurement, only where "
-            "the marker ring gets drawn -- whichever run's rings actually line up with "
-            "the real click tells us which way the fix needs to go.");
-        ImGui::PopStyleColor();
-        if (engine->fwDebugMode &&
-            Widgets::StyledSliderInt(
-                "Debug Pause (ticks)", &engine->fwDebugSlowdown, 1, 120, theme))
-            Mod::get()->setSavedValue("fw_debug_slowdown", (int64_t)engine->fwDebugSlowdown);
-        if (!engine->fwDebugMarks.empty() &&
-            Widgets::StyledButton("View Debug History (...)", ImVec2(-1, 28), theme, anim, 6.f))
-            ImGui::OpenPopup("FwDebugHistory");
-        ImGui::SetNextWindowSize(ImVec2(440, 0), ImGuiCond_Appearing);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14, 12));
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.f);
-        ImGui::PushStyleColor(ImGuiCol_PopupBg, IM_COL32(0, 0, 0, 0));
-        ImGui::PushStyleColor(ImGuiCol_Border, IM_COL32(0, 0, 0, 0));
-        ImGui::PushStyleColor(ImGuiCol_ModalWindowDimBg, IM_COL32(0, 0, 0, 0));
-        if (ImGui::BeginPopupModal("FwDebugHistory",
-                                   nullptr,
-                                   ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar |
-                                       ImGuiWindowFlags_NoResize)) {
-            drawPopupChrome(*this, "Debug History");
-            ImGui::TextColored(
-                theme.getAccent(), "%zu test(s) recorded this run", engine->fwDebugMarks.size());
-            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-            ImGui::TextWrapped(
-                "\"Go\" teleports you to that test's exact checkpoint + shift and lets it play out "
-                "exactly like the real test did -- watch it, or take over yourself.");
-            ImGui::PopStyleColor();
-            ImGui::Dummy(ImVec2(0, 6));
-            float listH = std::min((float)engine->fwDebugMarks.size() * 26.f, 320.f);
-            ImGui::BeginChild("##fwDebugHistList", ImVec2(410, listH), true);
-            for (size_t i = 0; i < engine->fwDebugMarks.size(); ++i) {
-                auto const& mk = engine->fwDebugMarks[i];
-                ImGui::PushID((int)i + 11000);
-                ImGui::TextColored(mk.survived ? ImVec4(0.3f, 1.f, 0.4f, 1.f)
-                                               : ImVec4(1.f, 0.3f, 0.3f, 1.f),
-                                   "%s",
-                                   mk.survived ? "PASS" : "FAIL");
-                ImGui::SameLine();
-                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-                ImGui::Text("in#%d f=%u -> shift f=%u  %s p%d",
-                            mk.inputNumber,
-                            mk.macroFrame,
-                            mk.testedFrame,
-                            mk.isRelease ? "rel" : "press",
-                            mk.player2 ? 2 : 1);
-                ImGui::PopStyleColor();
-                ImGui::SameLine();
-                if (Widgets::StyledButton("Go", ImVec2(40, 20), theme, anim, 4.f)) {
-                    engine->debugTeleportToMark(i);
-                    ImGui::CloseCurrentPopup();
+        // --- sub-tick (CBF) -----------------------------------------------
+        if (ImGui::CollapsingHeader("Sub-Tick (CBF)")) {
+            toggle("Enabled", &fw.subframeProbe,
+                   "Measure windows finer than one frame, by placing the input between physics "
+                   "steps the way Click Between Frames does.");
+            if (fw.subframeProbe) {
+                int hz = (int)fw.cbfInputHz;
+                if (Widgets::StyledSliderInt("Input Hz", &hz, 240, 240000, theme)) {
+                    fw.cbfInputHz = hz;
+                    dirty = true;
                 }
-                ImGui::PopID();
+                toggle("Bisect Edges", &fw.subframeBisect,
+                       "Binary-search the sub-tick edges instead of scanning every slot. Much "
+                       "faster; assumes the surviving band has no holes in it.");
+                toggle("Count Every Input", &fw.subframeAll,
+                       "Run the sub-tick pass on every input rather than only the tight ones.");
+                sliderInt("Search Stride (%)", &fw.subframeScanPercent, 1, 100,
+                          "Step size for the sub-tick scan, as a percentage of a tick.");
+                toggle("Whole Numbers On Markers", &fw.cbfWholeMarkers,
+                       "Show markers as whole frames even when a sub-tick window was measured.");
+                sliderInt("Readout Under", &fw.cbfReadoutThreshold, 0, 20,
+                          "Only show the sub-tick readout for windows at or under this size.");
+                toggle("Tick-Quantised Ground", &fw.cbfTickGround,
+                       "Hold ground state steady within a tick while splitting it.");
+                sliderInt("Decimals", &fw.subframeDecimals, 0, 4,
+                          "Decimal places for sub-tick windows on markers and labels.");
             }
-            ImGui::EndChild();
-            ImGui::Dummy(ImVec2(0, 6));
-            if (Widgets::StyledButton("Close##fwDebugHist", ImVec2(-1, 28), theme, anim, 6.f))
-                ImGui::CloseCurrentPopup();
-            ImGui::EndPopup();
         }
-        ImGui::PopStyleColor(3);
-        ImGui::PopStyleVar(2);
-        if (engine->fwAnalyzeRunning) {
+
+        // --- which inputs -------------------------------------------------
+        if (ImGui::CollapsingHeader("Which Inputs")) {
+            toggle("Test Ship / Swing Releases", &fw.testShipReleases,
+                   "Measure releases in ship and swing, where letting go has its own timing.");
+            toggle("Test All Releases", &fw.testAllReleases,
+                   "Also measure releases in cube, ball, UFO and spider. Holding changes physics "
+                   "in every mode, so those releases do have timing -- just less of it. Roughly "
+                   "doubles the run.");
+            toggle("Orb Aware Release Skip", &fw.orbAwareReleaseSkip,
+                   "Skip a robot release when the click before it touched a non-dash orb, where "
+                   "the release can't be retimed on its own.");
+            toggle("Joint Setup Sweep", &fw.jointSetupSweep,
+                   "Resolve groups of inputs together where one sets up the next.");
+            toggle("Entry Sweep", &fw.entrySweep,
+                   "Also vary how the player entered the section being measured.");
+        }
+
+        // --- display ------------------------------------------------------
+        if (ImGui::CollapsingHeader("Display")) {
+            toggle("Show Markers", &fw.showMarkers, "Draw the circles in the level.");
+            toggle("Show HUD", &fw.showHud, "The tier counts in the corner.");
+            toggle("Show Labels", &fw.showLabels, "Numbers on the markers.");
+            toggle("Show Totals", &fw.showTotals, nullptr);
+            toggle("Show Rate", &fw.showHzReadout, "Show windows as a click rate as well.");
+            toggle("Show Timing", &fw.showTiming, nullptr);
+            toggle("Show Desynced", &fw.showDesynced,
+                   "Also draw inputs whose run desynced, which are not trustworthy.");
+            toggle("Setup Suffixes", &fw.markSetupVarying,
+                   "Mark windows that depend on setup: ship and swing get ^, inputs resolved by a "
+                   "joint sweep get ~.");
+            if (fw.markSetupVarying)
+                toggle("Include Hold Modes", &fw.setupHoldModes,
+                       "Also put ^ on UFO, wave and robot.");
+            toggle("Show Setup Range", &fw.showSetupRange, nullptr);
+            toggle("Circle Skin", &fw.circleSkin,
+                   "Size each marker by how tight its window is, instead of drawing them all "
+                   "the same size.");
+            if (fw.circleSkin) {
+                sliderFloat("Dot Radius", &fw.circleSkinDotRadius, 1.f, 30.f,
+                            "Radius for a 0-frame window, before any growth.");
+                sliderFloat("Radius Per Frame", &fw.circleSkinRadiusPerFrame, 0.2f, 10.f,
+                            "How much bigger the ring gets for each extra frame of window.");
+                sliderFloat("Max Radius", &fw.circleSkinMaxRadius, 5.f, 120.f, nullptr);
+            } else {
+                sliderFloat("Marker Radius", &fw.markerRadius, 2.f, 40.f, nullptr);
+            }
+            sliderFloat("Label Scale", &fw.markerScale, 0.1f, 2.f, nullptr);
+            sliderFloat("HUD Scale", &fw.hudScale, 0.2f, 2.f, nullptr);
+        }
+
+        // --- colour bands ---------------------------------------------------
+        if (ImGui::CollapsingHeader("Bands")) {
+            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+            ImGui::TextWrapped(
+                "A window falls into the first band whose range covers it. The band gives "
+                "it its colour, its label, and the sound that plays when it is measured.");
+            ImGui::PopStyleColor();
             ImGui::Dummy(ImVec2(0, 4));
-            ImGui::PushStyleColor(ImGuiCol_PlotHistogram, theme.getAccent());
-            char ov[64];
-            if (engine->fwAnalyzeTotal > 0)
-                snprintf(ov,
-                         sizeof(ov),
-                         "%s  %d/%d  (%.0f%%)",
-                         engine->fwAnalyzeStage.c_str(),
-                         engine->fwAnalyzeCur,
-                         engine->fwAnalyzeTotal,
-                         engine->fwAnalyzeProgress * 100.f);
-            else
-                snprintf(ov,
-                         sizeof(ov),
-                         "%s  (%.0f%%)",
-                         engine->fwAnalyzeStage.c_str(),
-                         engine->fwAnalyzeProgress * 100.f);
-            ImGui::ProgressBar(engine->fwAnalyzeProgress, ImVec2(-1, 18), ov);
-            ImGui::PopStyleColor();
-        }
-        ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-        if (engine->fwHasData) {
-            int vis = 0, loosest = 0, noPos = 0;
-            for (auto const& mk : engine->fwMarks) {
-                if (mk.window <= engine->fwMaxWindow) {
-                    ++vis;
-                    if (!mk.hasPosition())
-                        ++noPos;
-                }
-                if (mk.window > loosest)
-                    loosest = mk.window;
-            }
-            ImGui::Text("%zu clicks analyzed, %d shown (window <= %d).",
-                        engine->fwMarks.size(),
-                        vis,
-                        engine->fwMaxWindow);
-            if (vis == 0 && !engine->fwMarks.empty())
-                ImGui::TextWrapped("None visible: every click is looser than %d frames (loosest is "
-                                   "%d). Raise Max Window to see them.",
-                                   engine->fwMaxWindow,
-                                   loosest);
-            if (noPos > 0)
-                ImGui::TextWrapped("%d of the shown clicks have no position recorded, so they are "
-                                   "counted in the legend but cannot be drawn in the level.",
-                                   noPos);
-        } else if (!engine->fwAnalyzeRunning)
-            ImGui::TextWrapped(
-                "No analysis yet. Save a macro while in the level and choose Calculate "
-                "to simulate frame windows.");
-        ImGui::PopStyleColor();
 
-        if (engine->fwAiHasData) {
-            static size_t s_aiDebugFilterClick = SIZE_MAX;
-            static bool s_aiDebugPopupRequested = false;
+            int removeAt = -1;
+            int moveFrom = -1, moveTo = -1;
+            for (size_t i = 0; i < fw.tiers.size(); i++) {
+                auto& t = fw.tiers[i];
+                ImGui::PushID((int)i);
+
+                ImVec4 col(t.color[0], t.color[1], t.color[2], t.color[3]);
+                if (ImGui::ColorEdit4("##col",
+                                      (float*)&col,
+                                      ImGuiColorEditFlags_NoInputs |
+                                          ImGuiColorEditFlags_AlphaPreview)) {
+                    t.color = {col.x, col.y, col.z, col.w};
+                    dirty = true;
+                }
+
+                ImGui::SameLine(0, 8);
+                ImGui::SetNextItemWidth(52);
+                if (ImGui::DragInt("##min", &t.minWindow, 0.2f, 0, 10)) {
+                    if (t.maxWindow < t.minWindow)
+                        t.maxWindow = t.minWindow;
+                    dirty = true;
+                }
+                ImGui::SameLine(0, 4);
+                ImGui::TextUnformatted("-");
+                ImGui::SameLine(0, 4);
+                ImGui::SetNextItemWidth(52);
+                if (ImGui::DragInt("##max", &t.maxWindow, 0.2f, 0, 10)) {
+                    if (t.maxWindow < t.minWindow)
+                        t.minWindow = t.maxWindow;
+                    dirty = true;
+                }
+
+                ImGui::SameLine(0, 8);
+                char label[64];
+                std::snprintf(label, sizeof(label), "%s", t.text.c_str());
+                ImGui::SetNextItemWidth(90);
+                if (ImGui::InputTextWithHint("##text", "label", label, sizeof(label))) {
+                    t.text = label;
+                    dirty = true;
+                }
+
+                ImGui::SameLine(0, 8);
+                if (ImGui::Checkbox("HUD", &t.showInHud))
+                    dirty = true;
+
+                // Order is not cosmetic: a window takes the first band whose
+                // range covers it, so moving a band changes which one wins.
+                // Without this, inserting a band meant retyping the ranges of
+                // every band after it.
+                ImGui::SameLine(0, 8);
+                ImGui::BeginDisabled(i == 0);
+                if (ImGui::ArrowButton("##up", ImGuiDir_Up))
+                    moveFrom = (int)i, moveTo = (int)i - 1;
+                ImGui::EndDisabled();
+
+                ImGui::SameLine(0, 2);
+                ImGui::BeginDisabled(i + 1 >= fw.tiers.size());
+                if (ImGui::ArrowButton("##down", ImGuiDir_Down))
+                    moveFrom = (int)i, moveTo = (int)i + 1;
+                ImGui::EndDisabled();
+
+                ImGui::SameLine(0, 8);
+                if (ImGui::SmallButton("x"))
+                    removeAt = (int)i;
+
+                char audio[260];
+                std::snprintf(audio, sizeof(audio), "%s", t.audioPath.c_str());
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::InputTextWithHint(
+                        "##audio", "sound file (optional)", audio, sizeof(audio))) {
+                    t.audioPath = audio;
+                    dirty = true;
+                }
+
+                const char* shapeNames[] = {"Circle", "Star", "Spiral", "Polygon"};
+                int shapeIdx = (int)t.style.shape;
+                ImGui::SetNextItemWidth(84);
+                if (ImGui::Combo("##shape", &shapeIdx, shapeNames, 4)) {
+                    t.style.shape = (gbshape::Shape)shapeIdx;
+                    dirty = true;
+                }
+                ImGui::SameLine(0, 6);
+                const char* fillNames[] = {"Inner ring", "Filled", "Single"};
+                int fillIdx = (int)t.style.fill;
+                ImGui::SetNextItemWidth(88);
+                if (ImGui::Combo("##fill", &fillIdx, fillNames, 3)) {
+                    t.style.fill = (gbshape::Fill)fillIdx;
+                    dirty = true;
+                }
+                ImGui::SameLine(0, 6);
+                ImGui::SetNextItemWidth(56);
+                if (ImGui::DragFloat("##size", &t.style.sizeScale, 0.01f, 0.1f, 4.f, "x%.2f"))
+                    dirty = true;
+                if (t.style.shape == gbshape::Shape::Polygon) {
+                    ImGui::SetNextItemWidth(56);
+                    if (ImGui::DragInt("##sides", &t.style.polygonSides, 0.1f, 3, 12))
+                        dirty = true;
+                    ImGui::SameLine(0, 6);
+                    ImGui::SetNextItemWidth(78);
+                    if (ImGui::DragFloat("##corner", &t.style.polygonCornerRadius,
+                                         0.01f, 0.f, 1.f, "round %.2f"))
+                        dirty = true;
+                }
+
+                ImGui::PopID();
+                ImGui::Dummy(ImVec2(0, 2));
+            }
+
+            if (moveFrom >= 0 && moveTo >= 0 && moveTo < (int)fw.tiers.size()) {
+                std::swap(fw.tiers[moveFrom], fw.tiers[moveTo]);
+                dirty = true;
+            }
+
+            if (removeAt >= 0 && fw.tiers.size() > 1) {
+                fw.tiers.erase(fw.tiers.begin() + removeAt);
+                dirty = true;
+            }
+
+            if (Widgets::StyledButton("Add Band", ImVec2(-1, 24), theme, anim, 6.f)) {
+                FrameWindowTier t;
+                int maxId = 0;
+                for (auto const& e : fw.tiers)
+                    maxId = std::max(maxId, e.id);
+                t.id = maxId + 1;
+                t.minWindow = fw.tiers.empty() ? 0 : std::min(10, fw.tiers.back().maxWindow + 1);
+                t.maxWindow = t.minWindow;
+                fw.tiers.push_back(t);
+                dirty = true;
+            }
+            if (Widgets::StyledButton("Reset Bands", ImVec2(-1, 22), theme, anim, 6.f)) {
+                FrameWindowSettings const def;
+                fw.tiers = def.tiers;
+                dirty = true;
+            }
+
+            // A "NaN Look" preset used to sit here. Removed: anticroom's own
+            // default bands are already that ramp -- same seven bands, same
+            // ranges, colours within a few percent -- so it and Reset Bands
+            // produced virtually the same thing.
+
+            ImGui::Dummy(ImVec2(0, 6));
+            Widgets::SectionHeader("Sounds", theme);
+            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+            ImGui::TextWrapped(
+                "Brrr is GucciBot's own, one sound for every window. Bells are the per-window "
+                "set the Default Look normally uses.");
+            ImGui::PopStyleColor();
+
+            float const halfW = (ImGui::GetContentRegionAvail().x - 8) / 2.f;
+            if (Widgets::StyledButton("Brrr", ImVec2(halfW, 22), theme, anim, 6.f)) {
+                for (auto& t : fw.tiers)
+                    t.audioPath = "fw_default.mp3";
+                FrameWindowSound::clearCache();
+                dirty = true;
+            }
+            ImGui::SameLine(0, 8);
+            if (Widgets::StyledButton("Bells", ImVec2(halfW, 22), theme, anim, 6.f)) {
+                // Seeded into fw_assets on first run; named by the window range
+                // they cover rather than by band index.
+                auto clip = [](int lo) -> char const* {
+                    if (lo <= 1) return "fw_1.wav";
+                    if (lo == 2) return "fw_2.wav";
+                    if (lo == 3) return "fw_3.wav";
+                    if (lo == 4) return "fw_4.wav";
+                    if (lo <= 6) return "fw_5_6.wav";
+                    if (lo <= 8) return "fw_7_8.wav";
+                    return "fw_9_12.wav";
+                };
+                auto const dir = Mod::get()->getSaveDir() / "fw_assets";
+                for (auto& t : fw.tiers)
+                    t.audioPath = (dir / clip(t.minWindow)).string();
+                FrameWindowSound::clearCache();
+                dirty = true;
+            }
 
             ImGui::Dummy(ImVec2(0, 8));
-            Widgets::SectionHeader("Alignment-Independent Results", theme);
+            Widgets::SectionHeader("Sound Pack", theme);
             ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
             ImGui::TextWrapped(
-                "Doesn't touch the markers above -- Time-Based/Recovery Range still drive those. "
-                "\"Representative\" is blank when no dominant cluster was found for that click, "
-                "meaning it fell back to the Macro column. Macro shows \"--\" if Time-Based/"
-                "Recovery Range hasn't measured this click at all yet (not the same as an actual "
-                "0-frame result) -- run one of those too if you want a real number there.");
+                "A pack is a folder of clips named \"<N>f SFX\", one per band size. Import "
+                "gives every band the clip matching its lower bound; Export copies the "
+                "bands' current clips out under that name. Bands start with no sound at "
+                "all, so nothing plays until a pack is imported.");
             ImGui::PopStyleColor();
-            ImGui::Dummy(ImVec2(0, 4));
-            float tblH = std::min((float)engine->fwAiResults.size() * 24.f + 28.f, 280.f);
-            if (ImGui::BeginTable("##fwAiResultsTbl",
-                                  7,
-                                  ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
-                                      ImGuiTableFlags_ScrollY,
-                                  ImVec2(-1, tblH))) {
-                ImGui::TableSetupColumn("Click");
-                ImGui::TableSetupColumn("Macro");
-                ImGui::TableSetupColumn("Representative");
-                ImGui::TableSetupColumn("Observed");
-                ImGui::TableSetupColumn("Valid Align.");
-                ImGui::TableSetupColumn("Sensitivity");
-                ImGui::TableSetupColumn("Branches");
-                ImGui::TableHeadersRow();
-                for (size_t i = 0; i < engine->fwAiResults.size(); ++i) {
-                    auto const& r = engine->fwAiResults[i];
-                    ImGui::PushID((int)i + 12000);
-                    ImGui::TableNextRow();
-                    ImGui::TableSetColumnIndex(0);
-                    ImGui::Text("%.1f%% %s%s",
-                               r.percent,
-                               r.isRelease ? "rel" : "press",
-                               r.player2 ? " p2" : "");
-                    ImGui::TableSetColumnIndex(1);
-                    if (r.hasMacroMatch)
-                        ImGui::Text("%d", r.macroWindow);
-                    else
-                        ImGui::TextColored(theme.textSecondary, "--");
-                    ImGui::TableSetColumnIndex(2);
-                    if (r.representativeWindow > 0)
-                        ImGui::Text("%d", r.representativeWindow);
-                    else
-                        ImGui::TextColored(theme.textSecondary, "--");
-                    ImGui::TableSetColumnIndex(3);
-                    ImGui::Text("%d..%d", r.observedMin, r.observedMax);
-                    ImGui::TableSetColumnIndex(4);
-                    ImGui::Text("%d/%d", r.validAlignments, r.totalAlignments);
-                    ImGui::TableSetColumnIndex(5);
-                    ImGui::Text("%.2f", r.sensitivity);
-                    ImGui::TableSetColumnIndex(6);
-                    bool hasBranches = std::any_of(
-                        engine->fwAiDebugBranches.begin(),
-                        engine->fwAiDebugBranches.end(),
-                        [i](auto const& br) {
-                            return br.clickIdx == i;
-                        });
-                    if (!hasBranches)
-                        ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.4f);
-                    if (Widgets::StyledButton("View", ImVec2(50, 20), theme, anim, 4.f) &&
-                        hasBranches) {
-                        // Can't call ImGui::OpenPopup here directly -- we're
-                        // inside this row's PushID, so the string-ID popup
-                        // it would open is scoped to THIS row and never
-                        // matches the BeginPopupModal call below (which runs
-                        // outside any PushID). Same trap the existing
-                        // replayActionPopupRequested/replayRenamePopupRequested
-                        // fields elsewhere in this file exist to avoid --
-                        // defer the actual OpenPopup call to after the table
-                        // closes, matching that pattern. This was exactly
-                        // why "View" did nothing (Juice, 2026-09-02).
-                        s_aiDebugFilterClick = i;
-                        s_aiDebugPopupRequested = true;
-                    }
-                    if (!hasBranches)
-                        ImGui::PopStyleVar();
-                    ImGui::PopID();
-                }
-                ImGui::EndTable();
-            }
-            if (s_aiDebugPopupRequested) {
-                ImGui::OpenPopup("AiDebugHistory");
-                s_aiDebugPopupRequested = false;
-            }
-            if (!engine->fwDebugMode) {
-                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-                ImGui::TextWrapped(
-                    "Branches only get recorded when Debug Mode (Analysis Settings, below) is "
-                    "on during the Calculate run -- turn it on and re-run to fill these in.");
-                ImGui::PopStyleColor();
-            }
 
-            ImGui::SetNextWindowSize(ImVec2(460, 0), ImGuiCond_Appearing);
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14, 12));
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.f);
-            ImGui::PushStyleColor(ImGuiCol_PopupBg, IM_COL32(0, 0, 0, 0));
-            ImGui::PushStyleColor(ImGuiCol_Border, IM_COL32(0, 0, 0, 0));
-            ImGui::PushStyleColor(ImGuiCol_ModalWindowDimBg, IM_COL32(0, 0, 0, 0));
-            if (ImGui::BeginPopupModal("AiDebugHistory",
-                                       nullptr,
-                                       ImGuiWindowFlags_AlwaysAutoResize |
-                                           ImGuiWindowFlags_NoTitleBar |
-                                           ImGuiWindowFlags_NoResize)) {
-                drawPopupChrome(*this, "Alignment-Independent Branches");
-                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-                ImGui::TextWrapped(
-                    "\"Go\" restores the exact predecessor-alignment checkpoint this branch used "
-                    "and applies its click shift, then lets it play out at whatever speed you "
-                    "normally run at -- turn on \"Show Macro Path\" first if you want to see the "
-                    "recorded line to compare against.");
-                ImGui::PopStyleColor();
-                ImGui::Dummy(ImVec2(0, 6));
-                std::vector<size_t> shown;
-                for (size_t bi = 0; bi < engine->fwAiDebugBranches.size(); ++bi)
-                    if (engine->fwAiDebugBranches[bi].clickIdx == s_aiDebugFilterClick)
-                        shown.push_back(bi);
-                float listH = std::min((float)shown.size() * 26.f, 320.f);
-                ImGui::BeginChild("##aiDebugHistList", ImVec2(430, listH), true);
-                for (size_t bi : shown) {
-                    auto const& br = engine->fwAiDebugBranches[bi];
-                    ImGui::PushID((int)bi + 13000);
-                    const char* statusStr = "?";
-                    ImVec4 statusCol = ImVec4(1.f, 1.f, 1.f, 1.f);
-                    switch (br.status) {
-                    case GucciEngine::FwAiStatus::Dead:
-                        statusStr = "DEAD";
-                        statusCol = ImVec4(1.f, 0.3f, 0.3f, 1.f);
-                        break;
-                    case GucciEngine::FwAiStatus::MissedTarget:
-                        statusStr = "MISSED";
-                        statusCol = ImVec4(1.f, 0.6f, 0.2f, 1.f);
-                        break;
-                    case GucciEngine::FwAiStatus::Partial:
-                        statusStr = "PARTIAL";
-                        statusCol = ImVec4(0.9f, 0.9f, 0.3f, 1.f);
-                        break;
-                    case GucciEngine::FwAiStatus::Viable:
-                        statusStr = "VIABLE";
-                        statusCol = ImVec4(0.3f, 1.f, 0.4f, 1.f);
-                        break;
-                    case GucciEngine::FwAiStatus::DeadEnd:
-                        statusStr = "DEAD_END";
-                        statusCol = ImVec4(1.f, 0.4f, 0.4f, 1.f);
-                        break;
+            {
+                auto const names = acSoundPackNames();
+                std::string current = m_acPackName.empty() ? names.front() : m_acPackName;
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::BeginCombo("##acPack", current.c_str())) {
+                    for (auto const& n : names) {
+                        bool const sel = (n == current);
+                        if (ImGui::Selectable(n.c_str(), sel))
+                            m_acPackName = n;
+                        if (sel)
+                            ImGui::SetItemDefaultFocus();
                     }
-                    ImGui::TextColored(statusCol, "%s", statusStr);
-                    ImGui::SameLine();
-                    ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-                    ImGui::Text("pred %+d, x %+d", br.predShift, br.xShift);
-                    ImGui::PopStyleColor();
-                    ImGui::SameLine();
-                    if (Widgets::StyledButton("Go", ImVec2(40, 20), theme, anim, 4.f)) {
-                        engine->debugTeleportToAiBranch(bi);
-                        ImGui::CloseCurrentPopup();
-                    }
-                    ImGui::PopID();
+                    ImGui::EndCombo();
                 }
-                ImGui::EndChild();
-                ImGui::Dummy(ImVec2(0, 6));
-                if (Widgets::StyledButton("Close##aiDebugHist", ImVec2(-1, 28), theme, anim, 6.f))
-                    ImGui::CloseCurrentPopup();
-                ImGui::EndPopup();
+
+                char buf[128];
+                std::snprintf(buf, sizeof(buf), "%s", m_acPackName.c_str());
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::InputTextWithHint(
+                        "##acPackName", "or type a name to export as", buf, sizeof(buf)))
+                    m_acPackName = buf;
+
+                float const half = (ImGui::GetContentRegionAvail().x - 8) / 2.f;
+                if (Widgets::StyledButton("Import", ImVec2(half, 24), theme, anim, 6.f))
+                    this->importAcSoundPack(m_acPackName);
+                ImGui::SameLine(0, 8);
+                if (Widgets::StyledButton("Export", ImVec2(half, 24), theme, anim, 6.f))
+                    this->exportAcSoundPack(m_acPackName);
+
+                if (!m_acPackReport.empty()) {
+                    ImGui::PushStyleColor(
+                        ImGuiCol_Text,
+                        m_acPackOk ? theme.textSecondary : ImVec4(0.90f, 0.35f, 0.35f, 1.f));
+                    ImGui::TextWrapped("%s", m_acPackReport.c_str());
+                    ImGui::PopStyleColor();
+                }
             }
-            ImGui::PopStyleColor(3);
-            ImGui::PopStyleVar(2);
         }
 
-        ImGui::Dummy(ImVec2(0, 8));
-        Widgets::SectionHeader("Manual Frame Windows", theme);
-        ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-        ImGui::TextWrapped(
-            "Set or override a click's window by hand -- for clicks Calculate hasn't "
-            "measured yet, or a reading you don't trust. Manual entries are protected: "
-            "re-running Calculate fills in everything else but leaves these alone.");
-        ImGui::PopStyleColor();
-        if (engine->fwAnalyzing) {
-            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-            ImGui::TextWrapped(
-                "Unavailable while Calculate is running -- it's actively reshaping the macro's "
-                "action "
-                "list to run its tests. Manual Frame Windows will show up again once it finishes.");
-            ImGui::PopStyleColor();
-        } else {
-            auto& acts = engine->replay.m_actionAtom.m_actions;
-            auto& samples = engine->replay.m_pathSamples;
-            std::vector<size_t> clickIdx;
-            for (size_t i = 0; i < acts.size(); ++i)
-                if (acts[i].isInput())
-                    clickIdx.push_back(i);
+        // --- during the run -----------------------------------------------
+        if (ImGui::CollapsingHeader("During Analysis")) {
+            toggle("Analysis Visuals", &fw.analysisVisuals,
+                   "Draw the level while analysing. Off is faster.");
+            toggle("Lock Camera", &fw.lockCamera, "Hold the camera still during a run.");
+            toggle("Hide Spawn Effects", &fw.hideSpawnEffects,
+                   "Suppress respawn flashes while the analyzer restarts constantly.");
+            toggle("Play Sounds", &fw.playSounds, "Tier sounds as each window is measured.");
+            if (fw.playSounds)
+                sliderFloat("Volume", &fw.soundVolume, 0.f, 1.f, nullptr);
+        }
 
-            if (clickIdx.empty()) {
-                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-                ImGui::TextWrapped("No macro loaded, or it has no inputs to list.");
-                ImGui::PopStyleColor();
+        // --- speed ----------------------------------------------------------
+        if (ImGui::CollapsingHeader("Speed")) {
+            toggle("Adaptive Budget", &fw.adaptiveBudget,
+                   "Spend a share of each frame analysing rather than a fixed slice, so a level "
+                   "that already runs slowly counts faster instead of leaving the gap idle.");
+            if (fw.adaptiveBudget) {
+                sliderInt("Budget Share (%)", &fw.budgetSharePercent, 1, 90, nullptr);
+                sliderInt("Max Budget (ms)", &fw.maxBudgetMs, 1, 200, nullptr);
             } else {
-                float listH = std::min((float)clickIdx.size() * 24.f, 200.f);
-                ImGui::BeginChild("##fwManualList", ImVec2(-1, listH), true);
-                for (size_t row = 0; row < clickIdx.size(); ++row) {
-                    auto& a = acts[clickIdx[row]];
-                    ImGui::PushID((int)row + 9000);
-
-                    GucciEngine::FrameWindowMark* mk = nullptr;
-                    for (auto& m : engine->fwMarks)
-                        if (m.frame == a.m_frame && m.player2 == a.m_player2) {
-                            mk = &m;
-                            break;
-                        }
-
-                    float pct = mk ? mk->percent : -1.f;
-                    if (!mk && a.m_frame < samples.size() && engine->m_levelLength > 0.f) {
-                        float px = a.m_player2 ? samples[a.m_frame].p2x : samples[a.m_frame].p1x;
-                        pct = std::clamp(px / engine->m_levelLength * 100.f, 0.f, 100.f);
-                    }
-
-                    bool isRel = !a.m_holding;
-                    char rowLabel[64];
-                    if (pct >= 0.f)
-                        snprintf(rowLabel,
-                                 sizeof(rowLabel),
-                                 "f=%u  p%d  %s  %.1f%%",
-                                 a.m_frame,
-                                 a.m_player2 ? 2 : 1,
-                                 isRel ? "rel" : "press",
-                                 pct);
-                    else
-                        snprintf(rowLabel,
-                                 sizeof(rowLabel),
-                                 "f=%u  p%d  %s",
-                                 a.m_frame,
-                                 a.m_player2 ? 2 : 1,
-                                 isRel ? "rel" : "press");
-                    ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-                    ImGui::TextUnformatted(rowLabel);
-                    ImGui::PopStyleColor();
-                    float labelW = ImGui::CalcTextSize(rowLabel).x;
-                    ImGui::SameLine(std::max(190.f, labelW + 12.f));
-
-                    int win = mk ? mk->window : 0;
-                    ImGui::SetNextItemWidth(60);
-                    if (ImGui::InputInt("##win", &win, 0, 0)) {
-                        win = std::max(1, win);
-                        if (mk) {
-                            mk->window = win;
-                            mk->manual = true;
-                        } else {
-                            GucciEngine::FrameWindowMark nm;
-                            nm.frame = a.m_frame;
-                            nm.player2 = a.m_player2;
-                            nm.window = win;
-                            nm.manual = true;
-                            nm.isRelease = isRel;
-                            if (a.m_frame < samples.size()) {
-                                nm.x =
-                                    a.m_player2 ? samples[a.m_frame].p2x : samples[a.m_frame].p1x;
-                                nm.y =
-                                    a.m_player2 ? samples[a.m_frame].p2y : samples[a.m_frame].p1y;
-                            }
-                            if (!nm.hasPosition()) {
-                                // No recorded path at this frame: borrow the
-                                // position Calculate captured for the same click.
-                                for (auto const& cs : engine->fwClickSamples)
-                                    if (cs.frame == a.m_frame && cs.player2 == a.m_player2 &&
-                                        (cs.x != 0.f || cs.y != 0.f)) {
-                                        nm.x = cs.x;
-                                        nm.y = cs.y;
-                                        break;
-                                    }
-                            }
-                            nm.percent = pct >= 0.f ? pct : 0.f;
-                            engine->fwMarks.push_back(nm);
-                            engine->fwHasData = true;
-                        }
-                    }
-                    if (mk) {
-                        ImGui::SameLine();
-                        ImGui::PushStyleColor(ImGuiCol_Text,
-                                              mk->manual ? theme.getAccent() : theme.textSecondary);
-                        ImGui::TextUnformatted(mk->manual ? "manual" : "auto");
-                        ImGui::PopStyleColor();
-                        if (mk->manual) {
-                            ImGui::SameLine();
-                            if (Widgets::StyledButton("Clear", ImVec2(50, 20), theme, anim, 4.f)) {
-                                engine->fwMarks.erase(engine->fwMarks.begin() +
-                                                      (mk - engine->fwMarks.data()));
-                                engine->fwHasData = !engine->fwMarks.empty();
-                            }
-                        }
-                    }
-                    ImGui::PopID();
-                }
-                ImGui::EndChild();
-
-                if (Widgets::StyledButton("Save Manual Marks", ImVec2(-1, 26), theme, anim, 6.f))
-                    engine->saveFwMarksNow();
+                sliderInt("Frame Budget (ms)", &fw.budgetMs, 1, 100, nullptr);
             }
+            sliderInt("Tick Batch", &fw.stepBatch, 1, 200,
+                      "How many physics steps to run per drawn frame while analysing.");
         }
 
-        ImGui::Dummy(ImVec2(0, 6));
-        ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-        ImGui::TextWrapped(
-            "Tiers map gap sizes to a marker image and sound. Put PNG/audio files in the mod's "
-            "fw_assets folder and enter the filenames. No tier = default colored ring.");
-        ImGui::TextWrapped("Sound: leave blank for the built-in default (Gucci Mane saying \"Brrr\" "
-                           "-- that's intentional, not a broken file), type a filename for custom, "
-                           "or 'none' to silence that tier. Markers appear as the bot reaches each "
-                           "click.");
-        ImGui::PopStyleColor();
-        {
-            float halfW = (ImGui::GetContentRegionAvail().x - 8) / 2.f;
-            if (Widgets::StyledButton("Import Sounds/Images", ImVec2(halfW, 24), theme, anim, 4.f))
-                importFwAssetFiles();
-            ImGui::SameLine(0, 8);
-            if (Widgets::StyledButton("Import Folder", ImVec2(halfW, 24), theme, anim, 4.f))
-                importFwAssetFolder();
+        // --- diagnostics ----------------------------------------------------
+        if (ImGui::CollapsingHeader("Diagnostics")) {
+            toggle("Verbose Log", &fw.verbose, "Full per-leg detail in the log.");
+            toggle("Analysis Overlay", &fw.analysisOverlay,
+                   "Live progress readout in the level while analysing.");
+            toggle("Player State Diff", &fw.statePlayerDiff,
+                   "Report which player fields changed across a restore. Very noisy.");
         }
-        ImGui::Dummy(ImVec2(0, 4));
-        int tierRemove = -1;
-        for (size_t ti = 0; ti < engine->fwTiers.size(); ++ti) {
-            auto& t = engine->fwTiers[ti];
-            ImGui::PushID((int)(7000 + ti));
-            char hdrLabel[64];
-            snprintf(hdrLabel, sizeof(hdrLabel), "Tier %d-%d frames###tierhdr", t.lo, t.hi);
-            if (!ImGui::CollapsingHeader(hdrLabel)) {
-                ImGui::PopID();
-                continue;
-            }
-            float third = (ImGui::GetContentRegionAvail().x - 16) / 3.f;
-            ImGui::SetNextItemWidth(third);
-            ImGui::InputInt("##lo", &t.lo, 0, 0);
-            ImGui::SameLine(0, 8);
-            ImGui::SetNextItemWidth(third);
-            ImGui::InputInt("##hi", &t.hi, 0, 0);
-            ImGui::SameLine(0, 8);
-            if (Widgets::StyledButton("X", ImVec2(-1, 22), theme, anim, 4.f))
-                tierRemove = (int)ti;
-            ImGui::SetNextItemWidth(-1);
-            ImGui::InputTextWithHint("##legendgroup",
-                                     "Legend group (optional -- e.g. make lo=hi=5 and lo=hi=6 both "
-                                     "'5-6' to customize each "
-                                     "individually but combine them in the Legend)",
-                                     t.legendGroup,
-                                     sizeof(t.legendGroup));
-            ImGui::SetNextItemWidth(-1);
-            ImGui::InputTextWithHint(
-                "##img", "marker.png (in fw_assets)", t.imageFile, sizeof(t.imageFile));
-            ImGui::SetNextItemWidth(-1);
-            ImGui::InputTextWithHint(
-                "##snd", "sound file, or 'none' for silent", t.soundFile, sizeof(t.soundFile));
-            float col3[3] = {t.r, t.g, t.b};
-            if (ImGui::ColorEdit3("##col", col3, ImGuiColorEditFlags_NoInputs)) {
-                t.r = col3[0];
-                t.g = col3[1];
-                t.b = col3[2];
-            }
-            ImGui::SameLine();
-            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-            ImGui::TextUnformatted("tint / ring color");
-            ImGui::PopStyleColor();
 
-            ImGui::Dummy(ImVec2(0, 4));
-            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-            ImGui::TextUnformatted("Shape (used when no marker image is set above):");
-            ImGui::PopStyleColor();
-            {
-                const char* shapeNames[] = {"Circle", "Star", "Spiral", "Geometric"};
-                int shapeIdx = (int)t.shape;
-                ImGui::SetNextItemWidth(-1);
-                if (ImGui::Combo("##shape", &shapeIdx, shapeNames, 4))
-                    t.shape = (GucciEngine::FwMarkerShape)shapeIdx;
-            }
-            if (t.shape == GucciEngine::FwMarkerShape::Polygon) {
-                ImGui::SetNextItemWidth(third);
-                ImGui::InputInt("##sides", &t.polygonSides, 0, 0);
-                t.polygonSides = std::clamp(t.polygonSides, 3, 12);
-                ImGui::SameLine();
-                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-                ImGui::TextUnformatted("sides");
-                ImGui::PopStyleColor();
-                ImGui::SetNextItemWidth(third);
-                ImGui::SliderFloat("##cornerrad", &t.polygonCornerRadius, 0.f, 1.f, "%.2f");
-                ImGui::SameLine();
-                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-                ImGui::TextUnformatted("corner radius");
-                ImGui::PopStyleColor();
-            }
+        if (running)
+            ImGui::EndDisabled();
 
-            {
-                const char* fillNames[] = {"Inverted (default)", "Normal (donut)"};
-                int fillIdx = (int)t.fillStyle;
-                ImGui::SetNextItemWidth(-1);
-                if (ImGui::Combo("##fillstyle", &fillIdx, fillNames, 2))
-                    t.fillStyle = (GucciEngine::FwFillStyle)fillIdx;
-            }
-            if (t.fillStyle == GucciEngine::FwFillStyle::Normal) {
-                ImGui::Checkbox("No Border##tier", &t.noBorder);
-            } else if (t.noBorder) {
-                t.noBorder = false;
-            }
-            ImGui::SetNextItemWidth(third);
-            ImGui::SliderFloat("##stroke", &t.strokeSize, 0.5f, 10.f, "%.1f stroke");
-            ImGui::SetNextItemWidth(third);
-            ImGui::SliderFloat("##size", &t.sizeScale, 0.3f, 3.f, "%.2fx size");
-            ImGui::SetNextItemWidth(-1);
-            ImGui::SliderFloat("##vol", &t.volume, 0.f, 1.f, "%.2f sound volume");
-
-            if (ImGui::TreeNodeEx("Pulse Effects", ImGuiTreeNodeFlags_None)) {
-                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
-                ImGui::TextWrapped(
-                    "Fades from the marker/text's normal color to the pulse color, "
-                    "holds, then fades back -- once, the moment this mark first shows "
-                    "up each time you watch the macro play. Doesn't loop.");
-                ImGui::PopStyleColor();
-                ImGui::Checkbox("Enable Marker Pulse", &t.markerPulseEnabled);
-                if (t.markerPulseEnabled) {
-                    ImGui::ColorEdit3(
-                        "Marker Pulse Color", t.markerPulseColor, ImGuiColorEditFlags_NoInputs);
-                    ImGui::SetNextItemWidth(third);
-                    ImGui::InputFloat("##mfi", &t.markerPulseFadeIn, 0, 0, "%.2fs in");
-                    ImGui::SameLine();
-                    ImGui::SetNextItemWidth(third);
-                    ImGui::InputFloat("##mhd", &t.markerPulseHold, 0, 0, "%.2fs hold");
-                    ImGui::SameLine();
-                    ImGui::SetNextItemWidth(third);
-                    ImGui::InputFloat("##mfo", &t.markerPulseFadeOut, 0, 0, "%.2fs out");
-                    t.markerPulseFadeIn = std::max(0.f, t.markerPulseFadeIn);
-                    t.markerPulseHold = std::max(0.f, t.markerPulseHold);
-                    t.markerPulseFadeOut = std::max(0.f, t.markerPulseFadeOut);
-                }
-                ImGui::Checkbox("Enable Text Pulse", &t.textPulseEnabled);
-                if (t.textPulseEnabled) {
-                    ImGui::ColorEdit3(
-                        "Text Pulse Color", t.textPulseColor, ImGuiColorEditFlags_NoInputs);
-                    ImGui::SetNextItemWidth(third);
-                    ImGui::InputFloat("##tfi", &t.textPulseFadeIn, 0, 0, "%.2fs in");
-                    ImGui::SameLine();
-                    ImGui::SetNextItemWidth(third);
-                    ImGui::InputFloat("##thd", &t.textPulseHold, 0, 0, "%.2fs hold");
-                    ImGui::SameLine();
-                    ImGui::SetNextItemWidth(third);
-                    ImGui::InputFloat("##tfo", &t.textPulseFadeOut, 0, 0, "%.2fs out");
-                    t.textPulseFadeIn = std::max(0.f, t.textPulseFadeIn);
-                    t.textPulseHold = std::max(0.f, t.textPulseHold);
-                    t.textPulseFadeOut = std::max(0.f, t.textPulseFadeOut);
-                }
-                ImGui::TreePop();
-            }
-            ImGui::PopID();
-        }
-        if (tierRemove >= 0)
-            engine->fwTiers.erase(engine->fwTiers.begin() + tierRemove);
-        ImGui::Separator();
-        if (Widgets::StyledButton("+ Add Range", ImVec2(-1, 26), theme, anim, 6.f)) {
-            GucciEngine::FrameWindowTier nt;
-            if (!engine->fwTiers.empty()) {
-                nt.lo = engine->fwTiers.back().hi + 1;
-                nt.hi = nt.lo + 3;
-            }
-            engine->fwTiers.push_back(nt);
-        }
-        if (!engine->fwTiers.empty()) {
-            if (Widgets::StyledButton("Save Tiers", ImVec2(-1, 24), theme, anim, 6.f)) {
-                std::string enc;
-                for (auto& t : engine->fwTiers) {
-                    enc += std::to_string(t.lo) + "|" + std::to_string(t.hi) + "|" + t.imageFile +
-                           "|" + t.soundFile + "|" + std::to_string(t.r) + "|" +
-                           std::to_string(t.g) + "|" + std::to_string(t.b) + "|" +
-                           std::to_string((int)t.shape) + "|" + std::to_string(t.polygonSides) +
-                           "|" + std::to_string(t.polygonCornerRadius) + "|" +
-                           std::to_string((int)t.fillStyle) + "|" + (t.noBorder ? "1" : "0") + "|" +
-                           std::to_string(t.strokeSize) + "|" + std::to_string(t.volume) + "|" +
-                           (t.markerPulseEnabled ? "1" : "0") + "|" +
-                           std::to_string(t.markerPulseColor[0]) + "|" +
-                           std::to_string(t.markerPulseColor[1]) + "|" +
-                           std::to_string(t.markerPulseColor[2]) + "|" +
-                           std::to_string(t.markerPulseFadeIn) + "|" +
-                           std::to_string(t.markerPulseHold) + "|" +
-                           std::to_string(t.markerPulseFadeOut) + "|" +
-                           (t.textPulseEnabled ? "1" : "0") + "|" +
-                           std::to_string(t.textPulseColor[0]) + "|" +
-                           std::to_string(t.textPulseColor[1]) + "|" +
-                           std::to_string(t.textPulseColor[2]) + "|" +
-                           std::to_string(t.textPulseFadeIn) + "|" +
-                           std::to_string(t.textPulseHold) + "|" +
-                           std::to_string(t.textPulseFadeOut) + "|" + std::to_string(t.sizeScale) +
-                           "|" + t.legendGroup + ";";
-                }
-                Mod::get()->setSavedValue("fw_tiers", enc);
-            }
-        }
+        if (dirty)
+            this->saveAcFrameWindowSettings();
     }
 
     void MenuInterface::drawRenderTab() {
@@ -5551,10 +5365,14 @@ namespace gucci {
             const char* name;
             int w, h;
         };
+        // Resolution is picked ONLY from this list -- there are no width/height
+        // boxes -- so anything a preset wants to select has to exist here.
         static const ResPreset presets[] = {{"720p (1280x720)", 1280, 720},
                                             {"1080p (1920x1080)", 1920, 1080},
                                             {"1440p (2560x1440)", 2560, 1440},
-                                            {"4K (3840x2160)", 3840, 2160}};
+                                            {"4K (3840x2160)", 3840, 2160},
+                                            {"8K (7680x4320)", 7680, 4320}};
+        static constexpr int kResPresetCount = 5;
         if (!renderBufsInit)
             loadRenderSettings();
         float iW = ImGui::GetContentRegionAvail().x * 0.45f;
@@ -5582,6 +5400,76 @@ namespace gucci {
         }
 
         Widgets::SectionHeader("Render Presets", theme);
+
+        // Nigel's showcase settings, applied in one press. 8K/60 with lossless
+        // x264 (-qp 0) in yuv444p, FLAC audio, music only. The thread count is
+        // filled in from the machine rather than hardcoded -- that is the one
+        // value in his list that is per-CPU.
+        static bool showcaseApplied = false;
+        static unsigned showcaseThreads = 0;
+        if (Widgets::StyledButton(
+                "Nigel's Awesome Showcase Preset", ImVec2(-1, 28), theme, anim, 6.f)) {
+            unsigned threads = std::thread::hardware_concurrency();
+            if (threads == 0)
+                threads = 8;
+
+            // Point the resolution combo at 8K too. Without this the buffers
+            // said 7680 while the combo still read 1080p, so the press looked
+            // like it had done nothing -- and touching the combo afterwards
+            // would have written 1080p straight back over it.
+            renderPresetIndex = 4;
+            snprintf(renderWidthBuf, sizeof(renderWidthBuf), "%d", 7680);
+            snprintf(renderHeightBuf, sizeof(renderHeightBuf), "%d", 4320);
+            snprintf(renderFpsBuf, sizeof(renderFpsBuf), "%d", 60);
+            snprintf(renderCodecBuf, sizeof(renderCodecBuf), "%s", "libx264");
+            snprintf(renderPixFmtBuf, sizeof(renderPixFmtBuf), "%s", "yuv444p");
+            snprintf(renderAudioCodecBuf, sizeof(renderAudioCodecBuf), "%s", "flac");
+            snprintf(renderSecondsAfterBuf, sizeof(renderSecondsAfterBuf), "%s", "0.0");
+            snprintf(renderVideoArgsBuf,
+                     sizeof(renderVideoArgsBuf),
+                     "-preset ultrafast -threads %u -qp 0 -vf "
+                     "colorspace=all=bt709:iall=bt470bg:fast=1",
+                     threads);
+
+            renderIncludeAudio = true;
+            renderMusicVol = 1.0f;
+            renderSfxVol = 0.0f;         // death, orbs, pads -- the run's own noise
+            renderTriggerSfxVol = 1.0f;  // the level's own sound, kept
+
+            // These three load as int64_t (loadSV<int64_t>), so they have to be
+            // stored as numbers -- saved as strings they read back as the
+            // defaults and the preset would silently do nothing.
+            mod->setSavedValue("render_width", (int64_t)7680);
+            mod->setSavedValue("render_height", (int64_t)4320);
+            mod->setSavedValue("render_fps", (int64_t)60);
+            mod->setSavedValue("render_codec", std::string(renderCodecBuf));
+            mod->setSavedValue("render_pix_fmt", std::string(renderPixFmtBuf));
+            mod->setSavedValue("render_audio_codec", std::string(renderAudioCodecBuf));
+            mod->setSavedValue("render_seconds_after", std::string(renderSecondsAfterBuf));
+            mod->setSavedValue("render_video_args", std::string(renderVideoArgsBuf));
+            mod->setSavedValue("render_include_audio", renderIncludeAudio);
+            mod->setSavedValue("render_music_volume", (double)renderMusicVol);
+            mod->setSavedValue("render_sfx_volume", (double)renderSfxVol);
+            mod->setSavedValue("render_trigger_sfx_volume", (double)renderTriggerSfxVol);
+
+            showcaseApplied = true;
+            showcaseThreads = threads;
+            log::info("[GucciBot] render: applied the showcase preset ({} threads)", threads);
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip(
+                "8K 60fps, lossless x264 (-qp 0) in yuv444p, FLAC audio. Music and the "
+                "level's own SFX triggers stay; death, orbs and UI are dropped. Thread "
+                "count is read from this machine. Files are very large -- this is for "
+                "showcase footage, not everyday renders.");
+        if (showcaseApplied) {
+            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+            ImGui::TextWrapped("Applied: 8K60, libx264 qp 0, yuv444p, FLAC, %u threads.",
+                               showcaseThreads);
+            ImGui::PopStyleColor();
+        }
+
+        ImGui::Dummy(ImVec2(0, 6));
         static char presetNameBuf[64] = "My Preset";
         ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 170);
         ImGui::InputText("##presetName", presetNameBuf, sizeof(presetNameBuf));
@@ -5724,7 +5612,7 @@ namespace gucci {
         ImGui::SameLine(iW);
         ImGui::SetNextItemWidth(-1);
         if (ImGui::BeginCombo("##rPreset", presets[renderPresetIndex].name)) {
-            for (int i = 0; i < 4; i++) {
+            for (int i = 0; i < kResPresetCount; i++) {
                 bool sel = (renderPresetIndex == i);
                 if (ImGui::Selectable(presets[i].name, sel)) {
                     renderPresetIndex = i;
@@ -5942,7 +5830,17 @@ namespace gucci {
                 "frame-window cues isolated separately.");
             ImGui::PopStyleColor();
             Widgets::StyledSliderFloat("Music Volume", &renderMusicVol, 0.f, 2.f, theme, true);
-            Widgets::StyledSliderFloat("SFX Volume", &renderSfxVol, 0.f, 2.f, theme, true);
+            Widgets::StyledSliderFloat("Game SFX", &renderSfxVol, 0.f, 2.f, theme, true);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip(
+                    "Death, orbs, pads, portals, checkpoints, level complete and UI -- the "
+                    "sound the run itself makes.");
+            Widgets::StyledSliderFloat(
+                "Level SFX", &renderTriggerSfxVol, 0.f, 2.f, theme, true);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip(
+                    "Sound the level's creator placed with SFX triggers. On many modern "
+                    "levels this is part of the song rather than decoration.");
         }
         if (Widgets::ToggleSwitch("Auto Color Fix", &renderColorFix, theme, anim))
             mod->setSavedValue("render_color_fix", renderColorFix);
@@ -8589,6 +8487,7 @@ namespace gucci {
         mod->setSavedValue("render_include_clicks", renderIncludeClicks);
         mod->setSavedValue("render_sfx_volume", (double)renderSfxVol);
         mod->setSavedValue("render_music_volume", (double)renderMusicVol);
+        mod->setSavedValue("render_trigger_sfx_volume", (double)renderTriggerSfxVol);
         mod->setSavedValue("render_hide_endscreen", renderHideEndscreen);
         mod->setSavedValue("render_hide_levelcomplete", renderHideLevelComplete);
         auto* csm = ClickSoundManager::get();
@@ -8630,6 +8529,8 @@ namespace gucci {
         renderIncludeClicks = loadSV<bool>(mod, "render_include_clicks", false);
         renderSfxVol = (float)loadSV<double>(mod, "render_sfx_volume", 1.0);
         renderMusicVol = (float)loadSV<double>(mod, "render_music_volume", 1.0);
+        renderTriggerSfxVol =
+            (float)loadSV<double>(mod, "render_trigger_sfx_volume", 1.0);
         renderHideEndscreen = loadSV<bool>(mod, "render_hide_endscreen", false);
         renderHideLevelComplete = loadSV<bool>(mod, "render_hide_levelcomplete", false);
         snprintf(renderNameBuf, sizeof(renderNameBuf), "%s", rn.c_str());
@@ -8854,6 +8755,8 @@ namespace gucci {
         eng->fwUseRecoveryRangeAlgorithm = mod->getSavedValue<bool>("fw_use_recovery_range", false);
         eng->fwRecoveryRange = mod->getSavedValue<int>("fw_recovery_range", 4);
         eng->fwUseAlignmentIndependent = mod->getSavedValue<bool>("fw_use_align_indep", false);
+        // All of anticroom's settings, loaded from the fwac_ keys.
+        MenuInterface::get()->loadAcFrameWindowSettings();
         eng->fwAiZ = mod->getSavedValue<int>("fw_ai_z", 3);
         eng->fwAiContinuationDepth = mod->getSavedValue<int>("fw_ai_cont_depth", 1);
         eng->fwAiClusterRatio = mod->getSavedValue<float>("fw_ai_cluster_ratio", 1.15f);
@@ -9425,6 +9328,30 @@ namespace gucci {
                 MenuInterface::get()->initialize();
             })
             .draw([] {
+                // anticroom's analyzer is driven from here, the same place
+                // Silicate drives it (UIManager::draw), and NOT from the
+                // updater where GucciBot's own fwTick runs -- his tick()
+                // pauses and single-steps the updater itself, so calling it
+                // from inside the update would be re-entrant. Both calls
+                // return immediately while it isn't running, which is always,
+                // until something calls start(). Nothing does yet.
+                // Save results the moment a run finishes, not only when the
+                // macro is next saved. Calculate is normally run on a macro
+                // that is already on disk, so waiting for a save meant the
+                // results were never written and the macro came back blank.
+                {
+                    static bool s_wasRunning = false;
+                    auto& acfw = ::Bot::get()->frameWindow();
+                    bool const nowRunning = acfw.running();
+                    if (s_wasRunning && !nowRunning)
+                        GucciEngine::get()->saveAcFrameWindowResults();
+                    s_wasRunning = nowRunning;
+                }
+
+                ::Bot::get()->frameWindow().tick(PlayLayer::get());
+                if (auto* fwPl = PlayLayer::get())
+                    ::Bot::get()->frameWindow().updateProgressOverlay(fwPl);
+
                 auto* ui = MenuInterface::get();
                 // Cover goes first so the menu (drawn next) stacks above it.
                 displayPathfinderHUD();

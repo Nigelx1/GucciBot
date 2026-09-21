@@ -1,5 +1,6 @@
 #include "renderer.hpp"
 #include "core/GucciBot.hpp"
+#include "analysis/ac/sound.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/binding/PlayLayer.hpp>
@@ -184,6 +185,8 @@ namespace gucci {
         m_settings.m_audioCodec = mod->getSavedValue<std::string>("render_audio_codec", "aac");
         m_settings.m_musicVolume = mod->getSavedValue<double>("render_music_volume", 1.0);
         m_settings.m_sfxVolume = mod->getSavedValue<double>("render_sfx_volume", 1.0);
+        m_settings.m_triggerSfxVolume =
+            mod->getSavedValue<double>("render_trigger_sfx_volume", 1.0);
 
         m_collectAudio = mod->getSavedValue<bool>("render_include_audio", true);
         m_settings.m_splitAudioTracks =
@@ -442,8 +445,9 @@ namespace gucci {
         geode::log::info("[GucciBot] SLRenderer capture ready — buffer {}", m_bufferSize);
 
         if (m_collectAudio) {
-            gbfw::frameWindowChannelGroup();
+            FrameWindowSound::channelGroup();
             AudioEngineRenderState::enter(m_settings.m_musicVolume, m_settings.m_sfxVolume);
+            FrameWindowSound::setRenderMode(true);
 
             AudioRecorder::get()->init();
             AudioRecorder::get()->attach();
@@ -453,7 +457,7 @@ namespace gucci {
                 AudioRecorder::getMusic()->attach();
                 AudioRecorder::getSfx()->init(engine->m_globalChannel);
                 AudioRecorder::getSfx()->attach();
-                AudioRecorder::getFrameWindow()->init(gbfw::frameWindowChannelGroup());
+                AudioRecorder::getFrameWindow()->init(FrameWindowSound::channelGroup());
                 AudioRecorder::getFrameWindow()->attach();
             }
         }
@@ -587,6 +591,7 @@ namespace gucci {
             AudioRecorder::getFrameWindow()->detach();
             AudioRecorder::getFrameWindow()->uninit();
         }
+        FrameWindowSound::setRenderMode(false);
         AudioEngineRenderState::exit();
 
         if (m_pkt && m_videoCodecCtx && m_formatCtx && m_videoStream) {

@@ -12,6 +12,9 @@
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/binding/GJGroundLayer.hpp>
 
+#include "analysis/ac/cbf.hpp"
+#include "analysis/ac/framewindow.hpp"
+
 using namespace geode::prelude;
 
 using namespace gucci;
@@ -114,11 +117,24 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         if (!lockDeltaActive)
             upd.calculateSteps(dt, (float)upd.getPhysicsDt());
 
+        // Diagnostic: the analyzer's legs are supposed to step exactly as the
+        // capture pass did. This prints what the step count actually is per
+        // frame while a run is in progress, and whether the post-reset clamp
+        // is the thing changing it -- the capture never resets, so it never
+        // meets the clamp, while every leg starts with one.
+        int const stepsBeforeClamp = upd.estimatedStepCount;
+
         if (upd.m_respawnTimer > 0) {
             upd.m_respawnTimer--;
             upd.totalStepCount = std::min(upd.totalStepCount, 1);
             upd.estimatedStepCount = std::min(upd.estimatedStepCount, 1);
         }
+
+        if (gb->analyzerOwnsRun() && stepsBeforeClamp != upd.estimatedStepCount)
+            gucci::fwEngineLog(fmt::format(
+                "[fw][steps] frame={} steps {} -> {} (respawn clamp, {} left)",
+                upd.getFrame(), stepsBeforeClamp, upd.estimatedStepCount,
+                upd.m_respawnTimer));
 
         if (upd.m_extrapolateFrames && upd.getFrame() > upd.m_frameOnLastAttempt) {
             if (shouldExtrapolate()) {
@@ -150,15 +166,20 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
                 gb->renderer.handleRecording(rpl, (int)upd.getFrame());
         }
 
-        if (auto* fpl = PlayLayer::get()) {
-            gbfw::renderFrameWindows(fpl, SLRenderer::get()->isRecording());
+        // Ghosts, ranges and debug overlays are decoration. During a run they
+        // are drawn hundreds of times a second over a level that is being
+        // restarted constantly, and none of it is being looked at. Analyzer
+        // gets the frame budget.
+        if (auto* fpl = PlayLayer::get(); fpl && !gb->analyzerOwnsRun()) {
             gbpf::renderAgencyDebug(fpl);
             gbpr::renderPracticeRange(fpl);
             gbju::renderJupiterGhost(fpl);
             gbtr::renderTrainerGhost(fpl);
         }
 
-        if (gb->pendingAutoRetry > 0.0f) {
+        // Auto-retry calls resetLevel(). Doing that in the middle of a leg
+        // would throw away the run the analyzer is measuring.
+        if (gb->pendingAutoRetry > 0.0f && !gb->analyzerOwnsRun()) {
             gb->pendingAutoRetry -= dt;
             if (gb->pendingAutoRetry <= 0.0f) {
                 gb->pendingAutoRetry = 0.0f;
@@ -239,6 +260,35 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         if (button < 1 || button > 3)
             return;
 
+        // Tell anticroom's analyzer the moment a press is actually applied,
+        // and in what state the player was when it landed -- notably whether
+        // the input could be split within the tick or had to be buffered,
+        // which is what his cube CBF investigation hangs on. Inert unless his
+        // analyzer is running, which GucciBot's own Calculate never makes it.
+        // Placed exactly where Silicate places it: after the button filter,
+        // before the input is handed onward.
+        if (auto& acfw = ::Bot::get()->frameWindow(); acfw.running()) {
+            bool const flipped = gb->replay.playerFlipped(action.m_player2);
+            auto* actor = flipped ? m_player2 : m_player1;
+            acfw.notePress(action.m_frame,
+                           action.m_player2,
+                           cbf::canSplit(actor,
+                                         SLSettings::get()->frameWindow.cbfTickGround),
+                           actor && actor->m_isOnGround,
+                           actor ? actor->m_yVelocity : 0.0);
+        }
+
+        // Hand the input to the CBF engine. If it is armed for this frame, it
+        // holds the input back and fires it between physics sub-steps instead
+        // of at the tick boundary -- which is the whole point of a sub-tick
+        // window. Returning true means "taken, do not queue it normally".
+        {
+            bool const flipped2 = gb->replay.playerFlipped(action.m_player2);
+            if (cbf::Engine::get()->capture(
+                    action.m_frame, button, action.m_holding, flipped2))
+                return;
+        }
+
         if (gb->fwSampling && action.m_holding) {
             auto* sp = action.m_player2 ? m_player2 : m_player1;
             if (sp)
@@ -252,23 +302,9 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
                                               action.m_type});
         }
 
-        bool fwSoundEnabled =
-            SLRenderer::get()->isRecording() ? gb->fwEnabledRender : gb->fwEnabledLive;
-        if (fwSoundEnabled && !gb->fwAnalyzing && gb->fwHasData) {
-            bool actionIsRelease = !action.m_holding;
-            for (auto const& mk : gb->fwMarks) {
-                if (mk.frame != action.m_frame || mk.isRelease != actionIsRelease)
-                    continue;
-                if (mk.window > gb->fwMaxWindow)
-                    break;
-                // Default Look ignores tiers, so a tier setup that doesn't
-                // cover this window must not silence it.
-                if (!gb->fwDefaultLook && !gb->fwTiers.empty() && !gb->fwTierFor(mk.window))
-                    break;
-                gbfw::playTierSound(mk.window);
-                break;
-            }
-        }
+        // GucciBot's tier sounds were driven from here off its own fwMarks.
+        // anticroom's analyzer plays its tier sounds itself, from its render
+        // path, so there is nothing to drive from the action dispatch now.
 
         queueButton(button, action.m_holding, gb->replay.playerFlipped(action.m_player2), 0.0);
     }
@@ -383,7 +419,24 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
             saveQueuedButtons();
         } else if (gb->isPlaying()) {
             uint32_t frame = gb->updater.getFrame();
-            uint32_t lookupFrame = gb->fwAnalyzing ? frame : frame + 1;
+            // The unshifted branch exists for GucciBot's own analyzer (Juice's
+            // design, commit 77b0dad): store the true frame everywhere and
+            // compensate only where normal playback applies a queued input.
+            //
+            // anticroom's analyzer is not that analyzer. It replays GucciBot
+            // macros through the ordinary update path, so it needs the same
+            // compensation ordinary playback needs. Without it the capture
+            // pass -- a plain replay from frame 0, no restores involved --
+            // died at frame 193 on a macro that plays fine normally, while
+            // with it the same pass reached 3943. Capture and legs were both
+            // unshifted, so they agreed with each other and desyncs looked
+            // low, but both were running a macro that was not the real one.
+            // That is the "counts everything, numbers aren't right" symptom.
+            //
+            // Pathfinder keeps the unshifted branch: it is GucciBot-native and
+            // was built against it.
+            bool const acRun = gb->analyzerOwnsRun();
+            uint32_t lookupFrame = (gb->fwAnalyzing && !acRun) ? frame : frame + 1;
             while (auto input = gb->replay.getNextInput(lookupFrame)) {
                 // Nigel's real test (2026-09-06): a Pathfinder result "calculated
                 // correctly" but every one of its inputs failed to fire on normal
@@ -413,6 +466,20 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         auto& upd = GucciEngine::get()->updater;
         upd.m_lastCameraPos = upd.m_currentCameraPos;
         GJBaseGameLayer::updateCamera(dt);
+
+        // Holds the camera on the click being measured instead of letting it
+        // fly around as the analyzer restarts the level hundreds of times.
+        // This is what the "Lock Camera" setting does -- without it that
+        // setting saved, loaded and changed nothing at all.
+        if (auto& acfw = ::Bot::get()->frameWindow();
+            acfw.cameraLocked() && m_objectLayer) {
+            auto const win = cocos2d::CCDirector::sharedDirector()->getWinSize();
+            auto const target = acfw.cameraPoint();
+            float const sc = m_objectLayer->getScale();
+            m_objectLayer->setPosition(
+                {win.width / 2.f - target.x * sc, m_objectLayer->getPositionY()});
+        }
+
         upd.m_currentCameraPos = m_objectLayer->getPosition();
     }
 

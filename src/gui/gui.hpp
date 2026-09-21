@@ -272,6 +272,8 @@ namespace gucci {
         bool renderSplitAudioTracks = false;
         bool renderIncludeClicks = false;
         float renderSfxVol = 1.f, renderMusicVol = 1.f;
+        // Level SFX-trigger audio, separate from gameplay sound.
+        float renderTriggerSfxVol = 1.f;
         bool renderHideEndscreen = false, renderHideLevelComplete = false;
         bool renderBufsInit = false;
         bool advancedWarningAccepted = false, showAdvancedWarning = false;
@@ -326,6 +328,14 @@ namespace gucci {
         void drawReplayTab();
         void drawToolsTab();
         void drawFrameWindowsTab();
+        void loadAcFrameWindowSettings();
+        std::vector<std::string> acSoundPackNames();
+        void importAcSoundPack(std::string const& name);
+        void exportAcSoundPack(std::string const& name);
+        std::string m_acPackName;
+        std::string m_acPackReport;
+        bool m_acPackOk = false;
+        void saveAcFrameWindowSettings();
         void drawPathfinderTab();
         void drawRenderTab();
         void drawClicksTab();

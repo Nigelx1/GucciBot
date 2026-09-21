@@ -21,7 +21,67 @@ namespace gucci {
         return true;
     }
 
+    // Splits the level's own SFX-trigger audio from GD's gameplay sound while
+    // rendering, so a showcase can keep the sound a creator built into the
+    // level and drop the death/orb/pad noise the macro makes.
+    //
+    // The split is by call path, which is how GD itself separates them:
+    // gameplay sound goes through the plain playEffect overloads, while an SFX
+    // trigger calls playEffectAdvanced -- it is the only one carrying an
+    // effect id, channel and SFX group, which is exactly what a trigger
+    // configures. No filename matching, which would break the moment a creator
+    // used a built-in sound in a trigger.
+    //
+    // Only active while rendering. Outside a render both return true and the
+    // game sounds exactly as it always does.
+    static bool renderAudioActive() {
+        auto* r = SLRenderer::get();
+        return r && r->isRecording();
+    }
+
+    static float gameplaySfxScale() {
+        if (!renderAudioActive())
+            return 1.f;
+        return (float)SLRenderer::get()->m_settings.m_sfxVolume;
+    }
+
+    static float triggerSfxScale() {
+        if (!renderAudioActive())
+            return 1.f;
+        return (float)SLRenderer::get()->m_settings.m_triggerSfxVolume;
+    }
+
     struct GB7AudioEngine : Modify<GB7AudioEngine, FMODAudioEngine> {
+        // Gameplay sound. The one-argument overload carries no volume to
+        // scale, so at zero the call is dropped rather than played silently.
+        int playEffect(gd::string path) {
+            if (gameplaySfxScale() <= 0.f)
+                return 0;
+            return FMODAudioEngine::playEffect(path);
+        }
+
+        int playEffect(gd::string path, float speed, float unknown, float volume) {
+            float const scale = gameplaySfxScale();
+            if (scale <= 0.f)
+                return 0;
+            return FMODAudioEngine::playEffect(path, speed, unknown, volume * scale);
+        }
+
+        // SFX triggers.
+        int playEffectAdvanced(gd::string path, float speed, float unknown, float volume,
+                               float pitch, bool fastFourierTransform, bool reverb,
+                               int startMillis, int endMillis, int fadeIn, int fadeOut,
+                               bool loopEnabled, int effectID, bool override, bool noPreload,
+                               int channelID, int uniqueID, float minInterval, int sfxGroup) {
+            float const scale = triggerSfxScale();
+            if (scale <= 0.f)
+                return 0;
+            return FMODAudioEngine::playEffectAdvanced(
+                path, speed, unknown, volume * scale, pitch, fastFourierTransform, reverb,
+                startMillis, endMillis, fadeIn, fadeOut, loopEnabled, effectID, override,
+                noPreload, channelID, uniqueID, minInterval, sfxGroup);
+        }
+
         void update(float dt) {
             if (!shouldUpdateAudio())
                 return;

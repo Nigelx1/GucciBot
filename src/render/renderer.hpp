@@ -33,7 +33,21 @@ namespace gucci {
         std::string m_renderArgs = "";
 
         double m_musicVolume = 1.0;
+
+        // GD plays level sound through two different calls, so a render can
+        // treat them separately:
+        //
+        //   m_sfxVolume         gameplay sound -- death, orbs, pads, portals,
+        //                       checkpoints, level complete, UI. These go
+        //                       through the plain playEffect overloads.
+        //   m_triggerSfxVolume  the level's OWN sound, placed by its creator
+        //                       with SFX triggers, which call
+        //                       playEffectAdvanced with an effect id and SFX
+        //                       group. On many modern levels this is part of
+        //                       the song rather than decoration, so muting it
+        //                       with the death sound loses real audio.
         double m_sfxVolume = 1.0;
+        double m_triggerSfxVolume = 1.0;
 
         bool m_splitAudioTracks = false;
     };

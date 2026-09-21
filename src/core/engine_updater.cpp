@@ -2,6 +2,7 @@
 #include "hacks/autoclicker.hpp"
 #include "analysis/trajectory.hpp"
 #include "analysis/pathfinder.hpp"
+#include "analysis/ac/framewindow.hpp"
 #include "hooks/util_midhook.hpp"
 #include "render/renderer.hpp"
 
@@ -183,12 +184,45 @@ void GucciUpdater::runUpdates(std::function<void(float)> update, float realDt, b
     auto* gb = GucciEngine::get();
     m_allowedToProcessActions = true;
 
+    // fwAnalyzing is GucciBot's engine-wide "a headless simulation is running,
+    // behave accordingly" flag -- it long outlived the analyzer it was named
+    // after, and Pathfinder already borrows it. anticroom's analyzer has no
+    // idea it exists, so it is kept in step here.
+    //
+    // This matters most at hook_gjbasegamelayer.cpp's input dispatch, which
+    // looks inputs up at frame+1 during normal playback and at frame during a
+    // simulation. Without this every input in one of his legs fired a frame
+    // late: the press on the click being measured had not happened yet on its
+    // own frame, so the leg diverged from the capture by exactly one frame of
+    // movement and the click was written off as desynced. Tight sections died
+    // of it; sections with room absorbed it, which is why spam was worst.
+    //
+    // Pathfinder owns the flag while it is running -- don't fight it for it.
+    if (!Pathfinder::get()->active)
+        gb->fwAnalyzing = ::Bot::get()->frameWindow().running();
+
     if (frozen) {
         m_onlyRefresh = true;
         update(realDt);
         m_onlyRefresh = false;
         if (PlayLayer::get())
             TrajectoryPredictionService::get().updatePreview(PlayLayer::get());
+        return;
+    }
+
+    // Batched stepping for anticroom's analyzer: run m_analysisBatch physics
+    // steps in one pass instead of one per drawn frame, so a sweep finishes in
+    // seconds rather than minutes. Ported from Silicate's updater, and placed
+    // where Silicate places it -- ahead of the normal step calculation, which
+    // it deliberately bypasses. m_analysisBatch is only ever non-zero for the
+    // duration of one of his stepping calls, so nothing else sees this path.
+    if (m_analysisBatch > 0) {
+        consumeStep();
+        totalStepCount = (int)m_analysisBatch;
+        estimatedStepCount = (int)m_analysisBatch;
+        m_tpsOverflow = 0.0;
+        m_shouldRender = true;
+        update((float)(getPhysicsDt() * m_analysisBatch));
         return;
     }
 
@@ -443,7 +477,6 @@ static void frameUpdateMidhook(SafetyHookContext&) {
             // ahead of its position and made every restore lose a frame of X.
             // Same bug the deferred capture right above this already fixes for
             // GD's own practice checkpoints. Don't move these back into tick().
-            gb->fwServiceSettledCapture();
             if (Pathfinder::get()->active) {
                 Pathfinder::get()->serviceSettledCapture();
                 Pathfinder::get()->serviceAgencyProbe();
@@ -560,11 +593,18 @@ static void frameUpdateMidhook(SafetyHookContext&) {
         }
     }
 
+    // fwCkptCreatedThisFrame stays: Pathfinder sets it, it is not analyzer
+    // state. The fwTick() call that used to follow is gone with GucciBot's
+    // analyzer -- anticroom's ticks from the UI draw instead.
     gb->fwCkptCreatedThisFrame = false;
-    if (gb->fwAnalyzing)
-        gb->fwTick();
     if (Pathfinder::get()->active)
         Pathfinder::get()->tick();
+    // Draws anticroom's markers and HUD. Called every frame regardless of
+    // whether his analyzer is running, matching Silicate -- render() also
+    // tears its own nodes down when there is nothing to show. Its nodes have
+    // their own IDs ("framewindow-markers"/"framewindow-hud"), so they do not
+    // collide with GucciBot's own FrameWindowOverlay.
+    ::Bot::get()->frameWindow().render(PlayLayer::get());
 
     bool slRender = SLRenderer::get()->isRecording();
     if (gb->isPlaying() || slRender) {
@@ -621,7 +661,10 @@ static void frameUpdateMidhook(SafetyHookContext&) {
         }
     }
 
-    if (auto* pll = PlayLayer::get()) {
+    // The autoclicker queues real buttons. Firing one inside an analyzer leg
+    // would put an input into the run that the macro never contained, and the
+    // window measured from it would be meaningless. Analyzer wins.
+    if (auto* pll = PlayLayer::get(); pll && !gb->analyzerOwnsRun()) {
         auto res = Autoclicker::get()->processTick();
         if (res.p1Fire) {
             pll->queueButton(1, res.p1Press, false, 0.0);

@@ -1,11 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-19-b (Reverts build -a. The robot release-pairing change was built on a wrong "\
-    "premise: GucciBot's robot windows were never the broken ones -- the robot bug was in "\
-    "anticroom's Silicate, not here. Juice's design, where a robot release is measured as "\
-    "its own sample rather than dragged along by the press, stands untouched. Back to the "\
-    "1.7.2 behaviour exactly.)"
+    "2026-09-20-ae (The showcase preset actually applies now. Resolution is chosen only from a fixed list with no width or height boxes, and 8K was not in it -- so the press set the buffers while the combo still read 1080p, which looked like nothing happening, and touching the combo afterwards would have written 1080p back over it. 8K is in the list now and the preset selects it, with a line under the button confirming what was applied. SFX sliders renamed Game SFX and Level SFX, the latter no longer running off the edge.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -38,6 +34,11 @@ namespace gucci {
 
     void logFrameIncrement(const char* callSite, uint32_t frame, PlayerObject* p = nullptr);
     void logCalcDeathTrace(const std::string& line);
+    // Writes into anticroom's analyzer log (guccibot_fw.log) from engine-side
+    // code, so a run's diagnostics all land in one file in one order instead
+    // of being split across two logs that have to be interleaved by hand.
+    // Defined in analysis/ac/framewindow.cpp.
+    void fwEngineLog(const std::string& line);
 
     class GucciScheduler {
     public:
@@ -81,6 +82,22 @@ namespace gucci {
         // between attempt-start and the checkpoint would desync downstream
         // otherwise. Captured/restored alongside everything else here.
         uint64_t m_rngState = 0;
+
+        // Level simulation state, ported from Silicate 2026-09-20. GucciBot's
+        // checkpoints restored the PLAYER faithfully and left the LEVEL where
+        // it was, so after a restore the moving objects, trigger variance and
+        // persistent item counters were still wherever the run had got to.
+        // Replaying the macro from such a checkpoint then diverges -- the
+        // player meets a world that is not the one it met the first time --
+        // and anticroom's analyzer, which restores hundreds of times per run,
+        // reported that as "the macro's own timing does not reproduce here"
+        // and refused to measure the click at all. That is what made every
+        // window past the first few come back desynced.
+        std::unordered_map<int, int> m_persistentItemMap;
+        std::array<float, 2000> m_varianceValues{};
+        std::vector<GameObject*> m_calcNonEffectObjects;
+        int m_calcNonEffectObjectsSize = 0;
+        bool m_hasLevelState = false;
     };
 
     struct StoredFrame {
@@ -120,8 +137,16 @@ namespace gucci {
         uint64_t m_pendingCaptureFrameOffset = 0;
         int m_pendingCaptureStage = 0;
 
+        SavedCheckpointState createCheckpoint(CheckpointObject* cp, uint64_t frameOffset);
         void saveCurrent(CheckpointObject* cp, uint64_t frameOffset);
         void saveState(CheckpointObject* cp, uint64_t frameOffset);
+        // Both ported from Silicate 2026-09-20 during the analyzer port.
+        // m_forcedState above was already here, declared and read by nothing --
+        // the same half-a-mechanism pattern as registerBrokenObject (CLAUDE.md
+        // section "Reference codebases"). resetWithState is the half that was
+        // missing; the readers in hook_playlayer.cpp are the rest of it.
+        void resetWithState(const SavedCheckpointState& state);
+        void removeAll();
         void restorePreviousFrame(std::function<void(CheckpointObject*)> loadFn);
         void applyLatest();
         void applyCheckpoint(SavedCheckpointState& state);
@@ -197,6 +222,14 @@ namespace gucci {
 
         std::vector<std::pair<double, double>> m_clickIntervalsSec;
         double m_clickBarTps = 240.0;
+
+        // The TPS the loaded macro was actually recorded at, as opposed to the
+        // TPS the game is running now. Silicate keeps this; GucciBot's port
+        // dropped it and kept only the TPS *actions* inside the atom, which
+        // say when TPS changes mid-run but not what the macro started at.
+        // Used to warn when a macro recorded at one rate is played back at
+        // another, which silently changes what every frame window means.
+        double m_initialTPS = 240.0;
         void buildClickIntervals(double tps);
 
         float m_trainerBestX = 0.f;
@@ -222,6 +255,14 @@ namespace gucci {
             m_inputIndex++;
         }
         void onReset(uint32_t respawnFrame, uint32_t deathFrame);
+        // Silicate's signature. GucciBot added deathFrame, which is used only
+        // in this function's log lines -- respawnFrame does all the actual
+        // work -- so passing the same frame for both is faithful, not a
+        // shortcut. Kept so Silicate-side code (the ported analyzer) calls
+        // this unmodified.
+        void onReset(uint32_t frame) {
+            this->onReset(frame, frame);
+        }
         void onExit() {
             m_inputIndex = 0;
         }
@@ -264,6 +305,18 @@ namespace gucci {
         bool m_paused = false;
         bool m_stepOnce_ = false;
         bool m_onlyRefresh = false;
+
+        // Wanted by anticroom's frame-window analyzer. Declared here so the
+        // port compiles and reads/writes real state; NEITHER IS HONOURED BY
+        // THE UPDATE LOOP YET -- wiring them is phase 2 of the port, and until
+        // then the analyzer runs one step per frame like the existing one.
+        // m_analysisBatch: how many physics steps to run per drawn frame while
+        // analysing, so a long sweep doesn't take real-time minutes.
+        // m_droppedTimeFrame: the frame at which the loop last had to drop
+        // accumulated time; the analyzer warns on it because a drop there
+        // means the run it just measured isn't trustworthy.
+        uint32_t m_analysisBatch = 0;
+        uint32_t m_droppedTimeFrame = UINT32_MAX;
 
         bool m_backwardsStepping = false;
         bool m_ssbFix = true;
@@ -324,6 +377,12 @@ namespace gucci {
             bool s = m_stepOnce_;
             m_stepOnce_ = false;
             return s;
+        }
+        // Arms a single frame advance. GucciBot's own callers set m_stepOnce_
+        // directly; this is the name anticroom's analyzer asks for, and it is
+        // the same one-shot flag consumeStep() drains.
+        void stepOnce() {
+            m_stepOnce_ = true;
         }
         bool isPaused() const {
             return m_paused;
@@ -435,6 +494,18 @@ namespace gucci {
         bool isRecording() const {
             return mode == Mode::Recording;
         }
+        // True while anticroom's frame-window analyzer owns the run.
+        //
+        // Nigel's standing rule, 2026-09-20: where anything GucciBot does
+        // conflicts with what the analyzer needs, the analyzer wins. A leg
+        // only means something if it reproduces the macro exactly, so while
+        // one is running nothing else may inject inputs, reset the level, or
+        // spend the frame budget on decoration.
+        //
+        // Defined in engine_core.cpp, since GucciBot.hpp cannot see the
+        // analyzer's header (it includes this one).
+        bool analyzerOwnsRun() const;
+
         bool isPlaying() const {
             return mode == Mode::Playing;
         }
@@ -841,6 +912,8 @@ namespace gucci {
         void unmuteAnalysisMusic();
         void computeProbeHorizon();
         void saveFwMarksNow();
+        // Writes the analyzer's results next to the current macro.
+        void saveAcFrameWindowResults();
         float fwAnalyzeProgress = 0.0f;
         int fwAnalyzeCur = 0;
         int fwAnalyzeTotal = 0;
@@ -868,6 +941,17 @@ namespace gucci {
         // Continuation depth is capped at 0 or 1 (not arbitrary N) for the
         // same reason. Ask before adding any of these.
         bool fwUseAlignmentIndependent = false;
+
+        // Selects anticroom's analyzer (src/analysis/ac/) instead of
+        // GucciBot's own for a Calculate run. Off by default: while it is off,
+        // his analyzer never starts, every gate that asks whether it is
+        // running answers no, and Calculate behaves exactly as it always has.
+        // It is an ADDITIONAL algorithm rather than a replacement so that
+        // Alignment-Independent -- Juice's, which his port predates and does
+        // not have -- survives, and so the two can be compared on one macro.
+        bool fwUseAcAnalyzer = false;
+        std::string fwAcReport;
+        bool fwAcOk = false;
         int fwAiZ = 3;
         int fwAiContinuationDepth = 1; // 0 or 1 only in V1
         float fwAiClusterRatio = 1.15f;

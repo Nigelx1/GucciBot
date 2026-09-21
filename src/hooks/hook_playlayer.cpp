@@ -2,6 +2,7 @@
 #include "hacks/autoclicker.hpp"
 #include "analysis/trajectory.hpp"
 #include "analysis/pathfinder.hpp"
+#include "analysis/ac/framewindow.hpp"
 #include "hacks/hitboxes.hpp"
 #include "trainers/jupiterghost.hpp"
 #include "trainers/trainerghost.hpp"
@@ -44,21 +45,44 @@ class $modify(GB7PlayLayer, PlayLayer) {
         // don't "simplify" this back to an immediate call, that's exactly
         // the bug this fixed (compounding per-checkpoint position drift).
         auto& pf = gb->practiceFix;
-        if (pf.m_pendingCaptureStage != 0 && pf.m_pendingCaptureCp) {
-            pf.saveCurrent(pf.m_pendingCaptureCp, pf.m_pendingCaptureFrameOffset);
-        }
         if (gb->updater.m_logFrameIncrements)
             logFrameIncrement(
                 "storeCheckpoint(queued)", gb->updater.getFrame() + 1, this->m_player1);
         pf.m_pendingCaptureCp = obj;
         pf.m_pendingCaptureFrameOffset = gb->updater.getFrame() + 1;
         pf.m_pendingCaptureStage = 1;
+
+        // Provisional save, right now, with the one-frame-stale state the
+        // comment above warns about. The settled capture two ticks later
+        // replaces it in place (saveCurrent overwrites an entry for the same
+        // checkpoint), so in normal play nothing changes and the accurate
+        // capture still wins.
+        //
+        // It exists for the case where the settled capture never arrives: the
+        // deferred pass is gated on the player being alive, so dying within
+        // those two ticks used to abandon the capture entirely. The checkpoint
+        // then never entered m_savedCheckpoints and the next respawn went to
+        // the PREVIOUS checkpoint. A slightly stale checkpoint beats a missing
+        // one. (This also replaces the old flush-the-previous-pending call
+        // that used to sit here, which saved the previous checkpoint using the
+        // CURRENT player state -- a checkpoint whose stored gamemode did not
+        // match its own position, which is how hitboxes came back wrong.)
+        pf.saveCurrent(obj, pf.m_pendingCaptureFrameOffset);
     }
 
     void loadFromCheckpoint(CheckpointObject* obj) {
         if (!GucciEngine::get()->enabled)
             return PlayLayer::loadFromCheckpoint(obj);
         auto& pf = GucciEngine::get()->practiceFix;
+        // Checked before everything else: when m_forcedState is set, a caller
+        // (resetWithState) has named the exact state to come back to, so any
+        // other branch winning here would restore the wrong one. Silicate
+        // checks it first in this function too.
+        if (pf.m_forcedState) {
+            PlayLayer::loadFromCheckpoint(pf.m_forcedState->m_checkpoint);
+            pf.applyCheckpoint(*pf.m_forcedState);
+            return;
+        }
         if (pf.m_loadCheckpoint) {
             pf.restorePreviousFrame([this](auto* cp) {
                 this->PlayLayer::loadFromCheckpoint(cp);
@@ -215,6 +239,18 @@ class $modify(GB7PlayLayer, PlayLayer) {
                       !pf.m_savedCheckpoints.empty(),
                       pf.m_storedFrames.size());
 
+        // The other half of the m_forcedState mechanism (see
+        // GucciPracticeFix::resetWithState). First for the same reason it is
+        // first in loadFromCheckpoint: a named state beats every heuristic
+        // below it. Note this function's branch order is load-bearing -- it is
+        // where the 233->107 bug lived, CLAUDE.md section 4 -- so this goes in
+        // front of the existing chain rather than somewhere inside it, and
+        // changes nothing about the order of what follows.
+        if (pf.m_forcedState && pf.m_forcedState->m_checkpoint) {
+            upd.m_frameOnLastAttempt = pf.m_forcedState->m_frameOffset;
+            m_checkpointArray->addObject(pf.m_forcedState->m_checkpoint);
+            return true;
+        }
         if (!pf.m_savedCheckpoints.empty() && !pf.m_isBackstep && !upd.m_canDie) {
             upd.m_frameOnLastAttempt = pf.m_savedCheckpoints.back().m_frameOffset;
             m_checkpointArray->addObject(pf.m_savedCheckpoints.back().m_checkpoint);
@@ -284,7 +320,11 @@ class $modify(GB7PlayLayer, PlayLayer) {
             upd.m_canDie = false;
             upd.m_inputIsDeath = false;
             upd.m_expectsDeath = false;
-            processQueuedButtons(0.0, true);
+            // Not while anticroom's analyzer is mid-restore: it is putting the
+            // player back to a captured state, and replaying queued buttons on
+            // top of that would apply inputs it did not ask for.
+            if (!::Bot::get()->frameWindow().isRestoring())
+                processQueuedButtons(0.0, true);
             upd.m_tpsOverflow = 0.0;
             return;
         }
@@ -404,7 +444,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
         restoreHoldOnReset(deathFrame);
         addDeathInput(deathFrame);
 
-        if (!upd.m_canDie) {
+        if (!upd.m_canDie && !::Bot::get()->frameWindow().isRestoring()) {
             gb->replay.m_flipProcessingInputs = true;
             processQueuedButtons(0.0, true);
             gb->replay.m_flipProcessingInputs = false;
@@ -427,6 +467,18 @@ class $modify(GB7PlayLayer, PlayLayer) {
         auto* gb = GucciEngine::get();
         auto& upd = gb->updater;
 
+        // A queued checkpoint capture must not outlive the attempt it belongs
+        // to. The deferred pass only runs while the player is alive, so a
+        // pending capture at death would otherwise sit there and be completed
+        // during a LATER attempt, filing that attempt's player state -- a
+        // different position, often a different gamemode -- under this
+        // checkpoint's frame. The provisional save taken at placement time
+        // already holds a usable state, so dropping this loses nothing.
+        if (auto& pf = gb->practiceFix; pf.m_pendingCaptureStage != 0) {
+            pf.m_pendingCaptureCp = nullptr;
+            pf.m_pendingCaptureStage = 0;
+        }
+
         if (Pathfinder::get()->active) {
             // A simulated player dying inside an agency probe is not the run
             // dying. Without this the search treats every fork that clips
@@ -443,6 +495,16 @@ class $modify(GB7PlayLayer, PlayLayer) {
             // so the search keeps driving the same PlayLayer.
             if (obj != m_anticheatSpike)
                 Pathfinder::get()->noteDeath(upd.getFrame(), player ? player->m_position.x : 0.f);
+            return;
+        }
+
+        // anticroom's analyzer swallows deaths it caused itself, the same way
+        // the Pathfinder branch above does. Conditions are Silicate's: never
+        // for the end-of-level anticheat spike, and never for a simulated
+        // player, so a fork dying is not mistaken for the run dying.
+        if (obj != m_anticheatSpike &&
+            !TrajectoryPredictionService::get().ownsPreviewPlayer(player) &&
+            ::Bot::get()->frameWindow().onSuppressedDeath(player, obj)) {
             return;
         }
 
@@ -553,7 +615,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
             Pathfinder::get()->noteLevelComplete();
             return;
         }
-        if (gb->fwAnalyzing)
+        if (gb->fwAnalyzing || ::Bot::get()->frameWindow().running())
             return;
 
         PlayLayer::levelComplete();

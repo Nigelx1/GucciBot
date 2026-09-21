@@ -11,6 +11,7 @@
   "resources": {
     "files": [
       "resources/*.ttf",
+   "resources/*f SFX.mp3",
       "resources/clicks/Clickbot/softReleases/click00011692.mov",
       "resources/clicks/Clickbot/softReleases/click00012029.mov",
       "resources/clicks/Clickbot/softReleases/click00011810.mov",
