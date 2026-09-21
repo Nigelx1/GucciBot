@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-ae (The showcase preset actually applies now. Resolution is chosen only from a fixed list with no width or height boxes, and 8K was not in it -- so the press set the buffers while the combo still read 1080p, which looked like nothing happening, and touching the combo afterwards would have written 1080p back over it. 8K is in the list now and the preset selects it, with a line under the button confirming what was applied. SFX sliders renamed Game SFX and Level SFX, the latter no longer running off the edge.)"
+    "2026-09-20-af (Version bump to 1.8.0. Packages the whole analyzer replacement: GucciBot's own frame-window analyzer removed and anticroom's Silicate one in its place, the six things GucciBot's original Silicate port had dropped repaired, two older checkpoint and playback bugs fixed, Juice's marker shapes and the Brrr back, results saving alongside the macro, and the render path able to tell a level's own SFX triggers from the noise the run makes.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

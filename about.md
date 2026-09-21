@@ -1,4 +1,4 @@
-# GucciBot 1.7
+# GucciBot 1.8
 
 > Frame perfect. Ice cold. Brrr.
 
@@ -37,7 +37,7 @@ GucciBot is a Geometry Dash macro bot built on Silicate's physics engine, with a
 ## Practice & Analysis
 
 - Macro diff viewer — compare two replays frame by frame
-- Frame-window analyzer ("Calculate") — per-click timing windows across real game frames, with three selectable algorithms: Time-Based (default), Recovery Range, and the new Alignment-Independent (also re-tests the previous click's own timing, not just this one). Optional "Circle Skin" marker style, a **Default Look** preset matching the frame-window overlay style people already know, and an in-level legend counting how many clicks landed in each window.
+- Frame-window analyzer ("Calculate") — per-click timing windows measured against the real game engine, rebuilt in 1.8 on anticroom's Silicate analyzer. Two algorithms (Time-Based and Recovery Range), sub-tick CBF measurement that reads windows finer than a single frame, and a full settings tab: how far a shifted input has to survive, how much room to leave before the next one, which inputs to measure, and how much of each frame to spend. Colour bands with per-band marker shapes (circle, star, spiral, polygon, as a single outline, an inner ring or filled), per-band sounds and importable sound packs, and an in-level legend counting how many clicks landed in each band. Results save alongside the macro.
 - TPS mid-macro changes, noclip accuracy display, macro trim/merge/surgery
 - Bot settings presets, metadata editor, autosave at level end and/or on a timer
 
@@ -93,10 +93,10 @@ Real click-timing feedback and a synced video-review overlay, both built around 
 ## Rendering
 
 - Full gameplay capture to video via FFmpeg — configurable resolution, FPS, bitrate, codec (hardware encoders auto-detected per GPU vendor), and output extension.
-- Audio captured straight from the game's own mix, with music and SFX volumes independently adjustable for the render.
+- Audio captured straight from the game's own mix, with music, the game's own sound effects, and the level's SFX-trigger audio each at their own volume for the render — so a showcase can keep the sound a creator built into the level while dropping the death and orb noise the run makes.
 - **Split audio tracks** — optional 4-track output (combined mix, plus music, SFX, and frame-window cues each isolated) instead of one merged track.
 - Frame-window markers and cues render into the video too, matching your live tier setup.
-- Render presets — save and reload full render configurations by name.
+- Render presets — save and reload full render configurations by name, plus a one-press showcase preset (8K60, lossless x264, FLAC, thread count read from your CPU).
 
 ## Themes
 
