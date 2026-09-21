@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-ad (Level SFX and gameplay sound are now separate render volumes. GD plays them through different calls -- gameplay uses playEffect, an SFX trigger uses playEffectAdvanced, the only one carrying an effect id and SFX group -- so they can be scaled apart without matching filenames. Showcase preset keeps the level's own trigger audio at 1.00 and drops death, orbs, pads and UI to 0.00. The global effects volume stays at full during a render now, since setting that one knob would mute both.)"
+    "2026-09-20-ae (The showcase preset actually applies now. Resolution is chosen only from a fixed list with no width or height boxes, and 8K was not in it -- so the press set the buffers while the combo still read 1080p, which looked like nothing happening, and touching the combo afterwards would have written 1080p back over it. 8K is in the list now and the preset selects it, with a line under the button confirming what was applied. SFX sliders renamed Game SFX and Level SFX, the latter no longer running off the edge.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

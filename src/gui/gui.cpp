@@ -5365,10 +5365,14 @@ namespace gucci {
             const char* name;
             int w, h;
         };
+        // Resolution is picked ONLY from this list -- there are no width/height
+        // boxes -- so anything a preset wants to select has to exist here.
         static const ResPreset presets[] = {{"720p (1280x720)", 1280, 720},
                                             {"1080p (1920x1080)", 1920, 1080},
                                             {"1440p (2560x1440)", 2560, 1440},
-                                            {"4K (3840x2160)", 3840, 2160}};
+                                            {"4K (3840x2160)", 3840, 2160},
+                                            {"8K (7680x4320)", 7680, 4320}};
+        static constexpr int kResPresetCount = 5;
         if (!renderBufsInit)
             loadRenderSettings();
         float iW = ImGui::GetContentRegionAvail().x * 0.45f;
@@ -5401,12 +5405,19 @@ namespace gucci {
         // x264 (-qp 0) in yuv444p, FLAC audio, music only. The thread count is
         // filled in from the machine rather than hardcoded -- that is the one
         // value in his list that is per-CPU.
+        static bool showcaseApplied = false;
+        static unsigned showcaseThreads = 0;
         if (Widgets::StyledButton(
                 "Nigel's Awesome Showcase Preset", ImVec2(-1, 28), theme, anim, 6.f)) {
             unsigned threads = std::thread::hardware_concurrency();
             if (threads == 0)
                 threads = 8;
 
+            // Point the resolution combo at 8K too. Without this the buffers
+            // said 7680 while the combo still read 1080p, so the press looked
+            // like it had done nothing -- and touching the combo afterwards
+            // would have written 1080p straight back over it.
+            renderPresetIndex = 4;
             snprintf(renderWidthBuf, sizeof(renderWidthBuf), "%d", 7680);
             snprintf(renderHeightBuf, sizeof(renderHeightBuf), "%d", 4320);
             snprintf(renderFpsBuf, sizeof(renderFpsBuf), "%d", 60);
@@ -5441,13 +5452,22 @@ namespace gucci {
             mod->setSavedValue("render_sfx_volume", (double)renderSfxVol);
             mod->setSavedValue("render_trigger_sfx_volume", (double)renderTriggerSfxVol);
 
+            showcaseApplied = true;
+            showcaseThreads = threads;
             log::info("[GucciBot] render: applied the showcase preset ({} threads)", threads);
         }
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip(
-                "8K 60fps, lossless x264 (-qp 0) in yuv444p, FLAC audio, music only and no "
-                "SFX, nothing after the end. Thread count is read from this machine. Files "
-                "are very large -- this is for showcase footage, not everyday renders.");
+                "8K 60fps, lossless x264 (-qp 0) in yuv444p, FLAC audio. Music and the "
+                "level's own SFX triggers stay; death, orbs and UI are dropped. Thread "
+                "count is read from this machine. Files are very large -- this is for "
+                "showcase footage, not everyday renders.");
+        if (showcaseApplied) {
+            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+            ImGui::TextWrapped("Applied: 8K60, libx264 qp 0, yuv444p, FLAC, %u threads.",
+                               showcaseThreads);
+            ImGui::PopStyleColor();
+        }
 
         ImGui::Dummy(ImVec2(0, 6));
         static char presetNameBuf[64] = "My Preset";
@@ -5592,7 +5612,7 @@ namespace gucci {
         ImGui::SameLine(iW);
         ImGui::SetNextItemWidth(-1);
         if (ImGui::BeginCombo("##rPreset", presets[renderPresetIndex].name)) {
-            for (int i = 0; i < 4; i++) {
+            for (int i = 0; i < kResPresetCount; i++) {
                 bool sel = (renderPresetIndex == i);
                 if (ImGui::Selectable(presets[i].name, sel)) {
                     renderPresetIndex = i;
@@ -5810,13 +5830,13 @@ namespace gucci {
                 "frame-window cues isolated separately.");
             ImGui::PopStyleColor();
             Widgets::StyledSliderFloat("Music Volume", &renderMusicVol, 0.f, 2.f, theme, true);
-            Widgets::StyledSliderFloat("Gameplay SFX", &renderSfxVol, 0.f, 2.f, theme, true);
+            Widgets::StyledSliderFloat("Game SFX", &renderSfxVol, 0.f, 2.f, theme, true);
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip(
                     "Death, orbs, pads, portals, checkpoints, level complete and UI -- the "
                     "sound the run itself makes.");
             Widgets::StyledSliderFloat(
-                "Level SFX (triggers)", &renderTriggerSfxVol, 0.f, 2.f, theme, true);
+                "Level SFX", &renderTriggerSfxVol, 0.f, 2.f, theme, true);
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip(
                     "Sound the level's creator placed with SFX triggers. On many modern "
