@@ -117,9 +117,14 @@ struct FrameWindowSettings {
     bool cbfTickGround = true;
     double lstarRespawn = 0.0;
     double lstarTarget = 86400.0;
-    double lstarNerve = 0.0;
-    double lstarFatigue = 0.0;
-    double lstarCps = 0.0;
+    // NaN GD's own coefficients, the same values his calculator ships with
+    // (nandl.pages.dev/calculator.js: kt/ku/kc) and the same ones C0nscious
+    // hardcodes as DEFAULT_K_T/U/C. These were 0.0 here, which made the three
+    // toggles inert -- switching one on multiplied by exp(0)=1 and changed
+    // nothing, with no hint that a number was still needed.
+    double lstarNerve = 0.0016520833717346;
+    double lstarFatigue = 0.0002727763242154;
+    double lstarCps = 0.2784421686721826;
     bool lstarUseNerve = false;
     bool lstarUseFatigue = false;
     bool lstarUseCps = false;

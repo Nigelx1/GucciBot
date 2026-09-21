@@ -4883,6 +4883,14 @@ namespace gucci {
             fw.*e.field = (float)mod->getSavedValue<double>(e.key, (double)(d.*e.field));
         for (auto const& e : kAcDoubles)
             fw.*e.field = mod->getSavedValue<double>(e.key, d.*e.field);
+        // Builds -d and -e shipped these three as 0.0 and saved that, so an
+        // install from either has a stored zero that would survive the default
+        // being corrected. A zero coefficient means "no penalty", which is what
+        // the toggle already says, so it carries no information worth keeping --
+        // treat it as unset and fall back to NaN's value.
+        if (fw.lstarNerve == 0.0) fw.lstarNerve = d.lstarNerve;
+        if (fw.lstarFatigue == 0.0) fw.lstarFatigue = d.lstarFatigue;
+        if (fw.lstarCps == 0.0) fw.lstarCps = d.lstarCps;
         fw.cbfInputHz = (int64_t)mod->getSavedValue<int>("fwac_cbf_input_hz", (int)d.cbfInputHz);
         if (auto const t = mod->getSavedValue<std::string>("fwac_tiers", "");
             !t.empty())
@@ -5121,21 +5129,59 @@ namespace gucci {
                     "by default for that reason.");
                 ImGui::PopStyleColor();
 
+                // Typed, not slid. NaN's fatigue coefficient is 0.00027 --
+                // on any slider wide enough to be useful it sits a fraction of
+                // a percent from the left end, and the styled slider prints
+                // %.2f, which would show it as "0.00". These want exact values.
+                auto inputD = [&](char const* label, double* v, char const* fmt,
+                                  double dflt, char const* help) {
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::InputDouble(label, v, 0.0, 0.0, fmt)) {
+                        if (*v < 0.0) *v = 0.0;
+                        dirty = true;
+                        lstar::Solver::get()->markDirty();
+                    }
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("%s\nNaN's value: %.10g", help, dflt);
+                };
+
+                FrameWindowSettings const def{};
+
                 toggleL("Nerve", &fw.lstarUseNerve,
-                        "Assume precision decays the further into a run you get.");
+                        "Assume precision decays the further into a run you get. "
+                        "Scales each window by e^(-k * seconds into the attempt).");
                 if (fw.lstarUseNerve)
-                    sliderD("Nerve Rate", &fw.lstarNerve, 0.f, 0.5f,
-                            "Per second into the attempt.");
+                    inputD("Nerve (k_t)", &fw.lstarNerve, "%.10f", def.lstarNerve,
+                           "Per second into the attempt. Bigger punishes late "
+                           "inputs harder.");
+
                 toggleL("Fatigue", &fw.lstarUseFatigue,
-                        "Assume precision decays with the number of inputs done.");
+                        "Assume precision decays with the number of inputs already "
+                        "done. Scales each window by e^(-k * input number).");
                 if (fw.lstarUseFatigue)
-                    sliderD("Fatigue Rate", &fw.lstarFatigue, 0.f, 0.5f,
-                            "Per input.");
+                    inputD("Fatigue (k_u)", &fw.lstarFatigue, "%.10f",
+                           def.lstarFatigue,
+                           "Per input. Bigger punishes long input counts harder.");
+
                 toggleL("Click Rate", &fw.lstarUseCps,
-                        "Penalise inputs that come soon after the one before.");
+                        "Penalise inputs that come soon after the one before. "
+                        "Scales by (4 / max(1, 2 * local CPS)) ^ k.");
                 if (fw.lstarUseCps)
-                    sliderD("Click Rate Weight", &fw.lstarCps, 0.f, 2.f,
-                            "How much a tight gap counts against you.");
+                    inputD("Click Rate (k_c)", &fw.lstarCps, "%.10f", def.lstarCps,
+                           "Bigger punishes fast sections harder. NaN marks this "
+                           "one WIP and unreliable on his own page.");
+
+                ImGui::Dummy(ImVec2(0, 4));
+                if (Widgets::StyledButton("Reset L* Values to NaN's Defaults",
+                                          ImVec2(-1, 24), theme, anim, 6.f)) {
+                    fw.lstarNerve = def.lstarNerve;
+                    fw.lstarFatigue = def.lstarFatigue;
+                    fw.lstarCps = def.lstarCps;
+                    fw.lstarRespawn = def.lstarRespawn;
+                    fw.lstarTarget = def.lstarTarget;
+                    dirty = true;
+                    solver->markDirty();
+                }
             }
         }
 

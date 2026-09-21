@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-21-e (L* credit correction. The formula is NaN GD's, published at nandl.pages.dev -- C0nscious implemented it, and build -d credited him for authoring it, which was wrong. Every term in that implementation maps onto NaN's page one-to-one. Also renamed the section from Difficulty to Precision and added the sigma/s unit, because precision is what NaN calls it and he says outright that frame windows alone do not determine difficulty -- the readout now repeats that instead of overselling the number.)"
+    "2026-09-21-f (L* penalty coefficients were unusable, caught by Nigel. All three defaulted to 0.0, so ticking Nerve/Fatigue/Click Rate on multiplied by exp(0)=1 and did nothing. They now default to NaN GD's own values, and an install that already saved a zero heals on load. The sliders were wrong too: fatigue is 0.00027, which on a 0-0.5 slider sits a twentieth of a percent from the end and printed as 0.00 -- they are typed inputs now, like C0nscious uses, with a reset button.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
