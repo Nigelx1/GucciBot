@@ -841,8 +841,15 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::start(PlayLayer* pl) {
 
     pf.clearStoredFrames();
     pf.removeAll();
+    logPlayerState("pre-reset", pl->m_player1);
     pl->resetLevel();
     rs.onReset(0);
+    // Right here is the state the capture pass starts from. On Congregation
+    // the capture runs the level at the wrong speed and diverges from frame
+    // 1, and nothing logged the speed at this exact moment -- the statediff
+    // dumps only fire later, inside legs, by which point a checkpoint restore
+    // has already put the right value back and hidden it.
+    logPlayerState("capture-start", pl->m_player1);
 
     report.ok = true;
     report.message = fmt::format("Analysing {} inputs.", m_total);

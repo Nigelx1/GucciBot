@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-21-k (Congregation root cause found and PROVEN, not fixed yet. The capture pass runs the player at GD's default speed 0.9 instead of the level's configured start speed of 1.3, so it diverges from frame 1, never climbs the opening slope, and dies at 398 on flat ground it reached 165 units early. Three-way proof: the recorded .path sidecar and the normal-playback log agree exactly with each other and disagree with the capture, and IoH -- which works -- starts at exactly 0.9, the default. Step batch was a wrong guess and is ruled out. This build only makes the [fw][state] line reach the file, since it carries speed and never did.)"
+    "2026-09-21-l (Logs the player state either side of the reset the capture pass starts from. Build -k put the state dump in the file but it only ever fires inside legs, after a checkpoint restore has already put the right speed back, so it showed 1.300 and hid the problem. This logs pre-reset and capture-start, which is the moment that actually matters.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
