@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-21-j (Congregation measured ten windows of 29 that meant nothing. The capture pass died at frame 398 -- before the macro's first input at 538, on flat ground with no input held -- and carried on with noclip, so every shift after that survived and every window came back pinned to the sweep limit, reported as if measured. A run whose capture died now says so and is marked failed rather than handing back numbers. Likely cause is Step Batch 35: the player sub-steps a frame at a time while the level advances in one jump per batch, so moving geometry is not where the macro met it. Batch 1 is the test.)"
+    "2026-09-21-k (Congregation root cause found and PROVEN, not fixed yet. The capture pass runs the player at GD's default speed 0.9 instead of the level's configured start speed of 1.3, so it diverges from frame 1, never climbs the opening slope, and dies at 398 on flat ground it reached 165 units early. Three-way proof: the recorded .path sidecar and the normal-playback log agree exactly with each other and disagree with the capture, and IoH -- which works -- starts at exactly 0.9, the default. Step batch was a wrong guess and is ruled out. This build only makes the [fw][state] line reach the file, since it carries speed and never did.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

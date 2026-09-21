@@ -96,14 +96,23 @@ static void logPlayerState(char const* tag, PlayerObject* p) {
     auto it = p->m_holdingButtons.find(1);
     int const held =
         it == p->m_holdingButtons.end() ? -1 : (it->second ? 1 : 0);
-    geode::log::info(
-        "[fw][state] {} pos=({:.2f},{:.2f}) yvel={:.4f} held={} up={} grav={:.3f} "
-        "ground={} g2={} g3={} g4={} dart={} side={} locked={} vehicle={:.2f} "
-        "speed={:.3f}",
-        tag, p->getPositionX(), p->getPositionY(), p->m_yVelocity, held,
-        p->m_isUpsideDown, p->m_gravityMod, p->m_isOnGround, p->m_isOnGround2,
-        p->m_isOnGround3, p->m_isOnGround4, p->m_isDart, p->m_isSideways,
-        p->m_inputsLocked, p->m_vehicleSize, p->m_playerSpeed);
+    // Mirrored to the file, not just geode::log. This line carries speed,
+    // and speed is what broke Congregation: the capture ran the player at
+    // GD's default 0.9 instead of the level's start speed of 1.3, so it
+    // diverged from frame 1. Diagnosing that needed the recorded path
+    // sidecar because this line never reached guccibot_fw.log.
+    {
+        auto const st_ = fmt::format(
+            "[fw][state] {} pos=({:.2f},{:.2f}) yvel={:.4f} held={} up={} grav={:.3f} "
+            "ground={} g2={} g3={} g4={} dart={} side={} locked={} vehicle={:.2f} "
+            "speed={:.3f}",
+            tag, p->getPositionX(), p->getPositionY(), p->m_yVelocity, held,
+            p->m_isUpsideDown, p->m_gravityMod, p->m_isOnGround, p->m_isOnGround2,
+            p->m_isOnGround3, p->m_isOnGround4, p->m_isDart, p->m_isSideways,
+            p->m_inputsLocked, p->m_vehicleSize, p->m_playerSpeed);
+        geode::log::info("{}", st_);
+        fwFileLog(st_);
+    }
 }
 
 static char gamemodeOf(PlayerObject* p) {
