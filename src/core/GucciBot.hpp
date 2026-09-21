@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-21-f (L* penalty coefficients were unusable, caught by Nigel. All three defaulted to 0.0, so ticking Nerve/Fatigue/Click Rate on multiplied by exp(0)=1 and did nothing. They now default to NaN GD's own values, and an install that already saved a zero heals on load. The sliders were wrong too: fatigue is 0.00027, which on a 0-0.5 slider sits a twentieth of a percent from the end and printed as 0.00 -- they are typed inputs now, like C0nscious uses, with a reset button.)"
+    "2026-09-21-g (Chasing a macro that dies on normal playback after Calculate, at the same spot every time, surviving a level exit. The analyzer shifts the real macro's action frames to probe them and restores them at finish; a level exit does not reload the macro, so if that restore ever misses, the macro stays retimed and behaves exactly like this. Finish now counts what it put back and logs it, so the next run says whether the restore held instead of leaving it to guesswork. Also: the analyzer now stands down BEFORE the reset that hands the level back, since that reset was running under analyzer-exclusive rules; and the finish summary itself now reaches guccibot_fw.log, which it never did -- it went through log::info, so the file showed 11 starts and 0 finishes and read like every run was hanging. L* also drew nothing at all when the solver had no result; it says why now.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

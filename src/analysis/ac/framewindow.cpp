@@ -2781,16 +2781,47 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
             m_slack_, m_baseTps);
     }
 
+    // The analyzer shifts the real macro's action frames to probe them and
+    // puts them back here. If that ever fails to land, the macro is left
+    // retimed in memory and every later playback dies at the same place --
+    // surviving a level exit, because leaving the level does not reload the
+    // macro. That is hard to tell apart from a real macro bug by feel, so it
+    // is checked and reported rather than assumed.
     auto& actions = rs.m_actionAtom.m_actions;
-    if (actions.size() == m_originalFrames.size()) {
-        for (size_t i = 0; i < actions.size(); i++)
+    if (actions.size() != m_originalFrames.size()) {
+        FWWARN(
+            "[fw][restore-macro] MACRO LEFT SHIFTED: {} actions but {} saved "
+            "originals, so the probe shifts could not be undone. Reload the "
+            "macro before playing it",
+            actions.size(), m_originalFrames.size());
+    } else {
+        int moved = 0;
+        for (size_t i = 0; i < actions.size(); i++) {
+            if (actions[i].m_frame != m_originalFrames[i]) moved++;
             actions[i].m_frame = m_originalFrames[i];
+        }
+        auto const line = fmt::format(
+            "[fw][restore-macro] {} action(s) still shifted at finish, all put "
+            "back; first frame now {}",
+            moved, actions.empty() ? 0ull : (unsigned long long)actions[0].m_frame);
+        log::info("{}", line);
+        fwFileLog(line);
     }
 
     this->releaseCheckpoint();
 
     pf.clearStoredFrames();
     pf.removeAll();
+
+    // m_running is cleared before this reset, not after it. analyzerOwnsRun()
+    // is literally frameWindow().running(), and several engine paths branch on
+    // it -- including onReset's input-index rule, which uses a strict
+    // frame > respawn while the analyzer owns the run. This is the reset that
+    // hands the level back for normal play, so it has to run under normal
+    // rules; with it inside the run, a macro whose first input sits on frame 0
+    // would come back with that input skipped.
+    m_running = false;
+    m_stageId = Stage::Idle;
 
     if (auto* pl = PlayLayer::get()) {
         pl->resetLevel();
@@ -2810,9 +2841,20 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
     m_trailP1.clear();
     m_trailP2.clear();
 
-    log::info(
-        "[fw][finish] ok={} measured={} skipped={} desynced={} legs={} msg={}",
-        ok, m_measured, m_skipped, m_desynced, m_legCounter, message);
+    // Written straight to the file, not through FWLOG. FWLOG is gated on
+    // the verbose toggle, and this one line is the summary of the whole run --
+    // it is the first thing anyone reads when a run is questioned, so it must
+    // be in guccibot_fw.log unconditionally. It went through plain log::info
+    // until 2026-09-21, which meant it only ever reached Geode's console log,
+    // and that is not persisted on Nigel's machine: the file showed 11 starts
+    // and 0 finishes, which reads exactly like every run hanging.
+    {
+        auto const fin_ = fmt::format(
+            "[fw][finish] ok={} measured={} skipped={} desynced={} legs={} msg={}",
+            ok, m_measured, m_skipped, m_desynced, m_legCounter, message);
+        log::info("{}", fin_);
+        fwFileLog(fin_);
+    }
 
     if (m_stateDiffRestores > 0) {
         log::info(

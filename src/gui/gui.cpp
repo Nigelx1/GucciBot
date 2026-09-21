@@ -5064,6 +5064,25 @@ namespace gucci {
                     ImGui::TextWrapped(
                         "Run Calculate first -- L* is built from the measured windows.");
                     ImGui::PopStyleColor();
+                } else if (acfw.running()) {
+                    // Deliberately not solved mid-run. The results vector is
+                    // still growing, so any number now is off a partial macro
+                    // and about to be replaced; and the analyzer is timing
+                    // sensitive, so there is no reason to put a second
+                    // CPU-heavy thread beside it. finish() calls markDirty(),
+                    // so this solves itself the moment the run ends.
+                    ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                    ImGui::TextWrapped("Waiting for the run to finish.");
+                    ImGui::PopStyleColor();
+                } else if (acfw.running()) {
+                    // Not solved mid-run: the results vector is still growing,
+                    // so any number now is off a partial macro, and the
+                    // analyzer is timing sensitive enough not to want a second
+                    // CPU-heavy thread beside it. finish() calls markDirty(),
+                    // so this resolves itself the moment the run ends.
+                    ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                    ImGui::TextWrapped("Waiting for the run to finish.");
+                    ImGui::PopStyleColor();
                 } else {
                     if (solver->dirty() && !solver->running()) {
                         lstar::Settings ls;
@@ -5083,6 +5102,50 @@ namespace gucci {
                     if (solver->running()) {
                         ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
                         ImGui::Text("Solving... %.0f%%", solver->progress());
+                        ImGui::PopStyleColor();
+                    } else if (!solver->result().m_ok) {
+                        // Every other branch had a message and this one did
+                        // not, so a run whose windows were all unmeasurable
+                        // drew the heading and then simply nothing, with no
+                        // way to tell that apart from the panel being broken.
+                        int desynced = 0;
+                        for (auto const& mk : acfw.results())
+                            if (mk.desynced || mk.hidden) desynced++;
+                        ImGui::PushStyleColor(ImGuiCol_Text,
+                                              ImVec4(0.90f, 0.35f, 0.35f, 1.f));
+                        if (desynced >= (int)acfw.results().size())
+                            ImGui::TextWrapped(
+                                "No L*: none of the %d measured click(s) produced "
+                                "a usable window -- every one came back desynced, "
+                                "so there is nothing to compute from.",
+                                (int)acfw.results().size());
+                        else
+                            ImGui::TextWrapped(
+                                "No L*: the solver returned nothing for these %d "
+                                "result(s). This is a bug -- please report it.",
+                                (int)acfw.results().size());
+                        ImGui::PopStyleColor();
+                    } else if (!solver->result().m_ok) {
+                        // Every other branch here says something and this one
+                        // said nothing, so a run whose windows were all
+                        // unmeasurable drew the heading and then blank space,
+                        // indistinguishable from the panel being broken.
+                        int bad = 0;
+                        for (auto const& mk : acfw.results())
+                            if (mk.desynced || mk.hidden) bad++;
+                        ImGui::PushStyleColor(ImGuiCol_Text,
+                                              ImVec4(0.90f, 0.35f, 0.35f, 1.f));
+                        if (bad >= (int)acfw.results().size())
+                            ImGui::TextWrapped(
+                                "No L*: none of the %d measured click(s) gave a "
+                                "usable window -- every one came back desynced, "
+                                "so there is nothing to compute from.",
+                                (int)acfw.results().size());
+                        else
+                            ImGui::TextWrapped(
+                                "No L*: the solver returned nothing for these %d "
+                                "result(s). That is a bug -- please report it.",
+                                (int)acfw.results().size());
                         ImGui::PopStyleColor();
                     } else if (solver->result().m_ok) {
                         auto const& r = solver->result();
