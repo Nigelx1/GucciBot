@@ -4958,6 +4958,15 @@ namespace gucci {
                     ImGui::TextWrapped("%s", engine->fwAcReport.c_str());
                     ImGui::PopStyleColor();
                 }
+                // Shown before a run, not just after one: with another
+                // step-splitting mod enabled the results are unreliable, and
+                // the only symptom the user sees otherwise is a grey "?".
+                if (auto const& conflicts = engine->analyzerConflicts();
+                    !conflicts.empty()) {
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.98f, 0.73f, 0.24f, 1.f));
+                    ImGui::TextWrapped("%s", conflicts.c_str());
+                    ImGui::PopStyleColor();
+                }
                 if (!acfw.results().empty()) {
                     ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
                     ImGui::TextWrapped("%d window(s) measured.", (int)acfw.results().size());

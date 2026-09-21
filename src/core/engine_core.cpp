@@ -2388,6 +2388,63 @@ namespace gucci {
         return ::Bot::get()->frameWindow().running();
     }
 
+    // GitHub issue #8: releases coming back as grey "?" markers. A "?" means
+    // the analyzer could not measure that click at all -- replaying the macro
+    // UNSHIFTED from the checkpoint died, so there was no baseline to compare
+    // shifted runs against (framewindow.cpp, mk.desynced).
+    //
+    // The reporter's crash log from issue #7 lists, all enabled at once:
+    // syzzi.click_between_frames, toastexgd.its-all-frame-perfects,
+    // c0nscious.frame_window and claude.frame-window, on top of GucciBot 1.8.
+    // Two of those show up in that crash's own stack hooking the very
+    // functions the analyzer drives (its-all-frame-perfects sits directly
+    // above us on PlayLayer::loadFromCheckpoint).
+    //
+    // That breaks the analyzer by construction. It works by replaying a macro
+    // from a checkpoint and requiring the replay to reproduce the capture
+    // exactly; that only holds if GucciBot alone decides how many physics
+    // steps a frame gets and when inputs land in them. Click Between Frames
+    // splits the step itself, which 1.8 also now does internally -- two
+    // splitters do not compose, and the replay steps differently from the
+    // capture it is being checked against. Releases on a wave show it first
+    // because a wave flips direction on hold state every sub-step.
+    //
+    // This is a warning, not a refusal: it is not certain to be the whole
+    // cause of #8, and refusing to run would break setups that are fine. But
+    // a silent grey "?" gives the user nothing to act on, which is how this
+    // was reported in the first place.
+    const std::string& GucciEngine::analyzerConflicts() {
+        if (fwAcConflictsChecked) return fwAcConflicts;
+        fwAcConflictsChecked = true;
+
+        static constexpr std::pair<const char*, const char*> kKnown[] = {
+            {"syzzi.click_between_frames",
+             "splits the physics step, which GucciBot 1.8 also does itself"},
+            {"toastexgd.its-all-frame-perfects",
+             "hooks the same checkpoint and reset path the analyzer drives"},
+            {"c0nscious.frame_window", "is another frame-window analyzer"},
+            {"claude.frame-window", "is another frame-window analyzer"},
+            {"peony.silicate",
+             "is the engine GucciBot is built from, hooking the same functions twice"},
+            {"zilko.xdbot", "is another macro bot replaying inputs"},
+        };
+
+        std::string out;
+        for (auto const& [id, why] : kKnown) {
+            if (!Loader::get()->isModLoaded(id)) continue;
+            if (!out.empty()) out += "\n";
+            out += fmt::format("  - {} ({})", id, why);
+        }
+        if (!out.empty())
+            fwAcConflicts = fmt::format(
+                "These mods are enabled and change how frames are stepped, so "
+                "Calculate's numbers may be wrong and some clicks may come back "
+                "as a grey \"?\" it could not measure:\n{}\n"
+                "Disable them before measuring.",
+                out);
+        return fwAcConflicts;
+    }
+
     void GucciEngine::analyzeFrameWindows() {
         auto* pl = PlayLayer::get();
         if (!pl)
@@ -2407,6 +2464,10 @@ namespace gucci {
         pl->m_isPaused = false;
 
         auto const r = ::Bot::get()->frameWindow().start(pl);
+        if (auto const& conflicts = this->analyzerConflicts(); !conflicts.empty()) {
+            log::warn("[GucciBot] frame windows: {}", conflicts);
+            fwEngineLog(fmt::format("[fw][conflict] {}", conflicts));
+        }
         fwAcReport = r.message;
         fwAcOk = r.ok;
         log::info("[GucciBot] frame windows: start ok={} msg={}", r.ok, r.message);

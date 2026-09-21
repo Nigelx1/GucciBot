@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-21-a (GitHub issue #7, the crash while recording. Symbolized to our own loadFromCheckpoint hook handing GD a freed checkpoint. Removing a checkpoint released it without clearing a capture still queued against it, so the deferred pass two ticks later pushed the freed pointer back into the saved list and the next reset dereferenced it. Reachable since 1.8, where a checkpoint started entering that list immediately rather than two ticks later, which is what let removeCheckpoint reach one mid-capture.)"
+    "2026-09-21-b (GitHub issue #8, releases coming back as a grey \"?\". A \"?\" means the macro did not even reproduce unshifted from the checkpoint, so there was no baseline to measure against. The reporter has four other frame-timing mods enabled, two of them hooking the same functions the analyzer drives, and Click Between Frames splits the physics step that 1.8 now splits itself. Calculate now names those mods in the tab before you run instead of leaving a silent grey marker.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -952,6 +952,13 @@ namespace gucci {
         bool fwUseAcAnalyzer = false;
         std::string fwAcReport;
         bool fwAcOk = false;
+
+        // Other enabled mods that step physics or hook the same reset /
+        // checkpoint path as the analyzer. Computed once on first use.
+        // See analyzerConflicts() in engine_core.cpp for why this matters.
+        std::string fwAcConflicts;
+        bool fwAcConflictsChecked = false;
+        const std::string& analyzerConflicts();
         int fwAiZ = 3;
         int fwAiContinuationDepth = 1; // 0 or 1 only in V1
         float fwAiClusterRatio = 1.15f;
