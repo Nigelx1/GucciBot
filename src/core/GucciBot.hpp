@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-21-h (L* in the corner of the level, bottom left, which is where NaN publishes it in his own videos -- until now the number only existed inside the mod menu, which is no use on a recording. The overlay also owns kicking the solver, since the menu is shut during a showcase or a render. Log check on build -g came back clean: 128 of 128 measured, zero desyncs, zero skipped, and the macro restore put back 0 shifted actions, so the earlier one-off death is not reproducing. 13 windows do rest on the sweep limit at Sweep Range 14 and read as floors.)"
+    "2026-09-21-i (Rebuilt the L* overlay to match what NaN actually shows, after Nigel sent a frame of his video. Two stacked lines bottom left in bigFont -- percentage above, value below -- not one small chatFont line. More importantly the number is the RUNNING value now: L* is monotonic, the solver already returns a per-input series, and the display walks it as the player passes each measured input so it climbs click by click. The percentage is that running value over the final one, so it reads as progress through the level's difficulty rather than its length.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

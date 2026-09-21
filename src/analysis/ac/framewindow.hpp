@@ -573,6 +573,10 @@ class FrameWindowAnalyzer {
                      FrameWindowTier const* tier);
     void rebuildHud(PlayLayer* pl);
     void updateLStarHud(PlayLayer* pl);
+    // Frames of the inputs handed to the L* solver, in the order it sorted
+    // them, so m_lstarFrames[i] pairs with result().m_perInput[i]. Needed to
+    // show the RUNNING value at the frame the player has reached.
+    std::vector<uint32_t> m_lstarFrames;
     void refreshHudCounts(PlayLayer* pl);
     void cullOffscreen(PlayLayer* pl);
     void recountUpTo(uint32_t frame);

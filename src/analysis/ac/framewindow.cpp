@@ -3987,23 +3987,42 @@ void FrameWindowAnalyzer::cullOffscreen(PlayLayer* pl) {
 }
 
 // GucciBot addition, not anticroom's: the L* readout in the corner of the
-// level, which is the form NaN actually publishes it in. It also owns kicking
-// the solver, because the mod menu cannot -- the menu is shut during a
-// showcase or a render, and a number that only exists while an ImGui tab is
-// open is no use for either.
+// level, in the form NaN actually publishes it -- two stacked lines, bottom
+// left, percentage above the value. It also owns kicking the solver, because
+// the mod menu cannot: the menu is shut during a showcase or a render, and a
+// number that only exists while an ImGui tab is open is no use for either.
+//
+// The value shown is the RUNNING one. L* is monotonic -- every further input
+// demands at least as much precision as the run so far -- so m_perInput holds
+// the value after each input and the display walks it as the player passes
+// them, climbing click by click. The percentage is how far through the total
+// that running value has got, which is what makes it read as progress through
+// the level's difficulty rather than through its length.
 void FrameWindowAnalyzer::updateLStarHud(PlayLayer* pl) {
     auto const& fw = SLSettings::get()->frameWindow;
     auto* solver = lstar::Solver::get();
 
-    char const* const kId = "framewindow-lstar";
-    auto* label = static_cast<CCLabelBMFont*>(pl->m_uiLayer->getChildByID(kId));
+    auto const drop = [&] {
+        for (char const* id :
+             {"framewindow-lstar-pct", "framewindow-lstar-val"})
+            if (auto* n = pl->m_uiLayer->getChildByID(id)) n->removeFromParent();
+    };
 
     if (!fw.lstarEnabled || !fw.lstarHud || m_results.empty()) {
-        if (label) label->removeFromParent();
+        drop();
         return;
     }
 
     if (solver->dirty() && !solver->running() && !m_running) {
+        auto inputs = this->precisionInputs();
+        std::sort(inputs.begin(), inputs.end(),
+                  [](lstar::Input const& a, lstar::Input const& b) {
+                      return a.m_frame < b.m_frame;
+                  });
+        m_lstarFrames.clear();
+        m_lstarFrames.reserve(inputs.size());
+        for (auto const& in : inputs) m_lstarFrames.push_back(in.m_frame);
+
         lstar::Settings ls;
         ls.m_tps = Bot::get()->updater().m_tps;
         ls.m_respawnSeconds = fw.lstarRespawn;
@@ -4014,31 +4033,48 @@ void FrameWindowAnalyzer::updateLStarHud(PlayLayer* pl) {
         ls.m_fatigue = fw.lstarFatigue;
         ls.m_useCps = fw.lstarUseCps;
         ls.m_cps = fw.lstarCps;
-        solver->start(this->precisionInputs(), ls);
+        solver->start(std::move(inputs), ls);
     }
 
-    if (!solver->result().m_ok) {
-        if (label) label->removeFromParent();
+    auto const& res = solver->result();
+    if (!res.m_ok || res.m_perInput.empty()) {
+        drop();
         return;
     }
 
-    // chatFont, not bigFont: bigFont is GD's chunky display face and does not
-    // carry the whole ASCII set, and this string needs an asterisk and a
-    // slash. Small and legible is also the right look for a corner stat.
-    auto const text = fmt::format("L* {:.2f} sigma/s", solver->result().m_value);
-    if (!label) {
-        label = CCLabelBMFont::create(text.c_str(), "chatFont.fnt");
-        label->setID(kId);
-        label->setAnchorPoint({0.f, 0.f});
-        pl->m_uiLayer->addChild(label);
-    } else {
-        label->setString(text.c_str());
-    }
+    // How many of the measured inputs the player has already passed.
+    uint32_t const frame = Bot::get()->updater().getFrame();
+    size_t passed = static_cast<size_t>(
+        std::upper_bound(m_lstarFrames.begin(), m_lstarFrames.end(), frame) -
+        m_lstarFrames.begin());
+    passed = std::min(passed, res.m_perInput.size());
+
+    double const total = res.m_perInput.back();
+    double const now = passed == 0 ? 0.0 : res.m_perInput[passed - 1];
+    double const pct = total > 0.0 ? now / total * 100.0 : 0.0;
 
     float const scale = std::max(0.1f, fw.lstarHudScale);
-    label->setScale(scale);
-    label->setPosition({8.f, 8.f});
-    label->setOpacity(255);
+
+    auto const put = [&](char const* id, std::string const& text, float y) {
+        auto* label =
+            static_cast<CCLabelBMFont*>(pl->m_uiLayer->getChildByID(id));
+        if (!label) {
+            label = CCLabelBMFont::create(text.c_str(), "bigFont.fnt");
+            label->setID(id);
+            label->setAnchorPoint({0.f, 0.f});
+            pl->m_uiLayer->addChild(label);
+        } else {
+            label->setString(text.c_str());
+        }
+        label->setScale(scale);
+        label->setPosition({8.f, y});
+        return label->getContentSize().height * scale;
+    };
+
+    float const valH = put("framewindow-lstar-val",
+                           fmt::format("{:.2f}", now), 8.f);
+    put("framewindow-lstar-pct", fmt::format("{:.2f}%", pct),
+        8.f + valH * 0.86f);
 }
 
 void FrameWindowAnalyzer::rebuildHud(PlayLayer* pl) {
@@ -4381,8 +4417,10 @@ void FrameWindowAnalyzer::render(PlayLayer* pl) {
         if (markers) markers->removeFromParent();
         this->dropMarkers();
         if (hud) hud->removeFromParent();
-        if (auto* ls = pl->m_uiLayer->getChildByID("framewindow-lstar"))
-            ls->removeFromParent();
+        for (char const* lsid :
+             {"framewindow-lstar-pct", "framewindow-lstar-val"})
+            if (auto* ls = pl->m_uiLayer->getChildByID(lsid))
+                ls->removeFromParent();
         if (auto* t = pl->m_uiLayer->getChildByID("framewindow-timing"_spr))
             t->removeFromParent();
         m_hudBuiltGeneration = UINT32_MAX;
