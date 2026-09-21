@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-af (Version bump to 1.8.0. Packages the whole analyzer replacement: GucciBot's own frame-window analyzer removed and anticroom's Silicate one in its place, the six things GucciBot's original Silicate port had dropped repaired, two older checkpoint and playback bugs fixed, Juice's marker shapes and the Brrr back, results saving alongside the macro, and the render path able to tell a level's own SFX triggers from the noise the run makes.)"
+    "2026-09-21-a (GitHub issue #7, the crash while recording. Symbolized to our own loadFromCheckpoint hook handing GD a freed checkpoint. Removing a checkpoint released it without clearing a capture still queued against it, so the deferred pass two ticks later pushed the freed pointer back into the saved list and the next reset dereferenced it. Reachable since 1.8, where a checkpoint started entering that list immediately rather than two ticks later, which is what let removeCheckpoint reach one mid-capture.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

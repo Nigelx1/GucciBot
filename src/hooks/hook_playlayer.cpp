@@ -100,6 +100,16 @@ class $modify(GB7PlayLayer, PlayLayer) {
         }
         auto cp = pf.m_savedCheckpoints.back();
         pf.clearStoredFrames();
+        // Belt and braces after issue #7: a saved checkpoint should always
+        // carry a live object, but handing GD a null one crashes inside its
+        // own loadFromCheckpoint where the cause is invisible. Fall back to
+        // the checkpoint GD passed instead.
+        if (!cp.m_checkpoint) {
+            log::warn("[GucciBot] checkpoint restore: saved checkpoint had no object, "
+                      "falling back to the one GD supplied");
+            PlayLayer::loadFromCheckpoint(obj);
+            return;
+        }
         PlayLayer::loadFromCheckpoint(cp.m_checkpoint);
         pf.applyLatest();
     }
@@ -118,6 +128,23 @@ class $modify(GB7PlayLayer, PlayLayer) {
             obj->m_glowSprite = nullptr;
         }
         obj->removeMeAndCleanup();
+
+        // A capture may still be queued against this checkpoint. Releasing it
+        // here while m_pendingCaptureCp still points at it leaves that pointer
+        // dangling, and the deferred pass two ticks later would push the freed
+        // object straight back into m_savedCheckpoints -- where the next
+        // loadFromCheckpoint dereferences it. GitHub issue #7, crashing inside
+        // GD's loadFromCheckpoint with a read of 0xFFFFFFFFFFFFFFFF.
+        //
+        // Reachable since 1.8, where storeCheckpoint began saving the
+        // checkpoint immediately as well as queueing it: before that the
+        // checkpoint was not in m_savedCheckpoints yet, so removeCheckpoint
+        // could not reach it while a capture was still pending.
+        if (pf.m_pendingCaptureCp == cp.m_checkpoint) {
+            pf.m_pendingCaptureCp = nullptr;
+            pf.m_pendingCaptureStage = 0;
+        }
+
         cp.m_checkpoint->release();
         pf.m_savedCheckpoints.pop_back();
     }
