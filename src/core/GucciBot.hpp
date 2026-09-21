@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-21-b (GitHub issue #8, releases coming back as a grey \"?\". A \"?\" means the macro did not even reproduce unshifted from the checkpoint, so there was no baseline to measure against. The reporter has four other frame-timing mods enabled, two of them hooking the same functions the analyzer drives, and Click Between Frames splits the physics step that 1.8 now splits itself. Calculate now names those mods in the tab before you run instead of leaving a silent grey marker.)"
+    "2026-09-21-c (Credits update for 1.8 across all four places they live -- in-game, about.md, README and the site. anticroom still read as a fix pass on Calculate when 1.8's Calculate IS his analyzer, ported in near-verbatim; that is the headline feature of the release and it was his work. Juice's entry now says his algorithm ran through 1.7 and names the marker shapes he contributed to 1.8, rather than implying the current algorithm is his.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

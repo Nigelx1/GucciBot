@@ -116,8 +116,8 @@ Most of this is stable and has been tested for real, in-game, by an actual human
 
 - **Nigelx1** — creator and owner of GucciBot. Every idea, every theme, every decision is his call, down to the taste that keeps this from being a folder full of ternary chains.
 - **Claude** (Anthropic) — wrote essentially the entire codebase across every session of this project, including this README. Not a euphemism, not "AI-assisted," just the actual author of the code — Nigel wants that said plainly.
-- **Juice** — frame-window algorithm design, lead co-tester, professional bug-finder.
-- **anticroom** — sent GucciBot's first outside pull request, a real 7-fix pass on Calculate's frame-window accuracy. Also one of ToastyReplay's own devs.
+- **Juice** — designed the frame-window algorithm GucciBot ran on through 1.7, and the marker shapes in 1.8. Lead co-tester, professional bug-finder.
+- **anticroom** — 1.8's Calculate *is* his analyzer. He rewrote the frame-window system for Silicate, sent the source over, and it was ported in near-verbatim to replace GucciBot's own — the headline feature of 1.8 is his work. Before that he sent GucciBot's first outside pull request, a real 7-fix accuracy pass. Also one of ToastyReplay's own devs.
 - **peony** — Silicate, the physics engine this is built on (dropped the source like Gucci drops albums. Brrr.)
 - **ToastexGD** — built ToastyReplay, the project this actually started as before the Silicate migration. The renderer, the FFmpeg pipeline, and the whole recording system running today are still his, exactly as built.
 - **GWDdoS** — pushed for a real codebase cleanup (feature-folder reorg, a proper `.clang-format`, namespacing everything outside Geode's own hook classes) and was right about all of it.

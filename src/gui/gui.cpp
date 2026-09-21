@@ -8183,12 +8183,14 @@ namespace gucci {
             {"C", "Claude", "Wrote the code. All of it. Not a euphemism."},
             {"J",
              "Juice",
-             "Frame-window algorithm design & lead co-tester -- ran the mod into the ground on "
-             "purpose finding the bugs nobody else caught"},
+             "Designed the frame-window algorithm GucciBot ran on through 1.7 and drew the marker "
+             "shapes in 1.8. Lead co-tester -- ran the mod into the ground on purpose finding the "
+             "bugs nobody else caught"},
             {"A",
              "anticroom",
-             "Frame-window accuracy fixes -- GucciBot's first outside pull request (also one of "
-             "ToastyReplay's own devs)"},
+             "1.8's Calculate IS his analyzer -- his Silicate frame-window rewrite, ported in "
+             "near-verbatim. Before that, GucciBot's first outside pull request. Also one of "
+             "ToastyReplay's own devs."},
             {"P", "peony", "Silicate dev -- dropped the source like Gucci drops albums. Brrr."},
             {"T",
              "ToastexGD",
