@@ -2750,6 +2750,29 @@ void FrameWindowAnalyzer::nextClick() {
 }
 
 void FrameWindowAnalyzer::finish(std::string message, bool ok) {
+    // If the capture pass died, it carried on with noclip so the run could
+    // still produce something -- but a player that cannot die survives every
+    // shift, so the windows come back pinned to the sweep limit and read as
+    // real measurements. Nigel hit exactly this on Congregation: the capture
+    // died at frame 398, before the macro's first input at 538, and the ten
+    // windows it produced were all 29 = the full sweep, from a noclipped
+    // player. Say so plainly instead of reporting them as measurements.
+    if (m_captureNoclip) {
+        ok = false;
+        message =
+            fmt::format(
+                "The macro died during the capture pass{}, so the rest of the "
+                "run was measured on a player that could not die -- every "
+                "window here is pinned to the sweep limit and none of them "
+                "mean anything. The macro itself is fine; the level did not "
+                "replay the same way. Try Step Batch = 1 under Speed: at a "
+                "high batch the level's moving objects advance in one jump "
+                "per batch while the player steps one frame at a time. ",
+                m_captureDeaths.empty()
+                    ? std::string{}
+                    : fmt::format(" at frame {}", m_captureDeaths.front())) +
+            message;
+    }
     auto bot = Bot::get();
     auto& updater = bot->updater();
     auto& rs = bot->replaySystem();

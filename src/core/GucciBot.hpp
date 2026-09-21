@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-21-i (Rebuilt the L* overlay to match what NaN actually shows, after Nigel sent a frame of his video. Two stacked lines bottom left in bigFont -- percentage above, value below -- not one small chatFont line. More importantly the number is the RUNNING value now: L* is monotonic, the solver already returns a per-input series, and the display walks it as the player passes each measured input so it climbs click by click. The percentage is that running value over the final one, so it reads as progress through the level's difficulty rather than its length.)"
+    "2026-09-21-j (Congregation measured ten windows of 29 that meant nothing. The capture pass died at frame 398 -- before the macro's first input at 538, on flat ground with no input held -- and carried on with noclip, so every shift after that survived and every window came back pinned to the sweep limit, reported as if measured. A run whose capture died now says so and is marked failed rather than handing back numbers. Likely cause is Step Batch 35: the player sub-steps a frame at a time while the level advances in one jump per batch, so moving geometry is not where the macro met it. Batch 1 is the test.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
