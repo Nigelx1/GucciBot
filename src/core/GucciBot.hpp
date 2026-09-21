@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-21-c (Credits update for 1.8 across all four places they live -- in-game, about.md, README and the site. anticroom still read as a fix pass on Calculate when 1.8's Calculate IS his analyzer, ported in near-verbatim; that is the headline feature of the release and it was his work. Juice's entry now says his algorithm ran through 1.7 and names the marker shapes he contributed to 1.8, rather than implying the current algorithm is his.)"
+    "2026-09-21-d (L* difficulty readout. The solver came across with anticroom's source and has been sitting in the tree compiled, fed and never called -- nothing ran it and nothing showed it, because he finished the display after sending the source. This adds the display, driving his solver through his own settings fields rather than parallel copies. One number per macro: the precision needed to clear the level inside a target time when every miss costs a restart. Algorithm is C0nscious's, MIT, now credited.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

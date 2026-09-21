@@ -1,3 +1,16 @@
+// L* -- a whole macro's frame windows reduced to one difficulty number:
+// the precision a player would need to clear the level inside a target
+// time, given every miss costs a restart. Higher is harder.
+//
+// The algorithm is C0nscious's, from Frame Window Counter (MIT licensed,
+// github.com/hyper-5/frame-window-counter, src/Math/Calculator.cpp). This
+// is anticroom's port of it, which came across with the rest of his
+// analyzer; the readout that drives it lives in the GUI's Frame Windows
+// tab and is GucciBot's own, because he finished his after sending the
+// source. Upstream solves eight penalty combinations on eight threads and
+// picks between them; this solves the one combination the settings
+// select, which is the same math with the dead variants not computed.
+
 #include "lstar.hpp"
 
 #include <Geode/Geode.hpp>

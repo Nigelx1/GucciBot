@@ -169,6 +169,12 @@ struct FrameWindowSettings {
 
     // Scale of the tier-count HUD. Upstream hardcodes 0.6.
     float hudScale = 0.6f;
+
+    // Only the on/off switch is ours. The solver's own inputs -- lstarTarget,
+    // lstarRespawn and the three penalty terms -- are anticroom's fields
+    // above, already here when his source came across; the readout is what
+    // did not, because he finished that part after sending it.
+    bool lstarEnabled = true;
     float markerScale = 0.5f;
     std::vector<FrameWindowTier> tiers = {
         {1, 0, 1, "", "", {0.996f, 0.310f, 0.314f, 1.f}, true},

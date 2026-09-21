@@ -4586,6 +4586,10 @@ namespace gucci {
 
         constexpr AcSetting<bool> kAcBools[] = {
             {"fwac_enabled", &FrameWindowSettings::enabled},
+            {"fwac_lstar_enabled", &FrameWindowSettings::lstarEnabled},
+            {"fwac_lstar_use_nerve", &FrameWindowSettings::lstarUseNerve},
+            {"fwac_lstar_use_fatigue", &FrameWindowSettings::lstarUseFatigue},
+            {"fwac_lstar_use_cps", &FrameWindowSettings::lstarUseCps},
             {"fwac_subframe_probe", &FrameWindowSettings::subframeProbe},
             {"fwac_cbf_whole_markers", &FrameWindowSettings::cbfWholeMarkers},
             {"fwac_cbf_tick_ground", &FrameWindowSettings::cbfTickGround},
@@ -4642,6 +4646,16 @@ namespace gucci {
             {"fwac_circle_per_frame", &FrameWindowSettings::circleSkinRadiusPerFrame},
             {"fwac_circle_max", &FrameWindowSettings::circleSkinMaxRadius},
             {"fwac_hud_scale", &FrameWindowSettings::hudScale},
+        };
+
+        // His L* inputs are doubles, so they need their own table rather than
+        // being squeezed through the float one.
+        constexpr AcSetting<double> kAcDoubles[] = {
+            {"fwac_lstar_target", &FrameWindowSettings::lstarTarget},
+            {"fwac_lstar_respawn", &FrameWindowSettings::lstarRespawn},
+            {"fwac_lstar_nerve", &FrameWindowSettings::lstarNerve},
+            {"fwac_lstar_fatigue", &FrameWindowSettings::lstarFatigue},
+            {"fwac_lstar_cps", &FrameWindowSettings::lstarCps},
         };
     }
 
@@ -4867,6 +4881,8 @@ namespace gucci {
             fw.*e.field = mod->getSavedValue<int>(e.key, d.*e.field);
         for (auto const& e : kAcFloats)
             fw.*e.field = (float)mod->getSavedValue<double>(e.key, (double)(d.*e.field));
+        for (auto const& e : kAcDoubles)
+            fw.*e.field = mod->getSavedValue<double>(e.key, d.*e.field);
         fw.cbfInputHz = (int64_t)mod->getSavedValue<int>("fwac_cbf_input_hz", (int)d.cbfInputHz);
         if (auto const t = mod->getSavedValue<std::string>("fwac_tiers", "");
             !t.empty())
@@ -4882,6 +4898,8 @@ namespace gucci {
             mod->setSavedValue(e.key, fw.*e.field);
         for (auto const& e : kAcFloats)
             mod->setSavedValue(e.key, (double)(fw.*e.field));
+        for (auto const& e : kAcDoubles)
+            mod->setSavedValue(e.key, fw.*e.field);
         mod->setSavedValue("fwac_cbf_input_hz", (int)fw.cbfInputHz);
         mod->setSavedValue("fwac_tiers", acTiersToJson(fw.tiers));
     }
@@ -4985,6 +5003,130 @@ namespace gucci {
             ImGui::BeginDisabled();
 
         // --- measurement --------------------------------------------------
+        // --- difficulty (L*) ----------------------------------------------
+        // One number for the whole macro: the precision a player would need to
+        // clear the level inside the target time, given every miss costs a
+        // restart from the start. Higher is harder.
+        //
+        // The solver (analysis/ac/lstar.cpp) and its settings came across with
+        // anticroom's source. The readout did not -- he finished that part
+        // after sending it -- so this panel is ours, driving his solver
+        // through his own fields rather than parallel copies of them.
+        //
+        // Algorithm is C0nscious's Frame Window Counter, MIT licensed:
+        // github.com/hyper-5/frame-window-counter
+        if (ImGui::CollapsingHeader("Difficulty (L*)", ImGuiTreeNodeFlags_DefaultOpen)) {
+            auto* solver = lstar::Solver::get();
+            bool const haveResults = !acfw.results().empty();
+
+            auto sliderD = [&](char const* label, double* v, float lo, float hi,
+                               char const* help) {
+                float f = (float)*v;
+                if (Widgets::StyledSliderFloat(label, &f, lo, hi, theme)) {
+                    *v = (double)f;
+                    dirty = true;
+                    lstar::Solver::get()->markDirty();
+                }
+                if (help && ImGui::IsItemHovered())
+                    ImGui::SetTooltip("%s", help);
+            };
+            auto toggleL = [&](char const* label, bool* v, char const* help) {
+                if (Widgets::ToggleSwitch(label, v, theme, anim)) {
+                    dirty = true;
+                    lstar::Solver::get()->markDirty();
+                }
+                if (help && ImGui::IsItemHovered())
+                    ImGui::SetTooltip("%s", help);
+            };
+
+            toggle("Show L*", &fw.lstarEnabled,
+                   "One number summarising how hard the whole macro is to hit, "
+                   "built from the windows Calculate measured. Higher is harder.");
+
+            if (fw.lstarEnabled) {
+                if (!haveResults) {
+                    ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                    ImGui::TextWrapped(
+                        "Run Calculate first -- L* is built from the measured windows.");
+                    ImGui::PopStyleColor();
+                } else {
+                    if (solver->dirty() && !solver->running()) {
+                        lstar::Settings ls;
+                        ls.m_tps = engine->updater.m_tps;
+                        ls.m_respawnSeconds = fw.lstarRespawn;
+                        ls.m_targetSeconds =
+                            fw.lstarTarget > 0.0 ? fw.lstarTarget : 86400.0;
+                        ls.m_useNerve = fw.lstarUseNerve;
+                        ls.m_nerve = fw.lstarNerve;
+                        ls.m_useFatigue = fw.lstarUseFatigue;
+                        ls.m_fatigue = fw.lstarFatigue;
+                        ls.m_useCps = fw.lstarUseCps;
+                        ls.m_cps = fw.lstarCps;
+                        solver->start(acfw.precisionInputs(), ls);
+                    }
+
+                    if (solver->running()) {
+                        ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                        ImGui::Text("Solving... %.0f%%", solver->progress());
+                        ImGui::PopStyleColor();
+                    } else if (solver->result().m_ok) {
+                        auto const& r = solver->result();
+                        ImGui::PushStyleColor(ImGuiCol_Text, theme.getAccent());
+                        ImGui::Text("L* = %.2f", r.m_value);
+                        ImGui::PopStyleColor();
+                        ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                        ImGui::TextWrapped(
+                            "From %d measured window(s) -- the precision needed to "
+                            "clear this in %.4g hour(s), restarting on every miss.",
+                            (int)r.m_perInput.size(), fw.lstarTarget / 3600.0);
+                        ImGui::PopStyleColor();
+                    }
+                }
+
+                {
+                    float hours = (float)(fw.lstarTarget / 3600.0);
+                    if (Widgets::StyledSliderFloat("Target Hours", &hours, 0.1f,
+                                                   500.f, theme)) {
+                        fw.lstarTarget = (double)hours * 3600.0;
+                        dirty = true;
+                        solver->markDirty();
+                    }
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip(
+                            "How long a player is assumed willing to grind it. L* "
+                            "answers: how precise would they have to be to finish "
+                            "inside this?");
+                }
+                sliderD("Respawn Seconds", &fw.lstarRespawn, 0.f, 10.f,
+                        "Dead time between dying and being back in control. It "
+                        "counts toward the grind, so it pushes L* up.");
+
+                ImGui::Dummy(ImVec2(0, 4));
+                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                ImGui::TextWrapped(
+                    "The three below model the PLAYER rather than the level, so "
+                    "turning them on makes L* less comparable between macros. Off "
+                    "by default for that reason.");
+                ImGui::PopStyleColor();
+
+                toggleL("Nerve", &fw.lstarUseNerve,
+                        "Assume precision decays the further into a run you get.");
+                if (fw.lstarUseNerve)
+                    sliderD("Nerve Rate", &fw.lstarNerve, 0.f, 0.5f,
+                            "Per second into the attempt.");
+                toggleL("Fatigue", &fw.lstarUseFatigue,
+                        "Assume precision decays with the number of inputs done.");
+                if (fw.lstarUseFatigue)
+                    sliderD("Fatigue Rate", &fw.lstarFatigue, 0.f, 0.5f,
+                            "Per input.");
+                toggleL("Click Rate", &fw.lstarUseCps,
+                        "Penalise inputs that come soon after the one before.");
+                if (fw.lstarUseCps)
+                    sliderD("Click Rate Weight", &fw.lstarCps, 0.f, 2.f,
+                            "How much a tight gap counts against you.");
+            }
+        }
+
         if (ImGui::CollapsingHeader("Measurement", ImGuiTreeNodeFlags_DefaultOpen)) {
             const char* modes[] = {"Time-Based", "Recovery Range"};
             int mode = fw.algorithm == 1 ? 1 : 0;
@@ -8191,6 +8333,10 @@ namespace gucci {
              "1.8's Calculate IS his analyzer -- his Silicate frame-window rewrite, ported in "
              "near-verbatim. Before that, GucciBot's first outside pull request. Also one of "
              "ToastyReplay's own devs."},
+            {"C",
+             "C0nscious",
+             "The L* difficulty metric -- GucciBot's difficulty number is his algorithm, from "
+             "Frame Window Counter (github.com/hyper-5/frame-window-counter, MIT)"},
             {"P", "peony", "Silicate dev -- dropped the source like Gucci drops albums. Brrr."},
             {"T",
              "ToastexGD",
