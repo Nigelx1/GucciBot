@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-21-g (Chasing a macro that dies on normal playback after Calculate, at the same spot every time, surviving a level exit. The analyzer shifts the real macro's action frames to probe them and restores them at finish; a level exit does not reload the macro, so if that restore ever misses, the macro stays retimed and behaves exactly like this. Finish now counts what it put back and logs it, so the next run says whether the restore held instead of leaving it to guesswork. Also: the analyzer now stands down BEFORE the reset that hands the level back, since that reset was running under analyzer-exclusive rules; and the finish summary itself now reaches guccibot_fw.log, which it never did -- it went through log::info, so the file showed 11 starts and 0 finishes and read like every run was hanging. L* also drew nothing at all when the solver had no result; it says why now.)"
+    "2026-09-21-h (L* in the corner of the level, bottom left, which is where NaN publishes it in his own videos -- until now the number only existed inside the mod menu, which is no use on a recording. The overlay also owns kicking the solver, since the menu is shut during a showcase or a render. Log check on build -g came back clean: 128 of 128 measured, zero desyncs, zero skipped, and the macro restore put back 0 shifted actions, so the earlier one-off death is not reproducing. 13 windows do rest on the sweep limit at Sweep Range 14 and read as floors.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

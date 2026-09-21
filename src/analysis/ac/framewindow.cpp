@@ -3986,6 +3986,61 @@ void FrameWindowAnalyzer::cullOffscreen(PlayLayer* pl) {
     }
 }
 
+// GucciBot addition, not anticroom's: the L* readout in the corner of the
+// level, which is the form NaN actually publishes it in. It also owns kicking
+// the solver, because the mod menu cannot -- the menu is shut during a
+// showcase or a render, and a number that only exists while an ImGui tab is
+// open is no use for either.
+void FrameWindowAnalyzer::updateLStarHud(PlayLayer* pl) {
+    auto const& fw = SLSettings::get()->frameWindow;
+    auto* solver = lstar::Solver::get();
+
+    char const* const kId = "framewindow-lstar";
+    auto* label = static_cast<CCLabelBMFont*>(pl->m_uiLayer->getChildByID(kId));
+
+    if (!fw.lstarEnabled || !fw.lstarHud || m_results.empty()) {
+        if (label) label->removeFromParent();
+        return;
+    }
+
+    if (solver->dirty() && !solver->running() && !m_running) {
+        lstar::Settings ls;
+        ls.m_tps = Bot::get()->updater().m_tps;
+        ls.m_respawnSeconds = fw.lstarRespawn;
+        ls.m_targetSeconds = fw.lstarTarget > 0.0 ? fw.lstarTarget : 86400.0;
+        ls.m_useNerve = fw.lstarUseNerve;
+        ls.m_nerve = fw.lstarNerve;
+        ls.m_useFatigue = fw.lstarUseFatigue;
+        ls.m_fatigue = fw.lstarFatigue;
+        ls.m_useCps = fw.lstarUseCps;
+        ls.m_cps = fw.lstarCps;
+        solver->start(this->precisionInputs(), ls);
+    }
+
+    if (!solver->result().m_ok) {
+        if (label) label->removeFromParent();
+        return;
+    }
+
+    // chatFont, not bigFont: bigFont is GD's chunky display face and does not
+    // carry the whole ASCII set, and this string needs an asterisk and a
+    // slash. Small and legible is also the right look for a corner stat.
+    auto const text = fmt::format("L* {:.2f} sigma/s", solver->result().m_value);
+    if (!label) {
+        label = CCLabelBMFont::create(text.c_str(), "chatFont.fnt");
+        label->setID(kId);
+        label->setAnchorPoint({0.f, 0.f});
+        pl->m_uiLayer->addChild(label);
+    } else {
+        label->setString(text.c_str());
+    }
+
+    float const scale = std::max(0.1f, fw.lstarHudScale);
+    label->setScale(scale);
+    label->setPosition({8.f, 8.f});
+    label->setOpacity(255);
+}
+
 void FrameWindowAnalyzer::rebuildHud(PlayLayer* pl) {
     if (auto* old = pl->m_uiLayer->getChildByID("framewindow-hud"_spr))
         old->removeFromParent();
@@ -4326,12 +4381,16 @@ void FrameWindowAnalyzer::render(PlayLayer* pl) {
         if (markers) markers->removeFromParent();
         this->dropMarkers();
         if (hud) hud->removeFromParent();
+        if (auto* ls = pl->m_uiLayer->getChildByID("framewindow-lstar"))
+            ls->removeFromParent();
         if (auto* t = pl->m_uiLayer->getChildByID("framewindow-timing"_spr))
             t->removeFromParent();
         m_hudBuiltGeneration = UINT32_MAX;
         m_haveLastFrame = false;
         return;
     }
+
+    this->updateLStarHud(pl);
 
     auto const& tiers = SLSettings::get()->frameWindow.tiers;
     if (!hud || m_hudBuiltGeneration != m_generation ||

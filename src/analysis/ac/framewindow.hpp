@@ -572,6 +572,7 @@ class FrameWindowAnalyzer {
     void spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
                      FrameWindowTier const* tier);
     void rebuildHud(PlayLayer* pl);
+    void updateLStarHud(PlayLayer* pl);
     void refreshHudCounts(PlayLayer* pl);
     void cullOffscreen(PlayLayer* pl);
     void recountUpTo(uint32_t frame);

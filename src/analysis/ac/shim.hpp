@@ -180,6 +180,12 @@ struct FrameWindowSettings {
     // above, already here when his source came across; the readout is what
     // did not, because he finished that part after sending it.
     bool lstarEnabled = true;
+    // In-level readout, bottom left -- where NaN puts it in his own videos
+    // ("the number on the bottom left of my videos", nandl.pages.dev FAQ).
+    // This is the showcase-facing half of L*: without it the number only
+    // exists inside the mod menu, which is no use on a recording.
+    bool lstarHud = true;
+    float lstarHudScale = 0.5f;
     float markerScale = 0.5f;
     std::vector<FrameWindowTier> tiers = {
         {1, 0, 1, "", "", {0.996f, 0.310f, 0.314f, 1.f}, true},

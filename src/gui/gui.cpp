@@ -4587,6 +4587,7 @@ namespace gucci {
         constexpr AcSetting<bool> kAcBools[] = {
             {"fwac_enabled", &FrameWindowSettings::enabled},
             {"fwac_lstar_enabled", &FrameWindowSettings::lstarEnabled},
+            {"fwac_lstar_hud", &FrameWindowSettings::lstarHud},
             {"fwac_lstar_use_nerve", &FrameWindowSettings::lstarUseNerve},
             {"fwac_lstar_use_fatigue", &FrameWindowSettings::lstarUseFatigue},
             {"fwac_lstar_use_cps", &FrameWindowSettings::lstarUseCps},
@@ -4646,6 +4647,7 @@ namespace gucci {
             {"fwac_circle_per_frame", &FrameWindowSettings::circleSkinRadiusPerFrame},
             {"fwac_circle_max", &FrameWindowSettings::circleSkinMaxRadius},
             {"fwac_hud_scale", &FrameWindowSettings::hudScale},
+            {"fwac_lstar_hud_scale", &FrameWindowSettings::lstarHudScale},
         };
 
         // His L* inputs are doubles, so they need their own table rather than
@@ -5053,6 +5055,8 @@ namespace gucci {
                     ImGui::SetTooltip("%s", help);
             };
 
+            // The in-level readout is the point of the feature for showcases,
+            // so it sits with the value rather than buried under Display.
             toggle("Show L*", &fw.lstarEnabled,
                    "One number for the whole macro: the precision a player would "
                    "need to clear it, built from the windows Calculate measured. "
@@ -5165,6 +5169,14 @@ namespace gucci {
                         ImGui::PopStyleColor();
                     }
                 }
+
+                toggle("Show In Level (Bottom Left)", &fw.lstarHud,
+                       "Draw L* in the corner of the level itself, where NaN "
+                       "puts it in his videos, so it shows up in renders and "
+                       "showcases instead of only in this menu.");
+                if (fw.lstarHud)
+                    sliderFloat("In-Level Size", &fw.lstarHudScale, 0.2f, 2.f,
+                                "Size of the corner readout.");
 
                 {
                     float hours = (float)(fw.lstarTarget / 3600.0);
