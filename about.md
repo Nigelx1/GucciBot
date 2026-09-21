@@ -138,7 +138,8 @@ Real click-timing feedback and a synced video-review overlay, both built around 
 - **Claude** — wrote the code and this page. Essentially the whole codebase, not a euphemism.
 - **Juice** — designed the frame-window algorithm GucciBot ran on through 1.7 and the marker shapes in 1.8; lead co-tester, ran the mod into the ground on purpose finding the bugs nobody else caught
 - **anticroom** — 1.8's Calculate *is* his analyzer: his Silicate frame-window rewrite, ported in near-verbatim and now the whole feature. Before that, GucciBot's first outside pull request — a real 7-fix accuracy pass. Also one of ToastyReplay's own devs.
-- **C0nscious** — the L* difficulty metric: the single number GucciBot puts on a macro's difficulty is his algorithm, from [Frame Window Counter](https://github.com/hyper-5/frame-window-counter) (MIT)
+- **NaN GD** — the L* precision formula, published at [nandl.pages.dev](https://nandl.pages.dev/#formula). The number GucciBot puts on a macro is his maths
+- **C0nscious** — implemented NaN's formula in C++ as [Frame Window Counter](https://github.com/hyper-5/frame-window-counter) (MIT), which is the code that reached GucciBot
 - **peony** — Silicate (dropped the source like Gucci drops albums. Brrr.)
 - **ToastexGD** — built ToastyReplay, the project GucciBot actually started as before the Silicate migration; the renderer, the FFmpeg pipeline, and the whole recording system running today are still his, exactly as built
 - **GWDdoS** — Astral, and the codebase cleanup that got this repo public-ready

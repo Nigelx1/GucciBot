@@ -5003,19 +5003,25 @@ namespace gucci {
             ImGui::BeginDisabled();
 
         // --- measurement --------------------------------------------------
-        // --- difficulty (L*) ----------------------------------------------
+        // --- precision (L*) -----------------------------------------------
         // One number for the whole macro: the precision a player would need to
         // clear the level inside the target time, given every miss costs a
-        // restart from the start. Higher is harder.
+        // restart from the start. Higher means more precision demanded.
+        //
+        // Called PRECISION, not difficulty, because that is what NaN calls it
+        // and he is right -- it only sees timing windows. A level can be
+        // brutal for reasons this number cannot see (memory, blindness,
+        // kinematics), so presenting it as a difficulty verdict would oversell
+        // it. The readout says so rather than leaving people to assume.
         //
         // The solver (analysis/ac/lstar.cpp) and its settings came across with
         // anticroom's source. The readout did not -- he finished that part
         // after sending it -- so this panel is ours, driving his solver
         // through his own fields rather than parallel copies of them.
         //
-        // Algorithm is C0nscious's Frame Window Counter, MIT licensed:
-        // github.com/hyper-5/frame-window-counter
-        if (ImGui::CollapsingHeader("Difficulty (L*)", ImGuiTreeNodeFlags_DefaultOpen)) {
+        // Formula is NaN GD's (nandl.pages.dev/#formula); the C++ came via
+        // C0nscious's implementation of it, MIT licensed.
+        if (ImGui::CollapsingHeader("Precision (L*)", ImGuiTreeNodeFlags_DefaultOpen)) {
             auto* solver = lstar::Solver::get();
             bool const haveResults = !acfw.results().empty();
 
@@ -5040,8 +5046,9 @@ namespace gucci {
             };
 
             toggle("Show L*", &fw.lstarEnabled,
-                   "One number summarising how hard the whole macro is to hit, "
-                   "built from the windows Calculate measured. Higher is harder.");
+                   "One number for the whole macro: the precision a player would "
+                   "need to clear it, built from the windows Calculate measured. "
+                   "NaN GD's formula -- see nandl.pages.dev.");
 
             if (fw.lstarEnabled) {
                 if (!haveResults) {
@@ -5072,13 +5079,18 @@ namespace gucci {
                     } else if (solver->result().m_ok) {
                         auto const& r = solver->result();
                         ImGui::PushStyleColor(ImGuiCol_Text, theme.getAccent());
-                        ImGui::Text("L* = %.2f", r.m_value);
+                        ImGui::Text("L* = %.2f sigma/s", r.m_value);
                         ImGui::PopStyleColor();
                         ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
                         ImGui::TextWrapped(
-                            "From %d measured window(s) -- the precision needed to "
-                            "clear this in %.4g hour(s), restarting on every miss.",
+                            "From %d measured window(s) -- the timing precision "
+                            "needed to clear this in %.4g hour(s), restarting on "
+                            "every miss.",
                             (int)r.m_perInput.size(), fw.lstarTarget / 3600.0);
+                        ImGui::TextWrapped(
+                            "This is precision, not difficulty. It only sees timing "
+                            "windows -- memory, reading and kinematics don't show up "
+                            "in it. NaN GD, whose formula this is, says the same.");
                         ImGui::PopStyleColor();
                     }
                 }
@@ -8333,10 +8345,15 @@ namespace gucci {
              "1.8's Calculate IS his analyzer -- his Silicate frame-window rewrite, ported in "
              "near-verbatim. Before that, GucciBot's first outside pull request. Also one of "
              "ToastyReplay's own devs."},
+            {"N",
+             "NaN GD",
+             "The L* precision formula -- the number GucciBot puts on a macro is his maths, "
+             "published at nandl.pages.dev. He'll tell you himself it isn't the whole story on "
+             "difficulty, and he's right."},
             {"C",
              "C0nscious",
-             "The L* difficulty metric -- GucciBot's difficulty number is his algorithm, from "
-             "Frame Window Counter (github.com/hyper-5/frame-window-counter, MIT)"},
+             "Implemented NaN's formula in C++ as Frame Window Counter "
+             "(github.com/hyper-5/frame-window-counter, MIT) -- the code that reached GucciBot"},
             {"P", "peony", "Silicate dev -- dropped the source like Gucci drops albums. Brrr."},
             {"T",
              "ToastexGD",

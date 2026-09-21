@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-21-d (L* difficulty readout. The solver came across with anticroom's source and has been sitting in the tree compiled, fed and never called -- nothing ran it and nothing showed it, because he finished the display after sending the source. This adds the display, driving his solver through his own settings fields rather than parallel copies. One number per macro: the precision needed to clear the level inside a target time when every miss costs a restart. Algorithm is C0nscious's, MIT, now credited.)"
+    "2026-09-21-e (L* credit correction. The formula is NaN GD's, published at nandl.pages.dev -- C0nscious implemented it, and build -d credited him for authoring it, which was wrong. Every term in that implementation maps onto NaN's page one-to-one. Also renamed the section from Difficulty to Precision and added the sigma/s unit, because precision is what NaN calls it and he says outright that frame windows alone do not determine difficulty -- the readout now repeats that instead of overselling the number.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
