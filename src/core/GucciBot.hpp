@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-20-ab (Bands can be reordered. Up and down arrows on each row, because a window takes the first band whose range covers it -- so order decides which band wins, and adding one used to mean retyping the ranges of every band after it. Also fixed new bands reusing an id when an earlier band had been deleted.)"
+    "2026-09-20-ac (One-press render preset, Nigel's Awesome Showcase Preset, at the top of Render Presets: 8K 60, lossless x264 at -qp 0 in yuv444p with the bt709 colorspace filter, FLAC audio, music at 1.00 and SFX at 0.00, nothing after the end. The thread count is read from the machine rather than hardcoded, since that is the one value in the list that is per-CPU.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

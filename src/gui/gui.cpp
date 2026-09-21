@@ -5396,6 +5396,58 @@ namespace gucci {
         }
 
         Widgets::SectionHeader("Render Presets", theme);
+
+        // Nigel's showcase settings, applied in one press. 8K/60 with lossless
+        // x264 (-qp 0) in yuv444p, FLAC audio, music only. The thread count is
+        // filled in from the machine rather than hardcoded -- that is the one
+        // value in his list that is per-CPU.
+        if (Widgets::StyledButton(
+                "Nigel's Awesome Showcase Preset", ImVec2(-1, 28), theme, anim, 6.f)) {
+            unsigned threads = std::thread::hardware_concurrency();
+            if (threads == 0)
+                threads = 8;
+
+            snprintf(renderWidthBuf, sizeof(renderWidthBuf), "%d", 7680);
+            snprintf(renderHeightBuf, sizeof(renderHeightBuf), "%d", 4320);
+            snprintf(renderFpsBuf, sizeof(renderFpsBuf), "%d", 60);
+            snprintf(renderCodecBuf, sizeof(renderCodecBuf), "%s", "libx264");
+            snprintf(renderPixFmtBuf, sizeof(renderPixFmtBuf), "%s", "yuv444p");
+            snprintf(renderAudioCodecBuf, sizeof(renderAudioCodecBuf), "%s", "flac");
+            snprintf(renderSecondsAfterBuf, sizeof(renderSecondsAfterBuf), "%s", "0.0");
+            snprintf(renderVideoArgsBuf,
+                     sizeof(renderVideoArgsBuf),
+                     "-preset ultrafast -threads %u -qp 0 -vf "
+                     "colorspace=all=bt709:iall=bt470bg:fast=1",
+                     threads);
+
+            renderIncludeAudio = true;
+            renderMusicVol = 1.0f;
+            renderSfxVol = 0.0f;
+
+            // These three load as int64_t (loadSV<int64_t>), so they have to be
+            // stored as numbers -- saved as strings they read back as the
+            // defaults and the preset would silently do nothing.
+            mod->setSavedValue("render_width", (int64_t)7680);
+            mod->setSavedValue("render_height", (int64_t)4320);
+            mod->setSavedValue("render_fps", (int64_t)60);
+            mod->setSavedValue("render_codec", std::string(renderCodecBuf));
+            mod->setSavedValue("render_pix_fmt", std::string(renderPixFmtBuf));
+            mod->setSavedValue("render_audio_codec", std::string(renderAudioCodecBuf));
+            mod->setSavedValue("render_seconds_after", std::string(renderSecondsAfterBuf));
+            mod->setSavedValue("render_video_args", std::string(renderVideoArgsBuf));
+            mod->setSavedValue("render_include_audio", renderIncludeAudio);
+            mod->setSavedValue("render_music_volume", (double)renderMusicVol);
+            mod->setSavedValue("render_sfx_volume", (double)renderSfxVol);
+
+            log::info("[GucciBot] render: applied the showcase preset ({} threads)", threads);
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip(
+                "8K 60fps, lossless x264 (-qp 0) in yuv444p, FLAC audio, music only and no "
+                "SFX, nothing after the end. Thread count is read from this machine. Files "
+                "are very large -- this is for showcase footage, not everyday renders.");
+
+        ImGui::Dummy(ImVec2(0, 6));
         static char presetNameBuf[64] = "My Preset";
         ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 170);
         ImGui::InputText("##presetName", presetNameBuf, sizeof(presetNameBuf));
