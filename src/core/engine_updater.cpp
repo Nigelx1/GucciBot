@@ -608,8 +608,15 @@ static void frameUpdateMidhook(SafetyHookContext&) {
 
     bool slRender = SLRenderer::get()->isRecording();
     if (gb->isPlaying() || slRender) {
-        bool logIt =
-            slRender || !gb->fwAnalyzing || (gb->fwState == GucciEngine::FwState::Capturing);
+        // fwAnalyzing and fwState belonged to GucciBot's own analyzer, which
+        // was deleted in 1.8 -- they have been stuck false ever since, so the
+        // CALC tag stopped being emitted and this log silently became
+        // PLAY-only. That is why a slope bug in the new analyzer had to be
+        // chased through the .path sidecar instead of just diffing CALC
+        // against PLAY here. Wired to anticroom's analyzer, scoped to its
+        // capture pass so legs do not flood the file.
+        bool const acCapturing = ::Bot::get()->frameWindow().capturing();
+        bool logIt = slRender || !gb->analyzerOwnsRun() || acCapturing;
         if (logIt) {
             auto* plr = PlayLayer::get();
             if (plr && plr->m_player1) {
@@ -630,7 +637,8 @@ static void frameUpdateMidhook(SafetyHookContext&) {
                                      "rs={} ckpt={} fast={} q={} "
                                      "onS={} wasS={} sVel={:.4f} preSV={:.4f} colS={} ang={:.2f} "
                                      "st={:.3f} et={:.3f} curS={}",
-                                     slRender ? "REND" : (gb->fwAnalyzing ? "CALC" : "PLAY"),
+                                     slRender ? "REND"
+                                              : (gb->analyzerOwnsRun() ? "CALC" : "PLAY"),
                                      upd.getFrame(),
                                      (double)p->m_position.x,
                                      (double)p->m_position.y,

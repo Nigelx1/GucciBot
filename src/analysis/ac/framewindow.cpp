@@ -86,6 +86,10 @@ cocos2d::ccColor3B FrameWindowAnalyzer::colorForWindow(int window) {
     }
 }
 
+bool FrameWindowAnalyzer::capturing() const {
+    return m_running && m_stageId == Stage::Capture;
+}
+
 float FrameWindowAnalyzer::progress() const {
     if (m_total == 0) return 0.0f;
     return static_cast<float>(m_index) / static_cast<float>(m_total);

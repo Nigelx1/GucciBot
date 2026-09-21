@@ -89,6 +89,10 @@ class FrameWindowAnalyzer {
     void updateProgressOverlay(PlayLayer* pl);
 
     bool running() const { return m_running; }
+    // True only during the capture pass -- the run that establishes the
+    // macro's ground truth. Exposed so the slope log can tag those frames
+    // CALC and be diffed against a PLAY run frame for frame.
+    bool capturing() const;
 
     bool isRestoring() const { return m_restoring; }
     bool onSuppressedDeath(cocos2d::CCNode* player, cocos2d::CCNode* killer);

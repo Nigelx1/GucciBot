@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-21-l (Logs the player state either side of the reset the capture pass starts from. Build -k put the state dump in the file but it only ever fires inside legs, after a checkpoint restore has already put the right speed back, so it showed 1.300 and hid the problem. This logs pre-reset and capture-start, which is the moment that actually matters.)"
+    "2026-09-21-m (Congregation is a SLOPE bug, and my speed theory was wrong -- it came from comparing Congregation against trace lines belonging to a vsc run. Scoped properly, the capture matches the recording exactly to the top of the opening slope and then fails to launch: same position, yvel 0 where a real run has 15.781, so it drops back and cycles on the ground forever. This restores the slope log's CALC tag, which has been dead since 1.8 because it was wired to the deleted analyzer's flags -- that is why this needed a sidecar diff instead of a PLAY/CALC diff.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
