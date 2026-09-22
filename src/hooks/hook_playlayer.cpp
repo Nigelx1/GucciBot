@@ -521,6 +521,40 @@ class $modify(GB7PlayLayer, PlayLayer) {
             m_attemptLabel->setVisible(false);
     }
 
+    // GD asks this before treating a reset as a real death. The analyzer and
+    // the intentional-death path both set these flags and we never answered
+    // the question, so GD counted our deliberate resets as genuine deaths.
+    // Ported from Silicate 2026-09-22.
+    bool isResetIntentional() {
+        auto& upd = GucciEngine::get()->updater;
+        return upd.m_canDie || upd.m_expectsDeath;
+    }
+
+    // Restart the attempt counters and clocks without tearing down the
+    // checkpoints. GD calls this itself; we were leaving it to vanilla, which
+    // does not know about the practice fix's platformer state.
+    void fakeFullReset() {
+        auto winSize = CCDirector::sharedDirector()->getWinSize();
+        m_gameState.m_totalTime = 0.0;
+        m_gameState.m_unkDouble3 = 0.0;
+        m_gameState.m_levelTime = 0.0;
+        if (m_player1)
+            m_player1->m_totalTime = 0.0;
+        if (m_player2)
+            m_player2->m_totalTime = 0.0;
+        m_attempts = 0;
+        m_jumps = 0;
+        m_objectsDeactivated = true;
+        m_freezeStartCamera = true;
+
+        GucciEngine::get()->practiceFix.clearPlatformer(true);
+        this->resetLevel();
+        if (m_attemptLabel)
+            m_attemptLabel->setPosition(
+                CCPoint{winSize.width,
+                        winSize.width * 0.5f + (float)m_gameState.m_cameraPosition.x});
+    }
+
     void destroyPlayer(PlayerObject* player, GameObject* obj) {
         auto* gb = GucciEngine::get();
         auto& upd = gb->updater;

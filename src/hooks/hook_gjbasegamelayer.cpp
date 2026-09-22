@@ -399,6 +399,62 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         GJBaseGameLayer::handleButton(pressed, button, player1);
     }
 
+    // Deterministic object variance, ported from Silicate 2026-09-22.
+    //
+    // GD gives objects driven by move/rotate/scale/advance-follow triggers a
+    // per-object "variance index" that randomises their motion. Left alone it
+    // is not reproducible, so a macro replays against objects that are not
+    // where they were when it was recorded.
+    //
+    // GucciBot already carried the whole apparatus for fixing this -- the
+    // macro header stores an rngSeed, m_startingSeed and
+    // m_startingSeedThisAttempt are maintained on reset, and checkpoints save
+    // and restore m_varianceValues -- and then never applied any of it to the
+    // objects, because this hook was not ported. The seed was being written to
+    // every macro file and read back and used for nothing.
+    //
+    // Derives each object's index from the seed and the object's own immutable
+    // properties, so it is stable across attempts and identical for the same
+    // macro every time.
+    void processMoveActionsStep(float dt, bool visibleFrame) {
+        auto* gb = GucciEngine::get();
+
+        auto const hashObject = [&](GameObject* object, int group, int index) {
+            return (int)((gb->replay.m_startingSeed *
+                          (int)(object->m_objectID + 5541) *
+                          (int)(std::fabs(object->m_startPosition.x) + 1.0) *
+                          (int)(std::fabs(object->m_startPosition.y) + 1.0) *
+                          ((int)object->m_zLayer + 2137) *
+                          (object->m_groupCount + 6969) *
+                          ((int)object->m_isObjectBlack * 420 + 14) *
+                          ((int)(std::fabs(object->m_startRotationX) * 6.7 + 1.0) *
+                           (index + 67)) *
+                          (group + 2137)) %
+                         1777);
+        };
+
+        auto const seedGroup = [&](int group) {
+            CCArray* objects = this->getGroup(group);
+            if (!objects)
+                return;
+            for (int i = 0; i < (int)objects->count(); i++) {
+                if (auto* object = static_cast<GameObject*>(objects->objectAtIndex(i)))
+                    object->m_varianceIndex = hashObject(object, group, i);
+            }
+        };
+
+        for (auto& a : m_gameState.m_advanceFollowInstances)
+            seedGroup(a.m_group);
+        for (auto& a : m_gameState.m_rotateEffectInstances)
+            seedGroup(a.m_targetID);
+        for (auto& a : m_gameState.m_scaleEffectInstances)
+            seedGroup(a.m_targetID);
+        for (auto& a : m_gameState.m_moveEffectInstances)
+            seedGroup(a.m_targetID);
+
+        GJBaseGameLayer::processMoveActionsStep(dt, visibleFrame);
+    }
+
     void processQueuedButtons(float dt, bool clearInputQueue) {
         auto* gb = GucciEngine::get();
         if (!gb->enabled)

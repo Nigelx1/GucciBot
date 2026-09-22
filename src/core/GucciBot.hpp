@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-22-d (Engine port: five PlayerObject hooks Silicate has and we did not. We had 8 of his 20; the other seven are trajectory-only and route to his own physics for fake players, so they do not apply here. Ported: setYVelocity with High TPS Precision (GD rounds y-velocity to a fixed 0.001 step regardless of tick rate, so running above a macro's recorded rate throws away the precision the extra ticks buy -- OFF by default since it changes physics), tryPlaceCheckpoint (timeout-based placement so holding the key does not spray checkpoints), removePendingCheckpoint (suppressed, GD dropping one under the practice fix desyncs them), incrementJumps (preview players no longer count toward the real jump tally) and levelFlipping (off in the editor). Analyzer confirmed already fully in sync -- all 88 of his methods present -- so frame windows need no re-port.)"
+    "2026-09-22-e (Engine port: the object-variance seed was never applied. GucciBot writes an rngSeed into every macro header, maintains m_startingSeed and a per-attempt copy across resets, and saves m_varianceValues in every checkpoint -- then never seeded a single object with it, because processMoveActionsStep was not ported. Objects driven by move, rotate, scale and advance-follow triggers kept GD's unreproducible variance, so a macro replayed against objects that were not where they were when it was recorded. Also ported isResetIntentional (GD asks before counting a reset as a real death and we never answered, so deliberate resets counted as deaths) and fakeFullReset.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
