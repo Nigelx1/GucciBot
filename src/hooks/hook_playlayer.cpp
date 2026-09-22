@@ -312,6 +312,13 @@ class $modify(GB7PlayLayer, PlayLayer) {
         if (!gb->updater.m_expectsDeath)
             rs.m_startingSeedThisAttempt = rs.m_startingSeed;
 
+        // Every random source this attempt will consume is re-derived from the
+        // attempt seed here, so two runs of the same macro take the same
+        // branches through Random triggers and the same teleport/shake draws.
+        rs.m_shakeRandomState = rs.m_startingSeedThisAttempt & 0x7FFF;
+        rs.m_teleportRandomState = rs.m_startingSeedThisAttempt & 0x7FFF;
+        gb->practiceFix.reseedAdvancedRandom(rs.m_startingSeedThisAttempt);
+
         if (gb->isRecording()) {
             rs.m_startingSeedThisAttempt = state;
             if (gb->practiceFix.m_savedCheckpoints.empty() && !gb->practiceFix.m_loadCheckpoint &&

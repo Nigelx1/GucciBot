@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-22-e (Engine port: the object-variance seed was never applied. GucciBot writes an rngSeed into every macro header, maintains m_startingSeed and a per-attempt copy across resets, and saves m_varianceValues in every checkpoint -- then never seeded a single object with it, because processMoveActionsStep was not ported. Objects driven by move, rotate, scale and advance-follow triggers kept GD's unreproducible variance, so a macro replayed against objects that were not where they were when it was recorded. Also ported isResetIntentional (GD asks before counting a reset as a real death and we never answered, so deliberate resets counted as deaths) and fakeFullReset.)"
+    "2026-09-22-f (Deterministic Random triggers. GD's Random trigger picks a branch from the shared RNG, so a level with one takes a different path every attempt and no macro through it replays -- the divergence is in which objects spawn at all, which no amount of checkpoint fidelity can fix. Each trigger now keeps its own LCG seeded from the macro seed and its object id, registered with the practice fix so checkpoints capture and restore it. Teleport RNG state ported alongside it, and both are reseeded per attempt with the shake state.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -88,6 +88,11 @@ namespace gucci {
         // otherwise. Captured/restored alongside everything else here.
         uint64_t m_rngState = 0;
 
+        // Per-object Random-trigger states and the teleport RNG, captured
+        // alongside m_rngState so a restore puts every random source back.
+        std::vector<uint64_t> m_advRandStates;
+        uint64_t m_teleportRandomState = 0;
+
         // Level simulation state, ported from Silicate 2026-09-20. GucciBot's
         // checkpoints restored the PLAYER faithfully and left the LEVEL where
         // it was, so after a restore the moving objects, trigger variance and
@@ -134,6 +139,25 @@ namespace gucci {
         // time -- detection fired constantly and did nothing -- don't let this
         // regress back to that.
         std::vector<GameObject*> m_brokenObjects;
+
+        // Advanced ("Random") trigger determinism, ported from Silicate
+        // 2026-09-22. Each Random trigger keeps its own LCG state; this holds a
+        // pointer to every one, so an attempt can reseed them all from the
+        // macro's seed and a checkpoint can capture and restore them. Without
+        // it a level with Random triggers takes a different branch on every
+        // attempt and no macro through one is reproducible.
+        struct SavedAdvRand {
+            uint64_t* m_randomState;
+            int m_uniqueID;
+        };
+        std::vector<SavedAdvRand> m_advancedRandom;
+
+        void reseedAdvancedRandom(uint64_t attemptSeed) {
+            for (auto& s : m_advancedRandom)
+                if (s.m_randomState)
+                    *s.m_randomState =
+                        attemptSeed ^ (static_cast<uint64_t>(s.m_uniqueID) * 2137);
+        }
 
         // Deferred checkpoint capture -- see storeCheckpoint (hook_playlayer.cpp)
         // and frameUpdateMidhook (engine_updater.cpp) for why this exists and
@@ -237,6 +261,9 @@ namespace gucci {
         uint64_t m_startingSeed = 0;
         uint64_t m_startingSeedThisAttempt = 0;
         uint64_t m_shakeRandomState = 0;
+        // Same idea as the shake state: GD's teleport portals consume RNG, and
+        // a replay has to consume the same sequence. Ported 2026-09-22.
+        uint64_t m_teleportRandomState = 0;
         std::string m_replayName = "";
 
         std::vector<MacroPathSample> m_pathSamples;

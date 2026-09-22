@@ -83,6 +83,12 @@ namespace gucci {
         // every reset -- see the comment on SavedCheckpointState::m_rngState
         // for why this needs to be captured per-checkpoint now.
         state.m_rngState = *reinterpret_cast<uint64_t*>(geode::base::get() + 0x6c2e90);
+        // Every other random source a replay depends on, captured with it.
+        state.m_teleportRandomState = GucciEngine::get()->replay.m_teleportRandomState;
+        state.m_advRandStates.clear();
+        state.m_advRandStates.reserve(m_advancedRandom.size());
+        for (auto const& r : m_advancedRandom)
+            state.m_advRandStates.push_back(r.m_randomState ? *r.m_randomState : 0);
 
         // Level state, alongside the player state. Without these a restore
         // rewinds the player into a level that never rewound -- see the
@@ -208,6 +214,11 @@ namespace gucci {
         // same resetLevel() call -- restoring the checkpoint's own captured
         // value here is what actually fixes the per-checkpoint RNG gap.
         *reinterpret_cast<uint64_t*>(geode::base::get() + 0x6c2e90) = state.m_rngState;
+        GucciEngine::get()->replay.m_teleportRandomState = state.m_teleportRandomState;
+        for (size_t i = 0;
+             i < state.m_advRandStates.size() && i < m_advancedRandom.size(); i++)
+            if (m_advancedRandom[i].m_randomState)
+                *m_advancedRandom[i].m_randomState = state.m_advRandStates[i];
     }
 
     void GucciPracticeFix::dropLastStoredFrame() {
@@ -232,11 +243,11 @@ namespace gucci {
         m_forcedState = nullptr;
     }
 
-    // Silicate also clears m_brokenOpacity and m_advancedRandom here; GucciBot
-    // has neither, so this clears the two it does have. If either gets ported
-    // later, add it here too.
+    // m_advancedRandom is ported as of 2026-09-22 and cleared here. Silicate
+    // also clears m_brokenOpacity, which GucciBot still does not have.
     void GucciPracticeFix::removeAll() {
         m_brokenObjects.clear();
+        m_advancedRandom.clear();
         m_savedCheckpoints.clear();
     }
 
