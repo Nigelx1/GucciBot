@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-21-m (Congregation is a SLOPE bug, and my speed theory was wrong -- it came from comparing Congregation against trace lines belonging to a vsc run. Scoped properly, the capture matches the recording exactly to the top of the opening slope and then fails to launch: same position, yvel 0 where a real run has 15.781, so it drops back and cycles on the ground forever. This restores the slope log's CALC tag, which has been dead since 1.8 because it was wired to the deleted analyzer's flags -- that is why this needed a sidecar diff instead of a PLAY/CALC diff.)"
+    "2026-09-21-n (Audit build for anticroom. Dumps every PlayerObject field his statediff table knows about, automatically on the frame a slope launch is decided, tagged PLAY or CALC, so a normal run and the analyzer's capture can be diffed byte for byte at the exact frame they part company -- the dozen fields the slope log samples do not contain the answer. Also ports back a real gap found in his source: his physStepCount and restorePhysDt midhooks bypass on m_analysisBatch > 0 and ours did not, which affects batched legs, though not the capture, where batch is pinned to 1.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -39,6 +39,12 @@ namespace gucci {
     // of being split across two logs that have to be interleaved by hand.
     // Defined in analysis/ac/framewindow.cpp.
     void fwEngineLog(const std::string& line);
+    // Dumps every PlayerObject field anticroom's statediff table knows about,
+    // for one player, as name=hex lines. Used to diff a normal run against the
+    // analyzer's capture at the exact frame they part company -- the slope log
+    // only samples a dozen fields and the answer was not among them.
+    // Defined in analysis/ac/framewindow.cpp, which owns the field table.
+    std::vector<std::string> fwPlayerFieldDump(PlayerObject* p);
 
     class GucciScheduler {
     public:

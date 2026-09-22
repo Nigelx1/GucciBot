@@ -1501,6 +1501,8 @@ static PlayerField const s_playerFields[] = {
         {offsetof(PlayerObject, m_enableImpulseFix), sizeof(PlayerObject::m_enableImpulseFix), "m_enableImpulseFix"},
 };
 
+
+
 std::string describePlayerBytes(size_t begin, size_t end) {
     std::string out;
     for (auto const& f : s_playerFields) {
@@ -1511,6 +1513,21 @@ std::string describePlayerBytes(size_t begin, size_t end) {
     return out.empty() ? std::string("<unnamed/padding>") : out;
 }
 }  // namespace
+
+namespace gucci {
+std::vector<std::string> fwPlayerFieldDump(PlayerObject* p) {
+    std::vector<std::string> out;
+    if (!p) return out;
+    auto const* base = reinterpret_cast<uint8_t const*>(p);
+    for (auto const& f : s_playerFields) {
+        std::string hex;
+        for (size_t i = 0; i < f.m_size && i < 16; i++)
+            hex += fmt::format("{:02x}", base[f.m_offset + i]);
+        out.push_back(fmt::format("{}={}", f.m_name, hex));
+    }
+    return out;
+}
+}  // namespace gucci
 
 void FrameWindowAnalyzer::reportStateDiff(PlayLayer* pl) {
     if (m_snapP1.size() != PLAYER_BYTES || !pl || !pl->m_player1) return;

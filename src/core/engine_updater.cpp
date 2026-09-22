@@ -348,7 +348,12 @@ static void physStepCountMidhook(SafetyHookContext& ctx) {
     if (!gb->enabled)
         return;
     auto& upd = gb->updater;
-    bool fastBypass = upd.useFastLockDelta() || !upd.m_lockDelta;
+    // m_analysisBatch bypass ported from anticroom's source 2026-09-21: his
+    // build has it on both of these and ours did not. While the analyzer is
+    // running a batched step, GD must be left to do its own sub-stepping for
+    // that multiplied dt rather than be forced to a single-step count.
+    bool fastBypass = upd.useFastLockDelta() || !upd.m_lockDelta ||
+                      upd.m_analysisBatch > 0;
     if (!fastBypass && PlayLayer::get())
         return;
     ctx.rdx = 2 - upd.estimatedStepCount;
@@ -359,7 +364,12 @@ static void restorePhysDtMidhook(SafetyHookContext& ctx) {
     if (!gb->enabled)
         return;
     auto& upd = gb->updater;
-    bool fastBypass = upd.useFastLockDelta() || !upd.m_lockDelta;
+    // m_analysisBatch bypass ported from anticroom's source 2026-09-21: his
+    // build has it on both of these and ours did not. While the analyzer is
+    // running a batched step, GD must be left to do its own sub-stepping for
+    // that multiplied dt rather than be forced to a single-step count.
+    bool fastBypass = upd.useFastLockDelta() || !upd.m_lockDelta ||
+                      upd.m_analysisBatch > 0;
     if (!fastBypass && PlayLayer::get())
         return;
     ctx.xmm9.f64[0] = upd.getPhysicsDt() * upd.estimatedStepCount;
@@ -632,6 +642,21 @@ static void frameUpdateMidhook(SafetyHookContext&) {
                             : p->m_isBird   ? 'U'
                             : p->m_isDart   ? 'V'
                                             : 'C';
+                // The frame a slope launch is decided. On a normal run GD moves
+                // m_slopeVelocity into m_yVelocity here, clears m_currentSlope
+                // and stamps m_slopeEndTime; under the analyzer's capture none
+                // of that happens and the player never leaves the ground.
+                // Dumping every field the statediff table knows about, on both
+                // runs, is the only way to see which one actually differs --
+                // the dozen in the line below do not contain the answer.
+                if (p->m_wasOnSlope && !p->m_isOnSlope) {
+                    auto const tag = slRender ? "REND"
+                                              : (gb->analyzerOwnsRun() ? "CALC" : "PLAY");
+                    slopeLog(fmt::format("--- {}-SLOPEEXIT f={} ---", tag, upd.getFrame()));
+                    for (auto const& fl : gucci::fwPlayerFieldDump(p))
+                        slopeLog(fmt::format("{}-FIELD f={} {}", tag, upd.getFrame(), fl));
+                }
+
                 slopeLog(fmt::format("{} f={} x={:.3f} y={:.3f} xs={:.3f} ys={:.3f} rot={:.3f} "
                                      "g={} flip={} dash={} mode={} hold={} steps={} ovf={:.4f} "
                                      "rs={} ckpt={} fast={} q={} "
