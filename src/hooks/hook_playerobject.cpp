@@ -214,6 +214,76 @@ class $modify(GB7PlayerObject, PlayerObject) {
         PlayerObject::spawnCircle();
     }
 
+    // GD quantises y-velocity to a fixed 0.001 step. Above the macro's
+    // recorded tick rate that is coarser than the simulation, so the extra
+    // ticks buy nothing. Silicate scales the step down by the ratio.
+    static constexpr double kVanillaQuantum = 0.001;
+
+    static double yVelocityQuantum() {
+        auto* gb = GucciEngine::get();
+        if (!gb->updater.m_highTpsPrecision || !gb->enabled)
+            return kVanillaQuantum;
+        double const tps = gb->updater.m_tps;
+        double ref = gb->replay.m_initialTPS;
+        if (!(ref > 0.0))
+            ref = 240.0;
+        if (!(tps > ref))
+            return kVanillaQuantum;
+        return kVanillaQuantum * (ref / tps);
+    }
+
+    static double quantise(double value, double quantum) {
+        double const whole = std::trunc(value);
+        double const frac = value - whole;
+        if (frac == 0.0)
+            return value;
+        return whole + std::round(frac / quantum) * quantum;
+    }
+
+    void setYVelocity(double velocity, int type) {
+        double const quantum = yVelocityQuantum();
+        if (quantum >= kVanillaQuantum)
+            return PlayerObject::setYVelocity(velocity, type);
+        m_yVelocity = quantise(velocity, quantum);
+    }
+
+    // A fake player drawn for a trajectory preview must not count toward the
+    // real attempt's jump tally.
+    void incrementJumps() {
+        if (TrajectoryPredictionService::get().ownsPreviewPlayer(this))
+            return;
+        PlayerObject::incrementJumps();
+    }
+
+    // Level flipping is a gameplay effect; in the editor it fights the
+    // editor's own camera handling.
+    bool levelFlipping() {
+        if (LevelEditorLayer::get())
+            return false;
+        return PlayerObject::levelFlipping();
+    }
+
+    // Pending checkpoints are GD's own deferred-placement path. The practice
+    // fix places and restores checkpoints itself, so letting GD drop one from
+    // under it desyncs the two. Silicate suppresses this outright.
+    void removePendingCheckpoint() {
+        return;
+    }
+
+    // Replaces GD's placement with a timeout, so holding the key does not
+    // spray checkpoints. 0.2s in quick mode, 1s otherwise, measured on the
+    // game state's own clock rather than real time.
+    void tryPlaceCheckpoint() {
+        if (!GameManager::get()->getGameVariable("0027"))
+            return;
+        double const timeout = this->m_quickCheckpointMode ? 0.2 : 1.0;
+        if ((this->m_gameLayer->m_gameState.m_totalTime - this->m_lastCheckpointTime) > timeout) {
+            this->m_gameLayer->m_uiLayer->onCheck(nullptr);
+            this->m_shouldTryPlacingCheckpoint = false;
+            this->m_lastCheckpointTime = this->m_totalTime;
+        }
+    }
+
     void releaseAllButtons() {
         auto* gb = GucciEngine::get();
         if (gb->updater.m_canDie || gb->isPlaying())

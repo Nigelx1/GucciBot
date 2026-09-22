@@ -4080,7 +4080,23 @@ namespace gucci {
             Widgets::ModuleCardEnd();
         }
 
-        if (Widgets::ModuleCard("Frame Extrapolation",
+        if (Widgets::ModuleCard("High TPS Precision",
+                                "Scale GD's y-velocity quantum with tick rate",
+                                &engine->updater.m_highTpsPrecision,
+                                theme,
+                                anim)) {
+        }
+        Mod::get()->setSavedValue("updater_highTpsPrecision", engine->updater.m_highTpsPrecision);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip(
+                "GD rounds y-velocity to a fixed 0.001 step no matter the tick "
+                "rate, so running above the rate a macro was recorded at throws "
+                "away the precision the extra ticks were meant to buy. This "
+                "scales the step by recorded/current TPS.\n\n"
+                "Off by default: it changes physics, and nothing recorded before "
+                "2.0 was made under it.");
+
+                if (Widgets::ModuleCard("Frame Extrapolation",
                                 "Smoothly interpolate player position between physics ticks",
                                 &engine->updater.m_extrapolateFrames,
                                 theme,

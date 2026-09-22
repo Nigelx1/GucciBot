@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-22-c (Render reconciliation, audio chunk. Ported syncMixFormat from Silicate: the channel count is read from getSoftwareFormat once at init, which happens BEFORE FMOD's output switches to non-realtime, so what FMOD actually mixes can differ -- and encoding against the wrong count corrupts a render's audio. We had no equivalent and never corrected it. The DSP callback now records the real count and the drain loop reconciles before encoding. Our split music/SFX/frame-window tracks are untouched.)"
+    "2026-09-22-d (Engine port: five PlayerObject hooks Silicate has and we did not. We had 8 of his 20; the other seven are trajectory-only and route to his own physics for fake players, so they do not apply here. Ported: setYVelocity with High TPS Precision (GD rounds y-velocity to a fixed 0.001 step regardless of tick rate, so running above a macro's recorded rate throws away the precision the extra ticks buy -- OFF by default since it changes physics), tryPlaceCheckpoint (timeout-based placement so holding the key does not spray checkpoints), removePendingCheckpoint (suppressed, GD dropping one under the practice fix desyncs them), incrementJumps (preview players no longer count toward the real jump tally) and levelFlipping (off in the editor). Analyzer confirmed already fully in sync -- all 88 of his methods present -- so frame windows need no re-port.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -344,6 +344,14 @@ namespace gucci {
         bool m_backwardsStepping = false;
         bool m_ssbFix = true;
         bool m_extrapolateFrames = false;
+
+        // High TPS Precision, ported from Silicate 2026-09-22. GD quantises
+        // y-velocity to 0.001, which is a fixed step regardless of tick rate --
+        // so running above the rate a macro was recorded at throws away
+        // precision the extra ticks were supposed to buy. This scales the
+        // quantum by recordedTps/currentTps. Default OFF: it changes physics,
+        // and nothing recorded before it existed was made under it.
+        bool m_highTpsPrecision = false;
         bool m_layoutMode = false;
         bool m_speedhackAudio = false;
         bool m_allowedToProcessActions = true;

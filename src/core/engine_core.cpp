@@ -2228,6 +2228,8 @@ namespace gucci {
         updater.m_tps = mod->getSavedValue<double>("updater_tps", 240.0);
         updater.m_speedhack = mod->getSavedValue<double>("updater_speedhack", 1.0);
         updater.m_lockDelta = mod->getSavedValue<bool>("updater_lockDelta", true);
+        updater.m_highTpsPrecision =
+            mod->getSavedValue<bool>("updater_highTpsPrecision", false);
         updater.m_lockDeltaMode = static_cast<GucciUpdater::LockDeltaMode>(
             mod->getSavedValue<int>("updater_lockDeltaMode",
                                     (int)GucciUpdater::LockDeltaMode::Accuracy));
