@@ -382,8 +382,23 @@ class $modify(GB7PlayLayer, PlayLayer) {
                     queueButton(button, held, rs.playerFlipped(p2), 0.0);
             };
             check(p1H, 1, false);
-            if (m_levelSettings->m_twoPlayerMode)
+            // Platformer also has to put the held DIRECTION back, not just the
+            // jump. Ported from Silicate 2026-09-22 along with the state that
+            // feeds it -- updatePlatformerInputs was a no-op stub, so these
+            // were never tracked and a restore left the player standing still.
+            if (m_isPlatformer) {
+                auto& pf = gb->practiceFix;
+                check(pf.m_p1Left, 2, false);
+                check(pf.m_p1Right, 3, false);
+            }
+            if (m_levelSettings->m_twoPlayerMode) {
                 check(p2H, 1, true);
+                if (m_isPlatformer) {
+                    auto& pf = gb->practiceFix;
+                    check(pf.m_p2Left, 2, true);
+                    check(pf.m_p2Right, 3, true);
+                }
+            }
             rs.m_lastInputs.clear();
         }
 
@@ -401,8 +416,23 @@ class $modify(GB7PlayLayer, PlayLayer) {
                     queueButton(button, held, rs.playerFlipped(p2), 0.0);
             };
             check(p1H, 1, false);
-            if (m_levelSettings->m_twoPlayerMode)
+            // Platformer also has to put the held DIRECTION back, not just the
+            // jump. Ported from Silicate 2026-09-22 along with the state that
+            // feeds it -- updatePlatformerInputs was a no-op stub, so these
+            // were never tracked and a restore left the player standing still.
+            if (m_isPlatformer) {
+                auto& pf = gb->practiceFix;
+                check(pf.m_p1Left, 2, false);
+                check(pf.m_p1Right, 3, false);
+            }
+            if (m_levelSettings->m_twoPlayerMode) {
                 check(p2H, 1, true);
+                if (m_isPlatformer) {
+                    auto& pf = gb->practiceFix;
+                    check(pf.m_p2Left, 2, true);
+                    check(pf.m_p2Right, 3, true);
+                }
+            }
         }
     }
 

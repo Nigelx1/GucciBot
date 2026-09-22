@@ -405,7 +405,7 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         if (!gb->enabled)
             return GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
 
-        gb->practiceFix.updatePlatformerInputs(nullptr);
+        gb->practiceFix.updatePlatformerInputs(m_queuedButtons);
 
         if (gb->replay.m_ignoreInputs && gb->isPlaying())
             m_queuedButtons.clear();

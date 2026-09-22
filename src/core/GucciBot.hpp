@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-21-o (Engine audit against anticroom's source, per his ask. Real finding: useFastLockDelta() is a stub returning false, so the two midhooks gated on it -- physStepCount and restorePhysDt, the pair that tell GD how many sub-steps to run for one update -- have been dead in every GucciBot build since August. His build runs them during playback. LockDeltaMode is restored so the two paths can be compared, but it DEFAULTS TO ACCURACY, which is exactly today's behaviour: Performance was removed deliberately on 2026-08-20 after Juice measured it undercounting frames, and that reason still stands. Switch it to Performance in the Lock Delta card to test the slope bug.)"
+    "2026-09-22-a (branch engine-port-2.0, first layer. Nigel called it: the gaps are not one-offs, they are a pattern of mechanisms ported as signatures with no bodies. Swept the engine for stub-shaped functions and found updatePlatformerInputs -- signature took a CCArray*, its one call site passed nullptr, body was (void)queuedButtons. So platformer direction was never tracked and a checkpoint restore left the player standing still. Ported the state, the real signature, the real call site, and the left/right re-assert on both restore paths. Same shape as registerBrokenObject and useFastLockDelta.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -164,8 +164,26 @@ namespace gucci {
         bool canRestoreState() const {
             return m_storedFrames.size() > 1;
         }
-        void updatePlatformerInputs(cocos2d::CCArray* queuedButtons) {
-            (void)queuedButtons;
+        // Platformer direction state, ported from Silicate 2026-09-22. This was
+        // half-ported: the signature took a CCArray*, the only call site passed
+        // nullptr, and the body was "(void)queuedButtons;". So the fields below
+        // never existed and a checkpoint restore on a platformer level never
+        // re-asserted which way the player was holding -- they stopped moving.
+        // Same shape as registerBrokenObject and useFastLockDelta before it.
+        bool m_p1Left = false;
+        bool m_p1Right = false;
+        bool m_p2Left = false;
+        bool m_p2Right = false;
+
+        void updatePlatformerInputs(gd::vector<PlayerButtonCommand>& inputs) {
+            for (auto const& in : inputs) {
+                bool& left = in.m_isPlayer2 ? m_p2Left : m_p1Left;
+                bool& right = in.m_isPlayer2 ? m_p2Right : m_p1Right;
+                if (in.m_button == PlayerButton::Left)
+                    left = in.m_isPush;
+                else if (in.m_button == PlayerButton::Right)
+                    right = in.m_isPush;
+            }
         }
         void registerBrokenObject(GameObject* obj) {
             m_brokenObjects.push_back(obj);
