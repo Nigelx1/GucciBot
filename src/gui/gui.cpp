@@ -4055,11 +4055,29 @@ namespace gucci {
                                      anim)) {
             ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
             ImGui::TextWrapped(
-                "Forces exact 1/TPS every step. The old Performance mode (batching "
-                "multiple ticks into one to catch up) was removed -- it measurably "
-                "undercounted the frame number relative to real physics progress, and "
-                "this bot doesn't need the speed badly enough to be worth that.");
+                "Forces exact 1/TPS every step.\n\n"
+                "Accuracy drives GD one physics step per update. Performance hands it "
+                "one update covering several steps and lets it sub-step internally, "
+                "which is what Silicate does -- it is also the only mode where the "
+                "physStepCount and restorePhysDt midhooks do anything at all.\n\n"
+                "Performance was removed in August because its catch-up path "
+                "undercounted the frame number: it collapses several ticks into one "
+                "scheduler update while the frame counter increments once. Juice "
+                "measured that. It is back only as a switch for testing the slope bug "
+                "where a Calculate capture fails to launch off a slope -- Accuracy "
+                "stays the default and stays correct for normal botting.");
             ImGui::PopStyleColor();
+            ImGui::Dummy(ImVec2(0, 4));
+            {
+                int mode = (int)engine->updater.m_lockDeltaMode;
+                char const* modes[] = {"Performance (Silicate)", "Accuracy (default)"};
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::Combo("##lockDeltaMode", &mode, modes, 2)) {
+                    engine->updater.m_lockDeltaMode =
+                        (GucciUpdater::LockDeltaMode)mode;
+                    Mod::get()->setSavedValue("updater_lockDeltaMode", mode);
+                }
+            }
             Widgets::ModuleCardEnd();
         }
 

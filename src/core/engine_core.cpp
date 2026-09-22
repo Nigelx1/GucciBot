@@ -2228,6 +2228,9 @@ namespace gucci {
         updater.m_tps = mod->getSavedValue<double>("updater_tps", 240.0);
         updater.m_speedhack = mod->getSavedValue<double>("updater_speedhack", 1.0);
         updater.m_lockDelta = mod->getSavedValue<bool>("updater_lockDelta", true);
+        updater.m_lockDeltaMode = static_cast<GucciUpdater::LockDeltaMode>(
+            mod->getSavedValue<int>("updater_lockDeltaMode",
+                                    (int)GucciUpdater::LockDeltaMode::Accuracy));
         updater.m_ssbFix = mod->getSavedValue<bool>("updater_ssbFix", true);
         updater.m_backwardsStepping = mod->getSavedValue<bool>("updater_backwardsStepping", false);
         updater.m_extrapolateFrames = mod->getSavedValue<bool>("updater_extrapolateFrames", false);

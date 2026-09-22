@@ -84,7 +84,14 @@ uint32_t GucciUpdater::getFrame() const {
 }
 
 bool GucciUpdater::useFastLockDelta() const {
-    return false;
+    // Was "return false" -- a stub, not a decision. Restored from Silicate
+    // 2026-09-21 while tracing why a slope launch never fires during the
+    // analyzer's capture: with this false, GD is fed exactly one physics step
+    // per update and never runs its own sub-step loop, which is where its
+    // slope state machine lives.
+    auto* gb = GucciEngine::get();
+    return m_lockDelta && m_lockDeltaMode == LockDeltaMode::Performance &&
+           gb->isPlaying() && !gb->renderer.recording;
 }
 
 void GucciUpdater::calculateSteps(float dt, float targetDt) {
@@ -137,6 +144,65 @@ void GucciUpdater::breakLoop() {
     totalStepCount = 0;
     m_tpsOverflow = 0.0;
 }
+
+// Ported from Silicate's runFastLockDeltaUpdates 2026-09-21. GucciBot had the
+// midhooks this relies on but no caller, because useFastLockDelta() was
+// stubbed to false -- so every update, in playback and during the analyzer's
+// capture alike, handed GD exactly one physics step.
+//
+// That matters beyond speed. GD does its own sub-stepping inside one update
+// and parts of its physics live in that loop; a slope launch is one of them.
+// Feeding it single steps from outside means the exit transition can be
+// evaluated at a point where it never fires, which is why a capture could
+// climb a slope and then fail to launch off it while a normal run launched
+// fine.
+static void runFastLockDelta(GucciUpdater& upd, std::function<void(float)> update,
+                             float realDt) {
+    auto* gb = GucciEngine::get();
+    upd.m_allowedToProcessActions = false;
+
+    auto const& queued = gb->replay.getCurrentQueuedInput();
+
+    upd.calculateSteps(realDt * upd.getTimeWarp() * (float)upd.m_speedhack,
+                       (float)upd.getPhysicsDt());
+
+    if (!queued.has_value()) {
+        // Nothing to land on: give GD the whole delta in one update.
+        if (upd.estimatedStepCount >= 1) {
+            upd.m_shouldRender = true;
+            update(realDt * (float)upd.m_speedhack);
+        }
+        return;
+    }
+
+    // An input is coming: advance in one batch up to its frame, then take that
+    // frame on its own so the input lands on exactly the tick it was recorded
+    // on.
+    int steps = upd.totalStepCount;
+    while (steps > 0) {
+        auto const& input = gb->replay.getCurrentQueuedInput();
+        uint64_t safeSteps = input.has_value()
+                                 ? input->m_frame - upd.getFrame()
+                                 : (uint64_t)steps;
+        safeSteps = std::min(safeSteps, (uint64_t)steps);
+
+        if (safeSteps > 0) {
+            upd.estimatedStepCount = (int)safeSteps;
+            if (steps - (int)safeSteps == 0)
+                upd.m_shouldRender = true;
+            update((float)(upd.getPhysicsDt() * (double)safeSteps));
+            steps -= (int)safeSteps;
+        }
+
+        if (steps > 0) {
+            upd.estimatedStepCount = 1;
+            upd.m_shouldRender = true;
+            update(realDt * (float)upd.m_speedhack);
+            steps -= 1;
+        }
+    }
+}
+
 
 static void
 runSlowLockDelta(GucciUpdater& upd, std::function<void(float)> update, float realDt, bool calcSsb) {
@@ -264,7 +330,10 @@ void GucciUpdater::runUpdates(std::function<void(float)> update, float realDt, b
     }
 
     if (m_lockDelta && isPlayLayer) {
-        runSlowLockDelta(*this, update, realDt, calcSsb);
+        if (this->useFastLockDelta())
+            runFastLockDelta(*this, update, realDt);
+        else
+            runSlowLockDelta(*this, update, realDt, calcSsb);
     } else {
         m_shouldRender = true;
         if (m_respawnTimer > 0) {

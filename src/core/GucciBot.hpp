@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-21-n (Audit build for anticroom. Dumps every PlayerObject field his statediff table knows about, automatically on the frame a slope launch is decided, tagged PLAY or CALC, so a normal run and the analyzer's capture can be diffed byte for byte at the exact frame they part company -- the dozen fields the slope log samples do not contain the answer. Also ports back a real gap found in his source: his physStepCount and restorePhysDt midhooks bypass on m_analysisBatch > 0 and ours did not, which affects batched legs, though not the capture, where batch is pinned to 1.)"
+    "2026-09-21-o (Engine audit against anticroom's source, per his ask. Real finding: useFastLockDelta() is a stub returning false, so the two midhooks gated on it -- physStepCount and restorePhysDt, the pair that tell GD how many sub-steps to run for one update -- have been dead in every GucciBot build since August. His build runs them during playback. LockDeltaMode is restored so the two paths can be compared, but it DEFAULTS TO ACCURACY, which is exactly today's behaviour: Performance was removed deliberately on 2026-08-20 after Juice measured it undercounting frames, and that reason still stands. Switch it to Performance in the Lock Delta card to test the slope bug.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -396,6 +396,23 @@ namespace gucci {
         bool isLockDelta() const {
             return m_lockDelta;
         }
+        // Silicate's lock-delta modes. Performance hands GD one update
+        // covering several physics steps and lets it sub-step internally, the
+        // way it does without the bot; Accuracy drives one step per update.
+        // GucciBot ported the midhooks that implement Performance but never
+        // this enum, and stubbed useFastLockDelta() to return false -- so the
+        // fast path was unreachable and the two midhooks gated on it
+        // (physStepCount, restorePhysDt) have been dead since the port.
+        enum class LockDeltaMode { Performance = 0, Accuracy = 1 };
+        // Defaults to Accuracy, which is exactly today's behaviour. Performance
+        // was removed deliberately on 2026-08-20 (commit 8d0c686): Juice
+        // measured it undercounting the frame number, because its catch-up path
+        // collapses several ticks into one scheduler update while the frame
+        // counter increments once. That reason still stands for normal play, so
+        // this is restored as an opt-in switch to test the slope bug with, NOT
+        // as a default. Do not flip the default without re-testing frame drift.
+        LockDeltaMode m_lockDeltaMode = LockDeltaMode::Accuracy;
+
         bool useFastLockDelta() const;
 
         void calculateSteps(float dt, float targetDt);
