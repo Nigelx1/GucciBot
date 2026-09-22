@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-22-f (Deterministic Random triggers. GD's Random trigger picks a branch from the shared RNG, so a level with one takes a different path every attempt and no macro through it replays -- the divergence is in which objects spawn at all, which no amount of checkpoint fidelity can fix. Each trigger now keeps its own LCG seeded from the macro seed and its object id, registered with the practice fix so checkpoints capture and restore it. Teleport RNG state ported alongside it, and both are reseeded per attempt with the shake state.)"
+    "2026-09-22-g (Two time-accounting clamps from Silicate's calculateSteps that GucciBot dropped. A single frame delta is now capped at 1s -- a frame longer than that is a hitch, and the ticks it produced are time nobody played, baked into whatever was being recorded. And hitting the step limit no longer zeroes the backlog: Silicate carries up to 0.25s so a brief dip catches up, where we threw the whole thing away and silently desynced the replay from the run. Both warn when they fire, so a macro recorded through a stall says so instead of just not working.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -101,6 +101,21 @@ void GucciUpdater::calculateSteps(float dt, float targetDt) {
     if (wantedDt == 0.0f)
         return;
 
+    // Silicate caps a single frame's delta and says so. A frame this long means
+    // the game hitched -- a level load, an alt-tab, a stall -- and the steps it
+    // would produce are time the player never actually played. Recording
+    // through one bakes that gap into the macro and it will not replay.
+    // GucciBot had no cap, so a hitch silently became real ticks.
+    constexpr float MAX_FRAME_DELTA = 1.0f;
+    if (dt > MAX_FRAME_DELTA) {
+        geode::log::warn(
+            "[GucciBot] Dropped {:.2f}s of game time at frame {}: a {:.2f}s frame "
+            "delta is past the {:.0f}s ceiling. A macro recorded through this will "
+            "not replay -- the run skipped time a clean replay does not",
+            dt - MAX_FRAME_DELTA, this->getFrame(), dt, MAX_FRAME_DELTA);
+        dt = MAX_FRAME_DELTA;
+    }
+
     int steps = (int)std::floor(dt / wantedDt);
     int stepLimit = (int)m_maxUPR;
 
@@ -127,8 +142,23 @@ void GucciUpdater::calculateSteps(float dt, float targetDt) {
     m_shouldRender = false;
 
     if (!m_realTime && !rendering) {
-        if (steps == stepLimit)
-            m_tpsOverflow = 0.0;
+        if (steps == stepLimit) {
+            // This used to zero the backlog outright, throwing away every tick
+            // the step limit could not run. Silicate carries up to a quarter
+            // second of it and only drops the excess, so a brief dip catches up
+            // instead of losing time. Discarding it silently desynced a replay
+            // from the run that recorded it.
+            constexpr double MAX_CARRIED_OVERFLOW = 0.25;
+            if (m_tpsOverflow > MAX_CARRIED_OVERFLOW) {
+                geode::log::warn(
+                    "[GucciBot] Dropped {:.3f}s of game time at frame {}: the "
+                    "backlog is past the {:.2f}s that can be carried. A macro "
+                    "recorded through this will not replay",
+                    m_tpsOverflow - MAX_CARRIED_OVERFLOW, this->getFrame(),
+                    MAX_CARRIED_OVERFLOW);
+                m_tpsOverflow = MAX_CARRIED_OVERFLOW;
+            }
+        }
     }
 
     if (m_paused && !rendering) {
