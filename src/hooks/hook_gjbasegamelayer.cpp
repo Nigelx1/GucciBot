@@ -161,10 +161,9 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
             }
         }
 
-        if (gb->renderer.recording) {
-            if (auto* rpl = PlayLayer::get(); rpl && rpl->m_player1)
-                gb->renderer.handleRecording(rpl, (int)upd.getFrame());
-        }
+        // The legacy TTR recording hook lived here. SLRenderer drives its own
+        // capture from CCDirector::drawScene, so this only ever ran against a
+        // renderer that could not start. Removed with it in 2.0.
 
         // Ghosts, ranges and debug overlays are decoration. During a run they
         // are drawn hundreds of times a second over a level that is being

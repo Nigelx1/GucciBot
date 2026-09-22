@@ -10,7 +10,6 @@
 #include "trainers/jupiterghost.hpp"
 #include "trainers/trainerghost.hpp"
 
-#include "legacy_renderer.hpp"
 #include "render/renderer.hpp"
 #include "tools/selfcheck.hpp"
 #include <Geode/Bindings.hpp>
@@ -6482,10 +6481,11 @@ namespace gucci {
             ImGui::Text("Frame-window marks: %zu   Analyzed: %s",
                         eng->fwMarks.size(),
                         eng->fwHasData ? "yes" : "no");
-            ImGui::Text("Renderer: %s", eng->renderer.recording ? "RECORDING" : "idle");
-            if (eng->renderer.lastRender.fileSize > 0)
+            ImGui::Text("Renderer: %s",
+                        SLRenderer::get()->isRecording() ? "RECORDING" : "idle");
+            if (SLRenderer::get()->m_lastRender.fileSize > 0)
                 ImGui::Text("Last render: %.2f MB",
-                            (double)eng->renderer.lastRender.fileSize / (1024.0 * 1024.0));
+                            (double)SLRenderer::get()->m_lastRender.fileSize / (1024.0 * 1024.0));
             ImGui::PopStyleColor();
             ImGui::Dummy(ImVec2(0, 4));
             if (Widgets::ToggleSwitch(
@@ -8496,8 +8496,9 @@ namespace gucci {
             {"P", "peony", "Silicate dev -- dropped the source like Gucci drops albums. Brrr."},
             {"T",
              "ToastexGD",
-             "Built ToastyReplay -- the project GucciBot actually started as before Silicate. "
-             "Still runs the renderer today, exactly as he built it."},
+             "Built ToastyReplay -- the project GucciBot actually started as, and the reason there "
+             "is a GucciBot at all. Its renderer carried this mod for most of its life; the "
+             "current one is Silicate's."},
             {"G", "GWDdoS", "Astral -- and the codebase cleanup that got this repo public-ready"},
             {"B",
              "Bogdaner09",
@@ -9236,7 +9237,7 @@ namespace gucci {
 
     void MenuInterface::drawRenderCompletePopup() {
         auto* engine = GucciEngine::get();
-        auto& lr = engine->renderer.lastRender;
+        auto& lr = SLRenderer::get()->m_lastRender;
         if (lr.pending) {
             lr.pending = false;
             ImGui::OpenPopup("RenderComplete");
@@ -9342,8 +9343,8 @@ namespace gucci {
         auto* engine = GucciEngine::get();
         if (!ui || !ui->setupComplete || !engine)
             return;
-        auto& r = engine->renderer;
-        if (!r.recording)
+        auto* r = SLRenderer::get();
+        if (!r->isRecording())
             return;
         auto* vp = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(
@@ -9361,9 +9362,10 @@ namespace gucci {
         float pulse = 0.55f + 0.45f * std::sin((float)ImGui::GetTime() * 4.f);
         ImGui::TextColored(ImVec4(1.f, 0.25f, 0.25f, pulse), "REC");
         ImGui::SameLine();
-        int frames = (int)r.renderedFrames.size();
-        int secs = (int)r.lastFrame_t;
-        ImGui::Text("%d frames  %d:%02d  @%ufps", frames, secs / 60, secs % 60, r.fps);
+        int frames = r->renderedFrames();
+        int secs = (int)r->getTime();
+        ImGui::Text(
+            "%d frames  %d:%02d  @%dfps", frames, secs / 60, secs % 60, r->m_settings.m_fps);
         if (ui->fontBody)
             ImGui::PopFont();
         ImGui::End();

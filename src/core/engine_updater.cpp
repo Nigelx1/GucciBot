@@ -91,7 +91,7 @@ bool GucciUpdater::useFastLockDelta() const {
     // slope state machine lives.
     auto* gb = GucciEngine::get();
     return m_lockDelta && m_lockDeltaMode == LockDeltaMode::Performance &&
-           gb->isPlaying() && !gb->renderer.recording;
+           gb->isPlaying() && !SLRenderer::get()->isRecording();
 }
 
 void GucciUpdater::calculateSteps(float dt, float targetDt) {
@@ -115,7 +115,11 @@ void GucciUpdater::calculateSteps(float dt, float targetDt) {
         stepLimit *= std::max(1, modifier);
     }
 
-    bool rendering = GucciEngine::get()->renderer.recording;
+    // Was gb->renderer.recording -- the legacy TTR renderer, which has been
+    // unreachable since SLRenderer took over, so this read false forever and
+    // the UPR step limit was being applied during renders. Silicate exempts
+    // rendering from it deliberately.
+    bool rendering = SLRenderer::get()->isRecording();
     if (!m_realTime && !rendering)
         steps = std::min(steps, stepLimit);
 
@@ -305,7 +309,7 @@ void GucciUpdater::runUpdates(std::function<void(float)> update, float realDt, b
         return;
     }
 
-    if (m_paused && !gb->renderer.recording) {
+    if (m_paused && !SLRenderer::get()->isRecording()) {
         m_tpsOverflow = 0.0;
         m_respawnTimer = 0;
         if (consumeStep())
@@ -316,7 +320,7 @@ void GucciUpdater::runUpdates(std::function<void(float)> update, float realDt, b
 
     bool calcSsb = isPlayLayer && !((PlayLayer*)pl)->m_isPaused &&
                    !((PlayLayer*)pl)->m_hasCompletedLevel && pl->m_started && !pl->m_isPlatformer &&
-                   m_ssbFix && gb->renderer.recording;
+                   m_ssbFix && SLRenderer::get()->isRecording();
 
     if (gb->fwAnalyzing && (getFrame() % 25) == 0) {
         auto qi = gb->replay.getCurrentQueuedInput();
@@ -454,7 +458,7 @@ static void earlyUpdateMidhook(SafetyHookContext&) {
     auto* pl = PlayLayer::get();
     if (!pl)
         return;
-    if (!pl->m_playerDied && upd.m_backwardsStepping && !gb->renderer.recording) {
+    if (!pl->m_playerDied && upd.m_backwardsStepping && !SLRenderer::get()->isRecording()) {
         CheckpointObject* cp = pl->createCheckpoint();
         if (!cp)
             return;
@@ -846,18 +850,11 @@ class $modify(GB7CCDirector, CCDirector) {
         if (!pl)
             return CCDirector::drawScene();
 
-        auto& rend = gb->renderer;
-        if (rend.recording && !pl->m_isPaused && pl->m_started) {
-            int frame = gb->updater.getFrame();
-            if (!m_bPaused)
-                m_pScheduler->update(1.0f / rend.fps);
-            if (m_pNextScene)
-                this->setNextScene();
-            rend.handleRecording(pl, frame);
-            this->m_pobOpenGLView->swapBuffers();
-            gb->updater.runFrozenTick();
-            return;
-        }
+        // The legacy TTR capture loop ran from here. It was gated on
+        // gb->renderer.recording, which SLRenderer never sets, so it has been
+        // dead since the Silicate renderer took over; SLRenderer drives its own
+        // capture. Removed with legacy_renderer in 2.0.
+
 
         if (gb->fwAnalyzing && !pl->m_isPaused && pl->m_started) {
             if (!m_bPaused)

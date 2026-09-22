@@ -248,6 +248,7 @@ namespace gucci {
         auto outU8 = out.u8string();
         std::string outPath(outU8.begin(), outU8.end());
         geode::log::info("[GucciBot] SLRenderer output: {}", outPath);
+        m_lastRender.path = outPath;
 
         ff->avformat_alloc_output_context2(&m_formatCtx, nullptr, nullptr, outPath.c_str());
         if (!m_formatCtx)
@@ -635,8 +636,22 @@ namespace gucci {
             m_frame->data[0] = nullptr;
         }
         m_texture.destroy();
+        this->publishRenderResult(true);
         geode::log::info("[GucciBot] SLRenderer stopped");
         return geode::Ok();
+    }
+
+    void SLRenderer::publishRenderResult(bool success) {
+        m_lastRender.success = success;
+        m_lastRender.width = (unsigned)m_settings.m_width;
+        m_lastRender.height = (unsigned)m_settings.m_height;
+        m_lastRender.fps = (unsigned)m_settings.m_fps;
+        m_lastRender.duration = m_time;
+        m_lastRender.fileSize = 0;
+        std::error_code ec;
+        if (auto const sz = fs::file_size(fs::path(m_lastRender.path), ec); !ec)
+            m_lastRender.fileSize = sz;
+        m_lastRender.pending = true;
     }
 
     void SLRenderer::recordLoop() {

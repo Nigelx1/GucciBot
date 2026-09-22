@@ -1,4 +1,5 @@
 #include "core/GucciBot.hpp"
+#include "render/renderer.hpp"
 #include "hacks/autoclicker.hpp"
 #include "analysis/trajectory.hpp"
 #include "analysis/pathfinder.hpp"
@@ -186,8 +187,8 @@ class $modify(GB7PlayLayer, PlayLayer) {
             Pathfinder::get()->cancel();
         else if (gb->fwAnalyzing)
             gb->cancelAnalysis();
-        if (gb->renderer.recording)
-            gb->renderer.stop(gb->updater.getFrame());
+        if (gucci::SLRenderer::get()->isRecording())
+            gucci::SLRenderer::get()->signalStop();
         TrajectoryPredictionService::get().updatePreview(nullptr);
         PlayLayer::onQuit();
         gb->practiceFix.clearStoredFrames();

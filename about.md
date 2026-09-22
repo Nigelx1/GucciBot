@@ -141,7 +141,7 @@ Real click-timing feedback and a synced video-review overlay, both built around 
 - **NaN GD** — the L* precision formula, published at [nandl.pages.dev](https://nandl.pages.dev/#formula). The number GucciBot puts on a macro is his maths
 - **C0nscious** — implemented NaN's formula in C++ as [Frame Window Counter](https://github.com/hyper-5/frame-window-counter) (MIT), which is the code that reached GucciBot
 - **peony** — Silicate (dropped the source like Gucci drops albums. Brrr.)
-- **ToastexGD** — built ToastyReplay, the project GucciBot actually started as before the Silicate migration; the renderer, the FFmpeg pipeline, and the whole recording system running today are still his, exactly as built
+- **ToastexGD** — built ToastyReplay, the project GucciBot actually started as and the reason there is a GucciBot at all. His renderer and FFmpeg pipeline carried this mod for most of its life; rendering now runs on Silicate's
 - **GWDdoS** — Astral, and the codebase cleanup that got this repo public-ready
 - **Bogdaner09** — Click Indicators inspiration ([github.com/Bogdaner09/mod](https://github.com/Bogdaner09/mod)) — vibecoded by his own admission, so credit's probably owed to whichever model wrote that too
 - **Gucci Mane** — he's the truth. Brrr.

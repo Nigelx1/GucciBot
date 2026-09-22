@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-22-a (branch engine-port-2.0, first layer. Nigel called it: the gaps are not one-offs, they are a pattern of mechanisms ported as signatures with no bodies. Swept the engine for stub-shaped functions and found updatePlatformerInputs -- signature took a CCArray*, its one call site passed nullptr, body was (void)queuedButtons. So platformer direction was never tracked and a checkpoint restore left the player standing still. Ported the state, the real signature, the real call site, and the left/right re-assert on both restore paths. Same shape as registerBrokenObject and useFastLockDelta.)"
+    "2026-09-22-b (2.0: retired the TTR renderer. It has been unreachable since SLRenderer took over -- Start Render calls SLRenderer, Renderer::toggle() is called from nowhere, and its recording flag could never become true. Fourteen places tested that flag, so each was silently stuck on one branch: the UPR step limit was being applied during renders when Silicate exempts them, the SSB fix required it and so never ran during a render at all, and the render-complete popup and render HUD could never appear. All rewired to SLRenderer, which now carries LastRender. Credits corrected in all four places: ToastexGD founded this project and his renderer carried it for most of its life, but it is not what runs today.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -17,7 +17,6 @@
 #include <vector>
 
 #include "core/action_types.hpp"
-#include "legacy_renderer.hpp"
 #include "core/checkpoint_player.hpp"
 
 using namespace geode::prelude;
@@ -493,7 +492,6 @@ namespace gucci {
         GucciReplaySystem replay;
         GucciPracticeFix practiceFix;
         GucciScheduler scheduler;
-        Renderer renderer;
         HudConfig hud;
 
         bool enabled = false;

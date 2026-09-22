@@ -110,6 +110,24 @@ namespace gucci {
         bool isRecording() const {
             return m_recording;
         }
+
+        // Moved off the legacy TTR renderer in 2.0. The render-complete popup
+        // and the render HUD were both reading that renderer's fields, and it
+        // has been unreachable since SLRenderer took over -- so neither ever
+        // appeared. They read these now.
+        struct LastRender {
+            bool pending = false;
+            bool success = false;
+            std::string path;
+            unsigned width = 0, height = 0, fps = 0;
+            double duration = 0.0;
+            uintmax_t fileSize = 0;
+        } m_lastRender;
+
+        int renderedFrames() const {
+            return m_frameCount;
+        }
+        void publishRenderResult(bool success);
         float getTime() const {
             return m_time;
         }
