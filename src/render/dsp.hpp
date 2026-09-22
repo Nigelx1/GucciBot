@@ -54,6 +54,14 @@ namespace gucci {
         uint32_t m_index = 0;
         int m_sampleRate = 0;
         int m_channels = 0;
+
+        // What FMOD is ACTUALLY mixing, recorded from the DSP callback.
+        // m_channels above is read once from getSoftwareFormat at init, which
+        // happens BEFORE the output switches to non-realtime -- so the two can
+        // disagree, and encoding against the wrong count corrupts the audio.
+        // Ported from Silicate 2026-09-22; we had no equivalent.
+        std::atomic<int> m_mixedChannels{0};
+        void syncMixFormat();
         size_t m_lastCollectedLength = 0;
 
         std::vector<float> m_buffer;

@@ -124,6 +124,9 @@ namespace gucci {
             uintmax_t fileSize = 0;
         } m_lastRender;
 
+        void setChannels(int c) {
+            m_channels = c;
+        }
         int renderedFrames() const {
             return m_frameCount;
         }

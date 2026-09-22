@@ -93,6 +93,8 @@ namespace gucci {
     static void (*fmodSystemUpdateOrig)(FMOD::System*) = nullptr;
 
     static bool drainRecorderIntoTrack(SLRenderer* renderer, AudioRecorder* audio, int trackIndex) {
+        audio->syncMixFormat();
+
         const unsigned int frameSize = 1024;
         const size_t totalFrameSize = frameSize * static_cast<size_t>(audio->m_channels);
 

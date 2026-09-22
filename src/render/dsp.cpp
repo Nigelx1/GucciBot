@@ -7,6 +7,20 @@
 
 namespace gucci {
 
+    void AudioRecorder::syncMixFormat() {
+        int const mixed = m_mixedChannels.load(std::memory_order_relaxed);
+        if (mixed <= 0 || mixed == m_channels)
+            return;
+
+        geode::log::warn(
+            "[GucciBot] FMOD is mixing {} channels but the software format said {} "
+            "-- the format is read before the output switches to NRT. Using {}.",
+            mixed, m_channels, mixed);
+
+        m_channels = mixed;
+        SLRenderer::get()->setChannels(mixed);
+    }
+
     static FMOD_RESULT captureInto(AudioRecorder* recorder,
                                    float* inBuffer,
                                    float* outBuffer,
@@ -17,6 +31,7 @@ namespace gucci {
         }
 
         recorder->m_lastCollectedLength = length;
+        recorder->m_mixedChannels.store(inChannels, std::memory_order_relaxed);
         recorder->haltWithData(inBuffer, length * inChannels);
 
         std::memset(outBuffer, 0, length * inChannels * sizeof(float));

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-22-b (2.0: retired the TTR renderer. It has been unreachable since SLRenderer took over -- Start Render calls SLRenderer, Renderer::toggle() is called from nowhere, and its recording flag could never become true. Fourteen places tested that flag, so each was silently stuck on one branch: the UPR step limit was being applied during renders when Silicate exempts them, the SSB fix required it and so never ran during a render at all, and the render-complete popup and render HUD could never appear. All rewired to SLRenderer, which now carries LastRender. Credits corrected in all four places: ToastexGD founded this project and his renderer carried it for most of its life, but it is not what runs today.)"
+    "2026-09-22-c (Render reconciliation, audio chunk. Ported syncMixFormat from Silicate: the channel count is read from getSoftwareFormat once at init, which happens BEFORE FMOD's output switches to non-realtime, so what FMOD actually mixes can differ -- and encoding against the wrong count corrupts a render's audio. We had no equivalent and never corrected it. The DSP callback now records the real count and the drain loop reconciles before encoding. Our split music/SFX/frame-window tracks are untouched.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
