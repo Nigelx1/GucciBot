@@ -2209,16 +2209,67 @@ namespace gucci {
         drawSolidRect(dl, bMin, bMax, theme.cornerRadius, theme, 1.f);
         if (fontSmall)
             ImGui::PushFont(fontSmall);
+        // What the bot is doing, first thing, in colour. This is the single
+        // most useful fact on screen and it used to be small grey text buried
+        // in a tab -- while the one number here that tried to say it, Tick, was
+        // hardcoded: `int tick = PlayLayer::get() ? 0 : 0;`. It printed 0 for
+        // the entire life of the menu.
+        char const* stateLabel = "IDLE";
+        ImU32 stateCol = theme.getTextSecondaryU32();
+        bool pulse = false;
+        if (::Bot::get()->frameWindow().running()) {
+            stateLabel = "ANALYZING";
+            stateCol = theme.getAccentU32(0.95f);
+            pulse = true;
+        } else if (Pathfinder::get()->active) {
+            stateLabel = "PATHFINDING";
+            stateCol = IM_COL32(150, 200, 255, 240);
+            pulse = true;
+        } else if (SLRenderer::get()->isRecording()) {
+            stateLabel = "RENDERING";
+            stateCol = IM_COL32(255, 170, 60, 240);
+            pulse = true;
+        } else if (engine->isRecording()) {
+            stateLabel = "RECORDING";
+            stateCol = IM_COL32(255, 80, 80, 245);
+            pulse = true;
+        } else if (engine->isPlaying()) {
+            stateLabel = "PLAYING";
+            stateCol = IM_COL32(90, 220, 130, 240);
+        }
+
+        float const dotR = 4.f;
+        float dotX = wp.x + padX + 14.f;
+        float const midY = barY + barH * 0.5f;
+        float dotA = 1.f;
+        if (pulse)
+            dotA = 0.45f + 0.55f * (0.5f + 0.5f * std::sin((float)ImGui::GetTime() * 4.f));
+        dl->AddCircleFilled(
+            ImVec2(dotX, midY), dotR, (stateCol & 0x00FFFFFF) | ((ImU32)(dotA * 255) << 24), 12);
+
+        ImVec2 slz = ImGui::CalcTextSize(stateLabel);
+        dl->AddText(ImVec2(dotX + dotR + 7.f, midY - slz.y * 0.5f), stateCol, stateLabel);
+
         char buf[256];
-        int tick = PlayLayer::get() ? 0 : 0;
-        snprintf(buf,
-                 sizeof(buf),
-                 "TPS: %.0f    Speed: %.2fx    Tick: %d",
-                 engine->updater.m_tps,
-                 engine->updater.m_speedhack,
-                 tick);
+        uint32_t const frame = engine->updater.getFrame();
+        size_t const acts = engine->replay.m_actionAtom.m_actions.size();
+        if (acts > 0)
+            snprintf(buf,
+                     sizeof(buf),
+                     "f %u    %.0f TPS    %.2fx    %zu inputs",
+                     frame,
+                     engine->updater.m_tps,
+                     engine->updater.m_speedhack,
+                     acts);
+        else
+            snprintf(buf,
+                     sizeof(buf),
+                     "f %u    %.0f TPS    %.2fx    no macro",
+                     frame,
+                     engine->updater.m_tps,
+                     engine->updater.m_speedhack);
         ImVec2 ts = ImGui::CalcTextSize(buf);
-        dl->AddText(ImVec2(wp.x + padX + 12, barY + (barH - ts.y) * 0.5f),
+        dl->AddText(ImVec2(dotX + dotR + 7.f + slz.x + 18.f, midY - ts.y * 0.5f),
                     theme.getTextSecondaryU32(),
                     buf);
         auto* statusCustom = getActiveCustomTheme();

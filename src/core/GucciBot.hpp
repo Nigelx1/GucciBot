@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-23-a (Version bump to 2.alpha.1. mod.json stays v2.0.0-alpha.1 because Geode parses that field as semver and would refuse to load the mod otherwise, and CMake's project() needs numeric components -- but MOD_VERSION is display-only, so every place a person actually reads the version says 2.alpha.1: in-game, about.md, the site and the changelog. about.md audited for content too, not just the header: deterministic levels, High TPS Precision, lock-delta modes, render fade, async capture, view handling.)"
+    "2026-09-23-b (GUI refresh, first pass: the status bar says what the bot is doing. It now leads with a coloured state -- RECORDING, PLAYING, ANALYZING, PATHFINDING, RENDERING, IDLE -- with a pulsing dot while something is running, then the live frame, TPS, speed and the loaded macro's input count. The old bar printed TPS, speed and a Tick that was hardcoded to zero: `int tick = PlayLayer::get() ? 0 : 0;`. It has shown 0 for the entire life of the menu.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
