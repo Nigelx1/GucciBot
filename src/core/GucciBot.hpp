@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-22-l (Async render readback, the last of the renderer port. capture() used to map the single PBO on the spot, stalling the GL thread on the GPU every frame of every render. Now a ring of 8 buffers: issue() starts a readback and drops a fence, tryHarvest() maps a slot only once its fence says the copy landed, and the encode thread waits on a queue instead of spinning on a bool. Frames in flight overlap with frames still being drawn. The drain runs on the game thread, never inside stop() -- stop() runs on the encode thread and harvesting makes GL calls.)"
+    "2026-09-22-m (Made the MegaHack-Style Menu actually look like MegaHack. Nigel: ours read like Silicate or TCbot. He was right, and it was the shape -- a 150px left rail, 6px rounded corners and blue-tinted greys are Silicate's language, not MegaHack's. Tabs now run across the top, evenly divided, with a hard 2px accent underline on the active one; corners are effectively square; greys are neutral; and on the stock theme the accent is MegaHack teal instead of Gucci gold. Any other theme keeps its own colour, since picking one is deliberate.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

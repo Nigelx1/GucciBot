@@ -2417,6 +2417,13 @@ namespace gucci {
         bool jupiterActive = (activeTab == 5);
         t *= bigBrrrFlickerAlpha(jupiterActive);
         ThemeEngine savedTheme = theme;
+
+        // Megahack's accent is its teal, and a "Megahack style" rendered in
+        // Gucci gold does not read as Megahack. Applied only on the stock
+        // theme -- anyone who deliberately picked one of the others keeps their
+        // colour, because they chose it.
+        if (!jupiterActive && activeTheme == THEME_GUCCI)
+            theme.accentColor = ImVec4(0.000f, 0.827f, 0.780f, 1.f);
         if (jupiterActive) {
             theme.accentColor = ImVec4(0.988f, 0.961f, 0.314f, 1.f);
             theme.bgColor = ImVec4(0.063f, 0.024f, 0.502f, 1.f);
@@ -2431,7 +2438,7 @@ namespace gucci {
             ImGui::SetNextWindowSize(vp->Size, ImGuiCond_Always);
         } else {
             ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-            ImVec2 mhSize(620.f, 400.f);
+            ImVec2 mhSize(660.f, 380.f);
             if (!windowPosInitialized) {
                 ImGui::SetNextWindowPos(
                     ImVec2(center.x - mhSize.x * 0.5f, center.y - mhSize.y * 0.5f),
@@ -2455,13 +2462,18 @@ namespace gucci {
         windowPos = ImGui::GetWindowPos();
         ImDrawList* dl = ImGui::GetWindowDrawList();
         ImVec2 wp = windowPos, ws = ImGui::GetWindowSize();
-        const float railW = 150.f, headH = 44.f, footH = 30.f, rnd = 6.f;
+        // Megahack proportions: no side rail, a tab strip under a slim header,
+        // corners essentially square. A 150px rail and 6px rounding are most of
+        // why this read as Silicate/TCbot instead of Megahack.
+        const float railW = 0.f, headH = 30.f, tabH = 26.f, footH = 26.f, rnd = 2.f;
+        // Neutral greys. The old ones were blue-tinted, which is the other half
+        // of why this looked like Silicate.
         ImU32 bgMain =
-            jupiterActive ? IM_COL32(16, 6, 128, 255) : IM_COL32(18, 19, 26, (int)(243 * t));
+            jupiterActive ? IM_COL32(16, 6, 128, 255) : IM_COL32(27, 27, 29, (int)(247 * t));
         ImU32 bgRail =
-            jupiterActive ? IM_COL32(16, 6, 128, 255) : IM_COL32(13, 14, 19, (int)(248 * t));
+            jupiterActive ? IM_COL32(16, 6, 128, 255) : IM_COL32(22, 22, 24, (int)(250 * t));
         ImU32 bgHead =
-            jupiterActive ? IM_COL32(16, 6, 128, 255) : IM_COL32(22, 24, 32, (int)(248 * t));
+            jupiterActive ? IM_COL32(16, 6, 128, 255) : IM_COL32(20, 20, 22, (int)(252 * t));
         dl->AddRectFilled(wp, ImVec2(wp.x + ws.x, wp.y + ws.y), bgMain, rnd);
         dl->AddRectFilled(
             wp, ImVec2(wp.x + railW, wp.y + ws.y), bgRail, rnd, ImDrawFlags_RoundCornersLeft);
@@ -2490,14 +2502,14 @@ namespace gucci {
             if (fontHeading)
                 ImGui::PushFont(fontHeading);
             titleW = ImGui::CalcTextSize(title).x;
-            dl->AddText(ImVec2(wp.x + railW + 14, wp.y + (headH - ImGui::GetFontSize()) * 0.5f),
+            dl->AddText(ImVec2(wp.x + 12, wp.y + (headH - ImGui::GetFontSize()) * 0.5f),
                         theme.getAccentU32(0.96f),
                         title);
             if (fontHeading)
                 ImGui::PopFont();
             if (fontSmall)
                 ImGui::PushFont(fontSmall);
-            dl->AddText(ImVec2(wp.x + railW + 14 + titleW + 10, wp.y + headH * 0.5f - 5),
+            dl->AddText(ImVec2(wp.x + 12 + titleW + 10, wp.y + headH * 0.5f - 5),
                         theme.getTextSecondaryU32(),
                         "v" MOD_VERSION "  mega edition. brrr.");
             if (fontSmall)
@@ -2508,133 +2520,63 @@ namespace gucci {
             if (fontHeading)
                 ImGui::PopFont();
         }
-        const char* names[] = {"Macro",
-                               "Render",
-                               "Autoclicker",
-                               "Click Indicator",
-                               "Frame Windows",
-                               "JMF",
-                               "Trainer",
-                               "HUD",
-                               "Settings",
-                               "Pathfinder",
-                               "Credits"};
-        const int railTabCount = (int)(sizeof(names) / sizeof(names[0]));
-        float rowH = 34.f, railTop = headH + 10.f;
-        for (int i = 0; i < railTabCount; i++) {
-            ImVec2 rMin(wp.x, wp.y + railTop + i * rowH), rMax(wp.x + railW, rMin.y + rowH);
-            char rid[24];
-            snprintf(rid, sizeof(rid), "##mhTab%d", i);
-            ImGui::SetCursorScreenPos(rMin);
-            ImGui::InvisibleButton(rid, ImVec2(railW, rowH));
-            bool hov = ImGui::IsItemHovered();
+        // Megahack runs its tabs ACROSS the top, evenly divided, with a hard
+        // accent underline on the active one.
+        const char* names[] = {"Macro", "Render", "Autoclick", "Click Ind.",
+                               "Frame Win.", "JMF", "Trainer", "HUD",
+                               "Settings", "Pathfind", "Credits"};
+        const int mhTabCount = (int)(sizeof(names) / sizeof(names[0]));
+        float const tabW = ws.x / (float)mhTabCount;
+        float const tabTop = wp.y + headH;
+
+        for (int i = 0; i < mhTabCount; i++) {
+            ImVec2 tMin(wp.x + i * tabW, tabTop), tMax(tMin.x + tabW, tabTop + tabH);
+            char tid[24];
+            snprintf(tid, sizeof(tid), "##mhTab%d", i);
+            ImGui::SetCursorScreenPos(tMin);
+            ImGui::InvisibleButton(tid, ImVec2(tabW, tabH));
+            bool const hov = ImGui::IsItemHovered();
             if (ImGui::IsItemClicked())
                 switchTab(i);
-            bool act = (activeTab == i);
+            bool const act = (activeTab == i);
+
             if (act)
-                dl->AddRectFilled(rMin, rMax, theme.getAccentU32(0.10f));
+                dl->AddRectFilled(tMin, tMax, theme.getAccentU32(0.14f));
             else if (hov)
-                dl->AddRectFilled(rMin, rMax, IM_COL32(255, 255, 255, 10));
+                dl->AddRectFilled(tMin, tMax, IM_COL32(255, 255, 255, 12));
             if (act)
-                dl->AddRectFilled(rMin, ImVec2(rMin.x + 3, rMax.y), theme.getAccentU32(0.95f));
-            if (fontBody)
-                ImGui::PushFont(fontBody);
-            ImU32 tc = act        ? theme.getAccentU32(0.98f)
-                       : (i == 5) ? IM_COL32(200, 175, 90, 190)
-                                  : (hov ? theme.getTextU32() : theme.getTextSecondaryU32());
-            if (i == 5 && act) {
-                const char* full = "Nigel's Jupiter My Favourite Trainer";
-                std::vector<std::string> words;
-                {
-                    std::string w;
-                    for (const char* p = full;; ++p) {
-                        if (*p == ' ' || *p == 0) {
-                            if (!w.empty())
-                                words.push_back(w);
-                            w.clear();
-                            if (*p == 0)
-                                break;
-                        } else
-                            w.push_back(*p);
-                    }
-                }
-                std::vector<std::string> lines;
-                std::string cur;
-                float maxW = railW - 22.f;
-                for (auto& w : words) {
-                    std::string trial = cur.empty() ? w : (cur + " " + w);
-                    if (ImGui::CalcTextSize(trial.c_str()).x <= maxW || cur.empty())
-                        cur = trial;
-                    else {
-                        lines.push_back(cur);
-                        cur = w;
-                    }
-                }
-                if (!cur.empty())
-                    lines.push_back(cur);
-                float lineH = ImGui::GetFontSize();
-                float ly = rMin.y + (rowH - lineH * (float)lines.size()) * 0.5f;
-                for (auto& ln : lines) {
-                    dl->AddText(ImVec2(rMin.x + 16, ly), tc, ln.c_str());
-                    ly += lineH;
-                }
-            } else {
-                float maxW = railW - 22.f;
-                if (ImGui::CalcTextSize(names[i]).x <= maxW) {
-                    dl->AddText(ImVec2(rMin.x + 16, rMin.y + (rowH - ImGui::GetFontSize()) * 0.5f),
-                                tc,
-                                names[i]);
-                } else {
-                    std::vector<std::string> words;
-                    {
-                        std::string w;
-                        for (const char* p = names[i];; ++p) {
-                            if (*p == ' ' || *p == 0) {
-                                if (!w.empty())
-                                    words.push_back(w);
-                                w.clear();
-                                if (*p == 0)
-                                    break;
-                            } else
-                                w.push_back(*p);
-                        }
-                    }
-                    std::vector<std::string> lines;
-                    std::string cur;
-                    for (auto& w : words) {
-                        std::string trial = cur.empty() ? w : (cur + " " + w);
-                        if (ImGui::CalcTextSize(trial.c_str()).x <= maxW || cur.empty())
-                            cur = trial;
-                        else {
-                            lines.push_back(cur);
-                            cur = w;
-                        }
-                    }
-                    if (!cur.empty())
-                        lines.push_back(cur);
-                    float lineH = ImGui::GetFontSize();
-                    float ly = rMin.y + (rowH - lineH * (float)lines.size()) * 0.5f;
-                    for (auto& ln : lines) {
-                        dl->AddText(ImVec2(rMin.x + 16, ly), tc, ln.c_str());
-                        ly += lineH;
-                    }
-                }
-            }
-            if (fontBody)
+                dl->AddRectFilled(ImVec2(tMin.x, tMax.y - 2.f), tMax, theme.getAccentU32(0.98f));
+
+            if (fontSmall)
+                ImGui::PushFont(fontSmall);
+            ImU32 const tc = act        ? theme.getAccentU32(0.98f)
+                             : (i == 5) ? IM_COL32(200, 175, 90, 200)
+                                        : (hov ? theme.getTextU32() : theme.getTextSecondaryU32());
+            ImVec2 const lsz = ImGui::CalcTextSize(names[i]);
+            dl->AddText(
+                ImVec2(tMin.x + (tabW - lsz.x) * 0.5f, tMin.y + (tabH - lsz.y) * 0.5f), tc,
+                names[i]);
+            if (fontSmall)
                 ImGui::PopFont();
         }
-        ImGui::SetCursorScreenPos(ImVec2(wp.x + railW + 12, wp.y + headH + 8));
+
+        dl->AddLine(ImVec2(wp.x, tabTop + tabH),
+                    ImVec2(wp.x + ws.x, tabTop + tabH),
+                    theme.getAccentU32(0.22f),
+                    1.f);
+
+        ImGui::SetCursorScreenPos(ImVec2(wp.x + 10, wp.y + headH + tabH + 8));
         if (jupiterActive)
             ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32(0, 0, 0, 0));
         ImGui::BeginChild("##mhContent",
-                          ImVec2(ws.x - railW - 24, ws.y - headH - footH - 16),
+                          ImVec2(ws.x - 20, ws.y - headH - tabH - footH - 14),
                           false,
                           ImGuiWindowFlags_NoScrollbar);
         drawTabContent();
         ImGui::EndChild();
         if (jupiterActive)
             ImGui::PopStyleColor();
-        ImGui::SetCursorScreenPos(ImVec2(wp.x + railW + 12, wp.y + ws.y - footH + 2));
+        ImGui::SetCursorScreenPos(ImVec2(wp.x + 10, wp.y + ws.y - footH + 2));
         if (!jupiterActive)
             drawStatusBar();
         if (!jupiterActive && activeTheme == THEME_BRRR)
