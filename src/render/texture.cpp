@@ -1,4 +1,5 @@
 #include "texture.hpp"
+#include "renderer.hpp"
 
 #include <Geode/cocos/platform/win32/CCGL.h>
 
@@ -126,6 +127,8 @@ namespace gucci {
                 glBindTexture(GL_TEXTURE_2D, pass.m_tex);
 
                 glUniform1i(glGetUniformLocation(pass.m_program, "u_texture"), 1);
+                glUniform1f(glGetUniformLocation(pass.m_program, "u_fade"),
+                            SLRenderer::get()->m_fadeThreshold);
                 glUniform2f(glGetUniformLocation(pass.m_program, "u_texelSize"),
                             1.0f / pass.m_width,
                             1.0f / pass.m_height);

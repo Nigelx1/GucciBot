@@ -40,11 +40,14 @@ namespace gucci {
                 out vec4 fragColor;
 
                 uniform sampler2D u_texture;
+                uniform float u_fade;
 
                 const vec3 coeffY = vec3(0.2126, 0.7152, 0.0722);
 
                 void main() {
-                    vec3 rgb = texture2D(u_texture, v_texCoord).rgb;
+                    float gamma = 1.6;
+                    float corrected = pow(u_fade, 1.0 / gamma);
+                    vec3 rgb = texture2D(u_texture, v_texCoord).rgb * corrected;
 
                     float y = dot(rgb, coeffY);
 
@@ -75,6 +78,7 @@ namespace gucci {
             out vec4 fragColor;
 
             uniform sampler2D u_texture;
+                uniform float u_fade;
             uniform vec2 u_texelSize;
 
             const vec3 coeffU = vec3(-0.11457, -0.38543, 0.5);
@@ -86,7 +90,9 @@ namespace gucci {
                 vec3 rgb10 = texture2D(u_texture, v_texCoord + vec2(0, u_texelSize.y)).rgb;
                 vec3 rgb11 = texture2D(u_texture, v_texCoord + u_texelSize).rgb;
 
-                vec3 rgb = (rgb00 + rgb01 + rgb10 + rgb11) / 4.0;
+                float gamma = 1.6;
+                float corrected = pow(u_fade, 1.0 / gamma);
+                vec3 rgb = ((rgb00 + rgb01 + rgb10 + rgb11) / 4.0) * corrected;
 
                 float u = dot(rgb, coeffU) + 0.5;
                 float v = dot(rgb, coeffV) + 0.5;

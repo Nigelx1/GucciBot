@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-22-i (Render view lifecycle. A render runs at a resolution the window is not -- 8K out of a 1080p window -- so the view lies about its size for the whole render, and GucciBot had no CCEGLView hook at all: any resize event during one went straight to cocos, which resized the view out from under the render. acquireView now takes the view and remembers the real window, including the framebuffer-to-view scale so DPI does not corrupt the restore; the three resize callbacks are swallowed while a render owns the view and record the new window size instead; restoreView puts back the measured thing at the end.)"
+    "2026-09-22-j (Render fade in and out, which GucciBot had none of -- renders cut hard from black at the start and to silence at the end. Ported from Silicate: a fade threshold recomputed every frame, fed to the colorspace shaders through a u_fade uniform with gamma correction, and used to attenuate the audio on the same curve so picture and sound fade together. Our chroma shaders average four texels where his samples one, which is the better filter, so the fade was applied to our averaged result rather than adopting his sampling. Times default to 1.5s each and are editable in the Render tab.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

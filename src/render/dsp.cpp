@@ -77,7 +77,10 @@ namespace gucci {
         m_buffer.insert(m_buffer.end(), data, data + length);
 
         for (size_t i = m_buffer.size() - length; i < m_buffer.size(); i++) {
-            m_buffer[i] = std::clamp(m_buffer[i], -1.0f, 1.0f);
+            // Attenuated by the same curve the picture fades on, so a render
+            // does not cut to silence while the image is still fading.
+            m_buffer[i] = std::clamp(m_buffer[i], -1.0f, 1.0f) *
+                          SLRenderer::get()->m_fadeThreshold;
         }
     }
 

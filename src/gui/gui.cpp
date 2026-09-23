@@ -5946,6 +5946,25 @@ namespace gucci {
         ImGui::SetNextItemWidth(-1);
         ImGui::InputText(
             "##rFPS", renderFpsBuf, sizeof(renderFpsBuf), ImGuiInputTextFlags_CharsDecimal);
+
+        // Render fade, ported from Silicate in 2.0. Fades the picture in at the
+        // start and out at the end, and takes the audio with it, so a showcase
+        // does not cut hard from black or to silence.
+        {
+            auto* mod = Mod::get();
+            float fin = (float)mod->getSavedValue<double>("render_fade_in", 1.5);
+            float fout = (float)mod->getSavedValue<double>("render_fade_out", 1.5);
+            ImGui::Text("Fade in (s)");
+            ImGui::SameLine(iW);
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::InputFloat("##rFadeIn", &fin, 0.1f, 0.5f, "%.2f"))
+                mod->setSavedValue("render_fade_in", (double)std::max(0.f, fin));
+            ImGui::Text("Fade out (s)");
+            ImGui::SameLine(iW);
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::InputFloat("##rFadeOut", &fout, 0.1f, 0.5f, "%.2f"))
+                mod->setSavedValue("render_fade_out", (double)std::max(0.f, fout));
+        }
         {
             struct QPreset {
                 const char* n;

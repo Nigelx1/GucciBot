@@ -296,6 +296,8 @@ namespace gucci {
             geode::utils::numFromString<float>(
                 mod->getSavedValue<std::string>("render_seconds_after", "3"))
                 .unwrapOr(3.f);
+        m_settings.m_fadeInTime = mod->getSavedValue<double>("render_fade_in", 1.5);
+        m_settings.m_fadeOutTime = mod->getSavedValue<double>("render_fade_out", 1.5);
         m_settings.m_colorFix = mod->getSavedValue<bool>("render_color_fix", true);
         m_settings.m_audioCodec = mod->getSavedValue<std::string>("render_audio_codec", "aac");
         m_settings.m_musicVolume = mod->getSavedValue<double>("render_music_volume", 1.0);
@@ -819,6 +821,20 @@ namespace gucci {
                 return;
             }
             this->m_endTime += this->getDt();
+        }
+
+        {
+            double const fadeIn =
+                m_settings.m_fadeInTime == 0.0
+                    ? 1.0
+                    : std::clamp(m_time / m_settings.m_fadeInTime, 0.0, 1.0);
+            double const fadeOut =
+                (m_settings.m_fadeOutTime == 0.0 || m_endTime <= 0.0f)
+                    ? 1.0
+                    : std::clamp((m_settings.m_afterEndTime - m_endTime) /
+                                     m_settings.m_fadeOutTime,
+                                 0.0, 1.0);
+            m_fadeThreshold = static_cast<float>(std::min(fadeIn, fadeOut));
         }
 
         if (m_collectAudio)

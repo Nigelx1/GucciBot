@@ -34,9 +34,12 @@ namespace gucci {
                 out vec4 fragColor;
 
                 uniform sampler2D u_texture;
+                uniform float u_fade;
 
                 void main() {
-                    vec3 rgb = texture2D(u_texture, v_texCoord).rgb;
+                    float gamma = 1.6;
+                    float corrected = pow(u_fade, 1.0 / gamma);
+                    vec3 rgb = texture2D(u_texture, v_texCoord).rgb * corrected;
 
                     gl_FragData[0] = vec4(rgb, 1.0);
                 })",

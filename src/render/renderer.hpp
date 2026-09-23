@@ -24,6 +24,10 @@ namespace gucci {
         int m_fps = 60;
 
         float m_afterEndTime = 3.0f;
+        // Render fade, ported from Silicate 2026-09-22. Fades the picture in at
+        // the start and out at the end, and attenuates the audio with it.
+        double m_fadeInTime = 1.5;
+        double m_fadeOutTime = 1.5;
         bool m_colorFix = true;
         bool m_firstAttemptPause = false;
 
@@ -184,6 +188,10 @@ namespace gucci {
         bool m_autoVideoName = true;
         std::string m_videoNameTemplate = "%name%_%rand%";
 
+        // 1.0 = fully visible. Recomputed every rendered frame; read by the
+        // colorspace shaders through u_fade and by the audio recorder, so it
+        // lives with the other public render state rather than the privates.
+        float m_fadeThreshold = 1.0f;
         double m_time = 0;
         bool m_needsCleanup = false;
         SLRenderTexture m_texture;
