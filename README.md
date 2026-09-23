@@ -121,7 +121,7 @@ Made by one person, so all of these reach the same human.
 |---|---|
 | **Email** | [nigel@guccibot.net](mailto:nigel@guccibot.net) |
 | **Discord** | `jimmybutlerfan` |
-| **Phone** | 901-555-BRRR — not a real number. 555 numbers never are; that's what they're for. |
+| **Phone** | 555-ICE-COLD — not a real number, and deliberately so: 555 has never been assigned as an area code. Putting 555 in the *middle* stopped being safe in 2016, when everything outside 555-0100–555-0199 was returned to the assignable pool. |
 
 **Found a bug? Open an [issue](https://github.com/Nigelx1/GucciBot/issues) rather than messaging it.** Not out of formality — a crash log posted in a thread can actually be symbolized and traced to the exact line that caused it, and it stays findable for whoever hits the same thing next. Attach the crash report Geode hands you and say what you were doing. That has been enough to fix nearly every real bug this mod has had, including a use-after-free nobody could reproduce.
 
