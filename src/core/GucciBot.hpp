@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-22-g (Two time-accounting clamps from Silicate's calculateSteps that GucciBot dropped. A single frame delta is now capped at 1s -- a frame longer than that is a hitch, and the ticks it produced are time nobody played, baked into whatever was being recorded. And hitting the step limit no longer zeroes the backlog: Silicate carries up to 0.25s so a brief dip catches up, where we threw the whole thing away and silently desynced the replay from the run. Both warn when they fire, so a macro recorded through a stall says so instead of just not working.)"
+    "2026-09-22-h (Corrects a wrong call of mine: I read hacks/hitboxes.hpp, saw four empty methods, and reported that Show Hitboxes had never been implemented. Nigel said it works, and he is right -- the implementation is 593 lines in hacks/hitboxes.cpp behind its own $modify hooks, and that header is a vestigial shim kept so old call sites compile. It is now labelled as one so it cannot be misread again. No port of Silicate's hitboxes; it would have duplicated a working feature.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
