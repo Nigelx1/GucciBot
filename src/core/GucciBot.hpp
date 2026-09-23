@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-22-m (Made the MegaHack-Style Menu actually look like MegaHack. Nigel: ours read like Silicate or TCbot. He was right, and it was the shape -- a 150px left rail, 6px rounded corners and blue-tinted greys are Silicate's language, not MegaHack's. Tabs now run across the top, evenly divided, with a hard 2px accent underline on the active one; corners are effectively square; greys are neutral; and on the stock theme the accent is MegaHack teal instead of Gucci gold. Any other theme keeps its own colour, since picking one is deliberate.)"
+    "2026-09-23-a (Version bump to 2.alpha.1. mod.json stays v2.0.0-alpha.1 because Geode parses that field as semver and would refuse to load the mod otherwise, and CMake's project() needs numeric components -- but MOD_VERSION is display-only, so every place a person actually reads the version says 2.alpha.1: in-game, about.md, the site and the changelog. about.md audited for content too, not just the header: deterministic levels, High TPS Precision, lock-delta modes, render fade, async capture, view handling.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

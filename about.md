@@ -1,4 +1,4 @@
-# GucciBot 1.8
+# GucciBot 2.alpha.1
 
 > Frame perfect. Ice cold. Brrr.
 
@@ -26,6 +26,12 @@ GucciBot is a Geometry Dash macro bot built on Silicate's physics engine, with a
 - Silicate's full physics engine — exact GD 2.2081 offsets, proper TPS bypass, SSB fix, lock delta, frame extrapolation
 - Intentional deaths, backwards stepping, mirror inputs, maintain gravity, auto-flip, prevent death
 - Complete player-state checkpoint capture
+- **Deterministic levels.** A macro now replays against the level it was recorded on rather than a slightly different one each attempt: object variance, Random triggers, and the teleport and shake RNG are all derived from the macro's own seed, and checkpoints capture and restore every one of them. Levels built around Random triggers are replayable at all for the first time.
+- **High TPS Precision** (optional) — GD rounds vertical velocity to a fixed step no matter the tick rate, so running above the rate a macro was recorded at throws away the precision those extra ticks buy. This scales the step with the rate. Off by default, because it changes physics.
+- Lock Delta has Performance and Accuracy modes again. Accuracy is the default and gives GD one physics step per update; Performance hands it several at once and lets it sub-step, which is what Silicate does.
+- **Deterministic levels.** A macro replays against the level it was recorded on, not a slightly different one each time: object variance, Random triggers, teleport and shake RNG are all derived from the macro's own seed, and checkpoints capture and restore every one of them. Levels built on Random triggers are replayable at all for the first time.
+- **High TPS Precision** (optional) — GD rounds vertical velocity to a fixed step regardless of tick rate, so running above the rate a macro was recorded at throws away the precision the extra ticks buy. This scales the step with the rate. Off by default; it changes physics.
+- Lock Delta has Performance and Accuracy modes again. Accuracy is the default and drives one physics step per update; Performance hands GD several at once and lets it sub-step, which is what Silicate does.
 - Hitbox trail dedupes consecutive samples landing on the same on-screen pixel (camera-zoom aware), instead of drawing every sample
 
 ## Autoclicker
@@ -97,6 +103,12 @@ Real click-timing feedback and a synced video-review overlay, both built around 
 - **Split audio tracks** — optional 4-track output (combined mix, plus music, SFX, and frame-window cues each isolated) instead of one merged track.
 - Frame-window markers and cues render into the video too, matching your live tier setup.
 - Render presets — save and reload full render configurations by name, plus a one-press showcase preset (8K60, lossless x264, FLAC, thread count read from your CPU).
+- **Fade in and out** — the picture fades up at the start and down at the end, with the audio on the same curve, so a render doesn't cut hard from black or hard to silence. 1.5 seconds each by default; either end can be set to zero.
+- **Asynchronous frame capture** — readbacks are pipelined through a ring of GPU buffers with fences, instead of stalling the game every single frame waiting for one to copy out.
+- A render holds the view for its whole duration, so a resize, a DPI change or an alt-tab partway through no longer fights the output resolution.
+- **Fade in and out** — the picture fades up at the start and down at the end, with the audio on the same curve, so a render doesn't cut hard from black or to silence. 1.5s each by default, either end can be set to zero.
+- **Asynchronous frame capture** — readbacks are pipelined through a ring of GPU buffers with fences instead of stalling the game every frame waiting for each one to copy out.
+- Rendering holds the view for the whole render, so a resize, a DPI change or an alt-tab mid-render no longer fights the output resolution.
 
 ## Themes
 
