@@ -10,6 +10,7 @@
 
 #include <cstdlib>
 #include <filesystem>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -118,6 +119,32 @@ namespace gucci {
         glViewport(0, 0, size.width, size.height);
     }
 
+    static CCSize alignedRenderSize(SLRendererSettings const& settings) {
+        return CCSize((settings.m_width + ALIGNMENT - 1) & ~(ALIGNMENT - 1),
+                      (settings.m_height + ALIGNMENT - 1) & ~(ALIGNMENT - 1));
+    }
+
+    // The window's framebuffer in pixels, which is not the same as the view
+    // size once DPI scaling is involved. Asked of the OS rather than cocos,
+    // because cocos is the thing being lied to while a render owns the view.
+    static std::optional<CCSize> getWindowFramebufferSize() {
+        HDC deviceContext = wglGetCurrentDC();
+        if (!deviceContext)
+            return std::nullopt;
+
+        HWND window = WindowFromDC(deviceContext);
+        RECT clientRect{};
+        if (!window || !GetClientRect(window, &clientRect))
+            return std::nullopt;
+
+        int const width = clientRect.right - clientRect.left;
+        int const height = clientRect.bottom - clientRect.top;
+        if (width <= 0 || height <= 0)
+            return std::nullopt;
+
+        return CCSize(static_cast<float>(width), static_cast<float>(height));
+    }
+
     static void resizeShaderLayer(CCSize size, CCSize original) {
         ShaderLayer* sh = GJBaseGameLayer::get()->m_shaderLayer;
         if (!sh) {
@@ -160,6 +187,94 @@ namespace gucci {
         sh->m_state.m_textureScaleY = size.height / winSize.height;
         geode::log::info(
             "[GucciBot] resizeShaderLayer -> {}x{}", (int)size.width, (int)size.height);
+    }
+
+    void SLRenderer::acquireView() {
+        CCSize const renderSize = alignedRenderSize(m_settings);
+
+        if (m_viewResized) {
+            silentChangeSize(renderSize);
+            auto* gjbgl = GJBaseGameLayer::get();
+            if (m_recording && gjbgl && gjbgl->m_shaderLayer) {
+                auto* sh = gjbgl->m_shaderLayer;
+                if (!sh->m_screenSize.equals(renderSize) ||
+                    !sh->m_targetTextureSize.equals(renderSize))
+                    resizeShaderLayer(renderSize, m_windowSize);
+            }
+            return;
+        }
+
+        auto* view = CCDirector::get()->getOpenGLView();
+        m_windowSize = view->getFrameSize();
+        m_windowFramebufferSize = getWindowFramebufferSize().value_or(m_windowSize);
+        m_viewToFramebufferScale =
+            CCSize(m_windowSize.width / m_windowFramebufferSize.width,
+                   m_windowSize.height / m_windowFramebufferSize.height);
+        m_texture.m_windowWidth = (uint32_t)m_windowFramebufferSize.width;
+        m_texture.m_windowHeight = (uint32_t)m_windowFramebufferSize.height;
+        m_viewResized = true;
+    }
+
+    void SLRenderer::restoreView() {
+        if (!m_viewResized)
+            return;
+        m_viewResized = false;
+        silentChangeSize(m_windowSize);
+        resizeShaderLayer(m_windowSize, m_windowSize);
+    }
+
+    void SLRenderer::withOriginalView(std::function<void()> const& callback) {
+        if (!m_viewResized) {
+            callback();
+            return;
+        }
+        silentChangeSize(m_windowSize);
+        callback();
+        silentChangeSize(alignedRenderSize(m_settings));
+    }
+
+    void SLRenderer::updateWindowFramebufferSize(CCSize size) {
+        if (size.width <= 0.0f || size.height <= 0.0f ||
+            size.equals(m_windowFramebufferSize))
+            return;
+
+        m_windowFramebufferSize = size;
+        m_windowSize = CCSize(size.width * m_viewToFramebufferScale.width,
+                              size.height * m_viewToFramebufferScale.height);
+        m_texture.m_windowWidth = (uint32_t)size.width;
+        m_texture.m_windowHeight = (uint32_t)size.height;
+
+        geode::log::info(
+            "[GucciBot] window framebuffer changed mid-render: {}x{} (will restore to {}x{})",
+            (int)m_windowFramebufferSize.width, (int)m_windowFramebufferSize.height,
+            (int)m_windowSize.width, (int)m_windowSize.height);
+    }
+
+    // The three below answer "did a render swallow this resize event?". They
+    // return true to tell the CCEGLView hook not to pass it on, because cocos
+    // acting on it would resize the view out from under the render.
+    bool SLRenderer::handleFrameSizeChange(float, float) {
+        if (!m_viewResized)
+            return false;
+        if (auto fb = getWindowFramebufferSize())
+            this->updateWindowFramebufferSize(*fb);
+        return true;
+    }
+
+    bool SLRenderer::handleFramebufferSizeChange(int width, int height) {
+        if (!m_viewResized)
+            return false;
+        this->updateWindowFramebufferSize(
+            CCSize(static_cast<float>(width), static_cast<float>(height)));
+        return true;
+    }
+
+    bool SLRenderer::handleWindowSizeChange() {
+        if (!m_viewResized)
+            return false;
+        if (auto fb = getWindowFramebufferSize())
+            this->updateWindowFramebufferSize(*fb);
+        return true;
     }
 
     void SLRenderer::loadSettingsFromGeode() {
@@ -432,7 +547,8 @@ namespace gucci {
         m_texture.m_widthOffset = 0;
         m_texture.m_heightOffset = 0;
 
-        auto frameSize = CCDirector::get()->getOpenGLView()->getFrameSize();
+        this->acquireView();
+        auto frameSize = m_windowSize;
         silentChangeSize(CCSize(m_alignedWidth, m_alignedHeight));
         resizeShaderLayer(CCSize(m_alignedWidth, m_alignedHeight), frameSize);
         if (ShaderLayer* sh = GJBaseGameLayer::get()->m_shaderLayer) {
@@ -636,6 +752,7 @@ namespace gucci {
             m_frame->data[0] = nullptr;
         }
         m_texture.destroy();
+        this->restoreView();
         this->publishRenderResult(true);
         geode::log::info("[GucciBot] SLRenderer stopped");
         return geode::Ok();

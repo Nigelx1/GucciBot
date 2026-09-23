@@ -25,6 +25,9 @@ namespace gucci {
         uint32_t m_width, m_height;
         uint32_t m_alignedWidth, m_alignedHeight;
         uint32_t m_widthOffset, m_heightOffset;
+        // The window's real framebuffer size, so a render that owns the view
+        // can still reason about the window it will be handed back to.
+        uint32_t m_windowWidth = 0, m_windowHeight = 0;
 
         uint32_t m_tex[2];
         uint32_t m_quadVAO, m_quadVBO;

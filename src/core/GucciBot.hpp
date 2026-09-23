@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-22-h (Corrects a wrong call of mine: I read hacks/hitboxes.hpp, saw four empty methods, and reported that Show Hitboxes had never been implemented. Nigel said it works, and he is right -- the implementation is 593 lines in hacks/hitboxes.cpp behind its own $modify hooks, and that header is a vestigial shim kept so old call sites compile. It is now labelled as one so it cannot be misread again. No port of Silicate's hitboxes; it would have duplicated a working feature.)"
+    "2026-09-22-i (Render view lifecycle. A render runs at a resolution the window is not -- 8K out of a 1080p window -- so the view lies about its size for the whole render, and GucciBot had no CCEGLView hook at all: any resize event during one went straight to cocos, which resized the view out from under the render. acquireView now takes the view and remembers the real window, including the framebuffer-to-view scale so DPI does not corrupt the restore; the three resize callbacks are swallowed while a render owns the view and record the new window size instead; restoreView puts back the measured thing at the end.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

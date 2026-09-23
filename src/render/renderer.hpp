@@ -1,6 +1,7 @@
 #ifndef SL_RENDERER_HPP
 #define SL_RENDERER_HPP
 
+#include <functional>
 #include "ffmpeg.hpp"
 #include "texture.hpp"
 #include "dsp.hpp"
@@ -149,6 +150,30 @@ namespace gucci {
         }
 
         void loadSettingsFromGeode();
+
+        // View lifecycle, ported from Silicate 2026-09-22. A render usually
+        // runs at a resolution the window is not, and GucciBot had nothing
+        // holding that: no CCEGLView hook, so any resize event during a render
+        // -- the OS, a DPI change, alt-tab, the user dragging the frame -- went
+        // straight through and fought the render size.
+        //
+        // acquireView takes the view for the whole render and remembers what
+        // the window was, including the framebuffer-to-view scale, so restore
+        // puts back the real thing rather than a guess. The handle* calls are
+        // what the CCEGLView hook routes resize events into while a render owns
+        // the view.
+        void acquireView();
+        void restoreView();
+        void withOriginalView(std::function<void()> const& callback);
+        void updateWindowFramebufferSize(cocos2d::CCSize size);
+        bool handleFrameSizeChange(float width, float height);
+        bool handleFramebufferSizeChange(int width, int height);
+        bool handleWindowSizeChange();
+
+        bool m_viewResized = false;
+        cocos2d::CCSize m_windowSize{};
+        cocos2d::CCSize m_windowFramebufferSize{};
+        cocos2d::CCSize m_viewToFramebufferScale{1.f, 1.f};
 
         bool m_shouldStart = false;
         bool m_collectAudio = true;
