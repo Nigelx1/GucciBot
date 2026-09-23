@@ -121,11 +121,13 @@ Made by one person, so all of these reach the same human.
 |---|---|
 | **Email** | [nigel@guccibot.net](mailto:nigel@guccibot.net) |
 | **Discord** | `jimmybutlerfan` |
-| **Phone** | 555-ICE-COLD — not a real number, and deliberately so: 555 has never been assigned as an area code. Putting 555 in the *middle* stopped being safe in 2016, when everything outside 555-0100–555-0199 was returned to the assignable pool. |
+| **Phone** | 555-ICE-COLD<sup>✱</sup> |
 
 **Found a bug? Open an [issue](https://github.com/Nigelx1/GucciBot/issues) rather than messaging it.** Not out of formality — a crash log posted in a thread can actually be symbolized and traced to the exact line that caused it, and it stays findable for whoever hits the same thing next. Attach the crash report Geode hands you and say what you were doing. That has been enough to fix nearly every real bug this mod has had, including a use-after-free nobody could reproduce.
 
 There's a [contact page](https://guccibot.net/contact/) on the site with the same details.
+
+<sub>✱ Not a real number. There has never been a 555 area code, which is doing all of the work here.</sub>
 
 ## Credits
 
