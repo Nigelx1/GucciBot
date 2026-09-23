@@ -2047,6 +2047,20 @@ namespace gucci {
             tabIndicatorX = pos.x + activeTab * tabW;
         tabIndicatorX =
             smoothStep(tabIndicatorX, pos.x + activeTab * tabW, 14.f + anim.animSpeed * 0.7f, dt);
+
+        // The active tab used to be signalled by text colour and a 2px underline
+        // and nothing else, so on a dense eleven-tab bar it was easy to lose.
+        // A filled pill slides with the same interpolation the underline
+        // already used, so the whole tab moves as one object instead of a
+        // marker detaching from its label.
+        {
+            float const padX = 3.f;
+            ImVec2 pMin(tabIndicatorX + padX, pos.y + 2.f);
+            ImVec2 pMax(tabIndicatorX + tabW - padX, pos.y + tabH - 3.f);
+            dl->AddRectFilled(pMin, pMax, theme.getAccentU32(0.13f), 5.f);
+            dl->AddRect(pMin, pMax, theme.getAccentU32(0.28f), 5.f, 0, 1.f);
+        }
+
         for (int i = 0; i < N; i++) {
             ImVec2 tMin(pos.x + i * tabW, pos.y), tMax(tMin.x + tabW, pos.y + tabH);
             char tid[32];
@@ -2056,6 +2070,12 @@ namespace gucci {
             bool hov = ImGui::IsItemHovered();
             if (ImGui::IsItemClicked())
                 switchTab(i);
+            // Hovering a tab you are not on now answers back.
+            if (hov && activeTab != i)
+                dl->AddRectFilled(ImVec2(tMin.x + 3.f, tMin.y + 2.f),
+                                  ImVec2(tMax.x - 3.f, tMax.y - 3.f),
+                                  IM_COL32(255, 255, 255, 14),
+                                  5.f);
             if (fontSmall)
                 ImGui::PushFont(fontSmall);
             ImU32 tc = (activeTab == i) ? theme.getAccentU32(0.98f)
@@ -2145,6 +2165,12 @@ namespace gucci {
                 ImGui::PopFont();
         }
         float indW = tabW * 0.5f, indX = tabIndicatorX + (tabW - indW) * 0.5f;
+        // Soft bloom under the marker, so the accent reads on light themes too.
+        for (int g = 3; g >= 1; g--)
+            dl->AddRectFilled(ImVec2(indX - g * 1.5f, pos.y + tabH - 2 - g * 0.5f),
+                              ImVec2(indX + indW + g * 1.5f, pos.y + tabH + g * 0.5f),
+                              theme.getAccentU32(0.05f),
+                              3.f);
         dl->AddRectFilled(ImVec2(indX, pos.y + tabH - 2),
                           ImVec2(indX + indW, pos.y + tabH),
                           theme.getAccentU32(0.92f),

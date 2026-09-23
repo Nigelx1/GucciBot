@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-23-b (GUI refresh, first pass: the status bar says what the bot is doing. It now leads with a coloured state -- RECORDING, PLAYING, ANALYZING, PATHFINDING, RENDERING, IDLE -- with a pulsing dot while something is running, then the live frame, TPS, speed and the loaded macro's input count. The old bar printed TPS, speed and a Tick that was hardcoded to zero: `int tick = PlayLayer::get() ? 0 : 0;`. It has shown 0 for the entire life of the menu.)"
+    "2026-09-23-c (GUI refresh 2: the tab bar answers back. Eleven tabs signalled by text colour and a 2px underline was easy to lose track of, so the active tab now carries a filled pill that slides on the same interpolation the underline already used -- the tab moves as one object rather than a marker detaching from its label -- hovering an inactive tab lights it, and the marker has a soft bloom so the accent still reads on the light themes.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
