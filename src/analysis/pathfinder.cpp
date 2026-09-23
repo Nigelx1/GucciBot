@@ -627,6 +627,20 @@ namespace gucci {
                 points.push_back((uint32_t)f);
         }
 
+        // Was the walk stopped by the previous committed input, with agency
+        // still available underneath it? If so the frame that decided this
+        // death is very likely one this node is not allowed to touch --
+        // startNextCandidateOrBacktrack acts on it.
+        if ((int64_t)lastCommitted + 1 > (int64_t)d - kMaxAgencyLookback) {
+            int64_t const lookFloor = std::max<int64_t>(1, (int64_t)d - kMaxAgencyLookback);
+            for (int64_t f = floor - 1; f >= lookFloor; --f) {
+                if ((size_t)f < agencyMap.size() && agencyMap[(size_t)f]) {
+                    n.floorClipped = true;
+                    break;
+                }
+            }
+        }
+
         bool usedAgency = !points.empty();
         if (!usedAgency) {
             // No measurement to go on -- either the probe never ran here or
@@ -691,6 +705,40 @@ namespace gucci {
                 return;
             }
             Node& top = stack.back();
+            // Step 4 (2026-09-22): this node's reach-back was cut short by the
+            // previous committed input, and there is agency below that floor.
+            // The frame that actually decided this death is therefore one this
+            // node cannot reach, and every candidate in the clipped window is a
+            // whole run spent proving that. Give the window up and reopen the
+            // input that clipped it -- backtracking does exactly that, because
+            // the parent owns the last committed input and will try its next
+            // alternative for it.
+            //
+            // This is the reach-back FLOOR problem: falls crawl because the
+            // real mistake is the jump that led off the ledge, which sits
+            // before the last commit, and the only way there used to be
+            // exhausting every node in between.
+            //
+            // Once per node. If the search comes back through here the guess
+            // was wrong, so the second visit searches the window properly and
+            // a bad guess costs one extra backtrack rather than a loop.
+            if (top.floorClipped && !top.reopenSpent && top.next == 0 &&
+                stack.size() > 1) {
+                top.reopenSpent = true;
+                log::info(
+                    "[Pathfinder] decision point @f={} is floor-clipped by the last committed "
+                    "input and has agency below it -- reopening that input instead of spending "
+                    "{} runs on a window that cannot contain the answer",
+                    top.deathFrame,
+                    top.cands.size());
+                releaseStoredFrame(top.ckpt);
+                stack.pop_back();
+                depth = stack.size();
+                if (!stack.empty())
+                    committed.resize(std::min(committed.size(), stack.back().committedBefore));
+                haveCandidate = false;
+                continue;
+            }
             if (top.next < top.cands.size()) {
                 cur = top.cands[top.next++];
                 haveCandidate = true;

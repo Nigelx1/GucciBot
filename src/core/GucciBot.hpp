@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-22-j (Render fade in and out, which GucciBot had none of -- renders cut hard from black at the start and to silence at the end. Ported from Silicate: a fade threshold recomputed every frame, fed to the colorspace shaders through a u_fade uniform with gamma correction, and used to attenuate the audio on the same curve so picture and sound fade together. Our chroma shaders average four texels where his samples one, which is the better filter, so the fade was applied to our averaged result rather than adopting his sampling. Times default to 1.5s each and are editable in the Render tab.)"
+    "2026-09-22-k (Pathfinder V2 step 4, the reach-back floor. Kept V2 rather than rebuilding: steps 0-3 are confirmed in-game and the agency diagnosis behind it is right. The thing actually capping it was the floor -- buildNodeFromDeath cannot search before the last committed input, so when the real mistake is an earlier input, which is every fall off a ledge, the search only reaches it by exhausting whole nodes. A node whose reach-back was clipped by that floor AND has agency underneath it now gives its window up immediately and reopens the input that clipped it, once per node, instead of spending a run per candidate proving the answer is not there.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

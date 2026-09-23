@@ -133,6 +133,18 @@ namespace gucci {
             bool deferredUsed = false;
             Candidate deferred{0, 1};
             uint32_t deferredDeath = 0;
+
+            // Step 4 (2026-09-22): this node's reach-back was cut short by the
+            // previous committed input rather than by running out of agency,
+            // AND there are agency frames below that floor. So the frame that
+            // actually decided this death is very likely one this node is not
+            // allowed to touch, and every candidate in the clipped window is a
+            // run spent to prove it. Set once at build time.
+            bool floorClipped = false;
+            // Guards the reopen: a node that already gave up its window once
+            // searches it properly the next time, so a bad guess costs one
+            // extra backtrack rather than looping.
+            bool reopenSpent = false;
         };
 
         // Which frames of the CURRENT run the player actually had a say on,
