@@ -863,7 +863,7 @@ class $modify(GB7CCDirector, CCDirector) {
                 return;
             }
             if (sl->m_needsCleanup) {
-                sl->m_texture.postCapture();
+                sl->m_texture.releaseSlot();
                 sl->m_needsCleanup = false;
             }
             if (!m_bPaused)

@@ -188,7 +188,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
         else if (gb->fwAnalyzing)
             gb->cancelAnalysis();
         if (gucci::SLRenderer::get()->isRecording())
-            gucci::SLRenderer::get()->signalStop();
+            gucci::SLRenderer::get()->flushAndStop();
         TrajectoryPredictionService::get().updatePreview(nullptr);
         PlayLayer::onQuit();
         gb->practiceFix.clearStoredFrames();

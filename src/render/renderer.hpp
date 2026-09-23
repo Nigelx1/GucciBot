@@ -7,6 +7,8 @@
 #include "dsp.hpp"
 
 #include <Geode/Geode.hpp>
+#include <deque>
+#include <condition_variable>
 #include <atomic>
 #include <memory>
 #include <mutex>
@@ -91,7 +93,40 @@ namespace gucci {
 
         void signalStop() {
             m_recording = false;
+            // Wake the encode thread so it sees the flag and drains, rather
+            // than sitting on the condition variable until the next frame it
+            // will never get.
+            m_recordCv.notify_all();
         }
+
+        // Drains everything still in flight, then stops. Only safe from the
+        // game/GL thread -- tryHarvest makes GL calls. Use this wherever the
+        // caller is on that thread so the tail of the video is not dropped.
+        void flushAndStop() {
+            this->flushPending();
+            this->signalStop();
+        }
+
+        // Async encode handoff, ported from Silicate 2026-09-22. The GL thread
+        // issues readbacks and harvests whichever have landed; the encode
+        // thread waits on the queue. Previously the GL thread mapped the PBO
+        // synchronously and the encode thread spun on a bool.
+        struct QueuedFrame {
+            uint8_t* m_data = nullptr;
+            int64_t m_pts = 0;
+        };
+
+        bool tryBeginFrame();
+        void enqueueFrame(uint8_t* data, int64_t pts);
+        void harvestCompleted();
+        void flushPending();
+
+        std::deque<QueuedFrame> m_frameQueue;
+        std::deque<int64_t> m_ptsQueue;
+        std::mutex m_recordMutex;
+        std::condition_variable m_recordCv;
+        std::atomic<int64_t> m_encoded{0};
+        int64_t m_bufferPts = 0;
 
         void recordLoop();
 

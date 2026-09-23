@@ -698,7 +698,11 @@ namespace gucci {
     }
 
     geode::Result<> SLRenderer::stop() {
+        // NOT flushPending() here: stop() runs on the encode thread, and
+        // tryHarvest makes GL calls. The drain happens on the game thread just
+        // before signalStop(), which is the last point the GL context is ours.
         m_recording = false;
+        m_recordCv.notify_all();
 
         AudioRecorder::get()->detach();
         AudioRecorder::get()->uninit();
@@ -749,7 +753,7 @@ namespace gucci {
         m_halting = false;
         m_collected = false;
         if (m_needsCleanup)
-            m_texture.postCapture();
+            m_texture.releaseSlot();
         if (m_frame) {
             m_frame->data[0] = nullptr;
         }
@@ -774,30 +778,93 @@ namespace gucci {
     }
 
     void SLRenderer::recordLoop() {
-        while (m_recording || m_collected) {
-            if (m_collected) {
-                auto e = this->encode(m_buffer, m_bufferSize);
-                if (e.isErr()) {
-                    geode::log::error("[GucciBot] encode failed: {}", e.unwrapErr());
-                    break;
+        geode::log::info("[GucciBot] encode thread started");
+
+        while (true) {
+            QueuedFrame frame;
+            {
+                std::unique_lock<std::mutex> lock(m_recordMutex);
+                m_recordCv.wait(lock, [this] { return !m_frameQueue.empty() || !m_recording; });
+
+                if (m_frameQueue.empty()) {
+                    if (!m_recording)
+                        break;  // nothing queued and the render is done
+                    continue;
                 }
-                auto w = this->write();
-                if (w.isErr()) {
-                    geode::log::error("[GucciBot] write failed: {}", w.unwrapErr());
-                    break;
-                }
-                m_needsCleanup = true;
-                m_collected = false;
-                m_halting = false;
+                frame = m_frameQueue.front();
+                m_frameQueue.pop_front();
             }
+
+            m_bufferPts = frame.m_pts;
+
+            if (auto e = this->encode(frame.m_data, m_bufferSize); e.isErr()) {
+                geode::log::error("[GucciBot] encode failed: {}", e.unwrapErr());
+                break;
+            }
+            if (auto w = this->write(); w.isErr()) {
+                geode::log::error("[GucciBot] write failed: {}", w.unwrapErr());
+                break;
+            }
+
+            m_encoded.fetch_add(1, std::memory_order_release);
         }
-        auto s = this->stop();
-        if (s.isErr())
-            geode::log::error("[GucciBot] stop failed: {}", s.unwrapErr());
+
+        {
+            std::lock_guard<std::mutex> lock(m_recordMutex);
+            m_recording = false;
+        }
+
+        auto st = this->stop();
+        if (st.isErr())
+            geode::log::error("[GucciBot] stop failed: {}", st.unwrapErr());
+        geode::log::info("[GucciBot] encode thread finished");
+    }
+
+    // True when there is room in the ring to start another readback. Harvests
+    // first, so a full ring usually frees a slot right here.
+    bool SLRenderer::tryBeginFrame() {
+        this->harvestCompleted();
+        return m_texture.issuedCount() - m_encoded.load(std::memory_order_acquire) <
+               SLRenderTexture::RING_SIZE;
+    }
+
+    void SLRenderer::enqueueFrame(uint8_t* data, int64_t pts) {
+        {
+            std::lock_guard<std::mutex> lock(m_recordMutex);
+            m_frameQueue.push_back(QueuedFrame{data, pts});
+        }
+        m_recordCv.notify_one();
+    }
+
+    // Non-blocking: take whatever the GPU has finished, in issue order, and
+    // hand each to the encoder with the timestamp it was issued under.
+    void SLRenderer::harvestCompleted() {
+        uint8_t* data = nullptr;
+        while (!m_ptsQueue.empty() && m_texture.tryHarvest(&data, false)) {
+            int64_t const pts = m_ptsQueue.front();
+            m_ptsQueue.pop_front();
+            this->enqueueFrame(data, pts);
+        }
+    }
+
+    // End of render: wait for everything still in flight, so the tail of the
+    // video is not silently dropped.
+    void SLRenderer::flushPending() {
+        uint8_t* data = nullptr;
+        while (!m_ptsQueue.empty() && m_texture.mappedCount() < m_texture.issuedCount()) {
+            if (!m_texture.tryHarvest(&data, true))
+                break;
+            int64_t const pts = m_ptsQueue.front();
+            m_ptsQueue.pop_front();
+            this->enqueueFrame(data, pts);
+        }
     }
 
     void SLRenderer::capture() {
-        m_texture.capture(&m_buffer, m_collected);
+        if (!this->tryBeginFrame())
+            return;  // ring is full; the encoder is behind, skip issuing this one
+        m_ptsQueue.push_back(m_updateIndex - 1);
+        m_texture.issue(m_fadeThreshold);
     }
 
     void SLRenderer::update(PlayLayer* pl) {
@@ -817,7 +884,7 @@ namespace gucci {
         if (pl->m_hasCompletedLevel &&
             !GucciEngine::get()->replay.getCurrentQueuedInput().has_value()) {
             if (this->m_endTime >= this->m_settings.m_afterEndTime) {
-                this->signalStop();
+                this->flushAndStop();
                 return;
             }
             this->m_endTime += this->getDt();

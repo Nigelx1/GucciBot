@@ -13,9 +13,26 @@ namespace gucci {
     class SLRenderTexture {
     public:
         void init(std::unique_ptr<Colorspace> colorspace);
-        void destroy() const;
-        void capture(uint8_t** data, std::atomic<bool>& hasDataFlag);
-        void postCapture();
+        void destroy();
+        // Async readback, ported from Silicate 2026-09-22. capture() mapped the
+        // single PBO on the spot, which stalls the GL thread until the GPU has
+        // finished the copy -- every frame, for the whole render.
+        //
+        // issue() starts a readback into the next slot of a ring and drops a
+        // fence; tryHarvest() maps a slot only once its fence says the data has
+        // landed. Frames in flight overlap with frames still being drawn.
+        static constexpr int RING_SIZE = 8;
+
+        void issue(float fadeThreshold);
+        bool tryHarvest(uint8_t** outData, bool block);
+        void releaseSlot();
+
+        int64_t issuedCount() const {
+            return m_issued;
+        }
+        int64_t mappedCount() const {
+            return m_mapped;
+        }
         void displayPreview();
 
     public:
@@ -34,7 +51,12 @@ namespace gucci {
 
         int m_old_fbo, m_old_rbo;
         uint32_t m_fbo[2];
-        uint32_t m_pbo;
+        uint32_t m_pbo[RING_SIZE] = {};
+        void* m_fence[RING_SIZE] = {};
+        uint8_t* m_slotData[RING_SIZE] = {};
+        bool m_slotMapped[RING_SIZE] = {};
+        int64_t m_issued = 0;
+        int64_t m_mapped = 0;
 
         uint32_t m_program;
     };

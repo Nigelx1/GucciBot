@@ -5916,7 +5916,7 @@ namespace gucci {
             Widgets::StatusBadge("Rendering", ImVec4(0.9f, 0.3f, 0.3f, 1.f));
             ImGui::Dummy(ImVec2(0, 4));
             if (Widgets::StyledButton("Stop Render", ImVec2(-1, 36), theme, anim))
-                sl->signalStop();
+                sl->flushAndStop();
         } else {
             if (Widgets::StyledButton("Start Render", ImVec2(-1, 36), theme, anim)) {
                 sl->loadSettingsFromGeode();

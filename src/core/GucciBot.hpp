@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-22-k (Pathfinder V2 step 4, the reach-back floor. Kept V2 rather than rebuilding: steps 0-3 are confirmed in-game and the agency diagnosis behind it is right. The thing actually capping it was the floor -- buildNodeFromDeath cannot search before the last committed input, so when the real mistake is an earlier input, which is every fall off a ledge, the search only reaches it by exhausting whole nodes. A node whose reach-back was clipped by that floor AND has agency underneath it now gives its window up immediately and reopens the input that clipped it, once per node, instead of spending a run per candidate proving the answer is not there.)"
+    "2026-09-22-l (Async render readback, the last of the renderer port. capture() used to map the single PBO on the spot, stalling the GL thread on the GPU every frame of every render. Now a ring of 8 buffers: issue() starts a readback and drops a fence, tryHarvest() maps a slot only once its fence says the copy landed, and the encode thread waits on a queue instead of spinning on a bool. Frames in flight overlap with frames still being drawn. The drain runs on the game thread, never inside stop() -- stop() runs on the encode thread and harvesting makes GL calls.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
