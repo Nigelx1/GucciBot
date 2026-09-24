@@ -617,6 +617,37 @@ namespace gucci {
             return;
         }
 
+        // Frame-perfect solutions are worse solutions. Absense tests this by
+        // re-running the candidate a tick late and seeing whether it still
+        // survives, which costs a whole extra simulation per candidate --
+        // runs are exactly what this search is short of.
+        //
+        // The dead-end cache already holds the answer whenever the neighbour
+        // has been tried: if press+1 from this same prefix is known dead, this
+        // press only works on its own exact frame. So the question is answered
+        // for nothing, and only when it can be answered honestly -- an untried
+        // neighbour says nothing and is not held against the candidate.
+        //
+        // Held back rather than rejected, through the same slot the cramped
+        // check uses: if nothing more tolerant turns up, it gets replayed and
+        // committed, so no solution is ever lost to this preference.
+        if (preferRobust && !top.hasDeferred &&
+            deadEnds.count(this->deadEndKey(cur.pressFrame + 1, cur.holdFrames))) {
+            top.hasDeferred = true;
+            top.deferred = cur;
+            top.deferredDeath = d;
+            deferredFragile++;
+            haveCandidate = false;
+            log::info(
+                "[Pathfinder] press@{} hold {} works but press@{} is already known dead -- this is "
+                "frame-perfect, held back while this decision point's other candidates get a turn",
+                cur.pressFrame,
+                cur.holdFrames,
+                cur.pressFrame + 1);
+            startNextCandidateOrBacktrack();
+            return;
+        }
+
         commitCurrent("committed");
     }
 
@@ -982,6 +1013,9 @@ namespace gucci {
             log::info("[Pathfinder] {} decision point(s) answered from memory", memoryHits);
         if (skippedDeadEnds > 0)
             log::info("[Pathfinder] skipped {} run(s) that were already proven dead", skippedDeadEnds);
+        if (deferredFragile > 0)
+            log::info("[Pathfinder] held back {} frame-perfect candidate(s) in favour of tolerant ones",
+                      deferredFragile);
         auto* gb = GucciEngine::get();
         auto* pl = PlayLayer::get();
 

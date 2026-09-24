@@ -179,6 +179,12 @@ namespace gucci {
         // could diverge, and this cache would have been unsound.
         std::unordered_set<uint64_t> deadEnds;
         int skippedDeadEnds = 0;  // reported at finish, so the saving is visible
+        // Prefer a press that still works a frame late over one that only
+        // works on exactly its frame. Absense runs an extra simulation to ask
+        // that question; here it is answered for free from deadEnds, which
+        // already knows the neighbour's fate whenever it has been tried.
+        bool preferRobust = true;
+        int deferredFragile = 0;
 
         // What got past a hard spot on this level last time, so a second
         // search tries the known answer first instead of re-deriving it.

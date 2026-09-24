@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-24-b (Pathfinder remembers what solved a spot. Ported from Absense's pathfinder/memory, including the part that makes it safe -- a remembered answer is still RUN and judged by the real game, so memory only changes the ORDER candidates are tried in and can never launder a wrong answer through. Keyed by death frame plus committed-prefix hash, saved per level ID under the mod's own data, so a second search of a level tries each known answer first instead of re-deriving the whole path.)"
+    "2026-09-24-c (Pathfinder prefers tolerant presses over frame-perfect ones. Absense asks this by re-running a candidate a tick late, which costs a whole extra simulation per candidate -- runs are the one thing this search is short of. The dead-end cache from -a already holds the answer whenever the neighbour has been tried, so the question is answered for free and only when it can be answered honestly. Held back through the same slot the cramped check uses, so if nothing more tolerant exists the frame-perfect one is still replayed and committed.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
