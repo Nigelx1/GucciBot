@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Geode/Geode.hpp>
+#include <functional>
 #include <string>
 #include <vector>
 #include "hooks/util_midhook.hpp"
@@ -28,11 +29,17 @@ namespace gucci {
                 ++g_failCount;
         }
 
+        // `extraChecks` runs inside the sweep rather than after it, so
+        // anything it adds is counted by the PASSED/FAILED line at the end
+        // instead of appearing in the Diagnostics panel but not the log. It is
+        // a callback rather than a direct call because the checks that use it
+        // include this header themselves.
         inline void run(int expectedMidhooks,
                         int expectedPatches,
                         int gbr6Version,
                         int brrVersion,
-                        const char* modVersion) {
+                        const char* modVersion,
+                        const std::function<void()>& extraChecks = {}) {
             g_results.clear();
             g_passCount = 0;
             g_failCount = 0;
@@ -95,6 +102,9 @@ namespace gucci {
                     geode::log::error("[GucciBot]  [FAIL] Save dir unreachable -- "
                                       "macros/renders cannot be written");
             }
+
+            if (extraChecks)
+                extraChecks();
 
             if (g_failCount == 0)
                 geode::log::info(

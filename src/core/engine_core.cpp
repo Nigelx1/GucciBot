@@ -5,6 +5,7 @@
 #include "core/brr_format.hpp"
 #include "core/gbr6_format.hpp"
 #include "tools/selfcheck.hpp"
+#include "tools/edit_core_test.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/binding/PauseLayer.hpp>
@@ -2340,7 +2341,8 @@ namespace gucci {
         log::info("[GucciBot] ========================================");
         log::info("[GucciBot] " MOD_VERSION " initialized — {} macros", storedMacros.size());
 
-        gbcheck::run(5, 4, GBR6_VERSION, BRR_FORMAT_VERSION, MOD_VERSION);
+        gbcheck::run(5, 4, GBR6_VERSION, BRR_FORMAT_VERSION, MOD_VERSION,
+                     &editcoretest::run);
     }
 
     static PauseLayer* findOpenPauseLayerRecursive(CCNode* node) {

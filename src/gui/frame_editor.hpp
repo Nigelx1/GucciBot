@@ -7,29 +7,17 @@
 #include <cstdint>
 
 #include "core/brr_format.hpp"
+#include "tools/edit_core.hpp"
 
 namespace gucci {
 
     class MenuInterface;
 
-    struct EditorInput {
-        int32_t frame = 0;
-        int actionType = 0;
-        bool player2 = false;
-        bool pressed = false;
-        float stepOffset = 0.0f;
-        size_t originalIndex = 0;
-    };
-
-    struct HoldSegment {
-        int32_t startFrame = 0;
-        int32_t endFrame = 0;
-        bool player2 = false;
-        int actionType = 0;
-        size_t pressIndex = 0;
-        size_t releaseIndex = 0;
-        bool hasRelease = true;
-    };
+    // The editor's data lives in edit_core.hpp, which has no ImGui and no
+    // Geode in it so edit_core_test.hpp can assert on the rules that operate
+    // on it. These are the same types under the names the UI already uses.
+    using EditorInput = editcore::Input;
+    using HoldSegment = editcore::Segment;
 
     enum class EditorFormat { BRR, GDR };
 

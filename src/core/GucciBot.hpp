@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-24-g (Pathfinder remembers hazards by the SITUATION rather than by the input history that reached them. The first version keyed a remembered solution on the death frame plus a hash of every committed input before it, which is exact and therefore almost never hit -- the hash changes the moment any earlier repair differs by one frame, so a second search re-derived answers it already had. A hazard is a fixed thing at a fixed place, so the key is now the quantised position, form, size, speed and gravity at the death, and the answer is stored as an offset back from it: \"press eleven frames before you die\" survives an earlier repair shifting everything, \"press at frame 812\" does not. Still safe for the same reason as before -- a remembered candidate is run and judged by real physics like any other, so memory only changes the order things are tried in.)"
+    "2026-09-24-h (The frame editor's rules now live in a core with tests, an idea taken from Absense. Testing it turned up a real bug: nothing stopped a hold being dragged straight through its neighbour on the same lane, and since the editor writes inputs back out verbatim in frame order, the result was press-press-release-release -- playback ends the hold on the FIRST release, so the editor drew two holds and the macro played one short one, with nothing to see until a run desynced. Drags are now clamped against their neighbours. 26 cases run at startup and show up in the Diagnostics panel, and the same cases run outside the game with .\run_tests.bat in about a second.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

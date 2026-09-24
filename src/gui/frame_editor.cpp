@@ -266,78 +266,7 @@ namespace gucci {
     }
 
     void FrameEditor::rebuildSegments() {
-        segments.clear();
-
-        std::vector<size_t> sorted(inputs.size());
-        for (size_t i = 0; i < inputs.size(); i++)
-            sorted[i] = i;
-        std::stable_sort(sorted.begin(), sorted.end(), [&](size_t a, size_t b) {
-            return inputs[a].frame < inputs[b].frame;
-        });
-
-        int maxPlayer = twoPlayerMode ? 1 : 0;
-        for (int player = 0; player <= maxPlayer; player++) {
-            for (int act = 0; act <= 3; act++) {
-                bool isP2 = (player == 1);
-                int openPress = -1;
-                int32_t openFrame = 0;
-
-                for (size_t si = 0; si < sorted.size(); si++) {
-                    size_t idx = sorted[si];
-                    auto& inp = inputs[idx];
-                    bool inputIsP2 = twoPlayerMode ? inp.player2 : false;
-                    if (inputIsP2 != isP2 || inp.actionType != act)
-                        continue;
-
-                    if (inp.pressed) {
-                        if (openPress >= 0) {
-                            HoldSegment seg;
-                            seg.startFrame = openFrame;
-                            seg.endFrame = inp.frame;
-                            seg.player2 = isP2;
-                            seg.actionType = act;
-                            seg.pressIndex = openPress;
-                            seg.releaseIndex = idx;
-                            seg.hasRelease = false;
-
-                            segments.push_back(seg);
-                        }
-                        openPress = static_cast<int>(idx);
-                        openFrame = inp.frame;
-                    } else {
-                        if (openPress >= 0) {
-                            HoldSegment seg;
-                            seg.startFrame = openFrame;
-                            seg.endFrame = inp.frame;
-                            seg.player2 = isP2;
-                            seg.actionType = act;
-                            seg.pressIndex = openPress;
-                            seg.releaseIndex = idx;
-                            seg.hasRelease = true;
-
-                            segments.push_back(seg);
-                            openPress = -1;
-                        }
-                    }
-                }
-
-                if (openPress >= 0) {
-                    HoldSegment seg;
-                    seg.startFrame = openFrame;
-                    seg.endFrame = maxFrame;
-                    seg.player2 = isP2;
-                    seg.actionType = act;
-                    seg.pressIndex = openPress;
-                    seg.releaseIndex = openPress;
-                    seg.hasRelease = false;
-                    segments.push_back(seg);
-                }
-            }
-        }
-
-        std::sort(segments.begin(), segments.end(), [](const HoldSegment& a, const HoldSegment& b) {
-            return a.startFrame < b.startFrame;
-        });
+        segments = editcore::buildSegments(inputs, twoPlayerMode, maxFrame);
     }
 
     void FrameEditor::pushUndo() {
@@ -511,20 +440,17 @@ namespace gucci {
         } else if (dragMode == DragMode::MoveSegment) {
             if (dragPressIdx < inputs.size()) {
                 int32_t currentFrame = frameAtPixel(mouseX, canvasOriginX);
-                int32_t delta = currentFrame - dragStartFrame;
-
-                int32_t newStart = dragOriginalFrame + delta;
-                if (newStart < 0) {
-                    delta = -dragOriginalFrame;
-                    newStart = 0;
-                }
+                int32_t delta = editcore::clampSegmentMove(inputs,
+                                                           twoPlayerMode,
+                                                           dragPressIdx,
+                                                           dragReleaseIdx,
+                                                           dragOriginalFrame,
+                                                           dragReleaseOrigFrame,
+                                                           currentFrame - dragStartFrame);
 
                 inputs[dragPressIdx].frame = dragOriginalFrame + delta;
-                if (dragReleaseIdx != dragPressIdx && dragReleaseIdx < inputs.size()) {
+                if (dragReleaseIdx != dragPressIdx && dragReleaseIdx < inputs.size())
                     inputs[dragReleaseIdx].frame = dragReleaseOrigFrame + delta;
-                    if (inputs[dragReleaseIdx].frame < 0)
-                        inputs[dragReleaseIdx].frame = 0;
-                }
                 dirty = true;
                 rebuildSegments();
                 selectedSegment = findSegmentByPressIndex(dragPressIdx);
@@ -534,13 +460,11 @@ namespace gucci {
             }
         } else if (dragMode == DragMode::MoveEdgeLeft) {
             if (dragPressIdx < inputs.size()) {
-                int32_t newFrame = frameAtPixel(mouseX, canvasOriginX);
-                newFrame = std::max(newFrame, (int32_t)0);
-                if (dragReleaseIdx != dragPressIdx && dragReleaseIdx < inputs.size()) {
-                    int32_t releaseFrame = inputs[dragReleaseIdx].frame;
-                    if (newFrame >= releaseFrame)
-                        newFrame = releaseFrame - 1;
-                }
+                int32_t newFrame = editcore::clampEdgeLeft(inputs,
+                                                           twoPlayerMode,
+                                                           dragPressIdx,
+                                                           dragReleaseIdx,
+                                                           frameAtPixel(mouseX, canvasOriginX));
                 inputs[dragPressIdx].frame = newFrame;
                 dirty = true;
                 rebuildSegments();
@@ -551,11 +475,11 @@ namespace gucci {
             }
         } else if (dragMode == DragMode::MoveEdgeRight) {
             if (dragReleaseIdx < inputs.size() && dragReleaseIdx != dragPressIdx) {
-                int32_t newFrame = frameAtPixel(mouseX, canvasOriginX);
-                newFrame = std::max(newFrame, (int32_t)0);
-                int32_t pressFrame = inputs[dragPressIdx].frame;
-                if (newFrame <= pressFrame)
-                    newFrame = pressFrame + 1;
+                int32_t newFrame = editcore::clampEdgeRight(inputs,
+                                                            twoPlayerMode,
+                                                            dragPressIdx,
+                                                            dragReleaseIdx,
+                                                            frameAtPixel(mouseX, canvasOriginX));
                 inputs[dragReleaseIdx].frame = newFrame;
                 dirty = true;
                 rebuildSegments();
