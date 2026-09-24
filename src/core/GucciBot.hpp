@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-23-c (GUI refresh 2: the tab bar answers back. Eleven tabs signalled by text colour and a 2px underline was easy to lose track of, so the active tab now carries a filled pill that slides on the same interpolation the underline already used -- the tab moves as one object rather than a marker detaching from its label -- hovering an inactive tab lights it, and the marker has a soft bloom so the accent still reads on the light themes.)"
+    "2026-09-24-a (Pathfinder: proven dead ends are never retried. Idea from Absense's tabu list, reimplemented here with an argument rather than copied -- a candidate keyed by (hash of the committed prefix, press frame, hold length) that already failed will fail again, because the replay is bit-identical. That is only sound because of the 2026-09-22 determinism work; before variance and Random triggers were seeded, two runs of the same inputs really could differ. Matters most alongside step 4, which deliberately revisits decision points.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

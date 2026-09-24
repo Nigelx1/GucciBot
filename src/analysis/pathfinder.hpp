@@ -3,6 +3,7 @@
 #include "core/GucciBot.hpp"
 
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace gucci {
@@ -155,6 +156,26 @@ namespace gucci {
 
         std::vector<Node> stack;
         std::vector<gb::Action> committed;
+
+        // Dead ends already proven, so the search never pays for one twice.
+        // Idea taken from Absense's tabu list; the soundness argument is ours.
+        //
+        // A key is (hash of the committed prefix, press frame, hold length).
+        // If all three match a run that already failed, the replay is
+        // bit-identical to that run -- same level state, same inputs, same
+        // physics -- so it cannot end differently. Skipping it is not a
+        // heuristic, it is arithmetic.
+        //
+        // That argument only holds because of the 2026-09-22 determinism work
+        // (object variance, Random triggers, teleport and shake RNG all seeded
+        // from the macro). Before that, two runs of the same inputs genuinely
+        // could diverge, and this cache would have been unsound.
+        std::unordered_set<uint64_t> deadEnds;
+        int skippedDeadEnds = 0;  // reported at finish, so the saving is visible
+        static constexpr size_t kMaxDeadEnds = size_t(1) << 16;
+
+        uint64_t committedHash() const;
+        uint64_t deadEndKey(uint32_t pressFrame, int holdFrames) const;
         gb::ActionAtom savedAtom;
         std::vector<StoredFrame> ring;
 

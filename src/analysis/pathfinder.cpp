@@ -73,6 +73,10 @@ namespace gucci {
     }
 
     void Pathfinder::begin() {
+        // Fresh search: nothing proven dead yet.
+        deadEnds.clear();
+        skippedDeadEnds = 0;
+
         auto* gb = GucciEngine::get();
         auto* pl = PlayLayer::get();
         if (active || !pl)
@@ -559,6 +563,15 @@ namespace gucci {
         };
 
         if (!progressed) {
+            // Proven dead: this exact candidate, from this exact committed
+            // prefix, does not get past the death. Recorded so the search
+            // cannot spend another run rediscovering it after a backtrack
+            // brings it back here -- which the floor-reopen in step 4 makes
+            // considerably more likely, since it deliberately revisits.
+            if (deadEnds.size() >= kMaxDeadEnds)
+                deadEnds.clear();  // a cache; dropping it costs time, never correctness
+            deadEnds.insert(this->deadEndKey(cur.pressFrame, cur.holdFrames));
+
             // No progress -- next candidate at this decision point (or backtrack).
             startNextCandidateOrBacktrack();
             return;
@@ -599,6 +612,33 @@ namespace gucci {
         }
 
         commitCurrent("committed");
+    }
+
+    // FNV-1a over the committed inputs. Only what actually changes the run --
+    // frame, whether it is a press or a release, and which player -- so two
+    // prefixes that produce the same playback hash the same.
+    uint64_t Pathfinder::committedHash() const {
+        uint64_t h = 1469598103934665603ull;
+        auto mix = [&h](uint64_t v) {
+            for (int i = 0; i < 8; i++) {
+                h ^= (v >> (i * 8)) & 0xFF;
+                h *= 1099511628211ull;
+            }
+        };
+        for (auto const& a : committed) {
+            mix(a.m_frame);
+            mix((a.m_holding ? 1ull : 0ull) | (a.m_player2 ? 2ull : 0ull));
+        }
+        mix(committed.size());
+        return h;
+    }
+
+    uint64_t Pathfinder::deadEndKey(uint32_t pressFrame, int holdFrames) const {
+        uint64_t h = this->committedHash();
+        h ^= (uint64_t)pressFrame * 1099511628211ull;
+        h *= 1099511628211ull;
+        h ^= (uint64_t)(uint32_t)holdFrames * 14695981039346656ull;
+        return h;
     }
 
     void Pathfinder::buildNodeFromDeath(uint32_t d) {
@@ -698,9 +738,12 @@ namespace gucci {
     void Pathfinder::startNextCandidateOrBacktrack() {
         while (true) {
             if (stack.empty()) {
-                log::info("[Pathfinder] exhausted every branch after {} runs -- giving up, best {:.1f}%",
-                          runs,
-                          bestPct);
+                log::info(
+                    "[Pathfinder] exhausted every branch after {} runs -- giving up, best {:.1f}% "
+                    "({} candidate(s) skipped as already-proven dead ends)",
+                    runs,
+                    bestPct,
+                    skippedDeadEnds);
                 finish(false);
                 return;
             }
@@ -740,6 +783,21 @@ namespace gucci {
                 continue;
             }
             if (top.next < top.cands.size()) {
+                // Skip anything already proven dead from this same committed
+                // prefix. Bit-identical inputs against bit-identical state
+                // cannot produce a different death.
+                {
+                    bool skipped = false;
+                    while (top.next < top.cands.size() &&
+                           deadEnds.count(this->deadEndKey(top.cands[top.next].pressFrame,
+                                                           top.cands[top.next].holdFrames))) {
+                        top.next++;
+                        skippedDeadEnds++;
+                        skipped = true;
+                    }
+                    if (skipped && top.next >= top.cands.size())
+                        continue;  // everything here is known dead -- fall through to backtrack
+                }
                 cur = top.cands[top.next++];
                 haveCandidate = true;
                 runs++;
@@ -799,6 +857,8 @@ namespace gucci {
     }
 
     void Pathfinder::finish(bool success) {
+        if (skippedDeadEnds > 0)
+            log::info("[Pathfinder] skipped {} run(s) that were already proven dead", skippedDeadEnds);
         auto* gb = GucciEngine::get();
         auto* pl = PlayLayer::get();
 
