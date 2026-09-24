@@ -76,6 +76,7 @@ namespace gucci {
         // Fresh search: nothing proven dead yet.
         deadEnds.clear();
         skippedDeadEnds = 0;
+        this->loadSolutionMemory();
 
         auto* gb = GucciEngine::get();
         auto* pl = PlayLayer::get();
@@ -546,6 +547,11 @@ namespace gucci {
             gb::Action release = press;
             release.m_frame = cur.pressFrame + (uint32_t)std::max(1, cur.holdFrames);
             release.m_holding = false;
+            // Worked. Remember it against the prefix that produced it, BEFORE
+            // the commit changes that prefix -- the key has to describe the
+            // state the decision was made in, not the state after it.
+            this->rememberWin(top.deathFrame, cur.pressFrame, cur.holdFrames);
+
             committed.push_back(press);
             committed.push_back(release);
             haveCandidate = false;
@@ -641,6 +647,85 @@ namespace gucci {
         return h;
     }
 
+    uint64_t Pathfinder::memoryKey(uint32_t deathFrame) const {
+        uint64_t h = this->committedHash();
+        h ^= (uint64_t)deathFrame * 1099511628211ull;
+        h *= 1099511628211ull;
+        return h;
+    }
+
+    // One saved blob per level, under the mod's own save data. Levels are
+    // keyed by GD's level ID, so a search on a different level never reads
+    // another's answers.
+    void Pathfinder::loadSolutionMemory() {
+        solutionMemory.clear();
+        memoryHits = 0;
+        memoryDirty = false;
+        memoryLevelID = 0;
+
+        auto* pl = PlayLayer::get();
+        if (!pl || !pl->m_level)
+            return;
+        memoryLevelID = pl->m_level->m_levelID.value();
+        if (memoryLevelID == 0)
+            return;  // local/unsaved level: nothing stable to key on
+
+        auto const raw = Mod::get()->getSavedValue<std::string>(
+            fmt::format("pf_memory_{}", memoryLevelID), "");
+        if (raw.empty())
+            return;
+
+        auto parsed = matjson::parse(raw);
+        if (!parsed.isOk())
+            return;
+        auto obj = parsed.unwrap();
+        if (!obj.isObject())
+            return;
+        for (auto const& [key, value] : obj) {
+            if (!value.isObject())
+                continue;
+            RememberedWin w;
+            w.pressFrame = (uint32_t)value["p"].asInt().unwrapOr(0);
+            w.holdFrames = (int)value["h"].asInt().unwrapOr(1);
+            if (w.pressFrame == 0)
+                continue;
+            solutionMemory[std::strtoull(key.c_str(), nullptr, 10)] = w;
+        }
+        if (!solutionMemory.empty())
+            log::info("[Pathfinder] loaded {} remembered solution(s) for level {}",
+                      solutionMemory.size(),
+                      memoryLevelID);
+    }
+
+    void Pathfinder::saveSolutionMemory() {
+        if (!memoryDirty || memoryLevelID == 0)
+            return;
+        auto obj = matjson::Value::object();
+        for (auto const& [key, w] : solutionMemory) {
+            auto entry = matjson::Value::object();
+            entry["p"] = (int)w.pressFrame;
+            entry["h"] = w.holdFrames;
+            obj[std::to_string(key)] = entry;
+        }
+        Mod::get()->setSavedValue(fmt::format("pf_memory_{}", memoryLevelID), obj.dump());
+        memoryDirty = false;
+        log::info("[Pathfinder] saved {} solution(s) for level {}",
+                  solutionMemory.size(),
+                  memoryLevelID);
+    }
+
+    void Pathfinder::rememberWin(uint32_t deathFrame, uint32_t pressFrame, int holdFrames) {
+        if (memoryLevelID == 0)
+            return;
+        auto const k = this->memoryKey(deathFrame);
+        auto const it = solutionMemory.find(k);
+        if (it != solutionMemory.end() && it->second.pressFrame == pressFrame &&
+            it->second.holdFrames == holdFrames)
+            return;  // already known, nothing to write
+        solutionMemory[k] = RememberedWin{pressFrame, holdFrames};
+        memoryDirty = true;
+    }
+
     void Pathfinder::buildNodeFromDeath(uint32_t d) {
         Node n;
         n.deathFrame = d;
@@ -690,6 +775,18 @@ namespace gucci {
                  f >= std::max<int64_t>(floor, (int64_t)d - windowFrames);
                  --f)
                 points.push_back((uint32_t)f);
+        }
+
+        // If this exact decision point was solved before, try that answer
+        // first. It is still run and still judged by the real game -- this
+        // only changes the order, so a stale memory costs one run and is then
+        // treated like any other failure.
+        if (!points.empty()) {
+            auto const it = solutionMemory.find(this->memoryKey(d));
+            if (it != solutionMemory.end()) {
+                n.rememberedFirst = true;
+                n.remembered = Candidate{it->second.pressFrame, it->second.holdFrames};
+            }
         }
 
         int64_t start = points.empty() ? (int64_t)d : (int64_t)points.back();
@@ -782,6 +879,29 @@ namespace gucci {
                 haveCandidate = false;
                 continue;
             }
+            // Remembered answer goes first, once, before the generated list.
+            if (top.rememberedFirst && !top.rememberedTried) {
+                top.rememberedTried = true;
+                if (!deadEnds.count(
+                        this->deadEndKey(top.remembered.pressFrame, top.remembered.holdFrames))) {
+                    cur = top.remembered;
+                    haveCandidate = true;
+                    runs++;
+                    memoryHits++;
+                    log::info(
+                        "[Pathfinder] decision point @f={} solved here before -- trying the "
+                        "remembered press@{} hold {} first",
+                        top.deathFrame,
+                        cur.pressFrame,
+                        cur.holdFrames);
+                    stage = fmt::format(
+                        "f={} remembered press@{} hold {}", top.deathFrame, cur.pressFrame,
+                        cur.holdFrames);
+                    startRun(&top);
+                    return;
+                }
+            }
+
             if (top.next < top.cands.size()) {
                 // Skip anything already proven dead from this same committed
                 // prefix. Bit-identical inputs against bit-identical state
@@ -857,6 +977,9 @@ namespace gucci {
     }
 
     void Pathfinder::finish(bool success) {
+        this->saveSolutionMemory();
+        if (memoryHits > 0)
+            log::info("[Pathfinder] {} decision point(s) answered from memory", memoryHits);
         if (skippedDeadEnds > 0)
             log::info("[Pathfinder] skipped {} run(s) that were already proven dead", skippedDeadEnds);
         auto* gb = GucciEngine::get();

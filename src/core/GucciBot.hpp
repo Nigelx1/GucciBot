@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-24-a (Pathfinder: proven dead ends are never retried. Idea from Absense's tabu list, reimplemented here with an argument rather than copied -- a candidate keyed by (hash of the committed prefix, press frame, hold length) that already failed will fail again, because the replay is bit-identical. That is only sound because of the 2026-09-22 determinism work; before variance and Random triggers were seeded, two runs of the same inputs really could differ. Matters most alongside step 4, which deliberately revisits decision points.)"
+    "2026-09-24-b (Pathfinder remembers what solved a spot. Ported from Absense's pathfinder/memory, including the part that makes it safe -- a remembered answer is still RUN and judged by the real game, so memory only changes the ORDER candidates are tried in and can never launder a wrong answer through. Keyed by death frame plus committed-prefix hash, saved per level ID under the mod's own data, so a second search of a level tries each known answer first instead of re-deriving the whole path.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

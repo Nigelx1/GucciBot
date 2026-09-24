@@ -3,6 +3,7 @@
 #include "core/GucciBot.hpp"
 
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -135,6 +136,12 @@ namespace gucci {
             Candidate deferred{0, 1};
             uint32_t deferredDeath = 0;
 
+            // A solution remembered from a previous search of this level,
+            // tried ahead of the generated candidates.
+            bool rememberedFirst = false;
+            Candidate remembered{0, 1};
+            bool rememberedTried = false;
+
             // Step 4 (2026-09-22): this node's reach-back was cut short by the
             // previous committed input rather than by running out of agency,
             // AND there are agency frames below that floor. So the frame that
@@ -172,6 +179,32 @@ namespace gucci {
         // could diverge, and this cache would have been unsound.
         std::unordered_set<uint64_t> deadEnds;
         int skippedDeadEnds = 0;  // reported at finish, so the saving is visible
+
+        // What got past a hard spot on this level last time, so a second
+        // search tries the known answer first instead of re-deriving it.
+        // Idea from Absense's pathfinder/memory, including the part that makes
+        // it safe: a remembered candidate is still RUN and judged by real
+        // physics like any other. Memory only changes the ORDER things are
+        // tried in -- it can never let a wrong answer through.
+        //
+        // Keyed by (death frame, committed-prefix hash), which is exact rather
+        // than fuzzy: with the run deterministic, a repeat search reaches the
+        // same decision point with the same prefix, so an exact key hits. If
+        // anything upstream differs the key simply misses and the search
+        // proceeds normally.
+        struct RememberedWin {
+            uint32_t pressFrame = 0;
+            int holdFrames = 1;
+        };
+        std::unordered_map<uint64_t, RememberedWin> solutionMemory;
+        int memoryHits = 0;
+        bool memoryDirty = false;
+        int memoryLevelID = 0;
+
+        uint64_t memoryKey(uint32_t deathFrame) const;
+        void loadSolutionMemory();
+        void saveSolutionMemory();
+        void rememberWin(uint32_t deathFrame, uint32_t pressFrame, int holdFrames);
         static constexpr size_t kMaxDeadEnds = size_t(1) << 16;
 
         uint64_t committedHash() const;
