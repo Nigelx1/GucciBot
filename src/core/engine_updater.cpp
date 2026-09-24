@@ -5,6 +5,7 @@
 #include "analysis/ac/framewindow.hpp"
 #include "hooks/util_midhook.hpp"
 #include "render/renderer.hpp"
+#include "mcp/mcp_server.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/modify/CCScheduler.hpp>
@@ -826,6 +827,12 @@ static void frameUpdateMidhook(SafetyHookContext&) {
 class $modify(GB7CCScheduler, CCScheduler) {
     void update(float dt) override {
         auto* gb = GucciEngine::get();
+        // Anything the MCP socket thread queued runs here and nowhere else,
+        // before the engine touches anything. Unconditional on purpose: a
+        // tool has to be able to look at the game (and switch `enabled` on)
+        // even when the engine is standing down.
+        if (mcp::Server::get()->running())
+            mcp::Server::get()->pump();
         if (gb->updater.m_onlyRefresh || !gb->enabled) {
             CCScheduler::update(dt);
             return;

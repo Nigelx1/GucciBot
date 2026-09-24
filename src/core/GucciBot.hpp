@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-24-e (Pathfinder widens its look at spots that keep biting, from Absense's hazard-frequency memory -- a repair starts at the right distance at once instead of creeping outward one exhausted decision point at a time. Also records a verified finding: the World, Absense's 11.8k-line trigger and moving-object simulator, has no counterpart here because it solves a problem this architecture does not have. Our trajectory forks real PlayerObjects into the real object layer and Pathfinder evaluates candidates with real runs, so triggers are exact for free. Theirs has to model what the real game would do; ours asks it.)"
+    "2026-09-24-f (In-game MCP server, ported in concept from Absense. Off by default, loopback only, and it adds thirteen tools that let an assistant read the frame, the macro, the analyzer's windows, the pathfinder's progress and GucciBot's own logs -- and step the game -- while a bug is still happening, instead of Nigel reproducing it and pasting a log afterwards. Every tool runs on the game's main thread, and the ones that would drive the game refuse while a render or an analyzer owns the run. Build note: this is the one file opted out of Geode's precompiled header, because winsock2.h has to come before windows.h and the PCH force-includes Geode.hpp ahead of line 1 of every source file.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -1226,6 +1226,12 @@ namespace gucci {
         bool fastPlayback = false;
 
         float m_levelLength = 0.f;
+
+        // In-game MCP server (src/mcp/). Off by default and loopback only --
+        // it can drive the bot, so it stays something you switch on for a
+        // debugging session, not something that is quietly listening.
+        bool mcpEnabled = false;
+        int mcpPort = 8790;
 
         void initialize();
         void reloadMacroList();

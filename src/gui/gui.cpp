@@ -11,6 +11,7 @@
 #include "trainers/trainerghost.hpp"
 
 #include "render/renderer.hpp"
+#include "mcp/mcp_server.hpp"
 #include "tools/selfcheck.hpp"
 #include <Geode/Bindings.hpp>
 #include <Geode/cocos/textures/CCTexture2D.h>
@@ -6555,6 +6556,42 @@ namespace gucci {
             ImGui::PopStyleColor();
         }
         ImGui::Dummy(ImVec2(0, 8));
+
+        Widgets::SectionHeader("Assistant Access", theme);
+        {
+            auto* srv = mcp::Server::get();
+            bool on = srv->running();
+            if (Widgets::ToggleSwitch("MCP Server", &on, theme, anim)) {
+                if (on) {
+                    if (!srv->start(eng->mcpPort))
+                        on = false;
+                } else {
+                    srv->stop();
+                }
+                eng->mcpEnabled = on;
+                Mod::get()->setSavedValue("mcp_enabled", eng->mcpEnabled);
+            }
+            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+            if (srv->running())
+                ImGui::Text("Listening on 127.0.0.1:%d  (%zu tools)",
+                            srv->port(),
+                            srv->tools().size());
+            ImGui::TextWrapped(
+                "Lets an AI assistant look at the bot while it's running -- read the frame, the "
+                "macro, the analyzer's windows and the logs, and step the game -- instead of you "
+                "reproducing a bug and pasting a log afterwards. Local machine only, never the "
+                "network, and it does nothing until something connects.");
+            ImGui::PopStyleColor();
+            ImGui::SetNextItemWidth(110.f);
+            if (ImGui::InputInt("Port", &eng->mcpPort)) {
+                eng->mcpPort = std::clamp(eng->mcpPort, 1024, 65535);
+                Mod::get()->setSavedValue("mcp_port", eng->mcpPort);
+            }
+            if (srv->running())
+                ImGui::TextDisabled("Port changes take effect next time it starts.");
+        }
+
+        ImGui::Dummy(ImVec2(0, 8));
         Widgets::SectionHeader("Theme", theme);
         int pc = ThemeEngine::getPresetCount();
         const ThemePreset* presets = ThemeEngine::getPresets();
@@ -8968,6 +9005,16 @@ namespace gucci {
         keybinds.layoutMode = mod->getSavedValue<int>("key_layout_mode", 0);
         keybinds.noMirror = mod->getSavedValue<int>("key_no_mirror", 0);
         keybinds.autoclicker = mod->getSavedValue<int>("key_autoclicker", 0);
+        eng->mcpEnabled = mod->getSavedValue<bool>("mcp_enabled", false);
+        eng->mcpPort = std::clamp(mod->getSavedValue<int>("mcp_port", 8790), 1024, 65535);
+        // Register the tools once regardless, so the Settings tab can report
+        // how many there are before anything has been started.
+        if (mcp::Server::get()->tools().empty())
+            mcp::registerTools(*mcp::Server::get());
+        if (eng->mcpEnabled && !mcp::Server::get()->running()) {
+            if (!mcp::Server::get()->start(eng->mcpPort))
+                eng->mcpEnabled = false;
+        }
         eng->showHitboxes = mod->getSavedValue<bool>("hack_hitboxes", false);
         eng->hitboxOnDeath = mod->getSavedValue<bool>("hack_hitbox_death", false);
         eng->hitboxTrail = mod->getSavedValue<bool>("hack_hitbox_trail", false);

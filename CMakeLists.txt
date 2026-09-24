@@ -38,11 +38,21 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_BINARY_DIR}/_deps/zlib-build
 )
 
+# The MCP server is the one file that needs winsock2.h before windows.h, and
+# Geode's precompiled header force-includes Geode.hpp (and so windows.h, and
+# so winsock 1.1) ahead of line 1 of every source file. Opting this one file
+# out of the PCH is the only way its own include order gets to matter.
+set_source_files_properties(
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/mcp_server.cpp
+    PROPERTIES SKIP_PRECOMPILE_HEADERS ON
+)
+
 target_link_libraries(${PROJECT_NAME}
     imgui-cocos
     safetyhook
     zlibstatic
     libGDR
+    ws2_32
 )
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
