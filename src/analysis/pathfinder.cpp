@@ -841,6 +841,55 @@ namespace gucci {
         }
         releaseRing();
 
+        // A human already solved this level, probably. Ported from Absense's
+        // pathfinder/human: if a macro was loaded when the search started, the
+        // presses it makes around this death go in as candidates FIRST, with a
+        // frame either side, because a route a person actually played is a far
+        // better guess than the nearest agency frame.
+        //
+        // It is only an ordering hint. The game's own physics judges these
+        // exactly like any other candidate, so where the human's route still
+        // holds the decision costs one run, and where it does not -- different
+        // tick rate, different approach, or the search has already diverged
+        // from their path -- they simply fail and the normal search continues.
+        size_t humanAdded = 0;
+        if (!savedAtom.m_actions.empty() && !points.empty()) {
+            uint32_t const lo = (uint32_t)std::max<int64_t>(start, 1);
+            auto const& acts = savedAtom.m_actions;
+            for (size_t i = 0; i < acts.size(); i++) {
+                auto const& a = acts[i];
+                if (a.m_player2 || !a.m_holding)
+                    continue;  // player 1 presses only, same as everything else here
+                if (a.m_frame < lo || a.m_frame >= d)
+                    continue;
+
+                // Pair it with its release to get the real hold length.
+                int hold = 0;
+                for (size_t j = i + 1; j < acts.size(); j++) {
+                    if (acts[j].m_player2 || acts[j].m_holding)
+                        continue;
+                    hold = (int)((int64_t)acts[j].m_frame - (int64_t)a.m_frame);
+                    break;
+                }
+                if (hold <= 0)
+                    continue;
+
+                for (int off : {0, -1, 1}) {
+                    int64_t const f = (int64_t)a.m_frame + off;
+                    if (f < (int64_t)lo || f >= (int64_t)d)
+                        continue;
+                    n.cands.push_back({(uint32_t)f, hold});
+                    humanAdded++;
+                }
+            }
+            if (humanAdded > 0)
+                log::info(
+                    "[Pathfinder] decision point @f={} : {} candidate(s) taken from the loaded "
+                    "macro's own presses, tried before the generated ones",
+                    d,
+                    humanAdded);
+        }
+
         // points is already ordered nearest-the-death first, which is the
         // common case and the order v1 searched in.
         for (uint32_t f : points)

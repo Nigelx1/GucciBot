@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-24-c (Pathfinder prefers tolerant presses over frame-perfect ones. Absense asks this by re-running a candidate a tick late, which costs a whole extra simulation per candidate -- runs are the one thing this search is short of. The dead-end cache from -a already holds the answer whenever the neighbour has been tried, so the question is answered for free and only when it can be answered honestly. Held back through the same slot the cramped check uses, so if nothing more tolerant exists the frame-perfect one is still replayed and committed.)"
+    "2026-09-24-d (Pathfinder uses a loaded macro as a hint. Ported from Absense's pathfinder/human: if a macro was loaded when the search started, the presses it makes around each death go in as candidates first, with a frame either side, because a route a person actually played beats the nearest agency frame as a guess. Only an ordering hint -- real physics judges them like anything else, so where the human route holds a decision costs one run, and where it does not they fail and the normal search continues.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
