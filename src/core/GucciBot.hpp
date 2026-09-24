@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-24-d (Pathfinder uses a loaded macro as a hint. Ported from Absense's pathfinder/human: if a macro was loaded when the search started, the presses it makes around each death go in as candidates first, with a frame either side, because a route a person actually played beats the nearest agency frame as a guess. Only an ordering hint -- real physics judges them like anything else, so where the human route holds a decision costs one run, and where it does not they fail and the normal search continues.)"
+    "2026-09-24-e (Pathfinder widens its look at spots that keep biting, from Absense's hazard-frequency memory -- a repair starts at the right distance at once instead of creeping outward one exhausted decision point at a time. Also records a verified finding: the World, Absense's 11.8k-line trigger and moving-object simulator, has no counterpart here because it solves a problem this architecture does not have. Our trajectory forks real PlayerObjects into the real object layer and Pathfinder evaluates candidates with real runs, so triggers are exact for free. Theirs has to model what the real game would do; ours asks it.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

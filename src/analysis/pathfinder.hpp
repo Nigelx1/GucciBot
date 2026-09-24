@@ -207,7 +207,15 @@ namespace gucci {
         bool memoryDirty = false;
         int memoryLevelID = 0;
 
-        uint64_t memoryKey(uint32_t deathFrame) const;
+        // How often each spot has bitten. Absense keeps this so "a repair
+        // starts at the right distance at once" instead of creeping outward
+        // one failed decision point at a time. Bucketed by death frame so a
+        // couple of frames of drift between attempts still counts as the same
+        // spot.
+        std::unordered_map<uint32_t, int> hazardCount;
+        static constexpr uint32_t kHazardBucket = 8;
+
+                uint64_t memoryKey(uint32_t deathFrame) const;
         void loadSolutionMemory();
         void saveSolutionMemory();
         void rememberWin(uint32_t deathFrame, uint32_t pressFrame, int holdFrames);

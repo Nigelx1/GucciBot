@@ -77,6 +77,7 @@ namespace gucci {
         deadEnds.clear();
         skippedDeadEnds = 0;
         this->loadSolutionMemory();
+        hazardCount.clear();
 
         auto* gb = GucciEngine::get();
         auto* pl = PlayLayer::get();
@@ -775,9 +776,27 @@ namespace gucci {
         // of what a fixed window contains whenever a death is delayed. Falling
         // off a ledge is the clear case: the whole descent has no agency, and
         // the frame that decided it sits before all of it.
+        // A spot that has bitten repeatedly gets a wider look straight away.
+        // Creeping outward one exhausted decision point at a time is how the
+        // search spends its runs proving the same small window empty over and
+        // over -- and with the floor-reopen in step 4 it can arrive here
+        // several times.
+        int const bites = ++hazardCount[d / kHazardBucket];
+        int effectiveWindow = windowFrames;
+        if (bites > 1) {
+            effectiveWindow = std::min(windowFrames * std::min(bites, 4), kMaxAgencyLookback);
+            log::info(
+                "[Pathfinder] decision point @f={} has bitten {} times -- widening the look from "
+                "{} to {} agency frames",
+                d,
+                bites,
+                windowFrames,
+                effectiveWindow);
+        }
+
         std::vector<uint32_t> points;
         for (int64_t f = (int64_t)d - 1;
-             f >= floor && (int)points.size() < windowFrames;
+             f >= floor && (int)points.size() < effectiveWindow;
              --f) {
             if ((size_t)f < agencyMap.size() && agencyMap[(size_t)f])
                 points.push_back((uint32_t)f);
@@ -803,7 +822,7 @@ namespace gucci {
             // the lookback genuinely held no agency at all. Fall back to the
             // old fixed window rather than dead-end on a missing reading.
             for (int64_t f = (int64_t)d - 1;
-                 f >= std::max<int64_t>(floor, (int64_t)d - windowFrames);
+                 f >= std::max<int64_t>(floor, (int64_t)d - effectiveWindow);
                  --f)
                 points.push_back((uint32_t)f);
         }
