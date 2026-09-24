@@ -121,6 +121,11 @@ namespace gucci {
             StoredFrame ckpt;
             bool fullResetInstead = false;
             uint32_t deathFrame = 0;
+            // The physical situation the player died in, as captureDeathStateKey()
+            // spells it. Kept on the node rather than read live, because a
+            // node is repaired long after its own death -- by then the player
+            // is dead somewhere else entirely.
+            uint64_t stateKey = 0;
             std::vector<Candidate> cands;
             size_t next = 0;
             // committed.size() at creation -- backtracking INTO this node
@@ -193,13 +198,30 @@ namespace gucci {
         // physics like any other. Memory only changes the ORDER things are
         // tried in -- it can never let a wrong answer through.
         //
-        // Keyed by (death frame, committed-prefix hash), which is exact rather
-        // than fuzzy: with the run deterministic, a repeat search reaches the
-        // same decision point with the same prefix, so an exact key hits. If
-        // anything upstream differs the key simply misses and the search
-        // proceeds normally.
+        // Keyed on the SITUATION the player died in -- quantised position,
+        // gamemode, size, speed, gravity -- rather than on the input history
+        // that arrived there.
+        //
+        // The first version keyed on (death frame, committed-prefix hash),
+        // which is exact and therefore almost never hits: the prefix hash
+        // changes the moment any earlier repair differs by a single frame, so
+        // a second search of the same level would re-derive answers it already
+        // had. A hazard, though, is a fixed thing at a fixed place. If the
+        // player is dying at the same x and y in the same form at the same
+        // speed, whatever got past it last time is worth trying first, no
+        // matter how they got there.
+        //
+        // For the same reason the answer is stored as an OFFSET back from the
+        // death rather than an absolute frame. "Press eleven frames before you
+        // die" survives an earlier repair shifting everything; "press at frame
+        // 812" does not.
+        //
+        // Both halves are safe because a remembered candidate is still RUN and
+        // still judged by real physics. Memory only changes the ORDER things
+        // are tried in; a stale or colliding entry costs one run and is then
+        // treated like any other failure.
         struct RememberedWin {
-            uint32_t pressFrame = 0;
+            uint32_t pressOffset = 1;  // frames before the death
             int holdFrames = 1;
         };
         std::unordered_map<uint64_t, RememberedWin> solutionMemory;
@@ -215,10 +237,14 @@ namespace gucci {
         std::unordered_map<uint32_t, int> hazardCount;
         static constexpr uint32_t kHazardBucket = 8;
 
-                uint64_t memoryKey(uint32_t deathFrame) const;
+        // The live player's situation, hashed. Captured at noteDeath(), when
+        // the player is still standing in the state that killed them.
+        uint64_t captureDeathStateKey() const;
+        uint64_t deathStateKey = 0;
         void loadSolutionMemory();
         void saveSolutionMemory();
-        void rememberWin(uint32_t deathFrame, uint32_t pressFrame, int holdFrames);
+        void rememberWin(uint64_t stateKey, uint32_t deathFrame, uint32_t pressFrame,
+                         int holdFrames);
         static constexpr size_t kMaxDeadEnds = size_t(1) << 16;
 
         uint64_t committedHash() const;

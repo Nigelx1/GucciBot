@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-24-f (In-game MCP server, ported in concept from Absense. Off by default, loopback only, and it adds thirteen tools that let an assistant read the frame, the macro, the analyzer's windows, the pathfinder's progress and GucciBot's own logs -- and step the game -- while a bug is still happening, instead of Nigel reproducing it and pasting a log afterwards. Every tool runs on the game's main thread, and the ones that would drive the game refuse while a render or an analyzer owns the run. Build note: this is the one file opted out of Geode's precompiled header, because winsock2.h has to come before windows.h and the PCH force-includes Geode.hpp ahead of line 1 of every source file.)"
+    "2026-09-24-g (Pathfinder remembers hazards by the SITUATION rather than by the input history that reached them. The first version keyed a remembered solution on the death frame plus a hash of every committed input before it, which is exact and therefore almost never hit -- the hash changes the moment any earlier repair differs by one frame, so a second search re-derived answers it already had. A hazard is a fixed thing at a fixed place, so the key is now the quantised position, form, size, speed and gravity at the death, and the answer is stored as an offset back from it: \"press eleven frames before you die\" survives an earlier repair shifting everything, \"press at frame 812\" does not. Still safe for the same reason as before -- a remembered candidate is run and judged by real physics like any other, so memory only changes the order things are tried in.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

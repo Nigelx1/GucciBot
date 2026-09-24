@@ -191,6 +191,51 @@ namespace gucci {
         died = true;
         deathFrame = frame;
         deathX = x;
+        deathStateKey = this->captureDeathStateKey();
+    }
+
+    // What the player was, where, and how fast, at the moment it went wrong --
+    // quantised, so two attempts that die at the same hazard hash the same
+    // even though neither the approach nor the exact pixel matches.
+    //
+    // Position is bucketed at 4 units. A GD block is 30, so this is well
+    // inside "the same spot" while still separating two hazards a block apart.
+    uint64_t Pathfinder::captureDeathStateKey() const {
+        auto* pl = PlayLayer::get();
+        if (!pl || !pl->m_player1)
+            return 0;
+        auto* p = pl->m_player1;
+
+        uint64_t h = 1469598103934665603ull;
+        auto mix = [&h](uint64_t v) {
+            for (int i = 0; i < 8; i++) {
+                h ^= (v >> (i * 8)) & 0xFF;
+                h *= 1099511628211ull;
+            }
+        };
+
+        constexpr float kPosBucket = 4.f;
+        mix((uint64_t)(int64_t)std::floor(p->getPositionX() / kPosBucket));
+        mix((uint64_t)(int64_t)std::floor(p->getPositionY() / kPosBucket));
+
+        // Form. Cube is the absence of all of these, which hashes fine as 0.
+        uint64_t form = 0;
+        if (p->m_isShip) form |= 1u << 0;
+        if (p->m_isBird) form |= 1u << 1;
+        if (p->m_isBall) form |= 1u << 2;
+        if (p->m_isDart) form |= 1u << 3;
+        if (p->m_isRobot) form |= 1u << 4;
+        if (p->m_isSpider) form |= 1u << 5;
+        if (p->m_isSwing) form |= 1u << 6;
+        if (p->m_isUpsideDown) form |= 1u << 7;
+        if (p->m_vehicleSize < 1.f) form |= 1u << 8;
+        if (p->m_isSideways) form |= 1u << 9;
+        mix(form);
+
+        // Speed is one of a handful of fixed values; rounding keeps float
+        // noise from splitting a bucket.
+        mix((uint64_t)(int64_t)std::lround(p->m_playerSpeed * 100.0));
+        return h;
     }
 
     void Pathfinder::noteLevelComplete() {
@@ -548,10 +593,10 @@ namespace gucci {
             gb::Action release = press;
             release.m_frame = cur.pressFrame + (uint32_t)std::max(1, cur.holdFrames);
             release.m_holding = false;
-            // Worked. Remember it against the prefix that produced it, BEFORE
-            // the commit changes that prefix -- the key has to describe the
-            // state the decision was made in, not the state after it.
-            this->rememberWin(top.deathFrame, cur.pressFrame, cur.holdFrames);
+            // Worked. Remember it against the situation this node was opened
+            // to repair -- top.deathFrame and top.stateKey, not the death that
+            // just happened, which is the NEXT problem further along.
+            this->rememberWin(top.stateKey, top.deathFrame, cur.pressFrame, cur.holdFrames);
 
             committed.push_back(press);
             committed.push_back(release);
@@ -679,13 +724,6 @@ namespace gucci {
         return h;
     }
 
-    uint64_t Pathfinder::memoryKey(uint32_t deathFrame) const {
-        uint64_t h = this->committedHash();
-        h ^= (uint64_t)deathFrame * 1099511628211ull;
-        h *= 1099511628211ull;
-        return h;
-    }
-
     // One saved blob per level, under the mod's own save data. Levels are
     // keyed by GD's level ID, so a search on a different level never reads
     // another's answers.
@@ -702,8 +740,12 @@ namespace gucci {
         if (memoryLevelID == 0)
             return;  // local/unsaved level: nothing stable to key on
 
+        // v2: keys are situation hashes and values are offsets back from the
+        // death. Neither is readable as the old (frame, prefix-hash) data, so
+        // it gets its own slot rather than a migration -- the old entries were
+        // only ever a search-order hint and are cheap to lose.
         auto const raw = Mod::get()->getSavedValue<std::string>(
-            fmt::format("pf_memory_{}", memoryLevelID), "");
+            fmt::format("pf_memory_v2_{}", memoryLevelID), "");
         if (raw.empty())
             return;
 
@@ -717,9 +759,9 @@ namespace gucci {
             if (!value.isObject())
                 continue;
             RememberedWin w;
-            w.pressFrame = (uint32_t)value["p"].asInt().unwrapOr(0);
+            w.pressOffset = (uint32_t)value["o"].asInt().unwrapOr(0);
             w.holdFrames = (int)value["h"].asInt().unwrapOr(1);
-            if (w.pressFrame == 0)
+            if (w.pressOffset == 0)
                 continue;
             solutionMemory[std::strtoull(key.c_str(), nullptr, 10)] = w;
         }
@@ -735,32 +777,39 @@ namespace gucci {
         auto obj = matjson::Value::object();
         for (auto const& [key, w] : solutionMemory) {
             auto entry = matjson::Value::object();
-            entry["p"] = (int)w.pressFrame;
+            entry["o"] = (int)w.pressOffset;
             entry["h"] = w.holdFrames;
             obj[std::to_string(key)] = entry;
         }
-        Mod::get()->setSavedValue(fmt::format("pf_memory_{}", memoryLevelID), obj.dump());
+        Mod::get()->setSavedValue(fmt::format("pf_memory_v2_{}", memoryLevelID), obj.dump());
         memoryDirty = false;
         log::info("[Pathfinder] saved {} solution(s) for level {}",
                   solutionMemory.size(),
                   memoryLevelID);
     }
 
-    void Pathfinder::rememberWin(uint32_t deathFrame, uint32_t pressFrame, int holdFrames) {
-        if (memoryLevelID == 0)
+    void Pathfinder::rememberWin(uint64_t stateKey, uint32_t deathFrame, uint32_t pressFrame,
+                                 int holdFrames) {
+        if (memoryLevelID == 0 || stateKey == 0)
             return;
-        auto const k = this->memoryKey(deathFrame);
-        auto const it = solutionMemory.find(k);
-        if (it != solutionMemory.end() && it->second.pressFrame == pressFrame &&
+        if (pressFrame >= deathFrame)
+            return;  // nothing to describe as "before the death"
+        uint32_t const offset = deathFrame - pressFrame;
+        if (offset > (uint32_t)kMaxAgencyLookback)
+            return;  // further back than a search would ever look again
+
+        auto const it = solutionMemory.find(stateKey);
+        if (it != solutionMemory.end() && it->second.pressOffset == offset &&
             it->second.holdFrames == holdFrames)
             return;  // already known, nothing to write
-        solutionMemory[k] = RememberedWin{pressFrame, holdFrames};
+        solutionMemory[stateKey] = RememberedWin{offset, holdFrames};
         memoryDirty = true;
     }
 
     void Pathfinder::buildNodeFromDeath(uint32_t d) {
         Node n;
         n.deathFrame = d;
+        n.stateKey = deathStateKey;
         n.committedBefore = committed.size();
 
         // Candidates must start strictly after the last committed input so
@@ -831,11 +880,23 @@ namespace gucci {
         // first. It is still run and still judged by the real game -- this
         // only changes the order, so a stale memory costs one run and is then
         // treated like any other failure.
-        if (!points.empty()) {
-            auto const it = solutionMemory.find(this->memoryKey(d));
-            if (it != solutionMemory.end()) {
-                n.rememberedFirst = true;
-                n.remembered = Candidate{it->second.pressFrame, it->second.holdFrames};
+        if (!points.empty() && n.stateKey != 0) {
+            auto const it = solutionMemory.find(n.stateKey);
+            if (it != solutionMemory.end() && (uint64_t)it->second.pressOffset < (uint64_t)d) {
+                uint32_t const pf = d - it->second.pressOffset;
+                // The offset came from a run whose committed prefix may have
+                // been different, so the frame it lands on has to be checked
+                // against THIS node's floor. Out of range means the memory is
+                // simply not applicable here, not that anything is wrong.
+                if ((int64_t)pf >= floor) {
+                    n.rememberedFirst = true;
+                    n.remembered = Candidate{pf, it->second.holdFrames};
+                    log::info("[Pathfinder] seen this spot before -- trying press@{} hold {} "
+                              "first (remembered as {} frames before the death)",
+                              pf,
+                              it->second.holdFrames,
+                              it->second.pressOffset);
+                }
             }
         }
 
