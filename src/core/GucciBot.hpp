@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-24-h (The frame editor's rules now live in a core with tests, an idea taken from Absense. Testing it turned up a real bug: nothing stopped a hold being dragged straight through its neighbour on the same lane, and since the editor writes inputs back out verbatim in frame order, the result was press-press-release-release -- playback ends the hold on the FIRST release, so the editor drew two holds and the macro played one short one, with nothing to see until a run desynced. Drags are now clamped against their neighbours. 26 cases run at startup and show up in the Diagnostics panel, and the same cases run outside the game with .\run_tests.bat in about a second.)"
+    "2026-09-24-i (Version 2.alpha.2. Everything since 2.alpha.1: six Pathfinder improvements worked out from Absent's Absense source -- never retry a proven dead end, remember what got past a hard spot, prefer a press you could actually hit, try the human's own presses first, widen the look where the search keeps getting bitten, and key that memory on the situation you died in rather than the exact run that led there. Plus the in-game assistant server, and the frame editor's rules moved into a tested core, which immediately caught a real bug where dragging a hold through its neighbour produced a macro that played shorter than the editor drew it. Absent credited in about.md, the README and the in-game credits tab.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

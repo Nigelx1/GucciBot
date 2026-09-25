@@ -8585,6 +8585,11 @@ namespace gucci {
              "Implemented NaN's formula in C++ as Frame Window Counter "
              "(github.com/hyper-5/frame-window-counter, MIT) -- the code that reached GucciBot"},
             {"P", "peony", "Silicate dev -- dropped the source like Gucci drops albums. Brrr."},
+            {"A",
+             "Absent",
+             "Absense -- another bot built on Silicate. Several of Pathfinder's 2.alpha.2 "
+             "improvements and the assistant server are his ideas, worked out again here "
+             "from his source."},
             {"T",
              "ToastexGD",
              "Built ToastyReplay -- the project GucciBot actually started as, and the reason there "

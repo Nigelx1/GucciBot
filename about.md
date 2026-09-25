@@ -1,4 +1,4 @@
-# GucciBot 2.alpha.1
+# GucciBot 2.alpha.2
 
 > Frame perfect. Ice cold. Brrr.
 
@@ -54,6 +54,11 @@ Makes a macro for you. Open a level with nothing recorded, start Pathfinder, and
 - **Searches where it matters** — it checks, frame by frame, whether pressing would change anything at all. When a death comes long after the mistake behind it (walking off a ledge and dying at the bottom), it looks back past the stretch where no input could have helped instead of burning attempts inside it.
 - **Tries the earlier press again first** — when a fix only buys a few frames, it tries different versions of the press before it rather than settling.
 - **Real backtracking** — every option it tries at a decision point is ruled out there for good; dead ends restore a real checkpoint further back.
+- **Never retries a proven dead end** — a press that has already been shown not to work is skipped outright the next time the search comes back through.
+- **Remembers hard spots** — what got past a hazard is saved per level, keyed on the situation you died in rather than on the exact run that led there, and tried first the next time you search that level.
+- **Prefers a press you could actually hit** — given two options, it takes the one that also works a frame late over the one that only works frame-perfect.
+- **Tries your own presses first** — if there is a recorded macro on the level, its inputs are candidates before anything generated.
+- **Widens where it keeps getting bitten** — a spot that has failed several times gets a longer look straight away instead of creeping outward one frame at a time.
 - **Proves its own answer** — a solution only counts once it plays from the very start of the level on its own.
 - **Agency Map** — an optional overlay showing, as you play, which frames an input could actually change.
 - Strongest on Cube-style sections so far. Modes where letting go is its own decision -- Ship, Wave, Robot, Swing -- are the next part of the work.
@@ -139,6 +144,8 @@ Real click-timing feedback and a synced video-review overlay, both built around 
 
 ## Extras
 
+- **Frame Editor** — a timeline view of a macro's inputs. Every press is a bar you can drag, stretch or shorten, with undo and redo, an overview strip for long macros, and separate lanes for player 2.
+- **Assistant Access** — an optional local server (Settings) that lets an AI assistant read what the bot is doing: the frame, the loaded macro, Calculate's windows, Pathfinder's progress and GucciBot's own logs, and step the game while something is going wrong. Off by default, your machine only, and it never reaches the network.
 - **Compact Mode** — a small corner panel (record/play, save/name/Calculate, macro picker, TPS/speed, frame stepping) instead of the full tabbed window, so the bot stays usable while you're actually playing.
 - **BIG BRRRR** — a joke toggle in Settings. You'll know it when you see it.
 
@@ -153,6 +160,7 @@ Real click-timing feedback and a synced video-review overlay, both built around 
 - **NaN GD** — the L* precision formula, published at [nandl.pages.dev](https://nandl.pages.dev/#formula). The number GucciBot puts on a macro is his maths
 - **C0nscious** — implemented NaN's formula in C++ as [Frame Window Counter](https://github.com/hyper-5/frame-window-counter) (MIT), which is the code that reached GucciBot
 - **peony** — Silicate (dropped the source like Gucci drops albums. Brrr.)
+- **Absent** — Absense, another bot built on Silicate. Several of Pathfinder's 2.alpha.2 improvements and the assistant server are his ideas, worked out again here from his source
 - **ToastexGD** — built ToastyReplay, the project GucciBot actually started as and the reason there is a GucciBot at all. His renderer and FFmpeg pipeline carried this mod for most of its life; rendering now runs on Silicate's
 - **GWDdoS** — Astral, and the codebase cleanup that got this repo public-ready
 - **Bogdaner09** — Click Indicators inspiration ([github.com/Bogdaner09/mod](https://github.com/Bogdaner09/mod)) — vibecoded by his own admission, so credit's probably owed to whichever model wrote that too
