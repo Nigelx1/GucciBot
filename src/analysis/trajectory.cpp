@@ -756,8 +756,31 @@ void TrajectoryPredictionService::traceInputPath(PlayLayer* playLayer,
         previewPlayer->updatePlayerScale();
 
         m_context.frameTouchingPads.clear();
-        playLayer->checkCollisions(previewPlayer, m_context.stepDelta, false);
+        // checkCollisions returns 1 when that collision killed the player, and
+        // the fork's death has to be read from HERE.
+        //
+        // GD's destroyPlayer is not reached for a fork on this path (the third
+        // argument is false), so the only other place a fork death was noticed
+        // was the destroyPlayer hook -- and that branch only runs while
+        // Pathfinder is active. During ordinary play, which is exactly when the
+        // survival indicator and the path preview are on screen, nothing ever
+        // told the trace the fork had hit something: it ran the full horizon
+        // regardless and survivedFrames stayed at frameCount, so the indicator
+        // reported SAFE straight through a spike.
+        //
+        // Silicate reads the return value (trajectory/trajectory.cpp:204,
+        // `if (pl->checkCollisions(player, delta, false) == 1) hasDied(...)`);
+        // the port dropped it.
+        int const collisionResult =
+            playLayer->checkCollisions(previewPlayer, m_context.stepDelta, false);
         m_context.touchingPads = m_context.frameTouchingPads;
+
+        // Guarded so a death already reported through the destroyPlayer hook
+        // (the Pathfinder probe path) is not counted a second time. No killer
+        // object here -- the return value does not carry one -- so the killer
+        // id stays whatever that path recorded.
+        if (collisionResult == 1 && !m_context.traceCancelled)
+            this->noteSimulatedDeath(previewPlayer);
 
         if (m_context.traceCancelled) {
             survivedFrames = frameIndex;
