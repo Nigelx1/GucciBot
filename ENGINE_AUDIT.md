@@ -10,13 +10,16 @@ replace it with Silicate's. This is the answer.
 worth. Three of them are settings in the menu that are wired to nothing. One is
 a memory leak. None of them explains the Congregation slope bug.
 
+**Progress:** §1.1 is fixed (build `-j`). The rest are open. Findings are struck
+through as they land, so this doc stays the live punch list.
+
 ---
 
 ## 0. What this means if you don't read C++
 
 | # | What's wrong | What you'd notice |
 |---|---|---|
-| 1 | Eleven engine settings are saved in **two different places at once** — including TPS and Speed | A setting changes by itself, usually the first time you open the menu |
+| 1 | ~~Nineteen engine settings saved in **two different places at once**~~ **FIXED `-j`** | Settings were stuck at defaults until you opened the menu once, then changed |
 | 2 | "Back Step Count" does nothing, and backwards stepping never frees memory | GD slowly eats RAM while backwards stepping is on, forever |
 | 3 | "High TPS Precision" only does half its job | Precision is better than off, but not as good as it should be |
 | 4 | Teleport triggers aren't actually seeded | A level with teleport triggers can replay differently |
@@ -37,7 +40,7 @@ Good news in the same audit:
 
 ## 1. Confirmed problems
 
-### 1.1 Eleven engine settings have two sources of truth · **worst one**
+### 1.1 ~~Eleven~~ **Nineteen** engine settings had two sources of truth · **FIXED, build `-j`**
 
 `GucciEngine::initialize()` (`core/engine_core.cpp:2166`, runs at **startup**)
 loads from `updater_*` / `replay_*` keys. `MenuInterface::loadSettings()`
@@ -45,12 +48,28 @@ loads from `updater_*` / `replay_*` keys. `MenuInterface::loadSettings()`
 from `feat_*` / `eng_*` keys. Whichever runs last wins — and the GUI's runs
 later, possibly after a level has already started.
 
+**Corrected during the fix:** the audit's first pass found eleven, because the
+detector only matched assignments with a `.` in them. A second pass that also
+caught bare field names found **nineteen**. The extra eight:
+
+| field | startup key | menu key | note |
+|---|---|---|---|
+| `layoutMode` | `hack_layoutMode` | `hack_layout_mode` | |
+| `noMirrorEffect` | `hack_noMirror` | `hack_no_mirror` | |
+| `audioPitchEnabled` | `hack_audioPitch` (default **false**) | `hack_audio_pitch` (default **true**) | defaults disagreed |
+| `autosaveAtLevelEnd` | `autosave_atLevelEnd` (default **false**) | `feat_autosave_end` (default **true**) | defaults disagreed |
+| `autosaveAtInterval` | `autosave_atInterval` | `feat_autosave_interval` | |
+| `autosaveIntervalSec` | `autosave_interval` (default **60**) | `feat_autosave_interval_sec` (default **180**) | defaults disagreed |
+| `replayBackupsEnabled` | `replay_backups` | `feat_replay_backups` | |
+| `m_speedhackAudio` | `updater_speedhackAudio` | *(not loaded at all)* | |
+
+The original eleven:
+
 | field | startup key | menu key |
 |---|---|---|
 | `m_tps` | `updater_tps` | `eng_tick_rate` |
 | `m_speedhack` | `updater_speedhack` | `eng_speed` |
 | `m_lockDelta` | `updater_lockDelta` | `feat_lock_delta` |
-| `m_lockDeltaMode` | `updater_lockDeltaMode` | `feat_lock_delta_mode` |
 | `m_ssbFix` | `updater_ssbFix` (default **true**) | `feat_scroll_speed_fix` (default **false**) |
 | `m_preventDeath` | `updater_preventDeath` | `feat_prevent_death` |
 | `m_backwardsStepping` | `updater_backwardsStepping` | `feat_backwards_step` |
@@ -61,6 +80,10 @@ later, possibly after a level has already started.
 
 Plus `hud_showFrame` / `hud_show_frame` and `hud_showTPS` / `hud_show_tps`.
 
+(`m_lockDeltaMode` looked like a twelfth from the save file, which holds both
+`updater_lockDeltaMode` and `feat_lock_delta_mode`. It isn't: nothing in the
+current code reads or writes the `feat_` spelling, so it is a dead leftover.)
+
 **This is live, not theoretical.** Nigel's `saved.json` right now contains *both*
 families: `updater_lockDelta: true` alongside `feat_lock_delta: true`,
 `updater_lockDeltaMode: 0` alongside `feat_lock_delta_mode: 0`,
@@ -68,15 +91,36 @@ families: `updater_lockDelta: true` alongside `feat_lock_delta: true`,
 luck. `updater_ssbFix` is absent, so that one falls back to a default of `true`
 while the menu key says `true` — agreeing by luck too.
 
-The two defaults for `m_ssbFix` genuinely disagree (`true` vs `false`), so which
-one you get depends on load order.
+**And it was worse than "whichever wins".** Checking the write side: all thirteen
+`updater_*` / `replay_*` / camelCase keys that `initialize()` read are
+**written by nothing at all.** They are read-only ghosts; the values in Nigel's
+save are leftovers from a build that used to write them.
+
+So the real behaviour was: **every one of these settings held a stale or default
+value from the moment GD launched until the menu was opened for the first time,
+and then silently changed.** Launch, go straight into a level, play a macro
+without touching the menu, and TPS was 240 regardless of what you had saved.
 
 `m_tps` is the tick rate. It should not have two homes.
 
-**Fix:** one loader, one key per field. Pick the `feat_*`/`eng_*` names since
-those are what the GUI writes and what the live save is full of, delete the
-duplicate loads from `initialize()`, and migrate any `updater_*` value that has
-no `feat_*` counterpart.
+**Fixed in build `-j`:** one loader, `GucciEngine::loadEngineSettings()`, called
+from `initialize()` at startup. Canonical key = the one that is actually written,
+with a fallback to the legacy key when the canonical is absent, so nobody loses a
+setting. The nineteen duplicate loads are gone from
+`MenuInterface::loadSettings()`, and the three autosave toggles that wrote
+`autosave_*` on click now write `feat_autosave_*` like the bulk save does.
+
+Verified against Nigel's live `saved.json` by simulating the new loader against
+it: **all 23 fields come out identical** to what the menu loader gave him before.
+The change moves *when* settings load, not what they are.
+
+**Deliberately not changed:** three defaults genuinely disagreed between the two
+loaders (`m_ssbFix` true/false, `autosaveAtLevelEnd` false/true,
+`autosaveIntervalSec` 60/180, `audioPitchEnabled` false/true). The menu loader's
+value is the one that won in practice, so the menu loader's default is what the
+single loader now uses. Whether those are the *right* defaults is a separate
+question — note that Silicate and our own `BotSettingsPreset` both default
+`ssbFix` to **true** while the menu defaulted it to **false**.
 
 ### 1.2 "Back Step Count" is dead, and backwards stepping leaks
 
@@ -224,8 +268,7 @@ purpose rather than by accident.
 
 ## 5. Recommended order
 
-1. §1.1 settings double-load — biggest, and it makes every other settings bug
-   easier to reason about
+1. ~~§1.1 settings double-load~~ — **done, build `-j`**
 2. §1.2 backstep cap — small, fixes a leak, makes a dead slider work
 3. §1.3 + §1.4 the two missing midhooks — each makes an advertised feature real
 4. §1.7 one-line SSB condition

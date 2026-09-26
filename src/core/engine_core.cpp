@@ -2163,6 +2163,71 @@ namespace gucci {
     // geode::Task. Use an arc-native coroutine, the event-based
     // WebResponseEvent API, or a plain sync request off the main thread.
 
+    // See the comment on the declaration in GucciBot.hpp for why this exists.
+    //
+    // `pick` prefers the canonical key and falls back to the legacy one only
+    // when the canonical is absent, which is what makes this a migration rather
+    // than a reset. Defaults match what MenuInterface::loadSettings() used,
+    // because that loader is the one whose value actually won in the end --
+    // keeping them means this change moves WHEN settings load, not what they
+    // are. (Two defaults genuinely disagreed between the loaders: ssbFix
+    // true/false and autosave-at-level-end false/true. The GUI's won before, so
+    // the GUI's is kept here. Whether those are the RIGHT defaults is a
+    // separate question and a separate change.)
+    void GucciEngine::loadEngineSettings() {
+        auto* mod = Mod::get();
+        auto pick = [mod](auto def, const char* key, const char* legacy) {
+            using T = decltype(def);
+            if (!mod->hasSavedValue(key) && legacy && mod->hasSavedValue(legacy))
+                return mod->getSavedValue<T>(legacy, def);
+            return mod->getSavedValue<T>(key, def);
+        };
+
+        // Timing. Written as float by the GUI, so read as float -- asking for a
+        // double back out of a float slot returns the default instead.
+        updater.m_tps = pick(240.f, "eng_tick_rate", "updater_tps");
+        updater.m_speedhack = pick(1.f, "eng_speed", "updater_speedhack");
+        updater.m_lockDelta = pick(true, "feat_lock_delta", "updater_lockDelta");
+        updater.m_lockDeltaMode = static_cast<GucciUpdater::LockDeltaMode>(
+            pick((int)GucciUpdater::LockDeltaMode::Accuracy, "updater_lockDeltaMode", nullptr));
+        updater.m_highTpsPrecision = pick(false, "updater_highTpsPrecision", nullptr);
+        updater.m_speedhackAudio = pick(true, "feat_speedhack_audio", "updater_speedhackAudio");
+
+        // Playback features.
+        updater.m_ssbFix = pick(false, "feat_scroll_speed_fix", "updater_ssbFix");
+        updater.m_backwardsStepping = pick(false, "feat_backwards_step", "updater_backwardsStepping");
+        updater.m_maxBackstepFrames = (uint32_t)pick(120, "feat_back_step_count", nullptr);
+        updater.m_extrapolateFrames =
+            pick(false, "feat_frame_extrapolation", "updater_extrapolateFrames");
+        updater.m_preventDeath = pick(false, "feat_prevent_death", "updater_preventDeath");
+        updater.m_autoFlipOnDeath = pick(false, "feat_auto_flip", "updater_autoFlipOnDeath");
+        replay.m_mirrorInputs = pick(false, "feat_mirror_inputs", "replay_mirrorInputs");
+        replay.m_mirrorInverted = pick(false, "feat_mirror_inverted", nullptr);
+        replay.m_maintainGravity = pick(false, "feat_maintain_gravity", "replay_maintainGravity");
+
+        // Hacks.
+        noclipEnabled = pick(false, "hack_noclip", nullptr);
+        noclipThreshold = pick(0.f, "hack_noclipThreshold", nullptr);
+        showHitboxes = pick(false, "hack_hitboxes", nullptr);
+        pathPreview = pick(false, "hack_trajectory", nullptr);
+        pathLength = pick(312, "hack_trajectory_len", nullptr);
+        layoutMode = pick(false, "hack_layout_mode", "hack_layoutMode");
+        noMirrorEffect = pick(false, "hack_no_mirror", "hack_noMirror");
+        audioPitchEnabled = pick(true, "hack_audio_pitch", "hack_audioPitch");
+        practiceRangeEnabled = pick(false, "practice_range", nullptr);
+
+        // Saving.
+        autosaveAtLevelEnd = pick(true, "feat_autosave_end", "autosave_atLevelEnd");
+        autosaveAtInterval = pick(false, "feat_autosave_interval", "autosave_atInterval");
+        autosaveIntervalSec = pick(180.0, "feat_autosave_interval_sec", "autosave_interval");
+        replayBackupsEnabled = pick(true, "feat_replay_backups", "replay_backups");
+
+        // HUD.
+        hud.enabled = pick(false, "hud_enabled", nullptr);
+        hud.showFrame = pick(true, "hud_show_frame", "hud_showFrame");
+        hud.showTPS = pick(false, "hud_show_tps", "hud_showTPS");
+    }
+
     void GucciEngine::initialize() {
         fs::create_directories(getReplayDir());
         fs::create_directories(getPresetsDir());
@@ -2237,38 +2302,7 @@ namespace gucci {
         }
 
         auto* mod = Mod::get();
-        updater.m_tps = mod->getSavedValue<double>("updater_tps", 240.0);
-        updater.m_speedhack = mod->getSavedValue<double>("updater_speedhack", 1.0);
-        updater.m_lockDelta = mod->getSavedValue<bool>("updater_lockDelta", true);
-        updater.m_highTpsPrecision =
-            mod->getSavedValue<bool>("updater_highTpsPrecision", false);
-        updater.m_lockDeltaMode = static_cast<GucciUpdater::LockDeltaMode>(
-            mod->getSavedValue<int>("updater_lockDeltaMode",
-                                    (int)GucciUpdater::LockDeltaMode::Accuracy));
-        updater.m_ssbFix = mod->getSavedValue<bool>("updater_ssbFix", true);
-        updater.m_backwardsStepping = mod->getSavedValue<bool>("updater_backwardsStepping", false);
-        updater.m_extrapolateFrames = mod->getSavedValue<bool>("updater_extrapolateFrames", false);
-        updater.m_preventDeath = mod->getSavedValue<bool>("updater_preventDeath", false);
-        updater.m_autoFlipOnDeath = mod->getSavedValue<bool>("updater_autoFlipOnDeath", false);
-        updater.m_speedhackAudio = mod->getSavedValue<bool>("updater_speedhackAudio", true);
-        noclipEnabled = mod->getSavedValue<bool>("hack_noclip", false);
-        noclipThreshold = mod->getSavedValue<float>("hack_noclipThreshold", 0.f);
-        showHitboxes = mod->getSavedValue<bool>("hack_hitboxes", false);
-        pathPreview = mod->getSavedValue<bool>("hack_trajectory", false);
-        pathLength = mod->getSavedValue<int>("hack_trajectory_len", 312);
-        layoutMode = mod->getSavedValue<bool>("hack_layoutMode", false);
-        noMirrorEffect = mod->getSavedValue<bool>("hack_noMirror", false);
-        audioPitchEnabled = mod->getSavedValue<bool>("hack_audioPitch", false);
-        practiceRangeEnabled = mod->getSavedValue<bool>("practice_range", false);
-        autosaveAtLevelEnd = mod->getSavedValue<bool>("autosave_atLevelEnd", false);
-        autosaveAtInterval = mod->getSavedValue<bool>("autosave_atInterval", false);
-        autosaveIntervalSec = mod->getSavedValue<double>("autosave_interval", 60.0);
-        replayBackupsEnabled = mod->getSavedValue<bool>("replay_backups", true);
-        replay.m_mirrorInputs = mod->getSavedValue<bool>("replay_mirrorInputs", false);
-        replay.m_maintainGravity = mod->getSavedValue<bool>("replay_maintainGravity", false);
-        hud.enabled = mod->getSavedValue<bool>("hud_enabled", false);
-        hud.showFrame = mod->getSavedValue<bool>("hud_showFrame", true);
-        hud.showTPS = mod->getSavedValue<bool>("hud_showTPS", false);
+        this->loadEngineSettings();
 
         std::error_code ec;
         for (auto& entry : fs::directory_iterator(getPresetsDir(), ec)) {

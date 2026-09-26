@@ -4130,16 +4130,16 @@ namespace gucci {
         Widgets::SectionHeader("Autosave", theme);
         if (Widgets::ToggleSwitch(
                 "Save on Level Complete", &engine->autosaveAtLevelEnd, theme, anim))
-            Mod::get()->setSavedValue("autosave_atLevelEnd", engine->autosaveAtLevelEnd);
+            Mod::get()->setSavedValue("feat_autosave_end", engine->autosaveAtLevelEnd);
         if (Widgets::ToggleSwitch("Save at Interval", &engine->autosaveAtInterval, theme, anim)) {
-            Mod::get()->setSavedValue("autosave_atInterval", engine->autosaveAtInterval);
+            Mod::get()->setSavedValue("feat_autosave_interval", engine->autosaveAtInterval);
             engine->applyIntervalAutosave();
         }
         if (engine->autosaveAtInterval) {
             float intervalF = static_cast<float>(engine->autosaveIntervalSec);
             if (Widgets::StyledSliderFloat("Interval (sec)", &intervalF, 10.f, 600.f, theme)) {
                 engine->autosaveIntervalSec = static_cast<double>(intervalF);
-                Mod::get()->setSavedValue("autosave_interval", engine->autosaveIntervalSec);
+                Mod::get()->setSavedValue("feat_autosave_interval_sec", engine->autosaveIntervalSec);
                 engine->applyIntervalAutosave();
             }
             ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
@@ -8961,6 +8961,12 @@ namespace gucci {
     }
 
     void MenuInterface::loadSettings() {
+        // Engine settings are NOT loaded here any more. They are loaded once
+        // at startup by GucciEngine::loadEngineSettings(), which is the single
+        // owner of every key below the engine line. This function had been
+        // reading nineteen of the same fields from DIFFERENT keys than
+        // initialize() did, so they changed the moment the menu first opened.
+        // Add new engine settings there, and only GUI-local state here.
         auto* mod = Mod::get();
         auto* eng = GucciEngine::get();
         ImVec4 accDef(0.788f, 0.659f, 0.298f, 1.f), bgDef(0.051f, 0.051f, 0.051f, 0.96f);
@@ -9020,12 +9026,9 @@ namespace gucci {
             if (!mcp::Server::get()->start(eng->mcpPort))
                 eng->mcpEnabled = false;
         }
-        eng->showHitboxes = mod->getSavedValue<bool>("hack_hitboxes", false);
         eng->hitboxOnDeath = mod->getSavedValue<bool>("hack_hitbox_death", false);
         eng->hitboxTrail = mod->getSavedValue<bool>("hack_hitbox_trail", false);
         eng->hitboxTrailLength = mod->getSavedValue<int>("hack_hitbox_trail_len", 240);
-        eng->pathPreview = mod->getSavedValue<bool>("hack_trajectory", false);
-        eng->pathLength = mod->getSavedValue<int>("hack_trajectory_len", 312);
         eng->survivalIndicator = mod->getSavedValue<bool>("hack_survival_indicator", false);
         eng->indicatorLookahead = mod->getSavedValue<int>("hack_survival_indicator_lookahead", 20);
         eng->indicatorStyle = mod->getSavedValue<int>("hack_indicator_style", 0);
@@ -9074,18 +9077,13 @@ namespace gucci {
             if (!savedTrainerMacro.empty())
                 eng->loadTrainerMacro(savedTrainerMacro);
         }
-        eng->noclipEnabled = mod->getSavedValue<bool>("hack_noclip", false);
         eng->noclipDeathFlash = mod->getSavedValue<bool>("hack_noclip_flash", true);
         eng->noclipDeathColorR = mod->getSavedValue<float>("hack_noclip_color_r", 1.f);
         eng->noclipDeathColorG = mod->getSavedValue<float>("hack_noclip_color_g", 0.f);
         eng->noclipDeathColorB = mod->getSavedValue<float>("hack_noclip_color_b", 0.f);
-        eng->noclipThreshold = mod->getSavedValue<float>("hack_noclipThreshold", 0.f);
         eng->rngLocked = mod->getSavedValue<bool>("hack_rng_lock", false);
         eng->rngSeedVal = mod->getSavedValue<int>("hack_rng_seed", 1);
         eng->protectedMode = mod->getSavedValue<bool>("hack_safe_mode", false);
-        eng->audioPitchEnabled = mod->getSavedValue<bool>("hack_audio_pitch", true);
-        eng->noMirrorEffect = mod->getSavedValue<bool>("hack_no_mirror", false);
-        eng->layoutMode = mod->getSavedValue<bool>("hack_layout_mode", false);
         eng->noMirrorRecordingOnly = mod->getSavedValue<bool>("hack_no_mirror_rec_only", false);
 
         eng->hackAutoRetry = mod->getSavedValue<bool>("hack_auto_retry", false);
@@ -9118,8 +9116,6 @@ namespace gucci {
         ac->p2.clicksPerHold = mod->getSavedValue<int>("ac_p2_clicks", 1);
         ac->onlyWhileHolding = mod->getSavedValue<bool>("ac_only_holding", false);
 
-        eng->updater.m_tps = mod->getSavedValue<float>("eng_tick_rate", 240.f);
-        eng->updater.m_speedhack = mod->getSavedValue<float>("eng_speed", 1.f);
         tempTickRate = (float)eng->updater.m_tps;
         tempGameSpeed = (float)eng->updater.m_speedhack;
         compactTempTickRate = tempTickRate;
@@ -9148,7 +9144,6 @@ namespace gucci {
         keybinds.preventDeath = mod->getSavedValue<int>("key_prevent_death", 0);
         keybinds.mirrorInputs = mod->getSavedValue<int>("key_mirror_inputs", 0);
         keybinds.compactMode = mod->getSavedValue<int>("key_compact_mode", 0);
-        eng->updater.m_backwardsStepping = mod->getSavedValue<bool>("feat_backwards_step", false);
         eng->fwSweepRange = mod->getSavedValue<int>("fw_sweeprange", 12);
         if (eng->fwMaxWindow > 2 * eng->fwSweepRange)
             eng->fwMaxWindow = 2 * eng->fwSweepRange;
@@ -9186,23 +9181,6 @@ namespace gucci {
         eng->fwDelayMarkerCapture = mod->getSavedValue<bool>("fw_delay_marker_capture", false);
         eng->updater.m_logFrameIncrements =
             mod->getSavedValue<bool>("diag_log_frame_increments", false);
-        eng->updater.m_maxBackstepFrames = mod->getSavedValue<int>("feat_back_step_count", 120);
-        eng->updater.m_autoFlipOnDeath = mod->getSavedValue<bool>("feat_auto_flip", false);
-        eng->updater.m_preventDeath = mod->getSavedValue<bool>("feat_prevent_death", false);
-        eng->replay.m_mirrorInputs = mod->getSavedValue<bool>("feat_mirror_inputs", false);
-        eng->replay.m_mirrorInverted = mod->getSavedValue<bool>("feat_mirror_inverted", false);
-        eng->replay.m_maintainGravity = mod->getSavedValue<bool>("feat_maintain_gravity", false);
-        eng->autosaveAtLevelEnd = mod->getSavedValue<bool>("feat_autosave_end", true);
-        eng->autosaveAtInterval = mod->getSavedValue<bool>("feat_autosave_interval", false);
-        eng->autosaveIntervalSec = mod->getSavedValue<double>("feat_autosave_interval_sec", 180.0);
-        eng->replayBackupsEnabled = mod->getSavedValue<bool>("feat_replay_backups", true);
-        eng->updater.m_ssbFix = mod->getSavedValue<bool>("feat_scroll_speed_fix", false);
-        eng->updater.m_lockDelta = mod->getSavedValue<bool>("feat_lock_delta", true);
-        eng->updater.m_extrapolateFrames =
-            mod->getSavedValue<bool>("feat_frame_extrapolation", false);
-        eng->hud.enabled = mod->getSavedValue<bool>("hud_enabled", false);
-        eng->hud.showFrame = mod->getSavedValue<bool>("hud_show_frame", true);
-        eng->hud.showTPS = mod->getSavedValue<bool>("hud_show_tps", false);
         eng->hud.showX = mod->getSavedValue<bool>("hud_show_x", false);
         eng->hud.showY = mod->getSavedValue<bool>("hud_show_y", false);
         eng->hud.showXVel = mod->getSavedValue<bool>("hud_show_xvel", false);

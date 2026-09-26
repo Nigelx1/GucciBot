@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-24-i (Version 2.alpha.2. Everything since 2.alpha.1: six Pathfinder improvements worked out from Absent's Absense source -- never retry a proven dead end, remember what got past a hard spot, prefer a press you could actually hit, try the human's own presses first, widen the look where the search keeps getting bitten, and key that memory on the situation you died in rather than the exact run that led there. Plus the in-game assistant server, and the frame editor's rules moved into a tested core, which immediately caught a real bug where dragging a hold through its neighbour produced a macro that played shorter than the editor drew it. Absent credited in about.md, the README and the in-game credits tab.)"
+    "2026-09-26-j (Engine settings have one home again. GucciBot had TWO settings loaders reading NINETEEN of the same fields from different keys -- initialize() at startup from updater_*/replay_*, the menu's loadSettings() from feat_*/eng_* the first time the menu was opened -- and every key the startup side read is written by nothing at all. So TPS, Speed, Lock Delta, Prevent Death, the autosave settings and a dozen more sat at stale or default values from launch until the menu happened to be opened, then silently changed. Now one loader at startup, canonical key = the one that is actually written, with a fallback to the old key so nothing is lost. Simulated against Nigel's real save first: all 23 fields come out identical, so this moves WHEN settings load, not what they are. Found by the engine audit in ENGINE_AUDIT.md, which said eleven -- the deeper pass during the fix found nineteen.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -1234,6 +1234,22 @@ namespace gucci {
         int mcpPort = 8790;
 
         void initialize();
+        // The ONE place engine settings are read back from disk. Called from
+        // initialize(), at startup, before anything can be played.
+        //
+        // Before 2026-09-26 there were two loaders: this one (reading
+        // `updater_*`/`replay_*`/camelCase keys) and MenuInterface::
+        // loadSettings() (reading `feat_*`/`eng_*`/snake_case keys), which only
+        // ran when the menu was first opened. Nineteen fields -- TPS and Speed
+        // among them -- were loaded from a DIFFERENT key by each. The keys this
+        // side read are written by nothing at all, so every one of those
+        // settings held a stale or default value from launch until the menu
+        // happened to be opened, and then silently changed under you.
+        //
+        // Canonical key = the one that is actually written. Each field falls
+        // back to its old key when the canonical one is absent, so nobody
+        // loses a setting on the way across.
+        void loadEngineSettings();
         void reloadMacroList();
 
         std::filesystem::path getReplayDir() const {
