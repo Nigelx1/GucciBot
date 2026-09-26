@@ -675,6 +675,110 @@ void TrajectoryPredictionService::applyPortalHint(PlayerObject* player, int port
         break;
     }
 }
+namespace {
+    // The objects a move, rotate, scale or follow trigger can act on: anything
+    // in a group, anything following, anything followed. Everything else
+    // stays put, so leaving it out keeps the snapshot small.
+    bool canBeMovedByTrigger(GameObject* object) {
+        return object && (object->m_groupCount > 0 || object->m_followingSprite != nullptr ||
+                          object->m_hasFollower);
+    }
+}
+
+// Ported from Silicate's Trajectory (snapshotMovedObjects / stepMoveActions /
+// restoreMovedObjects). GucciBot's port never took these, so every prediction
+// ran against a frozen level. Two additions over Silicate, because this runs
+// on every drawn frame and must leave the real run exactly as it found it:
+// the variance table is saved and put back too, and so is the whole game
+// state (the trace's callers only save four scalars of it).
+void TrajectoryPredictionService::snapshotMovedObjects(PlayLayer* playLayer) {
+    m_movedObjects.clear();
+    m_movedSnapshotTaken = false;
+    if (!playLayer || !playLayer->m_objects || !playLayer->m_effectManager) {
+        return;
+    }
+
+    playLayer->m_effectManager->saveToState(m_savedEffectState);
+    m_savedVariance = playLayer->m_varianceValues;
+
+    for (unsigned int i = 0; i < playLayer->m_objects->count(); i++) {
+        auto* object = static_cast<GameObject*>(playLayer->m_objects->objectAtIndex(i));
+        if (!canBeMovedByTrigger(object)) {
+            continue;
+        }
+        MovedObjectSnapshot snap;
+        snap.object = object;
+        snap.position = object->getPosition();
+        snap.lastPosition = object->m_lastPosition;
+        snap.positionX = object->m_positionX;
+        snap.positionY = object->m_positionY;
+        snap.positionXOffset = object->m_positionXOffset;
+        snap.positionYOffset = object->m_positionYOffset;
+        snap.rotationX = object->getRotationX();
+        snap.rotationY = object->getRotationY();
+        snap.rotationXOffset = object->m_rotationXOffset;
+        snap.rotationYOffset = object->m_rotationYOffset;
+        snap.scaleX = object->m_scaleX;
+        snap.scaleY = object->m_scaleY;
+        snap.scaleXOffset = object->m_scaleXOffset;
+        snap.scaleYOffset = object->m_scaleYOffset;
+        snap.isDirty = object->m_isDirty;
+        m_movedObjects.push_back(snap);
+    }
+    m_movedSnapshotTaken = true;
+}
+
+void TrajectoryPredictionService::restoreMovedObjects(PlayLayer* playLayer) {
+    if (!m_movedSnapshotTaken || !playLayer) {
+        return;
+    }
+    for (auto const& snap : m_movedObjects) {
+        auto* object = snap.object;
+        if (!object) {
+            continue;
+        }
+        object->m_positionX = snap.positionX;
+        object->m_positionY = snap.positionY;
+        object->m_positionXOffset = snap.positionXOffset;
+        object->m_positionYOffset = snap.positionYOffset;
+        object->m_rotationXOffset = snap.rotationXOffset;
+        object->m_rotationYOffset = snap.rotationYOffset;
+        object->m_scaleX = snap.scaleX;
+        object->m_scaleY = snap.scaleY;
+        object->m_scaleXOffset = snap.scaleXOffset;
+        object->m_scaleYOffset = snap.scaleYOffset;
+
+        object->setPosition(snap.position);
+        object->setRotationX(snap.rotationX);
+        object->setRotationY(snap.rotationY);
+        object->m_lastPosition = snap.lastPosition;
+
+        object->m_isDirty = snap.isDirty;
+        object->setObjectRectDirty(true);
+        object->setOrientedRectDirty(true);
+        playLayer->updateObjectSection(object);
+    }
+    m_movedObjects.clear();
+
+    if (playLayer->m_effectManager) {
+        playLayer->m_effectManager->loadFromState(m_savedEffectState);
+    }
+    playLayer->m_varianceValues = m_savedVariance;
+    m_movedSnapshotTaken = false;
+}
+
+// GD's own move step, the same three calls the game makes. `delta` is in the
+// player-step unit; Silicate hands the move step one sixtieth of it, and so
+// does this -- keeping its ratio rather than guessing at GD's units.
+void TrajectoryPredictionService::stepMoveActions(PlayLayer* playLayer, float delta) {
+    if (!playLayer || !playLayer->m_effectManager) {
+        return;
+    }
+    playLayer->m_effectManager->prepareMoveActions(delta / 60.0f, false);
+    playLayer->processMoveActionsStep(delta / 60.0f, true);
+    playLayer->m_effectManager->postMoveActions();
+}
+
 void TrajectoryPredictionService::traceInputPath(PlayLayer* playLayer,
                                                  PlayerObject* previewPlayer,
                                                  PlayerObject* sourcePlayer,
@@ -735,7 +839,21 @@ void TrajectoryPredictionService::traceInputPath(PlayLayer* playLayer,
 
     auto* drawNode = ensureDrawNode();
     int survivedFrames = frameCount;
+
+    auto* gbe = GucciEngine::get();
+    bool const moving = gbe->pathMovingObjects;
+    int const moveInterval = std::max(1, gbe->pathMoveStepInterval);
+    std::optional<GJGameState> savedGameState;
+    if (moving) {
+        savedGameState = playLayer->m_gameState;
+        snapshotMovedObjects(playLayer);
+    }
+
     for (int frameIndex = 0; frameIndex < frameCount; ++frameIndex) {
+        // Level first, then the player -- the order Silicate steps them in.
+        if (moving && frameIndex % moveInterval == 0) {
+            stepMoveActions(playLayer, m_context.stepDelta * static_cast<float>(moveInterval));
+        }
         CCPoint previousPosition = previewPlayer->getPosition();
 
         if (holdingInput) {
@@ -812,6 +930,14 @@ void TrajectoryPredictionService::traceInputPath(PlayLayer* playLayer,
 
         if (drawNode && GucciEngine::get()->pathPreview && !probing) {
             drawNode->drawSegment(previousPosition, previewPlayer->getPosition(), 0.6f, lineColor);
+        }
+    }
+
+    // Every exit from the loop lands here, so the level always goes back.
+    if (moving) {
+        restoreMovedObjects(playLayer);
+        if (savedGameState) {
+            playLayer->m_gameState = *savedGameState;
         }
     }
 

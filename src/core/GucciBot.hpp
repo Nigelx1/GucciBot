@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-26-p (Fixes Input FPS from -n, which recorded a press twice: GucciBot records from handleButton AND from the input queue, and Input FPS only held the queue, so the direct copy landed on the raw tick and the held copy on the next input tick. Now the queue path owns recording whenever Input FPS is on. Plus anticroom's CBF guards -- orphaned inputs fire on the tick edge instead of never, only a tick actually being split may take an input, a reset clears stale CBF state outside analysis, presses CBF fires mid-step aren't recorded -- and the checkpoint key is ignored while Calculate walks you back.)"
+    "2026-09-26-q (Trajectory sees moving objects. Every prediction used to run against a frozen level -- moving platforms and hazards stayed where they were while the fork ran on. Now, with Moving Objects on, it does what Silicate does: snapshot every object a trigger could move, let GD's own move step advance them while the fork runs, then put everything back. The real engine, not a simulator -- this is the answer to the World question in about 150 lines. Also saves and restores the variance table and whole game state around each trace, since it runs every frame. Off by default; a step-interval slider trades accuracy for speed.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -631,6 +631,13 @@ namespace gucci {
         int hitboxTrailLength = 240;
         bool pathPreview = false;
         int pathLength = 240;
+        // Silicate's "account for moved objects": run GD's own move-trigger
+        // step during a prediction so moving platforms and hazards are where
+        // they will be, not frozen where they are now. Off by default -- it
+        // costs frames. Step Interval runs the move step every N predicted
+        // frames instead of every one, trading accuracy for speed.
+        bool pathMovingObjects = false;
+        int pathMoveStepInterval = 1;
         // Pathfinder v2 step 1: draw, per frame, whether pressing would change
         // anything at all from here. Diagnostic only -- the search does not
         // consult it yet. See the Pathfinder tab.

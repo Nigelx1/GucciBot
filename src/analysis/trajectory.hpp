@@ -208,6 +208,29 @@ namespace gucci {
         void handleTouchedTrigger(PlayerObject* player, EffectGameObject* object);
 
     private:
+        // Moving objects during a prediction -- Silicate's approach, not a
+        // simulator: snapshot every object a trigger could move, let GD's real
+        // move step advance them while the fork runs, then put everything back.
+        struct MovedObjectSnapshot {
+            GameObject* object = nullptr;
+            cocos2d::CCPoint position;
+            cocos2d::CCPoint lastPosition;
+            double positionX = 0.0, positionY = 0.0;
+            float positionXOffset = 0.f, positionYOffset = 0.f;
+            float rotationX = 0.f, rotationY = 0.f;
+            float rotationXOffset = 0.f, rotationYOffset = 0.f;
+            float scaleX = 1.f, scaleY = 1.f;
+            float scaleXOffset = 0.f, scaleYOffset = 0.f;
+            bool isDirty = false;
+        };
+        std::vector<MovedObjectSnapshot> m_movedObjects;
+        EffectManagerState m_savedEffectState;
+        std::array<float, 2000> m_savedVariance{};
+        bool m_movedSnapshotTaken = false;
+        void snapshotMovedObjects(PlayLayer* playLayer);
+        void restoreMovedObjects(PlayLayer* playLayer);
+        void stepMoveActions(PlayLayer* playLayer, float delta);
+
         PredictionContext m_context;
         float m_lastProbeStep = 0.0f;
         int m_lastKillerId = -1;

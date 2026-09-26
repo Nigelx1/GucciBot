@@ -4198,6 +4198,21 @@ namespace gucci {
                                      anim,
                                      &keybinds.trajectory)) {
             Widgets::StyledSliderInt("Trajectory Length", &engine->pathLength, 50, 480, theme);
+            if (Widgets::ToggleSwitch("Moving Objects", &engine->pathMovingObjects, theme, anim))
+                Mod::get()->setSavedValue("hack_trajectory_moving", engine->pathMovingObjects);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Runs move and rotate triggers while predicting, so moving "
+                                  "platforms and hazards are shown where they will be, not where "
+                                  "they are now. Costs frames on busy levels.");
+            if (engine->pathMovingObjects) {
+                if (Widgets::StyledSliderInt("Move Step Interval", &engine->pathMoveStepInterval,
+                                             1, 30, theme))
+                    Mod::get()->setSavedValue("hack_trajectory_move_interval",
+                                              engine->pathMoveStepInterval);
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Step moving objects every N predicted frames instead of "
+                                      "every one. Higher is faster and less exact.");
+            }
             Widgets::ModuleCardEnd();
         }
         if (Widgets::ModuleCardBegin("Show Hitboxes",
@@ -8913,6 +8928,8 @@ namespace gucci {
         mod->setSavedValue("hack_hitbox_trail_len", eng->hitboxTrailLength);
         mod->setSavedValue("hack_trajectory", eng->pathPreview);
         mod->setSavedValue("hack_trajectory_len", eng->pathLength);
+        mod->setSavedValue("hack_trajectory_moving", eng->pathMovingObjects);
+        mod->setSavedValue("hack_trajectory_move_interval", eng->pathMoveStepInterval);
         mod->setSavedValue("hack_survival_indicator", eng->survivalIndicator);
         mod->setSavedValue("hack_survival_indicator_lookahead", eng->indicatorLookahead);
         mod->setSavedValue("hack_indicator_style", eng->indicatorStyle);

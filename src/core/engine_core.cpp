@@ -2212,6 +2212,8 @@ namespace gucci {
         showHitboxes = pick(false, "hack_hitboxes", nullptr);
         pathPreview = pick(false, "hack_trajectory", nullptr);
         pathLength = pick(312, "hack_trajectory_len", nullptr);
+        pathMovingObjects = pick(false, "hack_trajectory_moving", nullptr);
+        pathMoveStepInterval = std::clamp(pick(1, "hack_trajectory_move_interval", nullptr), 1, 30);
         layoutMode = pick(false, "hack_layout_mode", "hack_layoutMode");
         noMirrorEffect = pick(false, "hack_no_mirror", "hack_noMirror");
         audioPitchEnabled = pick(true, "hack_audio_pitch", "hack_audioPitch");
