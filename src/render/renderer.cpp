@@ -750,8 +750,6 @@ namespace gucci {
             ff->swr_free(&track.swrCtx);
         m_audioTracks.clear();
 
-        m_halting = false;
-        m_collected = false;
         if (m_needsCleanup)
             m_texture.releaseSlot();
         if (m_frame) {
@@ -860,9 +858,11 @@ namespace gucci {
         }
     }
 
+    // No slot check here: drawScene has already waited for one (tryBeginFrame)
+    // before letting the game advance to this frame. Checking here instead is
+    // what the async port first did, and it meant a busy encoder DROPPED the
+    // frame after the game had already moved on -- a gap in the video.
     void SLRenderer::capture() {
-        if (!this->tryBeginFrame())
-            return;  // ring is full; the encoder is behind, skip issuing this one
         m_ptsQueue.push_back(m_updateIndex - 1);
         m_texture.issue(m_fadeThreshold);
     }
@@ -875,9 +875,6 @@ namespace gucci {
         m_seenFrames++;
         if (pl->m_isPaused || !started)
             return;
-        if (m_halting || m_collected)
-            return;
-        m_halting = true;
 
         m_time = ++m_updateIndex * this->getDt();
 

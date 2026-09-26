@@ -869,7 +869,19 @@ class $modify(GB7CCDirector, CCDirector) {
         if (pl && sl->isRecording() && !pl->m_isPaused &&
             (pl->m_started || sl->m_settings.m_firstAttemptPause)) {
             float dt = sl->getDt();
-            if (sl->m_halting.load()) {
+            // Backpressure, as Silicate does it: if every slot in the readback
+            // ring is still waiting on the encoder, don't advance the game this
+            // frame -- show the preview and wait. The frame is captured once a
+            // slot frees up, so a slow encode slows the render down instead of
+            // losing frames.
+            //
+            // This replaced m_halting, a flag left over from the synchronous
+            // pipeline: update() set it after every capture and the encode loop
+            // cleared it once the frame was written. The async port (d433c7f,
+            // build 2026-09-22-l) removed that encode loop and with it the only
+            // per-frame clear, so after the first frame the game froze for the
+            // rest of the render. That shipped in the 2.alpha.1 pre-release.
+            if (!sl->tryBeginFrame()) {
                 sl->displayPreview();
                 this->m_pobOpenGLView->swapBuffers();
                 gb->updater.runFrozenTick();

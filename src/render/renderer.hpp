@@ -217,8 +217,6 @@ namespace gucci {
         bool m_shouldStart = false;
         bool m_collectAudio = true;
 
-        std::atomic<bool> m_halting = false;
-        std::atomic<bool> m_collected = false;
 
         bool m_autoVideoName = true;
         std::string m_videoNameTemplate = "%name%_%rand%";
