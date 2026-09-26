@@ -567,6 +567,20 @@ class $modify(GB7PlayLayer, PlayLayer) {
         auto* gb = GucciEngine::get();
         auto& upd = gb->updater;
 
+        // A trajectory fork dying is not the player dying. The trajectory's own
+        // destroyPlayer hook (TrajectoryPreviewPlayLayer) records it and stops
+        // there -- but Geode does not define which of two hooks on the same
+        // function runs first. If this one ran first, a fork clipping a spike
+        // fell through to the noclip branch below, which has no preview guard:
+        // the real player flashed, noclip accuracy dropped, and with a threshold
+        // set noclip could switch itself off. Frame Extrapolation steps a fork
+        // on every drawn frame, which makes that far more likely. Pass it down
+        // the chain untouched instead; the trajectory hook handles it wherever
+        // it sits.
+        if (auto& traj = TrajectoryPredictionService::get();
+            traj.isActiveSimulation() || traj.ownsPreviewPlayer(player))
+            return PlayLayer::destroyPlayer(player, obj);
+
         // A queued checkpoint capture must not outlive the attempt it belongs
         // to. The deferred pass only runs while the player is alive, so a
         // pending capture at death would otherwise sit there and be completed

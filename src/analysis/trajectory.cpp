@@ -756,21 +756,14 @@ void TrajectoryPredictionService::traceInputPath(PlayLayer* playLayer,
         previewPlayer->updatePlayerScale();
 
         m_context.frameTouchingPads.clear();
-        // checkCollisions returns 1 when that collision killed the player, and
-        // the fork's death has to be read from HERE.
-        //
-        // GD's destroyPlayer is not reached for a fork on this path (the third
-        // argument is false), so the only other place a fork death was noticed
-        // was the destroyPlayer hook -- and that branch only runs while
-        // Pathfinder is active. During ordinary play, which is exactly when the
-        // survival indicator and the path preview are on screen, nothing ever
-        // told the trace the fork had hit something: it ran the full horizon
-        // regardless and survivedFrames stayed at frameCount, so the indicator
-        // reported SAFE straight through a spike.
-        //
-        // Silicate reads the return value (trajectory/trajectory.cpp:204,
-        // `if (pl->checkCollisions(player, delta, false) == 1) hasDied(...)`);
-        // the port dropped it.
+        // checkCollisions returns 1 when that collision killed the player.
+        // Silicate reads this directly (trajectory/trajectory.cpp:204). It is a
+        // SECOND signal here, not the only one: TrajectoryPreviewPlayLayer::
+        // destroyPlayer already records every fork death and stops it reaching
+        // the real death handler. (Build -k's note claimed fork deaths went
+        // unnoticed during ordinary play. That was wrong -- that hook was
+        // missed. The check stays; it is guarded so a death is never counted
+        // twice.)
         int const collisionResult =
             playLayer->checkCollisions(previewPlayer, m_context.stepDelta, false);
         m_context.touchingPads = m_context.frameTouchingPads;
@@ -832,6 +825,92 @@ void TrajectoryPredictionService::traceInputPath(PlayLayer* playLayer,
     } else {
         m_context.releaseSurvivedFrames[playerIndex] = survivedFrames;
     }
+}
+
+// Silicate's extrapolation asks its trajectory for exactly one step ahead
+// (simulate with m_maxLength = 0). This is the same thing on our fork.
+//
+// The fork starts from the source's PHYSICS position, m_position, not
+// getPosition(). On an extrapolated frame the drawn position has been moved to
+// an in-between point; predicting from there would compound frame on frame.
+// Silicate made the same switch (its getPosition() line is commented out above
+// the m_position one).
+//
+// Setup mirrors traceInputPath's rather than calling it, because that function
+// also resets the context the path preview, the survival indicator and the
+// agency probe all read from -- this must not disturb any of them.
+bool TrajectoryPredictionService::predictStep(PlayLayer* playLayer,
+                                              PlayerObject* source,
+                                              bool holding,
+                                              cocos2d::CCPoint& outPos,
+                                              float& outRot) {
+    if (!playLayer || !source || m_context.activeSimulation) {
+        return false;
+    }
+    if (!m_context.previewPlayers[0]) {
+        attach(playLayer);
+    }
+    bool const isSecondPlayer = playLayer->m_player2 == source;
+    auto* preview = m_context.previewPlayers[isSecondPlayer ? 1 : 0];
+    if (!preview) {
+        return false;
+    }
+
+    unsigned int const savedProgress = playLayer->m_gameState.m_currentProgress;
+    double const savedLevelTime = playLayer->m_gameState.m_levelTime;
+    double const savedTotalTime = playLayer->m_gameState.m_totalTime;
+    unsigned int const savedCommandIndex = playLayer->m_gameState.m_commandIndex;
+
+    m_context.activeSimulation = true;
+
+    applyPlayerState(preview, capturePlayerState(source));
+    preview->setPosition(source->m_position);
+    preview->m_isSecondPlayer = isSecondPlayer;
+    preview->m_isPlatformer = source->m_isPlatformer;
+    preview->m_playEffects = false;
+
+    preview->m_touchedRings.clear();
+    for (auto const& ringId : source->m_touchedRings) {
+        preview->m_touchedRings.insert(ringId);
+    }
+    if (preview->m_touchingRings) {
+        preview->m_touchingRings->removeAllObjects();
+    }
+    preview->m_potentialSlopeMap.clear();
+    for (auto const& [key, value] : source->m_potentialSlopeMap) {
+        preview->m_potentialSlopeMap.insert({key, value});
+    }
+
+    if (holding) {
+        preview->pushButton(static_cast<PlayerButton>(1));
+    } else {
+        preview->releaseButton(static_cast<PlayerButton>(1));
+    }
+    if (playLayer->m_levelSettings->m_platformerMode) {
+        preview->pushButton(static_cast<PlayerButton>(source->m_isGoingLeft ? 2 : 3));
+    }
+
+    double const tps = GucciEngine::get()->updater.m_tps;
+    float const dt = tps > 1.0 ? static_cast<float>(1.0 / tps) : m_context.stepDelta;
+
+    preview->m_collisionLogTop->removeAllObjects();
+    preview->m_collisionLogBottom->removeAllObjects();
+    preview->m_collisionLogLeft->removeAllObjects();
+    preview->m_collisionLogRight->removeAllObjects();
+    preview->update(dt);
+    preview->updateRotation(dt);
+    preview->updatePlayerScale();
+    playLayer->checkCollisions(preview, dt, false);
+
+    outPos = preview->getPosition();
+    outRot = preview->getRotation();
+
+    playLayer->m_gameState.m_currentProgress = savedProgress;
+    playLayer->m_gameState.m_levelTime = savedLevelTime;
+    playLayer->m_gameState.m_totalTime = savedTotalTime;
+    playLayer->m_gameState.m_commandIndex = savedCommandIndex;
+    m_context.activeSimulation = false;
+    return true;
 }
 
 bool TrajectoryPredictionService::probeAgency(PlayLayer* playLayer,

@@ -181,6 +181,11 @@ namespace gucci {
         void detach();
         void updatePreview(PlayLayer* playLayer);
         bool probeAgency(PlayLayer* playLayer, PlayerObject* source, AgencyResult& out, int frames);
+        // One physics step of a fork, for Frame Extrapolation: where `source`
+        // will be a tick from now if it holds (or doesn't). Draws nothing and
+        // leaves the preview/indicator paths alone. False if no fork can run.
+        bool predictStep(PlayLayer* playLayer, PlayerObject* source, bool holding,
+                         cocos2d::CCPoint& outPos, float& outRot);
         float lastProbeStep() const { return m_lastProbeStep; }
         // What ended the last simulated run, for diagnosing forks that die
         // before they measure anything. -1 means no object (a non-collision

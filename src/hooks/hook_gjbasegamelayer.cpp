@@ -64,6 +64,14 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         PlayerState m_lastP1, m_lastP2;
         GroundState m_lastGround, m_lastGround2;
 
+        // Frame Extrapolation moves the players to an in-between point for
+        // drawing. loadActualState puts them back before real physics runs --
+        // but only if no level reset happened in between. A reset rebuilds the
+        // player from scratch; restoring the pre-reset rotation, game state
+        // and ground on top of it would drag the old attempt into the new one.
+        bool m_undoPending = false;
+        uint32_t m_undoResets = 0;
+
         // Input FPS: presses queued on a tick that is not an input tick wait
         // here for the next one.
         std::vector<PlayerButtonCommand> m_heldInputs;
@@ -83,6 +91,11 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
     }
 
     void loadActualState() {
+        bool const undo = m_fields->m_undoPending &&
+                          m_fields->m_undoResets == GucciEngine::get()->updater.m_resetCount;
+        m_fields->m_undoPending = false;
+        if (!undo)
+            return;
         m_gameState = m_fields->m_lastGameState;
         m_fields->m_lastP1.load(m_player1);
         m_fields->m_lastP2.load(m_player2);
@@ -94,14 +107,64 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         return GucciEngine::get()->updater.estimatedStepCount == 0;
     }
 
+    // Frame Extrapolation, as Silicate does it. On a drawn frame where no
+    // physics step is due, predict each player one step ahead and draw them at
+    // the in-between point, so motion stays smooth when the frame rate is
+    // above the tick rate.
+    //
+    // Before 2026-09-26 this computed that in-between point and threw it away
+    // -- `(void)framePos;` -- so the setting only refreshed the camera. The
+    // position half of the feature was never ported.
+    //
+    // Only the DRAWN position moves (setPosition). The physics position,
+    // m_position, is untouched, and loadActualState restores rotation, game
+    // state and ground before the next real step.
     void extrapolateVisualUpdates(float dt) {
         auto& upd = GucciEngine::get()->updater;
         m_player1->setRotation(m_fields->m_lastP1.m_rotation);
         m_player2->setRotation(m_fields->m_lastP2.m_rotation);
-        float framePos = (float)(upd.m_tpsOverflow / upd.getPhysicsDt());
-        (void)framePos;
+
+        auto* pl = PlayLayer::get();
+        auto& traj = TrajectoryPredictionService::get();
+        cocos2d::CCPoint next1, next2;
+        float rot1 = 0.f, rot2 = 0.f;
+        // Hold or release to match what the real player is doing, so the
+        // prediction follows the same input the next real step will see.
+        bool const have1 =
+            pl && traj.predictStep(pl, m_player1, m_player1->m_jumpBuffered, next1, rot1);
+        bool const have2 =
+            pl && traj.predictStep(pl, m_player2, m_player2->m_jumpBuffered, next2, rot2);
+
+        // How far into the next tick this drawn frame is: 0.5 is halfway.
+        float framePos = std::clamp(
+            static_cast<float>(upd.m_tpsOverflow / upd.getPhysicsDt()), 0.f, 1.f);
+        if (!std::isfinite(framePos))
+            framePos = 0.f;
+
+        m_fields->m_undoPending = true;
+        m_fields->m_undoResets = upd.m_resetCount;
+
+        if (have1) {
+            m_player1->setPosition(next1 * framePos + m_player1->m_position * (1.f - framePos));
+            m_player1->setRotation(rot1 * framePos +
+                                   m_fields->m_lastP1.m_rotation * (1.f - framePos));
+        }
+        if (have2) {
+            m_player2->setPosition(next2 * framePos + m_player2->m_position * (1.f - framePos));
+            m_player2->setRotation(rot2 * framePos +
+                                   m_fields->m_lastP2.m_rotation * (1.f - framePos));
+        }
+
+        // updateCamera only writes game-state variables, so loadActualState
+        // puts it back.
         updateCamera(dt * 60.0f);
         updateVisibility(dt);
+
+        if (m_player1->m_isDart && m_player1->m_waveTrail)
+            m_player1->m_waveTrail->setPosition(m_player1->m_position);
+        if (m_player2->m_isDart && m_player2->m_waveTrail)
+            m_player2->m_waveTrail->setPosition(m_player2->m_position);
+
         CCLayer::update(dt);
     }
 
