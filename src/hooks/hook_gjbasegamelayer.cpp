@@ -27,7 +27,16 @@ static void shakeRandomOverride(SafetyHookContext& ctx) {
 
 static void overrideCheckpointPlacement(SafetyHookContext& ctx) {
     ctx.rip += 5;
-    PlayLayer::get()->queueCheckpoint();
+    auto* pl = PlayLayer::get();
+    if (!pl)
+        return;
+    // anticroom: while Calculate walks you back after a Test, it places your
+    // checkpoints itself at the frames they were at. One from the key in the
+    // middle of that would throw off its count and land somewhere you never
+    // put one.
+    if (::Bot::get()->frameWindow().returning())
+        return;
+    pl->queueCheckpoint();
 }
 
 class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
@@ -372,9 +381,15 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         // holds the input back and fires it between physics sub-steps instead
         // of at the tick boundary -- which is the whole point of a sub-tick
         // window. Returning true means "taken, do not queue it normally".
+        //
+        // anticroom's gate: only a tick that is actually being split may take
+        // the input. GucciBot macros carry no sub-tick offset (see scbf in
+        // shim.hpp), so that is exactly while the analyzer arms ticks. Outside
+        // one, stale engine state can't swallow a normal playback input.
         {
             bool const flipped2 = gb->replay.playerFlipped(action.m_player2);
-            if (cbf::Engine::get()->capture(
+            if (::Bot::get()->frameWindow().armsTicks() &&
+                cbf::Engine::get()->capture(
                     action.m_frame, button, action.m_holding, flipped2))
                 return;
         }
@@ -480,7 +495,19 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
                 }
             }
         }
-        if (!gb->isRecording()) {
+        // GucciBot records a press twice over -- here, and from the queue in
+        // processQueuedButtons -- and normally the second copy is swallowed
+        // because both land on the same frame. Two cases break that, and in
+        // both the queue path has to be the only one:
+        //   - Input FPS holds queued presses until the next input tick. A copy
+        //     recorded here lands on the raw tick instead, so the macro gets
+        //     the press twice on two different frames.
+        //   - A press fired by CBF mid-step is the replay's own input being
+        //     split into the tick, not a new one (anticroom's guard).
+        // Silicate only records from the queue unless its alternate-hook
+        // setting is on, which is why it never had the first problem.
+        if (!gb->isRecording() || gb->updater.inputFpsActive() ||
+            cbf::Engine::get()->m_midStep) {
             return GJBaseGameLayer::handleButton(pressed, button, player1);
         }
         addInputToReplay({.m_button = (PlayerButton)button,
@@ -552,6 +579,12 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
             return GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
 
         gb->practiceFix.updatePlatformerInputs(m_queuedButtons);
+
+        // anticroom: an input the CBF engine took but never got to split --
+        // the tick it was armed for didn't run the split -- would otherwise
+        // never fire at all. Fire it on the tick edge instead.
+        if (auto* eng = cbf::Engine::get(); eng->hasPending())
+            eng->flushOrphaned();
 
         if (gb->replay.m_ignoreInputs && gb->isPlaying())
             m_queuedButtons.clear();

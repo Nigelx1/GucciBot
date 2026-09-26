@@ -3,6 +3,7 @@
 #include "hacks/autoclicker.hpp"
 #include "analysis/trajectory.hpp"
 #include "analysis/pathfinder.hpp"
+#include "analysis/ac/cbf.hpp"
 #include "analysis/ac/framewindow.hpp"
 #include "hacks/hitboxes.hpp"
 #include "trainers/jupiterghost.hpp"
@@ -465,6 +466,11 @@ class $modify(GB7PlayLayer, PlayLayer) {
 
     void resetLevel() {
         GucciEngine::get()->updater.m_resetCount++;
+        // anticroom: a reset starts a new attempt, so any input the CBF engine
+        // was holding for a split belongs to the old one. Not during analysis,
+        // which resets constantly and owns the engine's state itself.
+        if (!::Bot::get()->frameWindow().running())
+            cbf::Engine::get()->reset();
         auto* gb = GucciEngine::get();
         if (!gb->enabled) {
             m_player1->releaseAllButtons();

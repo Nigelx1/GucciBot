@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-26-o (Frame Extrapolation actually extrapolates. It computed the in-between position and threw it away -- (void)framePos -- so the setting only refreshed the camera. Now it predicts each player one step ahead on a fork and draws them at the in-between point, as Silicate does, with anticroom's clamp and his reset guard so a level reset mid-frame can't drag the old attempt into the new one. Also: a fork dying no longer risks counting as a noclip death, and build -k's claim that fork deaths went unnoticed is corrected -- the trajectory's own death hook was already catching them.)"
+    "2026-09-26-p (Fixes Input FPS from -n, which recorded a press twice: GucciBot records from handleButton AND from the input queue, and Input FPS only held the queue, so the direct copy landed on the raw tick and the held copy on the next input tick. Now the queue path owns recording whenever Input FPS is on. Plus anticroom's CBF guards -- orphaned inputs fire on the tick edge instead of never, only a tick actually being split may take an input, a reset clears stale CBF state outside analysis, presses CBF fires mid-step aren't recorded -- and the checkpoint key is ignored while Calculate walks you back.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
