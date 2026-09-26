@@ -80,6 +80,12 @@ namespace gucci::mcp {
         std::string handleRequest(std::string const& body);
         matjson::Value callToolOnMainThread(std::string const& name, matjson::Value const& args);
 
+        // 0 = the listen thread has not reported yet, 1 = bound and listening,
+        // 2 = it failed. start() used to return true the instant the thread was
+        // spawned, before bind() had been attempted, so a port clash left the
+        // toggle switched on, the log claiming success, and nothing listening.
+        std::atomic<int> m_bindState{0};
+
         std::atomic<bool> m_running{false};
         int m_port = 0;
         std::thread m_thread;
@@ -93,6 +99,12 @@ namespace gucci::mcp {
         bool m_callDone = false;
         std::function<void()> m_callFn;
     };
+
+    // Everything the server does, appended to guccibot_mcp.log in the mod's
+    // save dir. Geode's own console log is not persisted on this machine, so a
+    // failed bind or a tool call left no evidence at all -- which is a silly
+    // way for a diagnostic tool to behave.
+    void mcpFileLog(std::string const& line);
 
     // Registers GucciBot's own tools. Defined in mcp_tools.cpp.
     void registerTools(Server& server);

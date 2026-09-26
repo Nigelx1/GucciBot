@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-26-k (The trajectory fork's death is finally noticed. checkCollisions returns 1 when that collision killed the player and the port threw the return value away, so during ordinary play -- exactly when the survival indicator and the path preview are on screen -- nothing ever told the trace the fork had hit anything. It ran the full horizon regardless and survivedFrames stayed at the full count, so the indicator reported SAFE straight through a spike. The only other place a fork death was seen is the destroyPlayer hook, and that branch only runs while Pathfinder is active. Silicate reads the return value; we now do too. Also checked and found fine: portals already apply to the fork (mini/big, all five speeds, gravity) -- but GAMEMODE portals do not, so a fork through a ship portal keeps cubing. Noted, not yet fixed.)"
+    "2026-09-26-l (MCP can now prove whether it started. Two problems, both mine: start() returned true and logged \"listening\" the instant the listen thread was spawned, BEFORE bind() had been attempted -- so a port clash would leave the toggle switched on, the save file saying enabled, and nothing actually listening. It now waits for the thread to report a real bind result and returns that. And because Geode's console log is not persisted on this machine, a failed bind left no evidence anywhere at all, which is a silly way for a diagnostic tool to behave -- it now writes guccibot_mcp.log in the save dir: start, the bind result with the winsock error code and a plain-English note when the port is in use, every request and reply size, every JSON-RPC method, and stop.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

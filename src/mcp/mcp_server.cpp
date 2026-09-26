@@ -12,10 +12,33 @@
 #include <cctype>
 #include <chrono>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 
 using namespace geode::prelude;
 
 namespace gucci::mcp {
+
+    namespace {
+        std::ofstream g_mcpLog;
+    }
+
+    // Appends rather than truncates, with a banner per launch, so a session
+    // that already happened is still readable afterwards. Same shape as
+    // fwFileLog.
+    void mcpFileLog(std::string const& line) {
+        if (!g_mcpLog.is_open()) {
+            auto path = geode::Mod::get()->getSaveDir() / "guccibot_mcp.log";
+            bool const fresh = !std::filesystem::exists(path);
+            g_mcpLog.open(path, std::ios::out | std::ios::app);
+            if (!fresh && g_mcpLog.is_open())
+                g_mcpLog << "\n===== new session =====\n";
+        }
+        if (g_mcpLog.is_open()) {
+            g_mcpLog << line << "\n";
+            g_mcpLog.flush();
+        }
+    }
 
     namespace {
         // Smallest HTTP that serves the purpose: read a request, find the body
@@ -101,15 +124,33 @@ namespace gucci::mcp {
             return true;
 
         WSADATA wsa{};
-        if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
-            log::error("[GucciBot] MCP: WSAStartup failed");
+        if (int const e = WSAStartup(MAKEWORD(2, 2), &wsa); e != 0) {
+            log::error("[GucciBot] MCP: WSAStartup failed ({})", e);
+            mcpFileLog(fmt::format("[mcp] start FAILED: WSAStartup returned {}", e));
             return false;
         }
 
         m_port = port;
+        m_bindState = 0;
         m_running = true;
+        mcpFileLog(fmt::format("[mcp] starting on 127.0.0.1:{} ({} tool(s) registered)", port,
+                               m_tools.size()));
         m_thread = std::thread(&Server::listenLoop, this);
+
+        // Wait for the thread to actually bind before answering. Reporting
+        // success the moment the thread was spawned is what let a port clash
+        // leave the toggle on with nothing listening behind it.
+        for (int i = 0; i < 200 && m_bindState.load() == 0; i++)
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+        if (m_bindState.load() != 1) {
+            mcpFileLog("[mcp] start FAILED: see the bind error above");
+            this->stop();
+            return false;
+        }
+
         log::info("[GucciBot] MCP server listening on 127.0.0.1:{}", port);
+        mcpFileLog(fmt::format("[mcp] listening on 127.0.0.1:{}", port));
         return true;
     }
 
@@ -122,11 +163,14 @@ namespace gucci::mcp {
             m_thread.join();
         WSACleanup();
         log::info("[GucciBot] MCP server stopped");
+        mcpFileLog("[mcp] stopped");
     }
 
     void Server::listenLoop() {
         SOCKET listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
         if (listener == INVALID_SOCKET) {
+            mcpFileLog(fmt::format("[mcp] socket() failed, WSA error {}", WSAGetLastError()));
+            m_bindState = 2;
             m_running = false;
             return;
         }
@@ -143,11 +187,18 @@ namespace gucci::mcp {
 
         if (bind(listener, (sockaddr*)&addr, sizeof(addr)) == SOCKET_ERROR ||
             listen(listener, 4) == SOCKET_ERROR) {
-            log::error("[GucciBot] MCP: could not bind 127.0.0.1:{}", m_port);
+            int const e = WSAGetLastError();
+            log::error("[GucciBot] MCP: could not bind 127.0.0.1:{} (WSA error {})", m_port, e);
+            mcpFileLog(fmt::format(
+                "[mcp] could not bind 127.0.0.1:{} -- WSA error {}{}", m_port, e,
+                e == WSAEADDRINUSE ? " (port already in use -- pick another in Settings)" : ""));
             closesocket(listener);
+            m_bindState = 2;
             m_running = false;
             return;
         }
+
+        m_bindState = 1;
 
         while (m_running.load()) {
             fd_set set;
@@ -162,7 +213,10 @@ namespace gucci::mcp {
                 continue;
 
             auto const body = readRequest(client);
-            sendResponse(client, body.empty() ? std::string{} : this->handleRequest(body));
+            mcpFileLog(fmt::format("[mcp] <- {} byte request", body.size()));
+            auto const reply = body.empty() ? std::string{} : this->handleRequest(body);
+            mcpFileLog(fmt::format("[mcp] -> {} byte reply", reply.size()));
+            sendResponse(client, reply);
             closesocket(client);
         }
 
@@ -243,6 +297,7 @@ namespace gucci::mcp {
         auto req = parsed.unwrap();
         auto id = req.contains("id") ? req["id"] : matjson::Value();
         auto const method = req.contains("method") ? req["method"].asString().unwrapOr("") : "";
+        mcpFileLog("[mcp]    method=" + method);
 
         if (method == "initialize") {
             auto caps = matjson::Value::object();
