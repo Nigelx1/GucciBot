@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -47,6 +48,9 @@ struct FrameWindowMark {
     int splitShift = 0;
     bool splitChecked = false;
     cocos2d::CCPoint position{};
+    float dependent = 0.f;
+    float dependentMin = 0.f;
+    float dependentMax = 0.f;
 };
 
 struct FrameWindowMessage {
@@ -71,6 +75,7 @@ class FrameWindowAnalyzer {
     static constexpr int64_t MAX_CBF_SLOTS = 134217728;
     static constexpr int64_t MAX_CBF_HZ = 32000000000LL;
     static constexpr long MAX_SETUP_COMBOS = 20000;
+    static constexpr int64_t MAX_RESOLVABLE_SLOTS = 524288;
 
     enum class Algorithm : int {
         TimeBased = 0,
@@ -83,6 +88,20 @@ class FrameWindowAnalyzer {
     };
 
     Report start(PlayLayer* pl);
+    Report startRange(PlayLayer* pl, uint32_t from, uint32_t to);
+
+    struct PlayheadInput {
+        bool valid = false;
+        uint32_t frame = 0;
+        bool player2 = false;
+        bool release = false;
+        int number = 0;
+        int mark = -1;
+    };
+
+    PlayheadInput playheadInput() const;
+    void applyLabel(int window, float cbf);
+    Report testPlayhead(PlayLayer* pl, int count);
     void tick(PlayLayer* pl);
     void cancel();
     void render(PlayLayer* pl);
@@ -93,6 +112,13 @@ class FrameWindowAnalyzer {
     // macro's ground truth. Exposed so the slope log can tag those frames
     // CALC and be diffed against a PLAY run frame for frame.
     bool capturing() const;
+
+    bool armsTicks() const { return m_running && !m_subtickMacro; }
+
+    bool returning() const { return m_trip.active; }
+    uint32_t returnFrame() const { return m_trip.frame; }
+    float returnProgress() const;
+    void stopReturn();
 
     bool isRestoring() const { return m_restoring; }
     bool onSuppressedDeath(cocos2d::CCNode* player, cocos2d::CCNode* killer);
@@ -156,7 +182,8 @@ class FrameWindowAnalyzer {
 
     std::vector<FrameWindowMark> const& results() const { return m_results; }
     double resultsTps() const { return m_resultsTps > 0.0 ? m_resultsTps : 240.0; }
-    std::vector<lstar::Input> precisionInputs() const;
+    std::vector<lstar::Input> precisionInputs(bool cbf = true) const;
+    std::string describe() const;
     std::vector<FrameWindowMark>& editResults() { return m_results; }
     std::vector<FrameWindowMessage>& messages() { return m_messages; }
     void markEdited() {
@@ -214,6 +241,26 @@ class FrameWindowAnalyzer {
         "framewindow.step_batch", &SLSettings::get()->frameWindow.stepBatch);
     SLValuePtr<bool> m_showTiming = SLValue<bool>::create(
         "framewindow.show_timing", &SLSettings::get()->frameWindow.showTiming);
+    // GucciBot: anticroom's precision readout and our L* HUD are the same
+    // feature. His toggle drives ours, so there is one switch and one readout.
+    SLValuePtr<bool> m_showPrecision = SLValue<bool>::create(
+        "framewindow.show_precision",
+        &SLSettings::get()->frameWindow.lstarHud);
+    SLValuePtr<int> m_labelWindow = SLValue<int>::create(
+        "framewindow.label_window",
+        &SLSettings::get()->frameWindow.labelWindow);
+    SLValuePtr<float> m_labelCbf = SLValue<float>::create(
+        "framewindow.label_cbf", &SLSettings::get()->frameWindow.labelCbf);
+    SLValuePtr<int> m_labelTestCount = SLValue<int>::create(
+        "framewindow.label_test_count",
+        &SLSettings::get()->frameWindow.labelTestCount);
+    SLValuePtr<bool> m_labelReleases = SLValue<bool>::create(
+        "framewindow.label_releases",
+        &SLSettings::get()->frameWindow.labelReleases);
+    SLValuePtr<bool> m_labelApply = SLValue<bool>::create(
+        "framewindow.label_apply", &SLSettings::get()->frameWindow.labelApply);
+    SLValuePtr<bool> m_labelTest = SLValue<bool>::create(
+        "framewindow.label_test", &SLSettings::get()->frameWindow.labelTest);
     SLValuePtr<int64_t> m_cbfInputHz = SLValue<int64_t>::create(
         "framewindow.cbf_input_hz",
         &SLSettings::get()->frameWindow.cbfInputHz);
@@ -229,6 +276,9 @@ class FrameWindowAnalyzer {
     SLValuePtr<bool> m_entrySweep = SLValue<bool>::create(
         "framewindow.entry_sweep",
         &SLSettings::get()->frameWindow.entrySweep);
+    SLValuePtr<bool> m_dependentSearch = SLValue<bool>::create(
+        "framewindow.dependent_search",
+        &SLSettings::get()->frameWindow.dependentSearch);
     SLValuePtr<bool> m_showSetupRange = SLValue<bool>::create(
         "framewindow.show_setup_range",
         &SLSettings::get()->frameWindow.showSetupRange);
@@ -300,6 +350,11 @@ class FrameWindowAnalyzer {
         &SLSettings::get()->frameWindow.hideSpawnEffects);
     SLValuePtr<int> m_budgetMs = SLValue<int>::create(
         "framewindow.budget_ms", &SLSettings::get()->frameWindow.budgetMs);
+    SLValuePtr<bool> m_turbo = SLValue<bool>::create(
+        "framewindow.turbo", &SLSettings::get()->frameWindow.turbo);
+    SLValuePtr<int> m_turboBudgetMs = SLValue<int>::create(
+        "framewindow.turbo_budget_ms",
+        &SLSettings::get()->frameWindow.turboBudgetMs);
     SLValuePtr<bool> m_adaptiveBudget = SLValue<bool>::create(
         "framewindow.adaptive_budget",
         &SLSettings::get()->frameWindow.adaptiveBudget);
@@ -344,6 +399,7 @@ class FrameWindowAnalyzer {
         Probe,
         Recover,
         Rewind,
+        Dependent,
         Finish,
     };
 
@@ -427,9 +483,9 @@ class FrameWindowAnalyzer {
     std::vector<SetupGroup> m_setupGroups;
     size_t m_setupGroupCursor = 0;
 
-    std::vector<int> m_setupFollowerRange;  // size count-1
+    std::vector<int> m_setupFollowerRange;
     int m_setupLeaderShift = 0;
-    std::vector<int> m_setupCombo;          // size count-1
+    std::vector<int> m_setupCombo;
     bool m_setupLegActive = false;
     uint32_t m_setupLegTarget = 0;
 
@@ -457,6 +513,11 @@ class FrameWindowAnalyzer {
     std::vector<int> m_setupBestCombo;
     long long m_stepNanos = 0;
     long long m_stepCount = 0;
+    long long m_fineLegs = 0;
+    bool m_warnedResolution = false;
+    long long m_restoreNanos = 0;
+    long long m_restoreCount = 0;
+    long long m_tickNanos = 0;
 
     std::chrono::steady_clock::time_point m_lastTickCall{};
     bool m_haveLastTickCall = false;
@@ -467,6 +528,11 @@ class FrameWindowAnalyzer {
     void spawnMessages(PlayLayer* pl, uint32_t frame);
     std::vector<Sample> m_samples;
     std::vector<uint32_t> m_originalFrames;
+    std::vector<double> m_originalOffsets;
+    bool m_subtickMacro = false;
+
+    int64_t placeSubtick(size_t k, int64_t slots, int64_t ticks);
+    void restoreOffsets();
 
     bool m_running = false;
     std::string m_status;
@@ -575,6 +641,8 @@ class FrameWindowAnalyzer {
     std::string formatSubframe(float frames) const;
     void spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
                      FrameWindowTier const* tier);
+    std::optional<cocos2d::CCPoint> dualTwin(PlayLayer* pl,
+                                             FrameWindowMark const& mk) const;
     void rebuildHud(PlayLayer* pl);
     void updateLStarHud(PlayLayer* pl);
     // Frames of the inputs handed to the L* solver, in the order it sorted
@@ -582,6 +650,100 @@ class FrameWindowAnalyzer {
     // show the RUNNING value at the frame the player has reached.
     std::vector<uint32_t> m_lstarFrames;
     void refreshHudCounts(PlayLayer* pl);
+    void updateHudFlash(PlayLayer* pl, uint32_t frame, double tps);
+    void updatePrecisionReadout(PlayLayer* pl, uint32_t frame);
+
+    uint32_t m_precisionGeneration = UINT32_MAX;
+
+    bool m_partial = false;
+    uint32_t m_probeFrom = 0;
+    uint32_t m_probeTo = UINT32_MAX;
+    std::vector<FrameWindowMark> m_keptResults;
+    std::vector<FrameWindowMessage> m_keptMessages;
+
+    bool inProbeRange(size_t index) const;
+    void mergeKept();
+
+    static constexpr int DEP_POINTS = 7;
+    static constexpr int DEP_SCAN_PER_TICK = 8;
+
+    struct DependentPair {
+        size_t a = 0;
+        size_t b = 0;
+        size_t markB = 0;
+        double aLo = 0.0;
+        double aHi = 0.0;
+    };
+
+    std::vector<DependentPair> m_depPairs;
+    size_t m_depCursor = 0;
+    int64_t m_depRes = 1;
+    bool m_depBaseReady = false;
+    bool m_depAdvancing = false;
+    bool m_depLegActive = false;
+    uint32_t m_depLegTarget = 0;
+    int64_t m_depLegShift = 0;
+    std::vector<double> m_depPoints;
+    size_t m_depPoint = 0;
+    std::vector<int64_t> m_depWidths;
+    std::vector<int64_t> m_depScan;
+    std::vector<char> m_depScanAlive;
+    size_t m_depScanAt = 0;
+    bool m_depEdgesSet = false;
+    bool m_depFound = false;
+    int64_t m_depLow = 0;
+    int64_t m_depLowDead = 0;
+    int64_t m_depAlive = 0;
+    int64_t m_depDead = 0;
+    std::string m_depFinishMessage;
+
+    bool beginDependentPass(std::string message);
+    bool stepDependent(PlayLayer* pl);
+    void startDependentPoint();
+    bool nextDependentShift(int64_t& shift);
+    void launchDependentLeg(int64_t shift);
+    void recordDependentLeg(bool survived);
+    void finishDependentPair();
+    void resetActions();
+    void placeAt(size_t k, double pos);
+    size_t resultFor(size_t sample) const;
+
+    static constexpr int TRIP_BUDGET_MS = 100;
+    static constexpr uint32_t TRIP_STALL_STEPS = 2000;
+    static constexpr double TRIP_NOTE_SECONDS = 3.0;
+
+    struct Trip {
+        bool pending = false;
+        bool active = false;
+        uint32_t frame = 0;
+        std::vector<uint32_t> checkpoints;
+        size_t placed = 0;
+        size_t expected = 0;
+        bool record = false;
+        bool paused = false;
+        bool backstep = false;
+        bool died = false;
+        uint32_t stalled = 0;
+        std::vector<tbuf::Sample> trail[2];
+    };
+
+    Trip m_trip;
+    std::string m_tripTitle;
+    std::string m_tripDetail;
+    bool m_tripOk = true;
+    std::chrono::steady_clock::time_point m_tripNoteAt{};
+
+    void beginTrip();
+    void stepTrip(PlayLayer* pl);
+    void endTrip(PlayLayer* pl, bool arrived, std::string title,
+                 std::string detail);
+    void updateTripLabel(PlayLayer* pl);
+
+    static constexpr double HUD_FLASH_SECONDS = 0.53;
+
+    int m_hudFlashTier = -1;
+    uint32_t m_hudFlashFrame = 0;
+    bool m_hudFlashActive = false;
     void cullOffscreen(PlayLayer* pl);
     void recountUpTo(uint32_t frame);
 

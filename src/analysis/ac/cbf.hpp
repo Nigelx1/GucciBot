@@ -3,7 +3,6 @@
 
 #include <cocos2d.h>
 
-#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -18,11 +17,6 @@ struct Deferred {
     bool player2 = false;
 };
 
-struct Step {
-    double deltaFactor = 1.0;
-    bool endStep = true;
-};
-
 struct Armed {
     uint32_t frame = 0;
     double fraction = 0.0;
@@ -33,20 +27,15 @@ class Engine {
     static Engine* get();
 
     void arm(uint32_t frame, double fraction);
-    void disarm();
-
-    bool armed() const { return !m_armed.empty(); }
+    bool isArmed(uint32_t frame) const { return this->findArmed(frame); }
 
     bool capture(uint32_t frame, int button, bool holding, bool player2);
     bool hasPending() const { return !m_pending.empty(); }
 
     bool beginTick();
-    void endTick();
-
-    Step pop();
-    bool exhausted() const { return m_cursor >= m_queue.size(); }
-
+    double fraction() const { return m_tickFraction; }
     void fire();
+    void endTick();
 
     bool flushOrphaned();
 
@@ -73,8 +62,6 @@ class Engine {
     double m_tickFraction = 0.0;
 
     std::vector<Deferred> m_pending;
-    std::vector<Step> m_queue;
-    size_t m_cursor = 0;
     bool m_fired = false;
 };
 

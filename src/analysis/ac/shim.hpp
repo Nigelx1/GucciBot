@@ -42,6 +42,32 @@ using SavedCheckpoint = gucci::SavedCheckpointState;
 
 class FrameWindowAnalyzer;
 
+// --- sub-tick input offsets (anticroom's SCBF) -------------------------------
+
+// His macros can carry a sub-tick offset per input -- where inside the frame it
+// landed -- bit-cast into slc::Action::m_seed. gb::Action has no such field and
+// no GucciBot macro format stores one, so every input sits on the frame edge:
+// offsetOf is 0, and a macro never counts as sub-tick.
+//
+// That makes the SUB-TICK MACRO path in the analyzer a genuine no-op
+// (m_subtickMacro stays false).
+//
+// Dependent search is the one other caller. At frame resolution anticroom rounds
+// every placement to a whole frame himself, so the no-op here is exact. At
+// sub-frame resolution (Subframe Probe on) or for CBF results it would silently
+// snap fractions to whole frames -- so beginDependentPass refuses the first and
+// skips the second, with a message, instead of reporting wrong windows.
+//
+// Real support needs an offset on gb::Action and the replay path arming CBF from
+// it (his GJBaseGameLayer.cpp: `if (offset > 0.0 && !eng->isArmed(frame))
+// eng->arm(frame, offset);`). That is core playback, so it is its own change.
+namespace scbf {
+    inline double offsetOf(slc::Action const&) { return 0.0; }
+    inline void setOffset(slc::Action&, double) {}
+    inline size_t offsetCount(std::vector<slc::Action> const&) { return 0; }
+    inline bool hasOffsets(std::vector<slc::Action> const&) { return false; }
+}
+
 // --- trail buffer -----------------------------------------------------------
 
 // Silicate draws the player's path with a buffer of per-frame rects. GucciBot
@@ -196,6 +222,25 @@ struct FrameWindowSettings {
         {6, 7, 8, "", "", {0.553f, 0.780f, 0.996f, 1.f}, true},
         {7, 9, 10, "", "", {0.471f, 0.467f, 0.996f, 1.f}, true},
     };
+
+    // --- anticroom's 2026-09-26 source drop ("slc count") -----------------
+    // Dependent search: measures inputs whose window moves depending on where
+    // the input before them landed, instead of treating every click alone.
+    bool dependentSearch = false;
+    // Turbo: spend a much bigger slice of each frame on the analysis. Faster,
+    // at the cost of the game being close to frozen while it runs.
+    bool turbo = false;
+    int turboBudgetMs = 400;
+    // Playhead labelling: hand-label the input under the playhead with a
+    // window, or test it, without running a whole Calculate.
+    int labelWindow = 1;
+    float labelCbf = 0.f;
+    int labelTestCount = 1;
+    bool labelReleases = false;
+    bool labelApply = false;
+    bool labelTest = false;
+    // (His showPrecision toggle is NOT a field here -- framewindow.hpp points
+    // it at lstarHud above, so the in-level L* readout has one switch, not two.)
 };
 
 class SLSettings {
@@ -261,6 +306,29 @@ public:
     // GucciBot.hpp) -- so it is forward declared and handed back by reference.
     FrameWindowAnalyzer& frameWindow();
     bool isPlaying() const { return gucci::GucciEngine::get()->isPlaying(); }
+
+    // anticroom's return trip switches recording off while it walks the player
+    // back, then on again on arrival. Same three modes, same meaning, so this
+    // is forwarding rather than a translation.
+    using Mode = gucci::GucciEngine::Mode;
+    bool isRecording() const { return gucci::GucciEngine::get()->isRecording(); }
+
+    // NOT a plain forward for Recording. Silicate's setMode(Recording) mid-level
+    // resumes the macro where you stand; ours only flips the flag. The trip
+    // switches back to Recording at the frame it walked the player to, and
+    // doing that with a bare flag flip skips two things beginResumeRecording()
+    // does: truncating the macro at this frame (so new inputs cannot interleave
+    // with old ones after it), and releasing any button held at this point (so
+    // a hold that was in progress when you pressed Test does not stick).
+    // beginResumeRecording() refuses an empty macro, in which case there is
+    // nothing to truncate and the plain switch is correct.
+    void setMode(Mode m) {
+        auto* gb = gucci::GucciEngine::get();
+        if (m == Mode::Recording && gb->isPlaying() && PlayLayer::get() &&
+            gb->beginResumeRecording())
+            return;
+        gb->setMode(m);
+    }
 
     TrailBufferStub& trailBuffer() { return m_trail; }
 

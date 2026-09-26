@@ -18,9 +18,19 @@ class $modify(GB7PlayerObject, PlayerObject) {
     //
     // Only player 1 drives this; player 2 is stepped from inside the same
     // loop, and m_p2Handled tells the p2 update to stand down for that tick.
+    // anticroom's CBF split, as of his 2026-09-26 source drop.
+    //
+    // The tick used to be carved into a queue of sub-steps that this function
+    // popped one at a time. It is now split exactly once, at the fraction of
+    // the tick the input actually landed on: advance by `lead`, settle
+    // collisions, fire the input, advance by the `rest`. One split point per
+    // tick is all an input ever needed, and it removes a loop whose exit
+    // condition depended on two separate engine flags.
     bool cbfSplitUpdate(float stepDelta) {
         auto* eng = cbf::Engine::get();
-        auto* pl = PlayLayer::get();
+        // GJBaseGameLayer rather than PlayLayer, so the split also runs in an
+        // editor playtest. checkCollisions lives on GJBaseGameLayer anyway.
+        auto* pl = GJBaseGameLayer::get();
         if (!pl || this != pl->m_player1)
             return false;
         if (eng->m_midStep)
@@ -34,80 +44,57 @@ class $modify(GB7PlayerObject, PlayerObject) {
             return false;
         }
 
-        PlayerObject* p2 = pl->m_player2;
-        bool const isDual = pl->m_gameState.m_isDualMode;
-
-        bool const p1StartedOnGround = this->m_isOnGround;
-        bool const p2StartedOnGround = p2 && p2->m_isOnGround;
-
+        // Player 2 only exists for this purpose in dual mode.
+        PlayerObject* p2 = pl->m_gameState.m_isDualMode ? pl->m_player2 : nullptr;
         bool const tickGround = SLSettings::get()->frameWindow.cbfTickGround;
 
-        bool const p1NotBuffering = cbf::canSplit(this, tickGround);
-        bool const p2NotBuffering = p2 && cbf::canSplit(p2, tickGround);
-
+        eng->m_p1Split = cbf::canSplit(this, tickGround);
+        eng->m_p2Split = cbf::canSplit(p2, tickGround);  // false for a null p2
         eng->m_p1Pos = this->getPosition();
         eng->m_p2Pos = p2 ? p2->getPosition() : cocos2d::CCPoint{};
 
-        eng->m_p1Split = p1NotBuffering;
-        eng->m_p2Split = p2NotBuffering && isDual;
+        bool const p1OnGround = this->m_isOnGround;
+        bool const p2OnGround = p2 && p2->m_isOnGround;
+
+        // Upstream's note, kept: this stays as two multiplies. Deriving `rest`
+        // as stepDelta - lead drifts by a float ulp and desyncs old macros.
+        float const lead = stepDelta * static_cast<float>(eng->fraction());
+        float const rest = stepDelta * static_cast<float>(1.0 - eng->fraction());
 
         eng->m_midStep = true;
         eng->m_shipRotAccum = 0.f;
         eng->m_shipRotAccumP2 = 0.f;
         eng->m_shipRotHeld = true;
 
-        bool firstLoop = true;
-        cbf::Step step;
+        auto const settle = [&](PlayerObject* p, bool wasOnGround) {
+            // GD drops ground contact after the first half of the tick.
+            if (tickGround && ((p->m_yVelocity < 0) ^ p->m_isUpsideDown))
+                p->m_isOnGround = wasOnGround;
 
-        do {
-            step = eng->pop();
-            float const substepDelta = stepDelta * static_cast<float>(step.deltaFactor);
-            eng->m_rotationDelta = substepDelta;
+            // On a slope the collision pass needs the full step, off one it
+            // needs none -- same rule as before, now in one place.
+            bool const slope = p->m_isOnSlope && !p->m_isDart;
+            pl->checkCollisions(p, slope ? stepDelta : 0.f, true);
+            p->updateRotation(lead);
+            cbf::resetCollisionLog(p);
+        };
 
-            if (eng->m_p1Split) {
-                PlayerObject::update(substepDelta);
-                if (!step.endStep) {
-                    if (tickGround && firstLoop &&
-                        ((this->m_yVelocity < 0) ^ this->m_isUpsideDown))
-                        this->m_isOnGround = p1StartedOnGround;
+        eng->m_rotationDelta = lead;
+        if (eng->m_p1Split) {
+            PlayerObject::update(lead);
+            settle(this, p1OnGround);
+        }
+        if (eng->m_p2Split) {
+            p2->update(lead);
+            settle(p2, p2OnGround);
+        }
 
-                    if (!this->m_isOnSlope || this->m_isDart)
-                        pl->checkCollisions(this, 0.0f, true);
-                    else
-                        pl->checkCollisions(this, stepDelta, true);
+        eng->fire();
 
-                    PlayerObject::updateRotation(substepDelta);
-
-                    cbf::resetCollisionLog(this);
-                }
-            } else if (step.endStep) {
-                PlayerObject::update(stepDelta);
-            }
-
-            if (eng->m_p2Split && p2) {
-                p2->update(substepDelta);
-                if (!step.endStep) {
-                    if (tickGround && firstLoop &&
-                        ((p2->m_yVelocity < 0) ^ p2->m_isUpsideDown))
-                        p2->m_isOnGround = p2StartedOnGround;
-
-                    if (!p2->m_isOnSlope || p2->m_isDart)
-                        pl->checkCollisions(p2, 0.0f, true);
-                    else
-                        pl->checkCollisions(p2, stepDelta, true);
-
-                    p2->updateRotation(substepDelta);
-                    cbf::resetCollisionLog(p2);
-                }
-            } else if (step.endStep && p2) {
-                p2->update(stepDelta);
-            }
-
-            firstLoop = false;
-
-            if (!step.endStep)
-                eng->fire();
-        } while (!step.endStep && !eng->exhausted());
+        eng->m_rotationDelta = rest;
+        PlayerObject::update(eng->m_p1Split ? rest : stepDelta);
+        if (p2)
+            p2->update(eng->m_p2Split ? rest : stepDelta);
 
         eng->m_shipRotHeld = false;
         if (eng->m_shipRotAccum != 0.f) {
@@ -119,9 +106,8 @@ class $modify(GB7PlayerObject, PlayerObject) {
             eng->m_shipRotAccumP2 = 0.f;
         }
 
-        eng->m_midStep = false;
         eng->m_p2Handled = p2 != nullptr;
-        eng->endTick();
+        eng->endTick();  // also clears m_midStep
         return true;
     }
 

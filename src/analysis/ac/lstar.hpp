@@ -11,6 +11,8 @@ namespace lstar {
 struct Input {
     uint32_t m_frame = 0;
     double m_frames = 1.0;
+    uint32_t m_input = 0;
+    bool m_ignored = false;
 };
 
 struct Settings {
@@ -29,7 +31,10 @@ struct Result {
     bool m_ok = false;
     double m_value = 0.0;
     std::vector<double> m_perInput;
+    std::vector<uint32_t> m_frames;
 };
+
+double solve(std::vector<Input> inputs, Settings const& settings);
 
 class Solver {
    public:

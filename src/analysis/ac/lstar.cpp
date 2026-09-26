@@ -22,9 +22,9 @@
 #include "lstar.hpp"
 
 #include <Geode/Geode.hpp>
-
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <thread>
 
 namespace lstar {
@@ -62,8 +62,8 @@ constexpr int SECANT_STEPS = 64;
 constexpr int BISECT_STEPS = 200;
 
 struct Prepared {
-    std::vector<double> m_weight;  // window scaled by every active penalty
-    std::vector<double> m_time;    // seconds into the attempt
+    std::vector<double> m_weight;
+    std::vector<double> m_time;
 };
 
 Prepared prepare(std::vector<Input> const& inputs, Settings const& s) {
@@ -72,25 +72,49 @@ Prepared prepare(std::vector<Input> const& inputs, Settings const& s) {
     out.m_time.reserve(inputs.size());
 
     double const tps = s.m_tps > 0.0 ? s.m_tps : 240.0;
-    double prev = 0.0;
+    bool const useCps = s.m_useCps && s.m_cps > 0.0;
+
+    double maxFrames = 0.0;
+    for (auto const& in : inputs) {
+        if (!in.m_ignored)
+            maxFrames =
+                std::max(maxFrames, in.m_frames <= 0.0 ? 1.0 : in.m_frames);
+    }
+
+    double prevTime = 0.0;
+    uint32_t prevInput = 0;
 
     for (size_t i = 0; i < inputs.size(); i++) {
-        double const t = s.m_respawnSeconds + inputs[i].m_frame / tps;
-        double const frames = inputs[i].m_frames <= 0.0 ? 1.0 : inputs[i].m_frames;
+        auto const& in = inputs[i];
+        uint32_t const number = in.m_input > 0 ? in.m_input : i + 1;
+        double const t = s.m_respawnSeconds + in.m_frame / tps;
+
+        double dt = 1.0;
+        if (number != prevInput) {
+            dt = (t - prevTime) / ((double)number - prevInput);
+            if (dt == 0.0 || !std::isfinite(dt)) dt = 1.0;
+        }
+        prevTime = t;
+        prevInput = number;
+
+        if (in.m_ignored && !useCps) {
+            out.m_weight.push_back(std::numeric_limits<double>::infinity());
+            out.m_time.push_back(t);
+            continue;
+        }
+
+        double frames = in.m_ignored ? maxFrames + 1.0 : in.m_frames;
+        if (frames <= 0.0) frames = 1.0;
 
         double w = (frames / tps) * SIGMA_SCALE;
         if (s.m_useNerve) w *= std::exp(-s.m_nerve * t);
-        if (s.m_useFatigue) w *= std::exp(-s.m_fatigue * (i + 1));
-        if (s.m_useCps) {
-            double gap = t - prev;
-            if (gap <= 0.0) gap = 1.0;
-            double const worst = std::max(1.0, 2.0 / gap);
-            w *= std::pow(4.0 / worst, s.m_cps);
-        }
+        if (s.m_useFatigue) w *= std::exp(-s.m_fatigue * number);
+        if (useCps)
+            w *= std::pow(4.0, s.m_cps) /
+                 std::max(1.0, std::pow(2.0 / dt, s.m_cps));
 
         out.m_weight.push_back(w);
         out.m_time.push_back(t);
-        prev = t;
     }
     return out;
 }
@@ -103,7 +127,7 @@ double expectedTime(Prepared const& p, size_t first, size_t last, double L) {
 
     for (size_t j = first; j <= last; j++) {
         double const x = p.m_weight[j] * L;
-        if (x > ERFC_MAX) continue;  // certain 
+        if (x > ERFC_MAX) continue;
 
         double const fail = fastErfc(x);
         double pass = 1.0 - fail;
@@ -182,7 +206,35 @@ double solveAt(Prepared const& p, size_t last, size_t& first, double target,
     return std::isfinite(next) ? std::clamp(next, L_MIN, L_MAX) : L_MIN;
 }
 
+bool order(std::vector<Input>& inputs) {
+    bool const anyWindow =
+        std::any_of(inputs.begin(), inputs.end(),
+                    [](Input const& in) { return !in.m_ignored; });
+    if (!anyWindow) return false;
+
+    std::stable_sort(inputs.begin(), inputs.end(),
+                     [](Input const& a, Input const& b) {
+                         if (a.m_frame != b.m_frame)
+                             return a.m_frame < b.m_frame;
+                         return a.m_input < b.m_input;
+                     });
+    return true;
+}
+
 }  // namespace
+
+double solve(std::vector<Input> inputs, Settings const& settings) {
+    if (!order(inputs)) return 0.0;
+
+    buildErfcTable();
+
+    Prepared const p = prepare(inputs, settings);
+    double const target =
+        settings.m_targetSeconds > 0.0 ? settings.m_targetSeconds : 86400.0;
+
+    size_t first = 0;
+    return solveAt(p, p.m_weight.size() - 1, first, target, L_MIN);
+}
 
 Solver* Solver::get() {
     static Solver instance;
@@ -201,10 +253,7 @@ void Solver::start(std::vector<Input> inputs, Settings settings) {
     m_result = Result{};
     m_dirty = false;
 
-    if (inputs.empty()) return;
-
-    std::sort(inputs.begin(), inputs.end(),
-              [](Input const& a, Input const& b) { return a.m_frame < b.m_frame; });
+    if (!order(inputs)) return;
 
     buildErfcTable();
 
@@ -241,6 +290,8 @@ void Solver::start(std::vector<Input> inputs, Settings settings) {
         pending->m_ok = true;
         pending->m_value = per.empty() ? 0.0 : per.back();
         pending->m_perInput = std::move(per);
+        pending->m_frames.reserve(inputs.size());
+        for (auto const& in : inputs) pending->m_frames.push_back(in.m_frame);
 
         geode::queueInMainThread([this, generation, pending]() {
             if (m_generation.load() != generation) return;

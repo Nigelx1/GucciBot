@@ -4674,6 +4674,11 @@ namespace gucci {
             {"fwac_show_hud", &FrameWindowSettings::showHud},
             {"fwac_play_sounds", &FrameWindowSettings::playSounds},
             {"fwac_circle_skin", &FrameWindowSettings::circleSkin},
+            // anticroom's 2026-09-26 drop. labelApply/labelTest are one-shot
+            // triggers, not settings, so they are deliberately not saved.
+            {"fwac_dependent_search", &FrameWindowSettings::dependentSearch},
+            {"fwac_turbo", &FrameWindowSettings::turbo},
+            {"fwac_label_releases", &FrameWindowSettings::labelReleases},
         };
 
         constexpr AcSetting<int> kAcInts[] = {
@@ -4690,6 +4695,9 @@ namespace gucci {
             {"fwac_max_budget_ms", &FrameWindowSettings::maxBudgetMs},
             {"fwac_step_batch", &FrameWindowSettings::stepBatch},
             {"fwac_subframe_decimals", &FrameWindowSettings::subframeDecimals},
+            {"fwac_turbo_budget_ms", &FrameWindowSettings::turboBudgetMs},
+            {"fwac_label_window", &FrameWindowSettings::labelWindow},
+            {"fwac_label_test_count", &FrameWindowSettings::labelTestCount},
         };
 
         constexpr AcSetting<float> kAcFloats[] = {
@@ -4701,6 +4709,7 @@ namespace gucci {
             {"fwac_circle_max", &FrameWindowSettings::circleSkinMaxRadius},
             {"fwac_hud_scale", &FrameWindowSettings::hudScale},
             {"fwac_lstar_hud_scale", &FrameWindowSettings::lstarHudScale},
+            {"fwac_label_cbf", &FrameWindowSettings::labelCbf},
         };
 
         // His L* inputs are doubles, so they need their own table rather than
@@ -5062,6 +5071,93 @@ namespace gucci {
 
         ImGui::Dummy(ImVec2(0, 8));
 
+        // --- test & label ---------------------------------------------------
+        // anticroom's 2026-09-26 drop. Deliberately above the settings lock:
+        // these act on results rather than configure a run.
+        //
+        // The point of Test is the recording loop: record a hard section, then
+        // measure only the last few inputs instead of re-running the whole
+        // macro. Every other window is kept, and afterwards it plays back to
+        // where you were, puts your checkpoints back and carries on recording.
+        if (ImGui::CollapsingHeader("Test & Label")) {
+            if (running) {
+                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                ImGui::TextWrapped("Analysing. Editing is locked until it finishes or is "
+                                   "cancelled.");
+                ImGui::PopStyleColor();
+            } else if (acfw.returning()) {
+                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                ImGui::TextWrapped("Playing back to frame %u. Editing unlocks once you're "
+                                   "there.",
+                                   acfw.returnFrame());
+                ImGui::PopStyleColor();
+                if (Widgets::StyledButton("Stop##fwReturn", ImVec2(-1, 24), theme, anim, 6.f))
+                    acfw.stopReturn();
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Stops where it is and stays in playback, so the macro "
+                                      "after this point isn't cut.");
+            } else {
+                if (auto const in = acfw.playheadInput(); in.valid) {
+                    std::string mark = "unlabelled";
+                    if (in.mark >= 0 && in.mark < (int)acfw.results().size()) {
+                        auto const& mk = acfw.results()[in.mark];
+                        mark = mk.subframe > 0.f
+                                   ? fmt::format("{} ({:.2f})", mk.window, mk.subframe)
+                                   : fmt::format("{}", mk.window);
+                    }
+                    ImGui::Text("#%d  f%u  %s%s  %s", in.number, in.frame,
+                                in.release ? "release" : "press", in.player2 ? " p2" : "",
+                                mark.c_str());
+                } else {
+                    ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                    ImGui::TextWrapped("Step onto an input to label it.");
+                    ImGui::PopStyleColor();
+                }
+
+                sliderInt("Window##fwLabel", &fw.labelWindow, 0, 99,
+                          "The window to give the input at the playhead. 0 clears it.");
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::InputFloat("CBF##fwLabel", &fw.labelCbf, 0.01f, 0.1f, "%.2f")) {
+                    fw.labelCbf = std::clamp(fw.labelCbf, 0.f, 99.f);
+                    dirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Sub-frame window. Leave at 0 for whole frames only.");
+
+                float const half = (ImGui::GetContentRegionAvail().x - 6.f) * 0.5f;
+                if (Widgets::StyledButton("Apply##fwLabel", ImVec2(half, 24), theme, anim, 6.f))
+                    acfw.applyLabel(fw.labelWindow, fw.labelCbf);
+                ImGui::SameLine(0, 6);
+                if (Widgets::StyledButton("Clear##fwLabel", ImVec2(half, 24), theme, anim, 6.f))
+                    acfw.applyLabel(0, 0.f);
+
+                toggle("Releases", &fw.labelReleases,
+                       "Also count releases as the input at the playhead, for hold gamemodes.");
+
+                ImGui::Dummy(ImVec2(0, 4));
+                sliderInt("Test Back", &fw.labelTestCount, 1, 50,
+                          "How many inputs back from the playhead Test measures.");
+                auto* tpl = PlayLayer::get();
+                if (!tpl)
+                    ImGui::BeginDisabled();
+                char const* testLabel = engine->isRecording() ? "Play & Test" : "Test";
+                if (Widgets::StyledButton(testLabel, ImVec2(-1, 26), theme, anim, 6.f) && tpl) {
+                    auto const r = acfw.testPlayhead(tpl, fw.labelTestCount);
+                    engine->fwAcReport = r.message;
+                    engine->fwAcOk = r.ok;
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Measures only those inputs and keeps every other window. "
+                                      "Afterwards it plays the macro back to where you were, "
+                                      "restores your checkpoints, and carries on recording if "
+                                      "you were.");
+                if (!tpl)
+                    ImGui::EndDisabled();
+            }
+        }
+
+        ImGui::Dummy(ImVec2(0, 8));
+
         if (running)
             ImGui::BeginDisabled();
 
@@ -5338,6 +5434,13 @@ namespace gucci {
                    "Slower, but finds windows split in two.");
             sliderInt("Tight Threshold", &fw.tightThreshold, 0, 20,
                       "Windows at or under this many frames count as tight.");
+            toggle("Dependent Pair Search", &fw.dependentSearch,
+                   "After counting, re-measures each input with the previous one moved across "
+                   "its own window. If the timing carries over (entering a gap late, say), the "
+                   "window becomes the average of those positions and shows as ~N. Independent "
+                   "inputs are left as counted.\n\nGucciBot: runs at whole-frame resolution. "
+                   "With Subframe Probe on it is skipped, because sub-frame placement is not "
+                   "supported yet.");
         }
 
         // --- sub-tick (CBF) -----------------------------------------------
@@ -5677,6 +5780,11 @@ namespace gucci {
             }
             sliderInt("Tick Batch", &fw.stepBatch, 1, 200,
                       "How many physics steps to run per drawn frame while analysing.");
+            toggle("Turbo", &fw.turbo,
+                   "Give the analyser a large part of every frame instead of a share of it. The "
+                   "game drops to a few FPS while counting, but finishes several times faster.");
+            if (fw.turbo)
+                sliderInt("Turbo Budget (ms)", &fw.turboBudgetMs, 1, 2000, nullptr);
         }
 
         // --- diagnostics ----------------------------------------------------

@@ -5,14 +5,10 @@
 #include <Geode/binding/PlayerObject.hpp>
 
 #include <algorithm>
-#include <limits>
 
 using namespace geode::prelude;
 
 namespace cbf {
-
-static constexpr double SMALLEST_FLOAT =
-    static_cast<double>(std::numeric_limits<float>::min());
 
 Engine* Engine::get() {
     static Engine instance;
@@ -20,17 +16,15 @@ Engine* Engine::get() {
 }
 
 void Engine::arm(uint32_t frame, double fraction) {
-    if (fraction <= 0.0) return;
-
-    double const f = std::clamp(fraction, SMALLEST_FLOAT, 1.0 - SMALLEST_FLOAT);
+    if (!(fraction > 0.0 && fraction < 1.0)) return;
 
     for (auto& a : m_armed) {
         if (a.frame == frame) {
-            a.fraction = f;
+            a.fraction = fraction;
             return;
         }
     }
-    m_armed.push_back(Armed{frame, f});
+    m_armed.push_back(Armed{frame, fraction});
 }
 
 double const* Engine::findArmed(uint32_t frame) const {
@@ -39,17 +33,11 @@ double const* Engine::findArmed(uint32_t frame) const {
     return nullptr;
 }
 
-void Engine::disarm() { this->reset(); }
-
 void Engine::reset() {
     m_armed.clear();
     m_tickFrame = 0;
-    m_tickFraction = 0.0;
     m_pending.clear();
-    m_queue.clear();
-    m_cursor = 0;
-    m_fired = false;
-    m_midStep = false;
+    this->endTick();
     m_p1Split = false;
     m_p2Split = false;
     m_p2Handled = false;
@@ -60,9 +48,7 @@ void Engine::reset() {
 }
 
 bool Engine::capture(uint32_t frame, int button, bool holding, bool player2) {
-    if (m_armed.empty()) return false;
     if (button < 1 || button > 3) return false;
-
     if (!m_pending.empty() && frame != m_tickFrame) return false;
 
     double const* f = this->findArmed(frame);
@@ -76,33 +62,16 @@ bool Engine::capture(uint32_t frame, int button, bool holding, bool player2) {
 
 bool Engine::beginTick() {
     if (m_pending.empty()) return false;
-    if (m_tickFraction <= 0.0) return false;
-    if (!m_queue.empty()) return false;  // already inside this tick
-
-    m_queue.push_back(
-        Step{std::clamp(m_tickFraction, SMALLEST_FLOAT, 1.0), false});
-    m_queue.push_back(
-        Step{std::max(SMALLEST_FLOAT, 1.0 - m_tickFraction), true});
-    m_cursor = 0;
     m_fired = false;
     return true;
-}
-
-Step Engine::pop() {
-    if (m_cursor >= m_queue.size()) return Step{1.0, true};
-    return m_queue[m_cursor++];
 }
 
 void Engine::fire() {
     if (m_fired) return;
     m_fired = true;
 
-    for (size_t i = 0; i < m_armed.size(); i++) {
-        if (m_armed[i].frame == m_tickFrame) {
-            m_armed.erase(m_armed.begin() + i);
-            break;
-        }
-    }
+    std::erase_if(m_armed,
+                  [this](Armed const& a) { return a.frame == m_tickFrame; });
 
     auto* gjbgl = GJBaseGameLayer::get();
     if (!gjbgl) return;
@@ -114,22 +83,15 @@ void Engine::fire() {
 void Engine::endTick() {
     m_tickFraction = 0.0;
     m_pending.clear();
-    m_queue.clear();
-    m_cursor = 0;
     m_fired = false;
     m_midStep = false;
 }
 
 bool Engine::flushOrphaned() {
-    if (m_pending.empty() || m_fired) {
-        if (m_fired) this->endTick();
-        return false;
-    }
+    if (m_pending.empty()) return false;
 
-    log::warn(
-        "[cbf] tick {} never reached the split loop -- firing {} deferred "
-        "input(s) at the tick boundary instead",
-        m_tickFrame, m_pending.size());
+    log::warn("[cbf] {} input(s) never got split on tick {}, firing on edge",
+              m_pending.size(), m_tickFrame);
     this->fire();
     this->endTick();
     return true;

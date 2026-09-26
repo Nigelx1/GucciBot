@@ -13,6 +13,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <fstream>
+#include <numeric>
 #include <map>
 #include <matjson.hpp>
 
@@ -24,6 +25,17 @@ using Clock = std::chrono::steady_clock;
 static constexpr uint32_t MAX_STEPS_PER_LEG = 200000;
 
 static Clock::time_point g_deadline;
+
+struct ScopeTimer {
+    long long& total;
+    Clock::time_point start = Clock::now();
+
+    ~ScopeTimer() {
+        total += std::chrono::duration_cast<std::chrono::nanoseconds>(
+                     Clock::now() - start)
+                     .count();
+    }
+};
 
 // Last frame seen by the nominal-leg trace, to spot a leg stepping out of
 // step with the capture. Diagnostic only.
@@ -251,6 +263,23 @@ void FrameWindowAnalyzer::splitSlots(int64_t slots, int& tickShift,
                static_cast<double>(per);
 }
 
+int64_t FrameWindowAnalyzer::placeSubtick(size_t k, int64_t slots,
+                                          int64_t ticks) {
+    double const per = static_cast<double>(std::max<int64_t>(1, m_fine));
+    this->placeAt(k, static_cast<double>(m_originalFrames[k]) +
+                         static_cast<double>(ticks) + m_originalOffsets[k] +
+                         static_cast<double>(slots) / per);
+    return static_cast<int64_t>(
+        Bot::get()->replaySystem().m_actionAtom.m_actions[k].m_frame);
+}
+
+void FrameWindowAnalyzer::restoreOffsets() {
+    auto& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
+    if (actions.size() != m_originalOffsets.size()) return;
+    for (size_t k = 0; k < actions.size(); k++)
+        scbf::setOffset(actions[k], m_originalOffsets[k]);
+}
+
 static bool isDashOrb(GameObjectType type) {
     return type == GameObjectType::DashRing ||
            type == GameObjectType::GravityDashRing;
@@ -297,15 +326,13 @@ static bool isMeasurableInput(slc::Action const& action) {
             return false;
     }
 }
-
 FrameWindowAnalyzer::StepResult FrameWindowAnalyzer::stepToward(PlayLayer* pl,
                                                                uint32_t until) {
     auto& updater = Bot::get()->updater();
 
     if (m_stageId == Stage::Probe && updater.getFrame() > until)
         FWWARN(
-            "[fw] leg target {} is behind the current frame {} -- the shift "
-            "was judged on a short run",
+            "[fw] leg target {} behind frame {}, judged on a short run",
             until, updater.getFrame());
 
     uint32_t guard = 0;
@@ -328,7 +355,11 @@ FrameWindowAnalyzer::StepResult FrameWindowAnalyzer::stepToward(PlayLayer* pl,
                 return StepResult::Died;
             }
         }
-        if (++guard > MAX_STEPS_PER_LEG) return StepResult::Reached;
+        if (++guard > MAX_STEPS_PER_LEG) {
+            FWWARN("[fw] leg {} stuck after {} steps (frame {}/{})",
+                      m_legCounter, guard, updater.getFrame(), until);
+            return StepResult::Reached;
+        }
 
         bool const logHold = m_stageId == Stage::Probe && guard <= 2;
         int holdBefore = -1;
@@ -500,9 +531,12 @@ FrameWindowAnalyzer::StepResult FrameWindowAnalyzer::stepToward(PlayLayer* pl,
     return (m_probeDied || pl->m_playerDied) ? StepResult::Died
                                              : StepResult::Reached;
 }
-
 bool FrameWindowAnalyzer::onSuppressedDeath(cocos2d::CCNode* player,
                                             cocos2d::CCNode* killer) {
+    if (m_trip.active) {
+        m_trip.died = true;
+        return true;
+    }
     if (!m_running) return false;
 
     if (!m_probeDied) {
@@ -567,8 +601,13 @@ bool FrameWindowAnalyzer::collectSamples() {
     m_samples.clear();
     m_originalFrames.clear();
     m_originalFrames.reserve(actions.size());
-    for (auto const& a : actions)
+    m_originalOffsets.clear();
+    m_originalOffsets.reserve(actions.size());
+    for (auto const& a : actions) {
         m_originalFrames.push_back(static_cast<uint32_t>(a.m_frame));
+        m_originalOffsets.push_back(scbf::offsetOf(a));
+    }
+    m_subtickMacro = scbf::hasOffsets(actions);
 
     for (size_t i = 0; i < actions.size(); i++) {
         if (!isMeasurableInput(actions[i])) continue;
@@ -737,6 +776,12 @@ void FrameWindowAnalyzer::unmuteAudio() {
 }
 
 FrameWindowAnalyzer::Report FrameWindowAnalyzer::start(PlayLayer* pl) {
+    return this->startRange(pl, 0, UINT32_MAX);
+}
+
+FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
+                                                            uint32_t from,
+                                                            uint32_t to) {
     Report report;
 
     auto bot = Bot::get();
@@ -746,6 +791,11 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::start(PlayLayer* pl) {
 
     if (m_running) {
         report.message = "Already running.";
+        return report;
+    }
+    if (m_trip.active) {
+        report.message = fmt::format("Still going back to frame {}.",
+                                     m_trip.frame);
         return report;
     }
     if (!pl) {
@@ -762,7 +812,7 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::start(PlayLayer* pl) {
     }
     if (updater.m_preventDeath) {
         report.message =
-            "Turn off Prevent Death first: with it on, every shifted frame "
+            "Turn off Prevent Death first: with it on, every shifted frame"
             "survives and every window reads as the maximum.";
         return report;
     }
@@ -777,6 +827,28 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::start(PlayLayer* pl) {
         return report;
     }
 
+    bool const partial = from > 0 || to != UINT32_MAX;
+    if (partial && !m_results.empty() &&
+        std::abs(m_resultsTps - updater.m_tps) > 0.5) {
+        report.message = fmt::format(
+            "These windows were counted at {:.0f} TPS. Switch back or clear "
+            "them first.",
+            m_resultsTps);
+        return report;
+    }
+
+    std::vector<FrameWindowMark> kept;
+    std::vector<FrameWindowMessage> keptMessages;
+    if (partial) {
+        kept = m_results;
+        keptMessages = m_messages;
+    }
+    auto const restore = [&] {
+        m_results = std::move(kept);
+        m_messages = std::move(keptMessages);
+        m_generation++;
+    };
+
     this->clear();
 
     m_sweep = std::clamp(m_sweepRange->inner(), 1, MAX_SWEEP);
@@ -786,10 +858,33 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::start(PlayLayer* pl) {
     m_algo = static_cast<Algorithm>(m_algorithm->inner());
 
     if (!this->collectSamples()) {
+        if (partial) restore();
         report.message = "The macro has no clicks to measure.";
         return report;
     }
     this->foldSwiftClicks();
+
+    size_t inRange = m_samples.size();
+    if (partial) {
+        uint32_t const tail = to + static_cast<uint32_t>(m_horizon);
+        std::erase_if(m_samples,
+                      [tail](Sample const& s) { return s.frame > tail; });
+        inRange = std::count_if(
+            m_samples.begin(), m_samples.end(), [from, to](Sample const& s) {
+                return s.frame >= from && s.frame <= to;
+            });
+        if (inRange == 0) {
+            restore();
+            report.message = "No input in that range.";
+            return report;
+        }
+    }
+
+    m_partial = partial;
+    m_probeFrom = from;
+    m_probeTo = to;
+    m_keptResults = std::move(kept);
+    m_keptMessages = std::move(keptMessages);
 
     FWLOG(
         "[fw][start] level=\"{}\" id={} replay=\"{}\" tps={:.0f} macroTps={:.0f} "
@@ -802,6 +897,16 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::start(PlayLayer* pl) {
         rs.m_actionAtom.m_actions.size(), m_samples.size(), m_sweep, m_horizon,
         m_slack_, m_recovery, static_cast<int>(m_algo),
         m_fullRangeSweep->inner(), m_budgetMs->inner());
+
+    FWLOG("[fw][start] turbo={} turboBudget={}ms adaptive={} share={}% max={}ms",
+          m_turbo->inner(), m_turboBudgetMs->inner(),
+          m_adaptiveBudget->inner(), m_budgetSharePercent->inner(),
+          m_maxBudgetMs->inner());
+
+    m_restoreNanos = 0;
+    m_restoreCount = 0;
+    m_tickNanos = 0;
+    m_warnedResolution = false;
 
     m_running = true;
     m_runStart = Clock::now();
@@ -843,6 +948,7 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::start(PlayLayer* pl) {
     updater.m_canDie = false;
     updater.m_expectsDeath = false;
 
+    if (!pf.m_savedCheckpoints.empty()) pl->removeAllCheckpoints();
     pf.clearStoredFrames();
     pf.removeAll();
     logPlayerState("pre-reset", pl->m_player1);
@@ -856,7 +962,7 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::start(PlayLayer* pl) {
     logPlayerState("capture-start", pl->m_player1);
 
     report.ok = true;
-    report.message = fmt::format("Analysing {} inputs.", m_total);
+    report.message = fmt::format("Analysing {} inputs.", inRange);
     return report;
 }
 
@@ -960,9 +1066,7 @@ void FrameWindowAnalyzer::detectSetupGroups() {
                 "joint legs{}",
                 start + 1, end, m_samples[start].frame,
                 m_samples[end - 1].frame, combos,
-                trimmed ? " -- cut short here, the next input would take it "
-                          "past the leg budget"
-                        : "");
+                trimmed ? " (capped at the leg budget)" : "");
         }
         start = end;
     }
@@ -1026,7 +1130,7 @@ void FrameWindowAnalyzer::beginSetupGroup(SetupGroup const& sg) {
 }
 
 void FrameWindowAnalyzer::beginSetupLeg(SetupGroup const& sg) {
-    cbf::Engine::get()->disarm();
+    cbf::Engine::get()->reset();
 
     if (!this->restoreToBranch()) return;
 
@@ -1112,8 +1216,8 @@ void FrameWindowAnalyzer::deriveSetupRanges(SetupGroup const& sg) {
         m_setupRange[idx] = {lo, hi};
 
         FWLOG(
-            "[fw][setup] sample {}: window is {}..{} frames depending on how "
-            "the rest of the chain is set up ({} surviving alignments)",
+            "[fw][setup] sample {}: window {}..{} depending on chain setup "
+            "({} alignments)",
             idx + 1, lo, hi, m_setupSurvivors.size());
     }
 }
@@ -1125,8 +1229,8 @@ void FrameWindowAnalyzer::commitSetupGroup(SetupGroup const& sg) {
 
     if (!m_setupBestFound) {
         FWLOG(
-            "[fw][setup] group at samples {}..{}: no joint alignment "
-            "survives, keeping the macro's original timing",
+            "[fw][setup] group {}..{}: no joint alignment survives, keeping "
+            "recorded timing",
             sg.first + 1, sg.first + sg.count);
         return;
     }
@@ -1151,8 +1255,7 @@ void FrameWindowAnalyzer::commitSetupGroup(SetupGroup const& sg) {
         offsets += fmt::format("{}{:+d}", j == 0 ? "" : " ", off);
     }
     FWLOG(
-        "[fw][setup] group at samples {}..{}: resolved, per-input offsets "
-        "[{}] (total deviation {} ticks from the macro)",
+        "[fw][setup] group {}..{}: resolved, offsets [{}] deviation={} ticks",
         sg.first + 1, sg.first + sg.count, offsets, m_setupBestDeviation);
 }
 
@@ -1202,7 +1305,7 @@ void FrameWindowAnalyzer::beginClick() {
     m_pathDiverged = false;
     m_forceFullSweep = false;
     m_fine = 1;
-    cbf::Engine::get()->disarm();
+    cbf::Engine::get()->reset();
     m_entryActive = false;
     m_entryDone = false;
     m_entryOffset = 0;
@@ -1270,10 +1373,9 @@ void FrameWindowAnalyzer::checkCaptureAgainstTrail(PlayLayer* pl,
     m_trailChecked = true;
     m_trailDiverged = true;
     FWWARN(
-        "[fw][capture] left the macro's recorded path at frame {}: the "
-        "recording was at ({:.2f},{:.2f}), the capture is at ({:.2f},{:.2f}), "
-        "off by ({:.2f},{:.2f}). The macro is not at fault -- the capture "
-        "desynced, so nothing measured from here on means anything",
+        "[fw][capture] off the recorded path at frame {}: want "
+        "({:.2f},{:.2f}) got ({:.2f},{:.2f}) d=({:.2f},{:.2f}), capture "
+        "desynced",
         frame, wantX, wantY, got.x, got.y, dx, dy);
 }
 
@@ -1585,9 +1687,9 @@ void FrameWindowAnalyzer::reportStateDiff(PlayLayer* pl) {
     m_stateDiffReal++;
     FWWARN(
         "[fw][statediff] click {}: {} differing run(s) in PlayerObject after "
-        "restore, outside the lazily rebuilt caches{}{}",
+        "restore, outside cached fields{}{}",
         m_index + 1, realRuns, out,
-        realRuns > 24 ? "\n    (more not listed)" : "");
+        realRuns > 24 ? "\n    (truncated)" : "");
 }
 
 void FrameWindowAnalyzer::reassertHeldButtons(uint32_t frame) {
@@ -1628,6 +1730,9 @@ void FrameWindowAnalyzer::reassertHeldButtons(uint32_t frame) {
 }
 
 bool FrameWindowAnalyzer::restoreToBranch() {
+    ScopeTimer timer{m_restoreNanos};
+    m_restoreCount++;
+
     auto bot = Bot::get();
     auto& updater = bot->updater();
     auto& pf = bot->practiceFix();
@@ -1661,8 +1766,8 @@ bool FrameWindowAnalyzer::restoreToBranch() {
 
     if (updater.getFrame() != m_saved.m_frameOffset) {
         FWLOG(
-            "[fw][restore] FAILED: frame is {} but checkpoint says {} -- the "
-            "forced-state branch was bypassed",
+            "[fw][restore] FAILED: frame {}, checkpoint says {}, forced-state "
+            "branch bypassed",
             updater.getFrame(), m_saved.m_frameOffset);
         m_restoreFailed = true;
         return false;
@@ -1676,9 +1781,8 @@ bool FrameWindowAnalyzer::restoreToBranch() {
         if (std::fabs(dx) > POSITION_EPSILON ||
             std::fabs(dy) > POSITION_EPSILON) {
             FWWARN(
-                "[fw][restore] player landed at ({:.4f},{:.4f}) but the "
-                "checkpoint holds ({:.4f},{:.4f}) -- off by ({:.4f},{:.4f}) "
-                "at frame {}",
+                "[fw][restore] pos ({:.4f},{:.4f}) want ({:.4f},{:.4f}) "
+                "d=({:.4f},{:.4f}) at frame {}",
                 got.x, got.y, want.x, want.y, dx, dy, m_saved.m_frameOffset);
         }
     }
@@ -1728,8 +1832,11 @@ bool FrameWindowAnalyzer::bufferShiftValid(int64_t shift) const {
 void FrameWindowAnalyzer::beginShift(int64_t shift, ShiftMode mode) {
     auto& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
 
-    cbf::Engine::get()->disarm();
+    if (m_fine > 1 && shift != 0) m_fineLegs++;
+
+    cbf::Engine::get()->reset();
     m_releaseFrame = -1;
+    this->restoreOffsets();
 
     if (!this->restoreToBranch()) return;
 
@@ -1739,7 +1846,7 @@ void FrameWindowAnalyzer::beginShift(int64_t shift, ShiftMode mode) {
     double fraction = 0.0;
     this->splitSlots(shift, tickShift, fraction);
 
-    int64_t const shifted =
+    int64_t shifted =
         static_cast<int64_t>(m_recorded) + m_entryOffset + tickShift;
 
     bool const thisP2 = m_samples[m_index].player2;
@@ -1750,10 +1857,8 @@ void FrameWindowAnalyzer::beginShift(int64_t shift, ShiftMode mode) {
         if (shift != 0 && !this->bufferShiftValid(shift)) {
             m_fineCrossedNeighbour = true;
             FWLOG(
-                "[fw][leg {}] click {} slot={:+d} CROSSES A NEIGHBOURING INPUT "
-                "-- the whole-frame pass would have refused this shift; it is "
-                "still measured, so this click's window may reach past the "
-                "input next to it",
+                "[fw][leg {}] click {} slot={:+d} crosses a neighbouring "
+                "input, window may overrun it",
                 m_legCounter + 1, m_index + 1, shift);
         }
     }
@@ -1790,6 +1895,17 @@ void FrameWindowAnalyzer::beginShift(int64_t shift, ShiftMode mode) {
             m_releaseFrame = relMoved;
         }
     }
+
+    if (m_subtickMacro && m_fine > 1) {
+        shifted = this->placeSubtick(ai, shift, m_entryOffset);
+        fraction = scbf::offsetOf(actions[ai]);
+        if (size_t const rel = this->pairedReleaseFor(ai); rel != NO_INDEX) {
+            int64_t const relEntry =
+                m_entryActive && rel >= m_entryPrevAi ? m_entryOffset : 0;
+            m_releaseFrame = this->placeSubtick(rel, shift, relEntry);
+        }
+    }
+
     size_t const relIdx = this->pairedReleaseFor(ai);
 
     int64_t gap = static_cast<int64_t>(m_horizon);
@@ -1804,7 +1920,7 @@ void FrameWindowAnalyzer::beginShift(int64_t shift, ShiftMode mode) {
     reach = std::clamp<int64_t>(reach, MIN_HORIZON,
                                 static_cast<int64_t>(m_horizon));
 
-    if (fraction > 0.0) {
+    if (fraction > 0.0 && !m_subtickMacro) {
         auto* eng = cbf::Engine::get();
         eng->arm(static_cast<uint32_t>(std::max<int64_t>(shifted, 0)), fraction);
         if (mode == ShiftMode::Retime) {
@@ -1855,6 +1971,7 @@ void FrameWindowAnalyzer::concludeShift(bool survived) {
 
     for (size_t i = 0; i < actions.size(); i++)
         actions[i].m_frame = m_originalFrames[i];
+    this->restoreOffsets();
 
     m_testActive = false;
 
@@ -1943,8 +2060,7 @@ void FrameWindowAnalyzer::advanceSweep(bool survived) {
             m_forceFullSweep = this->captureDiedInSpan();
             if (m_entryActive) {
                 FWLOG(
-                    "[fw][click {}] entry {:+d}: the macro does not survive "
-                    "this entry (died at frame {})",
+                    "[fw][click {}] entry {:+d}: macro dies here (frame {})",
                     m_index + 1, m_entryOffset,
                     Bot::get()->updater().getFrame());
             } else if (m_pathDiverged) {
@@ -1953,10 +2069,9 @@ void FrameWindowAnalyzer::advanceSweep(bool survived) {
                     m_desyncPending = true;
                 }
                 FWWARN(
-                    "[fw][click {}] RESTORE MISMATCH @ frame {}: the replay "
-                    "left the captured path before dying (at frame {}). The "
-                    "macro is fine; the checkpoint did not reproduce the "
-                    "capture, so this window cannot be measured",
+                    "[fw][click {}] RESTORE MISMATCH @ frame {}: left the "
+                    "captured path before dying at {}, checkpoint did not "
+                    "reproduce the capture",
                     m_index + 1, m_recorded,
                     Bot::get()->updater().getFrame());
             } else {
@@ -1965,12 +2080,9 @@ void FrameWindowAnalyzer::advanceSweep(bool survived) {
                     m_desyncPending = true;
                 }
                 FWWARN(
-                    "[fw][click {}] DESYNC @ frame {}: the unmodified macro "
-                    "died during its own probe (died at frame {}), killed by "
-                    "object id {} at ({:.1f},{:.1f}). The player followed the "
-                    "captured path exactly up to the death, so the state that "
-                    "differs from the capture is not in the player -- look at "
-                    "that object",
+                    "[fw][click {}] DESYNC @ frame {}: nominal died at {}, "
+                    "killer id {} at ({:.1f},{:.1f}), path matched up to the "
+                    "death",
                     m_index + 1, m_recorded,
                     Bot::get()->updater().getFrame(), m_lastKillerId,
                     m_lastKillerPos.x, m_lastKillerPos.y);
@@ -1985,9 +2097,8 @@ void FrameWindowAnalyzer::advanceSweep(bool survived) {
             m_high = 0;
             m_validCount = 0;
             FWLOG(
-                "[fw][click {}] sweep skipped: the macro's own timing does not "
-                "reproduce here, so no shifted timing would mean anything "
-                "either. Not probing the {} offsets either side",
+                "[fw][click {}] sweep skipped: nominal does not reproduce, "
+                "{} offsets unprobed",
                 m_index + 1, m_maxNeg + m_maxPos);
             this->finishClick();
             return;
@@ -1996,8 +2107,7 @@ void FrameWindowAnalyzer::advanceSweep(bool survived) {
         if (m_bisect && !m_scanning && (!survived || m_forceFullSweep)) {
             m_bisect = false;
             FWLOG(
-                "[fw][click {}] bisect off: {} -- falling back to the linear "
-                "sweep",
+                "[fw][click {}] bisect off ({}), using the linear sweep",
                 m_index + 1,
                 survived ? "capture died in this span" : "nominal died");
         }
@@ -2058,8 +2168,8 @@ void FrameWindowAnalyzer::advanceSweep(bool survived) {
             m_low = m_shift;
             m_high = m_shift;
             FWLOG(
-                "[fw][click {}] island scan: hit a survivor at shift {:+d} "
-                "after {} legs -- bisecting its edges",
+                "[fw][click {}] island scan: survivor at shift {:+d} after "
+                "{} legs, bisecting edges",
                 m_index + 1, m_shift, m_legCounter);
 
             m_gallopping = true;
@@ -2157,7 +2267,7 @@ void FrameWindowAnalyzer::advanceSweep(bool survived) {
         m_high = m_bisectLo;
         m_validCount = m_high - m_low + 1;
         FWLOG(
-            "[fw][click {}] search: latest surviving shift {:+d} -- window "
+            "[fw][click {}] search: latest surviving shift {:+d}, window "
             "{}..{} = {} fine ticks in {} legs",
             m_index + 1, m_high, m_low, m_high, m_validCount, m_legCounter);
         this->finishClick();
@@ -2211,12 +2321,8 @@ void FrameWindowAnalyzer::noteSweepStep(bool survived, bool counting) {
     m_splitWindow = true;
     m_splitShift = m_shift;
     FWWARN(
-        "[fw][click {}] shift {:+d} survives on the far side of a gap. The "
-        "reported window is only the run of offsets touching the macro's own "
-        "timing -- this input also works somewhere the window does not cover, "
-        "so the number is the room around THIS macro's timing, not how tight "
-        "the input is. A macro sitting in a narrow pocket beside the real "
-        "window reads far tighter than the input actually is",
+        "[fw][click {}] shift {:+d} survives past a gap, reported window is "
+        "macro-relative",
         m_index + 1, m_shift);
 }
 
@@ -2238,8 +2344,8 @@ void FrameWindowAnalyzer::noteCaptureDeath(uint32_t frame) {
     m_captureDeaths.push_back(frame);
     if (m_captureDeaths.size() > 1)
         FWWARN(
-            "[fw][capture] died again at frame {} ({} deaths so far) -- still "
-            "running on noclip",
+            "[fw][capture] died again at frame {} ({} total), still on "
+            "noclip",
             frame, m_captureDeaths.size());
 }
 
@@ -2267,13 +2373,25 @@ bool FrameWindowAnalyzer::startSubframeProbe() {
     double const hz =
         static_cast<double>(std::clamp<int64_t>(m_cbfInputHz->inner(), 240,
                                                MAX_CBF_HZ));
-    int64_t const mult = std::clamp<int64_t>(
+    int64_t mult = std::clamp<int64_t>(
         std::llround(hz / std::max(1.0, m_baseTps)), 1, MAX_CBF_SLOTS);
+
+    if (mult > MAX_RESOLVABLE_SLOTS) {
+        if (!m_warnedResolution) {
+            FWWARN(
+                "[fw] {:.0f} Hz is {} slots/tick, past float resolution, "
+                "clamping to {} ({:.0f} Hz)",
+                hz, mult, MAX_RESOLVABLE_SLOTS,
+                static_cast<double>(MAX_RESOLVABLE_SLOTS) * m_baseTps);
+            m_warnedResolution = true;
+        }
+        mult = MAX_RESOLVABLE_SLOTS;
+    }
 
     if (mult < 2) {
         FWLOG(
-            "[fw][click {}] CBF pass skipped: {:.0f} Hz gives under one "
-            "sub-tick slot at {:.0f} TPS",
+            "[fw][click {}] CBF skipped: {:.0f} Hz is under one slot at "
+            "{:.0f} TPS",
             m_index + 1, hz, m_baseTps);
         return false;
     }
@@ -2285,8 +2403,7 @@ bool FrameWindowAnalyzer::startSubframeProbe() {
         return false;
     if (m_maxNeg <= 0 && m_maxPos <= 0) {
         FWLOG(
-            "[fw][click {}] CBF pass skipped: no room either side of the "
-            "input to move it into",
+            "[fw][click {}] CBF skipped: no room either side",
             m_index + 1);
         return false;
     }
@@ -2299,6 +2416,7 @@ bool FrameWindowAnalyzer::startSubframeProbe() {
     m_coarseMaxPos = m_maxPos;
     m_coarseBufferSurvivors = m_bufferSurvivors;
     m_fine = mult;
+    m_fineLegs = 0;
 
     int const coarseReach =
         impossible ? std::max(IMPOSSIBLE_SWEEP_TICKS, m_sweep) : m_sweep;
@@ -2310,10 +2428,10 @@ bool FrameWindowAnalyzer::startSubframeProbe() {
             : fmt::format("tight window {}", m_coarseWindow);
 
     FWLOG(
-        "[fw][click {}] {} -- re-measuring with the CBF split: {} slots per "
-        "tick ({:.0f} Hz at {:.0f} TPS, {:.4f} ms apart), +/-{} ticks",
-        m_index + 1, why, mult, hz, m_baseTps, 1000.0 / (m_baseTps * mult),
-        coarseReach);
+        "[fw][click {}] {}, CBF split: {} slots/tick ({:.0f} Hz at {:.0f} "
+        "TPS, {:.4f} ms), +/-{} ticks",
+        m_index + 1, why, mult, static_cast<double>(mult) * m_baseTps,
+        m_baseTps, 1000.0 / (m_baseTps * mult), coarseReach);
 
     m_phase = Phase::Nominal;
     m_shift = 0;
@@ -2334,8 +2452,7 @@ bool FrameWindowAnalyzer::startSubframeProbe() {
         m_scanStep = std::max<int64_t>(1, mult * pct / 100);
         FWLOG(
             "[fw][click {}] {}: stride {} fine ticks ({}% of a frame), edges "
-            "bisected exactly -- gaps narrower than the stride can be stepped "
-            "over",
+            "bisected",
             m_index + 1, m_scanning ? "island scan" : "edge walk", m_scanStep,
             pct);
     }
@@ -2346,10 +2463,14 @@ bool FrameWindowAnalyzer::startSubframeProbe() {
         m_maxPos = coarseReach * mult;
     }
 
-    int64_t const room = (static_cast<int64_t>(m_recorded) -
-                          static_cast<int64_t>(m_branchFrame)) *
-                             mult -
-                         1;
+    int64_t room = (static_cast<int64_t>(m_recorded) -
+                    static_cast<int64_t>(m_branchFrame)) *
+                       mult -
+                   1;
+    if (m_subtickMacro)
+        room += std::llround(
+            m_originalOffsets[m_samples[m_index].actionIndex] *
+            static_cast<double>(mult));
     m_maxNeg = std::min<int64_t>(m_maxNeg, std::max<int64_t>(room, 0));
 
     FWLOG("[fw][click {}] fine sweep range -{}..+{} fine ticks (branch {})",
@@ -2368,7 +2489,8 @@ void FrameWindowAnalyzer::beginRecovery() {
         return;
     }
 
-    cbf::Engine::get()->disarm();
+    cbf::Engine::get()->reset();
+    this->restoreOffsets();
 
     if (!this->restoreToBranch()) return;
 
@@ -2388,9 +2510,11 @@ void FrameWindowAnalyzer::beginRecovery() {
         actions[k].m_frame = static_cast<uint64_t>(std::max<int64_t>(moved, 0));
     }
 
-    int64_t const shifted =
+    int64_t shifted =
         static_cast<int64_t>(m_recorded) + m_entryOffset + tickShift;
-    if (fraction > 0.0)
+    if (m_subtickMacro && m_fine > 1)
+        shifted = this->placeSubtick(ai, m_shift, m_entryOffset);
+    else if (fraction > 0.0)
         cbf::Engine::get()->arm(
             static_cast<uint32_t>(std::max<int64_t>(shifted, 0)), fraction);
 
@@ -2409,7 +2533,6 @@ void FrameWindowAnalyzer::beginRecovery() {
         recGap = static_cast<int64_t>(actions[k].m_frame) - nextShifted;
         break;
     }
-
     int64_t recReach = std::max<int64_t>(recGap - m_slack_, 0);
     recReach = std::clamp<int64_t>(recReach, MIN_HORIZON,
                                    static_cast<int64_t>(m_horizon));
@@ -2456,13 +2579,12 @@ FrameWindowMark FrameWindowAnalyzer::buildMark() const {
                                  (m_validCount - 1) % m_fine == 0;
         if (tickAligned)
             FWLOG(
-                "[fw][click {}] CBF pass adds nothing: both edges sit on tick "
-                "boundaries ({} slots is exactly {} whole ticks), so the "
-                "whole-frame window {} stands",
+                "[fw][click {}] CBF adds nothing: edges tick-aligned ({} "
+                "slots = {} ticks), keeping window {}",
                 m_index + 1, m_validCount, (m_validCount - 1) / m_fine,
                 m_coarseWindow);
 
-        if (m_validCount > 0 && !tickAligned) {
+        if (m_validCount > 0 && !tickAligned && m_fineLegs > 0) {
             mk.subframe = fineFrames;
             mk.cbf = true;
         } else {
@@ -2485,9 +2607,8 @@ FrameWindowMark FrameWindowAnalyzer::buildMark() const {
         mk.saturatedHigh = maxPos > 0 && high >= maxPos;
         if ((mk.saturatedLow || mk.saturatedHigh) && !mk.unbounded)
             FWWARN(
-                "[fw][click {}] window {}..{} rests on the sweep limit ({}{}{}"
-                "): that edge was never found, so {} is a floor, not the "
-                "window. Raise Sweep Range to close it",
+                "[fw][click {}] window {}..{} on the sweep limit ({}{}{}): "
+                "{} is a floor, raise Sweep Range",
                 m_index + 1, low, high, mk.saturatedLow ? "-" : "",
                 mk.saturatedLow && mk.saturatedHigh ? " and " : "",
                 mk.saturatedHigh ? "+" : "",
@@ -2521,13 +2642,13 @@ FrameWindowMark FrameWindowAnalyzer::buildMark() const {
     mk.hidden = mk.desynced && this->captureDiedInSpan();
     if (mk.hidden)
         FWLOG(
-            "[fw][click {}] no indicator: checkpoint sits inside the noclipped "
-            "region (capture died at frame {})",
+            "[fw][click {}] no indicator: checkpoint inside the noclipped "
+            "region (capture died at {})",
             m_index + 1, this->captureDeathInSpan());
     if (provenImpossible)
         FWLOG(
-            "[fw][click {}] IMPOSSIBLE: no alignment survives on the frame "
-            "grid or at {} slots per tick across +/-{} ticks",
+            "[fw][click {}] IMPOSSIBLE: nothing survives on the grid or at "
+            "{} slots/tick across +/-{} ticks",
             m_index + 1, m_fine, maxNeg / std::max<int64_t>(1, m_fine));
     mk.position = s.position;
     mk.percent = std::clamp(s.position.x / levelLen * 100.f, 0.f, 100.f);
@@ -2558,14 +2679,14 @@ void FrameWindowAnalyzer::finishClick() {
             mk.setupLow = m_entryMin;
             mk.setupHigh = m_entryMax;
             FWLOG(
-                "[fw][entry] click {}: window is {}..{} frames depending on "
-                "how the previous input is timed{}",
+                "[fw][entry] click {}: window {}..{} depending on the "
+                "previous input's timing{}",
                 m_index + 1, m_entryMin, m_entryMax,
                 m_entryFailed ? " (one entry fails outright)" : "");
         } else if (m_entryFailed) {
             FWLOG(
-                "[fw][entry] click {}: window stays {} -- the other entry "
-                "fails outright rather than narrowing it",
+                "[fw][entry] click {}: window stays {}, the other entry "
+                "fails outright",
                 m_index + 1, m_entryMin);
         }
     }
@@ -2593,11 +2714,9 @@ void FrameWindowAnalyzer::finishClick() {
             }
 
             FWWARN(
-                "[fw][click {}] window {}..{} is NOT SOLID: {} sampled "
-                "offset(s) inside it died ({}). Reported span {} is an upper "
-                "bound; the unbroken run around the macro's timing is at most "
-                "{}..{} = {} slots. The walk only bisects the edges, so hole "
-                "widths are unknown",
+                "[fw][click {}] window {}..{} NOT SOLID: {} sampled "
+                "offset(s) died ({}), span {} is an upper bound, unbroken run "
+                "{}..{} = {} slots",
                 m_index + 1, mk.low, mk.high, holes.size(), list,
                 mk.high - mk.low + 1, runLo, runHi, runHi - runLo + 1);
         }
@@ -2613,16 +2732,12 @@ void FrameWindowAnalyzer::finishClick() {
         bool const heldThrust = gm == 'R' || gm == 'H' || gm == 'W' ||
                                 gm == 'V' || gm == 'U';
         FWWARN(
-            "[fw][click {}] {} offset(s) in this window survived only as an "
-            "isolated shift -- this input moved on its own, with the rest of "
-            "the macro left at the timing it was recorded on{}",
+            "[fw][click {}] {} offset(s) survived only as isolated shifts, "
+            "rest of the macro left at recorded timing{}",
             m_index + 1, bufferSurvivors,
             heldThrust
-                ? fmt::format(
-                      ". Gamemode {} holds for sustained thrust, so check "
-                      "these by eye: the hold keeps its recorded length, but "
-                      "where it sits still changes what it thrusts through",
-                      gm)
+                ? fmt::format(", gamemode {} holds for thrust, check by eye",
+                              gm)
                 : "");
     }
 
@@ -2630,7 +2745,7 @@ void FrameWindowAnalyzer::finishClick() {
         "[fw][click {}] RESULT window={} low={} high={} clamped={} desync={} "
         "subframe={:.3f} solid={} holes={} split={} splitAt={:+d} satLow={} satHigh={} unbounded={} "
         "cbf={} fine={} gm={} bufAsst={} hz={} pos=({:.1f},{:.1f}) {:.2f}% "
-        "-- trust={}",
+        "trust={}",
         m_index + 1, mk.window, mk.low, mk.high, mk.clampedByNeighbour,
         mk.desynced, mk.subframe, mk.solid, mk.holes,
         mk.splitChecked ? (mk.splitWindow ? "true" : "false") : "unchecked",
@@ -2639,12 +2754,9 @@ void FrameWindowAnalyzer::finishClick() {
         mk.bufferAssisted, mk.hz, mk.position.x, mk.position.y, mk.percent,
         mk.desynced          ? "none (desynced)"
         : mk.window <= 0 && !(mk.subframe > 0.f)
-                             ? "IMPOSSIBLE (nothing survives at any offset, "
-                               "whole-frame or sub-tick)"
-        : mk.splitWindow     ? "MACRO-RELATIVE (input also works outside this "
-                               "band -- macro may sit in a pocket)"
-        : !mk.splitChecked   ? "bisected (band assumed contiguous; a gap would "
-                               "not have been seen)"
+                             ? "IMPOSSIBLE (nothing survives)"
+        : mk.splitWindow     ? "MACRO-RELATIVE (works outside the band)"
+        : !mk.splitChecked   ? "bisected (band assumed contiguous)"
         : !mk.solid          ? "UPPER BOUND (band has holes)"
         : (mk.saturatedLow || mk.saturatedHigh)
                              ? "FLOOR (edge on sweep limit)"
@@ -2700,7 +2812,7 @@ bool FrameWindowAnalyzer::advanceEntryPass(FrameWindowMark const& mk) {
         m_entryActive = true;
 
         FWLOG(
-            "[fw][entry] click {}: window {} -- re-testing with the previous "
+            "[fw][entry] click {}: window {}, re-testing with the previous "
             "input pinned at {:+d} and {:+d} (branch {})",
             m_index + 1, window, lo, hi, m_entryBranch);
     } else if (window > 0) {
@@ -2711,8 +2823,8 @@ bool FrameWindowAnalyzer::advanceEntryPass(FrameWindowMark const& mk) {
     } else {
         m_entryFailed = true;
         FWLOG(
-            "[fw][entry] click {}: previous at {:+d} makes this input "
-            "impossible -- left out of the span",
+            "[fw][entry] click {}: previous at {:+d} makes this impossible, "
+            "left out of the span",
             m_index + 1, m_entryOffset);
     }
 
@@ -2753,7 +2865,7 @@ bool FrameWindowAnalyzer::advanceEntryPass(FrameWindowMark const& mk) {
     m_bufferTried = false;
     m_maxNeg = std::min<int64_t>(m_maxNeg, m_sweep);
     m_maxPos = std::min<int64_t>(m_maxPos, m_sweep);
-    cbf::Engine::get()->disarm();
+    cbf::Engine::get()->reset();
 
     m_branchFrame = m_entryBranch;
     this->releaseCheckpoint();
@@ -2768,8 +2880,49 @@ void FrameWindowAnalyzer::abortClick(char const* why) {
     this->nextClick();
 }
 
+bool FrameWindowAnalyzer::inProbeRange(size_t index) const {
+    if (!m_partial) return true;
+    uint32_t const frame = m_samples[index].frame;
+    return frame >= m_probeFrom && frame <= m_probeTo;
+}
+
+void FrameWindowAnalyzer::mergeKept() {
+    auto fresh = std::move(m_results);
+    m_results.clear();
+
+    for (auto const& old : m_keptResults) {
+        bool const replaced =
+            std::any_of(fresh.begin(), fresh.end(), [&](auto const& mk) {
+                return mk.frame == old.frame && mk.player2 == old.player2 &&
+                       mk.release == old.release;
+            });
+        if (!replaced) m_results.push_back(old);
+    }
+    m_results.insert(m_results.end(), fresh.begin(), fresh.end());
+    std::stable_sort(m_results.begin(), m_results.end(),
+                     [](auto const& a, auto const& b) {
+                         return a.frame < b.frame;  
+                     });
+
+    m_messages = std::move(m_keptMessages);
+    int const last = std::max(0, static_cast<int>(m_results.size()) - 1);
+    for (auto& msg : m_messages)
+        msg.startIndex = std::clamp(msg.startIndex, 0, last);
+
+    m_keptResults.clear();
+    m_keptMessages.clear();
+    m_partial = false;
+    m_probeFrom = 0;
+    m_probeTo = UINT32_MAX;
+
+    m_generation++;
+    this->resetDisplay();
+}
+
 void FrameWindowAnalyzer::nextClick() {
     m_index++;
+    while (m_index < m_samples.size() && !this->inProbeRange(m_index))
+        m_index++;
     if (m_index >= m_samples.size()) {
         std::string msg =
             fmt::format("Measured {} of {} inputs.", m_measured,
@@ -2779,6 +2932,8 @@ void FrameWindowAnalyzer::nextClick() {
         if (m_filtered > 0)
             msg += fmt::format(" {} were filtered out before probing.",
                                m_filtered);
+        if (m_dependentSearch->inner() && this->beginDependentPass(msg))
+            return;
         this->finish(std::move(msg), true);
         return;
     }
@@ -2828,7 +2983,6 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
             if (mk.cbf) cbf++;
         }
         auto const& lg = [&](int n) { return n ? "WARN" : "ok"; };
-        // more logging so when others playtest, I can debug easier okok although logs become MASSIVE on cbf counts :sob:               
         log::info(
             "[fw][audit] {} marks: {} desynced, {} not solid [{}], {} on the "
             "sweep limit [{}], {} split [{}], {} unbounded, {} buffer-assisted, "
@@ -2867,6 +3021,7 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
         log::info("{}", line);
         fwFileLog(line);
     }
+    this->restoreOffsets();
 
     this->releaseCheckpoint();
 
@@ -2889,7 +3044,7 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
     }
 
     m_fine = 1;
-    cbf::Engine::get()->disarm();
+    cbf::Engine::get()->reset();
 
     updater.m_canDie = m_savedCanDie;
     updater.m_expectsDeath = m_savedExpectsDeath;
@@ -2900,6 +3055,8 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
     bot->trailBuffer().loadSamples(m_trailP1, m_trailP2);
     m_trailP1.clear();
     m_trailP2.clear();
+
+    if (m_partial) this->mergeKept();
 
     // Written straight to the file, not through FWLOG. FWLOG is gated on
     // the verbose toggle, and this one line is the summary of the whole run --
@@ -2918,8 +3075,8 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
 
     if (m_stateDiffRestores > 0) {
         log::info(
-            "[fw][statediff] {} restores checked: {} matched byte for byte, "
-            "{} differed only in cached node fields, {} had a real difference",
+            "[fw][statediff] {} restores: {} identical, {} cached-only, "
+            "{} real",
             m_stateDiffRestores,
             m_stateDiffRestores - m_stateDiffCachedOnly - m_stateDiffReal,
             m_stateDiffCachedOnly, m_stateDiffReal);
@@ -2930,6 +3087,21 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
 
     if (m_stepCount > 0) {
         double const ms = static_cast<double>(m_stepNanos) / 1'000'000.0;
+        double const wallMs = std::chrono::duration<double, std::milli>(
+                                  Clock::now() - m_runStart)
+                                  .count();
+        double const workMs =
+            static_cast<double>(m_tickNanos) / 1'000'000.0;
+        double const restoreMs =
+            static_cast<double>(m_restoreNanos) / 1'000'000.0;
+
+        log::info(
+            "[fw][perf] wall={:.0f}ms work={:.0f}ms ({:.1f}% duty) "
+            "step={:.0f}ms restore={:.0f}ms over {} restores, other={:.0f}ms",
+            wallMs, workMs, wallMs > 0.0 ? workMs / wallMs * 100.0 : 0.0, ms,
+            restoreMs, m_restoreCount,
+            std::max(0.0, workMs - ms - restoreMs));
+
         log::info(
             "[fw][perf] {} ticks in {:.0f}ms stepping ({:.1f}us/tick, batch={})",
             m_stepCount, ms,
@@ -2950,6 +3122,16 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
     m_generation++;
 
     if (!ok) FWWARN("[FrameWindow] {}", m_status);
+
+    if (m_trip.pending) {
+        m_trip.pending = false;
+        if (PlayLayer::get()) {
+            this->beginTrip();
+        } else {
+            if (m_trip.record) bot->setMode(Bot::Mode::Recording);
+            m_trip = {};
+        }
+    }
 }
 
 void FrameWindowAnalyzer::cancel() {
@@ -2958,12 +3140,18 @@ void FrameWindowAnalyzer::cancel() {
 }
 
 void FrameWindowAnalyzer::tick(PlayLayer* pl) {
+    if (m_trip.active) this->stepTrip(pl);
+    if (pl) this->updateTripLabel(pl);
     if (!m_running) return;
+
+    ScopeTimer timer{m_tickNanos};
 
     if (!pl) {
         this->finish("Left the level.", false);
         return;
     }
+
+    if (pl->m_isPaused) return;
 
     auto bot = Bot::get();
     auto& updater = bot->updater();
@@ -2971,7 +3159,9 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
 
     auto const now = Clock::now();
     int64_t budgetMs = std::max(1, m_budgetMs->inner());
-    if (m_adaptiveBudget->inner() && m_haveLastTickCall) {
+    if (m_turbo->inner()) {
+        budgetMs = std::clamp(m_turboBudgetMs->inner(), 1, 2000);
+    } else if (m_adaptiveBudget->inner() && m_haveLastTickCall) {
         double const elapsedMs =
             std::chrono::duration<double, std::milli>(now - m_lastTickCall)
                 .count();
@@ -3029,20 +3219,13 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
                                     "recorded past frame {}: {}",
                                     dropped, m_captureDeathFrame,
                                     m_trailDiverged
-                                        ? "the capture left the macro's own "
-                                          "recorded path there, so nothing "
-                                          "past that point can be reproduced"
-                                        : "a frame hitch skipped game time "
-                                          "during this session, which makes "
-                                          "the recording after it a different "
-                                          "run from a clean replay");
+                                        ? "capture left the recorded path"
+                                        : "frame hitch skipped game time");
                         } else {
                             log::info(
-                                "[fw][capture] the replay died at frame {} "
-                                "and continued on noclip -- this is routine "
-                                "for an input that only survives off the "
-                                "frame grid, so the {} sample(s) recorded "
-                                "after it are kept and probed normally",
+                                "[fw][capture] died at frame {} and "
+                                "continued on noclip, keeping {} later "
+                                "sample(s)",
                                 m_captureDeathFrame,
                                 std::count_if(
                                     m_samples.begin(), m_samples.end(),
@@ -3053,11 +3236,9 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
 
                         if (hitchDuringSession)
                             FWWARN(
-                                "[fw][capture] a frame hitch skipped game time "
-                                "at frame {} in this session. A macro recorded "
-                                "across a hitch replays as a different run "
-                                "-- re-record it on a quiet frame rate before "
-                                "trusting anything measured here",
+                                "[fw][capture] frame hitch skipped game time "
+                                "at frame {}, re-record before trusting these "
+                                "results",
                                 updater.m_droppedTimeFrame);
                     }
 
@@ -3072,7 +3253,7 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
                     m_stage = "probe";
                     m_status = "Probing";
 
-                    FWLOG("[fw][capture] DONE at frame {} -- {} inputs to probe",
+                    FWLOG("[fw][capture] DONE at frame {}, {} inputs to probe",
                           updater.getFrame(), m_total);
 
                     this->detectSetupGroups();
@@ -3081,6 +3262,14 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
                     pf.removeAll();
                     pl->resetLevel();
                     bot->replaySystem().onReset(0);
+
+                    while (m_index < m_samples.size() &&
+                           !this->inProbeRange(m_index))
+                        m_index++;
+                    if (m_index >= m_samples.size()) {
+                        this->finish("No input in that range.", false);
+                        return;
+                    }
 
                     this->beginClick();
                     m_stageId = Stage::Rewind;
@@ -3100,9 +3289,8 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
                         m_captureDeathFrame = deathFrame;
                         m_noclip = true;
                         FWWARN(
-                            "[fw][capture] DIED at frame {} after capturing "
-                            "{}/{} samples -- continuing through it with "
-                            "noclip",
+                            "[fw][capture] DIED at frame {} after {}/{} "
+                            "samples, continuing with noclip",
                             deathFrame, m_index, m_samples.size());
                     }
                     continue;
@@ -3134,10 +3322,8 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
                     if (!m_triedHardReset && !m_resyncGaveUp) {
                         m_triedHardReset = true;
                         FWWARN(
-                            "[fw][click {}] the advance to branch {} left the "
-                            "captured path -- the checkpoint carried over from "
-                            "an earlier click no longer reproduces the "
-                            "capture. Replaying from frame 0 to re-sync",
+                            "[fw][click {}] advance to branch {} left the "
+                            "captured path, replaying from frame 0",
                             m_index + 1, m_branchFrame);
                         this->hardResetToStart();
                         continue;
@@ -3148,12 +3334,9 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
                             !m_resyncGaveUp) {
                             m_resyncGaveUp = true;
                             FWWARN(
-                                "[fw][click {}] a clean replay from frame 0 "
-                                "still does not reproduce the capture. The "
-                                "run itself is not deterministic here, so "
-                                "re-syncing is off for the rest of this pass "
-                                "-- every remaining click that diverges is "
-                                "reported as desynced instead",
+                                "[fw][click {}] replay from frame 0 still "
+                                "does not reproduce the capture, re-sync off "
+                                "for the rest of this pass",
                                 m_index + 1);
                         }
                     }
@@ -3162,8 +3345,8 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
                     if (!m_triedHardReset) {
                         m_triedHardReset = true;
                         FWLOG(
-                            "[fw][click {}] could not reach branch {} from the "
-                            "checkpoint -- replaying from frame 0",
+                            "[fw][click {}] could not reach branch {} from "
+                            "the checkpoint, replaying from frame 0",
                             m_index + 1, m_branchFrame);
                         this->hardResetToStart();
                         continue;
@@ -3192,8 +3375,8 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
 
                 if (updater.getFrame() > m_branchFrame) {
                     FWLOG(
-                        "[fw][click {}] branch {} is behind the current frame "
-                        "{} -- replaying from frame 0 to reach it",
+                        "[fw][click {}] branch {} behind current frame {}, "
+                        "replaying from frame 0",
                         m_index + 1, m_branchFrame, updater.getFrame());
                     this->hardResetToStart();
                 }
@@ -3298,12 +3481,412 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
                 continue;
             }
 
+            case Stage::Dependent: {
+                if (!this->stepDependent(pl)) return;
+                continue;
+            }
+
             case Stage::Finish:
             case Stage::Idle:
             default:
                 return;
         }
     }
+}
+
+size_t FrameWindowAnalyzer::resultFor(size_t sample) const {
+    auto const& s = m_samples[sample];
+    for (size_t i = 0; i < m_results.size(); i++) {
+        auto const& mk = m_results[i];
+        if (mk.frame == s.frame && mk.player2 == s.player2 &&
+            mk.release == s.release)
+            return i;
+    }
+    return NO_INDEX;
+}
+
+void FrameWindowAnalyzer::resetActions() {
+    auto& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
+    if (actions.size() != m_originalFrames.size()) return;
+    for (size_t k = 0; k < actions.size(); k++) {
+        actions[k].m_frame = m_originalFrames[k];
+        scbf::setOffset(actions[k], m_originalOffsets[k]);
+    }
+}
+
+void FrameWindowAnalyzer::placeAt(size_t k, double pos) {
+    auto& action = Bot::get()->replaySystem().m_actionAtom.m_actions[k];
+    double const whole = std::max(0.0, std::floor(pos));
+    action.m_frame = static_cast<uint64_t>(whole);
+    scbf::setOffset(action, pos > whole ? pos - whole : 0.0);
+}
+
+bool FrameWindowAnalyzer::beginDependentPass(std::string message) {
+    m_depRes = 1;
+    if (m_subframeProbe->inner()) {
+        double const hz = static_cast<double>(
+            std::clamp<int64_t>(m_cbfInputHz->inner(), 240, MAX_CBF_HZ));
+        m_depRes = std::clamp<int64_t>(
+            std::llround(hz / std::max(1.0, m_baseTps)), 1,
+            MAX_RESOLVABLE_SLOTS);
+    }
+
+    // GucciBot: at sub-frame resolution this pass places inputs at fractions
+    // of a frame through scbf::setOffset, which GucciBot cannot honour yet --
+    // gb::Action has no offset and the replay path does not arm CBF from one
+    // (see the scbf block in shim.hpp). Running it anyway would snap every
+    // placement to a whole frame and report windows for positions that were
+    // never tested. At frame resolution anticroom rounds every point to a whole
+    // frame himself, so the pass is exact and runs normally.
+    if (m_depRes > 1) {
+        FWWARN("[fw][dependent] skipped: Subframe Probe is on, and sub-frame "
+               "dependent search needs sub-tick input placement GucciBot does "
+               "not have yet. Turn Subframe Probe off to run it at frame "
+               "resolution.");
+        this->finish(message + " Dependent search skipped: it needs Subframe "
+                               "Probe off in GucciBot for now.",
+                     true);
+        return true;
+    }
+
+    m_depPairs.clear();
+    for (size_t a = 0; a < m_samples.size(); a++) {
+        size_t const b = this->nextSampleFor(a);
+        if (b == NO_INDEX) continue;
+        if (m_samples[b].frame - m_samples[a].frame >
+            static_cast<uint32_t>(m_horizon))
+            continue;
+
+        size_t const ra = this->resultFor(a);
+        size_t const rb = this->resultFor(b);
+        if (ra == NO_INDEX || rb == NO_INDEX) continue;
+
+        auto const& ma = m_results[ra];
+        // A CBF result is measured at sub-frame precision, so its dependent
+        // points are not rounded -- same sub-tick limitation as above.
+        if (ma.cbf) continue;
+        auto const& mb = m_results[rb];
+        if (ma.desynced || mb.desynced) continue;
+        if (ma.window <= 0 || mb.window <= 0) continue;
+
+        double const scale =
+            ma.cbf ? static_cast<double>(std::max<int64_t>(1, m_depRes)) : 1.0;
+        DependentPair pair;
+        pair.a = a;
+        pair.b = b;
+        pair.markB = rb;
+        pair.aLo = static_cast<double>(ma.low) / scale;
+        pair.aHi = static_cast<double>(ma.high) / scale;
+        if (pair.aHi <= pair.aLo) continue;
+
+        m_depPairs.push_back(pair);
+    }
+
+    if (m_depPairs.empty()) {
+        FWLOG("[fw][dependent] no input pairs close enough to check");
+        return false;
+    }
+
+    log::info("[fw][dependent] checking {} pair(s) at {} slot(s)/tick",
+              m_depPairs.size(), m_depRes);
+
+    m_depFinishMessage = std::move(message);
+    m_depCursor = 0;
+    m_depBaseReady = false;
+    m_depAdvancing = false;
+    m_depLegActive = false;
+    m_phase = Phase::Later;
+    m_shift = 0;
+    m_stageId = Stage::Dependent;
+    m_stage = "dependent";
+    m_status = "Checking dependent pairs";
+    m_index = m_samples.size() - 1;
+    return true;
+}
+
+bool FrameWindowAnalyzer::stepDependent(PlayLayer* pl) {
+    auto bot = Bot::get();
+    auto& updater = bot->updater();
+    auto& pf = bot->practiceFix();
+
+    if (m_depCursor >= m_depPairs.size()) {
+        this->resetActions();
+        cbf::Engine::get()->reset();
+        this->finish(std::move(m_depFinishMessage), true);
+        return true;
+    }
+
+    auto const& pair = m_depPairs[m_depCursor];
+    size_t const aiA = m_samples[pair.a].actionIndex;
+
+    if (!m_depBaseReady) {
+        double const earliest = static_cast<double>(m_originalFrames[aiA]) +
+                                m_originalOffsets[aiA] + pair.aLo;
+        uint32_t const base = static_cast<uint32_t>(
+            std::max(0.0, std::floor(earliest) - 1.0));
+
+        if (!m_depAdvancing) {
+            cbf::Engine::get()->reset();
+            this->resetActions();
+            if (m_haveCheckpoint && m_saved.m_frameOffset <= base) {
+                if (!this->restoreToBranch()) return true;
+            } else {
+                this->hardResetToStart();
+            }
+            m_depAdvancing = true;
+        }
+
+        m_noclip = m_noclipNextAdvance;
+        auto const r = this->stepToward(pl, base);
+        m_noclip = false;
+        if (r == StepResult::OutOfBudget) return false;
+        m_noclipNextAdvance = false;
+        m_depAdvancing = false;
+
+        if (r == StepResult::Died) {
+            FWWARN("[fw][dependent] could not reach frame {} for click {}, "
+                      "skipping it",
+                      base, pair.b + 1);
+            m_depCursor++;
+            return true;
+        }
+
+        this->releaseCheckpoint();
+        m_cpObject = pl->createCheckpoint();
+        if (!m_cpObject) {
+            this->finish("Could not create a checkpoint.", false);
+            return true;
+        }
+        m_cpObject->retain();
+        m_saved = pf.createCheckpoint(m_cpObject, updater.m_frameOnLastAttempt);
+        m_haveCheckpoint = true;
+
+        m_depPoints.clear();
+        m_depPoints.push_back(pair.aLo);
+        m_depPoints.push_back(pair.aHi);
+        for (int k = 1; k < DEP_POINTS - 1; k++)
+            m_depPoints.push_back(pair.aLo + (pair.aHi - pair.aLo) * k /
+                                                 (DEP_POINTS - 1));
+        if (m_depRes <= 1 && !m_results[this->resultFor(pair.a)].cbf) {
+            for (auto& p : m_depPoints) p = std::round(p);
+            std::vector<double> unique;
+            for (double p : m_depPoints)
+                if (std::find(unique.begin(), unique.end(), p) == unique.end())
+                    unique.push_back(p);
+            m_depPoints = std::move(unique);
+        }
+
+        m_depWidths.clear();
+        m_depPoint = 0;
+        m_depBaseReady = true;
+        m_index = pair.b;
+        this->startDependentPoint();
+        return true;
+    }
+
+    if (!m_depLegActive) {
+        int64_t shift = 0;
+        if (this->nextDependentShift(shift)) {
+            this->launchDependentLeg(shift);
+            return true;
+        }
+
+        m_depWidths.push_back(m_depFound ? m_depAlive - m_depLow + 1 : 0);
+
+        if (m_depPoint == 1 && std::abs(m_depWidths[0] - m_depWidths[1]) <= 1) {
+            FWLOG("[fw][dependent] click {} after {}: same window at both "
+                  "edges, independent",
+                  pair.b + 1, pair.a + 1);
+            m_depWidths.clear();
+            this->finishDependentPair();
+            return true;
+        }
+
+        if (++m_depPoint >= m_depPoints.size()) {
+            this->finishDependentPair();
+            return true;
+        }
+        this->startDependentPoint();
+        return true;
+    }
+
+    auto const r = this->stepToward(pl, m_depLegTarget);
+    if (r == StepResult::OutOfBudget) return false;
+    m_depLegActive = false;
+    this->recordDependentLeg(r != StepResult::Died);
+    return true;
+}
+
+void FrameWindowAnalyzer::startDependentPoint() {
+    auto const& pair = m_depPairs[m_depCursor];
+    size_t const aiA = m_samples[pair.a].actionIndex;
+    size_t const aiB = m_samples[pair.b].actionIndex;
+
+    double const res = static_cast<double>(m_depRes);
+    double const aPos = static_cast<double>(m_originalFrames[aiA]) +
+                        m_originalOffsets[aiA] + m_depPoints[m_depPoint];
+    double const bPos =
+        static_cast<double>(m_originalFrames[aiB]) + m_originalOffsets[aiB];
+
+    int64_t const reach = static_cast<int64_t>(m_sweep) * m_depRes;
+    int64_t lo = -reach;
+    int64_t hi = reach;
+
+    lo = std::max<int64_t>(
+        lo, static_cast<int64_t>(std::floor((aPos - bPos) * res)) + 1);
+    lo = std::max<int64_t>(lo,
+                           static_cast<int64_t>(std::ceil(-bPos * res)));
+    if (size_t const next = this->nextActionFor(aiB, m_samples[pair.b].player2);
+        next != NO_INDEX) {
+        double const nPos = static_cast<double>(m_originalFrames[next]) +
+                            m_originalOffsets[next];
+        hi = std::min<int64_t>(
+            hi, static_cast<int64_t>(std::ceil((nPos - bPos) * res)) - 1);
+    }
+
+    m_depScan.clear();
+    m_depScanAlive.clear();
+    m_depScanAt = 0;
+    m_depEdgesSet = false;
+    m_depFound = false;
+    if (hi < lo) return;
+
+    int64_t const stride = std::max<int64_t>(1, m_depRes / DEP_SCAN_PER_TICK);
+    for (int64_t t = lo; t <= hi; t += stride) m_depScan.push_back(t);
+    if (m_depScan.back() != hi) m_depScan.push_back(hi);
+    if (lo <= 0 && hi >= 0 &&
+        std::find(m_depScan.begin(), m_depScan.end(), 0) == m_depScan.end()) {
+        m_depScan.push_back(0);
+        std::sort(m_depScan.begin(), m_depScan.end());
+    }
+}
+
+bool FrameWindowAnalyzer::nextDependentShift(int64_t& shift) {
+    if (m_depScanAt < m_depScan.size()) {
+        shift = m_depScan[m_depScanAt];
+        return true;
+    }
+
+    if (!m_depEdgesSet) {
+        m_depEdgesSet = true;
+        size_t best = NO_INDEX;
+        for (size_t i = 0; i < m_depScan.size(); i++) {
+            if (!m_depScanAlive[i]) continue;
+            if (best == NO_INDEX ||
+                std::abs(m_depScan[i]) < std::abs(m_depScan[best]))
+                best = i;
+        }
+        m_depFound = best != NO_INDEX;
+        if (!m_depFound) return false;
+
+        size_t left = best;
+        while (left > 0 && m_depScanAlive[left - 1]) left--;
+        size_t right = best;
+        while (right + 1 < m_depScan.size() && m_depScanAlive[right + 1])
+            right++;
+
+        m_depLow = m_depScan[left];
+        m_depLowDead = left > 0 ? m_depScan[left - 1] : m_depLow;
+        m_depAlive = m_depScan[right];
+        m_depDead = right + 1 < m_depScan.size() ? m_depScan[right + 1]
+                                                 : m_depAlive;
+    }
+
+    if (m_depLow - m_depLowDead > 1) {
+        shift = std::midpoint(m_depLowDead, m_depLow);
+        return true;
+    }
+    if (m_depDead - m_depAlive > 1) {
+        shift = std::midpoint(m_depAlive, m_depDead);
+        return true;
+    }
+    return false;
+}
+
+void FrameWindowAnalyzer::launchDependentLeg(int64_t shift) {
+    auto const& pair = m_depPairs[m_depCursor];
+    size_t const aiA = m_samples[pair.a].actionIndex;
+    size_t const aiB = m_samples[pair.b].actionIndex;
+
+    cbf::Engine::get()->reset();
+    if (!this->restoreToBranch()) return;
+    this->resetActions();
+
+    double const res = static_cast<double>(m_depRes);
+    double const aShift = m_depPoints[m_depPoint];
+    auto const origin = [this](size_t k) {
+        return static_cast<double>(m_originalFrames[k]) + m_originalOffsets[k];
+    };
+
+    this->placeAt(aiA, origin(aiA) + aShift);
+    if (size_t const rel = this->pairedReleaseFor(aiA);
+        rel != NO_INDEX && rel != aiB)
+        this->placeAt(rel, origin(rel) + aShift);
+
+    double const bPos = origin(aiB) + static_cast<double>(shift) / res;
+    this->placeAt(aiB, bPos);
+
+    auto const& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
+    int64_t const bFrame = static_cast<int64_t>(actions[aiB].m_frame);
+
+    int64_t gap = static_cast<int64_t>(m_horizon);
+    for (size_t k = aiB + 1; k < actions.size(); k++) {
+        if (!isMeasurableInput(actions[k])) continue;
+        gap = static_cast<int64_t>(actions[k].m_frame) - bFrame;
+        break;
+    }
+    int64_t const reach =
+        std::clamp<int64_t>(std::max<int64_t>(gap - m_slack_, 0), MIN_HORIZON,
+                            static_cast<int64_t>(m_horizon));
+
+    m_depLegShift = shift;
+    m_depLegTarget = static_cast<uint32_t>(std::max<int64_t>(bFrame + reach, 0));
+    m_depLegActive = true;
+    m_legCounter++;
+}
+
+void FrameWindowAnalyzer::recordDependentLeg(bool survived) {
+    int64_t const shift = m_depLegShift;
+
+    if (m_depScanAt < m_depScan.size()) {
+        m_depScanAlive.push_back(survived ? 1 : 0);
+        m_depScanAt++;
+    } else if (shift < m_depLow) {
+        (survived ? m_depLow : m_depLowDead) = shift;
+    } else {
+        (survived ? m_depAlive : m_depDead) = shift;
+    }
+}
+
+void FrameWindowAnalyzer::finishDependentPair() {
+    auto const& pair = m_depPairs[m_depCursor];
+
+    if (m_depWidths.size() >= 2) {
+        auto const [lo, hi] =
+            std::minmax_element(m_depWidths.begin(), m_depWidths.end());
+        double const res = static_cast<double>(m_depRes);
+        double const mean =
+            std::accumulate(m_depWidths.begin(), m_depWidths.end(), 0.0) /
+            static_cast<double>(m_depWidths.size()) / res;
+
+        auto& mk = m_results[pair.markB];
+        mk.dependent = static_cast<float>(std::max(mean, 1.0 / res));
+        mk.dependentMin = static_cast<float>(*lo / res);
+        mk.dependentMax = static_cast<float>(*hi / res);
+
+        log::info(
+            "[fw][dependent] click {} after {}: {} alone, {:.3f} averaged over "
+            "the previous input's window (min {:.3f}, max {:.3f}, {} points)",
+            pair.b + 1, pair.a + 1,
+            mk.subframe > 0.f ? fmt::format("{:.3f}", mk.subframe)
+                              : std::to_string(mk.window),
+            mean, mk.dependentMin, mk.dependentMax, m_depWidths.size());
+    }
+
+    m_depCursor++;
+    m_depBaseReady = false;
+    m_depLegActive = false;
+    m_depWidths.clear();
 }
 
 std::string FrameWindowAnalyzer::formatWindow(int window) {
@@ -3349,6 +3932,9 @@ struct StoredMark {
     bool splitChecked = false;
     float x = 0.f;
     float y = 0.f;
+    float dependent = 0.f;
+    float dependentMin = 0.f;
+    float dependentMax = 0.f;
 };
 
 struct StoredMessage {
@@ -3568,7 +4154,8 @@ bool FrameWindowAnalyzer::saveResults(std::filesystem::path const& path) const {
                              mk.setupHigh, mk.hz, mk.solid, mk.holes,
                              mk.saturatedLow, mk.saturatedHigh,
                              mk.splitWindow, mk.splitShift, mk.splitChecked,
-                             mk.position.x, mk.position.y});
+                             mk.position.x, mk.position.y, mk.dependent,
+                             mk.dependentMin, mk.dependentMax});
     }
 
     out.messages.reserve(m_messages.size());
@@ -3630,6 +4217,9 @@ bool FrameWindowAnalyzer::loadResults(std::filesystem::path const& path) {
         mk.setupHigh = sm.setupHigh;
         mk.hz = sm.hz;
         mk.position = CCPoint{sm.x, sm.y};
+        mk.dependent = sm.dependent;
+        mk.dependentMin = sm.dependentMin;
+        mk.dependentMax = sm.dependentMax;
         m_results.push_back(mk);
     }
 
@@ -3742,7 +4332,7 @@ void FrameWindowAnalyzer::updateTiming(PlayLayer* pl,
             label = CCLabelBMFont::create(text.c_str(), "bigFont.fnt");
             label->setID(id);
             label->setAnchorPoint({1.f, 1.f});
-            pl->m_uiLayer->addChild(label);
+            pl->m_uiLayer->addChild(label, 9999);
         } else {
             label->setString(text.c_str());
         }
@@ -3814,19 +4404,151 @@ void FrameWindowAnalyzer::updateTiming(PlayLayer* pl,
     }
 }
 
-std::vector<lstar::Input> FrameWindowAnalyzer::precisionInputs() const {
+std::string FrameWindowAnalyzer::describe() const {
+    auto const& fws = SLSettings::get()->frameWindow;
+
+    lstar::Settings plain;
+    plain.m_tps = this->resultsTps();
+    plain.m_respawnSeconds = fws.lstarRespawn;
+    plain.m_targetSeconds = fws.lstarTarget;
+
+    lstar::Settings nerve = plain;
+    nerve.m_nerve = fws.lstarNerve;
+    nerve.m_useNerve = true;
+
+    auto const whole = this->precisionInputs(false);
+    auto const cbf = this->precisionInputs(true);
+
+    std::vector<FrameWindowTier> bands;
+    for (auto const& t : fws.tiers)
+        if (t.showInHud) bands.push_back(t);
+    std::sort(bands.begin(), bands.end(), [](auto const& a, auto const& b) {
+        return a.minWindow < b.minWindow;
+    });
+
+    int top = 1;
+    for (auto const& b : bands) top = std::max(top, b.maxWindow);
+
+    std::vector<int> individual(top + 1, 0);
+    int individualOver = 0;
+    for (auto const& in : whole) {
+        if (in.m_ignored) continue;
+        int const w = (int)in.m_frames;
+        if (w > top)
+            individualOver++;
+        else
+            individual[w]++;
+    }
+
+    std::vector<int> grouped(bands.size(), 0);
+    std::vector<double> spread(top, 0.0);
+    double spreadOver = 0.0;
+    for (auto const& in : cbf) {
+        if (in.m_ignored) continue;
+
+        int const lo = (int)std::floor(in.m_frames);
+        double const frac = in.m_frames - lo;
+        auto const add = [&](int k, double v) {
+            if (k < top)
+                spread[k] += v;
+            else
+                spreadOver += v;
+        };
+        add(lo, 1.0 - frac);
+        if (frac > 0.0) add(lo + 1, frac);
+
+        for (size_t b = 0; b < bands.size(); b++) {
+            if (lo >= bands[b].minWindow && lo <= bands[b].maxWindow) {
+                grouped[b]++;
+                break;
+            }
+        }
+    }
+
+    double const target = fws.lstarTarget > 0.0 ? fws.lstarTarget : 86400.0;
+    std::string duration;
+    if (std::fmod(target, 3600.0) == 0.0)
+        duration = fmt::format("{:g} {}", target / 3600.0,
+                               target == 3600.0 ? "hour" : "hours");
+    else if (std::fmod(target, 60.0) == 0.0)
+        duration = fmt::format("{:g} minutes", target / 60.0);
+    else
+        duration = fmt::format("{:g} seconds", target);
+
+    auto const precision = [&](std::vector<lstar::Input> const& in) {
+        return fmt::format(
+            "{:.2f} \xCF\x83/s\n{:.2f} \xCF\x83/s (Nerve Inflated)\n",
+            lstar::solve(in, plain), lstar::solve(in, nerve));
+    };
+
+    std::string out = fmt::format(
+        "Precision required to complete the level from 0% with an expected "
+        "completion time of {}.\n\n",
+        duration);
+    out += precision(whole);
+    out += "\nCBF:\n\n";
+    out += precision(cbf);
+
+    out += "\nIndividual Frame Windows:\n";
+    for (int k = 1; k <= top; k++)
+        out += fmt::format("{}: {}\n", k, individual[k]);
+    if (individualOver > 0)
+        out += fmt::format("{}+: {}\n", top + 1, individualOver);
+
+    out += "\nGrouped CBF Windows:\n\n";
+    for (size_t b = 0; b < bands.size(); b++) {
+        auto const& t = bands[b];
+        std::string const name =
+            !t.text.empty() ? t.text
+            : t.minWindow == t.maxWindow
+                ? fmt::format("{}", t.minWindow)
+                : fmt::format("{}-{}", t.minWindow, t.maxWindow);
+        out += fmt::format("{}: {}\n", name, grouped[b]);
+    }
+
+    out += "\nProbabilistic Frame Windows:\n\n";
+    for (int k = 0; k < top; k++)
+        out += fmt::format("{}: {:.2f}\n", k, spread[k]);
+    if (spreadOver >= 0.005)
+        out += fmt::format("{}+: {:.2f}\n", top, spreadOver);
+
+    if (!out.empty() && out.back() == '\n') out.pop_back();
+    return out;
+}
+
+std::vector<lstar::Input> FrameWindowAnalyzer::precisionInputs(
+    bool cbf) const {
+    std::vector<uint32_t> presses;
+    for (auto const& a : Bot::get()->replaySystem().m_actionAtom.m_actions) {
+        if (a.m_holding && isMeasurableInput(a))
+            presses.push_back(static_cast<uint32_t>(a.m_frame));
+    }
+    std::sort(presses.begin(), presses.end());
+
     std::vector<lstar::Input> out;
     out.reserve(m_results.size());
 
-    for (auto const& mk : m_results) {
-        if (mk.desynced || mk.hidden) continue;
+    for (size_t i = 0; i < m_results.size(); i++) {
+        auto const& mk = m_results[i];
 
-        double const frames =
-            mk.subframe > 0.f ? static_cast<double>(mk.subframe)
-                              : static_cast<double>(mk.window);
-        if (frames <= 0.0) continue;
-
-        out.push_back({mk.frame, frames});
+        lstar::Input in;
+        in.m_frame = mk.frame;
+        in.m_frames = cbf && mk.subframe > 0.f ? mk.subframe : mk.window;
+        if (mk.dependent > 0.f)
+            in.m_frames = cbf ? static_cast<double>(mk.dependent)
+                              : std::max(1.0, std::floor(
+                                                  static_cast<double>(
+                                                      mk.dependent)));
+        in.m_ignored = mk.desynced || mk.hidden || in.m_frames <= 0.0 ||
+                       !this->visibleTierFor(mk);
+        in.m_input =
+            presses.empty()
+                ? static_cast<uint32_t>(i + 1)
+                : static_cast<uint32_t>(std::max<ptrdiff_t>(
+                      1, std::upper_bound(presses.begin(), presses.end(),
+                                          mk.frame) -
+                             presses.begin()));
+        out.push_back(in);
     }
     return out;
 }
@@ -3868,7 +4590,9 @@ void FrameWindowAnalyzer::spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
     bool const wholeOnly = mk.cbf && m_cbfWholeMarkers->inner();
 
     std::string text;
-    if (mk.subframe > 0.f && !wholeOnly)
+    if (mk.dependent > 0.f && !mk.desynced)
+        text = "~" + this->formatSubframe(mk.dependent);
+    else if (mk.subframe > 0.f && !wholeOnly)
         text = this->formatSubframe(mk.subframe);
     else if (mk.desynced)
         text = "?";
@@ -3890,10 +4614,6 @@ void FrameWindowAnalyzer::spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
 
     if (mk.desynced) color = {0.51f, 0.51f, 0.51f, 0.6f};
 
-    auto* node = CCNode::create();
-    node->setPosition(mk.position);
-    node->setZOrder(9999);
-
     // Circle skin sizes the ring by how tight the window is, so a 2-frame
     // click is visibly smaller than a 12-frame one. Off by default, in which
     // case every marker is the one configured size.
@@ -3906,43 +4626,75 @@ void FrameWindowAnalyzer::spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
                             1.f,
                             std::max(1.f, fwcfg.circleSkinMaxRadius));
     }
-    auto* circle = CCDrawNode::create();
-    float const a = color.a;
 
-    // A band can carry one of Juice's shapes. Without one this is the plain
-    // ring anticroom draws, kept exactly as it was -- two passes so the marker
-    // reads against a bright background as well as a dark one.
-    if (tier && tier->style.shape != gbshape::Shape::Circle) {
-        gbshape::draw(circle, {0.f, 0.f}, radius,
-                      {color.r * a, color.g * a, color.b * a, a}, tier->style);
-    } else if (tier && tier->style.fill == gbshape::Fill::Normal) {
-        gbshape::draw(circle, {0.f, 0.f}, radius,
-                      {color.r * a, color.g * a, color.b * a, a}, tier->style);
-    } else {
-        CCPoint verts[64];
-        for (int i = 0; i < 64; i++) {
-            float const angle = static_cast<float>(i) * 6.2831853f / 64.f;
-            verts[i] = CCPoint{radius * std::cos(angle), radius * std::sin(angle)};
+    // anticroom's structure: the marker is built by a lambda so the same one
+    // can be placed twice -- at the player, and at the dual-mode twin. The
+    // shape inside is ours (Juice's shapes and the circle skin).
+    auto const place = [&](CCPoint at) {
+        auto* node = CCNode::create();
+        node->setPosition(at);
+        node->setZOrder(9999);
+
+        auto* circle = CCDrawNode::create();
+        float const a = color.a;
+
+        // A band can carry one of Juice's shapes. Without one this is the plain
+        // ring anticroom draws, kept exactly as it was -- two passes so the
+        // marker reads against a bright background as well as a dark one.
+        if (tier && tier->style.shape != gbshape::Shape::Circle) {
+            gbshape::draw(circle, {0.f, 0.f}, radius,
+                          {color.r * a, color.g * a, color.b * a, a}, tier->style);
+        } else if (tier && tier->style.fill == gbshape::Fill::Normal) {
+            gbshape::draw(circle, {0.f, 0.f}, radius,
+                          {color.r * a, color.g * a, color.b * a, a}, tier->style);
+        } else {
+            CCPoint verts[64];
+            for (int i = 0; i < 64; i++) {
+                float const angle = static_cast<float>(i) * 6.2831853f / 64.f;
+                verts[i] = CCPoint{radius * std::cos(angle), radius * std::sin(angle)};
+            }
+            circle->drawPolygon(verts, 64, {0.f, 0.f, 0.f, 0.f}, 4.f,
+                                {0.f, 0.f, 0.f, a});
+            circle->drawPolygon(verts, 64, {0.f, 0.f, 0.f, 0.f}, 2.f,
+                                {color.r * a, color.g * a, color.b * a, a});
         }
-        circle->drawPolygon(verts, 64, {0.f, 0.f, 0.f, 0.f}, 4.f,
-                            {0.f, 0.f, 0.f, a});
-        circle->drawPolygon(verts, 64, {0.f, 0.f, 0.f, 0.f}, 2.f,
-                            {color.r * a, color.g * a, color.b * a, a});
-    }
-    node->addChild(circle);
+        node->addChild(circle);
 
-    auto* label = CCLabelBMFont::create(text.c_str(), "bigFont.fnt");
-    label->setAnchorPoint({1.f, 0.5f});
-    label->setPosition({-(radius + 5.f), 0.f});
-    label->setScale(std::max(0.05f, m_markerScale->inner()));
-    label->setColor({static_cast<GLubyte>(color.r * 255),
-                     static_cast<GLubyte>(color.g * 255),
-                     static_cast<GLubyte>(color.b * 255)});
-    label->setOpacity(static_cast<GLubyte>(color.a * 255));
-    node->addChild(label);
+        auto* label = CCLabelBMFont::create(text.c_str(), "bigFont.fnt");
+        label->setAnchorPoint({1.f, 0.5f});
+        label->setPosition({-(radius + 5.f), 0.f});
+        label->setScale(std::max(0.05f, m_markerScale->inner()));
+        label->setColor({static_cast<GLubyte>(color.r * 255),
+                         static_cast<GLubyte>(color.g * 255),
+                         static_cast<GLubyte>(color.b * 255)});
+        label->setOpacity(static_cast<GLubyte>(color.a * 255));
+        node->addChild(label);
 
-    container->addChild(node);
-    this->trackMarker(node, mk.position);
+        container->addChild(node);
+        this->trackMarker(node, at);
+    };
+
+    place(mk.position);
+    if (auto const twin = this->dualTwin(pl, mk)) place(*twin);
+}
+
+std::optional<cocos2d::CCPoint> FrameWindowAnalyzer::dualTwin(
+    PlayLayer* pl, FrameWindowMark const& mk) const {
+    if (mk.player2 || !pl->m_levelSettings ||
+        pl->m_levelSettings->m_twoPlayerMode)
+        return std::nullopt;
+
+    auto const& other = Bot::get()->trailBuffer().stream(1);
+    auto const it = std::upper_bound(
+        other.begin(), other.end(), mk.frame,
+        [](uint32_t f, tbuf::Sample const& s) { return f < s.frame; });
+    if (it == other.begin()) return std::nullopt;
+
+    auto const& s = *(it - 1);
+    if (mk.frame - s.frame > 1) return std::nullopt;
+
+    return cocos2d::CCPoint((s.rect.minX + s.rect.maxX) * 0.5f,
+                            (s.rect.minY + s.rect.maxY) * 0.5f);
 }
 
 void FrameWindowAnalyzer::spawnMessages(PlayLayer* pl, uint32_t frame) {
@@ -4084,7 +4836,7 @@ void FrameWindowAnalyzer::updateLStarHud(PlayLayer* pl) {
         for (auto const& in : inputs) m_lstarFrames.push_back(in.m_frame);
 
         lstar::Settings ls;
-        ls.m_tps = Bot::get()->updater().m_tps;
+        ls.m_tps = this->resultsTps();  // measured TPS, not current -- from anticroom's version
         ls.m_respawnSeconds = fw.lstarRespawn;
         ls.m_targetSeconds = fw.lstarTarget > 0.0 ? fw.lstarTarget : 86400.0;
         ls.m_useNerve = fw.lstarUseNerve;
@@ -4137,6 +4889,42 @@ void FrameWindowAnalyzer::updateLStarHud(PlayLayer* pl) {
         8.f + valH * 0.86f);
 }
 
+static CCTexture2D* hudGlowTexture() {
+    static CCTexture2D* cached = nullptr;
+    if (cached) return cached;
+
+    constexpr int SIZE = 192;
+    std::vector<uint8_t> pixels(static_cast<size_t>(SIZE) * SIZE * 4);
+
+    for (int y = 0; y < SIZE; y++) {
+        for (int x = 0; x < SIZE; x++) {
+            float const dx = (static_cast<float>(x) + 0.5f) / SIZE * 2.f - 1.f;
+            float const dy = (static_cast<float>(y) + 0.5f) / SIZE * 2.f - 1.f;
+
+            float const dist = std::sqrt(dx * dx + dy * dy);
+            float const alpha = std::pow(std::clamp(1.f - dist, 0.f, 1.f), 2.6f);
+
+            size_t const i = (static_cast<size_t>(y) * SIZE + x) * 4;
+            pixels[i + 0] = 255;
+            pixels[i + 1] = 255;
+            pixels[i + 2] = 255;
+            pixels[i + 3] =
+                static_cast<uint8_t>(std::lround(alpha * 255.f));
+        }
+    }
+
+    auto* tex = new CCTexture2D();
+    if (!tex->initWithData(pixels.data(), kCCTexture2DPixelFormat_RGBA8888,
+                           SIZE, SIZE, CCSize(SIZE, SIZE))) {
+        tex->release();
+        return nullptr;
+    }
+
+    tex->setAntiAliasTexParameters();
+    cached = tex;
+    return cached;
+}
+
 void FrameWindowAnalyzer::rebuildHud(PlayLayer* pl) {
     if (auto* old = pl->m_uiLayer->getChildByID("framewindow-hud"_spr))
         old->removeFromParent();
@@ -4145,7 +4933,7 @@ void FrameWindowAnalyzer::rebuildHud(PlayLayer* pl) {
     hud->setID("framewindow-hud"_spr);
     hud->setAnchorPoint({0.f, 1.f});
     hud->setPosition({8.f, CCDirector::get()->getWinSize().height - 8.f});
-    pl->m_uiLayer->addChild(hud);
+    pl->m_uiLayer->addChild(hud, 9999);
 
     auto const& tiers = SLSettings::get()->frameWindow.tiers;
 
@@ -4154,7 +4942,15 @@ void FrameWindowAnalyzer::rebuildHud(PlayLayer* pl) {
             std::clamp(v + (1.f - v) * 0.10f, 0.f, 1.f) * 255.f);
     };
 
-    float const scale = std::max(0.1f, SLSettings::get()->frameWindow.hudScale);
+    if (auto* tex = hudGlowTexture()) {
+        auto* flash = CCSprite::createWithTexture(tex);
+        flash->setID("framewindow-flash");
+        flash->setVisible(false);
+        flash->setBlendFunc({GL_SRC_ALPHA, GL_ONE});
+        hud->addChild(flash, -1);
+    }
+
+        float const scale = std::max(0.1f, SLSettings::get()->frameWindow.hudScale);
     float constexpr gutter = 6.f;
 
     struct Row {
@@ -4227,8 +5023,75 @@ void FrameWindowAnalyzer::refreshHudCounts(PlayLayer* pl) {
     }
 }
 
+void FrameWindowAnalyzer::updateHudFlash(PlayLayer* pl, uint32_t frame,
+                                        double tps) {
+    constexpr float GLOW_SPAN = 3.2f;
+
+    auto* hud = pl->m_uiLayer->getChildByID("framewindow-hud"_spr);
+    if (!hud) return;
+
+    auto* glow =
+        typeinfo_cast<CCSprite*>(hud->getChildByID("framewindow-flash"));
+
+    float amount = 0.f;
+    if (m_hudFlashActive && frame >= m_hudFlashFrame) {
+        double const span =
+            std::max(1.0, HUD_FLASH_SECONDS * (tps > 0.0 ? tps : 240.0));
+        double const age = static_cast<double>(frame - m_hudFlashFrame);
+
+        amount = static_cast<float>(std::clamp(1.0 - age / span, 0.0, 1.0));
+        if (amount <= 0.f) m_hudFlashActive = false;
+    } else {
+        m_hudFlashActive = false;
+    }
+
+    auto const lift = [](float v) {
+        return std::clamp(v + (1.f - v) * 0.10f, 0.f, 1.f);
+    };
+
+    CCLabelBMFont* lit = nullptr;
+
+    for (auto const& tier : SLSettings::get()->frameWindow.tiers) {
+        auto* node =
+            hud->getChildByID(fmt::format("framewindow-count-{}", tier.id));
+        auto* label = typeinfo_cast<CCLabelBMFont*>(node);
+        if (!label) continue;
+
+        bool const flashing = m_hudFlashActive && tier.id == m_hudFlashTier;
+        float const mix = flashing ? amount : 0.f;
+
+        auto const chan = [&](int i) {
+            float const base = lift(tier.color[i]);
+            return static_cast<GLubyte>(
+                std::clamp(base + (1.f - base) * mix, 0.f, 1.f) * 255.f);
+        };
+
+        label->setColor({chan(0), chan(1), chan(2)});
+
+        if (flashing) lit = label;
+    }
+
+    if (!glow) return;
+
+    if (!lit || amount <= 0.f) {
+        glow->setVisible(false);
+        return;
+    }
+
+    CCSize const size = lit->getScaledContentSize();
+    CCPoint const at = lit->getPosition();
+
+    glow->setVisible(true);
+    glow->setPosition({at.x + size.width * 0.5f, at.y - size.height * 0.5f});
+    glow->setScale(size.height * GLOW_SPAN /
+                   static_cast<float>(glow->getTexture()->getPixelsHigh()));
+    glow->setOpacity(static_cast<GLubyte>(std::lround(255.f * amount)));
+}
+
 void FrameWindowAnalyzer::recountUpTo(uint32_t frame) {
     m_hudCounts.clear();
+    m_hudFlashActive = false;
+    m_hudFlashTier = -1;
     m_timingMark = -1;
     for (size_t i = 0; i < m_results.size(); i++) {
         auto const& mk = m_results[i];
@@ -4242,6 +5105,8 @@ void FrameWindowAnalyzer::recountUpTo(uint32_t frame) {
 }
 
 int FrameWindowAnalyzer::displayWindow(FrameWindowMark const& mk) const {
+    if (mk.dependent > 0.f)
+        return std::max(1, static_cast<int>(std::floor(mk.dependent)));
     if (mk.subframe > 0.f && !(mk.cbf && m_cbfWholeMarkers->inner()))
         return std::max(1, static_cast<int>(std::floor(mk.subframe)));
     return mk.window;
@@ -4319,6 +5184,14 @@ void FrameWindowAnalyzer::updateDisplay(PlayLayer* pl) {
                 m_timingMark = static_cast<int>(mi);
                 changed = true;
 
+                if (!seeking) {
+                    m_hudFlashTier = tier->id;
+                    m_hudFlashFrame = mk.frame;
+                    m_hudFlashActive = true;
+                } else {
+                    m_hudFlashActive = false;
+                }
+
                 if (!seeking && m_playSounds->inner() && !mk.desynced) {
                     std::string const clip =
                         tier->audioPath.empty()
@@ -4350,6 +5223,7 @@ static char const* stageName(int stage) {
         case 5: return "probe";
         case 6: return "recover";
         case 7: return "rewind";
+        case 8: return "dependent";
         default: return "finish";
     }
 }
@@ -4471,7 +5345,8 @@ void FrameWindowAnalyzer::render(PlayLayer* pl) {
     auto* markers = pl->m_uiLayer->getChildByID("framewindow-markers"_spr);
     auto* hud = pl->m_uiLayer->getChildByID("framewindow-hud"_spr);
 
-    bool const want = m_enabled->inner() && !m_results.empty() && !m_running;
+    bool const want = m_enabled->inner() && !m_results.empty() && !m_running &&
+                      !m_trip.active;
 
     if (!want) {
         if (markers) markers->removeFromParent();
@@ -4483,12 +5358,12 @@ void FrameWindowAnalyzer::render(PlayLayer* pl) {
                 ls->removeFromParent();
         if (auto* t = pl->m_uiLayer->getChildByID("framewindow-timing"_spr))
             t->removeFromParent();
+        if (auto* p = pl->m_uiLayer->getChildByID("framewindow-precision"_spr))
+            p->removeFromParent();
         m_hudBuiltGeneration = UINT32_MAX;
         m_haveLastFrame = false;
         return;
     }
-
-    this->updateLStarHud(pl);
 
     auto const& tiers = SLSettings::get()->frameWindow.tiers;
     if (!hud || m_hudBuiltGeneration != m_generation ||
@@ -4511,5 +5386,386 @@ void FrameWindowAnalyzer::render(PlayLayer* pl) {
     }
 
     this->updateDisplay(pl);
+
+    if (m_showHud->inner()) {
+        auto& updater = Bot::get()->updater();
+        this->updateHudFlash(pl, updater.getFrame(),
+                             updater.m_tps);
+    }
+
+    if (m_showPrecision->inner()) {
+        this->updatePrecisionReadout(pl, Bot::get()->updater().getFrame());
+    } else {
+        if (auto* p = pl->m_uiLayer->getChildByID("framewindow-precision"_spr))
+            p->removeFromParent();
+        // GucciBot: the readout that actually draws is ours; clear it too.
+        for (char const* lsid : {"framewindow-lstar-pct", "framewindow-lstar-val"})
+            if (auto* ls = pl->m_uiLayer->getChildByID(lsid))
+                ls->removeFromParent();
+    }
 }
 
+// GucciBot: anticroom's precision readout and our L* HUD are the same feature
+// -- bottom left, percentage stacked over the running value, the way NaN shows
+// it. Ours is the one Nigel has checked in-game and it has a scale setting, so
+// his call site drives ours rather than two readouts drawing over each other.
+//
+// Taken from his version: the solver is fed the TPS the results were MEASURED
+// at (resultsTps), not whatever TPS happens to be set now.
+//
+// Not taken: his percentage is (value/total)^2; ours is linear. NaN's formula
+// page does not define the in-level percentage (it comes from his videos), so
+// this stays as Nigel has seen it until someone checks it against a video.
+void FrameWindowAnalyzer::updatePrecisionReadout(PlayLayer* pl, uint32_t) {
+    this->updateLStarHud(pl);
+}
+
+
+FrameWindowAnalyzer::PlayheadInput FrameWindowAnalyzer::playheadInput() const {
+    PlayheadInput out;
+
+    auto const& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
+    uint32_t const now = Bot::get()->updater().getFrame();
+    bool const releases = m_labelReleases->inner();
+
+    int presses = 0;
+    for (auto const& a : actions) {
+        if (!isMeasurableInput(a) || a.m_frame > now) continue;
+        if (a.m_holding) presses++;
+        if (!a.m_holding && !releases) continue;
+
+        out.valid = true;
+        out.frame = static_cast<uint32_t>(a.m_frame);
+        out.player2 = a.m_player2;
+        out.release = !a.m_holding;
+        out.number = presses;
+    }
+
+    if (!out.valid) return out;
+
+    for (size_t i = 0; i < m_results.size(); i++) {
+        auto const& mk = m_results[i];
+        if (mk.frame == out.frame && mk.player2 == out.player2 &&
+            mk.release == out.release) {
+            out.mark = static_cast<int>(i);
+            break;
+        }
+    }
+    return out;
+}
+
+void FrameWindowAnalyzer::applyLabel(int window, float cbf) {
+    if (m_running) return;
+
+    auto const in = this->playheadInput();
+    if (!in.valid) return;
+
+    if (window <= 0 && cbf <= 0.f) {
+        if (in.mark < 0) return;
+        m_results.erase(m_results.begin() + in.mark);
+        this->markEdited();
+        return;
+    }
+
+    auto* pl = PlayLayer::get();
+    if (m_results.empty())
+        m_resultsTps = Bot::get()->updater().m_tps;
+
+    FrameWindowMark mk;
+    if (in.mark >= 0) {
+        mk = m_results[in.mark];
+    } else {
+        mk.frame = in.frame;
+        mk.player2 = in.player2;
+        mk.release = in.release;
+
+        auto* player =
+            pl ? (in.player2 ? pl->m_player2 : pl->m_player1) : nullptr;
+        if (player) {
+            mk.position = player->getPosition();
+            mk.gamemode = gamemodeOf(player);
+        }
+
+        for (auto const& t : Bot::get()->trailBuffer().stream(in.player2)) {
+            if (t.frame != in.frame) continue;
+            mk.position = cocos2d::CCPoint((t.rect.minX + t.rect.maxX) * 0.5f,
+                                           (t.rect.minY + t.rect.maxY) * 0.5f);
+        }
+
+        if (pl && pl->m_levelLength > 0.f)
+            mk.percent = mk.position.x / pl->m_levelLength * 100.f;
+    }
+
+    mk.window = window > 0 ? window : std::max(1, (int)std::lround(cbf));
+    mk.subframe = cbf > 0.f ? cbf : 0.f;
+    mk.cbf = cbf > 0.f;
+    mk.desynced = false;
+    mk.hidden = false;
+    mk.unbounded = false;
+
+    if (in.mark >= 0) {
+        m_results[in.mark] = mk;
+    } else {
+        auto const at = std::upper_bound(
+            m_results.begin(), m_results.end(), mk.frame,
+            [](uint32_t f, FrameWindowMark const& m) { return f < m.frame; });
+        m_results.insert(at, mk);
+    }
+    this->markEdited();
+}
+
+FrameWindowAnalyzer::Report FrameWindowAnalyzer::testPlayhead(PlayLayer* pl,
+                                                              int count) {
+    Report report;
+
+    auto const in = this->playheadInput();
+    if (!in.valid) {
+        report.message = "No input at or before the playhead.";
+        return report;
+    }
+
+    bool const releases = m_labelReleases->inner();
+    std::vector<uint32_t> frames;
+    for (auto const& a : Bot::get()->replaySystem().m_actionAtom.m_actions) {
+        if (!isMeasurableInput(a) || a.m_frame > in.frame) continue;
+        if (!a.m_holding && !releases) continue;
+        frames.push_back(static_cast<uint32_t>(a.m_frame));
+    }
+    std::sort(frames.begin(), frames.end());
+
+    size_t const back =
+        std::min(frames.size(), static_cast<size_t>(std::max(1, count)));
+    uint32_t const from = frames[frames.size() - back];
+
+    auto* bot = Bot::get();
+    auto& updater = bot->updater();
+
+    Trip trip;
+    trip.frame = updater.getFrame();
+    trip.record = bot->isRecording();
+    trip.paused = updater.isPaused();
+    for (auto const& cp : bot->practiceFix().m_savedCheckpoints)
+        if (cp.m_frameOffset <= trip.frame)
+            trip.checkpoints.push_back(static_cast<uint32_t>(cp.m_frameOffset));
+    std::sort(trip.checkpoints.begin(), trip.checkpoints.end());
+    trip.checkpoints.erase(
+        std::unique(trip.checkpoints.begin(), trip.checkpoints.end()),
+        trip.checkpoints.end());
+
+    if (trip.record) bot->setMode(Bot::Mode::Playing);
+
+    report = this->startRange(pl, from, in.frame);
+    if (!report.ok) {
+        if (trip.record) bot->setMode(Bot::Mode::Recording);
+        return report;
+    }
+
+    m_trip = std::move(trip);
+    m_trip.pending = true;
+    report.message += fmt::format(" Then back to frame {}.", m_trip.frame);
+    return report;
+}
+
+float FrameWindowAnalyzer::returnProgress() const {
+    if (!m_trip.active || m_trip.frame == 0) return 0.f;
+    return std::clamp(static_cast<float>(Bot::get()->updater().getFrame()) /
+                          static_cast<float>(m_trip.frame),
+                      0.f, 1.f);
+}
+
+void FrameWindowAnalyzer::beginTrip() {
+    auto* bot = Bot::get();
+    auto& updater = bot->updater();
+
+    m_trip.active = true;
+    m_trip.placed = 0;
+    m_trip.expected = bot->practiceFix().m_savedCheckpoints.size();
+    m_trip.died = false;
+    m_trip.stalled = 0;
+    m_trip.trail[0] = bot->trailBuffer().stream(0);
+    m_trip.trail[1] = bot->trailBuffer().stream(1);
+    m_trip.backstep = updater.m_backwardsStepping;
+
+    updater.m_backwardsStepping = false;
+    updater.setPaused(true);
+    updater.m_predicting = true;
+    this->muteAudio();
+
+    m_tripTitle.clear();
+    m_tripDetail.clear();
+
+    log::info("[fw][return] to frame {} with {} checkpoint(s), record={}",
+              m_trip.frame, m_trip.checkpoints.size(), m_trip.record);
+}
+
+void FrameWindowAnalyzer::stepTrip(PlayLayer* pl) {
+    if (!pl) {
+        this->endTrip(nullptr, false, "", "");
+        return;
+    }
+    if (pl->m_isPaused) return;
+
+    auto* bot = Bot::get();
+    auto& updater = bot->updater();
+    auto& saved = bot->practiceFix().m_savedCheckpoints;
+    // Silicate's m_maxStoredFrames; ours is the Back Step Count setting.
+    uint32_t const kept = updater.m_maxBackstepFrames;
+    auto const deadline =
+        Clock::now() + std::chrono::milliseconds(TRIP_BUDGET_MS);
+
+    while (Clock::now() < deadline) {
+        uint32_t const now = updater.getFrame();
+
+        for (size_t n = saved.size(); n > m_trip.expected; n--)
+            pl->removeCheckpoint(false);
+
+        auto& cps = m_trip.checkpoints;
+        while (m_trip.placed < cps.size() && cps[m_trip.placed] <= now) {
+            if (cps[m_trip.placed] == now) {
+                pl->markCheckpoint();
+                m_trip.expected = saved.size();
+            }
+            m_trip.placed++;
+        }
+
+        if (now >= m_trip.frame) {
+            std::string detail = fmt::format("frame {}", now);
+            if (!cps.empty())
+                detail += fmt::format(", {} checkpoint{}", cps.size(),
+                                      cps.size() == 1 ? "" : "s");
+            if (m_trip.record) detail += ", recording";
+            this->endTrip(pl, true, "Back where you were", detail);
+            return;
+        }
+
+        if (m_trip.backstep && now + kept >= m_trip.frame)
+            updater.m_backwardsStepping = true;
+
+        updater.stepOnce();
+        cocos2d::CCScheduler::get()->update(updater.getPhysicsDt());
+
+        if (m_trip.died || pl->m_playerDied) {
+            this->endTrip(
+                pl, false, "Couldn't get back",
+                fmt::format("The macro dies at frame {} before {}. Left "
+                            "paused in playback.",
+                            updater.getFrame(), m_trip.frame));
+            return;
+        }
+
+        if (updater.getFrame() == now && ++m_trip.stalled > TRIP_STALL_STEPS) {
+            this->endTrip(
+                pl, false, "Couldn't get back",
+                fmt::format("The level stopped moving at frame {}. Left "
+                            "paused in playback.",
+                            now));
+            return;
+        }
+        if (updater.getFrame() != now) m_trip.stalled = 0;
+    }
+}
+
+void FrameWindowAnalyzer::endTrip(PlayLayer* pl, bool arrived,
+                                  std::string title, std::string detail) {
+    auto* bot = Bot::get();
+    auto& updater = bot->updater();
+
+    updater.m_backwardsStepping = m_trip.backstep;
+    updater.m_predicting = false;
+    this->unmuteAudio();
+    bot->trailBuffer().loadSamples(m_trip.trail[0], m_trip.trail[1]);
+
+    if (arrived || !pl) {
+        if (m_trip.record) bot->setMode(Bot::Mode::Recording);
+    }
+    updater.setPaused(arrived ? m_trip.paused : true);
+
+    log::info("[fw][return] {} at frame {}: {}",
+              arrived ? "arrived" : "stopped", updater.getFrame(), detail);
+
+    m_tripTitle = std::move(title);
+    m_tripDetail = std::move(detail);
+    m_tripOk = arrived;
+    m_tripNoteAt = Clock::now();
+    m_trip = {};
+}
+
+void FrameWindowAnalyzer::stopReturn() {
+    if (!m_trip.active) return;
+    this->endTrip(PlayLayer::get(), false, "Stopped on the way back",
+                  fmt::format("Frame {}. Still in playback so the macro "
+                              "isn't cut.",
+                              Bot::get()->updater().getFrame()));
+}
+
+void FrameWindowAnalyzer::updateTripLabel(PlayLayer* pl) {
+    if (!pl->m_uiLayer) return;
+    auto* node = pl->m_uiLayer->getChildByID("framewindow-return"_spr);
+
+    double const age =
+        std::chrono::duration<double>(Clock::now() - m_tripNoteAt).count();
+    bool const note = !m_tripTitle.empty() && age < TRIP_NOTE_SECONDS;
+
+    if (!m_trip.active && !note) {
+        if (node) node->removeFromParent();
+        m_tripTitle.clear();
+        return;
+    }
+
+    if (!node) {
+        node = cocos2d::CCNode::create();
+        node->setID("framewindow-return"_spr);
+        pl->m_uiLayer->addChild(node, 10000);
+
+        auto* title = cocos2d::CCLabelBMFont::create("", "bigFont.fnt");
+        title->setID("title");
+        title->setScale(0.55f);
+        node->addChild(title);
+
+        auto* detail = cocos2d::CCLabelBMFont::create("", "chatFont.fnt");
+        detail->setID("detail");
+        detail->setScale(0.75f);
+        detail->setPositionY(-20.f);
+        node->addChild(detail);
+    }
+
+    auto const win = cocos2d::CCDirector::sharedDirector()->getWinSize();
+    node->setPosition({win.width / 2.f, win.height * 0.78f});
+
+    auto* title = typeinfo_cast<cocos2d::CCLabelBMFont*>(
+        node->getChildByID("title"));
+    auto* detail = typeinfo_cast<cocos2d::CCLabelBMFont*>(
+        node->getChildByID("detail"));
+    if (!title || !detail) return;
+
+    std::string top = m_tripTitle;
+    std::string bottom = m_tripDetail;
+    cocos2d::ccColor3B color =
+        m_tripOk ? cocos2d::ccColor3B{140, 255, 140}
+                 : cocos2d::ccColor3B{255, 120, 120};
+    GLubyte opacity = 255;
+
+    if (m_trip.active) {
+        top = "Taking you back";
+        bottom = fmt::format("frame {} / {}",
+                             Bot::get()->updater().getFrame(), m_trip.frame);
+        if (!m_trip.checkpoints.empty())
+            bottom += fmt::format("    checkpoints {} / {}", m_trip.placed,
+                                  m_trip.checkpoints.size());
+        color = {255, 255, 255};
+    } else if (double const left = TRIP_NOTE_SECONDS - age; left < 0.6) {
+        opacity = static_cast<GLubyte>(std::max(0.0, left / 0.6) * 255.0);
+    }
+
+    if (top != title->getString()) title->setString(top.c_str());
+    if (bottom != detail->getString()) detail->setString(bottom.c_str());
+    title->setColor(color);
+    title->setOpacity(opacity);
+    detail->setOpacity(opacity);
+}
+
+// anticroom registers change-callbacks on m_labelWindow / m_labelApply /
+// m_labelTest here, which is how HIS settings UI triggers a label or a test.
+// GucciBot's menu is immediate-mode ImGui and calls applyLabel() and
+// testPlayhead() straight from its own buttons (gui.cpp, Calculate tab), so
+// there is nothing to register.
