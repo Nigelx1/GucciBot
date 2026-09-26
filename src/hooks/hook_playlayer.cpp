@@ -2,6 +2,7 @@
 #include "render/renderer.hpp"
 #include "hacks/autoclicker.hpp"
 #include "analysis/trajectory.hpp"
+#include "hooks/respawn.hpp"
 #include "analysis/pathfinder.hpp"
 #include "analysis/ac/cbf.hpp"
 #include "analysis/ac/framewindow.hpp"
@@ -721,9 +722,13 @@ class $modify(GB7PlayLayer, PlayLayer) {
                 fl->setVisible(false);
         }
 
-        if (gb->hackAutoRetry && obj != m_anticheatSpike && !gb->isPlaying()) {
-            gb->pendingAutoRetry = std::clamp(gb->hackAutoRetryDelay, 0.05f, 2.f);
-        }
+        // Auto Retry: replace GD's own queued respawn with one on our delay, so
+        // the level resets exactly once (Absense's retime). It used to count
+        // down separately and call resetLevel() while GD's respawn was still
+        // pending, and whichever fired second reset the level again.
+        if (gb->hackAutoRetry && obj != m_anticheatSpike && !gb->isPlaying() && player &&
+            player->m_isDead)
+            gucci::respawn::retime(this, gb->hackAutoRetryDelay);
 
         if (upd.m_preventDeath && obj != m_anticheatSpike) {
             upd.backwardsStep();

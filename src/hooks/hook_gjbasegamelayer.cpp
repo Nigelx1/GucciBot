@@ -254,18 +254,6 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
             gbtr::renderTrainerGhost(fpl);
         }
 
-        // Auto-retry calls resetLevel(). Doing that in the middle of a leg
-        // would throw away the run the analyzer is measuring.
-        if (gb->pendingAutoRetry > 0.0f && !gb->analyzerOwnsRun()) {
-            gb->pendingAutoRetry -= dt;
-            if (gb->pendingAutoRetry <= 0.0f) {
-                gb->pendingAutoRetry = 0.0f;
-                if (gb->hackAutoRetry && !gb->isPlaying()) {
-                    if (auto* rpl = PlayLayer::get())
-                        rpl->resetLevel();
-                }
-            }
-        }
     }
 
     void addInputToReplay(PlayerButtonCommand cmd) {

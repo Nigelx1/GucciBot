@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-26-r (Macro Buffing and Replace All, for the level editor. Play a level and GucciBot records both players' hitboxes every frame; open it in the editor and Generate builds walls around that path, or Place Spikes puts a hazard beside each recorded frame, so the recorded run survives and anything that strays from it dies. That is Silicate's trail buffer, ported whole -- and it is also the real trail the analyzer lost when it was stubbed, so Calculate's desync check against the recorded path, its dual-mode marker twins and its walk-back trail restore all work again. Replace All is Absense's: swap every object of one id for another, keeping everything else, undoable. Macro tab > Tools.)"
+    "2026-09-26-s (Auto Retry resets the level once. It counted down on its own and then called resetLevel() while GD's queued respawn was still pending, so whichever came second reset the level again a moment into the new attempt -- with a short delay GD's fired into it, with a long one ours did. Now it replaces GD's queued respawn with one on your delay, Absense's way, the way GDH does it. A delay of 0 is allowed now: instant.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -622,7 +622,6 @@ namespace gucci {
         float hackAutoRetryDelay = 0.5f;
         bool hackRespawnInstant = false;
         bool hackForcePlatformer = false;
-        float pendingAutoRetry = 0.f;
         bool noclipAccuracyVisible = false;
 
         bool showHitboxes = false;
