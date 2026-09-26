@@ -12,6 +12,9 @@
 
 #include "render/renderer.hpp"
 #include "mcp/mcp_server.hpp"
+#include "trailbuf/trailbuf.hpp"
+#include "trailbuf/spikes.hpp"
+#include "tools/replace_all.hpp"
 #include "tools/selfcheck.hpp"
 #include <Geode/Bindings.hpp>
 #include <Geode/cocos/textures/CCTexture2D.h>
@@ -4372,6 +4375,172 @@ namespace gucci {
         drawMoreHacksTab();
         ImGui::Dummy(ImVec2(0, 8));
         drawClicksTab();
+        ImGui::Dummy(ImVec2(0, 8));
+        drawMacroBuffingSection();
+    }
+
+    // Macro Buffing -- Silicate's trail buffer (anticroom's drop), which is the
+    // same feature Absense ships under this name. Play a level for real and it
+    // records both players' hitboxes each frame; open the level in the editor
+    // and Generate builds walls around that path, or Place Spikes puts a hazard
+    // beside each recorded frame. Either way the recorded run still survives,
+    // and a run that strays from it by more than the clearance dies.
+    void MenuInterface::drawMacroBuffingSection() {
+        auto& tbs = SLSettings::get()->trailBuffer;
+        auto& tb = ::Bot::get()->trailBuffer();
+        bool dirty = false;
+
+        auto toggle = [&](char const* label, bool* v, char const* help) {
+            if (Widgets::ToggleSwitch(label, v, theme, anim))
+                dirty = true;
+            if (help && ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", help);
+        };
+        auto intIn = [&](char const* label, int* v, int lo, int hi, char const* help) {
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::InputInt(label, v)) {
+                *v = std::clamp(*v, lo, hi);
+                dirty = true;
+            }
+            if (help && ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", help);
+        };
+        auto floatIn = [&](char const* label, float* v, float lo, float hi, char const* fmt,
+                           char const* help) {
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::InputFloat(label, v, 0.f, 0.f, fmt)) {
+                *v = std::clamp(*v, lo, hi);
+                dirty = true;
+            }
+            if (help && ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", help);
+        };
+        auto note = [&](std::string const& text) {
+            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+            ImGui::TextWrapped("%s", text.c_str());
+            ImGui::PopStyleColor();
+        };
+
+        Widgets::SectionHeader("Macro Buffing", theme);
+        toggle("Record Trail", &tbs.enabled,
+               "Record both players' hitboxes while you play, for the editor tools below.");
+
+        if (tb.tickCount() == 0) {
+            note("Nothing recorded. Play the level for real -- editor playtests run on the "
+                 "frame rate, not the tick rate.");
+        } else {
+            note(fmt::format("{} ticks ({} from spider snaps) | frames {} to {} | {}",
+                             tb.tickCount(), tb.dashSamples(), tb.firstFrame(), tb.lastFrame(),
+                             tb.sourceLevel().empty() ? "unknown level" : tb.sourceLevel()));
+        }
+        note("Distances are in units. One block is 30.");
+
+        if (ImGui::CollapsingHeader("Walls##tbWalls")) {
+            intIn("Object ID##tb", &tbs.objectId, 1, 100000, nullptr);
+            toggle("Separate Object For P2", &tbs.separatePlayers, nullptr);
+            if (tbs.separatePlayers)
+                intIn("P2 Object ID##tb", &tbs.objectIdP2, 1, 100000, nullptr);
+            floatIn("Clearance##tb", &tbs.gap, 0.f, 30.f, "%.6f",
+                    "Space left between the walls and the recorded hitboxes.");
+            toggle("Wall Against Inner Hitbox", &tbs.useInnerHitbox, nullptr);
+            floatIn("Fill Radius##tb", &tbs.fillRadius, 1.f, 900.f, "%.2f", nullptr);
+            floatIn("Column Width##tb", &tbs.columnWidth, 0.0001f, 30.f, "%.4f", nullptr);
+            floatIn("Minimum Block Size##tb", &tbs.minBlockSize, 0.000001f, 30.f, "%.6f",
+                    nullptr);
+            floatIn("Maximum Object Scale##tb", &tbs.maxScale, 1.f, 200.f, "%.0f", nullptr);
+            floatIn("Merge Tolerance##tb", &tbs.mergeTolerance, 0.f, 30.f, "%.4f", nullptr);
+            toggle("Keep Between-Tick Path Clear", &tbs.sweepBetweenTicks, nullptr);
+            toggle("Skip Existing Solids", &tbs.skipSolids, nullptr);
+            intIn("Object Limit##tb", &tbs.maxObjects, 1, 800000, nullptr);
+            intIn("Wall Every N Frames##tb", &tbs.frameInterval, 1, 240, nullptr);
+            if (tbs.frameInterval > 1)
+                floatIn("Gate Width##tb", &tbs.gateWidth, 1.f, 900.f, "%.0f", nullptr);
+            floatIn("Open At Start##tb", &tbs.startTrim, 0.f, 900.f, "%.0f", nullptr);
+            floatIn("Open At End##tb", &tbs.endTrim, 0.f, 900.f, "%.0f", nullptr);
+
+            if (auto* lel = LevelEditorLayer::get()) {
+                if (Widgets::StyledButton("Generate##tb", ImVec2(-1, 26), theme, anim, 6.f)) {
+                    auto const r = tb.generate(lel);
+                    m_trailBufReport = r.message;
+                    m_trailBufOk = r.ok && r.verified;
+                }
+            } else {
+                note("Open the editor to generate.");
+            }
+        }
+
+        if (ImGui::CollapsingHeader("Spikes##tbSpikes")) {
+            note("One hazard next to each recorded frame, as close as it fits without "
+                 "touching either player's trail.");
+            toggle("Player 2##tbSpikes", &tbs.spikePlayer2, nullptr);
+            intIn("Object ID##tbSpikes", &tbs.spikeObjectId, 1, 100000, nullptr);
+            floatIn("Gap##tbSpikes", &tbs.spikeGap, tbuf::MIN_SPIKE_GAP, tbuf::MAX_SPIKE_GAP,
+                    "%.3f", nullptr);
+            toggle("Below##tbSpikes", &tbs.spikeBelow, nullptr);
+            toggle("Above##tbSpikes", &tbs.spikeAbove, nullptr);
+            toggle("Left##tbSpikes", &tbs.spikeLeft, nullptr);
+            toggle("Right##tbSpikes", &tbs.spikeRight, nullptr);
+            toggle("Around Clicks##tbSpikes", &tbs.spikeAroundClicks,
+                   "Only place spikes on the frames around each jump in the loaded macro. All "
+                   "other frames are still kept clear.");
+            if (tbs.spikeAroundClicks) {
+                intIn("Frames Around Each Click##tbSpikes", &tbs.spikeClickRadius, 0,
+                      tbuf::MAX_CLICK_RADIUS, nullptr);
+                toggle("Releases Count##tbSpikes", &tbs.spikeReleases, nullptr);
+            } else {
+                intIn("Every Nth Frame##tbSpikes", &tbs.spikeEveryNth, 1, tbuf::MAX_EVERY_NTH,
+                      nullptr);
+            }
+            auto* lel = LevelEditorLayer::get();
+            if (lel && lel->m_playbackMode == PlaybackMode::Not) {
+                if (Widgets::StyledButton("Place Spikes##tb", ImVec2(-1, 26), theme, anim,
+                                          6.f)) {
+                    auto const r = tb.placeSpikes(lel);
+                    m_trailBufReport = r.message;
+                    m_trailBufOk = r.ok;
+                }
+            } else {
+                note("Open the editor, not playtesting, to place spikes.");
+            }
+        }
+
+        if (Widgets::StyledButton("Clear Recording##tb", ImVec2(-1, 24), theme, anim, 6.f)) {
+            tb.clear();
+            m_trailBufReport = "Recording cleared.";
+            m_trailBufOk = true;
+        }
+        if (!m_trailBufReport.empty()) {
+            ImGui::PushStyleColor(ImGuiCol_Text, m_trailBufOk ? theme.textSecondary
+                                                              : ImVec4(1.f, 0.4f, 0.4f, 1.f));
+            ImGui::TextWrapped("%s", m_trailBufReport.c_str());
+            ImGui::PopStyleColor();
+        }
+
+        if (dirty)
+            saveTrailBufferSettings();
+
+        // Replace All -- Absense's editor tool (by Absent).
+        ImGui::Dummy(ImVec2(0, 8));
+        Widgets::SectionHeader("Replace Objects", theme);
+        note("Swaps every object of one id for another in the open editor level, keeping "
+             "position, rotation, scale, groups and colours. Ctrl+Z twice undoes it.");
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::InputInt("From ID##replaceAll", &m_replaceFrom))
+            m_replaceFrom = std::max(1, m_replaceFrom);
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::InputInt("To ID##replaceAll", &m_replaceTo))
+            m_replaceTo = std::max(1, m_replaceTo);
+        if (Widgets::StyledButton("Replace All##replaceAll", ImVec2(-1, 26), theme, anim, 6.f)) {
+            auto const r = gucci::editortools::replaceAll(m_replaceFrom, m_replaceTo);
+            m_replaceReport = r.message;
+            m_replaceOk = r.ok;
+        }
+        if (!m_replaceReport.empty()) {
+            ImGui::PushStyleColor(ImGuiCol_Text, m_replaceOk ? theme.textSecondary
+                                                             : ImVec4(1.f, 0.4f, 0.4f, 1.f));
+            ImGui::TextWrapped("%s", m_replaceReport.c_str());
+            ImGui::PopStyleColor();
+        }
     }
 
     static geode::Task<int> importFwAssetFilesTask() {
@@ -4752,6 +4921,51 @@ namespace gucci {
 
         // His L* inputs are doubles, so they need their own table rather than
         // being squeezed through the float one.
+        // Macro Buffing (Silicate's trail buffer). Same table pattern as the
+        // frame-window settings above; keys prefixed tb_.
+        using TBS = SLSettings::TrailBufferSettings;
+        template <typename T>
+        struct TbSetting {
+            char const* key;
+            T TBS::*field;
+        };
+        constexpr TbSetting<bool> kTbBools[] = {
+            {"tb_enabled", &TBS::enabled},
+            {"tb_inner_hitbox", &TBS::useInnerHitbox},
+            {"tb_sweep", &TBS::sweepBetweenTicks},
+            {"tb_skip_solids", &TBS::skipSolids},
+            {"tb_separate_players", &TBS::separatePlayers},
+            {"tb_spike_p2", &TBS::spikePlayer2},
+            {"tb_spike_below", &TBS::spikeBelow},
+            {"tb_spike_above", &TBS::spikeAbove},
+            {"tb_spike_left", &TBS::spikeLeft},
+            {"tb_spike_right", &TBS::spikeRight},
+            {"tb_spike_around_clicks", &TBS::spikeAroundClicks},
+            {"tb_spike_releases", &TBS::spikeReleases},
+        };
+        constexpr TbSetting<int> kTbInts[] = {
+            {"tb_object_id", &TBS::objectId},
+            {"tb_object_id_p2", &TBS::objectIdP2},
+            {"tb_max_objects", &TBS::maxObjects},
+            {"tb_frame_interval", &TBS::frameInterval},
+            {"tb_spike_object_id", &TBS::spikeObjectId},
+            {"tb_spike_every_nth", &TBS::spikeEveryNth},
+            {"tb_spike_click_radius", &TBS::spikeClickRadius},
+        };
+        constexpr TbSetting<float> kTbFloats[] = {
+            {"tb_gap", &TBS::gap},
+            {"tb_fill_radius", &TBS::fillRadius},
+            {"tb_column_width", &TBS::columnWidth},
+            {"tb_min_block", &TBS::minBlockSize},
+            {"tb_max_scale", &TBS::maxScale},
+            {"tb_gate_width", &TBS::gateWidth},
+            {"tb_merge_tolerance", &TBS::mergeTolerance},
+            {"tb_break_distance", &TBS::breakDistance},
+            {"tb_start_trim", &TBS::startTrim},
+            {"tb_end_trim", &TBS::endTrim},
+            {"tb_spike_gap", &TBS::spikeGap},
+        };
+
         constexpr AcSetting<double> kAcDoubles[] = {
             {"fwac_lstar_target", &FrameWindowSettings::lstarTarget},
             {"fwac_lstar_respawn", &FrameWindowSettings::lstarRespawn},
@@ -4971,6 +5185,29 @@ namespace gucci {
         m_acPackReport = fmt::format("Wrote {} clip(s){}.",
                                      written,
                                      skipped ? fmt::format(", skipped {}", skipped) : "");
+    }
+
+    void MenuInterface::loadTrailBufferSettings() {
+        auto* mod = Mod::get();
+        auto& tb = SLSettings::get()->trailBuffer;
+        TBS const d;
+        for (auto const& e : kTbBools)
+            tb.*e.field = mod->getSavedValue<bool>(e.key, d.*e.field);
+        for (auto const& e : kTbInts)
+            tb.*e.field = mod->getSavedValue<int>(e.key, d.*e.field);
+        for (auto const& e : kTbFloats)
+            tb.*e.field = (float)mod->getSavedValue<double>(e.key, (double)(d.*e.field));
+    }
+
+    void MenuInterface::saveTrailBufferSettings() {
+        auto* mod = Mod::get();
+        auto const& tb = SLSettings::get()->trailBuffer;
+        for (auto const& e : kTbBools)
+            mod->setSavedValue(e.key, tb.*e.field);
+        for (auto const& e : kTbInts)
+            mod->setSavedValue(e.key, tb.*e.field);
+        for (auto const& e : kTbFloats)
+            mod->setSavedValue(e.key, (double)(tb.*e.field));
     }
 
     void MenuInterface::loadAcFrameWindowSettings() {
@@ -9321,6 +9558,7 @@ namespace gucci {
         eng->fwUseAlignmentIndependent = mod->getSavedValue<bool>("fw_use_align_indep", false);
         // All of anticroom's settings, loaded from the fwac_ keys.
         MenuInterface::get()->loadAcFrameWindowSettings();
+        MenuInterface::get()->loadTrailBufferSettings();
         eng->fwAiZ = mod->getSavedValue<int>("fw_ai_z", 3);
         eng->fwAiContinuationDepth = mod->getSavedValue<int>("fw_ai_cont_depth", 1);
         eng->fwAiClusterRatio = mod->getSavedValue<float>("fw_ai_cluster_ratio", 1.15f);

@@ -1,4 +1,5 @@
 #include "framewindow.hpp"
+#include "trailbuf/trailbuf.hpp"
 
 #include "cbf.hpp"
 

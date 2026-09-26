@@ -1,4 +1,5 @@
 #include "shim.hpp"
+#include "trailbuf/trailbuf.hpp"
 
 #include "framewindow.hpp"
 
@@ -14,3 +15,12 @@ FrameWindowAnalyzer& Bot::frameWindow() {
     static FrameWindowAnalyzer inst;
     return inst;
 }
+
+// A function-local static for the same reason frameWindow() is one: shim.hpp
+// cannot hold a TrailBuffer by value without including trailbuf.hpp, which
+// includes shim.hpp.
+TrailBuffer& Bot::trailBuffer() {
+    static TrailBuffer inst;
+    return inst;
+}
+

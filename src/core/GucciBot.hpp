@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-26-q (Trajectory sees moving objects. Every prediction used to run against a frozen level -- moving platforms and hazards stayed where they were while the fork ran on. Now, with Moving Objects on, it does what Silicate does: snapshot every object a trigger could move, let GD's own move step advance them while the fork runs, then put everything back. The real engine, not a simulator -- this is the answer to the World question in about 150 lines. Also saves and restores the variance table and whole game state around each trace, since it runs every frame. Off by default; a step-interval slider trades accuracy for speed.)"
+    "2026-09-26-r (Macro Buffing and Replace All, for the level editor. Play a level and GucciBot records both players' hitboxes every frame; open it in the editor and Generate builds walls around that path, or Place Spikes puts a hazard beside each recorded frame, so the recorded run survives and anything that strays from it dies. That is Silicate's trail buffer, ported whole -- and it is also the real trail the analyzer lost when it was stubbed, so Calculate's desync check against the recorded path, its dual-mode marker twins and its walk-back trail restore all work again. Replace All is Absense's: swap every object of one id for another, keeping everything else, undoable. Macro tab > Tools.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

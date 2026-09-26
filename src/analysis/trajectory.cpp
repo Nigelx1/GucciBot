@@ -1,5 +1,7 @@
 #include "analysis/trajectory.hpp"
 #include "core/GucciBot.hpp"
+#include "trailbuf/trailbuf.hpp"
+#include "analysis/ac/shim.hpp"
 #include "audio/clicksounds.hpp"
 #include "trainers/calibration.hpp"
 
@@ -1492,7 +1494,13 @@ class $modify(TrajectoryPreviewPlayerObject, PlayerObject) {
     }
 
     void playSpiderDashEffect(cocos2d::CCPoint from, cocos2d::CCPoint to) {
-        if (!TrajectoryPredictionService::get().isActiveSimulation()) {
+        auto& service = TrajectoryPredictionService::get();
+        if (!service.isActiveSimulation()) {
+            // A spider teleport skips the frames in between, so the trail
+            // buffer records the dash as a span rather than two far-apart
+            // points.
+            if (!service.ownsPreviewPlayer(this))
+                ::Bot::get()->trailBuffer().saveSpiderDash(this, from, to);
             PlayerObject::playSpiderDashEffect(from, to);
         }
     }

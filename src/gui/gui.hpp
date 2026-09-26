@@ -327,6 +327,15 @@ namespace gucci {
         void drawMainSubTabBar();
         void drawReplayTab();
         void drawToolsTab();
+        void drawMacroBuffingSection();
+        void loadTrailBufferSettings();
+        void saveTrailBufferSettings();
+        std::string m_trailBufReport;
+        bool m_trailBufOk = true;
+        int m_replaceFrom = 1;
+        int m_replaceTo = 1;
+        std::string m_replaceReport;
+        bool m_replaceOk = true;
         void drawFrameWindowsTab();
         void loadAcFrameWindowSettings();
         std::vector<std::string> acSoundPackNames();

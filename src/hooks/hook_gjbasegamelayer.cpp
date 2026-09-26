@@ -14,6 +14,7 @@
 
 #include "analysis/ac/cbf.hpp"
 #include "analysis/ac/framewindow.hpp"
+#include "trailbuf/trailbuf.hpp"
 
 using namespace geode::prelude;
 
@@ -298,6 +299,19 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
                       cmd.m_isPush ? "press" : "release",
                       (int)cmd.m_button,
                       cmd.m_isPlayer2 ? 2 : 1);
+    }
+
+    // Silicate's trail buffer snapshots the hitbox either side of the
+    // collision pass, so a trail records where the player was pushed to as
+    // well as where it moved. Real players only -- never a trajectory fork.
+    int checkCollisions(PlayerObject* player, float dt, bool ignoreDamage) {
+        bool const real = player && (player == m_player1 || player == m_player2);
+        if (real)
+            ::Bot::get()->trailBuffer().saveCollision(this, player);
+        int const result = GJBaseGameLayer::checkCollisions(player, dt, ignoreDamage);
+        if (real)
+            ::Bot::get()->trailBuffer().saveCollision(this, player);
+        return result;
     }
 
     void saveQueuedButtons() {

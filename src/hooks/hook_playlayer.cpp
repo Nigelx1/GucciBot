@@ -5,6 +5,7 @@
 #include "analysis/pathfinder.hpp"
 #include "analysis/ac/cbf.hpp"
 #include "analysis/ac/framewindow.hpp"
+#include "trailbuf/trailbuf.hpp"
 #include "hacks/hitboxes.hpp"
 #include "trainers/jupiterghost.hpp"
 #include "trainers/trainerghost.hpp"
@@ -495,6 +496,10 @@ class $modify(GB7PlayLayer, PlayLayer) {
         upd.resetFrame();
 
         HitboxOverlay::get()->clearTrail();
+        // Only the attempt that gets through should shape a generated trail,
+        // so each reset starts it again. Calculate and its walk-back save and
+        // restore the trail around their own resets.
+        ::Bot::get()->trailBuffer().clear();
 
         updateRandomSeedOnReset();
         PlayLayer::resetLevel();
@@ -586,6 +591,11 @@ class $modify(GB7PlayLayer, PlayLayer) {
         if (auto& traj = TrajectoryPredictionService::get();
             traj.isActiveSimulation() || traj.ownsPreviewPlayer(player))
             return PlayLayer::destroyPlayer(player, obj);
+
+        // Records it when one of the objects the trail buffer generated is
+        // what killed you -- how you find out a built structure is too tight.
+        if (obj)
+            ::Bot::get()->trailBuffer().reportKill(player, obj);
 
         // A queued checkpoint capture must not outlive the attempt it belongs
         // to. The deferred pass only runs while the player is alive, so a

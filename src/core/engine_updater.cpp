@@ -5,6 +5,8 @@
 #include "analysis/ac/framewindow.hpp"
 #include "hooks/util_midhook.hpp"
 #include "render/renderer.hpp"
+#include "trailbuf/trailbuf.hpp"
+#include "analysis/ac/shim.hpp"
 #include "mcp/mcp_server.hpp"
 
 #include <Geode/Geode.hpp>
@@ -599,6 +601,10 @@ static void frameUpdateMidhook(SafetyHookContext&) {
             upd.incrementFrame();
             if (upd.m_logFrameIncrements)
                 logFrameIncrement("frameUpdateMidhook", upd.getFrame(), pl->m_player1);
+
+            // Silicate's trail buffer records here too: both players' hitboxes,
+            // once per settled frame, while the player is alive.
+            ::Bot::get()->trailBuffer().saveTick(pl);
         }
 
         bool shouldCapturePath = gb->isRecording() || (gb->isPlaying() && !gb->fwAnalyzing);

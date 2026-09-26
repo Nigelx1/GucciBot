@@ -70,37 +70,18 @@ namespace scbf {
 
 // --- trail buffer -----------------------------------------------------------
 
-// Silicate draws the player's path with a buffer of per-frame rects. GucciBot
-// has no equivalent, and the analyzer uses it for two things:
-//
-//   1. Saving the trail before a run and restoring it after, so analysis
-//      doesn't wipe what the player was looking at. With no trail, nothing to
-//      save -- a genuine no-op, not a hidden failure.
-//   2. checkCaptureAgainstTrail(), a desync check comparing the captured
-//      position against the trail rect. It already self-disables on an empty
-//      stream (see framewindow.cpp, "if (trail.empty())"), so it simply does
-//      not run.
-//
-// (2) is a real check we lose, but GucciBot has its own version of the same
-// idea in m_pathSamples/fwOffTrack. Wiring checkCaptureAgainstTrail to that is
-// a phase-2 job; it is listed as such rather than left to look finished.
-namespace tbuf {
-    struct Rect {
-        float minX = 0.f, minY = 0.f, maxX = 0.f, maxY = 0.f;
-    };
-
-    struct Sample {
-        uint32_t frame = 0;
-        Rect rect;
-    };
-}
-
-class TrailBufferStub {
-public:
-    std::vector<tbuf::Sample> stream(int) const { return {}; }
-    void loadSamples(std::vector<tbuf::Sample> const&,
-                     std::vector<tbuf::Sample> const&) {}
-};
+// Silicate records each player's hitbox per frame (plus collisions, spider
+// dashes and kills) in a trail buffer. It was stubbed here until 2026-09-26,
+// which cost the analyzer three things: saving and restoring the trail around
+// a run, checkCaptureAgainstTrail() -- a desync check against the recorded
+// path, which self-disabled on the empty stream -- and dual-mode marker twins.
+// All three are live again now that the real buffer is in.
+// Silicate's trail buffer is ported for real now (src/trailbuf/). The analyzer
+// only needs its Sample type here; the TrailBuffer itself is reached through
+// Bot::trailBuffer(), defined in shim.cpp to keep this header free of a cycle
+// (trailbuf.hpp includes this file for SLValue).
+#include "trailbuf/generator.hpp"
+class TrailBuffer;
 
 // --- settings ---------------------------------------------------------------
 
@@ -251,6 +232,41 @@ public:
     }
 
     FrameWindowSettings frameWindow;
+
+    // Silicate's defaults, verbatim.
+    struct TrailBufferSettings {
+        bool enabled = true;
+        int objectId = 3610;
+        float gap = 0.01f;
+        bool useInnerHitbox = false;
+        float fillRadius = 1.f;
+        float columnWidth = 0.25f;
+        float minBlockSize = 0.0025f;
+        float maxScale = 100.f;
+        bool sweepBetweenTicks = false;
+        bool skipSolids = true;
+        int maxObjects = 800000;
+        int frameInterval = 1;
+        float gateWidth = 30.f;
+        float mergeTolerance = 0.5f;
+        bool separatePlayers = true;
+        int objectIdP2 = 3610;
+        float breakDistance = 90.f;
+        float startTrim = 0.f;
+        float endTrim = 90.f;
+
+        bool spikePlayer2 = false;
+        int spikeObjectId = 8;
+        float spikeGap = 0.1f;
+        bool spikeBelow = true;
+        bool spikeAbove = true;
+        bool spikeLeft = true;
+        bool spikeRight = true;
+        int spikeEveryNth = 1;
+        bool spikeAroundClicks = false;
+        int spikeClickRadius = 2;
+        bool spikeReleases = false;
+    } trailBuffer;
 };
 
 // --- setting handles --------------------------------------------------------
@@ -330,8 +346,7 @@ public:
         gb->setMode(m);
     }
 
-    TrailBufferStub& trailBuffer() { return m_trail; }
+    TrailBuffer& trailBuffer();
 
 private:
-    TrailBufferStub m_trail;
 };
