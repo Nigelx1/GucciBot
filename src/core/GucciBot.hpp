@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-26-n (Input FPS, from anticroom's drop. While recording, an input may only land on a tick where a new frame would start at the chosen rate -- the way the game itself only reads input once per drawn frame. 120 on 240 TPS allows every second tick; 0 turns it off. Presses queued on any other tick wait for the next input tick, and are dropped if the level resets underneath them rather than replayed into the new attempt. New field under TPS.)"
+    "2026-09-26-o (Frame Extrapolation actually extrapolates. It computed the in-between position and threw it away -- (void)framePos -- so the setting only refreshed the camera. Now it predicts each player one step ahead on a fork and draws them at the in-between point, as Silicate does, with anticroom's clamp and his reset guard so a level reset mid-frame can't drag the old attempt into the new one. Also: a fork dying no longer risks counting as a noclip death, and build -k's claim that fork deaths went unnoticed is corrected -- the trajectory's own death hook was already catching them.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
