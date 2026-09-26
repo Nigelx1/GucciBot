@@ -63,6 +63,11 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         GJGameState m_lastGameState;
         PlayerState m_lastP1, m_lastP2;
         GroundState m_lastGround, m_lastGround2;
+
+        // Input FPS: presses queued on a tick that is not an input tick wait
+        // here for the next one.
+        std::vector<PlayerButtonCommand> m_heldInputs;
+        uint32_t m_heldAt = 0;
     };
 
     static void onModify(auto& self) {
@@ -226,6 +231,29 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
     void saveQueuedButtons() {
         for (auto& cmd : m_queuedButtons)
             addInputToReplay(cmd);
+    }
+
+    // anticroom's Input FPS. Holds this tick's presses until the next tick on
+    // which a frame would start at the configured rate, then lets them through
+    // together. If the frame went BACKWARDS the held presses belonged to an
+    // attempt that no longer exists, so they are dropped rather than replayed
+    // into the new one.
+    void holdUntilFrame() {
+        auto& upd = GucciEngine::get()->updater;
+        auto& held = m_fields->m_heldInputs;
+        uint32_t const frame = upd.getFrame();
+
+        if (frame < m_fields->m_heldAt)
+            held.clear();
+        m_fields->m_heldAt = frame;
+
+        held.insert(held.end(), m_queuedButtons.begin(), m_queuedButtons.end());
+        m_queuedButtons.clear();
+
+        if (!upd.isInputTick(frame))
+            return;
+        m_queuedButtons.insert(m_queuedButtons.end(), held.begin(), held.end());
+        held.clear();
     }
 
     void processReplayAction(gb::Action& action) {
@@ -470,6 +498,8 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
                 performMaintainGravity();
                 return;
             }
+            if (gb->updater.inputFpsActive())
+                holdUntilFrame();
             requeueInverted();
             saveQueuedButtons();
         } else if (gb->isPlaying()) {

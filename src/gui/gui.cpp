@@ -4001,6 +4001,29 @@ namespace gucci {
             }
         }
         ImGui::Dummy(ImVec2(0, 8));
+        Widgets::SectionHeader("Input FPS", theme);
+        {
+            // anticroom's Input FPS. Only matters while recording.
+            float ifps = (float)engine->updater.m_inputFps;
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::InputFloat("##inputfps", &ifps, 0, 0, "%.0f")) {
+                engine->updater.m_inputFps = std::max(0.0, (double)ifps);
+                Mod::get()->setSavedValue("feat_input_fps", engine->updater.m_inputFps);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Only lets recorded inputs land on ticks where a new frame "
+                                  "would start at this FPS, the same way the game does it. "
+                                  "For example, 120 on 240 TPS allows every second tick. "
+                                  "0 turns it off.");
+            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+            if (engine->updater.inputFpsActive())
+                ImGui::Text("Recording inputs land on about 1 in %.1f ticks",
+                            engine->updater.m_tps / engine->updater.m_inputFps);
+            else
+                ImGui::Text("Off -- inputs record on any tick");
+            ImGui::PopStyleColor();
+        }
+        ImGui::Dummy(ImVec2(0, 8));
         Widgets::SectionHeader("Speed Control", theme);
         ImGui::TextColored(theme.getAccent(), "Current: %.2fx", engine->updater.m_speedhack);
         ImGui::Dummy(ImVec2(0, 4));
@@ -8988,6 +9011,7 @@ namespace gucci {
 
         mod->setSavedValue("eng_tick_rate", (float)eng->updater.m_tps);
         mod->setSavedValue("eng_speed", (float)eng->updater.m_speedhack);
+        mod->setSavedValue("feat_input_fps", eng->updater.m_inputFps);
         mod->setSavedValue("render_name", std::string(renderNameBuf));
         mod->setSavedValue("render_width", (int64_t)std::atoi(renderWidthBuf));
         mod->setSavedValue("render_height", (int64_t)std::atoi(renderHeightBuf));

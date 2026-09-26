@@ -2192,6 +2192,7 @@ namespace gucci {
             pick((int)GucciUpdater::LockDeltaMode::Accuracy, "updater_lockDeltaMode", nullptr));
         updater.m_highTpsPrecision = pick(false, "updater_highTpsPrecision", nullptr);
         updater.m_speedhackAudio = pick(true, "feat_speedhack_audio", "updater_speedhackAudio");
+        updater.m_inputFps = std::max(0.0, pick(0.0, "feat_input_fps", nullptr));
 
         // Playback features.
         updater.m_ssbFix = pick(false, "feat_scroll_speed_fix", "updater_ssbFix");

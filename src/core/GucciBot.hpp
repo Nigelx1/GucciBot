@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-26-m (anticroom's new analyzer source, merged. Three-way merge of his old -> new onto our port: framewindow 23 conflicts, lstar and cbf zero. New in Calculate: Test the last N inputs while recording -- measures only those, keeps every other window, then walks you back to where you were, restores your checkpoints and resumes recording; manual labelling of the input at the playhead; Dependent Pair Search; Turbo; dual-mode marker twins; a HUD flash. His CBF engine now splits each tick once at the input's fraction instead of popping a queue of sub-steps, and our PlayerObject hook follows it. His precision readout and our L* HUD were the same feature, so they are one readout now, fed the TPS the results were measured at. Sub-tick macros are stubbed as none, and Dependent Search is skipped only where it would need sub-frame placement, rather than silently snapping to whole frames.)"
+    "2026-09-26-n (Input FPS, from anticroom's drop. While recording, an input may only land on a tick where a new frame would start at the chosen rate -- the way the game itself only reads input once per drawn frame. 120 on 240 TPS allows every second tick; 0 turns it off. Presses queued on any other tick wait for the next input tick, and are dropped if the level resets underneath them rather than replayed into the new attempt. New field under TPS.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -334,6 +334,26 @@ namespace gucci {
     class GucciUpdater {
     public:
         double m_tps = 240.0;
+
+        // Input FPS (anticroom's, 2026-09-26 drop). While recording, an input
+        // may only land on a tick where a new FRAME would start at this rate --
+        // the way the game itself only reads input once per drawn frame. 120 on
+        // 240 TPS allows every second tick. 0 disables it, and so does any
+        // value at or above the TPS, since then every tick is a frame.
+        double m_inputFps = 0.0;
+        bool inputFpsActive() const { return m_inputFps > 0.0 && m_inputFps < m_tps; }
+        bool isInputTick(uint32_t tick) const {
+            if (!this->inputFpsActive() || tick == 0)
+                return true;
+            double const ratio = m_inputFps / m_tps;
+            auto const frameOf = [ratio](uint32_t t) {
+                return std::floor(static_cast<double>(t) * ratio + 1e-9);
+            };
+            return frameOf(tick) != frameOf(tick - 1);
+        }
+        // Counts level resets. Anything that stashes state across a frame
+        // boundary compares it to know whether a reset happened in between.
+        uint32_t m_resetCount = 0;
         double m_speedhack = 1.0;
         double m_tpsOverflow = 0.0;
         bool m_shouldRender = true;

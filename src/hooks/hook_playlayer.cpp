@@ -464,6 +464,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
     }
 
     void resetLevel() {
+        GucciEngine::get()->updater.m_resetCount++;
         auto* gb = GucciEngine::get();
         if (!gb->enabled) {
             m_player1->releaseAllButtons();
