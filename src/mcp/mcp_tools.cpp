@@ -16,12 +16,14 @@
 #include "analysis/ac/framewindow.hpp"
 #include "analysis/ac/lstar.hpp"
 #include "analysis/pathfinder.hpp"
+#include "analysis/trajectory.hpp"
 #include "core/GucciBot.hpp"
 #include "render/renderer.hpp"
 
 #include <Geode/Geode.hpp>
 
 #include <algorithm>
+#include <array>
 #include <deque>
 #include <filesystem>
 #include <fstream>
@@ -113,7 +115,70 @@ namespace gucci::mcp {
                 e["player2"] = true;
             if (a.m_type == gb::ActionType::TPS)
                 e["tps"] = a.m_tps;
+            if (a.isInput() && a.m_subtick > 0.0)
+                e["subtick"] = a.m_subtick;  // SCBF: where in the tick it lands
             return e;
+        }
+
+        // A JSON-schema object from (name, type, description) triples.
+        matjson::Value schemaOf(std::initializer_list<std::array<char const*, 3>> fields) {
+            auto props = obj();
+            for (auto const& f : fields) {
+                auto p = obj();
+                p["type"] = f[1];
+                p["description"] = f[2];
+                props[f[0]] = p;
+            }
+            auto schema = obj();
+            schema["type"] = "object";
+            schema["properties"] = props;
+            return schema;
+        }
+
+        char const* gamemodeName(PlayerObject* p) {
+            if (p->m_isShip) return "ship";
+            if (p->m_isBall) return "ball";
+            if (p->m_isBird) return "ufo";
+            if (p->m_isDart) return "wave";
+            if (p->m_isRobot) return "robot";
+            if (p->m_isSpider) return "spider";
+            if (p->m_isSwing) return "swing";
+            return "cube";
+        }
+
+        // Everything physics reads off a player -- Absense's player_state,
+        // plus the fields the Congregation slope investigation found differing
+        // between a normal run and Calculate's (m_hasEverJumped,
+        // m_lastJumpTime, m_snapDistance, m_reverseRelated).
+        matjson::Value playerJson(PlayerObject* p) {
+            auto j = obj();
+            j["x"] = (double)p->m_position.x;
+            j["y"] = (double)p->m_position.y;
+            j["drawn_x"] = (double)p->getPositionX();
+            j["drawn_y"] = (double)p->getPositionY();
+            j["x_velocity"] = (double)p->getCurrentXVelocity();
+            j["platformer_x_velocity"] = p->m_platformerXVelocity;
+            j["y_velocity"] = p->m_yVelocity;
+            j["rotation"] = (double)p->getRotation();
+            j["gamemode"] = gamemodeName(p);
+            j["mini"] = p->m_vehicleSize < 1.f;
+            j["speed"] = (double)p->m_playerSpeed;
+            j["gravity_mod"] = (double)p->m_gravityMod;
+            j["upside_down"] = p->m_isUpsideDown;
+            j["sideways"] = p->m_isSideways;
+            j["going_left"] = p->m_isGoingLeft;
+            j["on_ground"] = p->m_isOnGround;
+            j["dashing"] = p->m_isDashing;
+            j["dead"] = p->m_isDead;
+            auto const it = p->m_holdingButtons.find(1);
+            j["holding_jump"] = it != p->m_holdingButtons.end() && it->second;
+            j["jump_buffered"] = p->m_jumpBuffered;
+            j["on_slope"] = p->m_currentSlope != nullptr;
+            j["has_ever_jumped"] = p->m_hasEverJumped;
+            j["last_jump_time"] = p->m_lastJumpTime;
+            j["snap_distance"] = p->m_snapDistance;
+            j["reverse_related"] = (int64_t)p->m_reverseRelated;
+            return j;
         }
 
     } // namespace
@@ -619,6 +684,119 @@ namespace gucci::mcp {
                 gb->updater.stepOnce();
                 auto out = obj();
                 out["frame_before"] = (int64_t)gb->updater.getFrame();
+                return out;
+            },
+        });
+
+        // ---- ported from Absense's MCP set (2026-09-27): the tools that
+        // help a session debug GucciBot. Its level-editor, UI-automation and
+        // level-download tools are not ported -- see the commit.
+
+        server.addTool({
+            "gucci_player_state",
+            "The full physics state of player 1 and, in dual mode, player 2: "
+            "physics and drawn position, velocities, rotation, game mode, size, "
+            "gravity, ground/slope/dash/dead flags, held buttons, and the jump "
+            "bookkeeping GD keeps (has_ever_jumped, last_jump_time, "
+            "snap_distance).",
+            obj(),
+            [](matjson::Value const&) {
+                auto* pl = requireLevel();
+                auto out = obj();
+                out["frame"] = (int64_t)GucciEngine::get()->updater.getFrame();
+                out["game_tick"] = (int64_t)pl->m_gameState.m_currentProgress;
+                out["player1"] = playerJson(pl->m_player1);
+                if (pl->m_gameState.m_isDualMode && pl->m_player2)
+                    out["player2"] = playerJson(pl->m_player2);
+                return out;
+            },
+        });
+
+        server.addTool({
+            "gucci_level_info",
+            "The open level: name, id, length, object count, platformer / "
+            "two-player / dual, time warp, practice mode.",
+            obj(),
+            [](matjson::Value const&) {
+                auto* pl = requireLevel();
+                auto* gb = GucciEngine::get();
+                auto out = obj();
+                if (pl->m_level) {
+                    out["name"] = std::string(pl->m_level->m_levelName);
+                    out["id"] = (int64_t)pl->m_level->m_levelID.value();
+                }
+                out["length_x"] = (double)gb->m_levelLength;
+                out["objects"] = (int64_t)(pl->m_objects ? pl->m_objects->count() : 0);
+                out["platformer"] = pl->m_isPlatformer;
+                out["two_player"] = pl->m_levelSettings && pl->m_levelSettings->m_twoPlayerMode;
+                out["dual"] = pl->m_gameState.m_isDualMode;
+                out["time_warp"] = (double)pl->m_gameState.m_timeWarp;
+                out["practice"] = pl->m_isPracticeMode;
+                return out;
+            },
+        });
+
+        server.addTool({
+            "gucci_step_back",
+            "Step back `frames` ticks while paused (default 1). Needs Backwards "
+            "Stepping on. Returns the frame before and after.",
+            schemaOf({{"frames", "integer", "how many ticks to step back (default 1)"}}),
+            [](matjson::Value const& a) {
+                requireFreeRun();
+                requireLevel();
+                auto* gb = GucciEngine::get();
+                if (!gb->updater.m_paused)
+                    throw ToolError("not paused; call gucci_set_paused first");
+                if (!gb->updater.m_backwardsStepping)
+                    throw ToolError("Backwards Stepping is off");
+                int const n = (int)std::clamp<int64_t>(argInt(a, "frames", 1), 1, 10000);
+                auto out = obj();
+                out["frame_before"] = (int64_t)gb->updater.getFrame();
+                gb->updater.backwardsStep(n);
+                out["frame_after"] = (int64_t)gb->updater.getFrame();
+                return out;
+            },
+        });
+
+        server.addTool({
+            "gucci_click",
+            "Queue a press or release of jump for the next tick, as if the "
+            "player did it (recorded if recording).",
+            schemaOf({{"press", "boolean", "true to press, false to release (default true)"},
+                      {"player2", "boolean", "player 2 instead of 1 (default false)"}}),
+            [](matjson::Value const& a) {
+                requireFreeRun();
+                auto* pl = requireLevel();
+                bool const press = argBool(a, "press", true);
+                bool const p2 = argBool(a, "player2", false);
+                pl->queueButton(1, press, p2, 0.0);
+                auto out = obj();
+                out["queued"] = press ? "press" : "release";
+                out["player2"] = p2;
+                out["frame"] = (int64_t)GucciEngine::get()->updater.getFrame();
+                return out;
+            },
+        });
+
+        server.addTool({
+            "gucci_simulate",
+            "Fork the player and see how many of the next `frames` ticks it "
+            "survives if it holds, releases, or keeps its buttons as they are. "
+            "Nothing in the real game changes.",
+            schemaOf({{"frames", "integer", "look-ahead in ticks (default 120)"},
+                      {"player2", "boolean", "simulate player 2 (default false)"}}),
+            [](matjson::Value const& a) {
+                auto* pl = requireLevel();
+                int const frames = (int)std::clamp<int64_t>(argInt(a, "frames", 120), 1, 2000);
+                auto* player = argBool(a, "player2", false) ? pl->m_player2 : pl->m_player1;
+                if (!player)
+                    throw ToolError("no such player");
+                auto& traj = TrajectoryPredictionService::get();
+                auto out = obj();
+                out["frames"] = (int64_t)frames;
+                out["hold"] = (int64_t)traj.survivesFor(pl, player, frames, 1);
+                out["release"] = (int64_t)traj.survivesFor(pl, player, frames, -1);
+                out["as_is"] = (int64_t)traj.survivesFor(pl, player, frames, 0);
                 return out;
             },
         });

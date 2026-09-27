@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-ah (RENDER THE NEXT LEVEL. Outside a level the render button now reads Render the Next Level I Open: press it, open a level, and the render starts once the level has loaded, from the first attempt. Before, pressing Start Render outside a level failed silently. Inside a level Start Render works as before. Includes -t..-ag.)"
+    "2026-09-27-ai (ASSISTANT ACCESS: five more tools, from Absense -- full player physics state, level info, step back, click now, and a quick hold/release survival check. Only matters with Settings > Assistant Access on. Includes -t..-ah.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
