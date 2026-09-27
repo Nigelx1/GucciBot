@@ -56,7 +56,7 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
-    MOD_VERSION="2.alpha.2"
+    MOD_VERSION="2.alpha.3"
     NOMINMAX
     _HAS_ITERATOR_DEBUGGING=0
 )

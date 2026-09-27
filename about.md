@@ -1,4 +1,4 @@
-# GucciBot 2.alpha.2
+# GucciBot 2.alpha.3
 
 > Frame perfect. Ice cold. Brrr.
 
@@ -29,9 +29,10 @@ GucciBot is a Geometry Dash macro bot built on Silicate's physics engine, with a
 - **Deterministic levels.** A macro now replays against the level it was recorded on rather than a slightly different one each attempt: object variance, Random triggers, and the teleport and shake RNG are all derived from the macro's own seed, and checkpoints capture and restore every one of them. Levels built around Random triggers are replayable at all for the first time.
 - **High TPS Precision** (optional) — GD rounds vertical velocity to a fixed step no matter the tick rate, so running above the rate a macro was recorded at throws away the precision those extra ticks buy. This scales the step with the rate. Off by default, because it changes physics.
 - Lock Delta has Performance and Accuracy modes again. Accuracy is the default and gives GD one physics step per update; Performance hands it several at once and lets it sub-step, which is what Silicate does.
-- **Deterministic levels.** A macro replays against the level it was recorded on, not a slightly different one each time: object variance, Random triggers, teleport and shake RNG are all derived from the macro's own seed, and checkpoints capture and restore every one of them. Levels built on Random triggers are replayable at all for the first time.
-- **High TPS Precision** (optional) — GD rounds vertical velocity to a fixed step regardless of tick rate, so running above the rate a macro was recorded at throws away the precision the extra ticks buy. This scales the step with the rate. Off by default; it changes physics.
-- Lock Delta has Performance and Accuracy modes again. Accuracy is the default and drives one physics step per update; Performance hands GD several at once and lets it sub-step, which is what Silicate does.
+- **Sub-tick clicks (CBF Recording)** — records each click at the point inside the tick you actually pressed it, from the time Windows stamped on the input, and plays it back there. Saved in the macro; older versions still open it, with the clicks on the tick. **Sub-tick Frame Advance** steps through a tick in splits while frame advancing, showing where your hitbox would be and the hold and release paths from that point.
+- **Frame Pacing** — Real Time, a fixed number of ticks per drawn frame, or a dynamic limit that measures how long a tick takes and aims for a target frame rate.
+- **RNG Lock** — record with a fixed seed of your choosing.
+- **Prevent Death** can look ahead with the trajectory and stop before a death instead of stepping back after it. **Find Best Tick** steps forward trying your next click on every tick and stops on the one that survives longest.
 - Hitbox trail dedupes consecutive samples landing on the same on-screen pixel (camera-zoom aware), instead of drawing every sample
 
 ## Autoclicker
@@ -39,11 +40,14 @@ GucciBot is a Geometry Dash macro bot built on Silicate's physics engine, with a
 - Fully independent Hold Ticks / Release Ticks / Clicks Per Hold per player -- no more one shared setting forced onto both
 - One-shot "Sync Player 2 to Player 1" copy, not a permanent link -- keep tweaking either side afterward
 - Only While Holding — auto-clicks only while you actually hold the jump input
+- **Swift Clicks** — each click released on the same tick it was pressed
+- **Auto Black Orb UFO** — a fixed five-tick tap-and-hold loop recorded from a black orb UFO spam at 720 TPS
 
 ## Practice & Analysis
 
 - Macro diff viewer — compare two replays frame by frame
-- Frame-window analyzer ("Calculate") — per-click timing windows measured against the real game engine, rebuilt in 1.8 on anticroom's Silicate analyzer. Two algorithms (Time-Based and Recovery Range), sub-tick CBF measurement that reads windows finer than a single frame, and a full settings tab: how far a shifted input has to survive, how much room to leave before the next one, which inputs to measure, and how much of each frame to spend. Colour bands with per-band marker shapes (circle, star, spiral, polygon, as a single outline, an inner ring or filled), per-band sounds and importable sound packs, and an in-level legend counting how many clicks landed in each band. Results save alongside the macro.
+- Frame-window analyzer ("Calculate") — per-click timing windows measured against the real game engine, rebuilt in 1.8 on anticroom's Silicate analyzer. Two algorithms (Time-Based and Recovery Range), sub-tick CBF measurement that reads windows finer than a single frame, and a full settings tab: how far a shifted input has to survive, how much room to leave before the next one, which inputs to measure, and how much of each frame to spend. Colour bands with per-band marker shapes (circle, star, spiral, polygon, as a single outline, an inner ring or filled), per-band sounds and importable sound packs, and an in-level legend counting how many clicks landed in each band. Results save alongside the macro. **Dependent Pair Search** re-measures an input with the one before it moved across its own window; **Test** re-runs the last few inputs while you record; and any input under the playhead can be labelled by hand.
+- **Check Macro** — lists anything in a macro that would desync playback: a press while already held, a release with nothing held, actions out of order, bad values
 - TPS mid-macro changes, noclip accuracy display, macro trim/merge/surgery
 - Bot settings presets, metadata editor, autosave at level end and/or on a timer
 
@@ -111,9 +115,9 @@ Real click-timing feedback and a synced video-review overlay, both built around 
 - **Fade in and out** — the picture fades up at the start and down at the end, with the audio on the same curve, so a render doesn't cut hard from black or hard to silence. 1.5 seconds each by default; either end can be set to zero.
 - **Asynchronous frame capture** — readbacks are pipelined through a ring of GPU buffers with fences, instead of stalling the game every single frame waiting for one to copy out.
 - A render holds the view for its whole duration, so a resize, a DPI change or an alt-tab partway through no longer fights the output resolution.
-- **Fade in and out** — the picture fades up at the start and down at the end, with the audio on the same curve, so a render doesn't cut hard from black or to silence. 1.5s each by default, either end can be set to zero.
-- **Asynchronous frame capture** — readbacks are pipelined through a ring of GPU buffers with fences instead of stalling the game every frame waiting for each one to copy out.
-- Rendering holds the view for the whole render, so a resize, a DPI change or an alt-tab mid-render no longer fights the output resolution.
+- **Intro card** — an optional title card before the level: its name, your own lines, and your frame-window bands in their colours, fading in and out over black.
+- **Hear it while it renders** — optionally plays the render's audio through your speakers as it records.
+- **Render the next level I open**, and **leave the level when it finishes** — queue a render from the menu and walk away.
 
 ## Themes
 
@@ -146,6 +150,8 @@ Real click-timing feedback and a synced video-review overlay, both built around 
 
 - **Frame Editor** — a timeline view of a macro's inputs. Every press is a bar you can drag, stretch or shorten, with undo and redo, an overview strip for long macros, and separate lanes for player 2.
 - **Assistant Access** — an optional local server (Settings) that lets an AI assistant read what the bot is doing: the frame, the loaded macro, Calculate's windows, Pathfinder's progress and GucciBot's own logs, and step the game while something is going wrong. Off by default, your machine only, and it never reaches the network.
+- **HUD** — live readouts in the corner of the level: frame, TPS, position, velocities, rotation, bot state, plus debug readouts (game tick, speed, gravity, checkpoints, level time, time warp, random states, action index, touching orbs and more).
+- **Editor tools** — Macro Buffing (lays a macro's path into the level as objects) and Replace All (swap every object of one id for another, undoable).
 - **Compact Mode** — a small corner panel (record/play, save/name/Calculate, macro picker, TPS/speed, frame stepping) instead of the full tabbed window, so the bot stays usable while you're actually playing.
 - **BIG BRRRR** — a joke toggle in Settings. You'll know it when you see it.
 
@@ -156,11 +162,11 @@ Real click-timing feedback and a synced video-review overlay, both built around 
 - **Nigelx1** — creator and owner of GucciBot; every idea, every theme, every decision is his call
 - **Claude** — wrote the code and this page. Essentially the whole codebase, not a euphemism.
 - **Juice** — designed the frame-window algorithm GucciBot ran on through 1.7 and the marker shapes in 1.8; lead co-tester, ran the mod into the ground on purpose finding the bugs nobody else caught
-- **anticroom** — 1.8's Calculate *is* his analyzer: his Silicate frame-window rewrite, ported in near-verbatim and now the whole feature. Before that, GucciBot's first outside pull request — a real 7-fix accuracy pass. Also one of ToastyReplay's own devs.
+- **anticroom** — 1.8's Calculate *is* his analyzer: his Silicate frame-window rewrite, ported in near-verbatim and now the whole feature. Sub-tick CBF recording and the render intro card are his work too. Before that, GucciBot's first outside pull request — a real 7-fix accuracy pass. Also one of ToastyReplay's own devs.
 - **NaN GD** — the L* precision formula, published at [nandl.pages.dev](https://nandl.pages.dev/#formula). The number GucciBot puts on a macro is his maths
 - **C0nscious** — implemented NaN's formula in C++ as [Frame Window Counter](https://github.com/hyper-5/frame-window-counter) (MIT), which is the code that reached GucciBot
 - **peony** — Silicate (dropped the source like Gucci drops albums. Brrr.)
-- **Absent** — Absense, another bot built on Silicate. Several of Pathfinder's 2.alpha.2 improvements and the assistant server are his ideas, worked out again here from his source
+- **Absent** — Absense, another bot built on Silicate. Several of Pathfinder's improvements, the assistant server, Check Macro, Replace All, the respawn timer and the black orb autoclicker loop are his ideas, worked out again here from his source
 - **ToastexGD** — built ToastyReplay, the project GucciBot actually started as and the reason there is a GucciBot at all. His renderer and FFmpeg pipeline carried this mod for most of its life; rendering now runs on Silicate's
 - **GWDdoS** — Astral, and the codebase cleanup that got this repo public-ready
 - **Bogdaner09** — Click Indicators inspiration ([github.com/Bogdaner09/mod](https://github.com/Bogdaner09/mod)) — vibecoded by his own admission, so credit's probably owed to whichever model wrote that too

@@ -9267,8 +9267,9 @@ namespace gucci {
             {"A",
              "anticroom",
              "1.8's Calculate IS his analyzer -- his Silicate frame-window rewrite, ported in "
-             "near-verbatim. Before that, GucciBot's first outside pull request. Also one of "
-             "ToastyReplay's own devs."},
+             "near-verbatim. Sub-tick CBF recording and the render intro card are his too. "
+             "Before that, GucciBot's first outside pull request. Also one of ToastyReplay's "
+             "own devs."},
             {"N",
              "NaN GD",
              "The L* precision formula -- the number GucciBot puts on a macro is his maths, "
@@ -9281,9 +9282,9 @@ namespace gucci {
             {"P", "peony", "Silicate dev -- dropped the source like Gucci drops albums. Brrr."},
             {"A",
              "Absent",
-             "Absense -- another bot built on Silicate. Several of Pathfinder's 2.alpha.2 "
-             "improvements and the assistant server are his ideas, worked out again here "
-             "from his source."},
+             "Absense -- another bot built on Silicate. Several of Pathfinder's improvements, "
+             "the assistant server, Check Macro, Replace All, the respawn timer and the black "
+             "orb autoclicker loop are his ideas, worked out again here from his source."},
             {"T",
              "ToastexGD",
              "Built ToastyReplay -- the project GucciBot actually started as, and the reason there "

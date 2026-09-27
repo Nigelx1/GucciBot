@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-an (NO MIRROR: Only Recording works. The No Mirror Effect card's Only Recording toggle did nothing, so the mirror flip was skipped in playback and renders too. It now limits No Mirror to recording as it says (queued since 1.7.2). Plus small dead-code cleanup. Includes -t..-am.)"
+    "2026-09-27-ao (VERSION 2.alpha.3. Version bump only on top of -an: mod.json, CMake, about.md brought up to date, and anticroom's and Absent's credits updated on every surface.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
