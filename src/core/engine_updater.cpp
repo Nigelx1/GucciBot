@@ -592,7 +592,9 @@ static void earlyUpdateMidhook(SafetyHookContext&) {
         cp->retain();
         if (upd.m_logFrameIncrements)
             logFrameIncrement("earlyUpdateMidhook(saveState)", upd.getFrame() + 1, pl->m_player1);
-        gb->practiceFix.saveState(cp, upd.getFrame() + 1);
+        // The backstep store only -- NOT saveState, which also files a
+        // practice checkpoint (see saveBackstepFrame).
+        gb->practiceFix.saveBackstepFrame(cp, upd.getFrame() + 1);
     }
 }
 

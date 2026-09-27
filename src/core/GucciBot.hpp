@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-aj (CHECK MACRO, from Absense. A Check Macro button while recording or playing lists problems that desync playback -- a press while already held, a release with nothing held, actions out of order, bad values -- with their frames, plus holds cut by a death. Also available to Assistant Access. Includes -t..-ai.)"
+    "2026-09-27-ak (BACKWARDS STEPPING FIX. With Backwards Stepping on, every tick was secretly also saved as a practice checkpoint -- so dying respawned you one tick back instead of restarting -- and the saved ticks piled up in memory forever. Now it keeps only its own step-back history, capped at Back Step Count (which finally does something), freeing the oldest. Includes -t..-aj.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -113,6 +113,11 @@ namespace gucci {
     struct StoredFrame {
         SavedCheckpointState state;
         uint64_t frame = 0;
+        // Saved by saveBackstepFrame, whose caller retained the checkpoint
+        // object for it: released when the entry is evicted, popped or
+        // cleared. Entries other code pushes (Pathfinder's restore idiom)
+        // belong to that code and are never released here.
+        bool owned = false;
     };
 
     class GucciPracticeFix {
@@ -169,6 +174,13 @@ namespace gucci {
         SavedCheckpointState createCheckpoint(CheckpointObject* cp, uint64_t frameOffset);
         void saveCurrent(CheckpointObject* cp, uint64_t frameOffset);
         void saveState(CheckpointObject* cp, uint64_t frameOffset);
+        // Silicate's saveState: the backwards-stepping store and only that --
+        // one entry per frame, at most m_maxBackstepFrames, oldest evicted.
+        // (saveState above also files a practice checkpoint; Pathfinder relies
+        // on that, so it stays as it is.)
+        void saveBackstepFrame(CheckpointObject* cp, uint64_t frameOffset);
+        // Empties the store, releasing the entries saveBackstepFrame owns.
+        void clearStoredFrames();
         // Both ported from Silicate 2026-09-20 during the analyzer port.
         // m_forcedState above was already here, declared and read by nothing --
         // the same half-a-mechanism pattern as registerBrokenObject (CLAUDE.md
@@ -180,9 +192,6 @@ namespace gucci {
         void applyLatest();
         void applyCheckpoint(SavedCheckpointState& state);
         void dropLastStoredFrame();
-        void clearStoredFrames() {
-            m_storedFrames.clear();
-        }
         void clearPlatformer(bool full);
         bool canRestoreState() const {
             return m_storedFrames.size() > 1;

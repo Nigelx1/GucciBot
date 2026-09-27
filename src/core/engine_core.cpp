@@ -143,9 +143,56 @@ namespace gucci {
         saveCurrent(cp, frameOffset);
     }
 
+    // Until 2026-09-27 the per-tick Backwards Stepping save went through
+    // saveState, i.e. saveCurrent -- so every tick was ALSO filed as a
+    // practice checkpoint. With Backwards Stepping on, a death respawned at
+    // the last tick instead of restarting (handleResetWithCheckpoints takes
+    // the newest saved checkpoint); after stepping back, the newer ticks
+    // stayed in that list; neither list was capped, so a full level snapshot
+    // piled up 240 times a second; and every tick's retained checkpoint object
+    // leaked. The "Back Step Count" setting was read by nothing. This is
+    // Silicate's PracticeFix::saveState: the store alone, deduped per frame,
+    // capped at m_maxBackstepFrames (0 = store nothing), oldest out first.
+    void GucciPracticeFix::saveBackstepFrame(CheckpointObject* cp, uint64_t frameOffset) {
+        if (!cp)
+            return;
+        if (!PlayLayer::get()) {
+            cp->release();
+            return;
+        }
+        size_t const cap = GucciEngine::get()->updater.m_maxBackstepFrames;
+        if (cap == 0 || (!m_storedFrames.empty() && m_storedFrames.back().frame == frameOffset)) {
+            cp->release();
+            return;
+        }
+        while (m_storedFrames.size() >= cap) {
+            auto& oldest = m_storedFrames.front();
+            if (oldest.owned && oldest.state.m_checkpoint)
+                oldest.state.m_checkpoint->release();
+            m_storedFrames.erase(m_storedFrames.begin());
+        }
+
+        StoredFrame sf;
+        sf.state = this->createCheckpoint(cp, frameOffset);
+        sf.frame = frameOffset;
+        sf.owned = true;
+        m_storedFrames.push_back(sf);
+    }
+
+    void GucciPracticeFix::clearStoredFrames() {
+        for (auto& f : m_storedFrames)
+            if (f.owned && f.state.m_checkpoint)
+                f.state.m_checkpoint->release();
+        m_storedFrames.clear();
+    }
+
     void GucciPracticeFix::restorePreviousFrame(std::function<void(CheckpointObject*)> loadFn) {
         if (m_storedFrames.size() <= 1)
             return;
+        // The frame being stepped off is done with; the one behind it is
+        // applied and stays (it is where the next step back starts from).
+        if (auto& off = m_storedFrames.back(); off.owned && off.state.m_checkpoint)
+            off.state.m_checkpoint->release();
         m_storedFrames.pop_back();
         auto& prev = m_storedFrames.back();
         if (prev.state.m_checkpoint)
@@ -223,8 +270,11 @@ namespace gucci {
     }
 
     void GucciPracticeFix::dropLastStoredFrame() {
-        if (!m_storedFrames.empty())
-            m_storedFrames.pop_back();
+        if (m_storedFrames.empty())
+            return;
+        if (auto& last = m_storedFrames.back(); last.owned && last.state.m_checkpoint)
+            last.state.m_checkpoint->release();
+        m_storedFrames.pop_back();
     }
 
     // Restore to one specific captured state rather than to whatever the
@@ -257,7 +307,7 @@ namespace gucci {
         m_shouldLoadPlatformer = false;
         if (full) {
             m_savedCheckpoints.clear();
-            m_storedFrames.clear();
+            this->clearStoredFrames();
         }
     }
 

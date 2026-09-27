@@ -20,11 +20,11 @@ through as they land, so this doc stays the live punch list.
 | # | What's wrong | What you'd notice |
 |---|---|---|
 | 1 | ~~Nineteen engine settings saved in **two different places at once**~~ **FIXED `-j`** | Settings were stuck at defaults until you opened the menu once, then changed |
-| 2 | "Back Step Count" does nothing, and backwards stepping never frees memory | GD slowly eats RAM while backwards stepping is on, forever |
+| 2 | ~~"Back Step Count" does nothing, and backwards stepping never frees memory~~ **FIXED `-ak`** -- and it was worse: every tick was also filed as a practice checkpoint | GD slowly eats RAM while backwards stepping is on, forever; a death respawned one tick back instead of restarting |
 | 3 | "High TPS Precision" only does half its job | Precision is better than off, but not as good as it should be |
 | 4 | Teleport triggers aren't actually seeded | A level with teleport triggers can replay differently |
 | 5 | Four game hooks we never ported | Layout Mode leaves pulse/flash effects on |
-| 6 | The renderer has no audio monitoring | No level meter / audio diagnostics during a render |
+| 6 | ~~The renderer has no audio monitoring~~ **PORTED `-ad`** (Hear Audio While Rendering, off by default) | No level meter / audio diagnostics during a render |
 | 7 | One small gate differs from Silicate's | Scroll Speed Fix applies in one case it shouldn't |
 
 Good news in the same audit:
@@ -122,7 +122,9 @@ single loader now uses. Whether those are the *right* defaults is a separate
 question — note that Silicate and our own `BotSettingsPreset` both default
 `ssbFix` to **true** while the menu defaulted it to **false**.
 
-### 1.2 "Back Step Count" is dead, and backwards stepping leaks
+### 1.2 ~~"Back Step Count" is dead, and backwards stepping leaks~~ **FIXED, build `-ak`**
+
+**Worse than written below.** The per-tick save went through `saveState`, which in GucciBot is `saveCurrent` -- so every tick was *also* pushed into `m_savedCheckpoints`, the practice-checkpoint list. With Backwards Stepping on, `handleResetWithCheckpoints` respawned a death at the newest tick instead of restarting, newer ticks survived a step back, and each tick's retained `CheckpointObject` leaked. Fixed with `saveBackstepFrame` (Silicate's `saveState`: store only, per-frame dedupe, `m_maxBackstepFrames` cap, oldest evicted and released). `saveState` itself is unchanged because Pathfinder's ring relies on it filing both.
 
 `m_maxBackstepFrames` (default 60) appears in exactly three places: its
 declaration (`core/GucciBot.hpp:399`), the GUI slider (`gui/gui.cpp:4059`), and
@@ -194,7 +196,7 @@ Silicate hooks 16 GD classes; we hook 12 of the same ones plus four of our own
 | `EditorPauseLayer` | `onSaveAndPlay` | editor-only |
 | `VideoOptionsLayer` | `onApply` | resolution change during a render |
 
-### 1.6 The renderer has no audio monitoring
+### 1.6 ~~The renderer has no audio monitoring~~ **PORTED, build `-ad`**
 
 `AudioMonitorRing`, `startMonitor`, `stopMonitor`, `monitorReadCallback`,
 `writeCallback`, `getBuffer` — **zero references** in our source. Silicate's

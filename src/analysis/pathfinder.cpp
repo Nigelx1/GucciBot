@@ -284,7 +284,7 @@ namespace gucci {
         auto& pf = gb->practiceFix;
         pf.m_savedCheckpoints.clear();
         pf.m_brokenObjects.clear();
-        pf.m_storedFrames.clear();
+        pf.clearStoredFrames();  // releases any Backwards Stepping snapshots
 
         if (!node || node->fullResetInstead) {
             // Mirrors analyzeFrameWindows()' cold start.
