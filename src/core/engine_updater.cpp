@@ -1015,10 +1015,6 @@ class $modify(GB7CCDirector, CCDirector) {
                 gb->updater.runFrozenTick();
                 return;
             }
-            if (sl->m_needsCleanup) {
-                sl->m_texture.releaseSlot();
-                sl->m_needsCleanup = false;
-            }
             // The intro card, if one is on: its frames are captured with the
             // game held still, so the level starts right after it.
             if (sl->tickIntro(pl)) {

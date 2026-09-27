@@ -782,7 +782,10 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
     }
 
     void toggleFlipped(bool flipped, bool noEffects) {
-        if (GucciEngine::get()->noMirrorEffect) {
+        auto* gb = GucciEngine::get();
+        // "Only Recording" was saved and loaded but never read, so No Mirror
+        // applied during playback and renders too (queued since 1.7.2).
+        if (gb->noMirrorEffect && (!gb->noMirrorRecordingOnly || gb->isRecording())) {
             m_gameState.m_unkBool10 = flipped;
             return;
         }

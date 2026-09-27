@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-am (LAYOUT MODE + SCROLL SPEED FIX. Layout Mode now also stops pulse and fade effects, so objects no longer flash in it. The render Scroll Speed Bug Fix no longer applies to renders without audio, where it has nothing to fix -- same as Silicate. Includes -t..-al.)"
+    "2026-09-27-an (NO MIRROR: Only Recording works. The No Mirror Effect card's Only Recording toggle did nothing, so the mirror flip was skipped in playback and renders too. It now limits No Mirror to recording as it says (queued since 1.7.2). Plus small dead-code cleanup. Includes -t..-am.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -427,7 +427,6 @@ namespace gucci {
         // quantum by recordedTps/currentTps. Default OFF: it changes physics,
         // and nothing recorded before it existed was made under it.
         bool m_highTpsPrecision = false;
-        bool m_layoutMode = false;
         bool m_speedhackAudio = false;
         bool m_allowedToProcessActions = true;
 

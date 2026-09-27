@@ -4205,7 +4205,11 @@ namespace gucci {
                                      theme,
                                      anim,
                                      &keybinds.noMirror)) {
-            Widgets::ToggleSwitch("Only Recording", &engine->noMirrorRecordingOnly, theme, anim);
+            if (Widgets::ToggleSwitch("Only Recording", &engine->noMirrorRecordingOnly, theme, anim))
+                Mod::get()->setSavedValue("hack_no_mirror_rec_only", engine->noMirrorRecordingOnly);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Only skip the mirror flip while recording; playback and renders "
+                                  "show it as the level has it.");
             Widgets::ModuleCardEnd();
         }
 

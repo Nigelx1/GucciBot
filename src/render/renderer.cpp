@@ -791,8 +791,6 @@ namespace gucci {
             ff->swr_free(&track.swrCtx);
         m_audioTracks.clear();
 
-        if (m_needsCleanup)
-            m_texture.releaseSlot();
         if (m_frame) {
             m_frame->data[0] = nullptr;
         }

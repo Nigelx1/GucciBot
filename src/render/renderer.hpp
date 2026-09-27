@@ -274,7 +274,6 @@ namespace gucci {
         // lives with the other public render state rather than the privates.
         float m_fadeThreshold = 1.0f;
         double m_time = 0;
-        bool m_needsCleanup = false;
         SLRenderTexture m_texture;
         ff_t* ff = 0;
 
