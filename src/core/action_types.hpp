@@ -23,6 +23,14 @@ namespace gucci {
             bool m_holding = false;
             bool m_player2 = false;
             double m_tps = 0.0;
+            // Where inside its tick the input landed, 0 <= m_subtick < 1 --
+            // anticroom's SCBF (sub-tick CBF). 0 is the tick edge, which is
+            // what every input was before, and what every macro without the
+            // GBR6 sub-tick section loads as. Playback arms the CBF engine
+            // from it (processReplayAction), so the input fires this far into
+            // the physics step instead of at its start. Last so every brace
+            // initialiser in the codebase still means what it meant.
+            double m_subtick = 0.0;
 
             bool operator<(const Action& o) const {
                 return m_frame < o.m_frame;

@@ -385,14 +385,23 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         // window. Returning true means "taken, do not queue it normally".
         //
         // anticroom's gate: only a tick that is actually being split may take
-        // the input. GucciBot macros carry no sub-tick offset (see scbf in
-        // shim.hpp), so that is exactly while the analyzer arms ticks. Outside
-        // one, stale engine state can't swallow a normal playback input.
+        // the input -- one this input's own sub-tick offset arms (SCBF), or
+        // one the analyzer arms. Outside those, stale engine state can't
+        // swallow a normal playback input.
+        //
+        // Keyed by action.m_frame, as the analyzer arms it. Silicate keys by
+        // the updater frame; GucciBot looks inputs up one frame ahead
+        // (lookupFrame below), so the two differ by one here -- but arm and
+        // capture only have to agree with each other, and the split fires on
+        // the next physics step either way.
         {
             bool const flipped2 = gb->replay.playerFlipped(action.m_player2);
-            if (::Bot::get()->frameWindow().armsTicks() &&
-                cbf::Engine::get()->capture(
-                    action.m_frame, button, action.m_holding, flipped2))
+            auto* eng = cbf::Engine::get();
+            double const offset = scbf::offsetOf(action);
+            if (offset > 0.0 && !eng->isArmed(action.m_frame))
+                eng->arm(action.m_frame, offset);
+            bool const splits = offset > 0.0 || ::Bot::get()->frameWindow().armsTicks();
+            if (splits && eng->capture(action.m_frame, button, action.m_holding, flipped2))
                 return;
         }
 

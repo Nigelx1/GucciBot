@@ -379,6 +379,20 @@ namespace gucci {
             }
         }
 
+        if (header.flags & GBR6_HAS_SUBTICK) {
+            // The deaths block is always written when this one is, even if
+            // empty, so a reader can find where it starts without guessing.
+            if (!(header.flags & GBR6_HAS_DEATHS))
+                writeLE<uint32_t>(buf, 0u);
+            writeLE<uint32_t>(buf, static_cast<uint32_t>(subticks.size()));
+            for (auto const& st : subticks) {
+                writeLE<uint32_t>(buf, st.frame);
+                buf.push_back(st.button);
+                buf.push_back(static_cast<uint8_t>((st.pressed ? 1 : 0) | (st.player2 ? 2 : 0)));
+                writeLE<double>(buf, st.offset);
+            }
+        }
+
         return buf;
     }
 
@@ -423,6 +437,23 @@ namespace gucci {
                     d.frame = readLE<uint32_t>(data, pos, size);
                     d.type = readLE<uint8_t>(data, pos, size);
                     f.deaths.push_back(d);
+                }
+            } else if (f.header.flags & GBR6_HAS_SUBTICK) {
+                (void)readLE<uint32_t>(data, pos, size);  // the empty deaths block
+            }
+
+            if ((f.header.flags & GBR6_HAS_SUBTICK) && pos < size) {
+                uint32_t scount = readLE<uint32_t>(data, pos, size);
+                for (uint32_t i = 0; i < scount; ++i) {
+                    GBR6Subtick st;
+                    st.frame = readLE<uint32_t>(data, pos, size);
+                    st.button = readLE<uint8_t>(data, pos, size);
+                    uint8_t const bits = readLE<uint8_t>(data, pos, size);
+                    st.pressed = bits & 1;
+                    st.player2 = bits & 2;
+                    st.offset = readLE<double>(data, pos, size);
+                    if (st.offset > 0.0 && st.offset < 1.0)
+                        f.subticks.push_back(st);
                 }
             }
 

@@ -952,6 +952,18 @@ namespace gucci {
         if (!f.deaths.empty())
             f.header.flags |= GBR6_HAS_DEATHS;
 
+        for (auto const& a : m_actionAtom.m_actions) {
+            if (!a.isInput() || !(a.m_subtick > 0.0 && a.m_subtick < 1.0))
+                continue;
+            f.subticks.push_back({a.m_frame,
+                                  static_cast<uint8_t>(a.m_type),
+                                  a.m_holding,
+                                  a.m_player2,
+                                  a.m_subtick});
+        }
+        if (!f.subticks.empty())
+            f.header.flags |= GBR6_HAS_SUBTICK;
+
         if (!f.saveToPath(path)) {
             log::error("[GucciBot] Failed to save to {}", path.string());
         } else if (!f.deaths.empty()) {
@@ -1023,7 +1035,21 @@ namespace gucci {
                     inp.frame, static_cast<gb::ActionType>(inp.button), inp.pressed, true);
             for (auto& d : f.deaths)
                 m_actionAtom.addAction(d.frame, static_cast<gb::ActionType>(d.type), false, false);
-            std::sort(m_actionAtom.m_actions.begin(), m_actionAtom.m_actions.end());
+            size_t placedSubticks = 0;
+            for (auto const& st : f.subticks) {
+                for (auto& a : m_actionAtom.m_actions) {
+                    if (a.m_frame == st.frame && (uint8_t)a.m_type == st.button &&
+                        a.m_holding == st.pressed && a.m_player2 == st.player2) {
+                        a.m_subtick = st.offset;
+                        placedSubticks++;
+                        break;
+                    }
+                }
+            }
+            if (!f.subticks.empty())
+                log::info("[GucciBot] Loaded {} sub-tick offset(s) ({} matched an input)",
+                          f.subticks.size(), placedSubticks);
+            std::stable_sort(m_actionAtom.m_actions.begin(), m_actionAtom.m_actions.end());
             gb->setMode(GucciEngine::Mode::Playing);
             log::info("[GucciBot] Loaded GBR6: {} inputs, {} death marker(s)",
                       m_actionAtom.length(),

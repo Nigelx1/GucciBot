@@ -44,28 +44,30 @@ class FrameWindowAnalyzer;
 
 // --- sub-tick input offsets (anticroom's SCBF) -------------------------------
 
-// His macros can carry a sub-tick offset per input -- where inside the frame it
-// landed -- bit-cast into slc::Action::m_seed. gb::Action has no such field and
-// no GucciBot macro format stores one, so every input sits on the frame edge:
-// offsetOf is 0, and a macro never counts as sub-tick.
-//
-// That makes the SUB-TICK MACRO path in the analyzer a genuine no-op
-// (m_subtickMacro stays false).
-//
-// Dependent search is the one other caller. At frame resolution anticroom rounds
-// every placement to a whole frame himself, so the no-op here is exact. At
-// sub-frame resolution (Subframe Probe on) or for CBF results it would silently
-// snap fractions to whole frames -- so beginDependentPass refuses the first and
-// skips the second, with a message, instead of reporting wrong windows.
-//
-// Real support needs an offset on gb::Action and the replay path arming CBF from
-// it (his GJBaseGameLayer.cpp: `if (offset > 0.0 && !eng->isArmed(frame))
-// eng->arm(frame, offset);`). That is core playback, so it is its own change.
+// His macros carry a sub-tick offset per input -- where inside the frame it
+// landed -- bit-cast into slc::Action::m_seed. gb::Action has a real field for
+// it, m_subtick (2026-09-27), saved in GBR6's sub-tick section. These are his
+// helpers over that field, same contract: only player inputs carry one, and
+// anything outside (0, 1) reads as the tick edge.
 namespace scbf {
-    inline double offsetOf(slc::Action const&) { return 0.0; }
-    inline void setOffset(slc::Action&, double) {}
-    inline size_t offsetCount(std::vector<slc::Action> const&) { return 0; }
-    inline bool hasOffsets(std::vector<slc::Action> const&) { return false; }
+    inline double offsetOf(slc::Action const& a) {
+        if (!a.isInput()) return 0.0;
+        return a.m_subtick > 0.0 && a.m_subtick < 1.0 ? a.m_subtick : 0.0;
+    }
+    inline void setOffset(slc::Action& a, double offset) {
+        a.m_subtick = offset > 0.0 && offset < 1.0 ? offset : 0.0;
+    }
+    inline size_t offsetCount(std::vector<slc::Action> const& actions) {
+        size_t n = 0;
+        for (auto const& a : actions)
+            if (offsetOf(a) > 0.0) n++;
+        return n;
+    }
+    inline bool hasOffsets(std::vector<slc::Action> const& actions) {
+        for (auto const& a : actions)
+            if (offsetOf(a) > 0.0) return true;
+        return false;
+    }
 }
 
 // --- trail buffer -----------------------------------------------------------

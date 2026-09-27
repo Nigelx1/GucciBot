@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-w (RENDER INTRO CARD, from anticroom's source. Render > Intro Card: a title card before the level -- level name, your own text lines, and the frame-window bands in their colours -- fading in and out over black, with matching silence on every audio track so the level lines up after it. Needs the Frame Window counter on. Uses GD's own bigFont by default; his bundled font file is not included (its license is unclear). Includes the three render fixes: -t renders freezing after one frame, -u file-write lock, -v cleanup on the right thread.)"
+    "2026-09-27-x (SUB-TICK CLICKS, part 1 of anticroom's SCBF. A macro input can now carry where inside its tick it landed, and playback fires it that far into the physics step instead of at the tick edge. Saved in a new optional section of the .gbr6 file -- older GucciBot versions still open these macros, just with every click on the tick edge. Nothing records sub-tick clicks yet (that is part 2), so existing macros play exactly as before. Includes the render fixes -t/-u/-v and the intro card -w.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

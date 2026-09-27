@@ -19,11 +19,28 @@ namespace gucci {
         GBR6_PLATFORMER = 1 << 3,
         GBR6_HAS_LEVELNAME = 1 << 4,
         GBR6_HAS_DEATHS = 1 << 5,
+        // Sub-tick offsets (anticroom's SCBF), appended after the deaths.
+        // Readers from before this flag stop at the deaths and ignore the rest,
+        // so an older GucciBot still loads the macro -- with every input on the
+        // tick edge.
+        GBR6_HAS_SUBTICK = 1 << 6,
     };
 
     struct GBR6Death {
         uint32_t frame = 0;
         uint8_t type = 0;
+    };
+
+    // Keyed by the input itself rather than by position in a stream, so it
+    // does not depend on how the stream encoder groups taps or autoclicks.
+    // (frame, button, pressed, player2) is unique: the action list already
+    // refuses an exact duplicate on the same frame.
+    struct GBR6Subtick {
+        uint32_t frame = 0;
+        uint8_t button = 1;
+        bool pressed = true;
+        bool player2 = false;
+        double offset = 0.0;
     };
 
     struct GBR6Input {
@@ -85,6 +102,7 @@ namespace gucci {
         std::vector<GBR6Input> p2Inputs;
 
         std::vector<GBR6Death> deaths;
+        std::vector<GBR6Subtick> subticks;
 
         void decode();
 

@@ -16,5 +16,11 @@ if not exist build mkdir build
 cl /nologo /std:c++20 /EHsc /I src /DGB_EDIT_CORE_TEST_STANDALONE ^
    tools\run_edit_tests.cpp /Fe:build\run_edit_tests.exe /Fo:build\ || exit /b 1
 
-build\run_edit_tests.exe
+build\run_edit_tests.exe || exit /b 1
+
+REM GBR6's sub-tick section (SCBF offsets). /O2 /MD to match the mod's build.
+cl /nologo /std:c++20 /EHsc /O2 /MD /I src ^
+   tools\run_gbr6_tests.cpp src\core\gbr6_format.cpp /Fe:build\run_gbr6_tests.exe /Fo:build\ || exit /b 1
+
+build\run_gbr6_tests.exe
 exit /b %ERRORLEVEL%
