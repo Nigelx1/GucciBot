@@ -978,6 +978,10 @@ class $modify(GB7CCDirector, CCDirector) {
             if (auto* quitPl = PlayLayer::get())
                 quitPl->onQuit();
         }
+        // Pause/restore Click Between Frames around recording and playback.
+        // Every frame rather than in setMode, because several callers set the
+        // mode field directly. One compare unless the mode changed.
+        GucciEngine::get()->syncInputMods();
         // The sub-tick preview draws, hides itself, and steps the tick when a
         // press lands mid-tick. Before the enabled check so it can hide.
         scbf::SubtickPreview::get().update(PlayLayer::get());

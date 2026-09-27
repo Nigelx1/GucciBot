@@ -4104,6 +4104,15 @@ namespace gucci {
         }
         ImGui::Dummy(ImVec2(0, 8));
         Widgets::SectionHeader("CBF Recording", theme);
+        if (!engine->inputModsPaused.empty()) {
+            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+            ImGui::TextWrapped("%s is paused while GucciBot records or plays -- it applies "
+                               "clicks outside GD's button queue, where GucciBot records and "
+                               "replays them. It comes back as soon as GucciBot is idle. Record "
+                               "sub-tick clicks with CBF Recording below.",
+                               engine->inputModsPaused.c_str());
+            ImGui::PopStyleColor();
+        }
         {
             // anticroom's SCBF: records each press at the point in the tick it
             // really arrived, and plays it back there.

@@ -2558,6 +2558,79 @@ namespace gucci {
     // cause of #8, and refusing to run would break setups that are fine. But
     // a silent grey "?" gives the user nothing to act on, which is how this
     // was reported in the first place.
+    // Silicate's "CBF fix" (bot/bot.cpp, also in Absense), made polite.
+    //
+    // Syzzi's Click Between Frames and chizz's Superb Input Precision both
+    // apply inputs themselves, part-way through a tick, instead of through
+    // GD's button queue -- which is where GucciBot records and replays them.
+    // With either active, a macro can come out missing clicks or play them on
+    // other ticks. Silicate sets CBF's soft toggle ("Disable CBF") and turns
+    // its physics bypass off, and disables Superb Input Precision, at every
+    // launch, for good.
+    //
+    // Here they are paused only while GucciBot is recording or playing, and
+    // put back exactly as they were the moment it goes idle -- people play
+    // with CBF and only sometimes use the bot. CBF applies both settings live
+    // (listenForSettingChanges, and its toggleMod handles a mid-attempt
+    // switch), so no restart is involved. What they were is kept in saved
+    // values, so a crash mid-recording is undone on the next launch: the
+    // first frame is idle, and idle restores.
+    void GucciEngine::syncInputMods() {
+        bool const want = enabled && mode != Mode::Idle;
+        // The first call always runs, so a pause a crash left behind is
+        // undone on the first frame.
+        if (inputModsSynced && want == inputModsPausedState)
+            return;
+        inputModsSynced = true;
+        inputModsPausedState = want;
+
+        auto* self = Mod::get();
+        auto* cbfMod = Loader::get()->getInstalledMod("syzzi.click_between_frames");
+        auto* sip = Loader::get()->getInstalledMod("chizz.superb-input-precision");
+        bool const paused = self->getSavedValue<bool>("inputmods_paused", false);
+
+        if (want && !paused) {
+            std::string what;
+            if (cbfMod) {
+                bool const soft = cbfMod->getSettingValue<bool>("soft-toggle");
+                bool const bypass = cbfMod->getSettingValue<bool>("physics-bypass");
+                self->setSavedValue("inputmods_cbf_soft", soft);
+                self->setSavedValue("inputmods_cbf_bypass", bypass);
+                if (!soft || bypass) {
+                    cbfMod->setSettingValue<bool>("soft-toggle", true);
+                    cbfMod->setSettingValue<bool>("physics-bypass", false);
+                    what = "Click Between Frames";
+                }
+            }
+            if (sip) {
+                bool const on = sip->getSettingValue<bool>("mod-enabled");
+                self->setSavedValue("inputmods_sip_enabled", on);
+                if (on) {
+                    sip->setSettingValue<bool>("mod-enabled", false);
+                    what += what.empty() ? "Superb Input Precision" : " and Superb Input Precision";
+                }
+            }
+            self->setSavedValue("inputmods_paused", true);
+            inputModsPaused = what;
+            if (!what.empty())
+                log::info("[GucciBot] paused {} while recording/playing", what);
+        } else if (!want && paused) {
+            if (cbfMod) {
+                cbfMod->setSettingValue<bool>(
+                    "soft-toggle", self->getSavedValue<bool>("inputmods_cbf_soft", false));
+                cbfMod->setSettingValue<bool>(
+                    "physics-bypass", self->getSavedValue<bool>("inputmods_cbf_bypass", false));
+            }
+            if (sip)
+                sip->setSettingValue<bool>(
+                    "mod-enabled", self->getSavedValue<bool>("inputmods_sip_enabled", true));
+            self->setSavedValue("inputmods_paused", false);
+            if (!inputModsPaused.empty())
+                log::info("[GucciBot] put {} back as it was", inputModsPaused);
+            inputModsPaused.clear();
+        }
+    }
+
     const std::string& GucciEngine::analyzerConflicts() {
         if (fwAcConflictsChecked) return fwAcConflicts;
         fwAcConflictsChecked = true;

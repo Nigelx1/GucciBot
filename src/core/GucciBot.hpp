@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-ao (VERSION 2.alpha.3. Version bump only on top of -an: mod.json, CMake, about.md brought up to date, and anticroom's and Absent's credits updated on every surface.)"
+    "2026-09-27-ap (CLICK BETWEEN FRAMES PAUSE. While GucciBot is recording or playing, Syzzi's Click Between Frames and Superb Input Precision are paused -- both apply clicks outside the game's normal input path, where GucciBot records and replays them, so macros could lose clicks. The moment GucciBot goes idle they are put back exactly as they were, so normal play with CBF is untouched. Likely cause of GitHub issues 9 and 10. On top of 2.alpha.3.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -1116,6 +1116,12 @@ namespace gucci {
         // See analyzerConflicts() in engine_core.cpp for why this matters.
         std::string fwAcConflicts;
         bool fwAcConflictsChecked = false;
+        // Input mods paused while GucciBot records or plays (see
+        // syncInputMods), for the Bot tab to say so. Empty when none are.
+        std::string inputModsPaused;
+        bool inputModsPausedState = false;
+        bool inputModsSynced = false;
+        void syncInputMods();
         const std::string& analyzerConflicts();
         int fwAiZ = 3;
         int fwAiContinuationDepth = 1; // 0 or 1 only in V1
