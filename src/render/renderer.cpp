@@ -1,6 +1,7 @@
 #include "renderer.hpp"
 #include "core/GucciBot.hpp"
 #include "analysis/ac/sound.hpp"
+#include "analysis/ac/shim.hpp"  // SLSettings (the intro reads the frame-window switch)
 
 #include <Geode/Geode.hpp>
 #include <Geode/binding/PlayLayer.hpp>
@@ -308,6 +309,7 @@ namespace gucci {
         m_collectAudio = mod->getSavedValue<bool>("render_include_audio", true);
         m_settings.m_splitAudioTracks =
             mod->getSavedValue<bool>("render_split_audio_tracks", false);
+        m_settings.m_intro.load();
 
         std::string ext = mod->getSavedValue<std::string>("render_file_extension", ".mp4");
         if (!ext.empty() && ext[0] == '.')
@@ -541,6 +543,11 @@ namespace gucci {
         m_endTime = 0.0f;
         m_updateIndex = 0;
         m_frameCount = 0;
+        m_introStarted = false;
+        m_introFinished = false;
+        m_introIndex = 0;
+        m_introTotal = 0;
+        RenderIntro::get()->destroy();
         m_recording = true;
 
         m_texture.m_width = m_settings.m_width;
@@ -715,6 +722,10 @@ namespace gucci {
         m_recording = false;
         m_recordCv.notify_all();
 
+        // Cancelled mid-intro: take the card down. Game thread, so this is
+        // safe (finishStop).
+        RenderIntro::get()->destroy();
+
         AudioRecorder::get()->detach();
         AudioRecorder::get()->uninit();
         if (m_settings.m_splitAudioTracks) {
@@ -787,7 +798,9 @@ namespace gucci {
         m_lastRender.width = (unsigned)m_settings.m_width;
         m_lastRender.height = (unsigned)m_settings.m_height;
         m_lastRender.fps = (unsigned)m_settings.m_fps;
-        m_lastRender.duration = m_time;
+        // m_time counts from the level's first frame; the video also has the
+        // intro card in front of it.
+        m_lastRender.duration = m_time + m_introTotal * (double)getDt();
         m_lastRender.fileSize = 0;
         std::error_code ec;
         if (auto const sz = fs::file_size(fs::path(m_lastRender.path), ec); !ec)
@@ -896,6 +909,114 @@ namespace gucci {
         m_texture.issue(m_fadeThreshold);
     }
 
+    bool SLRenderer::introEnabled() const {
+        auto const& intro = m_settings.m_intro;
+        return intro.m_enabled && SLSettings::get()->frameWindow.enabled &&
+               intro.duration() > 0.0;
+    }
+
+    // The game is held still for the intro, so nothing feeds the audio in that
+    // time. Every active track gets the same length of silence up front and
+    // its recorder's position moves past it, so the level's audio starts
+    // exactly where the level's first video frame does.
+    //
+    // anticroom's writes one track. GucciBot can split the audio into four
+    // (combined, music, SFX, frame-window cues), each with its own recorder
+    // and its own position, so all four get the silence -- otherwise the split
+    // tracks would start the intro's length ahead of the picture.
+    void SLRenderer::writeIntroSilence(double seconds) {
+        if (!m_collectAudio || m_audioTracks.empty())
+            return;
+        if (m_sampleRate <= 0 || m_channels <= 0)
+            return;
+
+        constexpr int frameSize = 1024;  // same block drainRecorderIntoTrack writes
+        int const frames = (int)(seconds * m_sampleRate / frameSize);
+        if (frames <= 0)
+            return;
+
+        AudioRecorder* const recorders[] = {
+            AudioRecorder::get(),
+            AudioRecorder::getMusic(),
+            AudioRecorder::getSfx(),
+            AudioRecorder::getFrameWindow(),
+        };
+        size_t const tracks =
+            std::min(m_audioTracks.size(), (size_t)(m_settings.m_splitAudioTracks ? 4 : 1));
+
+        std::vector<float> silence;
+        for (size_t t = 0; t < tracks; t++) {
+            AudioRecorder* rec = recorders[t];
+            uint32_t const base = rec->m_index;
+            for (int i = 0; i < frames; i++) {
+                silence.assign((size_t)frameSize * m_channels, 0.f);
+                auto ret = this->writeAudio(silence, (uint64_t)(base + i) * frameSize, (int)t);
+                if (ret.isErr()) {
+                    geode::log::error("[GucciBot] Failed to write intro silence (track {}): {}",
+                                      t, ret.unwrapErr());
+                    return;
+                }
+            }
+            rec->m_index = base + frames;
+        }
+
+        // Only the combined recorder keeps a clock (the FMOD pump measures
+        // how much to mix from it); both halves move together, so the amount
+        // it asks for next is unchanged.
+        double const written = (double)frames * frameSize / m_sampleRate;
+        auto* main = AudioRecorder::get();
+        main->m_time += written;
+        main->m_fmodTime += written;
+    }
+
+    bool SLRenderer::tickIntro(PlayLayer* pl) {
+        if (m_introFinished)
+            return false;
+
+        auto const& intro = m_settings.m_intro;
+
+        if (!m_introStarted) {
+            m_introTotal =
+                this->introEnabled() ? (int)std::round(intro.duration() * m_settings.m_fps) : 0;
+            if (m_introTotal <= 0) {
+                m_introTotal = 0;
+                m_introFinished = true;
+                return false;
+            }
+
+            m_introStarted = true;
+            m_introIndex = 0;
+
+            RenderIntro::get()->build(pl, intro, (float)m_settings.m_height);
+            this->writeIntroSilence(m_introTotal * (double)this->getDt());
+        }
+
+        double const t = m_introIndex * (double)this->getDt();
+        double const fadeOutAt = intro.m_fadeInTime + intro.m_holdTime;
+
+        float alpha = 1.f;
+        if (t < intro.m_fadeInTime) {
+            alpha = (float)(t / intro.m_fadeInTime);
+        } else if (t >= fadeOutAt) {
+            alpha = intro.m_fadeOutTime > 0.0
+                        ? (float)(1.0 - (t - fadeOutAt) / intro.m_fadeOutTime)
+                        : 0.f;
+        }
+
+        RenderIntro::get()->setAlpha(alpha);
+
+        m_fadeThreshold = 1.f;
+        m_updateIndex++;
+        this->capture();
+
+        if (++m_introIndex >= m_introTotal) {
+            RenderIntro::get()->destroy();
+            m_introFinished = true;
+        }
+
+        return true;
+    }
+
     void SLRenderer::update(PlayLayer* pl) {
         if (!this->isRecording())
             return;
@@ -905,7 +1026,9 @@ namespace gucci {
         if (pl->m_isPaused || !started)
             return;
 
-        m_time = ++m_updateIndex * this->getDt();
+        // Intro frames used update indices too (they are the start of the
+        // video), but the level's clock starts after them.
+        m_time = (++m_updateIndex - m_introTotal) * this->getDt();
 
         if (pl->m_hasCompletedLevel &&
             !GucciEngine::get()->replay.getCurrentQueuedInput().has_value()) {

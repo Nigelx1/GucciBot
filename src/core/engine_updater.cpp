@@ -895,6 +895,14 @@ class $modify(GB7CCDirector, CCDirector) {
                 sl->m_texture.releaseSlot();
                 sl->m_needsCleanup = false;
             }
+            // The intro card, if one is on: its frames are captured with the
+            // game held still, so the level starts right after it.
+            if (sl->tickIntro(pl)) {
+                sl->displayPreview();
+                this->m_pobOpenGLView->swapBuffers();
+                gb->updater.runFrozenTick();
+                return;
+            }
             if (!m_bPaused)
                 m_pScheduler->update(dt);
             if (m_pNextScene)

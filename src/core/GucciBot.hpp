@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-v (RENDER CLEANUP ON THE RIGHT THREAD. When a render ended, its cleanup ran on the background encoding thread -- including freeing GPU memory and resizing the window back, which only work from the game's own thread. So every render leaked its GPU buffers, and the window restore was done from the wrong thread. Cleanup now runs on the game thread, the next frame after the encoder finishes, the way Silicate does it. Closing GD mid-render also can no longer crash on exit. Includes -t (renders freezing after one frame) and -u (audio/video file-write lock).)"
+    "2026-09-27-w (RENDER INTRO CARD, from anticroom's source. Render > Intro Card: a title card before the level -- level name, your own text lines, and the frame-window bands in their colours -- fading in and out over black, with matching silence on every audio track so the level lines up after it. Needs the Frame Window counter on. Uses GD's own bigFont by default; his bundled font file is not included (its license is unclear). Includes the three render fixes: -t renders freezing after one frame, -u file-write lock, -v cleanup on the right thread.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

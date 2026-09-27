@@ -5,6 +5,7 @@
 #include "ffmpeg.hpp"
 #include "texture.hpp"
 #include "dsp.hpp"
+#include "intro.hpp"
 
 #include <Geode/Geode.hpp>
 #include <deque>
@@ -58,6 +59,9 @@ namespace gucci {
         double m_triggerSfxVolume = 1.0;
 
         bool m_splitAudioTracks = false;
+
+        // Frame Window intro card (anticroom's, 2026-09-26). See intro.hpp.
+        RenderIntroSettings m_intro;
     };
 
 #define SL_AV_PTR(type) std::unique_ptr<type, void (*)(type*)>
@@ -154,6 +158,12 @@ namespace gucci {
 
         void capture();
         void update(PlayLayer* pl);
+
+        // Plays one frame of the intro card, if there is one left to play.
+        // True means the frame was the intro's: drawScene must not advance the
+        // game this frame.
+        bool tickIntro(PlayLayer* pl);
+        bool introEnabled() const;
 
         void displayPreview() {
             m_texture.displayPreview();
@@ -274,6 +284,12 @@ namespace gucci {
 
         int m_sampleRate = 44100;
         int m_channels = 2;
+
+        bool m_introStarted = false;
+        bool m_introFinished = false;
+        int m_introIndex = 0;
+        int m_introTotal = 0;
+        void writeIntroSilence(double seconds);
 
         uint8_t* m_buffer = nullptr;
         size_t m_bufferSize = 0;

@@ -6394,6 +6394,103 @@ namespace gucci {
             }
         }
         ImGui::Dummy(ImVec2(0, 8));
+        Widgets::SectionHeader("Intro Card", theme);
+        // anticroom's Frame Window intro card (2026-09-26): a title card with
+        // the level name and the frame-window bands, played before the level.
+        // Edits the renderer's own copy and saves on every change, since a
+        // render reloads its settings when it starts.
+        {
+            auto& intro = SLRenderer::get()->m_settings.m_intro;
+            static bool introLoaded = false;
+            if (!introLoaded) {
+                intro.load();
+                introLoaded = true;
+            }
+            bool changed = false;
+            ImGui::BeginDisabled(SLRenderer::get()->isRecording());
+
+            changed |= Widgets::ToggleSwitch("Frame Window Intro Card", &intro.m_enabled, theme, anim);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip(
+                    "A title card before the level: its name, your text, and the frame-window "
+                    "bands in their colours. The game waits while it plays.");
+
+            if (intro.m_enabled) {
+                if (!SLSettings::get()->frameWindow.enabled) {
+                    ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                    ImGui::TextWrapped("Turn the Frame Window counter on to use the intro card.");
+                    ImGui::PopStyleColor();
+                }
+
+                auto introTime = [&](char const* label, char const* id, double& v) {
+                    ImGui::Text("%s", label);
+                    ImGui::SameLine(iW);
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::InputDouble(id, &v, 0.1, 0.5, "%.1f s")) {
+                        v = std::clamp(v, 0.0, 60.0);
+                        return true;
+                    }
+                    return false;
+                };
+                auto introText = [&](char const* label, char const* id, std::string& v) {
+                    char buf[256];
+                    snprintf(buf, sizeof(buf), "%s", v.c_str());
+                    ImGui::Text("%s", label);
+                    ImGui::SameLine(iW);
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::InputText(id, buf, sizeof(buf))) {
+                        v = buf;
+                        return true;
+                    }
+                    return false;
+                };
+
+                changed |= introTime("Fade in", "##introFadeIn", intro.m_fadeInTime);
+                changed |= introTime("Hold", "##introHold", intro.m_holdTime);
+                changed |= introTime("Fade out", "##introFadeOut", intro.m_fadeOutTime);
+
+                ImGui::Dummy(ImVec2(0, 4));
+                changed |= Widgets::ToggleSwitch("Use Level Name", &intro.m_autoLevelName, theme, anim);
+                if (!intro.m_autoLevelName)
+                    changed |= introText("Title", "##introTitle", intro.m_levelName);
+                changed |= introText("Subtitle", "##introNote", intro.m_levelNote);
+                changed |= introText("Line 1", "##introH1", intro.m_heading1);
+                changed |= introText("Line 2", "##introH2", intro.m_heading2);
+                changed |= introText("Line 3", "##introH3", intro.m_heading3);
+                changed |= introText("Grey note", "##introGrey", intro.m_greyLine);
+                changed |= introText("Footer", "##introFooter", intro.m_footerLine);
+
+                ImGui::Dummy(ImVec2(0, 4));
+                changed |= introText("Band header", "##introBandHeader", intro.m_bandHeader);
+                changed |= introText("Band line", "##introBandLine", intro.m_bandLine);
+                changed |= introText("Band time", "##introBandTime", intro.m_bandTime);
+                changed |= introText("Font", "##introFont", intro.m_font);
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip(
+                        "A GD font (bigFont.fnt, goldFont.fnt, chatFont.fnt) or a .ttf file -- "
+                        "a full path, or just the name of one placed in GucciBot's save folder.");
+
+                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                ImGui::TextWrapped(
+                    "Fill-ins: {name} {note} {tps} {subfps} {cbfhz} in any line; {range} {hz} "
+                    "{ms} {low} {high} {min} {max} in the band lines.");
+                ImGui::PopStyleColor();
+
+                if (Widgets::StyledButton("Reset Intro Text", ImVec2(-1, 24), theme, anim)) {
+                    RenderIntroSettings const d;
+                    bool const keepOn = intro.m_enabled;
+                    intro = d;
+                    intro.m_enabled = keepOn;
+                    changed = true;
+                }
+            }
+
+            ImGui::EndDisabled();
+            if (changed)
+                intro.save();
+        }
+
+        ImGui::Dummy(ImVec2(0, 8));
         Widgets::SectionHeader("Encoding", theme);
 
         static const char* vCodecs[] = {"libx264",
