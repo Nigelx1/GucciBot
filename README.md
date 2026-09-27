@@ -22,6 +22,7 @@ GucciBot is public now — grab a build from [Releases](https://github.com/Nigel
 - [Building it](#building-it)
 - [Status](#status)
 - [Credits](#credits)
+- [License](#license)
 
 ## What it actually does
 
@@ -124,6 +125,12 @@ Most of this is stable and has been tested for real, in-game, by an actual human
 - **ToastexGD** — built ToastyReplay, the project this actually started as before the Silicate migration. The renderer, the FFmpeg pipeline, and the whole recording system running today are still his, exactly as built.
 - **GWDdoS** — pushed for a real codebase cleanup (feature-folder reorg, a proper `.clang-format`, namespacing everything outside Geode's own hook classes) and was right about all of it.
 - **Bogdaner09** — the mod that got Click Indicators started ([github.com/Bogdaner09/mod](https://github.com/Bogdaner09/mod)); Nigel found it, we built our own version around it. Vibecoded by his own admission, so credit's probably owed elsewhere too.
+
+## License
+
+GucciBot is free software under the **GNU General Public License v3.0** — see [LICENSE](LICENSE).
+
+It's built on [Silicate](https://git.puppy.lgbt/silicate/silicate) by peony, which is GPL-3.0, and includes anticroom's GPL-3.0 work from his Silicate fork; C0nscious's Frame Window Counter code is MIT, which is compatible. You're free to use it, study it, share it and change it. Anything you distribute that's built from it has to stay open source under the same license.
 
 ---
 
