@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-ak (BACKWARDS STEPPING FIX. With Backwards Stepping on, every tick was secretly also saved as a practice checkpoint -- so dying respawned you one tick back instead of restarting -- and the saved ticks piled up in memory forever. Now it keeps only its own step-back history, capped at Back Step Count (which finally does something), freeing the oldest. Includes -t..-aj.)"
+    "2026-09-27-al (TWO MISSING SILICATE HOOKS + SHAKE FIX. High TPS Precision now covers every place GD rounds vertical speed, not just half. Random teleport triggers now follow the macro's seed. And screen-shake randomness, which was meant to be seeded but was not (the hook let GD's own random call run anyway), now is. Includes -t..-ak.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

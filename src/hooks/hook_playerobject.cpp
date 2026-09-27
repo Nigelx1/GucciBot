@@ -2,11 +2,55 @@
 #include "analysis/ac/cbf.hpp"
 #include "analysis/ac/framewindow.hpp"
 #include "analysis/trajectory.hpp"
+#include "hooks/util_midhook.hpp"
 #include <Geode/Geode.hpp>
 #include <Geode/modify/PlayerObject.hpp>
 using namespace geode::prelude;
 
 using namespace gucci;
+
+// GD quantises y-velocity to a fixed 0.001 step. Above the macro's recorded
+// tick rate that is coarser than the simulation, so the extra ticks buy
+// nothing. Silicate scales the step down by the ratio ("High TPS Precision").
+static constexpr double kVanillaQuantum = 0.001;
+
+static double yVelocityQuantum() {
+    auto* gb = GucciEngine::get();
+    if (!gb->updater.m_highTpsPrecision || !gb->enabled)
+        return kVanillaQuantum;
+    double const tps = gb->updater.m_tps;
+    double ref = gb->replay.m_initialTPS;
+    if (!(ref > 0.0))
+        ref = 240.0;
+    if (!(tps > ref))
+        return kVanillaQuantum;
+    return kVanillaQuantum * (ref / tps);
+}
+
+static double quantise(double value, double quantum) {
+    double const whole = std::trunc(value);
+    double const frac = value - whole;
+    if (frac == 0.0)
+        return value;
+    return whole + std::round(frac / quantum) * quantum;
+}
+
+// ENGINE_AUDIT §1.3. setYVelocity below only catches the writes that go
+// through the setter; GD also rounds y-velocity inline, and Silicate catches
+// that with this midhook -- quantise the value in xmm1 to the finer step and
+// jump past GD's own 0.001 rounding. Until 2026-09-27 GucciBot had only the
+// setter half, so High TPS Precision did half of what it says.
+static void yVelocityRoundMidhook(SafetyHookContext& ctx) {
+    double const quantum = yVelocityQuantum();
+    if (quantum >= kVanillaQuantum)
+        return;
+    ctx.xmm1.f64[0] = quantise(ctx.xmm1.f64[0], quantum);
+    ctx.rip = geode::base::get() + 0x38c34d;
+}
+
+$execute {
+    util_midhook(geode::base::get() + 0x38c315, "yVelocityRound", yVelocityRoundMidhook);
+}
 
 class $modify(GB7PlayerObject, PlayerObject) {
     // Splits one physics tick into sub-steps so an input can land BETWEEN
@@ -198,32 +242,6 @@ class $modify(GB7PlayerObject, PlayerObject) {
         if (::Bot::get()->frameWindow().hideSpawnEffects())
             return;
         PlayerObject::spawnCircle();
-    }
-
-    // GD quantises y-velocity to a fixed 0.001 step. Above the macro's
-    // recorded tick rate that is coarser than the simulation, so the extra
-    // ticks buy nothing. Silicate scales the step down by the ratio.
-    static constexpr double kVanillaQuantum = 0.001;
-
-    static double yVelocityQuantum() {
-        auto* gb = GucciEngine::get();
-        if (!gb->updater.m_highTpsPrecision || !gb->enabled)
-            return kVanillaQuantum;
-        double const tps = gb->updater.m_tps;
-        double ref = gb->replay.m_initialTPS;
-        if (!(ref > 0.0))
-            ref = 240.0;
-        if (!(tps > ref))
-            return kVanillaQuantum;
-        return kVanillaQuantum * (ref / tps);
-    }
-
-    static double quantise(double value, double quantum) {
-        double const whole = std::trunc(value);
-        double const frac = value - whole;
-        if (frac == 0.0)
-            return value;
-        return whole + std::round(frac / quantum) * quantum;
     }
 
     void setYVelocity(double velocity, int type) {

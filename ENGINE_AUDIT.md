@@ -21,8 +21,8 @@ through as they land, so this doc stays the live punch list.
 |---|---|---|
 | 1 | ~~Nineteen engine settings saved in **two different places at once**~~ **FIXED `-j`** | Settings were stuck at defaults until you opened the menu once, then changed |
 | 2 | ~~"Back Step Count" does nothing, and backwards stepping never frees memory~~ **FIXED `-ak`** -- and it was worse: every tick was also filed as a practice checkpoint | GD slowly eats RAM while backwards stepping is on, forever; a death respawned one tick back instead of restarting |
-| 3 | "High TPS Precision" only does half its job | Precision is better than off, but not as good as it should be |
-| 4 | Teleport triggers aren't actually seeded | A level with teleport triggers can replay differently |
+| 3 | ~~"High TPS Precision" only does half its job~~ **FIXED `-al`** | Precision is better than off, but not as good as it should be |
+| 4 | ~~Teleport triggers aren't actually seeded~~ **FIXED `-al`** (and shake wasn't either -- see §1.4) | A level with teleport triggers can replay differently |
 | 5 | Four game hooks we never ported | Layout Mode leaves pulse/flash effects on |
 | 6 | ~~The renderer has no audio monitoring~~ **PORTED `-ad`** (Hear Audio While Rendering, off by default) | No level meter / audio diagnostics during a render |
 | 7 | One small gate differs from Silicate's | Scroll Speed Fix applies in one case it shouldn't |
@@ -156,7 +156,7 @@ that's 240 full level snapshots per second into a deque that never shrinks.
 **Fix:** apply `m_maxBackstepFrames` in `saveCurrent` with Silicate's eviction.
 One small change, and it makes an existing slider mean something.
 
-### 1.3 `yVelocityRound` midhook missing — High TPS Precision is half-wired
+### 1.3 ~~`yVelocityRound` midhook missing — High TPS Precision is half-wired~~ **FIXED, build `-al`**
 
 Silicate installs **eight** named midhooks. We install six of them.
 
@@ -177,7 +177,9 @@ the override catches calls that go through the setter, the midhook catches GD's
 inline y-velocity writes that bypass it. So "High TPS Precision" is on the menu
 and does half of what it claims.
 
-### 1.4 `teleportRandomOverride` midhook missing — teleport RNG isn't seeded
+### 1.4 ~~`teleportRandomOverride` midhook missing — teleport RNG isn't seeded~~ **FIXED, build `-al`**
+
+Found alongside it: the four **shake** overrides *were* installed but lacked Silicate's `ctx.rip += 6`, so the `rand()` call they sit on still ran after the hook -- it overwrote the seeded value (shake was never seeded either) and advanced GD's `rand()` as a side effect. Fixed in the same build.
 
 `m_teleportRandomState` exists, is stored in `SavedCheckpointState`, and is
 restored on checkpoint load. **Nothing ever uses it**, because the midhook at

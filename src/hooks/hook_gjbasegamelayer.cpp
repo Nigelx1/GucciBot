@@ -25,6 +25,22 @@ static void shakeRandomOverride(SafetyHookContext& ctx) {
     uint64_t& state = GucciEngine::get()->replay.m_shakeRandomState;
     state = (int)((214013 * state + 2531011) >> 16) & 0x7FFF;
     ctx.rax = (uintptr_t)state;
+    // Skip the rand() call this sits on, as Silicate does. Without this the
+    // call still ran after the hook: it overwrote rax with GD's own rand()
+    // (so shake was never seeded) and advanced GD's global random state as a
+    // side effect.
+    ctx.rip += 6;
+}
+
+// ENGINE_AUDIT §1.4. The teleport trigger's random pick, from the macro's
+// seeded teleport state instead of GD's rand(). m_teleportRandomState was
+// stored and restored with checkpoints and reseeded every attempt, but the
+// hook that reads it was never installed. This one sits after the call (no
+// rip skip) -- Silicate's placement.
+static void teleportRandomOverride(SafetyHookContext& ctx) {
+    uint64_t& state = GucciEngine::get()->replay.m_teleportRandomState;
+    state = (int)((214013 * state + 2531011) >> 16) & 0x7FFF;
+    ctx.rax = (uintptr_t)state;
 }
 
 static void overrideCheckpointPlacement(SafetyHookContext& ctx) {
@@ -826,5 +842,6 @@ $execute {
     util_midhook(geode::base::get() + 0x23E1A1, "shakeRandom2", shakeRandomOverride);
     util_midhook(geode::base::get() + 0x23E1CB, "shakeRandom3", shakeRandomOverride);
     util_midhook(geode::base::get() + 0x23E1E9, "shakeRandom4", shakeRandomOverride);
+    util_midhook(geode::base::get() + 0x20FEDC, "teleportRandomOverride", teleportRandomOverride);
     util_midhook(geode::base::get() + 0x3A3657, "checkpointPlacement", overrideCheckpointPlacement);
 }
