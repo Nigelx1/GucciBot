@@ -2233,6 +2233,8 @@ namespace gucci {
         replay.m_maintainGravity = pick(false, "feat_maintain_gravity", "replay_maintainGravity");
         replay.m_scbfRecording = pick(false, "scbf_recording", nullptr);
         replay.m_scbfTickSplit = pick(true, "scbf_tick_split", nullptr);
+        replay.m_subtickPreview = pick(false, "scbf_subtick_preview", nullptr);
+        replay.m_subtickSplits = pick(24000, "scbf_subtick_splits", nullptr);
 
         // Hacks.
         noclipEnabled = pick(false, "hack_noclip", nullptr);

@@ -189,6 +189,32 @@ namespace gucci {
         // leaves the preview/indicator paths alone. False if no fork can run.
         bool predictStep(PlayLayer* playLayer, PlayerObject* source, bool holding,
                          cocos2d::CCPoint& outPos, float& outRot);
+
+        // The sub-tick preview (anticroom's SubtickPreview, 2026-09-27), built
+        // on this fork. Neither touches the path preview's own context.
+        struct SubtickPose {
+            cocos2d::CCPoint position;
+            cocos2d::CCRect hitbox;
+            cocos2d::CCRect innerHitbox;
+            float rotation = 0.f;
+            bool died = false;
+        };
+        // Where `source` is `fraction` of a tick from now, its buttons exactly
+        // as they are.
+        bool extrapolateSubtick(PlayLayer* playLayer, PlayerObject* source, float fraction,
+                                SubtickPose& out);
+        // From that same point: press (hold) or release, finish the tick, and
+        // keep going for the path length, drawing the path into `node`.
+        void traceSubtickBranch(PlayLayer* playLayer, PlayerObject* source, float fraction,
+                                bool hold, cocos2d::CCDrawNode* node, cocos2d::ccColor4F color,
+                                float width);
+        // While the sub-tick preview is showing, the whole-tick path would
+        // contradict it; this keeps it hidden until released.
+        void setOverlaySuppressed(bool suppressed);
+        cocos2d::ccColor4F holdColor(bool player2) const {
+            return player2 ? m_holdColorP2 : m_holdColor;
+        }
+        cocos2d::ccColor4F releaseColor() const { return m_releaseColor; }
         float lastProbeStep() const { return m_lastProbeStep; }
         // What ended the last simulated run, for diagnosing forks that die
         // before they measure anything. -1 means no object (a non-collision
@@ -235,6 +261,10 @@ namespace gucci {
         void stepMoveActions(PlayLayer* playLayer, float delta);
 
         PredictionContext m_context;
+        bool m_overlaySuppressed = false;
+        PlayerObject* prepareFork(PlayLayer* playLayer, PlayerObject* source);
+        void stepFork(PlayLayer* playLayer, PlayerObject* fork, float delta);
+        float tickUnits() const;
         float m_lastProbeStep = 0.0f;
         int m_lastKillerId = -1;
         int m_lastKillerType = -1;

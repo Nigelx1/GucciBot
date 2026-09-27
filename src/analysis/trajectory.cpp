@@ -1047,6 +1047,217 @@ bool TrajectoryPredictionService::predictStep(PlayLayer* playLayer,
     return true;
 }
 
+// ---- sub-tick preview ----------------------------------------------------------
+//
+// anticroom's SubtickPreview asks his trajectory two things: where the player
+// is part of the way through a tick (extrapolate), and what the hold and
+// release paths look like if the input changes right there
+// (extrapolateBranch). GucciBot's trajectory is its own design, so these are
+// the same two questions answered on this fork -- same setup as predictStep,
+// same step order as traceInputPath, none of the path preview's context
+// (hold paths, survived frames, probe results) touched.
+
+namespace {
+    // The fork walks the real collision code, which advances these.
+    struct ForkStateGuard {
+        PlayLayer* pl;
+        unsigned int progress;
+        double levelTime;
+        double totalTime;
+        unsigned int commandIndex;
+        explicit ForkStateGuard(PlayLayer* p)
+            : pl(p),
+              progress(p->m_gameState.m_currentProgress),
+              levelTime(p->m_gameState.m_levelTime),
+              totalTime(p->m_gameState.m_totalTime),
+              commandIndex(p->m_gameState.m_commandIndex) {}
+        ~ForkStateGuard() {
+            pl->m_gameState.m_currentProgress = progress;
+            pl->m_gameState.m_levelTime = levelTime;
+            pl->m_gameState.m_totalTime = totalTime;
+            pl->m_gameState.m_commandIndex = commandIndex;
+        }
+    };
+} // namespace
+
+float TrajectoryPredictionService::tickUnits() const {
+    double const tps = GucciEngine::get()->updater.m_tps;
+    return tps > 1.0 ? static_cast<float>(60.0 / tps) : m_context.stepDelta;
+}
+
+PlayerObject* TrajectoryPredictionService::prepareFork(PlayLayer* playLayer,
+                                                      PlayerObject* source) {
+    if (!m_context.previewPlayers[0]) {
+        attach(playLayer);
+    }
+    bool const isSecondPlayer = playLayer->m_player2 == source;
+    auto* fork = m_context.previewPlayers[isSecondPlayer ? 1 : 0];
+    if (!fork) {
+        return nullptr;
+    }
+
+    applyPlayerState(fork, capturePlayerState(source));
+    fork->setPosition(source->m_position);
+    fork->m_isSecondPlayer = isSecondPlayer;
+    fork->m_isPlatformer = source->m_isPlatformer;
+    fork->m_playEffects = false;
+
+    fork->m_touchedRings.clear();
+    for (auto const& ringId : source->m_touchedRings) {
+        fork->m_touchedRings.insert(ringId);
+    }
+    if (fork->m_touchingRings) {
+        fork->m_touchingRings->removeAllObjects();
+    }
+    fork->m_potentialSlopeMap.clear();
+    for (auto const& [key, value] : source->m_potentialSlopeMap) {
+        fork->m_potentialSlopeMap.insert({key, value});
+    }
+
+    // The buttons exactly as the real player has them. Pressing or releasing
+    // to match (what predictStep does) would buffer a fresh jump the real
+    // player never made.
+    fork->m_holdingButtons = source->m_holdingButtons;
+    fork->m_jumpBuffered = source->m_jumpBuffered;
+    fork->m_stateJumpBuffered = source->m_stateJumpBuffered;
+    fork->m_holdingLeft = source->m_holdingLeft;
+    fork->m_holdingRight = source->m_holdingRight;
+    return fork;
+}
+
+void TrajectoryPredictionService::stepFork(PlayLayer* playLayer, PlayerObject* fork, float delta) {
+    fork->m_collisionLogTop->removeAllObjects();
+    fork->m_collisionLogBottom->removeAllObjects();
+    fork->m_collisionLogLeft->removeAllObjects();
+    fork->m_collisionLogRight->removeAllObjects();
+    fork->update(delta);
+    fork->updateRotation(delta);
+    fork->updatePlayerScale();
+    // A fork death also arrives through the destroyPlayer hook; this is the
+    // second signal, guarded the same way traceInputPath guards it.
+    if (playLayer->checkCollisions(fork, delta, false) == 1 && !m_context.traceCancelled) {
+        this->noteSimulatedDeath(fork);
+    }
+}
+
+bool TrajectoryPredictionService::extrapolateSubtick(PlayLayer* playLayer,
+                                                     PlayerObject* source,
+                                                     float fraction,
+                                                     SubtickPose& out) {
+    if (!playLayer || !source || m_context.activeSimulation) {
+        return false;
+    }
+    auto* fork = prepareFork(playLayer, source);
+    if (!fork) {
+        return false;
+    }
+
+    ForkStateGuard guard(playLayer);
+    m_context.activeSimulation = true;
+    m_context.traceCancelled = false;
+
+    this->stepFork(playLayer, fork, this->tickUnits() * std::clamp(fraction, 0.f, 1.f));
+
+    out.position = fork->getPosition();
+    out.hitbox = fork->getObjectRect();
+    out.innerHitbox = fork->getObjectRect(0.3f, 0.3f);
+    out.rotation = fork->getRotation();
+    out.died = m_context.traceCancelled;
+
+    m_context.traceCancelled = false;
+    m_context.activeSimulation = false;
+    return true;
+}
+
+void TrajectoryPredictionService::traceSubtickBranch(PlayLayer* playLayer,
+                                                     PlayerObject* source,
+                                                     float fraction,
+                                                     bool hold,
+                                                     cocos2d::CCDrawNode* node,
+                                                     cocos2d::ccColor4F color,
+                                                     float width) {
+    if (!playLayer || !source || !node || m_context.activeSimulation) {
+        return;
+    }
+    auto* fork = prepareFork(playLayer, source);
+    if (!fork) {
+        return;
+    }
+
+    ForkStateGuard guard(playLayer);
+    m_context.activeSimulation = true;
+    m_context.traceCancelled = false;
+    m_context.processedOrbs.clear();
+
+    auto* gbe = GucciEngine::get();
+    float const tick = this->tickUnits();
+    fraction = std::clamp(fraction, 0.f, 1.f);
+    bool const moving = gbe->pathMovingObjects;
+    int const moveInterval = std::max(1, gbe->pathMoveStepInterval);
+    std::optional<GJGameState> savedGameState;
+    if (moving) {
+        savedGameState = playLayer->m_gameState;
+        snapshotMovedObjects(playLayer);
+    }
+
+    // The split tick: level first, then the player up to the split, then the
+    // input, then the rest of the tick -- the CBF engine's own order.
+    if (moving) {
+        stepMoveActions(playLayer, tick);
+    }
+    this->stepFork(playLayer, fork, tick * fraction);
+    CCPoint from = fork->getPosition();
+    if (!m_context.traceCancelled) {
+        if (hold) {
+            fork->pushButton(static_cast<PlayerButton>(1));
+        } else {
+            fork->releaseButton(static_cast<PlayerButton>(1));
+            fork->m_jumpBuffered = false;
+        }
+        this->stepFork(playLayer, fork, tick * (1.f - fraction));
+        node->drawSegment(from, fork->getPosition(), width, color);
+    }
+
+    int const frames = std::clamp(gbe->pathLength, 0, kMaxTraceFrames);
+    for (int i = 1; i < frames && !m_context.traceCancelled; ++i) {
+        if (moving && i % moveInterval == 0) {
+            stepMoveActions(playLayer, tick * static_cast<float>(moveInterval));
+        }
+        from = fork->getPosition();
+        this->stepFork(playLayer, fork, tick);
+        cocos2d::ccColor4F c = color;
+        if (i >= frames - 40) {
+            c.a *= static_cast<float>(frames - i) / 40.0f;
+        }
+        node->drawSegment(from, fork->getPosition(), width, c);
+    }
+
+    if (moving) {
+        restoreMovedObjects(playLayer);
+        if (savedGameState) {
+            playLayer->m_gameState = *savedGameState;
+        }
+    }
+    m_context.processedOrbs.clear();
+    m_context.traceCancelled = false;
+    m_context.activeSimulation = false;
+}
+
+void TrajectoryPredictionService::setOverlaySuppressed(bool suppressed) {
+    if (m_overlaySuppressed == suppressed) {
+        return;
+    }
+    m_overlaySuppressed = suppressed;
+    if (!m_drawNode) {
+        return;
+    }
+    if (suppressed) {
+        m_drawNode->setVisible(false);
+    } else {
+        m_context.dirty = true;  // the next updatePreview redraws and shows it
+    }
+}
+
 bool TrajectoryPredictionService::probeAgency(PlayLayer* playLayer,
                                               PlayerObject* source,
                                               AgencyResult& out,
@@ -1153,7 +1364,7 @@ void TrajectoryPredictionService::rebuildPreview(PlayLayer* playLayer) {
     m_context.activeSimulation = true;
     m_context.processedOrbs.clear();
     drawNode->clear();
-    drawNode->setVisible(true);
+    drawNode->setVisible(!m_overlaySuppressed);
 
     traceInputPath(playLayer, m_context.previewPlayers[0], playLayer->m_player1, true);
     traceInputPath(playLayer, m_context.previewPlayers[0], playLayer->m_player1, false);

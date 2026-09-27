@@ -149,12 +149,15 @@ class $modify(GB7KeyHandler, CCKeyboardDispatcher) {
             auto& kb2 = ui->keybinds;
             if (kb2.frameStep != 0 && k == kb2.frameStep && gb->updater.m_paused) {
                 handled = true;
-                gb->updater.m_stepOnce_ = true;
+                gb->updater.userStepForward();
             }
+            // With the sub-tick preview on, back first moves back within the
+            // tick, which needs no rewind; otherwise it rewinds only if
+            // Backwards Stepping is on. The key is only swallowed when one of
+            // those happened, as before.
             if (kb2.backStep != 0 && k == kb2.backStep && gb->updater.m_paused &&
-                gb->updater.m_backwardsStepping) {
+                gb->updater.userStepBack()) {
                 handled = true;
-                gb->updater.backwardsStep(1);
             }
         }
 

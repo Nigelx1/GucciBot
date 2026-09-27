@@ -13,6 +13,7 @@
 #include "analysis/ac/framewindow.hpp"
 #include "analysis/ac/shim.hpp"
 #include "core/GucciBot.hpp"
+#include "replay/subtick_preview.hpp"
 
 using namespace geode::prelude;
 
@@ -101,9 +102,9 @@ namespace scbf {
             return;
 
         if (m_paused) {
-            // Frame-advance: his takes the fraction the sub-tick preview is
-            // stepped to. GucciBot has no sub-tick preview yet, so a press
-            // made while paused lands on the tick edge.
+            // Frame-advance: the press lands where the sub-tick preview is
+            // stepped to (0, the tick edge, when it is off or not stepped in).
+            due.offset = SubtickPreview::get().fraction();
             return;
         }
         if (!m_synced)

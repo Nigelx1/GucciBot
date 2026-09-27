@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-z (PREDICTION SPEED FIX. Two of GucciBot's physics look-aheads stepped the player at 1/60th of the real speed, because GD counts player physics in 60ths of a second and they passed plain seconds. Frame Extrapolation (smooth motion above the tick rate) therefore predicted almost no movement, and Pathfinder's hold-vs-release probe almost never saw a branch die. Both now step at the real speed, the way Silicate does. PATHFINDER BEHAVIOUR MAY CHANGE -- please re-test it. Includes -t..-y.)"
+    "2026-09-27-aa (SUB-TICK CLICKS, part 3: sub-tick frame advance. Bot > CBF Recording > Sub-tick Frame Advance: while frame advancing, Step moves through the tick in small splits instead of whole ticks, showing where the hitbox would be at that split plus the hold/release paths from there. The last split runs the tick. With CBF Recording on, pressing mid-tick records the click at that split. Includes -t..-z.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -296,6 +296,10 @@ namespace gucci {
         // only for the inputs that need it. Both his defaults.
         bool m_scbfRecording = false;
         bool m_scbfTickSplit = true;
+        // Sub-tick frame advance (replay/subtick_preview.hpp): stepping while
+        // paused moves through the tick in this many splits. His defaults.
+        bool m_subtickPreview = false;
+        int m_subtickSplits = 24000;
         bool m_forceNextInput = false;
         bool m_flipProcessingInputs = false;
 
@@ -469,6 +473,13 @@ namespace gucci {
         void stepOnce() {
             m_stepOnce_ = true;
         }
+        // A frame-advance step the USER asked for (key or button). With the
+        // sub-tick preview on, it moves through the tick in splits first and
+        // only the last one runs the tick; stepOnce() above is the raw one-shot
+        // the bot's own code uses.
+        void userStepForward();
+        // True when it did something (moved back in the tick, or rewound).
+        bool userStepBack();
         bool isPaused() const {
             return m_paused;
         }

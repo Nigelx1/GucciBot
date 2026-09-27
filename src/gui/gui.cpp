@@ -2855,13 +2855,11 @@ namespace gucci {
         if (Widgets::ToggleSwitch("Frame Advance", &upd->m_paused, theme, anim)) {
         }
         if (upd->m_paused) {
-            if (Widgets::StyledButton("<< Back", ImVec2(bw, 24), theme, anim, 4.f)) {
-                if (upd->m_backwardsStepping)
-                    upd->backwardsStep(1);
-            }
+            if (Widgets::StyledButton("<< Back", ImVec2(bw, 24), theme, anim, 4.f))
+                upd->userStepBack();
             ImGui::SameLine(0, 6);
             if (Widgets::StyledButton("Step >>", ImVec2(bw, 24), theme, anim, 4.f))
-                upd->m_stepOnce_ = true;
+                upd->userStepForward();
         }
         ImGui::Dummy(ImVec2(0, 4));
         ImGui::Separator();
@@ -4062,6 +4060,31 @@ namespace gucci {
                                 live.splitting() ? "" : " (splitting off)");
                 ImGui::PopStyleColor();
             }
+            // His "Extrapolate CBF Trajectory". Shown with CBF Recording on or
+            // a macro with sub-tick inputs loaded, as in his.
+            if (rp.m_scbfRecording || scbf::hasOffsets(rp.m_actionAtom.m_actions)) {
+                if (Widgets::ToggleSwitch("Sub-tick Frame Advance", &rp.m_subtickPreview, theme, anim))
+                    Mod::get()->setSavedValue("scbf_subtick_preview", rp.m_subtickPreview);
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("While frame advancing, stepping moves through the tick in "
+                                      "splits instead of whole ticks, and shows where the hitbox "
+                                      "would be at that split. The last split steps the tick. "
+                                      "With CBF Recording on, pressing mid-tick records the input "
+                                      "at that split.");
+                if (rp.m_subtickPreview) {
+                    ImGui::Text("Splits per tick");
+                    ImGui::SameLine();
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::InputInt("##subtickSplits", &rp.m_subtickSplits, 0, 0)) {
+                        rp.m_subtickSplits = std::clamp(rp.m_subtickSplits, 2, 524288);
+                        Mod::get()->setSavedValue("scbf_subtick_splits", rp.m_subtickSplits);
+                    }
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("How many splits a tick is divided into. Holding "
+                                          "advance always crosses a full tick in about the same "
+                                          "time, however many there are.");
+                }
+            }
         }
         ImGui::Dummy(ImVec2(0, 8));
         Widgets::SectionHeader("Speed Control", theme);
@@ -4388,14 +4411,11 @@ namespace gucci {
                 upd.setPaused(paused);
             if (upd.m_paused) {
                 float bw = (ImGui::GetContentRegionAvail().x - 8) / 2.f;
-                if (Widgets::StyledButton("<< Step Back", ImVec2(bw, 28), theme, anim, 6.f)) {
-                    if (upd.m_backwardsStepping)
-                        upd.backwardsStep(1);
-                }
+                if (Widgets::StyledButton("<< Step Back", ImVec2(bw, 28), theme, anim, 6.f))
+                    upd.userStepBack();
                 ImGui::SameLine(0, 8);
-                if (Widgets::StyledButton("Step Fwd >>", ImVec2(bw, 28), theme, anim, 6.f)) {
-                    upd.m_stepOnce_ = true;
-                }
+                if (Widgets::StyledButton("Step Fwd >>", ImVec2(bw, 28), theme, anim, 6.f))
+                    upd.userStepForward();
                 ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
                 if (!upd.m_backwardsStepping)
                     ImGui::TextWrapped("Enable Backwards Stepping (above) to step back.");

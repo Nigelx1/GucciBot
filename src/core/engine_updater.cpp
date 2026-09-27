@@ -9,6 +9,7 @@
 #include "analysis/ac/shim.hpp"
 #include "mcp/mcp_server.hpp"
 #include "replay/scbf_input.hpp"
+#include "replay/subtick_preview.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/modify/CCScheduler.hpp>
@@ -393,6 +394,20 @@ void GucciUpdater::runUpdates(std::function<void(float)> update, float realDt, b
 
     if (liveClock)
         live.endFrame(this->getFrame());
+}
+
+void GucciUpdater::userStepForward() {
+    if (scbf::SubtickPreview::get().forward())
+        m_stepOnce_ = true;
+}
+
+bool GucciUpdater::userStepBack() {
+    if (scbf::SubtickPreview::get().back())
+        return true;
+    if (!m_backwardsStepping)
+        return false;
+    backwardsStep(1);
+    return true;
 }
 
 void GucciUpdater::runFrozenTick() {
@@ -871,6 +886,9 @@ class $modify(GB7CCDirector, CCDirector) {
         // First, before the enabled check: a render that finished (or failed)
         // on the encode thread is torn down here, on the game thread.
         SLRenderer::get()->finishStop();
+        // The sub-tick preview draws, hides itself, and steps the tick when a
+        // press lands mid-tick. Before the enabled check so it can hide.
+        scbf::SubtickPreview::get().update(PlayLayer::get());
 
         auto* gb = GucciEngine::get();
         if (!gb->enabled)
