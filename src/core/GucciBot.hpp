@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-ar (CLEANUP. Removed 43 unused internal fields left over from GucciBot's old frame-window analyzer and updater. No behaviour change. Includes -ap and -aq.)"
+    "2026-09-27-as (VERSION 2.alpha.4. Version bump on top of -ar: mod.json, CMake, about.md -- which now notes the Click Between Frames pause and that GucciBot is GPL-3.0.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

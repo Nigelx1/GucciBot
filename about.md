@@ -1,4 +1,4 @@
-# GucciBot 2.alpha.3
+# GucciBot 2.alpha.4
 
 > Frame perfect. Ice cold. Brrr.
 
@@ -30,6 +30,7 @@ GucciBot is a Geometry Dash macro bot built on Silicate's physics engine, with a
 - **High TPS Precision** (optional) — GD rounds vertical velocity to a fixed step no matter the tick rate, so running above the rate a macro was recorded at throws away the precision those extra ticks buy. This scales the step with the rate. Off by default, because it changes physics.
 - Lock Delta has Performance and Accuracy modes again. Accuracy is the default and gives GD one physics step per update; Performance hands it several at once and lets it sub-step, which is what Silicate does.
 - **Sub-tick clicks (CBF Recording)** — records each click at the point inside the tick you actually pressed it, from the time Windows stamped on the input, and plays it back there. Saved in the macro; older versions still open it, with the clicks on the tick. **Sub-tick Frame Advance** steps through a tick in splits while frame advancing, showing where your hitbox would be and the hold and release paths from that point.
+- **Click Between Frames friendly** — Syzzi's Click Between Frames and Superb Input Precision apply clicks outside the game's normal input path, where a bot records them, so GucciBot pauses them while it's recording or playing and puts them back exactly as they were the moment it's idle.
 - **Frame Pacing** — Real Time, a fixed number of ticks per drawn frame, or a dynamic limit that measures how long a tick takes and aims for a target frame rate.
 - **RNG Lock** — record with a fixed seed of your choosing.
 - **Prevent Death** can look ahead with the trajectory and stop before a death instead of stepping back after it. **Find Best Tick** steps forward trying your next click on every tick and stops on the one that survives longest.
@@ -171,3 +172,5 @@ Real click-timing feedback and a synced video-review overlay, both built around 
 - **GWDdoS** — Astral, and the codebase cleanup that got this repo public-ready
 - **Bogdaner09** — Click Indicators inspiration ([github.com/Bogdaner09/mod](https://github.com/Bogdaner09/mod)) — vibecoded by his own admission, so credit's probably owed to whichever model wrote that too
 - **Gucci Mane** — he's the truth. Brrr.
+
+GucciBot is free software under the GNU General Public License v3.0, like Silicate, which it's built on.
