@@ -368,7 +368,7 @@ and untested in-game.
 1. **LICENSE.** GucciBot contains Silicate code (GPL-3) and anticroom's fork of
    it. Distributing it means distributing under GPL-3-compatible terms. The repo
    has no LICENSE file. Choosing one is Nigel's call.
-2. **`resizeShaderLayer` offsets** (`renderer.cpp`, from the July baseline, not
+2. ~~**`resizeShaderLayer` offsets**~~ **RESOLVED `-aq`: replaced with Silicate's version (exact-size texture, no offsets).** (`renderer.cpp`, from the July baseline, not
    Silicate). `m_heightOffset` is assigned `m_targetTextureSizeExtra.width`.
    Changing it to `.height` would feed a negative number into a `uint32_t` in
    the other aspect-ratio branch, so the typo is not the whole story. Only

@@ -146,44 +146,40 @@ namespace gucci {
         return CCSize(static_cast<float>(width), static_cast<float>(height));
     }
 
-    static void resizeShaderLayer(CCSize size, CCSize original) {
-        ShaderLayer* sh = GJBaseGameLayer::get()->m_shaderLayer;
-        if (!sh) {
+    // Silicate's resizeShaderLayer (render/renderer.cpp), ported 2026-09-27.
+    // GD's shader layer renders into a texture of exactly the render size,
+    // with no aspect "extra". GucciBot's version, from before the Silicate
+    // port, sized the texture to the WINDOW's aspect and offset it -- and then
+    // read the height offset from the width (`m_heightOffset =
+    // ...Extra.width`), while the other branch would have produced a negative
+    // offset for a uint32. For a render at the window's aspect (the usual
+    // case) both versions did the same thing; they differed only when the
+    // render's aspect ratio isn't the window's.
+    static void resizeShaderLayer(CCSize size) {
+        auto* gjbgl = GJBaseGameLayer::get();
+        if (!gjbgl || !gjbgl->m_shaderLayer) {
             geode::log::warn("[GucciBot] resizeShaderLayer: ShaderLayer missing, skipping");
             return;
         }
-        sh->m_screenSize = size;
-        sh->m_scaleFactor = size.height / CCDirector::get()->getWinSize().height;
-        sh->m_aspectRatio = size.width / size.height;
-
+        ShaderLayer* sh = gjbgl->m_shaderLayer;
         auto winSize = CCDirector::get()->getWinSize();
-        float baseAspectRatio = original.aspect();
+
+        sh->m_screenSize = size;
+        sh->m_scaleFactor = size.height / winSize.height;
+        sh->m_aspectRatio = size.width / size.height;
 
         float csf = CCDirector::get()->getContentScaleFactor();
         CCDirector::get()->setContentScaleFactor(1.0f);
         sh->m_renderTexture->release();
-        sh->m_renderTexture = nullptr;
         sh->m_renderTexture =
-            CCRenderTexture::create(size.width / sh->m_aspectRatio * baseAspectRatio,
-                                    size.height,
-                                    kCCTexture2DPixelFormat_RGBA8888);
+            CCRenderTexture::create(size.width, size.height, kCCTexture2DPixelFormat_RGBA8888);
         sh->m_renderTexture->retain();
         CCDirector::get()->setContentScaleFactor(csf);
         sh->m_sprite->setTexture(sh->m_renderTexture->getSprite()->getTexture());
         sh->m_textureContentSize = sh->m_sprite->getTexture()->getContentSize();
         sh->m_targetTextureSize = size;
         sh->m_targetTextureSizeExtra = CCSize(0.0f, 0.0f);
-        if (baseAspectRatio > sh->m_aspectRatio) {
-            float calculatedWidth = size.width / sh->m_aspectRatio * baseAspectRatio;
-            sh->m_targetTextureSizeExtra = cocos2d::CCSize{calculatedWidth - size.width, 0.0f};
-        } else if (baseAspectRatio < sh->m_aspectRatio) {
-            float calculatedHeight = size.height / sh->m_aspectRatio * baseAspectRatio;
-            sh->m_targetTextureSizeExtra = cocos2d::CCSize{0.0f, calculatedHeight - size.height};
-        }
-        sh->m_sprite->setTextureRect({-1.0f + sh->m_targetTextureSizeExtra.width,
-                                      -1.0f + sh->m_targetTextureSizeExtra.height,
-                                      size.width + 2.0f,
-                                      size.height + 2.0f});
+        sh->m_sprite->setTextureRect({-1.0f, -1.0f, size.width + 2.0f, size.height + 2.0f});
         sh->m_state.m_textureScaleX = size.width / winSize.width;
         sh->m_state.m_textureScaleY = size.height / winSize.height;
         geode::log::info(
@@ -200,7 +196,7 @@ namespace gucci {
                 auto* sh = gjbgl->m_shaderLayer;
                 if (!sh->m_screenSize.equals(renderSize) ||
                     !sh->m_targetTextureSize.equals(renderSize))
-                    resizeShaderLayer(renderSize, m_windowSize);
+                    resizeShaderLayer(renderSize);
             }
             return;
         }
@@ -221,7 +217,7 @@ namespace gucci {
             return;
         m_viewResized = false;
         silentChangeSize(m_windowSize);
-        resizeShaderLayer(m_windowSize, m_windowSize);
+        resizeShaderLayer(m_windowSize);
     }
 
     void SLRenderer::withOriginalView(std::function<void()> const& callback) {
@@ -564,11 +560,9 @@ namespace gucci {
         this->acquireView();
         auto frameSize = m_windowSize;
         silentChangeSize(CCSize(m_alignedWidth, m_alignedHeight));
-        resizeShaderLayer(CCSize(m_alignedWidth, m_alignedHeight), frameSize);
-        if (ShaderLayer* sh = GJBaseGameLayer::get()->m_shaderLayer) {
-            m_texture.m_widthOffset = static_cast<uint32_t>(sh->m_targetTextureSizeExtra.width);
-            m_texture.m_heightOffset = static_cast<uint32_t>(sh->m_targetTextureSizeExtra.width);
-        }
+        // No aspect "extra" any more (see resizeShaderLayer), so the preview
+        // blit's source offsets stay at the 0 set above -- as in Silicate.
+        resizeShaderLayer(CCSize(m_alignedWidth, m_alignedHeight));
         silentChangeSize(frameSize);
 
         m_texture.init(std::move(colorspace));
