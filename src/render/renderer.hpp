@@ -258,6 +258,12 @@ namespace gucci {
         bool m_collectAudio = true;
         // Set by stop() when m_autoExitLevel is on; drawScene leaves the level.
         bool m_shouldQuit = false;
+        // "Render the next level I open": Start Render pressed outside a level
+        // arms this, and the next level's setupHasCompleted starts the render
+        // -- where Silicate starts a queued one, once the level has finished
+        // loading. (m_shouldStart is the in-level path: drawScene starts it on
+        // the next frame, outside ImGui's draw.)
+        bool m_startOnNextLevel = false;
 
 
         bool m_autoVideoName = true;

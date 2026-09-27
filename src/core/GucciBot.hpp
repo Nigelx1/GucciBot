@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-ag (PREVENT DEATH EXTRAS, from Silicate. Prevent Death now has Use Trajectory Instead: it looks four ticks ahead and pauses before the death rather than stepping back after it. New Find Best Tick for Next Input button: steps forward trying your next click on every tick and stops on the one that survives longest (Survival Threshold sets how long is good enough). Both need Backwards Stepping. The Prevent Death description also said it absorbs hits -- that is Noclip; fixed. Includes -t..-af.)"
+    "2026-09-27-ah (RENDER THE NEXT LEVEL. Outside a level the render button now reads Render the Next Level I Open: press it, open a level, and the render starts once the level has loaded, from the first attempt. Before, pressing Start Render outside a level failed silently. Inside a level Start Render works as before. Includes -t..-ag.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

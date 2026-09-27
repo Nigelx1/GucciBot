@@ -800,6 +800,15 @@ class $modify(GB7PlayLayer, PlayLayer) {
 
     void setupHasCompleted() {
         auto* gb = GucciEngine::get();
+        // A render queued from outside a level starts here, as in Silicate
+        // (PlayLayer::setupHasCompleted -> startIfQueued): the level has
+        // finished loading, and nothing has been played yet.
+        if (auto* sl = gucci::SLRenderer::get(); gb->enabled && sl->m_startOnNextLevel) {
+            sl->m_startOnNextLevel = false;
+            sl->loadSettingsFromGeode();
+            sl->queueStart();
+            sl->startIfQueued();
+        }
         PlayLayer::setupHasCompleted();
     }
 

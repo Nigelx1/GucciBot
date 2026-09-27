@@ -6450,11 +6450,26 @@ namespace gucci {
             ImGui::Dummy(ImVec2(0, 4));
             if (Widgets::StyledButton("Stop Render", ImVec2(-1, 36), theme, anim))
                 sl->flushAndStop();
-        } else {
+        } else if (sl->m_startOnNextLevel) {
+            // Absense's queue UI over Silicate's queued start.
+            Widgets::StatusBadge("Waiting for a level to open", ImVec4(0.4f, 0.7f, 1.f, 1.f));
+            ImGui::Dummy(ImVec2(0, 4));
+            if (Widgets::StyledButton("Cancel", ImVec2(-1, 36), theme, anim))
+                sl->m_startOnNextLevel = false;
+        } else if (PlayLayer::get()) {
             if (Widgets::StyledButton("Start Render", ImVec2(-1, 36), theme, anim)) {
                 sl->loadSettingsFromGeode();
                 sl->queueStart();
             }
+        } else {
+            // Outside a level, starting used to fail on the spot ("Not in a
+            // level") and the button looked like it did nothing.
+            if (Widgets::StyledButton("Render the Next Level I Open", ImVec2(-1, 36), theme, anim))
+                sl->m_startOnNextLevel = true;
+            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+            ImGui::TextWrapped("Open a level in Play mode and the render starts from the first "
+                               "attempt.");
+            ImGui::PopStyleColor();
         }
         ImGui::Dummy(ImVec2(0, 8));
         Widgets::SectionHeader("Resolution", theme);
