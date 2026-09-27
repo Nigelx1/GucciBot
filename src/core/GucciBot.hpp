@@ -534,6 +534,21 @@ namespace gucci {
         bool showYVel = false;
         bool showRot = false;
         bool showState = false;
+        // Silicate's debug labels that the HUD did not have (2026-09-27).
+        bool showOnGround = false;
+        bool showGameTick = false;
+        bool showSpeed = false;
+        bool showGravity = false;
+        bool showAlive = false;
+        bool showCheckpoints = false;
+        bool showLevelTime = false;
+        bool showTimeWarp = false;
+        bool showRandom = false;
+        bool showActionIndex = false;
+        bool showIntentional = false;
+        bool showTickLimit = false;
+        bool showLastInput = false;
+        bool showOrbs = false;
         bool bigFont = false;
         float scale = 1.0f;
         float opacity = 1.0f;

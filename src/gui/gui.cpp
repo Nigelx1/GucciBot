@@ -9300,6 +9300,22 @@ namespace gucci {
         Widgets::ToggleSwitch("Y Velocity", &engine->hud.showYVel, theme, anim);
         Widgets::ToggleSwitch("Rotation", &engine->hud.showRot, theme, anim);
         Widgets::ToggleSwitch("Bot State", &engine->hud.showState, theme, anim);
+        ImGui::Dummy(ImVec2(0, 4));
+        Widgets::SectionHeader("Debug", theme);
+        Widgets::ToggleSwitch("On Ground", &engine->hud.showOnGround, theme, anim);
+        Widgets::ToggleSwitch("Game Tick", &engine->hud.showGameTick, theme, anim);
+        Widgets::ToggleSwitch("Player Speed", &engine->hud.showSpeed, theme, anim);
+        Widgets::ToggleSwitch("Gravity", &engine->hud.showGravity, theme, anim);
+        Widgets::ToggleSwitch("Dead / Alive", &engine->hud.showAlive, theme, anim);
+        Widgets::ToggleSwitch("Checkpoints", &engine->hud.showCheckpoints, theme, anim);
+        Widgets::ToggleSwitch("Level Time", &engine->hud.showLevelTime, theme, anim);
+        Widgets::ToggleSwitch("Time Warp", &engine->hud.showTimeWarp, theme, anim);
+        Widgets::ToggleSwitch("Random States", &engine->hud.showRandom, theme, anim);
+        Widgets::ToggleSwitch("Action Index", &engine->hud.showActionIndex, theme, anim);
+        Widgets::ToggleSwitch("Intentional Death", &engine->hud.showIntentional, theme, anim);
+        Widgets::ToggleSwitch("Tick Limit", &engine->hud.showTickLimit, theme, anim);
+        Widgets::ToggleSwitch("Ticks Since Last Input", &engine->hud.showLastInput, theme, anim);
+        Widgets::ToggleSwitch("Touching Orbs", &engine->hud.showOrbs, theme, anim);
         ImGui::Dummy(ImVec2(0, 8));
         Widgets::SectionHeader("Appearance", theme);
         const char* anchors[] = {"Top Left", "Top Right", "Bottom Left", "Bottom Right"};
@@ -9448,6 +9464,20 @@ namespace gucci {
         mod->setSavedValue("hud_show_yvel", eng->hud.showYVel);
         mod->setSavedValue("hud_show_rot", eng->hud.showRot);
         mod->setSavedValue("hud_show_state", eng->hud.showState);
+        mod->setSavedValue("hud_show_on_ground", eng->hud.showOnGround);
+        mod->setSavedValue("hud_show_game_tick", eng->hud.showGameTick);
+        mod->setSavedValue("hud_show_speed", eng->hud.showSpeed);
+        mod->setSavedValue("hud_show_gravity", eng->hud.showGravity);
+        mod->setSavedValue("hud_show_alive", eng->hud.showAlive);
+        mod->setSavedValue("hud_show_checkpoints", eng->hud.showCheckpoints);
+        mod->setSavedValue("hud_show_level_time", eng->hud.showLevelTime);
+        mod->setSavedValue("hud_show_time_warp", eng->hud.showTimeWarp);
+        mod->setSavedValue("hud_show_random", eng->hud.showRandom);
+        mod->setSavedValue("hud_show_action_index", eng->hud.showActionIndex);
+        mod->setSavedValue("hud_show_intentional", eng->hud.showIntentional);
+        mod->setSavedValue("hud_show_tick_limit", eng->hud.showTickLimit);
+        mod->setSavedValue("hud_show_last_input", eng->hud.showLastInput);
+        mod->setSavedValue("hud_show_orbs", eng->hud.showOrbs);
         mod->setSavedValue("hud_anchor", eng->hud.anchor);
         mod->setSavedValue("hud_big_font", eng->hud.bigFont);
         mod->setSavedValue("hud_opacity", eng->hud.opacity);
@@ -9779,6 +9809,20 @@ namespace gucci {
         eng->hud.showYVel = mod->getSavedValue<bool>("hud_show_yvel", false);
         eng->hud.showRot = mod->getSavedValue<bool>("hud_show_rot", false);
         eng->hud.showState = mod->getSavedValue<bool>("hud_show_state", false);
+        eng->hud.showOnGround = mod->getSavedValue<bool>("hud_show_on_ground", false);
+        eng->hud.showGameTick = mod->getSavedValue<bool>("hud_show_game_tick", false);
+        eng->hud.showSpeed = mod->getSavedValue<bool>("hud_show_speed", false);
+        eng->hud.showGravity = mod->getSavedValue<bool>("hud_show_gravity", false);
+        eng->hud.showAlive = mod->getSavedValue<bool>("hud_show_alive", false);
+        eng->hud.showCheckpoints = mod->getSavedValue<bool>("hud_show_checkpoints", false);
+        eng->hud.showLevelTime = mod->getSavedValue<bool>("hud_show_level_time", false);
+        eng->hud.showTimeWarp = mod->getSavedValue<bool>("hud_show_time_warp", false);
+        eng->hud.showRandom = mod->getSavedValue<bool>("hud_show_random", false);
+        eng->hud.showActionIndex = mod->getSavedValue<bool>("hud_show_action_index", false);
+        eng->hud.showIntentional = mod->getSavedValue<bool>("hud_show_intentional", false);
+        eng->hud.showTickLimit = mod->getSavedValue<bool>("hud_show_tick_limit", false);
+        eng->hud.showLastInput = mod->getSavedValue<bool>("hud_show_last_input", false);
+        eng->hud.showOrbs = mod->getSavedValue<bool>("hud_show_orbs", false);
         eng->hud.anchor = mod->getSavedValue<int>("hud_anchor", 0);
         eng->hud.bigFont = mod->getSavedValue<bool>("hud_big_font", false);
         eng->hud.opacity = mod->getSavedValue<float>("hud_opacity", 1.f);
@@ -10222,16 +10266,21 @@ namespace gucci {
             return;
         auto* p = pl->m_player1;
 
-        char buf[512];
+        char buf[2048];
         buf[0] = '\0';
         int n = 0;
+        auto addLine = [&](std::string const& line) {
+            if (n++)
+                strncat(buf, "\n", sizeof(buf) - strlen(buf) - 1);
+            strncat(buf, line.c_str(), sizeof(buf) - strlen(buf) - 1);
+        };
         auto add = [&](const char* fmt, auto val) {
             char line[96];
             snprintf(line, sizeof(line), fmt, val);
-            if (n++)
-                strncat(buf, "\n", sizeof(buf) - strlen(buf) - 1);
-            strncat(buf, line, sizeof(buf) - strlen(buf) - 1);
+            addLine(line);
         };
+        bool const dual = pl->m_gameState.m_isDualMode && pl->m_player2;
+        auto* p2 = pl->m_player2;
         if (h.showFrame)
             add("Frame: %u", engine->updater.getFrame());
         if (h.showTPS)
@@ -10246,8 +10295,123 @@ namespace gucci {
             add("Y Vel: %.2f", p->m_yVelocity);
         if (h.showRot)
             add("Rot: %.0f", p->getRotation());
+        // The toggle was always called Bot State but showed whether the player
+        // was on the ground. It shows the bot state now, as Silicate's label
+        // does; On Ground is its own toggle below.
         if (h.showState)
-            add("On ground: %s", p->m_isOnGround ? "yes" : "no");
+            add("Bot: %s",
+                !engine->enabled         ? "Off"
+                : engine->isRecording() ? "Recording"
+                : engine->isPlaying()   ? "Playing"
+                                        : "Idle");
+
+        // Silicate's debug labels (label/label.cpp), same values and wording.
+        auto both = [&](char const* name, auto one, auto two) {
+            addLine(dual ? fmt::format("{}: {} / {}", name, one, two) : fmt::format("{}: {}", name, one));
+        };
+        if (h.showOnGround)
+            both("On ground", p->m_isOnGround ? "yes" : "no",
+                 dual && p2->m_isOnGround ? "yes" : "no");
+        if (h.showGameTick)
+            addLine(fmt::format("Game tick: {}", pl->m_gameState.m_currentProgress));
+        if (h.showSpeed)
+            both("Speed", fmt::format("{:.2f}", p->m_playerSpeed),
+                 dual ? fmt::format("{:.2f}", p2->m_playerSpeed) : std::string());
+        if (h.showGravity)
+            both("Gravity", p->m_isUpsideDown ? "Flipped" : "Normal",
+                 dual && p2->m_isUpsideDown ? "Flipped" : "Normal");
+        if (h.showAlive)
+            addLine(dual ? fmt::format("{} / {}", p->m_isDead ? "Dead" : "Alive",
+                                       p2->m_isDead ? "Dead" : "Alive")
+                         : std::string(p->m_isDead ? "Dead" : "Alive"));
+        if (h.showCheckpoints) {
+            auto& pf = engine->practiceFix;
+            addLine(fmt::format("Checkpoints: C - {} / B - {} / P - {}",
+                                pf.m_savedCheckpoints.size(),
+                                pf.m_storedFrames.size(),
+                                pf.m_platformerCheckpoints.size()));
+        }
+        if (h.showLevelTime)
+            addLine(fmt::format("Level time: {:.6f}s", pl->m_gameState.m_levelTime));
+        if (h.showTimeWarp)
+            addLine(fmt::format("Time warp: {:.2f}x", pl->m_gameState.m_timeWarp));
+        if (h.showRandom) {
+            // The GD fast-rand global updateRandomSeedOnReset rewinds.
+            uint64_t const fastRand = *reinterpret_cast<uint64_t*>(geode::base::get() + 0x6c2e90);
+            addLine(fmt::format("Random state: {}", fastRand));
+            addLine(fmt::format("Shake state: {}", engine->replay.m_shakeRandomState));
+            addLine(fmt::format("Teleport state: {}", engine->replay.m_teleportRandomState));
+        }
+        if (h.showActionIndex)
+            addLine(fmt::format("Action index: {}/{}", engine->replay.m_inputIndex,
+                                engine->replay.m_actionAtom.length()));
+        if (h.showIntentional)
+            addLine(engine->isRecording()
+                        ? fmt::format("Intentional death: {}",
+                                      engine->updater.m_canDie ? "Enabled" : "Disabled")
+                        : fmt::format("Intentional death: {}",
+                                      engine->updater.m_expectsDeath ? "Expects death" : "Nothing"));
+        if (h.showTickLimit) {
+            auto& up = engine->updater;
+            addLine(up.m_realTime     ? std::string("Tick limit: uncapped")
+                    : up.m_dynamicUpr ? fmt::format("Tick limit: {} (dynamic)", up.m_stepLimit)
+                                      : fmt::format("Tick limit: {}", up.m_maxUPR));
+        }
+        if (h.showLastInput) {
+            auto& rs = engine->replay;
+            uint64_t const tick = engine->updater.getFrame();
+            auto const& actions = rs.m_actionAtom.m_actions;
+            if (actions.empty())
+                addLine("No inputs in macro");
+            else if (engine->isRecording())
+                addLine(fmt::format("Ticks since last input: {}",
+                                    (int64_t)tick - (int64_t)actions.back().m_frame));
+            else if (rs.m_inputIndex == 0)
+                addLine("Waiting for first input");
+            else if (rs.m_inputIndex > actions.size())
+                addLine(fmt::format("Invalid input index: {} / {}", rs.m_inputIndex, actions.size()));
+            else
+                addLine(fmt::format("Ticks since last input: {}",
+                                    (int64_t)tick - (int64_t)actions[rs.m_inputIndex - 1].m_frame));
+        }
+        if (h.showOrbs) {
+            auto orbName = [](int id) -> char const* {
+                switch (id) {
+                    case 36: return "Yellow";
+                    case 84: return "Blue";
+                    case 141: return "Pink";
+                    case 1022: return "Green";
+                    case 1330: return "Black";
+                    case 1333: return "Red";
+                    case 1594: return "Toggle";
+                    case 1704: return "Green Dash";
+                    case 1751: return "Pink Dash";
+                    case 3004: return "Spider";
+                    case 3027: return "Teleport";
+                    default: return "Unknown";
+                }
+            };
+            auto touching = [&](PlayerObject* player) {
+                std::string out;
+                auto* rings = player ? player->m_touchingRings : nullptr;
+                unsigned const count = rings ? rings->count() : 0u;
+                for (unsigned i = 0; i < count; i++) {
+                    auto* ring = static_cast<RingObject*>(rings->objectAtIndex(i));
+                    if (!ring || ring->hasBeenActivatedByPlayer(player))
+                        continue;
+                    if (!out.empty())
+                        out += ' ';
+                    out += orbName(ring->m_objectID);
+                    if (ring->m_objectID == 1594)
+                        out += fmt::format("({})", ring->m_targetGroupID);
+                    if (ring->m_isMultiActivate)
+                        out += '*';
+                }
+                return out.empty() ? std::string("None") : out;
+            };
+            addLine(dual ? fmt::format("Touching orbs: {} / {}", touching(p), touching(p2))
+                         : fmt::format("Touching orbs: {}", touching(p)));
+        }
         if (n == 0)
             return;
 
