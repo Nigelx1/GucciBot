@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-aq (RENDER SHADER LAYER. GD's shader effects in a render are now set up the way Silicate does it -- sized exactly to the render. The old setup only differed when the render's aspect ratio is not the game window's, and had a bug there. Renders at the window's shape are unchanged. Includes -ap.)"
+    "2026-09-27-ar (CLEANUP. Removed 43 unused internal fields left over from GucciBot's old frame-window analyzer and updater. No behaviour change. Includes -ap and -aq.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -391,10 +391,8 @@ namespace gucci {
 
         uint32_t m_frame = 0;
         uint64_t m_frameOnLastAttempt = 0;
-        int savedStepCount = 0;
         int totalStepCount = 1;
         int estimatedStepCount = 1;
-        float currentDelta = 0.f;
         float m_lastTfp = 0.f;
         bool m_logFrameIncrements = false;
 
@@ -459,7 +457,6 @@ namespace gucci {
         float m_lastPlayerX = 0.f;
         float m_currentPlayerX = 0.f;
 
-        void* m_actionMgr = nullptr;
         std::forward_list<std::function<void(float)>> m_frozenScheduledFunctions;
 
         double getPhysicsDt() const {
@@ -867,7 +864,6 @@ namespace gucci {
         bool protectedMode = false;
 
         bool fwEnabledLive = false;
-        bool fwEnabledRender = false;
         bool fwLegendEnabled = false;
         float fwLegendScale = 1.f;
         float fwRingBoldness = 2.2f;
@@ -1000,40 +996,20 @@ namespace gucci {
             AiContinuation
         };
         FwState fwState = FwState::Idle;
-        size_t fwCapIndex = 0;
-        size_t fwXYIndex = 0;
         bool fwCkptCreatedThisFrame = false;
         size_t fwProbeClick = 0;
         int fwProbeShift = 0;
-        int fwProbeLow = 0;
-        int fwProbeHigh = 0;
-        int fwProbePhase = 0;
         int fwProbeFrame = 0;
         int fwProbeHorizon = 16;
-        bool fwProbeHasNext = false;
-        uint32_t fwProbeNextFrame = 0;
-        bool fwProbeNextIsRelease = false;
-        bool fwProbeNextPlayer2 = false;
         float fwProbeNextX = 0.f, fwProbeNextY = 0.f;
         bool fwPositionCheckEnabled = false;
         float fwPositionSlack = 50.f;
-        int fwProbeWindowHigh = 0;
-        std::set<int> fwProbeTestedShifts;
-        bool fwProbeNegContiguous = true;
-        bool fwProbePosContiguous = true;
-        bool fwProbeNegCounting = true;
-        bool fwProbePosCounting = true;
         int fwProbeValidCount = 0;
-        int fwProbeMaxNegShift = 0;
-        int fwProbeMaxPosShift = 0;
         bool fwUseRecoveryRangeAlgorithm = false;
         int fwRecoveryRange = 4;
         enum class FwProbeSubPhase { Reaching, RecoveryCandidate };
-        FwProbeSubPhase fwProbeSubPhase = FwProbeSubPhase::Reaching;
-        int fwRecoveryOffset = 0;
         bool fwDebugMode = false;
         int fwDebugSlowdown = 30;
-        int fwDebugPauseRemaining = 0;
         bool fwDelayMarkerCapture = false;
         struct FwDebugMark {
             float x = 0.f, y = 0.f;
@@ -1075,9 +1051,7 @@ namespace gucci {
         float fwAnalyzeProgress = 0.0f;
         int fwAnalyzeCur = 0;
         int fwAnalyzeTotal = 0;
-        bool fwAnalyzeRunning = false;
         std::vector<StoredFrame> fwCapStack;
-        gb::ActionAtom fwSavedAtom;
         std::string fwAnalyzeStage;
         void analyzeFrameWindows();
 
@@ -1107,7 +1081,6 @@ namespace gucci {
         // It is an ADDITIONAL algorithm rather than a replacement so that
         // Alignment-Independent -- Juice's, which his port predates and does
         // not have -- survives, and so the two can be compared on one macro.
-        bool fwUseAcAnalyzer = false;
         std::string fwAcReport;
         bool fwAcOk = false;
 
@@ -1148,23 +1121,17 @@ namespace gucci {
             std::vector<int> perAlignmentWindow; // -- never discarded after picking the representative
         };
         std::vector<FwAiInputResult> fwAiResults;
-        bool fwAiHasData = false;
 
         // -- live pipeline state, meaningful only while fwState is one of
         // the Ai* states below --
         size_t fwAiClickIdx = 0;
-        int fwAiPredShift = 0;
         int fwAiPredMaxNeg = 0, fwAiPredMaxPos = 0;
         std::vector<int> fwAiValidPredShifts;
-        std::vector<StoredFrame> fwAiValidPredCkpts;
-        size_t fwAiAlignIdx = 0;
         int fwAiXShift = 0;
-        int fwAiXPhase = -1; // -1 nominal-first, 0 negative sweep, 1 positive sweep
         int fwAiXMaxNeg = 0, fwAiXMaxPos = 0;
         bool fwAiXNegContiguous = true, fwAiXPosContiguous = true;
         int fwAiXLow = 0, fwAiXHigh = 0;   // contiguous span -- logging only, NOT the reported window (see fwAiXValidCount)
         int fwAiXValidCount = 0;           // the actual per-alignment window: a raw count, matching fwProbeValidCount
-        std::vector<int> fwAiWindowPerAlign;
         // All three Ai* probe legs (AiBuildPred/AiSweepX/AiContinuation) use
         // RELATIVE tick counting from their own restore point, same as the
         // legacy method's fwProbeFrame/fwProbeHorizon -- deliberately NOT
@@ -1174,14 +1141,6 @@ namespace gucci {
         // never relies on that equivalence either; matching it here rather
         // than assuming otherwise).
         uint32_t fwAiProbeFrame = 0;
-        uint32_t fwAiProbeHorizon = 0;
-        bool fwAiWantContCkpt = false;  // this leg should snapshot a mid-run checkpoint for depth-1 continuation
-        uint32_t fwAiContCkptFrame = 0; // relative tick (matching fwAiProbeFrame) to snapshot it at
-        bool fwAiContCkptTaken = false;
-        StoredFrame fwAiContBaseCkpt;
-        FwAiStatus fwAiPendingStatus = FwAiStatus::Dead; // status the current X shift reached before any continuation check
-        bool fwAiInContinuation = false;
-        int fwAiContStepIdx = 0;
 
         // Juice's ask (2026-09-02): let him pick a specific tested (predecessor
         // alignment, X shift) branch and watch it actually play out, at
@@ -1199,7 +1158,6 @@ namespace gucci {
             float x = 0.f, y = 0.f;
             StoredFrame predCkpt;
         };
-        std::vector<FwAiDebugBranch> fwAiDebugBranches;
         void debugTeleportToAiBranch(size_t idx);
 
         // Nigel's ask (2026-09-02): a marker showing where the icon actually
@@ -1217,7 +1175,6 @@ namespace gucci {
             float x = 0.f, y = 0.f;
             int predShift = 0;
         };
-        std::vector<FwAiStartMark> fwAiStartMarks;
         void fwAiRecordAlignmentStartMark();
 
         void fwAiBeginClick();
