@@ -17,6 +17,7 @@
 #include "analysis/ac/lstar.hpp"
 #include "analysis/pathfinder.hpp"
 #include "analysis/trajectory.hpp"
+#include "tools/macro_check.hpp"
 #include "core/GucciBot.hpp"
 #include "render/renderer.hpp"
 
@@ -774,6 +775,43 @@ namespace gucci::mcp {
                 out["queued"] = press ? "press" : "release";
                 out["player2"] = p2;
                 out["frame"] = (int64_t)GucciEngine::get()->updater.getFrame();
+                return out;
+            },
+        });
+
+        server.addTool({
+            "gucci_check_macro",
+            "Check the loaded macro for problems that desync playback: a press "
+            "while already held, a release with nothing held, actions out of "
+            "frame order, invalid types or TPS values. Also counts clicks, "
+            "holds a death or restart cut, and holds still open at the end.",
+            schemaOf({{"limit", "integer", "max findings to return (default 100)"}}),
+            [](matjson::Value const& a) {
+                auto const& actions = GucciEngine::get()->replay.m_actionAtom.m_actions;
+                auto const r = macrocheck::check(actions);
+                size_t const limit = (size_t)std::clamp<int64_t>(argInt(a, "limit", 100), 1, 10000);
+                auto out = obj();
+                out["actions"] = (int64_t)actions.size();
+                out["ok"] = r.ok();
+                out["problems"] = (int64_t)r.findings.size();
+                out["clicks"] = (int64_t)r.clicks;
+                out["held_to_end"] = (int64_t)r.heldToEnd;
+                out["cut_by_reset"] = (int64_t)r.cutByReset;
+                out["release_after_reset"] = (int64_t)r.releaseAfterReset;
+                auto list = matjson::Value::array();
+                for (size_t i = 0; i < r.findings.size() && i < limit; i++) {
+                    auto const& f = r.findings[i];
+                    auto e = obj();
+                    e["index"] = (int64_t)f.index;
+                    e["frame"] = (int64_t)f.frame;
+                    e["problem"] = macrocheck::name(f.problem);
+                    if (f.lane >= 0) {
+                        e["player2"] = f.lane >= 3;
+                        e["button"] = (int64_t)(f.lane % 3 + 1);
+                    }
+                    list.push(e);
+                }
+                out["findings"] = list;
                 return out;
             },
         });

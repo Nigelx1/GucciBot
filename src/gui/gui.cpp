@@ -15,6 +15,7 @@
 #include "trailbuf/trailbuf.hpp"
 #include "trailbuf/spikes.hpp"
 #include "tools/replace_all.hpp"
+#include "tools/macro_check.hpp"
 #include "tools/selfcheck.hpp"
 #include "replay/scbf_input.hpp"
 #include <Geode/Bindings.hpp>
@@ -3087,6 +3088,42 @@ namespace gucci {
             ImGui::Dummy(ImVec2(0, 4));
         } else
             macroNameReady = false;
+
+        // Absense's macro Problems check, over the loaded macro.
+        if ((engine->isPlaying() || engine->isRecording()) &&
+            !engine->replay.m_actionAtom.m_actions.empty()) {
+            static std::string checkText;
+            static bool checkClean = true;
+            if (Widgets::StyledButton("Check Macro", ImVec2(-1, 24), theme, anim)) {
+                auto const r = macrocheck::check(engine->replay.m_actionAtom.m_actions);
+                checkClean = r.ok();
+                if (r.ok()) {
+                    checkText = fmt::format("No problems. {} clicks", r.clicks);
+                } else {
+                    checkText = fmt::format("{} problem(s):", r.findings.size());
+                    for (size_t i = 0; i < r.findings.size() && i < 5; i++) {
+                        auto const& f = r.findings[i];
+                        checkText += fmt::format("\n  frame {}{}: {}",
+                                                 f.frame,
+                                                 f.lane >= 3 ? " (P2)" : "",
+                                                 macrocheck::name(f.problem));
+                    }
+                    if (r.findings.size() > 5)
+                        checkText += fmt::format("\n  ...and {} more", r.findings.size() - 5);
+                }
+                if (r.cutByReset)
+                    checkText += fmt::format("\n{} hold(s) ended by a death or restart", r.cutByReset);
+                if (r.heldToEnd)
+                    checkText += fmt::format("\n{} hold(s) still held at the end", r.heldToEnd);
+            }
+            if (!checkText.empty()) {
+                ImGui::PushStyleColor(ImGuiCol_Text,
+                                      checkClean ? theme.textSecondary : ImVec4(1.f, 0.6f, 0.3f, 1.f));
+                ImGui::TextWrapped("%s", checkText.c_str());
+                ImGui::PopStyleColor();
+            }
+            ImGui::Dummy(ImVec2(0, 4));
+        }
 
         if (engine->isPlaying() && !engine->replay.m_actionAtom.m_actions.empty()) {
             size_t cnt = engine->replay.m_actionAtom.m_actions.size();

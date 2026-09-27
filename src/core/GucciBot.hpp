@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-ai (ASSISTANT ACCESS: five more tools, from Absense -- full player physics state, level info, step back, click now, and a quick hold/release survival check. Only matters with Settings > Assistant Access on. Includes -t..-ah.)"
+    "2026-09-27-aj (CHECK MACRO, from Absense. A Check Macro button while recording or playing lists problems that desync playback -- a press while already held, a release with nothing held, actions out of order, bad values -- with their frames, plus holds cut by a death. Also available to Assistant Access. Includes -t..-ai.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
