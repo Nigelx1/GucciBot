@@ -23,6 +23,7 @@ GucciBot is public now — grab a build from [Releases](https://github.com/Nigel
 - [Status](#status)
 - [Contact](#contact)
 - [Credits](#credits)
+- [License](#license)
 
 ## What it actually does
 
@@ -111,7 +112,7 @@ Also in Settings: **BIG BRRRR**, a core feature of this mod, and **Bass Shake**,
 
 ## Status
 
-Most of this is stable and has been tested for real, in-game, by an actual human. The frame-window analyzer specifically ("Calculate") is still being tuned against a real GD-community-designed algorithm and shouldn't be treated as gospel-accurate yet — see the commit history for the ongoing saga if you're curious how many times "this is definitely the fix" turned out not to be. Every fix in this repo that's still unconfirmed says so plainly in its own commit message, not just here.
+**1.8** is the stable release. **2.0** (the `engine-port-2.0` branch) is in alpha: GucciBot's engine reconciled against Silicate's function by function, with a lot of it not yet run in-game — the alphas say so on their release pages, and every unconfirmed fix says so in its own commit message. If you want something that's been tested by an actual human, use 1.8.
 
 ## Contact
 
@@ -142,6 +143,12 @@ There's a [contact page](https://guccibot.net/contact/) on the site with the sam
 - **ToastexGD** — built ToastyReplay, the project this actually started as, and the reason there is a GucciBot at all. His renderer and FFmpeg pipeline carried the mod for most of its life. Rendering now runs on Silicate's renderer instead; his was retired in 2.0 after being left unreachable by an earlier port, and the history is his either way.
 - **GWDdoS** — pushed for a real codebase cleanup (feature-folder reorg, a proper `.clang-format`, namespacing everything outside Geode's own hook classes) and was right about all of it.
 - **Bogdaner09** — the mod that got Click Indicators started ([github.com/Bogdaner09/mod](https://github.com/Bogdaner09/mod)); Nigel found it, we built our own version around it. Vibecoded by his own admission, so credit's probably owed elsewhere too.
+
+## License
+
+GucciBot is free software under the **GNU General Public License v3.0** — see [LICENSE](LICENSE).
+
+It's built on [Silicate](https://git.puppy.lgbt/silicate/silicate) by peony, which is GPL-3.0, and includes anticroom's GPL-3.0 work from his Silicate fork; C0nscious's Frame Window Counter code is MIT, which is compatible. You're free to use it, study it, share it and change it. Anything you distribute that's built from it has to stay open source under the same license.
 
 ---
 
