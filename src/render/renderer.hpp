@@ -13,6 +13,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 
 namespace gucci {
 
@@ -73,6 +74,15 @@ namespace gucci {
 
     class SLRenderer {
     public:
+        // Only runs at shutdown. A render still going when the game closes
+        // would leave the thread joinable, and destroying a joinable
+        // std::thread calls std::terminate -- a crash on exit. Silicate does
+        // the same.
+        ~SLRenderer() {
+            if (m_recordThread.joinable())
+                m_recordThread.detach();
+        }
+
         void queueStart() {
             m_shouldStart = true;
         }
@@ -129,6 +139,18 @@ namespace gucci {
         int64_t m_bufferPts = 0;
 
         void recordLoop();
+
+        // Teardown runs on the game thread, not the encode thread. The encode
+        // thread only drains its queue and raises m_readyToKill; drawScene
+        // calls finishStop() every frame, which joins the thread and runs
+        // stop() here, where the GL context, the window and FMOD belong.
+        // Ported from Silicate 2026-09-27. Before, stop() ran on the encode
+        // thread: its GL deletes had no context (so every render leaked its
+        // readback buffers and textures) and the window was resized back from
+        // the wrong thread.
+        void finishStop();
+        std::thread m_recordThread;
+        std::atomic<bool> m_readyToKill = false;
 
         void capture();
         void update(PlayLayer* pl);

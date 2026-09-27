@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-u (RENDER FILE SAFETY. Video and audio are written into the output file from two different threads, and nothing stopped them writing at the same moment. It never mattered before because the render froze the game while each frame encoded; with -t renders actually run in parallel, so it can happen now and could corrupt the file or crash. Every write now takes a lock, the way Silicate's renderer does it. Also includes -t: renders no longer freeze after one frame.)"
+    "2026-09-27-v (RENDER CLEANUP ON THE RIGHT THREAD. When a render ended, its cleanup ran on the background encoding thread -- including freeing GPU memory and resizing the window back, which only work from the game's own thread. So every render leaked its GPU buffers, and the window restore was done from the wrong thread. Cleanup now runs on the game thread, the next frame after the encoder finishes, the way Silicate does it. Closing GD mid-render also can no longer crash on exit. Includes -t (renders freezing after one frame) and -u (audio/video file-write lock).)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

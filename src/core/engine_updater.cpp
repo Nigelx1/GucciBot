@@ -854,6 +854,10 @@ class $modify(GB7CCScheduler, CCScheduler) {
 
 class $modify(GB7CCDirector, CCDirector) {
     void drawScene() {
+        // First, before the enabled check: a render that finished (or failed)
+        // on the encode thread is torn down here, on the game thread.
+        SLRenderer::get()->finishStop();
+
         auto* gb = GucciEngine::get();
         if (!gb->enabled)
             return CCDirector::drawScene();

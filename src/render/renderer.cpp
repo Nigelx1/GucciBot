@@ -317,6 +317,9 @@ namespace gucci {
 
     geode::Result<> SLRenderer::start() {
         geode::log::info("[GucciBot] SLRenderer starting");
+        this->finishStop();
+        if (m_recording || m_recordThread.joinable())
+            return geode::Err("A render is already in progress");
         if (!ff || !m_ffmpegLoaded)
             return geode::Err("FFmpeg not loaded");
         auto* pl = PlayLayer::get();
@@ -581,7 +584,8 @@ namespace gucci {
             }
         }
 
-        std::thread(&SLRenderer::recordLoop, this).detach();
+        m_readyToKill.store(false, std::memory_order_relaxed);
+        m_recordThread = std::thread(&SLRenderer::recordLoop, this);
         return geode::Ok();
     }
 
@@ -704,9 +708,10 @@ namespace gucci {
     }
 
     geode::Result<> SLRenderer::stop() {
-        // NOT flushPending() here: stop() runs on the encode thread, and
-        // tryHarvest makes GL calls. The drain happens on the game thread just
-        // before signalStop(), which is the last point the GL context is ours.
+        // Runs on the game thread (finishStop), after the encode thread has
+        // exited. No flushPending() here: the drain happened just before
+        // signalStop(), and the encode thread has written everything it was
+        // handed -- anything still in the ring was never going to be encoded.
         m_recording = false;
         m_recordCv.notify_all();
 
@@ -827,10 +832,19 @@ namespace gucci {
             m_recording = false;
         }
 
+        // stop() is NOT called here -- see finishStop().
+        m_readyToKill.store(true, std::memory_order_release);
+        geode::log::info("[GucciBot] encode thread finished");
+    }
+
+    void SLRenderer::finishStop() {
+        if (!m_readyToKill.exchange(false, std::memory_order_acquire))
+            return;
+        if (m_recordThread.joinable())
+            m_recordThread.join();
         auto st = this->stop();
         if (st.isErr())
             geode::log::error("[GucciBot] stop failed: {}", st.unwrapErr());
-        geode::log::info("[GucciBot] encode thread finished");
     }
 
     // True when there is room in the ring to start another readback. Harvests
