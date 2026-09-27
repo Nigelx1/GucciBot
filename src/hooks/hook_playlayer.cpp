@@ -323,16 +323,38 @@ class $modify(GB7PlayLayer, PlayLayer) {
         rs.m_teleportRandomState = rs.m_startingSeedThisAttempt & 0x7FFF;
         gb->practiceFix.reseedAdvancedRandom(rs.m_startingSeedThisAttempt);
 
+        // GD's per-object variance table (what move/rotate/scale triggers with
+        // variance read through m_varianceIndex), refilled from the seed.
+        // Silicate does this on every fresh recorded attempt and on every
+        // playback reset; GucciBot's port hashed each object's index from the
+        // seed (processMoveActionsStep) but never refilled the table it
+        // indexes, so the values themselves were whatever GD last left there
+        // -- not tied to the macro's seed at all.
+        auto const seedVariance = [this](uint64_t varianceState) {
+            for (auto& v : m_varianceValues) {
+                v = (float)(varianceState & 0xFFFF) / 32768.0 - 1.0;
+                varianceState = 214013 * varianceState + 2531011;
+            }
+        };
+
         if (gb->isRecording()) {
+            // RNG Lock -- Silicate's Override Seed. The card and its seed box
+            // were in the GUI but nothing ever read them; this is where
+            // Silicate applies it.
+            if (gb->rngLocked)
+                state = gb->rngSeedVal;
+
             rs.m_startingSeedThisAttempt = state;
             if (gb->practiceFix.m_savedCheckpoints.empty() && !gb->practiceFix.m_loadCheckpoint &&
                 !gb->updater.m_canDie) {
                 state = 214013 * state + 2531011;
                 rs.m_startingSeed = state;
                 rs.m_startingSeedThisAttempt = state;
+                seedVariance(state);
             }
         } else {
             state = rs.m_startingSeedThisAttempt;
+            seedVariance(state);
         }
     }
 

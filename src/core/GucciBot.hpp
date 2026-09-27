@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-ab (SUB-TICK CLICKS, part 4: Calculate. Dependent Pair Search now also runs with Subframe Probe on, and on CBF results -- it used to skip both, because GucciBot could not place an input part-way through a tick. Since parts 1-3 it can, so it now matches anticroom's analyzer exactly. Includes -t..-aa.)"
+    "2026-09-27-ac (RNG FIXES. 1) The RNG Lock card and its seed box did nothing -- nothing read them. They now fix the recording seed, as Silicate's Override Seed does. 2) GD's table of random values for objects moved by triggers with variance was never tied to the macro's seed, so those objects could move differently on playback than when recorded. It is now refilled from the seed on every attempt, recording and playback, as in Silicate. Includes -t..-ab.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
