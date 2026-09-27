@@ -132,7 +132,10 @@ namespace gucci {
         bool holdingTrace = false;
         bool processingOrbTouch = false;
         bool dirty = true;
-        float stepDelta = 1.0f / 240.0f;
+        // What the real PlayerObject::update last received -- GD's player
+        // units, 1.0 per 1/60 s, so a 240 TPS tick is 0.25. Only the default
+        // before the first real step; it was 1/240, the wrong unit.
+        float stepDelta = 60.0f / 240.0f;
         float collisionRotation = 0.0f;
         std::array<CCPoint, 480> holdPathP1{};
         std::array<CCPoint, 480> holdPathP2{};

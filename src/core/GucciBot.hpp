@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-y (SUB-TICK CLICKS, part 2: recording. Bot > CBF Recording: while recording, each click is placed at the point inside the tick you actually pressed it, using the time Windows stamped on the key/mouse event, and is played back there. Off by default; Tick Splitting can be turned off to record on the edge as normal. Shows how many clicks this attempt landed inside a tick vs on the edge -- if it is always 0 inside the tick, tell Claude. Includes -t..-x.)"
+    "2026-09-27-z (PREDICTION SPEED FIX. Two of GucciBot's physics look-aheads stepped the player at 1/60th of the real speed, because GD counts player physics in 60ths of a second and they passed plain seconds. Frame Extrapolation (smooth motion above the tick rate) therefore predicted almost no movement, and Pathfinder's hold-vs-release probe almost never saw a branch die. Both now step at the real speed, the way Silicate does. PATHFINDER BEHAVIOUR MAY CHANGE -- please re-test it. Includes -t..-y.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

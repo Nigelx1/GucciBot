@@ -1018,8 +1018,14 @@ bool TrajectoryPredictionService::predictStep(PlayLayer* playLayer,
         preview->pushButton(static_cast<PlayerButton>(source->m_isGoingLeft ? 2 : 3));
     }
 
+    // One tick in GD's player-physics units, which count 1.0 per 1/60 s: at
+    // 240 TPS a tick is 0.25. PlayerObject::update and checkCollisions both
+    // take it in those units -- Silicate steps every fork by
+    // getPhysicsDt() * 60 (trajectory.cpp, m_delta), and updateCamera is
+    // called with dt * 60 for the same reason. This used to pass 1/tps, a
+    // sixtieth of a tick, so Frame Extrapolation predicted almost no movement.
     double const tps = GucciEngine::get()->updater.m_tps;
-    float const dt = tps > 1.0 ? static_cast<float>(1.0 / tps) : m_context.stepDelta;
+    float const dt = tps > 1.0 ? static_cast<float>(60.0 / tps) : m_context.stepDelta;
 
     preview->m_collisionLogTop->removeAllObjects();
     preview->m_collisionLogBottom->removeAllObjects();
@@ -1075,7 +1081,11 @@ bool TrajectoryPredictionService::probeAgency(PlayLayer* playLayer,
     float savedStep = m_context.stepDelta;
     double tps = GucciEngine::get()->updater.m_tps;
     if (tps > 1.0) {
-        m_context.stepDelta = (float)(1.0 / tps);
+        // GD's player-physics units (1.0 per 1/60 s), as in predictStep.
+        // Was 1/tps -- a sixtieth of a tick. At that speed a branch could
+        // almost never die inside the 6-frame probe, so "one branch survives
+        // and the other doesn't" was a signal Pathfinder almost never got.
+        m_context.stepDelta = (float)(60.0 / tps);
     }
 
     m_lastProbeStep = m_context.stepDelta;
