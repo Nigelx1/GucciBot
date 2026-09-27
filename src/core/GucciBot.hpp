@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-ae (HUD: Silicate's debug labels. The HUD tab has a new Debug section: On Ground, Game Tick, Player Speed, Gravity, Dead/Alive, Checkpoints, Level Time, Time Warp, Random States, Action Index, Intentional Death, Tick Limit, Ticks Since Last Input, Touching Orbs -- both players in dual mode. Also fixes the Bot State toggle, which showed whether you were on the ground; it shows Playing/Recording now. Includes -t..-ad.)"
+    "2026-09-27-af (AUTOCLICKER: two new per-player options. Swift Clicks (from Silicate): each click is released on the tick it was pressed. Auto Black Orb UFO (from Absense): a fixed five-tick tap/hold loop recorded from a black orb UFO spam at 720 TPS, replacing the normal timings while on. Normal autoclicker timing is unchanged. Includes -t..-ae.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

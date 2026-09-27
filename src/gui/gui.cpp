@@ -7036,6 +7036,19 @@ namespace gucci {
                 mod->setSavedValue(releaseKey, s.releaseTicks);
             if (Widgets::StyledSliderInt("Clicks Per Hold", &s.clicksPerHold, 1, 10, theme))
                 mod->setSavedValue(clicksKey, s.clicksPerHold);
+            // Keys follow the others: ac_p1_hold_ticks -> ac_p1_swifts.
+            std::string const prefix = std::string(enabledKey).substr(0, 5);
+            if (Widgets::ToggleSwitch("Swift Clicks", &s.swifts, theme, anim))
+                mod->setSavedValue(prefix + "_swifts", s.swifts);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Releases each click on the same tick it was pressed, instead of "
+                                  "holding it for Hold Ticks.");
+            if (Widgets::ToggleSwitch("Auto Black Orb UFO", &s.blackOrbUfo, theme, anim))
+                mod->setSavedValue(prefix + "_black_orb", s.blackOrbUfo);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("The black orb spam: tap + hold, release + tap, tap + hold for two "
+                                  "ticks, release + tap, over and over. Made for 720 TPS. Replaces "
+                                  "the timings above while it is on.");
             float cps = (float)eng->updater.m_tps / (float)(s.holdTicks + s.releaseTicks);
             ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
             ImGui::Text("~%.1f clicks/sec at %.0f TPS%s",
@@ -7057,6 +7070,8 @@ namespace gucci {
             mod->setSavedValue("ac_p2_hold_ticks", ac->p2.holdTicks);
             mod->setSavedValue("ac_p2_release_ticks", ac->p2.releaseTicks);
             mod->setSavedValue("ac_p2_clicks", ac->p2.clicksPerHold);
+            mod->setSavedValue("ac_p2_swifts", ac->p2.swifts);
+            mod->setSavedValue("ac_p2_black_orb", ac->p2.blackOrbUfo);
         }
         ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
         ImGui::TextWrapped(
@@ -9496,6 +9511,10 @@ namespace gucci {
         mod->setSavedValue("ac_p2_hold_ticks", ac->p2.holdTicks);
         mod->setSavedValue("ac_p2_release_ticks", ac->p2.releaseTicks);
         mod->setSavedValue("ac_p2_clicks", ac->p2.clicksPerHold);
+        mod->setSavedValue("ac_p1_swifts", ac->p1.swifts);
+        mod->setSavedValue("ac_p1_black_orb", ac->p1.blackOrbUfo);
+        mod->setSavedValue("ac_p2_swifts", ac->p2.swifts);
+        mod->setSavedValue("ac_p2_black_orb", ac->p2.blackOrbUfo);
         mod->setSavedValue("ac_only_holding", ac->onlyWhileHolding);
 
         mod->setSavedValue("eng_tick_rate", (float)eng->updater.m_tps);
@@ -9735,6 +9754,10 @@ namespace gucci {
         ac->p2.holdTicks = mod->getSavedValue<int>("ac_p2_hold_ticks", oldHoldTicks);
         ac->p2.releaseTicks = mod->getSavedValue<int>("ac_p2_release_ticks", oldReleaseTicks);
         ac->p2.clicksPerHold = mod->getSavedValue<int>("ac_p2_clicks", 1);
+        ac->p1.swifts = mod->getSavedValue<bool>("ac_p1_swifts", false);
+        ac->p1.blackOrbUfo = mod->getSavedValue<bool>("ac_p1_black_orb", false);
+        ac->p2.swifts = mod->getSavedValue<bool>("ac_p2_swifts", false);
+        ac->p2.blackOrbUfo = mod->getSavedValue<bool>("ac_p2_black_orb", false);
         ac->onlyWhileHolding = mod->getSavedValue<bool>("ac_only_holding", false);
 
         tempTickRate = (float)eng->updater.m_tps;

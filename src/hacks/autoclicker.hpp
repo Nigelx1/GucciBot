@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 namespace gucci {
 
     struct Autoclicker {
@@ -14,6 +16,13 @@ namespace gucci {
             int holdTicks = 1;
             int releaseTicks = 1;
             int clicksPerHold = 1; // extra full press/release cycles fired the instant a hold starts
+            // Silicate's swift clicks: each click is released on the tick it
+            // was pressed, instead of held for holdTicks.
+            bool swifts = false;
+            // Absense's "Auto black orb UFO": a fixed five-tick loop recorded
+            // from a straight black orb UFO spam at 720 TPS. Replaces the
+            // timings above while on.
+            bool blackOrbUfo = false;
         };
 
         bool enabled = false;
@@ -23,19 +32,23 @@ namespace gucci {
 
         int tickCounterP1 = 0;
         int tickCounterP2 = 0;
+        // Position in the black orb loop; -1 starts it over (every attempt,
+        // and whenever the loop is switched on).
+        int loopStepP1 = -1;
+        int loopStepP2 = -1;
         bool currentlyHoldingP1 = false;
         bool currentlyHoldingP2 = false;
         bool userHoldingP1 = false;
         bool userHoldingP2 = false;
         bool isAutoclickerInput = false;
 
+        // This tick's button events for each player, in the order they are
+        // queued: true = press, false = release. A list rather than one event,
+        // because clicks-per-hold, swift clicks and the black orb loop all put
+        // several on one tick.
         struct TickResult {
-            bool p1Fire = false;
-            bool p1Press = false;
-            int p1Clicks = 1; // only meaningful when p1Fire && p1Press
-            bool p2Fire = false;
-            bool p2Press = false;
-            int p2Clicks = 1;
+            std::vector<bool> p1;
+            std::vector<bool> p2;
         };
 
         TickResult processTick();
