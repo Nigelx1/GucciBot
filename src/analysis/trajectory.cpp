@@ -1243,6 +1243,63 @@ void TrajectoryPredictionService::traceSubtickBranch(PlayLayer* playLayer,
     m_context.activeSimulation = false;
 }
 
+int TrajectoryPredictionService::survivesFor(PlayLayer* playLayer,
+                                             PlayerObject* source,
+                                             int frames,
+                                             int input) {
+    if (!playLayer || !source || frames <= 0 || m_context.activeSimulation) {
+        return -1;
+    }
+    auto* fork = prepareFork(playLayer, source);
+    if (!fork) {
+        return -1;
+    }
+
+    ForkStateGuard guard(playLayer);
+    m_context.activeSimulation = true;
+    m_context.traceCancelled = false;
+    m_context.processedOrbs.clear();
+
+    if (input > 0) {
+        fork->pushButton(static_cast<PlayerButton>(1));
+    } else if (input < 0) {
+        fork->releaseButton(static_cast<PlayerButton>(1));
+        fork->m_jumpBuffered = false;
+    }
+
+    auto* gbe = GucciEngine::get();
+    float const tick = this->tickUnits();
+    bool const moving = gbe->pathMovingObjects;
+    int const moveInterval = std::max(1, gbe->pathMoveStepInterval);
+    std::optional<GJGameState> savedGameState;
+    if (moving) {
+        savedGameState = playLayer->m_gameState;
+        snapshotMovedObjects(playLayer);
+    }
+
+    int survived = 0;
+    for (; survived < frames; ++survived) {
+        if (moving && survived % moveInterval == 0) {
+            stepMoveActions(playLayer, tick * static_cast<float>(moveInterval));
+        }
+        this->stepFork(playLayer, fork, tick);
+        if (m_context.traceCancelled) {
+            break;
+        }
+    }
+
+    if (moving) {
+        restoreMovedObjects(playLayer);
+        if (savedGameState) {
+            playLayer->m_gameState = *savedGameState;
+        }
+    }
+    m_context.processedOrbs.clear();
+    m_context.traceCancelled = false;
+    m_context.activeSimulation = false;
+    return survived;
+}
+
 void TrajectoryPredictionService::setOverlaySuppressed(bool suppressed) {
     if (m_overlaySuppressed == suppressed) {
         return;

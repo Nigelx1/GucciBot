@@ -211,6 +211,13 @@ namespace gucci {
         // While the sub-tick preview is showing, the whole-tick path would
         // contradict it; this keeps it hidden until released.
         void setOverlaySuppressed(bool suppressed);
+
+        // How many of the next `frames` ticks `source` survives: +1 presses
+        // jump first, -1 releases it, 0 keeps the buttons as they are.
+        // Silicate asks its trajectory this for Prevent Death's look-ahead and
+        // for the best-tick search (score = ticks survived). Returns `frames`
+        // when it never dies, -1 if no fork could run.
+        int survivesFor(PlayLayer* playLayer, PlayerObject* source, int frames, int input);
         cocos2d::ccColor4F holdColor(bool player2) const {
             return player2 ? m_holdColorP2 : m_holdColor;
         }

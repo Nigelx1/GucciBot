@@ -4418,12 +4418,47 @@ namespace gucci {
             Widgets::ModuleCardEnd();
         }
 
-        if (Widgets::ModuleCard("Prevent Death",
-                                "Absorb all hits silently -- no collision counter",
-                                &engine->updater.m_preventDeath,
-                                theme,
-                                anim,
-                                &keybinds.preventDeath)) {
+        // The old description, "Absorb all hits silently -- no collision
+        // counter", described Noclip. Prevent Death steps back one tick on a
+        // death so the input can be changed, as in Silicate.
+        if (Widgets::ModuleCardBegin("Prevent Death",
+                                     "Step back one tick on a death so you can change the input",
+                                     &engine->updater.m_preventDeath,
+                                     theme,
+                                     anim,
+                                     &keybinds.preventDeath)) {
+            auto& up = engine->updater;
+            if (Widgets::ToggleSwitch("Use Trajectory Instead", &up.m_fullGamePrediction, theme, anim))
+                Mod::get()->setSavedValue("feat_prevent_death_trajectory", up.m_fullGamePrediction);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Looks a few ticks ahead every tick and pauses before the death, "
+                                  "instead of stepping back after it.");
+            if (!up.m_backwardsStepping) {
+                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                ImGui::TextWrapped("Turn on Backwards Stepping for this to work.");
+                ImGui::PopStyleColor();
+            }
+            Widgets::ModuleCardEnd();
+        }
+
+        // Silicate's "Best tick for the next input".
+        {
+            auto& up = engine->updater;
+            ImGui::Dummy(ImVec2(0, 4));
+            if (Widgets::StyledSliderFloat("Survival Threshold", &up.m_acceptablePrediction, 0.f, 1.f, theme))
+                Mod::get()->setSavedValue("feat_best_tick_threshold", up.m_acceptablePrediction);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("How much of the path length a tick must survive for the search "
+                                  "below to count it as good enough.");
+            bool const ready = PlayLayer::get() && up.m_backwardsStepping;
+            ImGui::BeginDisabled(!ready);
+            if (Widgets::StyledButton("Find Best Tick for Next Input", ImVec2(-1, 28), theme, anim))
+                up.findBestFrameCandidate();
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                ImGui::SetTooltip("Steps forward, trying the next input on every tick, and stops on "
+                                  "the tick that survives longest. Needs Backwards Stepping, in a "
+                                  "level.");
         }
 
         if (Widgets::ModuleCardBegin("Mirror Inputs",

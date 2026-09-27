@@ -2234,6 +2234,9 @@ namespace gucci {
         updater.m_extrapolateFrames =
             pick(false, "feat_frame_extrapolation", "updater_extrapolateFrames");
         updater.m_preventDeath = pick(false, "feat_prevent_death", "updater_preventDeath");
+        updater.m_fullGamePrediction = pick(false, "feat_prevent_death_trajectory", nullptr);
+        updater.m_acceptablePrediction =
+            std::clamp(pick(0.9f, "feat_best_tick_threshold", nullptr), 0.f, 1.f);
         updater.m_autoFlipOnDeath = pick(false, "feat_auto_flip", "updater_autoFlipOnDeath");
         replay.m_mirrorInputs = pick(false, "feat_mirror_inputs", "replay_mirrorInputs");
         replay.m_mirrorInverted = pick(false, "feat_mirror_inverted", nullptr);

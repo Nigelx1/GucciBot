@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-af (AUTOCLICKER: two new per-player options. Swift Clicks (from Silicate): each click is released on the tick it was pressed. Auto Black Orb UFO (from Absense): a fixed five-tick tap/hold loop recorded from a black orb UFO spam at 720 TPS, replacing the normal timings while on. Normal autoclicker timing is unchanged. Includes -t..-ae.)"
+    "2026-09-27-ag (PREVENT DEATH EXTRAS, from Silicate. Prevent Death now has Use Trajectory Instead: it looks four ticks ahead and pauses before the death rather than stepping back after it. New Find Best Tick for Next Input button: steps forward trying your next click on every tick and stops on the one that survives longest (Survival Threshold sets how long is good enough). Both need Backwards Stepping. The Prevent Death description also said it absorbs hits -- that is Noclip; fixed. Includes -t..-af.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -431,8 +431,17 @@ namespace gucci {
 
         bool m_preventDeath = false;
         bool m_autoFlipOnDeath = false;
+        // Silicate's two Prevent Death extras. Both were declared here and
+        // read by nothing until 2026-09-27.
+        //   m_fullGamePrediction  "Use trajectory instead": look a few ticks
+        //                         ahead every tick and pause BEFORE the death,
+        //                         instead of stepping back after it.
+        //   m_acceptablePrediction  the share of the look-ahead a tick must
+        //                         survive for findBestFrameCandidate to stop.
         bool m_fullGamePrediction = false;
         float m_acceptablePrediction = 0.9f;
+        // Silicate's "Best tick for the next input".
+        void findBestFrameCandidate();
 
         int m_respawnTimer = 0;
         uint32_t m_maxBackstepFrames = 60;

@@ -415,6 +415,52 @@ void GucciUpdater::runUpdates(std::function<void(float)> update, float realDt, b
     }
 }
 
+// Silicate's findBestFrameCandidate. From here, step forward a tick at a
+// time; on each, ask the trajectory how long the player survives if the next
+// input (the opposite of what it is doing now) happens on that tick. Stop at
+// the first tick that survives the survival threshold's share of the path
+// length, or at the backstep limit, then step back to the best one seen.
+void GucciUpdater::findBestFrameCandidate() {
+    auto* pl = PlayLayer::get();
+    if (!pl || !pl->m_player1 || !m_backwardsStepping)
+        return;
+
+    auto& traj = TrajectoryPredictionService::get();
+    int const lookahead = std::clamp(GucciEngine::get()->pathLength, 1, 480);
+    int const acceptable =
+        (int)((float)lookahead * std::clamp(m_acceptablePrediction, 0.f, 1.f));
+
+    this->setPaused(true);
+    m_predicting = true;
+
+    int best = -1;
+    uint32_t bestFrame = this->getFrame();
+    uint32_t iters = 0;
+    uint32_t const maxIters = std::max<uint32_t>(1u, m_maxBackstepFrames);
+    while (!pl->m_playerDied && iters < maxIters) {
+        int const input = pl->m_player1->m_jumpBuffered ? -1 : 1;
+        int const survived = traj.survivesFor(pl, pl->m_player1, lookahead, input);
+        if (survived > best) {
+            best = survived;
+            bestFrame = this->getFrame();
+        }
+        if (best >= acceptable)
+            break;
+
+        this->stepOnce();
+        CCScheduler::get()->update((float)this->getPhysicsDt());
+        iters++;
+    }
+
+    uint32_t const steps = std::min(this->getFrame() - bestFrame, iters);
+    if (steps > 0)
+        this->backwardsStep((int)steps);
+
+    m_predicting = false;
+    log::info("[GucciBot] best tick: frame {} survives {}/{} ({} ticks searched)",
+              bestFrame, best, lookahead, iters);
+}
+
 void GucciUpdater::userStepForward() {
     if (scbf::SubtickPreview::get().forward())
         m_stepOnce_ = true;
@@ -653,6 +699,33 @@ static void frameUpdateMidhook(SafetyHookContext&) {
             // Silicate's trail buffer records here too: both players' hitboxes,
             // once per settled frame, while the player is alive.
             ::Bot::get()->trailBuffer().saveTick(pl);
+
+            // Prevent Death > Use trajectory instead (Silicate, same spot):
+            // look four ticks ahead holding what each player holds, and pause
+            // before a death rather than stepping back after one. Silicate's
+            // auto-flip here runs every tick whether or not a death was
+            // predicted, which would queue a flip each tick; it only runs on
+            // a predicted death here, which is what the option says.
+            if (upd.m_preventDeath && upd.m_fullGamePrediction && !upd.m_predicting) {
+                if (auto* pll = PlayLayer::get()) {
+                    auto& traj = TrajectoryPredictionService::get();
+                    auto check = [&](PlayerObject* p, bool p2) {
+                        if (!p)
+                            return;
+                        int const survived = traj.survivesFor(pll, p, 4, 0);
+                        if (survived < 0 || survived >= 4)
+                            return;
+                        upd.setPaused(true);
+                        if (upd.m_autoFlipOnDeath) {
+                            pl->queueButton(1, !p->m_jumpBuffered, p2, 0.0);
+                            upd.setPaused(false);
+                        }
+                    };
+                    check(pl->m_player1, false);
+                    if (pl->m_gameState.m_isDualMode)
+                        check(pl->m_player2, true);
+                }
+            }
         }
 
         bool shouldCapturePath = gb->isRecording() || (gb->isPlaying() && !gb->fwAnalyzing);
