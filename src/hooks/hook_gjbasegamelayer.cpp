@@ -15,6 +15,7 @@
 #include "analysis/ac/cbf.hpp"
 #include "analysis/ac/framewindow.hpp"
 #include "trailbuf/trailbuf.hpp"
+#include "replay/scbf_input.hpp"
 
 using namespace geode::prelude;
 
@@ -330,6 +331,48 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         held.clear();
     }
 
+    // anticroom's SCBF. Each live press waits in the recorder until the tick it
+    // really arrived in; a press that landed inside that tick is handed to the
+    // CBF engine to fire that far into the step, and recorded with the offset.
+    // One split point per tick: every press due this tick splits at the first
+    // one's offset, as in his.
+    void releaseLiveInputs() {
+        auto* gb = GucciEngine::get();
+        auto& live = scbf::LiveRecorder::get();
+        auto& actions = gb->replay.m_actionAtom;
+        auto* eng = cbf::Engine::get();
+        uint32_t const frame = gb->updater.getFrame();
+
+        live.defer(m_queuedButtons, frame);
+
+        double split = 0.0;
+        for (auto const& due : live.takeDue(frame)) {
+            if (due.offset <= 0.0) {
+                m_queuedButtons.push_back(due.cmd);
+                live.noteAligned();
+                continue;
+            }
+
+            if (split <= 0.0)
+                split = due.offset;
+            eng->arm(frame, split);
+            if (!eng->capture(frame,
+                              static_cast<int>(due.cmd.m_button),
+                              due.cmd.m_isPush,
+                              due.cmd.m_isPlayer2)) {
+                m_queuedButtons.push_back(due.cmd);
+                live.noteAligned();
+                continue;
+            }
+
+            size_t const before = actions.length();
+            this->addInputToReplay(due.cmd);
+            if (actions.length() > before)
+                scbf::setOffset(actions.m_actions.back(), split);
+            live.notePlaced();
+        }
+    }
+
     void processReplayAction(gb::Action& action) {
         auto* gb = GucciEngine::get();
         auto& upd = gb->updater;
@@ -515,10 +558,13 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         //     the press twice on two different frames.
         //   - A press fired by CBF mid-step is the replay's own input being
         //     split into the tick, not a new one (anticroom's guard).
+        //   - CBF Recording (SCBF) holds each press until the tick it really
+        //     arrived in and records it there with its offset. A copy recorded
+        //     here would land on the arrival frame, with no offset.
         // Silicate only records from the queue unless its alternate-hook
         // setting is on, which is why it never had the first problem.
         if (!gb->isRecording() || gb->updater.inputFpsActive() ||
-            cbf::Engine::get()->m_midStep) {
+            cbf::Engine::get()->m_midStep || scbf::LiveRecorder::get().recording()) {
             return GJBaseGameLayer::handleButton(pressed, button, player1);
         }
         addInputToReplay({.m_button = (PlayerButton)button,
@@ -605,8 +651,13 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
                 performMaintainGravity();
                 return;
             }
+            auto& live = scbf::LiveRecorder::get();
             if (gb->updater.inputFpsActive())
                 holdUntilFrame();
+            else if (live.splitting())
+                releaseLiveInputs();
+            else if (live.recording())
+                live.passThrough(m_queuedButtons);
             requeueInverted();
             saveQueuedButtons();
         } else if (gb->isPlaying()) {

@@ -8,6 +8,7 @@
 #include "trailbuf/trailbuf.hpp"
 #include "analysis/ac/shim.hpp"
 #include "mcp/mcp_server.hpp"
+#include "replay/scbf_input.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/modify/CCScheduler.hpp>
@@ -366,6 +367,16 @@ void GucciUpdater::runUpdates(std::function<void(float)> update, float realDt, b
                   estimatedStepCount);
     }
 
+    // SCBF: re-anchor the wall-clock -> tick map around this frame's ticks,
+    // exactly where Silicate does it. Outside a splitting recording the map is
+    // dropped, so it re-syncs from scratch when one starts.
+    auto& live = scbf::LiveRecorder::get();
+    bool const liveClock = isPlayLayer && live.splitting();
+    if (liveClock)
+        live.beginFrame(this->getFrame(), this->isPaused());
+    else
+        live.desync();
+
     if (m_lockDelta && isPlayLayer) {
         if (this->useFastLockDelta())
             runFastLockDelta(*this, update, realDt);
@@ -379,6 +390,9 @@ void GucciUpdater::runUpdates(std::function<void(float)> update, float realDt, b
         }
         update(realDt * m_speedhack);
     }
+
+    if (liveClock)
+        live.endFrame(this->getFrame());
 }
 
 void GucciUpdater::runFrozenTick() {

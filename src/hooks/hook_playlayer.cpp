@@ -7,6 +7,7 @@
 #include "analysis/ac/cbf.hpp"
 #include "analysis/ac/framewindow.hpp"
 #include "trailbuf/trailbuf.hpp"
+#include "replay/scbf_input.hpp"
 #include "hacks/hitboxes.hpp"
 #include "trainers/jupiterghost.hpp"
 #include "trainers/trainerghost.hpp"
@@ -468,6 +469,9 @@ class $modify(GB7PlayLayer, PlayLayer) {
 
     void resetLevel() {
         GucciEngine::get()->updater.m_resetCount++;
+        // Presses still waiting for their tick belong to the attempt that
+        // just ended.
+        scbf::LiveRecorder::get().reset();
         // anticroom: a reset starts a new attempt, so any input the CBF engine
         // was holding for a split belongs to the old one. Not during analysis,
         // which resets constantly and owns the engine's state itself.

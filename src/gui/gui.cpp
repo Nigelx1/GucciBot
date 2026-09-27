@@ -16,6 +16,7 @@
 #include "trailbuf/spikes.hpp"
 #include "tools/replace_all.hpp"
 #include "tools/selfcheck.hpp"
+#include "replay/scbf_input.hpp"
 #include <Geode/Bindings.hpp>
 #include <Geode/cocos/textures/CCTexture2D.h>
 #include <Geode/modify/LoadingLayer.hpp>
@@ -4025,6 +4026,42 @@ namespace gucci {
             else
                 ImGui::Text("Off -- inputs record on any tick");
             ImGui::PopStyleColor();
+        }
+        ImGui::Dummy(ImVec2(0, 8));
+        Widgets::SectionHeader("CBF Recording", theme);
+        {
+            // anticroom's SCBF: records each press at the point in the tick it
+            // really arrived, and plays it back there.
+            auto& rp = engine->replay;
+            if (Widgets::ToggleSwitch("CBF Recording", &rp.m_scbfRecording, theme, anim))
+                Mod::get()->setSavedValue("scbf_recording", rp.m_scbfRecording);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("With Tick Splitting on, each input is recorded at the point "
+                                  "in the tick you pressed it and played back there. The "
+                                  "offsets are saved in the macro. Frame window counting uses "
+                                  "them too.");
+            if (rp.m_scbfRecording) {
+                if (Widgets::ToggleSwitch("Tick Splitting", &rp.m_scbfTickSplit, theme, anim))
+                    Mod::get()->setSavedValue("scbf_tick_split", rp.m_scbfTickSplit);
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Off: inputs record on the tick like a normal macro. Turn "
+                                      "it on only for the inputs that need to land inside a "
+                                      "tick, and off again after.");
+                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                if (engine->updater.inputFpsActive())
+                    ImGui::TextWrapped("Input FPS is on, and it takes over from CBF Recording "
+                                       "while it is.");
+                else if (rp.m_scbfTickSplit && engine->updater.m_tps > 240.0)
+                    ImGui::TextWrapped("Tick splitting breaks above 240 TPS because of GD's "
+                                       "velocity rounding.");
+                auto const& live = scbf::LiveRecorder::get();
+                if (live.recording())
+                    ImGui::Text("This attempt: %u placed in the tick, %u on the edge%s",
+                                live.placed(),
+                                live.aligned(),
+                                live.splitting() ? "" : " (splitting off)");
+                ImGui::PopStyleColor();
+            }
         }
         ImGui::Dummy(ImVec2(0, 8));
         Widgets::SectionHeader("Speed Control", theme);

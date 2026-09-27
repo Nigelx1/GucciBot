@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-x (SUB-TICK CLICKS, part 1 of anticroom's SCBF. A macro input can now carry where inside its tick it landed, and playback fires it that far into the physics step instead of at the tick edge. Saved in a new optional section of the .gbr6 file -- older GucciBot versions still open these macros, just with every click on the tick edge. Nothing records sub-tick clicks yet (that is part 2), so existing macros play exactly as before. Includes the render fixes -t/-u/-v and the intro card -w.)"
+    "2026-09-27-y (SUB-TICK CLICKS, part 2: recording. Bot > CBF Recording: while recording, each click is placed at the point inside the tick you actually pressed it, using the time Windows stamped on the key/mouse event, and is played back there. Off by default; Tick Splitting can be turned off to record on the edge as normal. Shows how many clicks this attempt landed inside a tick vs on the edge -- if it is always 0 inside the tick, tell Claude. Includes -t..-x.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -289,6 +289,13 @@ namespace gucci {
         bool m_mirrorInverted = false;
         bool m_maintainGravity = false;
         bool m_ignoreInputs = false;
+        // anticroom's SCBF (replay/scbf_input.hpp). CBF Recording places each
+        // live press at the point in the tick it really arrived; Tick
+        // Splitting is his on/off for actually splitting the tick -- off
+        // records on the edge as usual, so it can be bound to a key and used
+        // only for the inputs that need it. Both his defaults.
+        bool m_scbfRecording = false;
+        bool m_scbfTickSplit = true;
         bool m_forceNextInput = false;
         bool m_flipProcessingInputs = false;
 
