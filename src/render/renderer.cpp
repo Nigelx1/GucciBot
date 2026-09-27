@@ -627,7 +627,10 @@ namespace gucci {
             ff->av_packet_rescale_ts(
                 m_pkt.get(), m_videoCodecCtx->time_base, m_videoStream->time_base);
             m_pkt->stream_index = m_videoStream->index;
-            ret = ff->av_interleaved_write_frame(m_formatCtx, m_pkt.get());
+            {
+                std::lock_guard<std::mutex> lock(m_muxMutex);
+                ret = ff->av_interleaved_write_frame(m_formatCtx, m_pkt.get());
+            }
             if (ret < 0)
                 return geode::Err("Failed to write frame");
             ff->av_packet_unref(m_pkt.get());
@@ -688,7 +691,10 @@ namespace gucci {
             ff->av_packet_rescale_ts(
                 track.pkt.get(), track.codecCtx->time_base, track.stream->time_base);
             track.pkt->stream_index = track.stream->index;
-            ret = ff->av_interleaved_write_frame(m_formatCtx, track.pkt.get());
+            {
+                std::lock_guard<std::mutex> lock(m_muxMutex);
+                ret = ff->av_interleaved_write_frame(m_formatCtx, track.pkt.get());
+            }
             if (ret < 0)
                 return geode::Err("Failed to write audio frame");
             ff->av_packet_unref(track.pkt.get());
@@ -723,7 +729,10 @@ namespace gucci {
                 ff->av_packet_rescale_ts(
                     m_pkt.get(), m_videoCodecCtx->time_base, m_videoStream->time_base);
                 m_pkt->stream_index = m_videoStream->index;
-                ff->av_interleaved_write_frame(m_formatCtx, m_pkt.get());
+                {
+                    std::lock_guard<std::mutex> lock(m_muxMutex);
+                    ff->av_interleaved_write_frame(m_formatCtx, m_pkt.get());
+                }
                 ff->av_packet_unref(m_pkt.get());
             }
         }
@@ -736,13 +745,19 @@ namespace gucci {
                 ff->av_packet_rescale_ts(
                     track.pkt.get(), track.codecCtx->time_base, track.stream->time_base);
                 track.pkt->stream_index = track.stream->index;
-                ff->av_interleaved_write_frame(m_formatCtx, track.pkt.get());
+                {
+                    std::lock_guard<std::mutex> lock(m_muxMutex);
+                    ff->av_interleaved_write_frame(m_formatCtx, track.pkt.get());
+                }
                 ff->av_packet_unref(track.pkt.get());
             }
         }
 
         if (m_formatCtx) {
-            ff->av_write_trailer(m_formatCtx);
+            {
+                std::lock_guard<std::mutex> lock(m_muxMutex);
+                ff->av_write_trailer(m_formatCtx);
+            }
             if (m_formatCtx->pb)
                 ff->avio_close(m_formatCtx->pb);
         }

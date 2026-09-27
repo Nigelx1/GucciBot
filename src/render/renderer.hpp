@@ -263,6 +263,15 @@ namespace gucci {
 
         std::mutex m_lock;
 
+        // Serialises every write into the output file. Video packets are
+        // written from the encode thread and audio packets from the game
+        // thread (the FMOD pump), and libavformat's muxer is not thread-safe.
+        // Under the old synchronous pipeline the game sat frozen while a frame
+        // encoded, so the two never overlapped; since the async port they do.
+        // Silicate's async renderer locks the same way (m_muxMutex); the port
+        // brought the async half over without it.
+        std::mutex m_muxMutex;
+
         friend class AudioRecorder;
     };
 

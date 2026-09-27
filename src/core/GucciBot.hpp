@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-26-t (RENDERING FIX. Since the async-readback port on 2026-09-22 a render captured one frame and then froze the game until cancelled -- and that shipped in the 2.alpha.1 pre-release. A per-frame halt flag from the old synchronous pipeline was still set after every capture, but the port had removed the only place that cleared it. Now it works the way Silicate's async renderer does: no halt flag; before the game advances, wait for a free slot in the readback ring, so a slow encoder slows the render down instead of freezing it or dropping frames. Also fixes the port's other mistake, which dropped a frame whenever the encoder fell behind.)"
+    "2026-09-27-u (RENDER FILE SAFETY. Video and audio are written into the output file from two different threads, and nothing stopped them writing at the same moment. It never mattered before because the render froze the game while each frame encoded; with -t renders actually run in parallel, so it can happen now and could corrupt the file or crash. Every write now takes a lock, the way Silicate's renderer does it. Also includes -t: renders no longer freeze after one frame.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
