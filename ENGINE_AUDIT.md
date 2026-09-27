@@ -10,8 +10,10 @@ replace it with Silicate's. This is the answer.
 worth. Three of them are settings in the menu that are wired to nothing. One is
 a memory leak. None of them explains the Congregation slope bug.
 
-**Progress:** §1.1 is fixed (build `-j`). The rest are open. Findings are struck
-through as they land, so this doc stays the live punch list.
+**Progress (2026-09-27):** every §1 finding is fixed, ported or explained
+(builds `-j`, `-ad`, `-ak`, `-al`, `-am`). A second pass on 2026-09-27 found
+more of the same kind -- see §7. The only open items are the two decisions in
+§7.3.
 
 ---
 
@@ -31,9 +33,11 @@ Good news in the same audit:
 
 - **The frame-window analyzer is a complete port.** Zero missing functions. It
   does not need replacing — that idea is off the table.
-- **Only one empty stub is left** in the whole codebase (the trail buffer, which
-  is deliberate and documented in `shim.hpp`). The "ported as an empty function"
-  pattern that caused five bugs earlier has essentially been cleaned out.
+- ~~**Only one empty stub is left**~~ **Wrong** -- this pass looked for
+  *empty function bodies*. The 2026-09-27 pass (§7) found the same pattern in
+  other shapes: settings nothing reads, a hook body that only calls the
+  original, a value computed and thrown away, a midhook missing its `rip`
+  skip. The trail buffer stub itself was replaced with the real port in `-r`.
 - Two things I suspected were broken turned out to be **correct** — see §3.
 
 ---
@@ -284,12 +288,12 @@ purpose rather than by accident.
 ## 5. Recommended order
 
 1. ~~§1.1 settings double-load~~ — **done, build `-j`**
-2. §1.2 backstep cap — small, fixes a leak, makes a dead slider work
-3. §1.3 + §1.4 the two missing midhooks — each makes an advertised feature real
-4. §1.7 one-line SSB condition
-5. §1.5 `GJEffectManager` hook; verify `EnhancedGameObject` is covered
-6. §1.6 audio monitoring — its own project, lowest urgency
-7. Add a LICENSE
+2. ~~§1.2 backstep cap~~ — **done, build `-ak`** (and worse than written)
+3. ~~§1.3 + §1.4 the two missing midhooks~~ — **done, build `-al`**
+4. ~~§1.7 one-line SSB condition~~ — **done, build `-am`**
+5. ~~§1.5 `GJEffectManager` hook; verify `EnhancedGameObject`~~ — **done, build `-am`**
+6. ~~§1.6 audio monitoring~~ — **ported, build `-ad`**
+7. Add a LICENSE — **Nigel's decision, see §7.3**
 
 **None of this fixes the Congregation slope bug.** That is still open, and the
 audit did not find it. What it did find is that the bug is *not* a missing
@@ -319,3 +323,56 @@ finding in §1 above was confirmed by hand, by grep and where possible against
 Nigel's live `saved.json`. Nothing in §1 rests on the script alone.
 
 *Audit and write-up by Claude (Opus 5).*
+
+---
+
+## 7. Second pass — 2026-09-27
+
+Done while porting anticroom's "slc count" drop and the rest of Absense, and
+by listing Absense's settings pages against ours (Absense is a Silicate port,
+so its UI is a checklist of Silicate features). Everything here is committed
+and untested in-game.
+
+### 7.1 Half-ported Silicate mechanisms found and fixed
+
+| build | what was wrong |
+|---|---|
+| `-t` | Renders froze after one frame since the async port (`d433c7f`) -- shipped in the 2.alpha.1 pre-release |
+| `-u` | Video and audio wrote the output file from two threads with no lock (Silicate has `m_muxMutex`) |
+| `-v` | Render teardown ran on the encode thread: GL deletes without a context (leak), window resize off-thread |
+| `-z` | Two trajectory forks stepped in seconds instead of GD's 1/60 s units -- 60x too slow (Frame Extrapolation, Pathfinder's probe) |
+| `-ac` | RNG Lock card read by nothing; GD's variance table never refilled from the seed |
+| `-ad` | Real Time / Ticks per frame had no loader or GUI; Dynamic UPR, audio monitor, leave-after-render missing |
+| `-ae` | HUD "Bot State" showed on-ground; 14 of Silicate's debug labels missing |
+| `-ag` | `m_fullGamePrediction` / `m_acceptablePrediction` declared, read by nothing; best-tick search missing |
+| `-ah` | `setupHasCompleted` hook was an empty stub; Start Render outside a level failed silently |
+| `-ak` | Backwards stepping filed every tick as a practice checkpoint (§1.2) |
+| `-al` | Shake RNG overrides lacked `rip += 6`, so GD's `rand()` still ran (§1.4) |
+| `-an` | No Mirror "Only Recording" read by nothing |
+
+### 7.2 Checked and cleared
+
+- `m_timewarpTime`: Silicate writes, saves and restores it but never reads it.
+  Nothing to port.
+- `EnhancedGameObject`: covered by the fork's activation snapshot (§1.5).
+- Stub scan: no remaining `(void)`-cast parameters except documented ones
+  (`hitboxes.hpp` vestigial shim, `dsp.cpp` sfxVolume, `texture.cpp`
+  fadeThreshold); no hook body that only calls the original.
+- The site converter reads GBR6 by ignoring flags and trailing sections, so
+  macros with the new sub-tick section still convert (offsets dropped).
+- ~90 fields of GucciBot's removed frame-window analyzer (`fwAi*`, `fwProbe*`
+  ...) are declared and unused. Inert; left for a separate cleanup.
+
+### 7.3 Open -- need a decision, not code
+
+1. **LICENSE.** GucciBot contains Silicate code (GPL-3) and anticroom's fork of
+   it. Distributing it means distributing under GPL-3-compatible terms. The repo
+   has no LICENSE file. Choosing one is Nigel's call.
+2. **`resizeShaderLayer` offsets** (`renderer.cpp`, from the July baseline, not
+   Silicate). `m_heightOffset` is assigned `m_targetTextureSizeExtra.width`.
+   Changing it to `.height` would feed a negative number into a `uint32_t` in
+   the other aspect-ratio branch, so the typo is not the whole story. Only
+   affects renders whose aspect ratio differs from the game window's. Silicate
+   simply keeps both offsets at 0. Needs a render test at a mismatched aspect
+   before touching.
+
