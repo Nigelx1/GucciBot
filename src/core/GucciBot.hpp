@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-ad (SILICATE SETTINGS THAT WERE MISSING. Render: Leave Level When Finished, and Hear Audio While Rendering (plays the render's sound through your speakers; off by default). Bot: new Frame Pacing section -- Real Time, Ticks per frame, and Silicate's Dynamic Limit with a target FPS. These existed inside GucciBot or Silicate but had no way to change them. Defaults keep things exactly as they were. Includes -t..-ac.)"
+    "2026-09-27-ae (HUD: Silicate's debug labels. The HUD tab has a new Debug section: On Ground, Game Tick, Player Speed, Gravity, Dead/Alive, Checkpoints, Level Time, Time Warp, Random States, Action Index, Intentional Death, Tick Limit, Ticks Since Last Input, Touching Orbs -- both players in dual mode. Also fixes the Bot State toggle, which showed whether you were on the ground; it shows Playing/Recording now. Includes -t..-ad.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
