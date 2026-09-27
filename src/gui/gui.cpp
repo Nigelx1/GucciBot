@@ -5770,9 +5770,7 @@ namespace gucci {
                    "After counting, re-measures each input with the previous one moved across "
                    "its own window. If the timing carries over (entering a gap late, say), the "
                    "window becomes the average of those positions and shows as ~N. Independent "
-                   "inputs are left as counted.\n\nGucciBot: runs at whole-frame resolution. "
-                   "With Subframe Probe on it is skipped, because sub-frame placement is not "
-                   "supported yet.");
+                   "inputs are left as counted.");
         }
 
         // --- sub-tick (CBF) -----------------------------------------------

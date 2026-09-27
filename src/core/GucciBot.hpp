@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-aa (SUB-TICK CLICKS, part 3: sub-tick frame advance. Bot > CBF Recording > Sub-tick Frame Advance: while frame advancing, Step moves through the tick in small splits instead of whole ticks, showing where the hitbox would be at that split plus the hold/release paths from there. The last split runs the tick. With CBF Recording on, pressing mid-tick records the click at that split. Includes -t..-z.)"
+    "2026-09-27-ab (SUB-TICK CLICKS, part 4: Calculate. Dependent Pair Search now also runs with Subframe Probe on, and on CBF results -- it used to skip both, because GucciBot could not place an input part-way through a tick. Since parts 1-3 it can, so it now matches anticroom's analyzer exactly. Includes -t..-aa.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

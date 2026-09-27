@@ -3532,24 +3532,6 @@ bool FrameWindowAnalyzer::beginDependentPass(std::string message) {
             MAX_RESOLVABLE_SLOTS);
     }
 
-    // GucciBot: at sub-frame resolution this pass places inputs at fractions
-    // of a frame through scbf::setOffset, which GucciBot cannot honour yet --
-    // gb::Action has no offset and the replay path does not arm CBF from one
-    // (see the scbf block in shim.hpp). Running it anyway would snap every
-    // placement to a whole frame and report windows for positions that were
-    // never tested. At frame resolution anticroom rounds every point to a whole
-    // frame himself, so the pass is exact and runs normally.
-    if (m_depRes > 1) {
-        FWWARN("[fw][dependent] skipped: Subframe Probe is on, and sub-frame "
-               "dependent search needs sub-tick input placement GucciBot does "
-               "not have yet. Turn Subframe Probe off to run it at frame "
-               "resolution.");
-        this->finish(message + " Dependent search skipped: it needs Subframe "
-                               "Probe off in GucciBot for now.",
-                     true);
-        return true;
-    }
-
     m_depPairs.clear();
     for (size_t a = 0; a < m_samples.size(); a++) {
         size_t const b = this->nextSampleFor(a);
@@ -3563,9 +3545,6 @@ bool FrameWindowAnalyzer::beginDependentPass(std::string message) {
         if (ra == NO_INDEX || rb == NO_INDEX) continue;
 
         auto const& ma = m_results[ra];
-        // A CBF result is measured at sub-frame precision, so its dependent
-        // points are not rounded -- same sub-tick limitation as above.
-        if (ma.cbf) continue;
         auto const& mb = m_results[rb];
         if (ma.desynced || mb.desynced) continue;
         if (ma.window <= 0 || mb.window <= 0) continue;
