@@ -309,6 +309,8 @@ namespace gucci {
         m_collectAudio = mod->getSavedValue<bool>("render_include_audio", true);
         m_settings.m_splitAudioTracks =
             mod->getSavedValue<bool>("render_split_audio_tracks", false);
+        m_settings.m_autoExitLevel = mod->getSavedValue<bool>("render_auto_exit", false);
+        m_settings.m_previewAudio = mod->getSavedValue<bool>("render_preview_audio", false);
         m_settings.m_intro.load();
 
         std::string ext = mod->getSavedValue<std::string>("render_file_extension", ".mp4");
@@ -574,12 +576,19 @@ namespace gucci {
         geode::log::info("[GucciBot] SLRenderer capture ready — buffer {}", m_bufferSize);
 
         if (m_collectAudio) {
+            // The volume the player normally hears music at, read before the
+            // render takes the engine over -- the preview plays at it.
+            float const listenVolume = FMODAudioEngine::get()->getBackgroundMusicVolume();
             FrameWindowSound::channelGroup();
             AudioEngineRenderState::enter(m_settings.m_musicVolume, m_settings.m_sfxVolume);
             FrameWindowSound::setRenderMode(true);
 
             AudioRecorder::get()->init();
             AudioRecorder::get()->attach();
+            if (m_settings.m_previewAudio) {
+                AudioRecorder::get()->startMonitor();
+                AudioRecorder::get()->m_monVolume.store(listenVolume, std::memory_order_relaxed);
+            }
             if (m_settings.m_splitAudioTracks) {
                 auto* engine = FMODAudioEngine::get();
                 AudioRecorder::getMusic()->init(engine->m_backgroundMusicChannel);
@@ -726,6 +735,7 @@ namespace gucci {
         // safe (finishStop).
         RenderIntro::get()->destroy();
 
+        AudioRecorder::get()->stopMonitor();
         AudioRecorder::get()->detach();
         AudioRecorder::get()->uninit();
         if (m_settings.m_splitAudioTracks) {
@@ -789,6 +799,8 @@ namespace gucci {
         m_texture.destroy();
         this->restoreView();
         this->publishRenderResult(true);
+        if (m_settings.m_autoExitLevel)
+            m_shouldQuit = true;
         geode::log::info("[GucciBot] SLRenderer stopped");
         return geode::Ok();
     }

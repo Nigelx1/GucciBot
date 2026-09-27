@@ -3,11 +3,58 @@
 #include <Geode/Geode.hpp>
 #include <Geode/binding/FMODAudioEngine.hpp>
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <vector>
 
 namespace gucci {
+
+    // Silicate's single-producer/single-consumer ring for the audio preview.
+    // The FMOD mixer (game thread, inside the render's pump) pushes; the
+    // preview system's stream thread pops. A full ring drops the overflow so
+    // the preview never falls further behind than its size.
+    class AudioMonitorRing {
+    public:
+        void init(size_t capacity) {
+            m_data.assign(capacity, 0.0f);
+            m_capacity = capacity;
+            clear();
+        }
+        void clear() {
+            m_read.store(0, std::memory_order_relaxed);
+            m_write.store(0, std::memory_order_relaxed);
+        }
+        void push(const float* src, size_t n) {
+            if (m_capacity == 0)
+                return;
+            size_t const w = m_write.load(std::memory_order_relaxed);
+            size_t const r = m_read.load(std::memory_order_acquire);
+            size_t const space = m_capacity - (w - r);
+            if (n > space)
+                n = space;
+            for (size_t i = 0; i < n; ++i)
+                m_data[(w + i) % m_capacity] = src[i];
+            m_write.store(w + n, std::memory_order_release);
+        }
+        size_t pop(float* dst, size_t n) {
+            if (m_capacity == 0)
+                return 0;
+            size_t const r = m_read.load(std::memory_order_relaxed);
+            size_t const w = m_write.load(std::memory_order_acquire);
+            size_t const take = std::min(n, w - r);
+            for (size_t i = 0; i < take; ++i)
+                dst[i] = m_data[(r + i) % m_capacity];
+            m_read.store(r + take, std::memory_order_release);
+            return take;
+        }
+
+    private:
+        std::vector<float> m_data;
+        size_t m_capacity = 0;
+        std::atomic<size_t> m_write{0};
+        std::atomic<size_t> m_read{0};
+    };
 
     class AudioRecorder {
     public:
@@ -65,6 +112,18 @@ namespace gucci {
         size_t m_lastCollectedLength = 0;
 
         std::vector<float> m_buffer;
+
+        // Audio preview (Silicate's monitor). Only the combined recorder,
+        // AudioRecorder::get(), runs one.
+        void startMonitor();
+        void stopMonitor();
+        static FMOD_RESULT F_CALLBACK monitorReadCallback(FMOD_SOUND*, void* data,
+                                                         unsigned int datalen);
+        FMOD::System* m_monSystem = nullptr;
+        FMOD::Sound* m_monSound = nullptr;
+        FMOD::Channel* m_monChannel = nullptr;
+        AudioMonitorRing m_monRing;
+        std::atomic<float> m_monVolume{1.0f};
 
     private:
         FMOD::DSP* m_dsp = nullptr;

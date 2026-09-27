@@ -16,6 +16,8 @@
 #include <Geode/modify/CCDirector.hpp>
 #include <safetyhook.hpp>
 #include <fstream>
+#include <chrono>
+#include <cmath>
 
 using namespace geode::prelude;
 
@@ -122,12 +124,16 @@ void GucciUpdater::calculateSteps(float dt, float targetDt) {
     }
 
     int steps = (int)std::floor(dt / wantedDt);
-    int stepLimit = (int)m_maxUPR;
+    // Silicate: the fixed cap, unless Dynamic UPR is measuring one
+    // (runUpdates sets m_stepLimit from the last frame's tick cost).
+    if (!m_realTime && !m_dynamicUpr)
+        m_stepLimit = m_maxUPR;
+    int stepLimit = (int)m_stepLimit;
 
     if (m_respawnTimer > 0)
         m_tpsOverflow = 0.0;
 
-    if (m_useVisualUpdates) {
+    if (m_useVisualUpdates && !m_dynamicUpr) {
         float fps = GameManager::get()->m_customFPSTarget;
         if (fps <= 10.0f)
             fps = 240.0f;
@@ -371,6 +377,8 @@ void GucciUpdater::runUpdates(std::function<void(float)> update, float realDt, b
     // SCBF: re-anchor the wall-clock -> tick map around this frame's ticks,
     // exactly where Silicate does it. Outside a splitting recording the map is
     // dropped, so it re-syncs from scratch when one starts.
+    auto const startTime = std::chrono::high_resolution_clock::now();
+
     auto& live = scbf::LiveRecorder::get();
     bool const liveClock = isPlayLayer && live.splitting();
     if (liveClock)
@@ -394,6 +402,17 @@ void GucciUpdater::runUpdates(std::function<void(float)> update, float realDt, b
 
     if (liveClock)
         live.endFrame(this->getFrame());
+
+    // Dynamic UPR, as Silicate does it: how long did each tick take this
+    // frame, and so how many fit in one frame at the target rate.
+    if (m_dynamicUpr && this->totalStepCount > 0) {
+        auto const endTime = std::chrono::high_resolution_clock::now();
+        double const secondsPerStep =
+            std::chrono::duration<double>(endTime - startTime).count() / this->totalStepCount;
+        double const dynamicDt = m_fpsTarget * secondsPerStep;
+        if (std::isfinite(dynamicDt) && dynamicDt > 0.0)
+            m_stepLimit = (uint32_t)std::max(1, (int)std::floor(1.0 / dynamicDt));
+    }
 }
 
 void GucciUpdater::userStepForward() {
@@ -886,6 +905,14 @@ class $modify(GB7CCDirector, CCDirector) {
         // First, before the enabled check: a render that finished (or failed)
         // on the encode thread is torn down here, on the game thread.
         SLRenderer::get()->finishStop();
+        // Silicate's "leave the level when the render finishes": stop() raises
+        // the flag, and this -- the game thread, before anything draws --
+        // acts on it.
+        if (auto* sl = SLRenderer::get(); sl->m_shouldQuit) {
+            sl->m_shouldQuit = false;
+            if (auto* quitPl = PlayLayer::get())
+                quitPl->onQuit();
+        }
         // The sub-tick preview draws, hides itself, and steps the tick when a
         // press lands mid-tick. Before the enabled check so it can hide.
         scbf::SubtickPreview::get().update(PlayLayer::get());

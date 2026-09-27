@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-ac (RNG FIXES. 1) The RNG Lock card and its seed box did nothing -- nothing read them. They now fix the recording seed, as Silicate's Override Seed does. 2) GD's table of random values for objects moved by triggers with variance was never tied to the macro's seed, so those objects could move differently on playback than when recorded. It is now refilled from the seed on every attempt, recording and playback, as in Silicate. Includes -t..-ab.)"
+    "2026-09-27-ad (SILICATE SETTINGS THAT WERE MISSING. Render: Leave Level When Finished, and Hear Audio While Rendering (plays the render's sound through your speakers; off by default). Bot: new Frame Pacing section -- Real Time, Ticks per frame, and Silicate's Dynamic Limit with a target FPS. These existed inside GucciBot or Silicate but had no way to change them. Defaults keep things exactly as they were. Includes -t..-ac.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -370,6 +370,14 @@ namespace gucci {
         bool m_shouldRender = true;
         bool m_realTime = false;
         uint32_t m_maxUPR = 10;
+        // Silicate's Dynamic UPR: instead of the fixed m_maxUPR cap, time how
+        // long a tick actually takes and allow as many per drawn frame as fit
+        // in 1/m_fpsTarget seconds. Only matters with Real Time off. Silicate
+        // defaults it on (with Real Time on); off here keeps GucciBot's
+        // pacing as it was.
+        bool m_dynamicUpr = false;
+        double m_fpsTarget = 60.0;
+        uint32_t m_stepLimit = 10;
         bool m_useVisualUpdates = false;
 
         uint32_t m_frame = 0;

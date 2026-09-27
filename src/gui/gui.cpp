@@ -4026,6 +4026,46 @@ namespace gucci {
             ImGui::PopStyleColor();
         }
         ImGui::Dummy(ImVec2(0, 8));
+        Widgets::SectionHeader("Frame Pacing", theme);
+        {
+            // Silicate's update-limit settings. GucciBot had the fields and
+            // used them, but nothing let you change them.
+            auto& up = engine->updater;
+            if (Widgets::ToggleSwitch("Real Time", &up.m_realTime, theme, anim))
+                Mod::get()->setSavedValue("updater_real_time", up.m_realTime);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Run every tick that is due, however many that is, so the game "
+                                  "never falls behind real time. Off: at most the limit below "
+                                  "per drawn frame, and the game slows down instead of skipping "
+                                  "ahead after a stall.");
+            if (!up.m_realTime) {
+                if (Widgets::ToggleSwitch("Dynamic Limit", &up.m_dynamicUpr, theme, anim))
+                    Mod::get()->setSavedValue("updater_dynamic_upr", up.m_dynamicUpr);
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Measure how long a tick takes and allow as many per frame "
+                                      "as fit at the target frame rate, instead of a fixed number.");
+                if (up.m_dynamicUpr) {
+                    float target = (float)up.m_fpsTarget;
+                    ImGui::Text("Target FPS");
+                    ImGui::SameLine();
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::InputFloat("##fpsTarget", &target, 0, 0, "%.0f")) {
+                        up.m_fpsTarget = std::max(1.0, (double)target);
+                        Mod::get()->setSavedValue("updater_fps_target", up.m_fpsTarget);
+                    }
+                } else {
+                    int upr = (int)up.m_maxUPR;
+                    ImGui::Text("Ticks per frame");
+                    ImGui::SameLine();
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::InputInt("##maxUpr", &upr, 0, 0)) {
+                        up.m_maxUPR = (uint32_t)std::clamp(upr, 1, 10000);
+                        Mod::get()->setSavedValue("updater_max_upr", (int)up.m_maxUPR);
+                    }
+                }
+            }
+        }
+        ImGui::Dummy(ImVec2(0, 8));
         Widgets::SectionHeader("CBF Recording", theme);
         {
             // anticroom's SCBF: records each press at the point in the tick it
@@ -6743,6 +6783,19 @@ namespace gucci {
             mod->setSavedValue("render_hide_endscreen", renderHideEndscreen);
         if (Widgets::ToggleSwitch("Hide Level Complete", &renderHideLevelComplete, theme, anim))
             mod->setSavedValue("render_hide_levelcomplete", renderHideLevelComplete);
+        {
+            // Silicate's "leave the level when finished" and audio preview.
+            bool autoExit = mod->getSavedValue<bool>("render_auto_exit", false);
+            if (Widgets::ToggleSwitch("Leave Level When Finished", &autoExit, theme, anim))
+                mod->setSavedValue("render_auto_exit", autoExit);
+            bool preview = mod->getSavedValue<bool>("render_preview_audio", false);
+            if (Widgets::ToggleSwitch("Hear Audio While Rendering", &preview, theme, anim))
+                mod->setSavedValue("render_preview_audio", preview);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Plays what is being recorded through your speakers while it "
+                                  "renders, at your normal music volume. It does not change "
+                                  "the video's audio.");
+        }
         ImGui::Dummy(ImVec2(0, 4));
         {
             std::error_code ffec;

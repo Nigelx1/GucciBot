@@ -60,6 +60,14 @@ namespace gucci {
 
         bool m_splitAudioTracks = false;
 
+        // Silicate's autoExitLevel: leave the level when the render finishes.
+        bool m_autoExitLevel = false;
+        // Silicate's audio preview: hear the render while it records, through
+        // a second FMOD system fed from the capture. Silicate defaults it on;
+        // off here for now so the first render test after the -t/-u/-v
+        // pipeline fixes has one less new thing in it.
+        bool m_previewAudio = false;
+
         // Frame Window intro card (anticroom's, 2026-09-26). See intro.hpp.
         RenderIntroSettings m_intro;
     };
@@ -248,6 +256,8 @@ namespace gucci {
 
         bool m_shouldStart = false;
         bool m_collectAudio = true;
+        // Set by stop() when m_autoExitLevel is on; drawScene leaves the level.
+        bool m_shouldQuit = false;
 
 
         bool m_autoVideoName = true;

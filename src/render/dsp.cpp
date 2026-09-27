@@ -33,6 +33,8 @@ namespace gucci {
         recorder->m_lastCollectedLength = length;
         recorder->m_mixedChannels.store(inChannels, std::memory_order_relaxed);
         recorder->haltWithData(inBuffer, length * inChannels);
+        if (recorder->m_monSystem)
+            recorder->m_monRing.push(inBuffer, length * inChannels);
 
         std::memset(outBuffer, 0, length * inChannels * sizeof(float));
 
@@ -82,6 +84,83 @@ namespace gucci {
             m_buffer[i] = std::clamp(m_buffer[i], -1.0f, 1.0f) *
                           SLRenderer::get()->m_fadeThreshold;
         }
+    }
+
+    FMOD_RESULT F_CALLBACK AudioRecorder::monitorReadCallback(FMOD_SOUND*,
+                                                              void* data,
+                                                              unsigned int datalen) {
+        auto* recorder = AudioRecorder::get();
+        auto* out = static_cast<float*>(data);
+        unsigned int const n = datalen / sizeof(float);
+        size_t const got = recorder->m_monRing.pop(out, n);
+
+        // Same fade the video and the recorded audio use.
+        float const gain = recorder->m_monVolume.load(std::memory_order_relaxed) *
+                           SLRenderer::get()->m_fadeThreshold;
+        for (size_t i = 0; i < got; ++i)
+            out[i] *= gain;
+        if (got < n)
+            std::memset(out + got, 0, (n - got) * sizeof(float));
+        return FMOD_OK;
+    }
+
+    void AudioRecorder::startMonitor() {
+        if (m_monSystem)
+            return;
+        if (m_sampleRate <= 0 || m_channels <= 0)
+            return;
+
+        if (FMOD::System_Create(&m_monSystem) != FMOD_OK || !m_monSystem) {
+            m_monSystem = nullptr;
+            geode::log::warn("[GucciBot] audio preview: could not create an FMOD system");
+            return;
+        }
+        m_monSystem->setSoftwareFormat(m_sampleRate, FMOD_SPEAKERMODE_DEFAULT, 0);
+        if (m_monSystem->init(32, FMOD_INIT_NORMAL, nullptr) != FMOD_OK) {
+            m_monSystem->release();
+            m_monSystem = nullptr;
+            geode::log::warn("[GucciBot] audio preview: could not start FMOD");
+            return;
+        }
+
+        // Half a second of audio, at most, between the render and the speakers.
+        m_monRing.init(static_cast<size_t>(m_sampleRate) * m_channels / 2);
+
+        FMOD_CREATESOUNDEXINFO ex = {};
+        ex.cbsize = sizeof(FMOD_CREATESOUNDEXINFO);
+        ex.numchannels = m_channels;
+        ex.defaultfrequency = m_sampleRate;
+        ex.format = FMOD_SOUND_FORMAT_PCMFLOAT;
+        ex.decodebuffersize = 1024;
+        ex.length = static_cast<unsigned int>(m_sampleRate) * m_channels * sizeof(float);
+        ex.pcmreadcallback = &AudioRecorder::monitorReadCallback;
+
+        if (m_monSystem->createSound(
+                nullptr, FMOD_OPENUSER | FMOD_CREATESTREAM | FMOD_LOOP_NORMAL, &ex, &m_monSound) !=
+            FMOD_OK) {
+            geode::log::warn("[GucciBot] audio preview: could not create the stream");
+            this->stopMonitor();
+            return;
+        }
+        m_monSystem->playSound(m_monSound, nullptr, false, &m_monChannel);
+        geode::log::info("[GucciBot] audio preview running at {}Hz x{}", m_sampleRate, m_channels);
+    }
+
+    void AudioRecorder::stopMonitor() {
+        if (m_monChannel) {
+            m_monChannel->stop();
+            m_monChannel = nullptr;
+        }
+        if (m_monSound) {
+            m_monSound->release();
+            m_monSound = nullptr;
+        }
+        if (m_monSystem) {
+            m_monSystem->close();
+            m_monSystem->release();
+            m_monSystem = nullptr;
+        }
+        m_monRing.clear();
     }
 
     void AudioRecorder::init(FMOD::ChannelGroup* group) {
@@ -192,6 +271,8 @@ namespace gucci {
                 AudioRecorder::getFrameWindow()->m_shouldUpdateFmod = true;
             }
             engine->update(dt);
+            if (auto* mon = AudioRecorder::get()->m_monSystem)
+                mon->update();
             AudioRecorder::get()->m_shouldUpdateFmod = false;
             AudioRecorder::getMusic()->m_shouldUpdateFmod = false;
             AudioRecorder::getSfx()->m_shouldUpdateFmod = false;

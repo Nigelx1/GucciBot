@@ -2219,6 +2219,13 @@ namespace gucci {
         updater.m_highTpsPrecision = pick(false, "updater_highTpsPrecision", nullptr);
         updater.m_speedhackAudio = pick(true, "feat_speedhack_audio", "updater_speedhackAudio");
         updater.m_inputFps = std::max(0.0, pick(0.0, "feat_input_fps", nullptr));
+        // Frame pacing (Silicate's real_time / max_upr / dynamic_upr /
+        // target_fps). These had no loader and no GUI -- fixed at their
+        // defaults.
+        updater.m_realTime = pick(false, "updater_real_time", nullptr);
+        updater.m_maxUPR = (uint32_t)std::max(1, pick(10, "updater_max_upr", nullptr));
+        updater.m_dynamicUpr = pick(false, "updater_dynamic_upr", nullptr);
+        updater.m_fpsTarget = std::max(1.0, pick(60.0, "updater_fps_target", nullptr));
 
         // Playback features.
         updater.m_ssbFix = pick(false, "feat_scroll_speed_fix", "updater_ssbFix");
