@@ -10,6 +10,7 @@
 
 #include <Geode/Geode.hpp>
 #include <Geode/modify/GJBaseGameLayer.hpp>
+#include <Geode/modify/GJEffectManager.hpp>
 #include <Geode/binding/GJGroundLayer.hpp>
 
 #include "analysis/ac/cbf.hpp"
@@ -834,6 +835,21 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
             GucciEngine::get()->layoutMode)
             return;
         GJBaseGameLayer::triggerGradientCommand(obj);
+    }
+};
+
+// ENGINE_AUDIT §1.5: Silicate's GJEffectManager hook. Layout Mode hid
+// decoration and colours through the GJBaseGameLayer hooks above, but pulse
+// and opacity triggers kept running, so objects still flashed and faded.
+class $modify(GB7GJEffectManager, GJEffectManager) {
+    void updateEffects(float dt) {
+        auto* gb = GucciEngine::get();
+        if (gb->enabled && gb->layoutMode && !LevelEditorLayer::get()) {
+            m_pulseEffectMap.clear();
+            m_pulseEffectVector.clear();
+            m_opacityEffectMap.clear();
+        }
+        GJEffectManager::updateEffects(dt);
     }
 };
 

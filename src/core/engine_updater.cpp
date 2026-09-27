@@ -361,7 +361,11 @@ void GucciUpdater::runUpdates(std::function<void(float)> update, float realDt, b
 
     bool calcSsb = isPlayLayer && !((PlayLayer*)pl)->m_isPaused &&
                    !((PlayLayer*)pl)->m_hasCompletedLevel && pl->m_started && !pl->m_isPlatformer &&
-                   m_ssbFix && SLRenderer::get()->isRecording();
+                   m_ssbFix && SLRenderer::get()->isRecording() &&
+                   // Silicate's third condition (ENGINE_AUDIT §1.7): the fix is
+                   // an audio-timing compensation, so a render with no audio
+                   // doesn't take it.
+                   SLRenderer::get()->m_collectAudio;
 
     if (gb->fwAnalyzing && (getFrame() % 25) == 0) {
         auto qi = gb->replay.getCurrentQueuedInput();

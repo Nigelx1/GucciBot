@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-al (TWO MISSING SILICATE HOOKS + SHAKE FIX. High TPS Precision now covers every place GD rounds vertical speed, not just half. Random teleport triggers now follow the macro's seed. And screen-shake randomness, which was meant to be seeded but was not (the hook let GD's own random call run anyway), now is. Includes -t..-ak.)"
+    "2026-09-27-am (LAYOUT MODE + SCROLL SPEED FIX. Layout Mode now also stops pulse and fade effects, so objects no longer flash in it. The render Scroll Speed Bug Fix no longer applies to renders without audio, where it has nothing to fix -- same as Silicate. Includes -t..-al.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

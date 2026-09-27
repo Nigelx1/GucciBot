@@ -23,9 +23,9 @@ through as they land, so this doc stays the live punch list.
 | 2 | ~~"Back Step Count" does nothing, and backwards stepping never frees memory~~ **FIXED `-ak`** -- and it was worse: every tick was also filed as a practice checkpoint | GD slowly eats RAM while backwards stepping is on, forever; a death respawned one tick back instead of restarting |
 | 3 | ~~"High TPS Precision" only does half its job~~ **FIXED `-al`** | Precision is better than off, but not as good as it should be |
 | 4 | ~~Teleport triggers aren't actually seeded~~ **FIXED `-al`** (and shake wasn't either -- see §1.4) | A level with teleport triggers can replay differently |
-| 5 | Four game hooks we never ported | Layout Mode leaves pulse/flash effects on |
+| 5 | ~~Four game hooks we never ported~~ **DONE `-am`** -- GJEffectManager ported; the other three don't apply (§1.5) | Layout Mode leaves pulse/flash effects on |
 | 6 | ~~The renderer has no audio monitoring~~ **PORTED `-ad`** (Hear Audio While Rendering, off by default) | No level meter / audio diagnostics during a render |
-| 7 | One small gate differs from Silicate's | Scroll Speed Fix applies in one case it shouldn't |
+| 7 | ~~One small gate differs from Silicate's~~ **FIXED `-am`** | Scroll Speed Fix applies in one case it shouldn't |
 
 Good news in the same audit:
 
@@ -186,7 +186,18 @@ restored on checkpoint load. **Nothing ever uses it**, because the midhook at
 `base + 0x20FEDC` that would read it was never installed. Same shape as the
 bugs we already fixed: the storage half landed, the acting half didn't.
 
-### 1.5 Four hook classes never ported
+### 1.5 ~~Four hook classes never ported~~ **DONE, build `-am`**
+
+- `GJEffectManager`: ported (Layout Mode clears pulse/opacity effects).
+- `EnhancedGameObject`: covered. Ours never routes `activatedByPlayer`, but
+  every fork snapshots the touched objects' `m_activatedByPlayer1/2` and puts
+  them back after the trace (`trajectory.cpp`, the activation snapshot near the
+  top), so a fork cannot consume a real object.
+- `EditorPauseLayer::onSaveAndPlay`: tears down Silicate's trajectory and
+  hitbox nodes before the editor hands over to a PlayLayer. Ours attach only to
+  a PlayLayer and detach on quit -- nothing to tear down.
+- `VideoOptionsLayer::onApply`: resizes Silicate's own ImGui host. GucciBot's
+  ImGui is hosted differently; not applicable.
 
 Silicate hooks 16 GD classes; we hook 12 of the same ones plus four of our own
 (`CCKeyboardDispatcher`, `EffectGameObject`, `HardStreak`, `RingObject`).
@@ -205,7 +216,7 @@ Silicate hooks 16 GD classes; we hook 12 of the same ones plus four of our own
 `render/dsp.cpp` has the lot. This is a whole feature, not a bug, and it's the
 largest single thing we're missing from Silicate.
 
-### 1.7 SSB gate misses one condition
+### 1.7 ~~SSB gate misses one condition~~ **FIXED, build `-am`**
 
 Ours (`core/engine_updater.cpp:353`):
 
