@@ -12,8 +12,7 @@ a memory leak. None of them explains the Congregation slope bug.
 
 **Progress (2026-09-27):** every §1 finding is fixed, ported or explained
 (builds `-j`, `-ad`, `-ak`, `-al`, `-am`). A second pass on 2026-09-27 found
-more of the same kind -- see §7. The only open items are the two decisions in
-§7.3.
+more of the same kind -- see §7. Nothing is open: both §7.3 decisions are closed.
 
 ---
 
@@ -365,7 +364,7 @@ and untested in-game.
 
 ### 7.3 Open -- need a decision, not code
 
-1. **LICENSE.** GucciBot contains Silicate code (GPL-3) and anticroom's fork of
+1. ~~**LICENSE.**~~ **DONE: GPL-3.0, on both branches (Nigel's decision, 2026-09-27).** GucciBot contains Silicate code (GPL-3) and anticroom's fork of
    it. Distributing it means distributing under GPL-3-compatible terms. The repo
    has no LICENSE file. Choosing one is Nigel's call.
 2. ~~**`resizeShaderLayer` offsets**~~ **RESOLVED `-aq`: replaced with Silicate's version (exact-size texture, no offsets).** (`renderer.cpp`, from the July baseline, not
