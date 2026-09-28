@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-bb (Pathfinder, Absense port step 1: a candidate that dies exactly like one whose decision point was already searched to the end is skipped instead of searched again -- the hold 1 / hold 3 / hold 6 repeats of the orb spot.)"
+    "2026-09-27-bc (Pathfinder, Absense port step 2: on a decision point's first visit every generated candidate is played forward on the fork and they are tried longest-surviving first, instead of nearest-the-death first. Ordering only, real runs still decide.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

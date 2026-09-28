@@ -7,6 +7,7 @@
 #include <Geode/Geode.hpp>
 #include <Geode/binding/PauseLayer.hpp>
 #include <algorithm>
+#include <chrono>
 #include <cstring>
 #include <filesystem>
 
@@ -78,6 +79,8 @@ namespace gucci {
         deadEnds.clear();
         skippedDeadEnds = 0;
         skippedSameOutcome = 0;
+        rankedNodes = 0;
+        rankMsTotal = 0.0;
         this->loadSolutionMemory();
         hazardCount.clear();
         reopenedSpots.clear();
@@ -1069,6 +1072,7 @@ namespace gucci {
                     d,
                     humanAdded);
         }
+        n.humanCount = humanAdded;
 
         // points is already ordered nearest-the-death first, which is the
         // common case and the order v1 searched in.
@@ -1090,6 +1094,105 @@ namespace gucci {
                                      : fmt::format("ckpt@f={}", n.ckpt.frame));
         stack.push_back(std::move(n));
         depth = stack.size();
+    }
+
+    // Absense port, step 2. Absense decides by trying many ideas on a copy of
+    // the player and keeping the one that survives longest; its copy is its
+    // own physics and world simulation. Ours is the trajectory fork -- the
+    // real PlayerObject code against the real level -- and it only ranks:
+    // every candidate is still judged by a real run, in this order. A fork
+    // that is wrong (gamemode portals, triggers it does not run) costs runs,
+    // never correctness.
+    //
+    // Before this, candidates were tried nearest-the-death first and the
+    // first one that got further was committed, however little further. In
+    // Nigel's orb run that meant a jump that led into a fall was committed and
+    // searched to the bottom while jumps that never fell went untried.
+    void Pathfinder::rankByLookahead(Node& n) {
+        static constexpr int kLookPast = 120;       // how far past the death to look
+        static constexpr int kMaxLookahead = 480;   // the fork's own trace cap
+        static constexpr double kBudgetMs = 2000.0; // over this, keep the old order
+
+        auto* gb = GucciEngine::get();
+        auto* pl = PlayLayer::get();
+        size_t const first = std::min(n.humanCount, n.cands.size());
+        if (!pl || !pl->m_player1 || n.cands.size() - first < 2)
+            return;
+
+        // The real game at this node's restore point, with only the committed
+        // inputs loaded -- the state every candidate's real run starts from.
+        haveCandidate = false;
+        startRun(&n);
+        uint32_t const f0 = gb->updater.getFrame();
+        if (n.deathFrame <= f0)
+            return;
+        int const horizon =
+            std::clamp((int)(n.deathFrame - f0) + kLookPast, 1, kMaxLookahead);
+
+        // Committed inputs still to come after the restore point; before it,
+        // the fork inherits the held button from the real player.
+        std::vector<std::pair<int, bool>> base;
+        for (auto const& a : committed)
+            if (!a.m_player2 && a.m_frame >= f0)
+                base.push_back({(int)(a.m_frame - f0), a.m_holding});
+
+        auto& traj = TrajectoryPredictionService::get();
+        auto const t0 = std::chrono::steady_clock::now();
+        std::vector<int> survived(n.cands.size(), -1);
+        for (size_t i = first; i < n.cands.size(); ++i) {
+            auto const& c = n.cands[i];
+            if (c.pressFrame < f0)
+                continue;
+            auto ev = base;
+            int const p = (int)(c.pressFrame - f0);
+            ev.push_back({p, true});
+            ev.push_back({p + std::max(1, c.holdFrames), false});
+            std::stable_sort(ev.begin(), ev.end(),
+                             [](auto const& a, auto const& b) { return a.first < b.first; });
+            survived[i] = traj.survivesScript(pl, pl->m_player1, horizon, ev);
+
+            double const ms = std::chrono::duration<double, std::milli>(
+                                  std::chrono::steady_clock::now() - t0)
+                                  .count();
+            if (ms > kBudgetMs) {
+                log::warn("[Pathfinder] look-ahead @f={} gave up after {:.0f} ms ({} of {} "
+                          "candidates) -- keeping the nearest-first order",
+                          n.deathFrame,
+                          ms,
+                          i + 1 - first,
+                          n.cands.size() - first);
+                rankMsTotal += ms;
+                return;
+            }
+        }
+        double const ms =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+
+        // Longest-surviving first; ties keep the old nearest-first order.
+        std::vector<size_t> order(n.cands.size() - first);
+        for (size_t i = 0; i < order.size(); ++i)
+            order[i] = first + i;
+        std::stable_sort(order.begin(), order.end(),
+                         [&](size_t a, size_t b) { return survived[a] > survived[b]; });
+        std::vector<Candidate> sorted(n.cands.begin(), n.cands.begin() + (std::ptrdiff_t)first);
+        for (size_t i : order)
+            sorted.push_back(n.cands[i]);
+
+        auto const& best = sorted[first];
+        int const bestSurvived = survived[order.front()];
+        n.cands = std::move(sorted);
+        rankedNodes++;
+        rankMsTotal += ms;
+        log::info("[Pathfinder] look-ahead @f={} : {} candidates over {} frames in {:.0f} ms -- "
+                  "best press@{} hold {} lasts {} (the death is {} in)",
+                  n.deathFrame,
+                  order.size(),
+                  horizon,
+                  ms,
+                  best.pressFrame,
+                  best.holdFrames,
+                  bestSurvived,
+                  n.deathFrame - f0);
     }
 
     void Pathfinder::startNextCandidateOrBacktrack() {
@@ -1160,6 +1263,14 @@ namespace gucci {
                     startRun(&top);
                     return;
                 }
+            }
+
+            // First visit: put the generated candidates in look-ahead order.
+            // After the reopen and remembered checks on purpose -- a node given
+            // up unsearched, or answered from memory, never pays for it.
+            if (!top.ranked && top.next == 0 && top.next < top.cands.size()) {
+                top.ranked = true;
+                this->rankByLookahead(top);
             }
 
             if (top.next < top.cands.size()) {
@@ -1252,6 +1363,10 @@ namespace gucci {
             log::info("[Pathfinder] skipped {} decision point(s) already searched through another "
                       "input that died the same way",
                       skippedSameOutcome);
+        if (rankedNodes > 0)
+            log::info("[Pathfinder] look-ahead ranked {} decision point(s), {:.0f} ms each on average",
+                      rankedNodes,
+                      rankMsTotal / rankedNodes);
         if (deferredFragile > 0)
             log::info("[Pathfinder] held back {} frame-perfect candidate(s) in favour of tolerant ones",
                       deferredFragile);

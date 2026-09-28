@@ -4,6 +4,7 @@
 
 #include <array>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 using namespace geode::prelude;
@@ -218,6 +219,12 @@ namespace gucci {
         // for the best-tick search (score = ticks survived). Returns `frames`
         // when it never dies, -1 if no fork could run.
         int survivesFor(PlayLayer* playLayer, PlayerObject* source, int frames, int input);
+        // The same question for a whole input script: `events` are (tick
+        // offset, pressed) pairs sorted by offset, each applied at the start
+        // of that tick, before its physics. Pathfinder ranks its candidates
+        // with this -- a fork only ranks; a real run still decides.
+        int survivesScript(PlayLayer* playLayer, PlayerObject* source, int frames,
+                           std::vector<std::pair<int, bool>> const& events);
         cocos2d::ccColor4F holdColor(bool player2) const {
             return player2 ? m_holdColorP2 : m_holdColor;
         }

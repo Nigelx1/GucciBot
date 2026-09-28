@@ -168,7 +168,20 @@ namespace gucci {
                 uint32_t release;
             };
             std::vector<Exhausted> exhausted;
+
+            // The first humanCount candidates came from the loaded macro and
+            // stay in front; the rest are put in look-ahead order once, on
+            // the node's first visit (rankByLookahead).
+            size_t humanCount = 0;
+            bool ranked = false;
         };
+
+        // Absense's look-ahead, on this engine: play every candidate forward
+        // on the fork from the node's restore point and try the ones that
+        // survive longest first. Ordering only -- a real run still decides.
+        void rankByLookahead(Node& n);
+        int rankedNodes = 0;
+        double rankMsTotal = 0.0;
 
         // Which frames of the CURRENT run the player actually had a say on,
         // indexed by absolute frame. Filled by the agency probe as the run
