@@ -25,6 +25,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstring>
 #include <deque>
 #include <filesystem>
 #include <fstream>
@@ -733,6 +734,86 @@ namespace gucci::mcp {
                 out["dual"] = pl->m_gameState.m_isDualMode;
                 out["time_warp"] = (double)pl->m_gameState.m_timeWarp;
                 out["practice"] = pl->m_isPracticeMode;
+                return out;
+            },
+        });
+
+        // Practice checkpoints, driven the way a player drives them, so a
+        // session can check that a respawn really puts the level and the
+        // player back where they were. `level_hash` fingerprints every
+        // object's position, rotation, scale, opacity and disabled flags:
+        // take it at a checkpoint on a straight run, respawn, step back to
+        // the same frame, and the two must match.
+        server.addTool({
+            "gucci_practice",
+            "Practice mode and checkpoints. action: status | on | off | "
+            "checkpoint (the checkpoint key's own path; lands at the end of this "
+            "frame) | respawn (back to the last checkpoint). status returns the "
+            "frame, saved checkpoint frames and level_hash (every object's "
+            "position/rotation/scale/opacity/disabled, hashed).",
+            schemaOf({{"action", "string", "status, on, off, checkpoint or respawn"}}),
+            [](matjson::Value const& a) {
+                auto* pl = requireLevel();
+                auto* gb = GucciEngine::get();
+                auto const what = argStr(a, "action", "status");
+
+                if (what == "on" || what == "off") {
+                    requireFreeRun();
+                    bool const on = what == "on";
+                    if (pl->m_isPracticeMode != on)
+                        pl->togglePracticeMode(on);
+                } else if (what == "checkpoint") {
+                    requireFreeRun();
+                    if (!pl->m_isPracticeMode)
+                        throw ToolError("practice mode is off");
+                    // GD's checkpoint key handler, hooked in hook_playlayer.cpp.
+                    reinterpret_cast<void (*)(void*, void*)>(geode::base::get() + 0x4ce060)(
+                        nullptr, nullptr);
+                } else if (what == "respawn") {
+                    requireFreeRun();
+                    pl->resetLevel();
+                } else if (what != "status") {
+                    throw ToolError("unknown action: " + what);
+                }
+
+                uint64_t h = 1469598103934665603ull;
+                auto mix = [&h](uint64_t v) {
+                    for (int i = 0; i < 8; i++) {
+                        h ^= (v >> (i * 8)) & 0xFF;
+                        h *= 1099511628211ull;
+                    }
+                };
+                auto bits = [](float f) {
+                    uint32_t u;
+                    std::memcpy(&u, &f, sizeof u);
+                    return (uint64_t)u;
+                };
+                int64_t count = 0;
+                if (pl->m_objects) {
+                    for (auto* o : CCArrayExt<GameObject*>(pl->m_objects)) {
+                        if (!o)
+                            continue;
+                        auto const p = o->getPosition();
+                        mix(bits(p.x));
+                        mix(bits(p.y));
+                        mix(bits(o->getRotation()));
+                        mix(bits(o->getScaleX()));
+                        mix(bits(o->getScaleY()));
+                        mix((uint64_t)o->getOpacity());
+                        mix((o->m_isDisabled ? 1u : 0u) | (o->m_isDisabled2 ? 2u : 0u));
+                        count++;
+                    }
+                }
+
+                auto out = obj();
+                out["frame"] = (int64_t)gb->updater.getFrame();
+                out["practice"] = pl->m_isPracticeMode;
+                auto frames = matjson::Value::array();
+                for (auto const& cp : gb->practiceFix.m_savedCheckpoints)
+                    frames.push((int64_t)cp.m_frameOffset);
+                out["checkpoints"] = frames;
+                out["level_hash"] = fmt::format("{:016x}", h);
+                out["objects_hashed"] = count;
                 return out;
             },
         });

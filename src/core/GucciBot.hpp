@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-ax (Practice checkpoints: placed in the frozen tick and captured in the same instant, as Silicate does, instead of GD placing them mid-tick and GucciBot capturing the player two ticks later. Respawns put the level and the player back at different moments, and macros recorded through them broke shortly after.)"
+    "2026-09-27-ay (Assistant Access: gucci_practice tool -- practice mode on or off, place a checkpoint through the key's own path, respawn, and a hash of every level object so a respawn can be checked against a straight run. Includes the -ax checkpoint fix.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
