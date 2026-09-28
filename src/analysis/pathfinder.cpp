@@ -376,10 +376,10 @@ namespace gucci {
             return;
         }
 
-        // Mirrors beginProbeRun()'s arbitrary-checkpoint restore idiom --
-        // the target pushed twice on purpose (restorePreviousFrame pops one
-        // then applies the one behind it).
-        pf.m_storedFrames.push_back(node->ckpt);
+        // Restored through the backstep path: restorePreviousFrame applies
+        // the newest stored frame and takes it off. (It used to drop the
+        // newest and apply the one behind it, so this pushed the target
+        // twice.)
         pf.m_storedFrames.push_back(node->ckpt);
         gb->mode = GucciEngine::Mode::Playing;
         if (pf.canRestoreState()) {

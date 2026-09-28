@@ -186,18 +186,27 @@ namespace gucci {
         m_storedFrames.clear();
     }
 
+    // Silicate's restorePreviousFrame: the newest stored frame is applied and
+    // taken off the store (the next tick stores it again).
+    //
+    // This used to drop the newest and apply the one behind it, as if the
+    // newest were where the game already is. It isn't: a frame is stored at
+    // the START of the tick after it (earlyUpdateMidhook), so while paused
+    // the newest entry is already one tick back. Every step back went two
+    // ticks the first time, Prevent Death landed a tick before the tick it
+    // meant, and the best-tick search one before the best tick. The frame
+    // counter came from the dropped entry, so it did not match the player
+    // either (handleResetWithCheckpoints now reads the entry applied here).
     void GucciPracticeFix::restorePreviousFrame(std::function<void(CheckpointObject*)> loadFn) {
-        if (m_storedFrames.size() <= 1)
+        if (m_storedFrames.empty())
             return;
-        // The frame being stepped off is done with; the one behind it is
-        // applied and stays (it is where the next step back starts from).
-        if (auto& off = m_storedFrames.back(); off.owned && off.state.m_checkpoint)
-            off.state.m_checkpoint->release();
+        StoredFrame frame = m_storedFrames.back();
         m_storedFrames.pop_back();
-        auto& prev = m_storedFrames.back();
-        if (prev.state.m_checkpoint)
-            loadFn(prev.state.m_checkpoint);
-        applyCheckpoint(prev.state);
+        if (frame.state.m_checkpoint)
+            loadFn(frame.state.m_checkpoint);
+        applyCheckpoint(frame.state);
+        if (frame.owned && frame.state.m_checkpoint)
+            frame.state.m_checkpoint->release();
     }
 
     void GucciPracticeFix::applyLatest() {

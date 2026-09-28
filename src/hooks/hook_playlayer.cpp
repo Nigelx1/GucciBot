@@ -271,6 +271,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
             return false;
         }
         if (pf.m_loadCheckpoint && !pf.m_storedFrames.empty()) {
+            // The entry restorePreviousFrame is about to apply.
             upd.m_frameOnLastAttempt = pf.m_storedFrames.back().frame;
             m_checkpointArray->addObject(pf.m_storedFrames.back().state.m_checkpoint);
             return true;

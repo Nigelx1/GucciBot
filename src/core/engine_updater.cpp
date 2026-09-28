@@ -607,17 +607,24 @@ static void earlyUpdateMidhook(SafetyHookContext&) {
         // Absense's pathfinder asks for a frame only every few ticks while it
         // searches (Silicate's m_storeEvery); otherwise every tick, as always.
         uint32_t const every = gb->practiceFix.m_storeEvery;
-        if (every > 1 && ((upd.getFrame() + 1) % every) != 0)
+        if (every > 1 && (upd.getFrame() % every) != 0)
             return;
         CheckpointObject* cp = pl->createCheckpoint();
         if (!cp)
             return;
         cp->retain();
         if (upd.m_logFrameIncrements)
-            logFrameIncrement("earlyUpdateMidhook(saveState)", upd.getFrame() + 1, pl->m_player1);
+            logFrameIncrement("earlyUpdateMidhook(saveState)", upd.getFrame(), pl->m_player1);
         // The backstep store only -- NOT saveState, which also files a
         // practice checkpoint (see saveBackstepFrame).
-        gb->practiceFix.saveBackstepFrame(cp, upd.getFrame() + 1);
+        //
+        // Labelled getFrame(), as Silicate does. This runs before the tick's
+        // physics, so the state here is the one the counter already names --
+        // the same moment and label as a practice checkpoint placed between
+        // ticks (storeCheckpoint), which restores exactly. It was labelled
+        // getFrame() + 1, so every restored frame came back with the counter
+        // a tick ahead of the player.
+        gb->practiceFix.saveBackstepFrame(cp, upd.getFrame());
     }
 }
 

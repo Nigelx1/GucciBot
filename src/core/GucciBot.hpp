@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-28-bg (Branch absense-pathfinder, WORK IN PROGRESS: Absense's pathfinder, its trajectory, the World and Silicate's physics layer for trajectory copies are compiled in under src/absense, but nothing calls them yet -- plays exactly like -bf.)"
+    "2026-09-28-bh (Branch absense-pathfinder: Backwards Stepping now works like Silicate's. A stored frame is labelled with the frame it holds, and a step back restores the newest one and sets the frame counter to match. Before, the first step back went two ticks, and Prevent Death and the best-tick search landed a tick early. Absense's pathfinder is still compiled in but not wired up.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -191,7 +191,7 @@ namespace gucci {
         void dropLastStoredFrame();
         void clearPlatformer(bool full);
         bool canRestoreState() const {
-            return m_storedFrames.size() > 1;
+            return !m_storedFrames.empty();
         }
         // Platformer direction state, ported from Silicate 2026-09-22. This was
         // half-ported: the signature took a CCArray*, the only call site passed
