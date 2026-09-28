@@ -37,6 +37,20 @@ static void slopeLog(const std::string& line) {
     log::info("[SLOPE] {}", line);
 }
 
+// Congregation slope diagnostic. Under the analyzer's capture GD's
+// leave-the-slope block in PlayerObject::postCollision has never run -- not
+// once in 42,460 frames -- while every normal run hits it at frame 168. The
+// hooks count GD's collision passes on the real player 1 per tick and log
+// what postCollision sees whenever the slope flags differ; the per-frame line
+// below prints the counts.
+namespace gucci::slopediag {
+    int g_checkCalls = 0;
+    int g_postCalls = 0;
+    void log(std::string const& line) {
+        slopeLog(line);
+    }
+}
+
 static std::ofstream g_frameIncLog;
 void gucci::logFrameIncrement(const char* callSite, uint32_t frame, PlayerObject* p) {
     if (!g_frameIncLog.is_open()) {
@@ -898,7 +912,7 @@ static void frameUpdateMidhook(SafetyHookContext&) {
                                      "g={} flip={} dash={} mode={} hold={} steps={} ovf={:.4f} "
                                      "rs={} ckpt={} fast={} q={} "
                                      "onS={} wasS={} sVel={:.4f} preSV={:.4f} colS={} ang={:.2f} "
-                                     "st={:.3f} et={:.3f} curS={}",
+                                     "st={:.3f} et={:.3f} curS={} cc={} pc={}",
                                      slRender ? "REND"
                                               : (gb->analyzerOwnsRun() ? "CALC" : "PLAY"),
                                      upd.getFrame(),
@@ -926,10 +940,14 @@ static void frameUpdateMidhook(SafetyHookContext&) {
                                      (double)p->m_slopeAngle,
                                      (double)p->m_slopeStartTime,
                                      (double)p->m_slopeEndTime,
-                                     p->m_currentSlope ? 1 : 0));
+                                     p->m_currentSlope ? 1 : 0,
+                                     gucci::slopediag::g_checkCalls,
+                                     gucci::slopediag::g_postCalls));
             }
         }
     }
+    gucci::slopediag::g_checkCalls = 0;
+    gucci::slopediag::g_postCalls = 0;
 
     // The autoclicker queues real buttons. Firing one inside an analyzer leg
     // would put an input into the run that the macro never contained, and the

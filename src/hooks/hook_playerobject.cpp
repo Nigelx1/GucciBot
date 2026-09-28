@@ -52,6 +52,12 @@ $execute {
     util_midhook(geode::base::get() + 0x38c315, "yVelocityRound", yVelocityRoundMidhook);
 }
 
+// Congregation slope diagnostic, see engine_updater.cpp.
+namespace gucci::slopediag {
+    extern int g_postCalls;
+    void log(std::string const& line);
+}
+
 class $modify(GB7PlayerObject, PlayerObject) {
     // Splits one physics tick into sub-steps so an input can land BETWEEN
     // them, which is what makes sub-tick (CBF) frame windows mean anything.
@@ -221,6 +227,34 @@ class $modify(GB7PlayerObject, PlayerObject) {
         }
 
         PlayerObject::updateShipRotation(t);
+    }
+
+    // Diagnostic only. GD decides a slope launch here: when m_isOnSlope and
+    // m_wasOnSlope differ and the player is now off the slope, it stamps
+    // m_slopeEndTime and moves the slope velocity into y-velocity.
+    void postCollision(float dt, bool betweenSteps) {
+        auto* pl = PlayLayer::get();
+        bool const p1 = pl && this == pl->m_player1;
+        bool const edge = p1 && m_isOnSlope != m_wasOnSlope;
+        if (p1)
+            gucci::slopediag::g_postCalls++;
+        if (edge) {
+            auto* gb = GucciEngine::get();
+            gucci::slopediag::log(fmt::format(
+                "  {}-PC f={} in: is={} was={} dart={} between={} dt={:.4f} et={:.3f}",
+                gb->analyzerOwnsRun() ? "CALC" : "PLAY", gb->updater.getFrame(),
+                m_isOnSlope ? 1 : 0, m_wasOnSlope ? 1 : 0, m_isDart ? 1 : 0,
+                betweenSteps ? 1 : 0, dt, m_slopeEndTime));
+        }
+        PlayerObject::postCollision(dt, betweenSteps);
+        if (edge) {
+            auto* gb = GucciEngine::get();
+            gucci::slopediag::log(fmt::format(
+                "  {}-PC f={} out: is={} was={} et={:.3f} ys={:.3f} sVel={:.3f} curS={}",
+                gb->analyzerOwnsRun() ? "CALC" : "PLAY", gb->updater.getFrame(),
+                m_isOnSlope ? 1 : 0, m_wasOnSlope ? 1 : 0, m_slopeEndTime,
+                m_yVelocity, (double)m_slopeVelocity, m_currentSlope ? 1 : 0));
+        }
     }
 
     void playDeathEffect() {

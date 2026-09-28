@@ -22,6 +22,13 @@ using namespace geode::prelude;
 
 using namespace gucci;
 
+// Congregation slope diagnostic, see engine_updater.cpp.
+namespace gucci::slopediag {
+    extern int g_checkCalls;
+    extern int g_postCalls;
+    void log(std::string const& line);
+}
+
 static void shakeRandomOverride(SafetyHookContext& ctx) {
     uint64_t& state = GucciEngine::get()->replay.m_shakeRandomState;
     state = (int)((214013 * state + 2531011) >> 16) & 0x7FFF;
@@ -314,7 +321,29 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         bool const real = player && (player == m_player1 || player == m_player2);
         if (real)
             ::Bot::get()->trailBuffer().saveCollision(this, player);
+
+        // Congregation slope diagnostic, see engine_updater.cpp. GD copies
+        // m_isOnSlope into m_wasOnSlope at the top of this pass and calls
+        // postCollision at the end -- unless the pass returns early.
+        bool const p1 = player && player == m_player1 && PlayLayer::get();
+        bool const wasOn = p1 && player->m_isOnSlope;
+        int const postBefore = gucci::slopediag::g_postCalls;
+        if (p1)
+            gucci::slopediag::g_checkCalls++;
+
         int const result = GJBaseGameLayer::checkCollisions(player, dt, ignoreDamage);
+
+        if (p1 && wasOn && !player->m_isOnSlope) {
+            auto* gb = GucciEngine::get();
+            gucci::slopediag::log(fmt::format(
+                "  {}-CC f={} left slope: ret={} ignoreDamage={} dt={:.4f} postCalled={} "
+                "is={} was={} et={:.3f}",
+                gb->analyzerOwnsRun() ? "CALC" : "PLAY", gb->updater.getFrame(), result,
+                ignoreDamage ? 1 : 0, dt, gucci::slopediag::g_postCalls - postBefore,
+                player->m_isOnSlope ? 1 : 0, player->m_wasOnSlope ? 1 : 0,
+                player->m_slopeEndTime));
+        }
+
         if (real)
             ::Bot::get()->trailBuffer().saveCollision(this, player);
         return result;

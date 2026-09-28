@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-as (VERSION 2.alpha.4. Version bump on top of -ar: mod.json, CMake, about.md -- which now notes the Click Between Frames pause and that GucciBot is GPL-3.0.)"
+    "2026-09-27-at (DIAGNOSTIC ONLY, Congregation slope: counts GD's collision passes on player 1 per tick and logs what postCollision sees when the slope flags change, to guccibot_slope.log. No behaviour change.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
