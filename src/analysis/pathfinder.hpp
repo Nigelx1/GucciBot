@@ -154,6 +154,20 @@ namespace gucci {
             // allowed to touch, and every candidate in the clipped window is a
             // run spent to prove it. Set once at build time.
             bool floorClipped = false;
+
+            // The exact death that opened this node (captureDeathExactKey),
+            // and the release of the committed input that led to it.
+            uint64_t exactKey = 0;
+            uint32_t viaRelease = 0;
+            // Deaths this node's own candidates led to whose decision points
+            // were then searched to the end with nothing found. A later
+            // candidate here that dies the same way would open the same
+            // decision point again. See handleDeath.
+            struct Exhausted {
+                uint64_t key;
+                uint32_t release;
+            };
+            std::vector<Exhausted> exhausted;
         };
 
         // Which frames of the CURRENT run the player actually had a say on,
@@ -246,6 +260,12 @@ namespace gucci {
         // the player is still standing in the state that killed them.
         uint64_t captureDeathStateKey() const;
         uint64_t deathStateKey = 0;
+        // Same moment, hashed exactly (bit-for-bit position, velocity,
+        // rotation, form, held button; both players in dual). The key above is
+        // coarse on purpose, for memory; this one says "the same run".
+        uint64_t captureDeathExactKey(uint32_t frame) const;
+        uint64_t deathExactKey = 0;
+        int skippedSameOutcome = 0;
         void loadSolutionMemory();
         void saveSolutionMemory();
         void rememberWin(uint64_t stateKey, uint32_t deathFrame, uint32_t pressFrame,

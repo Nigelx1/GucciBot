@@ -7,6 +7,7 @@
 #include <Geode/Geode.hpp>
 #include <Geode/binding/PauseLayer.hpp>
 #include <algorithm>
+#include <cstring>
 #include <filesystem>
 
 using namespace geode::prelude;
@@ -76,6 +77,7 @@ namespace gucci {
         // Fresh search: nothing proven dead yet.
         deadEnds.clear();
         skippedDeadEnds = 0;
+        skippedSameOutcome = 0;
         this->loadSolutionMemory();
         hazardCount.clear();
         reopenedSpots.clear();
@@ -193,6 +195,60 @@ namespace gucci {
         deathFrame = frame;
         deathX = x;
         deathStateKey = this->captureDeathStateKey();
+        deathExactKey = this->captureDeathExactKey(frame);
+    }
+
+    uint64_t Pathfinder::captureDeathExactKey(uint32_t frame) const {
+        auto* pl = PlayLayer::get();
+        if (!pl || !pl->m_player1)
+            return 0;
+
+        uint64_t h = 1469598103934665603ull;
+        auto mix = [&h](uint64_t v) {
+            for (int i = 0; i < 8; i++) {
+                h ^= (v >> (i * 8)) & 0xFF;
+                h *= 1099511628211ull;
+            }
+        };
+        auto bitsF = [](float f) {
+            uint32_t u;
+            std::memcpy(&u, &f, sizeof u);
+            return (uint64_t)u;
+        };
+        auto bitsD = [](double d) {
+            uint64_t u;
+            std::memcpy(&u, &d, sizeof u);
+            return u;
+        };
+        auto player = [&](PlayerObject* p) {
+            mix(bitsF(p->getPositionX()));
+            mix(bitsF(p->getPositionY()));
+            mix(bitsD(p->m_yVelocity));
+            mix(bitsF(p->getRotation()));
+            mix(bitsF(p->m_vehicleSize));
+            mix(bitsF(p->m_playerSpeed));
+            uint64_t flags = 0;
+            flags |= (uint64_t)p->m_isShip << 0;
+            flags |= (uint64_t)p->m_isBird << 1;
+            flags |= (uint64_t)p->m_isBall << 2;
+            flags |= (uint64_t)p->m_isDart << 3;
+            flags |= (uint64_t)p->m_isRobot << 4;
+            flags |= (uint64_t)p->m_isSpider << 5;
+            flags |= (uint64_t)p->m_isSwing << 6;
+            flags |= (uint64_t)p->m_isUpsideDown << 7;
+            flags |= (uint64_t)p->m_isSideways << 8;
+            flags |= (uint64_t)p->m_isOnGround << 9;
+            flags |= (uint64_t)p->m_isDashing << 10;
+            auto const it = p->m_holdingButtons.find(1);
+            flags |= (uint64_t)(it != p->m_holdingButtons.end() && it->second) << 11;
+            mix(flags);
+        };
+
+        mix(frame);
+        player(pl->m_player1);
+        if (pl->m_gameState.m_isDualMode && pl->m_player2)
+            player(pl->m_player2);
+        return h;
     }
 
     // What the player was, where, and how fast, at the moment it went wrong --
@@ -447,6 +503,7 @@ namespace gucci {
             died = true;
             deathFrame = f;
             deathX = x;
+            deathExactKey = this->captureDeathExactKey(f);
         }
 
         if (died) {
@@ -630,6 +687,38 @@ namespace gucci {
             return;
         }
 
+        // The same run as one already searched to the end. Absense's rule --
+        // "the same script twice is the same answer twice" -- applied to
+        // where a run ends rather than to its inputs: a candidate that dies
+        // exactly as an earlier one here did (same frame, bit-identical
+        // player) would open the same decision point again, and that one has
+        // already been searched with nothing found. A later release only
+        // narrows it (its floor moves up), so the earlier search covered it.
+        //
+        // Nigel's run on build -aw: after the orb spot dead-ended, the search
+        // backtracked and tried press@416 hold 3, which plays exactly like
+        // hold 1 -- and re-searched the whole orb spot from scratch, as it
+        // would have for hold 6, 10, 16 and 24 after it.
+        {
+            uint32_t const candRelease = cur.pressFrame + (uint32_t)std::max(1, cur.holdFrames);
+            for (auto const& e : top.exhausted) {
+                if (e.key != deathExactKey || deathExactKey == 0 || candRelease < e.release)
+                    continue;
+                if (deadEnds.size() >= kMaxDeadEnds)
+                    deadEnds.clear();
+                deadEnds.insert(this->deadEndKey(cur.pressFrame, cur.holdFrames));
+                skippedSameOutcome++;
+                haveCandidate = false;
+                log::info("[Pathfinder] press@{} hold {} dies exactly as an input already searched "
+                          "to the end here (f={}) -- skipping its decision point",
+                          cur.pressFrame,
+                          cur.holdFrames,
+                          d);
+                startNextCandidateOrBacktrack();
+                return;
+            }
+        }
+
         if (wasDeferredReplay) {
             // Already judged: it made progress, and nothing with more room did.
             commitCurrent("committed after nothing roomier worked");
@@ -811,6 +900,8 @@ namespace gucci {
         Node n;
         n.deathFrame = d;
         n.stateKey = deathStateKey;
+        n.exactKey = deathExactKey;
+        n.viaRelease = committed.empty() ? 0 : committed.back().m_frame;
         n.committedBefore = committed.size();
 
         // Candidates must start strictly after the last committed input so
@@ -1136,9 +1227,15 @@ namespace gucci {
             log::info("[Pathfinder] dead end @f={} ({} candidates tried) -- backtracking",
                       top.deathFrame,
                       top.cands.size());
+            Node::Exhausted const spent{top.exactKey, top.viaRelease};
             releaseStoredFrame(top.ckpt);
             stack.pop_back();
             depth = stack.size();
+            // Searched to the end with nothing found: tell the parent, so a
+            // sibling that dies the same way is not searched again. Only
+            // here -- a floor-clip reopen gives a node up UNsearched.
+            if (!stack.empty() && spent.key != 0)
+                stack.back().exhausted.push_back(spent);
             if (!stack.empty())
                 committed.resize(std::min(committed.size(), stack.back().committedBefore));
             haveCandidate = false;
@@ -1151,6 +1248,10 @@ namespace gucci {
             log::info("[Pathfinder] {} decision point(s) answered from memory", memoryHits);
         if (skippedDeadEnds > 0)
             log::info("[Pathfinder] skipped {} run(s) that were already proven dead", skippedDeadEnds);
+        if (skippedSameOutcome > 0)
+            log::info("[Pathfinder] skipped {} decision point(s) already searched through another "
+                      "input that died the same way",
+                      skippedSameOutcome);
         if (deferredFragile > 0)
             log::info("[Pathfinder] held back {} frame-perfect candidate(s) in favour of tolerant ones",
                       deferredFragile);

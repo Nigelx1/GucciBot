@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-ba (VERSION 2.beta.1. Version bump on top of -az: mod.json, CMake, about.md -- which now describes practice checkpoints captured whole and the Bells default -- and the README status.)"
+    "2026-09-27-bb (Pathfinder, Absense port step 1: a candidate that dies exactly like one whose decision point was already searched to the end is skipped instead of searched again -- the hold 1 / hold 3 / hold 6 repeats of the orb spot.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
