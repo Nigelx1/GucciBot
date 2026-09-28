@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-28-bf (DIAGNOSTIC for the Pathfinder look-ahead: on the first 12 ranked decision points, logs where the fork's path and the real run's path for the same candidate split, what killed each, and where the real player is right after the restore.)"
+    "2026-09-28-bg (Branch absense-pathfinder, WORK IN PROGRESS: Absense's pathfinder, its trajectory, the World and Silicate's physics layer for trajectory copies are compiled in under src/absense, but nothing calls them yet -- plays exactly like -bf.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -124,6 +124,10 @@ namespace gucci {
     public:
         std::vector<SavedCheckpointState> m_savedCheckpoints;
         std::vector<StoredFrame> m_storedFrames;
+        // Store a backstep frame only every this many ticks (Silicate's
+        // PracticeFix::m_storeEvery). 1 is every tick, as GucciBot always did;
+        // Absense's pathfinder raises it for the length of a search.
+        uint32_t m_storeEvery = 1;
         std::vector<std::pair<CheckpointObject*, CheckpointObject*>> m_platformerCheckpoints;
 
         bool m_loadCheckpoint = false;
@@ -260,6 +264,7 @@ namespace gucci {
     public:
         gb::ActionAtom m_actionAtom;
         size_t m_inputIndex = 0;
+        size_t getInputIndex() const { return m_inputIndex; }  // Silicate's name
         uint64_t m_startingSeed = 0;
         uint64_t m_startingSeedThisAttempt = 0;
         uint64_t m_shakeRandomState = 0;
@@ -455,6 +460,8 @@ namespace gucci {
         double getPhysicsDt() const {
             return 1.0 / m_tps;
         }
+        // Silicate's name for m_tps, which Absense's pathfinder uses.
+        double getTps() const { return m_tps; }
         float getTimeWarp() const;
         uint32_t getFrame() const;
 

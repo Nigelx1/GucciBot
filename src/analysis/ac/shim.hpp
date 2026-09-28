@@ -25,6 +25,12 @@
 #include "core/action_types.hpp"
 #include "core/checkpoint_player.hpp"
 #include "analysis/ac/shapes.hpp"
+#include "absense/compat/settings_types.hpp"
+
+// Absense's pathfinder stack (src/absense/), reached through Bot below.
+class TrajectoryManager;
+class AbsensePathfinder;
+class AbsAutoclicker;
 
 // --- Silicate's action type is ours under a different name ------------------
 
@@ -235,6 +241,17 @@ public:
 
     FrameWindowSettings frameWindow;
 
+    // Absense's (src/absense/): its trajectory, its pathfinder and the hitbox
+    // colours its trajectory draws with, under the names its code uses.
+    using TrajectorySettings = absense_settings::TrajectorySettings;
+    using PathfinderSettings = absense_settings::PathfinderSettings;
+    using HitboxSettings = absense_settings::HitboxSettings;
+    TrajectorySettings trajectory;
+    PathfinderSettings pathfinder;
+    HitboxSettings hitboxes;
+    std::array<float, 4> layoutBgColor = {0.2828f, 0.4901f, 1.0f, 1.0f};
+    std::array<float, 4> layoutGroundColor = {0.2828f, 0.4901f, 1.0f, 1.0f};
+
     // Silicate's defaults, verbatim.
     struct TrailBufferSettings {
         bool enabled = true;
@@ -287,6 +304,9 @@ public:
     T& inner() { return *m_backing; }
     T const& inner() const { return *m_backing; }
     std::string const& key() const { return m_key; }
+    // Silicate tells a value's listeners it changed; here nothing listens --
+    // GucciBot saves settings from its own UI.
+    void notifyChange() {}
 
 private:
     SLValue(char const* key, T* backing) : m_key(key), m_backing(backing) {}
@@ -349,6 +369,12 @@ public:
     }
 
     TrailBuffer& trailBuffer();
+
+    // Absense's pathfinder stack, defined in absense/compat/bot.cpp.
+    TrajectoryManager& trajectory();
+    AbsensePathfinder& pathfinder();
+    AbsAutoclicker& autoclicker();
+    bool isEnabled() const { return gucci::GucciEngine::get()->enabled; }
 
 private:
 };

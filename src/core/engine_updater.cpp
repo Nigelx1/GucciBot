@@ -604,6 +604,11 @@ static void earlyUpdateMidhook(SafetyHookContext&) {
     if (!pl)
         return;
     if (!pl->m_playerDied && upd.m_backwardsStepping && !SLRenderer::get()->isRecording()) {
+        // Absense's pathfinder asks for a frame only every few ticks while it
+        // searches (Silicate's m_storeEvery); otherwise every tick, as always.
+        uint32_t const every = gb->practiceFix.m_storeEvery;
+        if (every > 1 && ((upd.getFrame() + 1) % every) != 0)
+            return;
         CheckpointObject* cp = pl->createCheckpoint();
         if (!cp)
             return;

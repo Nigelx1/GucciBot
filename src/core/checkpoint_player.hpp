@@ -5,6 +5,8 @@ namespace gucci {
     struct SavedPlayerCheckpoint {
         void apply(PlayerObject* p);
         static SavedPlayerCheckpoint create(PlayerObject* p);
+        // Silicate's in-place form, which Absense's trajectory uses.
+        void capture(PlayerObject* p) { *this = create(p); }
 
         cocos2d::CCPoint m_ccPosition{};
         float m_ccRotation = 0.f;
