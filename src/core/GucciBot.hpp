@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-bc (Pathfinder, Absense port step 2: on a decision point's first visit every generated candidate is played forward on the fork and they are tried longest-surviving first, instead of nearest-the-death first. Ordering only, real runs still decide.)"
+    "2026-09-27-bd (Pathfinder, Absense port step 3: hold lengths 1, 2, 3, 6, 11, 25, 48 and 65 ticks -- Absense's, taken from 1552 human macros -- instead of stopping at 24.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -15,11 +15,18 @@ using namespace geode::prelude;
 
 namespace gucci {
 
-    // Tap first, then progressively longer holds. Cube only ever needs the
-    // tap; Ship/Wave/Swing need real hold lengths. Frame-major ordering
-    // (all holds at the frame nearest the death before moving one frame
-    // earlier) because "just before the hazard" is the common case.
-    static const int kHoldSet[] = {1, 3, 6, 10, 16, 24};
+    // Tap first, then progressively longer holds. Frame-major ordering (all
+    // holds at the frame nearest the death before moving one frame earlier)
+    // because "just before the hazard" is the common case; the look-ahead
+    // (rankByLookahead) reorders from there.
+    //
+    // Absense's lengths, which it took from 1552 human macros (680,760
+    // presses at 240 TPS): a human hold is 11 ticks at the 10th percentile,
+    // 25 at the median and 65 at the 90th; 1 and 2 are the spam and swift
+    // shapes. The old set stopped at 24 -- under the median human hold --
+    // so every ship, wave or swing climb longer than that had to be built
+    // out of several decision points instead of one press.
+    static const int kHoldSet[] = {1, 2, 3, 6, 11, 25, 48, 65};
 
     // How far back a decision point may reach when the frames in between had
     // no agency -- a long fall can put the real decision hundreds of frames
