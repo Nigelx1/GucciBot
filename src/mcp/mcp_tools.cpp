@@ -29,6 +29,7 @@
 #include <cstring>
 #include <deque>
 #include <filesystem>
+#include <sstream>
 #include <fstream>
 
 using namespace geode::prelude;
@@ -934,6 +935,69 @@ namespace gucci::mcp {
                     list.push(e);
                 }
                 out["findings"] = list;
+                return out;
+            },
+        });
+
+        server.addTool({
+            "gucci_abs_simulate",
+            "Diagnostic: run Absense's pathfinder simulation (its copies of the "
+            "player, Silicate's physics, the World) from the real player's current "
+            "state along a scripted input, and report the path, how far it got and "
+            "what killed it. `script` is space-separated steps, h<N> = hold N ticks, "
+            "r<N> = release N ticks (e.g. \"h20 r15 h40\"); the last step repeats "
+            "to `ticks`. Nothing in the real game changes.",
+            schemaOf({{"script", "string", "hold/release steps, e.g. h20 r15 h40"},
+                      {"ticks", "integer", "ticks to run (default: the script's length, max 3000)"},
+                      {"every", "integer", "report the path every N ticks (default 4)"}}),
+            [](matjson::Value const& a) {
+                requireFreeRun();
+                requireLevel();
+                std::vector<bool> held;
+                std::istringstream in(argStr(a, "script"));
+                std::string step;
+                while (in >> step) {
+                    if (step.size() < 2 || (step[0] != 'h' && step[0] != 'r'))
+                        throw ToolError("script steps are h<N> or r<N>, got \"" + step + "\"");
+                    int n = 0;
+                    try {
+                        n = std::stoi(step.substr(1));
+                    } catch (...) {
+                        throw ToolError("bad tick count in \"" + step + "\"");
+                    }
+                    if (n < 1 || n > 3000)
+                        throw ToolError("tick counts are 1 to 3000");
+                    held.insert(held.end(), (size_t)n, step[0] == 'h');
+                    if (held.size() > 3000)
+                        throw ToolError("script longer than 3000 ticks");
+                }
+                int const ticks = (int)std::clamp<int64_t>(
+                    argInt(a, "ticks", std::max<int64_t>(1, (int64_t)held.size())), 1, 3000);
+                int const every = (int)std::clamp<int64_t>(argInt(a, "every", 4), 1, 240);
+                auto out = absense::simulate(held, ticks, every);
+                if (out.contains("error"))
+                    throw ToolError(out["error"].asString().unwrapOr("failed"));
+                return out;
+            },
+        });
+
+        server.addTool({
+            "gucci_run_to",
+            "Let the real game run until the frame counter reaches `frame`, then "
+            "pause there. Returns at once; poll gucci_get_state for paused.",
+            schemaOf({{"frame", "integer", "frame to pause at (after the current one)"}}),
+            [](matjson::Value const& a) {
+                requireFreeRun();
+                requireLevel();
+                auto* gb = GucciEngine::get();
+                int64_t const target = argInt(a, "frame", -1);
+                if (target <= (int64_t)gb->updater.getFrame())
+                    throw ToolError("frame must be after the current frame");
+                gb->updater.m_pauseAtFrame = (uint32_t)target;
+                gb->updater.setPaused(false);
+                auto out = obj();
+                out["from"] = (int64_t)gb->updater.getFrame();
+                out["to"] = target;
                 return out;
             },
         });

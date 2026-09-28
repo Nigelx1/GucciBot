@@ -242,6 +242,12 @@ bool AbsensePathfinder::start() {
         m_stats.message = "The level is already complete.";
         return false;
     }
+    // Started on a dead player it has no tick to go forward from and none
+    // before the start to go back to, and decided the same tick forever.
+    if (pl->m_player1->m_isDead || (pl->m_gameState.m_isDualMode && pl->m_player2 && pl->m_player2->m_isDead)) {
+        m_stats.message = "Wait for the respawn first.";
+        return false;
+    }
     if (!bot->trajectory().exists()) {
         m_stats.message = "The simulation is not ready for this level.";
         return false;

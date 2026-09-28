@@ -6,8 +6,11 @@
 // would collide with GucciBot's own in those files. Defined in
 // absense/compat/bot.cpp.
 
+#include <matjson.hpp>
+
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace absense {
     // Which engine the Pathfinder tab and gucci_pathfinder use: Absense's,
@@ -39,4 +42,11 @@ namespace absense {
         std::string message;        // why it stopped, or a note while it runs
     };
     Status status();
+
+    // Diagnostics (gucci_abs_simulate): run the pathfinder's simulation from
+    // the real player's current state, the button down on each tick `held`
+    // says, for `ticks` ticks (the last entry repeats). Reports how far it
+    // got, the path every `every` ticks, and what killed it. Changes nothing
+    // in the real game.
+    matjson::Value simulate(std::vector<bool> const& held, int ticks, int every);
 }

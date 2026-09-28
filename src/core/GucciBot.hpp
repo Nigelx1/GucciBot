@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-28-bi (Branch absense-pathfinder: Absense's pathfinder is wired in and is the default engine in the Pathfinder tab, with Classic still selectable. It plays the level for real, plans each input by running copies of the player ahead, and goes back when a way is a dead end. Its result is saved as a macro named after the level. gucci_pathfinder takes an engine option. UNTESTED in-game.)"
+    "2026-09-28-bj (Branch absense-pathfinder: diagnostics for Absense's pathfinder, which dives under the black boxes in Zafari 2's ship part every time. New Assistant Access tools gucci_abs_simulate and gucci_run_to. It also refuses to start on a dead player instead of spinning. Nothing else changes.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -465,6 +465,8 @@ namespace gucci {
         // Wall-clock seconds this frame stood still while Absense's pathfinder
         // thought (set in drawScene, spent in calculateSteps).
         double m_frozenSeconds = 0.0;
+        // gucci_run_to: pause once the frame counter reaches this (0 = off).
+        uint32_t m_pauseAtFrame = 0;
         float getTimeWarp() const;
         uint32_t getFrame() const;
 

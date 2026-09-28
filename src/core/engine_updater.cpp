@@ -733,6 +733,11 @@ static void frameUpdateMidhook(SafetyHookContext&) {
             upd.incrementFrame();
             if (upd.m_logFrameIncrements)
                 logFrameIncrement("frameUpdateMidhook", upd.getFrame(), pl->m_player1);
+            if (upd.m_pauseAtFrame != 0 && upd.getFrame() >= upd.m_pauseAtFrame) {
+                upd.m_pauseAtFrame = 0;
+                upd.setPaused(true);
+                upd.breakLoop();
+            }
 
             // Silicate's trail buffer records here too: both players' hitboxes,
             // once per settled frame, while the player is alive.
