@@ -1303,7 +1303,8 @@ int TrajectoryPredictionService::survivesFor(PlayLayer* playLayer,
 int TrajectoryPredictionService::survivesScript(PlayLayer* playLayer,
                                                 PlayerObject* source,
                                                 int frames,
-                                                std::vector<std::pair<int, bool>> const& events) {
+                                                std::vector<std::pair<int, bool>> const& events,
+                                                std::vector<cocos2d::CCPoint>* trace) {
     if (!playLayer || !source || frames <= 0 || m_context.activeSimulation) {
         return -1;
     }
@@ -1342,6 +1343,9 @@ int TrajectoryPredictionService::survivesScript(PlayLayer* playLayer,
             stepMoveActions(playLayer, tick * static_cast<float>(moveInterval));
         }
         this->stepFork(playLayer, fork, tick);
+        if (trace) {
+            trace->push_back(fork->getPosition());
+        }
         if (m_context.traceCancelled) {
             break;
         }

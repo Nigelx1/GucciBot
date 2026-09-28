@@ -88,6 +88,8 @@ namespace gucci {
         skippedSameOutcome = 0;
         rankedNodes = 0;
         rankMsTotal = 0.0;
+        lookCheck = LookaheadCheck{};
+        lookChecksLogged = 0;
         this->loadSolutionMemory();
         hazardCount.clear();
         reopenedSpots.clear();
@@ -198,12 +200,13 @@ namespace gucci {
         lastReleaseSurvived = agency.releaseSurvived;
     }
 
-    void Pathfinder::noteDeath(uint32_t frame, float x) {
+    void Pathfinder::noteDeath(uint32_t frame, float x, int killerId) {
         if (!active || died)
             return;
         died = true;
         deathFrame = frame;
         deathX = x;
+        deathKillerId = killerId;
         deathStateKey = this->captureDeathStateKey();
         deathExactKey = this->captureDeathExactKey(frame);
     }
@@ -342,6 +345,13 @@ namespace gucci {
         // Any rolling checkpoints belong to the run we're abandoning.
         releaseRing();
         applyAtom();
+        if (lookCheck.armed) {
+            lookCheck.recording = haveCandidate &&
+                                  cur.pressFrame == lookCheck.cand.pressFrame &&
+                                  cur.holdFrames == lookCheck.cand.holdFrames;
+            if (lookCheck.recording)
+                lookCheck.real.clear();
+        }
         died = false;
         completed = false;
         runFrames = 0;
@@ -614,6 +624,75 @@ namespace gucci {
         // instead of only a cold full reset.
         if (checkpointInterval > 0 && f > 0 && (f % (uint32_t)checkpointInterval) == 0)
             takeRingCheckpoint(f);
+
+        if (lookCheck.recording && pl->m_player1)
+            lookCheck.real.push_back(pl->m_player1->getPosition());
+    }
+
+    // Where the fork's path and the real run's path for the same candidate
+    // part, if they do. The two are recorded at slightly different points in
+    // a tick, so the offset between them is found first (the one that makes
+    // the opening frames agree best) rather than assumed.
+    void Pathfinder::finishLookaheadCheck() {
+        auto& c = lookCheck;
+        c.recording = false;
+        c.armed = false;
+        lookChecksLogged++;
+
+        auto dist = [](cocos2d::CCPoint a, cocos2d::CCPoint b) {
+            return std::abs(a.x - b.x) + std::abs(a.y - b.y);
+        };
+        int bestK = 0;
+        float bestErr = 1e30f;
+        for (int k = -3; k <= 3; ++k) {
+            float err = 0.f;
+            int n = 0;
+            for (int i = 0; i < 20; ++i) {
+                int const j = i + k;
+                if (i >= (int)c.fork.size() || j < 0 || j >= (int)c.real.size())
+                    continue;
+                err += dist(c.fork[(size_t)i], c.real[(size_t)j]);
+                n++;
+            }
+            if (n >= 5 && err / n < bestErr) {
+                bestErr = err / n;
+                bestK = k;
+            }
+        }
+        int split = -1;
+        for (int i = 0; i < (int)c.fork.size(); ++i) {
+            int const j = i + bestK;
+            if (j < 0 || j >= (int)c.real.size())
+                break;
+            if (dist(c.fork[(size_t)i], c.real[(size_t)j]) > 1.0f) {
+                split = i;
+                break;
+            }
+        }
+        std::string where = "never (as far as both went)";
+        if (split >= 0) {
+            auto const fp = c.fork[(size_t)split];
+            auto const rp = c.real[(size_t)(split + bestK)];
+            where = fmt::format("{} frames in: fork ({:.1f},{:.1f}) real ({:.1f},{:.1f})",
+                                split, fp.x, fp.y, rp.x, rp.y);
+        }
+        log::info("[Pathfinder] look-ahead check @f={} press@{} hold {} from f={}: fork lasted {} "
+                  "(killer id {}), real died at f={} = {} in (killer id {}); {} fork / {} real "
+                  "frames, offset {}, opening error {:.2f}; paths split {}",
+                  c.nodeDeath,
+                  c.cand.pressFrame,
+                  c.cand.holdFrames,
+                  c.f0,
+                  c.forkSurvived,
+                  c.forkKiller,
+                  deathFrame,
+                  (int64_t)deathFrame - (int64_t)c.f0,
+                  deathKillerId,
+                  c.fork.size(),
+                  c.real.size(),
+                  bestK,
+                  bestErr,
+                  where);
     }
 
     int Pathfinder::agencyPointsBetween(int64_t floor, uint32_t d) const {
@@ -628,6 +707,8 @@ namespace gucci {
     void Pathfinder::handleDeath() {
         died = false;
         uint32_t d = deathFrame;
+        if (lookCheck.recording)
+            this->finishLookaheadCheck();
 
         if (stack.empty()) {
             log::info("[Pathfinder] first death @f={} x={:.1f} -- opening decision point", d, deathX);
@@ -1185,11 +1266,41 @@ namespace gucci {
         for (size_t i : order)
             sorted.push_back(n.cands[i]);
 
-        auto const& best = sorted[first];
+        auto const best = sorted[first];
         int const bestSurvived = survived[order.front()];
         n.cands = std::move(sorted);
         rankedNodes++;
         rankMsTotal += ms;
+
+        // Diagnostic (see LookaheadCheck): replay the top candidate on the
+        // fork once more keeping its path, and have its real run recorded.
+        if (lookChecksLogged < 12) {
+            auto ev = base;
+            int const p = (int)(best.pressFrame - f0);
+            ev.push_back({p, true});
+            ev.push_back({p + std::max(1, best.holdFrames), false});
+            std::stable_sort(ev.begin(), ev.end(),
+                             [](auto const& a, auto const& b) { return a.first < b.first; });
+            lookCheck = LookaheadCheck{};
+            lookCheck.forkSurvived =
+                traj.survivesScript(pl, pl->m_player1, horizon, ev, &lookCheck.fork);
+            lookCheck.forkKiller = traj.lastForkKillerId();
+            lookCheck.armed = true;
+            lookCheck.cand = best;
+            lookCheck.f0 = f0;
+            lookCheck.nodeDeath = n.deathFrame;
+            auto const rp = pl->m_player1->getPosition();
+            auto const cp = n.ckpt.state.m_player1.m_ccPosition;
+            log::info("[Pathfinder] look-ahead check armed @f={}: real player after the restore to "
+                      "f={} is at ({:.2f},{:.2f}), the checkpoint says ({:.2f},{:.2f}){}",
+                      n.deathFrame,
+                      f0,
+                      rp.x,
+                      rp.y,
+                      cp.x,
+                      cp.y,
+                      n.fullResetInstead ? " (full reset, no checkpoint)" : "");
+        }
         log::info("[Pathfinder] look-ahead @f={} : {} candidates over {} frames in {:.0f} ms -- "
                   "best press@{} hold {} lasts {} (the death is {} in)",
                   n.deathFrame,

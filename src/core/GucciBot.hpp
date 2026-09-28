@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-28-be (ToastyReplay Lite is no longer required -- GucciBot runs without it. It still stands down if ToastyReplay Lite is enabled at the same time, because the two crash playback together. Pathfinder is as in -bd.)"
+    "2026-09-28-bf (DIAGNOSTIC for the Pathfinder look-ahead: on the first 12 ranked decision points, logs where the fork's path and the real run's path for the same candidate split, what killed each, and where the real player is right after the restore.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

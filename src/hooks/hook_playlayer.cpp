@@ -622,7 +622,9 @@ class $modify(GB7PlayLayer, PlayLayer) {
             // anticheat spike -- native death path suppressed so the search
             // keeps driving the same PlayLayer.
             if (obj != m_anticheatSpike)
-                Pathfinder::get()->noteDeath(upd.getFrame(), player ? player->m_position.x : 0.f);
+                Pathfinder::get()->noteDeath(upd.getFrame(),
+                                             player ? player->m_position.x : 0.f,
+                                             obj ? obj->m_objectID : -1);
             return;
         }
 

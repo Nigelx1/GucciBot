@@ -224,7 +224,8 @@ namespace gucci {
         // of that tick, before its physics. Pathfinder ranks its candidates
         // with this -- a fork only ranks; a real run still decides.
         int survivesScript(PlayLayer* playLayer, PlayerObject* source, int frames,
-                           std::vector<std::pair<int, bool>> const& events);
+                           std::vector<std::pair<int, bool>> const& events,
+                           std::vector<cocos2d::CCPoint>* trace = nullptr);
         cocos2d::ccColor4F holdColor(bool player2) const {
             return player2 ? m_holdColorP2 : m_holdColor;
         }

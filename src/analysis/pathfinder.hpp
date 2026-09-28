@@ -106,7 +106,7 @@ namespace gucci {
         // records whether it mattered. Search-only -- normal play never calls
         // this, so a fault here can only ever reach an active search.
         void serviceAgencyProbe();
-        void noteDeath(uint32_t frame, float x);
+        void noteDeath(uint32_t frame, float x, int killerId = -1);
         void noteLevelComplete();
         void saveSettings() const;
 
@@ -182,6 +182,25 @@ namespace gucci {
         void rankByLookahead(Node& n);
         int rankedNodes = 0;
         double rankMsTotal = 0.0;
+
+        // Diagnostic: does the look-ahead see what the real run sees? For the
+        // top-ranked candidate of the first few ranked nodes, keep the fork's
+        // path, record the real run's path for the same candidate, and log
+        // where they part. See rankByLookahead / finishLookaheadCheck.
+        struct LookaheadCheck {
+            bool armed = false;      // waiting for the real run of `cand`
+            bool recording = false;  // that run is going now
+            Candidate cand{0, 1};
+            uint32_t f0 = 0;
+            uint32_t nodeDeath = 0;
+            int forkSurvived = -1;
+            int forkKiller = -1;
+            std::vector<cocos2d::CCPoint> fork;  // after each fork step
+            std::vector<cocos2d::CCPoint> real;  // at each settled frame
+        } lookCheck;
+        int lookChecksLogged = 0;
+        int deathKillerId = -1;
+        void finishLookaheadCheck();
 
         // Which frames of the CURRENT run the player actually had a say on,
         // indexed by absolute frame. Filled by the agency probe as the run
