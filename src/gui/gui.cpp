@@ -2972,6 +2972,7 @@ namespace gucci {
             } else {
                 engine->replay.m_actionAtom.clear();
                 engine->replay.m_pathSamples.clear();
+                engine->forgetMacroWindows();
                 engine->replay.m_inputIndex = 0;
                 engine->updater.resetFrame();
                 engine->updater.m_frameOnLastAttempt = 0;
@@ -3685,6 +3686,7 @@ namespace gucci {
                     if (!eng4->isRecording() && eng4->replayName == replayDeleteName) {
                         eng4->replay.m_actionAtom.clear();
                         eng4->replayName.clear();
+                        eng4->forgetMacroWindows();
                     }
                     eng4->incompatibleMacros.erase(replayDeleteName);
                     eng4->jaMacros.erase(replayDeleteName);

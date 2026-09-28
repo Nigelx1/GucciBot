@@ -1041,6 +1041,9 @@ namespace gucci {
         void saveFwMarksNow();
         // Writes the analyzer's results next to the current macro.
         void saveAcFrameWindowResults();
+        // Drops the frame windows in memory (not the sidecar on disk) when
+        // the macro they belong to stops being the loaded one.
+        void forgetMacroWindows();
         std::vector<StoredFrame> fwCapStack;
         void analyzeFrameWindows();
 

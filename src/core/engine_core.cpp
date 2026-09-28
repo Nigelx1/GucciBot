@@ -2529,6 +2529,18 @@ namespace gucci {
         saveAcResults(path);
     }
 
+    // Loading a macro already swaps its windows in (loadAcResults clears
+    // first). This is for the paths that drop a macro without loading
+    // another -- starting a fresh recording, deleting the loaded macro --
+    // which used to leave the old macro's windows drawn over the level.
+    void GucciEngine::forgetMacroWindows() {
+        if (::Bot::get()->frameWindow().running())
+            return;
+        ::Bot::get()->frameWindow().clear();
+        fwMarks.clear();
+        fwHasData = false;
+    }
+
     bool GucciEngine::analyzerOwnsRun() const {
         return ::Bot::get()->frameWindow().running();
     }
