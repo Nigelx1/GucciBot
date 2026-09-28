@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-az (Three QoL fixes: frame windows are dropped when their macro is (new recording, deleted macro); the Calculating HUD shows the real progress instead of 0 percent; bands start on the Bells sounds instead of empty sound boxes, and Reset Bands lands there too.)"
+    "2026-09-27-ba (VERSION 2.beta.1. Version bump on top of -az: mod.json, CMake, about.md -- which now describes practice checkpoints captured whole and the Bells default -- and the README status.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -112,7 +112,7 @@ Also in Settings: **BIG BRRRR**, a core feature of this mod, and **Bass Shake**,
 
 ## Status
 
-**1.8** is the stable release. **2.0** (the `engine-port-2.0` branch) is in alpha: GucciBot's engine reconciled against Silicate's function by function, with a lot of it not yet run in-game — the alphas say so on their release pages, and every unconfirmed fix says so in its own commit message. If you want something that's been tested by an actual human, use 1.8.
+**1.8** is the stable release. **2.0** (the `engine-port-2.0` branch) is in beta: GucciBot's engine reconciled against Silicate's function by function, now run in-game — Calculate, playback and practice-mode recording are confirmed, and every fix still waiting on a test says so in its own commit message. If you want something that's been tested by an actual human, use 1.8.
 
 ## Contact
 
