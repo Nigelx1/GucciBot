@@ -25,8 +25,14 @@ class $modify(GB7PlayLayer, PlayLayer) {
     CheckpointObject* markCheckpoint() {
         if (!GucciEngine::get()->enabled)
             return PlayLayer::markCheckpoint();
+        // Silicate's guards: no checkpoint for a player who is already dead,
+        // and the checkpoint's own object is activated like GD's would be.
+        if (m_player1->m_isDead || m_player2->m_isDead)
+            return nullptr;
         auto* cp = createCheckpoint();
         storeCheckpoint(cp);
+        if (cp && cp->m_physicalCheckpointObject)
+            cp->m_physicalCheckpointObject->activateObject();
         return cp;
     }
 
@@ -41,38 +47,20 @@ class $modify(GB7PlayLayer, PlayLayer) {
                 std::make_pair(obj, (CheckpointObject*)this->m_activatedCheckpoint));
             return;
         }
-        // Queues the capture instead of taking it immediately: this native
-        // hook fires before that tick's own physics integration for the
-        // labeled frame has happened, so an immediate saveCurrent() here
-        // reads stale position/velocity even though the +1 frame label
-        // is correct. frameUpdateMidhook (engine_updater.cpp) performs the
-        // real saveCurrent() one tick later, once the frame has settled --
-        // don't "simplify" this back to an immediate call, that's exactly
-        // the bug this fixed (compounding per-checkpoint position drift).
-        auto& pf = gb->practiceFix;
-        if (gb->updater.m_logFrameIncrements)
-            logFrameIncrement(
-                "storeCheckpoint(queued)", gb->updater.getFrame() + 1, this->m_player1);
-        pf.m_pendingCaptureCp = obj;
-        pf.m_pendingCaptureFrameOffset = gb->updater.getFrame() + 1;
-        pf.m_pendingCaptureStage = 1;
-
-        // Provisional save, right now, with the one-frame-stale state the
-        // comment above warns about. The settled capture two ticks later
-        // replaces it in place (saveCurrent overwrites an entry for the same
-        // checkpoint), so in normal play nothing changes and the accurate
-        // capture still wins.
+        // Captured here, in the same instant GD built `obj`, and labelled with
+        // the current frame -- exactly what Calculate's snapshots do, and those
+        // restore exactly. The checkpoint key reaches this through
+        // queueCheckpointHook (below), which places it in the frozen tick
+        // between physics steps, so the state is settled.
         //
-        // It exists for the case where the settled capture never arrives: the
-        // deferred pass is gated on the player being alive, so dying within
-        // those two ticks used to abandon the capture entirely. The checkpoint
-        // then never entered m_savedCheckpoints and the next respawn went to
-        // the PREVIOUS checkpoint. A slightly stale checkpoint beats a missing
-        // one. (This also replaces the old flush-the-previous-pending call
-        // that used to sit here, which saved the previous checkpoint using the
-        // CURRENT player state -- a checkpoint whose stored gamemode did not
-        // match its own position, which is how hitboxes came back wrong.)
-        pf.saveCurrent(obj, pf.m_pendingCaptureFrameOffset);
+        // This used to capture the player two ticks AFTER GD built its
+        // checkpoint (a deferral that compensated for GD placing it mid-tick).
+        // GD's checkpoint holds the level -- moving objects, triggers -- so a
+        // respawn put the level back at one moment and the player at another.
+        // Macros recorded through such a respawn broke a little after it:
+        // Supersonic (the dual), Solar Flare (the ship), Silent Clubstep (the
+        // drop), 79 to 164 frames past the checkpoint each time.
+        gb->practiceFix.saveCurrent(obj, gb->updater.getFrame());
     }
 
     void loadFromCheckpoint(CheckpointObject* obj) {
@@ -133,22 +121,6 @@ class $modify(GB7PlayLayer, PlayLayer) {
             obj->m_glowSprite = nullptr;
         }
         obj->removeMeAndCleanup();
-
-        // A capture may still be queued against this checkpoint. Releasing it
-        // here while m_pendingCaptureCp still points at it leaves that pointer
-        // dangling, and the deferred pass two ticks later would push the freed
-        // object straight back into m_savedCheckpoints -- where the next
-        // loadFromCheckpoint dereferences it. GitHub issue #7, crashing inside
-        // GD's loadFromCheckpoint with a read of 0xFFFFFFFFFFFFFFFF.
-        //
-        // Reachable since 1.8, where storeCheckpoint began saving the
-        // checkpoint immediately as well as queueing it: before that the
-        // checkpoint was not in m_savedCheckpoints yet, so removeCheckpoint
-        // could not reach it while a capture was still pending.
-        if (pf.m_pendingCaptureCp == cp.m_checkpoint) {
-            pf.m_pendingCaptureCp = nullptr;
-            pf.m_pendingCaptureStage = 0;
-        }
 
         cp.m_checkpoint->release();
         pf.m_savedCheckpoints.pop_back();
@@ -624,18 +596,6 @@ class $modify(GB7PlayLayer, PlayLayer) {
         if (obj)
             ::Bot::get()->trailBuffer().reportKill(player, obj);
 
-        // A queued checkpoint capture must not outlive the attempt it belongs
-        // to. The deferred pass only runs while the player is alive, so a
-        // pending capture at death would otherwise sit there and be completed
-        // during a LATER attempt, filing that attempt's player state -- a
-        // different position, often a different gamemode -- under this
-        // checkpoint's frame. The provisional save taken at placement time
-        // already holds a usable state, so dropping this loses nothing.
-        if (auto& pf = gb->practiceFix; pf.m_pendingCaptureStage != 0) {
-            pf.m_pendingCaptureCp = nullptr;
-            pf.m_pendingCaptureStage = 0;
-        }
-
         // The anticheat spike always goes to GD, whoever owns the run, as in
         // Silicate's conditionalDestroyPlayer. Until GD's destroyPlayer has
         // handled it, every collision pass that touches it returns before
@@ -859,3 +819,41 @@ class $modify(GB7PlayLayer, PlayLayer) {
         PlayLayer::addObject(obj);
     }
 };
+
+// GD's checkpoint key/button handler (2.2081 Windows): if practice mode is on,
+// it sets m_tryPlaceCheckpoint and GD places the checkpoint later, part-way
+// through a tick. Silicate replaces it so the checkpoint is placed in the
+// frozen tick instead, between physics steps -- "this basically removes the one
+// frame delay with placing checkpoints". GucciBot never had this half; it let
+// GD place the checkpoint mid-tick and captured the player two ticks later to
+// make up for it, which left a respawn's level and player at different moments.
+static constexpr uintptr_t kQueueCheckpointOffset = 0x4ce060;
+
+static void queueCheckpointHook(void* unk, void* unk2) {
+    if (!GucciEngine::get()->enabled) {
+        return reinterpret_cast<void (*)(void*, void*)>(geode::base::get() +
+                                                        kQueueCheckpointOffset)(unk, unk2);
+    }
+
+    auto* pl = PlayLayer::get();
+    if (!pl || !pl->m_isPracticeMode)
+        return;  // GD's own gate
+    // While Calculate walks you back after a Test it places your checkpoints
+    // itself; a key press in the middle of that would throw its count off.
+    if (::Bot::get()->frameWindow().returning())
+        return;
+    if (pl->m_player1->m_isDead || pl->m_player2->m_isDead)
+        return;
+
+    GucciEngine::get()->updater.scheduleFrozenFunction([](float) {
+        if (auto* p = PlayLayer::get())
+            p->markCheckpoint();
+    });
+}
+
+$execute {
+    (void)Mod::get()->hook(reinterpret_cast<void*>(geode::base::get() + kQueueCheckpointOffset),
+                           &queueCheckpointHook,
+                           "PlayLayer::queueCheckpoint",
+                           tulip::hook::TulipConvention::Default);
+}

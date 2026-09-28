@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-aw (Pathfinder: a decision point only counts as cut short by the last committed input when its search window actually ran into that input. It used to count whenever the input was within 960 frames, so nodes with a full window gave it up for nothing.)"
+    "2026-09-27-ax (Practice checkpoints: placed in the frozen tick and captured in the same instant, as Silicate does, instead of GD placing them mid-tick and GucciBot capturing the player two ticks later. Respawns put the level and the player back at different moments, and macros recorded through them broke shortly after.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -163,13 +163,6 @@ namespace gucci {
                     *s.m_randomState =
                         attemptSeed ^ (static_cast<uint64_t>(s.m_uniqueID) * 2137);
         }
-
-        // Deferred checkpoint capture -- see storeCheckpoint (hook_playlayer.cpp)
-        // and frameUpdateMidhook (engine_updater.cpp) for why this exists and
-        // why the timing/ordering there is deliberate, not incidental.
-        CheckpointObject* m_pendingCaptureCp = nullptr;
-        uint64_t m_pendingCaptureFrameOffset = 0;
-        int m_pendingCaptureStage = 0;
 
         SavedCheckpointState createCheckpoint(CheckpointObject* cp, uint64_t frameOffset);
         void saveCurrent(CheckpointObject* cp, uint64_t frameOffset);

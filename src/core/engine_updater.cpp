@@ -678,25 +678,6 @@ static void frameUpdateMidhook(SafetyHookContext&) {
 
     if (!pl->m_playerDied) {
         if (PlayLayer::get()) {
-            // Checked/cleared BEFORE incrementFrame() below on purpose, so
-            // stage 2 captures while getFrame() still reads the label it
-            // was queued under -- one tick after storeCheckpoint queued it
-            // (hook_playlayer.cpp), so this tick's own physics settle has
-            // already happened. Don't move this after incrementFrame() or
-            // collapse the two-stage promotion -- both changes reintroduce
-            // stale-position checkpoint capture.
-            auto& pf = gb->practiceFix;
-            if (pf.m_pendingCaptureStage == 2) {
-                if (upd.m_logFrameIncrements)
-                    logFrameIncrement(
-                        "frameUpdateMidhook(deferredCapture)", upd.getFrame() + 1, pl->m_player1);
-                pf.saveCurrent(pf.m_pendingCaptureCp, pf.m_pendingCaptureFrameOffset);
-                pf.m_pendingCaptureCp = nullptr;
-                pf.m_pendingCaptureStage = 0;
-            } else if (pf.m_pendingCaptureStage == 1) {
-                pf.m_pendingCaptureStage = 2;
-            }
-
             // THE settled point -- this exact spot, before incrementFrame().
             // getFrame() still reads the frame whose physics just finished, and
             // the live player state is that frame's completed state, so a
