@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-at (DIAGNOSTIC ONLY, Congregation slope: counts GD's collision passes on player 1 per tick and logs what postCollision sees when the slope flags change, to guccibot_slope.log. No behaviour change.)"
+    "2026-09-27-au (Congregation slope FIX: the anticheat spike now always reaches GD during Calculate and Pathfinder, as in Silicate. Swallowing it left every collision pass cut short, so no slope ever launched under either. The -at collision-pass logging is still in.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

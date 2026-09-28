@@ -636,6 +636,17 @@ class $modify(GB7PlayLayer, PlayLayer) {
             pf.m_pendingCaptureStage = 0;
         }
 
+        // The anticheat spike always goes to GD, whoever owns the run, as in
+        // Silicate's conditionalDestroyPlayer. Until GD's destroyPlayer has
+        // handled it, every collision pass that touches it returns before
+        // PlayerObject::postCollision -- which is where GD launches the player
+        // off the top of a slope. Normal play clears it within the first six
+        // ticks. The two branches below used to swallow it, so under Calculate
+        // and Pathfinder it was never cleared and no slope launched all level:
+        // Congregation's capture went 42,460 frames without one.
+        if (obj == m_anticheatSpike && (Pathfinder::get()->active || gb->fwAnalyzing))
+            return PlayLayer::destroyPlayer(player, obj);
+
         if (Pathfinder::get()->active) {
             // A simulated player dying inside an agency probe is not the run
             // dying. Without this the search treats every fork that clips
@@ -648,8 +659,8 @@ class $modify(GB7PlayLayer, PlayLayer) {
                 return;
             }
             // Same GD-native death signal Calculate relies on, minus the
-            // end-of-level anticheat spike -- native death path suppressed
-            // so the search keeps driving the same PlayLayer.
+            // anticheat spike -- native death path suppressed so the search
+            // keeps driving the same PlayLayer.
             if (obj != m_anticheatSpike)
                 Pathfinder::get()->noteDeath(upd.getFrame(), player ? player->m_position.x : 0.f);
             return;
@@ -657,7 +668,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
 
         // anticroom's analyzer swallows deaths it caused itself, the same way
         // the Pathfinder branch above does. Conditions are Silicate's: never
-        // for the end-of-level anticheat spike, and never for a simulated
+        // for the anticheat spike, and never for a simulated
         // player, so a fork dying is not mistaken for the run dying.
         if (obj != m_anticheatSpike &&
             !TrajectoryPredictionService::get().ownsPreviewPlayer(player) &&
