@@ -175,6 +175,8 @@ class FrameWindowAnalyzer {
 
    public:
     float progress() const;
+    size_t progressIndex() const { return m_index; }
+    size_t progressTotal() const { return m_total; }
     std::string const& status() const { return m_status; }
     std::string const& stage() const { return m_stage; }
 

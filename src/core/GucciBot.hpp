@@ -1041,11 +1041,7 @@ namespace gucci {
         void saveFwMarksNow();
         // Writes the analyzer's results next to the current macro.
         void saveAcFrameWindowResults();
-        float fwAnalyzeProgress = 0.0f;
-        int fwAnalyzeCur = 0;
-        int fwAnalyzeTotal = 0;
         std::vector<StoredFrame> fwCapStack;
-        std::string fwAnalyzeStage;
         void analyzeFrameWindows();
 
         // ---- Alignment-Independent frame-window method (Juice's spec,

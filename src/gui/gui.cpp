@@ -10244,16 +10244,21 @@ namespace gucci {
         ImGui::TextColored(ImVec4(accent.x, accent.y, accent.z, pulse), "Calculating...");
         if (ui->fontBody)
             ImGui::PopFont();
+        // Read from anticroom's analyzer. This used to read progress fields
+        // that belonged to GucciBot's own analyzer, deleted in 1.8 -- nothing
+        // wrote them any more, so the HUD sat at 0% for the whole run.
+        // progress() is inputs done over inputs total, so it runs 0-100% once
+        // for the capture pass and again for probing; the status says which.
+        auto const& fw = ::Bot::get()->frameWindow();
         ImGui::PushStyleColor(ImGuiCol_Text, ui->theme.textSecondary);
-        if (engine->fwAnalyzeTotal > 0)
+        if (fw.progressTotal() > 0)
             ImGui::Text("%s  %d/%d  (%.0f%%)",
-                        engine->fwAnalyzeStage.c_str(),
-                        engine->fwAnalyzeCur,
-                        engine->fwAnalyzeTotal,
-                        engine->fwAnalyzeProgress * 100.f);
+                        fw.status().c_str(),
+                        (int)std::min(fw.progressIndex(), fw.progressTotal()),
+                        (int)fw.progressTotal(),
+                        fw.progress() * 100.f);
         else
-            ImGui::Text(
-                "%s  (%.0f%%)", engine->fwAnalyzeStage.c_str(), engine->fwAnalyzeProgress * 100.f);
+            ImGui::Text("%s", fw.status().c_str());
         ImGui::PopStyleColor();
         if (Widgets::StyledButton("Cancel", ImVec2(-1, 24), ui->theme, ui->anim, 4.f))
             engine->cancelAnalysis();
