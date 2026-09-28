@@ -5159,6 +5159,25 @@ namespace gucci {
         };
     }
 
+    // The per-window bell clips, one per band by the window range it covers.
+    // Seeded into fw_assets on first run (main.cpp); named by range rather
+    // than band index. The Bells button, the first-run default and Reset Bands
+    // all come through here.
+    static void applyBellSounds(std::vector<FrameWindowTier>& tiers) {
+        auto clip = [](int lo) -> char const* {
+            if (lo <= 1) return "fw_1.wav";
+            if (lo == 2) return "fw_2.wav";
+            if (lo == 3) return "fw_3.wav";
+            if (lo == 4) return "fw_4.wav";
+            if (lo <= 6) return "fw_5_6.wav";
+            if (lo <= 8) return "fw_7_8.wav";
+            return "fw_9_12.wav";
+        };
+        auto const dir = Mod::get()->getSaveDir() / "fw_assets";
+        for (auto& t : tiers)
+            t.audioPath = (dir / clip(t.minWindow)).string();
+    }
+
     // The bands are a vector of structs, so they persist as one JSON string
     // rather than as numbered keys -- adding or removing a band would otherwise
     // leave orphaned keys behind that the next load would half-read.
@@ -5418,6 +5437,21 @@ namespace gucci {
         if (auto const t = mod->getSavedValue<std::string>("fwac_tiers", "");
             !t.empty())
             acTiersFromJson(t, fw.tiers);
+
+        // Bands used to start silent, every sound box reading "sound file
+        // (optional)" until the Bells button was pressed. Start on the Bells
+        // instead -- once, and only if no band has a sound yet, so a set of
+        // sounds someone chose (or cleared on purpose later) is never replaced.
+        if (!mod->getSavedValue<bool>("fwac_sounds_seeded", false)) {
+            bool const silent = std::all_of(fw.tiers.begin(), fw.tiers.end(),
+                                            [](auto const& t) { return t.audioPath.empty(); });
+            if (silent) {
+                applyBellSounds(fw.tiers);
+                FrameWindowSound::clearCache();
+                mod->setSavedValue("fwac_tiers", acTiersToJson(fw.tiers));
+            }
+            mod->setSavedValue("fwac_sounds_seeded", true);
+        }
     }
 
     void MenuInterface::saveAcFrameWindowSettings() {
@@ -6120,6 +6154,8 @@ namespace gucci {
             if (Widgets::StyledButton("Reset Bands", ImVec2(-1, 22), theme, anim, 6.f)) {
                 FrameWindowSettings const def;
                 fw.tiers = def.tiers;
+                applyBellSounds(fw.tiers);  // the same Bells a fresh install starts on
+                FrameWindowSound::clearCache();
                 dirty = true;
             }
 
@@ -6145,20 +6181,7 @@ namespace gucci {
             }
             ImGui::SameLine(0, 8);
             if (Widgets::StyledButton("Bells", ImVec2(halfW, 22), theme, anim, 6.f)) {
-                // Seeded into fw_assets on first run; named by the window range
-                // they cover rather than by band index.
-                auto clip = [](int lo) -> char const* {
-                    if (lo <= 1) return "fw_1.wav";
-                    if (lo == 2) return "fw_2.wav";
-                    if (lo == 3) return "fw_3.wav";
-                    if (lo == 4) return "fw_4.wav";
-                    if (lo <= 6) return "fw_5_6.wav";
-                    if (lo <= 8) return "fw_7_8.wav";
-                    return "fw_9_12.wav";
-                };
-                auto const dir = Mod::get()->getSaveDir() / "fw_assets";
-                for (auto& t : fw.tiers)
-                    t.audioPath = (dir / clip(t.minWindow)).string();
+                applyBellSounds(fw.tiers);
                 FrameWindowSound::clearCache();
                 dirty = true;
             }
@@ -6169,8 +6192,7 @@ namespace gucci {
             ImGui::TextWrapped(
                 "A pack is a folder of clips named \"<N>f SFX\", one per band size. Import "
                 "gives every band the clip matching its lower bound; Export copies the "
-                "bands' current clips out under that name. Bands start with no sound at "
-                "all, so nothing plays until a pack is imported.");
+                "bands' current clips out under that name. Bands start on the Bells.");
             ImGui::PopStyleColor();
 
             {

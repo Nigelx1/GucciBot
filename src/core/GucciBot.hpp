@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-ay (Assistant Access: gucci_practice tool -- practice mode on or off, place a checkpoint through the key's own path, respawn, and a hash of every level object so a respawn can be checked against a straight run. Includes the -ax checkpoint fix.)"
+    "2026-09-27-az (Three QoL fixes: frame windows are dropped when their macro is (new recording, deleted macro); the Calculating HUD shows the real progress instead of 0 percent; bands start on the Bells sounds instead of empty sound boxes, and Reset Bands lands there too.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
