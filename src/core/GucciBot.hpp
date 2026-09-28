@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-28-bh (Branch absense-pathfinder: Backwards Stepping now works like Silicate's. A stored frame is labelled with the frame it holds, and a step back restores the newest one and sets the frame counter to match. Before, the first step back went two ticks, and Prevent Death and the best-tick search landed a tick early. Absense's pathfinder is still compiled in but not wired up.)"
+    "2026-09-28-bi (Branch absense-pathfinder: Absense's pathfinder is wired in and is the default engine in the Pathfinder tab, with Classic still selectable. It plays the level for real, plans each input by running copies of the player ahead, and goes back when a way is a dead end. Its result is saved as a macro named after the level. gucci_pathfinder takes an engine option. UNTESTED in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -462,6 +462,9 @@ namespace gucci {
         }
         // Silicate's name for m_tps, which Absense's pathfinder uses.
         double getTps() const { return m_tps; }
+        // Wall-clock seconds this frame stood still while Absense's pathfinder
+        // thought (set in drawScene, spent in calculateSteps).
+        double m_frozenSeconds = 0.0;
         float getTimeWarp() const;
         uint32_t getFrame() const;
 

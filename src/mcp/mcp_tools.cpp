@@ -16,6 +16,7 @@
 #include "analysis/ac/framewindow.hpp"
 #include "analysis/ac/lstar.hpp"
 #include "analysis/pathfinder.hpp"
+#include "absense/glue.hpp"
 #include "analysis/trajectory.hpp"
 #include "tools/macro_check.hpp"
 #include "core/GucciBot.hpp"
@@ -69,7 +70,7 @@ namespace gucci::mcp {
                 return "render";
             if (gb->analyzerOwnsRun())
                 return "analyzer";
-            if (Pathfinder::get()->active)
+            if (Pathfinder::get()->active || absense::isRunning())
                 return "pathfinder";
             return "";
         }
@@ -500,6 +501,12 @@ namespace gucci::mcp {
             action["type"] = "string";
             action["enum"] = std::vector<std::string>{"start", "cancel", "status"};
             props["action"] = action;
+            auto engine = obj();
+            engine["type"] = "string";
+            engine["enum"] = std::vector<std::string>{"absense", "classic"};
+            engine["description"] =
+                "which pathfinder to start (default: the one picked in the Pathfinder tab)";
+            props["engine"] = engine;
             schema["type"] = "object";
             schema["properties"] = props;
             schema["required"] = std::vector<std::string>{"action"};
@@ -507,7 +514,9 @@ namespace gucci::mcp {
             server.addTool({
                 "gucci_pathfinder",
                 "Drive the pathfinder: start a search, cancel it, or read how "
-                "far it has got and what it has found.",
+                "far it has got and what it has found. Two engines: Absense's "
+                "(plans each input by running copies of the player ahead; its "
+                "status is under \"absense\") and the classic one.",
                 schema,
                 [](matjson::Value const& a) {
                     auto* pf = Pathfinder::get();
@@ -517,16 +526,48 @@ namespace gucci::mcp {
                     if (what == "start") {
                         requireFreeRun();
                         requireLevel();
-                        pf->begin();
-                        out["started"] = pf->active;
+                        auto const eng = argStr(a, "engine");
+                        bool const classic =
+                            eng.empty() ? absense::classicSelected() : eng == "classic";
+                        if (!eng.empty() && eng != "classic" && eng != "absense")
+                            throw ToolError("engine must be absense or classic");
+                        out["engine"] = classic ? "classic" : "absense";
+                        if (classic) {
+                            pf->begin();
+                            out["started"] = pf->active;
+                        } else {
+                            out["started"] = absense::startPathfinder();
+                            out["message"] = absense::status().message;
+                        }
                         return out;
                     }
                     if (what == "cancel") {
+                        absense::stopPathfinder();
                         pf->cancel();
                         out["cancelled"] = true;
                         return out;
                     }
                     if (what == "status") {
+                        {
+                            auto const st = absense::status();
+                            auto ab = obj();
+                            ab["running"] = st.running;
+                            ab["phase"] = std::string(st.phase);
+                            ab["progress_percent"] = (double)st.progress * 100.0;
+                            ab["best_percent"] = (double)st.bestProgress * 100.0;
+                            ab["start_tick"] = (int64_t)st.startTick;
+                            ab["current_tick"] = (int64_t)st.currentTick;
+                            ab["best_tick"] = (int64_t)st.bestTick;
+                            ab["decisions"] = (int64_t)st.decisions;
+                            ab["dead_ends"] = (int64_t)st.deadEnds;
+                            ab["backtracks"] = (int64_t)st.backtracks;
+                            ab["simulations"] = (int64_t)st.simulations;
+                            ab["freezes"] = (int64_t)st.freezes;
+                            ab["seconds"] = st.seconds;
+                            ab["last_decision"] = st.lastDecision;
+                            ab["message"] = st.message;
+                            out["absense"] = ab;
+                        }
                         out["active"] = pf->active;
                         out["stage"] = pf->stage;
                         out["runs"] = (int64_t)pf->runs;

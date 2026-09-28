@@ -3,6 +3,8 @@
 #include "analysis/ac/framewindow.hpp"
 #include "analysis/trajectory.hpp"
 #include "hooks/util_midhook.hpp"
+#include "absense/compat/bot.hpp"
+#include "absense/trajectory/trajectory.hpp"
 #include <Geode/Geode.hpp>
 #include <Geode/modify/PlayerObject.hpp>
 using namespace geode::prelude;
@@ -189,6 +191,10 @@ class $modify(GB7PlayerObject, PlayerObject) {
 
         if (real)
             upd.m_currentPlayerX = this->getPositionX();
+        // Absense's look-ahead steps its copies with the delta the real game
+        // used (a no-op when it has no copies).
+        if (real && !::Bot::get()->trajectory().isFakePlayer(this))
+            ::Bot::get()->trajectory().setDelta(dt);
     }
 
     // While a tick is split, rotation must advance by the SUB-step delta and
@@ -289,6 +295,9 @@ class $modify(GB7PlayerObject, PlayerObject) {
     // real attempt's jump tally.
     void incrementJumps() {
         if (TrajectoryPredictionService::get().ownsPreviewPlayer(this))
+            return;
+        // Nor a jump by a copy in Absense's look-ahead.
+        if (auto& t = ::Bot::get()->trajectory(); t.drawing() || t.simulating())
             return;
         PlayerObject::incrementJumps();
     }

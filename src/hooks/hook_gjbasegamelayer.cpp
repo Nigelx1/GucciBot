@@ -17,6 +17,10 @@
 #include "analysis/ac/framewindow.hpp"
 #include "trailbuf/trailbuf.hpp"
 #include "replay/scbf_input.hpp"
+#include "absense/compat/bot.hpp"
+#include "absense/pathfinder/pathfinder.hpp"
+#include "absense/trajectory/trajectory.hpp"
+#include "absense/world/world.hpp"
 
 using namespace geode::prelude;
 
@@ -682,6 +686,9 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
             return GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
 
         gb->practiceFix.updatePlatformerInputs(m_queuedButtons);
+        // Absense's pathfinder in realtime: this tick's planned input. A no-op
+        // unless it is driving the game.
+        ::Bot::get()->pathfinder().liveInput();
 
         // anticroom: an input the CBF engine took but never got to split --
         // the tick it was armed for didn't run the split -- would otherwise
@@ -793,8 +800,15 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
     }
 
     void gameEventTriggered(GJGameEvent event, int p1, int p2) {
-        if (false)
+        // A copy of the player in Absense's look-ahead landing or jumping runs
+        // the game's own code, which reports the event to the level -- its
+        // event triggers would spawn real groups. The run fires its own event
+        // listeners instead (world::onEvent). This slot held `if (false)`
+        // until the look-ahead it is about existed here (2026-09-28).
+        if (auto& t = ::Bot::get()->trajectory(); t.drawing() || t.simulating()) {
+            world::onEvent((int)event, p1, p2);
             return;
+        }
         if (event == GJGameEvent::CheckpointRespawn &&
             !GucciEngine::get()->practiceFix.m_shouldLoadPlatformer)
             return;
@@ -803,8 +817,16 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
 
     void destroyObject(GameObject* obj) {
         auto* gb = GucciEngine::get();
-        if (false)
+        // A copy in Absense's look-ahead broke the block: it is only hidden
+        // from the copies and put back when the run is undone, never
+        // destroyed in the real level or filed as a practice break. (Was
+        // `if (false)` until that look-ahead existed here.)
+        if (auto& t = ::Bot::get()->trajectory(); t.drawing())
             return;
+        else if (t.simulating()) {
+            t.simBreak(obj);
+            return;
+        }
         if (m_isPracticeMode)
             gb->practiceFix.registerBrokenObject(obj);
         GJBaseGameLayer::destroyObject(obj);

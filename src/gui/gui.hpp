@@ -346,6 +346,7 @@ namespace gucci {
         bool m_acPackOk = false;
         void saveAcFrameWindowSettings();
         void drawPathfinderTab();
+        void drawAbsensePathfinder();
         void drawRenderTab();
         void drawClicksTab();
         void drawAutoclickerTab();

@@ -5,6 +5,7 @@
 #include "audio/clicksounds.hpp"
 #include "hacks/autoclicker.hpp"
 #include "analysis/pathfinder.hpp"
+#include "absense/glue.hpp"
 #include "trainers/calibration.hpp"
 #include "audio/bigbrrr.hpp"
 #include "trainers/jupiterghost.hpp"
@@ -4848,13 +4849,112 @@ namespace gucci {
         s_fwAssetFolderTask = importFwAssetFolderTask();
     }
 
+    // Absense's pathfinder (src/absense). It plays the level for real from
+    // where the player is; before each input it runs copies of the player
+    // ahead through the level to choose it, and goes back through Backwards
+    // Stepping's stored frames when a way turns out to be a dead end.
+    void MenuInterface::drawAbsensePathfinder() {
+        auto const st = absense::status();
+        ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+        ImGui::TextWrapped(
+            "Absense's pathfinder. It plays the level for real from where you are, and before "
+            "each input it runs copies of the player ahead through the level to choose it. When "
+            "a way turns out to be a dead end, it goes back and tries another. When it reaches "
+            "the end, the result is loaded as the current macro and saved (named after the "
+            "level, unless the macro already has a name).");
+        ImGui::PopStyleColor();
+        ImGui::Dummy(ImVec2(0, 8));
+
+        bool const inLevel = PlayLayer::get() != nullptr;
+        if (!st.running) {
+            if (!inLevel)
+                ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.4f);
+            bool const clicked = Widgets::StyledButton("Start Pathfinder", ImVec2(-1, 30), theme, anim, 6.f);
+            if (!inLevel)
+                ImGui::PopStyleVar();
+            // A start that cannot go ahead says why in the status below.
+            if (clicked && inLevel)
+                absense::startPathfinder();
+            if (!inLevel) {
+                ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+                ImGui::TextWrapped("Enter the level to start.");
+                ImGui::PopStyleColor();
+            }
+        } else if (Widgets::StyledButton("Stop", ImVec2(-1, 30), theme, anim, 6.f)) {
+            absense::stopPathfinder();
+        }
+
+        ImGui::Dummy(ImVec2(0, 8));
+        Widgets::SectionHeader("Status", theme);
+        if (st.running) {
+            Widgets::StatusBadge("SEARCHING", ImVec4(0.3f, 1.f, 0.4f, 1.f));
+            ImGui::SameLine();
+            ImGui::Text("%s", st.phase);
+            ImGui::PushStyleColor(ImGuiCol_PlotHistogram, theme.getAccent());
+            char ov[64];
+            snprintf(ov, sizeof(ov), "best %.1f%%", st.bestProgress * 100.f);
+            ImGui::ProgressBar(std::clamp(st.bestProgress, 0.f, 1.f), ImVec2(-1, 18), ov);
+            ImGui::PopStyleColor();
+            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+            ImGui::Text("now %.1f%%  |  tick %llu (started at %llu, furthest %llu)",
+                        st.progress * 100.f,
+                        (unsigned long long)st.currentTick,
+                        (unsigned long long)st.startTick,
+                        (unsigned long long)st.bestTick);
+            ImGui::Text("%llu decisions  |  %llu dead ends  |  went back %llu times  |  %.0fs",
+                        (unsigned long long)st.decisions,
+                        (unsigned long long)st.deadEnds,
+                        (unsigned long long)st.backtracks,
+                        st.seconds);
+            if (!st.lastDecision.empty())
+                ImGui::TextWrapped("last: %s", st.lastDecision.c_str());
+            if (!st.message.empty())
+                ImGui::TextWrapped("%s", st.message.c_str());
+            ImGui::PopStyleColor();
+        } else if (!st.message.empty()) {
+            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+            ImGui::TextWrapped("%s", st.message.c_str());
+            if (st.bestTick > st.startTick)
+                ImGui::Text("furthest: %.1f%% (tick %llu)",
+                            st.bestProgress * 100.f,
+                            (unsigned long long)st.bestTick);
+            ImGui::PopStyleColor();
+        } else {
+            ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+            ImGui::TextWrapped("Nothing run yet.");
+            ImGui::PopStyleColor();
+        }
+    }
+
     void MenuInterface::drawPathfinderTab() {
         auto* pf = Pathfinder::get();
         auto* engine = GucciEngine::get();
         Widgets::GucciQuote("\"I don't find the path. The path finds me. Then I take it anyway.\"",
                             "-- Gucci Mane, probably",
                             theme);
+
+        // Two engines. Absense's (ported 2026-09-28) plans each input by
+        // running copies of the player ahead through the real level; the
+        // classic one is GucciBot's own and stays selectable.
+        Widgets::SectionHeader("Engine", theme);
+        bool const classic = absense::classicSelected();
+        bool const busy = pf->active || absense::isRunning();
+        float const pillW = (ImGui::GetContentRegionAvail().x - 10) / 2.f;
+        if (busy)
+            ImGui::BeginDisabled();
+        if (Widgets::PillButton("Absense (look-ahead)", !classic, pillW, theme, anim))
+            absense::selectClassic(false);
+        ImGui::SameLine(0, 10);
+        if (Widgets::PillButton("Classic", classic, pillW, theme, anim))
+            absense::selectClassic(true);
+        if (busy)
+            ImGui::EndDisabled();
         ImGui::Dummy(ImVec2(0, 4));
+        if (!absense::classicSelected()) {
+            drawAbsensePathfinder();
+            return;
+        }
+
         ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
         ImGui::TextWrapped(
             "Searches for a click sequence that beats this level with no macro to start from. "
@@ -10327,9 +10427,45 @@ namespace gucci {
     // top of it. The game keeps running underneath; only the view is hidden.
     // Toggle-able (Pathfinder::hideSearch) -- off falls back to the small
     // corner HUD above instead, so the level is actually visible.
+    // Absense's pathfinder plays the level where it can be seen, so it only
+    // gets the corner readout, never the cover.
+    static void displayAbsensePathfinderHUD(MenuInterface* ui) {
+        auto const st = absense::status();
+        auto* vp = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(
+            ImVec2(vp->Pos.x + vp->Size.x - 10, vp->Pos.y + 10), ImGuiCond_Always, ImVec2(1, 0));
+        ImGui::SetNextWindowSize(ImVec2(0, 0), ImGuiCond_Always);
+        ImGui::SetNextWindowBgAlpha(0.75f);
+        ImGui::Begin("##absensePathfinderHud",
+                     nullptr,
+                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+                         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
+                         ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoBringToFrontOnFocus);
+        if (ui->fontBody)
+            ImGui::PushFont(ui->fontBody);
+        float pulse = 0.55f + 0.45f * std::sin((float)ImGui::GetTime() * 4.f);
+        ImVec4 accent = ui->theme.getAccent();
+        ImGui::TextColored(ImVec4(accent.x, accent.y, accent.z, pulse), "Pathfinding...");
+        if (ui->fontBody)
+            ImGui::PopFont();
+        ImGui::PushStyleColor(ImGuiCol_Text, ui->theme.textSecondary);
+        ImGui::Text("best %.1f%%  |  %s", st.bestProgress * 100.f, st.phase);
+        ImGui::Text("%llu dead ends  |  went back %llu times",
+                    (unsigned long long)st.deadEnds,
+                    (unsigned long long)st.backtracks);
+        ImGui::PopStyleColor();
+        if (Widgets::StyledButton("Stop", ImVec2(-1, 24), ui->theme, ui->anim, 4.f))
+            absense::stopPathfinder();
+        ImGui::End();
+    }
+
     void displayPathfinderHUD() {
         auto* ui = MenuInterface::get();
         auto* pf = Pathfinder::get();
+        if (ui && ui->setupComplete && absense::isRunning()) {
+            displayAbsensePathfinderHUD(ui);
+            return;
+        }
         if (!ui || !ui->setupComplete || !pf->active)
             return;
         if (!pf->hideSearch) {

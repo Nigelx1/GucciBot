@@ -10,6 +10,10 @@
 #include "mcp/mcp_server.hpp"
 #include "replay/scbf_input.hpp"
 #include "replay/subtick_preview.hpp"
+#include "absense/compat/bot.hpp"
+#include "absense/pathfinder/pathfinder.hpp"
+#include "absense/trajectory/trajectory.hpp"
+#include "absense/world/world.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/modify/CCScheduler.hpp>
@@ -116,6 +120,15 @@ bool GucciUpdater::useFastLockDelta() const {
 }
 
 void GucciUpdater::calculateSteps(float dt, float targetDt) {
+    // Absense's pathfinder thinks, and puts earlier states back, while the
+    // frame stands still (drawScene). cocos measures this frame's delta after
+    // both, so that time is in `dt` -- but the level did not advance through
+    // it, and paying for it in physics ticks turns a 100 ms slice into 24
+    // ticks, those ticks into a slower frame, and so on. 0 whenever that
+    // pathfinder is not running. Frame advance is left alone.
+    if (m_frozenSeconds > 0.0 && !isPaused())
+        dt = (float)std::max(0.0, (double)dt - m_frozenSeconds);
+
     dt += (float)m_tpsOverflow;
 
     float wantedDt = targetDt * std::fmin(getTimeWarp(), 1.0f);
@@ -163,7 +176,19 @@ void GucciUpdater::calculateSteps(float dt, float targetDt) {
     if (!m_realTime && !rendering)
         steps = std::min(steps, stepLimit);
 
+    // While Absense's pathfinder drives the game, one drawn frame runs at
+    // most a thirtieth of a second of ticks (Absense's updater). No tick is
+    // skipped or reordered; what is let go of is wall clock the frame could
+    // not keep up with.
+    int realtimeCap = 0;
+    if (!rendering && !isPaused() && ::Bot::get()->pathfinder().drivesGame()) {
+        realtimeCap = std::max(1, (int)(m_tps / 30.0));
+        steps = std::min(steps, realtimeCap);
+    }
+
     m_tpsOverflow = dt - steps * wantedDt;
+    if (realtimeCap != 0 && steps == realtimeCap)
+        m_tpsOverflow = 0.0;
     m_shouldRender = false;
 
     if (!m_realTime && !rendering) {
@@ -713,13 +738,27 @@ static void frameUpdateMidhook(SafetyHookContext&) {
             // once per settled frame, while the player is alive.
             ::Bot::get()->trailBuffer().saveTick(pl);
 
+            // Absense's pathfinder, after every real tick (Absense's frame
+            // midhook, same order): its own bookkeeping, then the World's
+            // ledger of the tick that just ran (so a start kept at this tick
+            // finds it), then the look-ahead's copies are set up from the real
+            // player again. Only while it runs -- normal play pays nothing.
+            if (auto& apf = ::Bot::get()->pathfinder(); apf.isRunning()) {
+                apf.afterLiveTick();
+                world::World::afterRealTick(pl, (int)upd.getFrame());
+                ::Bot::get()->trajectory().realStateChanged();
+            }
+
             // Prevent Death > Use trajectory instead (Silicate, same spot):
             // look four ticks ahead holding what each player holds, and pause
             // before a death rather than stepping back after one. Silicate's
             // auto-flip here runs every tick whether or not a death was
             // predicted, which would queue a flip each tick; it only runs on
-            // a predicted death here, which is what the option says.
-            if (upd.m_preventDeath && upd.m_fullGamePrediction && !upd.m_predicting) {
+            // a predicted death here, which is what the option says. Not while
+            // Absense's pathfinder drives the game (Absense skips it then too):
+            // its dead ends are its own to go back from, and a pause stops it.
+            if (upd.m_preventDeath && upd.m_fullGamePrediction && !upd.m_predicting &&
+                !::Bot::get()->pathfinder().drivesGame()) {
                 if (auto* pll = PlayLayer::get()) {
                     auto& traj = TrajectoryPredictionService::get();
                     auto check = [&](PlayerObject* p, bool p2) {
@@ -1070,8 +1109,37 @@ class $modify(GB7CCDirector, CCDirector) {
             return;
         }
 
+        // Absense's pathfinder does a slice of its work here, before the frame
+        // is drawn; a restore it asked for runs in the frozen tick right after,
+        // so the next slice starts from the restored state. The time it stood
+        // still is taken back out of this frame's delta (calculateSteps).
+        // Absense's CCDirector::drawScene, same order.
+        gb->updater.m_frozenSeconds = 0.0;
+        bool absPathfinding = false;
+        auto const frameT0 = std::chrono::steady_clock::now();
+        auto msSince = [](std::chrono::steady_clock::time_point t) {
+            return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t)
+                .count();
+        };
+        double sliceMs = 0.0, restoreMs = 0.0;
+        if (auto& apf = ::Bot::get()->pathfinder(); apf.isRunning()) {
+            absPathfinding = true;
+            apf.tick();
+            sliceMs = msSince(frameT0);
+            auto const t1 = std::chrono::steady_clock::now();
+            gb->updater.runFrozenTick();
+            restoreMs = msSince(t1);
+            gb->updater.m_frozenSeconds = std::min((sliceMs + restoreMs) / 1000.0, 1.0);
+        }
+
         CCDirector::drawScene();
         gb->updater.runFrozenTick();
+
+        if (absPathfinding) {
+            double const total = msSince(frameT0);
+            ::Bot::get()->pathfinder().noteFrameCost(std::max(0.0, total - sliceMs - restoreMs),
+                                                     restoreMs);
+        }
     }
 };
 

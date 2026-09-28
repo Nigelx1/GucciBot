@@ -15,8 +15,37 @@
 #include "absense/compat/devlog.hpp"
 #include "absense/gpu/client.hpp"
 #include "absense/compat/modal.hpp"
+#include "gui/gui.hpp"
+
+#include <string_view>
 
 using namespace geode::prelude;
+
+// Where a found path is written. Absense wrote .slc files to a folder of its
+// own; here it goes where GucciBot's macros live and is named as the classic
+// Pathfinder names its result: the macro's own name if the user gave it
+// one, otherwise the level's name made safe for a file name, in the current
+// theme's format. `suffix` goes on the end of the name ("" or " furthest").
+static std::filesystem::path gucciMacroPath(PlayLayer* pl, const std::string& suffix, std::string& nameOut) {
+    auto* gb = gucci::GucciEngine::get();
+    std::string base = gb->replayName;
+    if (base.empty()) {
+        if (pl && pl->m_level) {
+            static constexpr std::string_view kIllegal = "\\/:*?\"<>|";
+            for (char c : std::string(pl->m_level->m_levelName)) {
+                if ((unsigned char)c < 0x20 || kIllegal.find(c) != std::string_view::npos) continue;
+                base += c;
+            }
+            // Windows does not keep trailing dots or spaces.
+            while (!base.empty() && (base.back() == ' ' || base.back() == '.')) base.pop_back();
+            const size_t first = base.find_first_not_of(' ');
+            base = first == std::string::npos ? std::string() : base.substr(first);
+        }
+        if (base.empty()) base = "pathfinder";
+    }
+    nameOut = base + suffix;
+    return gb->getReplayDir() / (nameOut + gucci::currentThemeExtension(gucci::MenuInterface::get()));
+}
 
 namespace {
 
@@ -238,15 +267,18 @@ bool AbsensePathfinder::start() {
     const uint64_t tick = currentTick();
     absense::human::Reference::get().open(pl, &rs.m_actionAtom, updater.getTps());
     if (!bot->isRecording()) {
-        rs.m_actionAtom.clipActions(tick);
+        // Silicate labels an input with the frame counter before its tick;
+        // GucciBot one later (getFrame() + 1). "Everything from tick t on" is
+        // clipActions(t) there and clipFrom(t + 1) here.
+        rs.m_actionAtom.clipFrom((uint32_t)tick + 1);
         rs.m_inputIndex = rs.m_actionAtom.length();
         bot->setMode(Bot::Mode::Recording);
     }
     updater.m_backwardsStepping = true;
-    /* notifyChange: GucciBot's fields are plain */
+    (void)0;  /* notifyChange: GucciBot's fields are plain */
     if (!updater.m_lockDelta) {
         updater.m_lockDelta = true;
-        /* notifyChange: GucciBot's fields are plain */
+        (void)0;  /* notifyChange: GucciBot's fields are plain */
     }
     // Going back uses the stored frames: keep enough to reach the limit
     // (and one more window beyond it) without touching the kept states. A
@@ -267,16 +299,16 @@ bool AbsensePathfinder::start() {
         const uint32_t want = (uint32_t)(ticks / pf.m_storeEvery) + 16;
         if (Bot::get()->updater().m_maxBackstepFrames != want) {
             Bot::get()->updater().m_maxBackstepFrames = want;
-            /* notifyChange: GucciBot's fields are plain */
+            (void)0;  /* notifyChange: GucciBot's fields are plain */
         }
     }
     updater.setPaused(true);
-    if (updater.m_paused != m_savedPaused) /* notifyChange: GucciBot's fields are plain */
+    if (updater.m_paused != m_savedPaused) (void)0;  /* notifyChange: GucciBot's fields are plain */
     // An intentional death would be recorded as a Death action on the way
     // back; the search never wants that.
     if (updater.m_canDie) {
         updater.m_canDie = false;
-        /* notifyChange: GucciBot's fields are plain */
+        (void)0;  /* notifyChange: GucciBot's fields are plain */
     }
 
     m_history.clear();
@@ -389,15 +421,15 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
 
     if (PlayLayer::get()) {
         updater.m_backwardsStepping = m_savedBackstep;
-        /* notifyChange: GucciBot's fields are plain */
+        (void)0;  /* notifyChange: GucciBot's fields are plain */
         if (updater.m_lockDelta != m_savedLockDelta) {
             updater.m_lockDelta = m_savedLockDelta;
-            /* notifyChange: GucciBot's fields are plain */
+            (void)0;  /* notifyChange: GucciBot's fields are plain */
         }
         pf.m_storeEvery = std::max<uint32_t>(1u, m_savedStoreEvery);
         if (Bot::get()->updater().m_maxBackstepFrames != m_savedStoredFrames) {
             Bot::get()->updater().m_maxBackstepFrames = m_savedStoredFrames;
-            /* notifyChange: GucciBot's fields are plain */
+            (void)0;  /* notifyChange: GucciBot's fields are plain */
         }
         // The game goes back to however it was before the search started.
         // It used to stay frozen wherever the search gave up, which looks
@@ -432,16 +464,11 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
 void AbsensePathfinder::saveFurthest() {
     auto* bot = Bot::get();
     auto& rs = bot->replaySystem();
-    auto* pl = PlayLayer::get();
-    std::string name = rs.m_replayName.empty() ? std::string("pathfinder") : rs.m_replayName;
-    if (rs.m_replayName.empty() && pl && pl->m_level) name += "-" + std::string(pl->m_level->m_levelName);
-    name += "-furthest";
-    for (char& ch : name) {
-        if (ch == '/' || ch == '\\' || ch == ':' || ch == '*' || ch == '?' || ch == '"' || ch == '<' || ch == '>' || ch == '|') ch = '_';
-    }
-    const auto path = Mod::get()->getPersistentDir() / "replays" / (name + ".slc");
+    std::string name;
+    const auto path = gucciMacroPath(PlayLayer::get(), " furthest", name);
     std::error_code ec;
     std::filesystem::create_directories(path.parent_path(), ec);
+    if (gucci::GucciEngine::get()->replayBackupsEnabled) rs.backupExisting(path);
 
     // Swap the furthest actions in, write, swap back.
     std::vector<slc::Action> live = rs.m_actionAtom.m_actions;
@@ -506,7 +533,9 @@ void AbsensePathfinder::keepAnchor(uint64_t at) {
     if (!obj) return;
     obj->retain();
     Anchor a;
-    a.state = bot->practiceFix().createCheckpoint(obj, bot->updater().m_frameOnLastAttempt);
+    // GucciBot's createCheckpoint takes the frame the state belongs to (Silicate's
+    // takes the attempt start and reads the frame itself) -- as in anticroom's port.
+    a.state = bot->practiceFix().createCheckpoint(obj, bot->updater().getFrame());
     a.tick = tick;
 
     // The start state is kept on its own: it is always the last way back.
@@ -3463,7 +3492,7 @@ bool AbsensePathfinder::moveStartBack() {
     // The replay's actions between there and the old start were the
     // player's: they go, exactly as at a start.
     auto& rs = bot->replaySystem();
-    rs.m_actionAtom.clipActions(landing);
+    rs.m_actionAtom.clipFrom((uint32_t)landing + 1);  // GucciBot's labels: see start()
     rs.m_inputIndex = rs.m_actionAtom.length();
 
     m_backtrackTarget = landing;
@@ -4242,22 +4271,28 @@ void AbsensePathfinder::finishRestore() {
 }
 
 void AbsensePathfinder::saveResult() {
-    auto* bot = Bot::get();
-    auto& rs = bot->replaySystem();
-    auto* pl = PlayLayer::get();
-    std::string name = rs.m_replayName;
-    if (name.empty()) {
-        name = "pathfinder";
-        if (pl && pl->m_level) name += "-" + std::string(pl->m_level->m_levelName);
-    }
-    for (char& ch : name) {
-        if (ch == '/' || ch == '\\' || ch == ':' || ch == '*' || ch == '?' || ch == '"' || ch == '<' || ch == '>' || ch == '|') ch = '_';
-    }
-    rs.m_replayName = name;
-    const auto path = Mod::get()->getPersistentDir() / "replays" / (name + ".slc");
+    auto* gb = gucci::GucciEngine::get();
+    auto& rs = Bot::get()->replaySystem();
+    const bool named = !gb->replayName.empty();
+    std::string name;
+    auto path = gucciMacroPath(PlayLayer::get(), "", name);
     std::error_code ec;
     std::filesystem::create_directories(path.parent_path(), ec);
-    if (std::filesystem::exists(path, ec)) rs.backupExisting(path);
+    if (!named) {
+        // A name of our own: numbered past any macro already called that,
+        // rather than over it (the classic Pathfinder does the same).
+        const std::string base = name;
+        const std::string ext = path.extension().string();
+        for (int n = 2; std::filesystem::exists(path, ec); ++n) {
+            name = fmt::format("{} {}", base, n);
+            path = gb->getReplayDir() / (name + ext);
+        }
+    } else if (gb->replayBackupsEnabled) {
+        rs.backupExisting(path);
+    }
+    // The Macro tab shows (and saves to) this name from now on.
+    gb->replayName = name;
     rs.save(path);
     log("saved %s", path.filename().string().c_str());
+    Notification::create(fmt::format("Macro saved as \"{}\"", name), NotificationIcon::Success)->show();
 }

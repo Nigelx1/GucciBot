@@ -8,6 +8,9 @@
 #include "analysis/ac/framewindow.hpp"
 #include "trailbuf/trailbuf.hpp"
 #include "replay/scbf_input.hpp"
+#include "absense/compat/bot.hpp"
+#include "absense/pathfinder/pathfinder.hpp"
+#include "absense/trajectory/trajectory.hpp"
 #include "hacks/hitboxes.hpp"
 #include "trainers/jupiterghost.hpp"
 #include "trainers/trainerghost.hpp"
@@ -142,6 +145,9 @@ class $modify(GB7PlayLayer, PlayLayer) {
 
         gb->practiceFix.clearStoredFrames();
         gb->practiceFix.clearPlatformer(false);
+        // Absense's look-ahead copies belong to the last level's scene.
+        if (::Bot::get()->trajectory().exists())
+            ::Bot::get()->trajectory().uninit();
 
         if (!PlayLayer::init(level, useReplay, dontCreateObjects))
             return false;
@@ -159,6 +165,10 @@ class $modify(GB7PlayLayer, PlayLayer) {
 
     void onQuit() {
         auto* gb = GucciEngine::get();
+        // Absense's pathfinder stops on its own terms (it saves what it has),
+        // and its look-ahead copies go before the PlayLayer does.
+        ::Bot::get()->pathfinder().onQuit();
+        ::Bot::get()->trajectory().uninit();
         if (Pathfinder::get()->active)
             Pathfinder::get()->cancel();
         else if (gb->fwAnalyzing)
@@ -364,6 +374,17 @@ class $modify(GB7PlayLayer, PlayLayer) {
         }
 
         if (gb->isRecording()) {
+            // Absense's pathfinder going back (its backwards step or a kept
+            // state): the loaded frame already put back exactly what was held,
+            // and the replay was cut at that tick with it. Syncing to the mouse
+            // here would release the hold (recording it) and the next input
+            // would press again -- a fresh click that re-arms the jump buffer
+            // next to an orb. (Absense's hooks/PlayLayer.cpp.)
+            if (::Bot::get()->pathfinder().drivesGame() &&
+                (gb->practiceFix.m_loadCheckpoint || gb->practiceFix.m_forcedState)) {
+                rs.m_lastInputs.clear();
+                return;
+            }
             if (upd.m_canDie) {
                 m_player1->releaseAllButtons();
                 m_player2->releaseAllButtons();
@@ -531,6 +552,10 @@ class $modify(GB7PlayLayer, PlayLayer) {
         gb->practiceFix.m_hasDiedNormally = false;
         gb->practiceFix.m_isBackstep = false;
         upd.breakLoop();
+
+        // A reset Absense's pathfinder asked for is its way back; any other
+        // stops it.
+        ::Bot::get()->pathfinder().onForeignReset();
     }
 
     void postUpdate(float dt) {
@@ -577,6 +602,19 @@ class $modify(GB7PlayLayer, PlayLayer) {
     void destroyPlayer(PlayerObject* player, GameObject* obj) {
         auto* gb = GucciEngine::get();
         auto& upd = gb->updater;
+
+        // A copy in Absense's look-ahead died: remember what got it and mark
+        // it dead (hasDied), and nothing else -- it is not the player.
+        if (auto& abst = ::Bot::get()->trajectory(); abst.isFakePlayer(player)) {
+            abst.noteKiller(player, obj);
+            abst.hasDied(player);
+            return;
+        }
+        // While Absense's pathfinder drives the game a death is a dead end it
+        // goes back from, not an actual death.
+        if (obj != m_anticheatSpike && player && !m_player1->m_isDead && !m_player2->m_isDead &&
+            ::Bot::get()->pathfinder().onWouldDie(player, obj))
+            return;
 
         // A trajectory fork dying is not the player dying. The trajectory's own
         // destroyPlayer hook (TrajectoryPreviewPlayLayer) records it and stops
@@ -746,6 +784,11 @@ class $modify(GB7PlayLayer, PlayLayer) {
 
     void levelComplete() {
         auto* gb = GucciEngine::get();
+        if (::Bot::get()->pathfinder().isRunning()) {
+            PlayLayer::levelComplete();
+            ::Bot::get()->pathfinder().onLevelComplete();
+            return;
+        }
         if (Pathfinder::get()->active) {
             Pathfinder::get()->noteLevelComplete();
             return;

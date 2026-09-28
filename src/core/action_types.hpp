@@ -73,9 +73,6 @@ namespace gucci {
             void addTpsChange(uint32_t frame, double tps) {
                 m_actions.push_back({frame, ActionType::TPS, false, false, tps});
             }
-            // Silicate's name for clipFrom (slc v3 ActionAtom::clipActions:
-            // erase every action at `frame` or later).
-            void clipActions(uint32_t frame) { clipFrom(frame); }
             void clipFrom(uint32_t frame) {
                 m_actions.erase(std::remove_if(m_actions.begin(),
                                                m_actions.end(),
