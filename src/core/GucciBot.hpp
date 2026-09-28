@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-av (Pathfinder: a spot is reopened past the last committed input once per search, not once per visit. The once-only mark lived on a node the reopen deletes, so it reopened forever and could never commit a second input.)"
+    "2026-09-27-aw (Pathfinder: a decision point only counts as cut short by the last committed input when its search window actually ran into that input. It used to count whenever the input was within 960 frames, so nodes with a full window gave it up for nothing.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

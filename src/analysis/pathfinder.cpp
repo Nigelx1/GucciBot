@@ -856,7 +856,15 @@ namespace gucci {
         // still available underneath it? If so the frame that decided this
         // death is very likely one this node is not allowed to touch --
         // startNextCandidateOrBacktrack acts on it.
-        if ((int64_t)lastCommitted + 1 > (int64_t)d - kMaxAgencyLookback) {
+        //
+        // "Stopped by" means the walk ran out of frames before it filled its
+        // window, and the floor it ran into was the committed input's rather
+        // than the lookback cap. This used to test only that the committed
+        // input sat inside the 960-frame lookback -- true of nearly every node
+        // after the first commit -- so a node with a full window of its own was
+        // flagged too, and gave that window up for nothing.
+        bool const walkHitFloor = (int)points.size() < effectiveWindow;
+        if (walkHitFloor && (int64_t)lastCommitted + 1 > (int64_t)d - kMaxAgencyLookback) {
             int64_t const lookFloor = std::max<int64_t>(1, (int64_t)d - kMaxAgencyLookback);
             for (int64_t f = floor - 1; f >= lookFloor; --f) {
                 if ((size_t)f < agencyMap.size() && agencyMap[(size_t)f]) {
