@@ -78,6 +78,7 @@ namespace gucci {
         skippedDeadEnds = 0;
         this->loadSolutionMemory();
         hazardCount.clear();
+        reopenedSpots.clear();
 
         auto* gb = GucciEngine::get();
         auto* pl = PlayLayer::get();
@@ -1019,12 +1020,12 @@ namespace gucci {
             // before the last commit, and the only way there used to be
             // exhausting every node in between.
             //
-            // Once per node. If the search comes back through here the guess
-            // was wrong, so the second visit searches the window properly and
-            // a bad guess costs one extra backtrack rather than a loop.
-            if (top.floorClipped && !top.reopenSpent && top.next == 0 &&
-                stack.size() > 1) {
-                top.reopenSpent = true;
+            // Once per spot. If the search comes back to the same spot the
+            // guess was wrong, so the second visit searches the window
+            // properly and a bad guess costs one extra backtrack rather than
+            // a loop. Remembered on the search, not the node: this pops it.
+            if (top.floorClipped && top.next == 0 && stack.size() > 1 &&
+                reopenedSpots.insert(top.deathFrame / kHazardBucket).second) {
                 log::info(
                     "[Pathfinder] decision point @f={} is floor-clipped by the last committed "
                     "input and has agency below it -- reopening that input instead of spending "

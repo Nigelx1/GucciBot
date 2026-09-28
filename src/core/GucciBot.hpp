@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-au (Congregation slope FIX: the anticheat spike now always reaches GD during Calculate and Pathfinder, as in Silicate. Swallowing it left every collision pass cut short, so no slope ever launched under either. The -at collision-pass logging is still in.)"
+    "2026-09-27-av (Pathfinder: a spot is reopened past the last committed input once per search, not once per visit. The once-only mark lived on a node the reopen deletes, so it reopened forever and could never commit a second input.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

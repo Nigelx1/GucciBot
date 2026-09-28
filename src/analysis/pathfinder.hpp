@@ -154,10 +154,6 @@ namespace gucci {
             // allowed to touch, and every candidate in the clipped window is a
             // run spent to prove it. Set once at build time.
             bool floorClipped = false;
-            // Guards the reopen: a node that already gave up its window once
-            // searches it properly the next time, so a bad guess costs one
-            // extra backtrack rather than looping.
-            bool reopenSpent = false;
         };
 
         // Which frames of the CURRENT run the player actually had a say on,
@@ -236,6 +232,15 @@ namespace gucci {
         // spot.
         std::unordered_map<uint32_t, int> hazardCount;
         static constexpr uint32_t kHazardBucket = 8;
+
+        // Spots whose floor-clipped decision point has already been given up
+        // once (step 4's reopen), bucketed like hazardCount, so the next visit
+        // searches the window properly. This used to be a flag on the Node --
+        // but the reopen pops the node, so the flag was gone by the time the
+        // search came back to the same spot and it reopened again, every
+        // time, until the parent ran out of candidates. The search could never
+        // commit a second input.
+        std::unordered_set<uint32_t> reopenedSpots;
 
         // The live player's situation, hashed. Captured at noteDeath(), when
         // the player is still standing in the state that killed them.
