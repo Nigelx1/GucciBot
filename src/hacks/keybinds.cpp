@@ -65,15 +65,8 @@ class $modify(GB7KeyHandler, CCKeyboardDispatcher) {
                 // Nigel's ask (2026-09-05): the startup notification is easy
                 // to miss if you weren't looking right when the game
                 // launched -- re-show it every time someone actually tries
-                // to open the menu while ToastyReplay Lite is still missing.
-                // Caught in testing (2026-09-06): the menu was still opening
-                // underneath the popup, which defeats the whole point of
-                // GucciBot "standing down" -- while TTR is missing, the menu
-                // shouldn't open at all, just re-show the popup.
-                if (gb->ttrRequirementMissing) {
-                    GucciEngine::showTtrMissingNotification();
-                    return;
-                }
+                // to open the menu while GucciBot is standing down, and
+                // don't open the menu underneath it (caught 2026-09-06).
                 if (gb->ttrEnabledConflict) {
                     GucciEngine::showTtrEnabledNotification();
                     return;

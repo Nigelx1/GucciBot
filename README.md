@@ -6,7 +6,7 @@ It's Gucci. GucciBot is a Geometry Dash macro bot (a [Geode](https://geode-sdk.o
 
 GucciBot is public now — grab a build from [Releases](https://github.com/Nigelx1/GucciBot/releases/latest), drop it in your Geode mods folder, and you're in. It's not on the in-game Geode mod index (long story, not going into it here), so a manual install is the only way to get it for now.
 
-**Requires ToastyReplay Lite (`toastexgd.toastyreplay-lite`) to be installed** (it doesn't need to be enabled, just present in your mods folder) — GucciBot won't run without it. This is the one real condition on GucciBot's release, and it's checked every launch.
+**Don't run ToastyReplay Lite enabled at the same time** — the two bots can't both run live (it's what crashed macro playback), so GucciBot stands down until ToastyReplay Lite is turned off or uninstalled.
 
 ---
 

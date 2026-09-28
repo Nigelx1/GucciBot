@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-27-bd (Pathfinder, Absense port step 3: hold lengths 1, 2, 3, 6, 11, 25, 48 and 65 ticks -- Absense's, taken from 1552 human macros -- instead of stopping at 24.)"
+    "2026-09-28-be (ToastyReplay Lite is no longer required -- GucciBot runs without it. It still stands down if ToastyReplay Lite is enabled at the same time, because the two crash playback together. Pathfinder is as in -bd.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -598,33 +598,21 @@ namespace gucci {
         HudConfig hud;
 
         bool enabled = false;
-        // Nigel's condition with ToastexGD for GucciBot's public release
-        // (2026-09-05): GucciBot only runs if ToastyReplay Lite is present
-        // in the mods folder (installed is enough -- it can be disabled).
-        // Checked once per game launch in initialize(), not continuously
-        // polled while playing, since Geode mods can't be added/removed
-        // without a restart anyway. This flag records WHY enabled stayed
-        // false, for the GUI to surface later if it ever grows a banner
-        // for this specifically -- not surfaced anywhere yet beyond the
-        // one-time startup notification.
-        bool ttrRequirementMissing = false;
-        // A THIRD state alongside "missing"/"fine": ToastyReplay Lite is
-        // installed (satisfies the requirement above) but also currently
-        // *enabled*, which is what actually crashed macro playback for a
-        // real user (anticroom's Discord report, 2026-09-08, screenshot
-        // showed him telling someone to "install Toasty, disable it, then
-        // use gucci" -- a real requirement that was never surfaced in-app,
-        // so people were finding out about it from crashes, not GucciBot
-        // itself). Both mods running live at once isn't safe; stand down
-        // the same way the missing-entirely case does, with different
-        // wording, rather than letting the crash happen and saying nothing.
+        // ToastyReplay Lite installed AND enabled alongside GucciBot: the two
+        // bots running live at once is what crashed macro playback for a real
+        // user (anticroom's Discord report, 2026-09-08). GucciBot stands down
+        // and says why instead of letting that crash happen. Checked once per
+        // launch in initialize(); Geode can't toggle a mod without a restart.
+        //
+        // GucciBot used to REQUIRE ToastyReplay Lite to be installed -- the
+        // condition of its 2026-09-05 public release. Nigel dropped that on
+        // 2026-09-28. Installed-but-disabled, or not installed at all, both
+        // run normally now; only this conflict remains.
         bool ttrEnabledConflict = false;
         static constexpr const char* kTtrModId = "toastexgd.toastyreplay-lite";
-        // Shared so the wording only lives in one place -- shown once at
-        // startup (initialize()) and again every time someone tries to
-        // open the menu while it's still missing (hacks/keybinds.cpp),
-        // since the startup one is easy to miss.
-        static void showTtrMissingNotification();
+        // Shown at startup (initialize()) and again whenever someone tries to
+        // open the menu while the conflict stands (hacks/keybinds.cpp), since
+        // the startup one is easy to miss.
         static void showTtrEnabledNotification();
         Mode mode = Mode::Idle;
         double userTpsSaved = 0.0;

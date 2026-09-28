@@ -2188,29 +2188,14 @@ namespace gucci {
         fs::remove(getPresetsDir() / (name + ".json"), ec);
     }
 
-    void GucciEngine::showTtrMissingNotification() {
-        // Nigel caught (2026-09-06): the toast Notification widget doesn't
-        // wrap -- it's built for one short line (see every other
-        // Notification::create in this codebase), and this message is a
-        // paragraph, so it was rendering as one cut-off line. Switched to
-        // createQuickPopup (a real FLAlertLayer dialog), which wraps long
-        // text properly and is what Geode's own long-message popups use.
-        createQuickPopup(
-            "GucciBot Is Standing Down",
-            "<cy>ToastexGD</c> only blessed this mod's release on <cr>one condition</c>: "
-            "<co>ToastyReplay Lite</c> has to be installed, no exceptions (disabled is fine, "
-            "gone is not). Grab it from the mod index, restart, and GucciBot rides again.",
-            "Got It", nullptr,
-            [](auto, bool) {});
-    }
-
+    // A popup rather than a Notification: the toast widget doesn't wrap, and
+    // this is a paragraph (Nigel caught it cut off, 2026-09-06).
     void GucciEngine::showTtrEnabledNotification() {
         createQuickPopup(
             "GucciBot Is Standing Down",
-            "<co>ToastyReplay Lite</c> is installed, which is required -- but it's also "
-            "currently <cr>enabled</c>, and the two mods can't both run live at the same "
-            "time (this is what's behind crashes on macro playback). Open the Geode mod "
-            "list, toggle ToastyReplay Lite off (leave it installed), and restart. "
+            "<co>ToastyReplay Lite</c> is <cr>enabled</c>, and the two mods can't both run "
+            "live at the same time (this is what's behind crashes on macro playback). Open "
+            "the Geode mod list, toggle ToastyReplay Lite off or uninstall it, and restart. "
             "GucciBot rides again from there.",
             "Got It", nullptr,
             [](auto, bool) {});
@@ -2431,35 +2416,18 @@ namespace gucci {
 
         reloadMacroList();
 
-        // Nigel's condition with ToastexGD for GucciBot's public release
-        // (2026-09-05): only run if ToastyReplay Lite is present -- doesn't
-        // need to be enabled/active, just installed. Checked here (once per
-        // game launch, inside initialize()) rather than polled continuously,
-        // since Geode can't add/remove a mod without restarting anyway, so
-        // a launch-time check already can't be "unlocked once and forgotten"
-        // -- removing TTR and relaunching drops right back to disabled.
-        if (!Loader::get()->isModInstalled(kTtrModId)) {
+        // ToastyReplay Lite enabled alongside GucciBot crashes macro playback
+        // -- see ttrEnabledConflict's comment in GucciBot.hpp. Installing it is
+        // no longer required (dropped 2026-09-28); only running both is refused.
+        if (Loader::get()->isModLoaded(kTtrModId)) {
             enabled = false;
-            ttrRequirementMissing = true;
-            ttrEnabledConflict = false;
-            log::warn("[GucciBot] Disabled -- ToastyReplay Lite ({}) not found. Install it "
-                      "(it doesn't need to be enabled) to use GucciBot.",
-                      kTtrModId);
-            showTtrMissingNotification();
-        } else if (Loader::get()->isModLoaded(kTtrModId)) {
-            // Installed satisfies the requirement above, but running it
-            // enabled alongside GucciBot is what actually crashes macro
-            // playback -- see ttrEnabledConflict's comment in GucciBot.hpp.
-            enabled = false;
-            ttrRequirementMissing = false;
             ttrEnabledConflict = true;
-            log::warn("[GucciBot] Disabled -- ToastyReplay Lite ({}) is installed but "
-                      "currently enabled. Disable it (keep it installed) to use GucciBot.",
+            log::warn("[GucciBot] Disabled -- ToastyReplay Lite ({}) is enabled. Disable or "
+                      "uninstall it to use GucciBot.",
                       kTtrModId);
             showTtrEnabledNotification();
         } else {
             enabled = true;
-            ttrRequirementMissing = false;
             ttrEnabledConflict = false;
         }
 

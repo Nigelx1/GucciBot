@@ -25,7 +25,7 @@ A **Geometry Dash macro bot**, distributed as the Geode mod `nigelx1.guccibot` (
 - **Engine:** Silicate, by peony (GPL-3). GucciBot's engine is a port of it, reconciled function by function in 2.0.
 - **Calculate (frame-window analyzer), sub-tick CBF recording (SCBF), the render intro card:** anticroom's, from his Silicate fork, ported in near-verbatim.
 - **Ideas from Absense** (Absent's Silicate port): Pathfinder improvements, the MCP server, Check Macro, Replace All.
-- **ToastyReplay** (ToastexGD; Nigel co-owns it) is what GucciBot started as. ToastyReplay Lite must be installed (not enabled) for GucciBot to run.
+- **ToastyReplay** (ToastexGD) is what GucciBot started as. GucciBot no longer requires ToastyReplay Lite; it only stands down if ToastyReplay Lite is *enabled* alongside it, because the two conflict.
 
 **Target:** GD 2.2081, Windows x64, Geode 5.10.1. **Versions (check source):** `MOD_VERSION "2.alpha.3"`, `GBR6_VERSION 1`, `BRR_FORMAT_VERSION 4`.
 

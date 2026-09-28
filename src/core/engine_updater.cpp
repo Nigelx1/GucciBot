@@ -538,9 +538,9 @@ void GucciUpdater::updateAudioSpeedhack() {
 
 // 2026-09-05: none of the raw midhooks/hooks below used to check
 // GucciEngine::enabled at all -- harmless for as long as `enabled` was
-// unconditionally forced true at every launch, but the new
-// ToastyReplay-Lite-must-be-installed gate (see initialize()) means
-// `enabled` can now genuinely stay false for a whole session, and Nigel
+// unconditionally forced true at every launch, but the ToastyReplay Lite
+// check in initialize() means `enabled` can genuinely stay false for a
+// whole session, and Nigel
 // caught it in-game: autoclicker (and everything else these drive) kept
 // working with the notification up. These are raw SafetyHook midhooks
 // and a direct CCActionManager::update replacement -- they run
