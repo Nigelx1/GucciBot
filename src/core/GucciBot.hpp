@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-29-bt (Branch absense-pathfinder: Assistant Access tool gucci_quit_level, to reproduce a crash on leaving a level after Absense's pathfinder has run. No gameplay changes.)"
+    "2026-09-29-bu (Branch absense-pathfinder: fixes the crash on leaving a level after Absense's pathfinder ran. Applying a saved player state no longer writes the player's particle list onto another player, which left the pathfinder's simulated copies sharing the real player's list so it was freed twice at teardown.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -54,7 +54,16 @@ namespace gucci {
         p->unk_584 = unk_584;
         p->m_collidingWithSlopeId = m_collidingWithSlopeId;
         p->m_slopeFlipGravityRelated = m_slopeFlipGravityRelated;
-        p->m_particleSystems = m_particleSystems;
+        // m_particleSystems is NOT written back. It is the player's own
+        // CCArray, which its destructor walks and releases; Silicate's
+        // checkpoint does not carry it at all. Written from a checkpoint of one
+        // player onto another -- Absense's look-ahead sets its copies up from
+        // the real player this way -- two players owned one array: the first
+        // destroyed with the level freed it, the second's destructor walked the
+        // freed array and the game crashed leaving the level (Nigel, Xmas
+        // Challenge, 2026-09-29: PlayerObject::~PlayerObject -> CCArray::count
+        // on m_particleSystems, +0x690). For the same player it is its own
+        // pointer anyway.
         p->m_slopeAngleRadians = m_slopeAngleRadians;
         p->m_rotateObjectsRelated = m_rotateObjectsRelated;
         p->m_potentialSlopeMap = m_maybeRotatedObjectsMap;
