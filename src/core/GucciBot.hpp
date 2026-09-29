@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-28-br (Branch absense-pathfinder: Absense's pathfinder can be started from the pause menu, which it closes, and has a Start from the beginning switch that does a Full Restart and searches from frame 0. It waits for the level to be running with the player alive instead of refusing. gucci_pathfinder start takes from_beginning.)"
+    "2026-09-28-bs (Branch absense-pathfinder: fixes -br. Starting from the beginning restarted the level but never began, because the game held paused at frame 0 never counted down GD's start and resume timers. A held game now gets one update a frame until it is ready, which also lets a paused dead player respawn before the start.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

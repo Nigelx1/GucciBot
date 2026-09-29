@@ -139,9 +139,11 @@ void absense::servicePendingStart() {
         return;
     }
 
-    // Ready: the level running, the player alive, not finished. Held at
-    // frame 0 (paused), a level that has not started yet gets single ticks
-    // until it has.
+    // Ready: the level running, the player alive, not finished. While the
+    // game is held paused - at frame 0 after the restart, or paused by the
+    // user - it gets one update a frame until then: the level's start, GD's
+    // resume timer and a respawn all only move on when the game updates
+    // (and none of them moves the player).
     const bool ready = pl->m_started && !pl->m_isPaused && pl->m_resumeTimer <= 0 &&
                        !pl->m_player1->m_isDead && !pl->m_hasCompletedLevel;
     if (!ready) {
@@ -150,7 +152,7 @@ void absense::servicePendingStart() {
             s_pendingNote = pl->m_hasCompletedLevel
                                 ? "The level is already complete (turn on \"start from the beginning\")."
                                 : "The level did not get going within ten seconds; the start was given up.";
-        } else if (upd.m_paused && !pl->m_started) {
+        } else if (upd.m_paused) {
             upd.stepOnce();
         }
         return;
