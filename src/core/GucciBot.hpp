@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-28-bs (Branch absense-pathfinder: fixes -br. Starting from the beginning restarted the level but never began, because the game held paused at frame 0 never counted down GD's start and resume timers. A held game now gets one update a frame until it is ready, which also lets a paused dead player respawn before the start.)"
+    "2026-09-29-bt (Branch absense-pathfinder: Assistant Access tool gucci_quit_level, to reproduce a crash on leaving a level after Absense's pathfinder has run. No gameplay changes.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

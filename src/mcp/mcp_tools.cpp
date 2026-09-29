@@ -1215,6 +1215,23 @@ namespace gucci::mcp {
         });
 
         server.addTool({
+            "gucci_quit_level",
+            "Leave the level the way the pause menu's exit does (PlayLayer::onQuit).",
+            schemaOf({}),
+            [](matjson::Value const&) {
+                auto* pl = requireLevel();
+                // After this call has answered: leaving tears the level down.
+                Loader::get()->queueInMainThread([pl] {
+                    if (PlayLayer::get() == pl)
+                        pl->onQuit();
+                });
+                auto out = obj();
+                out["leaving"] = true;
+                return out;
+            },
+        });
+
+        server.addTool({
             "gucci_restart_game",
             "Save and restart Geometry Dash (so a freshly built GucciBot loads). "
             "Assistant Access comes back on by itself if it was on.",
