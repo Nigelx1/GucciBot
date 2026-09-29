@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-28-bl (Branch absense-pathfinder: the real game as judge of Absense's simulation. It can play a script for real from the current moment, catch the death and put the game back exactly, and the simulation can be told to ignore a killer the real game proved wrong. New Assistant Access tools gucci_sim_vs_real and gucci_abs_distrust, for finding why it dives under the black boxes in Zafari 2. The pathfinder itself does not use them yet.)"
+    "2026-09-28-bm (Branch absense-pathfinder: Assistant Access can open a local level by name and restart the game, so a session can load a new build without Nigel. gucci_sim_vs_real reports the frame and position right after it puts the game back, to find a one-tick drift found in -bl. No gameplay changes.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

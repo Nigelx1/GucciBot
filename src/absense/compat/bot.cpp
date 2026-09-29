@@ -244,6 +244,9 @@ matjson::Value absense::simVsReal(std::vector<ScriptTick> const& script, int tic
 
     out["start_frame"] = (int64_t)startFrame;
     out["world_on"] = !world::World::disabled;
+    out["after_restore"] = fmt::format("frame {} (started {}), x {:.3f} (started {:.3f}), step armed {}",
+                                       rr.frameAfter, rr.startFrame, rr.xAfter, rr.xBefore,
+                                       rr.stepArmedAfter ? "yes" : "no");
     {
         auto s = matjson::Value::object();
         s["survived"] = (int64_t)sr.survived;

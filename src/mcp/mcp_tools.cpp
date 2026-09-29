@@ -1174,6 +1174,50 @@ namespace gucci::mcp {
         }
 
         server.addTool({
+            "gucci_open_level",
+            "Open one of your own (local, created) levels by its exact name, "
+            "from anywhere outside a level. For Assistant Access sessions that "
+            "restart the game.",
+            schemaOf({{"name", "string", "the level's name, exactly"}}),
+            [](matjson::Value const& a) {
+                if (PlayLayer::get() || LevelEditorLayer::get())
+                    throw ToolError("leave the level (or the editor) first");
+                auto const name = argStr(a, "name");
+                auto* llm = LocalLevelManager::get();
+                GJGameLevel* found = nullptr;
+                if (llm && llm->m_localLevels) {
+                    for (auto* lvl : CCArrayExt<GJGameLevel*>(llm->m_localLevels)) {
+                        if (lvl && std::string(lvl->m_levelName) == name) {
+                            found = lvl;
+                            break;
+                        }
+                    }
+                }
+                if (!found)
+                    throw ToolError("no local level called \"" + name + "\"");
+                auto* scene = PlayLayer::scene(found, false, false);
+                CCDirector::sharedDirector()->replaceScene(CCTransitionFade::create(0.5f, scene));
+                auto out = obj();
+                out["opening"] = name;
+                return out;
+            },
+        });
+
+        server.addTool({
+            "gucci_restart_game",
+            "Save and restart Geometry Dash (so a freshly built GucciBot loads). "
+            "Assistant Access comes back on by itself if it was on.",
+            schemaOf({}),
+            [](matjson::Value const&) {
+                // After this call has answered: the restart ends the process.
+                Loader::get()->queueInMainThread([] { geode::utils::game::restart(true); });
+                auto out = obj();
+                out["restarting"] = true;
+                return out;
+            },
+        });
+
+        server.addTool({
             "gucci_run_to",
             "Let the real game run until the frame counter reaches `frame`, then "
             "pause there. Returns at once; poll gucci_get_state for paused.",

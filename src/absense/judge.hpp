@@ -33,6 +33,12 @@ namespace absense::judge {
         int killerUid = 0;
         int killerType = 0;
         float killerX = 0.f, killerY = 0.f;
+        // Right after the game was put back (diagnostics: the frame should be
+        // the one it started at, and no step should be left armed).
+        uint32_t startFrame = 0;
+        uint32_t frameAfter = 0;
+        float xBefore = 0.f, xAfter = 0.f;
+        bool stepArmedAfter = false;
     };
 
     // Plays `inputs` (one per tick; the last repeats to `ticks`) on the real

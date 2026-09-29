@@ -89,6 +89,8 @@ namespace absense::judge {
         bool const savedPaused = upd.m_paused;
         bool const savedBackstep = upd.m_backwardsStepping;
         uint32_t const startFrame = upd.getFrame();
+        r.startFrame = startFrame;
+        r.xBefore = pl->m_player1->getPositionX();
         CheckpointObject* cp = pl->createCheckpoint();
         if (!cp) {
             r.error = "the game made no checkpoint";
@@ -164,6 +166,9 @@ namespace absense::judge {
         pf.resetWithState(state);
         pf.m_isBackstep = false;
         s_active = false;
+        r.frameAfter = upd.getFrame();
+        r.xAfter = pl->m_player1->getPositionX();
+        r.stepArmedAfter = upd.m_stepOnce_;
         s_killer = nullptr;
         cp->release();
 
