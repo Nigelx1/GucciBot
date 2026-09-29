@@ -72,7 +72,7 @@ namespace gucci::mcp {
                 return "render";
             if (gb->analyzerOwnsRun())
                 return "analyzer";
-            if (Pathfinder::get()->active || absense::isRunning())
+            if (Pathfinder::get()->active || absense::isRunning() || absense::startPending())
                 return "pathfinder";
             return "";
         }
@@ -534,6 +534,12 @@ namespace gucci::mcp {
             engine["description"] =
                 "which pathfinder to start (default: the one picked in the Pathfinder tab)";
             props["engine"] = engine;
+            auto fromBeginning = obj();
+            fromBeginning["type"] = "boolean";
+            fromBeginning["description"] =
+                "Absense's engine: restart the level (Full Restart) and search from frame 0 "
+                "(default: the Pathfinder tab's switch). It also starts from the pause menu.";
+            props["from_beginning"] = fromBeginning;
             schema["type"] = "object";
             schema["properties"] = props;
             schema["required"] = std::vector<std::string>{"action"};
@@ -563,7 +569,11 @@ namespace gucci::mcp {
                             pf->begin();
                             out["started"] = pf->active;
                         } else {
-                            out["started"] = absense::startPathfinder();
+                            // Queued: the start is carried out over the next
+                            // frames (pause menu, restart); poll status.
+                            bool const fromStart = argBool(a, "from_beginning", absense::startFromBeginning());
+                            out["queued"] = absense::requestStart(fromStart);
+                            out["from_beginning"] = fromStart;
                             out["message"] = absense::status().message;
                         }
                         return out;

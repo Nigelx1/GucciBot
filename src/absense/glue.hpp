@@ -21,6 +21,20 @@ namespace absense {
     // Starts it from the current tick. False when it cannot; status().message
     // says why.
     bool startPathfinder();
+
+    // Nigel (2026-09-28): start it from the pause menu, and/or from the
+    // level's beginning. The start is queued and carried out over the next
+    // frames (servicePendingStart, from drawScene): the pause menu is closed
+    // (GD's Resume) - or, from the beginning, GD's Full Restart is done - and
+    // it starts once the level is running with the player alive. From the
+    // beginning, the game is held at frame 0 so the search plays every tick.
+    // False when there is no level to start in.
+    bool requestStart(bool fromBeginning);
+    bool startPending();
+    void servicePendingStart();
+    // The Pathfinder tab's "start from the beginning" switch (saved).
+    bool startFromBeginning();
+    void setStartFromBeginning(bool on);
     void stopPathfinder();
     bool isRunning();
 

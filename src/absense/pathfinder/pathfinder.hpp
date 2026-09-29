@@ -141,6 +141,10 @@ public:
 
     // Helpers the gameplay hooks use to stay out of the way while it runs.
     bool drivesGame() const { return isRunning(); }
+    // GucciBot: whether the game is left paused when it stops (start() takes
+    // the state it found; a queued start that paused the game itself to hold
+    // it at frame 0 hands over the state from before - absense::requestStart).
+    void setRestorePaused(bool paused) { m_savedPaused = paused; }
     // Time the updater spent putting an earlier state back (statistics).
     void noteRestoreTime(double seconds) { m_stats.secondsRestore += seconds; }
     // Lets go of all but the newest `keep` kept states (the memory guard);

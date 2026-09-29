@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-28-bq (Branch absense-pathfinder: recording keeps every button event. A release, press, release in one tick, which is a tap from a held button and what the pathfinder's taps and orb spam are made of, used to lose its last release, so the replay ended the tick holding and died. Loading a macro had the same rule. Only an event that repeats the same button's previous event on the frame is dropped now, and Silicate drops none.)"
+    "2026-09-28-br (Branch absense-pathfinder: Absense's pathfinder can be started from the pause menu, which it closes, and has a Start from the beginning switch that does a Full Restart and searches from frame 0. It waits for the level to be running with the player alive instead of refusing. gucci_pathfinder start takes from_beginning.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

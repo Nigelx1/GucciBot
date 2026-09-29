@@ -4865,16 +4865,29 @@ namespace gucci {
         ImGui::PopStyleColor();
         ImGui::Dummy(ImVec2(0, 8));
 
+        bool fromBeginning = absense::startFromBeginning();
+        if (Widgets::ToggleSwitch("Start from the beginning", &fromBeginning, theme, anim))
+            absense::setStartFromBeginning(fromBeginning);
+        ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
+        ImGui::TextWrapped(fromBeginning
+                               ? "On: Start restarts the level (Full Restart) and the search begins at frame 0."
+                               : "Off: the search picks up from wherever the level is now.");
+        ImGui::TextWrapped("It can be started from the pause menu: the menu closes and the search takes over.");
+        ImGui::PopStyleColor();
+        ImGui::Dummy(ImVec2(0, 4));
+
         bool const inLevel = PlayLayer::get() != nullptr;
-        if (!st.running) {
+        bool const starting = absense::startPending();
+        if (!st.running && !starting) {
             if (!inLevel)
                 ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.4f);
             bool const clicked = Widgets::StyledButton("Start Pathfinder", ImVec2(-1, 30), theme, anim, 6.f);
             if (!inLevel)
                 ImGui::PopStyleVar();
-            // A start that cannot go ahead says why in the status below.
+            // Queued: closing the pause menu or restarting the level takes a
+            // frame or two. A start that cannot go ahead says why below.
             if (clicked && inLevel)
-                absense::startPathfinder();
+                absense::requestStart(fromBeginning);
             if (!inLevel) {
                 ImGui::PushStyleColor(ImGuiCol_Text, theme.textSecondary);
                 ImGui::TextWrapped("Enter the level to start.");

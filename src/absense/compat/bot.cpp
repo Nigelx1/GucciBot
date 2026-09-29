@@ -72,7 +72,111 @@ bool absense::isRunning() {
     return Bot::get()->pathfinder().isRunning();
 }
 
+namespace {
+    struct PendingStart {
+        bool active = false;
+        bool fromBeginning = false;
+        bool resetDone = false;
+        bool wasPaused = false;  // GucciBot's own pause, before the request
+        int frames = 0;          // frames waited for the level to be ready
+    };
+    PendingStart s_pending;
+    std::string s_pendingNote;  // why a queued start gave up (status().message)
+
+    PauseLayer* pauseMenu() {
+        auto* scene = CCDirector::sharedDirector()->getRunningScene();
+        return scene ? scene->getChildByType<PauseLayer>(0) : nullptr;
+    }
+}  // namespace
+
+bool absense::requestStart(bool fromBeginning) {
+    auto* pl = PlayLayer::get();
+    if (!pl || !pl->m_player1) {
+        s_pendingNote = "Open a level first.";
+        return false;
+    }
+    if (Bot::get()->pathfinder().isRunning())
+        return true;
+    s_pending = PendingStart{};
+    s_pending.active = true;
+    s_pending.fromBeginning = fromBeginning;
+    s_pending.wasPaused = gucci::GucciEngine::get()->updater.m_paused;
+    s_pendingNote.clear();
+    return true;
+}
+
+bool absense::startPending() {
+    return s_pending.active;
+}
+
+void absense::servicePendingStart() {
+    if (!s_pending.active)
+        return;
+    auto* pl = PlayLayer::get();
+    if (!pl || !pl->m_player1) {
+        s_pending.active = false;
+        s_pendingNote = "The level was left before the pathfinder could start.";
+        return;
+    }
+    auto& upd = gucci::GucciEngine::get()->updater;
+
+    // The pause menu first: GD's own buttons, so the game resumes (or
+    // restarts) exactly as when they are pressed.
+    if (auto* menu = pauseMenu()) {
+        if (s_pending.fromBeginning && !s_pending.resetDone) {
+            menu->onRestartFull(nullptr);
+            s_pending.resetDone = true;
+            upd.setPaused(true);  // held at frame 0 until the search takes it
+        } else {
+            menu->onResume(nullptr);
+        }
+        return;  // the next frame, with the menu gone
+    }
+    if (s_pending.fromBeginning && !s_pending.resetDone) {
+        pl->fullReset();
+        s_pending.resetDone = true;
+        upd.setPaused(true);
+        return;
+    }
+
+    // Ready: the level running, the player alive, not finished. Held at
+    // frame 0 (paused), a level that has not started yet gets single ticks
+    // until it has.
+    const bool ready = pl->m_started && !pl->m_isPaused && pl->m_resumeTimer <= 0 &&
+                       !pl->m_player1->m_isDead && !pl->m_hasCompletedLevel;
+    if (!ready) {
+        if (++s_pending.frames > 600) {
+            s_pending.active = false;
+            s_pendingNote = pl->m_hasCompletedLevel
+                                ? "The level is already complete (turn on \"start from the beginning\")."
+                                : "The level did not get going within ten seconds; the start was given up.";
+        } else if (upd.m_paused && !pl->m_started) {
+            upd.stepOnce();
+        }
+        return;
+    }
+    s_pending.active = false;
+    if (absense::startPathfinder()) {
+        if (s_pending.resetDone)
+            Bot::get()->pathfinder().setRestorePaused(s_pending.wasPaused);
+    } else if (s_pending.resetDone) {
+        upd.setPaused(s_pending.wasPaused);
+    }
+}
+
+bool absense::startFromBeginning() {
+    return geode::Mod::get()->getSavedValue<bool>("pf_start_from_zero", false);
+}
+
+void absense::setStartFromBeginning(bool on) {
+    geode::Mod::get()->setSavedValue("pf_start_from_zero", on);
+}
+
 void absense::stopPathfinder() {
+    if (s_pending.active) {
+        s_pending.active = false;
+        s_pendingNote = "stopped";
+    }
     auto& pf = Bot::get()->pathfinder();
     if (pf.isRunning())
         pf.stop("stopped");
@@ -83,7 +187,7 @@ absense::Status absense::status() {
     auto const& s = pf.stats();
     Status out;
     out.running = pf.isRunning();
-    out.phase = phaseName();
+    out.phase = s_pending.active ? "starting" : phaseName();
     out.progress = s.progress;
     out.bestProgress = s.bestProgress;
     out.startTick = s.startTick;
@@ -97,6 +201,10 @@ absense::Status absense::status() {
     out.seconds = s.seconds;
     out.lastDecision = s.lastDecision;
     out.message = s.message;
+    if (s_pending.active)
+        out.message = s_pending.fromBeginning ? "Restarting the level to start from its beginning..." : "Starting...";
+    else if (!out.running && !s_pendingNote.empty())
+        out.message = s_pendingNote;
     return out;
 }
 

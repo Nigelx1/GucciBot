@@ -15,6 +15,7 @@
 #include "absense/pathfinder/pathfinder.hpp"
 #include "absense/trajectory/trajectory.hpp"
 #include "absense/world/world.hpp"
+#include "absense/glue.hpp"
 #include "absense/judge.hpp"
 
 #include <Geode/Geode.hpp>
@@ -1141,6 +1142,9 @@ class $modify(GB7CCDirector, CCDirector) {
         // so the next slice starts from the restored state. The time it stood
         // still is taken back out of this frame's delta (calculateSteps).
         // Absense's CCDirector::drawScene, same order.
+        // A start asked for from the pause menu or from the level's
+        // beginning is carried out here, before this frame's slice.
+        absense::servicePendingStart();
         gb->updater.m_frozenSeconds = 0.0;
         bool absPathfinding = false;
         auto const frameT0 = std::chrono::steady_clock::now();
