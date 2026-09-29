@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-28-bp (Branch absense-pathfinder: diagnostics only. The tick probe also records the time step GD gave the player each tick, whether the sub-tick splitter took it, and GD's carried-over time, to find why a normal replay parts from the same inputs stepped one tick at a time.)"
+    "2026-09-28-bq (Branch absense-pathfinder: recording keeps every button event. A release, press, release in one tick, which is a tap from a held button and what the pathfinder's taps and orb spam are made of, used to lose its last release, so the replay ended the tick holding and died. Loading a macro had the same rule. Only an event that repeats the same button's previous event on the frame is dropped now, and Silicate drops none.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

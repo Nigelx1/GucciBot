@@ -57,13 +57,24 @@ namespace gucci {
             }
 
             bool addAction(uint32_t frame, ActionType type, bool holding, bool player2) {
+                // A button event that repeats that button's previous event on
+                // the same frame says nothing new, and is dropped. Only the
+                // previous one: this used to drop it if the same event was
+                // anywhere on the frame, and release, press, release -- a tap
+                // from a held button, which the Absense pathfinder plays all
+                // the time (and its orb spam is press, release, press) -- lost
+                // its last event. The game ended the tick with the button up,
+                // the macro with it down, and the replay died (Zafari 2,
+                // 2026-09-28: tick 1658, a replay death at 2154). Silicate
+                // records every event.
                 if ((uint8_t)type <= 3) {
                     for (auto it = m_actions.rbegin(); it != m_actions.rend(); ++it) {
                         if (it->m_frame != frame)
                             break;
-                        if (it->m_type == type && it->m_holding == holding &&
-                            it->m_player2 == player2) {
-                            return false;
+                        if (it->m_type == type && it->m_player2 == player2) {
+                            if (it->m_holding == holding)
+                                return false;
+                            break;
                         }
                     }
                 }
