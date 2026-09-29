@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-28-bn (Branch absense-pathfinder: Absense's pathfinder gets a new kind of idea for the flying modes, steering that holds a height once the copy flies, tried at a spread of heights. On Zafari 2 it always dove under the black boxes because none of its ideas lined a mini ship up with the 50-unit gap, while a plain hover gets through in the simulation and the real game alike. Also: the sim-vs-real tool no longer leaves the game a tick later than it started.)"
+    "2026-09-28-bo (Branch absense-pathfinder: Assistant Access tool gucci_lock_delta, to switch Lock Delta between Accuracy and Performance for one session without touching the saved setting. For testing why replays in Performance mode can part from what was recorded. No gameplay changes.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
