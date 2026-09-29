@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-28-bj (Branch absense-pathfinder: diagnostics for Absense's pathfinder, which dives under the black boxes in Zafari 2's ship part every time. New Assistant Access tools gucci_abs_simulate and gucci_run_to. It also refuses to start on a dead player instead of spinning. Nothing else changes.)"
+    "2026-09-28-bk (Branch absense-pathfinder: two recording fixes for Absense's pathfinder. Going back no longer deletes a press that was still held at the point it went back to, and stopping it puts GucciBot back in the mode it was in instead of leaving it recording, which let the next death wipe the found path. Plus Assistant Access tools gucci_tick_probe and gucci_backwards_stepping for finding where a replay leaves the path the pathfinder played.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

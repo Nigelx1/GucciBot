@@ -8,6 +8,7 @@
 #include "trailbuf/trailbuf.hpp"
 #include "analysis/ac/shim.hpp"
 #include "mcp/mcp_server.hpp"
+#include "mcp/tickprobe.hpp"
 #include "replay/scbf_input.hpp"
 #include "replay/subtick_preview.hpp"
 #include "absense/compat/bot.hpp"
@@ -733,6 +734,19 @@ static void frameUpdateMidhook(SafetyHookContext&) {
             upd.incrementFrame();
             if (upd.m_logFrameIncrements)
                 logFrameIncrement("frameUpdateMidhook", upd.getFrame(), pl->m_player1);
+            if (tickprobe::armed && pl->m_player1) {
+                auto* p = pl->m_player1;
+                auto const it = p->m_holdingButtons.find(static_cast<int>(PlayerButton::Jump));
+                tickprobe::current[upd.getFrame()] = tickprobe::Sample{
+                    p->m_position.x,
+                    p->m_position.y,
+                    (float)p->m_yVelocity,
+                    p->getRotation(),
+                    it != p->m_holdingButtons.end() && it->second,
+                    p->m_isOnGround,
+                    gamemodeChar(p),
+                };
+            }
             if (upd.m_pauseAtFrame != 0 && upd.getFrame() >= upd.m_pauseAtFrame) {
                 upd.m_pauseAtFrame = 0;
                 upd.setPaused(true);

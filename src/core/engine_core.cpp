@@ -343,7 +343,15 @@ namespace gucci {
             size_t before = m_actionAtom.length();
             if (respawnFrame > 0) {
                 m_actionAtom.clipFrom(respawnFrame + 1);
-                if (!m_actionAtom.m_actions.empty()) {
+                // A restore to an exact earlier state -- a Backwards Stepping
+                // step, or Absense's pathfinder going back -- puts the button
+                // back as it was (the checkpoint holds m_holdingButtons), so a
+                // press still held there is part of the recording, not a click
+                // the player died in. Removing it deleted a real press on every
+                // such restore, and the release suppressed after it went too.
+                bool const exactRestore =
+                    gb->practiceFix.m_loadCheckpoint || gb->practiceFix.m_forcedState != nullptr;
+                if (!exactRestore && !m_actionAtom.m_actions.empty()) {
                     auto& last = m_actionAtom.m_actions.back();
                     if (last.isInput() && last.m_holding) {
                         int p = last.m_player2 ? 1 : 0;

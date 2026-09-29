@@ -99,7 +99,7 @@ absense::Status absense::status() {
     return out;
 }
 
-matjson::Value absense::simulate(std::vector<bool> const& held, int ticks, int every) {
+matjson::Value absense::simulate(std::vector<ScriptTick> const& script, int ticks, int every) {
     auto out = matjson::Value::object();
     auto* pl = PlayLayer::get();
     auto* bot = Bot::get();
@@ -125,14 +125,14 @@ matjson::Value absense::simulate(std::vector<bool> const& held, int ticks, int e
     auto const it = buttons.find(static_cast<int>(PlayerButton::Jump));
     bool const downNow = it != buttons.end() && it->second;
     std::vector<TickInput> inputs;
-    inputs.reserve(held.size());
+    inputs.reserve(script.size());
     bool down = downNow;
-    for (bool h : held) {
+    for (auto const& s : script) {
         TickInput in;
-        in.presses = (h && !down) ? 1 : 0;
-        in.held = h;
+        in.presses = (s.press || (s.held && !down)) ? 1 : 0;
+        in.held = s.held || s.press;
         inputs.push_back(in);
-        down = h;
+        down = in.held;
     }
     if (inputs.empty())
         inputs.push_back(TickInput{0, downNow});

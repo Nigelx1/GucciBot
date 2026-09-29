@@ -44,9 +44,13 @@ namespace absense {
     Status status();
 
     // Diagnostics (gucci_abs_simulate): run the pathfinder's simulation from
-    // the real player's current state, the button down on each tick `held`
-    // says, for `ticks` ticks (the last entry repeats). Reports how far it
-    // got, the path every `every` ticks, and what killed it. Changes nothing
-    // in the real game.
-    matjson::Value simulate(std::vector<bool> const& held, int ticks, int every);
+    // the real player's current state along `script`, one entry per tick, for
+    // `ticks` ticks (the last entry repeats). Reports how far it got, the path
+    // every `every` ticks, and what killed it. Changes nothing in the real
+    // game.
+    struct ScriptTick {
+        bool press = false;  // a press on this tick (a release first if the button is down)
+        bool held = false;   // the button is down after the tick
+    };
+    matjson::Value simulate(std::vector<ScriptTick> const& script, int ticks, int every);
 }

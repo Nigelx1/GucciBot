@@ -17,6 +17,7 @@
 #include "analysis/ac/lstar.hpp"
 #include "analysis/pathfinder.hpp"
 #include "absense/glue.hpp"
+#include "mcp/tickprobe.hpp"
 #include "analysis/trajectory.hpp"
 #include "tools/macro_check.hpp"
 #include "core/GucciBot.hpp"
@@ -945,20 +946,21 @@ namespace gucci::mcp {
             "player, Silicate's physics, the World) from the real player's current "
             "state along a scripted input, and report the path, how far it got and "
             "what killed it. `script` is space-separated steps, h<N> = hold N ticks, "
-            "r<N> = release N ticks (e.g. \"h20 r15 h40\"); the last step repeats "
-            "to `ticks`. Nothing in the real game changes.",
-            schemaOf({{"script", "string", "hold/release steps, e.g. h20 r15 h40"},
+            "r<N> = release N ticks, p<N> = press on each of N ticks (a release "
+            "first when already held), e.g. \"h20 r15 p1 h40\"; the last step "
+            "repeats to `ticks`. Nothing in the real game changes.",
+            schemaOf({{"script", "string", "steps, e.g. h20 r15 p1 h40"},
                       {"ticks", "integer", "ticks to run (default: the script's length, max 3000)"},
                       {"every", "integer", "report the path every N ticks (default 4)"}}),
             [](matjson::Value const& a) {
                 requireFreeRun();
                 requireLevel();
-                std::vector<bool> held;
+                std::vector<absense::ScriptTick> held;
                 std::istringstream in(argStr(a, "script"));
                 std::string step;
                 while (in >> step) {
-                    if (step.size() < 2 || (step[0] != 'h' && step[0] != 'r'))
-                        throw ToolError("script steps are h<N> or r<N>, got \"" + step + "\"");
+                    if (step.size() < 2 || (step[0] != 'h' && step[0] != 'r' && step[0] != 'p'))
+                        throw ToolError("script steps are h<N>, r<N> or p<N>, got \"" + step + "\"");
                     int n = 0;
                     try {
                         n = std::stoi(step.substr(1));
@@ -967,7 +969,8 @@ namespace gucci::mcp {
                     }
                     if (n < 1 || n > 3000)
                         throw ToolError("tick counts are 1 to 3000");
-                    held.insert(held.end(), (size_t)n, step[0] == 'h');
+                    held.insert(held.end(), (size_t)n,
+                                absense::ScriptTick{step[0] == 'p', step[0] != 'r'});
                     if (held.size() > 3000)
                         throw ToolError("script longer than 3000 ticks");
                 }
@@ -977,6 +980,123 @@ namespace gucci::mcp {
                 auto out = absense::simulate(held, ticks, every);
                 if (out.contains("error"))
                     throw ToolError(out["error"].asString().unwrapOr("failed"));
+                return out;
+            },
+        });
+
+        {
+            auto schema = obj();
+            auto props = obj();
+            auto action = obj();
+            action["type"] = "string";
+            action["enum"] = std::vector<std::string>{"start", "stop", "save", "diff", "read"};
+            props["action"] = action;
+            for (auto const* k : {"from", "to", "every"}) {
+                auto p = obj();
+                p["type"] = "integer";
+                props[k] = p;
+            }
+            schema["type"] = "object";
+            schema["properties"] = props;
+            schema["required"] = std::vector<std::string>{"action"};
+            server.addTool({
+                "gucci_tick_probe",
+                "Record player 1's state at every tick, to compare two runs of the "
+                "same inputs. start: clear and record. stop: stop recording. save: "
+                "keep what was recorded as the reference. diff: the first tick where "
+                "the recording differs from the reference, with the ticks around it. "
+                "read: the recording from `from` to `to`, every `every` ticks.",
+                schema,
+                [](matjson::Value const& a) {
+                    auto const what = argStr(a, "action");
+                    auto out = obj();
+                    auto fmtSample = [](uint32_t f, tickprobe::Sample const& s) {
+                        return fmt::format("{} x={:.3f} y={:.3f} vy={:.3f} r={:.1f}{}{} {}",
+                                           f, s.x, s.y, s.yVel, s.rot,
+                                           s.held ? " H" : "", s.onGround ? " G" : "", s.mode);
+                    };
+                    auto range = [](std::map<uint32_t, tickprobe::Sample> const& m) {
+                        auto r = obj();
+                        r["ticks"] = (int64_t)m.size();
+                        r["first"] = m.empty() ? (int64_t)-1 : (int64_t)m.begin()->first;
+                        r["last"] = m.empty() ? (int64_t)-1 : (int64_t)m.rbegin()->first;
+                        return r;
+                    };
+                    if (what == "start") {
+                        tickprobe::current.clear();
+                        tickprobe::armed = true;
+                    } else if (what == "stop") {
+                        tickprobe::armed = false;
+                    } else if (what == "save") {
+                        tickprobe::saved = tickprobe::current;
+                    } else if (what == "read") {
+                        int64_t const from = argInt(a, "from", 0);
+                        int64_t const to = argInt(a, "to", 1 << 30);
+                        int64_t const every = std::max<int64_t>(1, argInt(a, "every", 1));
+                        auto rows = matjson::Value::array();
+                        size_t count = 0;
+                        for (auto const& [f, s] : tickprobe::current) {
+                            if ((int64_t)f < from || (int64_t)f > to || ((int64_t)f - from) % every != 0)
+                                continue;
+                            rows.push(fmtSample(f, s));
+                            if (++count >= 400)
+                                break;
+                        }
+                        out["rows"] = rows;
+                    } else if (what == "diff") {
+                        auto const& A = tickprobe::saved;
+                        auto const& B = tickprobe::current;
+                        int64_t compared = 0;
+                        int64_t first = -1;
+                        for (auto const& [f, s] : A) {
+                            auto it = B.find(f);
+                            if (it == B.end())
+                                continue;
+                            compared++;
+                            auto const& t = it->second;
+                            if (std::fabs(s.x - t.x) > 1e-3f || std::fabs(s.y - t.y) > 1e-3f ||
+                                std::fabs(s.yVel - t.yVel) > 1e-3f || s.held != t.held ||
+                                s.mode != t.mode) {
+                                first = f;
+                                break;
+                            }
+                        }
+                        out["compared"] = compared;
+                        out["first_difference"] = first;
+                        if (first >= 0) {
+                            auto around = matjson::Value::array();
+                            for (int64_t f = std::max<int64_t>(0, first - 4); f <= first + 4; f++) {
+                                auto ia = A.find((uint32_t)f);
+                                auto ib = B.find((uint32_t)f);
+                                around.push("ref " + (ia == A.end() ? std::to_string(f) + " -"
+                                                                     : fmtSample((uint32_t)f, ia->second)));
+                                around.push("now " + (ib == B.end() ? std::to_string(f) + " -"
+                                                                     : fmtSample((uint32_t)f, ib->second)));
+                            }
+                            out["around"] = around;
+                        }
+                    } else {
+                        throw ToolError("action must be start, stop, save, diff or read");
+                    }
+                    out["armed"] = tickprobe::armed;
+                    out["recording"] = range(tickprobe::current);
+                    out["reference"] = range(tickprobe::saved);
+                    return out;
+                },
+            });
+        }
+
+        server.addTool({
+            "gucci_backwards_stepping",
+            "Turn Backwards Stepping on or off (the per-tick store step-backs "
+            "restore from).",
+            schemaOf({{"on", "boolean", "on or off"}}),
+            [](matjson::Value const& a) {
+                auto* gb = GucciEngine::get();
+                gb->updater.m_backwardsStepping = argBool(a, "on", true);
+                auto out = obj();
+                out["on"] = gb->updater.m_backwardsStepping;
+                out["stored_frames"] = (int64_t)gb->practiceFix.m_storedFrames.size();
                 return out;
             },
         });

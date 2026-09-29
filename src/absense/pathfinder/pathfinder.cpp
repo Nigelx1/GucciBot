@@ -441,6 +441,15 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
         // It used to stay frozen wherever the search gave up, which looks
         // exactly like the game hanging.
         updater.setPaused(m_savedPaused);
+        // And back to the mode it was in (GucciBot). Absense leaves the game
+        // recording; here the game carries on after a stop, and the first death
+        // while recording wipes everything after the respawn -- the path the
+        // search found with it. Switching mode leaves the recording itself alone.
+        {
+            auto* gb = gucci::GucciEngine::get();
+            auto const mode = static_cast<gucci::GucciEngine::Mode>(m_savedMode);
+            if (gb->mode != mode) gb->setMode(mode);
+        }
     }
     releaseAnchors();
 
