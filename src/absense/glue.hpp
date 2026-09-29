@@ -53,4 +53,15 @@ namespace absense {
         bool held = false;   // the button is down after the tick
     };
     matjson::Value simulate(std::vector<ScriptTick> const& script, int ticks, int every);
+
+    // gucci_sim_vs_real: the same script from the same moment, once in the
+    // simulation and once for real (absense/judge.hpp), and the first tick the
+    // two part. The game is put back afterwards.
+    matjson::Value simVsReal(std::vector<ScriptTick> const& script, int ticks, int every);
+
+    // Killers the simulation is wrong about (by object uid): its copies do
+    // not die of them. See absense/judge.hpp.
+    void distrust(int uid);
+    void clearDistrust();
+    std::vector<int> distrustedList();
 }

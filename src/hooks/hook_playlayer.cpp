@@ -11,6 +11,7 @@
 #include "absense/compat/bot.hpp"
 #include "absense/pathfinder/pathfinder.hpp"
 #include "absense/trajectory/trajectory.hpp"
+#include "absense/judge.hpp"
 #include "hacks/hitboxes.hpp"
 #include "trainers/jupiterghost.hpp"
 #include "trainers/trainerghost.hpp"
@@ -606,8 +607,19 @@ class $modify(GB7PlayLayer, PlayLayer) {
         // A copy in Absense's look-ahead died: remember what got it and mark
         // it dead (hasDied), and nothing else -- it is not the player.
         if (auto& abst = ::Bot::get()->trajectory(); abst.isFakePlayer(player)) {
+            // A killer the real game has shown the simulation to be wrong
+            // about (absense/judge.hpp): the copy carries on through it.
+            if (obj && absense::judge::distrusted(obj->m_uniqueID))
+                return;
             abst.noteKiller(player, obj);
             abst.hasDied(player);
+            return;
+        }
+        // The judge playing a script for real (gucci_sim_vs_real): the death
+        // is noted and the run ends there, the player does not die.
+        if (absense::judge::active() && obj != m_anticheatSpike &&
+            (player == m_player1 || player == m_player2)) {
+            absense::judge::noteDeath(obj);
             return;
         }
         // While Absense's pathfinder drives the game a death is a dead end it
@@ -784,6 +796,10 @@ class $modify(GB7PlayLayer, PlayLayer) {
 
     void levelComplete() {
         auto* gb = GucciEngine::get();
+        if (absense::judge::active()) {
+            absense::judge::noteComplete();
+            return;
+        }
         if (::Bot::get()->pathfinder().isRunning()) {
             PlayLayer::levelComplete();
             ::Bot::get()->pathfinder().onLevelComplete();

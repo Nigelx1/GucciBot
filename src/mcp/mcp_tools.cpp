@@ -126,6 +126,31 @@ namespace gucci::mcp {
         }
 
         // A JSON-schema object from (name, type, description) triples.
+        // Scripts for the Absense diagnostics: space-separated steps, h<N> =
+        // hold N ticks, r<N> = release N ticks, p<N> = press on each of N
+        // ticks (a release first when already held).
+        std::vector<absense::ScriptTick> parseAbsScript(std::string const& text) {
+            std::vector<absense::ScriptTick> held;
+            std::istringstream in(text);
+            std::string step;
+            while (in >> step) {
+                if (step.size() < 2 || (step[0] != 'h' && step[0] != 'r' && step[0] != 'p'))
+                    throw ToolError("script steps are h<N>, r<N> or p<N>, got \"" + step + "\"");
+                int n = 0;
+                try {
+                    n = std::stoi(step.substr(1));
+                } catch (...) {
+                    throw ToolError("bad tick count in \"" + step + "\"");
+                }
+                if (n < 1 || n > 3000)
+                    throw ToolError("tick counts are 1 to 3000");
+                held.insert(held.end(), (size_t)n, absense::ScriptTick{step[0] == 'p', step[0] != 'r'});
+                if (held.size() > 3000)
+                    throw ToolError("script longer than 3000 ticks");
+            }
+            return held;
+        }
+
         matjson::Value schemaOf(std::initializer_list<std::array<char const*, 3>> fields) {
             auto props = obj();
             for (auto const& f : fields) {
@@ -955,25 +980,7 @@ namespace gucci::mcp {
             [](matjson::Value const& a) {
                 requireFreeRun();
                 requireLevel();
-                std::vector<absense::ScriptTick> held;
-                std::istringstream in(argStr(a, "script"));
-                std::string step;
-                while (in >> step) {
-                    if (step.size() < 2 || (step[0] != 'h' && step[0] != 'r' && step[0] != 'p'))
-                        throw ToolError("script steps are h<N>, r<N> or p<N>, got \"" + step + "\"");
-                    int n = 0;
-                    try {
-                        n = std::stoi(step.substr(1));
-                    } catch (...) {
-                        throw ToolError("bad tick count in \"" + step + "\"");
-                    }
-                    if (n < 1 || n > 3000)
-                        throw ToolError("tick counts are 1 to 3000");
-                    held.insert(held.end(), (size_t)n,
-                                absense::ScriptTick{step[0] == 'p', step[0] != 'r'});
-                    if (held.size() > 3000)
-                        throw ToolError("script longer than 3000 ticks");
-                }
+                auto const held = parseAbsScript(argStr(a, "script"));
                 int const ticks = (int)std::clamp<int64_t>(
                     argInt(a, "ticks", std::max<int64_t>(1, (int64_t)held.size())), 1, 3000);
                 int const every = (int)std::clamp<int64_t>(argInt(a, "every", 4), 1, 240);
@@ -1100,6 +1107,71 @@ namespace gucci::mcp {
                 return out;
             },
         });
+
+        server.addTool({
+            "gucci_sim_vs_real",
+            "Diagnostic: play the same script from the player's current state "
+            "twice -- in Absense's pathfinder simulation, then for real (the "
+            "death is caught, not died) -- and report both outcomes, what killed "
+            "each, and the first tick the two part. The game is put back to "
+            "where it was afterwards. Script as for gucci_abs_simulate.",
+            schemaOf({{"script", "string", "steps, e.g. h20 r15 p1 h40"},
+                      {"ticks", "integer", "ticks to run (default: the script's length, max 1500)"},
+                      {"every", "integer", "report both paths every N ticks (default 10)"}}),
+            [](matjson::Value const& a) {
+                requireFreeRun();
+                requireLevel();
+                auto const script = parseAbsScript(argStr(a, "script"));
+                int const ticks = (int)std::clamp<int64_t>(
+                    argInt(a, "ticks", std::max<int64_t>(1, (int64_t)script.size())), 1, 1500);
+                int const every = (int)std::clamp<int64_t>(argInt(a, "every", 10), 1, 240);
+                auto out = absense::simVsReal(script, ticks, every);
+                if (out.contains("error"))
+                    throw ToolError(out["error"].asString().unwrapOr("failed"));
+                return out;
+            },
+        });
+
+        {
+            auto schema = obj();
+            auto props = obj();
+            auto action = obj();
+            action["type"] = "string";
+            action["enum"] = std::vector<std::string>{"add", "clear", "list"};
+            props["action"] = action;
+            auto uid = obj();
+            uid["type"] = "integer";
+            uid["description"] = "the object's unique id (killer_uid in the other tools)";
+            props["uid"] = uid;
+            schema["type"] = "object";
+            schema["properties"] = props;
+            schema["required"] = std::vector<std::string>{"action"};
+            server.addTool({
+                "gucci_abs_distrust",
+                "Mark an object as a killer Absense's simulation is wrong about: "
+                "its copies of the player no longer die of it. add (uid), clear, list.",
+                schema,
+                [](matjson::Value const& a) {
+                    auto const what = argStr(a, "action");
+                    if (what == "add") {
+                        int64_t const uid = argInt(a, "uid", 0);
+                        if (uid == 0)
+                            throw ToolError("add needs a uid");
+                        absense::distrust((int)uid);
+                    } else if (what == "clear") {
+                        absense::clearDistrust();
+                    } else if (what != "list") {
+                        throw ToolError("action must be add, clear or list");
+                    }
+                    auto out = obj();
+                    auto list = matjson::Value::array();
+                    for (int u : absense::distrustedList())
+                        list.push((int64_t)u);
+                    out["distrusted"] = list;
+                    return out;
+                },
+            });
+        }
 
         server.addTool({
             "gucci_run_to",

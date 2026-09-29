@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-28-bk (Branch absense-pathfinder: two recording fixes for Absense's pathfinder. Going back no longer deletes a press that was still held at the point it went back to, and stopping it puts GucciBot back in the mode it was in instead of leaving it recording, which let the next death wipe the found path. Plus Assistant Access tools gucci_tick_probe and gucci_backwards_stepping for finding where a replay leaves the path the pathfinder played.)"
+    "2026-09-28-bl (Branch absense-pathfinder: the real game as judge of Absense's simulation. It can play a script for real from the current moment, catch the death and put the game back exactly, and the simulation can be told to ignore a killer the real game proved wrong. New Assistant Access tools gucci_sim_vs_real and gucci_abs_distrust, for finding why it dives under the black boxes in Zafari 2. The pathfinder itself does not use them yet.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

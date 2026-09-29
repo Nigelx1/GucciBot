@@ -15,6 +15,7 @@
 #include "absense/pathfinder/pathfinder.hpp"
 #include "absense/trajectory/trajectory.hpp"
 #include "absense/world/world.hpp"
+#include "absense/judge.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/modify/CCScheduler.hpp>
@@ -762,7 +763,9 @@ static void frameUpdateMidhook(SafetyHookContext&) {
             // ledger of the tick that just ran (so a start kept at this tick
             // finds it), then the look-ahead's copies are set up from the real
             // player again. Only while it runs -- normal play pays nothing.
-            if (auto& apf = ::Bot::get()->pathfinder(); apf.isRunning()) {
+            // (Not a tick the judge is playing for real: that path is put
+            // back afterwards and is none of the pathfinder's business.)
+            if (auto& apf = ::Bot::get()->pathfinder(); apf.isRunning() && !absense::judge::active()) {
                 apf.afterLiveTick();
                 world::World::afterRealTick(pl, (int)upd.getFrame());
                 ::Bot::get()->trajectory().realStateChanged();
@@ -777,7 +780,7 @@ static void frameUpdateMidhook(SafetyHookContext&) {
             // Absense's pathfinder drives the game (Absense skips it then too):
             // its dead ends are its own to go back from, and a pause stops it.
             if (upd.m_preventDeath && upd.m_fullGamePrediction && !upd.m_predicting &&
-                !::Bot::get()->pathfinder().drivesGame()) {
+                !::Bot::get()->pathfinder().drivesGame() && !absense::judge::active()) {
                 if (auto* pll = PlayLayer::get()) {
                     auto& traj = TrajectoryPredictionService::get();
                     auto check = [&](PlayerObject* p, bool p2) {
