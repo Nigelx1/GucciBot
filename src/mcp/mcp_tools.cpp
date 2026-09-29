@@ -1018,9 +1018,10 @@ namespace gucci::mcp {
                     auto const what = argStr(a, "action");
                     auto out = obj();
                     auto fmtSample = [](uint32_t f, tickprobe::Sample const& s) {
-                        return fmt::format("{} x={:.3f} y={:.3f} vy={:.3f} r={:.1f}{}{} {}",
+                        return fmt::format("{} x={:.3f} y={:.3f} vy={:.3f} r={:.1f}{}{} {} dt={:.5f}{} xd={:.6f}",
                                            f, s.x, s.y, s.yVel, s.rot,
-                                           s.held ? " H" : "", s.onGround ? " G" : "", s.mode);
+                                           s.held ? " H" : "", s.onGround ? " G" : "", s.mode, s.dt,
+                                           s.split ? " SPLIT" : "", s.extraDelta);
                     };
                     auto range = [](std::map<uint32_t, tickprobe::Sample> const& m) {
                         auto r = obj();

@@ -746,7 +746,12 @@ static void frameUpdateMidhook(SafetyHookContext&) {
                     it != p->m_holdingButtons.end() && it->second,
                     p->m_isOnGround,
                     gamemodeChar(p),
+                    tickprobe::lastDt,
+                    tickprobe::lastSplit,
+                    pl->m_extraDelta,
                 };
+                tickprobe::lastDt = 0.f;
+                tickprobe::lastSplit = false;
             }
             if (upd.m_pauseAtFrame != 0 && upd.getFrame() >= upd.m_pauseAtFrame) {
                 upd.m_pauseAtFrame = 0;

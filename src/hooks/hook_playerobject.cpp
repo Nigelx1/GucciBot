@@ -5,6 +5,7 @@
 #include "hooks/util_midhook.hpp"
 #include "absense/compat/bot.hpp"
 #include "absense/trajectory/trajectory.hpp"
+#include "mcp/tickprobe.hpp"
 #include <Geode/Geode.hpp>
 #include <Geode/modify/PlayerObject.hpp>
 using namespace geode::prelude;
@@ -182,8 +183,16 @@ class $modify(GB7PlayerObject, PlayerObject) {
         // Simulated players are never split: a fork exists to answer one
         // question about physics, and splitting its ticks would change the
         // physics it is being asked about.
+        if (tickprobe::armed && real) {
+            if (auto* ppl = PlayLayer::get(); ppl && this == ppl->m_player1)
+                tickprobe::lastDt += dt;
+        }
         if (real && this->cbfSplitUpdate(dt)) {
             upd.m_currentPlayerX = this->getPositionX();
+            if (tickprobe::armed) {
+                if (auto* ppl = PlayLayer::get(); ppl && this == ppl->m_player1)
+                    tickprobe::lastSplit = true;
+            }
             return;
         }
 

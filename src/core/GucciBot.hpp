@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-28-bo (Branch absense-pathfinder: Assistant Access tool gucci_lock_delta, to switch Lock Delta between Accuracy and Performance for one session without touching the saved setting. For testing why replays in Performance mode can part from what was recorded. No gameplay changes.)"
+    "2026-09-28-bp (Branch absense-pathfinder: diagnostics only. The tick probe also records the time step GD gave the player each tick, whether the sub-tick splitter took it, and GD's carried-over time, to find why a normal replay parts from the same inputs stepped one tick at a time.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

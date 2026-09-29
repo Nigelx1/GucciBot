@@ -19,7 +19,18 @@ namespace gucci::tickprobe {
         bool held = false;
         bool onGround = false;
         char mode = 'C';
+        // How the tick ran: the delta GD handed player 1's update (0 when it
+        // was not updated), whether the sub-tick splitter took it instead,
+        // and GD's carried-over time (m_extraDelta) when it ended.
+        float dt = 0.f;
+        bool split = false;
+        double extraDelta = 0.0;
     };
+
+    // Written by PlayerObject::update's hook for the real player 1, read and
+    // cleared when the tick's sample is taken.
+    inline float lastDt = 0.f;
+    inline bool lastSplit = false;
 
     inline bool armed = false;
     inline std::map<uint32_t, Sample> current;
