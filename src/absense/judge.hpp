@@ -39,6 +39,8 @@ namespace absense::judge {
         uint32_t frameAfter = 0;
         float xBefore = 0.f, xAfter = 0.f;
         bool stepArmedAfter = false;
+        int stepLeftArmed = 0;          // stepped ticks after which the step flag was still set
+        bool onlyRefreshAtStart = false;  // the updater was in its refresh-only state
     };
 
     // Plays `inputs` (one per tick; the last repeats to `ticks`) on the real

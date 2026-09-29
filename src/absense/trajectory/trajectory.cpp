@@ -2571,14 +2571,59 @@ static TickInput orbSpamTick(int since, int period) {
     return (period > 0 && since % period == 0) ? TickInput{2, true} : TickInput{0, false};
 }
 
+// GucciBot (2026-09-28): the input that holds a flying copy at `target`.
+// Where the copy will be `lead` ticks on at its present rate of climb decides
+// it: short of the target, climb; past it, fall. What climbs depends on the
+// kind - holding for the ship and the wave (letting go, upside down), a flap
+// for the UFO (only while it is not already rising), for the swing falling
+// the other way (a press flips it). Switching on the prediction rather than
+// the height itself is what keeps it from swinging past the target: a ship
+// on a plain "below: hold" overshoots by its whole speed of climb.
+static TickInput holdHeight(PlayerObject* p, bool down, float y, float dy, float target, int lead) {
+    const float predicted = y + dy * (float)lead;
+    const bool wantUp = predicted < target;  // towards +y
+    const bool flipped = p->m_isUpsideDown;
+    if (p->m_isShip || p->m_isDart) {
+        const bool hold = flipped ? !wantUp : wantUp;
+        if (hold) return TickInput{(uint8_t)(down ? 0 : 1), true};
+        return TickInput{0, false};
+    }
+    if (p->m_isBird) {
+        const bool flapGoesUp = !flipped;
+        const bool rising = flapGoesUp ? dy > 0.0f : dy < 0.0f;
+        if (wantUp == flapGoesUp && !rising) return TickInput{1, false};
+        return TickInput{0, false};
+    }
+    if (p->m_isSwing) {
+        // Upside down the swing falls up; a press turns it round.
+        if (wantUp != flipped) return TickInput{1, false};
+        return TickInput{0, false};
+    }
+    return TickInput{0, down};
+}
+
 RunResult Trajectory::steer(GJBaseGameLayer* pl, bool p1, int ticks, bool buttonDown, int lookahead,
-                            std::vector<TickInput>& script, std::span<const TickInput> other, bool otherDown) {
+                            std::vector<TickInput>& script, std::span<const TickInput> other, bool otherDown,
+                            float aimOffset) {
     RunResult result;
     script.clear();
     if (ticks <= 0) return result;
     Sim s;
     if (!s.begin(this, pl, p1, buttonDown, other, otherDown, false)) return result;
     lookahead = std::max(1, lookahead);
+
+    // Holding a height (aimOffset set): the target is fixed on the first tick
+    // the copy flies. `lead` is how far ahead the climb is judged, in ticks -
+    // six at 240 TPS, as many seconds' worth at other rates.
+    const bool aiming = !std::isnan(aimOffset);
+    bool aimSet = false;
+    float aimTarget = 0.0f;
+    float lastY = s.pos().y;
+    int aimLead = 6;
+    {
+        const double dt = Bot::get()->updater().getPhysicsDt();
+        if (dt > 0.0) aimLead = std::max(1, (int)std::lround(6.0 * std::max(1.0, (1.0 / dt) / 240.0)));
+    }
 
     int guaranteed = 0;  // ticks the current input is known to survive
     // When nothing lasts the whole look-ahead the choice is kept until it is
@@ -2657,6 +2702,37 @@ RunResult Trajectory::steer(GJBaseGameLayer* pl, bool p1, int ticks, bool button
         // the run to the other (Sim::leaveDual), so holding on to the one the
         // run began with would ask a copy that has left what kind it is.
         PlayerObject* const player = s.players[0];
+        if (aiming) {
+            const float y = s.pos().y;
+            const float dy = y - lastY;
+            lastY = y;
+            const bool fliesNow = player->m_isShip || player->m_isBird || player->m_isDart || player->m_isSwing;
+            if (fliesNow && spamPeriod == 0) {
+                if (!aimSet) {
+                    aimTarget = y + aimOffset;
+                    aimSet = true;
+                }
+                const TickInput held = holdHeight(player, s.down, y, dy, aimTarget, aimLead);
+                const bool dead = s.step(held);
+                script.push_back(held);
+                s.fill(result);
+                // Back on the ground (a portal out of the flying kinds), the
+                // steering asks again at once.
+                guaranteed = 0;
+                committed = false;
+                if (dead) {
+                    result.died = true;
+                    result.dualDeath = s.deadPlayer2();
+                    break;
+                }
+                result.survived = i + 1;
+                if (s.complete()) {
+                    result.complete = true;
+                    break;
+                }
+                continue;
+            }
+        }
         // Riding the orb spam: its own ticks, not "carry on". Carrying on is
         // a hold, and a hold is one flap and one shot of the orb - the ticks
         // between the decision points are what keeps the corridor going.

@@ -155,6 +155,9 @@ public:
         bool evaluated = false;  // outcome already known
         int claimed = -1;        // what the steering / search itself reported (checked against its script)
         int steer = 0;           // a steered idea with this look-ahead; its script is made when evaluated
+        // GucciBot: a steered idea that holds a height once the copy flies (the
+        // height it starts flying at plus this); NaN for the plain steers.
+        float aimOffset = std::numeric_limits<float>::quiet_NaN();
         int events = 0;      // presses / releases in the script
         int eventsWindow = 0; // ... of which inside the part that will be played
         bool killerStatic = false;  // it dies at an object that cannot move (the simulation is right about it)

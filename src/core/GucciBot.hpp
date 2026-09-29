@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-28-bm (Branch absense-pathfinder: Assistant Access can open a local level by name and restart the game, so a session can load a new build without Nigel. gucci_sim_vs_real reports the frame and position right after it puts the game back, to find a one-tick drift found in -bl. No gameplay changes.)"
+    "2026-09-28-bn (Branch absense-pathfinder: Absense's pathfinder gets a new kind of idea for the flying modes, steering that holds a height once the copy flies, tried at a spread of heights. On Zafari 2 it always dove under the black boxes because none of its ideas lined a mini ship up with the 50-unit gap, while a plain hover gets through in the simulation and the real game alike. Also: the sim-vs-real tool no longer leaves the game a tick later than it started.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -105,6 +105,10 @@ namespace absense::judge {
             gb->setMode(gucci::GucciEngine::Mode::Idle);
         upd.m_backwardsStepping = false;
         upd.setPaused(true);
+        r.onlyRefreshAtStart = upd.m_onlyRefresh;
+        // A step someone else armed is theirs: taken out of the way here and
+        // put back at the end.
+        bool const stepArmedBefore = upd.consumeStep();
 
         s_active = true;
         s_died = false;
@@ -130,6 +134,8 @@ namespace absense::judge {
             // One tick, as the pathfinder's stepGame runs one.
             upd.stepOnce();
             CCScheduler::get()->update(static_cast<float>(upd.getPhysicsDt()));
+            if (upd.m_stepOnce_)
+                r.stepLeftArmed++;
 
             if (trace) {
                 auto* p = pl->m_player1;
@@ -169,6 +175,12 @@ namespace absense::judge {
         r.frameAfter = upd.getFrame();
         r.xAfter = pl->m_player1->getPositionX();
         r.stepArmedAfter = upd.m_stepOnce_;
+        // Nothing of the run's own is left to step once it is over (in -bl
+        // every run left one armed, and the next frame played it: the game
+        // came back a tick later than it started).
+        upd.consumeStep();
+        if (stepArmedBefore)
+            upd.stepOnce();
         s_killer = nullptr;
         cp->release();
 

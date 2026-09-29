@@ -1552,6 +1552,31 @@ void AbsensePathfinder::buildSteeredCandidates(std::vector<Candidate>& out, bool
         c.steer = lookahead;
         out.push_back(std::move(c));
     }
+
+    // GucciBot (2026-09-28): the same steers, holding a height once they fly.
+    // On Zafari 2 the way through a mini-ship section is a gap 50 units tall
+    // between two rows of spikes, and no idea above ever lined up with it:
+    // the steers only switch when a crash is close, so a ship bounces between
+    // the floor and the ceiling. A plain hover at the gap's height gets
+    // through (the simulation and the real game agree to the hundredth), and
+    // holding a height is how a person flies one. Tried at a spread of
+    // heights around where the copy starts flying; the cube part before a
+    // portal is steered as usual.
+    static constexpr float kAimOffsets[] = {0.f, 30.f, -30.f, 60.f, -60.f, 100.f, -100.f, 150.f, -150.f};
+    static constexpr int kAimLookaheads[] = {16, 64};
+    for (int base : kAimLookaheads) {
+        if (effort <= 0 && base == 16) continue;
+        const int lookahead = std::max(1, (int)std::lround(base * scale));
+        for (float off : kAimOffsets) {
+            if (effort <= 0 && off != 0.f && off != 60.f && off != -60.f) continue;
+            Candidate c;
+            std::snprintf(name, sizeof(name), "steer %d, height %+d", lookahead, (int)off);
+            c.name = name;
+            c.steer = lookahead;
+            c.aimOffset = off;
+            out.push_back(std::move(c));
+        }
+    }
 }
 
 // The script the branching search found (see Trajectory::search), once it
@@ -1789,8 +1814,12 @@ bool AbsensePathfinder::evaluate(Candidate& c, int horizon, bool held, std::vect
     // From a kept start, what an earlier pass or retry already ran there is looked
     // up instead of run again (see memoStart) - the steering as well.
     const Trajectory::SimStart* from = memoStart();
-    const auto steerKey = from && c.steer > 0 ? memoKey(from, horizon, held, {}, kSteerSalt + (uint64_t)(uint32_t)c.steer)
-                                              : std::pair<uint64_t, uint64_t>{0, 0};
+    // (A held height is part of the steer: a different run, a different memo.)
+    const uint64_t aimSalt =
+        std::isnan(c.aimOffset) ? 0 : ((uint64_t)(uint32_t)((int)std::lround(c.aimOffset) + 100000) << 24);
+    const auto steerKey = from && c.steer > 0
+                              ? memoKey(from, horizon, held, {}, kSteerSalt + (uint64_t)(uint32_t)c.steer + aimSalt)
+                              : std::pair<uint64_t, uint64_t>{0, 0};
     if (from && c.steer > 0 && c.inputs.empty()) {
         const auto it = m_runMemo.find(steerKey.first);
         if (it != m_runMemo.end() && it->second.check == steerKey.second) {
@@ -1809,8 +1838,10 @@ bool AbsensePathfinder::evaluate(Candidate& c, int horizon, bool held, std::vect
     if (c.steer > 0 && c.inputs.empty()) {
         // The steering itself, then its script is judged like any other.
         const Decision& d = m_decision;
-        const RunResult sr = d.pair ? Bot::get()->trajectory().steer(pl, !d.player2, horizon, held, c.steer, c.inputs, d.other, d.otherHeld)
-                                    : Bot::get()->trajectory().steer(pl, true, horizon, held, c.steer, c.inputs);
+        const RunResult sr = d.pair ? Bot::get()->trajectory().steer(pl, !d.player2, horizon, held, c.steer, c.inputs,
+                                                                     d.other, d.otherHeld, c.aimOffset)
+                                    : Bot::get()->trajectory().steer(pl, true, horizon, held, c.steer, c.inputs, {},
+                                                                     false, c.aimOffset);
         m_stats.simulations++;
         m_stats.simulatedTicks += (uint64_t)std::max(0, sr.simulated);
         if (from) {
