@@ -9428,9 +9428,10 @@ namespace gucci {
             {"P", "peony", "Silicate dev -- dropped the source like Gucci drops albums. Brrr."},
             {"A",
              "Absent",
-             "Absense -- another bot built on Silicate. Several of Pathfinder's improvements, "
-             "the assistant server, Check Macro, Replace All, the respawn timer and the black "
-             "orb autoclicker loop are his ideas, worked out again here from his source."},
+             "Absense -- another bot built on Silicate. Pathfinder's default engine is his: "
+             "Absense's pathfinder, with its look-ahead and its model of the level, ported in "
+             "whole. The assistant server, Check Macro, Replace All, the respawn timer and the "
+             "black orb autoclicker loop are his ideas too, worked out again here from his source."},
             {"T",
              "ToastexGD",
              "Built ToastyReplay -- the project GucciBot actually started as, and the reason there "

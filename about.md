@@ -1,4 +1,4 @@
-# GucciBot 2.beta.1
+# GucciBot 2.0.0-beta.2
 
 > Frame perfect. Ice cold. Brrr.
 
@@ -54,19 +54,26 @@ GucciBot is a Geometry Dash macro bot built on Silicate's physics engine, with a
 
 ## Pathfinder
 
-Makes a macro for you. Open a level with nothing recorded, start Pathfinder, and it plays the level itself until it has a run that reaches the end -- then saves that run as a macro named after the level.
+Makes a macro for you. Open a level with nothing recorded, start Pathfinder, and it plays the level itself until it reaches the end -- then saves that run as a macro named after the level.
 
-- **Searches where it matters** — it checks, frame by frame, whether pressing would change anything at all. When a death comes long after the mistake behind it (walking off a ledge and dying at the bottom), it looks back past the stretch where no input could have helped instead of burning attempts inside it.
-- **Tries the earlier press again first** — when a fix only buys a few frames, it tries different versions of the press before it rather than settling.
+Two engines, picked at the top of the Pathfinder tab.
+
+**Absense (the default)** — Absent's pathfinder from Absense, ported in whole.
+
+- **Looks before it clicks** — before each input it runs copies of the player ahead through the real level, with Silicate's physics for portals, orbs, pads and dashes and a model of the level's triggers, and plays the idea that lasts.
+- **Plays where you can see it** — the level runs in real time while it plans the next stretch, with its progress in the corner.
+- **Goes back when it has to** — a dead end sends it back through Backwards Stepping's stored frames to try another way, and further back each time a spot keeps biting.
+- **Learns levels** — what got it past a spot is remembered per level and tried first the next time, so searching a level again is faster.
+- **Holds a height** — GucciBot's addition: in ship, wave, UFO and swing it also tries holding the player at a spread of heights, the way you'd thread a ship through a gap.
+- **Starts how you like** — from wherever the level is, straight from the pause menu, or with **Start from the beginning** on, from frame 0 after a Full Restart.
+
+**Classic** — GucciBot's own search, still there.
+
+- **Death is the signal** — it runs until GD's own collision kills it, then looks back from there for the press that gets further, skipping stretches where no input could have mattered.
 - **Real backtracking** — every option it tries at a decision point is ruled out there for good; dead ends restore a real checkpoint further back.
-- **Never retries a proven dead end** — a press that has already been shown not to work is skipped outright the next time the search comes back through.
-- **Remembers hard spots** — what got past a hazard is saved per level, keyed on the situation you died in rather than on the exact run that led there, and tried first the next time you search that level.
-- **Prefers a press you could actually hit** — given two options, it takes the one that also works a frame late over the one that only works frame-perfect.
-- **Tries your own presses first** — if there is a recorded macro on the level, its inputs are candidates before anything generated.
-- **Widens where it keeps getting bitten** — a spot that has failed several times gets a longer look straight away instead of creeping outward one frame at a time.
 - **Proves its own answer** — a solution only counts once it plays from the very start of the level on its own.
 - **Agency Map** — an optional overlay showing, as you play, which frames an input could actually change.
-- Strongest on Cube-style sections so far. Modes where letting go is its own decision -- Ship, Wave, Robot, Swing -- are the next part of the work.
+- Strongest on Cube-style sections.
 
 ## Nigel's Jupiter My Favourite Trainer
 
@@ -167,7 +174,7 @@ Real click-timing feedback and a synced video-review overlay, both built around 
 - **NaN GD** — the L* precision formula, published at [nandl.pages.dev](https://nandl.pages.dev/#formula). The number GucciBot puts on a macro is his maths
 - **C0nscious** — implemented NaN's formula in C++ as [Frame Window Counter](https://github.com/hyper-5/frame-window-counter) (MIT), which is the code that reached GucciBot
 - **peony** — Silicate (dropped the source like Gucci drops albums. Brrr.)
-- **Absent** — Absense, another bot built on Silicate. Several of Pathfinder's improvements, the assistant server, Check Macro, Replace All, the respawn timer and the black orb autoclicker loop are his ideas, worked out again here from his source
+- **Absent** — Absense, another bot built on Silicate. Pathfinder's default engine is his: Absense's pathfinder, with its look-ahead and its model of the level, ported in whole. The assistant server, Check Macro, Replace All, the respawn timer and the black orb autoclicker loop are his ideas too, worked out again here from his source
 - **ToastexGD** — built ToastyReplay, the project GucciBot actually started as and the reason there is a GucciBot at all. His renderer and FFmpeg pipeline carried this mod for most of its life; rendering now runs on Silicate's
 - **GWDdoS** — Astral, and the codebase cleanup that got this repo public-ready
 - **Bogdaner09** — Click Indicators inspiration ([github.com/Bogdaner09/mod](https://github.com/Bogdaner09/mod)) — vibecoded by his own admission, so credit's probably owed to whichever model wrote that too

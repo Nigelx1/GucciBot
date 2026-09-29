@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-29-bu (Branch absense-pathfinder: fixes the crash on leaving a level after Absense's pathfinder ran. Applying a saved player state no longer writes the player's particle list onto another player, which left the pathfinder's simulated copies sharing the real player's list so it was freed twice at teardown.)"
+    "2026-09-29-bv (Version 2.0.0-beta.2. Absense's pathfinder ported in as the default engine, with GucciBot's height-holding steering, Classic kept. Recording keeps every button event, Backwards Stepping steps exactly one tick, ToastyReplay Lite no longer required, start the pathfinder from the pause menu or from the beginning, and the crash on leaving a level after it ran is fixed.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

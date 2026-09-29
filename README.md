@@ -112,7 +112,7 @@ Also in Settings: **BIG BRRRR**, a core feature of this mod, and **Bass Shake**,
 
 ## Status
 
-**1.8** is the stable release. **2.0** (the `engine-port-2.0` branch) is in beta: GucciBot's engine reconciled against Silicate's function by function, now run in-game — Calculate, playback and practice-mode recording are confirmed, and every fix still waiting on a test says so in its own commit message. If you want something that's been tested by an actual human, use 1.8.
+**1.8** is the stable release. **2.0** (the `engine-port-2.0` branch) is in beta: GucciBot's engine reconciled against Silicate's function by function, now run in-game — Calculate, playback, practice-mode recording and the new Pathfinder (Absense's, ported in) are confirmed, and every fix still waiting on a test says so in its own commit message. If you want something that's been tested by an actual human, use 1.8.
 
 ## Contact
 
@@ -139,7 +139,7 @@ There's a [contact page](https://guccibot.net/contact/) on the site with the sam
 - **NaN GD** — the L* precision formula, published at [nandl.pages.dev](https://nandl.pages.dev/#formula). The number GucciBot puts on a macro is his maths. He is careful to say frame windows alone don't determine difficulty, and GucciBot repeats that rather than overselling the number.
 - **C0nscious** — implemented NaN's formula in C++ as [Frame Window Counter](https://github.com/hyper-5/frame-window-counter) (MIT), a mod named after NaN's video series. That implementation is the code that reached GucciBot, via anticroom.
 - **peony** — Silicate, the physics engine this is built on (dropped the source like Gucci drops albums. Brrr.)
-- **Absent** — Absense, another bot built on Silicate. Several of Pathfinder's improvements, the in-game assistant server, Check Macro, Replace All, the respawn timer and the black orb autoclicker loop came from reading his source; the code here is our own, the ideas are his.
+- **Absent** — Absense, another bot built on Silicate. Pathfinder's default engine is his: Absense's pathfinder, with its look-ahead and its model of the level, ported in whole in 2.0.0-beta.2. The in-game assistant server, Check Macro, Replace All, the respawn timer and the black orb autoclicker loop came from reading his source; that code is our own, the ideas are his.
 - **ToastexGD** — built ToastyReplay, the project this actually started as, and the reason there is a GucciBot at all. His renderer and FFmpeg pipeline carried the mod for most of its life. Rendering now runs on Silicate's renderer instead; his was retired in 2.0 after being left unreachable by an earlier port, and the history is his either way.
 - **GWDdoS** — pushed for a real codebase cleanup (feature-folder reorg, a proper `.clang-format`, namespacing everything outside Geode's own hook classes) and was right about all of it.
 - **Bogdaner09** — the mod that got Click Indicators started ([github.com/Bogdaner09/mod](https://github.com/Bogdaner09/mod)); Nigel found it, we built our own version around it. Vibecoded by his own admission, so credit's probably owed elsewhere too.
