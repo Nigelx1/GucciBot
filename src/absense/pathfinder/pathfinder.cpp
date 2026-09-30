@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <climits>
 #include <cstdarg>
 #include <cstdio>
 
@@ -1964,6 +1965,9 @@ void AbsensePathfinder::decide() {
         // "lasts the whole horizon", left the one route that gets past, and
         // walked into the same death forever (Sonic Wave, 40%).
         const uint64_t seeTo = m_repair.active ? m_repair.deathTick : m_lastResume.valid ? m_lastResume.deathTick : 0;
+        // How far past the spot an idea has to be seen getting (see the bar
+        // below); the horizon reaches at least that far past it too.
+        const int clear = std::max(8, d.margin / 8);
         if (seeTo > d.tick) {
             const uint64_t dist = seeTo - d.tick + (uint64_t)(2 * d.margin);
             // kMaxHorizon is a count of 240-TPS ticks (16.7 s there, 4 s at
@@ -1978,7 +1982,12 @@ void AbsensePathfinder::decide() {
             // a level, see escalate), or a stop below the old floor could not see
             // the spot and would approve ideas that only survive the horizon.
             const double seeSeconds = std::min(kMaxWidenSeconds, kMaxRepairSeconds + (double)d.level);
-            const int cap = std::max(d.H, std::min(maxTicks, (int)std::lround(seeSeconds * tps)));
+            // GucciBot (2026-09-30): ... and the clearance past it. The floor is
+            // put down exactly seeSeconds before the death (beginRepair,
+            // beginBacktrack, escalate), so capped at seeSeconds a stop there
+            // saw up to the death tick and not one tick past it: no idea from
+            // the floor could ever be seen getting through.
+            const int cap = std::max(d.H, std::min(maxTicks, (int)std::lround(seeSeconds * tps) + clear));
             d.H = std::clamp((int)std::min<uint64_t>(dist, (uint64_t)cap), d.H, cap);
         }
         // The bar an idea has to clear to be worth playing (the verdict's
@@ -1993,11 +2002,27 @@ void AbsensePathfinder::decide() {
             // x, eight more gaps of the orb corridor, done in one go or the
             // stop was thrown away. Getting past the spot is what a repair is
             // for; the clearance only stops an idea that dies on the very next
-            // tick past it from counting as a way through.
-            const int clear = std::max(8, d.margin / 8);
+            // tick past it from counting as a way through (clear, above).
             // ... at every distance: kept at no less than the margin, a stop 50 ticks before the death needed 500 at
             // 1000 TPS and threw away an idea lasting 351 (tick 5290), while stops further back asked distance + clearance.
-            d.need = (int)std::min<uint64_t>(seeTo - d.tick, (uint64_t)(d.H - clear)) + clear;
+            const uint64_t toSpot = seeTo - d.tick;
+            if (m_repair.active) {
+                // GucciBot (2026-09-30): never less than past the spot while
+                // repairing. Capped at the horizon (the min below), a stop that
+                // could not see past the spot asked only to last the whole
+                // horizon, and at the floor, whose horizon ended on the death
+                // tick itself, that approved ideas that only reached the wall:
+                // Bloodbath's UFO went from the floor at 7236 into the death at
+                // 8676 on "lasts >=1440" nine times, a different nudge of the
+                // same plan each pass. The horizon now reaches past the spot
+                // down to the floor; a stop that still cannot see past it
+                // approves nothing on the horizon alone, and the floor then
+                // plays its best idea for the game's word or widens the spot
+                // (see the verdict).
+                d.need = (int)std::min<uint64_t>(toSpot, (uint64_t)(INT_MAX / 2)) + clear;
+            } else {
+                d.need = (int)std::min<uint64_t>(toSpot, (uint64_t)(d.H - clear)) + clear;
+            }
         }
         // Two-player mode: player 1 is decided first with player 2 carrying
         // on, then player 2 with player 1's choice (the second pass).

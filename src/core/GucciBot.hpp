@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-29-bv (Version 2.0.0-beta.2. Absense's pathfinder ported in as the default engine, with GucciBot's height-holding steering, Classic kept. Recording keeps every button event, Backwards Stepping steps exactly one tick, ToastyReplay Lite no longer required, start the pathfinder from the pause menu or from the beginning, and the crash on leaving a level after it ran is fixed.)"
+    "2026-09-30-bw (Absense pathfinder, the loop in Bloodbath's UFO: the furthest stop a repair goes back to could only see up to the death, not past it, so it approved ideas that just reached the wall and replayed into the same death forever. It now sees a little past the death and only takes an idea that gets through; when nothing does, the spot widens and the search goes further back with more effort. UNTESTED in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
