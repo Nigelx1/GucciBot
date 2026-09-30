@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-30-bw (Absense pathfinder, the loop in Bloodbath's UFO: the furthest stop a repair goes back to could only see up to the death, not past it, so it approved ideas that just reached the wall and replayed into the same death forever. It now sees a little past the death and only takes an idea that gets through; when nothing does, the spot widens and the search goes further back with more effort. UNTESTED in-game.)"
+    "2026-09-30-bx (Absense pathfinder: going back, playing the way it found and landing on the same death again now counts against that spot, once per try, like a real death does, so a spot it keeps looping on gets more effort instead of none. On top of -bw, the fix for the Bloodbath UFO loop where the furthest stop back could not see past the death. UNTESTED in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

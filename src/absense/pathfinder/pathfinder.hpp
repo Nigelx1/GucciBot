@@ -429,6 +429,9 @@ public:
         uint64_t deathTick = 0;
         int probe = 0;
         int retries = 0;
+        // GucciBot: this resume's failure has been counted against its spot
+        // (beginRepair: a loop back to the same spot counts once per resume).
+        bool counted = false;
     };
     LastResume m_lastResume;
     // Every spot the search died at, and how often: a dead end at a spot

@@ -3614,6 +3614,7 @@ void AbsensePathfinder::resumeFrom(uint64_t tick) {
     m_lastResume.deathTick = m_repair.deathTick;
     m_lastResume.probe = m_repair.probe;
     m_lastResume.retries = m_repair.retries;
+    m_lastResume.counted = false;
     m_repair.active = false;
     m_repair.failed.clear();
     m_repair.failed2.clear();
@@ -3883,7 +3884,22 @@ void AbsensePathfinder::beginRepair() {
         // Only a real death counts: the simulation declaring the same dead end
         // again is the search still looking, not the spot biting again, and
         // counting those sent every repair hundreds of ticks back.
-        if (m_deadEndReal) trap->fails++;
+        if (m_deadEndReal) {
+            trap->fails++;
+        } else if (m_lastResume.valid && !m_lastResume.counted && tick > m_lastResume.tick &&
+                   trapAt(m_lastResume.deathTick, slack) == trap) {
+            // GucciBot (2026-09-30): ... except the one that closes a loop. The
+            // repair went back, played the way it found, and came back to the
+            // same spot with no way past it: that way failed as surely as a
+            // death, once per resume. Uncounted, a loop the simulation closes
+            // every time (the dead end declared a few ticks short of the spot)
+            // never added to the spot and never widened it (Bloodbath's UFO:
+            // "1 here so far" on every pass).
+            trap->fails++;
+            m_lastResume.counted = true;
+            log("the way found from tick %llu did not get past the spot at %llu (%d here so far)",
+                (unsigned long long)m_lastResume.tick, (unsigned long long)obstacle, trap->fails);
+        }
     } else {
         // The obstacle's x, not the player's: a dead end the simulation
         // declares from far before the spot must be filed under the same spot
