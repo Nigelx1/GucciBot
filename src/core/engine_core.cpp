@@ -337,33 +337,73 @@ namespace gucci {
         return std::nullopt;
     }
 
+    // The macro's buttons on the respawn tick are the ones the respawned
+    // attempt starts with. A button the macro still holds (its last event
+    // before the respawn a press) that the respawned player is not holding --
+    // a checkpoint of GD's own keeps no buttons -- is released on this tick.
+    void GucciReplaySystem::releaseButtonsNotHeldAfterRespawn(uint32_t frame) {
+        auto* pl = PlayLayer::get();
+        if (!pl)
+            return;
+        // One lane per button of each player, as Check Macro walks them; a
+        // death or restart in the macro lets go of everything.
+        std::array<bool, 6> held{};
+        for (auto const& a : m_actionAtom.m_actions) {
+            if (a.m_type == gb::ActionType::Death || a.m_type == gb::ActionType::Restart ||
+                a.m_type == gb::ActionType::RestartFull) {
+                held.fill(false);
+                continue;
+            }
+            int const button = static_cast<int>(a.m_type);
+            if (button < 1 || button > 3)
+                continue;
+            held[(a.m_player2 ? 3 : 0) + button - 1] = a.m_holding;
+        }
+        bool const twoPlayer = pl->m_levelSettings && pl->m_levelSettings->m_twoPlayerMode;
+        for (int lane = 0; lane < 6; lane++) {
+            if (!held[lane])
+                continue;
+            bool const p2 = lane >= 3;
+            int const button = lane % 3 + 1;
+            // A lane's flag is stored flipped (see addInputToReplay), and it
+            // only moves player 2 in a two-player level.
+            auto* who = (twoPlayer && playerFlipped(p2)) ? pl->m_player2 : pl->m_player1;
+            if (!who || (bool)who->m_holdingButtons[button])
+                continue;
+            m_actionAtom.addAction(frame, static_cast<gb::ActionType>(button), false, p2);
+            log::info("[GucciBot] Recording: respawned without button {} held (lane p{}) -- "
+                      "released @ frame {}",
+                      button,
+                      p2 ? 2 : 1,
+                      frame);
+        }
+    }
+
     void GucciReplaySystem::onReset(uint32_t respawnFrame, uint32_t deathFrame) {
         auto* gb = GucciEngine::get();
         if (gb->isRecording() && !gb->fwAnalyzing) {
             size_t before = m_actionAtom.length();
             if (respawnFrame > 0) {
                 m_actionAtom.clipFrom(respawnFrame + 1);
-                // A restore to an exact earlier state -- a Backwards Stepping
-                // step, or Absense's pathfinder going back -- puts the button
-                // back as it was (the checkpoint holds m_holdingButtons), so a
-                // press still held there is part of the recording, not a click
-                // the player died in. Removing it deleted a real press on every
-                // such restore, and the release suppressed after it went too.
+                size_t after = m_actionAtom.length();
+                // A press still held at the checkpoint is part of the path
+                // there: every checkpoint GucciBot restores puts the held
+                // buttons back (SavedPlayerCheckpoint keeps m_holdingButtons),
+                // and what the player does after the respawn is recorded as
+                // usual (restoreHoldOnReset). The 1.4 cleanup for dying
+                // mid-click came from before that: it removed such a press as
+                // "dangling" and suppressed one release, so the replay lost the
+                // hold up to the checkpoint and every later attempt from it
+                // recorded a release with no press before it (issue #14; the
+                // log shows a press at 159 removed on a respawn at 408). Only a
+                // button the respawned player is not holding is let go of, on
+                // the respawn tick, as the attempt did. A restore to an exact
+                // earlier state (a Backwards Stepping step, Absense's
+                // pathfinder going back) puts everything back as it was.
                 bool const exactRestore =
                     gb->practiceFix.m_loadCheckpoint || gb->practiceFix.m_forcedState != nullptr;
-                if (!exactRestore && !m_actionAtom.m_actions.empty()) {
-                    auto& last = m_actionAtom.m_actions.back();
-                    if (last.isInput() && last.m_holding) {
-                        int p = last.m_player2 ? 1 : 0;
-                        log::info("[GucciBot] Recording: removed dangling press @ frame {} "
-                                  "(died mid-click) -- suppressing next release for player{}",
-                                  last.m_frame,
-                                  p + 1);
-                        m_actionAtom.m_actions.pop_back();
-                        m_suppressNextRelease[p] = true;
-                    }
-                }
-                size_t after = m_actionAtom.length();
+                if (!exactRestore)
+                    releaseButtonsNotHeldAfterRespawn(respawnFrame + 1);
                 m_inputIndex = m_actionAtom.length();
                 if (m_pathSamples.size() > (size_t)respawnFrame + 1)
                     m_pathSamples.resize((size_t)respawnFrame + 1);
@@ -384,8 +424,6 @@ namespace gucci {
                 m_actionAtom.m_actions.clear();
                 m_pathSamples.clear();
                 m_inputIndex = 0;
-                m_suppressNextRelease[0] = false;
-                m_suppressNextRelease[1] = false;
                 log::info("[GucciBot] Recording: died@{}, full restart (no checkpoint) "
                           "— cleared {} input(s), re-recording from frame 0",
                           deathFrame,

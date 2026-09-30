@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-30-bx (Absense pathfinder: going back, playing the way it found and landing on the same death again now counts against that spot, once per try, like a real death does, so a spot it keeps looping on gets more effort instead of none. On top of -bw, the fix for the Bloodbath UFO loop where the furthest stop back could not see past the death. UNTESTED in-game.)"
+    "2026-09-30-by (Recording, issue 14: dying in practice mode while a button was held at the checkpoint deleted that press and ignored one release, so the replay lost the hold and later tries left a release with no press before it. The press now stays, and a button the respawned player is not holding is released on the respawn tick. On top of -bw and -bx, the Absense pathfinder fixes for the Bloodbath UFO loop. UNTESTED in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -312,8 +312,6 @@ namespace gucci {
 
         std::unordered_map<int, gb::Action> m_lastInputs;
 
-        bool m_suppressNextRelease[2] = {false, false};
-
         GucciScheduler::JobId m_autosaveJobId = 0;
 
         [[nodiscard]] std::optional<gb::Action> getCurrentQueuedInput() const;
@@ -323,6 +321,7 @@ namespace gucci {
             m_inputIndex++;
         }
         void onReset(uint32_t respawnFrame, uint32_t deathFrame);
+        void releaseButtonsNotHeldAfterRespawn(uint32_t frame);
         // Silicate's signature. GucciBot added deathFrame, which is used only
         // in this function's log lines -- respawnFrame does all the actual
         // work -- so passing the same frame for both is faithful, not a

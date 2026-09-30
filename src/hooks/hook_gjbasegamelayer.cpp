@@ -291,18 +291,6 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
             cmd.m_isPlayer2 = false;
         auto& atom = gb->replay.m_actionAtom;
 
-        bool finalPlayer2 = gb->replay.playerFlipped(cmd.m_isPlayer2);
-        int suppressIdx = finalPlayer2 ? 1 : 0;
-        if (gb->replay.m_suppressNextRelease[suppressIdx]) {
-            gb->replay.m_suppressNextRelease[suppressIdx] = false;
-            if (!cmd.m_isPush) {
-                log::info("[GucciBot] Recording: suppressed orphan release for player{} "
-                          "(Juice's died-mid-click cleanup)",
-                          suppressIdx + 1);
-                return;
-            }
-        }
-
         uint32_t f = gb->updater.getFrame() + 1;
         if (atom.length() > 0 && atom.m_actions.back().m_frame > f)
             return;
