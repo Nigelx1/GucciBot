@@ -2,11 +2,11 @@
 
 > Frame perfect. Ice cold. Brrr Brrr Brrr.
 
-It's Gucci. GucciBot is a Geometry Dash macro bot (a [Geode](https://geode-sdk.org/) mod) that records your inputs frame-perfectly and plays them back exactly, built on top of [Silicate](https://git.puppy.lgbt/silicate/silicate)'s physics engine and ToastyReplay's renderer. Think of it as a very expensive, very icy ghost of your best run — except the ghost never drops a frame, never has an off day, and definitely never forgets its jewelry. So icy.
+It's Gucci. GucciBot is a Geometry Dash macro bot (a [Geode](https://geode-sdk.org/) mod) that records your inputs frame-perfectly and plays them back exactly, built on top of [Silicate](https://git.puppy.lgbt/silicate/silicate)'s physics engine. Think of it as a very expensive, very icy ghost of your best run — except the ghost never drops a frame, never has an off day, and definitely never forgets its jewelry. So icy.
 
 GucciBot is public now — grab a build from [Releases](https://github.com/Nigelx1/GucciBot/releases/latest), drop it in your Geode mods folder, and you're in. It's not on the in-game Geode mod index (long story, not going into it here), so a manual install is the only way to get it for now.
 
-**Don't run ToastyReplay Lite enabled at the same time** — the two bots can't both run live (it's what crashed macro playback), so GucciBot stands down until ToastyReplay Lite is turned off or uninstalled.
+**Don't run ToastyReplay Lite or Silicate enabled at the same time** — GucciBot can't run live alongside either one (ToastyReplay Lite crashed macro playback; Silicate patches the same spots in the game GucciBot does), so GucciBot stands down until the other one is turned off or uninstalled.
 
 ---
 
@@ -149,6 +149,8 @@ There's a [contact page](https://guccibot.net/contact/) on the site with the sam
 GucciBot is free software under the **GNU General Public License v3.0** — see [LICENSE](LICENSE).
 
 It's built on [Silicate](https://git.puppy.lgbt/silicate/silicate) by peony, which is GPL-3.0, and includes anticroom's GPL-3.0 work from his Silicate fork; C0nscious's Frame Window Counter code is MIT, which is compatible. You're free to use it, study it, share it and change it. Anything you distribute that's built from it has to stay open source under the same license.
+
+**ToastyReplay.** GucciBot started out as a fork of [ToastyReplay](https://github.com/ToastexGD/ToastyReplay) by ToastexGD, and ToastyReplay's source code was used in GucciBot up to and including 2.0.0-beta.2. That code was removed on 2026-10-02 (commit `385a5f7`); versions after 2.0.0-beta.2 contain none of it.
 
 ---
 

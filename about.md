@@ -9,7 +9,7 @@ GucciBot is a Geometry Dash macro bot built on Silicate's physics engine, with a
 ## Requirements
 
 - Geometry Dash 2.2081, Windows, Geode 5.10.1+
-- Don't run **ToastyReplay Lite** enabled at the same time -- the two can't both run live, so GucciBot stands down until it's turned off or uninstalled.
+- Don't run **ToastyReplay Lite** or **Silicate** enabled at the same time -- GucciBot can't run live alongside either, so it stands down until the other one is turned off or uninstalled.
 
 ---
 
