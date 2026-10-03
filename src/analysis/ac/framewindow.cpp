@@ -5747,5 +5747,5 @@ void FrameWindowAnalyzer::updateTripLabel(PlayLayer* pl) {
 // anticroom registers change-callbacks on m_labelWindow / m_labelApply /
 // m_labelTest here, which is how HIS settings UI triggers a label or a test.
 // GucciBot's menu is immediate-mode ImGui and calls applyLabel() and
-// testPlayhead() straight from its own buttons (gui.cpp, Calculate tab), so
+// testPlayhead() straight from its own buttons (ui/pages/calculate.cpp), so
 // there is nothing to register.
