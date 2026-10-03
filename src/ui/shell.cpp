@@ -16,6 +16,7 @@
 #include "audio/bigbrrr.hpp"
 #include "core/GucciBot.hpp"
 #include "hacks/autoclicker.hpp"
+#include "mcp/mcp_server.hpp"
 #include "render/intro.hpp"
 #include "render/renderer.hpp"
 #include "tools/macro_check.hpp"
@@ -709,6 +710,27 @@ namespace gucci::ui {
             kit::EndCard();
         }
 
+        // Assistant Access (src/mcp). Since the -bz menu rewrite nothing called
+        // Server::start or registerTools, so it could not be turned on at all.
+        // The choice is remembered so it comes back after a restart (the
+        // restart_game tool relies on that).
+        constexpr int kAssistantPort = 8790;
+        bool g_assistantAccessFailed = false;
+
+        void setAssistantAccess(bool on) {
+            auto* server = mcp::Server::get();
+            g_assistantAccessFailed = false;
+            if (on) {
+                if (server->tools().empty())
+                    mcp::registerTools(*server);
+                if (!server->running() && !server->start(kAssistantPort))
+                    g_assistantAccessFailed = true;
+            } else {
+                server->stop();
+            }
+            Mod::get()->setSavedValue<bool>("assistant_access", on && server->running());
+        }
+
         // BIG BRRRR's menu effects (drawMain). The window moves by the change
         // from last frame's offset, so it can still be dragged and settles
         // where it was once the drop stops.
@@ -757,6 +779,19 @@ namespace gucci::ui {
             for (auto const& slot : kKeySlots)
                 if (kit::KeyRow(slot.label, nullptr, &(g_keys.*(slot.field))))
                     saveSettings();
+            kit::EndCard();
+
+            kit::BeginCard("Assistant Access",
+                           "Lets an AI assistant on this computer read the game and step it. 127.0.0.1 only.");
+            auto* server = mcp::Server::get();
+            bool access = server->running();
+            if (kit::SwitchRow("Assistant Access", "Off by default; remembered once you turn it on", &access))
+                setAssistantAccess(access);
+            if (server->running())
+                kit::Hint(fmt::format("Listening on 127.0.0.1:{}", server->port()).c_str());
+            else if (g_assistantAccessFailed)
+                kit::Note("It could not start: something else is using port 8790. guccibot_mcp.log has the details.",
+                          Tone::Warn);
             kit::EndCard();
 
             kit::BeginCard("BIG BRRRR", "You'll know it when you see it.");
@@ -1007,6 +1042,8 @@ $on_mod(Loaded) {
             gucci::ui::look().loadFonts();
             gucci::ui::themes::loadCustoms();
             gucci::ui::loadSettings();
+            if (Mod::get()->getSavedValue<bool>("assistant_access", false))
+                gucci::ui::setAssistantAccess(true);
         })
         .draw([] { gucci::ui::frame(); });
 }
