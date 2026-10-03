@@ -1192,6 +1192,10 @@ static void actionMgrHook(void* self, float dt) {
 }
 
 $execute {
+    // Another bot is enabled that patches these same addresses (Silicate),
+    // or that GucciBot can't run beside: leave the game's code alone.
+    if (standDownBot())
+        return;
     util_midhook(geode::base::get() + 0x237A7C, "physDt", physDtMidhook);
     util_midhook(geode::base::get() + 0x237DCE, "physStepCount", physStepCountMidhook);
     util_midhook(geode::base::get() + 0x238F6E, "restorePhysDt", restorePhysDtMidhook);

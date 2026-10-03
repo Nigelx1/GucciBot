@@ -2,6 +2,7 @@
 #include <Geode/binding/FMODAudioEngine.hpp>
 #include <Geode/modify/FMODAudioEngine.hpp>
 
+#include "core/standdown.hpp"
 #include "render/dsp.hpp"
 #include "render/renderer.hpp"
 
@@ -162,6 +163,9 @@ namespace gucci {
     }
 
     $execute {
+        // Standing down for another bot: no address hooks (core/standdown.hpp).
+        if (standDownBot())
+            return;
         auto addr = reinterpret_cast<void*>(geode::addresser::getNonVirtual(&FMOD::System::update));
         fmodSystemUpdateOrig = reinterpret_cast<void (*)(FMOD::System*)>(addr);
         auto res = Mod::get()->hook(addr,

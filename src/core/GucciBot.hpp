@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-03-ca (Rebuilt after the ToastyReplay removal, none of his code: Themes page with all 20 themes and the custom theme editor, Silicate-based autoclicker with its own card, click sounds with a new FLAC Clickbot pack, Silicate-based Show Hitboxes. UNTESTED in-game.)"
+    "2026-10-03-cb (Autoclicker: Absent's real black orb UFO loop, ported from Absense. GucciBot now stands down with a message when Silicate is enabled and skips its midhooks and patches, so the two cannot crash the game together. UNTESTED in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -609,22 +609,21 @@ namespace gucci {
         HudConfig hud;
 
         bool enabled = false;
-        // ToastyReplay Lite installed AND enabled alongside GucciBot: the two
-        // bots running live at once is what crashed macro playback for a real
-        // user (anticroom's Discord report, 2026-09-08). GucciBot stands down
-        // and says why instead of letting that crash happen. Checked once per
-        // launch in initialize(); Geode can't toggle a mod without a restart.
+        // Another bot GucciBot can't run alongside is enabled (ToastyReplay
+        // Lite or Silicate; core/standdown.hpp has the list and why): GucciBot
+        // stands down for this launch and says why instead of letting the
+        // crash happen. Set once in initialize(); Geode can't toggle a mod
+        // without a restart.
         //
         // GucciBot used to REQUIRE ToastyReplay Lite to be installed -- the
         // condition of its 2026-09-05 public release. Nigel dropped that on
         // 2026-09-28. Installed-but-disabled, or not installed at all, both
-        // run normally now; only this conflict remains.
-        bool ttrEnabledConflict = false;
-        static constexpr const char* kTtrModId = "toastexgd.toastyreplay-lite";
+        // run normally now; only running both at once is refused.
+        bool standingDown = false;
         // Shown at startup (initialize()) and again whenever someone tries to
-        // open the menu while the conflict stands (hacks/keybinds.cpp), since
-        // the startup one is easy to miss.
-        static void showTtrEnabledNotification();
+        // open the menu while standing down (hacks/keybinds.cpp), since the
+        // startup one is easy to miss.
+        static void showStandDownNotification();
         Mode mode = Mode::Idle;
         double userTpsSaved = 0.0;
         std::string replayName = "";

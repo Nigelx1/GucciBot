@@ -4,6 +4,7 @@
 #include <fmt/format.h>
 #include "core/brr_format.hpp"
 #include "core/gbr6_format.hpp"
+#include "core/standdown.hpp"
 #include "tools/selfcheck.hpp"
 
 #include <Geode/Geode.hpp>
@@ -2244,13 +2245,13 @@ namespace gucci {
 
     // A popup rather than a Notification: the toast widget doesn't wrap, and
     // this is a paragraph (Nigel caught it cut off, 2026-09-06).
-    void GucciEngine::showTtrEnabledNotification() {
+    void GucciEngine::showStandDownNotification() {
+        auto const* bot = standDownBot();
+        if (!bot)
+            return;
         createQuickPopup(
             "GucciBot Is Standing Down",
-            "<co>ToastyReplay Lite</c> is <cr>enabled</c>, and the two mods can't both run "
-            "live at the same time (this is what's behind crashes on macro playback). Open "
-            "the Geode mod list, toggle ToastyReplay Lite off or uninstall it, and restart. "
-            "GucciBot rides again from there.",
+            fmt::format("<co>{}</c> is <cr>enabled</c>, {}", bot->name, bot->message),
             "Got It", nullptr,
             [](auto, bool) {});
     }
@@ -2470,19 +2471,19 @@ namespace gucci {
 
         reloadMacroList();
 
-        // ToastyReplay Lite enabled alongside GucciBot crashes macro playback
-        // -- see ttrEnabledConflict's comment in GucciBot.hpp. Installing it is
-        // no longer required (dropped 2026-09-28); only running both is refused.
-        if (Loader::get()->isModLoaded(kTtrModId)) {
+        // Another bot GucciBot can't run alongside is enabled -- see
+        // standingDown's comment in GucciBot.hpp. Asked of the mod list, not of
+        // what has loaded so far: this runs while GucciBot loads, which can be
+        // before the other mod has (isModLoaded would miss it).
+        if (auto const* bot = standDownBot()) {
             enabled = false;
-            ttrEnabledConflict = true;
-            log::warn("[GucciBot] Disabled -- ToastyReplay Lite ({}) is enabled. Disable or "
-                      "uninstall it to use GucciBot.",
-                      kTtrModId);
-            showTtrEnabledNotification();
+            standingDown = true;
+            log::warn("[GucciBot] Standing down -- {} ({}) is enabled. Turn it off to use GucciBot.",
+                      bot->name, bot->id);
+            showStandDownNotification();
         } else {
             enabled = true;
-            ttrEnabledConflict = false;
+            standingDown = false;
         }
 
         log::info("[GucciBot] ========================================");
@@ -2490,7 +2491,10 @@ namespace gucci {
         log::info("[GucciBot] ========================================");
         log::info("[GucciBot] " MOD_VERSION " initialized — {} macros", storedMacros.size());
 
-        gbcheck::run(5, 4, GBR6_VERSION, BRR_FORMAT_VERSION, MOD_VERSION);
+        // Standing down, no midhooks or patches went in on purpose
+        // (util_midhook, engine_updater.cpp): expect none.
+        gbcheck::run(standingDown ? 0 : 5, standingDown ? 0 : 4, GBR6_VERSION, BRR_FORMAT_VERSION,
+                     MOD_VERSION);
     }
 
     static PauseLayer* findOpenPauseLayerRecursive(CCNode* node) {

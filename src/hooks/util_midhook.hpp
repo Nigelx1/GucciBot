@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/standdown.hpp"
+
 #include <Geode/Geode.hpp>
 #include <safetyhook.hpp>
 #include <string>
@@ -15,6 +17,12 @@ namespace gucci {
     inline int g_patchFailures = 0;
 
     inline bool util_midhook(uintptr_t address, const std::string& name, safetyhook::MidHookFn fn) {
+        // Silicate places these same midhooks; two on one instruction crash
+        // the game. Standing down, none go in (core/standdown.hpp).
+        if (auto const* bot = standDownBot()) {
+            geode::log::warn("[GucciBot] Skipped midhook '{}': {} is enabled", name, bot->name);
+            return false;
+        }
         ++g_midhookAttempts;
         auto hook = safetyhook::create_mid(reinterpret_cast<void*>(address), fn);
         if (!hook) {

@@ -1,4 +1,5 @@
 #include "core/GucciBot.hpp"
+#include "core/standdown.hpp"
 #include "render/renderer.hpp"
 #include "hacks/autoclicker.hpp"
 #include "analysis/trajectory.hpp"
@@ -914,6 +915,9 @@ static void queueCheckpointHook(void* unk, void* unk2) {
 }
 
 $execute {
+    // Standing down for another bot: no address hooks (core/standdown.hpp).
+    if (standDownBot())
+        return;
     (void)Mod::get()->hook(reinterpret_cast<void*>(geode::base::get() + kQueueCheckpointOffset),
                            &queueCheckpointHook,
                            "PlayLayer::queueCheckpoint",

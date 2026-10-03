@@ -28,8 +28,8 @@ namespace {
         auto& keys = ui::keys();
         bool used = false;
         used |= fire(keys.onMenu, k, [&] {
-            if (gb->ttrEnabledConflict) {
-                GucciEngine::showTtrEnabledNotification();
+            if (gb->standingDown) {
+                GucciEngine::showStandDownNotification();
                 return;
             }
             ui::toggleOpen();
