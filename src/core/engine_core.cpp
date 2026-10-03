@@ -5,6 +5,7 @@
 #include "core/brr_format.hpp"
 #include "core/gbr6_format.hpp"
 #include "core/standdown.hpp"
+#include "hacks/hud.hpp"
 #include "tools/selfcheck.hpp"
 
 #include <Geode/Geode.hpp>
@@ -2355,10 +2356,17 @@ namespace gucci {
         autosaveIntervalSec = pick(180.0, "feat_autosave_interval_sec", "autosave_interval");
         replayBackupsEnabled = pick(true, "feat_replay_backups", "replay_backups");
 
-        // HUD.
-        hud.enabled = pick(false, "hud_enabled", nullptr);
-        hud.showFrame = pick(true, "hud_show_frame", "hud_showFrame");
-        hud.showTPS = pick(false, "hud_show_tps", "hud_showTPS");
+        // HUD. The readouts' keys come from hacks/hud.hpp's list, which the
+        // HUD and its card use too; the defaults are HudConfig's.
+        HudConfig const hudDefaults;
+        hud.enabled = pick(hudDefaults.enabled, hud::kKeyEnabled, nullptr);
+        for (auto const& r : hud::kReadouts)
+            hud.*r.field = pick(hudDefaults.*r.field, r.key, r.legacy);
+        hud.bigFont = pick(hudDefaults.bigFont, hud::kKeyBigFont, nullptr);
+        hud.scale = std::clamp(pick(hudDefaults.scale, hud::kKeyScale, nullptr), hud::kMinScale, hud::kMaxScale);
+        hud.opacity =
+            std::clamp(pick(hudDefaults.opacity, hud::kKeyOpacity, nullptr), hud::kMinOpacity, hud::kMaxOpacity);
+        hud.anchor = std::clamp(pick(hudDefaults.anchor, hud::kKeyAnchor, nullptr), 0, hud::AnchorCount - 1);
     }
 
     void GucciEngine::initialize() {
