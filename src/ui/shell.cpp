@@ -810,6 +810,8 @@ namespace gucci::ui {
         };
         const Page kPages[] = {
             {"Macro", pageMacro},
+            {"Frame Editor", pages::editor},
+            {"Calculate", pages::calculate},
             {"Hacks", pageHacks},
             {"Pathfinder", pagePathfinder},
             {"Render", pageRender},

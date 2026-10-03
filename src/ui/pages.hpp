@@ -9,6 +9,8 @@ namespace gucci::ui::pages {
     // Sidebar pages
     void themes();       // pages/themes.cpp: theme picker + custom theme editor
     void clickSounds();  // pages/clicksounds.cpp
+    void editor();       // pages/editor.cpp: Frame Editor (timeline of the loaded macro's inputs)
+    void calculate();    // pages/calculate.cpp: Calculate (frame-window analyzer) settings + run
 
     // Cards drawn inside other pages
     void hitboxCard();       // pages/hitboxes_card.cpp (Hacks page)
