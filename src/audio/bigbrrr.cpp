@@ -37,76 +37,13 @@ namespace gucci {
         return instance;
     }
 
-    // The old menu's theme numbers (ui::activeThemeId keeps them).
-    enum BotTheme {
-        THEME_GUCCI, THEME_TOOSII, THEME_TOOSII_SYRACUSE, THEME_TOOSII_SACSTATE, THEME_JA, THEME_GIDDEY,
-        THEME_BAM, THEME_SEXYY, THEME_JUICE, THEME_BUTLER, THEME_SAWEETIE, THEME_MAYBACH, THEME_ROMO,
-        THEME_GRIZZLEY, THEME_REDKINGDOM, THEME_LEMONADE, THEME_BRRR, THEME_WAKA, THEME_YOUNGSTA, THEME_KNOCKERZ
-    };
 
-    static BotTheme currentTheme() {
-        return static_cast<BotTheme>(ui::activeThemeId());
-    }
 
     double BigBrrrManager::kStartOffsetSec() {
-        switch (currentTheme()) {
-        case THEME_MAYBACH:
-            return 0.0;
-        case THEME_ROMO:
-            return 16.0 + 11.0 / 30.0;
-        case THEME_GRIZZLEY:
-            return 90.0 + 4.0 / 30.0;
-        case THEME_REDKINGDOM:
-            return 14.0 + 17.0 / 30.0;
-        case THEME_LEMONADE:
-            return 0.0;
-        case THEME_BRRR:
-            return 38.0 + 19.0 / 30.0;
-        case THEME_YOUNGSTA:
-            return 0.0;
-        case THEME_KNOCKERZ:
-            return 21.0 + 17.0 / 30.0;
-        case THEME_TOOSII:
-        case THEME_TOOSII_SYRACUSE:
-        case THEME_TOOSII_SACSTATE:
-            return 33.0 + 25.0 / 30.0;
-        case THEME_SEXYY:
-            return 11.0 + 2.0 / 30.0;
-        case THEME_SAWEETIE:
-            return 11.0 + 1.0 / 30.0;
-        default:
-            return 20.0 + 11.0 / 15.0;
-        }
+        return ui::activeThemeAudio().dropOffsetSec;
     }
     double BigBrrrManager::kBpm() {
-        switch (currentTheme()) {
-        case THEME_MAYBACH:
-            return 75.0;
-        case THEME_ROMO:
-            return 130.0;
-        case THEME_GRIZZLEY:
-            return 98.0;
-        case THEME_REDKINGDOM:
-            return 100.0;
-        case THEME_LEMONADE:
-            return 142.0;
-        case THEME_BRRR:
-            return 150.0;
-        case THEME_YOUNGSTA:
-            return 144.0;
-        case THEME_KNOCKERZ:
-            return 90.0;
-        case THEME_TOOSII:
-        case THEME_TOOSII_SYRACUSE:
-        case THEME_TOOSII_SACSTATE:
-            return 116.0;
-        case THEME_SEXYY:
-            return 178.0;
-        case THEME_SAWEETIE:
-            return 105.0;
-        default:
-            return 140.0;
-        }
+        return ui::activeThemeAudio().bpm;
     }
 
     std::filesystem::path BigBrrrManager::getBrrrDir() const {
@@ -160,47 +97,11 @@ namespace gucci {
                     path = customPath;
             }
             if (path.empty()) {
-                const char* bundledName = "big_brrr.mp3";
-                switch (currentTheme()) {
-                case THEME_MAYBACH:
-                    bundledName = "big_brrr_maybach.mp3";
-                    break;
-                case THEME_ROMO:
-                    bundledName = "big_brrr_romo.mp3";
-                    break;
-                case THEME_GRIZZLEY:
-                    bundledName = "big_brrr_grizzley.mp3";
-                    break;
-                case THEME_REDKINGDOM:
-                    bundledName = "big_brrr_redkingdom.mp3";
-                    break;
-                case THEME_LEMONADE:
-                    bundledName = "big_brrr_lemonade.mp3";
-                    break;
-                case THEME_BRRR:
-                    bundledName = "big_brrr_brrrbot.mp3";
-                    break;
-                case THEME_YOUNGSTA:
-                    bundledName = "big_brrr_youngsta.mp3";
-                    break;
-                case THEME_KNOCKERZ:
-                    bundledName = "big_brrr_knockerz.mp3";
-                    break;
-                case THEME_TOOSII:
-                case THEME_TOOSII_SYRACUSE:
-                case THEME_TOOSII_SACSTATE:
-                    bundledName = "big_brrr_toosii.mp3";
-                    break;
-                case THEME_SEXYY:
-                    bundledName = "big_brrr_sexyy.mp3";
-                    break;
-                case THEME_SAWEETIE:
-                    bundledName = "big_brrr_saweetie.mp3";
-                    break;
-                default:
-                    break;
-                }
-                auto bundled = Mod::get()->getResourcesDir() / bundledName;
+                // The active theme's own track, as its Themes page shows it.
+                std::string track = ui::activeThemeAudio().file;
+                if (track.empty())
+                    track = "big_brrr.mp3";
+                auto bundled = Mod::get()->getResourcesDir() / track;
                 if (std::filesystem::exists(bundled, ec))
                     path = bundled;
             }

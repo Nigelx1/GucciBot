@@ -575,7 +575,6 @@ namespace gucci::ui {
         // from last frame's offset, so it can still be dragged and settles
         // where it was once the drop stops.
         ImVec2 g_brrrOffset{0.f, 0.f};
-        bool g_brrrBob = true;
         bool g_brrrWasOn = false;
         double g_brrrStart = 0.0; // ImGui time the drop started
 
@@ -627,7 +626,6 @@ namespace gucci::ui {
             bool brrrOn = brrr->enabled;
             if (kit::SwitchRow("BIG BRRRR", nullptr, &brrrOn))
                 brrr->setEnabled(brrrOn);
-            kit::SwitchRow("Bob", "The menu hops to the beat", &g_brrrBob);
             kit::SwitchRow("Shake", "The menu shakes with the bass", &brrr->shakeEnabled);
             kit::SliderRow("Flicker", "How hard the menu flickers with the bass", &brrr->flickerIntensity, 0.f, 1.f,
                            "%.2f");
@@ -714,10 +712,10 @@ namespace gucci::ui {
                 if (brrr->shakeEnabled) {
                     offset.x += bass * 14.f * static_cast<float>(std::sin(t * 91.0));
                     offset.y += bass * 14.f * static_cast<float>(std::cos(t * 73.0));
-                }
-                if (g_brrrBob) {
-                    // A hop between beats that lands on each one, counted from
-                    // when the drop started (playback starts at the drop).
+                } else {
+                    // Without the shake, the bob: a hop between beats that
+                    // lands on each one, counted from when the drop started
+                    // (playback starts at the drop).
                     constexpr double kPi = 3.14159265358979323846;
                     double const beats = (t - g_brrrStart) * BigBrrrManager::kBpm() / 60.0;
                     offset.y -= (10.f + 8.f * bass) * static_cast<float>(std::abs(std::sin(kPi * beats)));
