@@ -14,6 +14,7 @@
 #include "analysis/ac/shim.hpp"
 #include "core/GucciBot.hpp"
 #include "hacks/autoclicker.hpp"
+#include "render/intro.hpp"
 #include "render/renderer.hpp"
 #include "tools/macro_check.hpp"
 
@@ -483,9 +484,89 @@ namespace gucci::ui {
             if (kit::InputInt("fps", &fps, 0) && fps > 0)
                 mod->setSavedValue<int64_t>("render_fps", fps);
             kit::RowEnd();
-            bool audio = mod->getSavedValue<bool>("render_include_audio", true);
-            if (kit::SwitchRow("Include audio", nullptr, &audio))
-                mod->setSavedValue("render_include_audio", audio);
+            // Every row below is a saved setting the renderer reads when a
+            // render starts (SLRenderer::loadSettingsFromGeode, which loads the
+            // intro card's too), so a change applies from the next render.
+            auto saveSwitch = [&](const char* label, const char* hint, const char* key, bool def) {
+                bool v = mod->getSavedValue<bool>(key, def);
+                if (kit::SwitchRow(label, hint, &v))
+                    mod->setSavedValue<bool>(key, v);
+            };
+            auto saveSeconds = [&](const char* label, const char* key, double def, float most) {
+                float v = static_cast<float>(mod->getSavedValue<double>(key, def));
+                if (kit::SliderRow(label, nullptr, &v, 0.f, most, "%.1f s"))
+                    mod->setSavedValue<double>(key, v);
+            };
+            auto saveVolume = [&](const char* label, const char* key) {
+                float v = static_cast<float>(mod->getSavedValue<double>(key, 1.0)) * 100.f;
+                if (kit::SliderRow(label, nullptr, &v, 0.f, 100.f, "%.0f%%"))
+                    mod->setSavedValue<double>(key, v / 100.0);
+            };
+            auto saveText = [&](const char* label, const char* hint, const char* key, const char* def,
+                                const char* placeholder) {
+                std::string v = mod->getSavedValue<std::string>(key, def);
+                kit::RowBegin(label, hint);
+                if (kit::InputText(key, &v, placeholder))
+                    mod->setSavedValue<std::string>(key, v);
+                kit::RowEnd();
+            };
+            // The renderer keeps these as text holding a whole number.
+            auto saveWhole = [&](const char* label, const char* hint, const char* key, int def, int least, int most) {
+                int v = geode::utils::numFromString<int>(mod->getSavedValue<std::string>(key, std::to_string(def)))
+                            .unwrapOr(def);
+                kit::RowBegin(label, hint);
+                if (kit::InputInt(key, &v, 1))
+                    mod->setSavedValue<std::string>(key, std::to_string(std::clamp(v, least, most)));
+                kit::RowEnd();
+            };
+
+            saveText("Codec", "Blank uses the default", "render_codec", "", "auto");
+            saveWhole("Bitrate (Mbps)", nullptr, "render_bitrate", 30, 1, 1000);
+            saveText("File type", nullptr, "render_file_extension", ".mp4", ".mp4");
+            saveText("Extra FFmpeg options", "For people who know FFmpeg", "render_video_args", "", "");
+            saveSwitch("Colour fix", nullptr, "render_color_fix", true);
+            kit::EndCard();
+
+            kit::BeginCard("Audio", nullptr);
+            saveSwitch("Include audio", nullptr, "render_include_audio", true);
+            saveText("Audio codec", nullptr, "render_audio_codec", "aac", "aac");
+            saveVolume("Music volume", "render_music_volume");
+            saveVolume("Sound effects volume", "render_sfx_volume");
+            saveVolume("Trigger sound volume", "render_trigger_sfx_volume");
+            saveSwitch("Separate audio tracks", "Music and sound effects on tracks of their own", "render_split_audio_tracks",
+                       false);
+            saveSwitch("Play audio while rendering", nullptr, "render_preview_audio", false);
+            kit::EndCard();
+
+            kit::BeginCard("Timing", nullptr);
+            saveSeconds("Fade in", "render_fade_in", 1.5, 5.f);
+            saveSeconds("Fade out", "render_fade_out", 1.5, 5.f);
+            saveWhole("Seconds after the end", "Keeps recording once the level is over", "render_seconds_after", 3, 0, 60);
+            saveSwitch("Leave the level when done", nullptr, "render_auto_exit", false);
+            kit::EndCard();
+
+            kit::BeginCard("Output", nullptr);
+            saveText("Folder", "Blank uses the default folder", "render_output_folder", "", "default");
+            saveText("File name", "Blank picks one for you", "render_name", "", "automatic");
+            kit::EndCard();
+
+            kit::BeginCard("Intro card", "anticroom's title card at the start of the video");
+            ImGui::PushID("intro");
+            RenderIntroSettings const d;
+            bool intro = mod->getSavedValue<bool>("render_intro_enabled", d.m_enabled);
+            bool introChanged = false;
+            if (kit::FeatureBegin("Show the intro card", nullptr, &intro, nullptr, &introChanged)) {
+                saveSwitch("Use the level's name", nullptr, "render_intro_auto_name", d.m_autoLevelName);
+                if (!mod->getSavedValue<bool>("render_intro_auto_name", d.m_autoLevelName))
+                    saveText("Name", nullptr, "render_intro_name", d.m_levelName.c_str(), "");
+                saveSeconds("Fade in", "render_intro_fade_in", d.m_fadeInTime, 5.f);
+                saveSeconds("Hold", "render_intro_hold", d.m_holdTime, 10.f);
+                saveSeconds("Fade out", "render_intro_fade_out", d.m_fadeOutTime, 5.f);
+                kit::FeatureEnd();
+            }
+            if (introChanged)
+                mod->setSavedValue<bool>("render_intro_enabled", intro);
+            ImGui::PopID();
             kit::EndCard();
         }
 

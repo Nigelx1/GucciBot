@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-03-cb (Autoclicker: Absent's real black orb UFO loop, ported from Absense. GucciBot now stands down with a message when Silicate is enabled and skips its midhooks and patches, so the two cannot crash the game together. UNTESTED in-game.)"
+    "2026-10-03-cc (Render page: every render setting is back in the menu - codec, bitrate, file type, FFmpeg options, colour fix, audio codec and volumes, separate audio tracks, fades, seconds after the end, leaving the level when done, output folder and file name, and the intro card. UNTESTED in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
