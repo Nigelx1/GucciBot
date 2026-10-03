@@ -10,7 +10,7 @@
 // buttons, and a fresh start takes the game's own button state as its
 // starting point, so the first thing it sends always changes something.
 //
-// The black orb UFO loop is the exception: see kBlackOrbLoop below.
+// The black orb UFO loop is Absent's, from Absense: see kBlackOrbLoop below.
 
 #include "hacks/autoclicker.hpp"
 
@@ -33,26 +33,34 @@ namespace gucci {
 
         using Settings = Autoclicker::PlayerSettings;
 
-        // One tick of a fixed pattern, in the terms Absense's scripts use
-        // (absense/glue.hpp, ScriptTick): how many presses the tick holds,
-        // each after a release when the button is already down, and whether
-        // the button is down once the tick is over.
+        // "Auto black orb UFO", ported 2026-10-03 from Absense's
+        // src/assist/autoclicker.cpp (Absent, built on Silicate, GPL-3.0): the
+        // black orb spam as Absent recorded it from a straight flight at
+        // 720 TPS. A five tick loop, per tick:
+        //
+        //   1  tap, then push (hold starts)
+        //   2  release, then tap
+        //   3  tap, then push (hold starts)
+        //   4  still held
+        //   5  release, then tap
+        //
+        // then it starts over. No pause between cycles; the hold is one tick
+        // long on odd cycles and two ticks long on even ones. The loop starts
+        // from tick 1 whenever the clicker turns on and on every attempt.
         struct LoopTick {
-            int presses;
-            bool down;
+            bool tapFirst;  // a tap (push + release) at the start of the tick
+            bool push;      // a push that stays held at the end of the tick
+            bool release;   // a release at the start of the tick (the hold ends)
+            bool tapAfter;  // a tap after the release
         };
 
-        // Absent's black orb UFO loop: five ticks, then round again.
-        //
-        // Absense's own autoclicker was not among the sources this was written
-        // from, so these five ticks are a reconstruction, not a port. They are
-        // the black orb spam unit of the Absense pathfinder that is ported in
-        // this repo (absense/trajectory/trajectory.cpp, orbSpamTick: a press,
-        // a release and a press inside one tick, let go on the next, then
-        // quiet until the cadence comes round again) at a cadence of five
-        // ticks. Check them against Absense's autoclicker; if the real loop
-        // differs, this table is all that needs to change.
-        constexpr LoopTick kBlackOrbLoop[] = {{2, true}, {0, false}, {0, false}, {0, false}, {0, false}};
+        constexpr LoopTick kBlackOrbLoop[] = {
+            {true, true, false, false},    // 1: tap, push
+            {false, false, true, true},    // 2: release, tap
+            {true, true, false, false},    // 3: tap, push
+            {false, false, false, false},  // 4: held
+            {false, false, true, true},    // 5: release, tap
+        };
         constexpr uint64_t kBlackOrbLoopTicks = std::size(kBlackOrbLoop);
         static_assert(kBlackOrbLoopTicks == 5, "the black orb UFO loop is five ticks long");
 
@@ -211,23 +219,38 @@ namespace gucci {
         }
     }
 
+    // Absense's updateBlackOrbUfo, in the same order: the release, then the
+    // tap (letting go first if the button is down), then the push.
     void Autoclicker::blackOrbTick(Lane& lane, uint64_t tick, std::vector<bool>& events) {
         if (tick == lane.lastTick)
             return;
-        if (lane.loopStart == kNever || tick < lane.loopStart)
+        // First tick after (re)activation, or the tick went backwards (a step
+        // back): the loop starts over from its first tick, button up.
+        if (lane.loopStart == kNever || tick < lane.loopStart) {
             lane.loopStart = tick;
+            if (lane.down) {
+                events.push_back(false);
+                lane.down = false;
+            }
+        }
         lane.lastTick = tick;
 
-        LoopTick const& step = kBlackOrbLoop[(tick - lane.loopStart) % kBlackOrbLoopTicks];
-        for (int i = 0; i < step.presses; ++i) {
-            if (lane.down)
+        LoopTick const& t = kBlackOrbLoop[(tick - lane.loopStart) % kBlackOrbLoopTicks];
+        if (t.release && lane.down) {
+            events.push_back(false);
+            lane.down = false;
+        }
+        if (t.tapFirst || t.tapAfter) {
+            if (lane.down) {
                 events.push_back(false);
+                lane.down = false;
+            }
+            events.push_back(true);
+            events.push_back(false);
+        }
+        if (t.push) {
             events.push_back(true);
             lane.down = true;
-        }
-        if (lane.down != step.down) {
-            events.push_back(step.down);
-            lane.down = step.down;
         }
     }
 

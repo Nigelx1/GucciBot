@@ -49,7 +49,7 @@ namespace gucci::ui::pages {
         bool rhythmRows(Settings& s) {
             bool changed = kit::SwitchRow(
                 "Black orb UFO loop",
-                s.blackOrbUfo ? "Every fifth tick: a press, a release and a press, let go on the next tick"
+                s.blackOrbUfo ? "Absent's spam: tap + hold, release + tap, tap + hold two ticks, release + tap. Made for 720 TPS"
                               : "A fixed five-tick loop in place of the rhythm below",
                 &s.blackOrbUfo);
             if (s.blackOrbUfo)
