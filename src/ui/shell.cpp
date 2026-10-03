@@ -424,6 +424,9 @@ namespace gucci::ui {
             auto& upd = gb->updater;
             kit::BeginCard("Gameplay", nullptr);
             engineSwitch("Noclip", "Pass through hazards", &gb->noclipEnabled, "hack_noclip");
+            if (gb->noclipEnabled)
+                engineSwitch("Flash on a blocked death", "Tints the player when noclip saves you", &gb->noclipDeathFlash,
+                             "hack_noclip_flash");
             engineSwitch("Safe mode", "No progress or stats are saved", &gb->protectedMode, nullptr);
             engineSwitch("Instant respawn", nullptr, &gb->hackRespawnInstant, "hack_respawn_instant");
             engineSwitch("Auto retry", nullptr, &gb->hackAutoRetry, "hack_auto_retry");
@@ -438,6 +441,8 @@ namespace gucci::ui {
             engineSwitch("Hide percentage", nullptr, &gb->hackHidePercentage, "hack_hide_percentage");
             engineSwitch("No death flash", nullptr, &gb->hackNoSpikeFlash, "hack_no_flash");
             engineSwitch("Audio pitch follows speed", nullptr, &gb->audioPitchEnabled, "hack_audio_pitch");
+            engineSwitch("Practice range", "Shows the loaded macro's clicks near you in the level", &gb->practiceRangeEnabled,
+                         "practice_range");
             kit::EndCard();
 
             pages::hitboxCard();
@@ -505,6 +510,38 @@ namespace gucci::ui {
             kit::EndCard();
 
             pages::autoclickerCard();
+
+            // The engine has saved, loaded and deleted these all along
+            // (presets/ in the save folder); the menu lost its way to them in -bz.
+            kit::BeginCard("Presets", "Save the engine settings under a name, and load them back");
+            static std::string s_presetName;
+            kit::RowBegin("Name", nullptr);
+            kit::InputText("presetname", &s_presetName, "preset name");
+            ImGui::SameLine();
+            ImGui::BeginDisabled(s_presetName.empty());
+            if (kit::Button("Save", Tone::Accent))
+                gb->saveBotSettingsPreset(s_presetName);
+            ImGui::EndDisabled();
+            kit::RowEnd();
+            std::string toDelete;
+            for (auto const& p : gb->settingsPresets) {
+                ImGui::PushID(p.name.c_str());
+                kit::RowBegin(p.name.c_str(), fmt::format("{:.0f} TPS{}{}", p.tps, p.lockDelta ? ", lock delta" : "",
+                                                          p.noclip ? ", noclip" : "")
+                                                  .c_str());
+                if (kit::Button("Load"))
+                    gb->loadBotSettingsPreset(p.name);
+                ImGui::SameLine();
+                if (kit::Button("Delete", Tone::Bad))
+                    toDelete = p.name;
+                kit::RowEnd();
+                ImGui::PopID();
+            }
+            if (gb->settingsPresets.empty())
+                kit::Hint("No presets saved yet.");
+            if (!toDelete.empty())
+                gb->deleteBotSettingsPreset(toDelete);
+            kit::EndCard();
         }
 
         // GucciBot's own search. Until 2026-10-03 only Assistant Access could

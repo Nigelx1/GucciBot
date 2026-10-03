@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-03-ci (Assistant Access can be switched on again from Settings - nothing started the server or registered its tools since the menu rewrite - and it is remembered across restarts. UNTESTED in-game.)"
+    "2026-10-03-cj (Hacks page: settings presets are reachable again, noclip death flash has a saved switch, and the practice range has its switch. UNTESTED in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

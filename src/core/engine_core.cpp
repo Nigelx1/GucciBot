@@ -2340,6 +2340,7 @@ namespace gucci {
         // Hacks.
         noclipEnabled = pick(false, "hack_noclip", nullptr);
         noclipThreshold = pick(0.f, "hack_noclipThreshold", nullptr);
+        noclipDeathFlash = pick(true, "hack_noclip_flash", nullptr);
         showHitboxes = pick(false, "hack_hitboxes", nullptr);
         pathPreview = pick(false, "hack_trajectory", nullptr);
         pathLength = pick(312, "hack_trajectory_len", nullptr);
