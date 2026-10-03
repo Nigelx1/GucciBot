@@ -571,6 +571,14 @@ namespace gucci::ui {
             kit::EndCard();
         }
 
+        // BIG BRRRR's menu effects (drawMain). The window moves by the change
+        // from last frame's offset, so it can still be dragged and settles
+        // where it was once the drop stops.
+        ImVec2 g_brrrOffset{0.f, 0.f};
+        bool g_brrrBob = true;
+        bool g_brrrWasOn = false;
+        double g_brrrStart = 0.0; // ImGui time the drop started
+
         void pageSettings() {
             kit::BeginCard("Theme", nullptr);
             std::vector<std::string> names;
@@ -619,6 +627,7 @@ namespace gucci::ui {
             bool brrrOn = brrr->enabled;
             if (kit::SwitchRow("BIG BRRRR", nullptr, &brrrOn))
                 brrr->setEnabled(brrrOn);
+            kit::SwitchRow("Bob", "The menu hops to the beat", &g_brrrBob);
             kit::SwitchRow("Shake", "The menu shakes with the bass", &brrr->shakeEnabled);
             kit::SliderRow("Flicker", "How hard the menu flickers with the bass", &brrr->flickerIntensity, 0.f, 1.f,
                            "%.2f");
@@ -677,11 +686,6 @@ namespace gucci::ui {
 
         // ------------------------------------------------------------ windows
 
-        // BIG BRRRR's shake, last frame's: the window moves by the change from
-        // it, so it can still be dragged and settles where it was once the
-        // drop stops.
-        ImVec2 g_brrrShake{0.f, 0.f};
-
         void drawMain() {
             auto const& pal = look().pal;
             ImGuiIO const& io = ImGui::GetIO();
@@ -702,16 +706,32 @@ namespace gucci::ui {
                 ImGui::PopStyleVar();
                 return;
             }
-            ImVec2 shake{0.f, 0.f};
-            if (brrr->enabled && brrr->shakeEnabled) {
+            ImVec2 offset{0.f, 0.f};
+            if (brrr->enabled) {
                 double const t = ImGui::GetTime();
-                shake = ImVec2(bass * 14.f * static_cast<float>(std::sin(t * 91.0)),
-                               bass * 14.f * static_cast<float>(std::cos(t * 73.0)));
+                if (!g_brrrWasOn)
+                    g_brrrStart = t;
+                if (brrr->shakeEnabled) {
+                    offset.x += bass * 14.f * static_cast<float>(std::sin(t * 91.0));
+                    offset.y += bass * 14.f * static_cast<float>(std::cos(t * 73.0));
+                }
+                if (g_brrrBob) {
+                    // A hop between beats that lands on each one, counted from
+                    // when the drop started (playback starts at the drop).
+                    constexpr double kPi = 3.14159265358979323846;
+                    double const beats = (t - g_brrrStart) * BigBrrrManager::kBpm() / 60.0;
+                    offset.y -= (10.f + 8.f * bass) * static_cast<float>(std::abs(std::sin(kPi * beats)));
+                }
             }
-            if (shake.x != g_brrrShake.x || shake.y != g_brrrShake.y) {
+            g_brrrWasOn = brrr->enabled;
+            // Whole pixels only: ImGui truncates window positions, so moving
+            // by fractions lost a little every frame and walked the window up
+            // and to the left.
+            offset = ImVec2(std::round(offset.x), std::round(offset.y));
+            if (offset.x != g_brrrOffset.x || offset.y != g_brrrOffset.y) {
                 ImVec2 const p = ImGui::GetWindowPos();
-                ImGui::SetWindowPos(ImVec2(p.x - g_brrrShake.x + shake.x, p.y - g_brrrShake.y + shake.y));
-                g_brrrShake = shake;
+                ImGui::SetWindowPos(ImVec2(p.x - g_brrrOffset.x + offset.x, p.y - g_brrrOffset.y + offset.y));
+                g_brrrOffset = offset;
             }
 
             // Sidebar

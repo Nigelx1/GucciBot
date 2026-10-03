@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-03-cd (BIG BRRRR is back in Settings: its toggle, a freshly written effect where the menu shakes and flickers with the drop's bass, and its folder button. UNTESTED in-game.)"
+    "2026-10-03-ce (BIG BRRRR: the menu bobs to the beat again, and the shake no longer walks the menu to the upper left - it moved by fractions of a pixel, which ImGui truncated every frame. UNTESTED in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
