@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-03-cc (Render page: every render setting is back in the menu - codec, bitrate, file type, FFmpeg options, colour fix, audio codec and volumes, separate audio tracks, fades, seconds after the end, leaving the level when done, output folder and file name, and the intro card. UNTESTED in-game.)"
+    "2026-10-03-cd (BIG BRRRR is back in Settings: its toggle, a freshly written effect where the menu shakes and flickers with the drop's bass, and its folder button. UNTESTED in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

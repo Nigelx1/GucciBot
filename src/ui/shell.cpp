@@ -11,6 +11,7 @@
 
 #include "absense/glue.hpp"
 #include "analysis/ac/framewindow.hpp"
+#include "audio/bigbrrr.hpp"
 #include "analysis/ac/shim.hpp"
 #include "core/GucciBot.hpp"
 #include "hacks/autoclicker.hpp"
@@ -612,6 +613,18 @@ namespace gucci::ui {
                 if (kit::KeyRow(slot.label, nullptr, &(g_keys.*(slot.field))))
                     saveSettings();
             kit::EndCard();
+
+            kit::BeginCard("BIG BRRRR", "You'll know it when you see it.");
+            auto* brrr = BigBrrrManager::get();
+            bool brrrOn = brrr->enabled;
+            if (kit::SwitchRow("BIG BRRRR", nullptr, &brrrOn))
+                brrr->setEnabled(brrrOn);
+            kit::SwitchRow("Shake", "The menu shakes with the bass", &brrr->shakeEnabled);
+            kit::SliderRow("Flicker", "How hard the menu flickers with the bass", &brrr->flickerIntensity, 0.f, 1.f,
+                           "%.2f");
+            if (kit::Button("Open the BIG BRRRR folder"))
+                brrr->openBrrrFolder();
+            kit::EndCard();
         }
 
         void pageCredits() {
@@ -664,9 +677,20 @@ namespace gucci::ui {
 
         // ------------------------------------------------------------ windows
 
+        // BIG BRRRR's shake, last frame's: the window moves by the change from
+        // it, so it can still be dragged and settles where it was once the
+        // drop stops.
+        ImVec2 g_brrrShake{0.f, 0.f};
+
         void drawMain() {
             auto const& pal = look().pal;
             ImGuiIO const& io = ImGui::GetIO();
+            // While BIG BRRRR plays, the window flickers and shakes with the
+            // drop's bass (BigBrrrManager's level, 0 to 1).
+            auto* brrr = BigBrrrManager::get();
+            float const bass = brrr->enabled ? brrr->getBassLevel() : 0.f;
+            ImGui::PushStyleVar(ImGuiStyleVar_Alpha,
+                                1.f - 0.6f * bass * std::clamp(brrr->flickerIntensity, 0.f, 1.f));
             ImGui::SetNextWindowSize(ImVec2(720.f, 500.f), ImGuiCond_FirstUseEver);
             ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_FirstUseEver,
                                     ImVec2(0.5f, 0.5f));
@@ -675,7 +699,19 @@ namespace gucci::ui {
             if (!ImGui::Begin("GucciBot##menu", &open, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
                                                           ImGuiWindowFlags_NoScrollbar)) {
                 ImGui::End();
+                ImGui::PopStyleVar();
                 return;
+            }
+            ImVec2 shake{0.f, 0.f};
+            if (brrr->enabled && brrr->shakeEnabled) {
+                double const t = ImGui::GetTime();
+                shake = ImVec2(bass * 14.f * static_cast<float>(std::sin(t * 91.0)),
+                               bass * 14.f * static_cast<float>(std::cos(t * 73.0)));
+            }
+            if (shake.x != g_brrrShake.x || shake.y != g_brrrShake.y) {
+                ImVec2 const p = ImGui::GetWindowPos();
+                ImGui::SetWindowPos(ImVec2(p.x - g_brrrShake.x + shake.x, p.y - g_brrrShake.y + shake.y));
+                g_brrrShake = shake;
             }
 
             // Sidebar
@@ -722,6 +758,7 @@ namespace gucci::ui {
             ImGui::EndChild();
 
             ImGui::End();
+            ImGui::PopStyleVar();
             if (!open)
                 setOpen(false);
         }
