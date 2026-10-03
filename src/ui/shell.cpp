@@ -11,8 +11,9 @@
 
 #include "absense/glue.hpp"
 #include "analysis/ac/framewindow.hpp"
-#include "audio/bigbrrr.hpp"
 #include "analysis/ac/shim.hpp"
+#include "analysis/pathfinder.hpp"
+#include "audio/bigbrrr.hpp"
 #include "core/GucciBot.hpp"
 #include "hacks/autoclicker.hpp"
 #include "render/intro.hpp"
@@ -356,6 +357,35 @@ namespace gucci::ui {
             }
             kit::EndCard();
 
+            kit::BeginCard("Playback", nullptr);
+            engineSwitch("Mirror inputs", "Two-player levels: each player's press also presses for the other",
+                         &gb->replay.m_mirrorInputs, "feat_mirror_inputs");
+            if (gb->replay.m_mirrorInputs)
+                engineSwitch("Mirror inverted", "The other player gets the opposite", &gb->replay.m_mirrorInverted,
+                             "feat_mirror_inverted");
+            engineSwitch("Maintain gravity", nullptr, &gb->replay.m_maintainGravity, "feat_maintain_gravity");
+            engineSwitch("Sub-tick clicks (CBF recording)", "Records each click where inside the tick you pressed it",
+                         &gb->replay.m_scbfRecording, "scbf_recording");
+            if (gb->replay.m_scbfRecording)
+                engineSwitch("Split the tick at each click", nullptr, &gb->replay.m_scbfTickSplit, "scbf_tick_split");
+            kit::EndCard();
+
+            kit::BeginCard("Saving", nullptr);
+            engineSwitch("Autosave at the level's end", nullptr, &gb->autosaveAtLevelEnd, "feat_autosave_end");
+            if (engineSwitch("Autosave on a timer", "While recording", &gb->autosaveAtInterval, "feat_autosave_interval"))
+                gb->applyIntervalAutosave();
+            if (gb->autosaveAtInterval) {
+                float minutes = static_cast<float>(gb->autosaveIntervalSec / 60.0);
+                if (kit::SliderRow("Every", nullptr, &minutes, 0.5f, 30.f, "%.1f min")) {
+                    gb->autosaveIntervalSec = minutes * 60.0;
+                    Mod::get()->setSavedValue<double>("feat_autosave_interval_sec", gb->autosaveIntervalSec);
+                    gb->applyIntervalAutosave();
+                }
+            }
+            engineSwitch("Back up a macro before overwriting it", nullptr, &gb->replayBackupsEnabled,
+                         "feat_replay_backups");
+            kit::EndCard();
+
             kit::BeginCard("Saved macros", nullptr);
             static std::string s_filter;
             kit::InputText("filter", &s_filter, "search");
@@ -410,6 +440,8 @@ namespace gucci::ui {
             kit::EndCard();
 
             pages::hitboxCard();
+            pages::predictionCard();
+            pages::hudCard();
 
             kit::BeginCard("Engine", nullptr);
             engineSwitch("Lock delta", "Fixed physics step per tick", &upd.m_lockDelta, "feat_lock_delta");
@@ -417,13 +449,119 @@ namespace gucci::ui {
             engineSwitch("Auto flip on death", nullptr, &upd.m_autoFlipOnDeath, "feat_auto_flip");
             engineSwitch("Speedhack audio", nullptr, &upd.m_speedhackAudio, "feat_speedhack_audio");
             engineSwitch("Scroll speed fix", nullptr, &upd.m_ssbFix, "feat_scroll_speed_fix");
+            if (upd.m_lockDelta) {
+                using LockMode = GucciUpdater::LockDeltaMode;
+                int mode = upd.m_lockDeltaMode == LockMode::Accuracy ? 0 : 1;
+                const char* modes[] = {"Accuracy", "Performance"};
+                if (kit::ChoiceRow("Lock delta mode", "Accuracy: one physics step per update. Performance: several, sub-stepped",
+                                   &mode, modes, 2)) {
+                    upd.m_lockDeltaMode = mode == 0 ? LockMode::Accuracy : LockMode::Performance;
+                    Mod::get()->setSavedValue<int>("updater_lockDeltaMode", static_cast<int>(upd.m_lockDeltaMode));
+                }
+            }
+            engineSwitch("High TPS precision", "Scales GD's velocity rounding with the tick rate. Changes physics",
+                         &upd.m_highTpsPrecision, "updater_highTpsPrecision");
+            engineSwitch("Prevent death", "Steps back instead of dying", &upd.m_preventDeath, "feat_prevent_death");
+            if (upd.m_backwardsStepping) {
+                int frames = static_cast<int>(upd.m_maxBackstepFrames);
+                if (kit::SliderRow("Ticks kept for stepping back", nullptr, &frames, 10, 1000)) {
+                    upd.m_maxBackstepFrames = static_cast<uint32_t>(frames);
+                    Mod::get()->setSavedValue<int>("feat_back_step_count", frames);
+                }
+            }
+            float inputFps = static_cast<float>(upd.m_inputFps);
+            kit::RowBegin("Input FPS", "Clicks land only on this many ticks a second. 0: every tick");
+            if (kit::InputFloat("inputfps", &inputFps, 0.f, "%.0f") && inputFps >= 0.f) {
+                upd.m_inputFps = inputFps;
+                Mod::get()->setSavedValue<double>("feat_input_fps", upd.m_inputFps);
+            }
+            kit::RowEnd();
+            kit::EndCard();
+
+            kit::BeginCard("Frame pacing", "How many physics ticks run for each drawn frame");
+            int pacing = upd.m_realTime ? 0 : upd.m_dynamicUpr ? 2 : 1;
+            const char* pacings[] = {"Real time", "Fixed", "Dynamic"};
+            if (kit::ChoiceRow("Pacing", nullptr, &pacing, pacings, 3)) {
+                upd.m_realTime = pacing == 0;
+                upd.m_dynamicUpr = pacing == 2;
+                Mod::get()->setSavedValue<bool>("updater_real_time", upd.m_realTime);
+                Mod::get()->setSavedValue<bool>("updater_dynamic_upr", upd.m_dynamicUpr);
+            }
+            if (pacing == 1) {
+                int upr = static_cast<int>(upd.m_maxUPR);
+                if (kit::SliderRow("Ticks per frame, at most", nullptr, &upr, 1, 60)) {
+                    upd.m_maxUPR = static_cast<uint32_t>(upr);
+                    Mod::get()->setSavedValue<int>("updater_max_upr", upr);
+                }
+            } else if (pacing == 2) {
+                float fps = static_cast<float>(upd.m_fpsTarget);
+                if (kit::SliderRow("Target FPS", "Measures how long a tick takes and aims for this frame rate", &fps, 30.f,
+                                   360.f, "%.0f")) {
+                    upd.m_fpsTarget = fps;
+                    Mod::get()->setSavedValue<double>("updater_fps_target", upd.m_fpsTarget);
+                }
+            }
             kit::EndCard();
 
             pages::autoclickerCard();
         }
 
+        // GucciBot's own search. Until 2026-10-03 only Assistant Access could
+        // start it; the menu's Start always ran Absense.
+        void classicPathfinder() {
+            auto* pf = Pathfinder::get();
+            kit::RowBegin("", nullptr);
+            if (!pf->active) {
+                ImGui::BeginDisabled(!PlayLayer::get());
+                if (kit::Button("Start", Tone::Accent, -1.f))
+                    pf->begin();
+                ImGui::EndDisabled();
+            } else if (kit::Button("Stop", Tone::Bad, -1.f)) {
+                pf->cancel();
+            }
+            kit::RowEnd();
+            if (pf->active || pf->runs > 0) {
+                kit::Progress(pf->bestPct / 100.f, fmt::format("best {:.1f}%", pf->bestPct).c_str());
+                kit::Hint(fmt::format("{}  |  {} runs", pf->stage, pf->runs).c_str());
+            }
+            if (pf->hasResult)
+                kit::Note(pf->lastResultSuccess ? fmt::format("Solved, saved as {}", pf->savedAs).c_str()
+                                                : "Gave up without a solution.",
+                          pf->lastResultSuccess ? Tone::Good : Tone::Muted);
+
+            kit::Section("Settings");
+            bool changed = false;
+            changed |= kit::SliderRow("Look-back", "How far back from a death to try clicks", &pf->windowFrames, 5, 240,
+                                      "%d ticks");
+            changed |= kit::SliderRow("Restore points", "Ticks between saved restore points", &pf->checkpointInterval, 1, 60,
+                                      "every %d");
+            changed |= kit::SliderRow("Minimum progress", "Ticks a try must gain to count", &pf->minProgressFrames, 1, 240,
+                                      "%d ticks");
+            kit::RowBegin("Give up after", "Runs in total");
+            if (kit::InputInt("maxruns", &pf->maxRuns, 1000)) {
+                pf->maxRuns = std::clamp(pf->maxRuns, 100, 1000000);
+                changed = true;
+            }
+            kit::RowEnd();
+            changed |= kit::SwitchRow("Hide the search", "Only show the run that counts", &pf->hideSearch);
+            if (changed)
+                pf->saveSettings();
+            kit::SwitchRow("Agency map", "While you play, shows which ticks an input could actually change",
+                           &GucciEngine::get()->pfAgencyDebug);
+        }
+
         void pagePathfinder() {
             kit::BeginCard("Pathfinder", "Finds a way through the level on its own.");
+            int engine = absense::classicSelected() ? 1 : 0;
+            const char* engines[] = {"Absense", "Classic"};
+            if (kit::ChoiceRow("Engine", "Absense: Absent's planner, the default. Classic: GucciBot's own search", &engine,
+                               engines, 2))
+                absense::selectClassic(engine == 1);
+            if (engine == 1) {
+                classicPathfinder();
+                kit::EndCard();
+                return;
+            }
             bool fromStart = absense::startFromBeginning();
             if (kit::SwitchRow("Start from the beginning", nullptr, &fromStart))
                 absense::setStartFromBeginning(fromStart);

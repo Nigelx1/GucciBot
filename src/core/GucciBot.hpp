@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-03-cf (BIG BRRRR: the bob is always on unless shake is, and every theme's track, BPM and drop now come from the theme data the Themes page uses, meant to fix LemonadeBot and YoungstaBot. UNTESTED in-game.)"
+    "2026-10-03-cg (Rebuild wave 2a: the player-copy simulator is back on Absense copies - path preview, Frame Extrapolation, Prevent Death look-ahead, sub-tick preview, Classic pathfinder ranking and the Agency Map - with a Prediction card; the HUD draws again with all its readouts saved; menu controls for 24 engine settings that had none, incl. frame pacing, autosave and the Classic pathfinder. UNTESTED in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

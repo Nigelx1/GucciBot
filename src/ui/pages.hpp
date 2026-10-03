@@ -13,5 +13,7 @@ namespace gucci::ui::pages {
     // Cards drawn inside other pages
     void hitboxCard();       // pages/hitboxes_card.cpp (Hacks page)
     void autoclickerCard();  // pages/autoclicker_card.cpp (Hacks page)
+    void predictionCard();   // pages/prediction_card.cpp (Hacks page)
+    void hudCard();          // pages/hud_card.cpp (Hacks page)
 
 } // namespace gucci::ui::pages
