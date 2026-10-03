@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-02-bz (Every line derived from ToastyReplay is gone, its author withdrew permission. New menu written from scratch: Macro, Hacks, Pathfinder, Render, Settings, Credits. Temporarily gone until rebuilt: frame editor, hitboxes, click sounds, path preview and the other look-ahead features, Classic pathfinder, old BRR macro loading, the trainer and Calculate settings pages. UNTESTED in-game.)"
+    "2026-10-03-ca (Rebuilt after the ToastyReplay removal, none of his code: Themes page with all 20 themes and the custom theme editor, Silicate-based autoclicker with its own card, click sounds with a new FLAC Clickbot pack, Silicate-based Show Hitboxes. UNTESTED in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -5,6 +5,7 @@
 #include "ui/ui.hpp"
 #include "ui/kit.hpp"
 #include "ui/look.hpp"
+#include "ui/pages.hpp"
 #include "ui/state.hpp"
 #include "ui/themes.hpp"
 
@@ -250,7 +251,7 @@ namespace gucci::ui {
     }
 
     ThemeAudio activeThemeAudio() {
-        return {};
+        return themes::audio(themes::active());
     }
 
     namespace detail {
@@ -406,6 +407,8 @@ namespace gucci::ui {
             engineSwitch("Audio pitch follows speed", nullptr, &gb->audioPitchEnabled, "hack_audio_pitch");
             kit::EndCard();
 
+            pages::hitboxCard();
+
             kit::BeginCard("Engine", nullptr);
             engineSwitch("Lock delta", "Fixed physics step per tick", &upd.m_lockDelta, "feat_lock_delta");
             engineSwitch("Backwards stepping", "Step back while paused", &upd.m_backwardsStepping, "feat_backwards_step");
@@ -414,13 +417,7 @@ namespace gucci::ui {
             engineSwitch("Scroll speed fix", nullptr, &upd.m_ssbFix, "feat_scroll_speed_fix");
             kit::EndCard();
 
-            kit::BeginCard("Autoclicker", nullptr);
-            auto* ac = Autoclicker::get();
-            kit::SwitchRow("On", nullptr, &ac->enabled);
-            kit::SwitchRow("Only while holding", nullptr, &ac->onlyWhileHolding);
-            kit::SliderRow("Hold ticks", nullptr, &ac->p1.holdTicks, 1, 30);
-            kit::SliderRow("Release ticks", nullptr, &ac->p1.releaseTicks, 1, 30);
-            kit::EndCard();
+            pages::autoclickerCard();
         }
 
         void pagePathfinder() {
@@ -577,6 +574,8 @@ namespace gucci::ui {
             {"Hacks", pageHacks},
             {"Pathfinder", pagePathfinder},
             {"Render", pageRender},
+            {"Click sounds", pages::clickSounds},
+            {"Themes", pages::themes},
             {"Settings", pageSettings},
             {"Credits", pageCredits},
         };
