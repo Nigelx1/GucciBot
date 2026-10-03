@@ -2,7 +2,7 @@
 
 You are picking up an in-progress Geometry Dash mod from its author, Nigel. Read this whole doc before writing code. Section 0 is the part that has cost the most when ignored.
 
-> **What this document is.** A map, last refreshed 2026-09-29 (build `2026-09-29-bv`, version 2.0.0-beta.2). The source is ground truth: when this doc and the repo disagree, the repo wins — and say so. The Claude Code memory store for this project holds far more history than belongs here; read its index at the start of a session.
+> **What this document is.** A map, last refreshed 2026-10-02 (build `2026-10-02-bz`, version 2.0.0-beta.2). The source is ground truth: when this doc and the repo disagree, the repo wins — and say so. The Claude Code memory store for this project holds far more history than belongs here; read its index at the start of a session.
 
 ---
 
@@ -25,11 +25,11 @@ A **Geometry Dash macro bot**, distributed as the Geode mod `nigelx1.guccibot` (
 - **Engine:** Silicate, by peony (GPL-3). GucciBot's engine is a port of it, reconciled function by function in 2.0.
 - **Calculate (frame-window analyzer), sub-tick CBF recording (SCBF), the render intro card:** anticroom's, from his Silicate fork, ported in near-verbatim.
 - **Absense** (Absent's Silicate port): its **pathfinder is ported in whole** (`src/absense/`: the planner, its trajectory copies, the World trigger model, Silicate's physics layer for the copies) and is the default Pathfinder engine; GucciBot's own search stays as Classic. Also ideas from it: the MCP server, Check Macro, Replace All.
-- **ToastyReplay** (ToastexGD) is what GucciBot started as. GucciBot no longer requires ToastyReplay Lite; it only stands down if ToastyReplay Lite is *enabled* alongside it, because the two conflict.
+- **ToastyReplay** (ToastexGD) is what GucciBot started as. On 2026-09-30 Toast withdrew permission to use his code (TTR's main repo has no licence), and build -bz (385a5f7) removed every TTR-derived line. **Never port, copy or read ToastyReplay code again** (neither repo, nor the deleted files in this repo's history). Rebuilds come from Silicate (GPL-3, credit peony), Absense, or are written fresh; check new code with the ttrcheck/ttrruns tools (memory: project_ttr_removal). GucciBot still stands down if ToastyReplay Lite is *enabled* alongside it, because the two conflict.
 
 **Target:** GD 2.2081, Windows x64, Geode 5.10.1. **Versions (check source):** `MOD_VERSION "2.0.0-beta.2"`, `GBR6_VERSION 1`, `BRR_FORMAT_VERSION 4`.
 
-**Branches:** `engine-port-2.0` is where 2.0 lives. `master` is still 1.8 (the stable release) and fast-forwards once 2.0 is confirmed.
+**Branches:** `engine-port-2.0` is where 2.0 lives. `master` was fast-forwarded to it on 2026-10-02 (to take the TTR code off the default branch), so master is 2.0 code now; keep the two level. The 1.8 release download still exists as a tag/release.
 
 ---
 
@@ -57,7 +57,10 @@ src/replay/     scbf_input.* (live sub-tick recorder), subtick_preview.*
 src/render/     renderer.* (async PBO ring, encode thread), dsp.* (audio capture + preview),
                 intro.*, texture.*
 src/trailbuf/   Silicate's trail buffer (Macro Buffing, spikes)
-src/gui/        the ImGui interface (gui.cpp is very large), frame editor
+src/ui/         the ImGui interface, rewritten 2026-10-01: ui.hpp (all the rest of the mod sees), look.*
+                (palette, fonts), kit.* (cards/rows/controls), themes.*, shell.cpp (window, pages,
+                overlay, saved settings, the ImGuiCocos draw hook that also ticks anticroom's analyzer),
+                pages/ (one file per page or card)
 src/absense/    Absense's pathfinder, ported whole: pathfinder/, trajectory/ (its copies of the
                 player), world/ (trigger model), physics/ (Silicate's collisions for the copies),
                 compat/ (Silicate names -> GucciBot), glue.hpp (the only header GUI/MCP include),
@@ -89,12 +92,13 @@ ENGINE_AUDIT.md the 2026-09-26/27 audit against Silicate: every finding and how 
 
 ---
 
-## 6. Current state (2026-09-29)
+## 6. Current state (2026-10-02)
 
-- **2.0.0-beta.2** is released as a GitHub pre-release (Nigel tested it in-game: the Absense pathfinder solved Zafari 2 and Xmas Challenge, and its macros replay). Stable ("latest") is still 1.8. Version names are back to normal semver (`2.0.0-beta.N`).
-- **2.0.0** = this plus one final audit and polish pass. Nigel is on promo/business for a while.
-- **Open:** GitHub issues #7–#10 (#9/#10 are macros losing inputs — the -bq recorder fix, which kept dropping the last release of a release-press-release tick, may be the cause; unconfirmed); a LICENSE file (GucciBot contains GPL-3 Silicate code); restarting right after a completed replay skips the next attempt's level end; the judge leaves the one-step flag armed after each stepped tick (cleared, cause unknown).
-- The memory store has the detail on each: read `MEMORY.md` there first.
+- **2.0.0-beta.2** is the latest pre-release (it still contains TTR code; whether to pull old downloads is Nigel's call). Stable ("latest") is still 1.8.
+- **Build -bz removed all TTR-derived code.** Gone until rebuilt (fresh): frame editor, hitboxes, click sounds, the fork service behind path preview / Frame Extrapolation / Prevent Death's look-ahead / sub-tick preview / the Classic pathfinder's ranking (src/analysis/trajectory.* is a no-op stub), legacy BRR loading, and the Calculate-settings, JMP/Trainer, HUD and Indicators pages. Rebuild waves are in progress (memory: project_ttr_removal).
+- **2.0.0** = the rebuilds + one final audit and polish pass. Promo plan (vouch video) in memory: project_promo_vouches.
+- **Open:** the Bloodbath "Michigun UFO" pathfinder stall (every idea dies on the same tick; escalation past its cap repeats cached searches - see memory project_pathfinder); GitHub issues #8, #11, #13, #14 (#14's cause fixed in -by); restarting right after a completed replay skips the next attempt's level end; the judge leaves the one-step flag armed.
+- Claude sees plan usage live (hooks; memory reference_usage_tracking). The memory store has the detail on each: read `MEMORY.md` there first.
 
 ## 7. Other docs in the repo
 
