@@ -707,6 +707,39 @@ class Trajectory {
     void handlePortal(PlayerObject* player, GameObject* object);
     void drawHitbox(PlayerObject* player);
 
+    // ---- GucciBot additions (2026-10-03), for its fork service
+    // (analysis/trajectory.cpp).
+
+    // The moving objects of the DRAWN lines only (simulate / runPrediction):
+    // off, every object stays where the real game has it for the whole line;
+    // on, they move the way the rest of this file moves them, placed every
+    // `every` ticks rather than every tick. A scripted run (run, steer,
+    // search) always moves them every tick. The defaults are Absense's.
+    struct DisplayMovers {
+        bool on = true;
+        int every = 1;
+    };
+    DisplayMovers m_displayMovers;
+
+    // The sub-tick preview's two questions, ported from anticroom's Silicate
+    // fork (src/trajectory/trajectory.cpp: cloneReal, splitStep, extrapolate,
+    // extrapolateBranch; GPL-3) onto these copies. subtickPose: where the
+    // player is `fraction` of the way through the next tick, with nothing
+    // pressed. subtickBranch: from that point, the rest of the tick and then
+    // `ticks` whole ticks with the button held (or let go), one point per
+    // step in `path`, the first being the split point. Both put the game
+    // back and draw nothing. False when they cannot run.
+    bool subtickPose(GJBaseGameLayer* pl, bool p1, float fraction, TrajectoryPlayerData& out, bool& died);
+    bool subtickBranch(GJBaseGameLayer* pl, bool p1, float fraction, bool hold, int ticks,
+                       std::vector<cocos2d::CCPoint>& path);
+
+   private:
+    // A copy set up from the real player the way simulate() sets one up.
+    PlayerObject* copyOfReal(GJBaseGameLayer* pl, bool p1);
+    void splitStep(GJBaseGameLayer* pl, PlayerObject* copy, float delta);
+
+   public:
+
     bool playerHasActivated(PlayerObject* player, EnhancedGameObject* object);
     bool realPlayerHasActivated(PlayerObject* player,
                                 EnhancedGameObject* object);

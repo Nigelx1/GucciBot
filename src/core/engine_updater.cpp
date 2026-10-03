@@ -354,12 +354,20 @@ void GucciUpdater::runUpdates(std::function<void(float)> update, float realDt, b
     if (!Pathfinder::get()->active)
         gb->fwAnalyzing = ::Bot::get()->frameWindow().running();
 
+    // The path preview is redrawn once per drawn frame, after whatever this
+    // frame ran, on every way out of here (frozen, paused, stepping, playing),
+    // as Absense's updater does. It rebuilds only when the player has moved.
+    struct PreviewAfterFrame {
+        ~PreviewAfterFrame() {
+            if (auto* pl = PlayLayer::get())
+                TrajectoryPredictionService::get().updatePreview(pl);
+        }
+    } previewAfterFrame;
+
     if (frozen) {
         m_onlyRefresh = true;
         update(realDt);
         m_onlyRefresh = false;
-        if (PlayLayer::get())
-            TrajectoryPredictionService::get().updatePreview(PlayLayer::get());
         return;
     }
 
@@ -775,6 +783,11 @@ static void frameUpdateMidhook(SafetyHookContext&) {
                 apf.afterLiveTick();
                 world::World::afterRealTick(pl, (int)upd.getFrame());
                 ::Bot::get()->trajectory().realStateChanged();
+            } else if (!absense::judge::active()) {
+                // The same copies serve the path preview and the look-aheads
+                // below (analysis/trajectory.cpp): once they exist they take
+                // the real player afresh after every tick too.
+                TrajectoryPredictionService::get().onRealTick();
             }
 
             // Prevent Death > Use trajectory instead (Silicate, same spot):

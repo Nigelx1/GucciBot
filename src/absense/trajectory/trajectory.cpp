@@ -216,6 +216,7 @@ bool Trajectory::iterate(GJBaseGameLayer* pl, PlayerObject* player, int mode,
 static void pressJump(PlayerObject* p);
 static void releaseJump(PlayerObject* p);
 static void displayMovingStep(float dt);
+static void displayMovingPlace(int tick);  // GucciBot (see m_displayMovers)
 
 // Whether the drawn lines take their click kind as their input: the player's
 // own play. A playing replay drives every kind with its inputs instead, and so
@@ -388,6 +389,7 @@ TrajectoryPlayerData Trajectory::runPrediction(GJBaseGameLayer* pl,
     }
 
     int predCount = 0;
+    const int moveEvery = std::max(1, m_displayMovers.every);
     for (int i = 0; i < iterations && i <= config.m_maxLength; i++) {
         uint64_t frame = Bot::get()->updater().getFrame() + i;
         // The real tick this drawn tick produces, as a run's step sets it:
@@ -446,7 +448,10 @@ TrajectoryPlayerData Trajectory::runPrediction(GJBaseGameLayer* pl,
         if (acDriven) {
             ac.update(player, state, isP2, frame, false);
         }
-        displayMovingStep(bot->updater().getPhysicsDt());
+        // GucciBot: the carried movers go where they belong only every
+        // m_displayMovers.every ticks (every tick by default).
+        if (moveEvery <= 1) displayMovingStep(bot->updater().getPhysicsDt());
+        else if ((i + 1) % moveEvery == 0) displayMovingPlace(i + 1);
         // The press Tap and DoubleHeld kept down over the first tick is let go
         // at the top of the second, before its physics, as the game handles a
         // release queued for that tick.
@@ -489,6 +494,9 @@ TrajectoryPlayerData Trajectory::runPrediction(GJBaseGameLayer* pl,
         // The objects each copy can meet on the tick, where the prediction's
         // log has them (a prediction whose World puts them in place).
         world::Materializer* displayObjects = displayRun ? displayRun->objects : nullptr;
+        // GucciBot: placed near the copies only every m_displayMovers.every
+        // ticks; in between they keep where they were last put.
+        if (moveEvery > 1 && i % moveEvery != 0) displayObjects = nullptr;
         if (!breakIterationP1) {
             if (displayObjects) displayObjects->materializeNear(*displayRun, player);
             breakIterationP1 =
@@ -1087,6 +1095,7 @@ struct MovingObjects {
 
 static MovingObjects g_displayMoving;  // the prediction's (the runs have their own)
 static void displayMovingStep(float dt) { g_displayMoving.step(dt); }
+static void displayMovingPlace(int tick) { g_displayMoving.place(tick); }
 
 // The moving objects of the run whose tick is in progress (set by Sim::step).
 static MovingObjects* g_runMovers = nullptr;
@@ -3895,7 +3904,9 @@ TrajectoryPlayerData Trajectory::simulate(GJBaseGameLayer* pl, bool p1,
     // everything is put back when it is drawn. Without them it keeps the old
     // carry of the moving objects.
     world::Materializer displayObjects;
-    if (displayStep && !displayWorld.partial) {
+    // (GucciBot: with its path preview's moving objects off, nothing is put
+    // in place and nothing is carried: see m_displayMovers.)
+    if (displayStep && !displayWorld.partial && m_displayMovers.on) {
         auto table = world::baseTable(pl, displayDef, state.m_currentProgress, state.m_commandIndex);
         if (table) {
             displayCache.setBaseTable(table);
@@ -3906,7 +3917,7 @@ TrajectoryPlayerData Trajectory::simulate(GJBaseGameLayer* pl, bool p1,
     }
     world::Scope displayScope(displayStep ? &displayRun : nullptr, displayWorldOn ? &displayWorld : nullptr);
 
-    if (!displayObjects.active()) g_displayMoving.begin(pl);
+    if (!displayObjects.active() && m_displayMovers.on) g_displayMoving.begin(pl);
     auto predicted = this->runPrediction(pl, player, otherPlayer, mode, colors,
                                          clickBothPlayers, config);
     displayObjects.end();
@@ -4719,6 +4730,157 @@ bool Trajectory::realPlayerHasActivated(PlayerObject* player,
         player == m_fakePlayer1 ? pl->m_player1 : pl->m_player2;
 
     return phys::hasBeenActivatedByPlayer(realPlayer, object);
+}
+
+// ------------------------------------------------------------ GucciBot: the sub-tick preview
+//
+// Ported from anticroom's Silicate fork (src/trajectory/trajectory.cpp:
+// cloneReal, splitStep, extrapolate, extrapolateBranch; GPL-3), onto these
+// copies and this file's set-up of them. His draws the branch straight into
+// the node it is given; here the points come back and GucciBot's sub-tick
+// preview draws them (replay/subtick_preview.cpp), so nothing here touches a
+// node. Hooks keep the copies' tick away from the real level while m_drawing
+// is set, as they do for a rebuild of the drawn lines.
+
+PlayerObject* Trajectory::copyOfReal(GJBaseGameLayer* pl, bool p1) {
+    PlayerObject* copy = p1 ? m_fakePlayer1 : m_fakePlayer2;
+    PlayerObject* real = p1 ? pl->m_player1 : pl->m_player2;
+    if (!copy || !real) return nullptr;
+    // The same steps as simulate()'s set-up, for the same reasons (see there).
+    copy->copyAttributes(real);
+    noteFakeMode(copy, modeOf(real));
+    copy->m_maybeReducedEffects = true;
+    setFakeMode(copy, modeOf(real));
+    SavedPlayerCheckpoint checkpoint = SavedPlayerCheckpoint::create(real);
+    checkpoint.apply(copy);
+    copy->setPosition(real->m_position);
+    copy->setRotation(real->getRotation());
+    if (copy->getScaleX() != real->getScaleX()) copy->setScaleX(real->getScaleX());
+    if (copy->getScaleY() != real->getScaleY()) copy->setScaleY(real->getScaleY());
+    syncButtons(copy, real);
+    copy->m_playEffects = false;
+    m_deadP1 = false;
+    m_deadP2 = false;
+    clearRingContacts();
+    clearKiller();
+    deactivateAllRemembered();
+    seedRingContacts(copy);
+    return copy;
+}
+
+// The first `delta` of a tick with no input: the copy's update, a collision
+// pass that can kill it but does not land it for the rest of the tick, and
+// its rotation. iterate()'s per-tick reset of the touched rings and the
+// collision log comes first, as at the top of every tick.
+void Trajectory::splitStep(GJBaseGameLayer* pl, PlayerObject* copy, float delta) {
+    if (copy->m_touchingRings) copy->resetTouchedRings(false);
+    copy->resetCollisionLog(false);
+    copy->update(delta);
+    if (pl->checkCollisions(copy, 0.0f, true) == 1) hasDied(copy);
+    copy->updateRotation(delta);
+    copy->m_collisionLogTop->removeAllObjects();
+    copy->m_collisionLogBottom->removeAllObjects();
+    copy->m_collisionLogLeft->removeAllObjects();
+    copy->m_collisionLogRight->removeAllObjects();
+}
+
+bool Trajectory::subtickPose(GJBaseGameLayer* pl, bool p1, float fraction, TrajectoryPlayerData& out,
+                             bool& died) {
+    died = false;
+    if (!pl || m_drawing || m_simulating || m_search || m_start) return false;
+    const GJGameState state = pl->m_gameState;
+    const float savedDelta = m_delta;
+    auto pending = std::move(m_actions);
+    m_actions.clear();
+    m_drawing = true;
+    m_delta = Bot::get()->updater().getPhysicsDt() * std::min(pl->m_gameState.m_timeWarp, 1.0f) * 60.0f;
+
+    PlayerObject* copy = copyOfReal(pl, p1);
+    if (copy) {
+        splitStep(pl, copy, m_delta * std::clamp(fraction, 0.0f, 1.0f));
+        out = TrajectoryPlayerData{
+            .position = copy->getPosition(),
+            .hitbox = copy->getObjectRect(),
+            .innerHitbox = copy->getObjectRect(0.3, 0.3),
+            .rotation = copy->getRotation(),
+            .p1 = p1,
+            .holding = false,
+            .score = 0,
+        };
+        died = p1 ? m_deadP1 : m_deadP2;
+        copy->setVisible(false);
+    }
+
+    clearRingContacts();
+    deactivateAllRemembered();
+    pl->m_gameState = state;
+    m_actions = std::move(pending);
+    m_delta = savedDelta;
+    m_drawing = false;
+    return copy != nullptr;
+}
+
+bool Trajectory::subtickBranch(GJBaseGameLayer* pl, bool p1, float fraction, bool hold, int ticks,
+                               std::vector<cocos2d::CCPoint>& path) {
+    path.clear();
+    if (!pl || m_drawing || m_simulating || m_search || m_start) return false;
+    const GJGameState state = pl->m_gameState;
+    const float savedDelta = m_delta;
+    auto pending = std::move(m_actions);
+    m_actions.clear();
+    m_drawing = true;
+    m_delta = Bot::get()->updater().getPhysicsDt() * std::min(pl->m_gameState.m_timeWarp, 1.0f) * 60.0f;
+
+    PlayerObject* copy = copyOfReal(pl, p1);
+    if (copy) {
+        // The branch meets moving objects the way the drawn lines do.
+        const bool moving = m_displayMovers.on;
+        const int moveEvery = std::max(1, m_displayMovers.every);
+        if (moving) g_displayMoving.begin(pl);
+
+        const float f = std::clamp(fraction, 0.0f, 1.0f);
+        splitStep(pl, copy, m_delta * f);
+        path.push_back(copy->getPosition());
+
+        // The press (or the release) lands at the split; the tick then runs
+        // its rest, and its full collision pass.
+        if (hold) {
+            pressJump(copy);
+        } else {
+            releaseJump(copy);
+            copy->m_jumpBuffered = false;
+        }
+        const float rest = m_delta * (1.0f - f);
+        copy->update(rest);
+        copy->updateRotation(rest);
+        if (pl->checkCollisions(copy, m_delta, false) == 1) hasDied(copy);
+        path.push_back(copy->getPosition());
+
+        const int mode = (hold ? TrajectoryMode::Hold : TrajectoryMode::Release) |
+                         (p1 ? TrajectoryMode::Player1 : TrajectoryMode::Player2);
+        PredictionConfig config;
+        config.m_bypassConfig = true;
+        config.m_silent = true;
+        static float colors[4] = {0, 0, 0, 0};
+        bool held = false;
+        int steps = 0;
+        for (int i = 0; i < ticks; i++) {
+            if (moving && (moveEvery <= 1 || (i + 1) % moveEvery == 0)) g_displayMoving.place(i + 1);
+            if (this->iterate(pl, copy, mode, colors, held, steps, config)) break;
+            path.push_back(copy->getPosition());
+        }
+
+        g_displayMoving.end();
+        copy->setVisible(false);
+    }
+
+    clearRingContacts();
+    deactivateAllRemembered();
+    pl->m_gameState = state;
+    m_actions = std::move(pending);
+    m_delta = savedDelta;
+    m_drawing = false;
+    return copy != nullptr;
 }
 
 static void* RingObject_spawnCircle_orig = nullptr;
