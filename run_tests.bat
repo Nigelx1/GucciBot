@@ -1,7 +1,5 @@
 @echo off
-REM Runs the frame editor's rule tests outside Geometry Dash.
-REM The same cases also run at startup in-game and show up in the
-REM Diagnostics panel -- this is just the fast way to check them.
+REM Offline tests: the GBR6 sub-tick section and Check Macro.
 
 setlocal
 set VCVARS="C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
@@ -12,11 +10,6 @@ if not exist %VCVARS% (
 
 call %VCVARS% >nul 2>&1
 if not exist build mkdir build
-
-cl /nologo /std:c++20 /EHsc /I src /DGB_EDIT_CORE_TEST_STANDALONE ^
-   tools\run_edit_tests.cpp /Fe:build\run_edit_tests.exe /Fo:build\ || exit /b 1
-
-build\run_edit_tests.exe || exit /b 1
 
 REM GBR6's sub-tick section (SCBF offsets). /O2 /MD to match the mod's build.
 cl /nologo /std:c++20 /EHsc /O2 /MD /I src ^

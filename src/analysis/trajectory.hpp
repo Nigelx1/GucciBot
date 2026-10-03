@@ -1,174 +1,26 @@
 #pragma once
 
+// Look-ahead forks of the player (path preview, Frame Extrapolation, Prevent
+// Death's look-ahead, the Classic pathfinder's ranking, the sub-tick preview).
+//
+// 2026-10-01: the previous implementation was derived from ToastyReplay, whose
+// author withdrew permission to use it, and was removed. Until a new one is
+// written this service runs no forks: every query answers "no fork could run"
+// and the features built on it stay idle. The interface is unchanged so the
+// callers keep compiling.
+
 #include <Geode/Geode.hpp>
 
-#include <array>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
-using namespace geode::prelude;
-
 namespace gucci {
 
-    struct TrajectoryMotionState {
-        CCPoint position;
-        CCPoint previousPosition;
-        double verticalVelocity;
-        double preSlopeVelocity;
-        float rotation;
-        float scale;
-        float movementSpeed;
-        float gravityFactor;
-        double totalTime;
-        GameObjectType objectType;
-    };
-
-    struct TrajectoryFormState {
-        bool gravityInverted;
-        bool onSlope;
-        bool wasOnSlope;
-        bool inShipMode;
-        bool inUfoMode;
-        bool inBallMode;
-        bool inWaveMode;
-        bool inRobotMode;
-        bool inSpiderMode;
-        bool inSwingMode;
-        bool grounded;
-        bool dashing;
-        bool isGoingLeft;
-        bool isSideways;
-        int reverseRelated;
-        double reverseSpeed;
-        double reverseAcceleration;
-    };
-
-    struct TrajectoryInteractionState {
-        bool padRingRelated;
-        bool ringJumpRelated;
-        gd::unordered_set<int> ringRelatedSet;
-        bool touchedRing;
-        bool touchedCustomRing;
-        bool touchedPad;
-        GameObject* lastActivatedPortal;
-        CCPoint lastPortalPos;
-        bool playEffects;
-    };
-
-    struct TrajectorySlopeState {
-        GameObject* currentSlope;
-        GameObject* currentSlopeSecondary;
-        GameObject* currentPotentialSlope;
-        float slopeAngle;
-        float slopeAngleRadians;
-        bool collidingWithSlope;
-        int collidingWithSlopeId;
-        bool slopeFlipGravityRelated;
-        float slopeVelocity;
-        double currentSlopeVelocity;
-        bool currentSlopeTop;
-        bool slopeSlideRotated;
-        double slopeRotation;
-        double slopeForce;
-        bool upsideDownSlope;
-        bool movingWithSlopeDirection;
-        bool sliding;
-        bool slidingRight;
-        double slopeStartTime;
-        double slopeEndTime;
-    };
-
-    struct TrajectoryCollisionState {
-        GameObject* lastGroundObject;
-        GameObject* preLastGroundObject;
-        GameObject* collidedObject;
-        GameObject* collidingWithLeft;
-        GameObject* collidingWithRight;
-        double groundYVelocity;
-        int lastCollisionBottom;
-        int lastCollisionTop;
-        int lastCollisionLeft;
-        int lastCollisionRight;
-        bool isOnGround2;
-        bool isOnGround3;
-        bool isOnGround4;
-        double fallSpeed;
-        bool maybeColliding;
-    };
-
-    struct PlayerStateCapsule {
-        TrajectoryMotionState motion;
-        TrajectoryFormState form;
-        TrajectoryInteractionState interaction;
-        TrajectorySlopeState slope;
-        TrajectoryCollisionState collision;
-    };
-
-    struct PredictionWatchKey {
-        CCPoint position;
-        double verticalVelocity;
-        float rotation;
-        bool gravityInverted;
-        float movementSpeed;
-        bool grounded;
-        float scale;
-        bool dashing;
-        bool inShipMode;
-        bool inUfoMode;
-        bool inBallMode;
-        bool inWaveMode;
-        bool inRobotMode;
-        bool inSpiderMode;
-        bool inSwingMode;
-        bool isGoingLeft;
-        bool isSideways;
-        int reverseRelated;
-    };
-
-    struct PredictionContext {
-        PlayerObject* previewPlayers[2] = {nullptr, nullptr};
-        bool activeSimulation = false;
-        bool traceCancelled = false;
-        bool holdingTrace = false;
-        bool processingOrbTouch = false;
-        bool dirty = true;
-        // What the real PlayerObject::update last received -- GD's player
-        // units, 1.0 per 1/60 s, so a 240 TPS tick is 0.25. Only the default
-        // before the first real step; it was 1/240, the wrong unit.
-        float stepDelta = 60.0f / 240.0f;
-        float collisionRotation = 0.0f;
-        std::array<CCPoint, 480> holdPathP1{};
-        std::array<CCPoint, 480> holdPathP2{};
-        int holdSurvivedFrames[2]{0, 0};
-        int releaseSurvivedFrames[2]{0, 0};
-        float indicatorFlashTimer[2]{0.0f, 0.0f};
-        float indicatorPulsePhase = 0.0f;
-        PredictionWatchKey watchKeys[2]{};
-        std::unordered_set<GameObject*> processedOrbs;
-        std::unordered_set<GameObject*> touchingPads;
-        std::unordered_set<GameObject*> frameTouchingPads;
-        // Non-zero while an agency probe is running: overrides the trace
-        // horizon and suppresses drawing, so the probe can't disturb the
-        // path preview it borrows the machinery from.
-        int probeFrames = 0;
-        float probeMaxDivergence = 0.0f;
-        int probeComparedFrames = 0;
-    };
-
-    // Does the player have any say in what happens next? Answered by running
-    // the fork twice from the same state -- once pressing, once not -- and
-    // seeing whether the two futures differ at all. Mid-air in Cube they are
-    // bit-identical and the answer is no; on the ground they separate on the
-    // next frame and the answer is yes. No level geometry is read to decide
-    // this, which is why it comes out right per gamemode for free.
-    // Long enough for a Cube jump to visibly separate from standing still,
-    // short enough that running it every frame stays cheap.
     inline constexpr int kAgencyProbeFrames = 6;
 
     struct AgencyResult {
         bool matters = false;
-        float divergence = 0.0f;   // furthest the two futures got apart, in units
+        float divergence = 0.0f;
         int holdSurvived = 0;
         int releaseSurvived = 0;
     };
@@ -177,22 +29,16 @@ namespace gucci {
     public:
         static TrajectoryPredictionService& get();
 
-        bool isActiveSimulation() const;
-        bool isProcessingOrbTouch() const;
-        void markDirty();
-        void clearOverlay();
-        void attach(PlayLayer* playLayer);
-        void detach();
-        void updatePreview(PlayLayer* playLayer);
-        bool probeAgency(PlayLayer* playLayer, PlayerObject* source, AgencyResult& out, int frames);
-        // One physics step of a fork, for Frame Extrapolation: where `source`
-        // will be a tick from now if it holds (or doesn't). Draws nothing and
-        // leaves the preview/indicator paths alone. False if no fork can run.
-        bool predictStep(PlayLayer* playLayer, PlayerObject* source, bool holding,
-                         cocos2d::CCPoint& outPos, float& outRot);
+        bool isActiveSimulation() const { return false; }
+        bool isProcessingOrbTouch() const { return false; }
+        void markDirty() {}
+        void clearOverlay() {}
+        void attach(PlayLayer*) {}
+        void detach() {}
+        void updatePreview(PlayLayer*) {}
+        bool probeAgency(PlayLayer*, PlayerObject*, AgencyResult&, int) { return false; }
+        bool predictStep(PlayLayer*, PlayerObject*, bool, cocos2d::CCPoint&, float&) { return false; }
 
-        // The sub-tick preview (anticroom's SubtickPreview, 2026-09-27), built
-        // on this fork. Neither touches the path preview's own context.
         struct SubtickPose {
             cocos2d::CCPoint position;
             cocos2d::CCRect hitbox;
@@ -200,119 +46,28 @@ namespace gucci {
             float rotation = 0.f;
             bool died = false;
         };
-        // Where `source` is `fraction` of a tick from now, its buttons exactly
-        // as they are.
-        bool extrapolateSubtick(PlayLayer* playLayer, PlayerObject* source, float fraction,
-                                SubtickPose& out);
-        // From that same point: press (hold) or release, finish the tick, and
-        // keep going for the path length, drawing the path into `node`.
-        void traceSubtickBranch(PlayLayer* playLayer, PlayerObject* source, float fraction,
-                                bool hold, cocos2d::CCDrawNode* node, cocos2d::ccColor4F color,
-                                float width);
-        // While the sub-tick preview is showing, the whole-tick path would
-        // contradict it; this keeps it hidden until released.
-        void setOverlaySuppressed(bool suppressed);
+        bool extrapolateSubtick(PlayLayer*, PlayerObject*, float, SubtickPose&) { return false; }
+        void traceSubtickBranch(PlayLayer*, PlayerObject*, float, bool, cocos2d::CCDrawNode*, cocos2d::ccColor4F, float) {}
+        void setOverlaySuppressed(bool) {}
 
-        // How many of the next `frames` ticks `source` survives: +1 presses
-        // jump first, -1 releases it, 0 keeps the buttons as they are.
-        // Silicate asks its trajectory this for Prevent Death's look-ahead and
-        // for the best-tick search (score = ticks survived). Returns `frames`
-        // when it never dies, -1 if no fork could run.
-        int survivesFor(PlayLayer* playLayer, PlayerObject* source, int frames, int input);
-        // The same question for a whole input script: `events` are (tick
-        // offset, pressed) pairs sorted by offset, each applied at the start
-        // of that tick, before its physics. Pathfinder ranks its candidates
-        // with this -- a fork only ranks; a real run still decides.
-        int survivesScript(PlayLayer* playLayer, PlayerObject* source, int frames,
-                           std::vector<std::pair<int, bool>> const& events,
-                           std::vector<cocos2d::CCPoint>* trace = nullptr);
-        cocos2d::ccColor4F holdColor(bool player2) const {
-            return player2 ? m_holdColorP2 : m_holdColor;
+        // -1: no fork could run.
+        int survivesFor(PlayLayer*, PlayerObject*, int, int) { return -1; }
+        int survivesScript(PlayLayer*, PlayerObject*, int, std::vector<std::pair<int, bool>> const&,
+                           std::vector<cocos2d::CCPoint>* = nullptr) {
+            return -1;
         }
-        cocos2d::ccColor4F releaseColor() const { return m_releaseColor; }
-        float lastProbeStep() const { return m_lastProbeStep; }
-        // What ended the last simulated run, for diagnosing forks that die
-        // before they measure anything. -1 means no object (a non-collision
-        // death, or nothing recorded yet).
-        int lastForkKillerId() const { return m_lastKillerId; }
-        int lastForkKillerType() const { return m_lastKillerType; }
-        int forkDeaths() const { return m_forkDeaths; }
-        void captureFrameDelta(float dt);
-        void noteSimulatedDeath(PlayerObject* player, GameObject* killer = nullptr);
-        bool ownsPreviewPlayer(PlayerObject* player) const;
-        int getSurvivedFrames(bool player2, bool held) const;
-        void onRealClick(bool player2, bool pressed);
 
-        void simulateCollisionBatch(GJBaseGameLayer* layer,
-                                    PlayerObject* player,
-                                    gd::vector<GameObject*>* objects,
-                                    int objectCount,
-                                    float dt);
-        bool handleActivationCheck(PlayerObject* player, EffectGameObject* object);
-        void handleTouchedTrigger(PlayerObject* player, EffectGameObject* object);
+        cocos2d::ccColor4F holdColor(bool player2) const {
+            return player2 ? cocos2d::ccColor4F{0.2f, 0.5f, 0.95f, 1.f} : cocos2d::ccColor4F{0.3f, 0.9f, 0.35f, 1.f};
+        }
+        cocos2d::ccColor4F releaseColor() const { return {0.55f, 0.05f, 0.05f, 1.f}; }
+        float lastProbeStep() const { return 0.f; }
+        int lastForkKillerId() const { return 0; }
 
-    private:
-        // Moving objects during a prediction -- Silicate's approach, not a
-        // simulator: snapshot every object a trigger could move, let GD's real
-        // move step advance them while the fork runs, then put everything back.
-        struct MovedObjectSnapshot {
-            GameObject* object = nullptr;
-            cocos2d::CCPoint position;
-            cocos2d::CCPoint lastPosition;
-            double positionX = 0.0, positionY = 0.0;
-            float positionXOffset = 0.f, positionYOffset = 0.f;
-            float rotationX = 0.f, rotationY = 0.f;
-            float rotationXOffset = 0.f, rotationYOffset = 0.f;
-            float scaleX = 1.f, scaleY = 1.f;
-            float scaleXOffset = 0.f, scaleYOffset = 0.f;
-            bool isDirty = false;
-        };
-        std::vector<MovedObjectSnapshot> m_movedObjects;
-        EffectManagerState m_savedEffectState;
-        std::array<float, 2000> m_savedVariance{};
-        bool m_movedSnapshotTaken = false;
-        void snapshotMovedObjects(PlayLayer* playLayer);
-        void restoreMovedObjects(PlayLayer* playLayer);
-        void stepMoveActions(PlayLayer* playLayer, float delta);
-
-        PredictionContext m_context;
-        bool m_overlaySuppressed = false;
-        PlayerObject* prepareFork(PlayLayer* playLayer, PlayerObject* source);
-        void stepFork(PlayLayer* playLayer, PlayerObject* fork, float delta);
-        float tickUnits() const;
-        float m_lastProbeStep = 0.0f;
-        int m_lastKillerId = -1;
-        int m_lastKillerType = -1;
-        int m_forkDeaths = 0;
-        cocos2d::CCDrawNode* m_drawNode = nullptr;
-        cocos2d::ccColor4F m_holdColor = ccc4f(0.29f, 0.89f, 0.33f, 1.0f);
-        cocos2d::ccColor4F m_holdColorP2 = ccc4f(0.20f, 0.50f, 0.95f, 1.0f);
-        cocos2d::ccColor4F m_releaseColor = ccc4f(0.51f, 0.03f, 0.03f, 1.0f);
-        cocos2d::ccColor4F m_overlapColor = ccc4f(1.0f, 1.0f, 0.0f, 1.0f);
-        cocos2d::ccColor4F m_overlapColorP2 = ccc4f(0.6f, 0.75f, 1.0f, 1.0f);
-
-        static bool isSimulatedPad(GameObjectType type);
-        static bool isSimulatedOrb(GameObjectType type);
-        static bool watchChanged(PredictionWatchKey const& lhs, PredictionWatchKey const& rhs);
-
-        static PredictionWatchKey buildWatchKey(PlayerObject* player);
-        static PlayerStateCapsule capturePlayerState(PlayerObject* player);
-        static void applyPlayerState(PlayerObject* player, PlayerStateCapsule const& state);
-
-        void rebuildPreview(PlayLayer* playLayer);
-        void traceInputPath(PlayLayer* playLayer,
-                            PlayerObject* previewPlayer,
-                            PlayerObject* sourcePlayer,
-                            bool holdingInput);
-        void drawPredictionBounds(PlayerObject* player);
-        void drawSurvivalIndicator(PlayerObject* player, bool isSecondPlayer);
-        void recalculateOverlapColors();
-        void applyPortalHint(PlayerObject* player, int portalId);
-        cocos2d::CCDrawNode* ensureDrawNode();
-
-        static std::vector<CCPoint>
-        buildPlayerBounds(PlayerObject* player, CCRect bounds, float angle);
-        static std::vector<CCPoint> buildRingVertices(CCPoint center, float radius, int segments);
+        void captureFrameDelta(float) {}
+        void noteSimulatedDeath(PlayerObject*, GameObject* = nullptr) {}
+        bool ownsPreviewPlayer(PlayerObject*) const { return false; }
+        void onRealClick(bool, bool) {}
     };
 
 } // namespace gucci

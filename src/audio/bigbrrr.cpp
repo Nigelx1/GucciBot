@@ -1,6 +1,6 @@
 #include "audio/bigbrrr.hpp"
 #include "audio/gameaudiomute.hpp"
-#include "gui/gui.hpp"
+#include "ui/ui.hpp"
 #include <Geode/Bindings.hpp>
 #include <Geode/binding/FMODAudioEngine.hpp>
 #include <algorithm>
@@ -37,15 +37,18 @@ namespace gucci {
         return instance;
     }
 
+    // The old menu's theme numbers (ui::activeThemeId keeps them).
+    enum BotTheme {
+        THEME_GUCCI, THEME_TOOSII, THEME_TOOSII_SYRACUSE, THEME_TOOSII_SACSTATE, THEME_JA, THEME_GIDDEY,
+        THEME_BAM, THEME_SEXYY, THEME_JUICE, THEME_BUTLER, THEME_SAWEETIE, THEME_MAYBACH, THEME_ROMO,
+        THEME_GRIZZLEY, THEME_REDKINGDOM, THEME_LEMONADE, THEME_BRRR, THEME_WAKA, THEME_YOUNGSTA, THEME_KNOCKERZ
+    };
+
     static BotTheme currentTheme() {
-        auto* ui = MenuInterface::get();
-        return ui ? ui->activeTheme : THEME_GUCCI;
+        return static_cast<BotTheme>(ui::activeThemeId());
     }
 
     double BigBrrrManager::kStartOffsetSec() {
-        auto* ui = MenuInterface::get();
-        if (auto* c = ui ? ui->getActiveCustomTheme() : nullptr)
-            return c->dropOffsetSec;
         switch (currentTheme()) {
         case THEME_MAYBACH:
             return 0.0;
@@ -76,9 +79,6 @@ namespace gucci {
         }
     }
     double BigBrrrManager::kBpm() {
-        auto* ui = MenuInterface::get();
-        if (auto* c = ui ? ui->getActiveCustomTheme() : nullptr)
-            return c->bpm;
         switch (currentTheme()) {
         case THEME_MAYBACH:
             return 75.0;
@@ -153,11 +153,9 @@ namespace gucci {
         stop();
         auto path = findFirstAudioFile(getBrrrDir());
         if (path.empty()) {
-            auto* ui = MenuInterface::get();
-            auto* custom = ui ? ui->getActiveCustomTheme() : nullptr;
             std::error_code ec;
-            if (custom && custom->hasAudio) {
-                auto customPath = ui->getCustomThemesDir() / (custom->extension + "_brrr.mp3");
+            if (!ui::activeCustomThemeExtension().empty()) {
+                auto customPath = ui::customThemesDir() / (ui::activeCustomThemeExtension().substr(1) + "_brrr.mp3");
                 if (std::filesystem::exists(customPath, ec))
                     path = customPath;
             }

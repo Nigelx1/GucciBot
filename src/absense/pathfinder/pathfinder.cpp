@@ -16,7 +16,7 @@
 #include "absense/compat/devlog.hpp"
 #include "absense/gpu/client.hpp"
 #include "absense/compat/modal.hpp"
-#include "gui/gui.hpp"
+#include "ui/ui.hpp"
 
 #include <string_view>
 
@@ -45,7 +45,7 @@ static std::filesystem::path gucciMacroPath(PlayLayer* pl, const std::string& su
         if (base.empty()) base = "pathfinder";
     }
     nameOut = base + suffix;
-    return gb->getReplayDir() / (nameOut + gucci::currentThemeExtension(gucci::MenuInterface::get()));
+    return gb->getReplayDir() / (nameOut + gucci::ui::macroExtension());
 }
 
 namespace {

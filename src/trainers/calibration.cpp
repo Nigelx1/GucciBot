@@ -1,5 +1,4 @@
 #include "trainers/calibration.hpp"
-#include "audio/clicksounds.hpp"
 
 #include <Geode/modify/PlayLayer.hpp>
 
@@ -95,10 +94,6 @@ void CalibrationService::tick(float dt) {
 
     timeToNextCue -= dt;
     if (timeToNextCue <= 0.f) {
-        auto* csm = ClickSoundManager::get();
-        if (csm->enabled) {
-            csm->playClick(true, false);
-        }
         waitingForClick = true;
         timeSinceCue = 0.f;
     }

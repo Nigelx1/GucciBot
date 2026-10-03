@@ -1,11 +1,10 @@
 #include "core/GucciBot.hpp"
 #include "analysis/ac/framewindow.hpp"
-#include "gui/gui.hpp"
+#include "ui/ui.hpp"
 #include <fmt/format.h>
 #include "core/brr_format.hpp"
 #include "core/gbr6_format.hpp"
 #include "tools/selfcheck.hpp"
-#include "tools/edit_core_test.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/binding/PauseLayer.hpp>
@@ -470,7 +469,7 @@ namespace gucci {
     fs::path GucciReplaySystem::getCurrentPath() const {
         auto* gb = GucciEngine::get();
         auto dir = gb->getReplayDir();
-        for (auto& ext : allKnownMacroExtensions()) {
+        for (auto& ext : ui::knownMacroExtensions()) {
             std::error_code ec;
             auto candidate = dir / (gb->replayName + ext);
             if (fs::exists(candidate, ec))
@@ -824,7 +823,7 @@ namespace gucci {
     bool GucciEngine::loadTrainerMacro(const std::string& stem) {
         auto dir = getReplayDir();
         fs::path found;
-        for (auto& ext : allKnownMacroExtensions()) {
+        for (auto& ext : ui::knownMacroExtensions()) {
             std::error_code ec;
             auto candidate = dir / (stem + ext);
             if (fs::exists(candidate, ec)) {
@@ -1292,7 +1291,7 @@ namespace gucci {
             return;
         }
 
-        auto known = allKnownMacroExtensions();
+        auto known = ui::knownMacroExtensions();
         std::error_code ec;
         for (auto& it : fs::directory_iterator(dir, ec)) {
             if (!it.is_regular_file())
@@ -2001,7 +2000,7 @@ namespace gucci {
     bool GucciEngine::convertToBRR(const std::string& name) {
         auto dir = getReplayDir();
         auto isNative = [](const std::string& e) {
-            auto known = allKnownMacroExtensions();
+            auto known = ui::knownMacroExtensions();
             return std::find(known.begin(), known.end(), e) != known.end();
         };
 
@@ -2370,7 +2369,7 @@ namespace gucci {
             fs::create_directories(jupDir);
 
             auto findIn = [](fs::path const& dir, std::string const& stem) -> fs::path {
-                for (auto& ext : allKnownMacroExtensions()) {
+                for (auto& ext : ui::knownMacroExtensions()) {
                     std::error_code ec;
                     auto candidate = dir / (stem + ext);
                     if (fs::exists(candidate, ec))
@@ -2491,8 +2490,7 @@ namespace gucci {
         log::info("[GucciBot] ========================================");
         log::info("[GucciBot] " MOD_VERSION " initialized — {} macros", storedMacros.size());
 
-        gbcheck::run(5, 4, GBR6_VERSION, BRR_FORMAT_VERSION, MOD_VERSION,
-                     &editcoretest::run);
+        gbcheck::run(5, 4, GBR6_VERSION, BRR_FORMAT_VERSION, MOD_VERSION);
     }
 
     static PauseLayer* findOpenPauseLayerRecursive(CCNode* node) {

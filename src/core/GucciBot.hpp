@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-09-30-by (Recording, issue 14: dying in practice mode while a button was held at the checkpoint deleted that press and ignored one release, so the replay lost the hold and later tries left a release with no press before it. The press now stays, and a button the respawned player is not holding is released on the respawn tick. On top of -bw and -bx, the Absense pathfinder fixes for the Bloodbath UFO loop. UNTESTED in-game.)"
+    "2026-10-02-bz (Every line derived from ToastyReplay is gone, its author withdrew permission. New menu written from scratch: Macro, Hacks, Pathfinder, Render, Settings, Credits. Temporarily gone until rebuilt: frame editor, hitboxes, click sounds, path preview and the other look-ahead features, Classic pathfinder, old BRR macro loading, the trainer and Calculate settings pages. UNTESTED in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

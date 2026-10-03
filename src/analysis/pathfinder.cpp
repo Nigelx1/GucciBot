@@ -2,7 +2,7 @@
 
 #include "analysis/trajectory.hpp"
 
-#include "gui/gui.hpp" // currentThemeExtension, for auto-saving the solved macro
+#include "ui/ui.hpp" // macroExtension, for auto-saving the solved macro
 
 #include <Geode/Geode.hpp>
 #include <Geode/binding/PauseLayer.hpp>
@@ -1538,7 +1538,7 @@ namespace gucci {
             // if they have, that name is theirs and we don't touch it.
             if (gb->replayName.empty()) {
                 auto dir = Mod::get()->getSaveDir() / "replays";
-                std::string ext = currentThemeExtension(MenuInterface::get());
+                std::string ext = ui::macroExtension();
                 // Named after the level rather than "pathfinder" (Nigel's ask,
                 // 2026-09-13). Level names are free text and routinely contain
                 // characters that aren't legal in a Windows filename, so strip
@@ -1568,7 +1568,7 @@ namespace gucci {
             }
 
             auto savePath =
-                Mod::get()->getSaveDir() / "replays" / (gb->replayName + currentThemeExtension(MenuInterface::get()));
+                Mod::get()->getSaveDir() / "replays" / (gb->replayName + ui::macroExtension());
             if (gb->replayBackupsEnabled)
                 gb->replay.backupExisting(savePath);
             gb->replay.save(savePath);
