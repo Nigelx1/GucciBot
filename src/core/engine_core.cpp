@@ -2175,24 +2175,94 @@ namespace gucci {
         return out;
     }
 
-    void GucciEngine::saveBotSettingsPreset(const std::string& name) {
+    // Every preset field in one place, so saving, reading from disk and loading
+    // can't drift apart again. They had: a preset captured 16 settings, wrote 8
+    // to disk (lockDeltaMode among them, never captured, so always 0) and read
+    // 5 back at launch, and loading set maintain gravity to false instead of
+    // the preset's value and left 6 captured settings out.
+    static BotSettingsPreset capturePreset(GucciEngine& e, std::string const& name) {
         BotSettingsPreset p;
         p.name = name;
-        p.tps = updater.m_tps;
-        p.speedhack = updater.m_speedhack;
-        p.lockDelta = updater.m_lockDelta;
-        p.backwardsStepping = updater.m_backwardsStepping;
-        p.ssbFix = updater.m_ssbFix;
-        p.extrapolateFrames = updater.m_extrapolateFrames;
-        p.preventDeath = updater.m_preventDeath;
-        p.autoFlipOnDeath = updater.m_autoFlipOnDeath;
-        p.maintainGravity = replay.m_maintainGravity;
-        p.mirrorInputs = replay.m_mirrorInputs;
-        p.noclip = noclipEnabled;
-        p.autosaveInterval = autosaveIntervalSec;
-        p.autosaveAtInterval = autosaveAtInterval;
-        p.autosaveAtLevelEnd = autosaveAtLevelEnd;
+        p.tps = e.updater.m_tps;
+        p.speedhack = e.updater.m_speedhack;
+        p.lockDelta = e.updater.m_lockDelta;
+        p.lockDeltaMode = static_cast<int>(e.updater.m_lockDeltaMode);
+        p.backwardsStepping = e.updater.m_backwardsStepping;
+        p.maxBackstepFrames = e.updater.m_maxBackstepFrames;
+        p.ssbFix = e.updater.m_ssbFix;
+        p.extrapolateFrames = e.updater.m_extrapolateFrames;
+        p.preventDeath = e.updater.m_preventDeath;
+        p.autoFlipOnDeath = e.updater.m_autoFlipOnDeath;
+        p.maintainGravity = e.replay.m_maintainGravity;
+        p.mirrorInputs = e.replay.m_mirrorInputs;
+        p.noclip = e.noclipEnabled;
+        p.autosaveInterval = e.autosaveIntervalSec;
+        p.autosaveAtInterval = e.autosaveAtInterval;
+        p.autosaveAtLevelEnd = e.autosaveAtLevelEnd;
+        return p;
+    }
 
+    // Version 2 files hold every field. Older ones hold a few, and their
+    // lockDeltaMode was never captured (always 0), so it is ignored there.
+    static matjson::Value presetToJson(BotSettingsPreset const& p) {
+        return matjson::makeObject({
+            {"version", 2},
+            {"name", p.name},
+            {"tps", p.tps},
+            {"speedhack", p.speedhack},
+            {"lockDelta", p.lockDelta},
+            {"lockDeltaMode", p.lockDeltaMode},
+            {"backwardsStepping", p.backwardsStepping},
+            {"maxBackstepFrames", static_cast<int>(p.maxBackstepFrames)},
+            {"ssbFix", p.ssbFix},
+            {"extrapolateFrames", p.extrapolateFrames},
+            {"preventDeath", p.preventDeath},
+            {"autoFlipOnDeath", p.autoFlipOnDeath},
+            {"maintainGravity", p.maintainGravity},
+            {"mirrorInputs", p.mirrorInputs},
+            {"noclip", p.noclip},
+            {"autosaveInterval", p.autosaveInterval},
+            {"autosaveAtInterval", p.autosaveAtInterval},
+            {"autosaveAtLevelEnd", p.autosaveAtLevelEnd},
+        });
+    }
+
+    // Fields the file lacks keep what `p` already holds.
+    static void presetFromJson(matjson::Value const& v, BotSettingsPreset& p) {
+        auto number = [&](const char* key, double& out) {
+            if (auto n = v[key].asDouble())
+                out = n.unwrap();
+        };
+        auto flag = [&](const char* key, bool& out) {
+            if (auto b = v[key].asBool())
+                out = b.unwrap();
+        };
+        number("tps", p.tps);
+        number("speedhack", p.speedhack);
+        flag("lockDelta", p.lockDelta);
+        if (v["version"].asInt().unwrapOr(1) >= 2) {
+            double mode = p.lockDeltaMode;
+            number("lockDeltaMode", mode);
+            p.lockDeltaMode = std::clamp(static_cast<int>(mode), 0, 1);
+        }
+        flag("backwardsStepping", p.backwardsStepping);
+        double frames = p.maxBackstepFrames;
+        number("maxBackstepFrames", frames);
+        p.maxBackstepFrames = static_cast<uint32_t>(std::clamp(frames, 1.0, 100000.0));
+        flag("ssbFix", p.ssbFix);
+        flag("extrapolateFrames", p.extrapolateFrames);
+        flag("preventDeath", p.preventDeath);
+        flag("autoFlipOnDeath", p.autoFlipOnDeath);
+        flag("maintainGravity", p.maintainGravity);
+        flag("mirrorInputs", p.mirrorInputs);
+        flag("noclip", p.noclip);
+        number("autosaveInterval", p.autosaveInterval);
+        flag("autosaveAtInterval", p.autosaveAtInterval);
+        flag("autosaveAtLevelEnd", p.autosaveAtLevelEnd);
+    }
+
+    void GucciEngine::saveBotSettingsPreset(const std::string& name) {
+        BotSettingsPreset p = capturePreset(*this, name);
         auto it = std::find_if(settingsPresets.begin(), settingsPresets.end(), [&](auto& x) {
             return x.name == name;
         });
@@ -2204,13 +2274,7 @@ namespace gucci {
         auto dir = getPresetsDir();
         fs::create_directories(dir);
         std::ofstream f(dir / (name + ".json"));
-        f << "{\"name\":\"" << p.name << "\""
-          << ",\"tps\":" << p.tps << ",\"speedhack\":" << p.speedhack
-          << ",\"lockDelta\":" << (p.lockDelta ? "true" : "false")
-          << ",\"lockDeltaMode\":" << p.lockDeltaMode
-          << ",\"ssbFix\":" << (p.ssbFix ? "true" : "false")
-          << ",\"preventDeath\":" << (p.preventDeath ? "true" : "false")
-          << ",\"noclip\":" << (p.noclip ? "true" : "false") << "}";
+        f << presetToJson(p).dump();
     }
 
     bool GucciEngine::loadBotSettingsPreset(const std::string& name) {
@@ -2219,17 +2283,44 @@ namespace gucci {
         });
         if (it == settingsPresets.end())
             return false;
-        auto& p = *it;
+        auto const& p = *it;
         updater.setTps(p.tps);
         updater.m_speedhack = p.speedhack;
         updater.m_lockDelta = p.lockDelta;
+        updater.m_lockDeltaMode = static_cast<GucciUpdater::LockDeltaMode>(std::clamp(p.lockDeltaMode, 0, 1));
+        updater.m_backwardsStepping = p.backwardsStepping;
+        updater.m_maxBackstepFrames = p.maxBackstepFrames;
         updater.m_ssbFix = p.ssbFix;
+        updater.m_extrapolateFrames = p.extrapolateFrames;
         updater.m_preventDeath = p.preventDeath;
-        replay.m_maintainGravity = false;
+        updater.m_autoFlipOnDeath = p.autoFlipOnDeath;
+        replay.m_maintainGravity = p.maintainGravity;
+        replay.m_mirrorInputs = p.mirrorInputs;
         noclipEnabled = p.noclip;
         autosaveIntervalSec = p.autosaveInterval;
         autosaveAtInterval = p.autosaveAtInterval;
         autosaveAtLevelEnd = p.autosaveAtLevelEnd;
+        applyIntervalAutosave();
+
+        // Saved under the keys loadEngineSettings reads, so a loaded preset is
+        // still in force after a restart; it used to last only until then.
+        auto* mod = Mod::get();
+        mod->setSavedValue<float>("eng_tick_rate", static_cast<float>(updater.m_tps));
+        mod->setSavedValue<float>("eng_speed", static_cast<float>(p.speedhack));
+        mod->setSavedValue<bool>("feat_lock_delta", p.lockDelta);
+        mod->setSavedValue<int>("updater_lockDeltaMode", static_cast<int>(updater.m_lockDeltaMode));
+        mod->setSavedValue<bool>("feat_backwards_step", p.backwardsStepping);
+        mod->setSavedValue<int>("feat_back_step_count", static_cast<int>(p.maxBackstepFrames));
+        mod->setSavedValue<bool>("feat_scroll_speed_fix", p.ssbFix);
+        mod->setSavedValue<bool>("feat_frame_extrapolation", p.extrapolateFrames);
+        mod->setSavedValue<bool>("feat_prevent_death", p.preventDeath);
+        mod->setSavedValue<bool>("feat_auto_flip", p.autoFlipOnDeath);
+        mod->setSavedValue<bool>("feat_maintain_gravity", p.maintainGravity);
+        mod->setSavedValue<bool>("feat_mirror_inputs", p.mirrorInputs);
+        mod->setSavedValue<bool>("hack_noclip", p.noclip);
+        mod->setSavedValue<double>("feat_autosave_interval_sec", autosaveIntervalSec);
+        mod->setSavedValue<bool>("feat_autosave_interval", p.autosaveAtInterval);
+        mod->setSavedValue<bool>("feat_autosave_end", p.autosaveAtLevelEnd);
         return true;
     }
 
@@ -2450,30 +2541,16 @@ namespace gucci {
         for (auto& entry : fs::directory_iterator(getPresetsDir(), ec)) {
             if (entry.path().extension() != ".json")
                 continue;
-            BotSettingsPreset p;
-            p.name = entry.path().stem().string();
             std::ifstream fin(entry.path());
             std::string json((std::istreambuf_iterator<char>(fin)), {});
-            auto ext = [&](const std::string& key) -> std::string {
-                auto pos = json.find("\"" + key + "\":");
-                if (pos == std::string::npos)
-                    return "";
-                pos += key.size() + 3;
-                auto end = json.find_first_of(",}", pos);
-                auto val = json.substr(pos, end - pos);
-                if (!val.empty() && val.front() == '"')
-                    val = val.substr(1, val.size() - 2);
-                return val;
-            };
-            try {
-                p.tps = std::stod(ext("tps"));
-                p.lockDelta = ext("lockDelta") == "true";
-                p.ssbFix = ext("ssbFix") == "true";
-                p.preventDeath = ext("preventDeath") == "true";
-                p.noclip = ext("noclip") == "true";
-                settingsPresets.push_back(p);
-            } catch (...) {
-            }
+            auto parsed = matjson::parse(json);
+            if (!parsed)
+                continue;
+            // Anything an older preset file lacks keeps the settings this
+            // launch started with, rather than the struct's defaults.
+            BotSettingsPreset p = capturePreset(*this, entry.path().stem().string());
+            presetFromJson(parsed.unwrap(), p);
+            settingsPresets.push_back(p);
         }
 
         applyIntervalAutosave();

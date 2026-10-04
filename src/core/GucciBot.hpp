@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-03-cj (Hacks page: settings presets are reachable again, noclip death flash has a saved switch, and the practice range has its switch. UNTESTED in-game.)"
+    "2026-10-03-ck (Settings presets keep every setting: saving wrote 8 of 16 fields and launch read back 5, loading forced maintain gravity off and skipped 6 fields, and nothing loaded survived a restart. All fixed. UNTESTED in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
