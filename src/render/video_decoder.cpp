@@ -147,6 +147,8 @@ namespace gucci {
         m_durationSec = 0.0;
         m_timeBase = 0.0;
         m_lastDecodedSec = -1.0;
+        m_prevDecodedSec = -1.0;
+        m_frameDurationSec = 1.0 / 30.0;
     }
 
     bool VideoDecoder::decodeNextFrame() {
@@ -229,51 +231,37 @@ namespace gucci {
             return false;
         auto* ff = SLRenderer::get()->ff;
 
-        // Real, traced bug (2026-08-31): the old strict `seconds <
-        // m_lastDecodedSec` check had no tolerance, but "decode forward"
-        // below always lands on whatever the NEXT frame's actual pts happens
-        // to be -- essentially never exactly equal to the requested
-        // `seconds`. With a static or near-static requested time (Video Mode
-        // open but nothing actually advancing jupiterClickBarPosSec), that
-        // made this function oscillate call to call: decode-forward lands
-        // one frame past the target -> the following call sees `seconds <
-        // m_lastDecodedSec` -> seeks backward to the target frame -> the
-        // call after THAT decodes forward past it again -> repeat forever,
-        // alternating between two adjacent real frames every other call.
-        // Both frames decode and upload successfully every time -- that's
-        // why every CPU-side log line looked clean while Nigel still saw a
-        // real flicker. Fix: treat "still within about one frame's duration
-        // of what's already decoded" as "nothing to do" in both directions,
-        // rather than only guarding the forward-jump case.
+        // The frame served for `seconds` is the first one whose timestamp is
+        // at or after it, so the frame already decoded is still the answer
+        // while `seconds` lies after the frame before it and no later than
+        // it. That rule is what keeps a clock that sits still (Video Mode
+        // open with the bar paused) on one frame instead of seeking back and
+        // forth between two (the 2026-08-31 flicker).
         //
-        // Real follow-up bug, same day: this was originally a flat 0.06s
-        // constant ("~1 frame at >=16fps") -- but the bundled video is
-        // actually 60fps (confirmed via a standalone harness against the
-        // real file: 30 raw frames decoded per 0.5s), where one real frame
-        // is ~0.0167s. A 0.06s dead zone is well over 3 real frames wide at
-        // that rate, so it was silently swallowing most genuine frame
-        // advances too -- not just the stuck-clock case it was built for --
-        // capping effective playback at ~16fps no matter how fast decoding
-        // itself was. That's what Nigel actually meant by "way less frames
-        // than mpv," not a decode/GPU performance problem. Now derived from
-        // the stream's own real frame rate (m_frameDurationSec, set in
-        // open()) instead of a fixed guess, so it stays "about 1.5 frames"
-        // for whatever video is loaded rather than a constant tuned for one
-        // specific file.
-        const double kFrameTolerance = m_frameDurationSec * 1.5;
-        if (m_lastDecodedSec >= 0.0 && seconds >= m_lastDecodedSec - kFrameTolerance &&
-            seconds <= m_lastDecodedSec + kFrameTolerance) {
-            return false; // current frame is still the right one to show
+        // It replaced a dead zone of 1.5 frames either side of the decoded
+        // frame (2026-10-03). On a clock advancing in real time that zone
+        // let a frame through only every two or three frames, so the 60 fps
+        // showcase video played at about 20; this one advances on every
+        // frame boundary the clock crosses.
+        if (m_lastDecodedSec >= 0.0) {
+            double const before =
+                m_prevDecodedSec >= 0.0 ? m_prevDecodedSec : m_lastDecodedSec - m_frameDurationSec;
+            if (seconds > before && seconds <= m_lastDecodedSec)
+                return false;
         }
 
-        bool needSeek = m_lastDecodedSec < 0.0 || seconds < m_lastDecodedSec - kFrameTolerance ||
-                       (seconds - m_lastDecodedSec) > 2.0;
+        // Backwards, or far enough forwards that decoding every frame in
+        // between would cost more than a seek.
+        bool const needSeek = m_lastDecodedSec < 0.0 || seconds <= m_lastDecodedSec ||
+                              (seconds - m_lastDecodedSec) > 2.0;
         if (needSeek) {
             int64_t targetTs = (int64_t)(seconds / m_timeBase);
             if (ff->av_seek_frame(m_formatCtx, m_videoStreamIndex, targetTs, AVSEEK_FLAG_BACKWARD) <
                 0)
                 return false;
             ff->avcodec_flush_buffers(m_codecCtx);
+            m_lastDecodedSec = -1.0;
+            m_prevDecodedSec = -1.0;
         }
 
         bool gotAny = false;
@@ -284,7 +272,9 @@ namespace gucci {
                 break; // ran out of frames -- use the last good one we have
             }
             gotAny = true;
-            double pts = (double)m_frame->pts * m_timeBase;
+            int64_t const ts = m_frame->pts != AV_NOPTS_VALUE ? m_frame->pts : m_frame->best_effort_timestamp;
+            double pts = (double)ts * m_timeBase;
+            m_prevDecodedSec = m_lastDecodedSec;
             m_lastDecodedSec = pts;
             if (pts >= seconds)
                 break;
