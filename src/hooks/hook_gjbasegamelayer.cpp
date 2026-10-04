@@ -2,6 +2,7 @@
 #include "analysis/trajectory.hpp"
 #include "audio/playsound.hpp"
 #include "trainers/calibration.hpp"
+#include "hacks/indicator.hpp"
 #include "hooks/util_midhook.hpp"
 #include "trainers/jupiterghost.hpp"
 #include "trainers/trainerghost.hpp"
@@ -564,9 +565,9 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         if (button == 1) {
             triggerClickAudio(!player1, button, pressed);
             if (!gb->isPlaying()) {
-                if (gb->survivalIndicator) {
-                    TrajectoryPredictionService::get().onRealClick(!player1, pressed);
-                }
+                // The Survival Indicator's flash and accuracy (hacks/indicator.hpp).
+                if (gb->survivalIndicator)
+                    indicator::onRealClick(!player1, pressed);
                 if (pressed) {
                     CalibrationService::get().onRealClick();
                 }

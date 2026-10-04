@@ -392,7 +392,7 @@ namespace gucci::clicks {
             return pick(banks[kStandIn[kind]]);
         }
 
-        void play(FMOD::Sound* sound) {
+        void play(FMOD::Sound* sound, float pitch = 1.f) {
             if (!sound || !g_system)
                 return;
             std::erase_if(g_voices, [](FMOD::Channel* voice) {
@@ -409,6 +409,8 @@ namespace gucci::clicks {
                 return;
             voice->setVolumeRamp(false);
             voice->setVolume(std::clamp(settings().volume, 0.f, 2.f));
+            if (pitch != 1.f)
+                voice->setPitch(std::clamp(pitch, 0.25f, 4.f));
             voice->setPaused(false);
             g_voices.push_back(voice);
         }
@@ -566,9 +568,9 @@ namespace gucci::clicks {
         return st;
     }
 
-    void playClick(bool p2) {
+    void playClick(bool p2, float pitch) {
         Pack& pack = packFor(p2);
-        play(soundFor(pack, p2, Click));
+        play(soundFor(pack, p2, Click), pitch);
     }
 
 } // namespace gucci::clicks

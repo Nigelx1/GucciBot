@@ -2430,7 +2430,11 @@ namespace gucci {
 
         // Hacks.
         noclipEnabled = pick(false, "hack_noclip", nullptr);
-        noclipThreshold = pick(0.f, "hack_noclipThreshold", nullptr);
+        // A floor for noclip accuracy (hacks/noclip_accuracy.hpp), 0..1. A new
+        // key: the old hack_noclipThreshold switched noclip off past a share of
+        // the level's time, a different meaning, so it is not read.
+        noclipThreshold = std::clamp(pick(0.f, "hack_noclip_die_below", nullptr), 0.f, 1.f);
+        noclipAccuracyVisible = pick(false, "hack_noclip_accuracy", nullptr);
         noclipDeathFlash = pick(true, "hack_noclip_flash", nullptr);
         showHitboxes = pick(false, "hack_hitboxes", nullptr);
         pathPreview = pick(false, "hack_trajectory", nullptr);

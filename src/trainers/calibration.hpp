@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Geode/Geode.hpp>
+#include <chrono>
 #include <vector>
 
 using namespace geode::prelude;
@@ -39,6 +40,10 @@ namespace gucci {
         float timeToNextCue = 0.f;
         bool waitingForClick = false;
         float timeSinceCue = 0.f;
+        // When the last cue's sound was started. A sample is measured from
+        // here on the wall clock rather than by adding up frame times, so it
+        // is not rounded to a frame.
+        std::chrono::steady_clock::time_point cueAt{};
         std::vector<float> samples;
 
         void start(int gamemodeIndex);

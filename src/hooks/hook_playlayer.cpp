@@ -14,6 +14,7 @@
 #include "absense/trajectory/trajectory.hpp"
 #include "absense/judge.hpp"
 #include "hacks/hitboxes.hpp"
+#include "hacks/noclip_accuracy.hpp"
 #include "trainers/jupiterghost.hpp"
 #include "trainers/trainerghost.hpp"
 
@@ -724,12 +725,11 @@ class $modify(GB7PlayLayer, PlayLayer) {
             return;
         }
 
-        if (gb->noclipEnabled && obj != m_anticheatSpike) {
+        // Noclip accuracy counts the tick (hacks/noclip_accuracy.hpp); a hit
+        // that would take the attempt under its "die below" line is not
+        // blocked, and the death goes ahead as if noclip were off.
+        if (gb->noclipEnabled && obj != m_anticheatSpike && noclipacc::onBlockedDeath()) {
             gb->noclipDeathBlocked = true;
-            float total = m_levelLength > 0.f ? m_levelLength : 1.f;
-            gb->noclipAccuracy = std::clamp((float)(m_gameState.m_levelTime / total), 0.f, 1.f);
-            if (gb->noclipThreshold > 0.f && gb->noclipAccuracy >= gb->noclipThreshold)
-                gb->noclipEnabled = false;
             if (gb->noclipDeathFlash) {
                 player->runAction(
                     CCSequence::create(CCTintTo::create(0.1f,

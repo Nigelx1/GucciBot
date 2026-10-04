@@ -101,11 +101,6 @@ namespace gucci {
         // A copy died where the caller's hook caught it first.
         void noteSimulatedDeath(PlayerObject* player, GameObject* object = nullptr);
 
-        // The Survival Indicator's click hook (hook_gjbasegamelayer.cpp). That
-        // indicator was on the Indicators page, which is not rebuilt yet; this
-        // keeps the call compiling and does nothing.
-        void onRealClick(bool, bool) {}
-
         cocos2d::ccColor4F holdColor(bool player2) const {
             return player2 ? cocos2d::ccColor4F{0.2f, 0.5f, 0.95f, 1.f} : cocos2d::ccColor4F{0.3f, 0.9f, 0.35f, 1.f};
         }

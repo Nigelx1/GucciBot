@@ -1,5 +1,7 @@
 #include "trainers/calibration.hpp"
 
+#include "audio/clicks.hpp"
+
 #include <Geode/modify/PlayLayer.hpp>
 
 #include <cmath>
@@ -96,6 +98,10 @@ void CalibrationService::tick(float dt) {
     if (timeToNextCue <= 0.f) {
         waitingForClick = true;
         timeSinceCue = 0.f;
+        // The metronome's tick: the same click sound the Survival Indicator's
+        // cue plays, so what is measured is how long you take to answer it.
+        clicks::playClick(false);
+        cueAt = std::chrono::steady_clock::now();
     }
 }
 
@@ -103,7 +109,7 @@ void CalibrationService::onRealClick() {
     if (!active || !waitingForClick)
         return;
 
-    samples.push_back(timeSinceCue);
+    samples.push_back(std::chrono::duration<float>(std::chrono::steady_clock::now() - cueAt).count());
     waitingForClick = false;
     repsDone++;
 

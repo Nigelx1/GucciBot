@@ -86,7 +86,9 @@ namespace gucci::clicks {
 
     // One click from player 1's (or player 2's) pack at the click volume,
     // whatever the switches say: for callers with a switch of their own, like
-    // the trainers' metronome, and the settings page's test button.
-    void playClick(bool p2);
+    // the trainers' metronome, and the settings page's test button. `pitch`
+    // shifts it (1 plays it as it is): the Survival Indicator's cue
+    // (hacks/indicator.cpp) rises with how little room is left.
+    void playClick(bool p2, float pitch = 1.f);
 
 } // namespace gucci::clicks
