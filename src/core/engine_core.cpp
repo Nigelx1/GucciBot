@@ -652,53 +652,6 @@ namespace gucci {
         log::info("[GucciBot] Macro path: loaded {} sample(s) from sidecar", samples.size());
     }
 
-    static void loadJupiterMacroData(const fs::path& path, GucciEngine::TrainerMacroData& out) {
-        out = {};
-
-        std::ifstream f(path, std::ios::binary | std::ios::ate);
-        if (!f)
-            return;
-        auto sz = static_cast<size_t>(f.tellg());
-        f.seekg(0);
-        std::vector<uint8_t> bytes(sz);
-        if (sz)
-            f.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(sz));
-        f.close();
-        if (bytes.empty())
-            return;
-
-        auto* legacy = BRRMacro::deserialize(bytes);
-        if (!legacy)
-            return;
-        if (legacy->inputs.empty()) {
-            delete legacy;
-            return;
-        }
-
-        double tps = legacy->framerate > 0.0 ? legacy->framerate : 240.0;
-        std::unordered_map<int, uint32_t> openPress;
-        for (auto& inp : legacy->inputs) {
-            int key = (int)inp.actionType * 2 + (inp.isPlayer2() ? 1 : 0);
-            if (inp.isPressed()) {
-                openPress[key] = (uint32_t)inp.tick;
-            } else {
-                auto it = openPress.find(key);
-                if (it != openPress.end()) {
-                    out.clickIntervalsSec.push_back({it->second / tps, (double)inp.tick / tps});
-                    openPress.erase(it);
-                }
-            }
-        }
-        out.clickBarTps = tps;
-        delete legacy;
-
-        loadPathSamples(path, out.pathSamples);
-        out.loaded = !out.clickIntervalsSec.empty() || !out.pathSamples.empty();
-        log::info("[GucciBot] Jupiter macro data: {} click interval(s), {} path sample(s)",
-                  out.clickIntervalsSec.size(),
-                  out.pathSamples.size());
-    }
-
     static void loadTrainerMacroData(const fs::path& path, GucciEngine::TrainerMacroData& out) {
         out = {};
 
@@ -1999,6 +1952,72 @@ namespace gucci {
 
     } // namespace
 
+    // ---- The JMF trainer's macro
+    //
+    // It ships as resources/jupiter_my_favourite.gdr and is read straight from
+    // there with the GDR readers above: the trainer only needs its click/hold
+    // windows. It used to be converted into a hidden legacy macro first, but
+    // that writer left with the ToastyReplay code in build -bz, so the
+    // conversion produced nothing and the JMF trainer came up empty.
+    //
+    // A .gdr carries inputs only, no positions, so the macro ghost's path is
+    // kept in a sidecar of its own, named after this (never written) file in
+    // the jupiter folder. The JMF page fills it from a played macro's path
+    // (setJupiterMacroPath).
+    static fs::path jupiterMacroAnchor() {
+        return Mod::get()->getSaveDir() / "jupiter" / "jupiter_my_favourite.gdr";
+    }
+
+    static void loadBundledJupiterMacro(GucciEngine::TrainerMacroData& out) {
+        out = {};
+        auto const bundled = Mod::get()->getResourcesDir() / "jupiter_my_favourite.gdr";
+        std::ifstream f(bundled, std::ios::binary | std::ios::ate);
+        if (!f)
+            return;
+        auto const sz = static_cast<size_t>(f.tellg());
+        f.seekg(0);
+        std::vector<uint8_t> bytes(sz);
+        if (sz)
+            f.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(sz));
+        f.close();
+
+        double tps = 240.0;
+        std::vector<GdrJsonInput> inputs;
+        if (!gdrBinaryExtract(bytes, tps, inputs)) {
+            inputs.clear();
+            tps = 240.0;
+            gdrJsonExtract(std::string(bytes.begin(), bytes.end()), tps, inputs);
+        }
+        if (tps <= 0.0)
+            tps = 240.0;
+
+        // Press and release pair up per button and player, as the GBR6 path
+        // in loadTrainerMacroData does. A release with no press before it
+        // (the file opens with one at frame 1) has no window and is skipped.
+        std::unordered_map<int, long long> openPress;
+        for (auto const& in : inputs) {
+            int const key = in.button * 2 + (in.player2 ? 1 : 0);
+            if (in.down) {
+                openPress[key] = in.frame;
+            } else if (auto it = openPress.find(key); it != openPress.end()) {
+                out.clickIntervalsSec.push_back({(double)it->second / tps, (double)in.frame / tps});
+                openPress.erase(it);
+            }
+        }
+        out.clickBarTps = tps;
+        loadPathSamples(jupiterMacroAnchor(), out.pathSamples);
+        out.loaded = !out.clickIntervalsSec.empty();
+        log::info("[GucciBot] Jupiter macro: {} click interval(s) at {} TPS, {} path sample(s)",
+                  out.clickIntervalsSec.size(),
+                  tps,
+                  out.pathSamples.size());
+    }
+
+    void GucciEngine::setJupiterMacroPath(std::vector<MacroPathSample> const& samples) {
+        jupiterMacro.pathSamples = samples;
+        savePathSamples(jupiterMacroAnchor(), samples);
+    }
+
     bool GucciEngine::convertToBRR(const std::string& name) {
         auto dir = getReplayDir();
         auto isNative = [](const std::string& e) {
@@ -2470,67 +2489,20 @@ namespace gucci {
         fs::create_directories(getPresetsDir());
 
         {
-            auto jupDir = Mod::get()->getSaveDir() / "jupiter";
-            fs::create_directories(jupDir);
+            std::error_code dirEc;
+            fs::create_directories(Mod::get()->getSaveDir() / "jupiter", dirEc);
+            loadBundledJupiterMacro(jupiterMacro);
 
-            auto findIn = [](fs::path const& dir, std::string const& stem) -> fs::path {
-                for (auto& ext : ui::knownMacroExtensions()) {
-                    std::error_code ec;
-                    auto candidate = dir / (stem + ext);
-                    if (fs::exists(candidate, ec))
-                        return candidate;
-                }
-                return {};
-            };
-
-            auto hidden = findIn(jupDir, "jupiter_my_favourite");
-            if (!hidden.empty())
-                loadJupiterMacroData(hidden, jupiterMacro);
-
-            if (!jupiterMacro.loaded) {
-                std::error_code rmEc;
-                if (!hidden.empty())
-                    fs::remove(hidden, rmEc);
-
-                auto bundled = Mod::get()->getResourcesDir() / "jupiter_my_favourite.gdr";
-                std::error_code ec;
-                if (fs::exists(bundled, ec)) {
-                    const std::string seedStem = "__guccibot_jupiter_seed";
-                    auto seedDest = getReplayDir() / (seedStem + ".gdr");
-                    fs::copy_file(bundled, seedDest, fs::copy_options::overwrite_existing, ec);
-                    convertToBRR(seedStem);
-                    auto converted = findIn(getReplayDir(), seedStem);
-                    if (!converted.empty()) {
-                        auto dest =
-                            jupDir / ("jupiter_my_favourite" + converted.extension().string());
-                        fs::rename(converted, dest, ec);
-                        if (!ec)
-                            hidden = dest;
-                    }
-                    fs::remove(seedDest, ec);
-                    reloadMacroList();
-                    if (!hidden.empty())
-                        loadJupiterMacroData(hidden, jupiterMacro);
-                }
-            }
-
-            // Diagnostic added 2026-08-31: Nigel reported the Click Trainer's
-            // Resume button doing nothing, traced to drawJupiterClickBar's
-            // "No click data yet." early-out when jupiterMacro.clickIntervalsSec
-            // is empty -- but a standalone byte-for-byte replica of
-            // loadJupiterMacroData's own parsing logic, run against the exact
-            // .brrr file sitting in his save folder, decoded it cleanly (467
-            // real inputs, 233 matched click pairs, zero unmatched). So the
-            // default macro file itself isn't the problem -- this records
-            // what the LIVE game actually ends up with in jupiterMacro after
-            // this whole block runs, dedicated file since Geode's own
-            // console log isn't persisted anywhere reachable on this machine.
+            // What the live game ended up with, in its own file: the JMF
+            // trainer has come up empty before (2026-08-31, and again after
+            // build -bz) with nothing else to say why.
             std::ofstream jmLog(Mod::get()->getSaveDir() / "guccibot_jupitermacro.log",
                                 std::ios::trunc);
             if (jmLog) {
-                jmLog << "hidden_path_found=" << (!hidden.empty() ? hidden.string() : "<none>")
+                jmLog << "source=" << (Mod::get()->getResourcesDir() / "jupiter_my_favourite.gdr").string()
                       << "\n";
                 jmLog << "jupiterMacro.loaded=" << (jupiterMacro.loaded ? 1 : 0) << "\n";
+                jmLog << "jupiterMacro.clickBarTps=" << jupiterMacro.clickBarTps << "\n";
                 jmLog << "jupiterMacro.clickIntervalsSec.size()="
                       << jupiterMacro.clickIntervalsSec.size() << "\n";
                 jmLog << "jupiterMacro.pathSamples.size()=" << jupiterMacro.pathSamples.size()

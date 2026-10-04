@@ -833,6 +833,10 @@ namespace gucci {
         float clickIndicatorOkMs = 60.f;
 
         bool loadTrainerMacro(const std::string& stem);
+        // The JMF macro's ghost path: the bundled .gdr has inputs only, so the
+        // JMF page hands over a played macro's path and this keeps it (memory
+        // and a sidecar in the jupiter folder). Empty clears it.
+        void setJupiterMacroPath(std::vector<MacroPathSample> const& samples);
 
         // Scores one real click (press or release) against `intervals`
         // (a macro's own press/release-time-pairs, in seconds) using

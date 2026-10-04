@@ -1,5 +1,6 @@
 #include "core/GucciBot.hpp"
 #include "hacks/autoclicker.hpp"
+#include "trainers/trainer_core.hpp"
 #include "ui/ui.hpp"
 
 #include <Geode/Geode.hpp>
@@ -77,13 +78,10 @@ class $modify(GucciKeys, CCKeyboardDispatcher) {
         if (ImGui::GetIO().WantTextInput)
             return CCKeyboardDispatcher::dispatchKeyboardMSG(key, down, repeat, timestamp);
 
-        // The trainers' click bars score the player's own jump key.
-        if (!repeat && jumpKey(key)) {
-            if (gb->jupiterClickBarPageVisible)
-                (down ? gb->jupiterClickBarMyClicks : gb->jupiterClickBarMyReleases).push_back(gb->jupiterClickBarPosSec);
-            if (gb->trainerClickBarPageVisible)
-                (down ? gb->trainerClickBarMyClicks : gb->trainerClickBarMyReleases).push_back(gb->trainerClickBarPosSec);
-        }
+        // The trainers' click bars take the player's own jump key while they
+        // run away from a level (in one, GD's handleButton reports it).
+        if (!repeat && jumpKey(key))
+            trainers::onKeyInput(down);
 
         bool handled = false;
         if (down && !repeat)
