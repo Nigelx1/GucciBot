@@ -1,4 +1,6 @@
-// GBR6 sub-tick section round trip (SCBF offsets, 2026-09-27). Run by
+// GBR6 sub-tick section round trip (SCBF offsets, 2026-09-27), the TPS
+// section (Macro Tools, 2026-10-03) and the encoder keeping each input's
+// button. Run by
 // run_tests.bat, outside the game. Built /O2 /MD like the mod: with cl's
 // defaults (static CRT, no optimisation) this toolchain fast-fails inside the
 // very first vector::insert in serialize(), which the mod runs on every save.
@@ -91,6 +93,59 @@ int main() {
         auto bytes = f.serialize();
         auto g = GBR6File::deserialize(bytes.data(), bytes.size());
         CHECK(g.has_value() && g->subticks.size() == 1);
+    }
+    // TPS changes, alone and after deaths and offsets
+    for (int variant = 0; variant < 4; ++variant) {
+        auto f = make(variant & 1, variant & 2);
+        f.tpsChanges.push_back({12, 480.0});
+        f.tpsChanges.push_back({28, 120.0});
+        f.header.flags |= GBR6_HAS_TPS;
+        auto bytes = f.serialize();
+        auto g = GBR6File::deserialize(bytes.data(), bytes.size());
+        CHECK(g.has_value());
+        CHECK(g->tpsChanges.size() == 2 && g->tpsChanges[0].frame == 12 && g->tpsChanges[1].tps == 120.0);
+        CHECK(g->deaths.size() == (variant & 1 ? 1u : 0u));
+        CHECK(g->subticks.size() == (variant & 2 ? 3u : 0u));
+        CHECK(g->p1Inputs.size() == 4 && g->p2Inputs.size() == 2);
+        // a reader from before the TPS section: same bytes, flag cleared
+        bytes[5] &= (uint8_t)~GBR6_HAS_TPS;
+        auto old = GBR6File::deserialize(bytes.data(), bytes.size());
+        CHECK(old.has_value() && old->tpsChanges.empty() && old->p1Inputs.size() == 4);
+        CHECK(old->subticks.size() == (variant & 2 ? 3u : 0u));
+    }
+    // a rate that is not a positive number is dropped on load
+    {
+        auto f = make(false, false);
+        f.tpsChanges.push_back({12, 0.0});
+        f.tpsChanges.push_back({13, -5.0});
+        f.tpsChanges.push_back({14, 360.0});
+        f.header.flags |= GBR6_HAS_TPS;
+        auto bytes = f.serialize();
+        auto g = GBR6File::deserialize(bytes.data(), bytes.size());
+        CHECK(g.has_value() && g->tpsChanges.size() == 1 && g->tpsChanges[0].frame == 14);
+    }
+    // platformer left/right taps and runs keep their button (the tap and
+    // autoclick forms read back as jump, so they are only used for jump)
+    {
+        GBR6Header hdr;
+        std::vector<GBR6Input> p1;
+        for (uint32_t c = 0; c < 10; ++c) {  // a run long enough for the autoclick form
+            p1.push_back({100 + c * 4, 2, true});
+            p1.push_back({102 + c * 4, 2, false});
+        }
+        p1.push_back({200, 3, true});
+        p1.push_back({205, 3, false});
+        p1.push_back({300, 1, true});
+        p1.push_back({305, 1, false});
+        auto f = GBR6File::fromInputs(hdr, p1);
+        auto bytes = f.serialize();
+        auto g = GBR6File::deserialize(bytes.data(), bytes.size());
+        CHECK(g.has_value() && g->p1Inputs.size() == p1.size());
+        bool sameAll = g.has_value() && g->p1Inputs.size() == p1.size();
+        for (size_t i = 0; sameAll && i < p1.size(); ++i)
+            sameAll = g->p1Inputs[i].frame == p1[i].frame && g->p1Inputs[i].button == p1[i].button &&
+                      g->p1Inputs[i].pressed == p1[i].pressed;
+        CHECK(sameAll);
     }
     std::printf(fails ? "gbr6 sub-tick: %d FAILED\n" : "gbr6 sub-tick: all passed\n", fails);
     return fails ? 1 : 0;

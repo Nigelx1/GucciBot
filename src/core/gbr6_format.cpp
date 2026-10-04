@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cassert>
 #include <chrono>
+#include <cmath>
 #include <cstring>
 #include <fstream>
 #include <stdexcept>
@@ -61,7 +62,10 @@ namespace gucci {
             size_t i = 0;
             while (i + 1 < inputs.size()) {
                 const auto& p = inputs[i];
-                if (!p.pressed) {
+                // The decoder reads an autoclick run back as button 1 (jump),
+                // so only jump runs may be written as one; a platformer left
+                // or right run is written event by event.
+                if (!p.pressed || p.button != 1) {
                     i++;
                     continue;
                 }
@@ -185,7 +189,10 @@ namespace gucci {
             const auto& inp = inputs[i];
 
             bool tryTap = false;
-            if (inp.pressed && tap_threshold > 0 && i + 1 < inputs.size() && !inAC[i + 1]) {
+            // Same for the short tap form: it carries no button, and reads
+            // back as jump.
+            if (inp.pressed && inp.button == 1 && tap_threshold > 0 && i + 1 < inputs.size() &&
+                !inAC[i + 1]) {
                 const auto& nxt = inputs[i + 1];
                 if (!nxt.pressed && nxt.button == inp.button && nxt.player2 == inp.player2) {
                     uint32_t holdDur = nxt.frame - inp.frame;
@@ -379,17 +386,29 @@ namespace gucci {
             }
         }
 
+        // Each later block needs every block before it on disk, even if
+        // empty, so a reader can find where it starts without guessing.
+        bool const hasTps = header.flags & GBR6_HAS_TPS;
+        if (!(header.flags & GBR6_HAS_DEATHS) && ((header.flags & GBR6_HAS_SUBTICK) || hasTps))
+            writeLE<uint32_t>(buf, 0u);
+
         if (header.flags & GBR6_HAS_SUBTICK) {
-            // The deaths block is always written when this one is, even if
-            // empty, so a reader can find where it starts without guessing.
-            if (!(header.flags & GBR6_HAS_DEATHS))
-                writeLE<uint32_t>(buf, 0u);
             writeLE<uint32_t>(buf, static_cast<uint32_t>(subticks.size()));
             for (auto const& st : subticks) {
                 writeLE<uint32_t>(buf, st.frame);
                 buf.push_back(st.button);
                 buf.push_back(static_cast<uint8_t>((st.pressed ? 1 : 0) | (st.player2 ? 2 : 0)));
                 writeLE<double>(buf, st.offset);
+            }
+        } else if (hasTps) {
+            writeLE<uint32_t>(buf, 0u);
+        }
+
+        if (hasTps) {
+            writeLE<uint32_t>(buf, static_cast<uint32_t>(tpsChanges.size()));
+            for (auto const& t : tpsChanges) {
+                writeLE<uint32_t>(buf, t.frame);
+                writeLE<double>(buf, t.tps);
             }
         }
 
@@ -438,11 +457,13 @@ namespace gucci {
                     d.type = readLE<uint8_t>(data, pos, size);
                     f.deaths.push_back(d);
                 }
-            } else if (f.header.flags & GBR6_HAS_SUBTICK) {
+            } else if (f.header.flags & (GBR6_HAS_SUBTICK | GBR6_HAS_TPS)) {
                 (void)readLE<uint32_t>(data, pos, size);  // the empty deaths block
             }
 
-            if ((f.header.flags & GBR6_HAS_SUBTICK) && pos < size) {
+            if (!(f.header.flags & GBR6_HAS_SUBTICK) && (f.header.flags & GBR6_HAS_TPS)) {
+                (void)readLE<uint32_t>(data, pos, size);  // the empty sub-tick block
+            } else if ((f.header.flags & GBR6_HAS_SUBTICK) && pos < size) {
                 uint32_t scount = readLE<uint32_t>(data, pos, size);
                 for (uint32_t i = 0; i < scount; ++i) {
                     GBR6Subtick st;
@@ -454,6 +475,19 @@ namespace gucci {
                     st.offset = readLE<double>(data, pos, size);
                     if (st.offset > 0.0 && st.offset < 1.0)
                         f.subticks.push_back(st);
+                }
+            }
+
+            if ((f.header.flags & GBR6_HAS_TPS) && pos < size) {
+                uint32_t tcount = readLE<uint32_t>(data, pos, size);
+                for (uint32_t i = 0; i < tcount; ++i) {
+                    GBR6TpsChange t;
+                    t.frame = readLE<uint32_t>(data, pos, size);
+                    t.tps = readLE<double>(data, pos, size);
+                    // Same rule as Check Macro's: a rate that is not a
+                    // positive number is never handed to the engine.
+                    if (std::isfinite(t.tps) && t.tps > 0.0)
+                        f.tpsChanges.push_back(t);
                 }
             }
 
@@ -487,10 +521,13 @@ namespace gucci {
         GBR6File f;
         f.header = hdr;
 
-        std::sort(p1.begin(), p1.end(), [](auto& a, auto& b) {
+        // Stable: a release and a press of one button on the same frame
+        // must stay in the order they happened, or the button ends the frame
+        // in the wrong state.
+        std::stable_sort(p1.begin(), p1.end(), [](auto& a, auto& b) {
             return a.frame < b.frame;
         });
-        std::sort(p2.begin(), p2.end(), [](auto& a, auto& b) {
+        std::stable_sort(p2.begin(), p2.end(), [](auto& a, auto& b) {
             return a.frame < b.frame;
         });
 

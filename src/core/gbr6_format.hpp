@@ -24,6 +24,12 @@ namespace gucci {
         // so an older GucciBot still loads the macro -- with every input on the
         // tick edge.
         GBR6_HAS_SUBTICK = 1 << 6,
+        // Mid-macro TPS changes (gb::ActionType::TPS), appended after the
+        // sub-tick offsets. Written only when a macro has one, and then the
+        // deaths and sub-tick blocks are always written before it (empty if
+        // need be) so it can be found. A reader from before this flag ignores
+        // the tail and plays the whole macro at the header's TPS.
+        GBR6_HAS_TPS = 1 << 7,
     };
 
     struct GBR6Death {
@@ -41,6 +47,13 @@ namespace gucci {
         bool pressed = true;
         bool player2 = false;
         double offset = 0.0;
+    };
+
+    // A TPS change: from this frame on the macro runs at this rate. The
+    // header's tps is the rate it starts at.
+    struct GBR6TpsChange {
+        uint32_t frame = 0;
+        double tps = 240.0;
     };
 
     struct GBR6Input {
@@ -103,6 +116,7 @@ namespace gucci {
 
         std::vector<GBR6Death> deaths;
         std::vector<GBR6Subtick> subticks;
+        std::vector<GBR6TpsChange> tpsChanges;
 
         void decode();
 
