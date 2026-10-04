@@ -433,6 +433,15 @@ namespace gucci::ui {
             engineSwitch("Auto retry", nullptr, &gb->hackAutoRetry, "hack_auto_retry");
             engineSwitch("Force platformer", nullptr, &gb->hackForcePlatformer, "hack_force_platformer");
             engineSwitch("RNG lock", "Same random triggers every attempt", &gb->rngLocked, nullptr);
+            if (gb->rngLocked) {
+                // The seed recordings start from while locked (hook_playlayer.cpp
+                // reads it); about.md promises one of your choosing.
+                int seed = static_cast<int>(gb->rngSeedVal);
+                kit::RowBegin("Seed", "Recordings start from this seed");
+                if (kit::InputInt("rngseed", &seed, 1))
+                    gb->rngSeedVal = static_cast<uint32_t>(seed);
+                kit::RowEnd();
+            }
             kit::EndCard();
 
             pages::noclipAccuracyCard();
@@ -887,6 +896,7 @@ namespace gucci::ui {
             {"Macro", pageMacro},
             {"Frame Editor", pages::editor},
             {"Macro Tools", pages::macroTools},
+            {"Editor Tools", pages::editorTools},
             {"Calculate", pages::calculate},
             {"JMF Trainer", pages::jupiterTrainer},
             {"Trainer", pages::anyTrainer},

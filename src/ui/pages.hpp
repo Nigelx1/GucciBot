@@ -12,6 +12,7 @@ namespace gucci::ui::pages {
     void editor();       // pages/editor.cpp: Frame Editor (timeline of the loaded macro's inputs)
     void calculate();    // pages/calculate.cpp: Calculate (frame-window analyzer) settings + run
     void macroTools();   // pages/macro_tools.cpp: Macro Tools (diff, trim, merge, metadata, TPS changes)
+    void editorTools();  // pages/editor_tools.cpp: Replace All and Macro Buffing (level editor)
     void jupiterTrainer();  // pages/trainer_pages.cpp: Nigel's Jupiter My Favourite Trainer
     void anyTrainer();      // pages/trainer_pages.cpp: Trainer (any saved macro)
     void indicators();      // pages/indicators.cpp: Survival Indicator, click cue + calibration, accuracy/streak

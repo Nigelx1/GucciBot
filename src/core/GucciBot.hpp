@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-03-cm (Rebuild wave 2d: Video Mode and the Alignment Tool on the JMF Trainer; Macro Tools page with diff, trim, merge, metadata and TPS changes on GBR6; GBR6 fix - platformer Left/Right taps were saved as Jump; GBR6 can store TPS changes. UNTESTED in-game.)"
+    "2026-10-03-cn (Editor Tools page: Replace All and Macro Buffing reachable again, Macro Buffing settings saved; RNG lock gets its seed box. UNTESTED in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
