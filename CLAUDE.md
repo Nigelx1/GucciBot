@@ -2,7 +2,7 @@
 
 You are picking up an in-progress Geometry Dash mod from its author, Nigel. Read this whole doc before writing code. Section 0 is the part that has cost the most when ignored.
 
-> **What this document is.** A map, last refreshed 2026-10-02 (build `2026-10-02-bz`, version 2.0.0-beta.2). The source is ground truth: when this doc and the repo disagree, the repo wins — and say so. The Claude Code memory store for this project holds far more history than belongs here; read its index at the start of a session.
+> **What this document is.** A map, last refreshed 2026-10-03 (build `2026-10-03-cn`, version 2.0.0-beta.2). The source is ground truth: when this doc and the repo disagree, the repo wins — and say so. The Claude Code memory store for this project holds far more history than belongs here; read its index at the start of a session.
 
 ---
 
@@ -36,7 +36,7 @@ A **Geometry Dash macro bot**, distributed as the Geode mod `nigelx1.guccibot` (
 ## 2. Build & test
 
 - `.\build_win.bat` — builds and installs. Look for `Build complete` in its output; don't trust an exit code that went through a pipe.
-- `.\run_tests.bat` — three offline suites: frame-editor rules, the GBR6 sub-tick section, Check Macro. Compiled `/O2 /MD` to match the mod (this toolchain fast-fails with cl's defaults).
+- `.\run_tests.bat` — four offline suites: frame-editor rules, the GBR6 format (sub-tick, TPS changes, Left/Right buttons), Check Macro, macro ops (trim/merge/diff). Compiled `/O2 /MD` to match the mod (this toolchain fast-fails with cl's defaults).
 - **`GB_BUILD_LABEL`** is at the top of `src/core/GucciBot.hpp`: line 3 is `#define GB_BUILD_LABEL \`, line 4 the string. Scheme: `YYYY-MM-DD-x` then `-aa`, `-ab`... within a day, plus a plain-English description of what changed. Edit it by finding the line that ends in a backslash, never by searching for the label's closing text (a bad scan once deleted ~300 lines of this header). No `"` or `\` in the text.
 - **In-game logs** live in `%LOCALAPPDATA%\GeometryDash\geode\mods\nigelx1.guccibot\` (`guccibot_slope.log`, `guccibot_fw.log`, ...). Read them yourself instead of asking Nigel to paste.
 - **Assistant Access** (Settings tab) is an MCP server on `127.0.0.1:8790`, off by default: a session can read game and player state, step the game and run Calculate or Pathfinder live.
@@ -95,8 +95,8 @@ ENGINE_AUDIT.md the 2026-09-26/27 audit against Silicate: every finding and how 
 ## 6. Current state (2026-10-02)
 
 - **2.0.0-beta.2** is the latest pre-release (it still contains TTR code; whether to pull old downloads is Nigel's call). Stable ("latest") is still 1.8.
-- **Build -bz removed all TTR-derived code.** Gone until rebuilt (fresh): frame editor, hitboxes, click sounds, the fork service behind path preview / Frame Extrapolation / Prevent Death's look-ahead / sub-tick preview / the Classic pathfinder's ranking (src/analysis/trajectory.* is a no-op stub), legacy BRR loading, and the Calculate-settings, JMP/Trainer, HUD and Indicators pages. Rebuild waves are in progress (memory: project_ttr_removal).
-- **2.0.0** = the rebuilds + one final audit and polish pass. Promo plan (vouch video) in memory: project_promo_vouches.
+- **Build -bz removed all TTR-derived code; the rebuild is done (2026-10-03, builds -ca..-cn, all UNTESTED in-game).** Rebuilt fresh or from Silicate/Absense/anticroom: themes, autoclicker, click sounds, hitboxes, the fork service (src/analysis/trajectory.* on Absense's copies: path preview, Frame Extrapolation, Prevent Death look-ahead, Find Best Tick, sub-tick preview, Agency Map, Classic ranking), HUD, frame editor, Calculate page (+ settings persistence), JMF Trainer + Trainer, Survival Indicator + calibration, noclip accuracy, Video Mode, Macro Tools, Editor Tools, Assistant Access switch, presets, and menu controls for every engine setting. **Not rebuilt:** the legacy BRR reader (no allowed source for the format, no known users). README's License section records that ToastyReplay's source was used up to 2.0.0-beta.2 - agreed with ToastexGD, keep it.
+- **Roadmap (Nigel, 2026-10-03):** his in-game test of the rebuild -> release 2.0.0-beta.3 -> the AI pathfinder (an AI that drives the controller inside the simulator) -> frame-window analyzer fixes -> 2.0.0. Promo plan in memory: project_promo_vouches.
 - **Open:** the Bloodbath "Michigun UFO" pathfinder stall (every idea dies on the same tick; escalation past its cap repeats cached searches - see memory project_pathfinder); GitHub issues #8, #11, #13, #14 (#14's cause fixed in -by); restarting right after a completed replay skips the next attempt's level end; the judge leaves the one-step flag armed.
 - Claude sees plan usage live (hooks; memory reference_usage_tracking). The memory store has the detail on each: read `MEMORY.md` there first.
 
