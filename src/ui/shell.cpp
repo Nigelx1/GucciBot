@@ -434,6 +434,8 @@ namespace gucci::ui {
             engineSwitch("RNG lock", "Same random triggers every attempt", &gb->rngLocked, nullptr);
             kit::EndCard();
 
+            pages::noclipAccuracyCard();
+
             kit::BeginCard("Visual", nullptr);
             engineSwitch("Layout mode", nullptr, &gb->layoutMode, "hack_layout_mode");
             engineSwitch("No mirror effect", nullptr, &gb->noMirrorEffect, "hack_no_mirror");
@@ -884,6 +886,9 @@ namespace gucci::ui {
             {"Macro", pageMacro},
             {"Frame Editor", pages::editor},
             {"Calculate", pages::calculate},
+            {"JMF Trainer", pages::jupiterTrainer},
+            {"Trainer", pages::anyTrainer},
+            {"Indicators", pages::indicators},
             {"Hacks", pageHacks},
             {"Pathfinder", pagePathfinder},
             {"Render", pageRender},

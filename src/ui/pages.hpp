@@ -11,11 +11,15 @@ namespace gucci::ui::pages {
     void clickSounds();  // pages/clicksounds.cpp
     void editor();       // pages/editor.cpp: Frame Editor (timeline of the loaded macro's inputs)
     void calculate();    // pages/calculate.cpp: Calculate (frame-window analyzer) settings + run
+    void jupiterTrainer();  // pages/trainer_pages.cpp: Nigel's Jupiter My Favourite Trainer
+    void anyTrainer();      // pages/trainer_pages.cpp: Trainer (any saved macro)
+    void indicators();      // pages/indicators.cpp: Survival Indicator, click cue + calibration, accuracy/streak
 
     // Cards drawn inside other pages
     void hitboxCard();       // pages/hitboxes_card.cpp (Hacks page)
     void autoclickerCard();  // pages/autoclicker_card.cpp (Hacks page)
     void predictionCard();   // pages/prediction_card.cpp (Hacks page)
     void hudCard();          // pages/hud_card.cpp (Hacks page)
+    void noclipAccuracyCard();  // pages/noclip_card.cpp (Hacks page)
 
 } // namespace gucci::ui::pages
