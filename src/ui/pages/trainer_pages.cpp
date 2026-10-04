@@ -29,6 +29,7 @@ namespace gucci::ui::pages {
 
     void jupiterTrainer();
     void anyTrainer();
+    void videoModeCard();  // pages/videomode_card.cpp
 
     namespace {
 
@@ -790,6 +791,9 @@ namespace gucci::ui::pages {
 
         void body(Kind k) {
             clickTrainerCard(k);
+            // Video Mode rides this trainer's click bar clock, so it sits right under it.
+            if (k == Kind::Jupiter)
+                videoModeCard();
             ghostsCard(k);
             segmentsCard(k);
             statsCard(k);

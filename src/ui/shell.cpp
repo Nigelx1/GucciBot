@@ -19,6 +19,7 @@
 #include "mcp/mcp_server.hpp"
 #include "render/intro.hpp"
 #include "render/renderer.hpp"
+#include "trainers/videomode.hpp"
 #include "tools/macro_check.hpp"
 
 #include <Geode/Geode.hpp>
@@ -885,6 +886,7 @@ namespace gucci::ui {
         const Page kPages[] = {
             {"Macro", pageMacro},
             {"Frame Editor", pages::editor},
+            {"Macro Tools", pages::macroTools},
             {"Calculate", pages::calculate},
             {"JMF Trainer", pages::jupiterTrainer},
             {"Trainer", pages::anyTrainer},
@@ -1064,6 +1066,9 @@ namespace gucci::ui {
             }
 
             look().refresh();
+            // Every frame, menu open or not: it starts and stops Video Mode's
+            // decoder as well as drawing it (trainers/videomode.hpp).
+            videomode::drawOverlay();
             drawOverlay();
             if (!g_open)
                 return;

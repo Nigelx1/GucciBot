@@ -110,7 +110,7 @@ A live green/red readout, right on screen while you play, for whether clicking *
 Real click-timing feedback and a synced video-review overlay, both built around the Jupiter My Favourite Trainer's click bar:
 
 - **Real scoring** — every real press/release you make against the macro's own click bar is matched to its nearest unanswered click and scored Perfect / OK / Miss, with the last timing delta shown live.
-- **Video Mode** — a full-screen review overlay (no level needs to be open) that plays your own footage back riding the exact same click-bar clock as the macro, for reviewing recorded runs against the timing data. The Jupiter My Favourite Trainer ships a real showcase video built in, working with zero setup.
+- **Video Mode** — a full-screen review overlay (no level needs to be open) that plays the built-in Jupiter My Favourite showcase video riding the exact same click-bar clock as the macro, for reviewing a run against the timing data. Zero setup.
 - **Alignment Tool** — scrub the video directly to the frame of the first real click, then snap the sync offset to it in one press instead of nudging a slider by trial and error.
 
 ## Rendering

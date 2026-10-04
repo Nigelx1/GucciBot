@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-03-cl (Rebuild wave 2c: JMF Trainer and Trainer pages - click bar, live clicks and Click Indicators scoring, ghosts, segments with checkpoint loops, stats, music - and the JMF macro loads again; Indicators page with the Survival Indicator, click cue and calibration; real noclip accuracy. UNTESTED in-game.)"
+    "2026-10-03-cm (Rebuild wave 2d: Video Mode and the Alignment Tool on the JMF Trainer; Macro Tools page with diff, trim, merge, metadata and TPS changes on GBR6; GBR6 fix - platformer Left/Right taps were saved as Jump; GBR6 can store TPS changes. UNTESTED in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
