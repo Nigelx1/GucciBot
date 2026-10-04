@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "core/action_types.hpp"
+#include "tools/macro_ops.hpp"
 #include "core/checkpoint_player.hpp"
 
 using namespace geode::prelude;
@@ -763,7 +764,7 @@ namespace gucci {
         // Alignment tool, added 2026-08-31 (Nigel: "any easier way to fix
         // up the delay stuff, debug slider is tedious... heres a scroll bar
         // for the video, scroll until right at the first click"). When
-        // active, drawJupiterVideoOverlay shows jupiterVideoAlignScrubSec
+        // active, the overlay (trainers/videomode.cpp) shows jupiterVideoAlignScrubSec
         // directly instead of the click bar's live clock, so the video can
         // be scrubbed by hand to find the exact moment of the macro's first
         // click; a button then sets jupiterVideoOffsetSec FROM that scrub
@@ -1249,20 +1250,30 @@ namespace gucci {
         bool loadBotSettingsPreset(const std::string& name);
         void deleteBotSettingsPreset(const std::string& name);
 
-        struct DiffEntry {
-            int frame = -1;
-            std::string description;
+        // Macro Tools (ui/pages/macro_tools.cpp; the work is in
+        // tools/macro_ops.*). They work on saved GBR6 macros by name and
+        // never touch the loaded one. Trim and Merge write a new macro next
+        // to the source (same folder and extension, "_trim" / "_merged",
+        // numbered if taken) and reload the macro list; Outcome::message
+        // says why when nothing was written.
+        std::filesystem::path findMacroFile(const std::string& name) const;
+        struct MacroDiffResult {
+            bool ok = false;
+            std::string error;
+            macroops::Diff diff;
         };
-        std::vector<DiffEntry> diffMacros(const std::string& a, const std::string& b);
-
-        bool trimMacro(const std::string& name, int startTick, int endTick, bool rebase);
-        bool mergeMacros(const std::string& a, const std::string& b, int gapTicks);
+        MacroDiffResult diffMacros(const std::string& a, const std::string& b, int moveWindow);
+        struct MacroToolResult {
+            macroops::Outcome outcome;
+            std::string savedAs;  // the new macro's name, when one was written
+        };
+        MacroToolResult trimMacro(const std::string& name, int startTick, int endTick, bool rebase);
+        MacroToolResult mergeMacros(const std::string& a, const std::string& b, int gapTicks);
 
         std::string startPosWarning;
 
         std::string loadedMacroLevelName;
         void recordTpsChange(double tps);
-        bool convertToBRR(const std::string& name);
         uint32_t rngSeedVal = 0;
         bool fastPlayback = false;
 

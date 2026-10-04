@@ -380,8 +380,32 @@ namespace gucci {
         }
     }
 
+    // A macro with TPS changes in it: after a reset the game has to run at
+    // the rate those actions left it at, not at whichever one it last
+    // reached. Everything before the input index has been handed over, so
+    // the last TPS change among those (or the starting rate) is it. A macro
+    // without any is left alone, so the TPS can still be changed by hand.
+    static void applyTpsAtIndex(GucciReplaySystem& rs, bool hadTpsChanges) {
+        if (!hadTpsChanges)
+            return;
+        auto& acts = rs.m_actionAtom.m_actions;
+        double tps = rs.m_initialTPS;
+        for (size_t i = 0; i < rs.m_inputIndex && i < acts.size(); ++i)
+            if (acts[i].m_type == gb::ActionType::TPS && acts[i].m_tps > 0.0)
+                tps = acts[i].m_tps;
+        auto& upd = GucciEngine::get()->updater;
+        if (upd.m_tps != tps) {
+            upd.setTps(tps);
+            upd.estimatedStepCount = 0;
+            upd.totalStepCount = 0;
+        }
+    }
+
     void GucciReplaySystem::onReset(uint32_t respawnFrame, uint32_t deathFrame) {
         auto* gb = GucciEngine::get();
+        bool const hadTpsChanges =
+            std::any_of(m_actionAtom.m_actions.begin(), m_actionAtom.m_actions.end(),
+                        [](gb::Action const& a) { return a.m_type == gb::ActionType::TPS; });
         if (gb->isRecording() && !gb->fwAnalyzing) {
             size_t before = m_actionAtom.length();
             if (respawnFrame > 0) {
@@ -466,6 +490,7 @@ namespace gucci {
                                                   : a.m_frame >= respawnFrame;
                              })));
         }
+        applyTpsAtIndex(*this, hadTpsChanges);
     }
 
     fs::path GucciReplaySystem::getCurrentPath() const {
@@ -987,6 +1012,14 @@ namespace gucci {
 
         GBR6Header hdr;
         hdr.tps = static_cast<float>(gb->updater.m_tps);
+        // A macro with TPS changes in it starts at the rate it was loaded
+        // with: by now the game may be running at one of the later ones.
+        for (auto const& a : m_actionAtom.m_actions) {
+            if (a.m_type == gb::ActionType::TPS) {
+                hdr.tps = static_cast<float>(m_initialTPS);
+                break;
+            }
+        }
         hdr.name = m_replayName;
         hdr.rngSeed = m_startingSeed;
         hdr.timestamp = std::chrono::duration_cast<std::chrono::seconds>(
@@ -1022,6 +1055,13 @@ namespace gucci {
         }
         if (!f.subticks.empty())
             f.header.flags |= GBR6_HAS_SUBTICK;
+
+        // Mid-macro TPS changes (Macro Tools adds them).
+        for (auto const& a : m_actionAtom.m_actions)
+            if (a.m_type == gb::ActionType::TPS && a.m_frame > 0 && std::isfinite(a.m_tps) && a.m_tps > 0.0)
+                f.tpsChanges.push_back({a.m_frame, a.m_tps});
+        if (!f.tpsChanges.empty())
+            f.header.flags |= GBR6_HAS_TPS;
 
         if (!f.saveToPath(path)) {
             log::error("[GucciBot] Failed to save to {}", path.string());
@@ -1079,6 +1119,11 @@ namespace gucci {
                 return;
             }
             auto& f = *result;
+            // A TPS change on frame 0 is the starting rate: playback never
+            // asks for frame 0, so as an action it would never be handed over.
+            for (auto const& t : f.tpsChanges)
+                if (t.frame == 0)
+                    f.header.tps = static_cast<float>(t.tps);
             gb->updater.setTps(f.header.tps);
             m_initialTPS = f.header.tps;
             m_startingSeed = f.header.rngSeed;
@@ -1108,6 +1153,12 @@ namespace gucci {
             if (!f.subticks.empty())
                 log::info("[GucciBot] Loaded {} sub-tick offset(s) ({} matched an input)",
                           f.subticks.size(), placedSubticks);
+            for (auto const& t : f.tpsChanges)
+                if (t.frame > 0)
+                    m_actionAtom.addTpsChange(t.frame, t.tps);
+            if (!f.tpsChanges.empty())
+                log::info("[GucciBot] Loaded {} TPS change(s), starting at {} TPS", f.tpsChanges.size(),
+                          f.header.tps);
             std::stable_sort(m_actionAtom.m_actions.begin(), m_actionAtom.m_actions.end());
             gb->setMode(GucciEngine::Mode::Playing);
             log::info("[GucciBot] Loaded GBR6: {} inputs, {} death marker(s)",
@@ -1331,65 +1382,118 @@ namespace gucci {
         }
     }
 
-    bool GucciEngine::trimMacro(const std::string& name, int startTick, int endTick, bool rebase) {
-        if (endTick <= startTick)
-            return false;
-        BRRMacro* m = BRRMacro::loadFromDisk(name);
-        if (!m)
-            return false;
-        std::vector<BRRInput> kept;
-        kept.reserve(m->inputs.size());
-        for (auto const& in : m->inputs) {
-            if (in.tick < startTick || in.tick > endTick)
-                continue;
-            BRRInput c = in;
-            if (rebase)
-                c.tick -= startTick;
-            kept.push_back(c);
+    // Macro Tools. Everything here is file in, file out through
+    // tools/macro_ops; the loaded macro is never read or changed.
+    fs::path GucciEngine::findMacroFile(const std::string& name) const {
+        auto dir = getReplayDir();
+        std::error_code ec;
+        for (auto const& ext : ui::knownMacroExtensions()) {
+            auto candidate = dir / (name + ext);
+            if (fs::exists(candidate, ec))
+                return candidate;
         }
-        if (kept.empty()) {
-            delete m;
-            return false;
-        }
-        m->inputs = std::move(kept);
-        m->anchors.clear();
-        m->checkpoints.clear();
-        m->deathFrames.clear();
-        m->attemptStartTicks.clear();
-        m->name = name + "_trim";
-        m->persistedName.clear();
-        m->persist();
-        delete m;
-        reloadMacroList();
-        log::info("[GucciBot] Trimmed '{}' [{}..{}] -> '{}_trim'", name, startTick, endTick, name);
-        return true;
+        return {};
     }
 
-    bool GucciEngine::mergeMacros(const std::string& a, const std::string& b, int gapTicks) {
-        BRRMacro* ma = BRRMacro::loadFromDisk(a);
-        BRRMacro* mb = BRRMacro::loadFromDisk(b);
-        if (!ma || !mb || ma->inputs.empty() || mb->inputs.empty()) {
-            delete ma;
-            delete mb;
-            return false;
+    // "<stem><suffix>", or with 2, 3... after it when any macro (of any
+    // theme's extension) already has that name: the list shows names, not
+    // files, so two macros may not share one.
+    static std::string freeMacroName(GucciEngine const& gb, std::string const& stem, std::string const& suffix) {
+        std::string name = stem + suffix;
+        for (int n = 2; !gb.findMacroFile(name).empty(); ++n)
+            name = stem + suffix + std::to_string(n);
+        return name;
+    }
+
+    static GucciEngine::MacroToolResult writeToolResult(GucciEngine& gb,
+                                                        macroops::Outcome outcome,
+                                                        fs::path const& next_to,
+                                                        std::string const& stem,
+                                                        std::string const& suffix) {
+        GucciEngine::MacroToolResult r;
+        r.outcome = std::move(outcome);
+        if (!r.outcome.ok)
+            return r;
+        std::string const name = freeMacroName(gb, stem, suffix);
+        auto& m = r.outcome.macro;
+        m.header.name = name;
+        m.header.timestamp =
+            std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
+                .count();
+        std::string err;
+        if (!macroops::save(m, next_to.parent_path() / (name + next_to.extension().string()), &err)) {
+            r.outcome.ok = false;
+            r.outcome.message = err;
+            return r;
         }
-        int32_t base = ma->inputs.back().tick + (gapTicks > 0 ? gapTicks : 0);
-        for (auto in : mb->inputs) {
-            in.tick += base;
-            ma->inputs.push_back(in);
+        r.savedAs = name;
+        gb.reloadMacroList();
+        return r;
+    }
+
+    GucciEngine::MacroToolResult GucciEngine::trimMacro(const std::string& name, int startTick, int endTick,
+                                                        bool rebase) {
+        MacroToolResult r;
+        if (startTick < 0 || endTick < startTick) {
+            r.outcome.message = "The end frame is before the start frame.";
+            return r;
         }
-        ma->anchors.clear();
-        ma->checkpoints.clear();
-        ma->deathFrames.clear();
-        ma->attemptStartTicks.clear();
-        ma->name = a + "_merged";
-        ma->persistedName.clear();
-        ma->persist();
-        delete ma;
-        delete mb;
-        reloadMacroList();
-        log::info("[GucciBot] Merged '{}' + '{}' (B offset {}) -> '{}_merged'", a, b, base, a);
-        return true;
+        auto path = findMacroFile(name);
+        std::string err;
+        auto m = path.empty() ? std::nullopt : macroops::load(path, &err);
+        if (!m) {
+            r.outcome.message = path.empty() ? "There's no macro called '" + name + "'." : err;
+            return r;
+        }
+        r = writeToolResult(*this, macroops::trim(*m, (uint32_t)startTick, (uint32_t)endTick, rebase), path, name,
+                            "_trim");
+        if (r.outcome.ok)
+            log::info("[GucciBot] Trimmed '{}' [{}..{}]{} -> '{}'", name, startTick, endTick,
+                      rebase ? " rebased" : "", r.savedAs);
+        return r;
+    }
+
+    GucciEngine::MacroToolResult GucciEngine::mergeMacros(const std::string& a, const std::string& b,
+                                                          int gapTicks) {
+        MacroToolResult r;
+        auto pa = findMacroFile(a);
+        auto pb = findMacroFile(b);
+        std::string err;
+        auto ma = pa.empty() ? std::nullopt : macroops::load(pa, &err);
+        if (!ma) {
+            r.outcome.message = "Macro A: " + (pa.empty() ? "there's no macro called '" + a + "'." : err);
+            return r;
+        }
+        auto mb = pb.empty() ? std::nullopt : macroops::load(pb, &err);
+        if (!mb) {
+            r.outcome.message = "Macro B: " + (pb.empty() ? "there's no macro called '" + b + "'." : err);
+            return r;
+        }
+        r = writeToolResult(*this, macroops::merge(*ma, *mb, (uint32_t)std::max(0, gapTicks)), pa, a, "_merged");
+        if (r.outcome.ok)
+            log::info("[GucciBot] Merged '{}' + '{}' (gap {}) -> '{}'", a, b, gapTicks, r.savedAs);
+        return r;
+    }
+
+    GucciEngine::MacroDiffResult GucciEngine::diffMacros(const std::string& a, const std::string& b,
+                                                         int moveWindow) {
+        MacroDiffResult r;
+        auto pa = findMacroFile(a);
+        auto pb = findMacroFile(b);
+        std::string err;
+        auto ma = pa.empty() ? std::nullopt : macroops::load(pa, &err);
+        if (!ma) {
+            r.error = "Macro A: " + (pa.empty() ? "there's no macro called '" + a + "'." : err);
+            return r;
+        }
+        auto mb = pb.empty() ? std::nullopt : macroops::load(pb, &err);
+        if (!mb) {
+            r.error = "Macro B: " + (pb.empty() ? "there's no macro called '" + b + "'." : err);
+            return r;
+        }
+        r.diff = macroops::diff(*ma, *mb, (uint32_t)std::max(0, moveWindow));
+        r.ok = true;
+        return r;
     }
 
     void GucciEngine::recordTpsChange(double tps) {
@@ -2016,182 +2120,6 @@ namespace gucci {
     void GucciEngine::setJupiterMacroPath(std::vector<MacroPathSample> const& samples) {
         jupiterMacro.pathSamples = samples;
         savePathSamples(jupiterMacroAnchor(), samples);
-    }
-
-    bool GucciEngine::convertToBRR(const std::string& name) {
-        auto dir = getReplayDir();
-        auto isNative = [](const std::string& e) {
-            auto known = ui::knownMacroExtensions();
-            return std::find(known.begin(), known.end(), e) != known.end();
-        };
-
-        fs::path src;
-        std::error_code ec;
-        for (auto& it : fs::directory_iterator(dir, ec)) {
-            if (!it.is_regular_file())
-                continue;
-            if (it.path().stem().string() != name)
-                continue;
-            if (isNative(it.path().extension().string()))
-                continue;
-            src = it.path();
-            break;
-        }
-        if (src.empty()) {
-            log::warn("[GucciBot] convertToBRR: no legacy file found for '{}'", name);
-            return false;
-        }
-
-        std::ifstream f(src, std::ios::binary | std::ios::ate);
-        if (!f) {
-            log::warn("[GucciBot] convertToBRR: can't open {}", src.string());
-            return false;
-        }
-        auto sz = static_cast<size_t>(f.tellg());
-        f.seekg(0);
-        std::vector<uint8_t> bytes(sz);
-        if (sz)
-            f.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(sz));
-        f.close();
-        if (bytes.empty()) {
-            log::warn("[GucciBot] convertToBRR: {} is empty", src.string());
-            return false;
-        }
-
-        if (auto* parsed = BRRMacro::deserialize(bytes)) {
-            parsed->name = name;
-            parsed->persistedName.clear();
-            parsed->persist();
-            delete parsed;
-            reloadMacroList();
-            log::info("[GucciBot] Converted '{}' (BRR payload) to native format", name);
-            return true;
-        }
-
-        std::string text(bytes.begin(), bytes.end());
-        if (text.find('{') != std::string::npos && text.find("\"inputs\"") != std::string::npos) {
-            double framerate = 240.0;
-            std::vector<GdrJsonInput> gdrInputs;
-            if (gdrJsonExtract(text, framerate, gdrInputs)) {
-                BRRMacro out;
-                out.name = name;
-                out.framerate = framerate;
-                for (auto& gi : gdrInputs) {
-                    BRRInput bi;
-                    bi.tick = static_cast<int32_t>(std::max(0LL, gi.frame));
-                    bi.actionType = static_cast<uint8_t>(std::clamp(gi.button, 1, 3));
-                    bi.setPlayer2(gi.player2);
-                    bi.setPressed(gi.down);
-                    out.inputs.push_back(bi);
-                }
-                std::sort(
-                    out.inputs.begin(), out.inputs.end(), [](const BRRInput& x, const BRRInput& y) {
-                        return x.tick < y.tick;
-                    });
-                out.persist();
-                reloadMacroList();
-                log::info("[GucciBot] Converted '{}' (GDR JSON, {} inputs) to native format",
-                          name,
-                          out.inputs.size());
-                return true;
-            }
-        }
-
-        {
-            double framerate = 240.0;
-            std::vector<GdrJsonInput> gdrInputs;
-            if (gdrBinaryExtract(bytes, framerate, gdrInputs)) {
-                BRRMacro out;
-                out.name = name;
-                out.framerate = framerate;
-                for (auto& gi : gdrInputs) {
-                    BRRInput bi;
-                    bi.tick = static_cast<int32_t>(std::max(0LL, gi.frame));
-                    bi.actionType = static_cast<uint8_t>(std::clamp(gi.button, 1, 3));
-                    bi.setPlayer2(gi.player2);
-                    bi.setPressed(gi.down);
-                    out.inputs.push_back(bi);
-                }
-                std::sort(
-                    out.inputs.begin(), out.inputs.end(), [](const BRRInput& x, const BRRInput& y) {
-                        return x.tick < y.tick;
-                    });
-                out.persist();
-                reloadMacroList();
-                log::info(
-                    "[GucciBot] Converted '{}' (GDR binary/msgpack, {} inputs) to native format",
-                    name,
-                    out.inputs.size());
-                return true;
-            }
-        }
-
-        log::warn("[GucciBot] convertToBRR: unsupported format: {}", src.string());
-        return false;
-    }
-
-    std::vector<GucciEngine::DiffEntry> GucciEngine::diffMacros(const std::string& a,
-                                                                const std::string& b) {
-        std::vector<DiffEntry> out;
-        constexpr size_t kMaxDiffs = 500;
-
-        BRRMacro* ma = BRRMacro::loadFromDisk(a);
-        BRRMacro* mb = BRRMacro::loadFromDisk(b);
-        if (!ma || !mb) {
-            if (!ma)
-                out.push_back({-1, "Could not load macro A: " + a});
-            if (!mb)
-                out.push_back({-1, "Could not load macro B: " + b});
-            delete ma;
-            delete mb;
-            return out;
-        }
-
-        if (ma->framerate != mb->framerate)
-            out.push_back(
-                {-1, fmt::format("Framerate differs: A={} vs B={}", ma->framerate, mb->framerate)});
-        if (ma->inputs.size() != mb->inputs.size())
-            out.push_back({-1,
-                           fmt::format("Input count differs: A={} vs B={}",
-                                       ma->inputs.size(),
-                                       mb->inputs.size())});
-
-        auto describe = [](const BRRInput& in) {
-            const char* btn = in.actionType == 2 ? "left" : in.actionType == 3 ? "right" : "jump";
-            return fmt::format("f{} {} {} {}",
-                               in.tick,
-                               btn,
-                               in.isPressed() ? "press" : "release",
-                               in.isPlayer2() ? "P2" : "P1");
-        };
-
-        size_t n = std::min(ma->inputs.size(), mb->inputs.size());
-        for (size_t i = 0; i < n && out.size() < kMaxDiffs; ++i) {
-            const auto& A = ma->inputs[i];
-            const auto& B = mb->inputs[i];
-            if (A.tick != B.tick || A.actionType != B.actionType ||
-                A.isPressed() != B.isPressed() || A.isPlayer2() != B.isPlayer2()) {
-                out.push_back({static_cast<int>(A.tick),
-                               fmt::format("#{}: A[{}] vs B[{}]", i, describe(A), describe(B))});
-            }
-        }
-
-        if (out.size() >= kMaxDiffs) {
-            out.push_back({-1, "... truncated at 500 differences."});
-        } else if (ma->inputs.size() != mb->inputs.size()) {
-            const auto& longer = ma->inputs.size() > mb->inputs.size() ? *ma : *mb;
-            const char* tag = ma->inputs.size() > mb->inputs.size() ? "A" : "B";
-            size_t extra = longer.inputs.size() - n;
-            out.push_back({static_cast<int>(longer.inputs[n].tick),
-                           fmt::format("{} has {} extra input(s) starting at [{}]",
-                                       tag,
-                                       extra,
-                                       describe(longer.inputs[n]))});
-        }
-
-        delete ma;
-        delete mb;
-        return out;
     }
 
     // Every preset field in one place, so saving, reading from disk and loading
