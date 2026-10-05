@@ -431,8 +431,7 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
 
         if (action.m_type == gb::ActionType::Death) {
             upd.m_expectsDeath = true;
-            if (auto* rng = gdRandomState())
-                gb->replay.m_startingSeedThisAttempt = *rng;
+            gb->replay.m_startingSeedThisAttempt = readGdRandom();
             return;
         }
         if (action.m_type == gb::ActionType::RestartFull) {
@@ -787,6 +786,27 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         float tw = m_gameState.m_timeWarp;
         if (tw <= 0.0f)
             tw = 1.0f;
+#if !GB_NATIVE_ENGINE
+        // What the physStepCount and restorePhysDt midhooks do on Windows
+        // (engine_updater.cpp), under the same condition: GD runs the step
+        // count the updater worked out in this one update. GD's update runs
+        // max(1, round(delta * 240 / min(timeWarp, 1))) steps (read from the
+        // Windows binary, 0x237a5b-0x237a99), so at GD's own 240 TPS that many
+        // ticks' worth is exactly that many ticks of exactly one tick each.
+        // Without it every update was one tick off Windows, and Calculate's
+        // batched steps (m_analysisBatch), the Performance lock delta and
+        // runs without lock delta all advanced one tick where they asked for
+        // several. At any other rate GD would cut the steps differently, so
+        // there it stays one tick per update (runUpdates steps Calculate's
+        // batches one tick at a time instead).
+        if (upd.m_tps == 240.0) {
+            bool const fastBypass = upd.useFastLockDelta() || !upd.m_lockDelta || upd.m_analysisBatch > 0;
+            if (fastBypass || !PlayLayer::get()) {
+                double const oneTick = (float)upd.getPhysicsDt() * std::fmin(tw, 1.0f);
+                return oneTick * std::max(1, upd.estimatedStepCount);
+            }
+        }
+#endif
         return (float)upd.getPhysicsDt() * std::fmin(tw, 1.0f);
     }
 

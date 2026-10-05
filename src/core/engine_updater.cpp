@@ -380,12 +380,32 @@ void GucciUpdater::runUpdates(std::function<void(float)> update, float realDt, b
     // where Silicate places it -- ahead of the normal step calculation, which
     // it deliberately bypasses. m_analysisBatch is only ever non-zero for the
     // duration of one of his stepping calls, so nothing else sees this path.
+    // GD runs all m_analysisBatch ticks inside this one update: on Windows
+    // through the physStepCount/restorePhysDt midhooks below, elsewhere
+    // through the getModifiedDelta hook (hook_gjbasegamelayer.cpp) at GD's
+    // own 240 TPS.
     if (m_analysisBatch > 0) {
         consumeStep();
         totalStepCount = (int)m_analysisBatch;
         estimatedStepCount = (int)m_analysisBatch;
         m_tpsOverflow = 0.0;
         m_shouldRender = true;
+#if !GB_NATIVE_ENGINE
+        // Off Windows at another rate GD takes one tick per update (see
+        // getModifiedDelta), so the batch is that many updates of one tick.
+        // A death ends it: the analyzer looks at the dead state next, and
+        // nothing past it belongs to the leg.
+        if (m_tps != 240.0) {
+            uint32_t const batch = m_analysisBatch;
+            for (uint32_t i = 0; i < batch; i++) {
+                estimatedStepCount = 1;
+                update((float)getPhysicsDt());
+                if (auto* dpl = PlayLayer::get(); !dpl || dpl->m_playerDied)
+                    break;
+            }
+            return;
+        }
+#endif
         update((float)(getPhysicsDt() * m_analysisBatch));
         return;
     }

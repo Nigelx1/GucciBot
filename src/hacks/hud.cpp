@@ -231,7 +231,7 @@ namespace gucci::hud {
                                    pf.m_storedFrames.size(), pf.m_platformerCheckpoints.size());
             }
             if (field == &HudConfig::showRandom) {
-                uint64_t const rng = gdRandomState() ? *gdRandomState() : 0;
+                uint64_t const rng = readGdRandom();
                 return fmt::format("Random: {} | shake {} | teleport {}", rng, gb->replay.m_shakeRandomState,
                                    gb->replay.m_teleportRandomState);
             }

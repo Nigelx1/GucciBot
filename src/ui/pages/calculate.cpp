@@ -716,7 +716,9 @@ namespace gucci::ui::pages {
 
     void calculate() {
 #if !GB_NATIVE_ENGINE
-        kit::Note("Calculate is Windows-only for now: it steps the game in batches through the Windows engine.", Tone::Warn);
+        kit::Note("Calculate is untested on this platform: it has only been checked on Windows so far. If its windows look "
+                  "wrong here, please report it.",
+                  Tone::Warn);
 #endif
         g_changed = g_look = g_lstar = false;
 

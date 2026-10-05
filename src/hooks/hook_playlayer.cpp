@@ -300,11 +300,10 @@ class $modify(GB7PlayLayer, PlayLayer) {
     void updateRandomSeedOnReset() {
         auto* gb = GucciEngine::get();
         auto& rs = gb->replay;
-        // Off Windows GD's random state isn't reachable: the writes below land
-        // in a scratch value instead (core/platform.hpp).
-        uint64_t scratch = 0;
-        uint64_t* rng = gdRandomState();
-        uint64_t& state = rng ? *rng : scratch;
+        // GD's fast-rand state, worked on here and written back at the end
+        // (core/platform.hpp: the global on Windows, GD's own get/set
+        // functions elsewhere).
+        uint64_t state = readGdRandom();
 
         if (!gb->updater.m_expectsDeath)
             rs.m_startingSeedThisAttempt = rs.m_startingSeed;
@@ -349,6 +348,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
             state = rs.m_startingSeedThisAttempt;
             seedVariance(state);
         }
+        writeGdRandom(state);
     }
 
     void restoreHoldOnReset(uint64_t deathFrame) {
@@ -931,4 +931,37 @@ $execute {
                            "PlayLayer::queueCheckpoint",
                            tulip::hook::TulipConvention::Default);
 }
+#endif
+
+#if !GB_NATIVE_ENGINE
+// The same on macOS, iOS and Android, where there is no address hook. The
+// Windows hook above sits on UILayer::onCheck (0x4ce060: if practice mode is
+// on, PlayLayer::queueCheckpoint, which is inline there and only sets
+// m_tryPlaceCheckpoint). On the other platforms PlayLayer::queueCheckpoint is
+// a real function, which UILayer::onCheck (the checkpoint button, and the key)
+// should reach as a call, so the request is taken here and the checkpoint
+// placed in the frozen tick, as on Windows. Only the Windows binary was read:
+// if a platform's GD sets m_tryPlaceCheckpoint without this call, GD places
+// the checkpoint itself, mid-tick, as it would without GucciBot. Untested on
+// a device.
+class $modify(GBPortableCheckpoint, PlayLayer) {
+    void queueCheckpoint() {
+        auto* gb = GucciEngine::get();
+        if (!gb->enabled)
+            return PlayLayer::queueCheckpoint();
+        if (!m_isPracticeMode)
+            return;  // UILayer::onCheck's gate
+        // While Calculate walks you back after a Test it places your
+        // checkpoints itself; a key press in the middle of that would throw
+        // its count off.
+        if (::Bot::get()->frameWindow().returning())
+            return;
+        if (m_player1->m_isDead || m_player2->m_isDead)
+            return;
+        gb->updater.scheduleFrozenFunction([](float) {
+            if (auto* p = PlayLayer::get())
+                p->markCheckpoint();
+        });
+    }
+};
 #endif

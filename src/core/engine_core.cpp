@@ -85,8 +85,7 @@ namespace gucci {
         // Same GD fast-rand global updateRandomSeedOnReset() rewinds on
         // every reset -- see the comment on SavedCheckpointState::m_rngState
         // for why this needs to be captured per-checkpoint now.
-        if (auto* rng = gdRandomState())
-            state.m_rngState = *rng;
+        state.m_rngState = readGdRandom();
         // Every other random source a replay depends on, captured with it.
         state.m_teleportRandomState = GucciEngine::get()->replay.m_teleportRandomState;
         state.m_advRandStates.clear();
@@ -273,8 +272,7 @@ namespace gucci {
         // already rewound this to the attempt-start value earlier in the
         // same resetLevel() call -- restoring the checkpoint's own captured
         // value here is what actually fixes the per-checkpoint RNG gap.
-        if (auto* rng = gdRandomState())
-            *rng = state.m_rngState;
+        writeGdRandom(state.m_rngState);
         GucciEngine::get()->replay.m_teleportRandomState = state.m_teleportRandomState;
         for (size_t i = 0;
              i < state.m_advRandStates.size() && i < m_advancedRandom.size(); i++)
@@ -2701,11 +2699,11 @@ namespace gucci {
     }
 
     void GucciEngine::analyzeFrameWindows() {
-#if !GB_NATIVE_ENGINE
-        // Calculate steps the game in batches through the Windows engine's midhooks.
-        geode::Notification::create("Calculate is Windows-only for now", geode::NotificationIcon::Info)->show();
-        return;
-#endif
+        // Off Windows Calculate runs too (multiplatform, untested on a device):
+        // its batched steps go through getModifiedDelta instead of the
+        // step-count midhooks (hook_gjbasegamelayer.cpp), the checkpoint
+        // request through PlayLayer::queueCheckpoint (hook_playlayer.cpp), and
+        // GD's random state through GameToolbox (core/platform.hpp).
         auto* pl = PlayLayer::get();
         if (!pl)
             return;

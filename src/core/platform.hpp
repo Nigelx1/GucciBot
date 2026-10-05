@@ -77,15 +77,29 @@ namespace gucci {
 
 namespace gucci {
 
-    // GD's fast-rand global, which updateRandomSeedOnReset rewinds on every
-    // reset. Its address is known for the Windows build only; elsewhere this is
-    // nullptr, and what pins random triggers to a macro (RNG lock, the RNG kept
-    // per checkpoint) stands aside.
-    inline uint64_t* gdRandomState() {
+    // GD's fast-rand state (GameToolbox::fast_srand / getfast_srand), which
+    // updateRandomSeedOnReset rewinds on every reset and RNG lock pins; the
+    // per-checkpoint RNG is captured and restored through these too.
+    //
+    // Windows: the global itself, at its known address (what GD's inline
+    // fast_srand/getfast_srand touch there). Elsewhere GD's own functions,
+    // bound on every other platform: on macOS and Android both are real
+    // functions, on iOS getfast_srand is Geode's inline read of the global and
+    // fast_srand a real function. GD's fast_rand is getfast_srand() * 214013 +
+    // 2531011 fed back through fast_srand, so the two are one 64-bit state.
+    inline uint64_t readGdRandom() {
 #if GB_NATIVE_ENGINE
-        return reinterpret_cast<uint64_t*>(geode::base::get() + 0x6c2e90);
+        return *reinterpret_cast<uint64_t*>(geode::base::get() + 0x6c2e90);
 #else
-        return nullptr;
+        return GameToolbox::getfast_srand();
+#endif
+    }
+
+    inline void writeGdRandom(uint64_t state) {
+#if GB_NATIVE_ENGINE
+        *reinterpret_cast<uint64_t*>(geode::base::get() + 0x6c2e90) = state;
+#else
+        GameToolbox::fast_srand(state);
 #endif
     }
 
