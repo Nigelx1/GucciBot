@@ -17,6 +17,8 @@
 
 #include <Geode/platform/cplatform.h>
 
+#include <utility>
+
 #if defined(GEODE_IS_WINDOWS)
 #define GB_NATIVE_ENGINE 1
 #else
@@ -38,3 +40,18 @@
 #else
 #define GB_GD_MAP_COPY_ONLY(T)
 #endif
+
+namespace gucci {
+
+    // `dst = std::move(src)` for GD types holding gd::maps (a GJGameState):
+    // a copy on Android, where Geode's gnustl has no map move assignment.
+    template <class T>
+    void gdAssign(T& dst, T& src) {
+#if defined(GEODE_IS_ANDROID)
+        dst = src;
+#else
+        dst = std::move(src);
+#endif
+    }
+
+} // namespace gucci

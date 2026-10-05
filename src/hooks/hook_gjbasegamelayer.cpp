@@ -8,7 +8,9 @@
 #include "trainers/trainerghost.hpp"
 #include "trainers/trainer_core.hpp"
 #include "render/renderer.hpp"
+#if GB_NATIVE_ENGINE
 #include <safetyhook.hpp>
+#endif
 
 #include <Geode/Geode.hpp>
 #include <Geode/modify/GJBaseGameLayer.hpp>

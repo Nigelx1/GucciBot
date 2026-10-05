@@ -21,7 +21,9 @@
 
 #include <Geode/Geode.hpp>
 #include <Geode/modify/PlayLayer.hpp>
+#if GB_NATIVE_ENGINE
 #include <safetyhook.hpp>
+#endif
 #include <fmt/format.h>
 
 using namespace geode::prelude;

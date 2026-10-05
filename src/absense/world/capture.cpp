@@ -114,6 +114,21 @@ static_assert(offsetof(GroupCommandObject2, m_keyframes) == 0x1b8 && offsetof(Gr
               offsetof(GroupCommandObject2, m_remapKeys) == 0x1e8);
 #endif
 
+// Copies a gd container into a std::vector element by element: on Android
+// (Geode's gnustl) gd iterators aren't standard iterators, so a std::vector
+// can't be built or assigned from a pair of them.
+template <class Vec, class Container>
+void fillFrom(Vec& out, Container const& in) {
+    out.clear();
+    out.reserve(in.size());
+    for (auto const& e : in) {
+        if constexpr (requires { e.first; e.second; })
+            out.emplace_back(e.first, e.second);
+        else
+            out.push_back(e);
+    }
+}
+
 namespace {
 
 Remap pushRemap(std::vector<int>& pool, const gd::vector<int>& keys) {
@@ -234,9 +249,9 @@ WorldState World::captureLive(GJBaseGameLayer* pl, bool withActions) {
     // write (world/fire.cpp (ae)).
     ws.points = gs.m_points;
     ws.levelTime = off::at<double>(pl, off::kLevelTime);
-    ws.spawnCursor.assign(gs.m_spawnChannelRelated0.begin(), gs.m_spawnChannelRelated0.end());
+    fillFrom(ws.spawnCursor, gs.m_spawnChannelRelated0);
     std::sort(ws.spawnCursor.begin(), ws.spawnCursor.end());
-    ws.goingBack.assign(gs.m_spawnChannelRelated1.begin(), gs.m_spawnChannelRelated1.end());
+    fillFrom(ws.goingBack, gs.m_spawnChannelRelated1);
     std::sort(ws.goingBack.begin(), ws.goingBack.end());
     ws.partial = !withActions;
 
@@ -382,18 +397,20 @@ WorldState World::captureLive(GJBaseGameLayer* pl, bool withActions) {
         }
 
         {
-            std::vector<std::pair<int, int>> ids(em->m_unkMap498.begin(), em->m_unkMap498.end());
+            std::vector<std::pair<int, int>> ids;
+            fillFrom(ids, em->m_unkMap498);
             importShared(ws.triggeredIds, std::move(ids), lastTriggeredIds);
-            std::vector<std::pair<int, int>> items(em->m_itemCountMap.begin(), em->m_itemCountMap.end());
+            std::vector<std::pair<int, int>> items;
+            fillFrom(items, em->m_itemCountMap);
             std::sort(items.begin(), items.end());
             importShared(ws.items, std::move(items), lastItems);
-            std::vector<std::pair<int, int>> persistent(em->m_persistentItemCountMap.begin(),
-                                                        em->m_persistentItemCountMap.end());
+            std::vector<std::pair<int, int>> persistent;
+            fillFrom(persistent, em->m_persistentItemCountMap);
             std::sort(persistent.begin(), persistent.end());
             importShared(ws.persistentItems, std::move(persistent), lastPersistent);
             // The items a persistent item trigger keeps a timer for (3641).
-            std::vector<int> persistentTimers(em->m_persistentTimerItemSet.begin(),
-                                              em->m_persistentTimerItemSet.end());
+            std::vector<int> persistentTimers;
+            fillFrom(persistentTimers, em->m_persistentTimerItemSet);
             std::sort(persistentTimers.begin(), persistentTimers.end());
             importShared(ws.persistentTimers, std::move(persistentTimers), lastPersistentTimers);
         }

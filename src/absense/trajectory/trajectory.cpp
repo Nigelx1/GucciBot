@@ -1,3 +1,4 @@
+#include "core/platform.hpp"
 #include "trajectory.hpp"
 
 #include <algorithm>
@@ -742,7 +743,7 @@ void Trajectory::seedRingContacts(PlayerObject* copy) {
     const unsigned n = copy->m_touchingRings->count();
     for (unsigned i = 0; i < n; i++) {
         auto* ring = static_cast<GameObject*>(copy->m_touchingRings->objectAtIndex(i));
-        if (!ring || !copy->m_ringRelatedSet.contains(ring->m_uniqueID)) continue;
+        if (!ring || !copy->m_ringRelatedSet.count(ring->m_uniqueID)) continue;
         noteRingContact(copy, ring);
         noteRingUsed(copy, ring);
     }
@@ -1529,8 +1530,8 @@ void Trajectory::useStart(std::shared_ptr<SimStart> start) {
             const auto* key = static_cast<cocos2d::CCObject*>(obj);
             for (int k = 0; k < m_start->count; k++) {
                 const SavedPlayerCheckpoint& c = m_start->p[k].player;
-                if (c.m_ringRelatedSet.contains(obj->m_uniqueID)) continue;
-                if (c.m_touchedRings.contains(obj->m_uniqueID) ||
+                if (c.m_ringRelatedSet.count(obj->m_uniqueID)) continue;
+                if (c.m_touchedRings.count(obj->m_uniqueID) ||
                     std::find(c.m_touchingRings.begin(), c.m_touchingRings.end(), key) != c.m_touchingRings.end())
                     onUnfired |= 1u << k;
             }
@@ -1544,7 +1545,7 @@ void Trajectory::useStart(std::shared_ptr<SimStart> start) {
         for (int k = 0; k < m_start->count && !before; k++) {
             if (onUnfired & (1u << k)) continue;  // unused for this player at the start's tick
             const SimPlayerSnap& sp = m_start->p[k];
-            if (sp.player.m_ringRelatedSet.contains(obj->m_uniqueID)) { before = true; break; }
+            if (sp.player.m_ringRelatedSet.count(obj->m_uniqueID)) { before = true; break; }
             // The other player of a dual start: a ring it has already passed keeps its flag.
             if (onUnfired && obj->getPositionX() <= sp.position.x) { before = true; break; }
             // Nor a ring this player has not reached yet: the +6 slack below is for
@@ -2506,7 +2507,7 @@ struct Trajectory::Sim {
         mv.end();
         t->m_simBroken.clear();
         t->m_simRealTick = -1;  // no run's tick to measure a phantom spot against
-        pl->m_gameState = std::move(savedState);  // never read again after this
+        gucci::gdAssign(pl->m_gameState, savedState);  // never read again after this
         // A copy the run picked up at a dual portal goes out of sight with it.
         if (t->m_fakePlayer1) t->m_fakePlayer1->setVisible(false);
         if (t->m_fakePlayer2) t->m_fakePlayer2->setVisible(false);
@@ -3207,7 +3208,7 @@ bool Trajectory::stepSearch(int maxTicks, std::chrono::steady_clock::time_point 
         st->s.objects.restoreWritten();
         st->s.mv.suspend();
         // Refilled from the game state on resume, and in finishSearch.
-        st->s.pl->m_gameState = std::move(st->s.savedState);
+        gucci::gdAssign(st->s.pl->m_gameState, st->s.savedState);
         st->paused = true;
         return false;
     }

@@ -21,7 +21,9 @@
 #include <Geode/Geode.hpp>
 #include <Geode/modify/CCScheduler.hpp>
 #include <Geode/modify/CCDirector.hpp>
+#if GB_NATIVE_ENGINE
 #include <safetyhook.hpp>
+#endif
 #include <fstream>
 #include <chrono>
 #include <cmath>

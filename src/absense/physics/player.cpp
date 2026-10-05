@@ -208,7 +208,7 @@ void ringJump(PlayerObject* player, RingObject* ring) {
     // (measured on a black orb: seven clicks on seven ticks, seven drops,
     // with the ring in the fired set the whole time).
     if (!ring->m_isMultiActivate) {
-        if (player->m_ringRelatedSet.contains(ring->m_uniqueID)) return;
+        if (player->m_ringRelatedSet.count(ring->m_uniqueID)) return;
         if (Bot::get()->trajectory().ringUsedThisContact(player, ring)) return;
     }
 
