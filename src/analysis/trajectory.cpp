@@ -10,6 +10,7 @@
 //   - the sub-tick preview's two questions are anticroom's, ported onto the
 //     same copies (Trajectory::subtickPose / subtickBranch).
 
+#include "core/platform.hpp"
 #include "analysis/trajectory.hpp"
 
 #include "absense/compat/bot.hpp"
@@ -92,6 +93,9 @@ namespace gucci {
         // already taken the copies down) the fade out of it is the running
         // scene, and copies made then would belong to a layer about to go.
         bool canMake(PlayLayer* pl) {
+            // Absense's copies read GD's Windows memory layout (core/platform.hpp).
+            if (!GB_NATIVE_ENGINE)
+                return false;
             if (!pl || pl != PlayLayer::get() || !pl->m_player1 || !pl->m_levelSettings || !pl->m_objectLayer ||
                 !pl->m_debugDrawNode || !pl->m_debugDrawNode->getParent())
                 return false;

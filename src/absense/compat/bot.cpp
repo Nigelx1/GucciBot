@@ -2,6 +2,7 @@
 // analysis/ac/shim.hpp). Function-local statics, like the analyzer's, so the
 // shim header needs no include of these classes.
 
+#include "core/platform.hpp"
 #include "absense/compat/bot.hpp"
 #include "absense/glue.hpp"
 #include "absense/judge.hpp"
@@ -90,6 +91,11 @@ namespace {
 }  // namespace
 
 bool absense::requestStart(bool fromBeginning) {
+#if !GB_NATIVE_ENGINE
+    (void)fromBeginning;
+    s_pendingNote = "The Pathfinder is Windows-only for now: its model of the level reads GD's Windows memory layout.";
+    return false;
+#endif
     auto* pl = PlayLayer::get();
     if (!pl || !pl->m_player1) {
         s_pendingNote = "Open a level first.";

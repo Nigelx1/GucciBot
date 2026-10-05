@@ -6,6 +6,7 @@
 // saved key the engine loads it from (GucciEngine::loadEngineSettings,
 // core/engine_core.cpp), the moment it changes.
 
+#include "core/platform.hpp"
 #include "ui/pages.hpp"
 
 #include "core/GucciBot.hpp"
@@ -36,6 +37,9 @@ namespace gucci::ui::pages {
     } // namespace
 
     void predictionCard() {
+#if !GB_NATIVE_ENGINE
+        kit::Note("Path preview, Frame Extrapolation and the look-aheads are Windows-only for now: the simulator reads GD's Windows memory layout.", Tone::Warn);
+#endif
         auto* gb = GucciEngine::get();
         auto& upd = gb->updater;
         auto* mod = Mod::get();

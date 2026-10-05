@@ -11,6 +11,7 @@
 //   - reads never refuse, because the whole point is being able to look at a
 //     run that has gone wrong while it is still wrong.
 
+#include "core/platform.hpp"
 #include "mcp_server.hpp"
 
 #include "analysis/ac/framewindow.hpp"
@@ -845,8 +846,12 @@ namespace gucci::mcp {
                     if (!pl->m_isPracticeMode)
                         throw ToolError("practice mode is off");
                     // GD's checkpoint key handler, hooked in hook_playlayer.cpp.
+#if GB_NATIVE_ENGINE
                     reinterpret_cast<void (*)(void*, void*)>(geode::base::get() + 0x4ce060)(
                         nullptr, nullptr);
+#else
+                    throw ToolError("placing a checkpoint this way needs GD's Windows build");
+#endif
                 } else if (what == "respawn") {
                     requireFreeRun();
                     pl->resetLevel();

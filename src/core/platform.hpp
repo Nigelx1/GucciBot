@@ -17,6 +17,10 @@
 
 #include <Geode/platform/cplatform.h>
 
+#include <Geode/Geode.hpp>
+
+#include <cstdint>
+
 #include <utility>
 
 #if defined(GEODE_IS_WINDOWS)
@@ -66,6 +70,22 @@ namespace gucci {
         dst = src;
 #else
         dst = std::move(src);
+#endif
+    }
+
+} // namespace gucci
+
+namespace gucci {
+
+    // GD's fast-rand global, which updateRandomSeedOnReset rewinds on every
+    // reset. Its address is known for the Windows build only; elsewhere this is
+    // nullptr, and what pins random triggers to a macro (RNG lock, the RNG kept
+    // per checkpoint) stands aside.
+    inline uint64_t* gdRandomState() {
+#if GB_NATIVE_ENGINE
+        return reinterpret_cast<uint64_t*>(geode::base::get() + 0x6c2e90);
+#else
+        return nullptr;
 #endif
     }
 

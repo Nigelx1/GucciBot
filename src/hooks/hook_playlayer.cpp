@@ -300,7 +300,11 @@ class $modify(GB7PlayLayer, PlayLayer) {
     void updateRandomSeedOnReset() {
         auto* gb = GucciEngine::get();
         auto& rs = gb->replay;
-        uint64_t& state = *reinterpret_cast<uint64_t*>(geode::base::get() + 0x6c2e90);
+        // Off Windows GD's random state isn't reachable: the writes below land
+        // in a scratch value instead (core/platform.hpp).
+        uint64_t scratch = 0;
+        uint64_t* rng = gdRandomState();
+        uint64_t& state = rng ? *rng : scratch;
 
         if (!gb->updater.m_expectsDeath)
             rs.m_startingSeedThisAttempt = rs.m_startingSeed;

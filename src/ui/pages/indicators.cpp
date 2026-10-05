@@ -3,6 +3,7 @@
 // accuracy / streak readout. Written fresh on 2026-10-03. Every change is saved
 // the moment it is made (indicator::saveSettings, CalibrationService::save).
 
+#include "core/platform.hpp"
 #include "ui/pages.hpp"
 #include "ui/kit.hpp"
 
@@ -196,6 +197,9 @@ namespace gucci::ui::pages {
     } // namespace
 
     void indicators() {
+#if !GB_NATIVE_ENGINE
+        kit::Note("The Survival Indicator is Windows-only for now: it asks the simulator, which reads GD's Windows memory layout.", Tone::Warn);
+#endif
         bool changed = false;
         indicatorCard(changed);
         cueCard(changed);

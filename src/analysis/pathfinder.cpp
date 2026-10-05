@@ -1,3 +1,4 @@
+#include "core/platform.hpp"
 #include "analysis/pathfinder.hpp"
 
 #include "analysis/trajectory.hpp"
@@ -82,6 +83,12 @@ namespace gucci {
     }
 
     void Pathfinder::begin() {
+#if !GB_NATIVE_ENGINE
+        // It ranks with the simulator, which reads GD's Windows memory layout.
+        stage = "Windows-only for now";
+        active = false;
+        return;
+#endif
         // Fresh search: nothing proven dead yet.
         deadEnds.clear();
         skippedDeadEnds = 0;

@@ -1,3 +1,4 @@
+#include <Geode/modify/GJBaseGameLayer.hpp>
 #include "core/GucciBot.hpp"
 #include "hacks/autoclicker.hpp"
 #include "analysis/trajectory.hpp"
@@ -637,8 +638,9 @@ static void restorePhysDtMidhook(SafetyHookContext& ctx) {
 }
 #endif
 
-#if GB_NATIVE_ENGINE // Windows midhooks and raw addresses (core/platform.hpp)
-static void earlyUpdateMidhook(SafetyHookContext&) {
+// Before each tick's physics: the back-step store. On Windows the earlyUpdate
+// midhook calls it; elsewhere GBPortableTick below.
+static void tickStartWork() {
     auto* gb = GucciEngine::get();
     if (!gb->enabled)
         return;
@@ -671,6 +673,10 @@ static void earlyUpdateMidhook(SafetyHookContext&) {
         // a tick ahead of the player.
         gb->practiceFix.saveBackstepFrame(cp, upd.getFrame());
     }
+}
+#if GB_NATIVE_ENGINE // Windows midhooks and raw addresses (core/platform.hpp)
+static void earlyUpdateMidhook(SafetyHookContext&) {
+    tickStartWork();
 }
 #endif
 
@@ -725,8 +731,10 @@ static void classifyOrbTouchForCapture(PlayerObject* player, bool& outDash, bool
     }
 }
 
-#if GB_NATIVE_ENGINE // Windows midhooks and raw addresses (core/platform.hpp)
-static void frameUpdateMidhook(SafetyHookContext&) {
+// After each tick's physics, the settled point: the frame counter and all
+// that hangs off it. On Windows the frameUpdate midhook calls it; elsewhere
+// GBPortableTick below.
+static void tickSettledWork() {
     auto* gb = GucciEngine::get();
     if (!gb->enabled)
         return;
@@ -1044,6 +1052,10 @@ static void frameUpdateMidhook(SafetyHookContext&) {
             pll->queueButton(1, down, true, 0.0);
     }
 }
+#if GB_NATIVE_ENGINE // Windows midhooks and raw addresses (core/platform.hpp)
+static void frameUpdateMidhook(SafetyHookContext&) {
+    tickSettledWork();
+}
 #endif
 
 class $modify(GB7CCScheduler, CCScheduler) {
@@ -1274,4 +1286,18 @@ $execute {
     if (g_patchFailures)
         geode::log::error("[GucciBot] {} of 4 binary patches FAILED to apply", g_patchFailures);
 }
+#endif
+
+#if !GB_NATIVE_ENGINE
+// Off Windows there are no midhooks inside GJBaseGameLayer::update, so the
+// per-tick work hangs off processCommands, which GD calls once for every
+// physics tick (bound on every platform). GD runs at its own 240 TPS there
+// (GucciUpdater::setTps).
+class $modify(GBPortableTick, GJBaseGameLayer) {
+    void processCommands(float dt, bool isHalfTick, bool isLastTick) {
+        tickStartWork();
+        GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
+        tickSettledWork();
+    }
+};
 #endif

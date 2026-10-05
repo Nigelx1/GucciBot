@@ -431,8 +431,8 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
 
         if (action.m_type == gb::ActionType::Death) {
             upd.m_expectsDeath = true;
-            gb->replay.m_startingSeedThisAttempt =
-                *reinterpret_cast<uint64_t*>(geode::base::get() + 0x6c2e90);
+            if (auto* rng = gdRandomState())
+                gb->replay.m_startingSeedThisAttempt = *rng;
             return;
         }
         if (action.m_type == gb::ActionType::RestartFull) {

@@ -85,7 +85,8 @@ namespace gucci {
         // Same GD fast-rand global updateRandomSeedOnReset() rewinds on
         // every reset -- see the comment on SavedCheckpointState::m_rngState
         // for why this needs to be captured per-checkpoint now.
-        state.m_rngState = *reinterpret_cast<uint64_t*>(geode::base::get() + 0x6c2e90);
+        if (auto* rng = gdRandomState())
+            state.m_rngState = *rng;
         // Every other random source a replay depends on, captured with it.
         state.m_teleportRandomState = GucciEngine::get()->replay.m_teleportRandomState;
         state.m_advRandStates.clear();
@@ -272,7 +273,8 @@ namespace gucci {
         // already rewound this to the attempt-start value earlier in the
         // same resetLevel() call -- restoring the checkpoint's own captured
         // value here is what actually fixes the per-checkpoint RNG gap.
-        *reinterpret_cast<uint64_t*>(geode::base::get() + 0x6c2e90) = state.m_rngState;
+        if (auto* rng = gdRandomState())
+            *rng = state.m_rngState;
         GucciEngine::get()->replay.m_teleportRandomState = state.m_teleportRandomState;
         for (size_t i = 0;
              i < state.m_advRandStates.size() && i < m_advancedRandom.size(); i++)
@@ -2342,6 +2344,9 @@ namespace gucci {
         // Timing. Written as float by the GUI, so read as float -- asking for a
         // double back out of a float slot returns the default instead.
         updater.m_tps = pick(240.f, "eng_tick_rate", "updater_tps");
+#if !GB_NATIVE_ENGINE
+        updater.m_tps = 240.f;  // see GucciUpdater::setTps
+#endif
         updater.m_speedhack = pick(1.f, "eng_speed", "updater_speedhack");
         updater.m_lockDelta = pick(true, "feat_lock_delta", "updater_lockDelta");
         updater.m_lockDeltaMode = static_cast<GucciUpdater::LockDeltaMode>(
@@ -2473,13 +2478,12 @@ namespace gucci {
                       bot->name, bot->id);
             showStandDownNotification();
         } else {
-            // Off Windows the engine's tick loop does not exist yet
-            // (core/platform.hpp): its hooks stay out of the game's way there,
-            // while the menu and macro files still work.
-            enabled = GB_NATIVE_ENGINE != 0;
+            // Off Windows the engine ticks through GJBaseGameLayer::processCommands
+            // instead of its midhooks (engine_updater.cpp, core/platform.hpp).
+            enabled = true;
             standingDown = false;
-            if (!enabled)
-                log::warn("[GucciBot] The engine isn't ported to this platform yet; recording and playback are off.");
+            if (!GB_NATIVE_ENGINE)
+                log::info("[GucciBot] Portable engine: GD's own 240 TPS; the Windows-only features stand aside.");
         }
 
         log::info("[GucciBot] ========================================");
@@ -2697,6 +2701,11 @@ namespace gucci {
     }
 
     void GucciEngine::analyzeFrameWindows() {
+#if !GB_NATIVE_ENGINE
+        // Calculate steps the game in batches through the Windows engine's midhooks.
+        geode::Notification::create("Calculate is Windows-only for now", geode::NotificationIcon::Info)->show();
+        return;
+#endif
         auto* pl = PlayLayer::get();
         if (!pl)
             return;

@@ -485,6 +485,11 @@ namespace gucci {
             m_frame = f;
         }
         void setTps(double tps) {
+#if !GB_NATIVE_ENGINE
+            // GD's own 240 TPS: running at another rate needs the Windows
+            // midhooks that set the physics step (core/platform.hpp).
+            tps = 240.0;
+#endif
             if (tps > 0.0)
                 m_tps = tps;
         }

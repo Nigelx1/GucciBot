@@ -21,6 +21,7 @@
 // - Absense's look-ahead copies of the player are never read: while one
 //   stands in for a real player the HUD keeps its last text.
 
+#include "core/platform.hpp"
 #include "hacks/hud.hpp"
 
 #include "core/GucciBot.hpp"
@@ -230,7 +231,7 @@ namespace gucci::hud {
                                    pf.m_storedFrames.size(), pf.m_platformerCheckpoints.size());
             }
             if (field == &HudConfig::showRandom) {
-                uint64_t const rng = *reinterpret_cast<uint64_t*>(geode::base::get() + kRandomStateOffset);
+                uint64_t const rng = gdRandomState() ? *gdRandomState() : 0;
                 return fmt::format("Random: {} | shake {} | teleport {}", rng, gb->replay.m_shakeRandomState,
                                    gb->replay.m_teleportRandomState);
             }

@@ -15,6 +15,7 @@
 // page's Calculate button, so both start a run the same way (the pause-menu
 // dismissal and the conflict log live there, not here).
 
+#include "core/platform.hpp"
 #include "ui/pages.hpp"
 #include "ui/kit.hpp"
 
@@ -714,6 +715,9 @@ namespace gucci::ui::pages {
     } // namespace
 
     void calculate() {
+#if !GB_NATIVE_ENGINE
+        kit::Note("Calculate is Windows-only for now: it steps the game in batches through the Windows engine.", Tone::Warn);
+#endif
         g_changed = g_look = g_lstar = false;
 
         runCard();

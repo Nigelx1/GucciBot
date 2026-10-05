@@ -2,6 +2,7 @@
 // settings, and the ImGui hook the whole mod draws from. Written from scratch
 // on 2026-10-01 to replace the old menu (see ui.hpp).
 
+#include "core/platform.hpp"
 #include "ui/ui.hpp"
 #include "ui/kit.hpp"
 #include "ui/look.hpp"
@@ -346,7 +347,11 @@ namespace gucci::ui {
 
             kit::BeginCard("Speed", nullptr);
             float tps = static_cast<float>(gb->updater.m_tps);
+#if GB_NATIVE_ENGINE
             kit::RowBegin("Tick rate", "Physics ticks per second");
+#else
+            kit::RowBegin("Tick rate", "GD's own 240 on this platform: other rates need the Windows engine");
+#endif
             if (kit::InputFloat("tps", &tps, 1.f, "%.0f") && tps >= 1.f) {
                 gb->updater.setTps(tps);
                 Mod::get()->setSavedValue<double>("eng_tick_rate", tps);
@@ -601,6 +606,9 @@ namespace gucci::ui {
         }
 
         void pagePathfinder() {
+#if !GB_NATIVE_ENGINE
+        kit::Note("The Pathfinder is Windows-only for now: its model of the level reads GD's Windows memory layout.", Tone::Warn);
+#endif
             kit::BeginCard("Pathfinder", "Finds a way through the level on its own.");
             int engine = absense::classicSelected() ? 1 : 0;
             const char* engines[] = {"Absense", "Classic"};
@@ -636,6 +644,9 @@ namespace gucci::ui {
         }
 
         void pageRender() {
+#if !GB_NATIVE_ENGINE
+        kit::Note("Rendering is Windows-only for now: it loads FFmpeg from Windows DLLs.", Tone::Warn);
+#endif
             auto* sl = SLRenderer::get();
             auto* mod = Mod::get();
             kit::BeginCard("Render", "Records the level to a video with FFmpeg.");
