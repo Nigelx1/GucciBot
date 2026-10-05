@@ -1319,8 +1319,8 @@ $execute {
 #if !GB_NATIVE_ENGINE
 // Off Windows there are no midhooks inside GJBaseGameLayer::update, so the
 // per-tick work hangs off processCommands, which GD calls once for every
-// physics tick (bound on every platform). GD runs at its own 240 TPS there
-// (GucciUpdater::setTps).
+// physics tick (bound on every platform). Off Windows the rate is 240, or one
+// GD runs as one physics step per tick (core/portable_tps.hpp).
 class $modify(GBPortableTick, GJBaseGameLayer) {
     void processCommands(float dt, bool isHalfTick, bool isLastTick) {
         tickStartWork();

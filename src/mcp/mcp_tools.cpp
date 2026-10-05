@@ -850,7 +850,9 @@ namespace gucci::mcp {
                     reinterpret_cast<void (*)(void*, void*)>(geode::base::get() + 0x4ce060)(
                         nullptr, nullptr);
 #else
-                    throw ToolError("placing a checkpoint this way needs GD's Windows build");
+                    // A real function off Windows, hooked there instead
+                    // (GBPortableCheckpoint, hook_playlayer.cpp).
+                    pl->queueCheckpoint();
 #endif
                 } else if (what == "respawn") {
                     requireFreeRun();
