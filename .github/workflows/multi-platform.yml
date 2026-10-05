@@ -1,10 +1,11 @@
 name: Multi-platform build
 
-# Builds GucciBot for every platform Geode runs on. Windows is GucciBot's home
-# and its releases still come from build_win.bat; macOS, iOS and Android are
-# being brought up on the multiplatform branch. mod.json lists only Windows, so
-# each job adds the platform it builds just before building: a release .geode
-# never claims a platform it has no binary for.
+# Builds GucciBot for every platform Geode runs on and packages one .geode
+# with all five binaries. Windows is GucciBot's home: a release swaps in the
+# Windows binary from build_win.bat's MSVC build, the one Nigel tests. Since
+# 2.0.0-beta.3 mod.json declares every platform itself (the combine step keeps
+# one job's mod.json, so a platform added per job went missing from the
+# package); the step below only matters if one is ever taken out again.
 
 on:
   workflow_dispatch:

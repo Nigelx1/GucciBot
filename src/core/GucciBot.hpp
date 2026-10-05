@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-03-cn (Editor Tools page: Replace All and Macro Buffing reachable again, Macro Buffing settings saved; RNG lock gets its seed box. UNTESTED in-game.)"
+    "2026-10-05-co (2.0.0-beta.3: macOS, iOS and Android join Windows; the simulator, Calculate and tick rates of 162 and up run there too. UNTESTED in-game.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

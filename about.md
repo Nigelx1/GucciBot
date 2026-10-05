@@ -1,4 +1,4 @@
-# GucciBot 2.0.0-beta.2
+# GucciBot 2.0.0-beta.3
 
 > Frame perfect. Ice cold. Brrr.
 
@@ -8,8 +8,20 @@ GucciBot is a Geometry Dash macro bot built on Silicate's physics engine, with a
 
 ## Requirements
 
-- Geometry Dash 2.2081, Windows, Geode 5.10.1+
+- Geometry Dash 2.2081 on Windows, macOS, iOS or Android, Geode 5.10.1+ (macOS, iOS and Android are experimental: see Platforms)
 - Don't run **ToastyReplay Lite** or **Silicate** enabled at the same time -- GucciBot can't run live alongside either, so it stands down until the other one is turned off or uninstalled.
+
+## Platforms
+
+Windows is GucciBot's home, and where all of it has been tested. Since 2.0.0-beta.3 it also runs on **macOS, iOS and Android**, as an experiment: nobody has played it on those yet, so if something there looks wrong, open an issue. On a phone the menu opens from the **GucciBot** button in the pause menu.
+
+What still needs Windows:
+
+- **Pathfinder** (both engines).
+- **Rendering** and **Video Mode**, which load FFmpeg from Windows libraries.
+- Tick rates under 162 TPS, and **High TPS Precision**.
+- The trigger model behind the look-aheads. Elsewhere, path preview, Frame Extrapolation, Prevent Death's look-ahead, Find Best Tick and the Survival Indicator carry moving objects at the speed they have, without the triggers that change them later.
+- Seeded random teleports and screen shake, so a macro through a random teleport may not replay off Windows.
 
 ---
 

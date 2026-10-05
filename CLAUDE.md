@@ -2,7 +2,7 @@
 
 You are picking up an in-progress Geometry Dash mod from its author, Nigel. Read this whole doc before writing code. Section 0 is the part that has cost the most when ignored.
 
-> **What this document is.** A map, last refreshed 2026-10-03 (build `2026-10-03-cn`, version 2.0.0-beta.2). The source is ground truth: when this doc and the repo disagree, the repo wins — and say so. The Claude Code memory store for this project holds far more history than belongs here; read its index at the start of a session.
+> **What this document is.** A map, last refreshed 2026-10-05 (build `2026-10-05-co`, version 2.0.0-beta.3). The source is ground truth: when this doc and the repo disagree, the repo wins — and say so. The Claude Code memory store for this project holds far more history than belongs here; read its index at the start of a session.
 
 ---
 
@@ -27,9 +27,9 @@ A **Geometry Dash macro bot**, distributed as the Geode mod `nigelx1.guccibot` (
 - **Absense** (Absent's Silicate port): its **pathfinder is ported in whole** (`src/absense/`: the planner, its trajectory copies, the World trigger model, Silicate's physics layer for the copies) and is the default Pathfinder engine; GucciBot's own search stays as Classic. Also ideas from it: the MCP server, Check Macro, Replace All.
 - **ToastyReplay** (ToastexGD) is what GucciBot started as. On 2026-09-30 Toast withdrew permission to use his code (TTR's main repo has no licence), and build -bz (385a5f7) removed every TTR-derived line. **Never port, copy or read ToastyReplay code again** (neither repo, nor the deleted files in this repo's history). Rebuilds come from Silicate (GPL-3, credit peony), Absense, or are written fresh; check new code with the ttrcheck/ttrruns tools (memory: project_ttr_removal). GucciBot stands down if ToastyReplay Lite or Silicate is *enabled* alongside it (`src/core/standdown.hpp`): it says why and, for that launch, installs none of its midhooks or patches (Silicate patches the same 13 addresses).
 
-**Target:** GD 2.2081, Windows x64, Geode 5.10.1. **Versions (check source):** `MOD_VERSION "2.0.0-beta.2"`, `GBR6_VERSION 1`, `BRR_FORMAT_VERSION 4`.
+**Target:** GD 2.2081, Geode 5.10.1. Windows x64 is home (built and tested locally); macOS, iOS and Android since beta.3, built by CI (`.github/workflows/multi-platform.yml`) and untested on devices. `GB_NATIVE_ENGINE` (`src/core/platform.hpp`) marks what needs the Windows engine; memory project_multiplatform has the rest. **Versions (check source):** `MOD_VERSION "2.0.0-beta.3"`, `GBR6_VERSION 1`, `BRR_FORMAT_VERSION 4`.
 
-**Branches:** `engine-port-2.0` is where 2.0 lives. `master` was fast-forwarded to it on 2026-10-02 (to take the TTR code off the default branch), so master is 2.0 code now; keep the two level. The 1.8 release download still exists as a tag/release.
+**Branches:** `engine-port-2.0` is where 2.0 lives. `master` was fast-forwarded to it on 2026-10-02 (to take the TTR code off the default branch), so master is 2.0 code now; keep the two level. `multiplatform` (the platform port) was merged into both for beta.3; the CI workflow runs on pushes to it. The 1.8 release download still exists as a tag/release.
 
 ---
 
@@ -92,11 +92,11 @@ ENGINE_AUDIT.md the 2026-09-26/27 audit against Silicate: every finding and how 
 
 ---
 
-## 6. Current state (2026-10-02)
+## 6. Current state (2026-10-05)
 
-- **2.0.0-beta.2** is the latest pre-release (it still contains TTR code; whether to pull old downloads is Nigel's call). Stable ("latest") is still 1.8.
+- **2.0.0-beta.3** is the latest pre-release (2026-10-05): the TTR-free rebuild plus macOS, iOS and Android. Released at Nigel's call before his in-game test of the rebuild. Its Windows binary is the local MSVC build, swapped into CI's all-platform package. Stable ("latest") is still 1.8. beta.2 and earlier still contain TTR code (whether to pull old downloads is Nigel's call).
 - **Build -bz removed all TTR-derived code; the rebuild is done (2026-10-03, builds -ca..-cn, all UNTESTED in-game).** Rebuilt fresh or from Silicate/Absense/anticroom: themes, autoclicker, click sounds, hitboxes, the fork service (src/analysis/trajectory.* on Absense's copies: path preview, Frame Extrapolation, Prevent Death look-ahead, Find Best Tick, sub-tick preview, Agency Map, Classic ranking), HUD, frame editor, Calculate page (+ settings persistence), JMF Trainer + Trainer, Survival Indicator + calibration, noclip accuracy, Video Mode, Macro Tools, Editor Tools, Assistant Access switch, presets, and menu controls for every engine setting. **Not rebuilt:** the legacy BRR reader (no allowed source for the format, no known users). README's License section records that ToastyReplay's source was used up to 2.0.0-beta.2 - agreed with ToastexGD, keep it.
-- **Roadmap (Nigel, 2026-10-03):** his in-game test of the rebuild -> release 2.0.0-beta.3 -> the AI pathfinder (an AI that drives the controller inside the simulator) -> frame-window analyzer fixes -> 2.0.0. Promo plan in memory: project_promo_vouches.
+- **Roadmap (Nigel, 2026-10-03):** 2.0.0-beta.3 (released 2026-10-05) -> the AI pathfinder (an AI that drives the controller inside the simulator) -> frame-window analyzer fixes -> 2.0.0. Promo plan in memory: project_promo_vouches.
 - **Open:** the Bloodbath "Michigun UFO" pathfinder stall (every idea dies on the same tick; escalation past its cap repeats cached searches - see memory project_pathfinder); GitHub issues #8, #11, #13, #14 (#14's cause fixed in -by); restarting right after a completed replay skips the next attempt's level end; the judge leaves the one-step flag armed.
 - Claude sees plan usage live (hooks; memory reference_usage_tracking). The memory store has the detail on each: read `MEMORY.md` there first.
 

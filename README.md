@@ -8,6 +8,8 @@ GucciBot is public now — grab a build from [Releases](https://github.com/Nigel
 
 **Don't run ToastyReplay Lite or Silicate enabled at the same time** — GucciBot can't run live alongside either one (ToastyReplay Lite crashed macro playback; Silicate patches the same spots in the game GucciBot does), so GucciBot stands down until the other one is turned off or uninstalled.
 
+**Runs on Windows, and since 2.0.0-beta.3 on macOS, iOS and Android too** — experimental there, and nobody has played it on those yet. What still needs Windows is listed under [Platforms in about.md](about.md#platforms).
+
 ---
 
 ## Table of Contents
@@ -43,7 +45,7 @@ GucciBot is public now — grab a build from [Releases](https://github.com/Nigel
 ## Practice & analysis
 
 - Macro diff viewer — put two replays side by side, frame by frame.
-- Calculate — per-click survivability windows measured against real game frames, not a guess. Three selectable algorithms now: Time-Based (default), Recovery Range, and Alignment-Independent (also re-tests the previous click's own timing, not just this one). Optional "Circle Skin" marker style.
+- Calculate — per-click timing windows measured against the real game engine, not a guess. It runs on anticroom's Silicate analyzer: Time-Based and Recovery Range, sub-tick measurement finer than a single frame, colour bands with their own marker shapes and sounds, and an in-level legend.
 - Mid-macro TPS changes, noclip accuracy readout, macro trim/merge/surgery.
 - Bot settings presets, a metadata editor, autosave on a timer or at level end.
 
@@ -102,7 +104,7 @@ Also in Settings: **BIG BRRRR**, a core feature of this mod, and **Bass Shake**,
 
 ## Building it
 
-- Target: Geometry Dash 2.2, x64, Windows.
+- Target: Geometry Dash 2.2081. Windows builds locally; macOS, iOS and Android build on GitHub Actions (`.github/workflows/multi-platform.yml`), which packages one `.geode` for all of them.
 - Requires the [Geode SDK](https://geode-sdk.org/) and its usual toolchain (CMake, Ninja, MSVC).
 - Build with:
   ```
@@ -112,7 +114,7 @@ Also in Settings: **BIG BRRRR**, a core feature of this mod, and **Bass Shake**,
 
 ## Status
 
-**1.8** is the stable release. **2.0** (the `engine-port-2.0` branch) is in beta: GucciBot's engine reconciled against Silicate's function by function, now run in-game — Calculate, playback, practice-mode recording and the new Pathfinder (Absense's, ported in) are confirmed, and every fix still waiting on a test says so in its own commit message. If you want something that's been tested by an actual human, use 1.8.
+**1.8** is the stable release. **2.0** (the `engine-port-2.0` branch) is in beta, at **2.0.0-beta.3**: GucciBot's engine reconciled against Silicate's function by function. Calculate, playback, practice-mode recording and the new Pathfinder (Absense's, ported in) were confirmed in-game on beta.2. Beta.3 rebuilds the menu and every feature that came from ToastyReplay from scratch, and adds macOS, iOS and Android; none of that has had a human test yet, and every fix still waiting on one says so in its own commit message. If you want something that's been tested by an actual human, use 1.8.
 
 ## Contact
 
