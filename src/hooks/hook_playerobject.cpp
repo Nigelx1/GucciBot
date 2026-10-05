@@ -315,6 +315,7 @@ class $modify(GB7PlayerObject, PlayerObject) {
         PlayerObject::incrementJumps();
     }
 
+#ifndef GEODE_IS_IOS // inlined there: nothing to hook
     // Level flipping is a gameplay effect; in the editor it fights the
     // editor's own camera handling.
     bool levelFlipping() {
@@ -322,6 +323,7 @@ class $modify(GB7PlayerObject, PlayerObject) {
             return false;
         return PlayerObject::levelFlipping();
     }
+#endif
 
     // Pending checkpoints are GD's own deferred-placement path. The practice
     // fix places and restores checkpoints itself, so letting GD drop one from

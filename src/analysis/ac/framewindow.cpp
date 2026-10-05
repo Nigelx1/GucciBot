@@ -892,7 +892,7 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
         "actions={} samples={} "
         "sweep={} horizon={} slack={} recovery={} algo={} fullRange={} "
         "budget={}ms",
-        pl->m_level ? pl->m_level->m_levelName : std::string{"?"},
+        pl->m_level ? std::string(pl->m_level->m_levelName) : std::string{"?"},
         pl->m_level ? pl->m_level->m_levelID.value() : 0, rs.m_replayName,
         updater.m_tps, rs.m_initialTPS,
         rs.m_actionAtom.m_actions.size(), m_samples.size(), m_sweep, m_horizon,

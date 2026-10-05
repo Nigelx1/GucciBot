@@ -64,6 +64,7 @@ namespace gucci {
     enum class GPUVendor { NVIDIA, AMD, INTEL, OTHER };
 
     static GPUVendor getGPUVendor() {
+#ifdef _WIN32
         HKEY hKey;
         if (RegOpenKeyExA(
                 HKEY_LOCAL_MACHINE, "SYSTEM\\CurrentControlSet\\Enum\\PCI", 0, KEY_READ, &hKey) !=
@@ -95,6 +96,9 @@ namespace gucci {
         }
         RegCloseKey(hKey);
         return GPUVendor::OTHER;
+#else
+        return GPUVendor::OTHER;
+#endif
     }
 
     static std::string getDefaultCodec() {
