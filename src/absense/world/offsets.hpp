@@ -376,21 +376,21 @@ inline bool& cameraGridSnap(GJBaseGameLayer* pl) {
 #ifdef GEODE_IS_WINDOWS
     return at<bool>(pl, kCameraGridSnap);
 #else
-    return pl->m_gameState.m_disableCameraGridSnap;
+    return pl->m_gameState.m_unkBool9;
 #endif
 }
 inline float& cameraEasing(GJBaseGameLayer* pl) {
 #ifdef GEODE_IS_WINDOWS
     return at<float>(pl, kCameraEasing);
 #else
-    return pl->m_gameState.m_cameraEasing;
+    return pl->m_gameState.m_unkFloat3;
 #endif
 }
 inline float& cameraPadding(GJBaseGameLayer* pl) {
 #ifdef GEODE_IS_WINDOWS
     return at<float>(pl, kCameraPadding);
 #else
-    return pl->m_gameState.m_cameraPadding;
+    return pl->m_gameState.m_unkFloat2;
 #endif
 }
 inline uint32_t& dualGroundMode(GJBaseGameLayer* pl) {
@@ -455,9 +455,9 @@ static_assert(world::off::kDualGroundMode >= world::off::kGameState + 0x1a0 &&
 // The bindings members the accessors above use off Windows, pinned here to the
 // Windows offsets they stand for (GucciBot multiplatform).
 static_assert(world::off::detail::kGs + offsetof(GJGameState, m_isFreeMode) == world::off::kCameraFreeMode);
-static_assert(world::off::detail::kGs + offsetof(GJGameState, m_disableCameraGridSnap) == world::off::kCameraGridSnap);
-static_assert(world::off::detail::kGs + offsetof(GJGameState, m_cameraEasing) == world::off::kCameraEasing);
-static_assert(world::off::detail::kGs + offsetof(GJGameState, m_cameraPadding) == world::off::kCameraPadding);
+static_assert(world::off::detail::kGs + offsetof(GJGameState, m_unkBool9) == world::off::kCameraGridSnap);
+static_assert(world::off::detail::kGs + offsetof(GJGameState, m_unkFloat3) == world::off::kCameraEasing);
+static_assert(world::off::detail::kGs + offsetof(GJGameState, m_unkFloat2) == world::off::kCameraPadding);
 static_assert(world::off::detail::kGs + offsetof(GJGameState, m_dualRelated) == world::off::kDualGroundMode);
 static_assert(sizeof(GJGameState::m_dualRelated) == sizeof(uint32_t));
 static_assert(offsetof(GJBaseGameLayer, m_groups) == world::off::kGroups);
@@ -743,12 +743,12 @@ inline constexpr std::size_t kHeadTo = offsetof(GJGameState, m_spawnChannelRelat
 }  // namespace world::off::detail
 static_assert(offsetof(GJGameState, m_isFreeMode) >= world::off::detail::kHeadFrom &&
               offsetof(GJGameState, m_isFreeMode) + sizeof(bool) <= world::off::detail::kHeadTo);
-static_assert(offsetof(GJGameState, m_disableCameraGridSnap) >= world::off::detail::kHeadFrom &&
-              offsetof(GJGameState, m_disableCameraGridSnap) + sizeof(bool) <= world::off::detail::kHeadTo);
-static_assert(offsetof(GJGameState, m_cameraEasing) >= world::off::detail::kHeadFrom &&
-              offsetof(GJGameState, m_cameraEasing) + sizeof(float) <= world::off::detail::kHeadTo);
-static_assert(offsetof(GJGameState, m_cameraPadding) >= world::off::detail::kHeadFrom &&
-              offsetof(GJGameState, m_cameraPadding) + sizeof(float) <= world::off::detail::kHeadTo);
+static_assert(offsetof(GJGameState, m_unkBool9) >= world::off::detail::kHeadFrom &&
+              offsetof(GJGameState, m_unkBool9) + sizeof(bool) <= world::off::detail::kHeadTo);
+static_assert(offsetof(GJGameState, m_unkFloat3) >= world::off::detail::kHeadFrom &&
+              offsetof(GJGameState, m_unkFloat3) + sizeof(float) <= world::off::detail::kHeadTo);
+static_assert(offsetof(GJGameState, m_unkFloat2) >= world::off::detail::kHeadFrom &&
+              offsetof(GJGameState, m_unkFloat2) + sizeof(float) <= world::off::detail::kHeadTo);
 static_assert(sizeof(GJGameState::m_dualRelated) == sizeof(uint32_t));
 #endif
 
