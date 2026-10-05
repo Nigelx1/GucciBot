@@ -6,6 +6,7 @@
 #include <Geode/Geode.hpp>
 #include <cmath>
 #include "core/platform.hpp"
+#include "core/portable_tps.hpp"
 #include <filesystem>
 #include <limits>
 #include <functional>
@@ -486,9 +487,10 @@ namespace gucci {
         }
         void setTps(double tps) {
 #if !GB_NATIVE_ENGINE
-            // GD's own 240 TPS: running at another rate needs the Windows
-            // midhooks that set the physics step (core/platform.hpp).
-            tps = 240.0;
+            // Off Windows GD runs 240, or any rate it takes as one physics
+            // step per tick; others fall back to 240 (core/portable_tps.hpp).
+            if (tps > 0.0)
+                tps = portable_tps::resolve(tps);
 #endif
             if (tps > 0.0)
                 m_tps = tps;

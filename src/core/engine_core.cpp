@@ -2343,7 +2343,7 @@ namespace gucci {
         // double back out of a float slot returns the default instead.
         updater.m_tps = pick(240.f, "eng_tick_rate", "updater_tps");
 #if !GB_NATIVE_ENGINE
-        updater.m_tps = 240.f;  // see GucciUpdater::setTps
+        updater.setTps(updater.m_tps);  // 240 if GD can't run it here (core/portable_tps.hpp)
 #endif
         updater.m_speedhack = pick(1.f, "eng_speed", "updater_speedhack");
         updater.m_lockDelta = pick(true, "feat_lock_delta", "updater_lockDelta");
@@ -2481,7 +2481,8 @@ namespace gucci {
             enabled = true;
             standingDown = false;
             if (!GB_NATIVE_ENGINE)
-                log::info("[GucciBot] Portable engine: GD's own 240 TPS; the Windows-only features stand aside.");
+                log::info("[GucciBot] Portable engine: {:.0f} TPS; the Windows-only features stand aside.",
+                          updater.m_tps);
         }
 
         log::info("[GucciBot] ========================================");

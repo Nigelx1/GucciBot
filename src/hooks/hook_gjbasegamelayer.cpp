@@ -217,6 +217,30 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         CCLayer::update(dt);
     }
 
+    // GD's update for this update's steps. Off Windows at a rate other than
+    // GD's 240, GD takes exactly one tick per update (getModifiedDelta below),
+    // so where real time sets the step count -- the editor, Lock delta off --
+    // that many ticks are that many updates. On Windows the physStepCount and
+    // restorePhysDt midhooks run them inside one update, and at 240 so does
+    // getModifiedDelta. A death ends the run of updates, as it ends
+    // Calculate's (engine_updater.cpp).
+    void gdUpdateSteps(float dt, bool lockDeltaActive) {
+#if !GB_NATIVE_ENGINE
+        auto& upd = GucciEngine::get()->updater;
+        auto* lel = LevelEditorLayer::get();
+        int const steps = upd.estimatedStepCount;
+        if (!lockDeltaActive && upd.m_tps != 240.0 && steps > 1 && !(lel && lel->m_playbackActive)) {
+            for (int i = 0; i < steps; i++) {
+                GJBaseGameLayer::update(dt / (float)steps);
+                if (auto* pl = PlayLayer::get(); pl && pl->m_playerDied)
+                    break;
+            }
+            return;
+        }
+#endif
+        GJBaseGameLayer::update(dt);
+    }
+
     void update(float dt) {
         auto* gb = GucciEngine::get();
         auto& upd = gb->updater;
@@ -258,7 +282,7 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
                 extrapolateVisualUpdates(dt);
             } else {
                 loadActualState();
-                GJBaseGameLayer::update(dt);
+                gdUpdateSteps(dt, lockDeltaActive);
                 storeActualState();
             }
         } else {
@@ -273,7 +297,7 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
             auto* lel = LevelEditorLayer::get();
             bool editorPlayback = lel && lel->m_playbackActive;
             if (lockDeltaActive || upd.estimatedStepCount != 0 || editorPlayback) {
-                GJBaseGameLayer::update(dt);
+                gdUpdateSteps(dt, lockDeltaActive);
                 storeActualState();
             }
         }

@@ -349,10 +349,13 @@ namespace gucci::ui {
             float tps = static_cast<float>(gb->updater.m_tps);
 #if GB_NATIVE_ENGINE
             kit::RowBegin("Tick rate", "Physics ticks per second");
-#else
-            kit::RowBegin("Tick rate", "GD's own 240 on this platform: other rates need the Windows engine");
-#endif
             if (kit::InputFloat("tps", &tps, 1.f, "%.0f") && tps >= 1.f) {
+#else
+            // Only a rate GD can run here is taken (core/portable_tps.hpp), so
+            // a half-typed one ("4" on the way to 480) is passed over.
+            kit::RowBegin("Tick rate", "Physics ticks per second: 240, or 162 and up on this platform");
+            if (kit::InputFloat("tps", &tps, 1.f, "%.0f") && gucci::portable_tps::runnable(tps)) {
+#endif
                 gb->updater.setTps(tps);
                 Mod::get()->setSavedValue<double>("eng_tick_rate", tps);
             }

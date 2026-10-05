@@ -121,6 +121,14 @@ bool GucciUpdater::useFastLockDelta() const {
     // per update and never runs its own sub-step loop, which is where its
     // slope state machine lives.
     auto* gb = GucciEngine::get();
+#if !GB_NATIVE_ENGINE
+    // Off Windows only GD's own 240 TPS can run several ticks in one update
+    // (getModifiedDelta, hook_gjbasegamelayer.cpp). At another rate
+    // Performance steps one tick per update, as Accuracy does, instead of
+    // running at a fraction of the speed.
+    if (m_tps != 240.0)
+        return false;
+#endif
     return m_lockDelta && m_lockDeltaMode == LockDeltaMode::Performance &&
            gb->isPlaying() && !SLRenderer::get()->isRecording();
 }
