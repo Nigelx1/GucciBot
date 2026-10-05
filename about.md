@@ -30,7 +30,7 @@ What still needs Windows:
 - 2 bytes per input. Matches yBot file sizes for human gameplay.
 - **Tap encoding** — wave/ship press+release pairs stored in 1 entry instead of 2. 50% smaller for those sections automatically.
 - **Autoclicker delta compression** — an autoclicker macro of any length, including octillions of clicks, stores in 4 bytes. The bot stores the *description* of the pattern, not the output.
-- Full backward compatibility — old `.brrr` files load automatically.
+- Legacy BRR macros (the format before GBR6) don't load since 2.0.0-beta.3: that reader went out with the ToastyReplay code.
 - Imports both JSON and binary (MessagePack) GDR macros.
 
 ## Engine
@@ -131,7 +131,6 @@ Real click-timing feedback and a synced video-review overlay, both built around 
 - Audio captured straight from the game's own mix, with music, the game's own sound effects, and the level's SFX-trigger audio each at their own volume for the render — so a showcase can keep the sound a creator built into the level while dropping the death and orb noise the run makes.
 - **Split audio tracks** — optional 4-track output (combined mix, plus music, SFX, and frame-window cues each isolated) instead of one merged track.
 - Frame-window markers and cues render into the video too, matching your live tier setup.
-- Render presets — save and reload full render configurations by name, plus a one-press showcase preset (8K60, lossless x264, FLAC, thread count read from your CPU).
 - **Fade in and out** — the picture fades up at the start and down at the end, with the audio on the same curve, so a render doesn't cut hard from black or hard to silence. 1.5 seconds each by default; either end can be set to zero.
 - **Asynchronous frame capture** — readbacks are pipelined through a ring of GPU buffers with fences, instead of stalling the game every single frame waiting for one to copy out.
 - A render holds the view for its whole duration, so a resize, a DPI change or an alt-tab partway through no longer fights the output resolution.

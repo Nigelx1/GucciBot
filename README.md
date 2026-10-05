@@ -40,7 +40,7 @@ GucciBot is public now — grab a build from [Releases](https://github.com/Nigel
 - 2 bytes per input — matches yBot-sized files for regular human gameplay.
 - Tap encoding: a wave/ship press+release pair stores as one entry instead of two.
 - Autoclicker delta compression: an autoclicker macro of *any* length — octillions of clicks, if you're feeling brave — stores in 4 bytes flat. It stores the pattern's description, not its output.
-- Old `.brrr` files still load. GBR6 doesn't forget where it came from.
+- Legacy BRR macros (the format before GBR6) don't load since 2.0.0-beta.3: that reader went out with the ToastyReplay code.
 
 ## Practice & analysis
 
@@ -70,7 +70,6 @@ Two flavors of the same toolset: one permanently pointed at the level "Jupiter M
 - Full gameplay capture to video via FFmpeg — resolution, FPS, bitrate, codec, hardware encoders auto-detected per GPU vendor.
 - Optional 4-track audio output (combined, music, SFX, and frame-window cues each isolated) instead of one flattened track.
 - Frame-window markers and cues bake right into the output video.
-- Save and reload full render configs by name.
 
 ## Themes
 
