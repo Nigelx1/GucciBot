@@ -179,7 +179,9 @@ namespace scbf {
         merged.reserve(m_waiting.size() + queue.size());
         for (auto const& d : m_waiting)
             merged.push_back(d.cmd);
-        merged.insert(merged.end(), queue.begin(), queue.end());
+        // Element by element: Geode's gnustl gd::vector (Android) has no range insert.
+        for (auto const& cmd : queue)
+            merged.push_back(cmd);
         queue = std::move(merged);
         m_waiting.clear();
     }
