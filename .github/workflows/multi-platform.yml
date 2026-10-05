@@ -1,0 +1,59 @@
+name: Multi-platform build
+
+# Builds GucciBot for every platform Geode runs on. Windows is GucciBot's home
+# and its releases still come from build_win.bat; macOS, iOS and Android are
+# being brought up on the multiplatform branch. mod.json lists only Windows, so
+# each job adds the platform it builds just before building: a release .geode
+# never claims a platform it has no binary for.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [multiplatform]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - { name: Windows, os: windows-latest, target: Win64, gd: win }
+          - { name: macOS, os: macos-latest, target: MacOS, gd: mac }
+          - { name: iOS, os: macos-latest, target: iOS, gd: ios }
+          - { name: Android64, os: ubuntu-latest, target: Android64, gd: android }
+          - { name: Android32, os: ubuntu-latest, target: Android32, gd: android }
+
+    name: ${{ matrix.config.name }}
+    runs-on: ${{ matrix.config.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Declare ${{ matrix.config.gd }} in mod.json
+        shell: bash
+        run: >
+          node -e "const fs = require('fs');
+          const m = JSON.parse(fs.readFileSync('mod.json', 'utf8'));
+          m.gd['${{ matrix.config.gd }}'] = m.gd.win;
+          fs.writeFileSync('mod.json', JSON.stringify(m, null, 4));"
+
+      - uses: geode-sdk/build-geode-mod@main
+        with:
+          combine: true
+          target: ${{ matrix.config.target }}
+          # The bindings the local Windows build uses (build/_deps/bindings-src).
+          bindings-ref: d641858f3e1cd2c6d86013c799f224ebdb8ec1cd
+
+  package:
+    name: Package
+    runs-on: ubuntu-latest
+    needs: [build]
+
+    steps:
+      - uses: geode-sdk/build-geode-mod/combine@main
+        id: build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GucciBot (all platforms)
+          path: ${{ steps.build.outputs.build-output }}

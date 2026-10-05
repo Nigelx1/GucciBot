@@ -583,6 +583,7 @@ void GucciUpdater::updateAudioSpeedhack() {
 // unconditionally once installed, completely independent of the
 // GB7CCScheduler/GB7CCDirector path below that already respected
 // `enabled` correctly. Added the same guard to all six.
+#if GB_NATIVE_ENGINE // Windows midhooks and raw addresses (core/platform.hpp)
 static void physDtMidhook(SafetyHookContext& ctx) {
     auto* pl = GJBaseGameLayer::get();
     if (!pl)
@@ -596,7 +597,9 @@ static void physDtMidhook(SafetyHookContext& ctx) {
     ctx.xmm1.f64[0] *= upd.m_tps / 60.0;
     ctx.rip += 0x08;
 }
+#endif
 
+#if GB_NATIVE_ENGINE // Windows midhooks and raw addresses (core/platform.hpp)
 static void physStepCountMidhook(SafetyHookContext& ctx) {
     auto* gb = GucciEngine::get();
     if (!gb->enabled)
@@ -612,7 +615,9 @@ static void physStepCountMidhook(SafetyHookContext& ctx) {
         return;
     ctx.rdx = 2 - upd.estimatedStepCount;
 }
+#endif
 
+#if GB_NATIVE_ENGINE // Windows midhooks and raw addresses (core/platform.hpp)
 static void restorePhysDtMidhook(SafetyHookContext& ctx) {
     auto* gb = GucciEngine::get();
     if (!gb->enabled)
@@ -628,7 +633,9 @@ static void restorePhysDtMidhook(SafetyHookContext& ctx) {
         return;
     ctx.xmm9.f64[0] = upd.getPhysicsDt() * upd.estimatedStepCount;
 }
+#endif
 
+#if GB_NATIVE_ENGINE // Windows midhooks and raw addresses (core/platform.hpp)
 static void earlyUpdateMidhook(SafetyHookContext&) {
     auto* gb = GucciEngine::get();
     if (!gb->enabled)
@@ -663,6 +670,7 @@ static void earlyUpdateMidhook(SafetyHookContext&) {
         gb->practiceFix.saveBackstepFrame(cp, upd.getFrame());
     }
 }
+#endif
 
 static char gamemodeChar(PlayerObject* p) {
     if (!p)
@@ -715,6 +723,7 @@ static void classifyOrbTouchForCapture(PlayerObject* player, bool& outDash, bool
     }
 }
 
+#if GB_NATIVE_ENGINE // Windows midhooks and raw addresses (core/platform.hpp)
 static void frameUpdateMidhook(SafetyHookContext&) {
     auto* gb = GucciEngine::get();
     if (!gb->enabled)
@@ -1033,6 +1042,7 @@ static void frameUpdateMidhook(SafetyHookContext&) {
             pll->queueButton(1, down, true, 0.0);
     }
 }
+#endif
 
 class $modify(GB7CCScheduler, CCScheduler) {
     void update(float dt) override {
@@ -1204,6 +1214,7 @@ static void actionMgrHook(void* self, float dt) {
         actionMgrOrig(self, dt);
 }
 
+#if GB_NATIVE_ENGINE // Windows midhooks and raw addresses (core/platform.hpp)
 $execute {
     // Another bot is enabled that patches these same addresses (Silicate),
     // or that GucciBot can't run beside: leave the game's code alone.
@@ -1261,3 +1272,4 @@ $execute {
     if (g_patchFailures)
         geode::log::error("[GucciBot] {} of 4 binary patches FAILED to apply", g_patchFailures);
 }
+#endif

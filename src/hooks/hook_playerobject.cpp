@@ -43,6 +43,7 @@ static double quantise(double value, double quantum) {
 // that with this midhook -- quantise the value in xmm1 to the finer step and
 // jump past GD's own 0.001 rounding. Until 2026-09-27 GucciBot had only the
 // setter half, so High TPS Precision did half of what it says.
+#if GB_NATIVE_ENGINE // Windows midhooks and raw addresses (core/platform.hpp)
 static void yVelocityRoundMidhook(SafetyHookContext& ctx) {
     double const quantum = yVelocityQuantum();
     if (quantum >= kVanillaQuantum)
@@ -50,10 +51,13 @@ static void yVelocityRoundMidhook(SafetyHookContext& ctx) {
     ctx.xmm1.f64[0] = quantise(ctx.xmm1.f64[0], quantum);
     ctx.rip = geode::base::get() + 0x38c34d;
 }
+#endif
 
+#if GB_NATIVE_ENGINE // Windows midhooks and raw addresses (core/platform.hpp)
 $execute {
     util_midhook(geode::base::get() + 0x38c315, "yVelocityRound", yVelocityRoundMidhook);
 }
+#endif
 
 // Congregation slope diagnostic, see engine_updater.cpp.
 namespace gucci::slopediag {

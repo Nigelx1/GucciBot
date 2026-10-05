@@ -1,20 +1,26 @@
 #pragma once
 
+#include "core/platform.hpp"
 #include "core/standdown.hpp"
 
 #include <Geode/Geode.hpp>
+#if GB_NATIVE_ENGINE
 #include <safetyhook.hpp>
+#endif
 #include <string>
 #include <unordered_map>
 
 namespace gucci {
 
-    static std::unordered_map<std::string, safetyhook::MidHook> g_midHooks;
-
+    // The self-check reads these on every platform; off Windows they stay 0
+    // (core/platform.hpp: no midhooks or patches there).
     inline int g_midhookAttempts = 0;
     inline int g_midhookFailures = 0;
     inline int g_patchAttempts = 0;
     inline int g_patchFailures = 0;
+
+#if GB_NATIVE_ENGINE
+    static std::unordered_map<std::string, safetyhook::MidHook> g_midHooks;
 
     inline bool util_midhook(uintptr_t address, const std::string& name, safetyhook::MidHookFn fn) {
         // Silicate places these same midhooks; two on one instruction crash
@@ -34,5 +40,6 @@ namespace gucci {
         geode::log::info("[GucciBot] Installed midhook '{}'", name);
         return true;
     }
+#endif
 
 } // namespace gucci

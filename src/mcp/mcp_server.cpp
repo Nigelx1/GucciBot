@@ -2,8 +2,29 @@
 // and windows.h pulls in the 1.1 winsock, which then collides with winsock2
 // in ws2tcpip.h. Nothing subtle to debug here -- it is purely include order,
 // so these two lines stay at the top of the file.
+#ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#else
+// Elsewhere it is BSD sockets, under Winsock's names so the server below
+// stays one piece of code.
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/select.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+#include <cerrno>
+
+namespace {
+    using SOCKET = int;
+    using u_short = unsigned short;
+    constexpr SOCKET INVALID_SOCKET = -1;
+    constexpr int SOCKET_ERROR = -1;
+    int closesocket(SOCKET s) { return ::close(s); }
+    int WSAGetLastError() { return errno; }
+} // namespace
+#endif
 
 #include "mcp_server.hpp"
 
@@ -123,12 +144,14 @@ namespace gucci::mcp {
         if (m_running.load())
             return true;
 
+#ifdef _WIN32
         WSADATA wsa{};
         if (int const e = WSAStartup(MAKEWORD(2, 2), &wsa); e != 0) {
             log::error("[GucciBot] MCP: WSAStartup failed ({})", e);
             mcpFileLog(fmt::format("[mcp] start FAILED: WSAStartup returned {}", e));
             return false;
         }
+#endif
 
         m_port = port;
         m_bindState = 0;
@@ -161,7 +184,9 @@ namespace gucci::mcp {
         // flag rather than needing its socket torn out from under it.
         if (m_thread.joinable())
             m_thread.join();
+#ifdef _WIN32
         WSACleanup();
+#endif
         log::info("[GucciBot] MCP server stopped");
         mcpFileLog("[mcp] stopped");
     }
@@ -205,7 +230,9 @@ namespace gucci::mcp {
             FD_ZERO(&set);
             FD_SET(listener, &set);
             timeval tv{0, 200000}; // 200ms, so stopping stays responsive
-            if (select(0, &set, nullptr, nullptr, &tv) <= 0)
+            // Winsock ignores the first argument; BSD sockets need the
+            // highest descriptor plus one.
+            if (select(static_cast<int>(listener) + 1, &set, nullptr, nullptr, &tv) <= 0)
                 continue;
 
             SOCKET client = accept(listener, nullptr, nullptr);

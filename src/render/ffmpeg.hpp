@@ -3,7 +3,9 @@
 
 #pragma once
 
+#ifdef _WIN32
 #include <Windows.h>
+#endif
 
 #include <Geode/Geode.hpp>
 #include <string>
@@ -123,6 +125,7 @@ namespace gucci {
                                                           "sws_scale",
                                                           "sws_freeContext"};
 
+#ifdef _WIN32
     inline void* loadFunction(HMODULE* modules, size_t moduleSize, const char* name) {
         void* fn = 0;
 
@@ -140,10 +143,13 @@ namespace gucci {
 
         return fn;
     }
+#endif
+
 
     static_assert(sizeof(ff_t) == sizeof(void*) * 45);
 
     inline bool loadFFmpegFunctions(void* ff) {
+#ifdef _WIN32
         std::vector<HMODULE> modules;
         std::vector<std::string> dlls = {
             "avutil-60.dll",
@@ -197,6 +203,12 @@ namespace gucci {
         }
 
         return true;
+#else
+        // FFmpeg ships as Windows DLLs only; rendering is Windows-only for now
+        // (core/platform.hpp).
+        (void)ff;
+        return false;
+#endif
     }
 
 } // namespace gucci

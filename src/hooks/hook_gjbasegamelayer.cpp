@@ -35,6 +35,7 @@ namespace gucci::slopediag {
     void log(std::string const& line);
 }
 
+#if GB_NATIVE_ENGINE // Windows midhooks and raw addresses (core/platform.hpp)
 static void shakeRandomOverride(SafetyHookContext& ctx) {
     uint64_t& state = GucciEngine::get()->replay.m_shakeRandomState;
     state = (int)((214013 * state + 2531011) >> 16) & 0x7FFF;
@@ -45,18 +46,22 @@ static void shakeRandomOverride(SafetyHookContext& ctx) {
     // side effect.
     ctx.rip += 6;
 }
+#endif
 
 // ENGINE_AUDIT §1.4. The teleport trigger's random pick, from the macro's
 // seeded teleport state instead of GD's rand(). m_teleportRandomState was
 // stored and restored with checkpoints and reseeded every attempt, but the
 // hook that reads it was never installed. This one sits after the call (no
 // rip skip) -- Silicate's placement.
+#if GB_NATIVE_ENGINE // Windows midhooks and raw addresses (core/platform.hpp)
 static void teleportRandomOverride(SafetyHookContext& ctx) {
     uint64_t& state = GucciEngine::get()->replay.m_teleportRandomState;
     state = (int)((214013 * state + 2531011) >> 16) & 0x7FFF;
     ctx.rax = (uintptr_t)state;
 }
+#endif
 
+#if GB_NATIVE_ENGINE // Windows midhooks and raw addresses (core/platform.hpp)
 static void overrideCheckpointPlacement(SafetyHookContext& ctx) {
     ctx.rip += 5;
     auto* pl = PlayLayer::get();
@@ -70,6 +75,7 @@ static void overrideCheckpointPlacement(SafetyHookContext& ctx) {
         return;
     pl->queueCheckpoint();
 }
+#endif
 
 class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
     struct Fields {
@@ -886,6 +892,7 @@ class $modify(GB7GJEffectManager, GJEffectManager) {
     }
 };
 
+#if GB_NATIVE_ENGINE // Windows midhooks and raw addresses (core/platform.hpp)
 $execute {
     util_midhook(geode::base::get() + 0x23E173, "shakeRandom1", shakeRandomOverride);
     util_midhook(geode::base::get() + 0x23E1A1, "shakeRandom2", shakeRandomOverride);
@@ -894,3 +901,4 @@ $execute {
     util_midhook(geode::base::get() + 0x20FEDC, "teleportRandomOverride", teleportRandomOverride);
     util_midhook(geode::base::get() + 0x3A3657, "checkpointPlacement", overrideCheckpointPlacement);
 }
+#endif

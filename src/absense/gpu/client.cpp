@@ -2,7 +2,9 @@
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
+#ifdef _WIN32
 #include <windows.h>
+#endif
 
 #include <algorithm>
 #include <chrono>
@@ -234,6 +236,7 @@ void Client::setEnabled(bool on) {
 }
 
 void Client::stop() {
+#ifdef _WIN32
     if (m_process) {
         sendFrame(Message::Bye, nullptr, 0);
         // Never 200 ms on the drawing thread. Bye was sent, so a healthy
@@ -250,9 +253,13 @@ void Client::stop() {
     m_toApp = nullptr;
     m_fromApp = nullptr;
     m_levelObjects = -1;
+#else
+    m_process = nullptr;
+#endif
 }
 
 bool Client::start() {
+#ifdef _WIN32
     if (m_process) return true;
     if (m_broken) return false;
     const auto exe = Mod::get()->getResourcesDir() / kExe;
@@ -320,9 +327,14 @@ bool Client::start() {
     m_message = "using " + m_device;
     devlog::logf(devlog::Cat::AbsensePathfinder, "graphics card search: %s", m_device.c_str());
     return true;
+#else
+    // The GPU helper is a Windows program.
+    return false;
+#endif
 }
 
 bool Client::sendFrame(Message type, const void* payload, size_t bytes) {
+#ifdef _WIN32
     if (!m_toApp) return false;
     FrameHeader h{kMagic, type, (uint32_t)bytes};
     DWORD wrote = 0;
@@ -336,9 +348,16 @@ bool Client::sendFrame(Message type, const void* payload, size_t bytes) {
         sent += wrote;
     }
     return true;
+#else
+    (void)type;
+    (void)payload;
+    (void)bytes;
+    return false;
+#endif
 }
 
 bool Client::readFrame(Message& type, std::vector<uint8_t>& payload, unsigned timeoutMs) {
+#ifdef _WIN32
     if (!m_fromApp) return false;
     const auto began = std::chrono::steady_clock::now();
     const auto deadline = began + std::chrono::milliseconds(timeoutMs);
@@ -377,6 +396,12 @@ bool Client::readFrame(Message& type, std::vector<uint8_t>& payload, unsigned ti
     if (h.bytes && !readExactly(payload.data(), h.bytes)) return false;
     type = h.type;
     return true;
+#else
+    (void)type;
+    (void)payload;
+    (void)timeoutMs;
+    return false;
+#endif
 }
 
 void Client::sendLevel(GJBaseGameLayer* pl, float fromX, float toX, uint64_t tick, uint32_t horizon) {

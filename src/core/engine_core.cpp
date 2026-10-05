@@ -4,6 +4,7 @@
 #include <fmt/format.h>
 #include "core/brr_format.hpp"
 #include "core/gbr6_format.hpp"
+#include "core/platform.hpp"
 #include "core/standdown.hpp"
 #include "hacks/hud.hpp"
 #include "tools/selfcheck.hpp"
@@ -2472,8 +2473,13 @@ namespace gucci {
                       bot->name, bot->id);
             showStandDownNotification();
         } else {
-            enabled = true;
+            // Off Windows the engine's tick loop does not exist yet
+            // (core/platform.hpp): its hooks stay out of the game's way there,
+            // while the menu and macro files still work.
+            enabled = GB_NATIVE_ENGINE != 0;
             standingDown = false;
+            if (!enabled)
+                log::warn("[GucciBot] The engine isn't ported to this platform yet; recording and playback are off.");
         }
 
         log::info("[GucciBot] ========================================");
@@ -2483,7 +2489,7 @@ namespace gucci {
 
         // Standing down, no midhooks or patches went in on purpose
         // (util_midhook, engine_updater.cpp): expect none.
-        gbcheck::run(standingDown ? 0 : 5, standingDown ? 0 : 4, GBR6_VERSION, BRR_FORMAT_VERSION,
+        gbcheck::run(standingDown || !GB_NATIVE_ENGINE ? 0 : 5, standingDown || !GB_NATIVE_ENGINE ? 0 : 4, GBR6_VERSION, BRR_FORMAT_VERSION,
                      MOD_VERSION);
     }
 

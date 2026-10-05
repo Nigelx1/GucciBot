@@ -1,3 +1,4 @@
+#include <cstdio>
 #include "audio/bigbrrr.hpp"
 #include "audio/gameaudiomute.hpp"
 #include "ui/ui.hpp"
@@ -134,7 +135,7 @@ namespace gucci {
             audioMuteHeld = true;
 
             FMOD_DSP_DESCRIPTION desc = {};
-            strcpy_s(desc.name, "guccibot bass tap");
+            std::snprintf(desc.name, sizeof(desc.name), "%s", "guccibot bass tap");
             desc.version = 0x00020000;
             desc.numinputbuffers = 1;
             desc.numoutputbuffers = 1;

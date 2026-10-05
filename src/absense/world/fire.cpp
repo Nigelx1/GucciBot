@@ -310,8 +310,11 @@
 
 #include <algorithm>
 #include <cmath>
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
 #include <emmintrin.h>
 #include <xmmintrin.h>
+#endif
+#include <cstdint>
 
 #include "absense/compat/bot.hpp"
 #include "absense/physics/gjbasegamelayer.hpp"
@@ -377,7 +380,14 @@ void sortedInsert(std::vector<int>& v, int x) {
 
 // cvttss2si: INT_MIN for a NaN or a value out of range, where a C++ cast is
 // undefined.
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
 int truncFloat(float f) { return _mm_cvtt_ss2si(_mm_set_ss(f)); }
+#else
+// Off x86: the same answer cvttss2si gives, INT_MIN for NaN or out of range.
+int truncFloat(float f) {
+    return (f != f || f >= 2147483648.0f || f < -2147483648.0f) ? INT32_MIN : static_cast<int>(f);
+}
+#endif
 
 GameObject* objectOf(const Run& run, int slot) {
     if (slot < 0 || (std::size_t)slot >= run.def->slots.size()) return nullptr;
@@ -1213,7 +1223,14 @@ double getItemValue(Run& run, int mode, int item) {
 }
 
 // cvttsd2si, as the item triggers take their result to an int.
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
 int truncDouble(double d) { return _mm_cvttsd_si32(_mm_set_sd(d)); }
+#else
+// Off x86: the same answer cvttsd2si gives, INT_MIN for NaN or out of range.
+int truncDouble(double d) {
+    return (d != d || d >= 2147483648.0 || d < -2147483648.0) ? INT32_MIN : static_cast<int>(d);
+}
+#endif
 
 // roundf(x * 1000) / 1000: the mods and the tolerance of an item trigger
 // (0x234288, 0x23471b).

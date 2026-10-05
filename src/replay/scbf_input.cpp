@@ -5,7 +5,10 @@
 
 #include <Geode/Geode.hpp>
 
+#ifdef _WIN32
 #include <Windows.h>
+#endif
+#include <chrono>
 
 #include <algorithm>
 #include <cmath>
@@ -31,6 +34,7 @@ namespace scbf {
     } // namespace
 
     double clockSeconds() {
+#ifdef _WIN32
         static double const freq = [] {
             LARGE_INTEGER f;
             QueryPerformanceFrequency(&f);
@@ -40,6 +44,9 @@ namespace scbf {
         LARGE_INTEGER t;
         QueryPerformanceCounter(&t);
         return static_cast<double>(t.QuadPart) / freq;
+#else
+        return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+#endif
     }
 
     bool isLivePress(PlayerButtonCommand const& cmd) {

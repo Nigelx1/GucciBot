@@ -46,7 +46,10 @@
 #include <map>
 #include <memory>
 
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
 #include <emmintrin.h>
+#endif
+#include <cstdint>
 
 #include "absense/compat/devlog.hpp"
 #include "absense/trajectory/trajectory.hpp"  // moverCacheGeneration
@@ -146,8 +149,19 @@ void setBit(RawBits& b, std::size_t i) { elem<uint32_t>(b.words, i >> 5) |= uint
 
 // cvttsd2si / cvttss2si: INT_MIN for a NaN or out of range, where a C++
 // cast is undefined.
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
 int truncDouble(double v) { return _mm_cvttsd_si32(_mm_set_sd(v)); }
 int truncFloat(float v) { return _mm_cvtt_ss2si(_mm_set_ss(v)); }
+#else
+// Off x86: the same answer cvttsd2si gives, INT_MIN for NaN or out of range.
+int truncDouble(double v) {
+    return (v != v || v >= 2147483648.0 || v < -2147483648.0) ? INT32_MIN : static_cast<int>(v);
+}
+// Off x86: the same answer cvttss2si gives, INT_MIN for NaN or out of range.
+int truncFloat(float v) {
+    return (v != v || v >= 2147483648.0f || v < -2147483648.0f) ? INT32_MIN : static_cast<int>(v);
+}
+#endif
 
 bool sameBits(const auto& a, const auto& b) { return std::memcmp(&a, &b, sizeof(a)) == 0; }
 

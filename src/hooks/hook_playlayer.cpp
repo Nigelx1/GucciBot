@@ -1,3 +1,4 @@
+#include "core/platform.hpp"
 #include "core/GucciBot.hpp"
 #include "core/standdown.hpp"
 #include "render/renderer.hpp"
@@ -914,6 +915,7 @@ static void queueCheckpointHook(void* unk, void* unk2) {
     });
 }
 
+#if GB_NATIVE_ENGINE // Windows midhooks and raw addresses (core/platform.hpp)
 $execute {
     // Standing down for another bot: no address hooks (core/standdown.hpp).
     if (standDownBot())
@@ -923,3 +925,4 @@ $execute {
                            "PlayLayer::queueCheckpoint",
                            tulip::hook::TulipConvention::Default);
 }
+#endif

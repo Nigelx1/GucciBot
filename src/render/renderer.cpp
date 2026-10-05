@@ -129,6 +129,7 @@ namespace gucci {
     // size once DPI scaling is involved. Asked of the OS rather than cocos,
     // because cocos is the thing being lied to while a render owns the view.
     static std::optional<CCSize> getWindowFramebufferSize() {
+#ifdef _WIN32
         HDC deviceContext = wglGetCurrentDC();
         if (!deviceContext)
             return std::nullopt;
@@ -144,6 +145,9 @@ namespace gucci {
             return std::nullopt;
 
         return CCSize(static_cast<float>(width), static_cast<float>(height));
+#else
+        return std::nullopt;
+#endif
     }
 
     // Silicate's resizeShaderLayer (render/renderer.cpp), ported 2026-09-27.
