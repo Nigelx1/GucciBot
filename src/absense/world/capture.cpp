@@ -4,6 +4,7 @@
 // game. The offsets and element sizes it relies on are pinned in
 // world/offsets.hpp against the game's own code.
 
+#include "core/platform.hpp"
 #include <Geode/Geode.hpp>
 
 #include <algorithm>
@@ -114,20 +115,7 @@ static_assert(offsetof(GroupCommandObject2, m_keyframes) == 0x1b8 && offsetof(Gr
               offsetof(GroupCommandObject2, m_remapKeys) == 0x1e8);
 #endif
 
-// Copies a gd container into a std::vector element by element: on Android
-// (Geode's gnustl) gd iterators aren't standard iterators, so a std::vector
-// can't be built or assigned from a pair of them.
-template <class Vec, class Container>
-void fillFrom(Vec& out, Container const& in) {
-    out.clear();
-    out.reserve(in.size());
-    for (auto const& e : in) {
-        if constexpr (requires { e.first; e.second; })
-            out.emplace_back(e.first, e.second);
-        else
-            out.push_back(e);
-    }
-}
+using gucci::fillFrom;  // core/platform.hpp
 
 namespace {
 

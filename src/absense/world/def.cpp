@@ -1,3 +1,4 @@
+#include "core/platform.hpp"
 #include "absense/world/def.hpp"
 
 #include <Geode/Geode.hpp>
@@ -742,7 +743,8 @@ void WorldDef::build(GJBaseGameLayer* layer) {
     remapTables.clear();
     remapTables.reserve(layer->m_spawnRemapTriggers.size());
     for (const auto& table : layer->m_spawnRemapTriggers) {
-        std::vector<std::pair<int, int>> pairs(table.begin(), table.end());
+        std::vector<std::pair<int, int>> pairs;
+        gucci::fillFrom(pairs, table);  // core/platform.hpp
         std::sort(pairs.begin(), pairs.end());
         remapTables.push_back(std::move(pairs));
     }

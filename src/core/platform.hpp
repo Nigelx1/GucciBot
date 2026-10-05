@@ -45,6 +45,21 @@ namespace gucci {
 
     // `dst = std::move(src)` for GD types holding gd::maps (a GJGameState):
     // a copy on Android, where Geode's gnustl has no map move assignment.
+    // Copies a gd container into a std::vector element by element: on Android
+    // (Geode's gnustl) gd iterators aren't standard iterators, so a std::vector
+    // can't be built or assigned from a pair of them.
+    template <class Vec, class Container>
+    void fillFrom(Vec& out, Container const& in) {
+        out.clear();
+        out.reserve(in.size());
+        for (auto const& e : in) {
+            if constexpr (requires { e.first; e.second; })
+                out.emplace_back(e.first, e.second);
+            else
+                out.push_back(e);
+        }
+    }
+
     template <class T>
     void gdAssign(T& dst, T& src) {
 #if defined(GEODE_IS_ANDROID)

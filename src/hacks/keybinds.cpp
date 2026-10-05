@@ -4,7 +4,9 @@
 #include "ui/ui.hpp"
 
 #include <Geode/Geode.hpp>
+#ifndef GEODE_IS_IOS
 #include <Geode/modify/CCKeyboardDispatcher.hpp>
+#endif
 
 using namespace geode::prelude;
 using namespace gucci;
@@ -67,6 +69,7 @@ namespace {
 
 } // namespace
 
+#ifndef GEODE_IS_IOS // no keyboard dispatcher binding there
 class $modify(GucciKeys, CCKeyboardDispatcher) {
     bool dispatchKeyboardMSG(enumKeyCodes key, bool down, bool repeat, double timestamp) {
         int const k = static_cast<int>(key);
@@ -104,3 +107,4 @@ class $modify(GucciKeys, CCKeyboardDispatcher) {
         return CCKeyboardDispatcher::dispatchKeyboardMSG(key, down, repeat, timestamp);
     }
 };
+#endif

@@ -18,6 +18,7 @@ using namespace gucci;
 // which swallows the event and records the new WINDOW size instead, so the
 // render keeps its resolution and restoreView still puts back something real
 // at the end. When no render is running they pass through untouched.
+#ifdef GEODE_IS_WINDOWS // rendering and GLFW are Windows-only (core/platform.hpp)
 struct GB7CCEGLView : Modify<GB7CCEGLView, CCEGLView> {
     void setFrameSize(float width, float height) {
         if (SLRenderer::get()->handleFrameSizeChange(width, height))
@@ -37,3 +38,4 @@ struct GB7CCEGLView : Modify<GB7CCEGLView, CCEGLView> {
         CCEGLView::onGLFWWindowSizeFunCallback(window, width, height);
     }
 };
+#endif
