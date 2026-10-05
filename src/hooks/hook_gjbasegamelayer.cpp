@@ -370,12 +370,16 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
             held.clear();
         m_fields->m_heldAt = frame;
 
-        held.insert(held.end(), m_queuedButtons.begin(), m_queuedButtons.end());
+        // Element by element: on Android gd::vector and std::vector don't take
+        // each other's iterators.
+        for (auto const& cmd : m_queuedButtons)
+            held.push_back(cmd);
         m_queuedButtons.clear();
 
         if (!upd.isInputTick(frame))
             return;
-        m_queuedButtons.insert(m_queuedButtons.end(), held.begin(), held.end());
+        for (auto const& cmd : held)
+            m_queuedButtons.push_back(cmd);
         held.clear();
     }
 

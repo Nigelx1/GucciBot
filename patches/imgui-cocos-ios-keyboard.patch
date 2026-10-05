@@ -1,0 +1,12 @@
+--- a/src/hooks.cpp
++++ b/src/hooks.cpp
+@@ -4,7 +4,9 @@
+ #include <Geode/modify/CCMouseDispatcher.hpp>
+ #include <Geode/modify/CCIMEDispatcher.hpp>
+ #include <Geode/modify/CCTouchDispatcher.hpp>
++#ifndef GEODE_IS_IOS
+ #include <Geode/modify/CCKeyboardDispatcher.hpp>
++#endif
+
+ #include <imgui.h>
+

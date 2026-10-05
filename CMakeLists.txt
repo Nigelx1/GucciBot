@@ -23,7 +23,18 @@ endif()
 add_subdirectory($ENV{GEODE_SDK} $ENV{GEODE_SDK}/build)
 
 set(IMGUI_VERSION "v1.91.4" CACHE STRING "Pin imgui version" FORCE)
-CPMAddPackage("gh:matcool/gd-imgui-cocos#97643336209b760a3d59d83b770546b1cfef4e7d")
+if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    # The keyboard modify header doesn't compile for iOS; this version already
+    # leaves the keyboard hook out there but still includes the header.
+    CPMAddPackage(
+        NAME gd-imgui-cocos
+        GITHUB_REPOSITORY matcool/gd-imgui-cocos
+        GIT_TAG 97643336209b760a3d59d83b770546b1cfef4e7d
+        PATCHES "${CMAKE_CURRENT_SOURCE_DIR}/patches/imgui-cocos-ios-keyboard.patch"
+    )
+else()
+    CPMAddPackage("gh:matcool/gd-imgui-cocos#97643336209b760a3d59d83b770546b1cfef4e7d")
+endif()
 # SafetyHook (and Zydis under it) places the engine's midhooks at fixed
 # addresses in the Windows build of GD: x86-64 Windows only. No other platform
 # builds them (src/core/platform.hpp).
