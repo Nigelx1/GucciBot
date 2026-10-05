@@ -1,6 +1,7 @@
 // Video Mode's engine: the decode thread, the texture and the overlay. See
 // videomode.hpp for the shape of it.
 
+#include "render/gl_compat.hpp"
 #include "trainers/videomode.hpp"
 
 #include "core/GucciBot.hpp"

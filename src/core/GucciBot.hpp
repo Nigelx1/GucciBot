@@ -107,7 +107,9 @@ namespace gucci {
         // reported that as "the macro's own timing does not reproduce here"
         // and refused to measure the click at all. That is what made every
         // window past the first few come back desynced.
-        std::unordered_map<int, int> m_persistentItemMap;
+        // GD's own type (EffectManager::m_persistentItemCountMap): on Android
+        // gd::unordered_map is not std::unordered_map, so no = between them.
+        gd::unordered_map<int, int> m_persistentItemMap;
         std::array<float, 2000> m_varianceValues{};
         std::vector<GameObject*> m_calcNonEffectObjects;
         int m_calcNonEffectObjectsSize = 0;

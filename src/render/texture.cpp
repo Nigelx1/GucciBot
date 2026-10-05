@@ -1,3 +1,4 @@
+#include "core/platform.hpp"
 #include "texture.hpp"
 #include "renderer.hpp"
 
@@ -28,6 +29,7 @@ namespace gucci {
     }
 
     void SLRenderTexture::init(std::unique_ptr<Colorspace> colorspace) {
+#if GB_DESKTOP_GL
 #ifdef SILICATE_PROTECT
         VMProtectBegin("SLRenderTexture::init");
 #endif
@@ -99,12 +101,16 @@ namespace gucci {
 #ifdef SILICATE_PROTECT
         VMProtectEnd();
 #endif
+#else
+        m_colorspace = std::move(colorspace);
+#endif
     }
 
     // Starts a readback into the next ring slot and drops a fence. Does not
     // map: mapping here is what stalled the GL thread on the GPU every frame.
     // tryHarvest picks the data up once the fence says it has landed.
     void SLRenderTexture::issue(float fadeThreshold) {
+#if GB_DESKTOP_GL
         (void)fadeThreshold;  // read by the shaders via SLRenderer::m_fadeThreshold
         int const slot = (int)(m_issued % RING_SIZE);
 
@@ -181,12 +187,16 @@ namespace gucci {
 
         glUseProgram(0);
         glEnable(GL_BLEND);
+#else
+        (void)fadeThreshold;
+#endif
     }
 
     // Maps the oldest outstanding slot, but only once its fence reports the
     // copy is done -- so the map itself never waits. With block=true it will
     // wait up to a second, which is what the end-of-render drain uses.
     bool SLRenderTexture::tryHarvest(uint8_t** outData, bool block) {
+#if GB_DESKTOP_GL
         if (m_mapped >= m_issued)
             return false;
 
@@ -219,9 +229,15 @@ namespace gucci {
         *outData = pixelData;
         m_mapped++;
         return true;
+#else
+        (void)outData;
+        (void)block;
+        return false;
+#endif
     }
 
     void SLRenderTexture::releaseSlot() {
+#if GB_DESKTOP_GL
         for (int i = 0; i < RING_SIZE; i++) {
             if (!m_slotMapped[i])
                 continue;
@@ -231,9 +247,13 @@ namespace gucci {
             m_slotData[i] = nullptr;
         }
         glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+#else
+
+#endif
     }
 
     void SLRenderTexture::displayPreview() {
+#if GB_DESKTOP_GL
         CCSize size = CCDirector::sharedDirector()->getOpenGLView()->getFrameSize();
 
         int blend;
@@ -260,9 +280,13 @@ namespace gucci {
         if (blend) {
             glEnable(GL_BLEND);
         }
+#else
+
+#endif
     }
 
     void SLRenderTexture::destroy() {
+#if GB_DESKTOP_GL
         glDeleteTextures(2, m_tex);
         glDeleteFramebuffers(2, m_fbo);
         for (int i = 0; i < RING_SIZE; i++) {
@@ -277,6 +301,9 @@ namespace gucci {
         glDeleteProgram(m_program);
 
         glBindFramebuffer(GL_FRAMEBUFFER, m_old_fbo);
+#else
+
+#endif
     }
 
 } // namespace gucci

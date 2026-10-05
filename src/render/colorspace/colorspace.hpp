@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 
+#include "../gl_compat.hpp"
 #include "../pass.hpp"
 
 // At global scope: inside namespace gucci, these C headers pull in C++
