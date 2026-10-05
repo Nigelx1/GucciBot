@@ -18,7 +18,10 @@
 #include "Geode/cocos/cocoa/CCGeometry.h"
 #include "Geode/cocos/platform/CCPlatformMacros.h"
 
-struct SavedPlayerCheckpoint;
+namespace gucci {
+    struct SavedPlayerCheckpoint;
+}
+using gucci::SavedPlayerCheckpoint;
 
 // Throws away the cached scan of the moving objects (it holds raw objects of
 // one level): called when a level is set up or torn down.

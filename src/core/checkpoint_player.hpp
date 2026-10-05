@@ -1,8 +1,12 @@
 #pragma once
 
+#include "core/platform.hpp"
+
 namespace gucci {
 
     struct SavedPlayerCheckpoint {
+        GB_GD_MAP_COPY_ONLY(SavedPlayerCheckpoint)
+
         void apply(PlayerObject* p);
         static SavedPlayerCheckpoint create(PlayerObject* p);
         // Silicate's in-place form, which Absense's trajectory uses.

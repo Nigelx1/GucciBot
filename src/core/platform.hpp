@@ -28,3 +28,13 @@
 #else
 #define GB_DESKTOP_GL 0
 #endif
+
+// Geode's gnustl (GD's standard library on Android) has no move assignment for
+// gd::map, so a struct holding one, or a GJGameState, must not get an implicit
+// move assignment there: declaring the copy assignment makes moves copy. Other
+// platforms keep their cheap moves.
+#if defined(GEODE_IS_ANDROID)
+#define GB_GD_MAP_COPY_ONLY(T) T& operator=(T const&) = default;
+#else
+#define GB_GD_MAP_COPY_ONLY(T)
+#endif

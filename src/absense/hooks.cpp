@@ -70,10 +70,13 @@ class $modify(AbsGJBaseGameLayer, GJBaseGameLayer) {
         GJBaseGameLayer::rotateObject(object, rotation);
     }
 
+#ifdef GEODE_IS_WINDOWS
+    // Inlined into its callers on the other platforms: nothing to hook.
     void moveAreaObject(GameObject* object, float dx, float dy) {
         if (world::ledgerRecording()) world::ledgerNoteObject(object);
         GJBaseGameLayer::moveAreaObject(object, dx, dy);
     }
+#endif
 
     void transformAreaObjects(GameObject* object, cocos2d::CCArray* objects, float scaleX, float scaleY,
                               bool reset) {

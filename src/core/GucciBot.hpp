@@ -5,6 +5,7 @@
 
 #include <Geode/Geode.hpp>
 #include <cmath>
+#include "core/platform.hpp"
 #include <filesystem>
 #include <limits>
 #include <functional>
@@ -66,6 +67,8 @@ namespace gucci {
     };
 
     struct SavedCheckpointState {
+        GB_GD_MAP_COPY_ONLY(SavedCheckpointState)
+
         CheckpointObject* m_checkpoint = nullptr;
         uint64_t m_frameOffset = 0;
 

@@ -606,7 +606,7 @@ void AbsensePathfinder::releaseAnchors() {
     m_anchors.clear();
     if (m_hasStartAnchor) {
         if (m_startAnchor.state.m_checkpoint) m_startAnchor.state.m_checkpoint->release();
-        m_startAnchor = Anchor{};
+        m_startAnchor = Anchor();
         m_hasStartAnchor = false;
     }
 }
@@ -3555,7 +3555,7 @@ bool AbsensePathfinder::moveStartBack() {
     // The old start's kept state is past the new one and nothing points at it
     // any more: it is let go of here, or its whole checkpoint leaks per move.
     if (m_hasStartAnchor && m_startAnchor.state.m_checkpoint) m_startAnchor.state.m_checkpoint->release();
-    m_startAnchor = Anchor{};
+    m_startAnchor = Anchor();
     m_hasStartAnchor = false;  // the kept state of the old start is past the new one; a new one is kept on landing
     // The furthest path first: kept after the clip it was the replay cut back
     // to the new start, and the "-furthest" file lost everything past it.
