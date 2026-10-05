@@ -1,3 +1,4 @@
+#include <cstdio>
 #include "dsp.hpp"
 
 #include "renderer.hpp"
@@ -166,16 +167,16 @@ namespace gucci {
     void AudioRecorder::init(FMOD::ChannelGroup* group) {
         FMOD_DSP_DESCRIPTION desc = {};
         if (this == getMusic()) {
-            strcpy_s(desc.name, "guccibot dsp (music)");
+            std::snprintf(desc.name, sizeof(desc.name), "%s", "guccibot dsp (music)");
             desc.read = AudioRecorder::writeCallbackMusic;
         } else if (this == getSfx()) {
-            strcpy_s(desc.name, "guccibot dsp (sfx)");
+            std::snprintf(desc.name, sizeof(desc.name), "%s", "guccibot dsp (sfx)");
             desc.read = AudioRecorder::writeCallbackSfx;
         } else if (this == getFrameWindow()) {
-            strcpy_s(desc.name, "guccibot dsp (fw)");
+            std::snprintf(desc.name, sizeof(desc.name), "%s", "guccibot dsp (fw)");
             desc.read = AudioRecorder::writeCallbackFrameWindow;
         } else {
-            strcpy_s(desc.name, "guccibot dsp");
+            std::snprintf(desc.name, sizeof(desc.name), "%s", "guccibot dsp");
             desc.read = AudioRecorder::writeCallbackMain;
         }
         desc.version = 0x00020000;

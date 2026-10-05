@@ -3,9 +3,9 @@
 
 #include "../pass.hpp"
 
-namespace gucci {
-
-    extern "C" {
+// At global scope: inside namespace gucci, these C headers pull in C++
+// wrappers that open namespace std there (gucci::std) under Clang.
+extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavfilter/avfilter.h>
 #include <libavfilter/buffersink.h>
@@ -15,7 +15,9 @@ namespace gucci {
 #include <libavutil/opt.h>
 #include <libswresample/swresample.h>
 #include <libswscale/swscale.h>
-    }
+}
+
+namespace gucci {
 
     class Colorspace {
     public:

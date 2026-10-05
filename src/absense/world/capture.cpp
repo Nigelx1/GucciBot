@@ -104,6 +104,7 @@ namespace world {
     X(interpRelatedTrue, m_someInterpValue2RelatedTrue)       \
     X(unk204, m_unkInt204)
 
+#ifdef GEODE_IS_WINDOWS // Windows layouts only (core/platform.hpp)
 #define WORLD_CMD_OFFSET(field, member) \
     static_assert(offsetof(WCmd, field) == offsetof(GroupCommandObject2, member), "WCmd." #field);
 WORLD_CMD_FIELDS(WORLD_CMD_OFFSET)
@@ -111,6 +112,7 @@ WORLD_CMD_FIELDS(WORLD_CMD_OFFSET)
 static_assert(offsetof(WCmd, moveOffsetX) == offsetof(GroupCommandObject2, m_moveOffset));
 static_assert(offsetof(GroupCommandObject2, m_keyframes) == 0x1b8 && offsetof(GroupCommandObject2, m_gameObject) == 0x1d8 &&
               offsetof(GroupCommandObject2, m_remapKeys) == 0x1e8);
+#endif
 
 namespace {
 

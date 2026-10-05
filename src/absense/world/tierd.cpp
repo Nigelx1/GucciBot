@@ -156,6 +156,7 @@ namespace world {
 // The bindings and the fact table have to agree about every field read below;
 // where they did not, the constant would win and a raw accessor would take the
 // member's place (design step 1).
+#ifdef GEODE_IS_WINDOWS // Windows layouts only (core/platform.hpp)
 static_assert(sizeof(EnterEffectInstance) == off::kAreaInstanceSize);
 static_assert(offsetof(EnterEffectInstance, m_gameObject) == 0xa0);
 static_assert(offsetof(EnterEffectInstance, m_targetID) == 0xac);
@@ -173,6 +174,7 @@ static_assert(offsetof(GJBaseGameLayer, m_processedAreaObjectsCount) == 0xee8);
 static_assert(offsetof(GJBaseGameLayer, m_targetGroupsArray) == 0xf78);
 static_assert(offsetof(EffectGameObject, m_animationID) == 0x684);
 static_assert(offsetof(EffectGameObject, m_targetGroupID) == 0x5c8);
+#endif
 
 namespace {
 

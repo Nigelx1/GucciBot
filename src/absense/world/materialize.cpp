@@ -63,10 +63,12 @@
 
 namespace world {
 
+#ifdef GEODE_IS_WINDOWS // Windows layouts only (core/platform.hpp)
 static_assert(sizeof(RawVec) == sizeof(gd::vector<int>));
 // addToSection 0x226bb4 allocates 0x20 bytes for a column's flags.
 static_assert(sizeof(RawBits) == 0x20 && sizeof(std::vector<bool>) == 0x20);
 static_assert(offsetof(OBB2D, m_center) + sizeof(cocos2d::CCPoint) - offsetof(OBB2D, m_corners) == 0x78);
+#endif
 
 namespace {
 

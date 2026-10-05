@@ -372,6 +372,7 @@ namespace world::off::detail {
 inline constexpr std::ptrdiff_t kGs = offsetof(GJBaseGameLayer, m_gameState);
 }
 
+#ifdef GEODE_IS_WINDOWS // Windows layouts only (core/platform.hpp)
 static_assert(offsetof(GJBaseGameLayer, m_gameState) == world::off::kGameState);
 static_assert(offsetof(GJBaseGameLayer, m_effectManager) == world::off::kEffectManager);
 static_assert(offsetof(GJBaseGameLayer, m_player1) == world::off::kPlayer1);
@@ -674,6 +675,7 @@ static_assert(offsetof(EffectGameObject, m_timeWarpTimeMod) == 0x6f4);
 static_assert(world::off::detail::kGs + offsetof(GJGameState, m_timeWarp) == 0x330);
 static_assert(world::off::detail::kGs + offsetof(GJGameState, m_queuedTimeWarp) == 0x334);
 static_assert(world::off::detail::kGs + offsetof(GJGameState, m_timeWarpRelated) == 0x338);
+#endif
 
 #if defined(__clang__)
 #pragma clang diagnostic pop

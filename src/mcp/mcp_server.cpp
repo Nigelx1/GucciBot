@@ -21,6 +21,7 @@ namespace {
     using u_short = unsigned short;
     constexpr SOCKET INVALID_SOCKET = -1;
     constexpr int SOCKET_ERROR = -1;
+    constexpr int WSAEADDRINUSE = EADDRINUSE;
     int closesocket(SOCKET s) { return ::close(s); }
     int WSAGetLastError() { return errno; }
 } // namespace
