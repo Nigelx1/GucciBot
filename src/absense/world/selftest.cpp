@@ -684,6 +684,19 @@ void World::turnOff(const char* why) {
 }
 
 void World::init(GJBaseGameLayer* pl) {
+#ifndef GEODE_IS_WINDOWS
+    // GucciBot multiplatform (2026-10-05): the World reads and writes GD's
+    // Windows memory layout (world/offsets.hpp), and the checks below compare
+    // code bytes at Windows addresses, which in another platform's binary are
+    // somewhere else entirely (or not mapped). So off Windows it stays off
+    // without checking anything, and every run takes the paths it took before
+    // the World existed: no trigger model, moving objects carried at their
+    // current speed (MovingObjects). Nothing else turns it on (disabled starts
+    // true, and only the end of this function clears it).
+    (void)pl;
+    disable("the trigger model reads GD's Windows memory layout; off on this platform");
+    return;
+#else
     // The code is checked whether or not a layer is at hand: returning early
     // without a layer left the World on unchecked.
     if (const char* bad = checkCode()) {
@@ -799,6 +812,7 @@ void World::init(GJBaseGameLayer* pl) {
                  "game's arithmetic, the bucket shadow restores exactly, the ledger undoes its ring exactly and "
                  "the step comes out the same through branches, the World is on",
                  sizeof(kSites) / sizeof(kSites[0]));
+#endif
 }
 
 void World::checkDef(const WorldDef& def, GJBaseGameLayer* pl) {

@@ -198,7 +198,7 @@ namespace gucci::ui::pages {
 
     void indicators() {
 #if !GB_NATIVE_ENGINE
-        kit::Note("The Survival Indicator is Windows-only for now: it asks the simulator, which reads GD's Windows memory layout.", Tone::Warn);
+        kit::Note("The Survival Indicator is untested on this platform. Moving objects keep the speed they have now: triggers that start, stop or change them later are not simulated here.", Tone::Warn);
 #endif
         bool changed = false;
         indicatorCard(changed);

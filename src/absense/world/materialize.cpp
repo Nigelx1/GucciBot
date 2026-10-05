@@ -52,6 +52,9 @@
 #include <cstdint>
 
 #include "absense/compat/devlog.hpp"
+#ifndef GEODE_IS_WINDOWS
+#include <cstdlib>  // std::abort (GucciBot multiplatform, see gameNew)
+#endif
 #include "absense/trajectory/trajectory.hpp"  // moverCacheGeneration
 #include "absense/world/offsets.hpp"
 #include "absense/world/world.hpp"
@@ -80,6 +83,7 @@ constexpr int kMaxSection = 100001;
 
 // ------------------------------------------------------------ the game's heap
 
+#ifdef GEODE_IS_WINDOWS
 void* gameNew(std::size_t bytes) {
     using Fn = void* (*)(std::size_t);
     return reinterpret_cast<Fn>(geode::base::get() + off::kGameNew)(bytes);
@@ -90,6 +94,22 @@ void gameDelete(void* p, std::size_t bytes) {
     using Fn = void (*)(void*, std::size_t);
     reinterpret_cast<Fn>(geode::base::get() + off::kGameDelete)(p, bytes);
 }
+#else
+// GucciBot multiplatform: the two image offsets above are the Windows build's.
+// Off Windows the World never turns on (World::init), so no materializer is
+// ever begun and nothing reaches these; if something ever did, stopping here
+// with a log line beats calling into the middle of another platform's binary.
+void* gameNew(std::size_t) {
+    geode::log::error("World: the materializer ran off Windows, where the World is off; stopping");
+    std::abort();
+}
+
+void gameDelete(void* p, std::size_t) {
+    if (!p) return;
+    geode::log::error("World: the materializer ran off Windows, where the World is off; stopping");
+    std::abort();
+}
+#endif
 
 char* allocZeroed(std::size_t bytes) {
     auto* p = static_cast<char*>(gameNew(bytes));

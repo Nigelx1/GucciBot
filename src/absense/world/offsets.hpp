@@ -357,6 +357,50 @@ inline uint16_t& positionDirtyWord(GameObject* o) { return at<uint16_t>(o, kRect
 inline uint16_t& rectDirtyWord(GameObject* o) { return at<uint16_t>(o, kDirty368); }
 inline uint32_t& layerCommandIndex(GJBaseGameLayer* pl) { return at<uint32_t>(pl, kCommandIndex); }
 
+// The four camera fields and the ground kind a copy crossing a portal writes
+// (kCameraFreeMode ... kDualGroundMode above): the only raw fields the copies
+// themselves touch, which is why they have accessors of their own. On Windows
+// they are read where the constants say, exactly as before. Elsewhere
+// (GucciBot multiplatform, 2026-10-05) the raw offsets do not hold, and the
+// bindings members the Windows asserts at the end of this file pin to the same
+// places are used instead: GJGameState is declared once for every platform,
+// so the member is the same field there.
+inline bool& cameraFreeMode(GJBaseGameLayer* pl) {
+#ifdef GEODE_IS_WINDOWS
+    return at<bool>(pl, kCameraFreeMode);
+#else
+    return pl->m_gameState.m_isFreeMode;
+#endif
+}
+inline bool& cameraGridSnap(GJBaseGameLayer* pl) {
+#ifdef GEODE_IS_WINDOWS
+    return at<bool>(pl, kCameraGridSnap);
+#else
+    return pl->m_gameState.m_disableCameraGridSnap;
+#endif
+}
+inline float& cameraEasing(GJBaseGameLayer* pl) {
+#ifdef GEODE_IS_WINDOWS
+    return at<float>(pl, kCameraEasing);
+#else
+    return pl->m_gameState.m_cameraEasing;
+#endif
+}
+inline float& cameraPadding(GJBaseGameLayer* pl) {
+#ifdef GEODE_IS_WINDOWS
+    return at<float>(pl, kCameraPadding);
+#else
+    return pl->m_gameState.m_cameraPadding;
+#endif
+}
+inline uint32_t& dualGroundMode(GJBaseGameLayer* pl) {
+#ifdef GEODE_IS_WINDOWS
+    return at<uint32_t>(pl, kDualGroundMode);
+#else
+    return pl->m_gameState.m_dualRelated;
+#endif
+}
+
 }  // namespace world::off
 
 // ------------------------------------------------------------ compile-time checks
@@ -408,6 +452,14 @@ static_assert(world::off::kCameraGridSnap >= world::off::kGameState &&
               world::off::kCameraGridSnap + 1 <= world::off::kGameState + 0x1a0);
 static_assert(world::off::kDualGroundMode >= world::off::kGameState + 0x1a0 &&
               world::off::kDualGroundMode + 4 <= world::off::kGameState + (std::ptrdiff_t)sizeof(GJGameState));
+// The bindings members the accessors above use off Windows, pinned here to the
+// Windows offsets they stand for (GucciBot multiplatform).
+static_assert(world::off::detail::kGs + offsetof(GJGameState, m_isFreeMode) == world::off::kCameraFreeMode);
+static_assert(world::off::detail::kGs + offsetof(GJGameState, m_disableCameraGridSnap) == world::off::kCameraGridSnap);
+static_assert(world::off::detail::kGs + offsetof(GJGameState, m_cameraEasing) == world::off::kCameraEasing);
+static_assert(world::off::detail::kGs + offsetof(GJGameState, m_cameraPadding) == world::off::kCameraPadding);
+static_assert(world::off::detail::kGs + offsetof(GJGameState, m_dualRelated) == world::off::kDualGroundMode);
+static_assert(sizeof(GJGameState::m_dualRelated) == sizeof(uint32_t));
 static_assert(offsetof(GJBaseGameLayer, m_groups) == world::off::kGroups);
 static_assert(offsetof(GJBaseGameLayer, m_staticGroups) == world::off::kStaticGroups);
 static_assert(offsetof(GJBaseGameLayer, m_optimizedGroups) == world::off::kOptimizedGroups);
@@ -675,6 +727,29 @@ static_assert(offsetof(EffectGameObject, m_timeWarpTimeMod) == 0x6f4);
 static_assert(world::off::detail::kGs + offsetof(GJGameState, m_timeWarp) == 0x330);
 static_assert(world::off::detail::kGs + offsetof(GJGameState, m_queuedTimeWarp) == 0x334);
 static_assert(world::off::detail::kGs + offsetof(GJGameState, m_timeWarpRelated) == 0x338);
+#endif
+
+#ifndef GEODE_IS_WINDOWS
+// Off Windows (GucciBot multiplatform): the four camera members the accessors
+// hand a copy have to sit in the run of bytes a run's PortalState::head keeps
+// (trajectory.cpp: from m_cameraZoom, up to m_spawnChannelRelated0 and at most
+// 0x1a0), or a branch would leave a portal's camera settings in the live game
+// with nothing to put them back. The ground kind is kept on its own.
+namespace world::off::detail {
+inline constexpr std::size_t kHeadFrom = offsetof(GJGameState, m_cameraZoom);
+inline constexpr std::size_t kHeadTo = offsetof(GJGameState, m_spawnChannelRelated0) < kHeadFrom + 0x1a0
+                                           ? offsetof(GJGameState, m_spawnChannelRelated0)
+                                           : kHeadFrom + 0x1a0;
+}  // namespace world::off::detail
+static_assert(offsetof(GJGameState, m_isFreeMode) >= world::off::detail::kHeadFrom &&
+              offsetof(GJGameState, m_isFreeMode) + sizeof(bool) <= world::off::detail::kHeadTo);
+static_assert(offsetof(GJGameState, m_disableCameraGridSnap) >= world::off::detail::kHeadFrom &&
+              offsetof(GJGameState, m_disableCameraGridSnap) + sizeof(bool) <= world::off::detail::kHeadTo);
+static_assert(offsetof(GJGameState, m_cameraEasing) >= world::off::detail::kHeadFrom &&
+              offsetof(GJGameState, m_cameraEasing) + sizeof(float) <= world::off::detail::kHeadTo);
+static_assert(offsetof(GJGameState, m_cameraPadding) >= world::off::detail::kHeadFrom &&
+              offsetof(GJGameState, m_cameraPadding) + sizeof(float) <= world::off::detail::kHeadTo);
+static_assert(sizeof(GJGameState::m_dualRelated) == sizeof(uint32_t));
 #endif
 
 #if defined(__clang__)

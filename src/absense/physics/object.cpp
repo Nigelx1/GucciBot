@@ -19,10 +19,15 @@ bool activatedPlatformer(EnhancedGameObject* object, bool isPlatformer) {
 
 void* hasBeenActivatedByPlayerOrig = nullptr;
 
+// A raw Windows address nothing calls any more (see the commented-out call
+// below; the check is done on the object's own fields). Off Windows it means
+// nothing, so it is not worked out there (GucciBot multiplatform).
+#ifdef GEODE_IS_WINDOWS
 $execute {
     hasBeenActivatedByPlayerOrig =
         reinterpret_cast<void*>(geode::base::get() + 0x1a1b70);
 }
+#endif
 
 // this doesn't work in trajectory for some odd reason
 bool hasBeenActivatedByPlayer(PlayerObject* player,

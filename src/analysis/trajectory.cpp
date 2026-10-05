@@ -93,9 +93,10 @@ namespace gucci {
         // already taken the copies down) the fade out of it is the running
         // scene, and copies made then would belong to a layer about to go.
         bool canMake(PlayLayer* pl) {
-            // Absense's copies read GD's Windows memory layout (core/platform.hpp).
-            if (!GB_NATIVE_ENGINE)
-                return false;
+            // Off Windows the copies run too (multiplatform, 2026-10-05), but
+            // without Absense's World: it reads GD's Windows memory layout, so
+            // World::init keeps it off there and moving objects are carried at
+            // the speed they had (absense/world/selftest.cpp).
             if (!pl || pl != PlayLayer::get() || !pl->m_player1 || !pl->m_levelSettings || !pl->m_objectLayer ||
                 !pl->m_debugDrawNode || !pl->m_debugDrawNode->getParent())
                 return false;

@@ -1147,13 +1147,13 @@ struct PortalState {
         const GJGameState& gs = pl->m_gameState;
         std::memcpy(head.data(), &gs.m_cameraZoom, headBytes(gs));
         std::memcpy(portals.data(), &gs.m_lastActivatedPortal1, portalBytes(gs));
-        groundMode = world::off::at<uint32_t>(pl, world::off::kDualGroundMode);
+        groundMode = world::off::dualGroundMode(pl);
     }
     void put(GJBaseGameLayer* pl) const {
         GJGameState& gs = pl->m_gameState;
         std::memcpy(&gs.m_cameraZoom, head.data(), headBytes(gs));
         std::memcpy(&gs.m_lastActivatedPortal1, portals.data(), portalBytes(gs));
-        world::off::at<uint32_t>(pl, world::off::kDualGroundMode) = groundMode;
+        world::off::dualGroundMode(pl) = groundMode;
     }
 };
 
@@ -2151,12 +2151,12 @@ struct Trajectory::Sim {
         pl->m_gameState.m_lastActivatedPortal2 = nullptr;
         if (portal && portal->m_classType == GameObjectClassType::Effect) {
             auto* e = static_cast<EffectGameObject*>(portal);
-            world::off::at<bool>(pl, world::off::kCameraFreeMode) = e->m_cameraIsFreeMode;
-            world::off::at<bool>(pl, world::off::kCameraGridSnap) = e->m_cameraDisableGridSnap;
+            world::off::cameraFreeMode(pl) = e->m_cameraIsFreeMode;
+            world::off::cameraGridSnap(pl) = e->m_cameraDisableGridSnap;
             if (e->m_cameraEditCameraSettings) {
-                world::off::at<float>(pl, world::off::kCameraEasing) =
+                world::off::cameraEasing(pl) =
                     std::min(40.0f, std::max(1.0f, e->m_cameraEasingValue));
-                world::off::at<float>(pl, world::off::kCameraPadding) =
+                world::off::cameraPadding(pl) =
                     std::min(1.0f, std::max(0.0f, e->m_cameraPaddingValue));
             }
         }

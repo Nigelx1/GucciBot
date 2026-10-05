@@ -349,6 +349,11 @@ void bumpPlayerFromGJBGL(GJBaseGameLayer* pl, PlayerObject* player,
 //     return ret;
 // }
 
+// Raw Windows addresses Silicate kept and nothing calls (the collision pass
+// below calls the bound getOrientedBox / updateOrientedBox, which exist on every
+// platform). Off Windows these addresses mean nothing, so they are not even
+// worked out there (GucciBot multiplatform).
+#ifdef GEODE_IS_WINDOWS
 static void* g_PlayerObject_getOrientedBox = nullptr;
 static void* g_PlayerObject_updateOrientedBox = nullptr;
 
@@ -358,6 +363,7 @@ $execute {
     g_PlayerObject_updateOrientedBox =
         reinterpret_cast<void*>(geode::base::get() + 0x19e5f0);
 }
+#endif
 
 void collisionCheckObjects(GJBaseGameLayer* pl, PlayerObject* player,
                            gd::vector<GameObject*>* objects, int objectCount,

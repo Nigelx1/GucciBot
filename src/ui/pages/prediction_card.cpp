@@ -38,7 +38,7 @@ namespace gucci::ui::pages {
 
     void predictionCard() {
 #if !GB_NATIVE_ENGINE
-        kit::Note("Path preview, Frame Extrapolation and the look-aheads are Windows-only for now: the simulator reads GD's Windows memory layout.", Tone::Warn);
+        kit::Note("Untested on this platform. Moving objects keep the speed they have now: triggers that start, stop or change them later are not simulated here (that part reads GD's Windows memory layout).", Tone::Warn);
 #endif
         auto* gb = GucciEngine::get();
         auto& upd = gb->updater;
