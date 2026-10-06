@@ -49,6 +49,7 @@ namespace gucci::botswitch {
             "cocos2d::CCDirector::drawScene",
 #endif
             "cocos2d::CCKeyboardDispatcher::dispatchKeyboardMSG",
+            "cocos2d::CCKeyboardDispatcher::updateModifierKeys",  // the menu key on a Mac (Option)
             "cocos2d::CCMouseDispatcher::dispatchScrollMSG",
             "cocos2d::CCIMEDispatcher::dispatchInsertText",
             "cocos2d::CCIMEDispatcher::dispatchDeleteBackward",

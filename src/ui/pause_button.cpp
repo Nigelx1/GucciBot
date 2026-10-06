@@ -1,12 +1,14 @@
-// The menu's key on a phone: a GucciBot button in the pause menu. Desktop keeps
-// its keybind and gets no button.
+// The menu's key on a phone: a GucciBot button in the pause menu. On a Mac too,
+// as a way in that doesn't depend on a key (Nigel's Option key didn't open the
+// menu there, 2026-10-06; hacks/keybinds.cpp). Windows keeps its keybind and
+// gets no button.
 
 #include "ui/ui.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/modify/PauseLayer.hpp>
 
-#ifdef GEODE_IS_MOBILE
+#if defined(GEODE_IS_MOBILE) || defined(GEODE_IS_MACOS)
 
 using namespace geode::prelude;
 

@@ -5,6 +5,8 @@
 #include "ui/ui.hpp"
 
 #include <Geode/Geode.hpp>
+
+#include <chrono>
 #ifndef GEODE_IS_IOS
 #include <Geode/modify/CCKeyboardDispatcher.hpp>
 #endif
@@ -72,6 +74,22 @@ namespace {
         return used;
     }
 
+#ifdef GEODE_IS_MACOS
+    // On a Mac a modifier key can reach GucciBot twice: through
+    // updateModifierKeys (below) and, maybe, dispatchKeyboardMSG as well -
+    // only the Windows binary has been read. One press fires its bindings once.
+    bool runTogglesOnce(int k) {
+        static std::chrono::steady_clock::time_point s_last[256];
+        if (k <= 0 || k >= 256)
+            return runToggles(k);
+        auto const now = std::chrono::steady_clock::now();
+        if (now - s_last[k] < std::chrono::milliseconds(150))
+            return true;
+        s_last[k] = now;
+        return runToggles(k);
+    }
+#endif
+
 } // namespace
 
 #ifndef GEODE_IS_IOS // no keyboard dispatcher binding there
@@ -95,8 +113,13 @@ class $modify(GucciKeys, CCKeyboardDispatcher) {
             trainers::onKeyInput(down);
 
         bool handled = false;
-        if (down && !repeat)
+        if (down && !repeat) {
+#ifdef GEODE_IS_MACOS
+            handled = runTogglesOnce(k);
+#else
             handled = runToggles(k);
+#endif
+        }
         if (!live)
             return CCKeyboardDispatcher::dispatchKeyboardMSG(key, down, repeat, timestamp);
 
@@ -116,5 +139,30 @@ class $modify(GucciKeys, CCKeyboardDispatcher) {
 
         return CCKeyboardDispatcher::dispatchKeyboardMSG(key, down, repeat, timestamp);
     }
+
+#ifdef GEODE_IS_MACOS
+    // macOS reports a modifier pressed on its own (Option, Shift, Control) as
+    // a change of modifier flags, which reaches cocos here and not through
+    // dispatchKeyboardMSG, so a binding on one never fired: the menu's default
+    // is Left Alt, and Option on Nigel's Mac did nothing (2026-10-06). A
+    // modifier going down fires its bindings once, on either side of the
+    // keyboard (macOS doesn't say which), as the key does on Windows.
+    void updateModifierKeys(bool shift, bool ctrl, bool alt, bool cmd) {
+        bool const was[3] = {m_bShiftPressed, m_bControlPressed, m_bAltPressed};
+        CCKeyboardDispatcher::updateModifierKeys(shift, ctrl, alt, cmd);
+        bool const now[3] = {shift, ctrl, alt};
+        // generic, left and right key codes, as cocos numbers them on Windows
+        static constexpr int kCodes[3][3] = {{0x10, 0xA0, 0xA1}, {0x11, 0xA2, 0xA3}, {0x12, 0xA4, 0xA5}};
+        for (int m = 0; m < 3; m++) {
+            if (!now[m] || was[m])
+                continue;
+            // A key-capture control in the menu takes it first, as the left key.
+            if (gucci::ui::feedKeyCapture(kCodes[m][1]) || ImGui::GetIO().WantTextInput)
+                continue;
+            for (int code : kCodes[m])
+                runTogglesOnce(code);
+        }
+    }
+#endif
 };
 #endif

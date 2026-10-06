@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-06-cp (Disable bot: a master switch in Settings takes GucciBot out of the game without a restart, the menu becomes that one switch; local builds pin Geode bindings to CI commit. UNTESTED in-game.)"
+    "2026-10-06-cq (Mac: Option opens the menu - macOS sends a lone modifier as a flags change, now handled - and the pause menu has a GucciBot button there too. UNTESTED on a Mac.)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
