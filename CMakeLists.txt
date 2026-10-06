@@ -20,6 +20,24 @@ else()
     message(STATUS "Found Geode: $ENV{GEODE_SDK}")
 endif()
 
+# Geode's bindings, pinned. Without this the SDK clones bindings' main on every
+# configure, and main moves under us: on 2026-10-06 a GJGameState rename made
+# it uncopyable, which GucciBot's practice checkpoints rely on, and every
+# local build stopped compiling. CI pins the same commit (bindings-ref in
+# .github/workflows/multi-platform.yml); move both together. A
+# GEODE_BINDINGS_REPO_PATH environment variable still wins (CI's action sets
+# it), for working on bindings.
+if(NOT DEFINED ENV{GEODE_BINDINGS_REPO_PATH})
+    include(FetchContent)
+    FetchContent_Declare(gb_bindings
+        GIT_REPOSITORY https://github.com/geode-sdk/bindings.git
+        GIT_TAG d641858f3e1cd2c6d86013c799f224ebdb8ec1cd
+        SOURCE_SUBDIR no-cmake-here  # fetch only: the SDK adds it as a subdirectory itself
+    )
+    FetchContent_MakeAvailable(gb_bindings)
+    set(GEODE_BINDINGS_REPO_PATH ${gb_bindings_SOURCE_DIR})
+endif()
+
 add_subdirectory($ENV{GEODE_SDK} $ENV{GEODE_SDK}/build)
 
 set(IMGUI_VERSION "v1.91.4" CACHE STRING "Pin imgui version" FORCE)
