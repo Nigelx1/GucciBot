@@ -1,4 +1,5 @@
 #include "core/GucciBot.hpp"
+#include "core/bot_switch.hpp"
 #include "hacks/autoclicker.hpp"
 #include "trainers/trainer_core.hpp"
 #include "ui/ui.hpp"
@@ -37,6 +38,10 @@ namespace {
             }
             ui::toggleOpen();
         });
+        // Switched off (core/bot_switch.hpp), the menu key is the only one
+        // left: it opens the menu that holds the switch.
+        if (!botswitch::on())
+            return used;
         used |= fire(keys.onFrameAdvance, k, [&] {
             if (PlayLayer::get())
                 gb->updater.togglePaused();
@@ -81,14 +86,19 @@ class $modify(GucciKeys, CCKeyboardDispatcher) {
         if (ImGui::GetIO().WantTextInput)
             return CCKeyboardDispatcher::dispatchKeyboardMSG(key, down, repeat, timestamp);
 
+        // Switched off (core/bot_switch.hpp), only the menu key does anything.
+        bool const live = botswitch::on();
+
         // The trainers' click bars take the player's own jump key while they
         // run away from a level (in one, GD's handleButton reports it).
-        if (!repeat && jumpKey(key))
+        if (live && !repeat && jumpKey(key))
             trainers::onKeyInput(down);
 
         bool handled = false;
         if (down && !repeat)
             handled = runToggles(k);
+        if (!live)
+            return CCKeyboardDispatcher::dispatchKeyboardMSG(key, down, repeat, timestamp);
 
         // Held-repeat keys: frame step and step back, only while paused.
         if (down && gb->updater.m_paused) {

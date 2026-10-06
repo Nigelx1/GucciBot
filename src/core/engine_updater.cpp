@@ -4,6 +4,7 @@
 #include "analysis/trajectory.hpp"
 #include "analysis/pathfinder.hpp"
 #include "analysis/ac/framewindow.hpp"
+#include "core/bot_switch.hpp"
 #include "hooks/util_midhook.hpp"
 #include "render/renderer.hpp"
 #include "trailbuf/trailbuf.hpp"
@@ -1110,6 +1111,13 @@ class $modify(GB7CCScheduler, CCScheduler) {
 
 class $modify(GB7CCDirector, CCDirector) {
     void drawScene() {
+        // Switched off (core/bot_switch.hpp). On Windows this hook is out with
+        // the rest; where imgui-cocos draws from drawScene (macOS, Android)
+        // every drawScene hook has to stay in, so this one steps aside. The
+        // work below the check had nothing left to do: the switch waited for
+        // a render to finish and put Click Between Frames back first.
+        if (botswitch::takenOut())
+            return CCDirector::drawScene();
         // First, before the enabled check: a render that finished (or failed)
         // on the encode thread is torn down here, on the game thread.
         SLRenderer::get()->finishStop();
@@ -1276,43 +1284,15 @@ $execute {
         "CCActionManager::update",
         tulip::hook::TulipConvention::Fastcall);
 
-    auto p1 =
-        Mod::get()->patch(reinterpret_cast<void*>(geode::base::get() + 0x23B4EA),
-                          {0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
-                           0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90});
+    // Through util_patch, so the master switch can take them out and put
+    // them back (core/bot_switch.hpp); with it saved off they wait unplaced.
+    util_patch(geode::base::get() + 0x23B4EA, std::vector<uint8_t>(24, 0x90), "nop 0x23B4EA");
+    util_patch(geode::base::get() + 0x4cd95c, std::vector<uint8_t>(19, 0x90), "nop 0x4cd95c");
+    util_patch(geode::base::get() + 0x3B994C, {0xeb, 0x5e}, "jmp 0x3B994C");
+    util_patch(geode::base::get() + 0x3BA508, std::vector<uint8_t>(5, 0x90), "nop 0x3BA508");
 
-    auto p2 = Mod::get()->patch(reinterpret_cast<void*>(geode::base::get() + 0x4cd95c),
-                                {0x90,
-                                 0x90,
-                                 0x90,
-                                 0x90,
-                                 0x90,
-                                 0x90,
-                                 0x90,
-                                 0x90,
-                                 0x90,
-                                 0x90,
-                                 0x90,
-                                 0x90,
-                                 0x90,
-                                 0x90,
-                                 0x90,
-                                 0x90,
-                                 0x90,
-                                 0x90,
-                                 0x90});
-
-    auto p3 =
-        Mod::get()->patch(reinterpret_cast<void*>(geode::base::get() + 0x3B994C), {0xeb, 0x5e});
-
-    auto p4 = Mod::get()->patch(reinterpret_cast<void*>(geode::base::get() + 0x3BA508),
-                                {0x90, 0x90, 0x90, 0x90, 0x90});
-
-    g_patchAttempts = 4;
-    g_patchFailures =
-        (p1.isErr() ? 1 : 0) + (p2.isErr() ? 1 : 0) + (p3.isErr() ? 1 : 0) + (p4.isErr() ? 1 : 0);
     if (g_patchFailures)
-        geode::log::error("[GucciBot] {} of 4 binary patches FAILED to apply", g_patchFailures);
+        geode::log::error("[GucciBot] {} of {} binary patches FAILED to apply", g_patchFailures, g_patchAttempts);
 }
 #endif
 

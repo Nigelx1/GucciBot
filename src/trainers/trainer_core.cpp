@@ -2,6 +2,7 @@
 // the Trainer's macro and track. See trainer_core.hpp for the shape of it.
 
 #include "trainers/trainer_core.hpp"
+#include "core/bot_switch.hpp"
 #include "trainers/jupiterghost.hpp"
 #include "trainers/trainerghost.hpp"
 
@@ -876,6 +877,10 @@ namespace gucci::trainers {
 // times a frame.
 class $modify(GBTrainerClock, cocos2d::CCDirector) {
     void drawScene() {
+        // Stays hooked while GucciBot is switched off where imgui-cocos draws
+        // from drawScene (core/bot_switch.hpp); the clock stops with the rest.
+        if (gucci::botswitch::takenOut())
+            return CCDirector::drawScene();
         gucci::trainers::tick();
         CCDirector::drawScene();
     }

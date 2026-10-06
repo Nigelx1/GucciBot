@@ -2,6 +2,7 @@
 #include "analysis/ac/framewindow.hpp"
 #include "ui/ui.hpp"
 #include <fmt/format.h>
+#include "core/bot_switch.hpp"
 #include "core/brr_format.hpp"
 #include "core/gbr6_format.hpp"
 #include "core/platform.hpp"
@@ -2485,14 +2486,20 @@ namespace gucci {
                           updater.m_tps);
         }
 
+        // Switched off from its own menu last time (core/bot_switch.hpp): no
+        // midhook or patch went in, and the hooks come out here. Standing
+        // down as well, this takes out the hooks a stand-down leaves in.
+        botswitch::applyAtLaunch();
+
         log::info("[GucciBot] ========================================");
         log::info("[GucciBot] BUILD: {} | compiled {} {}", GB_BUILD_LABEL, __DATE__, __TIME__);
         log::info("[GucciBot] ========================================");
         log::info("[GucciBot] " MOD_VERSION " initialized — {} macros", storedMacros.size());
 
-        // Standing down, no midhooks or patches went in on purpose
-        // (util_midhook, engine_updater.cpp): expect none.
-        gbcheck::run(standingDown || !GB_NATIVE_ENGINE ? 0 : 5, standingDown || !GB_NATIVE_ENGINE ? 0 : 4, GBR6_VERSION, BRR_FORMAT_VERSION,
+        // Standing down, or switched off, no midhooks or patches went in on
+        // purpose (util_midhook, engine_updater.cpp): expect none.
+        bool const noEngineCode = standingDown || botswitch::takenOut() || !GB_NATIVE_ENGINE;
+        gbcheck::run(noEngineCode ? 0 : 5, noEngineCode ? 0 : 4, GBR6_VERSION, BRR_FORMAT_VERSION,
                      MOD_VERSION);
     }
 

@@ -16,6 +16,7 @@
 #include "analysis/pathfinder.hpp"
 #include "audio/bigbrrr.hpp"
 #include "core/GucciBot.hpp"
+#include "core/bot_switch.hpp"
 #include "hacks/autoclicker.hpp"
 #include "mcp/mcp_server.hpp"
 #include "render/intro.hpp"
@@ -779,10 +780,14 @@ namespace gucci::ui {
         // restart_game tool relies on that).
         constexpr int kAssistantPort = 8790;
         bool g_assistantAccessFailed = false;
+        // Running when GucciBot was switched off, so it comes back with it
+        // (suspendAssistantAccess below; core/bot_switch.hpp).
+        bool g_assistantSuspended = false;
 
         void setAssistantAccess(bool on) {
             auto* server = mcp::Server::get();
             g_assistantAccessFailed = false;
+            g_assistantSuspended = false;
             if (on) {
                 if (server->tools().empty())
                     mcp::registerTools(*server);
@@ -802,6 +807,16 @@ namespace gucci::ui {
         double g_brrrStart = 0.0; // ImGui time the drop started
 
         void pageSettings() {
+            // The master switch (core/bot_switch.hpp), asked for by Dihmaster500.
+            kit::BeginCard("GucciBot", "Done botting? Switch it off: it leaves the game until you switch it back on, "
+                                       "no restart needed.");
+            bool botOn = botswitch::wanted();
+            if (kit::SwitchRow("GucciBot", "Off, the game runs as if GucciBot weren't installed", &botOn))
+                botswitch::request(botOn);
+            if (auto const* why = botswitch::waitingFor())
+                kit::Hint(why);
+            kit::EndCard();
+
             kit::BeginCard("Theme", nullptr);
             std::vector<std::string> names;
             std::vector<int> ids;
@@ -1073,7 +1088,36 @@ namespace gucci::ui {
             ImGui::End();
         }
 
+        // Switched off (core/bot_switch.hpp): the whole menu is the one switch
+        // that turns GucciBot back on.
+        void drawSwitchedOff() {
+            auto const& io = ImGui::GetIO();
+            ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_Appearing,
+                                    ImVec2(0.5f, 0.5f));
+            ImGui::SetNextWindowSize(ImVec2(360.f, 0.f), ImGuiCond_Always);
+            if (ImGui::Begin("GucciBot##switchedoff", &g_open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize)) {
+                kit::BeginCard("GucciBot", "Switched off: out of the game until you switch it back on.");
+                bool on = botswitch::wanted();
+                if (kit::SwitchRow("GucciBot", "On puts everything back, no restart needed", &on))
+                    botswitch::request(on);
+                if (auto const* why = botswitch::waitingFor())
+                    kit::Hint(why);
+                kit::EndCard();
+            }
+            ImGui::End();
+        }
+
         void frame() {
+            // The master switch's once-a-frame step: here the game's update for
+            // the frame is over, so its code and hooks can come out or go back.
+            botswitch::service();
+            if (botswitch::takenOut()) {
+                look().refresh();
+                if (g_open)
+                    drawSwitchedOff();
+                return;
+            }
+
             // anticroom's analyzer is driven from here, outside the game's
             // update (it pauses and single-steps the updater itself). Its
             // results are saved the moment a run finishes.
@@ -1093,6 +1137,14 @@ namespace gucci::ui {
             // Every frame, menu open or not: it starts and stops Video Mode's
             // decoder as well as drawing it (trainers/videomode.hpp).
             videomode::drawOverlay();
+            // Switched off but still in a level: what it was doing has stopped
+            // (the analyzer above still walks back), and it leaves the game when
+            // the level closes. Until then the menu is the switch.
+            if (!botswitch::wanted()) {
+                if (g_open)
+                    drawSwitchedOff();
+                return;
+            }
             drawOverlay();
             if (!g_open)
                 return;
@@ -1104,6 +1156,25 @@ namespace gucci::ui {
 
     } // namespace
 
+    void suspendAssistantAccess() {
+        auto* server = mcp::Server::get();
+        if (!server->running())
+            return;
+        g_assistantSuspended = true;
+        server->stop();  // the saved choice stays: it's back after a restart too
+    }
+
+    void resumeAssistantAccess() {
+        if (!g_assistantSuspended)
+            return;
+        g_assistantSuspended = false;
+        auto* server = mcp::Server::get();
+        if (server->tools().empty())
+            mcp::registerTools(*server);
+        if (!server->running() && !server->start(kAssistantPort))
+            g_assistantAccessFailed = true;
+    }
+
 } // namespace gucci::ui
 
 $on_mod(Loaded) {
@@ -1113,8 +1184,13 @@ $on_mod(Loaded) {
             gucci::ui::look().loadFonts();
             gucci::ui::themes::loadCustoms();
             gucci::ui::loadSettings();
-            if (Mod::get()->getSavedValue<bool>("assistant_access", false))
-                gucci::ui::setAssistantAccess(true);
+            if (Mod::get()->getSavedValue<bool>("assistant_access", false)) {
+                // Switched off (core/bot_switch.hpp): it starts when GucciBot does.
+                if (gucci::botswitch::wanted())
+                    gucci::ui::setAssistantAccess(true);
+                else
+                    gucci::ui::g_assistantSuspended = true;
+            }
         })
         .draw([] { gucci::ui::frame(); });
 }

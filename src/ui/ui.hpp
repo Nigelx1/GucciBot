@@ -20,6 +20,11 @@ namespace gucci::ui {
     void setOpen(bool open);
     void toggleOpen();
 
+    // Assistant Access while GucciBot is switched off (core/bot_switch.hpp):
+    // stopped with it, and started again with it if it was running.
+    void suspendAssistantAccess();
+    void resumeAssistantAccess();
+
     // The small quick-controls window instead of the full menu.
     bool compactMode();
     void setCompactMode(bool on);
