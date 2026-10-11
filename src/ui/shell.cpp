@@ -3,6 +3,7 @@
 // on 2026-10-01 to replace the old menu (see ui.hpp).
 
 #include "core/platform.hpp"
+#include "core/setup_check.hpp"
 #include "ui/ui.hpp"
 #include "ui/kit.hpp"
 #include "ui/look.hpp"
@@ -307,6 +308,29 @@ namespace gucci::ui {
         void pageMacro() {
             auto* gb = GucciEngine::get();
             auto& actions = gb->replay.m_actionAtom.m_actions;
+
+            // Anything switched on that breaks recording and playback
+            // (core/setup_check.hpp).
+            if (auto const& problems = setupcheck::current(); !problems.empty()) {
+                std::string dismiss;
+                kit::BeginCard("Heads up", "These can break recording and playback.");
+                for (size_t i = 0; i < problems.size(); ++i) {
+                    auto const& p = problems[i];
+                    if (i)
+                        kit::Gap();
+                    kit::Paragraph(p.what.c_str(), Tone::Warn);
+                    kit::Note(p.fix.c_str());
+                    if (!p.modId.empty()) {
+                        ImGui::PushID(static_cast<int>(i));
+                        if (kit::Button("It's fine", Tone::Plain))
+                            dismiss = p.modId;
+                        ImGui::PopID();
+                    }
+                }
+                kit::EndCard();
+                if (!dismiss.empty())
+                    setupcheck::dismissMod(dismiss);
+            }
 
             kit::BeginCard("Macro", "Record a run, or play one back.");
             int mode = gb->isRecording() ? 1 : gb->isPlaying() ? 2 : 0;

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-06-cq (Mac: Option opens the menu - macOS sends a lone modifier as a flags change, now handled - and the pause menu has a GucciBot button there too. UNTESTED on a Mac.)"
+    "2026-10-11-cr (Setup check: warns when Auto-Checkpoints, another mod's practice fix, Mega Hack or QOLMod frame extrapolation, TCBot or ToastyReplay PRO is on - a popup at the main menu, a card on the Macro page, a toast when recording or playback starts)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

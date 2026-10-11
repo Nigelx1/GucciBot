@@ -6,6 +6,7 @@
 #include "core/brr_format.hpp"
 #include "core/gbr6_format.hpp"
 #include "core/platform.hpp"
+#include "core/setup_check.hpp"
 #include "core/standdown.hpp"
 #include "hacks/hud.hpp"
 #include "tools/selfcheck.hpp"
@@ -1209,6 +1210,11 @@ namespace gucci {
         }
         Mode prev = mode;
         mode = m;
+        // Recording or playback starting with something on that breaks it
+        // (core/setup_check.hpp): a toast. Queued, since the MCP tools can get
+        // here from their own thread.
+        if (m != prev && m != Mode::Idle)
+            Loader::get()->queueInMainThread([] { setupcheck::toastIfNeeded(); });
         if (m == Mode::Recording) {
             fwEnabledLive = false;
             fwLegendEnabled = false;
