@@ -19,23 +19,22 @@
 //   functions is changing what GucciBot's own practice fix changes. Matched
 //   by address (GucciBot's own hooks on those functions say where they are,
 //   so a hook is caught whatever its mod named it) and by name. A mod can
-//   touch the checkpoints for a harmless reason (a music sync fix), so this
-//   warning can be dismissed per mod. Mega Hack's Practice Bug Fix is also
-//   read from its own switch, since its settings file is read anyway.
+//   touch the checkpoints for a harmless reason (a music sync fix), and one
+//   that keeps its hook in while it's loaded can't be told apart from one
+//   whose fix is switched off, so this warning can be dismissed per mod (and
+//   brought back from the Macro page). Mega Hack's Practice Bug Fix is also
+//   read from its own switch.
 // - Frame extrapolation: read from the switch of the two mods that have it,
-//   Mega Hack and QOLMod. The drawing code it changes is hooked by too many
-//   harmless mods (Click Between Frames, speedhacks, overlays) to tell from
-//   the code alone.
-// - Other bots: TCBot and ToastyReplay PRO, switched on in the mod list. A
-//   warning, not a stand-down: core/standdown.hpp is for the bots known to
-//   crash alongside GucciBot.
+//   Mega Hack (asked live through its exported isHackEnabled on Windows,
+//   read from its save file elsewhere) and QOLMod. The drawing code it
+//   changes is hooked by too many harmless mods (Click Between Frames,
+//   speedhacks, overlays) to tell from the code alone.
+// - Other bots: TCBot, ToastyReplay PRO and original ToastyReplay, Astral,
+//   xdBot, yBot and 40kbot, when loaded. A warning, not a stand-down:
+//   core/standdown.hpp is for the bots known to crash alongside GucciBot.
 
 #include <string>
 #include <vector>
-
-namespace cocos2d {
-    class CCNode;
-}
 
 namespace gucci::setupcheck {
 
@@ -52,11 +51,14 @@ namespace gucci::setupcheck {
 
     // "It's fine": stop warning about this mod's checkpoint hooks. Saved.
     void dismissMod(std::string const& id);
+    // The dismissed mods' names, comma-separated ("" if none), and undoing
+    // every "It's fine".
+    std::string dismissedNames();
+    void undismissAll();
 
-    // The popup, once a launch, on the first main menu (scene: that MenuLayer,
-    // which the popup is added to so the menu's transition doesn't drop it).
-    // Also logs what the check found, for the logs.
-    void showLaunchPopupOnce(cocos2d::CCNode* scene);
+    // The popup, once a launch, from the first main menu's init (queued to
+    // show once the menu is up). Also logs what the check found.
+    void showLaunchPopupOnce();
 
     // A short toast when recording or playback starts, at most once a minute.
     void toastIfNeeded();

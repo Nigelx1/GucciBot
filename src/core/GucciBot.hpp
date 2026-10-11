@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-11-cr (Setup check: warns when Auto-Checkpoints, another mod's practice fix, Mega Hack or QOLMod frame extrapolation, TCBot or ToastyReplay PRO is on - a popup at the main menu, a card on the Macro page, a toast when recording or playback starts)"
+    "2026-10-11-cs (Setup check fixes from review: bots count only when loaded, plus Astral, xdBot, yBot, 40kbot and ToastyReplay; Mega Hack asked live on Windows; checkpoint-hook warnings say what they can see and It's fine can be undone; popup queued so Escape closes it; QOLMod read without writing)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

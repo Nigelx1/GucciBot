@@ -11,7 +11,7 @@ class $modify(GB7MenuLayer, MenuLayer) {
     bool init() {
         if (!MenuLayer::init())
             return false;
-        gucci::setupcheck::showLaunchPopupOnce(this);
+        gucci::setupcheck::showLaunchPopupOnce();
         return true;
     }
 };

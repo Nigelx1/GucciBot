@@ -5,6 +5,7 @@
 
 #include <Geode/Geode.hpp>
 #include <Geode/loader/Hook.hpp>
+#include <Geode/ui/PopupManager.hpp>
 #include <Geode/utils/file.hpp>
 #include <fmt/format.h>
 
@@ -14,6 +15,10 @@
 #include <iterator>
 #include <string_view>
 #include <unordered_map>
+
+#ifdef GEODE_IS_WINDOWS
+#include <Windows.h>
+#endif
 
 using namespace geode::prelude;
 
@@ -71,15 +76,40 @@ namespace gucci::setupcheck {
             return out;
         }
 
-        // Mega Hack v9 keeps each profile's switched-on hacks as a list:
-        // v9/hackpro.json, "PROFILE" the one in use and "PROFILES" each
-        // profile's list (seen in Nigel's copy, 2026-10-11). Read again only
-        // when the file changes. Mega Hack writes the file itself, so a hack
-        // switched on this session shows up once Mega Hack has saved it.
+        // Mega Hack's switches. On Windows, asked of Mega Hack itself: its DLL
+        // exports hackpro::extensions::isHackEnabled for other mods (Globed
+        // reads hacks the same way), so a switch flipped this session counts
+        // at once. Elsewhere, or without that export, read from its save file:
+        // v9/hackpro.json lists each profile's switched-on hacks ("PROFILE" is
+        // the one in use, "PROFILES" each profile's list; seen in Nigel's copy
+        // 2026-10-11). Mega Hack writes that file when the game closes, so a
+        // change made this session only shows there after a restart.
         struct MegaHack {
             bool practiceFix = false;
             bool frameExtrapolation = false;
+            bool live = false; // asked of Mega Hack, not read from the file
         };
+
+        constexpr const char* kMegaHackPracticeFix = "LEVEL/HACK_PRACTICE_BUG_FIX";
+        constexpr const char* kMegaHackExtrapolation = "DISPLAY/HACK_FRAME_EXTRAPOLATION";
+
+#ifdef GEODE_IS_WINDOWS
+        using MegaHackIsEnabled = bool (*)(std::string const&);
+
+        // Looked up the first time it's needed, which is after Mega Hack has
+        // loaded (megaHack() checks that first).
+        MegaHackIsEnabled megaHackIsEnabled() {
+            static MegaHackIsEnabled const s_fn = []() -> MegaHackIsEnabled {
+                auto* dll = GetModuleHandleW(L"absolllute.megahack.dll");
+                if (!dll)
+                    return nullptr;
+                return reinterpret_cast<MegaHackIsEnabled>(GetProcAddress(
+                    dll, "?isHackEnabled@extensions@hackpro@@YA_NAEBV?$basic_string@DU?$char_traits@D@std@@V?$"
+                         "allocator@D@2@@std@@@Z"));
+            }();
+            return s_fn;
+        }
+#endif
 
         MegaHack megaHack() {
             static std::filesystem::file_time_type s_stamp{};
@@ -87,6 +117,10 @@ namespace gucci::setupcheck {
             auto* mod = Loader::get()->getInstalledMod("absolllute.megahack");
             if (!mod || !mod->isLoaded())
                 return {};
+#ifdef GEODE_IS_WINDOWS
+            if (auto const isEnabled = megaHackIsEnabled())
+                return {isEnabled(kMegaHackPracticeFix), isEnabled(kMegaHackExtrapolation), true};
+#endif
             auto const path = mod->getSaveDir() / "v9" / "hackpro.json";
             std::error_code ec;
             auto const stamp = std::filesystem::last_write_time(path, ec);
@@ -110,33 +144,36 @@ namespace gucci::setupcheck {
                 auto name = hack.asString();
                 if (name.isErr())
                     continue;
-                if (name.unwrap() == "LEVEL/HACK_PRACTICE_BUG_FIX")
+                if (name.unwrap() == kMegaHackPracticeFix)
                     s_found.practiceFix = true;
-                else if (name.unwrap() == "DISPLAY/HACK_FRAME_EXTRAPOLATION")
+                else if (name.unwrap() == kMegaHackExtrapolation)
                     s_found.frameExtrapolation = true;
             }
             return s_found;
         }
 
-        // QOLMod keeps its switches as Geode saved values.
+        // QOLMod keeps its switches as Geode saved values. Read without a
+        // default: the overload with one writes it into QOLMod's save data
+        // when the key is missing.
         bool qolModFrameExtrapolation() {
             auto* mod = Loader::get()->getInstalledMod("thesillydoggo.qolmod");
-            return mod && mod->isLoaded() && mod->getSavedValue<bool>("frame-extrapolation_enabled", false);
+            return mod && mod->isLoaded() && mod->getSavedValue<bool>("frame-extrapolation_enabled");
         }
 
-        struct OtherBot {
-            const char* id;
-            const char* name;
-        };
-        constexpr OtherBot kOtherBots[] = {
-            {"chagh.tcbot", "TCBot"},
-            {"toastexgd.toastyreplay-pro", "ToastyReplay PRO"},
+        // Other bots: any of these loaded alongside GucciBot. Loaded, not just
+        // switched on in the mod list: one whose dependency is missing never
+        // runs (TCBot on Nigel's PC, most launches), and one switched off this
+        // session still runs until the restart. Everything here runs after
+        // every mod has loaded; core/standdown.hpp asks the mod list instead
+        // because it runs while GucciBot itself is loading.
+        constexpr const char* kOtherBots[] = {
+            "chagh.tcbot",       "toastexgd.toastyreplay-pro", "toastexgd.toastyreplay", "astralteam.astral",
+            "zilko.xdbot",       "kepe.ybot",                  "sorkopiko.40kbot",
         };
 
-        bool botSwitchedOn(OtherBot const& bot) {
-            // Asked of the mod list, like core/standdown.hpp.
-            auto* mod = Loader::get()->getInstalledMod(bot.id);
-            return mod && mod->shouldLoad() && !mod->targetsOutdatedVersion();
+        bool isOtherBot(std::string_view id) {
+            return std::any_of(std::begin(kOtherBots), std::end(kOtherBots),
+                               [&](const char* bot) { return id == bot; });
         }
 
         // Dismissed mods, comma-separated (mod ids have no commas).
@@ -170,43 +207,55 @@ namespace gucci::setupcheck {
                                ""});
 
             auto const mh = megaHack();
+            // Read from the file (not Windows): it only changes when the game
+            // closes, so say a restart clears it.
+            std::string const mhAfter =
+                mh.live ? "" : " Mega Hack saves this when the game closes, so restart the game after turning it off.";
             if (mh.practiceFix)
                 out.push_back({"Mega Hack's Practice Bug Fix is on",
                                "Turn it off in Mega Hack (Level, Practice Bug Fix). GucciBot has its own practice "
-                               "fix, and two of them fight over every checkpoint.",
+                               "fix, and two of them fight over every checkpoint." +
+                                   mhAfter,
                                ""});
 
+            // What the code shows is a hook, not a switch: a mod can keep its
+            // hook in for as long as it's loaded and decide inside it whether
+            // to act (Astral does). So the warning can't clear when a fix
+            // inside the mod is turned off, and its wording says so. A bot
+            // gets the bot warning below instead of this one.
             std::vector<std::string> named;
             for (auto const& hook : checkpointHooks()) {
                 if (!hook.enabled)
                     continue;
                 std::string id(hook.mod->getID());
-                if (std::find(named.begin(), named.end(), id) != named.end() || isDismissed(id))
+                if (std::find(named.begin(), named.end(), id) != named.end() || isDismissed(id) || isOtherBot(id))
                     continue;
                 if (id == "absolllute.megahack" && mh.practiceFix)
                     continue; // already named above
                 named.push_back(id);
                 auto const name = hook.mod->getName().view();
-                out.push_back({fmt::format("{} changes the game's checkpoints", name),
-                               fmt::format("If that's a practice fix, turn it off in {}: GucciBot has its own, and "
-                                           "two of them fight over every checkpoint. If it's something else, press "
+                out.push_back({fmt::format("{} hooks the game's checkpoints", name),
+                               fmt::format("Practice fixes work this way. If {} has one, turn it off. GucciBot can't "
+                                           "see that switch, so once it's off (or if {} has no practice fix), press "
                                            "\"It's fine\" on GucciBot's Macro page.",
-                                           name),
+                                           name, name),
                                id});
             }
 
             if (mh.frameExtrapolation)
                 out.push_back({"Mega Hack's Frame Extrapolation is on",
-                               "Turn it off in Mega Hack (Display, Frame Extrapolation).", ""});
+                               "Turn it off in Mega Hack (Display, Frame Extrapolation)." + mhAfter, ""});
             if (qolModFrameExtrapolation())
                 out.push_back({"QOLMod's Frame Extrapolation is on", "Turn it off in QOLMod's menu.", ""});
 
-            for (auto const& bot : kOtherBots)
-                if (botSwitchedOn(bot))
-                    out.push_back({fmt::format("{} is turned on", bot.name),
+            for (auto const* id : kOtherBots) {
+                auto* bot = Loader::get()->getInstalledMod(id);
+                if (bot && bot->isLoaded())
+                    out.push_back({fmt::format("{} is running", bot->getName().view()),
                                    "Two bots at once fight over your inputs. Turn one of them off in the Geode mod "
                                    "list and restart the game.",
                                    ""});
+            }
             return out;
         }
 
@@ -234,7 +283,31 @@ namespace gucci::setupcheck {
         log::info("[SETUP-CHECK] Not warning about {}'s checkpoint hooks any more", id);
     }
 
-    void showLaunchPopupOnce(cocos2d::CCNode* scene) {
+    std::string dismissedNames() {
+        auto const list = Mod::get()->getSavedValue<std::string>(kDismissedKey, "");
+        std::string out;
+        size_t start = 0;
+        while (start < list.size()) {
+            auto end = list.find(',', start);
+            if (end == std::string::npos)
+                end = list.size();
+            auto const id = list.substr(start, end - start);
+            auto* mod = Loader::get()->getInstalledMod(id);
+            if (!out.empty())
+                out += ", ";
+            out += mod ? std::string(mod->getName()) : id;
+            start = end + 1;
+        }
+        return out;
+    }
+
+    void undismissAll() {
+        Mod::get()->setSavedValue<std::string>(kDismissedKey, "");
+        g_dirty = true;
+        log::info("[SETUP-CHECK] Warning about every mod's checkpoint hooks again");
+    }
+
+    void showLaunchPopupOnce() {
         static bool s_done = false;
         if (s_done)
             return;
@@ -249,9 +322,10 @@ namespace gucci::setupcheck {
             log::info("[SETUP-CHECK] {} hooks {} ({})", hook.mod->getID().view(), hook.fn,
                       hook.enabled ? "on" : "off");
         auto const mh = megaHack();
-        log::info("[SETUP-CHECK] Mega Hack: Practice Bug Fix {}, Frame Extrapolation {}; QOLMod Frame Extrapolation {}",
-                  mh.practiceFix ? "on" : "off", mh.frameExtrapolation ? "on" : "off",
-                  qolModFrameExtrapolation() ? "on" : "off");
+        log::info("[SETUP-CHECK] Mega Hack ({}): Practice Bug Fix {}, Frame Extrapolation {}; QOLMod Frame "
+                  "Extrapolation {}",
+                  mh.live ? "asked live" : "from its save file", mh.practiceFix ? "on" : "off",
+                  mh.frameExtrapolation ? "on" : "off", qolModFrameExtrapolation() ? "on" : "off");
 
         g_dirty = true;
         auto const& problems = current();
@@ -264,9 +338,11 @@ namespace gucci::setupcheck {
         std::string body = "These can break GucciBot's recording and playback:";
         for (auto const& p : problems)
             body += fmt::format("\n\n<cy>{}</c>. {}", p.what, p.fix);
-        auto* popup = createQuickPopup("Heads Up", body, "Got It", nullptr, 420.f, [](auto, bool) {}, false);
-        popup->m_scene = scene;
-        popup->show();
+        // Queued with Geode's popup manager, not shown here: this runs inside
+        // MenuLayer::init, before the menu is on screen, and a popup added
+        // then doesn't get the back key (Geode moved its own MenuLayer popups
+        // for that reason). The queue shows it once the menu is up.
+        PopupManager::get().alert("Heads Up", body, "Got It", nullptr, 420.f).showQueue();
     }
 
     void toastIfNeeded() {

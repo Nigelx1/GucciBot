@@ -331,6 +331,12 @@ namespace gucci::ui {
                 if (!dismiss.empty())
                     setupcheck::dismissMod(dismiss);
             }
+            // Mods "It's fine" was pressed for, with a way back.
+            if (auto const ignored = setupcheck::dismissedNames(); !ignored.empty()) {
+                kit::Hint(("Not warning about the checkpoint hooks of: " + ignored).c_str());
+                if (kit::Button("Warn again", Tone::Plain))
+                    setupcheck::undismissAll();
+            }
 
             kit::BeginCard("Macro", "Record a run, or play one back.");
             int mode = gb->isRecording() ? 1 : gb->isPlaying() ? 2 : 0;
