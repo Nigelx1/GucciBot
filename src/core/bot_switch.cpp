@@ -38,8 +38,10 @@ namespace gucci::botswitch {
         // imgui-cocos's (it is built into GucciBot, so its hooks are
         // GucciBot's): the draw, keyboard, mouse wheel, text and touch input.
         // GucciBot's own keyboard hook shares the keyboard name and has to
-        // stay anyway, for the menu key. imgui-cocos draws from swapBuffers on
-        // Windows and iOS and from drawScene elsewhere; where it is drawScene,
+        // stay anyway, for the menu key, and on a phone its touch hook
+        // (ui/touch.cpp) shares the touch name and has to stay too, so a tap
+        // reaches the switch. imgui-cocos draws from swapBuffers on Windows
+        // and iOS and from drawScene elsewhere; where it is drawScene,
         // GucciBot's own drawScene hooks share the name and stay in too, and
         // step aside themselves (engine_updater.cpp, trainer_core.cpp).
         constexpr std::string_view kMenuHooks[] = {

@@ -10,6 +10,7 @@
 #include "ui/pages.hpp"
 #include "ui/state.hpp"
 #include "ui/themes.hpp"
+#include "ui/touch.hpp"
 
 #include "absense/glue.hpp"
 #include "analysis/ac/framewindow.hpp"
@@ -102,6 +103,9 @@ namespace gucci::ui {
             look().textScale = static_cast<float>(mod->getSavedValue<double>("ui_text_scale", 1.0));
             look().effects = mod->getSavedValue<bool>("ui_effects", true);
             look().accentCycle = mod->getSavedValue<bool>("theme_glow_cycle", false);
+#if defined(GEODE_IS_MOBILE)
+            look().menuScale = static_cast<float>(mod->getSavedValue<double>("ui_menu_scale", 1.0));
+#endif
             auto* gb = GucciEngine::get();
             for (auto const& s : kUiLoadedSwitches)
                 gb->*(s.field) = mod->getSavedValue<bool>(s.key, gb->*(s.field));
@@ -122,6 +126,9 @@ namespace gucci::ui {
         mod->setSavedValue<double>("ui_text_scale", look().textScale);
         mod->setSavedValue("ui_effects", look().effects);
         mod->setSavedValue("theme_glow_cycle", look().accentCycle);
+#if defined(GEODE_IS_MOBILE)
+        mod->setSavedValue<double>("ui_menu_scale", look().menuScale);
+#endif
     }
 
     bool isOpen() {
@@ -876,6 +883,22 @@ namespace gucci::ui {
             }
             kit::RowEnd();
             kit::SliderRow("Text size", nullptr, &look().textScale, 0.8f, 1.4f, "%.2fx");
+#if defined(GEODE_IS_MOBILE)
+            {
+                // Applied when the finger lifts: the slider grows and shrinks
+                // with the menu, so following it live would chase the finger.
+                static float s_menuScale = look().menuScale;
+                kit::RowBegin("Menu size", "Bigger or smaller than the size picked for this screen");
+                kit::SliderFloat("menuscale", &s_menuScale, 0.6f, 1.6f, "%.2fx");
+                if (ImGui::IsItemDeactivatedAfterEdit()) {
+                    look().menuScale = s_menuScale;
+                    saveSettings();
+                }
+                if (!ImGui::IsItemActive())
+                    s_menuScale = look().menuScale;
+                kit::RowEnd();
+            }
+#endif
             kit::SwitchRow("Cycle the accent colour", nullptr, &look().accentCycle);
             kit::SwitchRow("Animations", nullptr, &look().effects);
             bool compact = g_compact;
@@ -981,13 +1004,26 @@ namespace gucci::ui {
             float const bass = brrr->enabled ? brrr->getBassLevel() : 0.f;
             ImGui::PushStyleVar(ImGuiStyleVar_Alpha,
                                 1.f - 0.6f * bass * std::clamp(brrr->flickerIntensity, 0.f, 1.f));
+#if defined(GEODE_IS_MOBILE)
+            // A phone: the window fills the screen inside the notch and the
+            // rounded corners, every frame, and can't be dragged or resized
+            // off it (BIG BRRRR's shake still moves it, from that spot).
+            (void)io;
+            ImVec2 areaMin, areaMax;
+            touch::screenArea(&areaMin, &areaMax);
+            ImGui::SetNextWindowPos(ImVec2(areaMin.x + g_brrrOffset.x, areaMin.y + g_brrrOffset.y), ImGuiCond_Always);
+            ImGui::SetNextWindowSize(ImVec2(areaMax.x - areaMin.x, areaMax.y - areaMin.y), ImGuiCond_Always);
+            ImGuiWindowFlags const fit = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
+#else
             ImGui::SetNextWindowSize(ImVec2(720.f, 500.f), ImGuiCond_FirstUseEver);
             ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_FirstUseEver,
                                     ImVec2(0.5f, 0.5f));
             ImGui::SetNextWindowSizeConstraints(ImVec2(520.f, 360.f), ImVec2(FLT_MAX, FLT_MAX));
+            ImGuiWindowFlags const fit = ImGuiWindowFlags_None;
+#endif
             bool open = true;
             if (!ImGui::Begin("GucciBot##menu", &open, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
-                                                          ImGuiWindowFlags_NoScrollbar)) {
+                                                          ImGuiWindowFlags_NoScrollbar | fit)) {
                 ImGui::End();
                 ImGui::PopStyleVar();
                 return;
@@ -1035,15 +1071,30 @@ namespace gucci::ui {
                 ImGui::PopStyleColor();
             }
             kit::Gap(0.6f);
+#if defined(GEODE_IS_MOBILE)
+            // On a phone the page list is taller than the screen: it scrolls
+            // (by dragging, ui/touch.cpp) above a Close button that stays in
+            // sight, and its rows are taller for a finger.
+            constexpr float kRowH = 34.f;
+            ImGui::BeginChild("##pages", ImVec2(0.f, -(ImGui::GetFrameHeightWithSpacing() + 6.f)), ImGuiChildFlags_None,
+                              ImGuiWindowFlags_NoScrollbar);
+#else
+            constexpr float kRowH = 26.f;
+#endif
             for (int i = 0; i < kPageCount; ++i) {
                 bool const selected = g_page == i;
                 ImVec2 const a = ImGui::GetCursorScreenPos();
-                if (ImGui::Selectable(kPages[i].title, selected, ImGuiSelectableFlags_None, ImVec2(0.f, 26.f)))
+                if (ImGui::Selectable(kPages[i].title, selected, ImGuiSelectableFlags_None, ImVec2(0.f, kRowH)))
                     g_page = i;
-                if (selected)
-                    ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(a.x - 4.f, a.y + 4.f), ImVec2(a.x - 1.f, a.y + 22.f),
-                                                              u32(pal.accent), 1.5f);
+                if (selected) {
+                    float const inset = (kRowH - 18.f) * 0.5f;  // an 18-unit bar, centred on the row
+                    ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(a.x - 4.f, a.y + inset),
+                                                              ImVec2(a.x - 1.f, a.y + (kRowH - inset)), u32(pal.accent), 1.5f);
+                }
             }
+#if defined(GEODE_IS_MOBILE)
+            ImGui::EndChild();
+#endif
             float const closeY = ImGui::GetWindowHeight() - ImGui::GetFrameHeight() - 6.f;
             if (closeY > ImGui::GetCursorPosY())
                 ImGui::SetCursorPosY(closeY);
@@ -1141,6 +1192,10 @@ namespace gucci::ui {
             // The master switch's once-a-frame step: here the game's update for
             // the frame is over, so its code and hooks can come out or go back.
             botswitch::service();
+#if defined(GEODE_IS_MOBILE)
+            // Before any window is drawn, so a scroll lands this frame.
+            touch::frame();
+#endif
             if (botswitch::takenOut()) {
                 look().refresh();
                 if (g_open)

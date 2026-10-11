@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-11-cs (Setup check fixes from review: bots count only when loaded, plus Astral, xdBot, yBot, 40kbot and ToastyReplay; Mega Hack asked live on Windows; checkpoint-hook warnings say what they can see and It's fine can be undone; popup queued so Escape closes it; QOLMod read without writing)"
+    "2026-10-11-ct (Phones and tablets: the menu is scaled to the screen, pages scroll by dragging, the page list scrolls above a Close button that stays in sight, and a Menu size slider in Settings. Windows and macOS unchanged)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

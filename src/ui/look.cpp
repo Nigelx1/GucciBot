@@ -3,12 +3,38 @@
 
 #include <Geode/Geode.hpp>
 
+#if defined(GEODE_IS_MOBILE)
+#include <imgui-cocos.hpp>
+#endif
+
 #include <algorithm>
 #include <cmath>
 
 using namespace geode::prelude;
 
 namespace gucci::ui {
+
+#if defined(GEODE_IS_MOBILE)
+    namespace {
+        // The menu is laid out for a desktop window about 500 units tall, a
+        // unit being a screen pixel. On a phone it was a pixel too (imgui-cocos
+        // gives ImGui the GL frame), so 15-pixel text came out about a
+        // millimetre tall. Instead the screen's short side is this many units:
+        // about 2.7 pixels a unit on a 1080-pixel phone, text near 2.5 mm. GD's
+        // own interface scales the same way (its screen is always 320 points
+        // tall), so a tablet gets it proportionally bigger, as GD's buttons are.
+        constexpr float kMobileUnitsTall = 400.f;
+
+        float screenScale() {
+            auto* view = CCDirector::sharedDirector()->getOpenGLView();
+            if (!view)
+                return 1.f;
+            CCSize const frame = view->getFrameSize();
+            float const shortSide = std::min(frame.width, frame.height);
+            return shortSide > 0.f ? std::max(1.f, shortSide / kMobileUnitsTall) : 1.f;
+        }
+    } // namespace
+#endif
 
     Look& look() {
         static Look s_look;
@@ -65,14 +91,45 @@ namespace gucci::ui {
             {Font::Title, true, 19.f},
             {Font::Display, true, 27.f},
         };
+#if defined(GEODE_IS_MOBILE)
+        // The glyphs are made as big as the screen shows them and shrunk back
+        // by FontGlobalScale (refresh), so text is drawn from glyphs at the
+        // screen's size rather than 15-pixel ones stretched. Set once: a later
+        // Menu size change resamples them. Glyphs this big need no sideways
+        // oversampling, and leaving it out halves the atlas.
+        m_fontRaster = std::clamp(screenScale(), 1.f, 4.f);
+        ImFontConfig cfg;
+        cfg.OversampleH = 1;
+#endif
         for (auto const& w : wants) {
             std::string const& path = (w.boldFace && haveBold) ? bold : regular;
             if (!haveRegular && !(w.boldFace && haveBold))
                 continue;
+#if defined(GEODE_IS_MOBILE)
+            m_fonts[static_cast<int>(w.slot)] = io.Fonts->AddFontFromFileTTF(path.c_str(), w.px * m_fontRaster, &cfg);
+#else
             m_fonts[static_cast<int>(w.slot)] = io.Fonts->AddFontFromFileTTF(path.c_str(), w.px);
+#endif
         }
-        if (!m_fonts[static_cast<int>(Font::Body)])
+        if (!m_fonts[static_cast<int>(Font::Body)]) {
+#if defined(GEODE_IS_MOBILE)
+            ImFontConfig fallback;  // ImGui's own settings for its pixel font, made as big
+            fallback.SizePixels = 13.f * m_fontRaster;
+            fallback.OversampleH = fallback.OversampleV = 1;
+            fallback.PixelSnapH = true;
+            m_fonts[static_cast<int>(Font::Body)] = io.Fonts->AddFontDefault(&fallback);
+#else
             m_fonts[static_cast<int>(Font::Body)] = io.Fonts->AddFontDefault();
+#endif
+        }
+    }
+
+    float Look::deviceScale() const {
+#if defined(GEODE_IS_MOBILE)
+        return std::clamp(screenScale() * std::clamp(menuScale, 0.6f, 1.6f), 1.f, 6.f);
+#else
+        return 1.f;
+#endif
     }
 
     ImFont* Look::font(Font f) const {
@@ -202,7 +259,23 @@ namespace gucci::ui {
         c[ImGuiCol_NavHighlight] = pal.accent;
         c[ImGuiCol_ModalWindowDimBg] = ImVec4(0.f, 0.f, 0.f, 0.45f);
 
+#if defined(GEODE_IS_MOBILE)
+        // Fingers, not a pointer: taller controls, more room between rows, a
+        // bigger slider grab, and hit boxes a little past what is drawn. The
+        // scrollbars only show where a page is: pages scroll by dragging
+        // (ui/touch.cpp). In ImGui units, grown with everything else below.
+        s.FramePadding = ImVec2(10.f, 9.f);
+        s.ItemSpacing = ImVec2(8.f, 9.f);
+        s.ScrollbarSize = 6.f;
+        s.GrabMinSize = 18.f;
+        s.TouchExtraPadding = ImVec2(2.f, 3.f);
+        // imgui-cocos sized this frame's display before it started, so a
+        // change shows in full from the next frame.
+        ImGuiCocos::setFrameScale(deviceScale());
+        ImGui::GetIO().FontGlobalScale = std::clamp(textScale, 0.7f, 1.6f) / m_fontRaster;
+#else
         ImGui::GetIO().FontGlobalScale = std::clamp(textScale, 0.7f, 1.6f);
+#endif
     }
 
 } // namespace gucci::ui

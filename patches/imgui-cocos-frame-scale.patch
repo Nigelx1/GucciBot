@@ -1,0 +1,59 @@
+--- a/include/imgui-cocos.hpp
++++ b/include/imgui-cocos.hpp
+@@ -66,4 +66,10 @@
+ 	
+ 	static ImVec2 cocosToFrame(const cocos2d::CCPoint& pos);
+ 	static cocos2d::CCPoint frameToCocos(const ImVec2& pos);
++
++	// GucciBot patch (Android and iOS builds only): screen pixels per ImGui
++	// unit. ImGui lays out a display this many times smaller than the GL
++	// frame, its output is drawn this many times bigger and touches are mapped
++	// to match, so the whole interface grows together. 1 changes nothing.
++	static void setFrameScale(float scale);
+ };
+--- a/src/backend.cpp
++++ b/src/backend.cpp
+@@ -278,14 +278,21 @@
+ 	m_reloading = true;
+ }
+ 
++// GucciBot patch: screen pixels per ImGui unit (imgui-cocos.hpp).
++static float s_frameScale = 1.f;
++
++void ImGuiCocos::setFrameScale(float scale) {
++	s_frameScale = scale > 0.f ? scale : 1.f;
++}
++
+ ImVec2 ImGuiCocos::cocosToFrame(const CCPoint& pos) {
+ 	auto* director = CCDirector::sharedDirector();
+ 	const auto frameSize = director->getOpenGLView()->getFrameSize() * geode::utils::getDisplayFactor();
+ 	const auto winSize = director->getWinSize();
+ 
+ 	return {
+-		pos.x / winSize.width * frameSize.width,
+-		(1.f - pos.y / winSize.height) * frameSize.height
++		pos.x / winSize.width * frameSize.width / s_frameScale,
++		(1.f - pos.y / winSize.height) * frameSize.height / s_frameScale
+ 	};
+ }
+ 
+@@ -295,8 +302,8 @@
+ 	const auto winSize = director->getWinSize();
+ 
+ 	return {
+-		pos.x / frameSize.width * winSize.width,
+-		(1.f - pos.y / frameSize.height) * winSize.height
++		pos.x * s_frameScale / frameSize.width * winSize.width,
++		(1.f - pos.y * s_frameScale / frameSize.height) * winSize.height
+ 	};
+ }
+ 
+@@ -333,7 +340,7 @@
+ 	const auto frameSize = director->getOpenGLView()->getFrameSize() * geode::utils::getDisplayFactor();
+ 
+ 	// glfw new frame
+-	io.DisplaySize = ImVec2(frameSize.width, frameSize.height);
++	io.DisplaySize = ImVec2(frameSize.width / s_frameScale, frameSize.height / s_frameScale);
+ 	if (director->getDeltaTime() > 0.f) {
+ 		io.DeltaTime = director->getDeltaTime();
+ 	} else {

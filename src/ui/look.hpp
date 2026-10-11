@@ -38,14 +38,22 @@ namespace gucci::ui {
         ImFont* font(Font f) const;
         ImVec4 tone(Tone t) const;
 
+        // Screen pixels per ImGui unit. 1 on Windows and macOS. On a phone or
+        // tablet the whole interface (fonts, spacing, every size a page uses)
+        // is drawn this many times bigger, worked out from the screen's size
+        // and times menuScale; refresh() hands it to imgui-cocos.
+        float deviceScale() const;
+
         // Look options (saved settings, see Settings page).
         float textScale = 1.f;
         bool accentCycle = false;   // slowly cycle the accent's hue
         float accentCycleRate = 0.5f;
         bool effects = true;        // falling-snow backdrop and small animations
+        float menuScale = 1.f;      // Android and iOS: bigger or smaller than deviceScale picks
 
     private:
         ImFont* m_fonts[5] = {};
+        float m_fontRaster = 1.f;   // the fonts were loaded this many times their size (loadFonts)
     };
 
     Look& look();

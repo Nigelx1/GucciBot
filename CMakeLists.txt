@@ -41,6 +41,10 @@ endif()
 add_subdirectory($ENV{GEODE_SDK} $ENV{GEODE_SDK}/build)
 
 set(IMGUI_VERSION "v1.91.4" CACHE STRING "Pin imgui version" FORCE)
+# On a phone or tablet the menu is drawn bigger as a whole:
+# imgui-cocos-frame-scale.patch lets ImGui lay out a display smaller than the
+# GL frame and scales its drawing and touches to match (src/ui/look.cpp sets
+# the scale). Android and iOS only; Windows and macOS fetch it as before.
 if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
     # The keyboard modify header doesn't compile for iOS; this version already
     # leaves the keyboard hook out there but still includes the header.
@@ -48,7 +52,16 @@ if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
         NAME gd-imgui-cocos
         GITHUB_REPOSITORY matcool/gd-imgui-cocos
         GIT_TAG 97643336209b760a3d59d83b770546b1cfef4e7d
-        PATCHES "${CMAKE_CURRENT_SOURCE_DIR}/patches/imgui-cocos-ios-keyboard.patch"
+        PATCHES
+            "${CMAKE_CURRENT_SOURCE_DIR}/patches/imgui-cocos-ios-keyboard.patch"
+            "${CMAKE_CURRENT_SOURCE_DIR}/patches/imgui-cocos-frame-scale.patch"
+    )
+elseif (ANDROID)
+    CPMAddPackage(
+        NAME gd-imgui-cocos
+        GITHUB_REPOSITORY matcool/gd-imgui-cocos
+        GIT_TAG 97643336209b760a3d59d83b770546b1cfef4e7d
+        PATCHES "${CMAKE_CURRENT_SOURCE_DIR}/patches/imgui-cocos-frame-scale.patch"
     )
 else()
     CPMAddPackage("gh:matcool/gd-imgui-cocos#97643336209b760a3d59d83b770546b1cfef4e7d")
