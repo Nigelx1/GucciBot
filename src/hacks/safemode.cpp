@@ -20,9 +20,8 @@ namespace gucci::safemode {
     namespace {
 
         // The owner's password: the hex of 10,000 rounds of SHA-256 over
-        // kSalt + the password (Nigel made it with a Python one-liner, so the
-        // password itself never left his PC). Empty: nothing unlocks.
-        constexpr const char* kOwnerTarget = "";
+        // kSalt + the password. Empty: nothing unlocks.
+        constexpr const char* kOwnerTarget = "4a9a35d0a6ff41536fd6169500a07d495a010d7ad87dc82e6c770b14afe52f98";
         constexpr const char* kSalt = "guccibot-unlock:";
         constexpr int kRounds = 10000;
         constexpr int kHalf = 5000;
