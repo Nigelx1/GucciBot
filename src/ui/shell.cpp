@@ -4,6 +4,7 @@
 
 #include "core/platform.hpp"
 #include "core/setup_check.hpp"
+#include "hacks/safemode.hpp"
 #include "ui/ui.hpp"
 #include "ui/kit.hpp"
 #include "ui/look.hpp"
@@ -852,6 +853,33 @@ namespace gucci::ui {
                 botswitch::request(botOn);
             if (auto const* why = botswitch::waitingFor())
                 kit::Hint(why);
+            kit::EndCard();
+
+            // Auto safe mode and the cheat dot (hacks/safemode.hpp), Dihmaster500's ask.
+            kit::BeginCard("Safe mode", "While a cheat is on, a run doesn't count: no completion, no new best, "
+                                        "nothing sent to the servers.");
+            bool safe = safemode::autoSafeMode();
+            if (kit::SwitchRow("Auto safe mode", "Off, a red dot shows in the corner while a cheat is on", &safe))
+                safemode::setAutoSafeMode(safe);
+            if (safemode::unlocked()) {
+                bool hide = safemode::dotHidden();
+                if (kit::SwitchRow("Hide the red dot", "Owner only", &hide))
+                    safemode::setDotHidden(hide);
+                if (kit::Button("Lock", Tone::Plain))
+                    safemode::lock();
+            } else {
+                static std::string s_password;
+                static bool s_wrong = false;
+                kit::RowBegin("Owner password", "Lets the owner hide the red dot");
+                kit::InputText("owner-password", &s_password, "password", ImGuiInputTextFlags_Password);
+                if (kit::Button("Unlock", Tone::Plain)) {
+                    s_wrong = !safemode::unlock(s_password);
+                    s_password.clear();
+                }
+                kit::RowEnd();
+                if (s_wrong)
+                    kit::Hint("That isn't it.");
+            }
             kit::EndCard();
 
             kit::BeginCard("Theme", nullptr);

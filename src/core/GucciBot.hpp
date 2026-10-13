@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-11-ct (Phones and tablets: the menu is scaled to the screen, pages scroll by dragging, the page list scrolls above a Close button that stays in sight, and a Menu size slider in Settings. Windows and macOS unchanged)"
+    "2026-10-12-cu (Auto safe mode: a run with a cheat on saves nothing, invisibly; off, a red dot shows while a cheat is on; hiding the dot takes the owner password)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
