@@ -988,6 +988,8 @@ namespace gucci::ui {
                 {"Absent", "Absense; the Pathfinder's default engine is his."},
                 {"ToastexGD", "Built ToastyReplay, the project GucciBot started as."},
                 {"GWDdoS", "Astral, and the cleanup that got the repo public-ready."},
+                {"Dihmaster500", "Asked for auto safe mode and the Disable bot switch; his testing caught safe "
+                                 "mode breaking start positions."},
                 {"Bogdaner09", "Click Indicators inspiration."},
                 {"Gucci Mane", "He's the truth. Brrr."},
             };

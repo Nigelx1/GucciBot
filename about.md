@@ -188,6 +188,7 @@ Real click-timing feedback and a synced video-review overlay, both built around 
 - **Absent** — Absense, another bot built on Silicate. Pathfinder's default engine is his: Absense's pathfinder, with its look-ahead and its model of the level, ported in whole. The assistant server, Check Macro, Replace All, the respawn timer and the black orb autoclicker loop are his ideas too, worked out again here from his source
 - **ToastexGD** — built ToastyReplay, the project GucciBot actually started as and the reason there is a GucciBot at all. His renderer and FFmpeg pipeline carried this mod for most of its life; rendering now runs on Silicate's
 - **GWDdoS** — Astral, and the codebase cleanup that got this repo public-ready
+- **Dihmaster500** — asked for auto safe mode with its cheat indicator, and for the Disable bot switch; his testing caught safe mode breaking start positions
 - **Bogdaner09** — Click Indicators inspiration ([github.com/Bogdaner09/mod](https://github.com/Bogdaner09/mod)) — vibecoded by his own admission, so credit's probably owed to whichever model wrote that too
 - **Gucci Mane** — he's the truth. Brrr.
 
