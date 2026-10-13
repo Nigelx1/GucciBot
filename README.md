@@ -8,7 +8,7 @@ GucciBot is public now — grab a build from [Releases](https://github.com/Nigel
 
 **Don't run ToastyReplay Lite or Silicate enabled at the same time** — GucciBot can't run live alongside either one (ToastyReplay Lite crashed macro playback; Silicate patches the same spots in the game GucciBot does), so GucciBot stands down until the other one is turned off or uninstalled.
 
-**Runs on Windows, and since 2.0.0-beta.3 on macOS, iOS and Android too** — experimental there, and nobody has played it on those yet. What still needs Windows is listed under [Platforms in about.md](about.md#platforms).
+**Runs on Windows, and since 2.0.0-beta.3 on macOS, iOS and Android too** — experimental there: it has been played on an Android phone, but the rest has had little testing. What still needs Windows is listed under [Platforms in about.md](about.md#platforms).
 
 ---
 
@@ -33,6 +33,7 @@ GucciBot is public now — grab a build from [Releases](https://github.com/Nigel
 - Full checkpoint/practice-fix system ported from Silicate, so restores actually behave like they should instead of leaving hazards in whatever state GD's own native restore felt like that day.
 - A frame-window analyzer ("Calculate") that measures, per click, how many frames you actually had to work with — built from a real GD-community algorithm (see [Status](#status), because honesty matters more than a clean README).
 - In-engine video rendering straight to a file, no external recorder needed.
+- Auto safe mode, on by default: an attempt with a cheat on doesn't count. Plus a setup check that warns about the settings that break the engine.
 - A whole closet of themes, because if the bot's going to carry you through a level it should at least look like money doing it.
 
 ## GBR6 — the hypercompressed format
@@ -116,7 +117,7 @@ Also in Settings: **BIG BRRRR**, a core feature of this mod, and **Bass Shake**,
 
 ## Status
 
-**1.8** is the stable release. **2.0** (the `engine-port-2.0` branch) is in beta, at **2.0.0-beta.3**: GucciBot's engine reconciled against Silicate's function by function. Calculate, playback, practice-mode recording and the new Pathfinder (Absense's, ported in) were confirmed in-game on beta.2. Beta.3 rebuilds the menu and every feature that came from ToastyReplay from scratch, and adds macOS, iOS and Android; none of that has had a human test yet, and every fix still waiting on one says so in its own commit message. If you want something that's been tested by an actual human, use 1.8.
+**1.8** is the stable release. **2.0** (the `engine-port-2.0` branch) is in beta, at **2.0.0-beta.4**: GucciBot's engine reconciled against Silicate's function by function. Calculate, playback, practice-mode recording and the Pathfinder (Absense's, ported in) were confirmed in-game on beta.2. Beta.3 rebuilt the menu and every feature that came from ToastyReplay from scratch, and added macOS, iOS and Android. Beta.4's additions (auto safe mode, the setup check, the Disable bot switch, the phone menu, the Mac menu key) were tried in-game before release, and the Android build has run on a phone. Most of beta.3's rebuilt features still haven't had a feature-by-feature human test, and every fix still waiting on one says so in its own commit message. If you want something that's been tested by an actual human, use 1.8.
 
 ## Contact
 

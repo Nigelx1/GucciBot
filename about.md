@@ -1,4 +1,4 @@
-# GucciBot 2.0.0-beta.3
+# GucciBot 2.0.0-beta.4
 
 > Frame perfect. Ice cold. Brrr.
 
@@ -13,7 +13,7 @@ GucciBot is a Geometry Dash macro bot built on Silicate's physics engine, with a
 
 ## Platforms
 
-Windows is GucciBot's home, and where all of it has been tested. Since 2.0.0-beta.3 it also runs on **macOS, iOS and Android**, as an experiment: nobody has played it on those yet, so if something there looks wrong, open an issue. On a phone the menu opens from the **GucciBot** button in the pause menu.
+Windows is GucciBot's home, and where all of it has been tested. Since 2.0.0-beta.3 it also runs on **macOS, iOS and Android**. It's still experimental there: it has been played on an Android phone, but the rest has had little testing, so if something looks wrong, open an issue. On a phone the menu opens from the **GucciBot** button in the pause menu, fills the screen and scrolls when you drag it; **Menu size** in Settings makes it bigger or smaller. On a Mac the menu key's default is **Option**, and the pause-menu button is there too.
 
 What still needs Windows:
 
@@ -167,6 +167,9 @@ Real click-timing feedback and a synced video-review overlay, both built around 
 
 ## Extras
 
+- **Auto safe mode** — on by default. While a cheat is on (a macro, Calculate or Pathfinder playing, noclip, speedhack, a tick rate other than 240, the autoclicker, Prevent Death or frame advance), the attempt doesn't count: no completion, no new best, no percentage saved, nothing sent to the servers. Start positions work as normal, and GD's Testmode label stays out of the way. Turn it off and a small red dot shows in the top-left corner while a cheat is on, drawn into the game so recordings and renders show it; a green one can show while nothing is.
+- **Setup check** — warns about the settings that break GucciBot's engine: GD's Auto-Checkpoints, other mods' practice fixes, Frame Extrapolation in Mega Hack or QOLMod, and other bots loaded alongside. Once per launch, on the Macro page, and when you hit Record or Play. It never changes another mod's settings.
+- **Disable bot** — one switch in Settings takes GucciBot out of the game without a restart: every hook and patch comes out, and the menu keeps only the switch that brings it back.
 - **Frame Editor** — a timeline view of a macro's inputs. Every press is a bar you can drag, stretch or shorten, with undo and redo, an overview strip for long macros, and separate lanes for player 2.
 - **Assistant Access** — an optional local server (Settings) that lets an AI assistant read what the bot is doing: the frame, the loaded macro, Calculate's windows, Pathfinder's progress and GucciBot's own logs, and step the game while something is going wrong. Off by default, your machine only, and it never reaches the network.
 - **HUD** — live readouts in the corner of the level: frame, TPS, position, velocities, rotation, bot state, plus debug readouts (game tick, speed, gravity, checkpoints, level time, time warp, random states, action index, touching orbs and more).

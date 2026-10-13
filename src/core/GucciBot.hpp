@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-13-cz (The autoclicker and hitbox keys now save their toggle, so it lasts after a restart like the menu switches)"
+    "2026-10-13-da (Version 2.0.0-beta.4: the version fields, about.md and README updated for the release)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
