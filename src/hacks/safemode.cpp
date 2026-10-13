@@ -5,6 +5,7 @@
 #include "hacks/autoclicker.hpp"
 
 #include <Geode/Geode.hpp>
+#include <Geode/modify/GJGameLevel.hpp>
 #include <Geode/modify/PlayLayer.hpp>
 #include <Geode/utils/hash.hpp>
 
@@ -150,74 +151,74 @@ namespace gucci::safemode {
 
 using namespace gucci;
 
-// GD's own test-mode value is kept in `real`; while safe mode shields an
-// attempt the flag is set, and the label is always drawn from `real`, so the
-// shield never shows.
+namespace {
+    // A run safe mode keeps from counting: auto safe mode on, and a cheat on at
+    // some point in this attempt (or right now).
+    bool shielded() {
+        return safemode::autoSafeMode() && (safemode::g_tainted || safemode::cheatingNow());
+    }
+} // namespace
+
+// GD's own test-mode flag is never left changed. GD sets it for a start position
+// (a startpos switch resets around it), and the first version, which overrode it
+// every frame, let a startpos run save its death % and crashed a startpos switch
+// (Dihmaster, 2026-10-12). Instead, as QOLMod's safe mode does it: the flag is
+// raised only while levelComplete runs, the new-best popup is skipped, and
+// GJGameLevel::savePercentage (where a death's % is saved) is skipped.
 class $modify(GB7SafeModePlayLayer, PlayLayer) {
     struct Fields {
-        bool real = false;
         CCDrawNode* dot = nullptr;
     };
-
-    void shield() {
-        bool const on = safemode::autoSafeMode() && (safemode::g_tainted || safemode::cheatingNow());
-        m_isTestMode = on ? true : m_fields->real;
-    }
 
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
         safemode::g_tainted = false;
         if (!PlayLayer::init(level, useReplay, dontCreateObjects))
             return false;
-        m_fields->real = m_isTestMode;
-        // The red dot, top right, in the game's own UI so recordings and renders
-        // show it. Shown only with auto safe mode off (postUpdate).
+        // The red dot: top left, on the PlayLayer itself rather than its UI layer
+        // (which some mods hide), so recordings and renders show it. Shown the
+        // whole time auto safe mode is off (postUpdate).
         auto* dot = CCDrawNode::create();
         auto const win = CCDirector::get()->getWinSize();
-        dot->drawDot(ccp(win.width - 7.f, win.height - 7.f), 3.5f, ccc4f(1.f, 0.16f, 0.16f, 1.f));
+        dot->drawDot(ccp(9.f, win.height - 9.f), 4.5f, ccc4f(1.f, 0.16f, 0.16f, 1.f));
         dot->setVisible(false);
         dot->setID("cheat-dot"_spr);
-        if (m_uiLayer)
-            m_uiLayer->addChild(dot, 1000);
-        else
-            this->addChild(dot, 1000);
+        this->addChild(dot, 1000);
         m_fields->dot = dot;
         return true;
     }
 
     void resetLevel() {
-        m_isTestMode = m_fields->real; // GD sees its own value through the reset
         PlayLayer::resetLevel();
-        m_fields->real = m_isTestMode;
         safemode::g_tainted = safemode::cheatingNow(); // a new attempt
-        shield();
     }
 
     void postUpdate(float dt) {
         PlayLayer::postUpdate(dt);
-        bool const now = safemode::cheatingNow();
-        if (now)
+        if (safemode::cheatingNow())
             safemode::g_tainted = true;
-        shield();
         if (auto* dot = m_fields->dot)
-            dot->setVisible(!safemode::autoSafeMode() && !safemode::dotHidden() && (now || safemode::g_tainted));
+            dot->setVisible(!safemode::autoSafeMode() && !safemode::dotHidden());
     }
 
-    // Saving happens here (and possibly a moment after, which the flag still
-    // covers): shield first in case the cheat started this very tick.
     void levelComplete() {
-        shield();
+        bool const was = m_isTestMode;
+        if (shielded())
+            m_isTestMode = true; // only raised, and only for this call
         PlayLayer::levelComplete();
+        m_isTestMode = was;
     }
 
-    void destroyPlayer(PlayerObject* player, GameObject* object) {
-        shield();
-        PlayLayer::destroyPlayer(player, object);
+    void showNewBest(bool newReward, int orbs, int diamonds, bool demonKey, bool noRetry, bool noTitle) {
+        if (shielded())
+            return;
+        PlayLayer::showNewBest(newReward, orbs, diamonds, demonKey, noRetry, noTitle);
     }
+};
 
-    void updateTestModeLabel() {
-        bool const shielded = m_isTestMode;
-        m_isTestMode = m_fields->real;
-        PlayLayer::updateTestModeLabel();
-        m_isTestMode = shielded;
+class $modify(GB7SafeModeLevel, GJGameLevel) {
+    void savePercentage(int percent, bool isPracticeMode, int clicks, int attempts, bool isChkValid) {
+        if (PlayLayer::get() && shielded())
+            return;
+        GJGameLevel::savePercentage(percent, isPracticeMode, clicks, attempts, isChkValid);
     }
 };

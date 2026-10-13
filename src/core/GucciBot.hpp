@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-12-cv (Auto safe mode + red cheat dot; the owner password now set, so hiding the dot unlocks)"
+    "2026-10-13-cw (Safe mode fixed for start positions: GD test-mode flag never left changed, death % and new best blocked directly; red dot top left whenever auto safe mode is off)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
