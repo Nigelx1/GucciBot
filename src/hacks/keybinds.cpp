@@ -56,12 +56,20 @@ namespace {
         });
         used |= fire(keys.onNoclip, k, [&] { gb->noclipEnabled = !gb->noclipEnabled; });
         used |= fire(keys.onTrajectory, k, [&] { gb->pathPreview = !gb->pathPreview; });
-        used |= fire(keys.onHitboxes, k, [&] { gb->showHitboxes = !gb->showHitboxes; });
+        // Saved like the menu's switches, so a toggle by key outlasts a restart.
+        used |= fire(keys.onHitboxes, k, [&] {
+            gb->showHitboxes = !gb->showHitboxes;
+            Mod::get()->setSavedValue<bool>("hack_hitboxes", gb->showHitboxes);
+        });
         used |= fire(keys.onLayoutMode, k, [&] { gb->layoutMode = !gb->layoutMode; });
         used |= fire(keys.onNoMirror, k, [&] { gb->noMirrorEffect = !gb->noMirrorEffect; });
         used |= fire(keys.onAudioPitch, k, [&] { gb->audioPitchEnabled = !gb->audioPitchEnabled; });
         used |= fire(keys.onRngLock, k, [&] { gb->rngLocked = !gb->rngLocked; });
-        used |= fire(keys.onAutoclicker, k, [&] { Autoclicker::get()->enabled = !Autoclicker::get()->enabled; });
+        used |= fire(keys.onAutoclicker, k, [&] {
+            auto* ac = Autoclicker::get();
+            ac->enabled = !ac->enabled;
+            ac->saveSettings();
+        });
         used |= fire(keys.onIntentionalDeath, k, [&] {
             if (gb->isRecording())
                 gb->updater.m_canDie = !gb->updater.m_canDie;

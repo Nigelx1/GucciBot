@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-13-cy (Renderer files fill themselves in: every launch, any missing or wrong-size FFmpeg DLL is copied into libraries, Windows only)"
+    "2026-10-13-cz (The autoclicker and hitbox keys now save their toggle, so it lasts after a restart like the menu switches)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
