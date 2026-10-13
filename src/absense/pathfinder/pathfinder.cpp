@@ -465,6 +465,14 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
         reason.c_str(), (unsigned long long)m_stats.committedTicks, (unsigned long long)m_stats.decisions,
         (unsigned long long)m_stats.simulations, (unsigned long long)m_stats.backtracks,
         (unsigned long long)m_stats.bestTick, m_stats.seconds);
+    // How fast the simulator really is (AI_PATHFINDER_PLAN.md, R0): every
+    // time and memory estimate in the plan waits on these numbers.
+    log("speed: %llu simulated ticks in %.1fs of deciding (%.0f ticks/s), %.1f ticks per simulation, "
+        "%.1fs going back, %.1fs stepping the real game, one search unit %.3f ms",
+        (unsigned long long)m_stats.simulatedTicks, m_stats.secondsSim,
+        m_stats.secondsSim > 0.0 ? (double)m_stats.simulatedTicks / m_stats.secondsSim : 0.0,
+        m_stats.simulations > 0 ? (double)m_stats.simulatedTicks / (double)m_stats.simulations : 0.0,
+        m_stats.secondsRestore, m_stats.secondsReal, m_stats.unitMs);
 
     if (done) {
         m_phase = Phase::Done;

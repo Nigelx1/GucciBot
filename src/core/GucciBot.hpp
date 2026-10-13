@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-13-da (Version 2.0.0-beta.4: the version fields, about.md and README updated for the release)"
+    "2026-10-13-db (Pathfinder logs how fast the simulator really is when it stops: simulated ticks per second, the first measurement for the AI pathfinder plan)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
