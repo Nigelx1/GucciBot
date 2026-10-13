@@ -114,4 +114,4 @@ ENGINE_AUDIT.md the 2026-09-26/27 audit against Silicate: every finding and how 
 
 ## 7. Other docs in the repo
 
-`ENGINE_AUDIT.md` is current. `CALC_SLOPE_EXIT.md` is superseded history. `about.md` (packaged into the mod) and `README.md` describe features and credits; keep their credits identical to the in-game Credits tab and the website.
+`AI_PATHFINDER_PLAN.md` is the plan for the AI pathfinder (2026-10-13): Part 1 in plain English for Nigel, Part 2 the design, milestones M0-M7 and Nigel's four open decisions. `ENGINE_AUDIT.md` is current. `CALC_SLOPE_EXIT.md` is superseded history. `about.md` (packaged into the mod) and `README.md` describe features and credits; keep their credits identical to the in-game Credits tab and the website.
