@@ -859,8 +859,13 @@ namespace gucci::ui {
             kit::BeginCard("Safe mode", "While a cheat is on, a run doesn't count: no completion, no new best, "
                                         "nothing sent to the servers.");
             bool safe = safemode::autoSafeMode();
-            if (kit::SwitchRow("Auto safe mode", "Off, a red dot shows in the top-left corner", &safe))
+            if (kit::SwitchRow("Auto safe mode", "Off, a red dot shows in the top-left corner while a cheat is on",
+                               &safe))
                 safemode::setAutoSafeMode(safe);
+            bool green = safemode::greenDot();
+            if (kit::SwitchRow("Green dot when clean", "A green dot in the top-left corner while no cheat is on",
+                               &green))
+                safemode::setGreenDot(green);
             if (safemode::unlocked()) {
                 bool hide = safemode::dotHidden();
                 if (kit::SwitchRow("Hide the red dot", "Owner only", &hide))

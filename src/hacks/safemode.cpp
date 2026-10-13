@@ -72,6 +72,7 @@ namespace gucci::safemode {
             bool loaded = false;
             bool safe = true;
             bool hidden = false;
+            bool green = false;
             bool unlocked = false;
         };
 
@@ -82,6 +83,7 @@ namespace gucci::safemode {
                 auto* mod = Mod::get();
                 s.safe = mod->getSavedValue<bool>("safe_mode_auto", true);
                 s.hidden = mod->getSavedValue<bool>("cheat_dot_hidden", false);
+                s.green = mod->getSavedValue<bool>("cheat_dot_green", false);
                 Digest token{};
                 s.unlocked = unhex(mod->getSavedValue<std::string>("owner_unlock", ""), token) && tokenOpens(token);
             }
@@ -134,6 +136,15 @@ namespace gucci::safemode {
         Mod::get()->setSavedValue("cheat_dot_hidden", hidden);
     }
 
+    bool greenDot() {
+        return st().green;
+    }
+
+    void setGreenDot(bool on) {
+        st().green = on;
+        Mod::get()->setSavedValue("cheat_dot_green", on);
+    }
+
     bool cheatingNow() {
         auto* gb = GucciEngine::get();
         if (gb->standingDown || botswitch::takenOut())
@@ -167,23 +178,28 @@ namespace {
 // GJGameLevel::savePercentage (where a death's % is saved) is skipped.
 class $modify(GB7SafeModePlayLayer, PlayLayer) {
     struct Fields {
-        CCDrawNode* dot = nullptr;
+        CCDrawNode* red = nullptr;
+        CCDrawNode* green = nullptr;
     };
 
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
         safemode::g_tainted = false;
         if (!PlayLayer::init(level, useReplay, dontCreateObjects))
             return false;
-        // The red dot: top left, on the PlayLayer itself rather than its UI layer
-        // (which some mods hide), so recordings and renders show it. Shown the
-        // whole time auto safe mode is off (postUpdate).
-        auto* dot = CCDrawNode::create();
+        // The dots: top left, on the PlayLayer itself rather than its UI layer
+        // (which some mods hide), so recordings and renders show them. Red while
+        // a cheat is on with auto safe mode off; green, if wanted, while none is.
         auto const win = CCDirector::get()->getWinSize();
-        dot->drawDot(ccp(9.f, win.height - 9.f), 4.5f, ccc4f(1.f, 0.16f, 0.16f, 1.f));
-        dot->setVisible(false);
-        dot->setID("cheat-dot"_spr);
-        this->addChild(dot, 1000);
-        m_fields->dot = dot;
+        auto make = [&](ccColor4F color, const char* id) {
+            auto* dot = CCDrawNode::create();
+            dot->drawDot(ccp(9.f, win.height - 9.f), 4.5f, color);
+            dot->setVisible(false);
+            dot->setID(id);
+            this->addChild(dot, 1000);
+            return dot;
+        };
+        m_fields->red = make(ccc4f(1.f, 0.16f, 0.16f, 1.f), "cheat-dot"_spr);
+        m_fields->green = make(ccc4f(0.2f, 0.85f, 0.35f, 1.f), "clean-dot"_spr);
         return true;
     }
 
@@ -194,10 +210,14 @@ class $modify(GB7SafeModePlayLayer, PlayLayer) {
 
     void postUpdate(float dt) {
         PlayLayer::postUpdate(dt);
-        if (safemode::cheatingNow())
+        bool const now = safemode::cheatingNow();
+        if (now)
             safemode::g_tainted = true;
-        if (auto* dot = m_fields->dot)
-            dot->setVisible(!safemode::autoSafeMode() && !safemode::dotHidden());
+        bool const cheated = now || safemode::g_tainted; // this attempt
+        if (auto* red = m_fields->red)
+            red->setVisible(cheated && !safemode::autoSafeMode() && !safemode::dotHidden());
+        if (auto* green = m_fields->green)
+            green->setVisible(!cheated && safemode::greenDot());
     }
 
     void levelComplete() {

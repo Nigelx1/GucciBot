@@ -5,9 +5,10 @@
 // save nothing and send nothing (hacks/safemode.cpp has how; GD's own test-mode
 // flag, which start positions use, is never left changed). Invisible: no label.
 //
-// With auto safe mode off, a small red dot shows in the top-left corner the whole
-// time, drawn into the game so recordings and renders show it. Hiding the dot as
-// well takes the owner's password. Only a salted, 10,000-round SHA-256 of it is
+// With auto safe mode off, a small red dot shows in the top-left corner while a
+// cheat is on (or was, this attempt), drawn into the game so recordings and
+// renders show it; a green one, if switched on, while none is. Hiding the red
+// dot takes the owner's password. Only a salted, 10,000-round SHA-256 of it is
 // in this (public) code, and an unlocked machine keeps the 5,000-round midpoint,
 // which can't be worked out from the code. Anyone building GucciBot from source
 // can take the lock out: it keeps the normal download honest.
@@ -29,6 +30,10 @@ namespace gucci::safemode {
 
     bool dotHidden();
     void setDotHidden(bool hidden); // only while unlocked
+
+    // A green dot while no cheat is on (off by default: nothing shows then).
+    bool greenDot();
+    void setGreenDot(bool on);
 
     bool cheatingNow();
 
