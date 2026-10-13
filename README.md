@@ -70,6 +70,7 @@ Two flavors of the same toolset: one permanently pointed at the level "Jupiter M
 - Full gameplay capture to video via FFmpeg — resolution, FPS, bitrate, codec, hardware encoders auto-detected per GPU vendor.
 - Optional 4-track audio output (combined, music, SFX, and frame-window cues each isolated) instead of one flattened track.
 - Frame-window markers and cues bake right into the output video.
+- Runs on FFmpeg 8.0.1 (GPL v3), bundled in the package; where those DLLs come from and their source: [guccibot-build-files](https://github.com/Nigelx1/guccibot-build-files).
 
 ## Themes
 
@@ -103,9 +104,11 @@ Also in Settings: **BIG BRRRR**, a core feature of this mod, and **Bass Shake**,
 
 ## Building it
 
-- Target: Geometry Dash 2.2081. Windows builds locally; macOS, iOS and Android build on GitHub Actions (`.github/workflows/multi-platform.yml`), which packages one `.geode` for all of them.
+- Target: Geometry Dash 2.2081. Every push to `multiplatform` builds Windows, macOS, iOS and Android on GitHub Actions (`.github/workflows/multi-platform.yml`) into **one `.geode` with everything in it**: all five platforms and every resource. That file *is* the release: one universal build per commit.
+- The renderer's FFmpeg DLLs are too big for this repo (one is over GitHub's 100 MB limit), so they live in [guccibot-build-files](https://github.com/Nigelx1/guccibot-build-files); the build downloads them and checks their SHA-256 before packing them in.
+- `.\install_ci_build.bat` installs GitHub's build of the commit you have checked out (waiting if it's still building) and keeps a copy in `build\ci\`.
 - Requires the [Geode SDK](https://geode-sdk.org/) and its usual toolchain (CMake, Ninja, MSVC).
-- Build with:
+- A quick local Windows build:
   ```
   .\build_win.bat
   ```

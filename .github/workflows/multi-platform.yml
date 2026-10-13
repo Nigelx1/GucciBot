@@ -1,11 +1,13 @@
 name: Multi-platform build
 
 # Builds GucciBot for every platform Geode runs on and packages one .geode
-# with all five binaries. Windows is GucciBot's home: a release swaps in the
-# Windows binary from build_win.bat's MSVC build, the one Nigel tests. Since
-# 2.0.0-beta.3 mod.json declares every platform itself (the combine step keeps
-# one job's mod.json, so a platform added per job went missing from the
-# package); the step below only matters if one is ever taken out again.
+# with all five binaries and every resource, the renderer's FFmpeg DLLs
+# included. This package is THE build: a release ships it as it is, Nigel's
+# game runs it (install_ci_build.bat), and Dihmaster's copy is it - one
+# universal file per commit (Nigel, 2026-10-12). Since 2.0.0-beta.3 mod.json
+# declares every platform itself (the combine step keeps one job's mod.json, so
+# a platform added per job went missing from the package); the step below only
+# matters if one is ever taken out again.
 
 on:
   workflow_dispatch:
@@ -29,6 +31,27 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      # The renderer's seven FFmpeg DLLs. Two are over GitHub's 100 MB file limit
+      # (.gitignore), so all seven live as a release asset in
+      # github.com/Nigelx1/guccibot-build-files and are packed in here, checked
+      # against this SHA-256 first. Every job takes them: the combine step keeps
+      # one job's resources.
+      - name: Fetch the renderer's FFmpeg DLLs
+        shell: bash
+        run: |
+          curl -fsSL --retry 3 -o ffmpeg-libs.zip             https://github.com/Nigelx1/guccibot-build-files/releases/download/ffmpeg-n8.0.1/ffmpeg-libs.zip
+          PY=$(command -v python || command -v python3)
+          "$PY" - <<'PYEOF'
+          import hashlib, sys, zipfile
+          want = "94c570044c0956ce988b0b4e19b5aa046643bb7d254e429e31907f706b7d76b2"
+          got = hashlib.sha256(open("ffmpeg-libs.zip", "rb").read()).hexdigest()
+          if got != want:
+              sys.exit(f"ffmpeg-libs.zip is {got}, not {want} - refusing to build")
+          zipfile.ZipFile("ffmpeg-libs.zip").extractall("resources/ffmpeg_libs")
+          PYEOF
+          rm ffmpeg-libs.zip
+          ls -l resources/ffmpeg_libs
 
       - name: Declare ${{ matrix.config.gd }} in mod.json
         shell: bash

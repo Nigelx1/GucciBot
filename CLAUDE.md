@@ -35,7 +35,11 @@ A **Geometry Dash macro bot**, distributed as the Geode mod `nigelx1.guccibot` (
 
 ## 2. Build & test
 
-- `.\build_win.bat` — builds and installs. Look for `Build complete` in its output; don't trust an exit code that went through a pipe.
+- **One universal build (Nigel, 2026-10-12).** Every push to `multiplatform` makes GitHub build ONE `.geode`: all five platforms plus every resource. The renderer's FFmpeg DLLs come from the release asset in [guccibot-build-files](https://github.com/Nigelx1/guccibot-build-files), and the build checks their SHA-256. That file is THE build:
+  - releases ship it as-is, with no more swapping in a local Windows binary;
+  - testers get it;
+  - `.\install_ci_build.bat` puts it in Nigel's game after you push. It waits about 8 minutes for the build, checks the 5 binaries and 7 DLLs, and keeps a copy in `build\ci\`.
+- `.\build_win.bat` — a quick local Windows build. It installs too, but it's not the shipped file. Look for `Build complete` in its output; don't trust an exit code that went through a pipe.
 - `.\run_tests.bat` — four offline suites: frame-editor rules, the GBR6 format (sub-tick, TPS changes, Left/Right buttons), Check Macro, macro ops (trim/merge/diff). Compiled `/O2 /MD` to match the mod (this toolchain fast-fails with cl's defaults).
 - **`GB_BUILD_LABEL`** is at the top of `src/core/GucciBot.hpp`: line 3 is `#define GB_BUILD_LABEL \`, line 4 the string. Scheme: `YYYY-MM-DD-x` then `-aa`, `-ab`... within a day, plus a plain-English description of what changed. Edit it by finding the line that ends in a backslash, never by searching for the label's closing text (a bad scan once deleted ~300 lines of this header). No `"` or `\` in the text.
 - **In-game logs** live in `%LOCALAPPDATA%\GeometryDash\geode\mods\nigelx1.guccibot\` (`guccibot_slope.log`, `guccibot_fw.log`, ...). Read them yourself instead of asking Nigel to paste.
