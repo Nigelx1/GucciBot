@@ -294,8 +294,11 @@ purpose rather than by accident.
 6. ~~§1.6 audio monitoring~~ — **ported, build `-ad`**
 7. Add a LICENSE — **Nigel's decision, see §7.3**
 
-**None of this fixes the Congregation slope bug.** That is still open, and the
-audit did not find it. What it did find is that the bug is *not* a missing
+**None of this fixes the Congregation slope bug.** *(Fixed afterwards: build
+`-au`, 154cbed, confirmed in-game by Nigel on 2026-09-27. GD's anticheat spike
+was being swallowed under Calculate and Pathfinder, so the slope launch in
+`postCollision` never ran. The rest of this paragraph is the state at the
+time of the audit.)* It was still open then, and the audit did not find it. What it did find is that the bug is *not* a missing
 Silicate mechanism in the paths I checked — so the next move there is the live
 one: turn the MCP server on and read `m_hasEverJumped`, `m_lastJumpTime`,
 `m_snapDistance` and `m_reverseRelated` at frame 167/168 on both runs.
