@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-13-cx (Red cheat dot only while a cheat is on again, plus an optional green dot when clean; Dihmaster500 in the credits)"
+    "2026-10-13-cy (Renderer files fill themselves in: every launch, any missing or wrong-size FFmpeg DLL is copied into libraries, Windows only)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
