@@ -1790,12 +1790,16 @@ const Trajectory::SimStart* AbsensePathfinder::memoStart() const {
     return st && st->sim ? st->sim.get() : nullptr;
 }
 
-bool AbsensePathfinder::robust(const Candidate& c, int horizon, bool held, int need) {
+bool AbsensePathfinder::robust(const Candidate& c, int horizon, bool held, int need, int* lasted) {
     auto* pl = PlayLayer::get();
+    if (lasted) *lasted = need;
     if (!pl) return true;
     // No press and no change of state anywhere in it: the script a tick late
     // is the same script, and it was already run over this horizon.
-    if (c.events == 0 && c.evaluated && !c.inputs.empty()) return c.complete || c.survived >= need;
+    if (c.events == 0 && c.evaluated && !c.inputs.empty()) {
+        if (lasted) *lasted = c.complete ? need : std::min(c.survived, need);
+        return c.complete || c.survived >= need;
+    }
     std::vector<TickInput> late;
     late.reserve(c.inputs.size());
     late.push_back({0, held});
@@ -1805,7 +1809,10 @@ bool AbsensePathfinder::robust(const Candidate& c, int horizon, bool held, int n
                                   : std::pair<uint64_t, uint64_t>{0, 0};
     if (lateFrom) {
         const auto it = m_runMemo.find(lateKey.first);
-        if (it != m_runMemo.end() && it->second.check == lateKey.second) return it->second.complete || it->second.survived >= need;
+        if (it != m_runMemo.end() && it->second.check == lateKey.second) {
+            if (lasted) *lasted = it->second.complete ? need : std::min(it->second.survived, need);
+            return it->second.complete || it->second.survived >= need;
+        }
     }
     // Only whether it lasts `need` ticks is asked: a run of min(horizon, need)
     // ticks gives the same answer (it is a prefix of the longer one).
@@ -1820,6 +1827,7 @@ bool AbsensePathfinder::robust(const Candidate& c, int horizon, bool held, int n
         m.survived = r.survived;
         m.complete = r.complete;
     }
+    if (lasted) *lasted = r.complete ? need : std::min(r.survived, need);
     return r.complete || r.survived >= need;
 }
 
@@ -2259,6 +2267,7 @@ void AbsensePathfinder::decide() {
                             c.prefix = way;
                             c.gateTicks = (int)way.size();
                             d.candidates.push_back(std::move(c));
+                            d.routeIdeas = true;
                         }
                     }
                 }
@@ -2320,8 +2329,11 @@ void AbsensePathfinder::decide() {
         if (a.events != b.events) return a.events < b.events;
         return a.firstEvent > b.firstEvent;
     };
+    // ... or the best is a route idea the verdict will take anyway (better()
+    // puts it first): the hundreds of other ideas would be judged for nothing.
     auto haveFull = [&]() {
-        return d.best >= 0 && (d.candidates[(size_t)d.best].complete || d.candidates[(size_t)d.best].survived >= H);
+        return d.best >= 0 && (d.candidates[(size_t)d.best].complete || d.candidates[(size_t)d.best].survived >= H ||
+                               routeViable(d.candidates[(size_t)d.best]));
     };
     // Judges the ideas [d.next, end) a slice at a time; true once they are all
     // done (or one of them settled it).
@@ -2373,7 +2385,11 @@ void AbsensePathfinder::decide() {
             // The verified rest of the last plan still lasting the whole
             // horizon, and a tick late as well: that settles it in one run,
             // and the steers are not simulated at all.
-            if (c.carryOn && c.survived >= H && robust(c, H, d.held, H)) {
+            // Not with route ideas to judge (step R4): the rest of the last
+            // plan is a steer past the last gate, and settling on it would let
+            // that steer carry the run past the next gates with the route
+            // never asked.
+            if (c.carryOn && c.survived >= H && !d.routeIdeas && robust(c, H, d.held, H)) {
                 d.slackChosen = (int)d.next - 1;  // already checked a tick late: the verdict need not run it again
                 d.slackDone = true;
                 return true;
@@ -2859,7 +2875,19 @@ void AbsensePathfinder::decide() {
                                     : std::min(best->survived,
                                                std::max(std::max(1, d.need), best->survived - std::max(1, margin / 2)));
                 d.slackChosen = -1;
+                // Step R4: the best idea is the planned route's, so only another
+                // of the route's ways through the same gate may take its place.
+                // On LIMBO at 1.5% this check swapped the route's idea for an orb
+                // spam that lasted longer; the orb led off the route, and the run
+                // died at 2% with no way back to the gate it had left.
+                d.slackRoute = routeViable(*best);
+                if (d.slackRoute)
+                    std::erase_if(d.slackOrder, [&](size_t i) { return candidates[i].gateTicks <= 0; });
             }
+            // A route idea is the way to its gate and then a steer. When the
+            // whole bar does not hold up a tick late, the way to the gate still
+            // may: then that is all of it that is played (see routeCap).
+            const int gateClear = std::max(2, (int)std::lround(2.0 * std::max(1.0, bot->updater().getTps() / 240.0)));
             while (d.slackAt < d.slackOrder.size() && d.slackChecked < 6 && mayWork()) {
                 const size_t idx = d.slackOrder[d.slackAt];
                 const Candidate& c = candidates[idx];
@@ -2868,9 +2896,18 @@ void AbsensePathfinder::decide() {
                     break;
                 }
                 d.slackChecked++;
-                if (robust(c, H, held, d.slackNeeded)) {
+                int lasted = 0;
+                if (robust(c, H, held, d.slackNeeded, &lasted)) {
                     d.slackChosen = (int)idx;
                     d.slackAt = d.slackOrder.size();
+                    break;
+                }
+                if (d.slackRoute && c.gateTicks > 0 && lasted >= std::min(d.slackNeeded, c.gateTicks + gateClear)) {
+                    d.slackChosen = (int)idx;
+                    d.routeCap = c.gateTicks;
+                    d.slackAt = d.slackOrder.size();
+                    log("tick %llu: %s holds up a tick late only as far as its gate; played that far (%d ticks)",
+                        (unsigned long long)tick, c.name.c_str(), c.gateTicks);
                     break;
                 }
                 d.slackAt++;
@@ -2887,6 +2924,16 @@ void AbsensePathfinder::decide() {
                 best = chosen;
             } else if (d.slackChosen < 0) {
                 m_stats.fragile++;
+                if (d.slackRoute) {
+                    // None of the route's ways holds up a tick late: its best is
+                    // played anyway, as far as its gate. A real death there costs
+                    // a respawn and gets the game's word; leaving the route cost
+                    // the LIMBO run everything after 1.5%.
+                    d.routeCap = best->gateTicks;
+                    log("tick %llu: %s only works to the tick (lasts %d); played anyway as far as its gate (%d ticks): it "
+                        "is the planned route",
+                        (unsigned long long)tick, best->name.c_str(), best->survived, best->gateTicks);
+                }
             }
         }
 
@@ -3201,6 +3248,10 @@ void AbsensePathfinder::decide() {
     if (forcedCommit > 0) {
         commit = (m_repair.active && forcedCommit > survived) ? forcedCommit : std::min(forcedCommit, std::max(1, K));
     }
+    // Step R4: a route idea that only holds up a tick late as far as its gate
+    // (or not at all, played because it is the route's) is played to the gate,
+    // and the next decision is made there.
+    if (d.routeCap > 0 && !complete && forcedCommit <= 0) commit = std::max(1, std::min(commit, d.routeCap));
     // What this tick really played, before the trim: a stop walked back to
     // here forbids this idea, and a fresh one generated there is compared
     // against it as it was generated.

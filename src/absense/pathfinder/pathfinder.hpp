@@ -276,6 +276,14 @@ public:
         int slackNeeded = 0;
         int slackChosen = -1;
         bool slackDone = false;
+        // Step R4: the best idea is a route idea, so only route ideas may take
+        // its place in the slack check (another way through the same gate).
+        bool slackRoute = false;
+        bool routeIdeas = false;  // this decision has route ideas (step R4)
+        // Play no more than this many ticks of the chosen idea (0: no cap): a
+        // route idea whose way to its gate is all that is known to hold up a
+        // tick late, or that is played although nothing of it does.
+        int routeCap = 0;
     };
 
     struct Anchor {
@@ -303,7 +311,8 @@ public:
     static void countEvents(Candidate& c, bool held, int window);
     // Whether the idea still gets as far when every input lands one tick
     // late: what a plan that hugs walls or times frame-perfect jumps fails.
-    bool robust(const Candidate& c, int horizon, bool held, int need);
+    // `lasted`, when given, gets how many of the `need` ticks the late run lasted.
+    bool robust(const Candidate& c, int horizon, bool held, int need, int* lasted = nullptr);
     // A run of the simulation for the player the decision is about, with
     // the other player following its fixed script in two-player mode.
     RunResult runFor(const Decision& d, std::span<const TickInput> inputs, int ticks,

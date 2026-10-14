@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-14-do (Route ideas are steered on past their gate in the simulation instead of holding the button, so they are judged on the route, not on what a held button hits next)"
+    "2026-10-14-dp (The late-click check keeps the planned route: it only swaps the route idea for another way through the same gate, and plays it to the gate when none holds up; a working route idea settles the decision)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
