@@ -983,6 +983,27 @@ namespace gucci::mcp {
         });
 
         server.addTool({
+            "gucci_abs_benchmark",
+            "Step R0 of AI_PATHFINDER_PLAN.md: time Absense's simulation from the real "
+            "player's current state. Two runs (carry on, then hold) give microseconds "
+            "per simulated tick and ticks per second; then a snapshot is taken and put "
+            "back `snapshots` times for its cost, plus a rough size. Also logged as "
+            "\"[AbsPF] speed test\". Nothing in the real game changes.",
+            schemaOf({{"ticks", "integer", "most ticks per run (default 2000, max 20000)"},
+                      {"snapshots", "integer", "snapshot save/restore pairs to time (default 200, max 5000)"}}),
+            [](matjson::Value const& a) {
+                requireFreeRun();
+                requireLevel();
+                int const ticks = (int)std::clamp<int64_t>(argInt(a, "ticks", 2000), 1, 20000);
+                int const snapshots = (int)std::clamp<int64_t>(argInt(a, "snapshots", 200), 1, 5000);
+                auto out = absense::benchmark(ticks, snapshots);
+                if (out.contains("error"))
+                    throw ToolError(out["error"].asString().unwrapOr("failed"));
+                return out;
+            },
+        });
+
+        server.addTool({
             "gucci_abs_simulate",
             "Diagnostic: run Absense's pathfinder simulation (its copies of the "
             "player, Silicate's physics, the World) from the real player's current "

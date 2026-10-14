@@ -3,6 +3,8 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
+#include <string>
 #include <cmath>
 #include <cstring>
 
@@ -3638,6 +3640,110 @@ void Trajectory::checkWorldBranches(GJBaseGameLayer* pl) {
                  "world: branch check passed - %d ticks straight and through %d abandoned branches come out the "
                  "same, tick for tick%s",
                  (int)straight.size(), branches, worldStep ? "" : " (the World does not step this level's triggers)");
+}
+
+Trajectory::Benchmark Trajectory::benchmark(GJBaseGameLayer* pl, int ticks, int snapshots) {
+    Benchmark b;
+    b.worldOn = !world::World::disabled;
+    // The same rules as the branch check: not inside somebody else's run, and
+    // only on a level that is all there.
+    if (m_search || m_start || m_simulating || m_drawing) {
+        b.error = "the simulation is busy: stop the pathfinder and try again";
+        return b;
+    }
+    if (!pl || !pl->m_objects || !pl->m_player1 || !m_fakePlayer1 || !m_fakePlayer2 || pl->m_loadingProgress < 1.0f) {
+        b.error = "open a level first";
+        return b;
+    }
+    if (pl->m_player1->m_isDead || pl->m_playerDied) {
+        b.error = "the player is dead: try again once the attempt has restarted";
+        return b;
+    }
+    // Like the branch check, leave the trajectory as it was found.
+    const Killer keptKiller = m_killer;
+    const uint64_t keptRand = m_teleportRand;
+    using Clock = std::chrono::steady_clock;
+    const auto us = [](Clock::duration d) { return std::chrono::duration<double, std::micro>(d).count(); };
+
+    // Simulated ticks: the copies carrying on, then holding, from where the
+    // player is, for as long as each run lasts (at most `ticks`).
+    double stepUs = 0.0;
+    double runUs = 0.0;
+    for (int variant = 0; variant < 2; variant++) {
+        const auto t0 = Clock::now();
+        Sim s;
+        if (!s.begin(this, pl, true, false)) continue;
+        const auto t1 = Clock::now();
+        int n = 0;
+        while (n < ticks) {
+            TickInput in;
+            in.held = variant == 1;
+            if (variant == 1 && n == 0) in.presses = 1;
+            n++;
+            if (s.step(in) || s.complete()) break;
+        }
+        const auto t2 = Clock::now();
+        s.end();
+        const auto t3 = Clock::now();
+        stepUs += us(t2 - t1);
+        runUs += us(t1 - t0) + us(t3 - t2);
+        b.ticks += (uint64_t)n;
+        b.runs++;
+    }
+    if (b.runs == 0) {
+        m_killer = keptKiller;
+        m_teleportRand = keptRand;
+        b.error = "the simulation could not start here";
+        return b;
+    }
+    b.usPerTick = b.ticks ? stepUs / (double)b.ticks : 0.0;
+    b.usPerRun = runUs / (double)b.runs;
+
+    // Snapshots: taken and put back, as a search does at each branch point,
+    // a few ticks into a run so they hold something.
+    {
+        Sim s;
+        if (s.begin(this, pl, true, false)) {
+            for (int i = 0; i < 20; i++)
+                if (s.step(TickInput{}) || s.complete()) break;
+            SimSnapshot snap;
+            double saveUs = 0.0;
+            double restoreUs = 0.0;
+            for (int i = 0; i < snapshots; i++) {
+                const auto a = Clock::now();
+                s.snapshot(snap);
+                const auto c = Clock::now();
+                s.restore(snap);
+                const auto d = Clock::now();
+                saveUs += us(c - a);
+                restoreUs += us(d - c);
+            }
+            b.snapshots = snapshots;
+            if (snapshots > 0) {
+                b.usPerSave = saveUs / (double)snapshots;
+                b.usPerRestore = restoreUs / (double)snapshots;
+            }
+            // Roughly what one snapshot holds: its own fields, the containers
+            // it fills, and the World's lists counted in full (a snapshot
+            // shares those with the run until either changes them).
+            const auto& w = snap.world;
+            std::size_t bytes = sizeof(SimSnapshot) + sizeof(world::ToggleWords);
+            bytes += snap.activatedIDs.size() * 48 + (snap.spawnChannel0.size() + snap.spawnChannel1.size()) * 32;
+            bytes += (snap.activated1.size() + snap.activated2.size()) * 32;
+            for (int k = 0; k < 2; k++) bytes += (snap.ringTouch[k].size() + snap.ringUsed[k].size()) * 40;
+            bytes += snap.actions.capacity() * sizeof(TrajectoryAction) + snap.simBroken.capacity() * sizeof(SimBroken);
+            bytes += w.cmds->size() * sizeof(world::WCmd) + w.spawns->size() * sizeof(world::WSpawn);
+            bytes += w.remaps->size() * sizeof(int) + w.timers->size() * sizeof(world::WTimer);
+            bytes += (w.items->size() + w.persistentItems->size() + w.triggeredIds->size()) * 8;
+            bytes += (w.toggleDelta.size() + w.triggeredOnce.size() + w.contact[0].size() + w.contact[1].size()) * 8;
+            bytes += w.reach.size() * sizeof(w.reach[0]);
+            b.snapshotBytes = bytes;
+            s.end();
+        }
+    }
+    m_killer = keptKiller;
+    m_teleportRand = keptRand;
+    return b;
 }
 
 std::shared_ptr<Trajectory::SimStart> Trajectory::advanceStart(GJBaseGameLayer* pl, std::shared_ptr<SimStart> from,

@@ -73,6 +73,11 @@ namespace absense {
     // two part. The game is put back afterwards.
     matjson::Value simVsReal(std::vector<ScriptTick> const& script, int ticks, int every);
 
+    // Step R0 of AI_PATHFINDER_PLAN.md: how fast the simulation runs from the
+    // real player's state (simulated ticks a second, snapshot save, restore
+    // and size), also written to the game's log. Nothing in the game changes.
+    matjson::Value benchmark(int ticks, int snapshots);
+
     // Killers the simulation is wrong about (by object uid): its copies do
     // not die of them. See absense/judge.hpp.
     void distrust(int uid);

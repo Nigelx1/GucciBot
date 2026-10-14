@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-13-db (Pathfinder logs how fast the simulator really is when it stops: simulated ticks per second, the first measurement for the AI pathfinder plan)"
+    "2026-10-13-dc (Pathfinder speed test button and assistant tool, and the World self-test now names what differs; both for step R0 of the AI pathfinder plan)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

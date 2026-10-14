@@ -647,6 +647,8 @@ namespace gucci::ui {
                            &GucciEngine::get()->pfAgencyDebug);
         }
 
+        std::string g_speedTest;  // the last speed test's result (step R0 of AI_PATHFINDER_PLAN.md)
+
         void pagePathfinder() {
 #if !GB_NATIVE_ENGINE
         kit::Note("The Pathfinder is Windows-only for now: its model of the level reads GD's Windows memory layout.", Tone::Warn);
@@ -682,6 +684,29 @@ namespace gucci::ui {
             }
             if (!s.message.empty())
                 kit::Note(s.message.c_str(), Tone::Muted);
+            // How fast the simulation runs from here: the first numbers the AI
+            // pathfinder plan needs (step R0). Run outside the menu's drawing.
+            kit::RowBegin("Speed test", "How fast the simulator runs from here (also written to the game's log)");
+            ImGui::BeginDisabled(!PlayLayer::get() || s.running || absense::startPending());
+            if (kit::Button("Measure", Tone::Muted, -1.f)) {
+                g_speedTest = "Measuring...";
+                geode::queueInMainThread([] {
+                    auto r = absense::benchmark(2000, 200);
+                    if (r.contains("error")) {
+                        g_speedTest = "Speed test: " + r["error"].asString().unwrapOr("failed");
+                        return;
+                    }
+                    g_speedTest = fmt::format(
+                        "{:.0f} simulated ticks a second | a saved state: {:.0f} us to save, {:.0f} us to restore, about {} KB",
+                        r["ticks_per_second"].asDouble().unwrapOr(0.0), r["us_per_snapshot_save"].asDouble().unwrapOr(0.0),
+                        r["us_per_snapshot_restore"].asDouble().unwrapOr(0.0),
+                        r["snapshot_bytes_roughly"].asInt().unwrapOr(0) / 1024);
+                });
+            }
+            ImGui::EndDisabled();
+            kit::RowEnd();
+            if (!g_speedTest.empty())
+                kit::Hint(g_speedTest.c_str());
             kit::EndCard();
         }
 

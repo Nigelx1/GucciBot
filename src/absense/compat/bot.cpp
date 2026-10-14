@@ -323,6 +323,46 @@ matjson::Value absense::simulate(std::vector<ScriptTick> const& script, int tick
     return out;
 }
 
+matjson::Value absense::benchmark(int ticks, int snapshots) {
+    auto out = matjson::Value::object();
+    auto* pl = PlayLayer::get();
+    auto* bot = Bot::get();
+    if (!pl || !pl->m_player1) {
+        out["error"] = "not in a level";
+        return out;
+    }
+    if (!bot->trajectory().exists())
+        bot->trajectory().init();
+    auto* t = bot->trajectory().unsafeInner();
+    if (!t) {
+        out["error"] = "the simulation could not be made";
+        return out;
+    }
+    auto const b = t->benchmark(pl, ticks, snapshots);
+    if (b.error) {
+        out["error"] = std::string(b.error);
+        return out;
+    }
+    double const perSecond = b.usPerTick > 0.0 ? 1e6 / b.usPerTick : 0.0;
+    out["frame"] = (int64_t)bot->updater().getFrame();
+    out["world_on"] = b.worldOn;
+    out["runs"] = (int64_t)b.runs;
+    out["simulated_ticks"] = (int64_t)b.ticks;
+    out["us_per_tick"] = b.usPerTick;
+    out["ticks_per_second"] = perSecond;
+    out["us_per_run_setup"] = b.usPerRun;
+    out["snapshots"] = (int64_t)b.snapshots;
+    out["us_per_snapshot_save"] = b.usPerSave;
+    out["us_per_snapshot_restore"] = b.usPerRestore;
+    out["snapshot_bytes_roughly"] = (int64_t)b.snapshotBytes;
+    geode::log::info("[AbsPF] speed test at frame {}: {:.0f} simulated ticks a second ({:.2f} us a tick over {} ticks "
+                     "in {} runs), {:.0f} us to set a run up, a snapshot {:.1f} us to take and {:.1f} us to put back, "
+                     "about {} bytes, World {}",
+                     bot->updater().getFrame(), perSecond, b.usPerTick, b.ticks, b.runs, b.usPerRun, b.usPerSave,
+                     b.usPerRestore, b.snapshotBytes, b.worldOn ? "on" : "off");
+    return out;
+}
+
 matjson::Value absense::simVsReal(std::vector<ScriptTick> const& script, int ticks, int every) {
     auto out = matjson::Value::object();
     auto* pl = PlayLayer::get();

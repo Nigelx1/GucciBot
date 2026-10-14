@@ -213,6 +213,21 @@ class Trajectory {
     struct SearchState;
    public:
     struct SimStart;  // see captureStart
+    // Step R0 of AI_PATHFINDER_PLAN.md: what a simulated tick and a snapshot
+    // cost, timed from the real player's state. Nothing in the game changes.
+    struct Benchmark {
+        const char* error = nullptr;  // why it could not run
+        bool worldOn = false;
+        int runs = 0;
+        uint64_t ticks = 0;             // simulated ticks the timing covers
+        double usPerTick = 0.0;         // one simulated tick
+        double usPerRun = 0.0;          // setting a run up and putting the game back
+        int snapshots = 0;
+        double usPerSave = 0.0;         // taking one snapshot
+        double usPerRestore = 0.0;      // putting one back
+        std::size_t snapshotBytes = 0;  // roughly one snapshot (its World lists counted in full; the ops log left out)
+    };
+    Benchmark benchmark(GJBaseGameLayer* pl, int ticks, int snapshots);
    private:
     SearchState* m_search = nullptr;  // a search in progress (beginSearch)
     // Groups a trigger that moves things targets (move, rotate, follow, scale,
