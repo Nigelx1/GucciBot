@@ -33,6 +33,8 @@
 #include <filesystem>
 #include <sstream>
 #include <fstream>
+#include <chrono>
+#include <unordered_map>
 
 using namespace geode::prelude;
 using namespace gucci;
@@ -1307,13 +1309,41 @@ namespace gucci::mcp {
 
         server.addTool({
             "gucci_open_level",
-            "Open one of your own (local, created) levels by its exact name, "
-            "from anywhere outside a level. For Assistant Access sessions that "
-            "restart the game.",
-            schemaOf({{"name", "string", "the level's name, exactly"}}),
+            "Open one of your own (local, created) levels by its exact name, or "
+            "an online level by its `id`, from anywhere outside a level. An online "
+            "level not downloaded yet is downloaded first, the way clicking it in the "
+            "game does: the reply is then {downloading: true}; call again until it "
+            "opens. For Assistant Access sessions that restart the game or test the "
+            "pathfinder on a list of levels.",
+            schemaOf({{"name", "string", "a local level's name, exactly"},
+                      {"id", "integer", "an online level's ID (instead of name)"}}),
             [](matjson::Value const& a) {
                 if (PlayLayer::get() || LevelEditorLayer::get())
                     throw ToolError("leave the level (or the editor) first");
+                if (int const id = (int)argInt(a, "id", 0); id > 0) {
+                    auto* glm = GameLevelManager::get();
+                    auto* level = glm ? glm->getSavedLevel(id) : nullptr;
+                    auto out = obj();
+                    out["id"] = (int64_t)id;
+                    if (!level || std::string(level->m_levelString).empty()) {
+                        // Not here yet: ask the servers for it, as the level's page
+                        // does, and let the caller come back. At most once every 15
+                        // s per level, however often the caller polls.
+                        static std::unordered_map<int, std::chrono::steady_clock::time_point> asked;
+                        auto const now = std::chrono::steady_clock::now();
+                        auto const it = asked.find(id);
+                        if (glm && (it == asked.end() || now - it->second > std::chrono::seconds(15))) {
+                            asked[id] = now;
+                            glm->downloadLevel(id, false, 0);
+                        }
+                        out["downloading"] = true;
+                        return out;
+                    }
+                    auto* scene = PlayLayer::scene(level, false, false);
+                    CCDirector::sharedDirector()->replaceScene(CCTransitionFade::create(0.5f, scene));
+                    out["opening"] = std::string(level->m_levelName);
+                    return out;
+                }
                 auto const name = argStr(a, "name");
                 auto* llm = LocalLevelManager::get();
                 GJGameLevel* found = nullptr;
