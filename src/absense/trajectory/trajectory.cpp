@@ -3943,7 +3943,8 @@ Trajectory::Leg Trajectory::sweepLeg(GJBaseGameLayer* pl, LegGoal const& goal) {
         std::reverse(out.path.begin(), out.path.end());
     } else if (frontier.empty()) {
         // Nothing alive any more: a proof only if nothing was ever dropped.
-        out.outcome = out.capped ? Leg::Outcome::OutOfBudget : Leg::Outcome::Impossible;
+        out.outcome = out.capped ? Leg::Outcome::OutOfBudget
+                                 : (goal.exact ? Leg::Outcome::Impossible : Leg::Outcome::NotFound);
     }
     s.end();
     m_killer = keptKiller;

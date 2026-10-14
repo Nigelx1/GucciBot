@@ -9,6 +9,7 @@
 #include <unordered_set>
 
 #include "absense/gpu/classify.hpp"
+#include "absense/trajectory/trajectory.hpp"
 
 using namespace geode::prelude;
 
@@ -86,6 +87,11 @@ namespace {
     std::unique_ptr<Atlas> g_atlas;
     GJBaseGameLayer* g_atlasFor = nullptr;
     int g_atlasObjects = -1;
+    // The set-up of the level the map was built for (moverCacheGeneration):
+    // a new level, or the same one opened again after an edit, can come back at
+    // the same layer address with the same object count.
+    unsigned g_atlasGeneration = ~0u;
+    uint64_t g_nextAtlasId = 0;
     bool g_overlay = false;
 
     void subtract(float lo, float hi, std::vector<std::pair<float, float>>& blocked, std::vector<Opening>& out) {
@@ -147,6 +153,7 @@ namespace {
 
         std::vector<Box> boxes;
         std::vector<float> unknownX;
+        std::vector<float> toggledX;
         boxes.reserve((size_t)n);
         float levelEnd = pl->m_levelLength;
         float levelTop = kGroundTop + 600.0f;
@@ -156,6 +163,13 @@ namespace {
             if (gpu::objectChangesEverything(obj)) {
                 unknownX.push_back(obj->getPositionX());
                 a->unknownObjects++;
+                continue;
+            }
+            if ((obj->m_isGroupDisabled || obj->m_isDisabled) && movesOrToggles(obj)) {
+                // Off now, but a trigger turns it on (or moves it) later:
+                // the map makes no claim about its columns.
+                toggledX.push_back(obj->getPositionX());
+                a->movingObjects++;
                 continue;
             }
             Box b;
@@ -201,6 +215,10 @@ namespace {
         for (float x : unknownX) {
             const int c = std::clamp((int)std::floor(x / kColumnWidth), 0, columns - 1);
             a->columns[(size_t)c].unknown = true;
+        }
+        for (float x : toggledX) {
+            const int c = std::clamp((int)std::floor(x / kColumnWidth), 0, columns - 1);
+            for (int k = std::max(0, c - 1); k <= std::min(columns - 1, c + 1); k++) a->columns[(size_t)k].dynamic = true;
         }
 
         size_t next = 0;
@@ -375,10 +393,13 @@ const char* gateKindName(GateKind k) {
 const Atlas* atlasFor(GJBaseGameLayer* pl) {
     if (!pl || !pl->m_objects || pl->m_loadingProgress < 1.0f) return nullptr;
     const int count = pl->m_objects->count();
-    if (!g_atlas || g_atlasFor != pl || g_atlasObjects != count) {
+    const unsigned generation = moverCacheGeneration();
+    if (!g_atlas || g_atlasFor != pl || g_atlasObjects != count || g_atlasGeneration != generation) {
         g_atlas = build(pl);
+        g_atlas->id = ++g_nextAtlasId;
         g_atlasFor = pl;
         g_atlasObjects = count;
+        g_atlasGeneration = generation;
     }
     return g_atlas.get();
 }

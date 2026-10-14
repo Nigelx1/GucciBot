@@ -493,7 +493,9 @@ matjson::Value absense::routeLeg(float gateX, float lo, float hi, int maxTicks, 
             return out;
         }
         const float px = pl->m_player1->getPositionX();
-        for (auto const& w : plan->routes.front().points) {
+        auto const& points = plan->routes.front().points;
+        for (size_t i = 1; i < points.size(); i++) {  // [0] is where it was planned from, not a gate
+            auto const& w = points[i];
             if (w.x <= px + route::kColumnWidth) continue;
             gateX = w.x;
             lo = w.band.lo;
@@ -527,6 +529,7 @@ matjson::Value absense::routeLeg(float gateX, float lo, float hi, int maxTicks, 
     }
     const char* outcome = leg.outcome == Trajectory::Leg::Outcome::Found        ? "found"
                           : leg.outcome == Trajectory::Leg::Outcome::Impossible ? "impossible"
+                          : leg.outcome == Trajectory::Leg::Outcome::NotFound   ? "not_found"
                                                                                 : "out_of_budget";
     out["outcome"] = std::string(outcome);
     out["gate_x"] = (double)gateX;

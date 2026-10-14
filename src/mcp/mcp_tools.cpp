@@ -1054,16 +1054,17 @@ namespace gucci::mcp {
             "player's state, play every way the button can go tick by tick (merging states "
             "that come out the same) until one reaches x `gate_x` inside the band lo..hi. "
             "Without gate_x: the next gate of the planned route. Returns found (with the way "
-            "as a script), impossible (only a proof when exact and nothing was dropped), or "
+            "as a script), impossible (exact and nothing dropped: every move it offers was "
+            "tried, close to a proof), not_found (similar states merged: not a proof), or "
             "out_of_budget, and draws it over the level. The game waits while it runs; "
             "nothing in the real game changes.",
             schemaOf({{"gate_x", "integer", "the gate's x (default: the next gate of the planned route)"},
                       {"lo", "integer", "bottom of the band (default: the route's)"},
                       {"hi", "integer", "top of the band (default: the route's; lo > hi = any height)"},
                       {"max_ticks", "integer", "default 2400"},
-                      {"cap", "integer", "states kept a tick (default 192, max 4096)"},
+                      {"cap", "integer", "states kept a tick (default 192, max 1024)"},
                       {"exact", "boolean", "merge only identical states, for a proof (default false)"},
-                      {"max_ms", "integer", "wall clock limit (default 3000, max 20000)"}}),
+                      {"max_ms", "integer", "wall clock limit (default 3000, max 8000: the server waits 10 s)"}}),
             [](matjson::Value const& a) {
                 requireFreeRun();
                 requireLevel();
@@ -1071,8 +1072,8 @@ namespace gucci::mcp {
                 auto out = absense::routeLeg((float)argInt(a, "gate_x", 0), (float)argInt(a, "lo", 1),
                                              (float)argInt(a, "hi", 0),
                                              (int)std::clamp<int64_t>(argInt(a, "max_ticks", 2400), 1, 20000),
-                                             (int)std::clamp<int64_t>(argInt(a, "cap", 192), 1, 4096), exact,
-                                             (double)std::clamp<int64_t>(argInt(a, "max_ms", 3000), 100, 20000));
+                                             (int)std::clamp<int64_t>(argInt(a, "cap", 192), 1, 1024), exact,
+                                             (double)std::clamp<int64_t>(argInt(a, "max_ms", 3000), 100, 8000));
                 if (out.contains("error"))
                     throw ToolError(out["error"].asString().unwrapOr("failed"));
                 return out;

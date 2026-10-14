@@ -129,7 +129,7 @@ namespace {
     };
 
     std::unique_ptr<Plan> g_plan;
-    const Atlas* g_planAtlas = nullptr;
+    uint64_t g_planAtlas = 0;  // the id of the map it was planned on
     bool g_routeShown = false;
 
     // Where the line is drawn in a band: its middle, but near the floor of an
@@ -243,11 +243,11 @@ Plan plan(Atlas const& a, float fromX, float fromY) {
 const Plan* shownPlan(GJBaseGameLayer* pl) {
     auto const* a = atlasFor(pl);
     if (!a || !pl->m_player1) return nullptr;
-    if (!g_plan || g_planAtlas != a) {
+    if (!g_plan || g_planAtlas != a->id) {
         const float half = kHalf * (pl->m_player1->m_vehicleSize < 0.8f ? 0.6f : 1.0f);
         const float y = std::max(pl->m_player1->getPositionY(), 90.0f + half);
         g_plan = std::make_unique<Plan>(plan(*a, pl->m_player1->getPositionX(), y));
-        g_planAtlas = a;
+        g_planAtlas = a->id;
         log::info("[AbsPF] route plan: {}", summary(*g_plan));
     }
     return g_plan.get();
@@ -266,18 +266,18 @@ std::string summary(Plan const& p) {
 
 namespace {
     std::unique_ptr<Plan> g_guide;
-    const Atlas* g_guideAtlas = nullptr;
+    uint64_t g_guideAtlas = 0;  // the id of the map it was planned on
     bool g_guidance = false;
 }
 
 const Plan* guidePlan(GJBaseGameLayer* pl) {
     auto const* a = atlasFor(pl);
     if (!a) return nullptr;
-    if (!g_guide || g_guideAtlas != a) {
+    if (!g_guide || g_guideAtlas != a->id) {
         // The level starts on the floor: y 105, or 99 when it starts mini.
         const bool mini = pl->m_levelSettings && pl->m_levelSettings->m_startMini;
         g_guide = std::make_unique<Plan>(plan(*a, 0.0f, 90.0f + kHalf * (mini ? 0.6f : 1.0f)));
-        g_guideAtlas = a;
+        g_guideAtlas = a->id;
         log::info("[AbsPF] route to follow: {}", summary(*g_guide));
     }
     return g_guide.get();

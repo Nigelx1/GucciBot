@@ -53,6 +53,7 @@ namespace absense::route {
     };
 
     struct Atlas {
+        uint64_t id = 0;  // a new number each build: what the plans built on it are keyed by
         std::string level;
         float length = 0.0f;
         int objects = 0;         // objects the map read

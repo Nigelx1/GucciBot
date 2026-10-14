@@ -253,7 +253,10 @@ class Trajectory {
         std::vector<std::array<float, 3>> gates;
     };
     struct Leg {
-        enum class Outcome : uint8_t { Found, Impossible, OutOfBudget };
+        // Impossible: exact and nothing dropped (every move it offers was tried; its
+        // key and moves are not yet everything, so close to a proof, not one).
+        // NotFound: the same with similar states merged, which is no proof.
+        enum class Outcome : uint8_t { Found, Impossible, NotFound, OutOfBudget };
         const char* error = nullptr;
         Outcome outcome = Outcome::OutOfBudget;
         bool capped = false;     // states were dropped for room: an empty end is then no proof

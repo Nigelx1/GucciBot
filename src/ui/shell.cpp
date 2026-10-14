@@ -758,7 +758,10 @@ namespace gucci::ui {
                         g_legText = fmt::format("Found a way to the next gate in {} ticks ({} ticks simulated, {:.0f} ms)",
                                                 ticks, steps, ms);
                     else if (outcome == "impossible")
-                        g_legText = fmt::format("No way into that gap from here: every way was tried ({:.0f} ms)", ms);
+                        g_legText = fmt::format("No way into that gap from here: every move it offers was tried ({:.0f} ms)", ms);
+                    else if (outcome == "not_found")
+                        g_legText = fmt::format("No way found into that gap from here (similar states were merged, so not a "
+                                                "proof; {:.0f} ms)", ms);
                     else
                         g_legText = fmt::format("Ran out of room or time after {} ticks ({:.0f} ms)", ticks, ms);
                 });
