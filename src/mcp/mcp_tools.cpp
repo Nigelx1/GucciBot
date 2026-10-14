@@ -1004,6 +1004,28 @@ namespace gucci::mcp {
         });
 
         server.addTool({
+            "gucci_route_atlas",
+            "Step R1 of AI_PATHFINDER_PLAN.md: the route planner's map of the level being "
+            "played. Columns one block wide with the game mode, the room it gives the "
+            "player's centre (band) and the gaps the centre fits through (openings), and "
+            "the gates (forks, orbs, pads, portals, tight gaps, spacing) with the bands a "
+            "route can take there, between x `from` and `to`. Nothing in the game changes.",
+            schemaOf({{"from", "integer", "left edge x (default: 300 behind the player)"},
+                      {"to", "integer", "right edge x (default: from + 1200)"}}),
+            [](matjson::Value const& a) {
+                requireLevel();
+                auto* pl = PlayLayer::get();
+                int64_t const px = pl && pl->m_player1 ? (int64_t)pl->m_player1->getPositionX() : 0;
+                int64_t const from = argInt(a, "from", px - 300);
+                int64_t const to = argInt(a, "to", from + 1200);
+                auto out = absense::levelMap((float)from, (float)to);
+                if (out.contains("error"))
+                    throw ToolError(out["error"].asString().unwrapOr("failed"));
+                return out;
+            },
+        });
+
+        server.addTool({
             "gucci_abs_simulate",
             "Diagnostic: run Absense's pathfinder simulation (its copies of the "
             "player, Silicate's physics, the World) from the real player's current "

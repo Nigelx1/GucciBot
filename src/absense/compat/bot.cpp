@@ -8,6 +8,7 @@
 #include "absense/judge.hpp"
 #include "absense/pathfinder/pathfinder.hpp"
 #include "absense/trajectory/trajectory.hpp"
+#include "absense/route/atlas.hpp"
 
 #include "absense/world/world.hpp"
 
@@ -360,6 +361,60 @@ matjson::Value absense::benchmark(int ticks, int snapshots) {
                      "about {} bytes, World {}",
                      bot->updater().getFrame(), perSecond, b.usPerTick, b.ticks, b.runs, b.usPerRun, b.usPerSave,
                      b.usPerRestore, b.snapshotBytes, b.worldOn ? "on" : "off");
+    return out;
+}
+
+bool absense::levelMapShown() {
+    return route::overlayEnabled();
+}
+
+void absense::showLevelMap(bool on) {
+    route::setOverlayEnabled(on);
+}
+
+std::string absense::levelMapSummary() {
+    auto const* a = route::atlasFor(PlayLayer::get());
+    return a ? route::summary(*a) : std::string();
+}
+
+matjson::Value absense::levelMap(float from, float to) {
+    auto out = matjson::Value::object();
+    auto const* a = route::atlasFor(PlayLayer::get());
+    if (!a) {
+        out["error"] = "not in a level, or it is still loading";
+        return out;
+    }
+    out["summary"] = route::summary(*a);
+    out["length"] = (double)a->length;
+    auto columns = matjson::Value::array();
+    for (auto const& c : a->columns) {
+        if (c.x0 + route::kColumnWidth < from || c.x0 > to) continue;
+        auto e = matjson::Value::object();
+        e["x"] = (double)c.x0;
+        e["mode"] = (int64_t)c.mode;
+        e["mini"] = c.mini;
+        e["moving"] = c.dynamic;
+        e["unknown"] = c.unknown;
+        e["band"] = fmt::format("{:.0f}-{:.0f}", c.bandLo, c.bandHi);
+        auto gaps = matjson::Value::array();
+        for (auto const& o : c.openings) gaps.push(fmt::format("{:.0f}-{:.0f}", o.lo, o.hi));
+        e["openings"] = gaps;
+        columns.push(e);
+    }
+    out["columns"] = columns;
+    auto gates = matjson::Value::array();
+    for (auto const& g : a->gates) {
+        if (g.x < from || g.x > to) continue;
+        auto e = matjson::Value::object();
+        e["kind"] = std::string(route::gateKindName(g.kind));
+        e["x"] = (double)g.x;
+        e["y"] = (double)g.y;
+        auto options = matjson::Value::array();
+        for (auto const& o : g.options) options.push(fmt::format("{:.0f}-{:.0f}", o.lo, o.hi));
+        e["options"] = options;
+        gates.push(e);
+    }
+    out["gates"] = gates;
     return out;
 }
 

@@ -224,6 +224,15 @@ bool changesEverything(GameObject* o) {
 
 }  // namespace
 
+// For the route atlas (route/atlas.cpp): one reader of the level, not two.
+bool classifyObject(GameObject* o, Object& out) {
+    return classify(o, out);
+}
+
+bool objectChangesEverything(GameObject* o) {
+    return changesEverything(o);
+}
+
 Client& Client::get() {
     static Client instance;
     return instance;

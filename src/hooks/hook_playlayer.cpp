@@ -13,6 +13,7 @@
 #include "absense/compat/bot.hpp"
 #include "absense/pathfinder/pathfinder.hpp"
 #include "absense/trajectory/trajectory.hpp"
+#include "absense/route/atlas.hpp"
 #include "absense/judge.hpp"
 #include "hacks/hitboxes.hpp"
 #include "hacks/noclip_accuracy.hpp"
@@ -573,6 +574,8 @@ class $modify(GB7PlayLayer, PlayLayer) {
         auto* gb = GucciEngine::get();
         if (gb->hackHideAttempts && m_attemptLabel)
             m_attemptLabel->setVisible(false);
+        // The AI pathfinder's level map, drawn over the level when it is switched on.
+        absense::route::tickOverlay(this);
     }
 
     // GD asks this before treating a reset as a real death. The analyzer and

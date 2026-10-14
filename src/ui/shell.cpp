@@ -707,6 +707,18 @@ namespace gucci::ui {
             kit::RowEnd();
             if (!g_speedTest.empty())
                 kit::Hint(g_speedTest.c_str());
+            // Step R1: the AI pathfinder's map of the whole level, drawn over it.
+            bool showMap = absense::levelMapShown();
+            if (kit::SwitchRow("Show the level map",
+                               "The AI pathfinder's map: gaps the player fits through (green), parts that move "
+                               "(yellow), choices (lines), and red where it can't follow",
+                               &showMap))
+                absense::showLevelMap(showMap);
+            if (showMap && PlayLayer::get()) {
+                auto const map = absense::levelMapSummary();
+                if (!map.empty())
+                    kit::Hint(map.c_str());
+            }
             kit::EndCard();
         }
 

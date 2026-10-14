@@ -78,6 +78,14 @@ namespace absense {
     // and size), also written to the game's log. Nothing in the game changes.
     matjson::Value benchmark(int ticks, int snapshots);
 
+    // Step R1 of AI_PATHFINDER_PLAN.md: the route planner's map of the whole
+    // level (absense/route/atlas.hpp), drawn over it when shown.
+    bool levelMapShown();
+    void showLevelMap(bool on);
+    std::string levelMapSummary();  // empty outside a level
+    // Its columns and gates between x `from` and `to`, for Assistant Access.
+    matjson::Value levelMap(float from, float to);
+
     // Killers the simulation is wrong about (by object uid): its copies do
     // not die of them. See absense/judge.hpp.
     void distrust(int uid);

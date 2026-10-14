@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-13-dc (Pathfinder speed test button and assistant tool, and the World self-test now names what differs; both for step R0 of the AI pathfinder plan)"
+    "2026-10-13-dd (The AI pathfinder level map: Pathfinder page, Show the level map draws the gaps, choices, orbs, pads and portals over the level)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
