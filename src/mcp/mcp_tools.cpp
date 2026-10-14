@@ -1049,6 +1049,22 @@ namespace gucci::mcp {
         });
 
         server.addTool({
+            "gucci_route_guidance",
+            "Step R4 of AI_PATHFINDER_PLAN.md: switch 'Follow the planned route (AI)' on or "
+            "off (the Pathfinder page's switch). With it on, each Absense decision first asks "
+            "the physics map for the way to the planned route's next gate, and that idea goes "
+            "first when it reaches the gate alive and clears the decision's bar. Without `on`, "
+            "reports the switch.",
+            schemaOf({{"on", "boolean", "true to follow the route, false for the pathfinder as it was"}}),
+            [](matjson::Value const& a) {
+                if (a.contains("on")) absense::setRouteGuidance(a["on"].asBool().unwrapOr(false));
+                auto out = matjson::Value::object();
+                out["on"] = absense::routeGuidance();
+                return out;
+            },
+        });
+
+        server.addTool({
             "gucci_route_leg",
             "Step R3 of AI_PATHFINDER_PLAN.md: the physics map with a goal. From the real "
             "player's state, play every way the button can go tick by tick (merging states "
