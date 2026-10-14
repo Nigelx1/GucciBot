@@ -228,6 +228,37 @@ class Trajectory {
         std::size_t snapshotBytes = 0;  // roughly one snapshot (its World lists counted in full; the ops log left out)
     };
     Benchmark benchmark(GJBaseGameLayer* pl, int ticks, int snapshots);
+
+    // Step R3 of AI_PATHFINDER_PLAN.md: the physics map with a goal. From the
+    // real player's state it plays every way the button can go, tick by tick
+    // (carrying on, plus alternativesFor's moves), merges states that come out
+    // the same, and stops when one reaches the goal's x inside its band. All
+    // of it runs before it returns (the game waits), within maxMs.
+    struct LegGoal {
+        float x = 0.0f;        // the gate's x
+        float lo = 1.0f;       // the band to be in there (lo > hi: any height)
+        float hi = 0.0f;
+        int maxTicks = 2400;
+        int frontierCap = 192;  // states kept a tick, the closest to the band first
+        double maxMs = 3000.0;
+        bool exact = false;     // merge only states that are the same bit for bit (what a proof needs)
+        int dotsEvery = 4;      // keep where the states are every N ticks, for the drawing
+    };
+    struct Leg {
+        enum class Outcome : uint8_t { Found, Impossible, OutOfBudget };
+        const char* error = nullptr;
+        Outcome outcome = Outcome::OutOfBudget;
+        bool capped = false;     // states were dropped for room: an empty end is then no proof
+        int ticks = 0;
+        uint64_t steps = 0;      // simulated ticks in all
+        int peakFrontier = 0;
+        int exitsElsewhere = 0;  // states that passed the gate's x outside the band
+        std::vector<TickInput> witness;               // Found: one input a tick from the start
+        std::vector<std::pair<float, float>> path;    // ... and where it took the player
+        std::vector<std::pair<float, float>> dots;    // the states every dotsEvery ticks
+        double ms = 0.0;
+    };
+    Leg sweepLeg(GJBaseGameLayer* pl, const LegGoal& goal);
    private:
     SearchState* m_search = nullptr;  // a search in progress (beginSearch)
     // Groups a trigger that moves things targets (move, rotate, follow, scale,

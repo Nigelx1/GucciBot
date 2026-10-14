@@ -3746,6 +3746,186 @@ Trajectory::Benchmark Trajectory::benchmark(GJBaseGameLayer* pl, int ticks, int 
     return b;
 }
 
+Trajectory::Leg Trajectory::sweepLeg(GJBaseGameLayer* pl, LegGoal const& goal) {
+    Leg out;
+    if (m_search || m_start || m_simulating || m_drawing) {
+        out.error = "the simulation is busy: stop the pathfinder and try again";
+        return out;
+    }
+    if (!pl || !pl->m_objects || !pl->m_player1 || !m_fakePlayer1 || !m_fakePlayer2 || pl->m_loadingProgress < 1.0f) {
+        out.error = "open a level first";
+        return out;
+    }
+    if (pl->m_player1->m_isDead || pl->m_playerDied) {
+        out.error = "the player is dead: try again once the attempt has restarted";
+        return out;
+    }
+    const Killer keptKiller = m_killer;
+    const uint64_t keptRand = m_teleportRand;
+    using Clock = std::chrono::steady_clock;
+    const auto started = Clock::now();
+    const auto elapsedMs = [&] { return std::chrono::duration<double, std::milli>(Clock::now() - started).count(); };
+
+    auto const& buttons = pl->m_player1->m_holdingButtons;
+    auto const held = buttons.find(static_cast<int>(PlayerButton::Jump));
+    const bool downNow = held != buttons.end() && held->second;
+
+    Sim s;
+    if (!s.begin(this, pl, true, downNow)) {
+        m_killer = keptKiller;
+        m_teleportRand = keptRand;
+        out.error = "the simulation could not start here";
+        return out;
+    }
+
+    // Every state kept, for tracing the way back; the live ones carry their
+    // snapshot.
+    struct Node {
+        int parent;
+        TickInput in;
+        float x, y;
+    };
+    struct Live {
+        int node = 0;
+        bool down = false;
+        float score = 0.0f;  // how far from the band
+        SimSnapshot snap;
+    };
+    // A state, merged with any other that comes out the same: where the
+    // players are and how they move, what they are, and the button.
+    struct Key {
+        int64_t v[6] = {};
+        bool operator==(Key const& o) const { return std::memcmp(v, o.v, sizeof v) == 0; }
+    };
+    struct KeyHash {
+        size_t operator()(Key const& k) const {
+            uint64_t h = 1469598103934665603ull;
+            for (int64_t x : k.v) h = (h ^ (uint64_t)x) * 1099511628211ull;
+            return (size_t)h;
+        }
+    };
+    const auto q = [&](double value, double step) -> int64_t {
+        if (goal.exact) {
+            int64_t bits;
+            std::memcpy(&bits, &value, sizeof bits);
+            return bits;
+        }
+        return (int64_t)std::llround(value / step);
+    };
+    const auto keyOf = [&](bool down) {
+        Key k;
+        PlayerObject* p = s.players[0];
+        k.v[0] = q(p->getPositionX(), 0.05);
+        k.v[1] = q(p->getPositionY(), 0.25);
+        k.v[2] = q(p->m_yVelocity, 0.05);
+        k.v[3] = (int64_t)p->m_isShip | (int64_t)p->m_isBird << 1 | (int64_t)p->m_isBall << 2 | (int64_t)p->m_isDart << 3 |
+                 (int64_t)p->m_isRobot << 4 | (int64_t)p->m_isSpider << 5 | (int64_t)p->m_isSwing << 6 |
+                 (int64_t)p->m_isUpsideDown << 7 | (int64_t)p->m_isOnGround << 8 | (int64_t)down << 9 |
+                 (int64_t)(p->m_vehicleSize < 0.8f) << 10 | (int64_t)(s.count == 2) << 11;
+        if (s.count == 2) {
+            k.v[4] = q(s.players[1]->getPositionY(), 0.25);
+            k.v[5] = q(s.players[1]->m_yVelocity, 0.05);
+        }
+        return k;
+    };
+    const bool anyBand = goal.lo > goal.hi;
+    const auto bandDistance = [&](float y) {
+        if (anyBand) return 0.0f;
+        return y < goal.lo ? goal.lo - y : (y > goal.hi ? y - goal.hi : 0.0f);
+    };
+
+    std::vector<Node> nodes;
+    std::vector<Live> frontier;
+    std::vector<Live> next;
+    std::unordered_set<Key, KeyHash> seen;
+    {
+        const auto p = s.pos();
+        nodes.push_back({-1, TickInput{}, p.x, p.y});
+        Live root;
+        root.down = downNow;
+        s.snapshot(root.snap);
+        frontier.push_back(std::move(root));
+    }
+    int found = -1;
+    Alternative alts[8];
+    for (int tick = 0; tick < goal.maxTicks && !frontier.empty() && found < 0; tick++) {
+        if (elapsedMs() > goal.maxMs) break;
+        next.clear();
+        seen.clear();
+        for (auto& f : frontier) {
+            s.restore(f.snap);
+            // Carrying on, then every way alternativesFor gives the button.
+            TickInput moves[10];
+            int m = 0;
+            moves[m++] = TickInput{0, f.down};
+            const int n = alternativesFor(s.players[0], f.down, alts, false);
+            for (int i = 0; i < n && m < 10; i++) {
+                const TickInput t = alts[i].first;
+                bool dup = false;
+                for (int j = 0; j < m; j++) dup |= moves[j].presses == t.presses && moves[j].held == t.held;
+                if (!dup) moves[m++] = t;
+            }
+            for (int i = 0; i < m && found < 0; i++) {
+                if (i > 0) s.restore(f.snap);
+                const bool dead = s.step(moves[i]);
+                out.steps++;
+                if (dead) continue;
+                const auto p = s.pos();
+                const bool complete = s.complete();
+                if (p.x >= goal.x || complete) {
+                    if (complete || bandDistance(p.y) == 0.0f) {
+                        nodes.push_back({f.node, moves[i], p.x, p.y});
+                        found = (int)nodes.size() - 1;
+                    } else {
+                        out.exitsElsewhere++;
+                    }
+                    continue;
+                }
+                if (!seen.insert(keyOf(moves[i].held)).second) continue;
+                nodes.push_back({f.node, moves[i], p.x, p.y});
+                Live c;
+                c.node = (int)nodes.size() - 1;
+                c.down = moves[i].held;
+                c.score = bandDistance(p.y);
+                s.snapshot(c.snap);
+                next.push_back(std::move(c));
+            }
+            if (found >= 0) break;
+        }
+        out.ticks = tick + 1;
+        out.peakFrontier = std::max(out.peakFrontier, (int)next.size());
+        if ((int)next.size() > goal.frontierCap) {
+            // Room for the ones closest to the band (ties: the earlier found).
+            out.capped = true;
+            std::stable_sort(next.begin(), next.end(), [](Live const& l, Live const& r) {
+                return l.score != r.score ? l.score < r.score : l.node < r.node;
+            });
+            next.resize((size_t)goal.frontierCap);
+        }
+        if (goal.dotsEvery > 0 && tick % goal.dotsEvery == 0 && out.dots.size() < 40000)
+            for (auto const& c : next) out.dots.emplace_back(nodes[(size_t)c.node].x, nodes[(size_t)c.node].y);
+        frontier.swap(next);
+    }
+
+    if (found >= 0) {
+        out.outcome = Leg::Outcome::Found;
+        for (int i = found; i > 0; i = nodes[(size_t)i].parent) {
+            out.witness.push_back(nodes[(size_t)i].in);
+            out.path.emplace_back(nodes[(size_t)i].x, nodes[(size_t)i].y);
+        }
+        std::reverse(out.witness.begin(), out.witness.end());
+        std::reverse(out.path.begin(), out.path.end());
+    } else if (frontier.empty()) {
+        // Nothing alive any more: a proof only if nothing was ever dropped.
+        out.outcome = out.capped ? Leg::Outcome::OutOfBudget : Leg::Outcome::Impossible;
+    }
+    s.end();
+    m_killer = keptKiller;
+    m_teleportRand = keptRand;
+    out.ms = elapsedMs();
+    return out;
+}
+
 std::shared_ptr<Trajectory::SimStart> Trajectory::advanceStart(GJBaseGameLayer* pl, std::shared_ptr<SimStart> from,
                                                               std::span<const TickInput> inputs,
                                                               std::span<const TickInput> inputs2) {

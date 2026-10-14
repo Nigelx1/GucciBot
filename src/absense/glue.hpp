@@ -94,6 +94,12 @@ namespace absense {
     // A fresh plan from (x, y), its best route's first `limit` waypoints.
     matjson::Value routePlan(float fromX, float fromY, int limit);
 
+    // Step R3: the physics map with a goal, from the real player's state to
+    // x `gateX` inside the band lo..hi (gateX <= 0: the next gate of the
+    // planned route ahead). Found (with the way as a script), impossible, or
+    // out of budget; drawn over the level. The game waits while it runs.
+    matjson::Value routeLeg(float gateX, float lo, float hi, int maxTicks, int frontierCap, bool exact, double maxMs);
+
     // Killers the simulation is wrong about (by object uid): its copies do
     // not die of them. See absense/judge.hpp.
     void distrust(int uid);

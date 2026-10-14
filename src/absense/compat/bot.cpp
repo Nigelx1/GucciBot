@@ -468,6 +468,90 @@ matjson::Value absense::routePlan(float fromX, float fromY, int limit) {
     return out;
 }
 
+matjson::Value absense::routeLeg(float gateX, float lo, float hi, int maxTicks, int frontierCap, bool exact,
+                                 double maxMs) {
+    auto out = matjson::Value::object();
+    auto* pl = PlayLayer::get();
+    auto* bot = Bot::get();
+    if (!pl || !pl->m_player1) {
+        out["error"] = "not in a level";
+        return out;
+    }
+    if (gateX <= 0.0f) {
+        // The next gate of the planned route, a column or more ahead.
+        auto const* plan = route::shownPlan(pl);
+        if (!plan || plan->routes.empty()) {
+            out["error"] = "no planned route here";
+            return out;
+        }
+        const float px = pl->m_player1->getPositionX();
+        for (auto const& w : plan->routes.front().points) {
+            if (w.x <= px + route::kColumnWidth) continue;
+            gateX = w.x;
+            lo = w.band.lo;
+            hi = w.band.hi;
+            break;
+        }
+        if (gateX <= 0.0f) {
+            out["error"] = "no gate ahead on the planned route";
+            return out;
+        }
+    }
+    if (!bot->trajectory().exists())
+        bot->trajectory().init();
+    auto* t = bot->trajectory().unsafeInner();
+    if (!t) {
+        out["error"] = "the simulation could not be made";
+        return out;
+    }
+    Trajectory::LegGoal goal;
+    goal.x = gateX;
+    goal.lo = lo;
+    goal.hi = hi;
+    goal.maxTicks = maxTicks;
+    goal.frontierCap = frontierCap;
+    goal.exact = exact;
+    goal.maxMs = maxMs;
+    auto const leg = t->sweepLeg(pl, goal);
+    if (leg.error) {
+        out["error"] = std::string(leg.error);
+        return out;
+    }
+    const char* outcome = leg.outcome == Trajectory::Leg::Outcome::Found        ? "found"
+                          : leg.outcome == Trajectory::Leg::Outcome::Impossible ? "impossible"
+                                                                                : "out_of_budget";
+    out["outcome"] = std::string(outcome);
+    out["gate_x"] = (double)gateX;
+    out["band"] = lo > hi ? std::string("any") : fmt::format("{:.0f}-{:.0f}", lo, hi);
+    out["ticks"] = (int64_t)leg.ticks;
+    out["simulated_ticks"] = (int64_t)leg.steps;
+    out["peak_states"] = (int64_t)leg.peakFrontier;
+    out["states_dropped_for_room"] = leg.capped;
+    out["exact"] = exact;
+    out["passed_outside_the_band"] = (int64_t)leg.exitsElsewhere;
+    out["ms"] = leg.ms;
+    // The way as a script: h<N> hold, r<N> release, p<N> a press on each tick.
+    std::string script;
+    for (size_t i = 0; i < leg.witness.size();) {
+        auto const& in = leg.witness[i];
+        const char c = in.presses > 0 ? 'p' : (in.held ? 'h' : 'r');
+        size_t j = i + 1;
+        while (j < leg.witness.size()) {
+            auto const& w = leg.witness[j];
+            if ((w.presses > 0 ? 'p' : (w.held ? 'h' : 'r')) != c) break;
+            j++;
+        }
+        script += fmt::format("{}{}{}", script.empty() ? "" : " ", c, j - i);
+        i = j;
+    }
+    if (!script.empty()) out["script"] = script;
+    route::showLeg(pl, leg.dots, leg.path);
+    geode::log::info("[AbsPF] leg to x {:.0f} ({}): {} after {} ticks, {} simulated, {} states at most{}, {:.0f} ms",
+                     gateX, lo > hi ? std::string("any height") : fmt::format("{:.0f}-{:.0f}", lo, hi), outcome,
+                     leg.ticks, leg.steps, leg.peakFrontier, leg.capped ? " (some dropped for room)" : "", leg.ms);
+    return out;
+}
+
 matjson::Value absense::simVsReal(std::vector<ScriptTick> const& script, int ticks, int every) {
     auto out = matjson::Value::object();
     auto* pl = PlayLayer::get();

@@ -63,4 +63,9 @@ namespace absense::route {
     // With tickOverlay: puts the route's drawing on the level when wanted.
     void tickRoute(PlayLayer* pl);
 
+    // Step R3: the last leg search drawn over the level, the states it kept
+    // as dots and the way it found as a line (replacing the one before).
+    void showLeg(PlayLayer* pl, std::vector<std::pair<float, float>> const& dots,
+                 std::vector<std::pair<float, float>> const& path);
+
 }  // namespace absense::route

@@ -648,6 +648,7 @@ namespace gucci::ui {
         }
 
         std::string g_speedTest;  // the last speed test's result (step R0 of AI_PATHFINDER_PLAN.md)
+        std::string g_legText;    // the last "find a way to the next gate" (step R3)
 
         void pagePathfinder() {
 #if !GB_NATIVE_ENGINE
@@ -731,6 +732,35 @@ namespace gucci::ui {
                 if (!route.empty())
                     kit::Hint(route.c_str());
             }
+            // Step R3: the physics map, from here to the route's next gate.
+            kit::RowBegin("Next gate", "Tries every way the button can go from here to the planned route's next gate "
+                                       "(the game waits a few seconds)");
+            ImGui::BeginDisabled(!PlayLayer::get() || s.running || absense::startPending());
+            if (kit::Button("Find a way", Tone::Muted, -1.f)) {
+                g_legText = "Searching...";
+                geode::queueInMainThread([] {
+                    auto r = absense::routeLeg(0.0f, 1.0f, 0.0f, 2400, 192, false, 3000.0);
+                    if (r.contains("error")) {
+                        g_legText = "Next gate: " + r["error"].asString().unwrapOr("failed");
+                        return;
+                    }
+                    auto const outcome = r["outcome"].asString().unwrapOr("");
+                    auto const ticks = r["ticks"].asInt().unwrapOr(0);
+                    auto const steps = r["simulated_ticks"].asInt().unwrapOr(0);
+                    auto const ms = r["ms"].asDouble().unwrapOr(0.0);
+                    if (outcome == "found")
+                        g_legText = fmt::format("Found a way to the next gate in {} ticks ({} ticks simulated, {:.0f} ms)",
+                                                ticks, steps, ms);
+                    else if (outcome == "impossible")
+                        g_legText = fmt::format("No way into that gap from here: every way was tried ({:.0f} ms)", ms);
+                    else
+                        g_legText = fmt::format("Ran out of room or time after {} ticks ({:.0f} ms)", ticks, ms);
+                });
+            }
+            ImGui::EndDisabled();
+            kit::RowEnd();
+            if (!g_legText.empty())
+                kit::Hint(g_legText.c_str());
             kit::EndCard();
         }
 

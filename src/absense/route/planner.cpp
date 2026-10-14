@@ -273,6 +273,19 @@ void setRouteShown(bool on) {
     if (on) g_plan.reset();  // switched on again: planned afresh from where the player is
 }
 
+void showLeg(PlayLayer* pl, std::vector<std::pair<float, float>> const& dots,
+             std::vector<std::pair<float, float>> const& path) {
+    if (!pl || !pl->m_objectLayer) return;
+    if (auto* old = pl->m_objectLayer->getChildByID("route-leg"_spr)) old->removeFromParent();
+    auto* node = CCDrawNode::create();
+    node->setID("route-leg"_spr);
+    for (auto const& [x, y] : dots) node->drawDot(ccp(x, y), 1.5f, ccc4f(0.4f, 0.9f, 1.0f, 0.45f));
+    for (size_t i = 0; i + 1 < path.size(); i++)
+        node->drawSegment(ccp(path[i].first, path[i].second), ccp(path[i + 1].first, path[i + 1].second), 1.5f,
+                          ccc4f(0.3f, 1.0f, 0.4f, 0.95f));
+    pl->m_objectLayer->addChild(node, 1502);
+}
+
 void tickRoute(PlayLayer* pl) {
     if (!pl || !pl->m_objectLayer) return;
     auto* existing = pl->m_objectLayer->getChildByID("route-plan"_spr);

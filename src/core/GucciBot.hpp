@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-13-de (The AI pathfinder plans its route: Pathfinder page, Show the planned route draws the way it would take through the whole level)"
+    "2026-10-13-df (The AI pathfinder finds a way to the next gate: Pathfinder page, Next gate, Find a way tries every way the button can go and draws it)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
