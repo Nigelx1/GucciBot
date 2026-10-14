@@ -86,6 +86,14 @@ namespace absense {
     // Its columns and gates between x `from` and `to`, for Assistant Access.
     matjson::Value levelMap(float from, float to);
 
+    // Step R2: the planned route through the whole level on that map
+    // (absense/route/planner.hpp), drawn over it when shown.
+    bool routeShown();
+    void showRoute(bool on);
+    std::string routeSummary();  // empty outside a level
+    // A fresh plan from (x, y), its best route's first `limit` waypoints.
+    matjson::Value routePlan(float fromX, float fromY, int limit);
+
     // Killers the simulation is wrong about (by object uid): its copies do
     // not die of them. See absense/judge.hpp.
     void distrust(int uid);

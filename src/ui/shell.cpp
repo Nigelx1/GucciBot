@@ -719,6 +719,18 @@ namespace gucci::ui {
                 if (!map.empty())
                     kit::Hint(map.c_str());
             }
+            // Step R2: the route it would take through the whole level.
+            bool showRoute = absense::routeShown();
+            if (kit::SwitchRow("Show the planned route",
+                               "The way through the whole level it would take, from where you are (gold; red where "
+                               "the map doubts it, white for the next best)",
+                               &showRoute))
+                absense::showRoute(showRoute);
+            if (showRoute && PlayLayer::get()) {
+                auto const route = absense::routeSummary();
+                if (!route.empty())
+                    kit::Hint(route.c_str());
+            }
             kit::EndCard();
         }
 

@@ -1026,6 +1026,29 @@ namespace gucci::mcp {
         });
 
         server.addTool({
+            "gucci_route_plan",
+            "Step R2 of AI_PATHFINDER_PLAN.md: plan a route through the whole level on "
+            "the level map from (from_x, from_y): at each gate, the gap to be in, priced "
+            "by length, tightness and what the map cannot vouch for. Returns the best "
+            "route's first `limit` waypoints and where the next best leave it. Nothing "
+            "is played and nothing in the game changes.",
+            schemaOf({{"from_x", "integer", "where to plan from (default: the player's x)"},
+                      {"from_y", "integer", "the height to plan from (default: the player's y)"},
+                      {"limit", "integer", "waypoints to return (default 60, max 2000)"}}),
+            [](matjson::Value const& a) {
+                requireLevel();
+                auto* pl = PlayLayer::get();
+                int64_t const px = pl && pl->m_player1 ? (int64_t)pl->m_player1->getPositionX() : 0;
+                int64_t const py = pl && pl->m_player1 ? (int64_t)pl->m_player1->getPositionY() : 105;
+                int const limit = (int)std::clamp<int64_t>(argInt(a, "limit", 60), 1, 2000);
+                auto out = absense::routePlan((float)argInt(a, "from_x", px), (float)argInt(a, "from_y", py), limit);
+                if (out.contains("error"))
+                    throw ToolError(out["error"].asString().unwrapOr("failed"));
+                return out;
+            },
+        });
+
+        server.addTool({
             "gucci_abs_simulate",
             "Diagnostic: run Absense's pathfinder simulation (its copies of the "
             "player, Silicate's physics, the World) from the real player's current "

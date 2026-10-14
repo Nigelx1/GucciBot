@@ -9,6 +9,7 @@
 #include "absense/pathfinder/pathfinder.hpp"
 #include "absense/trajectory/trajectory.hpp"
 #include "absense/route/atlas.hpp"
+#include "absense/route/planner.hpp"
 
 #include "absense/world/world.hpp"
 
@@ -415,6 +416,55 @@ matjson::Value absense::levelMap(float from, float to) {
         gates.push(e);
     }
     out["gates"] = gates;
+    return out;
+}
+
+bool absense::routeShown() {
+    return route::routeShown();
+}
+
+void absense::showRoute(bool on) {
+    route::setRouteShown(on);
+}
+
+std::string absense::routeSummary() {
+    auto const* p = route::shownPlan(PlayLayer::get());
+    return p ? route::summary(*p) : std::string();
+}
+
+matjson::Value absense::routePlan(float fromX, float fromY, int limit) {
+    auto out = matjson::Value::object();
+    auto const* a = route::atlasFor(PlayLayer::get());
+    if (!a) {
+        out["error"] = "not in a level, or it is still loading";
+        return out;
+    }
+    auto const p = route::plan(*a, fromX, fromY);
+    out["summary"] = route::summary(p);
+    auto routes = matjson::Value::array();
+    for (size_t k = 0; k < p.routes.size(); k++) {
+        auto const& r = p.routes[k];
+        auto e = matjson::Value::object();
+        e["cost"] = r.cost;
+        if (k == 0) {
+            auto points = matjson::Value::array();
+            for (size_t i = 0; i < r.points.size() && (int)i < limit; i++) {
+                auto const& w = r.points[i];
+                points.push(fmt::format("x {:.0f}: {:.0f}-{:.0f} (step {:.1f})", w.x, w.band.lo, w.band.hi, w.step));
+            }
+            e["points"] = points;
+        } else {
+            // Where it first leaves the best route.
+            auto const& best = p.routes.front().points;
+            for (size_t i = 0; i < r.points.size() && i < best.size(); i++) {
+                if (std::fabs(r.points[i].band.lo - best[i].band.lo) < 0.5f) continue;
+                e["leaves_best_at_x"] = (double)r.points[i].x;
+                break;
+            }
+        }
+        routes.push(e);
+    }
+    out["routes"] = routes;
     return out;
 }
 
