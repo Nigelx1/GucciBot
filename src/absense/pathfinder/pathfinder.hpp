@@ -66,6 +66,11 @@ class AbsensePathfinder {
         uint64_t freezes = 0;       // times the game had to wait for a decision (realtime)
         uint64_t routeLegs = 0;     // step R4: physics-map searches to the planned route's next gate
         uint64_t routeFound = 0;    // ... that found a way there
+        uint64_t routeNone = 0;     // ... where nothing alive got there
+        uint64_t routeBudget = 0;   // ... that ran out of room or time first
+        uint64_t routeErrors = 0;   // ... that could not run (no gate ahead, busy)
+        uint64_t routeTicks = 0;    // ticks those searches covered
+        double routeMs = 0.0;       // and the time they took
         uint64_t routeWins = 0;     // route ideas that were the one played
         uint64_t startTick = 0;
         uint64_t currentTick = 0;
@@ -181,6 +186,7 @@ public:
         int memoryIndex = -1; // a remembered solution (index into the level's memory)
         bool carryOn = false; // the verified rest of the last plan (wins ties among full survivors)
         int reach = 0;       // where the run ended, in blocks of 30 units (set in evaluate, ranked in better)
+        int gateTicks = 0;   // a route idea (step R4): the ticks its way takes to reach the route's next gate
         std::string name;
     };
 

@@ -7,6 +7,7 @@
 #include <cmath>
 #include <limits>
 #include <memory>
+#include <map>
 #include <tuple>
 
 using namespace geode::prelude;
@@ -25,14 +26,18 @@ namespace {
     // until the simulation measures it (step R3). The spider's and ball's
     // gravity flips make big vertical moves cheap.
     void envelope(uint8_t mode, bool mini, float& rise, float& fall) {
+        // On the generous side: a way the map wrongly allows costs one failed
+        // leg search (then the gap is priced up, see noteLeg), while one it
+        // wrongly rules out is never tried. The first run (Zafari 2, -di) had
+        // 86 of its 128 gates out of reach on tighter numbers.
         switch (mode) {
-            case 1: rise = 30.0f; fall = 30.0f; break;                        // ship
-            case 2: rise = 60.0f; fall = 60.0f; break;                        // ball
-            case 3: rise = 30.0f; fall = 45.0f; break;                        // ufo
+            case 1: rise = 60.0f; fall = 60.0f; break;                        // ship
+            case 2: rise = 90.0f; fall = 90.0f; break;                        // ball
+            case 3: rise = 60.0f; fall = 60.0f; break;                        // ufo
             case 4: rise = mini ? 60.0f : 30.0f; fall = rise; break;          // wave: 45 degrees, steeper mini
             case 6: rise = 1.0e6f; fall = 1.0e6f; break;                      // spider
-            case 7: rise = 45.0f; fall = 45.0f; break;                        // swing
-            default: rise = 30.0f; fall = 60.0f; break;                       // cube, robot
+            case 7: rise = 60.0f; fall = 60.0f; break;                        // swing
+            default: rise = 45.0f; fall = 90.0f; break;                       // cube, robot
         }
     }
 
@@ -113,6 +118,19 @@ namespace {
             gap = std::min(gap, r.hi < to.lo ? to.lo - r.hi : r.lo - to.hi);
         }
         return cost + kOffMap * (1.0 + gap / 30.0);
+    }
+
+    // Gaps the physics map has failed to reach, by (column, bottom of the gap):
+    // after kFailsToPrice failures one costs kFailedGap more, so the next plan
+    // goes another way where there is one.
+    constexpr int kFailsToPrice = 2;
+    constexpr double kFailedGap = 5000.0;
+    std::map<std::pair<int, int>, int> g_fails;
+    uint64_t g_failsAtlas = 0;
+    bool g_replan = false;
+    double failPrice(int column, float lo) {
+        auto const it = g_fails.find({column, (int)std::lround(lo)});
+        return it != g_fails.end() && it->second >= kFailsToPrice ? kFailedGap : 0.0;
     }
 
     struct Layer {
@@ -203,7 +221,8 @@ Plan plan(Atlas const& a, float fromX, float fromY) {
             for (size_t o = 0; o < from.options.size(); o++) {
                 if (labels[i - 1][o].empty()) continue;
                 const double step = stepCost(a, from.column, Interval{from.options[o].lo, from.options[o].hi},
-                                             here.column, here.options[b]);
+                                             here.column, here.options[b]) +
+                                    failPrice(here.column, here.options[b].lo);
                 p.edges++;
                 for (size_t r = 0; r < labels[i - 1][o].size(); r++)
                     candidates.emplace_back(labels[i - 1][o][r].cost + step, (int)o, (int)r, step);
@@ -273,7 +292,12 @@ namespace {
 const Plan* guidePlan(GJBaseGameLayer* pl) {
     auto const* a = atlasFor(pl);
     if (!a) return nullptr;
-    if (!g_guide || g_guideAtlas != a->id) {
+    if (g_failsAtlas != a->id) {
+        g_fails.clear();  // a new map: what failed on the old one says nothing
+        g_failsAtlas = a->id;
+    }
+    if (!g_guide || g_guideAtlas != a->id || g_replan) {
+        g_replan = false;
         // The level starts on the floor: y 105, or 99 when it starts mini.
         const bool mini = pl->m_levelSettings && pl->m_levelSettings->m_startMini;
         g_guide = std::make_unique<Plan>(plan(*a, 0.0f, 90.0f + kHalf * (mini ? 0.6f : 1.0f)));
@@ -285,6 +309,16 @@ const Plan* guidePlan(GJBaseGameLayer* pl) {
 
 bool guidanceEnabled() {
     return g_guidance;
+}
+
+void noteLeg(float gateX, float lo, bool found) {
+    if (found) return;
+    const int column = (int)std::floor(gateX / kColumnWidth);
+    int& n = g_fails[{column, (int)std::lround(lo)}];
+    if (++n == kFailsToPrice) {
+        g_replan = true;
+        log::info("[AbsPF] route: the gap at x {:.0f} (from y {:.0f}) failed {} times; planning again", gateX, lo, n);
+    }
 }
 
 void setGuidance(bool on) {

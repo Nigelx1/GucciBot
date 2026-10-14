@@ -70,6 +70,9 @@ namespace absense::route {
     // Pathfinder page > Follow the planned route.
     bool guidanceEnabled();
     void setGuidance(bool on);
+    // What the physics map found when it went for the gap (lo) at the gate at x:
+    // a gap it keeps failing to reach is priced up and the route planned again.
+    void noteLeg(float gateX, float lo, bool found);
 
     // Step R3: the last leg search drawn over the level, the states it kept
     // as dots and the way it found as a line (replacing the one before).

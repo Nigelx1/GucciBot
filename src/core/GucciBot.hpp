@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-14-di (Fixes from reviewing the AI pathfinder: a crash in the assistant leg tool, honest no-way-found wording, stale maps, toggled-on blocks)"
+    "2026-10-14-dj (Following the planned route: a route idea that reaches its gate alive now goes first, gaps that keep failing are planned around, and the leg searches are counted by outcome)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

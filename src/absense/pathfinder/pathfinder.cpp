@@ -475,9 +475,11 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
         m_stats.simulations > 0 ? (double)m_stats.simulatedTicks / (double)m_stats.simulations : 0.0,
         m_stats.secondsRestore, m_stats.secondsReal, m_stats.unitMs);
     if (m_stats.routeLegs > 0)
-        log("route: %llu searches to the next gate, %llu found a way, %llu route ideas played",
+        log("route: %llu searches to the next gate (%llu found a way, %llu none, %llu out of room or time, %llu could not run), %.0f ms and %.0f ticks a search on average, %llu route ideas played",
             (unsigned long long)m_stats.routeLegs, (unsigned long long)m_stats.routeFound,
-            (unsigned long long)m_stats.routeWins);
+            (unsigned long long)m_stats.routeNone, (unsigned long long)m_stats.routeBudget,
+            (unsigned long long)m_stats.routeErrors, m_stats.routeMs / (double)m_stats.routeLegs,
+            (double)m_stats.routeTicks / (double)m_stats.routeLegs, (unsigned long long)m_stats.routeWins);
 
     if (done) {
         m_phase = Phase::Done;
@@ -2217,14 +2219,21 @@ void AbsensePathfinder::decide() {
                 goal.inDecision = true;
                 goal.held = d.held;
                 goal.maxTicks = d.H;
-                goal.frontierCap = 96;
-                goal.maxMs = 120.0;
+                goal.frontierCap = 128;
+                goal.maxMs = 200.0;
                 goal.dotsEvery = 0;
                 for (auto const& w : route->routes.front().points) goal.gates.push_back({w.x, w.band.lo, w.band.hi});
                 auto const leg = traj->sweepLeg(pl, goal);
+                if (leg.error) m_stats.routeErrors++;
                 if (!leg.error) {
                     m_stats.routeLegs++;
-                    if (leg.outcome == Trajectory::Leg::Outcome::Found && !leg.witness.empty()) {
+                    m_stats.routeTicks += (uint64_t)leg.ticks;
+                    m_stats.routeMs += leg.ms;
+                    const bool found = leg.outcome == Trajectory::Leg::Outcome::Found && !leg.witness.empty();
+                    if (!found) (leg.outcome == Trajectory::Leg::Outcome::OutOfBudget ? m_stats.routeBudget : m_stats.routeNone)++;
+                    // A gate whose gap keeps failing gets priced up and the route planned again.
+                    absense::route::noteLeg(leg.gateX, leg.gateLo, found);
+                    if (found) {
                         m_stats.routeFound++;
                         std::vector<TickInput> v = leg.witness;
                         if ((int)v.size() > d.H) v.resize((size_t)d.H);
@@ -2232,7 +2241,9 @@ void AbsensePathfinder::decide() {
                         while ((int)v.size() < d.H) v.push_back({0, last.held});
                         char name[64];
                         std::snprintf(name, sizeof(name), "route to x %.0f", leg.gateX);
+                        const size_t before = d.candidates.size();
                         if (!seen(v)) addCandidate(d.candidates, std::move(v), name, d.held);
+                        if (d.candidates.size() > before) d.candidates.back().gateTicks = (int)leg.witness.size();
                     }
                 }
             }
@@ -2264,8 +2275,19 @@ void AbsensePathfinder::decide() {
     }
 
     const int H = d.H;
+    // Step R4: with the planned route followed, a route idea that reaches its
+    // gate alive (in the exact simulation) and clears this decision's bar
+    // goes ahead of every other idea that does not finish the level.
+    const bool guided = absense::route::guidanceEnabled();
+    auto routeViable = [&](const Candidate& c) {
+        return guided && c.gateTicks > 0 && c.evaluated && c.survived >= c.gateTicks && c.survived >= std::min(d.need, H);
+    };
     auto better = [&](const Candidate& a, const Candidate& b) {
         if (a.complete != b.complete) return a.complete;
+        if (!a.complete) {
+            const bool ar = routeViable(a), br = routeViable(b);
+            if (ar != br) return ar;
+        }
         // Among ideas that last the whole horizon, the verified rest of the
         // last plan beats a fresh one (which used to win on fewer clicks).
         if (a.survived >= H && b.survived >= H && a.carryOn != b.carryOn) return a.carryOn;
