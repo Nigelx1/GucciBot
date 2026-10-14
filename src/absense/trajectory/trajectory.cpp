@@ -3367,6 +3367,90 @@ TickInput checkBranchAt(int i) {
     return in;
 }
 
+// Which part of two World states is not the same, for the branch check's
+// report: the first field, and for a list its first entry. Bloodbath turned
+// the World off with nothing more to go on than "the World state after
+// branches is different".
+template <class T>
+std::string firstEntryDiff(const char* name, const std::vector<T>& x, const std::vector<T>& y) {
+    if (x.size() != y.size())
+        return std::string(name) + " (size " + std::to_string(x.size()) + " vs " + std::to_string(y.size()) + ")";
+    for (std::size_t i = 0; i < x.size(); i++)
+        if (!(x[i] == y[i])) return std::string(name) + "[" + std::to_string(i) + "] of " + std::to_string(x.size());
+    return name;
+}
+
+std::string worldDifference(const world::WorldState& a, const world::WorldState& b) {
+#define GB_WDIFF(f) \
+    if (!(a.f == b.f)) return #f;
+#define GB_WDIFF_VEC(f) \
+    if (!(a.f == b.f)) return firstEntryDiff(#f, a.f, b.f);
+#define GB_WDIFF_COW(f) \
+    if (!(a.f == b.f)) return firstEntryDiff(#f, *a.f, *b.f);
+    GB_WDIFF(tick)
+    GB_WDIFF(commandIndex)
+    GB_WDIFF(nextCommandUid)
+    GB_WDIFF(timeMod)
+    GB_WDIFF(timeMod2)
+    GB_WDIFF(timeWarp)
+    GB_WDIFF(queuedTimeWarp)
+    GB_WDIFF(appliedTimeWarp)
+    GB_WDIFF(channel)
+    GB_WDIFF_VEC(spawnCursor)
+    GB_WDIFF_VEC(goingBack)
+    if (!(a.cmds == b.cmds)) {
+        // A command carries the uids it was made with: a uid the branch used
+        // up on the game's own counter would show here.
+        const auto& x = *a.cmds;
+        const auto& y = *b.cmds;
+        if (x.size() != y.size())
+            return "cmds (size " + std::to_string(x.size()) + " vs " + std::to_string(y.size()) + ")";
+        for (std::size_t i = 0; i < x.size(); i++)
+            if (!(x[i] == y[i]))
+                return "cmds[" + std::to_string(i) + "] of " + std::to_string(x.size()) + " (trigger uid " +
+                       std::to_string(x[i].triggerUid) + " vs " + std::to_string(y[i].triggerUid) + ", control id " +
+                       std::to_string(x[i].controlId) + " vs " + std::to_string(y[i].controlId) + ", object uid " +
+                       std::to_string(x[i].objectUid) + " vs " + std::to_string(y[i].objectUid) + ")";
+        return "cmds";
+    }
+    GB_WDIFF_COW(spawns)
+    GB_WDIFF_COW(remaps)
+    GB_WDIFF(partial)
+    GB_WDIFF(toggleBits)
+    GB_WDIFF_VEC(toggleDelta)
+    GB_WDIFF_VEC(triggeredOnce)
+    GB_WDIFF_COW(triggeredIds)
+    GB_WDIFF_VEC(contact[0])
+    GB_WDIFF_VEC(contact[1])
+    GB_WDIFF_COW(items)
+    GB_WDIFF_COW(persistentItems)
+    GB_WDIFF_COW(timers)
+    GB_WDIFF_COW(countListeners)
+    GB_WDIFF_COW(collisionListeners)
+    GB_WDIFF_COW(touchListeners)
+    GB_WDIFF_COW(timerListeners)
+    GB_WDIFF_COW(eventListeners)
+    GB_WDIFF_COW(eventStamps)
+    GB_WDIFF_COW(persistentTimers)
+    GB_WDIFF_COW(sequences)
+    GB_WDIFF(seed)
+    GB_WDIFF(randomSeed)
+    GB_WDIFF(playerControl)
+    GB_WDIFF(unlinkedDual)
+    GB_WDIFF(levelEnd)
+    GB_WDIFF(points)
+    GB_WDIFF(levelTime)
+    GB_WDIFF(dirtyShape)
+    GB_WDIFF_VEC(uncertainGroups)
+    GB_WDIFF_VEC(uncertainSpawns)
+    GB_WDIFF(uncertainAny)
+    GB_WDIFF_VEC(reach)
+#undef GB_WDIFF
+#undef GB_WDIFF_VEC
+#undef GB_WDIFF_COW
+    return "a field this list does not name";
+}
+
 }  // namespace
 
 void Trajectory::checkWorldBranches(GJBaseGameLayer* pl) {
@@ -3532,7 +3616,10 @@ void Trajectory::checkWorldBranches(GJBaseGameLayer* pl) {
             break;
         }
     }
-    if (!bad && !(straightWs == branchedWs)) bad = "the World state after branches is different";
+    if (!bad && !(straightWs == branchedWs)) {
+        bad = "the World state after branches is different";
+        std::snprintf(detail, sizeof(detail), "%s", worldDifference(straightWs, branchedWs).c_str());
+    }
     if (!bad && worldStep && !straightLog.sameOps(branchedLog)) bad = "the ops after branches are different";
 
     if (bad) {
@@ -3542,6 +3629,9 @@ void Trajectory::checkWorldBranches(GJBaseGameLayer* pl) {
         world::noteDrift(bad);
         world::World::turnOff(bad);
         devlog::logf(devlog::Cat::System, "world: branch check failed - %s (%s)", bad, detail);
+        // devlog keeps only the pathfinder's own lines, so the detail goes to
+        // the game's log as well: it is how the cause gets found.
+        geode::log::warn("[AbsPF] World branch check failed: {} ({})", bad, detail);
         return;
     }
     devlog::logf(devlog::Cat::System,
