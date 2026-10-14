@@ -571,7 +571,13 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
 
     void requeueInverted() {
         auto* gb = GucciEngine::get();
-        for (auto& cmd : m_queuedButtons) {
+        // A copy of the presses as queued: queueButton below adds the mirrored
+        // ones to m_queuedButtons, and adding to a vector while a range-for
+        // walks it is undefined (a reallocation leaves the loop reading freed
+        // memory) and would walk on into the mirrored presses and mirror them
+        // back.
+        auto const queued = m_queuedButtons;
+        for (auto const& cmd : queued) {
             int key =
                 (int)cmd.m_button + ((cmd.m_isPlayer2 && m_levelSettings->m_twoPlayerMode) ? 4 : 0);
             gb::Action a;

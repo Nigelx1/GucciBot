@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-14-dj (Following the planned route: a route idea that reaches its gate alive now goes first, gaps that keep failing are planned around, and the leg searches are counted by outcome)"
+    "2026-10-14-dk (Mirror Inputs no longer adds to the list of queued presses while walking it, which could crash or mirror presses twice)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
