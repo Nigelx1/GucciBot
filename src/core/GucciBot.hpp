@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-14-dk (Mirror Inputs no longer adds to the list of queued presses while walking it, which could crash or mirror presses twice)"
+    "2026-10-14-dl (Safe mode now counts both pathfinders and Calculate as cheats: they record as they play, so a pathfinder run could have saved a real completion)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

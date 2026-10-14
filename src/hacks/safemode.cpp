@@ -2,6 +2,8 @@
 
 #include "core/GucciBot.hpp"
 #include "core/bot_switch.hpp"
+#include "absense/glue.hpp"
+#include "analysis/pathfinder.hpp"
 #include "hacks/autoclicker.hpp"
 
 #include <Geode/Geode.hpp>
@@ -150,7 +152,11 @@ namespace gucci::safemode {
         if (gb->standingDown || botswitch::takenOut())
             return false;
         auto const& u = gb->updater;
-        return gb->isPlaying()                       // a macro, Calculate or the pathfinder
+        return gb->isPlaying()                       // a macro playing
+               // The pathfinders record as they play, so isPlaying() never saw
+               // them: a pathfinder run on an online level could save a real
+               // completion. Both count, and so does Calculate.
+               || absense::isRunning() || gucci::Pathfinder::get()->active || gb->analyzerOwnsRun()
                || std::abs(u.m_tps - 240.0) > 1e-6     // physics at another rate
                || std::abs(u.m_speedhack - 1.0) > 1e-6 // speedhack
                || gb->noclipEnabled || u.m_preventDeath
