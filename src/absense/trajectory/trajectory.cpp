@@ -3748,7 +3748,7 @@ Trajectory::Benchmark Trajectory::benchmark(GJBaseGameLayer* pl, int ticks, int 
 
 Trajectory::Leg Trajectory::sweepLeg(GJBaseGameLayer* pl, LegGoal const& goal) {
     Leg out;
-    if (m_search || m_start || m_simulating || m_drawing) {
+    if (m_search || m_simulating || m_drawing || (m_start && !goal.inDecision)) {
         out.error = "the simulation is busy: stop the pathfinder and try again";
         return out;
     }
@@ -3768,7 +3768,7 @@ Trajectory::Leg Trajectory::sweepLeg(GJBaseGameLayer* pl, LegGoal const& goal) {
 
     auto const& buttons = pl->m_player1->m_holdingButtons;
     auto const held = buttons.find(static_cast<int>(PlayerButton::Jump));
-    const bool downNow = held != buttons.end() && held->second;
+    const bool downNow = goal.inDecision ? goal.held : (held != buttons.end() && held->second);
 
     Sim s;
     if (!s.begin(this, pl, true, downNow)) {
@@ -3828,10 +3828,36 @@ Trajectory::Leg Trajectory::sweepLeg(GJBaseGameLayer* pl, LegGoal const& goal) {
         }
         return k;
     };
-    const bool anyBand = goal.lo > goal.hi;
+    // The goal: its own, or the first of `gates` more than a column ahead of
+    // where the run begins.
+    float goalX = goal.x;
+    float goalLo = goal.lo;
+    float goalHi = goal.hi;
+    if (!goal.gates.empty()) {
+        const float startX = s.pos().x;
+        goalX = -1.0f;
+        for (auto const& g : goal.gates) {
+            if (g[0] <= startX + 30.0f) continue;
+            goalX = g[0];
+            goalLo = g[1];
+            goalHi = g[2];
+            break;
+        }
+        if (goalX < 0.0f) {
+            s.end();
+            m_killer = keptKiller;
+            m_teleportRand = keptRand;
+            out.error = "no gate ahead";
+            return out;
+        }
+    }
+    out.gateX = goalX;
+    out.gateLo = goalLo;
+    out.gateHi = goalHi;
+    const bool anyBand = goalLo > goalHi;
     const auto bandDistance = [&](float y) {
         if (anyBand) return 0.0f;
-        return y < goal.lo ? goal.lo - y : (y > goal.hi ? y - goal.hi : 0.0f);
+        return y < goalLo ? goalLo - y : (y > goalHi ? y - goalHi : 0.0f);
     };
 
     std::vector<Node> nodes;
@@ -3872,7 +3898,7 @@ Trajectory::Leg Trajectory::sweepLeg(GJBaseGameLayer* pl, LegGoal const& goal) {
                 if (dead) continue;
                 const auto p = s.pos();
                 const bool complete = s.complete();
-                if (p.x >= goal.x || complete) {
+                if (p.x >= goalX || complete) {
                     if (complete || bandDistance(p.y) == 0.0f) {
                         nodes.push_back({f.node, moves[i], p.x, p.y});
                         found = (int)nodes.size() - 1;

@@ -264,6 +264,33 @@ std::string summary(Plan const& p) {
                        p.routes.size(), p.edges, p.ms);
 }
 
+namespace {
+    std::unique_ptr<Plan> g_guide;
+    const Atlas* g_guideAtlas = nullptr;
+    bool g_guidance = false;
+}
+
+const Plan* guidePlan(GJBaseGameLayer* pl) {
+    auto const* a = atlasFor(pl);
+    if (!a) return nullptr;
+    if (!g_guide || g_guideAtlas != a) {
+        // The level starts on the floor: y 105, or 99 when it starts mini.
+        const bool mini = pl->m_levelSettings && pl->m_levelSettings->m_startMini;
+        g_guide = std::make_unique<Plan>(plan(*a, 0.0f, 90.0f + kHalf * (mini ? 0.6f : 1.0f)));
+        g_guideAtlas = a;
+        log::info("[AbsPF] route to follow: {}", summary(*g_guide));
+    }
+    return g_guide.get();
+}
+
+bool guidanceEnabled() {
+    return g_guidance;
+}
+
+void setGuidance(bool on) {
+    g_guidance = on;
+}
+
 bool routeShown() {
     return g_routeShown;
 }

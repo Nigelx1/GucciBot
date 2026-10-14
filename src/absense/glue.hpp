@@ -100,6 +100,11 @@ namespace absense {
     // out of budget; drawn over the level. The game waits while it runs.
     matjson::Value routeLeg(float gateX, float lo, float hi, int maxTicks, int frontierCap, bool exact, double maxMs);
 
+    // Step R4: the pathfinder follows the planned route (each decision tries
+    // the physics map's way to the route's next gate first).
+    bool routeGuidance();
+    void setRouteGuidance(bool on);
+
     // Killers the simulation is wrong about (by object uid): its copies do
     // not die of them. See absense/judge.hpp.
     void distrust(int uid);

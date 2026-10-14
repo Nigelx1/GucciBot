@@ -15,6 +15,7 @@
 #include "absense/compat/bot.hpp"
 #include "absense/compat/devlog.hpp"
 #include "absense/gpu/client.hpp"
+#include "absense/route/planner.hpp"
 #include "absense/compat/modal.hpp"
 #include "ui/ui.hpp"
 
@@ -473,6 +474,10 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
         m_stats.secondsSim > 0.0 ? (double)m_stats.simulatedTicks / m_stats.secondsSim : 0.0,
         m_stats.simulations > 0 ? (double)m_stats.simulatedTicks / (double)m_stats.simulations : 0.0,
         m_stats.secondsRestore, m_stats.secondsReal, m_stats.unitMs);
+    if (m_stats.routeLegs > 0)
+        log("route: %llu searches to the next gate, %llu found a way, %llu route ideas played",
+            (unsigned long long)m_stats.routeLegs, (unsigned long long)m_stats.routeFound,
+            (unsigned long long)m_stats.routeWins);
 
     if (done) {
         m_phase = Phase::Done;
@@ -2200,6 +2205,38 @@ void AbsensePathfinder::decide() {
                 }
             }
         }
+        // Step R4 of AI_PATHFINDER_PLAN.md: the planned route's way to its next
+        // gate, as the physics map finds it from this decision's state. One
+        // more idea, judged like the rest; when the search runs out of room
+        // or time, or no way exists, the usual ideas carry on alone.
+        if (absense::route::guidanceEnabled() && !d.pair) {
+            auto const* route = absense::route::guidePlan(pl);
+            auto* traj = bot->trajectory().unsafeInner();
+            if (route && !route->routes.empty() && traj) {
+                Trajectory::LegGoal goal;
+                goal.inDecision = true;
+                goal.held = d.held;
+                goal.maxTicks = d.H;
+                goal.frontierCap = 96;
+                goal.maxMs = 120.0;
+                goal.dotsEvery = 0;
+                for (auto const& w : route->routes.front().points) goal.gates.push_back({w.x, w.band.lo, w.band.hi});
+                auto const leg = traj->sweepLeg(pl, goal);
+                if (!leg.error) {
+                    m_stats.routeLegs++;
+                    if (leg.outcome == Trajectory::Leg::Outcome::Found && !leg.witness.empty()) {
+                        m_stats.routeFound++;
+                        std::vector<TickInput> v = leg.witness;
+                        if ((int)v.size() > d.H) v.resize((size_t)d.H);
+                        const TickInput last = v.back();
+                        while ((int)v.size() < d.H) v.push_back({0, last.held});
+                        char name[64];
+                        std::snprintf(name, sizeof(name), "route to x %.0f", leg.gateX);
+                        if (!seen(v)) addCandidate(d.candidates, std::move(v), name, d.held);
+                    }
+                }
+            }
+        }
         buildSteeredCandidates(d.candidates, d.held, d.H);
         d.steersEnd = d.candidates.size();
         buildCandidates(d.candidates, d.held, d.H);
@@ -3204,6 +3241,7 @@ void AbsensePathfinder::decide() {
     m_lastReplanTick = tick;
     (void)ahead;
 
+    if (name.rfind("route", 0) == 0) m_stats.routeWins++;
     char buf[200];
     std::snprintf(buf, sizeof(buf), "tick %llu: %s (lasts %s%d ticks), committing %d%s%s", (unsigned long long)tick,
                   name.c_str(), survived >= H ? ">=" : "", survived, commit,

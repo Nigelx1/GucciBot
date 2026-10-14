@@ -419,6 +419,14 @@ matjson::Value absense::levelMap(float from, float to) {
     return out;
 }
 
+bool absense::routeGuidance() {
+    return route::guidanceEnabled();
+}
+
+void absense::setRouteGuidance(bool on) {
+    route::setGuidance(on);
+}
+
 bool absense::routeShown() {
     return route::routeShown();
 }

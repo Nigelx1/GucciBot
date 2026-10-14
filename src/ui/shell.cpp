@@ -668,6 +668,12 @@ namespace gucci::ui {
             bool fromStart = absense::startFromBeginning();
             if (kit::SwitchRow("Start from the beginning", nullptr, &fromStart))
                 absense::setStartFromBeginning(fromStart);
+            bool guided = absense::routeGuidance();
+            if (kit::SwitchRow("Follow the planned route (AI)",
+                               "Each decision first tries the way the physics map finds to the planned route's next "
+                               "gate. Off: the pathfinder as it was",
+                               &guided))
+                absense::setRouteGuidance(guided);
             auto const s = absense::status();
             kit::RowBegin("", nullptr);
             if (!s.running && !absense::startPending()) {

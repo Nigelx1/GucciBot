@@ -10,6 +10,7 @@
 #include <memory>
 #include <span>
 #include <unordered_map>
+#include <array>
 #include <unordered_set>
 
 #include "absense/compat/settings.hpp"
@@ -243,6 +244,13 @@ class Trajectory {
         double maxMs = 3000.0;
         bool exact = false;     // merge only states that are the same bit for bit (what a proof needs)
         int dotsEvery = 4;      // keep where the states are every N ticks, for the drawing
+        // Called from a pathfinder decision (step R4): runs begin from its kept
+        // start, if one is in use, with the button as `held`, not as it is
+        // live. With `gates` (x, lo, hi in x order), the goal is the first one
+        // more than a column ahead of where the run begins.
+        bool inDecision = false;
+        bool held = false;
+        std::vector<std::array<float, 3>> gates;
     };
     struct Leg {
         enum class Outcome : uint8_t { Found, Impossible, OutOfBudget };
@@ -257,6 +265,9 @@ class Trajectory {
         std::vector<std::pair<float, float>> path;    // ... and where it took the player
         std::vector<std::pair<float, float>> dots;    // the states every dotsEvery ticks
         double ms = 0.0;
+        float gateX = 0.0f;  // the goal it went for (from `gates`, or the goal's own)
+        float gateLo = 1.0f;
+        float gateHi = 0.0f;
     };
     Leg sweepLeg(GJBaseGameLayer* pl, const LegGoal& goal);
    private:

@@ -64,6 +64,9 @@ class AbsensePathfinder {
         uint64_t humanWins = 0;     // ... that were the one played
         uint64_t aheadDecisions = 0; // decisions made about where a plan ends while it was still playing
         uint64_t freezes = 0;       // times the game had to wait for a decision (realtime)
+        uint64_t routeLegs = 0;     // step R4: physics-map searches to the planned route's next gate
+        uint64_t routeFound = 0;    // ... that found a way there
+        uint64_t routeWins = 0;     // route ideas that were the one played
         uint64_t startTick = 0;
         uint64_t currentTick = 0;
         uint64_t bestTick = 0;

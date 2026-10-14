@@ -63,6 +63,14 @@ namespace absense::route {
     // With tickOverlay: puts the route's drawing on the level when wanted.
     void tickRoute(PlayLayer* pl);
 
+    // Step R4: the route the pathfinder follows when guided. Planned from the
+    // level's start (so every gate ahead of wherever it starts is on it),
+    // cached until the map changes.
+    const Plan* guidePlan(GJBaseGameLayer* pl);
+    // Pathfinder page > Follow the planned route.
+    bool guidanceEnabled();
+    void setGuidance(bool on);
+
     // Step R3: the last leg search drawn over the level, the states it kept
     // as dots and the way it found as a line (replacing the one before).
     void showLeg(PlayLayer* pl, std::vector<std::pair<float, float>> const& dots,
