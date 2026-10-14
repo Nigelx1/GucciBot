@@ -167,7 +167,12 @@ namespace {
             }
             if ((obj->m_isGroupDisabled || obj->m_isDisabled) && movesOrToggles(obj)) {
                 // Off now, but a trigger turns it on (or moves it) later:
-                // the map makes no claim about its columns.
+                // the map makes no claim about its columns. Only for what the
+                // player could touch once it is on: LIMBO switches 161,117
+                // objects on and off, nearly all of them decoration, and
+                // counting those had 2,463 of its 2,519 columns doubted.
+                gpu::Object probe;
+                if (!gpu::classifyObject(obj, probe, true)) continue;
                 toggledX.push_back(obj->getPositionX());
                 a->movingObjects++;
                 continue;

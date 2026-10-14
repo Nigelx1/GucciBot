@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-14-dl (Safe mode now counts both pathfinders and Calculate as cheats: they record as they play, so a pathfinder run could have saved a real completion)"
+    "2026-10-14-dm (Level map: objects that start hidden only count as moving if the player could touch them once shown; LIMBO had 161117 bits of decoration doubting 2463 of 2519 columns)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

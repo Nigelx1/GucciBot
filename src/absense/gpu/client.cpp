@@ -55,8 +55,8 @@ float dashRise(GameObject* ring) {
 // something the simplified model has no idea about (a trigger, a teleport, a
 // dual portal): those are left out, and the exact simulation catches whatever
 // the card therefore got wrong. Object::flags carries the kFlag... bits.
-bool classify(GameObject* o, Object& out) {
-    if (!o || o->m_isGroupDisabled || o->m_isDisabled) return false;
+bool classify(GameObject* o, Object& out, bool evenIfOff = false) {
+    if (!o || (!evenIfOff && (o->m_isGroupDisabled || o->m_isDisabled))) return false;
     uint32_t kind;
     float power = 1.0f;
     uint32_t flags = 0;
@@ -225,8 +225,8 @@ bool changesEverything(GameObject* o) {
 }  // namespace
 
 // For the route atlas (route/atlas.cpp): one reader of the level, not two.
-bool classifyObject(GameObject* o, Object& out) {
-    return classify(o, out);
+bool classifyObject(GameObject* o, Object& out, bool evenIfOff) {
+    return classify(o, out, evenIfOff);
 }
 
 bool objectChangesEverything(GameObject* o) {

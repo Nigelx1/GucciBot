@@ -13,7 +13,9 @@ class GameObject;
 
 namespace absense::gpu {
 
-    bool classifyObject(GameObject* o, Object& out);
+    // `evenIfOff`: what the object would be once a trigger switches it on
+    // (an object that is off now is otherwise nothing).
+    bool classifyObject(GameObject* o, Object& out, bool evenIfOff = false);
     bool objectChangesEverything(GameObject* o);
 
 }  // namespace absense::gpu
