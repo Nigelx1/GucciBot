@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-13-df (The AI pathfinder finds a way to the next gate: Pathfinder page, Next gate, Find a way tries every way the button can go and draws it)"
+    "2026-10-14-dg (Level map: only triggers that move or toggle things make an object count as moving, not colour or pulse triggers)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

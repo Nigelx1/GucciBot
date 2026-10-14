@@ -6,9 +6,9 @@
 #include <chrono>
 #include <cmath>
 #include <memory>
+#include <unordered_set>
 
 #include "absense/gpu/classify.hpp"
-#include "absense/world/world.hpp"
 
 using namespace geode::prelude;
 
@@ -109,10 +109,44 @@ namespace {
         if (pl->m_level) a->level = std::string(pl->m_level->m_levelName);
 
         // 1. Every object, once: what it is to the pathfinder, and whether
-        // something moves or toggles it.
+        // something moves or toggles it. Only triggers that move a group (the
+        // kinds Trajectory::scanMovedGroups follows) or switch it on and off
+        // count: a colour, pulse or fade trigger naming a group changes
+        // nothing about where its objects can hit. (The World's certaintyOf
+        // counts any trigger naming a group, and with the World off, any
+        // group at all, which made most of a level "moving" on the map.)
+        const int n = pl->m_objects ? pl->m_objects->count() : 0;
+        std::unordered_set<int> dynamicGroups;
+        for (int i = 0; i < n; i++) {
+            auto* o = static_cast<GameObject*>(pl->m_objects->objectAtIndex(i));
+            if (!o) continue;
+            switch (o->m_objectID) {
+                case 901: case 1346: case 1347: case 1814: case 2067:  // move, rotate, follow, follow player Y, scale
+                case 3032: case 3033:                                  // keyframes
+                case 3016: case 3660: case 3661:                       // advanced follow
+                case 3006: case 3007: case 3008: case 3009: case 3010: case 3011:  // area effects
+                case 1049:                                             // toggle
+                case 1594: case 1595:                                  // toggle orb, touch
+                case 1611: case 1811: case 1815:                       // count, instant count, collision
+                    break;
+                default:
+                    continue;
+            }
+            if (auto* e = geode::cast::typeinfo_cast<EffectGameObject*>(o); e && e->m_targetGroupID > 0)
+                dynamicGroups.insert(e->m_targetGroupID);
+        }
+        const auto movesOrToggles = [&](GameObject* o) {
+            const cocos2d::CCPoint start = o->m_startPosition;
+            if (std::fabs(o->getPositionX() - start.x) > 0.01f || std::fabs(o->getPositionY() - start.y) > 0.01f)
+                return true;  // already moved
+            if (o->m_groupCount <= 0 || !o->m_groups) return false;
+            for (int g = 0; g < o->m_groupCount && g < 10; g++)
+                if (dynamicGroups.count((int)(*o->m_groups)[(size_t)g]) != 0) return true;
+            return false;
+        };
+
         std::vector<Box> boxes;
         std::vector<float> unknownX;
-        const int n = pl->m_objects ? pl->m_objects->count() : 0;
         boxes.reserve((size_t)n);
         float levelEnd = pl->m_levelLength;
         float levelTop = kGroundTop + 600.0f;
@@ -126,7 +160,7 @@ namespace {
             }
             Box b;
             if (!gpu::classifyObject(obj, b.o)) continue;
-            b.moving = world::certaintyOf(pl, obj) != world::Certainty::Static;
+            b.moving = movesOrToggles(obj);
             if (b.moving) a->movingObjects++;
             levelEnd = std::max(levelEnd, b.o.maxX);
             if (blocks(b.o.kind)) levelTop = std::max(levelTop, b.o.maxY + 150.0f);
