@@ -72,6 +72,8 @@ class AbsensePathfinder {
         uint64_t routeTicks = 0;    // ticks those searches covered
         double routeMs = 0.0;       // and the time they took
         uint64_t routeWins = 0;     // route ideas that were the one played
+        uint64_t routeJumps = 0;    // step R5: dead ends that went back to where the route was left
+        uint64_t routeRetaken = 0;  // ... and took the route there
         uint64_t startTick = 0;
         uint64_t currentTick = 0;
         uint64_t bestTick = 0;
@@ -280,6 +282,11 @@ public:
         // its place in the slack check (another way through the same gate).
         bool slackRoute = false;
         bool routeIdeas = false;  // this decision has route ideas (step R4)
+        float routeGateX = 0.0f;  // ... going for the gate at this x
+        // Step R5: a dead end came back here to take the route (see
+        // beginBacktrack); routeForced once a route idea was taken for it.
+        bool forceRoute = false;
+        bool routeForced = false;
         // Play no more than this many ticks of the chosen idea (0: no cap): a
         // route idea whose way to its gate is all that is known to hold up a
         // tick late, or that is played although nothing of it does.
@@ -438,8 +445,22 @@ public:
         std::vector<TickInput> failed; // the inputs that led to the dead end (from startTick)
         std::vector<TickInput> failed2;      // player 2's
         std::vector<uint8_t> failedPair;     // 1: that tick was played with separate controls
+        bool routeJumped = false;            // step R5 had its look at this dead end
     };
     Repair m_repair;
+    // Step R5 of AI_PATHFINDER_PLAN.md: what each decision with route ideas
+    // did about the route, oldest first, so a dead end can go straight back to
+    // the last one that left it (see beginBacktrack).
+    struct RouteChoice {
+        uint64_t tick = 0;
+        float x = 0.0f;
+        float gateX = 0.0f;
+        bool reached = false;  // a route idea got to its gate alive there
+        bool taken = false;    // ... and a route idea was the one played
+    };
+    std::vector<RouteChoice> m_routeChoices;
+    void noteRouteChoice(const RouteChoice& choice);
+    uint64_t m_forceRouteAt = UINT64_MAX;  // the decision a dead end went back to, to take the route there
     // Where the last repair resumed from, so a death at the same spot can try
     // something else from that stop before walking further back (the
     // simulation approved what was played, and the game disagreed: what is
@@ -464,6 +485,7 @@ public:
         float x = 0.0f;      // where that is in the level (for the memory)
         int anyway = 0;      // times the floor's best idea was played although it does not get past
         int level = 0;       // times every stop of this spot failed: each one widens what is tried (see escalate)
+        std::vector<uint64_t> routeForced;  // step R5: decisions gone back to for this spot, to take the route
     };
     std::vector<Trap> m_traps;
     Trap* trapAt(uint64_t tick, uint64_t slack);

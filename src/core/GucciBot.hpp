@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-14-dp (The late-click check keeps the planned route: it only swaps the route idea for another way through the same gate, and plays it to the gate when none holds up; a working route idea settles the decision)"
+    "2026-10-14-dq (Pathfinder step R5: a dead end jumps straight back to the last decision that left the planned route, however far back, and takes the route there to its gate)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

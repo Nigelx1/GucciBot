@@ -335,6 +335,8 @@ bool AbsensePathfinder::start() {
     m_repair = Repair{};
     m_lastResume = LastResume{};
     m_traps.clear();
+    m_routeChoices.clear();
+    m_forceRouteAt = UINT64_MAX;
     m_startMoves = 0;
     m_gpuWarned = false;
     m_live = false;
@@ -475,11 +477,12 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
         m_stats.simulations > 0 ? (double)m_stats.simulatedTicks / (double)m_stats.simulations : 0.0,
         m_stats.secondsRestore, m_stats.secondsReal, m_stats.unitMs);
     if (m_stats.routeLegs > 0)
-        log("route: %llu searches to the next gate (%llu found a way, %llu none, %llu out of room or time, %llu could not run), %.0f ms and %.0f ticks a search on average, %llu route ideas played",
+        log("route: %llu searches to the next gate (%llu found a way, %llu none, %llu out of room or time, %llu could not run), %.0f ms and %.0f ticks a search on average, %llu route ideas played; %llu dead ends went back to where the route was left, %llu took it there",
             (unsigned long long)m_stats.routeLegs, (unsigned long long)m_stats.routeFound,
             (unsigned long long)m_stats.routeNone, (unsigned long long)m_stats.routeBudget,
             (unsigned long long)m_stats.routeErrors, m_stats.routeMs / (double)m_stats.routeLegs,
-            (double)m_stats.routeTicks / (double)m_stats.routeLegs, (unsigned long long)m_stats.routeWins);
+            (double)m_stats.routeTicks / (double)m_stats.routeLegs, (unsigned long long)m_stats.routeWins,
+            (unsigned long long)m_stats.routeJumps, (unsigned long long)m_stats.routeRetaken);
 
     if (done) {
         m_phase = Phase::Done;
@@ -2078,6 +2081,10 @@ void AbsensePathfinder::decide() {
         d.window = flyingNow ? std::max(1, std::min(d.K, (int)std::lround(120.0 * std::max(1.0, tps / 240.0)))) : d.K;
         m_prefixLength = d.K;
         m_decisionTick = d.tick;
+        // Step R5: the first decision after going back for a dead end, at the
+        // tick it went back to, takes the route there (see beginBacktrack).
+        d.forceRoute = m_forceRouteAt == d.tick && !m_probe.active && !m_ahead.active && !d.pair;
+        m_forceRouteAt = UINT64_MAX;
         if (!d.player2) m_stats.decisions++;
         d.candidates.reserve(256);
         // Carrying on with the previous plan is always one of the ideas.
@@ -2268,6 +2275,7 @@ void AbsensePathfinder::decide() {
                             c.gateTicks = (int)way.size();
                             d.candidates.push_back(std::move(c));
                             d.routeIdeas = true;
+                            d.routeGateX = leg.gateX;
                         }
                     }
                 }
@@ -2329,11 +2337,24 @@ void AbsensePathfinder::decide() {
         if (a.events != b.events) return a.events < b.events;
         return a.firstEvent > b.firstEvent;
     };
+    // Step R5: of the route ideas judged so far, the best one that gets to its
+    // gate alive (-1: none).
+    auto routeReached = [&]() {
+        int pick = -1;
+        for (const size_t i : d.tried) {
+            const Candidate& c = d.candidates[i];
+            if (c.gateTicks <= 0 || !c.evaluated || c.survived < c.gateTicks) continue;
+            if (pick < 0 || better(c, d.candidates[(size_t)pick])) pick = (int)i;
+        }
+        return pick;
+    };
     // ... or the best is a route idea the verdict will take anyway (better()
-    // puts it first): the hundreds of other ideas would be judged for nothing.
+    // puts it first), or one a dead end came back here to take: the hundreds
+    // of other ideas would be judged for nothing.
     auto haveFull = [&]() {
-        return d.best >= 0 && (d.candidates[(size_t)d.best].complete || d.candidates[(size_t)d.best].survived >= H ||
-                               routeViable(d.candidates[(size_t)d.best]));
+        return (d.best >= 0 && (d.candidates[(size_t)d.best].complete || d.candidates[(size_t)d.best].survived >= H ||
+                                routeViable(d.candidates[(size_t)d.best]))) ||
+               (d.forceRoute && routeReached() >= 0);
     };
     // Judges the ideas [d.next, end) a slice at a time; true once they are all
     // done (or one of them settled it).
@@ -2810,6 +2831,29 @@ void AbsensePathfinder::decide() {
         std::vector<Candidate>& candidates = d.candidates;
         const Candidate* best = d.best >= 0 ? &candidates[(size_t)d.best] : nullptr;
 
+        // Step R5: back at the decision that left the route on the way to a
+        // dead end (see beginBacktrack). The route idea that gets to its gate
+        // alive is played there, to the gate, whatever else lasts longer.
+        if (d.forceRoute) {
+            d.forceRoute = false;  // once: the verdict is picked up again next slice when the check runs on
+            const int pick = routeReached();
+            if (pick >= 0) {
+                d.best = pick;
+                best = &candidates[(size_t)pick];
+                d.slackChosen = pick;
+                d.slackDone = true;
+                d.routeForced = true;
+                d.routeCap = best->gateTicks;
+                m_stats.routeRetaken++;
+                log("tick %llu: taking %s here (lasts %d), as far as its gate (%d ticks): leaving the route here led to "
+                    "the dead end",
+                    (unsigned long long)tick, best->name.c_str(), best->survived, best->gateTicks);
+            } else {
+                log("tick %llu: no route idea gets to its gate from here after all; deciding as usual",
+                    (unsigned long long)tick);
+            }
+        }
+
         // No idea at all, or none that lasts even a tick (a plan the game did
         // not follow left the player somewhere already lost): a dead end at
         // this very tick, and the way on is looked for from before it. Not
@@ -2952,7 +2996,7 @@ void AbsensePathfinder::decide() {
         // (an idea lasting exactly 500 ticks where the margin was 500); the
         // plan of one tick that was the worry is dealt with where the commit
         // length is worked out, not here.
-        const bool viable = best && (best->complete || best->survived >= need);
+        const bool viable = best && (best->complete || best->survived >= need || d.routeForced);
         // Playing an idea the simulation says dies: up to just before it does.
         int forcedCommit = -1;
         m_planKnownDeath = UINT64_MAX;
@@ -3176,6 +3220,25 @@ void AbsensePathfinder::decide() {
     d.active = false;  // the decision is made
     m_pairSecondPass = false;
 
+    // Step R5: what this decision did about the route, for a dead end further
+    // on to come back to. Read before anything below moves the start on
+    // (decisionState reads a probe's or a decided-ahead start).
+    if (!pair && d.routeIdeas) {
+        RouteChoice rc;
+        rc.tick = tick;
+        rc.x = decisionState(d).x;
+        rc.gateX = d.routeGateX;
+        for (const size_t i : d.tried) {
+            const Candidate& c = d.candidates[i];
+            if (c.gateTicks > 0 && c.evaluated && c.survived >= c.gateTicks) {
+                rc.reached = true;
+                break;
+            }
+        }
+        rc.taken = best->gateTicks > 0;
+        noteRouteChoice(rc);
+    }
+
     // Made whether or not the memory is on: confirmLessons only touches the
     // memory when it is, and the human macro's wins are counted from these.
     // A plan the simulation already knows dies (a forced commit, or the best
@@ -3251,7 +3314,13 @@ void AbsensePathfinder::decide() {
     // Step R4: a route idea that only holds up a tick late as far as its gate
     // (or not at all, played because it is the route's) is played to the gate,
     // and the next decision is made there.
-    if (d.routeCap > 0 && !complete && forcedCommit <= 0) commit = std::max(1, std::min(commit, d.routeCap));
+    // Step R5: the route taken where a dead end came back to is played all the
+    // way to its gate, so the next decision cannot leave it again right there.
+    if (d.routeForced && !complete) {
+        commit = std::max(1, d.routeCap);
+    } else if (d.routeCap > 0 && !complete && forcedCommit <= 0) {
+        commit = std::max(1, std::min(commit, d.routeCap));
+    }
     // What this tick really played, before the trim: a stop walked back to
     // here forbids this idea, and a fresh one generated there is compared
     // against it as it was generated.
@@ -3682,6 +3751,8 @@ bool AbsensePathfinder::moveStartBack() {
     m_historyPair.clear();
     m_repair = Repair{};
     m_lastResume = LastResume{};
+    m_routeChoices.clear();
+    m_forceRouteAt = UINT64_MAX;
     m_deadEndAt = 0;
     m_deadEndReal = false;
     m_deadEndUnseen = false;
@@ -3739,6 +3810,15 @@ void AbsensePathfinder::confirmLessons(uint64_t now) {
 
 void AbsensePathfinder::dropLessonsAfter(uint64_t tick) {
     std::erase_if(m_lessons, [tick](const Lesson& l) { return l.confirmAt > tick; });
+}
+
+void AbsensePathfinder::noteRouteChoice(const RouteChoice& choice) {
+    // A decision made again at a tick (a probe's, one after going back)
+    // replaces what was noted there and everything after it.
+    std::erase_if(m_routeChoices, [&](const RouteChoice& r) { return r.tick >= choice.tick; });
+    m_routeChoices.push_back(choice);
+    // A long level makes thousands of them: the oldest go first.
+    if (m_routeChoices.size() > 4096) m_routeChoices.erase(m_routeChoices.begin(), m_routeChoices.begin() + 1024);
 }
 
 void AbsensePathfinder::resumeFrom(uint64_t tick) {
@@ -4084,6 +4164,7 @@ void AbsensePathfinder::beginRepair() {
     m_repair.failedPair = m_historyPair;
     m_repair.retryTarget = UINT64_MAX;
     m_repair.passes = 0;  // a retry is a new repair: the passes of the one that resumed are not its own
+    m_repair.routeJumped = false;
 
     // Died at the same spot again after resuming from a stop with an idea
     // the simulation approved of: the game disagrees with the simulation
@@ -4141,6 +4222,33 @@ void AbsensePathfinder::beginBacktrack() {
 
     if (!m_repair.active) beginRepair();
     if (!isRunning()) return;
+
+    // Step R5 of AI_PATHFINDER_PLAN.md: with the planned route followed, a dead
+    // end goes straight back to the last decision that left the route while
+    // its way to the gate was there - however far back that is - and takes the
+    // route there. The walk below asks one idea at each stop to get past the
+    // dead end on its own, and past a choice that left the route none can:
+    // LIMBO took an orb off the route at 1.5%, died at 2%, and walked back stop
+    // by stop to the start of the level. Once per repair, and once per spot for
+    // each decision gone back to (Trap::routeForced); then the walk as before.
+    if (absense::route::guidanceEnabled() && !m_repair.routeJumped && m_goTo == UINT64_MAX &&
+        m_repair.retryTarget == UINT64_MAX) {
+        m_repair.routeJumped = true;
+        Trap* trap = trapAt(m_repair.deathTick, (uint64_t)std::lround(32.0 * std::max(1.0, tps / 240.0)));
+        for (auto it = m_routeChoices.rbegin(); it != m_routeChoices.rend(); ++it) {
+            if (it->tick >= tick || it->tick < m_stats.startTick || it->taken || !it->reached) continue;
+            if (trap && std::find(trap->routeForced.begin(), trap->routeForced.end(), it->tick) != trap->routeForced.end())
+                continue;
+            if (trap) trap->routeForced.push_back(it->tick);
+            m_forceRouteAt = it->tick;
+            m_goTo = it->tick;
+            m_stats.routeJumps++;
+            log("route: back to tick %llu (x %.0f), the last decision that left the planned route before the dead end at "
+                "%llu; the route's way to x %.0f is taken there",
+                (unsigned long long)it->tick, it->x, (unsigned long long)m_repair.deathTick, it->gateX);
+            break;
+        }
+    }
     // At the start there is nothing behind the game: the stop below is then
     // the tick it is at, decided in place, and a floor that fails widens the
     // spot (see escalate) - it never ends the search.
@@ -4450,6 +4558,7 @@ void AbsensePathfinder::finishRestore() {
     dropStartsAfter(tick);
     dropLessonsAfter(tick);  // the path from here changes: nothing past here is learned
     std::erase_if(m_played, [tick](const auto& e) { return e.first > tick; });  // those decisions are void
+    std::erase_if(m_routeChoices, [tick](const RouteChoice& r) { return r.tick > tick; });  // ... and what they did about the route
     m_plan.clear();
     m_plan2.clear();
     m_planIndex = 0;
