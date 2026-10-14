@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-14-dm (Level map: objects that start hidden only count as moving if the player could touch them once shown; LIMBO had 161117 bits of decoration doubting 2463 of 2519 columns)"
+    "2026-10-14-dn (Route legs: of the ways into a gate, the one with the most room in the opening wins, not the first found; up to three are offered as route ideas)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

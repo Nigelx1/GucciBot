@@ -251,6 +251,10 @@ class Trajectory {
         bool inDecision = false;
         bool held = false;
         std::vector<std::array<float, 3>> gates;
+        // How many ways in to hand back (Leg::witness, then Leg::alternates):
+        // of the states that reach the gate on the first tick any does, the
+        // ones with the most room in the band, from different states before it.
+        int witnesses = 1;
     };
     struct Leg {
         // Impossible: exact and nothing dropped (every move it offers was tried; its
@@ -266,6 +270,7 @@ class Trajectory {
         int exitsElsewhere = 0;  // states that passed the gate's x outside the band
         std::vector<TickInput> witness;               // Found: one input a tick from the start
         std::vector<std::pair<float, float>> path;    // ... and where it took the player
+        std::vector<std::vector<TickInput>> alternates;  // other ways in, the most room first (LegGoal::witnesses)
         std::vector<std::pair<float, float>> dots;    // the states every dotsEvery ticks
         double ms = 0.0;
         float gateX = 0.0f;  // the goal it went for (from `gates`, or the goal's own)

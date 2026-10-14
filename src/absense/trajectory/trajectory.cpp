@@ -3873,6 +3873,16 @@ Trajectory::Leg Trajectory::sweepLeg(GJBaseGameLayer* pl, LegGoal const& goal) {
         frontier.push_back(std::move(root));
     }
     int found = -1;
+    // The ways in on the first tick any state gets in: where each one crossed,
+    // the state it came from, and how far inside the band it was. The first
+    // one found used to be the answer, and the first one found hugs an edge
+    // as often as not - a way that only works to the tick (LIMBO, 1.5%).
+    struct Crossing {
+        int node;
+        int parent;
+        float room;
+    };
+    std::vector<Crossing> crossings;
     Alternative alts[8];
     for (int tick = 0; tick < goal.maxTicks && !frontier.empty() && found < 0; tick++) {
         if (elapsedMs() > goal.maxMs) break;
@@ -3891,7 +3901,7 @@ Trajectory::Leg Trajectory::sweepLeg(GJBaseGameLayer* pl, LegGoal const& goal) {
                 for (int j = 0; j < m; j++) dup |= moves[j].presses == t.presses && moves[j].held == t.held;
                 if (!dup) moves[m++] = t;
             }
-            for (int i = 0; i < m && found < 0; i++) {
+            for (int i = 0; i < m; i++) {
                 if (i > 0) s.restore(f.snap);
                 const bool dead = s.step(moves[i]);
                 out.steps++;
@@ -3901,7 +3911,10 @@ Trajectory::Leg Trajectory::sweepLeg(GJBaseGameLayer* pl, LegGoal const& goal) {
                 if (p.x >= goalX || complete) {
                     if (complete || bandDistance(p.y) == 0.0f) {
                         nodes.push_back({f.node, moves[i], p.x, p.y});
-                        found = (int)nodes.size() - 1;
+                        // The end of the level beats any band; with no band
+                        // every way in has the same room.
+                        const float room = complete ? 1.0e9f : anyBand ? 0.0f : std::min(p.y - goalLo, goalHi - p.y);
+                        crossings.push_back({(int)nodes.size() - 1, f.node, room});
                     } else {
                         out.exitsElsewhere++;
                     }
@@ -3916,7 +3929,12 @@ Trajectory::Leg Trajectory::sweepLeg(GJBaseGameLayer* pl, LegGoal const& goal) {
                 s.snapshot(c.snap);
                 next.push_back(std::move(c));
             }
-            if (found >= 0) break;
+        }
+        if (!crossings.empty()) {
+            // The most room first; ties keep the order they were found in.
+            std::stable_sort(crossings.begin(), crossings.end(),
+                             [](Crossing const& l, Crossing const& r) { return l.room > r.room; });
+            found = crossings.front().node;
         }
         out.ticks = tick + 1;
         out.peakFrontier = std::max(out.peakFrontier, (int)next.size());
@@ -3935,12 +3953,24 @@ Trajectory::Leg Trajectory::sweepLeg(GJBaseGameLayer* pl, LegGoal const& goal) {
 
     if (found >= 0) {
         out.outcome = Leg::Outcome::Found;
-        for (int i = found; i > 0; i = nodes[(size_t)i].parent) {
-            out.witness.push_back(nodes[(size_t)i].in);
-            out.path.emplace_back(nodes[(size_t)i].x, nodes[(size_t)i].y);
+        const auto traceBack = [&](int at, std::vector<TickInput>& inputs, std::vector<std::pair<float, float>>* path) {
+            for (int i = at; i > 0; i = nodes[(size_t)i].parent) {
+                inputs.push_back(nodes[(size_t)i].in);
+                if (path) path->emplace_back(nodes[(size_t)i].x, nodes[(size_t)i].y);
+            }
+            std::reverse(inputs.begin(), inputs.end());
+            if (path) std::reverse(path->begin(), path->end());
+        };
+        traceBack(found, out.witness, &out.path);
+        // The others, one per state they came in from: two ways that only
+        // differ in their very last input are one way.
+        std::vector<int> from{crossings.front().parent};
+        for (size_t k = 1; k < crossings.size() && (int)out.alternates.size() + 1 < goal.witnesses; k++) {
+            if (std::find(from.begin(), from.end(), crossings[k].parent) != from.end()) continue;
+            from.push_back(crossings[k].parent);
+            out.alternates.emplace_back();
+            traceBack(crossings[k].node, out.alternates.back(), nullptr);
         }
-        std::reverse(out.witness.begin(), out.witness.end());
-        std::reverse(out.path.begin(), out.path.end());
     } else if (frontier.empty()) {
         // Nothing alive any more: a proof only if nothing was ever dropped.
         out.outcome = out.capped ? Leg::Outcome::OutOfBudget

@@ -2222,6 +2222,7 @@ void AbsensePathfinder::decide() {
                 goal.frontierCap = 128;
                 goal.maxMs = 200.0;
                 goal.dotsEvery = 0;
+                goal.witnesses = 3;
                 for (auto const& w : route->routes.front().points) goal.gates.push_back({w.x, w.band.lo, w.band.hi});
                 auto const leg = traj->sweepLeg(pl, goal);
                 if (leg.error) m_stats.routeErrors++;
@@ -2235,15 +2236,25 @@ void AbsensePathfinder::decide() {
                     absense::route::noteLeg(leg.gateX, leg.gateLo, found);
                     if (found) {
                         m_stats.routeFound++;
-                        std::vector<TickInput> v = leg.witness;
-                        if ((int)v.size() > d.H) v.resize((size_t)d.H);
-                        const TickInput last = v.back();
-                        while ((int)v.size() < d.H) v.push_back({0, last.held});
-                        char name[64];
-                        std::snprintf(name, sizeof(name), "route to x %.0f", leg.gateX);
-                        const size_t before = d.candidates.size();
-                        if (!seen(v)) addCandidate(d.candidates, std::move(v), name, d.held);
-                        if (d.candidates.size() > before) d.candidates.back().gateTicks = (int)leg.witness.size();
+                        // The way in with the most room, then up to two others
+                        // through the same gate, so the verdict's late-input
+                        // check has more than one of the route's ways to pick from.
+                        std::vector<const std::vector<TickInput>*> ways{&leg.witness};
+                        for (auto const& w : leg.alternates) ways.push_back(&w);
+                        for (size_t k = 0; k < ways.size(); k++) {
+                            const std::vector<TickInput>& way = *ways[k];
+                            if (way.empty()) continue;
+                            std::vector<TickInput> v = way;
+                            if ((int)v.size() > d.H) v.resize((size_t)d.H);
+                            const TickInput last = v.back();
+                            while ((int)v.size() < d.H) v.push_back({0, last.held});
+                            char name[64];
+                            if (k == 0) std::snprintf(name, sizeof(name), "route to x %.0f", leg.gateX);
+                            else std::snprintf(name, sizeof(name), "route to x %.0f #%zu", leg.gateX, k + 1);
+                            const size_t before = d.candidates.size();
+                            if (!seen(v)) addCandidate(d.candidates, std::move(v), name, d.held);
+                            if (d.candidates.size() > before) d.candidates.back().gateTicks = (int)way.size();
+                        }
                     }
                 }
             }
