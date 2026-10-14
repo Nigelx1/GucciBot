@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-14-dq (Pathfinder step R5: a dead end jumps straight back to the last decision that left the planned route, however far back, and takes the route there to its gate)"
+    "2026-10-14-dr (Route legs: room in a gate counts up to a block and a half, so a wide-open band no longer pulls the way in to its middle)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

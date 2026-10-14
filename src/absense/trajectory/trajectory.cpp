@@ -3936,8 +3936,15 @@ Trajectory::Leg Trajectory::sweepLeg(GJBaseGameLayer* pl, LegGoal const& goal) {
                     if (complete || bandDistance(p.y) == 0.0f) {
                         nodes.push_back({f.node, moves[i], p.x, p.y});
                         // The end of the level beats any band; with no band
-                        // every way in has the same room.
-                        const float room = complete ? 1.0e9f : anyBand ? 0.0f : std::min(p.y - goalLo, goalHi - p.y);
+                        // every way in has the same room. Room is counted up
+                        // to a block and a half: past that a way in is not
+                        // hugging anything, and ranking on would only send
+                        // the run to the middle of a wide band - on LIMBO,
+                        // where everything moves, the band is the whole
+                        // height of the level (105 to 2738).
+                        const float room = complete ? 1.0e9f
+                                           : anyBand ? 0.0f
+                                                     : std::min(45.0f, std::min(p.y - goalLo, goalHi - p.y));
                         crossings.push_back({(int)nodes.size() - 1, f.node, room});
                     } else {
                         out.exitsElsewhere++;
