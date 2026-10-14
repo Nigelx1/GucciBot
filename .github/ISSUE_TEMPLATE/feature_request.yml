@@ -1,0 +1,25 @@
+name: Feature request
+description: Something GucciBot should do that it doesn't.
+labels: ["feature request"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What you'd like
+      description: What it should do, and where in GucciBot it would go.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: What it's for
+      description: The situation where you'd use it. If another mod or bot already does it, say which.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform you play on
+      options:
+        - Windows
+        - macOS
+        - Android
+        - iOS

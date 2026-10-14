@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and help
+    url: https://discord.gg/m95NUPdbpJ
+    about: How to use GucciBot, setting it up, or anything that isn't a bug. Ask in the Discord.
+  - name: GucciBot website
+    url: https://guccibot.net
+    about: Downloads, the changelog and the macro converter.

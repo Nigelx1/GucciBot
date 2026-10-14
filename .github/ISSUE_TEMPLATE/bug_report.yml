@@ -1,0 +1,73 @@
+name: Bug report
+description: Something in GucciBot doesn't work, crashes, or does the wrong thing.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. The version, platform, your other mods and the Geode log are what make a bug fixable, so please fill them in. Most "random" bugs turn out to be another mod's setting.
+  - type: input
+    id: version
+    attributes:
+      label: GucciBot version
+      description: In Geode's mod list, or in the corner of GucciBot's menu.
+      placeholder: e.g. 2.0.0-beta.4
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Windows
+        - macOS
+        - Android (64-bit)
+        - Android (32-bit)
+        - iOS
+    validations:
+      required: true
+  - type: input
+    id: geode
+    attributes:
+      label: Geode version
+      placeholder: e.g. 5.11.1
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+      description: The more exact the better. A screenshot or a short video helps a lot.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen
+      description: Which level, which feature, which buttons, in what order.
+      placeholder: |
+        1. Open ...
+        2. Turn on ...
+        3. ...
+  - type: textarea
+    id: mods
+    attributes:
+      label: Your other mods
+      description: Especially Mega Hack, QOLMod, Eclipse, other bots, and anything with a practice fix, frame extrapolation, speedhack or Click Between Frames.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Geode log
+      description: |
+        Attach the newest file from the `geode/logs` folder (drag it in). Where it is:
+        - Windows: the folder with GeometryDash.exe, then `geode/logs`. On Steam: right-click Geometry Dash > Manage > Browse local files.
+        - Android: `Android/media/com.geode.launcher/game/geode/logs`.
+        - Elsewhere: the `geode/logs` folder of your Geode install.
+        For a crash, also attach the newest file from `geode/crashlogs`.
+    validations:
+      required: true
+  - type: textarea
+    id: macro
+    attributes:
+      label: Macro or level (optional)
+      description: If it's about a macro, Calculate or the Pathfinder, attach the macro file and say which level (ID or name).
