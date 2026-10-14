@@ -187,6 +187,9 @@ public:
         bool carryOn = false; // the verified rest of the last plan (wins ties among full survivors)
         int reach = 0;       // where the run ended, in blocks of 30 units (set in evaluate, ranked in better)
         int gateTicks = 0;   // a route idea (step R4): the ticks its way takes to reach the route's next gate
+        // A route idea's way to that gate, played before the steering takes
+        // over (with `steer` set; see Trajectory::steer's prefix).
+        std::vector<TickInput> prefix;
         std::string name;
     };
 

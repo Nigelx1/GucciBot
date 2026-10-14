@@ -653,9 +653,12 @@ class Trajectory {
     // GucciBot: with `aimOffset` set (not NaN), once the copy flies it holds a
     // height instead - the height it started flying at plus the offset - the
     // way a person flies a ship through a gap. Until then it steers as above.
+    // With a `prefix`, that script is played first (it is the start of
+    // `script` too) and the steering takes over where it ends: a route idea's
+    // way to its gate, then the steering past it (step R4).
     RunResult steer(GJBaseGameLayer* pl, bool p1, int ticks, bool buttonDown, int lookahead,
                     std::vector<TickInput>& script, std::span<const TickInput> other = {}, bool otherDown = false,
-                    float aimOffset = std::numeric_limits<float>::quiet_NaN());
+                    float aimOffset = std::numeric_limits<float>::quiet_NaN(), std::span<const TickInput> prefix = {});
 
     // Searches for a script that survives `ticks`: runs the copy with no
     // change of input until it dies, then branches at the ticks before the
@@ -900,9 +903,9 @@ class TrajectoryManager {
 
     RunResult steer(GJBaseGameLayer* pl, bool p1, int ticks, bool buttonDown, int lookahead, std::vector<TickInput>& script,
                     std::span<const TickInput> other = {}, bool otherDown = false,
-                    float aimOffset = std::numeric_limits<float>::quiet_NaN()) {
+                    float aimOffset = std::numeric_limits<float>::quiet_NaN(), std::span<const TickInput> prefix = {}) {
         if (m_trajectory)
-            return m_trajectory->steer(pl, p1, ticks, buttonDown, lookahead, script, other, otherDown, aimOffset);
+            return m_trajectory->steer(pl, p1, ticks, buttonDown, lookahead, script, other, otherDown, aimOffset, prefix);
         script.clear();
         return {};
     }

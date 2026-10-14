@@ -1833,8 +1833,9 @@ bool AbsensePathfinder::evaluate(Candidate& c, int horizon, bool held, std::vect
     // (A held height is part of the steer: a different run, a different memo.)
     const uint64_t aimSalt =
         std::isnan(c.aimOffset) ? 0 : ((uint64_t)(uint32_t)((int)std::lround(c.aimOffset) + 100000) << 24);
+    // (... and so is a route idea's way to its gate.)
     const auto steerKey = from && c.steer > 0
-                              ? memoKey(from, horizon, held, {}, kSteerSalt + (uint64_t)(uint32_t)c.steer + aimSalt)
+                              ? memoKey(from, horizon, held, c.prefix, kSteerSalt + (uint64_t)(uint32_t)c.steer + aimSalt)
                               : std::pair<uint64_t, uint64_t>{0, 0};
     if (from && c.steer > 0 && c.inputs.empty()) {
         const auto it = m_runMemo.find(steerKey.first);
@@ -1855,9 +1856,9 @@ bool AbsensePathfinder::evaluate(Candidate& c, int horizon, bool held, std::vect
         // The steering itself, then its script is judged like any other.
         const Decision& d = m_decision;
         const RunResult sr = d.pair ? Bot::get()->trajectory().steer(pl, !d.player2, horizon, held, c.steer, c.inputs,
-                                                                     d.other, d.otherHeld, c.aimOffset)
+                                                                     d.other, d.otherHeld, c.aimOffset, c.prefix)
                                     : Bot::get()->trajectory().steer(pl, true, horizon, held, c.steer, c.inputs, {},
-                                                                     false, c.aimOffset);
+                                                                     false, c.aimOffset, c.prefix);
         m_stats.simulations++;
         m_stats.simulatedTicks += (uint64_t)std::max(0, sr.simulated);
         if (from) {
@@ -2239,21 +2240,25 @@ void AbsensePathfinder::decide() {
                         // The way in with the most room, then up to two others
                         // through the same gate, so the verdict's late-input
                         // check has more than one of the route's ways to pick from.
+                        // Each is steered on past the gate (a steer 16 that
+                        // starts with the way as its script): held there
+                        // instead, the idea was judged on whatever the held
+                        // button ran into next, not on the route.
                         std::vector<const std::vector<TickInput>*> ways{&leg.witness};
                         for (auto const& w : leg.alternates) ways.push_back(&w);
+                        const int lookahead = std::max(1, (int)std::lround(16.0 * std::max(1.0, tps / 240.0)));
                         for (size_t k = 0; k < ways.size(); k++) {
                             const std::vector<TickInput>& way = *ways[k];
-                            if (way.empty()) continue;
-                            std::vector<TickInput> v = way;
-                            if ((int)v.size() > d.H) v.resize((size_t)d.H);
-                            const TickInput last = v.back();
-                            while ((int)v.size() < d.H) v.push_back({0, last.held});
+                            if (way.empty() || (int)way.size() > d.H) continue;
+                            Candidate c;
                             char name[64];
                             if (k == 0) std::snprintf(name, sizeof(name), "route to x %.0f", leg.gateX);
                             else std::snprintf(name, sizeof(name), "route to x %.0f #%zu", leg.gateX, k + 1);
-                            const size_t before = d.candidates.size();
-                            if (!seen(v)) addCandidate(d.candidates, std::move(v), name, d.held);
-                            if (d.candidates.size() > before) d.candidates.back().gateTicks = (int)way.size();
+                            c.name = name;
+                            c.steer = lookahead;
+                            c.prefix = way;
+                            c.gateTicks = (int)way.size();
+                            d.candidates.push_back(std::move(c));
                         }
                     }
                 }

@@ -2616,7 +2616,7 @@ static TickInput holdHeight(PlayerObject* p, bool down, float y, float dy, float
 
 RunResult Trajectory::steer(GJBaseGameLayer* pl, bool p1, int ticks, bool buttonDown, int lookahead,
                             std::vector<TickInput>& script, std::span<const TickInput> other, bool otherDown,
-                            float aimOffset) {
+                            float aimOffset, std::span<const TickInput> prefix) {
     RunResult result;
     script.clear();
     if (ticks <= 0) return result;
@@ -2708,7 +2708,31 @@ RunResult Trajectory::steer(GJBaseGameLayer* pl, bool p1, int ticks, bool button
         return survived;
     };
 
-    for (int i = 0; i < ticks; i++) {
+    // GucciBot (step R4): the prefix - a route idea's way to its gate - as a
+    // script, and the steering from where it ends. A route idea used to hold
+    // the button past the gate instead, so it was judged on a filler that
+    // ran into the first thing after the gate.
+    int first = 0;
+    for (; first < (int)prefix.size() && first < ticks; first++) {
+        const TickInput in = prefix[(size_t)first];
+        const bool dead = s.step(in);
+        script.push_back(in);
+        s.fill(result);
+        if (dead) {
+            result.died = true;
+            result.dualDeath = s.deadPlayer2();
+            break;
+        }
+        result.survived = first + 1;
+        if (s.complete()) {
+            result.complete = true;
+            break;
+        }
+    }
+    lastY = s.pos().y;
+    const bool prefixEnded = result.died || result.complete;
+
+    for (int i = first; i < ticks && !prefixEnded; i++) {
         // The copy the run is driven by, read again every tick: a solo portal
         // a run crosses takes one of the two copies out of the level and hands
         // the run to the other (Sim::leaveDual), so holding on to the one the

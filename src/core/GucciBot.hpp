@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-14-dn (Route legs: of the ways into a gate, the one with the most room in the opening wins, not the first found; up to three are offered as route ideas)"
+    "2026-10-14-do (Route ideas are steered on past their gate in the simulation instead of holding the button, so they are judged on the route, not on what a held button hits next)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
