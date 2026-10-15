@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-14-ds (Level map that knows when: a ghost runs the level in the simulation with the level triggers, so moving and appearing blocks are mapped where they are when the player gets there)"
+    "2026-10-15-dt (Frame window markers with no position stood under the floor at the level start (issue 26): they now take the player position from the macro path, or are not drawn)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

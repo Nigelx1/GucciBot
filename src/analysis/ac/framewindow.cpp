@@ -1,4 +1,5 @@
 #include "framewindow.hpp"
+#include "core/GucciBot.hpp"
 #include "trailbuf/trailbuf.hpp"
 
 #include "cbf.hpp"
@@ -4654,7 +4655,24 @@ void FrameWindowAnalyzer::spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
         this->trackMarker(node, at);
     };
 
-    place(mk.position);
+    // GucciBot (issue #26): a mark whose position was never captured, or was
+    // saved without one, stands at the level's origin - under the floor at the
+    // start of the level and off the screen everywhere else, so the reporter
+    // saw one marker "in the ground" and none anywhere they clicked. The path
+    // the macro was played or recorded along knows where the player was.
+    CCPoint at = mk.position;
+    if (at.x == 0.f && at.y == 0.f) {
+        auto const& path = gucci::GucciEngine::get()->replay.m_pathSamples;
+        if (mk.frame < path.size()) {
+            auto const& ps = path[mk.frame];
+            if (!mk.player2) at = CCPoint{ps.p1x, ps.p1y};
+            else if (ps.hasP2) at = CCPoint{ps.p2x, ps.p2y};
+        }
+        FWLOG("[fw][marker] frame={} p{} had no position; {}", mk.frame, mk.player2 ? 2 : 1,
+              (at.x == 0.f && at.y == 0.f) ? "nothing on the path either, not drawn"
+                                           : "took the macro path's");
+    }
+    if (at.x != 0.f || at.y != 0.f) place(at);
     if (auto const twin = this->dualTwin(pl, mk)) place(*twin);
 }
 
