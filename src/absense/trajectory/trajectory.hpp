@@ -278,6 +278,27 @@ class Trajectory {
         float gateHi = 0.0f;
     };
     Leg sweepLeg(GJBaseGameLayer* pl, const LegGoal& goal);
+
+    // The level map that knows when (step R1 of AI_PATHFINDER_PLAN.md, for
+    // what moves): a ghost copy of player 1 runs on from where the player is,
+    // in the simulation with the World stepping the level's triggers, never
+    // pressing and never stopped by a hit. It takes every speed portal in
+    // `speedPortals` (x, speed; in x order) as it reaches its x, so it keeps
+    // the player's time whatever height it is at. Every `every` ticks `seen`
+    // gets its x and the objects the triggers can move or toggle that stand
+    // within `nearX` of it - where the World has them at that tick. Nothing
+    // runs when the simulation is busy or the level has no World (`why`).
+    struct GhostReport {
+        int ticks = 0;
+        float reachedX = 0.0f;
+        double ms = 0.0;
+        bool ran = false;
+        const char* why = nullptr;
+    };
+    // `want(x)` says whether this tick is one `seen` should be asked about.
+    GhostReport ghostRun(GJBaseGameLayer* pl, std::span<const std::pair<float, float>> speedPortals, float nearX,
+                         int maxTicks, double maxMs, const std::function<bool(float x)>& want,
+                         const std::function<void(float x, std::span<GameObject* const> nearby)>& seen);
    private:
     SearchState* m_search = nullptr;  // a search in progress (beginSearch)
     // Groups a trigger that moves things targets (move, rotate, follow, scale,

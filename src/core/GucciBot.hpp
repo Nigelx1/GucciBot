@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-14-dr (Route legs: room in a gate counts up to a block and a half, so a wide-open band no longer pulls the way in to its middle)"
+    "2026-10-14-ds (Level map that knows when: a ghost runs the level in the simulation with the level triggers, so moving and appearing blocks are mapped where they are when the player gets there)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

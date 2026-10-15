@@ -35,6 +35,7 @@ namespace absense::route {
         bool mini = false;
         bool dynamic = false;  // something here moves or toggles: the map makes no claim about it
         bool unknown = false;  // a dual, solo or teleport portal, teleport orb, custom ring or trigger the map cannot follow
+        bool timed = false;    // what moves or toggles here was read where it stands while the player goes through (the ghost run)
         float bandLo = 0.0f;   // the room the mode gives the player's centre, floor to ceiling
         float bandHi = 0.0f;
         std::vector<Opening> openings;
@@ -63,6 +64,13 @@ namespace absense::route {
         std::vector<Gate> gates;
         std::vector<float> unknownX;
         double buildMs = 0.0;
+        // The ghost run (see Trajectory::ghostRun): how many columns it timed,
+        // how far it got, what it cost, and why it stopped short or did not run.
+        int timedColumns = 0;
+        float timedTo = 0.0f;
+        double ghostMs = 0.0;
+        std::string ghostNote;
+        bool ghostBusy = false;  // the simulation was busy: built again shortly
     };
 
     // The map of the level `pl` is playing, built the first time it is asked

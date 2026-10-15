@@ -395,6 +395,7 @@ matjson::Value absense::levelMap(float from, float to) {
         e["mode"] = (int64_t)c.mode;
         e["mini"] = c.mini;
         e["moving"] = c.dynamic;
+        e["timed"] = c.timed;
         e["unknown"] = c.unknown;
         e["band"] = fmt::format("{:.0f}-{:.0f}", c.bandLo, c.bandHi);
         auto gaps = matjson::Value::array();

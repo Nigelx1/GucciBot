@@ -4014,6 +4014,103 @@ Trajectory::Leg Trajectory::sweepLeg(GJBaseGameLayer* pl, LegGoal const& goal) {
     return out;
 }
 
+Trajectory::GhostReport Trajectory::ghostRun(GJBaseGameLayer* pl, std::span<const std::pair<float, float>> speedPortals,
+                                             float nearX, int maxTicks, double maxMs, const std::function<bool(float x)>& want,
+                                             const std::function<void(float x, std::span<GameObject* const> nearby)>& seen) {
+    GhostReport out;
+    if (m_search || m_simulating || m_drawing) {
+        out.why = "the simulation is busy";
+        return out;
+    }
+    if (!pl || !pl->m_objects || !pl->m_player1 || !m_fakePlayer1 || !m_fakePlayer2 || pl->m_loadingProgress < 1.0f) {
+        out.why = "no level";
+        return out;
+    }
+    if (pl->m_player1->m_isDead || pl->m_playerDied) {
+        out.why = "the player is dead";
+        return out;
+    }
+    const Killer keptKiller = m_killer;
+    const uint64_t keptRand = m_teleportRand;
+    using Clock = std::chrono::steady_clock;
+    const auto started = Clock::now();
+    const auto elapsedMs = [&] { return std::chrono::duration<double, std::milli>(Clock::now() - started).count(); };
+
+    Sim s;
+    if (!s.begin(this, pl, true, false)) {
+        m_killer = keptKiller;
+        m_teleportRand = keptRand;
+        out.why = "the simulation could not start here";
+        return out;
+    }
+    if (!s.worldObjects || !s.def) {
+        // Without the World a run carries what moves at the speed it moved
+        // on the last real tick (MovingObjects): nothing to tell a whole
+        // level by. The map keeps calling those columns unknown.
+        s.end();
+        m_killer = keptKiller;
+        m_teleportRand = keptRand;
+        out.why = "the World is off for this level";
+        return out;
+    }
+    out.ran = true;
+    s.objects.setAllRows(true);
+    // What the triggers can move or toggle, by the 100-unit section it stands
+    // in now. A move takes an object a few sections at most, so the sections
+    // either side of the ghost (`reach`) are where to look for it.
+    auto const md = world::materialDef(s.def);
+    std::unordered_map<int, std::vector<GameObject*>> bySection;
+    if (md) {
+        for (const int slot : md->slots) {
+            if (slot < 0 || (size_t)slot >= s.def->slots.size()) continue;
+            GameObject* o = s.def->slots[(size_t)slot];
+            if (o) bySection[(int)std::floor(o->getPositionX() / 100.0f)].push_back(o);
+        }
+    }
+    constexpr int reach = 6;
+    std::vector<GameObject*> nearby;
+    size_t nextPortal = 0;
+    for (int tick = 0; tick < maxTicks; tick++) {
+        if ((tick & 31) == 0 && elapsedMs() > maxMs) {
+            out.why = "out of time";
+            break;
+        }
+        // A speed portal at or behind the ghost that it went past at another
+        // height: parked as the game parks a touched one, for the next tick.
+        const float x0 = s.pos().x;
+        while (nextPortal < speedPortals.size() && speedPortals[nextPortal].first <= x0) {
+            const float speed = speedPortals[nextPortal].second;
+            if (std::fabs(s.players[0]->m_playerSpeed - speed) > 1.0e-3f) pl->m_gameState.m_timeModRelated = speed;
+            nextPortal++;
+        }
+        (void)s.step(TickInput{0, false});
+        // A hit does not stop the ghost: it is where the triggers have things
+        // that matters, not whether a copy at its height lives.
+        m_deadP1 = false;
+        m_deadP2 = false;
+        out.ticks = tick + 1;
+        const float x = s.pos().x;
+        out.reachedX = x;
+        if (want(x)) {
+            nearby.clear();
+            const int sec = (int)std::floor(x / 100.0f);
+            for (int k = sec - reach; k <= sec + reach; k++) {
+                auto it = bySection.find(k);
+                if (it == bySection.end()) continue;
+                for (GameObject* o : it->second)
+                    if (std::fabs(o->getPositionX() - x) <= nearX) nearby.push_back(o);
+            }
+            seen(x, nearby);
+        }
+        if (s.complete()) break;
+    }
+    s.end();
+    m_killer = keptKiller;
+    m_teleportRand = keptRand;
+    out.ms = elapsedMs();
+    return out;
+}
+
 std::shared_ptr<Trajectory::SimStart> Trajectory::advanceStart(GJBaseGameLayer* pl, std::shared_ptr<SimStart> from,
                                                               std::span<const TickInput> inputs,
                                                               std::span<const TickInput> inputs2) {

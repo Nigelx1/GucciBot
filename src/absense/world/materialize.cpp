@@ -1110,9 +1110,10 @@ void Materializer::materializeNear(Run& run, PlayerObject* copy) {
     // flags), so it copies nothing more.
     m_shadow.shadowDirty(pass.x0, pass.x1, pass.y0, pass.y1);
     Window w = pass;
-    if (copy->m_isSpider) {
+    if (copy->m_isSpider || m_allRows) {
         // Every row of the columns (see world/materialize.hpp): the spider's
-        // jump reads the buckets from the copy up or down to the bounds.
+        // jump reads the buckets from the copy up or down to the bounds (and
+        // the level map's ghost reads the whole height).
         w.y0 = 0;
         w.y1 = kMaxSection;
     }
