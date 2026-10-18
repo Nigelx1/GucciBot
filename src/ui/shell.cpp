@@ -399,11 +399,15 @@ namespace gucci::ui {
                 Mod::get()->setSavedValue<double>("eng_tick_rate", tps);
             }
             kit::RowEnd();
+            // Typed, not a slider: any speed, exactly (a slider was the only
+            // way in, between 0.05x and 2x).
             float speed = static_cast<float>(gb->updater.m_speedhack);
-            if (kit::SliderRow("Game speed", nullptr, &speed, 0.05f, 2.f, "%.2fx")) {
+            kit::RowBegin("Game speed", "Type it, e.g. 0.5 or 3 (1 is normal)");
+            if (kit::InputFloat("speed", &speed, 0.05f, "%.2f") && speed >= 0.01f && speed <= 20.f) {
                 gb->updater.m_speedhack = speed;
                 Mod::get()->setSavedValue<double>("eng_speed", speed);
             }
+            kit::RowEnd();
             kit::EndCard();
 
             kit::BeginCard("Playback", nullptr);
@@ -450,6 +454,43 @@ namespace gucci::ui {
                     s_checkReport += fmt::format("\nframe {}{}: {}", f.frame, f.lane >= 3 ? " (P2)" : "", macrocheck::name(f.problem));
                 }
             }
+            // Deleting the macro picked in the list below (the loaded one). Two
+            // presses, so a slip doesn't lose a run; its sidecars go too, or a
+            // new macro saved under the same name would take over the old one's
+            // Calculate results and path. What is loaded stays loaded: saving
+            // it again brings the file back.
+            static std::string s_confirmDelete;
+            static std::string s_deleteNote;
+            if (!gb->replayName.empty() && !gb->isRecording()) {
+                ImGui::SameLine();
+                if (s_confirmDelete != gb->replayName) {
+                    if (kit::Button(fmt::format("Delete \"{}\"", gb->replayName).c_str(), Tone::Bad))
+                        s_confirmDelete = gb->replayName;
+                } else {
+                    if (kit::Button("Really delete it?", Tone::Bad)) {
+                        std::error_code ec;
+                        auto const file = gb->findMacroFile(gb->replayName);
+                        if (!file.empty() && std::filesystem::remove(file, ec)) {
+                            auto const prefix = file.filename().string() + ".";
+                            for (auto const& e : std::filesystem::directory_iterator(file.parent_path() / "sidecars", ec))
+                                if (e.path().filename().string().rfind(prefix, 0) == 0)
+                                    std::filesystem::remove(e.path(), ec);
+                            s_deleteNote = fmt::format("Deleted \"{}\". It is still loaded: Save brings it back.",
+                                                       gb->replayName);
+                            gb->reloadMacroList();
+                        } else {
+                            s_deleteNote = fmt::format("Couldn't delete \"{}\"{}", gb->replayName,
+                                                       ec ? ": " + ec.message() : ".");
+                        }
+                        s_confirmDelete.clear();
+                    }
+                    ImGui::SameLine();
+                    if (kit::Button("Cancel"))
+                        s_confirmDelete.clear();
+                }
+            }
+            if (!s_deleteNote.empty())
+                kit::Hint(s_deleteNote.c_str());
             if (!s_checkReport.empty())
                 kit::Note(s_checkReport.c_str(), Tone::Muted);
             std::string lowered = s_filter;
@@ -465,6 +506,12 @@ namespace gucci::ui {
             }
             ImGui::EndChild();
             kit::EndCard();
+        }
+
+        // Its own page (Nigel: "you have to go to some random tab and scroll
+        // down a lot to use hitboxes"); it was the fourth card down Hacks.
+        void pageHitboxes() {
+            pages::hitboxCard();
         }
 
         void pageHacks() {
@@ -504,7 +551,6 @@ namespace gucci::ui {
                          "practice_range");
             kit::EndCard();
 
-            pages::hitboxCard();
             pages::predictionCard();
             pages::hudCard();
 
@@ -1117,6 +1163,7 @@ namespace gucci::ui {
             {"Trainer", pages::anyTrainer},
             {"Indicators", pages::indicators},
             {"Hacks", pageHacks},
+            {"Hitboxes", pageHitboxes},
             {"Pathfinder", pagePathfinder},
             {"Render", pageRender},
             {"Click sounds", pages::clickSounds},

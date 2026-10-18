@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-18-dw (Click Indicators in the level are back: the trainer macro presses coming up drawn as green bars, from where it pressed to where it let go)"
+    "2026-10-18-dx (Menu: game speed is typed instead of a 0.05-2x slider, Saved macros can delete the picked macro, Hitboxes has its own page)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
