@@ -470,26 +470,44 @@ namespace gucci {
                 if (!track.codec)
                     return geode::Err("Failed to find audio codec '{}'", m_settings.m_audioCodec);
 
-                track.codecCtx.reset(ff->avcodec_alloc_context3(track.codec));
-                if (!track.codecCtx)
-                    return geode::Err("Failed to allocate audio codec context");
+                // The codec's own sample format. Float planes were set for
+                // every codec, and FLAC only takes 16- or 32-bit integers, so
+                // it never opened: "Failed to open audio codec 'flac'" and a
+                // Start that did nothing (Nigel, 2026-10-17). writeAudio's
+                // resampler converts to whichever format opens. Float planes
+                // first (AAC, Opus), then the integer kinds, then the rest.
+                static constexpr AVSampleFormat kSampleFormats[] = {AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_S16,
+                                                                    AV_SAMPLE_FMT_S32,  AV_SAMPLE_FMT_FLT,
+                                                                    AV_SAMPLE_FMT_S16P, AV_SAMPLE_FMT_S32P};
+                bool opened = false;
+                for (const AVSampleFormat sampleFormat : kSampleFormats) {
+                    AVCodecContext* ctx = ff->avcodec_alloc_context3(track.codec);
+                    if (!ctx)
+                        return geode::Err("Failed to allocate audio codec context");
+                    ctx->codec_tag = 0;
+                    ctx->codec_type = AVMEDIA_TYPE_AUDIO;
+                    ctx->ch_layout = AV_CHANNEL_LAYOUT_STEREO;
+                    ctx->bit_rate = 320000;
+                    ctx->sample_fmt = sampleFormat;
+                    ctx->sample_rate = m_sampleRate;
+                    ctx->time_base = {1, m_sampleRate};
+                    ctx->flags &= ~AV_CODEC_FLAG_QSCALE;
+                    if (m_formatCtx->oformat->flags & AVFMT_GLOBALHEADER)
+                        ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 
-                track.codecCtx->codec_tag = 0;
-                track.codecCtx->codec_type = AVMEDIA_TYPE_AUDIO;
-                track.codecCtx->ch_layout = AV_CHANNEL_LAYOUT_STEREO;
-                track.codecCtx->bit_rate = 320000;
-                track.codecCtx->sample_fmt = AV_SAMPLE_FMT_FLTP;
-                track.codecCtx->sample_rate = m_sampleRate;
-                track.codecCtx->time_base = {1, m_sampleRate};
-                track.codecCtx->flags &= ~AV_CODEC_FLAG_QSCALE;
-                if (m_formatCtx->oformat->flags & AVFMT_GLOBALHEADER)
-                    track.codecCtx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-
-                AVDictionary* audio_opts = nullptr;
-                ff->av_dict_set(&audio_opts, "compression_level", "0", 0);
-                if (ff->avcodec_open2(track.codecCtx.get(), track.codec, &audio_opts) < 0)
-                    return geode::Err("Failed to open audio codec '{}'", m_settings.m_audioCodec);
-                ff->av_dict_free(&audio_opts);
+                    AVDictionary* audio_opts = nullptr;
+                    ff->av_dict_set(&audio_opts, "compression_level", "0", 0);
+                    opened = ff->avcodec_open2(ctx, track.codec, &audio_opts) >= 0;
+                    ff->av_dict_free(&audio_opts);
+                    if (opened) {
+                        track.codecCtx.reset(ctx);
+                        break;
+                    }
+                    ff->avcodec_free_context(&ctx);  // this format refused: the next one gets a fresh context
+                }
+                if (!opened)
+                    return geode::Err("Failed to open audio codec '{}' (no sample format it takes)",
+                                      m_settings.m_audioCodec);
 
                 track.stream = ff->avformat_new_stream(m_formatCtx, track.codec);
                 if (!track.stream)

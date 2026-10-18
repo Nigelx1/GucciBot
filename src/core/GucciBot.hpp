@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-15-dt (Frame window markers with no position stood under the floor at the level start (issue 26): they now take the player position from the macro path, or are not drawn)"
+    "2026-10-18-du (Renderer: the audio codec opens with a sample format it takes (FLAC never started), a failed start says why on screen, and Start from the beginning renders from frame 0)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

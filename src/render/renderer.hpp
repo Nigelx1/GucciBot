@@ -103,10 +103,19 @@ namespace gucci {
                 m_shouldStart = false;
                 auto ret = start();
                 if (ret.isErr()) {
-                    geode::log::error("[GucciBot] Failed to start SLRenderer: {}", ret.unwrapErr());
+                    // Said where it can be seen, not only in the log: a failed
+                    // start used to look like a Start button that did nothing.
+                    m_lastError = ret.unwrapErr();
+                    geode::log::error("[GucciBot] Failed to start SLRenderer: {}", m_lastError);
+                    geode::Notification::create("Render didn't start: " + m_lastError, geode::NotificationIcon::Error, 4.f)
+                        ->show();
+                } else {
+                    m_lastError.clear();
                 }
             }
         }
+        // Why the last start failed (the Render page shows it); empty after one that started.
+        std::string m_lastError;
         geode::Result<> start();
         geode::Result<> encode(uint8_t* data, size_t size);
         geode::Result<> write();

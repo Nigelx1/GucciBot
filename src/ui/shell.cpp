@@ -788,14 +788,24 @@ namespace gucci::ui {
                 kit::Chip("Waiting for a level", Tone::Accent);
                 if (kit::Button("Cancel", Tone::Plain, -1.f))
                     sl->m_startOnNextLevel = false;
-            } else if (PlayLayer::get()) {
+            } else if (auto* pl = PlayLayer::get()) {
                 if (kit::Button("Start", Tone::Accent, -1.f)) {
                     sl->loadSettingsFromGeode();
+                    sl->queueStart();
+                }
+                // From frame 0 rather than wherever the attempt is: the level
+                // goes back to its start (in practice mode too), then the render
+                // starts on the next frame (startIfQueued, the drawScene hook).
+                if (kit::Button("Start from the beginning", Tone::Plain, -1.f)) {
+                    sl->loadSettingsFromGeode();
+                    pl->resetLevelFromStart();
                     sl->queueStart();
                 }
             } else if (kit::Button("Render the next level I open", Tone::Accent, -1.f)) {
                 sl->m_startOnNextLevel = true;
             }
+            if (!sl->isRecording() && !sl->m_lastError.empty())
+                kit::Note(fmt::format("The last render didn't start: {}", sl->m_lastError).c_str(), Tone::Bad);
             kit::EndCard();
 
             kit::BeginCard("Video", nullptr);
