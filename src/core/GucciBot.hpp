@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-18-du (Renderer: the audio codec opens with a sample format it takes (FLAC never started), a failed start says why on screen, and Start from the beginning renders from frame 0)"
+    "2026-10-18-dv (Frame windows clear when playback is turned off: they show only while a macro plays)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

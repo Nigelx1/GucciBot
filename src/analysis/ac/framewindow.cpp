@@ -5343,8 +5343,11 @@ void FrameWindowAnalyzer::render(PlayLayer* pl) {
     auto* markers = pl->m_uiLayer->getChildByID("framewindow-markers"_spr);
     auto* hud = pl->m_uiLayer->getChildByID("framewindow-hud"_spr);
 
+    // GucciBot: only while a macro plays. The windows belong to the macro's
+    // clicks, and they stayed on screen after playback was turned off - over
+    // the player's own attempts (Nigel, 2026-10-17).
     bool const want = m_enabled->inner() && !m_results.empty() && !m_running &&
-                      !m_trip.active;
+                      !m_trip.active && Bot::get()->isPlaying();
 
     if (!want) {
         if (markers) markers->removeFromParent();
