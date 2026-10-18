@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-18-dv (Frame windows clear when playback is turned off: they show only while a macro plays)"
+    "2026-10-18-dw (Click Indicators in the level are back: the trainer macro presses coming up drawn as green bars, from where it pressed to where it let go)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -844,6 +844,11 @@ namespace gucci {
         // regardless of the loaded macro's own TPS.
         float clickIndicatorPerfectMs = 20.f;
         float clickIndicatorOkMs = 60.f;
+        // Click Indicators in the level (Bogdaner09's idea): the trainer macro's
+        // coming presses drawn as bars where it pressed, as wide as it held.
+        bool clickBarsInLevel = true;
+        float clickBarsLookahead = 2.f;  // seconds of presses shown ahead
+        int clickBarsMax = 10;           // bars on screen at most
 
         bool loadTrainerMacro(const std::string& stem);
         // The JMF macro's ghost path: the bundled .gdr has inputs only, so the
