@@ -3985,6 +3985,11 @@ static matjson::Value markToJson(StoredMark const& m) {
         {"splitChecked", m.splitChecked},
         {"x", (double)m.x},
         {"y", (double)m.y},
+        // The dependent-click pass's averaged window. Missing until build -ee,
+        // so a reloaded macro showed its dependent clicks' strict windows.
+        {"dependent", (double)m.dependent},
+        {"dependentMin", (double)m.dependentMin},
+        {"dependentMax", (double)m.dependentMax},
     });
 }
 
@@ -4096,6 +4101,9 @@ static bool fromJson(std::string const& text, StoredResults& out) {
             m.splitChecked = jbool(j, "splitChecked", m.splitChecked);
             m.x = (float)jreal(j, "x", m.x);
             m.y = (float)jreal(j, "y", m.y);
+            m.dependent = (float)jreal(j, "dependent", m.dependent);
+            m.dependentMin = (float)jreal(j, "dependentMin", m.dependentMin);
+            m.dependentMax = (float)jreal(j, "dependentMax", m.dependentMax);
             out.marks.push_back(m);
         }
     }
