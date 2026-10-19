@@ -12,7 +12,7 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 ### Playback bugs
 - [ ] Restarting straight out of a finished replay desyncs the next attempt (seen on VSC, 2026-10-19)
 - [ ] Mirror Inputs adds inputs to the list it's in the middle of reading (src/hooks/hook_gjbasegamelayer.cpp, around line 572)
-- [ ] Mac: respawning to a checkpoint crashes (waiting on the crash log)
+- [ ] Mac: respawning to a checkpoint crashes. Fixed in build -ei (the action manager re-entered during the respawn's refresh tick; Windows always skipped it), waiting for Nigel's Mac test
 
 ### Switches that do nothing
 - [ ] Force Platformer (the code behind it is gone and needs writing)
@@ -61,7 +61,7 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 - [ ] Trainer video import for the normal Trainer, with a file picker that can't crash
 - [ ] Eclipse speedhack override
 - [ ] Moving wave spam (#25)
-- [ ] Bug reporters' follow-ups: #20 Android practice-death crash; #23 start positions and checkpoints; #11, #13 and the -103 error; macros ignoring inputs (#14, #8, #18); logs from the Calculate reports
+- [ ] Bug reporters' follow-ups: #20 Android practice-death crash (likely the same bug as the Mac one, fixed in -ei; needs a phone test); #23 start positions and checkpoints; #11, #13 and the -103 error; macros ignoring inputs (#14, #8, #18); logs from the Calculate reports
 - [ ] about.md, the README and the site match what ships
 
 ## 3. Calculate
