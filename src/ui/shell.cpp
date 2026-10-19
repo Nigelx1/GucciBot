@@ -1126,6 +1126,8 @@ namespace gucci::ui {
 
         void pageCredits() {
             kit::BeginCard("Credits", nullptr);
+            if (auto const& badge = themes::active().badge; !badge.empty())
+                kit::Chip(badge.c_str(), Tone::Accent);
             struct Line {
                 const char* who;
                 const char* what;
@@ -1252,6 +1254,9 @@ namespace gucci::ui {
             {
                 UseFont f(Font::Small);
                 ImGui::PushStyleColor(ImGuiCol_Text, pal.muted);
+                // The theme's subtitle, then the version.
+                if (!themes::active().subtitle.empty())
+                    ImGui::TextWrapped("%s", themes::active().subtitle.c_str());
                 ImGui::TextUnformatted(MOD_VERSION);
                 ImGui::PopStyleColor();
             }
@@ -1281,6 +1286,15 @@ namespace gucci::ui {
             ImGui::EndChild();
 #endif
             float const closeY = ImGui::GetWindowHeight() - ImGui::GetFrameHeight() - 6.f;
+            if (auto const& brand = themes::active().brand; !brand.empty()) {
+                UseFont f(Font::Strong);
+                float const brandY = closeY - ImGui::GetTextLineHeightWithSpacing() - 2.f;
+                if (brandY > ImGui::GetCursorPosY())
+                    ImGui::SetCursorPosY(brandY);
+                ImGui::PushStyleColor(ImGuiCol_Text, pal.accent);
+                ImGui::TextUnformatted(brand.c_str());
+                ImGui::PopStyleColor();
+            }
             if (closeY > ImGui::GetCursorPosY())
                 ImGui::SetCursorPosY(closeY);
             if (kit::Button("Close", Tone::Muted, -1.f))
@@ -1294,6 +1308,20 @@ namespace gucci::ui {
             {
                 UseFont f(Font::Display);
                 ImGui::TextUnformatted(kPages[g_page].title);
+            }
+            // The theme's words under every page's title (Nigel, 2026-10-18:
+            // "add labels everywhere with the cool quote stuff"). A theme has
+            // three quotes (the old menu's Replay, Tools and Credits pages);
+            // here the pages take turns with them.
+            {
+                auto const& q = themes::quote(themes::active(), static_cast<themes::Slot>(g_page % themes::kSlotCount));
+                if (!q.text.empty()) {
+                    UseFont f(Font::Small);
+                    ImGui::PushStyleColor(ImGuiCol_Text, pal.muted);
+                    std::string const line = q.by.empty() ? q.text : q.text + "  " + q.by;
+                    ImGui::TextWrapped("%s", line.c_str());
+                    ImGui::PopStyleColor();
+                }
             }
             kit::Gap(0.3f);
             kPages[g_page].draw();

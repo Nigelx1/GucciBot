@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-18-dz (Lock delta is Accuracy only: the Performance mode and its menu choice are gone)"
+    "2026-10-18-ea (Theme words everywhere: a quote under every page title, the subtitle and tag in the sidebar, the badge on Credits)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
