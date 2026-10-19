@@ -11,7 +11,7 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 
 ### Playback bugs
 - [ ] Restarting straight out of a finished replay desyncs the next attempt (seen on VSC, 2026-10-19)
-- [ ] Mirror Inputs adds inputs to the list it's in the middle of reading (src/hooks/hook_gjbasegamelayer.cpp, around line 572)
+- [x] Mirror Inputs adds inputs to the list it's in the middle of reading: already fixed in build -dk (2026-10-14); the old list hadn't caught up
 - [ ] Mac: respawning to a checkpoint crashes. Fixed in build -ei (the action manager re-entered during the respawn's refresh tick; Windows always skipped it), waiting for Nigel's Mac test
 
 ### Switches that do nothing
