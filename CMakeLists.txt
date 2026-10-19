@@ -38,6 +38,14 @@ if(NOT DEFINED ENV{GEODE_BINDINGS_REPO_PATH})
     set(GEODE_BINDINGS_REPO_PATH ${gb_bindings_SOURCE_DIR})
 endif()
 
+# Codegen, built from the pinned bindings above instead of downloaded. The
+# download is bindings' rolling "codegen" release, which follows bindings main,
+# not the pin: by 2026-10-19 it had moved to the next Geode's layout (headers
+# that include Geode/mapping/...), which our SDK doesn't have, and every build,
+# local and CI, stopped compiling. Built from the pinned commit it always
+# matches the pin. Costs a minute the first time.
+set(SKIP_BUILDING_CODEGEN OFF)
+
 add_subdirectory($ENV{GEODE_SDK} $ENV{GEODE_SDK}/build)
 
 set(IMGUI_VERSION "v1.91.4" CACHE STRING "Pin imgui version" FORCE)
