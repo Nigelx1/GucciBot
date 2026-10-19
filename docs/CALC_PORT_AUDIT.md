@@ -22,7 +22,7 @@ Nigel: "i feel like these 1 frames and stuff is purely a guccibot issue, we need
 - [x] `FrameWindowAnalyzer::finishClick` (anticroom 2554-2670, ours 2661-2777)
 - [x] `FrameWindowAnalyzer::abortClick` (anticroom 2771-2776, ours 2878-2883)
 - [x] `FrameWindowAnalyzer::stepDependent` (anticroom 3406-3517, ours 3588-3699)
-- [ ] `FrameWindowAnalyzer::finish` (anticroom 2839-2965, ours 2946-3137)
+- [x] `FrameWindowAnalyzer::finish` (anticroom 2839-2965, ours 2946-3137)
 - [x] `FrameWindowAnalyzer::tick` (anticroom 2972-3315, ours 3144-3497)
 - [x] `FrameWindowAnalyzer::reportStateDiff` (anticroom 1530-1589, ours 1636-1695)
 - [x] `logPlayerState` (anticroom 79-92, ours 112-134)
@@ -121,3 +121,12 @@ Silicate's `SLValue` settings (`m_preventDeath->inner()`, `m_tps->inner()`, `m_c
 ### `FrameWindowAnalyzer::tick`: logging + the correct checkpoint-frame port
 
 `log::warn` became `FWWARN` (five places). The capture's checkpoint passes `updater.getFrame()` instead of `m_frameOnLastAttempt`, with a comment explaining why: our checkpoint has one frame field, filled from the argument and written back to the frame counter on restore, and the attempt's start made every leg die and every window measure 0. This is the correct port, and the model for the `stepDependent` fix.
+
+### `FrameWindowAnalyzer::finish`: ours on purpose, measuring unchanged
+
+Three GucciBot additions, each with its reason in the code:
+- a run whose capture fell back to noclip is reported as failed, because every window would be pinned to the sweep limit (Congregation);
+- the macro's shifted frames are put back exactly as before, now counted and logged, with a warning if they can't be;
+- `m_running` and the stage are cleared before the hand-back reset, so onReset runs under normal rules and a frame-0 first input isn't skipped.
+
+Also `m_canDie->inner()` became the plain field, and the summary line is written to guccibot_fw.log unconditionally.
