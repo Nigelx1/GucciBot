@@ -23,6 +23,7 @@
 #include <Geode/Geode.hpp>
 #include <Geode/modify/CCScheduler.hpp>
 #include <Geode/modify/CCDirector.hpp>
+#include <Geode/modify/CCActionManager.hpp>
 #if GB_NATIVE_ENGINE
 #include <safetyhook.hpp>
 #endif
@@ -1302,6 +1303,24 @@ $execute {
 #endif
 
 #if !GB_NATIVE_ENGINE
+// Off Windows, actionMgrHook's rule as a Geode hook: no action manager pass on
+// a refresh-only tick. resetLevel runs one such tick after a checkpoint
+// respawn (hook_playlayer.cpp), and GD's respawn is a CCCallFunc, so that tick
+// starts from inside CCActionManager::update. Running the action manager
+// again in it re-entered the pass; the inner one ends by clearing the current
+// target, and the outer one then read through it. That was the macOS crash on
+// respawning to a checkpoint (Nigel, 2026-10-15: SIGSEGV at 0x20 in
+// CCActionManager::update), and likely the Android practice-death crash (#20).
+// Windows never re-entered, because its hook skips refresh ticks.
+class $modify(GBPortableActionManager, CCActionManager) {
+    void update(float dt) {
+        auto* gb = GucciEngine::get();
+        if (gb->enabled && gb->updater.m_onlyRefresh)
+            return;
+        CCActionManager::update(dt);
+    }
+};
+
 // Off Windows there are no midhooks inside GJBaseGameLayer::update, so the
 // per-tick work hangs off processCommands, which GD calls once for every
 // physics tick (bound on every platform). Off Windows the rate is 240, or one

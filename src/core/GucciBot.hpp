@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-19-eh (Credits: dihmaster500 is a tester too, NaN GD started the frame-window trend, Bogdaner09 made click indicators free and open source, GWDdoS for optimization help)"
+    "2026-10-19-ei (Mac, iOS, Android: respawning to a checkpoint no longer crashes; the action manager skips the refresh tick as on Windows)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
