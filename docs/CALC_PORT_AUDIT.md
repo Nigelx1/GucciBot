@@ -9,8 +9,8 @@ Nigel: "i feel like these 1 frames and stuff is purely a guccibot issue, we need
 ## Checklist: the measuring core (first)
 
 - [x] `isMeasurableInput` (anticroom 278-288, ours 320-330)
-- [ ] `FrameWindowAnalyzer::stepToward` (anticroom 289-453, ours 331-535)
-- [ ] `FrameWindowAnalyzer::startRange` (anticroom 702-880, ours 784-969)
+- [x] `FrameWindowAnalyzer::stepToward` (anticroom 289-453, ours 331-535)
+- [x] `FrameWindowAnalyzer::startRange` (anticroom 702-880, ours 784-969)
 - [x] `FrameWindowAnalyzer::checkCaptureAgainstTrail` (anticroom 1261-1293, ours 1350-1382)
 - [x] `FrameWindowAnalyzer::restoreToBranch` (anticroom 1628-1694, ours 1734-1800)
 - [x] `FrameWindowAnalyzer::beginShift` (anticroom 1728-1848, ours 1834-1955)
@@ -23,7 +23,7 @@ Nigel: "i feel like these 1 frames and stuff is purely a guccibot issue, we need
 - [x] `FrameWindowAnalyzer::abortClick` (anticroom 2771-2776, ours 2878-2883)
 - [x] `FrameWindowAnalyzer::stepDependent` (anticroom 3406-3517, ours 3588-3699)
 - [ ] `FrameWindowAnalyzer::finish` (anticroom 2839-2965, ours 2946-3137)
-- [ ] `FrameWindowAnalyzer::tick` (anticroom 2972-3315, ours 3144-3497)
+- [x] `FrameWindowAnalyzer::tick` (anticroom 2972-3315, ours 3144-3497)
 - [x] `FrameWindowAnalyzer::reportStateDiff` (anticroom 1530-1589, ours 1636-1695)
 - [x] `logPlayerState` (anticroom 79-92, ours 112-134)
 
@@ -86,9 +86,13 @@ One added line, `g_traceLastFrame = UINT32_MAX;`, resets a trace-log marker (fra
 
 Two `log::warn` became `FWWARN`. Same logic.
 
-### `FrameWindowAnalyzer::stepDependent`: PORT FAULT, fixed in the next build
+### `FrameWindowAnalyzer::stepDependent`: PORT FAULT, fixed in build -ed (6b3ddf4)
 
-The function's own diff is only the rename and logging, but the identical line below it is the fault. After stepping to `base`, it saves the analyzer's checkpoint with `pf.createCheckpoint(m_cpObject, updater.m_frameOnLastAttempt)` (ours 3642, anticroom 3460). In anticroom's code the second argument is the attempt's start frame, and the checkpoint's own frame is `getFrame()`. In ours it IS the checkpoint's frame, so the checkpoint claims the attempt's start frame instead of `base`. Effects: every restore to it fails the frame check in `restoreToBranch` ("forced-state branch bypassed", `m_restoreFailed`), and `tick` stops Calculate with "Checkpoint restore was bypassed. Stopping." The next pair's `m_saved.m_frameOffset <= base` test is also always true. The other call, in `tick` (ours 3412), was already ported to pass `updater.getFrame()`; this one was missed. Fix: pass `updater.getFrame()` here too. Link to the 1-frame windows, NOT proven: this pass refines clicks whose windows are clamped by a neighbour, and when it never completes, clamped windows stay as measured.
+The function's own diff is only the rename and logging, but the identical line below it is the fault. After stepping to `base`, it saves the analyzer's checkpoint with `pf.createCheckpoint(m_cpObject, updater.m_frameOnLastAttempt)` (ours 3642, anticroom 3460). In anticroom's code the second argument is the attempt's start frame, and the checkpoint's frame is read from the updater. In ours, the second argument IS the checkpoint's frame (`m_frameOffset`), and the restore path writes it back into the frame counter.
+
+Effect, as `tick`'s own port comment describes for the capture's checkpoint: a restore to this checkpoint puts the player where it was at `base`, but sets the clock to the attempt's start. The frame check in `restoreToBranch` passes, because the clock was set to the same wrong frame. Every dependent leg then replays the macro's clicks at the wrong frames, dies early, and measures a window that is far too small. The next pair's `m_saved.m_frameOffset <= base` test is also always true.
+
+`tick`'s checkpoint was ported to pass `updater.getFrame()`, with a comment explaining why; this second call was missed. Fix: pass `updater.getFrame()` here too. **This is a direct mechanism for too-small windows on dependent clicks, a strong candidate for Nigel's 1-frame windows.** Not yet confirmed in-game.
 
 ### `FrameWindowAnalyzer::advanceSweep`: logging only
 
@@ -105,3 +109,15 @@ Two `log::warn` became `FWWARN`. Same logic.
 ### `logPlayerState`: logging only
 
 The same line also goes to guccibot_fw.log (fwFileLog). Added while diagnosing the Congregation start-speed bug.
+
+### `FrameWindowAnalyzer::stepToward`: ours on purpose (trace logging), measuring unchanged
+
+Adds a per-frame `[fw][trace]` line comparing each nominal leg with the capture, and a warning when the frame jumps by more than one inside a leg. The `!m_pathDiverged` test moved from the outer condition to the inner one, so the trace keeps logging after a divergence; `m_pathDiverged` is set exactly as before. Two `log::warn` became `FWWARN`.
+
+### `FrameWindowAnalyzer::startRange`: renames + logging
+
+Silicate's `SLValue` settings (`m_preventDeath->inner()`, `m_tps->inner()`, `m_canDie->inner()`) became GucciBot's plain fields. `std::string(levelName)` for the log. Two `logPlayerState` calls around the reset (Congregation diagnosis). Same logic.
+
+### `FrameWindowAnalyzer::tick`: logging + the correct checkpoint-frame port
+
+`log::warn` became `FWWARN` (five places). The capture's checkpoint passes `updater.getFrame()` instead of `m_frameOnLastAttempt`, with a comment explaining why: our checkpoint has one frame field, filled from the argument and written back to the frame counter on restore, and the attempt's start made every leg die and every window measure 0. This is the correct port, and the model for the `stepDependent` fix.
