@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-19-ee (Calculate: the results file now keeps the dependent clicks averaged windows, which a reloaded macro lost, found by the port audit; builds make Geode codegen from the pinned bindings; Android compiles again)"
+    "2026-10-19-ef (Calculate: a death during the end-of-level animation no longer fails the run; the macro path stops at the level end instead of rewriting its file every tick behind the end screen)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

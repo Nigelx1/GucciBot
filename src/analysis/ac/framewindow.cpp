@@ -541,6 +541,15 @@ bool FrameWindowAnalyzer::onSuppressedDeath(cocos2d::CCNode* player,
     }
     if (!m_running) return false;
 
+    // GucciBot: once GD has started its end-of-level animation the level is
+    // beaten, and real play can't die from there. The animation still drags
+    // the player's sprite toward the end, and through any hazard on the way,
+    // which arrived here as a death: on VSC the capture "died" 215 frames
+    // after the end and the whole run was reported as failed. Swallowed, not
+    // counted. (Every restore goes through resetLevel, which clears the flag.)
+    if (auto* pl = PlayLayer::get(); pl && pl->m_levelEndAnimationStarted)
+        return true;
+
     if (!m_probeDied) {
         auto& updater = Bot::get()->updater();
         auto* obj = typeinfo_cast<GameObject*>(killer);
