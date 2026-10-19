@@ -25,11 +25,11 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 - [ ] Classic pathfinder: "Hide the search" and its status readout: built -ej, untested
 
 ### Macro list
-- [ ] Rename a macro (its extra files follow it)
-- [ ] Open the replays folder
-- [ ] A "..." menu on each macro: convert to .brrr, Calculate
-- [ ] The list refreshes itself when files change
-- [ ] Theme tags showing which theme each macro was saved under
+- [ ] Rename a macro (its extra files follow it): built -ek (the row's "..." menu), untested
+- [ ] Open the replays folder: built -ek, untested
+- [ ] A "..." menu on each macro: convert to .brrr, Calculate: built -ek (also Load, Rename, Delete; right click opens it too), untested
+- [ ] The list refreshes itself when files change: built -ek, untested
+- [ ] Theme tags showing which theme each macro was saved under: built -ek, untested
 
 ### Full conversion in the game
 - [ ] Other bots' macros (.gdr, .xd, .json and the rest) show in the list and convert in one click
