@@ -3639,7 +3639,14 @@ bool FrameWindowAnalyzer::stepDependent(PlayLayer* pl) {
             return true;
         }
         m_cpObject->retain();
-        m_saved = pf.createCheckpoint(m_cpObject, updater.m_frameOnLastAttempt);
+        // GucciBot: our createCheckpoint takes the checkpoint's own frame
+        // (Silicate's takes the attempt's start and reads the frame itself).
+        // Passing the attempt's start here had every restore to this
+        // checkpoint fail the frame check in restoreToBranch, and Calculate
+        // stop with "Checkpoint restore was bypassed" in the dependent pass
+        // (docs/CALC_PORT_AUDIT.md). The capture's checkpoint in tick() was
+        // ported this way already.
+        m_saved = pf.createCheckpoint(m_cpObject, updater.getFrame());
         m_haveCheckpoint = true;
 
         m_depPoints.clear();

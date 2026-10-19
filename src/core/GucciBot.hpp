@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-18-ec (JMF colours over the whole menu, Video Mode shows the click bar over the video instead of the menu, trainer music waits through a death instead of looping)"
+    "2026-10-19-ed (Calculate: the dependent-click pass saved its checkpoint with the wrong frame, so every restore failed and Calculate stopped; found by the port audit)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
