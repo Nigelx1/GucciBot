@@ -8,19 +8,19 @@ Nigel: "i feel like these 1 frames and stuff is purely a guccibot issue, we need
 
 ## Checklist: the measuring core (first)
 
-- [ ] `isMeasurableInput` (anticroom 278-288, ours 320-330)
+- [x] `isMeasurableInput` (anticroom 278-288, ours 320-330)
 - [ ] `FrameWindowAnalyzer::stepToward` (anticroom 289-453, ours 331-535)
 - [ ] `FrameWindowAnalyzer::startRange` (anticroom 702-880, ours 784-969)
-- [ ] `FrameWindowAnalyzer::checkCaptureAgainstTrail` (anticroom 1261-1293, ours 1350-1382)
+- [x] `FrameWindowAnalyzer::checkCaptureAgainstTrail` (anticroom 1261-1293, ours 1350-1382)
 - [ ] `FrameWindowAnalyzer::restoreToBranch` (anticroom 1628-1694, ours 1734-1800)
 - [ ] `FrameWindowAnalyzer::beginShift` (anticroom 1728-1848, ours 1834-1955)
 - [ ] `FrameWindowAnalyzer::advanceSweep` (anticroom 1917-2205, ours 2024-2312)
-- [ ] `FrameWindowAnalyzer::noteSweepStep` (anticroom 2207-2222, ours 2314-2329)
-- [ ] `FrameWindowAnalyzer::noteCaptureDeath` (anticroom 2235-2245, ours 2342-2352)
+- [x] `FrameWindowAnalyzer::noteSweepStep` (anticroom 2207-2222, ours 2314-2329)
+- [x] `FrameWindowAnalyzer::noteCaptureDeath` (anticroom 2235-2245, ours 2342-2352)
 - [ ] `FrameWindowAnalyzer::startSubframeProbe` (anticroom 2264-2376, ours 2371-2483)
 - [ ] `FrameWindowAnalyzer::buildMark` (anticroom 2445-2552, ours 2552-2659)
 - [ ] `FrameWindowAnalyzer::finishClick` (anticroom 2554-2670, ours 2661-2777)
-- [ ] `FrameWindowAnalyzer::abortClick` (anticroom 2771-2776, ours 2878-2883)
+- [x] `FrameWindowAnalyzer::abortClick` (anticroom 2771-2776, ours 2878-2883)
 - [ ] `FrameWindowAnalyzer::stepDependent` (anticroom 3406-3517, ours 3588-3699)
 - [ ] `FrameWindowAnalyzer::finish` (anticroom 2839-2965, ours 2946-3137)
 - [ ] `FrameWindowAnalyzer::tick` (anticroom 2972-3315, ours 3144-3497)
@@ -50,3 +50,22 @@ Nigel: "i feel like these 1 frames and stuff is purely a guccibot issue, we need
 
 (One entry per function, in checklist order.)
 
+### `isMeasurableInput`: rename
+
+`slc::Action::ActionType` became `slc::ActionType` (the shim's type). Same cases.
+
+### `FrameWindowAnalyzer::checkCaptureAgainstTrail`: logging only
+
+`log::warn` became our `FWWARN` (the analyzer's own log, which also writes guccibot_fw.log). Same logic.
+
+### `FrameWindowAnalyzer::noteSweepStep`: logging only
+
+`log::warn` became `FWWARN`. Same logic.
+
+### `FrameWindowAnalyzer::noteCaptureDeath`: logging only
+
+`log::warn` became `FWWARN`. Same logic.
+
+### `FrameWindowAnalyzer::abortClick`: logging only
+
+`log::warn` became `FWWARN`. Same logic.
