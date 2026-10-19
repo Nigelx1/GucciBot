@@ -3971,11 +3971,22 @@ Trajectory::Leg Trajectory::sweepLeg(GJBaseGameLayer* pl, LegGoal const& goal) {
         out.peakFrontier = std::max(out.peakFrontier, (int)next.size());
         if ((int)next.size() > goal.frontierCap) {
             // Room for the ones closest to the band (ties: the earlier found).
+            // Sorted by index, and the kept ones moved into a fresh list: a
+            // Live's snapshot holds GD maps, and on Android those can't be
+            // move-assigned, which sorting the Lives themselves needs (CI's
+            // Android builds failed on it from 2026-10-14).
             out.capped = true;
-            std::stable_sort(next.begin(), next.end(), [](Live const& l, Live const& r) {
+            std::vector<size_t> order(next.size());
+            for (size_t k = 0; k < order.size(); k++) order[k] = k;
+            std::stable_sort(order.begin(), order.end(), [&next](size_t a, size_t b) {
+                Live const& l = next[a];
+                Live const& r = next[b];
                 return l.score != r.score ? l.score < r.score : l.node < r.node;
             });
-            next.resize((size_t)goal.frontierCap);
+            std::vector<Live> kept;
+            kept.reserve((size_t)goal.frontierCap);
+            for (size_t k = 0; k < (size_t)goal.frontierCap; k++) kept.push_back(std::move(next[order[k]]));
+            next.swap(kept);
         }
         if (goal.dotsEvery > 0 && tick % goal.dotsEvery == 0 && out.dots.size() < 40000)
             for (auto const& c : next) out.dots.emplace_back(nodes[(size_t)c.node].x, nodes[(size_t)c.node].y);
