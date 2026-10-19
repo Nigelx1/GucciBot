@@ -15,10 +15,10 @@ namespace gucci::ui::pages {
     void editorTools();  // pages/editor_tools.cpp: Replace All and Macro Buffing (level editor)
     void jupiterTrainer();  // pages/trainer_pages.cpp: Nigel's Jupiter My Favourite Trainer
     void anyTrainer();      // pages/trainer_pages.cpp: Trainer (any saved macro)
-    void indicators();      // pages/indicators.cpp: Survival Indicator, click cue + calibration, accuracy/streak
+    void indicators();      // pages/indicators.cpp: Survival Indicator, click cue + calibration, accuracy/streak (both trainer pages)
 
     // Cards drawn inside other pages
-    void hitboxCard();       // pages/hitboxes_card.cpp (Hacks page)
+    void hitboxCard();       // pages/hitboxes_card.cpp (Macro page)
     void autoclickerCard();  // pages/autoclicker_card.cpp (Hacks page)
     void predictionCard();   // pages/prediction_card.cpp (Hacks page)
     void hudCard();          // pages/hud_card.cpp (Hacks page)

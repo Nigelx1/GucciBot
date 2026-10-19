@@ -30,6 +30,7 @@ namespace gucci::ui::pages {
     void jupiterTrainer();
     void anyTrainer();
     void videoModeCard();  // pages/videomode_card.cpp
+    void indicators();     // pages/indicators.cpp (drawn at the foot of both trainer pages)
 
     namespace {
 
@@ -804,6 +805,9 @@ namespace gucci::ui::pages {
             segmentsCard(k);
             statsCard(k);
             musicCard(k);
+            // The Survival Indicator, its click cue and the accuracy readout
+            // (Nigel's layout, 2026-10-18: no Indicators tab of their own).
+            indicators();
         }
 
     } // namespace

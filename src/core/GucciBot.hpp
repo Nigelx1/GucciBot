@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-18-dx (Menu: game speed is typed instead of a 0.05-2x slider, Saved macros can delete the picked macro, Hitboxes has its own page)"
+    "2026-10-18-dy (Menu laid out as Nigel asked: Hacks second, one Macro Tools tab, hitboxes and a frame stepper on the Macro tab, indicators on both trainer tabs, no second theme picker)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

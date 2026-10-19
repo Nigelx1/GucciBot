@@ -313,6 +313,39 @@ namespace gucci::ui {
             }
         }
 
+        // Pause, step and step back from the menu as well as by key, with
+        // backwards stepping (it was on Hacks > Engine) right where it is used.
+        void frameStepperCard() {
+            auto* gb = GucciEngine::get();
+            auto& upd = gb->updater;
+            kit::BeginCard("Frame stepper", "Pause and move one tick at a time. The keys are in Settings > Keybinds.");
+            if (PlayLayer::get()) {
+                if (kit::Button(upd.m_paused ? "Resume" : "Pause", Tone::Accent))
+                    upd.togglePaused();
+                ImGui::SameLine();
+                ImGui::BeginDisabled(!upd.m_paused || !upd.m_backwardsStepping);
+                if (kit::Button("Step back"))
+                    (void)upd.userStepBack();
+                ImGui::EndDisabled();
+                ImGui::SameLine();
+                ImGui::BeginDisabled(!upd.m_paused);
+                if (kit::Button("Step forward"))
+                    upd.userStepForward();
+                ImGui::EndDisabled();
+            } else {
+                kit::Hint("Open a level to step through it.");
+            }
+            engineSwitch("Backwards stepping", "Step back while paused", &upd.m_backwardsStepping, "feat_backwards_step");
+            if (upd.m_backwardsStepping) {
+                int frames = static_cast<int>(upd.m_maxBackstepFrames);
+                if (kit::SliderRow("Ticks kept for stepping back", nullptr, &frames, 10, 1000)) {
+                    upd.m_maxBackstepFrames = static_cast<uint32_t>(frames);
+                    Mod::get()->setSavedValue<int>("feat_back_step_count", frames);
+                }
+            }
+            kit::EndCard();
+        }
+
         void pageMacro() {
             auto* gb = GucciEngine::get();
             auto& actions = gb->replay.m_actionAtom.m_actions;
@@ -383,6 +416,11 @@ namespace gucci::ui {
             if (!gb->startPosWarning.empty())
                 kit::Note(gb->startPosWarning.c_str(), Tone::Warn);
             kit::EndCard();
+
+            // Nigel's layout (2026-10-18): hitboxes and the frame stepper sit
+            // with the macro, not on a page of their own or down the Hacks page.
+            pages::hitboxCard();
+            frameStepperCard();
 
             kit::BeginCard("Speed", nullptr);
             float tps = static_cast<float>(gb->updater.m_tps);
@@ -508,10 +546,24 @@ namespace gucci::ui {
             kit::EndCard();
         }
 
-        // Its own page (Nigel: "you have to go to some random tab and scroll
-        // down a lot to use hitboxes"); it was the fourth card down Hacks.
-        void pageHitboxes() {
-            pages::hitboxCard();
+        // Frame Editor, Macro Tools and Editor Tools as one tab (Nigel's
+        // layout), each a tab of its own inside it.
+        void pageMacroTools() {
+            if (ImGui::BeginTabBar("##macrotools")) {
+                if (ImGui::BeginTabItem("Frame Editor")) {
+                    pages::editor();
+                    ImGui::EndTabItem();
+                }
+                if (ImGui::BeginTabItem("Macro Tools")) {
+                    pages::macroTools();
+                    ImGui::EndTabItem();
+                }
+                if (ImGui::BeginTabItem("Editor Tools")) {
+                    pages::editorTools();
+                    ImGui::EndTabItem();
+                }
+                ImGui::EndTabBar();
+            }
         }
 
         void pageHacks() {
@@ -556,7 +608,6 @@ namespace gucci::ui {
 
             kit::BeginCard("Engine", nullptr);
             engineSwitch("Lock delta", "Fixed physics step per tick", &upd.m_lockDelta, "feat_lock_delta");
-            engineSwitch("Backwards stepping", "Step back while paused", &upd.m_backwardsStepping, "feat_backwards_step");
             engineSwitch("Auto flip on death", nullptr, &upd.m_autoFlipOnDeath, "feat_auto_flip");
             engineSwitch("Speedhack audio", nullptr, &upd.m_speedhackAudio, "feat_speedhack_audio");
             engineSwitch("Scroll speed fix", nullptr, &upd.m_ssbFix, "feat_scroll_speed_fix");
@@ -573,13 +624,6 @@ namespace gucci::ui {
             engineSwitch("High TPS precision", "Scales GD's velocity rounding with the tick rate. Changes physics",
                          &upd.m_highTpsPrecision, "updater_highTpsPrecision");
             engineSwitch("Prevent death", "Steps back instead of dying", &upd.m_preventDeath, "feat_prevent_death");
-            if (upd.m_backwardsStepping) {
-                int frames = static_cast<int>(upd.m_maxBackstepFrames);
-                if (kit::SliderRow("Ticks kept for stepping back", nullptr, &frames, 10, 1000)) {
-                    upd.m_maxBackstepFrames = static_cast<uint32_t>(frames);
-                    Mod::get()->setSavedValue<int>("feat_back_step_count", frames);
-                }
-            }
             float inputFps = static_cast<float>(upd.m_inputFps);
             kit::RowBegin("Input FPS", "Clicks land only on this many ticks a second. 0: every tick");
             if (kit::InputFloat("inputfps", &inputFps, 0.f, "%.0f") && inputFps >= 0.f) {
@@ -1031,34 +1075,9 @@ namespace gucci::ui {
             }
             kit::EndCard();
 
-            kit::BeginCard("Theme", nullptr);
-            std::vector<std::string> names;
-            std::vector<int> ids;
-            std::vector<std::string> customNames;
-            int current = 0;
-            for (auto const& t : themes::builtins()) {
-                if (t.id == themes::activeId())
-                    current = static_cast<int>(names.size());
-                names.push_back(t.name);
-                ids.push_back(t.id);
-                customNames.emplace_back();
-            }
-            for (auto const& t : themes::customs()) {
-                if (themes::activeId() == kCustomThemeId && t.name == themes::activeCustomName())
-                    current = static_cast<int>(names.size());
-                names.push_back(t.name + " (custom)");
-                ids.push_back(kCustomThemeId);
-                customNames.push_back(t.name);
-            }
-            kit::RowBegin("Theme", "Also sets the macro file extension");
-            if (kit::Dropdown("theme", &current, names)) {
-                if (ids[static_cast<size_t>(current)] == kCustomThemeId)
-                    themes::setActiveCustom(customNames[static_cast<size_t>(current)]);
-                else
-                    themes::setActive(ids[static_cast<size_t>(current)]);
-                saveSettings();
-            }
-            kit::RowEnd();
+            // The theme is picked on the Themes page (this card had a second
+            // picker for it).
+            kit::BeginCard("Look", nullptr);
             kit::SliderRow("Text size", nullptr, &look().textScale, 0.8f, 1.4f, "%.2fx");
 #if defined(GEODE_IS_MOBILE)
             {
@@ -1155,15 +1174,11 @@ namespace gucci::ui {
         };
         const Page kPages[] = {
             {"Macro", pageMacro},
-            {"Frame Editor", pages::editor},
-            {"Macro Tools", pages::macroTools},
-            {"Editor Tools", pages::editorTools},
+            {"Hacks", pageHacks},
+            {"Macro Tools", pageMacroTools},
             {"Calculate", pages::calculate},
             {"JMF Trainer", pages::jupiterTrainer},
             {"Trainer", pages::anyTrainer},
-            {"Indicators", pages::indicators},
-            {"Hacks", pageHacks},
-            {"Hitboxes", pageHitboxes},
             {"Pathfinder", pagePathfinder},
             {"Render", pageRender},
             {"Click sounds", pages::clickSounds},
