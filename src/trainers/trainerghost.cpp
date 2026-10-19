@@ -43,7 +43,14 @@ public:
             start();
         if (!m_channel)
             return;
-        m_channel->setPaused(false);
+        // Dead, paused or stepping: the song waits with the run instead of being
+        // dragged back to the frozen frame every look (the loud repeat on a
+        // death, as in the JMF Trainer's player).
+        bool const frozen = pl->m_playerDied || (pl->m_player1 && pl->m_player1->m_isDead) || pl->m_isPaused ||
+                            GucciEngine::get()->updater.m_paused;
+        m_channel->setPaused(frozen);
+        if (frozen)
+            return;
 
         double targetD = tps > 0.0 ? (frame / tps) * 1000.0 : 0.0;
         seekIfDrifted(targetD + gb->trainerMusicOffsetSec * 1000.0);

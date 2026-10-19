@@ -38,7 +38,15 @@ public:
             start();
         if (!m_channel)
             return;
-        m_channel->setPaused(false);
+        // Dead, paused or stepping, the frame stands still while the song would
+        // play on, and every look dragged the song back to the frozen frame:
+        // the same 60 ms over and over, loudly, all through the death (Nigel,
+        // 2026-10-18). It waits with the run instead.
+        bool const frozen = pl->m_playerDied || (pl->m_player1 && pl->m_player1->m_isDead) || pl->m_isPaused ||
+                            GucciEngine::get()->updater.m_paused;
+        m_channel->setPaused(frozen);
+        if (frozen)
+            return;
 
         double targetD = tps > 0.0 ? (frame / tps) * 1000.0 : 0.0;
         seekIfDrifted(targetD + gb->jupiterMusicOffsetSec * 1000.0);
