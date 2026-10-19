@@ -874,7 +874,12 @@ static void tickSettledWork() {
             auto* plr = PlayLayer::get();
             auto& samples = gb->replay.m_pathSamples;
             uint32_t frame = upd.getFrame();
-            if (plr && plr->m_player1 && frame >= samples.size()) {
+            // Not past the end of the level: the frame counter runs on behind
+            // the end screen, and every sample added there marked the path
+            // dirty, so the whole file (a MB on a long level) was written
+            // again on every tick until the level was left.
+            bool const ended = plr && (plr->m_levelEndAnimationStarted || plr->m_hasCompletedLevel);
+            if (plr && plr->m_player1 && frame >= samples.size() && !ended) {
                 auto* p1 = plr->m_player1;
                 MacroPathSample smp;
                 smp.p1x = p1->m_position.x;
