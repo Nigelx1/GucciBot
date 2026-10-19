@@ -15,14 +15,14 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 - [ ] Mac: respawning to a checkpoint crashes. Fixed in build -ei (the action manager re-entered during the respawn's refresh tick; Windows always skipped it), waiting for Nigel's Mac test
 
 ### Switches that do nothing
-- [ ] Force Platformer (the code behind it is gone and needs writing)
-- [ ] No Mirror: Only Recording (needs a switch and saving)
-- [ ] Render colour fix
-- [ ] Instant Respawn (doesn't actually respawn instantly)
-- [ ] Show Macro Path, plus the JMF Trainer reveal mode that uses it
-- [ ] Custom respawn delay (no control for it)
-- [ ] Changing TPS while recording (not saved into the macro)
-- [ ] Classic pathfinder: "Hide the search" and its status readout
+- [ ] Force Platformer (the code behind it is gone and needs writing): built -ej, untested; safe mode counts it as a cheat
+- [ ] No Mirror: Only Recording (needs a switch and saving): built -ej, untested
+- [x] Render colour fix: the switch is gone (-ej). Nothing read it, in Silicate either, and the fix it names (BT.709, limited range) is always on
+- [ ] Instant Respawn (doesn't actually respawn instantly): built -ej, untested
+- [ ] Show Macro Path, plus the JMF Trainer reveal mode that uses it: built -ej (Hacks > Visual), untested
+- [ ] Custom respawn delay (no control for it): built -ej (Auto retry > Respawn delay), untested
+- [ ] Changing TPS while recording (not saved into the macro): built -ej, untested
+- [ ] Classic pathfinder: "Hide the search" and its status readout: built -ej, untested
 
 ### Macro list
 - [ ] Rename a macro (its extra files follow it)
