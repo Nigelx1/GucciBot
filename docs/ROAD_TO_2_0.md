@@ -39,12 +39,12 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 - [ ] .flp (#19)
 
 ### Calculate leftovers
-- [ ] The result stays visible after a run
-- [ ] Conflicting-mod warning in the menu (it's only logged now)
-- [ ] An in-level progress box with Cancel
-- [ ] Start-position warning
-- [ ] Reorder bands, and Brrr/Bells buttons for band sounds
-- [ ] Mute during Calculate
+- [ ] The result stays visible after a run: built -el, untested
+- [ ] Conflicting-mod warning in the menu (it's only logged now): built -el, untested
+- [ ] An in-level progress box with Cancel: built -el, untested
+- [ ] Start-position warning: built -el (set when a macro recorded from a start position loads), untested
+- [ ] Reorder bands, and Brrr/Bells buttons for band sounds: built -el, untested
+- [ ] Mute during Calculate: built -el (Calculate page switch), untested
 - [ ] Per-band images, pulse and sound packs (the site still advertises them)
 
 ### Render
