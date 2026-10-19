@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-19-ei (Mac, iOS, Android: respawning to a checkpoint no longer crashes; the action manager skips the refresh tick as on Windows)"
+    "2026-10-19-ej (Switches that did nothing now work: force platformer, instant respawn and a respawn delay, no mirror only while recording, macro path, TPS changes while recording; the Classic pathfinder shows its search)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -681,6 +681,7 @@ namespace gucci {
         float hackAutoRetryDelay = 0.5f;
         bool hackRespawnInstant = false;
         bool hackForcePlatformer = false;
+        bool forcedPlatformer = false;  // the open level was forced (not saved; safe mode reads it)
         bool noclipAccuracyVisible = false;
 
         bool showHitboxes = false;

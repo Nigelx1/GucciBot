@@ -160,6 +160,7 @@ namespace gucci::safemode {
                || std::abs(u.m_tps - 240.0) > 1e-6     // physics at another rate
                || std::abs(u.m_speedhack - 1.0) > 1e-6 // speedhack
                || gb->noclipEnabled || u.m_preventDeath
+               || gb->forcedPlatformer // a level played as platformer that isn't one
                || u.m_paused // frame advance
                || Autoclicker::get()->enabled;
     }

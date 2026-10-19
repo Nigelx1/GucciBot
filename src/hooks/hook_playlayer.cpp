@@ -163,6 +163,21 @@ class $modify(GB7PlayLayer, PlayLayer) {
         m_clickOnSteps = false;
         m_clickBetweenSteps = false;
 
+        // Force platformer: the level plays as a platformer level. GD settles
+        // this once, while the level loads, so it takes the levels opened with
+        // the switch on. Safe mode counts it as a cheat (forcedPlatformer).
+        gb->forcedPlatformer = false;
+        if (gb->hackForcePlatformer && !m_isPlatformer) {
+            m_isPlatformer = true;
+            if (m_player1)
+                m_player1->togglePlatformerMode(true);
+            if (m_player2)
+                m_player2->togglePlatformerMode(true);
+            if (m_uiLayer)
+                m_uiLayer->togglePlatformerMode(true);
+            gb->forcedPlatformer = true;
+        }
+
         TrajectoryPredictionService::get().updatePreview(this);
         gb->updater.m_frameOnLastAttempt = 0;
         gb->updater.m_lastTfp = 0.0f;
@@ -789,9 +804,12 @@ class $modify(GB7PlayLayer, PlayLayer) {
         // the level resets exactly once (Absense's retime). It used to count
         // down separately and call resetLevel() while GD's respawn was still
         // pending, and whichever fired second reset the level again.
-        if (gb->hackAutoRetry && obj != m_anticheatSpike && !gb->isPlaying() && player &&
-            player->m_isDead)
-            gucci::respawn::retime(this, gb->hackAutoRetryDelay);
+        // Instant respawn is the same retime with no delay at all; it used to
+        // only skip the engine's two-tick step clamp after the reset, so GD's
+        // own wait of about a second stayed.
+        if ((gb->hackRespawnInstant || gb->hackAutoRetry) && obj != m_anticheatSpike && !gb->isPlaying() &&
+            player && player->m_isDead)
+            gucci::respawn::retime(this, gb->hackRespawnInstant ? 0.f : gb->hackAutoRetryDelay);
 
         if (upd.m_preventDeath && obj != m_anticheatSpike) {
             upd.backwardsStep();

@@ -88,7 +88,27 @@ namespace gucci::ui {
             {"hack_auto_retry", &GucciEngine::hackAutoRetry},
             {"hack_respawn_instant", &GucciEngine::hackRespawnInstant},
             {"hack_force_platformer", &GucciEngine::hackForcePlatformer},
+            {"hack_no_mirror_recording_only", &GucciEngine::noMirrorRecordingOnly},
+            {"show_macro_path", &GucciEngine::showMacroPath},
+            {"trainer_reveal", &GucciEngine::trainerRevealEnabled},
         };
+
+        // Float settings the menu loads, with the same keys it saves them under.
+        struct SavedFloat {
+            const char* key;
+            float GucciEngine::*field;
+        };
+        const SavedFloat kUiLoadedFloats[] = {
+            {"hack_auto_retry_delay", &GucciEngine::hackAutoRetryDelay},
+            {"macro_path_marker_size", &GucciEngine::macroPathMarkerSize},
+            {"macro_path_line_opacity", &GucciEngine::macroPathLineOpacity},
+            {"trainer_reveal_ahead", &GucciEngine::trainerRevealBuffer},
+        };
+
+        // A float setting's row edit, saved under its key.
+        void saveFloat(const char* key, float value) {
+            Mod::get()->setSavedValue<double>(key, value);
+        }
 
         void loadSettings() {
             auto* mod = Mod::get();
@@ -110,6 +130,8 @@ namespace gucci::ui {
             auto* gb = GucciEngine::get();
             for (auto const& s : kUiLoadedSwitches)
                 gb->*(s.field) = mod->getSavedValue<bool>(s.key, gb->*(s.field));
+            for (auto const& f : kUiLoadedFloats)
+                gb->*(f.field) = static_cast<float>(mod->getSavedValue<double>(f.key, gb->*(f.field)));
         }
 
         void saveEngineSwitch(const char* key, bool value) {
@@ -435,6 +457,10 @@ namespace gucci::ui {
 #endif
                 gb->updater.setTps(tps);
                 Mod::get()->setSavedValue<double>("eng_tick_rate", tps);
+                // Typed while recording, the change goes into the macro, so
+                // playback switches rate on the same tick.
+                if (gb->isRecording())
+                    gb->recordTpsChange(tps);
             }
             kit::RowEnd();
             // Typed, not a slider: any speed, exactly (a slider was the only
@@ -575,9 +601,20 @@ namespace gucci::ui {
                 engineSwitch("Flash on a blocked death", "Tints the player when noclip saves you", &gb->noclipDeathFlash,
                              "hack_noclip_flash");
             engineSwitch("Safe mode", "No progress or stats are saved", &gb->protectedMode, nullptr);
-            engineSwitch("Instant respawn", nullptr, &gb->hackRespawnInstant, "hack_respawn_instant");
-            engineSwitch("Auto retry", nullptr, &gb->hackAutoRetry, "hack_auto_retry");
-            engineSwitch("Force platformer", nullptr, &gb->hackForcePlatformer, "hack_force_platformer");
+            engineSwitch("Instant respawn", "Respawn the moment you die", &gb->hackRespawnInstant,
+                         "hack_respawn_instant");
+            engineSwitch("Auto retry", "Respawn after your own delay instead of GD's", &gb->hackAutoRetry,
+                         "hack_auto_retry");
+            if (gb->hackAutoRetry && !gb->hackRespawnInstant) {
+                kit::RowBegin("Respawn delay", "Seconds from a death to the respawn, 0 to 10");
+                if (kit::InputFloat("retrydelay", &gb->hackAutoRetryDelay, 0.1f, "%.2f s")) {
+                    gb->hackAutoRetryDelay = std::clamp(gb->hackAutoRetryDelay, 0.f, 10.f);
+                    saveFloat("hack_auto_retry_delay", gb->hackAutoRetryDelay);
+                }
+                kit::RowEnd();
+            }
+            engineSwitch("Force platformer", "Levels you open play as platformer levels", &gb->hackForcePlatformer,
+                         "hack_force_platformer");
             engineSwitch("RNG lock", "Same random triggers every attempt", &gb->rngLocked, nullptr);
             if (gb->rngLocked) {
                 // The seed recordings start from while locked (hook_playlayer.cpp
@@ -595,12 +632,31 @@ namespace gucci::ui {
             kit::BeginCard("Visual", nullptr);
             engineSwitch("Layout mode", nullptr, &gb->layoutMode, "hack_layout_mode");
             engineSwitch("No mirror effect", nullptr, &gb->noMirrorEffect, "hack_no_mirror");
+            if (gb->noMirrorEffect)
+                engineSwitch("Only while recording", "Playback and renders keep GD's mirror portals",
+                             &gb->noMirrorRecordingOnly, "hack_no_mirror_recording_only");
             engineSwitch("Hide attempts", nullptr, &gb->hackHideAttempts, "hack_hide_attempts");
             engineSwitch("Hide percentage", nullptr, &gb->hackHidePercentage, "hack_hide_percentage");
             engineSwitch("No death flash", nullptr, &gb->hackNoSpikeFlash, "hack_no_flash");
             engineSwitch("Audio pitch follows speed", nullptr, &gb->audioPitchEnabled, "hack_audio_pitch");
             engineSwitch("Practice range", "Shows the loaded macro's clicks near you in the level", &gb->practiceRangeEnabled,
                          "practice_range");
+            engineSwitch("Macro path", "Draws the loaded macro's whole path and its clicks in the level",
+                         &gb->showMacroPath, "show_macro_path");
+            if (gb->showMacroPath) {
+                if (kit::SliderRow("Marker size", nullptr, &gb->macroPathMarkerSize, 2.f, 24.f, "%.0f"))
+                    saveFloat("macro_path_marker_size", gb->macroPathMarkerSize);
+                if (kit::SliderRow("Line opacity", nullptr, &gb->macroPathLineOpacity, 0.05f, 1.f, "%.2f"))
+                    saveFloat("macro_path_line_opacity", gb->macroPathLineOpacity);
+                // The trainers' reveal (JMF Trainer Mode): the path only as far
+                // as your best, plus a little ahead.
+                engineSwitch("Only up to your best", "In a trainer, the path stops a little past your best attempt",
+                             &gb->trainerRevealEnabled, "trainer_reveal");
+                if (gb->trainerRevealEnabled &&
+                    kit::SliderRow("Show ahead", "How far past your best", &gb->trainerRevealBuffer, 0.f, 600.f,
+                                   "%.0f units"))
+                    saveFloat("trainer_reveal_ahead", gb->trainerRevealBuffer);
+            }
             kit::EndCard();
 
             pages::predictionCard();
@@ -700,6 +756,15 @@ namespace gucci::ui {
             if (pf->active || pf->runs > 0) {
                 kit::Progress(pf->bestPct / 100.f, fmt::format("best {:.1f}%", pf->bestPct).c_str());
                 kit::Hint(fmt::format("{}  |  {} runs", pf->stage, pf->runs).c_str());
+                // What the search is doing, all of it tracked already
+                // (analysis/pathfinder.hpp), none of it shown until now.
+                kit::Hint(fmt::format("depth {}  |  best tick {}  |  decision points {}  |  look-back {} ticks",
+                                      pf->depth, pf->bestFrame, pf->lastPointCount, pf->lastLookback)
+                              .c_str());
+                kit::Hint(fmt::format("probes {} ({} couldn't run)  |  ticks that mattered {}  |  held back {} ({} used)",
+                                      pf->probeRuns, pf->probeFails, pf->agencyFramesSeen, pf->deferredCramped,
+                                      pf->deferredReplayed)
+                              .c_str());
             }
             if (pf->hasResult)
                 kit::Note(pf->lastResultSuccess ? fmt::format("Solved, saved as {}", pf->savedAs).c_str()
@@ -944,7 +1009,10 @@ namespace gucci::ui {
             saveWhole("Bitrate (Mbps)", nullptr, "render_bitrate", 30, 1, 1000);
             saveText("File type", nullptr, "render_file_extension", ".mp4", ".mp4");
             saveText("Extra FFmpeg options", "For people who know FFmpeg", "render_video_args", "", "");
-            saveSwitch("Colour fix", nullptr, "render_color_fix", true);
+            // No "Colour fix" switch: nothing read it, in Silicate either, and
+            // the fix it names is always on (the colorspace shaders convert with
+            // BT.709 coefficients into limited range, and the stream is tagged
+            // BT.709).
             kit::EndCard();
 
             kit::BeginCard("Audio", nullptr);
@@ -1388,7 +1456,46 @@ namespace gucci::ui {
 
         // ------------------------------------------------------------ overlay
 
+        // The Classic Pathfinder while it searches. With "Hide the search" on
+        // (the default), the level is covered and only the result is worth
+        // watching; off, a corner box like Absense's, so the level shows.
+        void drawClassicSearch(Pathfinder* pf) {
+            ImGuiIO const& io = ImGui::GetIO();
+            ImGuiWindowFlags const boxFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+                                              ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
+                                              ImGuiWindowFlags_NoNav;
+            if (!pf->hideSearch) {
+                ImGui::SetNextWindowPos(ImVec2(10.f, 10.f), ImGuiCond_Always);
+                ImGui::SetNextWindowBgAlpha(0.6f);
+                if (ImGui::Begin("##classicPathfinderBox", nullptr, boxFlags | ImGuiWindowFlags_NoInputs)) {
+                    UseFont f(Font::Small);
+                    ImGui::Text("Pathfinder: %s  |  %d runs  |  best %.1f%%", pf->stage.c_str(), pf->runs, pf->bestPct);
+                }
+                ImGui::End();
+                return;
+            }
+            ImGui::GetBackgroundDrawList()->AddRectFilled(ImVec2(0.f, 0.f), io.DisplaySize, IM_COL32(6, 6, 10, 238));
+            ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_Always,
+                                    ImVec2(0.5f, 0.5f));
+            ImGui::SetNextWindowSizeConstraints(ImVec2(320.f, 0.f), ImVec2(520.f, FLT_MAX));
+            if (ImGui::Begin("##classicPathfinderCover", nullptr, boxFlags)) {
+                {
+                    UseFont f(Font::Strong);
+                    ImGui::TextUnformatted("Calculating...");
+                }
+                kit::Progress(pf->bestPct / 100.f, fmt::format("best {:.1f}%", pf->bestPct).c_str());
+                kit::Hint(fmt::format("{}  |  {} runs", pf->stage, pf->runs).c_str());
+                if (kit::Button("Cancel", Tone::Bad, -1.f))
+                    pf->cancel();
+            }
+            ImGui::End();
+        }
+
         void drawOverlay() {
+            if (auto* pf = Pathfinder::get(); pf->active && PlayLayer::get()) {
+                drawClassicSearch(pf);
+                return;
+            }
             auto const s = absense::status();
             if (!s.running || !PlayLayer::get())
                 return;

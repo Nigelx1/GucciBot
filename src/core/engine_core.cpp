@@ -1509,8 +1509,11 @@ namespace gucci {
             log::warn("[GucciBot] recordTpsChange: not recording, ignored");
             return;
         }
-        replay.m_actionAtom.addTpsChange(updater.m_frame, tps);
-        log::info("[GucciBot] Recorded TPS change to {} at frame {}", tps, updater.m_frame);
+        // At frame + 1, like an input: playback looks actions up one frame
+        // ahead, so the change lands on the tick it was typed before.
+        uint32_t const at = updater.getFrame() + 1;
+        replay.m_actionAtom.addTpsChange(at, tps);
+        log::info("[GucciBot] Recorded TPS change to {} at frame {}", tps, at);
     }
 
     namespace {
