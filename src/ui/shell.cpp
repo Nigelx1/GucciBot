@@ -1619,6 +1619,27 @@ namespace gucci::ui {
         }
 
         void drawOverlay() {
+            // Calculate's progress and its Cancel in the level, menu open or
+            // not (they were only on the Calculate page).
+            if (auto& fw = ::Bot::get()->frameWindow(); fw.running() && PlayLayer::get()) {
+                ImGui::SetNextWindowPos(ImVec2(10.f, 10.f), ImGuiCond_Always);
+                ImGui::SetNextWindowBgAlpha(0.7f);
+                ImGuiWindowFlags const flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+                                               ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
+                                               ImGuiWindowFlags_NoNav;
+                if (ImGui::Begin("##calculateBox", nullptr, flags)) {
+                    UseFont f(Font::Small);
+                    ImGui::ProgressBar(fw.progress(), ImVec2(260.f, 0.f),
+                                       fmt::format("Calculate {:.0f}%", fw.progress() * 100.f).c_str());
+                    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 260.f);
+                    ImGui::TextUnformatted(fw.status().c_str());
+                    ImGui::PopTextWrapPos();
+                    if (kit::Button("Cancel", Tone::Bad))
+                        GucciEngine::get()->cancelAnalysis();
+                }
+                ImGui::End();
+                return;
+            }
             if (auto* pf = Pathfinder::get(); pf->active && PlayLayer::get()) {
                 drawClassicSearch(pf);
                 return;
@@ -1679,8 +1700,20 @@ namespace gucci::ui {
                 static bool s_wasRunning = false;
                 auto& analyzer = ::Bot::get()->frameWindow();
                 bool const running = analyzer.running();
-                if (s_wasRunning && !running)
-                    GucciEngine::get()->saveAcFrameWindowResults();
+                if (s_wasRunning && !running) {
+                    auto* gbe = GucciEngine::get();
+                    gbe->saveAcFrameWindowResults();
+                    // The run's own last word stays on the Calculate page; the
+                    // start message ("Analysing N inputs.") used to.
+                    if (!analyzer.status().empty()) {
+                        gbe->fwAcReport = analyzer.status();
+                        gbe->fwAcOk = analyzer.lastRunOk();
+                    }
+                    gbe->unmuteAnalysisMusic();
+                }
+                // Mute while it runs (Calculate page switch).
+                if (!s_wasRunning && running && Mod::get()->getSavedValue<bool>("calc_mute", false))
+                    GucciEngine::get()->muteAnalysisMusic();
                 s_wasRunning = running;
                 analyzer.tick(PlayLayer::get());
                 if (auto* pl = PlayLayer::get())

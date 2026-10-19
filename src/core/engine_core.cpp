@@ -1132,6 +1132,12 @@ namespace gucci {
             m_startingSeed = f.header.rngSeed;
             m_replayName = f.header.name;
             gb->loadedMacroLevelName = f.header.levelName;
+            // Shown on the Macro card (nothing ever set it): a macro recorded
+            // from a start position only plays, and measures, from that one.
+            gb->startPosWarning = f.header.fromStartPos()
+                                      ? "Recorded from a start position: play it, and Calculate it, from that "
+                                        "same start position."
+                                      : "";
             m_actionAtom.clear();
             m_inputIndex = 0;
             for (auto& inp : f.p1Inputs)

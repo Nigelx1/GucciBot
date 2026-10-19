@@ -178,6 +178,9 @@ class FrameWindowAnalyzer {
     size_t progressIndex() const { return m_index; }
     size_t progressTotal() const { return m_total; }
     std::string const& status() const { return m_status; }
+    // GucciBot: whether the last run finished cleanly, for the page to show
+    // its result as a note or a warning after the run.
+    bool lastRunOk() const { return m_lastOk; }
     std::string const& stage() const { return m_stage; }
 
     void clearDisplay() { this->resetDisplay(); }
@@ -538,6 +541,7 @@ class FrameWindowAnalyzer {
 
     bool m_running = false;
     std::string m_status;
+    bool m_lastOk = false;
     std::string m_stage;
 
     Stage m_stageId = Stage::Idle;

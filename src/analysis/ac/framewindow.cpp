@@ -2953,6 +2953,7 @@ void FrameWindowAnalyzer::nextClick() {
 }
 
 void FrameWindowAnalyzer::finish(std::string message, bool ok) {
+    m_lastOk = ok;
     // If the capture pass died, it carried on with noclip so the run could
     // still produce something -- but a player that cannot die survives every
     // shift, so the windows come back pinned to the sweep limit and read as

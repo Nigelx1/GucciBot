@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-19-ek (Saved macros: rename, convert to .brrr, Calculate and delete from a row menu, open the folder, theme tags, and the list follows the folder)"
+    "2026-10-19-el (Calculate: the result stays after a run, conflicting mods are named, progress and Cancel in the level, mute while it runs, reorder bands, all Brrr or all Bells, the start-position warning)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

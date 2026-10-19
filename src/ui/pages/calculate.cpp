@@ -180,6 +180,13 @@ namespace gucci::ui::pages {
                 else if (!fw.results().empty())
                     kit::Hint("Copy info: the precision and window breakdown in the format NaN uses in video "
                               "descriptions, grouped by your bands.");
+                // Mods that step frames themselves throw the numbers off; this
+                // was only written to the log.
+                if (auto const& conflicts = gb->analyzerConflicts(); !conflicts.empty())
+                    kit::Note(conflicts.c_str(), Tone::Warn);
+                static bool s_mute = Mod::get()->getSavedValue<bool>("calc_mute", false);
+                if (kit::SwitchRow("Mute while it runs", "Silences the music and sounds until it finishes", &s_mute))
+                    Mod::get()->setSavedValue("calc_mute", s_mute);
             }
 
             if (!fw.results().empty())
@@ -435,6 +442,7 @@ namespace gucci::ui::pages {
             kit::BeginCard("Bands", "Colours, labels, shapes and sounds by window size. Hidden bands draw no markers.");
 
             int removeAt = -1;
+            int moveFrom = -1, moveTo = -1;
             for (size_t i = 0; i < tiers.size(); i++) {
                 auto& t = tiers[i];
                 ImGui::PushID(t.id);
@@ -456,6 +464,17 @@ namespace gucci::ui::pages {
                     else
                         g_openBands.insert(t.id);
                 }
+                // Order matters: a window takes the first band it fits.
+                ImGui::SameLine();
+                ImGui::BeginDisabled(i == 0);
+                if (ImGui::ArrowButton("##up", ImGuiDir_Up))
+                    moveFrom = static_cast<int>(i), moveTo = static_cast<int>(i) - 1;
+                ImGui::EndDisabled();
+                ImGui::SameLine();
+                ImGui::BeginDisabled(i + 1 == tiers.size());
+                if (ImGui::ArrowButton("##down", ImGuiDir_Down))
+                    moveFrom = static_cast<int>(i), moveTo = static_cast<int>(i) + 1;
+                ImGui::EndDisabled();
                 ImGui::SameLine();
                 if (kit::Button("Remove", Tone::Bad))
                     removeAt = static_cast<int>(i);
@@ -472,6 +491,23 @@ namespace gucci::ui::pages {
                 g_openBands.erase(tiers[removeAt].id);
                 tiers.erase(tiers.begin() + removeAt);
                 g_changed = g_look = true;
+            } else if (moveFrom >= 0) {
+                std::swap(tiers[moveFrom], tiers[moveTo]);
+                g_changed = g_look = true;
+            }
+
+            // Every band's sound in one press: the Brrr, or the Bells (what an
+            // empty sound plays).
+            if (kit::Button("All Brrr")) {
+                for (auto& t : tiers)
+                    t.audioPath = "fw_default.mp3";
+                g_changed = true;
+            }
+            ImGui::SameLine();
+            if (kit::Button("All Bells")) {
+                for (auto& t : tiers)
+                    t.audioPath.clear();
+                g_changed = true;
             }
 
             kit::Gap();
