@@ -35,9 +35,9 @@ Nigel: "i feel like these 1 frames and stuff is purely a guccibot issue, we need
 - [ ] `FrameWindowAnalyzer::rebuildHud` (anticroom 4437-4518, ours 4926-5007)
 - [ ] `FrameWindowAnalyzer::updateDisplay` (anticroom 4624-4723, ours 5113-5212)
 - [ ] `FrameWindowAnalyzer::render` (anticroom 4847-4905, ours 5336-5407)
-- [ ] `FrameWindowAnalyzer::updatePrecisionReadout` (anticroom 4907-4973, ours 5420-5422)
-- [ ] `FrameWindowAnalyzer::applyLabel` (anticroom 5009-5067, ours 5458-5516)
-- [ ] `FrameWindowAnalyzer::testPlayhead` (anticroom 5069-5119, ours 5518-5568)
+- [x] `FrameWindowAnalyzer::updatePrecisionReadout` (anticroom 4907-4973, ours 5420-5422)
+- [x] `FrameWindowAnalyzer::applyLabel` (anticroom 5009-5067, ours 5458-5516)
+- [x] `FrameWindowAnalyzer::testPlayhead` (anticroom 5069-5119, ours 5518-5568)
 - [ ] `FrameWindowAnalyzer::beginTrip` (anticroom 5128-5151, ours 5577-5600)
 - [ ] `FrameWindowAnalyzer::stepTrip` (anticroom 5153-5217, ours 5602-5667)
 - [ ] `FrameWindowAnalyzer::endTrip` (anticroom 5219-5242, ours 5669-5692)
@@ -130,3 +130,15 @@ Three GucciBot additions, each with its reason in the code:
 - `m_running` and the stage are cleared before the hand-back reset, so onReset runs under normal rules and a frame-0 first input isn't skipped.
 
 Also `m_canDie->inner()` became the plain field, and the summary line is written to guccibot_fw.log unconditionally.
+
+### `FrameWindowAnalyzer::updatePrecisionReadout`: replaced on purpose
+
+anticroom's two-label precision readout is replaced by GucciBot's `updateLStarHud` (ours only, framewindow.cpp ~4811), which shows L* in NaN's published form and kicks the solver itself. As the comment left in its place says, it still feeds the solver the TPS the results were measured at (`resultsTps`). No measuring involved.
+
+### `FrameWindowAnalyzer::applyLabel`: rename
+
+`m_tps->inner()` became the plain field. (The splitter's line ranges for ours run a few lines into the neighbouring function; the real difference is this one line.)
+
+### `FrameWindowAnalyzer::testPlayhead`: rename (correct)
+
+Practice checkpoints' `m_frame` became `m_frameOffset`. That's right here, because the practice fix saves them with `updater.getFrame()` (hook_playlayer.cpp:74).
