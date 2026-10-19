@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-19-eg (Credits in Nigels new order: peony third for Silicate and the converter, promo help from aura, DashBlaze and ace, chagh for the converter; dihmaster500 in lowercase)"
+    "2026-10-19-eh (Credits: dihmaster500 is a tester too, NaN GD started the frame-window trend, Bogdaner09 made click indicators free and open source, GWDdoS for optimization help)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
