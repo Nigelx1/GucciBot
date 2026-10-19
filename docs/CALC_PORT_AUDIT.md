@@ -6,6 +6,15 @@ Nigel: "i feel like these 1 frames and stuff is purely a guccibot issue, we need
 
 **Saved as it goes.** After each function the finding is written under it, the box is ticked, and the file is committed and pushed. A cut-off session resumes at the first unticked box.
 
+## Outcome (2026-10-19, all 30 checked)
+
+Two port faults, both fixed, neither yet confirmed in-game:
+
+1. **`stepDependent` saved its checkpoint with the attempt's start frame** where our checkpoint wants its own frame. Every dependent leg ran on the wrong clock, died early and measured a window that was too small. Fixed in build -ed. This is the one that can make the 1-frame windows.
+2. **The results file dropped the dependent clicks' averaged windows** (`fwstore` mapping, under `saveResults`). Live results were right; after the macro was loaded again, those clicks showed their strict window instead. Fixed in build -ee.
+
+Everything else is a rename the shim needs, logging, or a GucciBot addition with its reason in the code. The measuring logic itself matches anticroom's.
+
 ## Checklist: the measuring core (first)
 
 - [x] `isMeasurableInput` (anticroom 278-288, ours 320-330)
@@ -29,22 +38,24 @@ Nigel: "i feel like these 1 frames and stuff is purely a guccibot issue, we need
 
 ## Checklist: display, results file, trips (after the core)
 
-- [ ] `FrameWindowAnalyzer::saveResults` (anticroom 3761-3803, ours 4117-4158)
-- [ ] `FrameWindowAnalyzer::loadResults` (anticroom 3805-3866, ours 4160-4221)
-- [ ] `FrameWindowAnalyzer::spawnMarker` (anticroom 4209-4279, ours 4564-4677)
-- [ ] `FrameWindowAnalyzer::rebuildHud` (anticroom 4437-4518, ours 4926-5007)
-- [ ] `FrameWindowAnalyzer::updateDisplay` (anticroom 4624-4723, ours 5113-5212)
-- [ ] `FrameWindowAnalyzer::render` (anticroom 4847-4905, ours 5336-5407)
+- [x] `FrameWindowAnalyzer::saveResults` (anticroom 3761-3803, ours 4117-4158)
+- [x] `FrameWindowAnalyzer::loadResults` (anticroom 3805-3866, ours 4160-4221)
+- [x] `FrameWindowAnalyzer::spawnMarker` (anticroom 4209-4279, ours 4564-4677)
+- [x] `FrameWindowAnalyzer::rebuildHud` (anticroom 4437-4518, ours 4926-5007)
+- [x] `FrameWindowAnalyzer::updateDisplay` (anticroom 4624-4723, ours 5113-5212)
+- [x] `FrameWindowAnalyzer::render` (anticroom 4847-4905, ours 5336-5407)
 - [x] `FrameWindowAnalyzer::updatePrecisionReadout` (anticroom 4907-4973, ours 5420-5422)
 - [x] `FrameWindowAnalyzer::applyLabel` (anticroom 5009-5067, ours 5458-5516)
 - [x] `FrameWindowAnalyzer::testPlayhead` (anticroom 5069-5119, ours 5518-5568)
-- [ ] `FrameWindowAnalyzer::beginTrip` (anticroom 5128-5151, ours 5577-5600)
-- [ ] `FrameWindowAnalyzer::stepTrip` (anticroom 5153-5217, ours 5602-5667)
-- [ ] `FrameWindowAnalyzer::endTrip` (anticroom 5219-5242, ours 5669-5692)
+- [x] `FrameWindowAnalyzer::beginTrip` (anticroom 5128-5151, ours 5577-5600)
+- [x] `FrameWindowAnalyzer::stepTrip` (anticroom 5153-5217, ours 5602-5667)
+- [x] `FrameWindowAnalyzer::endTrip` (anticroom 5219-5242, ours 5669-5692)
 
 ## Ours alone (no counterpart; checked only if they touch measuring)
 
 `fwFileLog`, `gucci::fwEngineLog`, `FrameWindowAnalyzer::capturing`, `fwPlayerFieldDump`, `markToJson`, `messageToJson`, `toJson`, `jnum`, `jreal`, `jbool`, `jstr`, `fromJson`, `FrameWindowAnalyzer::updateLStarHud`
+
+`markToJson`/`fromJson` stand in for glaze, so they were checked field by field against the structs: they missed the three dependent fields (see `saveResults`). `messageToJson`, `toJson` and the rest of `fromJson` cover every field.
 
 ## Findings
 
@@ -142,3 +153,44 @@ anticroom's two-label precision readout is replaced by GucciBot's `updateLStarHu
 ### `FrameWindowAnalyzer::testPlayhead`: rename (correct)
 
 Practice checkpoints' `m_frame` became `m_frameOffset`. That's right here, because the practice fix saves them with `updater.getFrame()` (hook_playlayer.cpp:74).
+
+### `FrameWindowAnalyzer::saveResults`: rename, but the writer it calls was a PORT FAULT, fixed in build -ee
+
+anticroom writes the results with glaze, which serialises every field of `fwstore::StoredMark` by reflection. Ours calls `fwstore::toJson` (matjson, Geode's own), which names each field by hand, and its comment warns that a field missing from the mapping is dropped silently. Three were missing: `dependent`, `dependentMin` and `dependentMax`, the dependent-click pass's averaged window (they came with the slc count drop, after the mapping was written). `saveResults` copied them into the struct; `markToJson` never wrote them.
+
+Effect: live, a dependent click shows `~X`, its window averaged over the previous click's window, and that average also picks its colour tier, its circle size and its L* input (`displayWindow`, `spawnMarker`, the L* inputs). Results follow the macro (engine_core.cpp `saveAcResults`/`loadAcResults`), so once the macro was saved and loaded again the average came back as 0 and the same click showed its strict window instead, with a different number and colour. Fixed in build -ee: the three fields are written and read. Results files from before -ee still load (the three read as 0, as before); measuring again brings the averages back.
+
+### `FrameWindowAnalyzer::loadResults`: rename (the read side of the saveResults fault, fixed in -ee)
+
+`glz::read_json` became `fwstore::fromJson`. The copies into each mark are the same, the three dependent fields included, but `fromJson` never read those three from the file. Fixed with saveResults in build -ee.
+
+### `FrameWindowAnalyzer::spawnMarker`: ours on purpose (drawing only), measuring unchanged
+
+Three GucciBot additions, all in how the marker is drawn:
+- the Circle skin setting (off by default) sizes the ring by the click's window;
+- a tier can carry one of Juice's shapes, and without one it is anticroom's two-pass ring exactly;
+- build -dt: a mark saved with no position (0,0) takes the macro path's position at its frame, or isn't drawn (issue #26: one marker "in the ground", none where the clicks were).
+
+### `FrameWindowAnalyzer::rebuildHud`: ours on purpose (the HUD scale setting)
+
+anticroom's HUD has a fixed scale of 0.6; ours reads the HUD scale setting (`frameWindow.hudScale`, at least 0.1). Nothing else differs.
+
+### `FrameWindowAnalyzer::updateDisplay`: rename
+
+`updater.m_tps->inner()` became the plain field. Same logic.
+
+### `FrameWindowAnalyzer::render`: ours on purpose (when the windows show), measuring unchanged
+
+Build -dv: the windows show only while a macro plays (`Bot::get()->isPlaying()` added to `want`), because they stayed over the player's own attempts after playback was turned off (Nigel, 2026-10-17). Our L* readout's two labels are removed along with the HUD, and when the precision readout is off. `m_tps->inner()` became the plain field.
+
+### `FrameWindowAnalyzer::beginTrip`: rename
+
+`m_backwardsStepping->inner()` became the plain field (twice). Same logic.
+
+### `FrameWindowAnalyzer::stepTrip`: rename (correct)
+
+Silicate's `practiceFix().m_maxStoredFrames` became our `updater.m_maxBackstepFrames` (the Back Step Count setting). Checked that they mean the same thing: both cap the frames the practice fix keeps for stepping back, 0 keeps none, and the oldest drop out first (Silicate checkpoint/fix.cpp:146-151, ours engine_core.cpp:159-167). `m_backwardsStepping->inner()` became the plain field.
+
+### `FrameWindowAnalyzer::endTrip`: rename
+
+`m_backwardsStepping->inner()` became the plain field. Same logic.
