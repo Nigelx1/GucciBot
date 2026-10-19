@@ -1163,7 +1163,20 @@ namespace gucci::ui {
         struct Page {
             const char* title;
             void (*draw)();
-            void (*backdrop)() = nullptr;  // drawn first, under the title and the page
+            void (*backdrop)() = nullptr;  // drawn first, under the whole window (sidebar included)
+        };
+
+        // The JMF Trainer's colours over the whole menu while it is the page.
+        struct PageLook {
+            bool on;
+            explicit PageLook(bool jmf) : on(jmf) {
+                if (on)
+                    pages::jupiterLookPush();
+            }
+            ~PageLook() {
+                if (on)
+                    pages::jupiterLookPop();
+            }
         };
         const Page kPages[] = {
             {"Macro", pageMacro},
@@ -1184,6 +1197,7 @@ namespace gucci::ui {
         // ------------------------------------------------------------ windows
 
         void drawMain() {
+            PageLook const pageLook(kPages[g_page].draw == pages::jupiterTrainer);
             auto const& pal = look().pal;
             ImGuiIO const& io = ImGui::GetIO();
             // While BIG BRRRR plays, the window flickers and shakes with the
@@ -1216,6 +1230,8 @@ namespace gucci::ui {
                 ImGui::PopStyleVar();
                 return;
             }
+            if (kPages[g_page].backdrop)
+                kPages[g_page].backdrop();
             ImVec2 offset{0.f, 0.f};
             if (brrr->enabled) {
                 double const t = ImGui::GetTime();
@@ -1306,8 +1322,6 @@ namespace gucci::ui {
 
             // Page
             ImGui::BeginChild("##page", ImVec2(0.f, 0.f));
-            if (kPages[g_page].backdrop)
-                kPages[g_page].backdrop();
             {
                 UseFont f(Font::Display);
                 ImGui::TextUnformatted(kPages[g_page].title);
@@ -1447,6 +1461,12 @@ namespace gucci::ui {
                 return;
             }
             drawOverlay();
+            // Video Mode: the click bar over the video instead of the menu,
+            // open or closed (pages::jupiterVideoOverlay has the way out).
+            if (GucciEngine::get()->jupiterVideoModeEnabled) {
+                pages::jupiterVideoOverlay();
+                return;
+            }
             if (!g_open)
                 return;
             if (g_compact)

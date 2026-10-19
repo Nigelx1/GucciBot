@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-18-eb (The JMF Trainer page looks like Jupiter My Favourite again: indigo and yellow, a sky of pentagrams and sparkles, the half-sun wheel)"
+    "2026-10-18-ec (JMF colours over the whole menu, Video Mode shows the click bar over the video instead of the menu, trainer music waits through a death instead of looping)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

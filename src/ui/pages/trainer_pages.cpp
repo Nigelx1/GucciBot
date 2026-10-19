@@ -844,12 +844,21 @@ namespace gucci::ui::pages {
             dl->AddQuadFilled({c.x - r, c.y}, {c.x, c.y - w}, {c.x + r, c.y}, {c.x, c.y + w}, col);
         }
 
-        // The page's colours while it draws: the kit reads look().pal, the
-        // ImGui widgets the style colours.
-        struct JmfColours {
-            Palette saved;
-            int pushed = 0;
-            JmfColours() : saved(look().pal) {
+        Palette g_jmfSaved;
+        int g_jmfPushed = 0;
+    }
+
+    // The JMF colours over the whole menu while the JMF Trainer is the page
+    // (Nigel: the colours should take the whole menu, not just the page): the
+    // kit reads look().pal, ImGui's own widgets and the window the style
+    // colours. The shell pushes before the window begins and pops after it
+    // ends; Video Mode's bar uses them too.
+    void jupiterLookPush() {
+        if (g_jmfPushed > 0)
+            return;
+        g_jmfSaved = look().pal;
+        {
+            {
                 Palette& p = look().pal;
                 p.accent = kJmfYellow;
                 p.onAccent = ImVec4(0.06f, 0.03f, 0.25f, 1.f);
@@ -860,7 +869,7 @@ namespace gucci::ui::pages {
                 p.line = ImVec4(kJmfYellow.x, kJmfYellow.y, kJmfYellow.z, 0.22f);
                 auto push = [&](ImGuiCol c, ImVec4 v) {
                     ImGui::PushStyleColor(c, v);
-                    ++pushed;
+                    ++g_jmfPushed;
                 };
                 auto alpha = [](ImVec4 v, float a) { return ImVec4(v.x, v.y, v.z, a); };
                 push(ImGuiCol_Text, p.ink);
@@ -880,12 +889,22 @@ namespace gucci::ui::pages {
                 push(ImGuiCol_SliderGrabActive, kJmfYellow);
                 push(ImGuiCol_ScrollbarGrab, alpha(kJmfLavender, 0.35f));
                 push(ImGuiCol_PlotHistogram, kJmfYellow);
+                push(ImGuiCol_WindowBg, alpha(kJmfSky, g_jmfSaved.opacity));
+                push(ImGuiCol_PopupBg, kJmfCard);
+                push(ImGuiCol_Tab, kJmfRaised);
+                push(ImGuiCol_TabHovered, alpha(kJmfYellow, 0.35f));
+                push(ImGuiCol_TabActive, alpha(kJmfYellow, 0.45f));
+                p.backdrop = alpha(kJmfSky, g_jmfSaved.opacity);
             }
-            ~JmfColours() {
-                ImGui::PopStyleColor(pushed);
-                look().pal = saved;
-            }
-        };
+        }
+    }
+
+    void jupiterLookPop() {
+        if (g_jmfPushed == 0)
+            return;
+        ImGui::PopStyleColor(g_jmfPushed);
+        g_jmfPushed = 0;
+        look().pal = g_jmfSaved;
     }
 
     void jupiterBackdrop() {
@@ -943,9 +962,46 @@ namespace gucci::ui::pages {
     void jupiterTrainer() {
         tr::ensureLoaded();
         tr::markPageDrawn(Kind::Jupiter);
-        JmfColours const colours;
         jupiterHeader();
         body(Kind::Jupiter);
+    }
+
+    // Video Mode: in place of the menu, the JMF click bar over the bottom of
+    // the video (Nigel: "i still see the whole menu in the middle instead of an
+    // overlay of the bar thing"), with its controls and the way out. The page
+    // counts as open, so the bar's clock and its music carry on.
+    void jupiterVideoOverlay() {
+        tr::ensureLoaded();
+        tr::markPageDrawn(Kind::Jupiter);
+        auto* gb = GucciEngine::get();
+        auto s = tr::state(Kind::Jupiter);
+        ImGuiIO const& io = ImGui::GetIO();
+        float const w = std::min(io.DisplaySize.x - 40.f, 960.f);
+        ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y - 20.f), ImGuiCond_Always,
+                                ImVec2(0.5f, 1.f));
+        ImGui::SetNextWindowSizeConstraints(ImVec2(w, 0.f), ImVec2(w, FLT_MAX));
+        ImGui::SetNextWindowBgAlpha(0.6f);
+        jupiterLookPush();
+        if (ImGui::Begin("##jmfvideobar", nullptr,
+                         ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
+                             ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing)) {
+            if (s.macro.clickIntervalsSec.empty())
+                kit::Note("No clicks to show: the JMF macro isn't loaded.", Tone::Warn);
+            else
+                drawBar(Kind::Jupiter);
+            if (kit::Button(s.paused ? "Resume" : "Pause", Tone::Accent))
+                tr::setPaused(Kind::Jupiter, !s.paused);
+            ImGui::SameLine();
+            if (kit::Button("Restart"))
+                tr::restart(Kind::Jupiter);
+            ImGui::SameLine();
+            if (kit::Button("Exit Video Mode", Tone::Muted)) {
+                gb->jupiterVideoModeEnabled = false;
+                gb->jupiterVideoAlignToolActive = false;
+            }
+        }
+        ImGui::End();
+        jupiterLookPop();
     }
 
     void anyTrainer() {
