@@ -1163,13 +1163,14 @@ namespace gucci::ui {
         struct Page {
             const char* title;
             void (*draw)();
+            void (*backdrop)() = nullptr;  // drawn first, under the title and the page
         };
         const Page kPages[] = {
             {"Macro", pageMacro},
             {"Hacks", pageHacks},
             {"Macro Tools", pageMacroTools},
             {"Calculate", pages::calculate},
-            {"JMF Trainer", pages::jupiterTrainer},
+            {"JMF Trainer", pages::jupiterTrainer, pages::jupiterBackdrop},
             {"Trainer", pages::anyTrainer},
             {"Pathfinder", pagePathfinder},
             {"Render", pageRender},
@@ -1305,6 +1306,8 @@ namespace gucci::ui {
 
             // Page
             ImGui::BeginChild("##page", ImVec2(0.f, 0.f));
+            if (kPages[g_page].backdrop)
+                kPages[g_page].backdrop();
             {
                 UseFont f(Font::Display);
                 ImGui::TextUnformatted(kPages[g_page].title);

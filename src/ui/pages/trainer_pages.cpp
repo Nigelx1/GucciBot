@@ -812,9 +812,138 @@ namespace gucci::ui::pages {
 
     } // namespace
 
+    namespace {
+        // The JMF Trainer looks like Jupiter My Favourite (Nigel: "jmf tab isnt
+        // jmfing"), as the site's trainer section does: deep indigo cards, the
+        // level's yellow, lavender text, a sky of pentagrams and sparkles, and
+        // the half-sun wheel at the bottom edge.
+        ImVec4 const kJmfYellow{0.988f, 0.961f, 0.314f, 1.f};  // #FCF550
+        ImVec4 const kJmfSky{0.027f, 0.016f, 0.247f, 1.f};     // #07043F
+        ImVec4 const kJmfCard{0.051f, 0.027f, 0.408f, 1.f};    // #0D0768
+        ImVec4 const kJmfRaised{0.082f, 0.043f, 0.510f, 1.f};  // #150B82
+        ImVec4 const kJmfLavender{0.714f, 0.690f, 0.910f, 1.f}; // #B6B0E8
+
+        ImU32 jmfYellow(float alpha) {
+            return ImGui::ColorConvertFloat4ToU32(ImVec4(kJmfYellow.x, kJmfYellow.y, kJmfYellow.z, alpha));
+        }
+
+        // A true pentagram: five straight lines through every other point.
+        void pentagram(ImDrawList* dl, ImVec2 c, float r, float turnDeg, ImU32 col, float width) {
+            ImVec2 pts[5];
+            for (int k = 0; k < 5; k++) {
+                float const a = (turnDeg - 90.f + 72.f * (float)k) * 0.0174533f;
+                pts[k] = ImVec2(c.x + r * std::cos(a), c.y + r * std::sin(a));
+            }
+            ImVec2 const star[5] = {pts[0], pts[2], pts[4], pts[1], pts[3]};
+            dl->AddPolyline(star, 5, col, ImDrawFlags_Closed, width);
+        }
+
+        void sparkle(ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
+            float const w = r * 0.22f;
+            dl->AddQuadFilled({c.x, c.y - r}, {c.x + w, c.y}, {c.x, c.y + r}, {c.x - w, c.y}, col);
+            dl->AddQuadFilled({c.x - r, c.y}, {c.x, c.y - w}, {c.x + r, c.y}, {c.x, c.y + w}, col);
+        }
+
+        // The page's colours while it draws: the kit reads look().pal, the
+        // ImGui widgets the style colours.
+        struct JmfColours {
+            Palette saved;
+            int pushed = 0;
+            JmfColours() : saved(look().pal) {
+                Palette& p = look().pal;
+                p.accent = kJmfYellow;
+                p.onAccent = ImVec4(0.06f, 0.03f, 0.25f, 1.f);
+                p.surface = kJmfCard;
+                p.raised = kJmfRaised;
+                p.ink = ImVec4(0.957f, 0.949f, 1.f, 1.f);
+                p.muted = kJmfLavender;
+                p.line = ImVec4(kJmfYellow.x, kJmfYellow.y, kJmfYellow.z, 0.22f);
+                auto push = [&](ImGuiCol c, ImVec4 v) {
+                    ImGui::PushStyleColor(c, v);
+                    ++pushed;
+                };
+                auto alpha = [](ImVec4 v, float a) { return ImVec4(v.x, v.y, v.z, a); };
+                push(ImGuiCol_Text, p.ink);
+                push(ImGuiCol_TextDisabled, p.muted);
+                push(ImGuiCol_Border, p.line);
+                push(ImGuiCol_FrameBg, kJmfRaised);
+                push(ImGuiCol_FrameBgHovered, ImVec4(0.11f, 0.06f, 0.60f, 1.f));
+                push(ImGuiCol_FrameBgActive, ImVec4(0.13f, 0.08f, 0.66f, 1.f));
+                push(ImGuiCol_Button, kJmfRaised);
+                push(ImGuiCol_ButtonHovered, ImVec4(0.11f, 0.06f, 0.60f, 1.f));
+                push(ImGuiCol_ButtonActive, alpha(kJmfYellow, 0.55f));
+                push(ImGuiCol_Header, alpha(kJmfYellow, 0.22f));
+                push(ImGuiCol_HeaderHovered, alpha(kJmfYellow, 0.30f));
+                push(ImGuiCol_HeaderActive, alpha(kJmfYellow, 0.40f));
+                push(ImGuiCol_CheckMark, kJmfYellow);
+                push(ImGuiCol_SliderGrab, kJmfYellow);
+                push(ImGuiCol_SliderGrabActive, kJmfYellow);
+                push(ImGuiCol_ScrollbarGrab, alpha(kJmfLavender, 0.35f));
+                push(ImGuiCol_PlotHistogram, kJmfYellow);
+            }
+            ~JmfColours() {
+                ImGui::PopStyleColor(pushed);
+                look().pal = saved;
+            }
+        };
+    }
+
+    void jupiterBackdrop() {
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        ImVec2 const a = ImGui::GetWindowPos();
+        ImVec2 const size = ImGui::GetWindowSize();
+        ImVec2 const b(a.x + size.x, a.y + size.y);
+        dl->PushClipRect(a, b, true);
+        dl->AddRectFilled(a, b, ImGui::ColorConvertFloat4ToU32(kJmfSky), look().pal.radius);
+        // Scattered over the whole page, as the level's skies scatter them
+        // (positions and turns from the site's 400 x 500 sky).
+        struct Mark {
+            float x, y, scale, turn, alpha;
+        };
+        static constexpr Mark kPentagrams[] = {
+            {70, 70, 1.5f, -8, 0.10f},  {330, 60, 1.9f, 14, 0.08f}, {250, 150, 1.1f, 30, 0.12f},
+            {40, 220, 1.3f, -20, 0.09f}, {360, 250, 1.6f, 6, 0.10f}, {150, 320, 1.0f, -12, 0.11f},
+            {300, 380, 1.4f, 22, 0.08f}, {60, 420, 0.9f, 10, 0.12f}, {200, 60, 0.8f, -16, 0.10f},
+        };
+        static constexpr Mark kSparkles[] = {
+            {120, 110, 1.3f, 0, 0.35f}, {290, 220, 1.0f, 0, 0.30f}, {200, 300, 1.6f, 0, 0.25f}, {380, 400, 1.1f, 0, 0.30f},
+        };
+        auto at = [&](Mark const& m) { return ImVec2(a.x + m.x / 400.f * size.x, a.y + m.y / 500.f * size.y); };
+        // With animations on, the sky turns slowly and the sparkles breathe.
+        float const t = look().effects ? (float)ImGui::GetTime() : 0.f;
+        for (auto const& m : kPentagrams)
+            pentagram(dl, at(m), 16.f * m.scale, m.turn + t * 4.f, jmfYellow(m.alpha), 1.5f);
+        for (size_t i = 0; i < std::size(kSparkles); i++) {
+            auto const& m = kSparkles[i];
+            float const breathe = 0.75f + 0.25f * std::sin(t * 1.7f + (float)i * 1.3f);
+            sparkle(dl, at(m), 7.f * m.scale * breathe, jmfYellow(m.alpha));
+        }
+        // The half-sun wheel: its centre sits on the bottom edge, so only the
+        // top half shows. Two rings, a dashed one between them, ticks round
+        // the outside and a star in the middle.
+        ImVec2 const c(a.x + size.x * 0.80f, b.y + 6.f);
+        float const r = std::max(40.f, std::min(size.x, size.y) * 0.22f);
+        dl->AddCircle(c, r, jmfYellow(0.20f), 72, 2.f);
+        dl->AddCircle(c, r * 0.70f, jmfYellow(0.15f), 72, 1.5f);
+        for (int k = 0; k < 48; k += 2) {
+            float const a0 = (float)k * 6.2831853f / 48.f + t * 0.05f;
+            dl->PathArcTo(c, r * 0.85f, a0, a0 + 6.2831853f / 48.f, 4);
+            dl->PathStroke(jmfYellow(0.16f), 0, 1.5f);
+        }
+        for (int k = 0; k < 24; k++) {
+            float const ang = (float)k * 6.2831853f / 24.f;
+            ImVec2 const d(std::cos(ang), std::sin(ang));
+            dl->AddLine({c.x + d.x * r * 1.03f, c.y + d.y * r * 1.03f}, {c.x + d.x * r * 1.12f, c.y + d.y * r * 1.12f},
+                        jmfYellow(0.20f), 1.5f);
+        }
+        pentagram(dl, c, r * 0.32f, t * 6.f, jmfYellow(0.28f), 2.f);
+        dl->PopClipRect();
+    }
+
     void jupiterTrainer() {
         tr::ensureLoaded();
         tr::markPageDrawn(Kind::Jupiter);
+        JmfColours const colours;
         jupiterHeader();
         body(Kind::Jupiter);
     }

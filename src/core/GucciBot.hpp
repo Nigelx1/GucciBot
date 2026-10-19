@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-18-ea (Theme words everywhere: a quote under every page title, the subtitle and tag in the sidebar, the badge on Credits)"
+    "2026-10-18-eb (The JMF Trainer page looks like Jupiter My Favourite again: indigo and yellow, a sky of pentagrams and sparkles, the half-sun wheel)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -14,6 +14,7 @@ namespace gucci::ui::pages {
     void macroTools();   // pages/macro_tools.cpp: Macro Tools (diff, trim, merge, metadata, TPS changes)
     void editorTools();  // pages/editor_tools.cpp: Replace All and Macro Buffing (level editor)
     void jupiterTrainer();  // pages/trainer_pages.cpp: Nigel's Jupiter My Favourite Trainer
+    void jupiterBackdrop(); // ... and its sky, drawn under the whole page
     void anyTrainer();      // pages/trainer_pages.cpp: Trainer (any saved macro)
     void indicators();      // pages/indicators.cpp: Survival Indicator, click cue + calibration, accuracy/streak (both trainer pages)
 
