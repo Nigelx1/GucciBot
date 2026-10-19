@@ -335,6 +335,88 @@ namespace gucci::ui {
             }
         }
 
+        std::string g_rowNote;  // what the last row action said, when it failed
+
+        // The theme (built-in or custom) whose macros save with `ext`.
+        themes::Theme const* themeForExtension(std::string const& ext) {
+            for (auto const& t : themes::builtins())
+                if (t.extension == ext)
+                    return &t;
+            for (auto const& t : themes::customs())
+                if (t.extension == ext)
+                    return &t;
+            return nullptr;
+        }
+
+        // A saved macro and its sidecars, gone. Empty on success, else why not.
+        std::string deleteMacroFiles(std::string const& name) {
+            auto* gb = GucciEngine::get();
+            std::error_code ec;
+            auto const file = gb->findMacroFile(name);
+            if (file.empty() || !std::filesystem::remove(file, ec))
+                return fmt::format("Couldn't delete \"{}\"{}", name, ec ? ": " + ec.message() : ".");
+            auto const prefix = file.filename().string() + ".";
+            std::vector<std::filesystem::path> sidecars;
+            for (auto const& e : std::filesystem::directory_iterator(file.parent_path() / "sidecars", ec))
+                if (e.path().filename().string().rfind(prefix, 0) == 0)
+                    sidecars.push_back(e.path());
+            for (auto const& p : sidecars)
+                std::filesystem::remove(p, ec);
+            gb->reloadMacroList();
+            return "";
+        }
+
+        // The "..." menu on a saved macro's row (a right click opens it too).
+        // What it does is handed back, to run once the list has been drawn.
+        std::function<void()> macroRowMenu(std::string const& name, std::string const& ext) {
+            auto* gb = GucciEngine::get();
+            static std::string s_menuFor, s_rename;
+            static bool s_confirmDelete = false;
+            if (s_menuFor != name) {
+                s_menuFor = name;
+                s_rename = name;
+                s_confirmDelete = false;
+            }
+            std::function<void()> act;
+            std::string const who = name;
+            bool const recording = gb->isRecording();
+            ImGui::BeginDisabled(recording);
+            if (ImGui::MenuItem("Load"))
+                act = [who] { loadMacroByName(who); };
+            bool const canCalc = PlayLayer::get() != nullptr;
+            if (ImGui::MenuItem("Calculate", nullptr, false, canCalc))
+                act = [who] {
+                    loadMacroByName(who);
+                    GucciEngine::get()->analyzeFrameWindows();
+                };
+            if (!canCalc && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                ImGui::SetTooltip("Open a level first");
+            if (!ext.empty() && ext != ".brrr" && ImGui::MenuItem("Convert to .brrr"))
+                act = [who] { g_rowNote = GucciEngine::get()->moveMacro(who, who, ".brrr"); };
+            ImGui::Separator();
+            kit::InputText("rename", &s_rename, "new name");
+            if (kit::Button("Rename", Tone::Plain, -1.f)) {
+                std::string const to = s_rename;
+                act = [who, to] { g_rowNote = GucciEngine::get()->moveMacro(who, to); };
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::Separator();
+            if (!s_confirmDelete) {
+                if (kit::Button("Delete", Tone::Bad, -1.f))
+                    s_confirmDelete = true;
+            } else if (kit::Button("Really delete it?", Tone::Bad, -1.f)) {
+                s_confirmDelete = false;
+                act = [who] { g_rowNote = deleteMacroFiles(who); };
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndDisabled();
+            if (recording)
+                kit::Hint("Stop recording first.");
+            if (act)
+                g_rowNote.clear();
+            return act;
+        }
+
         // Pause, step and step back from the menu as well as by key, with
         // backwards stepping (it was on Hacks > Engine) right where it is used.
         void frameStepperCard() {
@@ -509,6 +591,9 @@ namespace gucci::ui {
             if (kit::Button("Refresh"))
                 gb->reloadMacroList();
             ImGui::SameLine();
+            if (kit::Button("Open folder"))
+                geode::utils::file::openFolder(gb->getReplayDir());
+            ImGui::SameLine();
             static std::string s_checkReport;
             if (kit::Button("Check macro")) {
                 auto report = macrocheck::check(actions);
@@ -532,20 +617,11 @@ namespace gucci::ui {
                         s_confirmDelete = gb->replayName;
                 } else {
                     if (kit::Button("Really delete it?", Tone::Bad)) {
-                        std::error_code ec;
-                        auto const file = gb->findMacroFile(gb->replayName);
-                        if (!file.empty() && std::filesystem::remove(file, ec)) {
-                            auto const prefix = file.filename().string() + ".";
-                            for (auto const& e : std::filesystem::directory_iterator(file.parent_path() / "sidecars", ec))
-                                if (e.path().filename().string().rfind(prefix, 0) == 0)
-                                    std::filesystem::remove(e.path(), ec);
-                            s_deleteNote = fmt::format("Deleted \"{}\". It is still loaded: Save brings it back.",
-                                                       gb->replayName);
-                            gb->reloadMacroList();
-                        } else {
-                            s_deleteNote = fmt::format("Couldn't delete \"{}\"{}", gb->replayName,
-                                                       ec ? ": " + ec.message() : ".");
-                        }
+                        auto const why = deleteMacroFiles(gb->replayName);
+                        s_deleteNote = why.empty()
+                                           ? fmt::format("Deleted \"{}\". It is still loaded: Save brings it back.",
+                                                         gb->replayName)
+                                           : why;
                         s_confirmDelete.clear();
                     }
                     ImGui::SameLine();
@@ -557,18 +633,69 @@ namespace gucci::ui {
                 kit::Hint(s_deleteNote.c_str());
             if (!s_checkReport.empty())
                 kit::Note(s_checkReport.c_str(), Tone::Muted);
+            // The list follows the folder: a macro the Pathfinder saves, or one
+            // copied in, shows up without pressing Refresh. The folder's write
+            // time moves when a file is added, removed or renamed in it.
+            {
+                static auto s_lastLook = std::chrono::steady_clock::time_point{};
+                static std::filesystem::file_time_type s_lastWrite{};
+                auto const now = std::chrono::steady_clock::now();
+                if (now - s_lastLook > std::chrono::milliseconds(1500)) {
+                    s_lastLook = now;
+                    std::error_code ec;
+                    auto const written = std::filesystem::last_write_time(gb->getReplayDir(), ec);
+                    if (!ec && written != s_lastWrite) {
+                        if (s_lastWrite != std::filesystem::file_time_type{})
+                            gb->reloadMacroList();
+                        s_lastWrite = written;
+                    }
+                }
+            }
             std::string lowered = s_filter;
             std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) { return std::tolower(c); });
+            // A row's menu renames, converts or deletes, and each of those
+            // reloads the list: that waits until the list has been drawn.
+            std::function<void()> afterList;
             ImGui::BeginChild("##macros", ImVec2(0.f, 200.f), ImGuiChildFlags_FrameStyle);
             for (auto const& name : gb->storedMacros) {
                 std::string n = name;
                 std::transform(n.begin(), n.end(), n.begin(), [](unsigned char c) { return std::tolower(c); });
                 if (!lowered.empty() && n.find(lowered) == std::string::npos)
                     continue;
-                if (ImGui::Selectable(name.c_str(), name == gb->replayName) && !gb->isRecording())
+                ImGui::PushID(name.c_str());
+                auto const extIt = gb->storedMacroExts.find(name);
+                std::string const ext = extIt == gb->storedMacroExts.end() ? std::string() : extIt->second;
+                // The theme it was saved under, unless that's the plain .brrr.
+                themes::Theme const* tagTheme = ext == ".brrr" ? nullptr : themeForExtension(ext);
+                std::string const tag = tagTheme ? tagTheme->name : (ext.empty() || ext == ".brrr" ? "" : ext);
+                auto const& style = ImGui::GetStyle();
+                float const moreW = ImGui::CalcTextSize("...").x + style.FramePadding.x * 2.f;
+                float const tagW = tag.empty() ? 0.f : ImGui::CalcTextSize(tag.c_str()).x + style.ItemSpacing.x;
+                float const rowW = std::max(40.f, ImGui::GetContentRegionAvail().x - moreW - tagW - style.ItemSpacing.x);
+                if (ImGui::Selectable(name.c_str(), name == gb->replayName, ImGuiSelectableFlags_None, ImVec2(rowW, 0.f)) &&
+                    !gb->isRecording())
                     loadMacroByName(name);
+                ImGui::OpenPopupOnItemClick("##rowmenu", ImGuiPopupFlags_MouseButtonRight);
+                if (!tag.empty()) {
+                    ImGui::SameLine();
+                    ImGui::TextColored(tagTheme ? tagTheme->accent : ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled),
+                                       "%s", tag.c_str());
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("..."))
+                    ImGui::OpenPopup("##rowmenu");
+                if (ImGui::BeginPopup("##rowmenu")) {
+                    if (auto act = macroRowMenu(name, ext))
+                        afterList = std::move(act);
+                    ImGui::EndPopup();
+                }
+                ImGui::PopID();
             }
             ImGui::EndChild();
+            if (afterList)
+                afterList();
+            if (!g_rowNote.empty())
+                kit::Note(g_rowNote.c_str(), Tone::Warn);
             kit::EndCard();
         }
 

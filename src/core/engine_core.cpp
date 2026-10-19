@@ -1279,6 +1279,7 @@ namespace gucci {
 
     void GucciEngine::reloadMacroList() {
         storedMacros.clear();
+        storedMacroExts.clear();
         incompatibleMacros.clear();
         jaMacros.clear();
         giddeyMacros.clear();
@@ -1314,6 +1315,7 @@ namespace gucci {
             auto stem = it.path().stem().string();
             if (std::find(known.begin(), known.end(), ext) != known.end()) {
                 storedMacros.push_back(stem);
+                storedMacroExts[stem] = ext;
                 if (ext == ".ja")
                     jaMacros.insert(stem);
                 if (ext == ".giddey")
@@ -1401,6 +1403,58 @@ namespace gucci {
                 return candidate;
         }
         return {};
+    }
+
+    // Rename a saved macro and/or give it another theme's extension (Convert
+    // to .brrr), its sidecars with it: they are named after the whole file
+    // name (replays/sidecars/<name><ext>.path ...). Empty on success, else
+    // what went wrong, in words for the menu.
+    std::string GucciEngine::moveMacro(const std::string& from, const std::string& toName, const std::string& toExt) {
+        auto const src = findMacroFile(from);
+        if (src.empty())
+            return fmt::format("\"{}\" isn't in the replays folder any more.", from);
+        std::string name = toName;
+        auto const notSpace = [](unsigned char c) { return !std::isspace(c); };
+        name.erase(name.begin(), std::find_if(name.begin(), name.end(), notSpace));
+        name.erase(std::find_if(name.rbegin(), name.rend(), notSpace).base(), name.end());
+        if (name.empty())
+            return "The name is empty.";
+        if (name.find_first_of("\\/:*?\"<>|") != std::string::npos)
+            return "A name can't have any of \\ / : * ? \" < > |";
+        std::string const ext = toExt.empty() ? src.extension().string() : toExt;
+        auto const lower = [](std::string s) {
+            std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+            return s;
+        };
+        // Only the case changing is the same file on Windows and macOS.
+        bool const sameName = lower(name) == lower(from);
+        if (name == from && ext == src.extension().string())
+            return "";
+        if (!sameName && !findMacroFile(name).empty())
+            return fmt::format("There's already a macro called \"{}\".", name);
+        auto const dst = src.parent_path() / (name + ext);
+        std::error_code ec;
+        if (!sameName && fs::exists(dst, ec))
+            return fmt::format("{} is already in the folder.", dst.filename().string());
+        fs::rename(src, dst, ec);
+        if (ec)
+            return fmt::format("Couldn't rename it: {}", ec.message());
+        auto const oldPrefix = src.filename().string() + ".";
+        auto const newPrefix = dst.filename().string() + ".";
+        auto const sidecars = src.parent_path() / "sidecars";
+        std::vector<fs::path> moving;
+        for (auto const& e : fs::directory_iterator(sidecars, ec))
+            if (e.path().filename().string().rfind(oldPrefix, 0) == 0)
+                moving.push_back(e.path());
+        for (auto const& p : moving) {
+            std::error_code ec2;
+            fs::rename(p, sidecars / (newPrefix + p.filename().string().substr(oldPrefix.size())), ec2);
+        }
+        if (replayName == from)
+            replayName = name;
+        log::info("[GucciBot] macro {} -> {}", src.filename().string(), dst.filename().string());
+        reloadMacroList();
+        return "";
     }
 
     // "<stem><suffix>", or with 2, 3... after it when any macro (of any

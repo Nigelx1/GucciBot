@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-19-ej (Switches that did nothing now work: force platformer, instant respawn and a respawn delay, no mirror only while recording, macro path, TPS changes while recording; the Classic pathfinder shows its search)"
+    "2026-10-19-ek (Saved macros: rename, convert to .brrr, Calculate and delete from a row menu, open the folder, theme tags, and the list follows the folder)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -1244,6 +1244,7 @@ namespace gucci {
 
         std::vector<std::string> storedMacros;
         std::set<std::string> incompatibleMacros;
+        std::map<std::string, std::string> storedMacroExts;  // name -> its file's extension (the theme tag)
         std::unordered_set<std::string> jaMacros;
         std::unordered_set<std::string> giddeyMacros;
         std::unordered_set<std::string> toosiiMacros;
@@ -1275,6 +1276,9 @@ namespace gucci {
         // numbered if taken) and reload the macro list; Outcome::message
         // says why when nothing was written.
         std::filesystem::path findMacroFile(const std::string& name) const;
+        // Rename and/or re-extension a saved macro, sidecars included; empty on
+        // success, else the reason (engine_core.cpp).
+        std::string moveMacro(const std::string& from, const std::string& toName, const std::string& toExt = "");
         struct MacroDiffResult {
             bool ok = false;
             std::string error;
