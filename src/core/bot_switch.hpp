@@ -2,7 +2,7 @@
 
 // GucciBot's master switch: turn the whole bot off from its own menu instead
 // of the Geode mod list and a restart, and have the game run as if GucciBot
-// weren't there while it is off. Asked for by Dihmaster500 (2026-10-05);
+// weren't there while it is off. Asked for by dihmaster500 (2026-10-05);
 // Nigel's spec: switched off, the menu shows one switch to turn it back on,
 // and nothing else.
 //

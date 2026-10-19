@@ -179,7 +179,7 @@ namespace {
 // GD's own test-mode flag is never left changed. GD sets it for a start position
 // (a startpos switch resets around it), and the first version, which overrode it
 // every frame, let a startpos run save its death % and crashed a startpos switch
-// (Dihmaster, 2026-10-12). Instead, as QOLMod's safe mode does it: the flag is
+// (dihmaster, 2026-10-12). Instead, as QOLMod's safe mode does it: the flag is
 // raised only while levelComplete runs, the new-best popup is skipped, and
 // GJGameLevel::savePercentage (where a death's % is saved) is skipped.
 class $modify(GB7SafeModePlayLayer, PlayLayer) {

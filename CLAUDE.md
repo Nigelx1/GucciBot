@@ -106,7 +106,7 @@ ENGINE_AUDIT.md the 2026-09-26/27 audit against Silicate: every finding and how 
 
 ## 6. Current state (2026-10-13)
 
-- **2.0.0-beta.4** is the latest pre-release (2026-10-13): auto safe mode (Dihmaster500's ask), the setup check, the Disable bot switch, the phone menu, the Mac menu key, renderer files that fill themselves in, hotkeys that remember. It was the first release shipped as GitHub's universal package, unchanged. Nigel tried builds -cp..-cx in-game; -cy (renderer self-heal) and -cz (hotkeys) went out untested at his call. Stable ("latest") is still 1.8.
+- **2.0.0-beta.4** is the latest pre-release (2026-10-13): auto safe mode (dihmaster500's ask), the setup check, the Disable bot switch, the phone menu, the Mac menu key, renderer files that fill themselves in, hotkeys that remember. It was the first release shipped as GitHub's universal package, unchanged. Nigel tried builds -cp..-cx in-game; -cy (renderer self-heal) and -cz (hotkeys) went out untested at his call. Stable ("latest") is still 1.8.
 - **Roadmap to 2.0 (Nigel, 2026-10-13):**
   1. AI pathfinder.
   2. Calculate tweaks: flag suspicious clicks, with suggestions.

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-19-ef (Calculate: a death during the end-of-level animation no longer fails the run; the macro path stops at the level end instead of rewriting its file every tick behind the end screen)"
+    "2026-10-19-eg (Credits in Nigels new order: peony third for Silicate and the converter, promo help from aura, DashBlaze and ace, chagh for the converter; dihmaster500 in lowercase)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

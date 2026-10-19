@@ -3,7 +3,7 @@ name: Multi-platform build
 # Builds GucciBot for every platform Geode runs on and packages one .geode
 # with all five binaries and every resource, the renderer's FFmpeg DLLs
 # included. This package is THE build: a release ships it as it is, Nigel's
-# game runs it (install_ci_build.bat), and Dihmaster's copy is it - one
+# game runs it (install_ci_build.bat), and dihmaster's copy is it - one
 # universal file per commit (Nigel, 2026-10-12). Since 2.0.0-beta.3 mod.json
 # declares every platform itself (the combine step keeps one job's mod.json, so
 # a platform added per job went missing from the package); the step below only

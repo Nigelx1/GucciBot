@@ -1023,7 +1023,7 @@ namespace gucci::ui {
         double g_brrrStart = 0.0; // ImGui time the drop started
 
         void pageSettings() {
-            // The master switch (core/bot_switch.hpp), asked for by Dihmaster500.
+            // The master switch (core/bot_switch.hpp), asked for by dihmaster500.
             kit::BeginCard("GucciBot", "Done botting? Switch it off: it leaves the game until you switch it back on, "
                                        "no restart needed.");
             bool botOn = botswitch::wanted();
@@ -1033,7 +1033,7 @@ namespace gucci::ui {
                 kit::Hint(why);
             kit::EndCard();
 
-            // Auto safe mode and the cheat dot (hacks/safemode.hpp), Dihmaster500's ask.
+            // Auto safe mode and the cheat dot (hacks/safemode.hpp), dihmaster500's ask.
             kit::BeginCard("Safe mode", "While a cheat is on, a run doesn't count: no completion, no new best, "
                                         "nothing sent to the servers.");
             bool safe = safemode::autoSafeMode();
@@ -1135,17 +1135,21 @@ namespace gucci::ui {
             const Line lines[] = {
                 {"Nigelx1", "Creator and owner of GucciBot; every idea, every theme, every decision is his call."},
                 {"Claude", "Wrote the code. Essentially the whole codebase, not a euphemism."},
+                {"peony", "Silicate, the engine GucciBot is built on, and nat-converter, which the site's converter is built on."},
                 {"Juice", "Designed the frame-window algorithm GucciBot ran on through 1.7 and the marker shapes in 1.8; lead co-tester."},
                 {"anticroom", "Calculate is his analyzer, ported in near-verbatim; sub-tick CBF recording and the render intro card too."},
-                {"NaN GD", "The L* precision formula (nandl.pages.dev)."},
-                {"C0nscious", "Implemented NaN's formula as Frame Window Counter (MIT)."},
-                {"peony", "Silicate."},
-                {"Absent", "Absense; the Pathfinder's default engine is his."},
-                {"ToastexGD", "Built ToastyReplay, the project GucciBot started as."},
-                {"GWDdoS", "Astral, and the cleanup that got the repo public-ready."},
-                {"Dihmaster500", "Asked for auto safe mode and the Disable bot switch; his testing caught safe "
+                {"dihmaster500", "Asked for auto safe mode and the Disable bot switch; his testing caught safe "
                                  "mode breaking start positions."},
+                {"aura", "Promo help: got the 2.0 launch promo set up with ace."},
+                {"DashBlaze", "Promo help."},
+                {"ace", "Promo help."},
+                {"Absent", "Absense; the Pathfinder's default engine is his."},
+                {"NaN GD", "The L* precision formula (nandl.pages.dev)."},
                 {"Bogdaner09", "Click Indicators inspiration."},
+                {"GWDdoS", "Astral, and the cleanup that got the repo public-ready."},
+                {"ToastexGD", "Built ToastyReplay, the project GucciBot started as."},
+                {"chagh", "Pointed the converter to TcBot's format library (tcm-rs)."},
+                {"C0nscious", "Implemented NaN's formula as Frame Window Counter (MIT)."},
                 {"Gucci Mane", "He's the truth. Brrr."},
             };
             for (auto const& l : lines) {
