@@ -136,3 +136,7 @@ A few of the missing ones were removed on purpose and are marked so. The rest is
 ### Trainers
 
 - **JMF Trainer Mode**: The macro path and markers only show up to the furthest point you've reached, plus a lookahead buffer. *(The reveal code is in src/analysis/macropath.cpp:84-103 (trainerRevealEnabled and trainerRevealBuffer, GucciBot.hpp:731-732) Nothing reaches it. The macro-path overlay it limits only draws when showMacroPath (GucciBot.hpp:727) is on, and nothing ever sets it. Reveal on/off and the buffer have no controls either.)*
+
+## Requested since the audit
+
+- **Trainers: video import in the normal Trainer** (Nigel, 2026-10-18): play your own video in the any-macro Trainer, as JMF's Video Mode plays its bundled one. JMF's own "Choose a Different Video" was dropped on 2026-08-31 (0b4eb84) because its file picker crashed; build this one with a fresh, guarded picker.
