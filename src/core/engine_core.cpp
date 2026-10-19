@@ -2242,7 +2242,7 @@ namespace gucci {
         updater.setTps(p.tps);
         updater.m_speedhack = p.speedhack;
         updater.m_lockDelta = p.lockDelta;
-        updater.m_lockDeltaMode = static_cast<GucciUpdater::LockDeltaMode>(std::clamp(p.lockDeltaMode, 0, 1));
+        updater.m_lockDeltaMode = GucciUpdater::LockDeltaMode::Accuracy;  // Accuracy only, whatever the preset saved
         updater.m_backwardsStepping = p.backwardsStepping;
         updater.m_maxBackstepFrames = p.maxBackstepFrames;
         updater.m_ssbFix = p.ssbFix;
@@ -2354,8 +2354,9 @@ namespace gucci {
 #endif
         updater.m_speedhack = pick(1.f, "eng_speed", "updater_speedhack");
         updater.m_lockDelta = pick(true, "feat_lock_delta", "updater_lockDelta");
-        updater.m_lockDeltaMode = static_cast<GucciUpdater::LockDeltaMode>(
-            pick((int)GucciUpdater::LockDeltaMode::Accuracy, "updater_lockDeltaMode", nullptr));
+        // Accuracy only (Nigel, 2026-10-18: "idk why theres still a performance
+        // mode for lock delta"). A saved Performance from before is not read.
+        updater.m_lockDeltaMode = GucciUpdater::LockDeltaMode::Accuracy;
         updater.m_highTpsPrecision = pick(false, "updater_highTpsPrecision", nullptr);
         updater.m_speedhackAudio = pick(true, "feat_speedhack_audio", "updater_speedhackAudio");
         updater.m_inputFps = std::max(0.0, pick(0.0, "feat_input_fps", nullptr));

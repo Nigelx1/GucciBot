@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-18-dy (Menu laid out as Nigel asked: Hacks second, one Macro Tools tab, hitboxes and a frame stepper on the Macro tab, indicators on both trainer tabs, no second theme picker)"
+    "2026-10-18-dz (Lock delta is Accuracy only: the Performance mode and its menu choice are gone)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

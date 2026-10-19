@@ -611,16 +611,6 @@ namespace gucci::ui {
             engineSwitch("Auto flip on death", nullptr, &upd.m_autoFlipOnDeath, "feat_auto_flip");
             engineSwitch("Speedhack audio", nullptr, &upd.m_speedhackAudio, "feat_speedhack_audio");
             engineSwitch("Scroll speed fix", nullptr, &upd.m_ssbFix, "feat_scroll_speed_fix");
-            if (upd.m_lockDelta) {
-                using LockMode = GucciUpdater::LockDeltaMode;
-                int mode = upd.m_lockDeltaMode == LockMode::Accuracy ? 0 : 1;
-                const char* modes[] = {"Accuracy", "Performance"};
-                if (kit::ChoiceRow("Lock delta mode", "Accuracy: one physics step per update. Performance: several, sub-stepped",
-                                   &mode, modes, 2)) {
-                    upd.m_lockDeltaMode = mode == 0 ? LockMode::Accuracy : LockMode::Performance;
-                    Mod::get()->setSavedValue<int>("updater_lockDeltaMode", static_cast<int>(upd.m_lockDeltaMode));
-                }
-            }
             engineSwitch("High TPS precision", "Scales GD's velocity rounding with the tick rate. Changes physics",
                          &upd.m_highTpsPrecision, "updater_highTpsPrecision");
             engineSwitch("Prevent death", "Steps back instead of dying", &upd.m_preventDeath, "feat_prevent_death");
