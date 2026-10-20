@@ -18,6 +18,7 @@ namespace gucci::ui::pages {
     void jupiterLookPush(); // ... its colours over the whole menu (the shell, around the window)
     void jupiterLookPop();
     void jupiterVideoOverlay();  // Video Mode: the JMF click bar over the video, in place of the menu
+    void trainerVideoOverlay();  // ... the Trainer's, over the video you picked
     void anyTrainer();      // pages/trainer_pages.cpp: Trainer (any saved macro)
     void clickIndicators();  // pages/click_indicators_card.cpp: Click Indicators (both trainer pages)
     void indicators();      // pages/indicators.cpp: Survival Indicator, click cue + calibration, accuracy/streak (both trainer pages)
@@ -29,5 +30,6 @@ namespace gucci::ui::pages {
     void hudCard();          // pages/hud_card.cpp (Hacks page)
     void noclipAccuracyCard();  // pages/noclip_card.cpp (Hacks page)
     void videoModeCard();       // pages/videomode_card.cpp (JMF Trainer page)
+    void trainerVideoModeCard();  // pages/videomode_card.cpp (Trainer page)
 
 } // namespace gucci::ui::pages

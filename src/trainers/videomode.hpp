@@ -1,13 +1,16 @@
 #pragma once
 
-// Video Mode: the JMF showcase video (resources/jmf_showcase.mp4, bundled with
-// the mod) drawn full screen, riding the Jupiter My Favourite Trainer's click
-// bar clock, for reviewing a run against the macro's timing. No level needs
-// to be open. The Alignment Tool scrubs the video by hand to the frame of the
-// macro's first click and sets the sync offset from it.
+// Video Mode: a video drawn full screen, riding a trainer's click bar clock,
+// for reviewing a run against the macro's timing. No level needs to be open.
+// Two of them, one on at a time: the JMF Trainer's plays the showcase video
+// bundled with the mod (resources/jmf_showcase.mp4), the Trainer's plays a
+// video you pick (2026-10-19). The Alignment Tool scrubs the video by hand to
+// the frame of the macro's first click and sets the sync offset from it.
 //
 // The state lives on GucciEngine (jupiterVideoModeEnabled, jupiterVideoOffsetSec,
-// jupiterVideoOpacity, jupiterVideoAlignToolActive, jupiterVideoAlignScrubSec).
+// jupiterVideoOpacity; trainerVideoModeEnabled, trainerVideoOffsetSec,
+// trainerVideoOpacity, trainerVideoPath; and, shared by both,
+// jupiterVideoAlignToolActive and jupiterVideoAlignScrubSec).
 // Decoding runs on a thread of its own (render/video_decoder.*), so seeks and
 // decodes never hold up a frame; the main thread only uploads the newest
 // finished frame. Turning the mode off stops the thread, closes the decoder
@@ -20,7 +23,7 @@
 
 namespace gucci::videomode {
 
-    // Saved settings (the offset and the opacity), read once. The overlay's
+    // Saved settings (each mode's offset and opacity, the Trainer's video), read once. The overlay's
     // first frame does it; the card calls it too, harmlessly.
     void ensureLoaded();
     void saveSettings();
@@ -29,6 +32,12 @@ namespace gucci::videomode {
     // video behind every ImGui window and on top of the game; starts and
     // stops the decoder as the mode is switched on and off.
     void drawOverlay();
+
+    // Which Video Mode is on: JMF's (the bundled showcase video, on the JMF
+    // Trainer's clock) or the Trainer's (a video you pick, on its clock). Only
+    // one at a time; switching restarts the decoder on the other video.
+    enum class Source { None, Jmf, Trainer };
+    Source source();
 
     enum class Status { Off, Opening, Ready, Failed };
     Status status();
@@ -47,8 +56,8 @@ namespace gucci::videomode {
     // the offset, or the scrub position while the Alignment Tool is on.
     double targetSec();
 
-    // The macro's first press, in macro time; false when the JMF macro has
-    // no clicks.
+    // The macro's first press, in macro time; false when the playing mode's
+    // macro has no clicks.
     bool firstClickSec(double& sec);
 
     // ---- the Alignment Tool

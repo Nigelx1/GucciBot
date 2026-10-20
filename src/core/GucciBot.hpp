@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-19-es (A status bar under every page title; the update checker is back, built so it cannot crash on launch)"
+    "2026-10-19-et (The Trainer gets its own Video Mode: pick any video and it plays on the Trainer click bar)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -786,6 +786,14 @@ namespace gucci {
         // setting (jupiterVideoOffsetSec, the actual result, already is).
         bool jupiterVideoAlignToolActive = false;
         float jupiterVideoAlignScrubSec = 0.f;
+
+        // The Trainer's own Video Mode (Nigel, 2026-10-18): a video you pick,
+        // on the Trainer's click bar clock. One Video Mode runs at a time; the
+        // Alignment Tool fields above serve whichever is on.
+        bool trainerVideoModeEnabled = false;
+        float trainerVideoOffsetSec = 0.f;
+        float trainerVideoOpacity = 0.6f;
+        std::string trainerVideoPath;  // UTF-8
 
         bool jupiterMusicEnabled = true;
         float jupiterMusicOffsetSec = 0.f;

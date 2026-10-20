@@ -134,8 +134,9 @@ namespace gucci::botswitch {
             gb->updater.setPaused(false);
 
             // The two things GucciBot plays outside a level.
-            if (gb->jupiterVideoModeEnabled) {
+            if (gb->jupiterVideoModeEnabled || gb->trainerVideoModeEnabled) {
                 gb->jupiterVideoModeEnabled = false;
+                gb->trainerVideoModeEnabled = false;
                 videomode::drawOverlay();  // with the mode off: stops the decoder, frees the texture
             }
             if (BigBrrrManager::get()->enabled)

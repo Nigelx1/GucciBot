@@ -39,8 +39,53 @@ namespace gucci::videomode {
         constexpr const char* kKeyOpacity = "jupiter_video_opacity";
 
         constexpr const char* kVideoFile = "jmf_showcase.mp4";
+        // The Trainer's own Video Mode keeps its settings under these.
+        constexpr const char* kKeyTrainerOffset = "trainer_video_offset_sec";
+        constexpr const char* kKeyTrainerOpacity = "trainer_video_opacity";
+        constexpr const char* kKeyTrainerPath = "trainer_video_path";
 
         bool g_loaded = false;
+
+        fs::path fromUtf8(std::string const& s) {
+            return fs::path(std::u8string(s.begin(), s.end()));
+        }
+
+        // ---- which Video Mode is on, and what goes with it
+
+        Source currentSource() {
+            auto* gb = GucciEngine::get();
+            if (gb->jupiterVideoModeEnabled)
+                return Source::Jmf;
+            if (gb->trainerVideoModeEnabled)
+                return Source::Trainer;
+            return Source::None;
+        }
+
+        fs::path pathOf(Source s) {
+            if (s == Source::Jmf)
+                return Mod::get()->getResourcesDir() / kVideoFile;
+            return fromUtf8(GucciEngine::get()->trainerVideoPath);
+        }
+
+        double clockOf(Source s) {
+            auto* gb = GucciEngine::get();
+            return s == Source::Trainer ? gb->trainerClickBarPosSec : gb->jupiterClickBarPosSec;
+        }
+
+        float& offsetOf(Source s) {
+            auto* gb = GucciEngine::get();
+            return s == Source::Trainer ? gb->trainerVideoOffsetSec : gb->jupiterVideoOffsetSec;
+        }
+
+        float opacityOf(Source s) {
+            auto* gb = GucciEngine::get();
+            return s == Source::Trainer ? gb->trainerVideoOpacity : gb->jupiterVideoOpacity;
+        }
+
+        std::vector<std::pair<double, double>> const& clicksOf(Source s) {
+            auto* gb = GucciEngine::get();
+            return s == Source::Trainer ? gb->trainerMacro.clickIntervalsSec : gb->jupiterMacro.clickIntervalsSec;
+        }
 
         // ---- guccibot_videomode.log: what opened, what failed, when it closed.
         // Started over once a launch so it never grows without end.
@@ -84,14 +129,18 @@ namespace gucci::videomode {
             double sharedPts = -1.0;
         };
 
-        void run(Worker* w, fs::path path) {
+        void run(Worker* w, fs::path path, bool bundled) {
             VideoDecoder decoder;
             std::string why;
             std::error_code ec;
             if (!SLRenderer::get()->isFFmpegLoaded())
                 why = "FFmpeg didn't load (the same libraries rendering uses), so nothing can decode the video.";
+            else if (path.empty())
+                why = "No video chosen yet.";
             else if (!fs::exists(path, ec))
-                why = fmt::format("{} isn't in the mod's resources folder.", kVideoFile);
+                why = bundled ? fmt::format("{} isn't in the mod's resources folder.", kVideoFile)
+                              : fmt::format("The video isn't there any more: {}",
+                                            geode::utils::string::pathToString(path));
             else if (!decoder.open(path))
                 why = "FFmpeg couldn't open the video. The Geode log has its reason.";
 
@@ -140,6 +189,8 @@ namespace gucci::videomode {
         // Heap-held and never destroyed at exit: a std::thread still joinable
         // when static destructors run would end the process with an abort.
         Worker* g_worker = nullptr;
+        Source g_runningSource = Source::None;  // what the worker was started for
+        fs::path g_runningPath;
 
         // ---- main-thread copies
 
@@ -226,14 +277,15 @@ namespace gucci::videomode {
             }
         }
 
-        void start() {
+        void start(Source src, fs::path path) {
             g_worker = new Worker();
             g_status = Status::Opening;
             g_failure.clear();
             g_shownPts = -1.0;
             g_asked = std::numeric_limits<double>::quiet_NaN();
-            fs::path path = Mod::get()->getResourcesDir() / kVideoFile;
-            g_worker->thread = std::thread(run, g_worker, std::move(path));
+            g_runningSource = src;
+            g_runningPath = path;
+            g_worker->thread = std::thread(run, g_worker, std::move(path), src == Source::Jmf);
         }
 
         // Everything the mode holds goes: the thread, the decoder (closed by
@@ -321,12 +373,25 @@ namespace gucci::videomode {
             std::clamp((float)mod->getSavedValue<double>(kKeyOffset, gb->jupiterVideoOffsetSec), -600.f, 600.f);
         gb->jupiterVideoOpacity =
             std::clamp((float)mod->getSavedValue<double>(kKeyOpacity, gb->jupiterVideoOpacity), 0.05f, 1.f);
+        gb->trainerVideoOffsetSec =
+            std::clamp((float)mod->getSavedValue<double>(kKeyTrainerOffset, gb->trainerVideoOffsetSec), -600.f, 600.f);
+        gb->trainerVideoOpacity =
+            std::clamp((float)mod->getSavedValue<double>(kKeyTrainerOpacity, gb->trainerVideoOpacity), 0.05f, 1.f);
+        gb->trainerVideoPath = mod->getSavedValue<std::string>(kKeyTrainerPath, gb->trainerVideoPath);
     }
 
     void saveSettings() {
         auto* gb = GucciEngine::get();
-        Mod::get()->setSavedValue<double>(kKeyOffset, gb->jupiterVideoOffsetSec);
-        Mod::get()->setSavedValue<double>(kKeyOpacity, gb->jupiterVideoOpacity);
+        auto* mod = Mod::get();
+        mod->setSavedValue<double>(kKeyOffset, gb->jupiterVideoOffsetSec);
+        mod->setSavedValue<double>(kKeyOpacity, gb->jupiterVideoOpacity);
+        mod->setSavedValue<double>(kKeyTrainerOffset, gb->trainerVideoOffsetSec);
+        mod->setSavedValue<double>(kKeyTrainerOpacity, gb->trainerVideoOpacity);
+        mod->setSavedValue<std::string>(kKeyTrainerPath, gb->trainerVideoPath);
+    }
+
+    Source source() {
+        return currentSource();
     }
 
     // ------------------------------------------------------------ status
@@ -364,14 +429,15 @@ namespace gucci::videomode {
 
     double targetSec() {
         auto* gb = GucciEngine::get();
+        Source const src = currentSource();
         double const sec = gb->jupiterVideoAlignToolActive
                                ? (double)gb->jupiterVideoAlignScrubSec
-                               : gb->jupiterClickBarPosSec + (double)gb->jupiterVideoOffsetSec;
+                               : clockOf(src) + (double)offsetOf(src);
         return clampToVideo(sec);
     }
 
     bool firstClickSec(double& sec) {
-        auto const& iv = GucciEngine::get()->jupiterMacro.clickIntervalsSec;
+        auto const& iv = clicksOf(currentSource());
         if (iv.empty())
             return false;
         sec = iv.front().first;
@@ -385,14 +451,22 @@ namespace gucci::videomode {
     void drawOverlay() {
         ensureLoaded();
         auto* gb = GucciEngine::get();
-        if (!gb->jupiterVideoModeEnabled) {
+        Source const src = currentSource();
+        if (src == Source::None) {
             gb->jupiterVideoAlignToolActive = false;
             if (g_worker || g_tex)
                 shutdown();
             return;
         }
+        // Switched from one Video Mode to the other, or a new video picked:
+        // the decoder starts over on the new file.
+        fs::path const path = pathOf(src);
+        if (g_worker && (src != g_runningSource || path != g_runningPath)) {
+            shutdown();
+            gb->jupiterVideoAlignToolActive = false;
+        }
         if (!g_worker)
-            start();
+            start(src, path);
         poll();
         if (g_status != Status::Ready)
             return;
@@ -410,7 +484,7 @@ namespace gucci::videomode {
         float const h = (float)g_texH * scale;
         ImVec2 const a((screen.x - w) * 0.5f, (screen.y - h) * 0.5f);
         ImVec2 const b(a.x + w, a.y + h);
-        int const alpha = std::clamp((int)std::lround(gb->jupiterVideoOpacity * 255.f), 0, 255);
+        int const alpha = std::clamp((int)std::lround(opacityOf(src) * 255.f), 0, 255);
         // The background list sits under every ImGui window, so the menu and
         // the click bar stay readable over the video.
         ImGui::GetBackgroundDrawList()->AddImage((ImTextureID)(intptr_t)g_tex, a, b, ImVec2(0.f, 0.f),
@@ -426,8 +500,8 @@ namespace gucci::videomode {
             // Start on the frame on screen; half a frame before its
             // timestamp, so the decoder's "first frame at or after" lands on
             // that same frame.
-            double const from = shownFrame(shown) ? shown - g_frameSec * 0.5
-                                                  : gb->jupiterClickBarPosSec + gb->jupiterVideoOffsetSec;
+            Source const src = currentSource();
+            double const from = shownFrame(shown) ? shown - g_frameSec * 0.5 : clockOf(src) + offsetOf(src);
             gb->jupiterVideoAlignScrubSec = (float)clampToVideo(from);
         }
         gb->jupiterVideoAlignToolActive = on;
@@ -453,11 +527,12 @@ namespace gucci::videomode {
         // timestamp. Half a frame back puts the first press in the middle of
         // that stretch, so the frame picked here is the one on screen at the
         // press, not its neighbour, however the clock's time rounds.
-        gb->jupiterVideoOffsetSec = (float)(shown - first - g_frameSec * 0.5);
+        float& offset = offsetOf(currentSource());
+        offset = (float)(shown - first - g_frameSec * 0.5);
         gb->jupiterVideoAlignToolActive = false;
         saveSettings();
-        logLine(fmt::format("offset set to {:.4f}s (frame at {:.4f}s, first press at {:.4f}s)",
-                            gb->jupiterVideoOffsetSec, shown, first));
+        logLine(fmt::format("offset set to {:.4f}s (frame at {:.4f}s, first press at {:.4f}s)", offset, shown,
+                            first));
         return true;
     }
 

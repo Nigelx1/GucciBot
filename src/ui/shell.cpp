@@ -1950,9 +1950,14 @@ namespace gucci::ui {
             }
             drawOverlay();
             // Video Mode: the click bar over the video instead of the menu,
-            // open or closed (pages::jupiterVideoOverlay has the way out).
+            // open or closed (the overlay has the way out). JMF's or the
+            // Trainer's; only one is ever on.
             if (GucciEngine::get()->jupiterVideoModeEnabled) {
                 pages::jupiterVideoOverlay();
+                return;
+            }
+            if (GucciEngine::get()->trainerVideoModeEnabled) {
+                pages::trainerVideoOverlay();
                 return;
             }
             if (!g_open)

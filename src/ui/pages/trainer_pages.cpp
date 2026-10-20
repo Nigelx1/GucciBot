@@ -29,7 +29,8 @@ namespace gucci::ui::pages {
 
     void jupiterTrainer();
     void anyTrainer();
-    void videoModeCard();  // pages/videomode_card.cpp
+    void videoModeCard();         // pages/videomode_card.cpp
+    void trainerVideoModeCard();  // pages/videomode_card.cpp
     void indicators();     // pages/indicators.cpp (drawn at the foot of both trainer pages)
 
     namespace {
@@ -795,6 +796,8 @@ namespace gucci::ui::pages {
             // Video Mode rides this trainer's click bar clock, so it sits right under it.
             if (k == Kind::Jupiter)
                 videoModeCard();
+            else
+                trainerVideoModeCard();
             ghostsCard(k);
             segmentsCard(k);
             statsCard(k);
@@ -960,42 +963,56 @@ namespace gucci::ui::pages {
         body(Kind::Jupiter);
     }
 
-    // Video Mode: in place of the menu, the JMF click bar over the bottom of
-    // the video (Nigel: "i still see the whole menu in the middle instead of an
-    // overlay of the bar thing"), with its controls and the way out. The page
-    // counts as open, so the bar's clock and its music carry on.
-    void jupiterVideoOverlay() {
-        tr::ensureLoaded();
-        tr::markPageDrawn(Kind::Jupiter);
-        auto* gb = GucciEngine::get();
-        auto s = tr::state(Kind::Jupiter);
-        ImGuiIO const& io = ImGui::GetIO();
-        float const w = std::min(io.DisplaySize.x - 40.f, 960.f);
-        ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y - 20.f), ImGuiCond_Always,
-                                ImVec2(0.5f, 1.f));
-        ImGui::SetNextWindowSizeConstraints(ImVec2(w, 0.f), ImVec2(w, FLT_MAX));
-        ImGui::SetNextWindowBgAlpha(0.6f);
-        jupiterLookPush();
-        if (ImGui::Begin("##jmfvideobar", nullptr,
-                         ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
-                             ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing)) {
-            if (s.macro.clickIntervalsSec.empty())
-                kit::Note("No clicks to show: the JMF macro isn't loaded.", Tone::Warn);
-            else
-                drawBar(Kind::Jupiter);
-            if (kit::Button(s.paused ? "Resume" : "Pause", Tone::Accent))
-                tr::setPaused(Kind::Jupiter, !s.paused);
-            ImGui::SameLine();
-            if (kit::Button("Restart"))
-                tr::restart(Kind::Jupiter);
-            ImGui::SameLine();
-            if (kit::Button("Exit Video Mode", Tone::Muted)) {
-                gb->jupiterVideoModeEnabled = false;
-                gb->jupiterVideoAlignToolActive = false;
+    namespace {
+        // Video Mode: in place of the menu, the trainer's click bar over the
+        // bottom of the video (Nigel: "i still see the whole menu in the middle
+        // instead of an overlay of the bar thing"), with its controls and the way
+        // out. The page counts as open, so the bar's clock and its music carry on.
+        void videoBar(Kind k) {
+            tr::ensureLoaded();
+            tr::markPageDrawn(k);
+            auto* gb = GucciEngine::get();
+            auto s = tr::state(k);
+            ImGuiIO const& io = ImGui::GetIO();
+            float const w = std::min(io.DisplaySize.x - 40.f, 960.f);
+            ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y - 20.f), ImGuiCond_Always,
+                                    ImVec2(0.5f, 1.f));
+            ImGui::SetNextWindowSizeConstraints(ImVec2(w, 0.f), ImVec2(w, FLT_MAX));
+            ImGui::SetNextWindowBgAlpha(0.6f);
+            if (ImGui::Begin(k == Kind::Jupiter ? "##jmfvideobar" : "##trainervideobar", nullptr,
+                             ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+                                 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                                 ImGuiWindowFlags_NoFocusOnAppearing)) {
+                if (s.macro.clickIntervalsSec.empty())
+                    kit::Note(k == Kind::Jupiter ? "No clicks to show: the JMF macro isn't loaded."
+                                                 : "No clicks to show: load a macro on the Trainer page.",
+                              Tone::Warn);
+                else
+                    drawBar(k);
+                if (kit::Button(s.paused ? "Resume" : "Pause", Tone::Accent))
+                    tr::setPaused(k, !s.paused);
+                ImGui::SameLine();
+                if (kit::Button("Restart"))
+                    tr::restart(k);
+                ImGui::SameLine();
+                if (kit::Button("Exit Video Mode", Tone::Muted)) {
+                    gb->jupiterVideoModeEnabled = false;
+                    gb->trainerVideoModeEnabled = false;
+                    gb->jupiterVideoAlignToolActive = false;
+                }
             }
+            ImGui::End();
         }
-        ImGui::End();
+    } // namespace
+
+    void jupiterVideoOverlay() {
+        jupiterLookPush();
+        videoBar(Kind::Jupiter);
         jupiterLookPop();
+    }
+
+    void trainerVideoOverlay() {
+        videoBar(Kind::Any);
     }
 
     void anyTrainer() {
