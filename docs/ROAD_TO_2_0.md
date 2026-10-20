@@ -51,11 +51,11 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 - [ ] Per-band images, pulse and sound packs (the site still advertises them)
 
 ### Render
-- [ ] Presets saved by name, plus the one-press Showcase preset (8K60 lossless)
-- [ ] A "render done" popup
-- [ ] An "FFmpeg missing" banner with an Open Folder button
+- [ ] Presets saved by name, plus the one-press Showcase preset (8K60 lossless): built -er (Showcase is lossless RGB x264 with FLAC in MKV: yuv444p isn't a format this renderer writes), untested
+- [ ] A "render done" popup: built -er, untested
+- [ ] An "FFmpeg missing" banner with an Open Folder button: built -er, untested
 - [ ] Pixel format choice: built -em, untested
-- [ ] An in-render HUD
+- [ ] An in-render HUD: built -er as frames and seconds on the Render card while it renders (an in-level overlay could end up in the video), untested
 - [ ] Nigel's test of the FLAC fix and "Start from the beginning" (build -du)
 
 ### The rest
