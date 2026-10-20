@@ -9,6 +9,9 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 
 ## 2. Minor features and bugs (next, starting with the Mac crash log)
 
+### Click Indicators (Nigel, 2026-10-19: first, before the rest of step 2)
+- [ ] Its own feature, not the trainers' click bar, with every option of Bogdaner09's mod (badges, player square and line, draining holds, taps and holds, player 2 colours, timing offset, the rhythm lane, scoring): built -em, untested
+
 ### Playback bugs
 - [ ] Restarting straight out of a finished replay desyncs the next attempt (seen on VSC, 2026-10-19)
 - [x] Mirror Inputs adds inputs to the list it's in the middle of reading: already fixed in build -dk (2026-10-14); the old list hadn't caught up
@@ -51,7 +54,7 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 - [ ] Presets saved by name, plus the one-press Showcase preset (8K60 lossless)
 - [ ] A "render done" popup
 - [ ] An "FFmpeg missing" banner with an Open Folder button
-- [ ] Pixel format choice
+- [ ] Pixel format choice: built -em, untested
 - [ ] An in-render HUD
 - [ ] Nigel's test of the FLAC fix and "Start from the beginning" (build -du)
 
