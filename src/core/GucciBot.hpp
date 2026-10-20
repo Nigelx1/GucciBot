@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-20-ex (Calculate suggests for suspicious clicks: Juice's count, flagged in the Frame Editor as my suggestion is x frames)"
+    "2026-10-20-ey (Review fixes: a GBR6 save bloat, Silicate files from nat-converter, safer converting, CPS on sub-tick presses)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
