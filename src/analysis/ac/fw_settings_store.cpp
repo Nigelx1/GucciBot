@@ -169,6 +169,13 @@ namespace gucci::fwstore {
                 o["g"] = t.color[1];
                 o["b"] = t.color[2];
                 o["a"] = t.color[3];
+                o["image"] = t.imagePath;
+                o["pulsemarker"] = t.pulseMarker;
+                o["pulsetext"] = t.pulseText;
+                o["pulsescale"] = t.pulseScale;
+                o["pulsein"] = t.pulseIn;
+                o["pulsehold"] = t.pulseHold;
+                o["pulseout"] = t.pulseOut;
                 arr.push(o);
             }
             return arr.dump();
@@ -207,6 +214,10 @@ namespace gucci::fwstore {
             t.style.polygonCornerRadius = std::clamp(t.style.polygonCornerRadius, 0.f, 1.f);
             t.style.strokeSize = std::clamp(t.style.strokeSize, 0.f, 10.f);
             t.style.sizeScale = std::clamp(t.style.sizeScale, 0.1f, 4.f);
+            t.pulseScale = std::clamp(t.pulseScale, 1.f, 3.f);
+            t.pulseIn = std::clamp(t.pulseIn, 0.f, 2.f);
+            t.pulseHold = std::clamp(t.pulseHold, 0.f, 3.f);
+            t.pulseOut = std::clamp(t.pulseOut, 0.f, 3.f);
         }
 
         // The HUD keys its count labels by band id, so two bands sharing one
@@ -257,6 +268,13 @@ namespace gucci::fwstore {
                 t.color[1] = static_cast<float>(jreal(j, "g", 1.0));
                 t.color[2] = static_cast<float>(jreal(j, "b", 1.0));
                 t.color[3] = static_cast<float>(jreal(j, "a", 1.0));
+                t.imagePath = jstr(j, "image", "");
+                t.pulseMarker = jbool(j, "pulsemarker", def.pulseMarker);
+                t.pulseText = jbool(j, "pulsetext", def.pulseText);
+                t.pulseScale = static_cast<float>(jreal(j, "pulsescale", def.pulseScale));
+                t.pulseIn = static_cast<float>(jreal(j, "pulsein", def.pulseIn));
+                t.pulseHold = static_cast<float>(jreal(j, "pulsehold", def.pulseHold));
+                t.pulseOut = static_cast<float>(jreal(j, "pulseout", def.pulseOut));
                 clampTier(t);
                 tiers.push_back(std::move(t));
             }

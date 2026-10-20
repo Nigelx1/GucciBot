@@ -107,6 +107,22 @@ struct FrameWindowTier {
     // Juice's marker shapes, per band -- circles, stars, spirals, polygons,
     // each Inverted (two concentric outlines) or Normal (filled donut).
     gbshape::Style style{gbshape::Shape::Circle, gbshape::Fill::Single};
+
+    // A picture drawn in place of the shape, sized to the marker. Relative
+    // paths look in the mod's config folder, then its resources, as the
+    // sound does. Empty draws the shape. (The site's "give a tier its own
+    // image"; rebuilt 2026-10-20.)
+    std::string imagePath = "";
+
+    // A pulse when the marker appears: the marker, its label or both grow to
+    // pulseScale over pulseIn seconds, hold for pulseHold, and settle back
+    // over pulseOut -- the fade-in, hold and fade-out the site promises.
+    bool pulseMarker = false;
+    bool pulseText = false;
+    float pulseScale = 1.4f;
+    float pulseIn = 0.08f;
+    float pulseHold = 0.12f;
+    float pulseOut = 0.25f;
 };
 
 // Copied field-for-field from anticroom's settings.hpp. Defaults are his --

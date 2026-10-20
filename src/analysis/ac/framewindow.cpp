@@ -4586,6 +4586,20 @@ cocos2d::CCNode* FrameWindowAnalyzer::markerContainer(PlayLayer* pl) {
     return container;
 }
 
+// A band image's file: as given when absolute, else the config folder, then
+// the resources -- the band sound's rule. Empty when it isn't there.
+static std::string bandImageFile(std::string const& path) {
+    std::filesystem::path p(std::u8string(path.begin(), path.end()));
+    std::error_code ec;
+    if (!p.is_absolute()) {
+        auto const inConfig = Mod::get()->getConfigDir() / p;
+        p = std::filesystem::exists(inConfig, ec) ? inConfig : Mod::get()->getResourcesDir() / p;
+    }
+    if (!std::filesystem::exists(p, ec))
+        return {};
+    return geode::utils::string::pathToString(p);
+}
+
 void FrameWindowAnalyzer::spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
                                       FrameWindowTier const* tier) {
     auto* container = this->markerContainer(pl);
@@ -4641,13 +4655,32 @@ void FrameWindowAnalyzer::spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
         node->setPosition(at);
         node->setZOrder(9999);
 
+        // A band's own picture, in place of the shape, sized to the marker.
+        // One that doesn't load falls back to the shape.
+        CCNode* shapeNode = nullptr;
+        if (tier && !tier->imagePath.empty()) {
+            if (auto const file = bandImageFile(tier->imagePath); !file.empty()) {
+                if (auto* sprite = CCSprite::create(file.c_str())) {
+                    auto const size = sprite->getContentSize();
+                    float const longest = std::max(size.width, size.height);
+                    if (longest > 0.f)
+                        sprite->setScale(2.f * radius * tier->style.sizeScale / longest);
+                    sprite->setOpacity(static_cast<GLubyte>(color.a * 255));
+                    node->addChild(sprite);
+                    shapeNode = sprite;
+                }
+            }
+        }
+
         auto* circle = CCDrawNode::create();
         float const a = color.a;
 
         // A band can carry one of Juice's shapes. Without one this is the plain
         // ring anticroom draws, kept exactly as it was -- two passes so the
         // marker reads against a bright background as well as a dark one.
-        if (tier && tier->style.shape != gbshape::Shape::Circle) {
+        if (shapeNode) {
+            // the picture stands in for it
+        } else if (tier && tier->style.shape != gbshape::Shape::Circle) {
             gbshape::draw(circle, {0.f, 0.f}, radius,
                           {color.r * a, color.g * a, color.b * a, a}, tier->style);
         } else if (tier && tier->style.fill == gbshape::Fill::Normal) {
@@ -4664,7 +4697,10 @@ void FrameWindowAnalyzer::spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
             circle->drawPolygon(verts, 64, {0.f, 0.f, 0.f, 0.f}, 2.f,
                                 {color.r * a, color.g * a, color.b * a, a});
         }
-        node->addChild(circle);
+        if (!shapeNode) {
+            node->addChild(circle);
+            shapeNode = circle;
+        }
 
         auto* label = CCLabelBMFont::create(text.c_str(), "bigFont.fnt");
         label->setAnchorPoint({1.f, 0.5f});
@@ -4675,6 +4711,22 @@ void FrameWindowAnalyzer::spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
                          static_cast<GLubyte>(color.b * 255)});
         label->setOpacity(static_cast<GLubyte>(color.a * 255));
         node->addChild(label);
+
+        // The band's pulse as the marker appears: grow to the pulse size,
+        // hold, settle back -- on the marker, the label or both.
+        if (tier && !mk.desynced && (tier->pulseMarker || tier->pulseText)) {
+            auto const pulse = [&](CCNode* n) {
+                float const base = n->getScale();
+                n->runAction(CCSequence::create(
+                    CCEaseOut::create(CCScaleTo::create(tier->pulseIn, base * tier->pulseScale), 2.f),
+                    CCDelayTime::create(tier->pulseHold),
+                    CCEaseIn::create(CCScaleTo::create(tier->pulseOut, base), 2.f), nullptr));
+            };
+            if (tier->pulseMarker)
+                pulse(shapeNode);
+            if (tier->pulseText)
+                pulse(label);
+        }
 
         container->addChild(node);
         this->trackMarker(node, at);

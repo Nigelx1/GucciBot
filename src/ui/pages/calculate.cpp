@@ -396,6 +396,19 @@ namespace gucci::ui::pages {
                                    "resources. Empty plays the bundled clip for the window");
             changed |= kit::InputText("audio", &t.audioPath, "file.ogg");
             kit::RowEnd();
+            kit::RowBegin("Image", "A png or jpg drawn in place of the shape, sized by Size below. Relative paths look "
+                                   "in the mod's config folder, then its resources. Empty draws the shape");
+            changed |= kit::InputText("image", &t.imagePath, "file.png");
+            kit::RowEnd();
+
+            changed |= kit::SwitchRow("Pulse the marker", "It grows and settles back as it appears", &t.pulseMarker);
+            changed |= kit::SwitchRow("Pulse the label", "Its text grows and settles back as it appears", &t.pulseText);
+            if (t.pulseMarker || t.pulseText) {
+                changed |= kit::SliderRow("Pulse size", nullptr, &t.pulseScale, 1.f, 3.f, "%.2fx");
+                changed |= kit::SliderRow("Fade in", "Seconds to grow", &t.pulseIn, 0.f, 2.f, "%.2f s");
+                changed |= kit::SliderRow("Hold", "Seconds at full size", &t.pulseHold, 0.f, 3.f, "%.2f s");
+                changed |= kit::SliderRow("Fade out", "Seconds to settle back", &t.pulseOut, 0.f, 3.f, "%.2f s");
+            }
 
             const char* shapes[] = {"Circle", "Star", "Spiral", "Polygon"};
             const char* fills[] = {"Two outlines", "Filled", "One outline"};
@@ -417,7 +430,11 @@ namespace gucci::ui::pages {
             // Mirrors spawnMarker(): a circle that isn't Filled is drawn as
             // the plain ring and ignores the rest of the style.
             bool const styled = t.style.shape != gbshape::Shape::Circle || t.style.fill == gbshape::Fill::Normal;
-            if (styled) {
+            if (!styled && !t.imagePath.empty()) {
+                // An image is sized by Size even when the shape is the plain ring.
+                changed |= kit::SliderRow("Size", "Multiplies the marker radius", &t.style.sizeScale, 0.1f, 4.f,
+                                          "%.2fx");
+            } else if (styled) {
                 if (t.style.shape == gbshape::Shape::Polygon) {
                     changed |= kit::SliderRow("Sides", nullptr, &t.style.polygonSides, 3, 12);
                     if (t.style.fill != gbshape::Fill::Normal)
@@ -439,7 +456,7 @@ namespace gucci::ui::pages {
 
         void bandsCard() {
             auto& tiers = S().tiers;
-            kit::BeginCard("Bands", "Colours, labels, shapes and sounds by window size. Hidden bands draw no markers.");
+            kit::BeginCard("Bands", "Colors, labels, shapes, images, pulses and sounds by window size. Hidden bands draw no markers.");
 
             int removeAt = -1;
             int moveFrom = -1, moveTo = -1;
