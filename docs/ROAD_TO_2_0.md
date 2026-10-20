@@ -59,8 +59,8 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 - [ ] Nigel's test of the FLAC fix and "Start from the beginning" (build -du)
 
 ### The rest
-- [ ] Status bar: what the bot is doing (recording, playing, calculating, pathfinding, rendering), plus frame, TPS, speed and inputs
-- [ ] Update checker, tried again (removed in 1.7 because it crashed the game on launch; this time it waits until the game is fully up)
+- [ ] Status bar: what the bot is doing (recording, playing, calculating, pathfinding, rendering), plus frame, TPS, speed and inputs: built -es (under every page title), untested
+- [ ] Update checker, tried again (removed in 1.7 because it crashed the game on launch; this time it waits until the game is fully up): built -es with a crash guard (a crash mid-check switches it off for the next launch), untested; not run on launch here (GD was closed)
 - [ ] Trainer video import for the normal Trainer, with a file picker that can't crash
 - [ ] Eclipse speedhack override
 - [ ] Moving wave spam (#25)
