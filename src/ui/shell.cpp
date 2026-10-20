@@ -32,6 +32,8 @@
 #include <imgui-cocos.hpp>
 
 #include <algorithm>
+#include <filesystem>
+#include <thread>
 #include <cctype>
 
 using namespace geode::prelude;
@@ -1047,6 +1049,119 @@ namespace gucci::ui {
             kit::EndCard();
         }
 
+        // ---- render presets: every render_* setting, saved under a name
+        // (render_presets/<name>.json in the mod's config folder). The file
+        // name of the next render stays out: it is per render, not a setup.
+
+        std::filesystem::path renderPresetsDir() {
+            return Mod::get()->getConfigDir() / "render_presets";
+        }
+
+        std::vector<std::string> renderPresets() {
+            std::vector<std::string> out;
+            std::error_code ec;
+            for (auto const& e : std::filesystem::directory_iterator(renderPresetsDir(), ec))
+                if (e.is_regular_file() && e.path().extension() == ".json")
+                    out.push_back(e.path().stem().string());
+            std::sort(out.begin(), out.end());
+            return out;
+        }
+
+        std::string saveRenderPreset(std::string const& name) {
+            if (name.empty() || name.find_first_of("\\/:*?\"<>|") != std::string::npos)
+                return "Give it a name without \\ / : * ? \" < > |";
+            auto preset = matjson::Value::object();
+            for (auto const& v : Mod::get()->getSaveContainer()) {
+                auto const key = v.getKey();
+                if (key && key->rfind("render_", 0) == 0 && *key != "render_name")
+                    preset.set(*key, v);
+            }
+            std::error_code ec;
+            std::filesystem::create_directories(renderPresetsDir(), ec);
+            auto const written =
+                geode::utils::file::writeStringSafe(renderPresetsDir() / (name + ".json"), preset.dump());
+            return written ? "" : fmt::format("Couldn't save it: {}", written.unwrapErr());
+        }
+
+        std::string loadRenderPreset(std::string const& name) {
+            auto const text = geode::utils::file::readString(renderPresetsDir() / (name + ".json"));
+            if (!text)
+                return fmt::format("Couldn't read it: {}", text.unwrapErr());
+            auto const parsed = matjson::parse(*text);
+            if (!parsed || !parsed.unwrap().isObject())
+                return "That preset file isn't valid.";
+            auto& saved = Mod::get()->getSaveContainer();
+            for (auto const& v : parsed.unwrap()) {
+                auto const key = v.getKey();
+                if (key && key->rfind("render_", 0) == 0 && *key != "render_name")
+                    saved.set(*key, v);
+            }
+            return "";
+        }
+
+        // One press for a showcase render: 8K at 60, lossless RGB x264 (the old
+        // preset's yuv444p is not a format this renderer writes), FLAC in MKV,
+        // the music and the level's own sounds but not the game's.
+        void applyShowcasePreset() {
+            auto* mod = Mod::get();
+            unsigned const threads = std::max(1u, std::thread::hardware_concurrency());
+            mod->setSavedValue<int64_t>("render_width", 7680);
+            mod->setSavedValue<int64_t>("render_height", 4320);
+            mod->setSavedValue<int64_t>("render_fps", 60);
+            mod->setSavedValue<std::string>("render_codec", "libx264rgb");
+            mod->setSavedValue<std::string>("render_pix_fmt", "rgb24");
+            mod->setSavedValue<std::string>("render_video_args",
+                                            fmt::format("-crf 0 -preset medium -threads {}", threads));
+            mod->setSavedValue<std::string>("render_file_extension", ".mkv");
+            mod->setSavedValue("render_include_audio", true);
+            mod->setSavedValue<std::string>("render_audio_codec", "flac");
+            mod->setSavedValue<double>("render_music_volume", 1.0);
+            mod->setSavedValue<double>("render_sfx_volume", 0.0);
+            mod->setSavedValue<double>("render_trigger_sfx_volume", 1.0);
+        }
+
+        void renderPresetsCard() {
+            static std::string s_name;
+            static std::string s_note;
+            static std::string s_confirmDelete;
+            kit::BeginCard("Presets", "Every render setting at once, saved under a name.");
+            if (kit::Button("Showcase: 8K60 lossless", Tone::Accent)) {
+                applyShowcasePreset();
+                s_note = "Showcase set: 7680x4320 at 60, lossless x264, FLAC in MKV. It's slow and the files are big.";
+            }
+            kit::RowBegin("Save as", nullptr);
+            kit::InputText("presetname", &s_name, "preset name");
+            kit::RowEnd();
+            if (kit::Button("Save the current settings")) {
+                std::string const name = s_name;
+                auto const why = saveRenderPreset(name);
+                s_note = why.empty() ? fmt::format("Saved \"{}\".", name) : why;
+            }
+            for (auto const& p : renderPresets()) {
+                ImGui::PushID(p.c_str());
+                kit::RowBegin(p.c_str(), nullptr);
+                if (kit::Button("Load")) {
+                    auto const why = loadRenderPreset(p);
+                    s_note = why.empty() ? fmt::format("Loaded \"{}\".", p) : why;
+                }
+                ImGui::SameLine();
+                if (s_confirmDelete != p) {
+                    if (kit::Button("Delete", Tone::Bad))
+                        s_confirmDelete = p;
+                } else if (kit::Button("Really?", Tone::Bad)) {
+                    std::error_code ec;
+                    std::filesystem::remove(renderPresetsDir() / (p + ".json"), ec);
+                    s_confirmDelete.clear();
+                    s_note = fmt::format("Deleted \"{}\".", p);
+                }
+                kit::RowEnd();
+                ImGui::PopID();
+            }
+            if (!s_note.empty())
+                kit::Hint(s_note.c_str());
+            kit::EndCard();
+        }
+
         void pageRender() {
 #if !GB_NATIVE_ENGINE
         kit::Note("Rendering is Windows-only for now: it loads FFmpeg from Windows DLLs.", Tone::Warn);
@@ -1056,6 +1171,8 @@ namespace gucci::ui {
             kit::BeginCard("Render", "Records the level to a video with FFmpeg.");
             if (sl->isRecording()) {
                 kit::Chip("Rendering", Tone::Bad);
+                kit::Hint(fmt::format("{} frames, {:.1f} s of the level so far", sl->renderedFrames(), sl->getTime())
+                              .c_str());
                 if (kit::Button("Stop", Tone::Bad, -1.f))
                     sl->flushAndStop();
             } else if (sl->m_startOnNextLevel) {
@@ -1080,7 +1197,20 @@ namespace gucci::ui {
             }
             if (!sl->isRecording() && !sl->m_lastError.empty())
                 kit::Note(fmt::format("The last render didn't start: {}", sl->m_lastError).c_str(), Tone::Bad);
+#if GB_NATIVE_ENGINE
+            // Without FFmpeg nothing renders; the mod puts its files back in
+            // this folder at launch when they go missing.
+            if (!sl->isFFmpegLoaded()) {
+                kit::Note("FFmpeg isn't loaded, so nothing can render. Its files belong in the folder below; "
+                          "restarting the game puts them back.",
+                          Tone::Bad);
+                if (kit::Button("Open the FFmpeg folder"))
+                    geode::utils::file::openFolder(Mod::get()->getPersistentDir() / "libraries");
+            }
+#endif
             kit::EndCard();
+
+            renderPresetsCard();
 
             kit::BeginCard("Video", nullptr);
             int width = static_cast<int>(mod->getSavedValue<int64_t>("render_width", 1920));
@@ -1740,6 +1870,27 @@ namespace gucci::ui {
             // Every frame, menu open or not: it starts and stops Video Mode's
             // decoder as well as drawing it (trainers/videomode.hpp).
             videomode::drawOverlay();
+            // A finished render says so once, with where it went
+            // (SLRenderer::publishRenderResult fills the record; nothing read
+            // it). Never while the scene is changing: a render that leaves the
+            // level when done would take the popup with it.
+            if (auto* slr = SLRenderer::get(); slr->m_lastRender.pending && !slr->m_shouldQuit) {
+                auto* scene = CCDirector::sharedDirector()->getRunningScene();
+                if (scene && !typeinfo_cast<CCTransitionScene*>(scene)) {
+                    slr->m_lastRender.pending = false;
+                    auto const r = slr->m_lastRender;
+                    std::filesystem::path const file(r.path);
+                    std::string const body =
+                        fmt::format("Saved <cy>{}</c>\n{}x{} at {} fps, {:.1f} s, {:.1f} MB", file.filename().string(),
+                                    r.width, r.height, r.fps, r.duration, (double)r.fileSize / 1048576.0);
+                    Loader::get()->queueInMainThread([body, dir = file.parent_path()] {
+                        createQuickPopup("Render finished", body, "OK", "Open folder", [dir](auto, bool open) {
+                            if (open)
+                                geode::utils::file::openFolder(dir);
+                        });
+                    });
+                }
+            }
             // Click Indicators' rhythm lane and verdict, menu open or not.
             clickind::drawOverlay();
             // Switched off but still in a level: what it was doing has stopped

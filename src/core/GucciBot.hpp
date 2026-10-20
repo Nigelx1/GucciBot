@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-19-eq (Credits in the order of Nigels video: ace, DashBlaze, then Isaiah before Absent; aura is plain promo help like the others)"
+    "2026-10-19-er (Render: presets saved by name and a one-press Showcase 8K60 lossless, a popup when a render finishes, a warning when FFmpeg is missing, frames and time while it renders)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
