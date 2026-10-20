@@ -48,7 +48,7 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 - [ ] Start-position warning: built -el (set when a macro recorded from a start position loads), untested
 - [ ] Reorder bands, and Brrr/Bells buttons for band sounds: built -el, untested
 - [ ] Mute during Calculate: built -el (Calculate page switch), untested
-- [ ] Per-band images, pulse and sound packs (the site still advertises them)
+- [ ] Per-band images, pulse and sound packs (the site still advertises them): built -ew (a band's own image in place of its shape; a pulse on the marker, the label or both, with fade-in, hold and fade-out; the Brrr and Bells packs came in -el), untested
 
 ### Render
 - [ ] Presets saved by name, plus the one-press Showcase preset (8K60 lossless): built -er (Showcase is lossless RGB x264 with FLAC in MKV: yuv444p isn't a format this renderer writes), untested
@@ -64,6 +64,8 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 - [ ] Trainer video import for the normal Trainer, with a file picker that can't crash: built -et (the Trainer page's own Video Mode card; one Video Mode at a time), untested
 - [ ] Eclipse speedhack override
 - [ ] Moving wave spam (#25)
+- [ ] CPS on the HUD (#28): built -ew (CPS and Max CPS, ported from Silicate), untested; Nigel keeps the speedhack as it is
+- [ ] Converter: GDR2 macros reading as all player 2 (#15). The reader matches libGDR's own; needs the reporter's file
 - [ ] Bug reporters' follow-ups: #20 Android practice-death crash (likely the same bug as the Mac one, fixed in -ei; needs a phone test); #23 start positions and checkpoints; #11, #13 and the -103 error; macros ignoring inputs (#14, #8, #18); logs from the Calculate reports
 - [ ] about.md, the README and the site match what ships
 
@@ -74,6 +76,7 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 - [ ] Speed: progress and a time cap (resetting to checkpoints is 87% of the time)
 - [ ] Markers in the ground (#26; the fix in build -dt is untested)
 - [ ] The trail check being one frame off; recheck the 42,000-frame noclip runaway
+- [ ] Markers missing for player 1 in some dual levels, showing only on player 2 during duals (#27; TheCinnyBun, Helios, TUAPEKA ...). The player-1 marker uses the mark's saved position and the twin uses the trail; look at why the first is missing there
 
 ## 4. AI pathfinder (AI_PATHFINDER_PLAN.md)
 
@@ -90,6 +93,7 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 - [ ] The trigger model in the look-aheads
 - [ ] Seeded random teleports and shake
 - [ ] Checkpoint placement
+- [ ] iOS: the game slows down at 1,000+ TPS (#30)
 
 ## 6. Standalone copy (Windows, no Geode)
 
