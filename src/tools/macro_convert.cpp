@@ -5,6 +5,7 @@
 #include <zlib.h>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <chrono>
 #include <cmath>
@@ -12,6 +13,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <initializer_list>
+#include <map>
 #include <utility>
 
 namespace gucci::convert {
@@ -1249,7 +1251,10 @@ namespace gucci::convert {
                     err = "A block in the Silicate macro runs past its end.";
                     return false;
                 }
-                size_t const atomEnd = r.p + (size_t)size;
+                // A size of 0 means "not known, read to the end": libslc reads it
+                // that way, and nat-converter's slc_oxide writes every action atom
+                // so (review 2026-10-20).
+                size_t const atomEnd = (size == 0 && id == 1) ? end : r.p + (size_t)size;
                 if (id != 1 || sawActions) {  // only the first action atom is the macro
                     r.p = atomEnd;
                     continue;
@@ -1928,7 +1933,8 @@ namespace gucci::convert {
                 events.arr.push_back(std::move(e));
             }
             Value j = Value::object();
-            j.set("meta", std::move(meta)).set("events", std::move(events));
+            // The "_" tag Mega Hack and nat-converter's reader require (review 2026-10-20).
+            j.set("_", Value::ofStr("GucciBot")).set("events", std::move(events)).set("meta", std::move(meta));
             return jsonBytes(j);
         }
 
@@ -2076,18 +2082,36 @@ namespace gucci::convert {
             m.bot = "TASBot";
             return true;
         }
-        Bytes writeTasBot(Macro const& m, std::vector<std::string>&) {
-            Value rows = Value::array();
+        Bytes writeTasBot(Macro const& m, std::vector<std::string>& notes) {
+            // A row per frame with both players in it (click 0: nothing), as
+            // TASBot and nat-converter's reader expect (review 2026-10-20). A
+            // row holds one action per player, so a release on its press's own
+            // frame goes a frame later.
+            std::map<int64_t, std::array<int, 2>> frames;
+            int moved = 0;
             for (auto const& in : inputsFor(m, true)) {
-                if (rows.arr.empty() || rows.arr.back().get("frame")->integer() != in.frame) {
-                    Value row = Value::object();
-                    row.set("frame", Value::ofInt(in.frame));
-                    rows.arr.push_back(std::move(row));
-                }
-                Value click = Value::object();
-                click.set("click", Value::ofInt(in.down ? 1 : 2)).set("x_position", Value::ofInt(0));
-                rows.arr.back().set(in.player2 ? "player_2" : "player_1", std::move(click));
+                int const pl = in.player2 ? 1 : 0;
+                int64_t f = in.frame;
+                while (frames.count(f) && frames[f][pl] != 0)
+                    f++;
+                if (f != in.frame)
+                    moved++;
+                frames[f][pl] = in.down ? 1 : 2;
             }
+            Value rows = Value::array();
+            for (auto const& [f, clicks] : frames) {
+                Value row = Value::object();
+                row.set("frame", Value::ofInt(f));
+                for (int pl = 0; pl < 2; pl++) {
+                    Value click = Value::object();
+                    click.set("click", Value::ofInt(clicks[pl])).set("x_position", Value::ofInt(0));
+                    row.set(pl ? "player_2" : "player_1", std::move(click));
+                }
+                rows.arr.push_back(std::move(row));
+            }
+            if (moved)
+                notes.push_back(std::to_string(moved) + " input(s) moved a frame later: TASBot holds one action per "
+                                                        "player per frame.");
             Value j = Value::object();
             j.set("fps", Value::ofNum(m.tps)).set("macro", std::move(rows));
             return jsonBytes(j);
@@ -2389,6 +2413,13 @@ namespace gucci::convert {
         if (m.inputs.size() != before)
             m.notes.push_back(std::to_string(before - m.inputs.size()) +
                               " inputs fell before the start of the level and were left out.");
+        // A change shifted onto or before the start is the rate it starts at
+        // (the last such one wins), not something to drop.
+        std::stable_sort(m.tpsChanges.begin(), m.tpsChanges.end(),
+                         [](TpsChange const& x, TpsChange const& y) { return x.frame < y.frame; });
+        for (auto const& t : m.tpsChanges)
+            if (t.frame <= 0)
+                m.tps = t.tps;
         std::erase_if(m.tpsChanges, [](TpsChange const& t) { return t.frame <= 0; });
         sortInputs(m);
         if (m.inputs.empty())
