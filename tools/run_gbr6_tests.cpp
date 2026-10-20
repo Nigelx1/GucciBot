@@ -147,6 +147,30 @@ int main() {
                       g->p1Inputs[i].pressed == p1[i].pressed;
         CHECK(sameAll);
     }
+    // An autoclick run with a Left or Right press inside its trailing gap
+    // (review 2026-10-20): the run used to end `rel` frames past its last
+    // release regardless, so the Right press needed a negative delta, which
+    // wrapped and wrote ~33 MB. It must round-trip, small.
+    {
+        GBR6Header hdr;
+        hdr.tps = 240.f;
+        std::vector<GBR6Input> p1;
+        for (uint32_t c = 0; c < 8; c++) {
+            p1.push_back({c * 5, 1, true});
+            p1.push_back({c * 5 + 2, 1, false});
+        }
+        p1.push_back({38, 3, true});  // one frame after the last release; the run's gap is 3
+        p1.push_back({50, 3, false});
+        auto f = GBR6File::fromInputs(hdr, p1);
+        auto bytes = f.serialize();
+        CHECK(bytes.size() < 1024);
+        auto g = GBR6File::deserialize(bytes.data(), bytes.size());
+        bool same = g.has_value() && g->p1Inputs.size() == p1.size();
+        for (size_t i = 0; same && i < p1.size(); ++i)
+            same = g->p1Inputs[i].frame == p1[i].frame && g->p1Inputs[i].button == p1[i].button &&
+                   g->p1Inputs[i].pressed == p1[i].pressed;
+        CHECK(same);
+    }
     std::printf(fails ? "gbr6 sub-tick: %d FAILED\n" : "gbr6 sub-tick: all passed\n", fails);
     return fails ? 1 : 0;
 }

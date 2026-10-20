@@ -116,6 +116,14 @@ namespace gucci {
                         if (cn.pressed && cn.button == p.button && cn.player2 == p.player2) {
                             if ((cn.frame - cr.frame) != rel)
                                 break;
+                        } else if ((cn.frame - cr.frame) < rel) {
+                            // The decoder ends a run `rel` frames past its last
+                            // release. Anything sooner (a Left or Right press,
+                            // say) would need a negative delta from there: the
+                            // unsigned delta wrapped and wrote ~33 MB of 0xFF
+                            // continuations (review 2026-10-20). That cycle
+                            // stays out of the run.
+                            break;
                         }
                     }
                     cycles++;
