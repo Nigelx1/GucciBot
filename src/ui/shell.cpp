@@ -395,6 +395,24 @@ namespace gucci::ui {
             return geode::utils::string::pathToString(p.filename());
         }
 
+        // `want` itself if nothing is there, else "name (2).ext", "(3)"... next
+        // to it, so a move never replaces a file (review 2026-10-20).
+        std::filesystem::path freePath(std::filesystem::path const& want) {
+            std::error_code ec;
+            if (!std::filesystem::exists(want, ec))
+                return want;
+            auto const stem = want.stem().native();
+            auto const ext = want.extension().native();
+            for (int n = 2; n < 10000; n++) {
+                auto candidate = want.parent_path() / stem;
+                candidate += " (" + std::to_string(n) + ")";
+                candidate += ext;
+                if (!std::filesystem::exists(candidate, ec))
+                    return candidate;
+            }
+            return want;
+        }
+
         // A name no saved macro uses yet.
         std::string freeMacroName(std::string const& want) {
             auto* gb = GucciEngine::get();
@@ -416,31 +434,48 @@ namespace gucci::ui {
             if (!res.ok())
                 return {false, fmt::format("{}: {}", fname, res.error)};
             auto& m = res.macro;
-            std::string stem = geode::utils::string::pathToString(src.stem());
+            // Named the way the macro list names files (reloadMacroList), so the
+            // new macro shows and loads under the name it was converted to.
+            std::string stem = src.stem().string();
             for (std::string_view inner : {".gdr", ".mhr"})  // "x.gdr.json" leaves ".gdr" on the stem
                 if (stem.size() > inner.size() && stem.ends_with(inner))
                     stem.resize(stem.size() - inner.size());
             auto const dir = replaysDir();
             std::error_code ec;
             bool const oldBrrr = res.format->id == "brr";
+            // An old 1.x .brrr gives up its name to the new one: it moves aside
+            // first, and comes back if the new one can't be written.
+            std::filesystem::path aside;
             if (inReplays && oldBrrr) {
-                std::filesystem::rename(src, dir / (fname + ".1x"), ec);
+                auto want = src;
+                want += ".1x";
+                aside = freePath(want);
+                std::filesystem::rename(src, aside, ec);
                 if (ec)
                     return {false, fmt::format("Couldn't move the old {} aside: {}", fname, ec.message())};
             }
             std::string const name = freeMacroName(stem);
             m.name = name;
-            if (!writeAll(dir / (name + ".brrr"), convert::toGucciBot(m)))
+            auto const target = dir / (name + ".brrr");
+            if (!writeAll(target, convert::toGucciBot(m))) {
+                std::filesystem::remove(target, ec);
+                if (!aside.empty())
+                    std::filesystem::rename(aside, src, ec);
                 return {false, fmt::format("Couldn't save {}.brrr.", name)};
+            }
+            std::string moveNote;
             if (inReplays && !oldBrrr) {
                 std::filesystem::create_directories(dir / "converted", ec);
-                std::filesystem::rename(src, dir / "converted" / src.filename(), ec);
+                std::filesystem::rename(src, freePath(dir / "converted" / src.filename()), ec);
+                if (ec)
+                    moveNote = fmt::format("\nThe original stayed in the replays folder ({}).", ec.message());
             }
             GucciEngine::get()->reloadMacroList();
             std::string msg = fmt::format("{} ({}) is now \"{}\": {} inputs at {} TPS.", fname, res.format->name, name,
                                           m.inputs.size(), m.tps);
             for (auto const& n : m.notes)
                 msg += "\n" + n;
+            msg += moveNote;
             return {true, msg};
         }
 
