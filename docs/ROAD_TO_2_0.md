@@ -72,7 +72,7 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 ## 3. Calculate
 
 - [x] Port audit against anticroom's original (docs/CALC_PORT_AUDIT.md): two port faults fixed (builds -ed, -ee), plus the end-of-level death (-ef)
-- [ ] The strict count, plus "my suggestion is x frames" using Juice's Alignment-Independent method (credited), flagged in the frame editor
+- [ ] The strict count, plus "my suggestion is x frames" using Juice's Alignment-Independent method (credited), flagged in the frame editor: built -ex, untested (a pass after the strict count, for strict windows of 2 or fewer right after another input; on by default, Calculate page > Suggestions for suspicious clicks)
 - [ ] Speed: progress and a time cap (resetting to checkpoints is 87% of the time)
 - [ ] Markers in the ground (#26; the fix in build -dt is untested)
 - [ ] The trail check being one frame off; recheck the 42,000-frame noclip runaway
