@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-19-er (Render: presets saved by name and a one-press Showcase 8K60 lossless, a popup when a render finishes, a warning when FFmpeg is missing, frames and time while it renders)"
+    "2026-10-19-es (A status bar under every page title; the update checker is back, built so it cannot crash on launch)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

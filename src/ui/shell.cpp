@@ -1542,6 +1542,39 @@ namespace gucci::ui {
 
         // ------------------------------------------------------------ windows
 
+        // What the bot is doing, in colour, with the numbers that go with it:
+        // the old menu's status bar, under every page's title.
+        void statusBar() {
+            auto* gb = GucciEngine::get();
+            auto const& upd = gb->updater;
+            const char* what = "IDLE";
+            Tone tone = Tone::Muted;
+            if (SLRenderer::get()->isRecording()) {
+                what = "RENDERING";
+                tone = Tone::Bad;
+            } else if (::Bot::get()->frameWindow().running() || gb->analyzerOwnsRun()) {
+                what = "CALCULATING";
+                tone = Tone::Accent;
+            } else if (absense::isRunning() || Pathfinder::get()->active) {
+                what = "PATHFINDING";
+                tone = Tone::Accent;
+            } else if (gb->isRecording()) {
+                what = "RECORDING";
+                tone = Tone::Bad;
+            } else if (gb->isPlaying()) {
+                what = "PLAYING";
+                tone = Tone::Good;
+            }
+            kit::Chip(what, tone);
+            ImGui::SameLine();
+            UseFont f(Font::Small);
+            ImGui::PushStyleColor(ImGuiCol_Text, look().pal.muted);
+            std::string const frame = PlayLayer::get() ? fmt::format("frame {}  |  ", upd.getFrame()) : "";
+            ImGui::Text("%s%.0f TPS  |  %.2fx  |  %zu inputs", frame.c_str(), upd.m_tps, upd.m_speedhack,
+                        gb->replay.m_actionAtom.m_actions.size());
+            ImGui::PopStyleColor();
+        }
+
         void drawMain() {
             PageLook const pageLook(kPages[g_page].draw == pages::jupiterTrainer);
             auto const& pal = look().pal;
@@ -1686,6 +1719,7 @@ namespace gucci::ui {
                     ImGui::PopStyleColor();
                 }
             }
+            statusBar();
             kit::Gap(0.3f);
             kPages[g_page].draw();
             ImGui::EndChild();
