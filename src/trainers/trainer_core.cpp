@@ -2,6 +2,7 @@
 // the Trainer's macro and track. See trainer_core.hpp for the shape of it.
 
 #include "trainers/trainer_core.hpp"
+#include "trainers/click_indicators.hpp"
 #include "core/bot_switch.hpp"
 #include "trainers/jupiterghost.hpp"
 #include "trainers/trainerghost.hpp"
@@ -359,9 +360,6 @@ namespace gucci::trainers {
             (float)mod->getSavedValue<double>("trainer_click_perfect_ms", gb->clickIndicatorPerfectMs), 1.f, 200.f);
         gb->clickIndicatorOkMs = std::clamp(
             (float)mod->getSavedValue<double>("trainer_click_ok_ms", gb->clickIndicatorOkMs), 1.f, 400.f);
-        gb->clickBarsInLevel = mod->getSavedValue<bool>("trainer_bars_in_level", gb->clickBarsInLevel);
-        gb->clickBarsLookahead = std::clamp(
-            (float)mod->getSavedValue<double>("trainer_bars_lookahead", gb->clickBarsLookahead), 0.5f, 6.f);
 
         loadMacroScoped(Kind::Jupiter);
         std::error_code ec;
@@ -399,8 +397,6 @@ namespace gucci::trainers {
         auto* gb = GucciEngine::get();
         Mod::get()->setSavedValue<double>("trainer_click_perfect_ms", gb->clickIndicatorPerfectMs);
         Mod::get()->setSavedValue<double>("trainer_click_ok_ms", gb->clickIndicatorOkMs);
-        Mod::get()->setSavedValue<bool>("trainer_bars_in_level", gb->clickBarsInLevel);
-        Mod::get()->setSavedValue<double>("trainer_bars_lookahead", gb->clickBarsLookahead);
     }
 
     // ------------------------------------------------------------ the clock
@@ -470,62 +466,12 @@ namespace gucci::trainers {
         clearComparison(k);
     }
 
-    namespace {
-        // Click Indicators in the level, after Bogdaner09's open-source mod
-        // (github.com/Bogdaner09/mod; credited in the Credits page): each of
-        // the macro's presses coming up in the next few seconds, as a bar from
-        // where the macro pressed to where it let go, with a line on the press.
-        // Where: the macro's own path when it has one (the player's x on that
-        // frame), the level's time-to-position otherwise. Redrawn every frame.
-        void drawLevelBars(PlayLayer* pl, State const& s, bool show) {
-            auto* layer = pl ? pl->m_objectLayer : nullptr;
-            if (!layer)
-                return;
-            auto* node = static_cast<CCDrawNode*>(layer->getChildByID("trainer-click-bars"_spr));
-            auto* gb = GucciEngine::get();
-            if (!show || !gb->clickBarsInLevel || !s.macro.loaded || s.macro.clickIntervalsSec.empty()) {
-                if (node)
-                    node->removeFromParent();
-                return;
-            }
-            if (!node) {
-                node = CCDrawNode::create();
-                node->setID("trainer-click-bars"_spr);
-                layer->addChild(node, 1400);
-            }
-            node->clear();
-            double const now = levelTimeSec();
-            double const tps = s.macro.clickBarTps > 0.0 ? s.macro.clickBarTps : 240.0;
-            auto const xAt = [&](double sec) {
-                long const f = std::lround(sec * tps);
-                auto const& path = s.macro.pathSamples;
-                if (f >= 0 && (size_t)f < path.size() && (path[(size_t)f].p1x != 0.f || path[(size_t)f].p1y != 0.f))
-                    return path[(size_t)f].p1x;
-                return pl->posForTime((float)sec).x;
-            };
-            // Bogdaner's default colour (#35F07A); the hold at his 80% transparency.
-            ccColor4F const hold{0.21f, 0.94f, 0.48f, 0.2f};
-            ccColor4F const press{0.21f, 0.94f, 0.48f, 0.9f};
-            constexpr float kBottom = -2000.f, kTop = 6000.f;  // the floor to above any camera
-            int drawn = 0;
-            for (auto const& [pressSec, releaseSec] : s.macro.clickIntervalsSec) {
-                if (releaseSec < now || pressSec > now + gb->clickBarsLookahead)
-                    continue;
-                if (drawn++ >= gb->clickBarsMax)
-                    break;
-                float const x0 = xAt(std::max(pressSec, now));
-                float const x1 = std::max(x0 + 2.f, xAt(releaseSec));
-                CCPoint span[4] = {{x0, kBottom}, {x1, kBottom}, {x1, kTop}, {x0, kTop}};  // drawPolygon takes it non-const
-                node->drawPolygon(span, 4, hold, 0.f, hold);
-                if (pressSec >= now)
-                    node->drawSegment({x0, kBottom}, {x0, kTop}, 1.5f, press);
-            }
-        }
-    }
-
     void tick() {
         ensureLoaded();
         ++g_tick;
+        // Click Indicators, its own feature now (trainers/click_indicators.hpp):
+        // the trainers' macro in their levels, the loaded one anywhere else.
+        clickind::frame();
         double const now = steadySeconds();
         if (!PlayLayer::get())
             g_stepLevel = nullptr;
@@ -536,8 +482,6 @@ namespace gucci::trainers {
             auto s = state(k);
             s.pageVisible = g_tick - g_drawnAt[idx(k)] <= 2;
             bool const following = followsLevel(k);
-            if (following)
-                drawLevelBars(PlayLayer::get(), s, true);
 
             if (following) {
                 // The level is the clock. Pausing it here means leaving the

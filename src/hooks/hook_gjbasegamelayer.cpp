@@ -2,6 +2,7 @@
 #include "analysis/trajectory.hpp"
 #include "audio/playsound.hpp"
 #include "trainers/calibration.hpp"
+#include "trainers/click_indicators.hpp"
 #include "hacks/indicator.hpp"
 #include "hooks/util_midhook.hpp"
 #include "trainers/jupiterghost.hpp"
@@ -617,6 +618,8 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
                 // scoring: timed off the input event itself, in the frame the
                 // click really arrived in, not polled from the menu.
                 trainers::onLevelInput(pressed);
+                // Click Indicators' scoring, against the macro it shows.
+                clickind::onRealClick(!player1, pressed);
             }
         }
         // GucciBot records a press twice over -- here, and from the queue in

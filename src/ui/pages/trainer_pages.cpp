@@ -366,12 +366,6 @@ namespace gucci::ui::pages {
             windows |= kit::SliderRow("Perfect within", "Shared by both trainers", &gb->clickIndicatorPerfectMs, 1.f,
                                       100.f, "%.0f ms");
             windows |= kit::SliderRow("OK within", nullptr, &gb->clickIndicatorOkMs, 1.f, 200.f, "%.0f ms");
-            windows |= kit::SwitchRow("Bars in the level",
-                                      "The macro's next presses drawn in the level, from where it pressed to where "
-                                      "it let go (Click Indicators, after Bogdaner09)",
-                                      &gb->clickBarsInLevel);
-            if (gb->clickBarsInLevel)
-                windows |= kit::SliderRow("Show ahead", nullptr, &gb->clickBarsLookahead, 0.5f, 6.f, "%.1f s");
             if (windows) {
                 gb->clickIndicatorOkMs = std::max(gb->clickIndicatorOkMs, gb->clickIndicatorPerfectMs);
                 tr::saveScoreWindows();

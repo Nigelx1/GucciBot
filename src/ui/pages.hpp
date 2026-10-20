@@ -19,6 +19,7 @@ namespace gucci::ui::pages {
     void jupiterLookPop();
     void jupiterVideoOverlay();  // Video Mode: the JMF click bar over the video, in place of the menu
     void anyTrainer();      // pages/trainer_pages.cpp: Trainer (any saved macro)
+    void clickIndicators();  // pages/click_indicators_card.cpp: Click Indicators (both trainer pages)
     void indicators();      // pages/indicators.cpp: Survival Indicator, click cue + calibration, accuracy/streak (both trainer pages)
 
     // Cards drawn inside other pages

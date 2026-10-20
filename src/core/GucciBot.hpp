@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-19-el (Calculate: the result stays after a run, conflicting mods are named, progress and Cancel in the level, mute while it runs, reorder bands, all Brrr or all Bells, the start-position warning)"
+    "2026-10-19-em (Click Indicators is its own feature with all of Bogdaner09s options: badges, player square and line, hold draining, taps and holds, player 2 colours, timing offset, the rhythm lane and scoring; render pixel format choice)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -847,9 +847,6 @@ namespace gucci {
         float clickIndicatorOkMs = 60.f;
         // Click Indicators in the level (Bogdaner09's idea): the trainer macro's
         // coming presses drawn as bars where it pressed, as wide as it held.
-        bool clickBarsInLevel = true;
-        float clickBarsLookahead = 2.f;  // seconds of presses shown ahead
-        int clickBarsMax = 10;           // bars on screen at most
 
         bool loadTrainerMacro(const std::string& stem);
         // The JMF macro's ghost path: the bundled .gdr has inputs only, so the

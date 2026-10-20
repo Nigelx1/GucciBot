@@ -25,6 +25,7 @@
 #include "render/intro.hpp"
 #include "render/renderer.hpp"
 #include "trainers/videomode.hpp"
+#include "trainers/click_indicators.hpp"
 #include "tools/macro_check.hpp"
 
 #include <Geode/Geode.hpp>
@@ -1724,6 +1725,8 @@ namespace gucci::ui {
             // Every frame, menu open or not: it starts and stops Video Mode's
             // decoder as well as drawing it (trainers/videomode.hpp).
             videomode::drawOverlay();
+            // Click Indicators' rhythm lane and verdict, menu open or not.
+            clickind::drawOverlay();
             // Switched off but still in a level: what it was doing has stopped
             // (the analyzer above still walks back), and it leaves the game when
             // the level closes. Until then the menu is the switch.

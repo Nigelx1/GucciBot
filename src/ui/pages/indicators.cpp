@@ -197,6 +197,7 @@ namespace gucci::ui::pages {
     } // namespace
 
     void indicators() {
+        clickIndicators();
 #if !GB_NATIVE_ENGINE
         kit::Note("The Survival Indicator is untested on this platform. Moving objects keep the speed they have now: triggers that start, stop or change them later are not simulated here.", Tone::Warn);
 #endif
