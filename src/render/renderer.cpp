@@ -402,30 +402,41 @@ namespace gucci {
             return geode::Err("Failed to query codec pixel-format capabilities");
         }
 
-        std::unique_ptr<Colorspace> colorspace;
-        for (int i = 0; i < outPixFmtCount; i++) {
-            switch (outPixFmts[i]) {
+        auto const makeColorspace = [](AVPixelFormat f) -> std::unique_ptr<Colorspace> {
+            switch (f) {
             case AV_PIX_FMT_YUV420P:
-                m_settings.m_pixFmt = AV_PIX_FMT_YUV420P;
-                colorspace = std::make_unique<YUV420PColorspace>();
-                break;
+                return std::make_unique<YUV420PColorspace>();
             case AV_PIX_FMT_NV12:
-                m_settings.m_pixFmt = AV_PIX_FMT_NV12;
-                colorspace = std::make_unique<NV12Colorspace>();
-                break;
+                return std::make_unique<NV12Colorspace>();
             case AV_PIX_FMT_RGB0:
-                m_settings.m_pixFmt = AV_PIX_FMT_RGB0;
-                colorspace = std::make_unique<RGB0Colorspace>();
-                break;
+                return std::make_unique<RGB0Colorspace>();
             case AV_PIX_FMT_RGB24:
-                m_settings.m_pixFmt = AV_PIX_FMT_RGB24;
-                colorspace = std::make_unique<RGB24Colorspace>();
-                break;
+                return std::make_unique<RGB24Colorspace>();
             default:
+                return nullptr;
+            }
+        };
+        // The pixel format picked on the Render page comes first, when the
+        // codec takes it; otherwise the first of these four the codec lists.
+        std::string const wanted = Mod::get()->getSavedValue<std::string>("render_pix_fmt", "auto");
+        AVPixelFormat const wantedFmt = wanted == "yuv420p" ? AV_PIX_FMT_YUV420P
+                                        : wanted == "nv12"  ? AV_PIX_FMT_NV12
+                                        : wanted == "rgb0"  ? AV_PIX_FMT_RGB0
+                                        : wanted == "rgb24" ? AV_PIX_FMT_RGB24
+                                                            : AV_PIX_FMT_NONE;
+        std::unique_ptr<Colorspace> colorspace;
+        for (int i = 0; i < outPixFmtCount && wantedFmt != AV_PIX_FMT_NONE; i++) {
+            if (outPixFmts[i] == wantedFmt) {
+                m_settings.m_pixFmt = wantedFmt;
+                colorspace = makeColorspace(wantedFmt);
                 break;
             }
-            if (m_settings.m_pixFmt != AV_PIX_FMT_NONE)
-                break;
+        }
+        for (int i = 0; i < outPixFmtCount && m_settings.m_pixFmt == AV_PIX_FMT_NONE; i++) {
+            if (auto cs = makeColorspace(outPixFmts[i])) {
+                m_settings.m_pixFmt = outPixFmts[i];
+                colorspace = std::move(cs);
+            }
         }
         if (m_settings.m_pixFmt == AV_PIX_FMT_NONE)
             return geode::Err("Couldn't find a usable pixel format for codec '{}'",

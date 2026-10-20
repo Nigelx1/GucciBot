@@ -1134,6 +1134,19 @@ namespace gucci::ui {
             };
 
             saveText("Codec", "Blank uses the default", "render_codec", "", "auto");
+            {
+                // Read when a render starts (renderer.cpp): a format the codec
+                // doesn't take falls back to the first one it does.
+                static const char* const kPixFmts[] = {"Auto", "yuv420p", "nv12", "rgb0", "rgb24"};
+                static const char* const kPixKeys[] = {"auto", "yuv420p", "nv12", "rgb0", "rgb24"};
+                std::string const cur = mod->getSavedValue<std::string>("render_pix_fmt", "auto");
+                int idx = 0;
+                for (int i = 0; i < 5; i++)
+                    if (cur == kPixKeys[i])
+                        idx = i;
+                if (kit::ChoiceRow("Pixel format", "Auto takes the first one the codec supports", &idx, kPixFmts, 5))
+                    mod->setSavedValue<std::string>("render_pix_fmt", kPixKeys[idx]);
+            }
             saveWhole("Bitrate (Mbps)", nullptr, "render_bitrate", 30, 1, 1000);
             saveText("File type", nullptr, "render_file_extension", ".mp4", ".mp4");
             saveText("Extra FFmpeg options", "For people who know FFmpeg", "render_video_args", "", "");
