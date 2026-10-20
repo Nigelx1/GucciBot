@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-19-en (Click Indicators count as a cheat for safe mode while they show: they take the memory out of memory levels)"
+    "2026-10-19-eo (Safe mode also counts what shows the way through a level as a cheat: path preview, macro path, practice range, the trainers ghosts)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

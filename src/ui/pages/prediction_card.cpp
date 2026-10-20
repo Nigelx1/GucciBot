@@ -48,7 +48,7 @@ namespace gucci::ui::pages {
 
         // ---- the path preview
         bool changed = false;
-        if (kit::FeatureBegin("Path preview", "Lines ahead of the player: green if you hold, red if you let go",
+        if (kit::FeatureBegin("Path preview", "Lines ahead of the player: green if you hold, red if you let go. Counts as a cheat",
                               &gb->pathPreview, nullptr, &changed)) {
             if (kit::SliderRow("Length", "How far ahead, in ticks; at 240 TPS, 240 is one second", &gb->pathLength,
                                kMinPathTicks, kMaxPathTicks, "%d ticks"))

@@ -6,6 +6,7 @@
 #include "analysis/pathfinder.hpp"
 #include "hacks/autoclicker.hpp"
 #include "trainers/click_indicators.hpp"
+#include "trainers/trainer_core.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/modify/GJGameLevel.hpp>
@@ -148,6 +149,29 @@ namespace gucci::safemode {
         Mod::get()->setSavedValue("cheat_dot_green", on);
     }
 
+    // Anything that shows the way through the level counts as a cheat too
+    // (Nigel, 2026-10-19: it takes the memory out of memory levels): Click
+    // Indicators, the path preview, the macro's path, its clicks near you
+    // (Practice range), and the trainers' ghosts in their own levels -- the
+    // macro's, and your best attempt's.
+    bool showsTheWay() {
+        auto* gb = GucciEngine::get();
+        if (clickind::active() || gb->pathPreview)
+            return true;
+        if (gb->showMacroPath && !gb->replay.m_pathSamples.empty())
+            return true;
+        if (gb->practiceRangeEnabled && !gb->replay.m_actionAtom.m_actions.empty())
+            return true;
+        using trainers::Kind;
+        if (trainers::followsLevel(Kind::Jupiter) &&
+            ((gb->jupiterGhostEnabled && !gb->jupiterMacro.pathSamples.empty()) || gb->jupiterBestGhostEnabled))
+            return true;
+        if (trainers::followsLevel(Kind::Any) &&
+            ((gb->trainerGhostEnabled && !gb->trainerMacro.pathSamples.empty()) || gb->trainerBestGhostEnabled))
+            return true;
+        return false;
+    }
+
     bool cheatingNow() {
         auto* gb = GucciEngine::get();
         if (gb->standingDown || botswitch::takenOut())
@@ -162,7 +186,7 @@ namespace gucci::safemode {
                || std::abs(u.m_speedhack - 1.0) > 1e-6 // speedhack
                || gb->noclipEnabled || u.m_preventDeath
                || gb->forcedPlatformer // a level played as platformer that isn't one
-               || clickind::active()   // the macro's clicks shown in the level: no memory left to test
+               || showsTheWay()       // the way through shown in the level: no memory left to test
                || u.m_paused // frame advance
                || Autoclicker::get()->enabled;
     }

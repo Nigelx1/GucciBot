@@ -767,9 +767,10 @@ namespace gucci::ui {
             engineSwitch("Hide percentage", nullptr, &gb->hackHidePercentage, "hack_hide_percentage");
             engineSwitch("No death flash", nullptr, &gb->hackNoSpikeFlash, "hack_no_flash");
             engineSwitch("Audio pitch follows speed", nullptr, &gb->audioPitchEnabled, "hack_audio_pitch");
-            engineSwitch("Practice range", "Shows the loaded macro's clicks near you in the level", &gb->practiceRangeEnabled,
+            engineSwitch("Practice range", "Shows the loaded macro's clicks near you in the level. Counts as a cheat",
+                         &gb->practiceRangeEnabled,
                          "practice_range");
-            engineSwitch("Macro path", "Draws the loaded macro's whole path and its clicks in the level",
+            engineSwitch("Macro path", "Draws the loaded macro's whole path and its clicks in the level. Counts as a cheat",
                          &gb->showMacroPath, "show_macro_path");
             if (gb->showMacroPath) {
                 if (kit::SliderRow("Marker size", nullptr, &gb->macroPathMarkerSize, 2.f, 24.f, "%.0f"))

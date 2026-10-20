@@ -376,7 +376,7 @@ namespace gucci::ui::pages {
         void ghostsCard(Kind k) {
             auto* gb = GucciEngine::get();
             auto s = tr::state(k);
-            kit::BeginCard("Ghosts", "Drawn in the level while you play it.");
+            kit::BeginCard("Ghosts", "Drawn in the level while you play it. Safe mode counts them as a cheat.");
             if (kit::SwitchRow("Macro ghost", "Where the macro's player is on your frame", &s.ghost))
                 tr::saveSettings(k);
             if (kit::SwitchRow("Best-attempt ghost", "Your furthest run this session, replayed alongside you",
