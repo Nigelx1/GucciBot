@@ -80,6 +80,7 @@ namespace gucci::fwstore {
             {"fwac_lstar_enabled", &FW::lstarEnabled},
             {"fwac_lstar_hud", &FW::lstarHud},
             {"fwac_dependent_search", &FW::dependentSearch},
+            {"fwac_suggest", &FW::suggestEnabled},
             {"fwac_turbo", &FW::turbo},
             {"fwac_label_releases", &FW::labelReleases},
         };
@@ -104,6 +105,8 @@ namespace gucci::fwstore {
             // the label from the input under the playhead.
             {"fwac_label_window", &FW::labelWindow, 0, kBandWindowMax},
             {"fwac_label_test_count", &FW::labelTestCount, 1, 100},
+            {"fwac_suggest_below", &FW::suggestBelow, 1, 10},
+            {"fwac_suggest_z", &FW::suggestZ, 1, 8},
         };
 
         constexpr Field<int64_t> kInt64s[] = {

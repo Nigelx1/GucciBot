@@ -236,6 +236,18 @@ namespace gucci::ui::pages {
                  "Re-measures each input with the previous one moved across its own window. If the timing carries "
                  "over, the window becomes the average and shows as ~N",
                  &FW::dependentSearch);
+            if (feature("Suggestions for suspicious clicks",
+                        "Calculate's count stays strict. A tight click right after another input is also counted "
+                        "Juice's way (his Alignment-Independent method: the input before it moved across its own "
+                        "window), and when that comes out wider the Frame Editor flags the click: \"my suggestion is "
+                        "x frames\"",
+                        &FW::suggestEnabled)) {
+                slider("Suspicious at", "A strict window this small or smaller", &FW::suggestBelow,
+                       "%d frames or fewer");
+                slider("Move the one before", "How far either way the input before it is moved", &FW::suggestZ,
+                       "up to %d frames");
+                kit::FeatureEnd();
+            }
             if (feature("Joint setup sweep",
                         "Resolves back-to-back inputs together instead of judging each against where the macro "
                         "placed the others. Costs extra tests",

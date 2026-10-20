@@ -51,6 +51,13 @@ struct FrameWindowMark {
     float dependent = 0.f;
     float dependentMin = 0.f;
     float dependentMax = 0.f;
+    // GucciBot: Juice's Alignment-Independent count, for a suspicious click
+    // only (see beginSuggestPass): its window taken over every alignment of
+    // the input before it. 0 = no suggestion. Calculate's count stays
+    // `window`; the frame editor flags this ("my suggestion is x frames").
+    float suggestion = 0.f;
+    int suggestAlignments = 0;
+    float suggestCoverage = 0.f;
 };
 
 struct FrameWindowMessage {
@@ -405,6 +412,7 @@ class FrameWindowAnalyzer {
         Recover,
         Rewind,
         Dependent,
+        Suggest,
         Finish,
     };
 
@@ -713,6 +721,40 @@ class FrameWindowAnalyzer {
     void resetActions();
     void placeAt(size_t k, double pos);
     size_t resultFor(size_t sample) const;
+
+    // ---- GucciBot: Juice's Alignment-Independent method, as Calculate's
+    // suggestion for suspicious clicks (framewindow.cpp, beginSuggestPass).
+    struct SuggestClick {
+        size_t a = 0;      // the sample before it
+        size_t b = 0;      // the suspicious click's sample
+        size_t markB = 0;  // its result
+        std::vector<int64_t> alignments;  // whole-frame shifts of the one before
+    };
+
+    std::vector<SuggestClick> m_sugClicks;
+    size_t m_sugCursor = 0;
+    size_t m_sugAlign = 0;
+    bool m_sugBaseReady = false;
+    bool m_sugAdvancing = false;
+    bool m_sugLegActive = false;
+    uint32_t m_sugLegTarget = 0;
+    std::vector<int64_t> m_sugScan;   // the click's shifts at this alignment
+    std::vector<char> m_sugViable;    // per shift: survived, and the next input could follow
+    size_t m_sugScanAt = 0;
+    bool m_sugInCont = false;         // testing the input after it for this shift
+    size_t m_sugContAction = 0;       // that input's action index, or NO_INDEX
+    std::vector<int64_t> m_sugContScan;
+    size_t m_sugContAt = 0;
+    std::vector<int64_t> m_sugWidths;  // the click's window at each alignment
+    std::string m_sugFinishMessage;
+
+    bool beginSuggestPass(std::string message);
+    bool stepSuggest(PlayLayer* pl);
+    void startSuggestAlignment();
+    void buildSuggestContinuation(int64_t clickShift);
+    void launchSuggestLeg();
+    void recordSuggestLeg(bool survived);
+    void finishSuggestClick();
 
     static constexpr int TRIP_BUDGET_MS = 100;
     static constexpr uint32_t TRIP_STALL_STEPS = 2000;

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-20-ew (Calculate bands get an image and a pulse; the HUD gets CPS and Max CPS; American spelling in the menu)"
+    "2026-10-20-ex (Calculate suggests for suspicious clicks: Juice's count, flagged in the Frame Editor as my suggestion is x frames)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -2945,6 +2945,9 @@ void FrameWindowAnalyzer::nextClick() {
                                m_filtered);
         if (m_dependentSearch->inner() && this->beginDependentPass(msg))
             return;
+        // GucciBot: Juice's count for the suspicious clicks, after the strict one.
+        if (this->beginSuggestPass(msg))
+            return;
         this->finish(std::move(msg), true);
         return;
     }
@@ -3498,6 +3501,11 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
                 continue;
             }
 
+            case Stage::Suggest: {
+                if (!this->stepSuggest(pl)) return;
+                continue;
+            }
+
             case Stage::Finish:
             case Stage::Idle:
             default:
@@ -3603,6 +3611,9 @@ bool FrameWindowAnalyzer::stepDependent(PlayLayer* pl) {
     if (m_depCursor >= m_depPairs.size()) {
         this->resetActions();
         cbf::Engine::get()->reset();
+        // GucciBot: Juice's count for the suspicious clicks comes after.
+        if (this->beginSuggestPass(m_depFinishMessage))
+            return true;
         this->finish(std::move(m_depFinishMessage), true);
         return true;
     }
@@ -3887,6 +3898,435 @@ void FrameWindowAnalyzer::finishDependentPair() {
     m_depWidths.clear();
 }
 
+// ---- GucciBot: Juice's Alignment-Independent method, as the suggestion ----
+//
+// Not anticroom's. Nigel's design (2026-10-13): Calculate counts every click
+// strictly, as anticroom's analyzer does; for a suspicious click -- a window
+// of a frame or two right after another input, where the input before it
+// may be what pins it -- it also counts it Juice's way, and the frame editor
+// flags the click with "my suggestion is x frames".
+//
+// Juice's method (his spec, first built as GucciBot 1.x's Alignment-
+// Independent mode, Version 1 scope): move the input before the click across
+// every alignment its own window allows, up to Z frames either way; at each,
+// measure the click, counting a timing only if the input after it can still
+// be timed somewhere within Z frames too (depth-1 continuation, his VIABLE);
+// group the windows that are within half again of each other, and if the
+// biggest group holds at least half the alignments, its median is the
+// suggestion. It is shown only when it is wider than the strict window.
+//
+// Built on the dependent pass's machinery so it measures the way the rest of
+// Calculate does: the same checkpoint a frame before the pair, the same
+// placement (the input before moves with its release), the same legs and
+// leg targets. Whole frames only; CBF clicks are left alone.
+
+static int64_t suggestZ() {
+    return std::clamp<int64_t>(SLSettings::get()->frameWindow.suggestZ, 1, 8);
+}
+
+bool FrameWindowAnalyzer::beginSuggestPass(std::string message) {
+    auto const& fw = SLSettings::get()->frameWindow;
+    for (auto& mk : m_results) {
+        mk.suggestion = 0.f;
+        mk.suggestAlignments = 0;
+        mk.suggestCoverage = 0.f;
+    }
+    if (!fw.suggestEnabled) return false;
+
+    int const below = std::clamp(fw.suggestBelow, 1, 10);
+    int64_t const z = suggestZ();
+
+    m_sugClicks.clear();
+    for (size_t a = 0; a < m_samples.size(); a++) {
+        size_t const b = this->nextSampleFor(a);
+        if (b == NO_INDEX) continue;
+        if (!this->inProbeRange(b)) continue;
+        if (m_samples[b].frame - m_samples[a].frame >
+            static_cast<uint32_t>(m_horizon))
+            continue;
+
+        size_t const ra = this->resultFor(a);
+        size_t const rb = this->resultFor(b);
+        if (ra == NO_INDEX || rb == NO_INDEX) continue;
+
+        auto const& ma = m_results[ra];
+        auto const& mb = m_results[rb];
+        if (ma.desynced || mb.desynced || mb.hidden || mb.unbounded) continue;
+        if (ma.cbf || mb.cbf) continue;
+        if (ma.window <= 0 || mb.window <= 0 || mb.window > below) continue;
+
+        SuggestClick click;
+        click.a = a;
+        click.b = b;
+        click.markB = rb;
+        int64_t const lo = std::max<int64_t>(-z, ma.low);
+        int64_t const hi = std::min<int64_t>(z, ma.high);
+        for (int64_t s = lo; s <= hi; s++) click.alignments.push_back(s);
+        // An input before it that can't move gives nothing to compare.
+        if (click.alignments.size() < 2) continue;
+        m_sugClicks.push_back(std::move(click));
+    }
+
+    if (m_sugClicks.empty()) {
+        FWLOG("[fw][suggest] no suspicious clicks to count Juice's way");
+        return false;
+    }
+
+    log::info("[fw][suggest] counting {} suspicious click(s) Juice's way "
+              "(windows of {} or fewer, Z={})",
+              m_sugClicks.size(), below, z);
+
+    m_sugFinishMessage = std::move(message);
+    m_sugCursor = 0;
+    m_sugBaseReady = false;
+    m_sugAdvancing = false;
+    m_sugLegActive = false;
+    m_phase = Phase::Later;
+    m_shift = 0;
+    m_stageId = Stage::Suggest;
+    m_stage = "suggest";
+    m_status = "Counting suspicious clicks Juice's way";
+    m_index = m_samples.size() - 1;
+    return true;
+}
+
+bool FrameWindowAnalyzer::stepSuggest(PlayLayer* pl) {
+    auto bot = Bot::get();
+    auto& updater = bot->updater();
+    auto& pf = bot->practiceFix();
+
+    if (m_sugCursor >= m_sugClicks.size()) {
+        this->resetActions();
+        cbf::Engine::get()->reset();
+        int flagged = 0;
+        for (auto const& mk : m_results)
+            if (mk.suggestion > 0.f) flagged++;
+        if (flagged > 0)
+            m_sugFinishMessage += fmt::format(
+                " {} suspicious click{} got a suggestion (Frame Editor).",
+                flagged, flagged == 1 ? "" : "s");
+        this->finish(std::move(m_sugFinishMessage), true);
+        return true;
+    }
+
+    auto const& click = m_sugClicks[m_sugCursor];
+    size_t const aiA = m_samples[click.a].actionIndex;
+
+    if (!m_sugBaseReady) {
+        // The dependent pass's checkpoint: a frame before the earliest the
+        // input before the click can go.
+        double const earliest = static_cast<double>(m_originalFrames[aiA]) +
+                                m_originalOffsets[aiA] +
+                                static_cast<double>(click.alignments.front());
+        uint32_t const base = static_cast<uint32_t>(
+            std::max(0.0, std::floor(earliest) - 1.0));
+
+        if (!m_sugAdvancing) {
+            cbf::Engine::get()->reset();
+            this->resetActions();
+            if (m_haveCheckpoint && m_saved.m_frameOffset <= base) {
+                if (!this->restoreToBranch()) return true;
+            } else {
+                this->hardResetToStart();
+            }
+            m_sugAdvancing = true;
+        }
+
+        m_noclip = m_noclipNextAdvance;
+        auto const r = this->stepToward(pl, base);
+        m_noclip = false;
+        if (r == StepResult::OutOfBudget) return false;
+        m_noclipNextAdvance = false;
+        m_sugAdvancing = false;
+
+        if (r == StepResult::Died) {
+            FWWARN("[fw][suggest] could not reach frame {} for click {}, "
+                   "skipping it",
+                   base, click.b + 1);
+            m_sugCursor++;
+            return true;
+        }
+
+        this->releaseCheckpoint();
+        m_cpObject = pl->createCheckpoint();
+        if (!m_cpObject) {
+            this->finish("Could not create a checkpoint.", false);
+            return true;
+        }
+        m_cpObject->retain();
+        // Our createCheckpoint takes the checkpoint's own frame (see the same
+        // call in stepDependent).
+        m_saved = pf.createCheckpoint(m_cpObject, updater.getFrame());
+        m_haveCheckpoint = true;
+
+        m_sugWidths.clear();
+        m_sugAlign = 0;
+        m_sugBaseReady = true;
+        m_index = click.b;
+        this->startSuggestAlignment();
+        return true;
+    }
+
+    if (!m_sugLegActive) {
+        if (m_sugInCont) {
+            if (m_sugContAt < m_sugContScan.size()) {
+                this->launchSuggestLeg();
+                return true;
+            }
+            // No timing of the input after it survived: a dead end.
+            m_sugViable.push_back(0);
+            m_sugInCont = false;
+            m_sugScanAt++;
+            return true;
+        }
+        if (m_sugScanAt < m_sugScan.size()) {
+            this->launchSuggestLeg();
+            return true;
+        }
+
+        // This alignment's window: the run of viable timings around the
+        // viable one nearest the click's own.
+        int64_t width = 0;
+        size_t best = NO_INDEX;
+        for (size_t i = 0; i < m_sugScan.size(); i++) {
+            if (!m_sugViable[i]) continue;
+            if (best == NO_INDEX ||
+                std::abs(m_sugScan[i]) < std::abs(m_sugScan[best]))
+                best = i;
+        }
+        if (best != NO_INDEX) {
+            size_t left = best, right = best;
+            while (left > 0 && m_sugViable[left - 1]) left--;
+            while (right + 1 < m_sugScan.size() && m_sugViable[right + 1])
+                right++;
+            width = m_sugScan[right] - m_sugScan[left] + 1;
+        }
+        m_sugWidths.push_back(width);
+        FWLOG("[fw][suggest] click {} with click {} at {:+d}: window {}",
+              click.b + 1, click.a + 1, click.alignments[m_sugAlign], width);
+
+        if (++m_sugAlign >= click.alignments.size()) {
+            this->finishSuggestClick();
+            return true;
+        }
+        this->startSuggestAlignment();
+        return true;
+    }
+
+    auto const r = this->stepToward(pl, m_sugLegTarget);
+    if (r == StepResult::OutOfBudget) return false;
+    m_sugLegActive = false;
+    this->recordSuggestLeg(r != StepResult::Died);
+    return true;
+}
+
+void FrameWindowAnalyzer::startSuggestAlignment() {
+    auto const& click = m_sugClicks[m_sugCursor];
+    size_t const aiA = m_samples[click.a].actionIndex;
+    size_t const aiB = m_samples[click.b].actionIndex;
+    auto const origin = [this](size_t k) {
+        return static_cast<double>(m_originalFrames[k]) + m_originalOffsets[k];
+    };
+
+    int64_t const z = suggestZ();
+    double const aPos =
+        origin(aiA) + static_cast<double>(click.alignments[m_sugAlign]);
+    double const bPos = origin(aiB);
+
+    // The click's own shifts: within Z, after the input before it (where it
+    // now is), not before the level, and before the input after it -- the
+    // bounds startDependentPoint uses, in whole frames.
+    int64_t lo = -z, hi = z;
+    lo = std::max<int64_t>(lo, static_cast<int64_t>(std::floor(aPos - bPos)) + 1);
+    lo = std::max<int64_t>(lo, static_cast<int64_t>(std::ceil(-bPos)));
+    size_t const next = this->nextActionFor(aiB, m_samples[click.b].player2);
+    if (next != NO_INDEX)
+        hi = std::min<int64_t>(
+            hi, static_cast<int64_t>(std::ceil(origin(next) - bPos)) - 1);
+
+    m_sugScan.clear();
+    m_sugViable.clear();
+    m_sugScanAt = 0;
+    m_sugInCont = false;
+    m_sugContScan.clear();
+    m_sugContAt = 0;
+    m_sugContAction = next;
+    for (int64_t s = lo; s <= hi; s++) m_sugScan.push_back(s);
+}
+
+void FrameWindowAnalyzer::buildSuggestContinuation(int64_t clickShift) {
+    m_sugContScan.clear();
+    m_sugContAt = 0;
+    if (m_sugContAction == NO_INDEX) return;
+
+    auto const& click = m_sugClicks[m_sugCursor];
+    size_t const aiB = m_samples[click.b].actionIndex;
+    size_t const aiC = m_sugContAction;
+    auto const origin = [this](size_t k) {
+        return static_cast<double>(m_originalFrames[k]) + m_originalOffsets[k];
+    };
+
+    int64_t const z = suggestZ();
+    double const bPos = origin(aiB) + static_cast<double>(clickShift);
+    double const cPos = origin(aiC);
+    int64_t lo = -z, hi = z;
+    lo = std::max<int64_t>(lo, static_cast<int64_t>(std::floor(bPos - cPos)) + 1);
+    lo = std::max<int64_t>(lo, static_cast<int64_t>(std::ceil(-cPos)));
+    if (size_t const after =
+            this->nextActionFor(aiC, m_samples[click.b].player2);
+        after != NO_INDEX)
+        hi = std::min<int64_t>(
+            hi, static_cast<int64_t>(std::ceil(origin(after) - cPos)) - 1);
+
+    // The macro's own timing first, then outward: the likeliest to work, so
+    // most viable timings cost one extra leg.
+    for (int64_t d = 0; d <= z; d++) {
+        if (d >= lo && d <= hi) m_sugContScan.push_back(d);
+        if (d > 0 && -d >= lo && -d <= hi) m_sugContScan.push_back(-d);
+    }
+}
+
+void FrameWindowAnalyzer::launchSuggestLeg() {
+    auto const& click = m_sugClicks[m_sugCursor];
+    size_t const aiA = m_samples[click.a].actionIndex;
+    size_t const aiB = m_samples[click.b].actionIndex;
+
+    cbf::Engine::get()->reset();
+    if (!this->restoreToBranch()) return;
+    this->resetActions();
+
+    auto const origin = [this](size_t k) {
+        return static_cast<double>(m_originalFrames[k]) + m_originalOffsets[k];
+    };
+
+    double const aShift = static_cast<double>(click.alignments[m_sugAlign]);
+    this->placeAt(aiA, origin(aiA) + aShift);
+    if (size_t const rel = this->pairedReleaseFor(aiA);
+        rel != NO_INDEX && rel != aiB)
+        this->placeAt(rel, origin(rel) + aShift);
+
+    int64_t const clickShift = m_sugScan[m_sugScanAt];
+    this->placeAt(aiB, origin(aiB) + static_cast<double>(clickShift));
+
+    size_t target = aiB;
+    if (m_sugInCont) {
+        size_t const aiC = m_sugContAction;
+        this->placeAt(aiC, origin(aiC) +
+                               static_cast<double>(m_sugContScan[m_sugContAt]));
+        target = aiC;
+    }
+
+    // launchDependentLeg's target: the input, then up to the next one less
+    // the slack, at least MIN_HORIZON, at most the horizon.
+    auto const& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
+    int64_t const tFrame = static_cast<int64_t>(actions[target].m_frame);
+    int64_t gap = static_cast<int64_t>(m_horizon);
+    for (size_t k = target + 1; k < actions.size(); k++) {
+        if (!isMeasurableInput(actions[k])) continue;
+        gap = static_cast<int64_t>(actions[k].m_frame) - tFrame;
+        break;
+    }
+    int64_t const reach =
+        std::clamp<int64_t>(std::max<int64_t>(gap - m_slack_, 0), MIN_HORIZON,
+                            static_cast<int64_t>(m_horizon));
+
+    m_sugLegTarget = static_cast<uint32_t>(std::max<int64_t>(tFrame + reach, 0));
+    m_sugLegActive = true;
+    m_legCounter++;
+}
+
+void FrameWindowAnalyzer::recordSuggestLeg(bool survived) {
+    if (!m_sugInCont) {
+        if (!survived) {
+            m_sugViable.push_back(0);
+            m_sugScanAt++;
+            return;
+        }
+        // It reached its own target. It counts only if the input after it can
+        // still be timed (Juice's depth-1 continuation).
+        this->buildSuggestContinuation(m_sugScan[m_sugScanAt]);
+        if (m_sugContScan.empty()) {
+            m_sugViable.push_back(1);
+            m_sugScanAt++;
+            return;
+        }
+        m_sugInCont = true;
+        return;
+    }
+
+    if (survived) {
+        m_sugViable.push_back(1);
+        m_sugInCont = false;
+        m_sugScanAt++;
+        return;
+    }
+    m_sugContAt++;
+}
+
+void FrameWindowAnalyzer::finishSuggestClick() {
+    auto const& click = m_sugClicks[m_sugCursor];
+    auto& mk = m_results[click.markB];
+
+    // Juice's grouping: windows within half again of the group's smallest
+    // count as one size; a window of 0 only groups with 0.
+    std::vector<int64_t> w = m_sugWidths;
+    std::sort(w.begin(), w.end());
+    size_t bestStart = 0, bestLen = 0;
+    bool tie = false;
+    for (size_t i = 0; i < w.size();) {
+        size_t j = i + 1;
+        while (j < w.size() &&
+               (w[i] == 0 ? w[j] == 0
+                          : static_cast<double>(w[j]) <=
+                                static_cast<double>(w[i]) * 1.5))
+            j++;
+        size_t const len = j - i;
+        if (len > bestLen) {
+            bestStart = i;
+            bestLen = len;
+            tie = false;
+        } else if (len == bestLen) {
+            tie = true;
+        }
+        i = j;
+    }
+
+    mk.suggestion = 0.f;
+    mk.suggestAlignments = static_cast<int>(w.size());
+    mk.suggestCoverage =
+        w.empty() ? 0.f
+                  : static_cast<float>(bestLen) / static_cast<float>(w.size());
+
+    float median = 0.f;
+    if (bestLen > 0) {
+        size_t const mid = bestStart + bestLen / 2;
+        median = bestLen % 2 == 1
+                     ? static_cast<float>(w[mid])
+                     : 0.5f * static_cast<float>(w[mid - 1] + w[mid]);
+    }
+
+    // Two groups of the same size is no answer, and a group under half the
+    // alignments isn't dominant. A suggestion no wider than the strict
+    // window says nothing new.
+    bool const dominant = !tie && bestLen * 2 >= w.size() && w.size() >= 2;
+    if (dominant && median > static_cast<float>(mk.window))
+        mk.suggestion = median;
+
+    std::string all;
+    for (int64_t x : m_sugWidths)
+        all += (all.empty() ? "" : " ") + std::to_string(x);
+    log::info("[fw][suggest] click {} (frame {}): strict {}, Juice's way {} "
+              "over {} alignment(s) [{}], group {}/{}{}",
+              click.b + 1, mk.frame, mk.window, median, w.size(), all, bestLen,
+              w.size(),
+              mk.suggestion > 0.f ? " -> suggested" : tie ? " (tie)" : "");
+
+    m_sugCursor++;
+    m_sugBaseReady = false;
+    m_sugLegActive = false;
+    m_sugWidths.clear();
+}
+
 std::string FrameWindowAnalyzer::formatWindow(int window) {
     if (window <= 0) return "X";
     return fmt::format("{}", window);
@@ -3933,6 +4373,9 @@ struct StoredMark {
     float dependent = 0.f;
     float dependentMin = 0.f;
     float dependentMax = 0.f;
+    float suggestion = 0.f;
+    int suggestAlignments = 0;
+    float suggestCoverage = 0.f;
 };
 
 struct StoredMessage {
@@ -4000,6 +4443,10 @@ static matjson::Value markToJson(StoredMark const& m) {
         {"dependent", (double)m.dependent},
         {"dependentMin", (double)m.dependentMin},
         {"dependentMax", (double)m.dependentMax},
+        // GucciBot: Juice's count for a suspicious click (the suggestion pass).
+        {"suggestion", (double)m.suggestion},
+        {"suggestAlignments", (int64_t)m.suggestAlignments},
+        {"suggestCoverage", (double)m.suggestCoverage},
     });
 }
 
@@ -4114,6 +4561,9 @@ static bool fromJson(std::string const& text, StoredResults& out) {
             m.dependent = (float)jreal(j, "dependent", m.dependent);
             m.dependentMin = (float)jreal(j, "dependentMin", m.dependentMin);
             m.dependentMax = (float)jreal(j, "dependentMax", m.dependentMax);
+            m.suggestion = (float)jreal(j, "suggestion", m.suggestion);
+            m.suggestAlignments = (int)jnum(j, "suggestAlignments", m.suggestAlignments);
+            m.suggestCoverage = (float)jreal(j, "suggestCoverage", m.suggestCoverage);
             out.marks.push_back(m);
         }
     }
@@ -4161,7 +4611,8 @@ bool FrameWindowAnalyzer::saveResults(std::filesystem::path const& path) const {
                              mk.saturatedLow, mk.saturatedHigh,
                              mk.splitWindow, mk.splitShift, mk.splitChecked,
                              mk.position.x, mk.position.y, mk.dependent,
-                             mk.dependentMin, mk.dependentMax});
+                             mk.dependentMin, mk.dependentMax, mk.suggestion,
+                             mk.suggestAlignments, mk.suggestCoverage});
     }
 
     out.messages.reserve(m_messages.size());
@@ -4226,6 +4677,9 @@ bool FrameWindowAnalyzer::loadResults(std::filesystem::path const& path) {
         mk.dependent = sm.dependent;
         mk.dependentMin = sm.dependentMin;
         mk.dependentMax = sm.dependentMax;
+        mk.suggestion = sm.suggestion;
+        mk.suggestAlignments = sm.suggestAlignments;
+        mk.suggestCoverage = sm.suggestCoverage;
         m_results.push_back(mk);
     }
 
@@ -5299,6 +5753,7 @@ static char const* stageName(int stage) {
         case 6: return "recover";
         case 7: return "rewind";
         case 8: return "dependent";
+        case 9: return "suggest";
         default: return "finish";
     }
 }

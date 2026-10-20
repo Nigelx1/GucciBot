@@ -232,6 +232,13 @@ struct FrameWindowSettings {
     // Dependent search: measures inputs whose window moves depending on where
     // the input before them landed, instead of treating every click alone.
     bool dependentSearch = false;
+    // GucciBot: Juice's Alignment-Independent count as a suggestion for
+    // suspicious clicks -- a strict window of suggestBelow frames or fewer
+    // right after another input. The input before it moves up to suggestZ
+    // frames either way. Calculate's own count is left as it is.
+    bool suggestEnabled = true;
+    int suggestBelow = 2;
+    int suggestZ = 3;
     // Turbo: spend a much bigger slice of each frame on the analysis. Faster,
     // at the cost of the game being close to frozen while it runs.
     bool turbo = false;

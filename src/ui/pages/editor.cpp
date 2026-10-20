@@ -23,6 +23,7 @@
 #include "ui/look.hpp"
 
 #include "absense/glue.hpp"
+#include "analysis/ac/framewindow.hpp"
 #include "analysis/pathfinder.hpp"
 #include "core/GucciBot.hpp"
 #include "tools/edit_core.hpp"
@@ -35,6 +36,7 @@
 #include <cmath>
 #include <cstdint>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace gucci::ui::pages {
@@ -417,6 +419,22 @@ namespace gucci::ui::pages {
             return best;
         }
 
+        // Calculate's suggestion for an input: Juice's count for a suspicious
+        // click (framewindow.cpp, beginSuggestPass). Empty when it has none.
+        std::string suggestionNote(bool player2, uint32_t frame, bool release) {
+            for (auto const& mk : ::Bot::get()->frameWindow().results()) {
+                if (mk.suggestion <= 0.f || mk.frame != frame || mk.player2 != player2 || mk.release != release)
+                    continue;
+                return fmt::format("\nMy suggestion is {:g} frame{}{} (Calculate counts {}).\nThe input before it pins "
+                                   "this one: moved across its own window, it leaves this {} {:g} in {:.0f}% of {} "
+                                   "alignments (Juice's Alignment-Independent method).",
+                                   mk.suggestion, mk.suggestion == 1.f ? "" : "s", release ? " for the release" : "",
+                                   mk.window, release ? "release" : "click", mk.suggestion, mk.suggestCoverage * 100.f,
+                                   mk.suggestAlignments);
+            }
+            return {};
+        }
+
         std::string describeItem(State const& s, Actions const& a, ed::Item const& it) {
             std::string const who = ed::laneName(it.lane);
             uint32_t const f = ed::firstFrame(a, it);
@@ -444,6 +462,10 @@ namespace gucci::ui::pages {
                 for (auto const& fd : s.report.findings)
                     if (fd.index == it.press || fd.index == it.release)
                         out += fmt::format("\nProblem: {}", macrocheck::name(fd.problem));
+            // Calculate's suggestion, on the press (and the release of a click).
+            out += suggestionNote(it.lane >= 3, f, it.kind == ed::Kind::Release);
+            if (it.kind == ed::Kind::Click)
+                out += suggestionNote(it.lane >= 3, ed::lastFrame(a, it), true);
             return out;
         }
 
@@ -750,6 +772,16 @@ namespace gucci::ui::pages {
             ImU32 const colLoneRelease = u32(pal.muted, 0.9f);
             ImU32 const colProblem = u32(pal.bad, 0.95f);
             ImU32 const colSel = u32(pal.accent);
+            // Calculate's suggestions (Juice's count for suspicious clicks): a
+            // small flag over the bar.
+            std::vector<std::tuple<uint32_t, bool, bool>> flags;
+            for (auto const& mk : ::Bot::get()->frameWindow().results())
+                if (mk.suggestion > 0.f)
+                    flags.emplace_back(mk.frame, mk.player2, mk.release);
+            auto const flagged = [&](uint32_t frame, bool p2, bool rel) {
+                return std::find(flags.begin(), flags.end(), std::tuple<uint32_t, bool, bool>{frame, p2, rel}) !=
+                       flags.end();
+            };
             bool const ghosting = (s.drag == Drag::Move && s.dragValue != 0) ||
                                   ((s.drag == Drag::PressEdge || s.drag == Drag::ReleaseEdge) &&
                                    s.dragValue != s.dragOrigin);
@@ -783,6 +815,17 @@ namespace gucci::ui::pages {
                         continue;
                     }
                     runs.add(x0, std::max(x1, x0 + 3.f), col);
+                    if (!flags.empty()) {
+                        bool const p2 = lane >= 3;
+                        bool const onPress = flagged(ed::firstFrame(a, it), p2, false);
+                        bool const onRelease = it.kind == ed::Kind::Click && flagged(ed::lastFrame(a, it), p2, true);
+                        if (onPress || onRelease) {
+                            runs.flush();
+                            float const fx = onPress ? x0 : x1;
+                            dl->AddTriangleFilled(ImVec2(fx - 4.f, runs.y0 - 4.f), ImVec2(fx + 4.f, runs.y0 - 4.f),
+                                                  ImVec2(fx, runs.y0 + 2.f), u32(pal.warn));
+                        }
+                    }
                     if (isSel && !ghosting && x1 - x0 > 4.f) {
                         runs.flush();
                         dl->AddRect(ImVec2(x0, runs.y0), ImVec2(x1, runs.y1), u32(pal.ink, 0.9f), 3.f, 0, 1.5f);
