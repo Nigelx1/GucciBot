@@ -1,5 +1,5 @@
 @echo off
-REM Offline tests: the GBR6 sub-tick and TPS sections, Check Macro, Macro Tools and the Frame Editor's rules.
+REM Offline tests: the GBR6 sub-tick and TPS sections, Check Macro, Macro Tools, other bots' formats and the Frame Editor's rules.
 
 setlocal
 set VCVARS="C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
@@ -28,6 +28,14 @@ cl /nologo /std:c++20 /EHsc /O2 /MD /I src ^
    tools\run_macroops_tests.cpp src\tools\macro_ops.cpp src\core\gbr6_format.cpp /Fe:build\run_macroops_tests.exe /Fo:build\ || exit /b 1
 
 build\run_macroops_tests.exe || exit /b 1
+
+REM Other bots' formats (src/tools/macro_convert): every writer round-trips. zlib comes from the
+REM mod's own build, so build the mod once first.
+cl /nologo /std:c++20 /EHsc /O2 /MD /I src /I build\_deps\zlib-src /I build\_deps\zlib-build ^
+   tools\run_convert_tests.cpp src\tools\macro_convert.cpp src\core\gbr6_format.cpp build\_deps\zlib-build\zlibstatic.lib ^
+   /Fe:build\run_convert_tests.exe /Fo:build\ || exit /b 1
+
+build\run_convert_tests.exe || exit /b 1
 
 REM Frame Editor rules (src/tools/edit_core, ported from Absense's macro editor).
 cl /nologo /std:c++20 /EHsc /O2 /MD /I src ^

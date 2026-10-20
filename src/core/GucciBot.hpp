@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-19-et (The Trainer gets its own Video Mode: pick any video and it plays on the Trainer click bar)"
+    "2026-10-19-eu (The macro converter core: 26 formats incl. Silicate, TcBot, GDR and old 1.x .brrr; not in the menu yet)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
