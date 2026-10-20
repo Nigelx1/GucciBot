@@ -2,6 +2,7 @@
 // settings, and the ImGui hook the whole mod draws from. Written from scratch
 // on 2026-10-01 to replace the old menu (see ui.hpp).
 
+#include "tools/macro_convert.hpp"
 #include "core/platform.hpp"
 #include "core/setup_check.hpp"
 #include "hacks/safemode.hpp"
@@ -33,6 +34,11 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <map>
+#include <optional>
+#include <Geode/utils/async.hpp>
 #include <thread>
 #include <cctype>
 
@@ -339,6 +345,7 @@ namespace gucci::ui {
         }
 
         std::string g_rowNote;  // what the last row action said, when it failed
+        bool g_rowNoteOk = false;  // ...or what it did, when that's worth saying
 
         // The theme (built-in or custom) whose macros save with `ext`.
         themes::Theme const* themeForExtension(std::string const& ext) {
@@ -369,6 +376,201 @@ namespace gucci::ui {
             return "";
         }
 
+        // ---- other bots' macros, in and out (tools/macro_convert)
+
+        int g_convertShift = 0;  // a nudge, in frames, on top of each format's own
+
+        std::vector<uint8_t> readAll(std::filesystem::path const& p) {
+            std::ifstream f(p, std::ios::binary);
+            return std::vector<uint8_t>((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+        }
+
+        bool writeAll(std::filesystem::path const& p, std::vector<uint8_t> const& bytes) {
+            std::ofstream f(p, std::ios::binary);
+            f.write(reinterpret_cast<char const*>(bytes.data()), (std::streamsize)bytes.size());
+            return f.good();
+        }
+
+        std::string fileNameOf(std::filesystem::path const& p) {
+            return geode::utils::string::pathToString(p.filename());
+        }
+
+        // A name no saved macro uses yet.
+        std::string freeMacroName(std::string const& want) {
+            auto* gb = GucciEngine::get();
+            std::string const base = want.empty() ? std::string("Converted") : want;
+            std::string name = base;
+            for (int n = 2; !gb->findMacroFile(name).empty(); n++)
+                name = fmt::format("{} ({})", base, n);
+            return name;
+        }
+
+        // Another format's macro, saved as a GucciBot one in replays/. One
+        // that was in the replays folder moves to replays/converted (an old
+        // 1.x .brrr to <name>.brrr.1x, next to its replacement), so it isn't
+        // offered again.
+        std::pair<bool, std::string> convertMacroFile(std::filesystem::path const& src, bool inReplays) {
+            auto const bytes = readAll(src);
+            auto const fname = fileNameOf(src);
+            auto res = convert::read(bytes, fname, g_convertShift);
+            if (!res.ok())
+                return {false, fmt::format("{}: {}", fname, res.error)};
+            auto& m = res.macro;
+            std::string stem = geode::utils::string::pathToString(src.stem());
+            for (std::string_view inner : {".gdr", ".mhr"})  // "x.gdr.json" leaves ".gdr" on the stem
+                if (stem.size() > inner.size() && stem.ends_with(inner))
+                    stem.resize(stem.size() - inner.size());
+            auto const dir = replaysDir();
+            std::error_code ec;
+            bool const oldBrrr = res.format->id == "brr";
+            if (inReplays && oldBrrr) {
+                std::filesystem::rename(src, dir / (fname + ".1x"), ec);
+                if (ec)
+                    return {false, fmt::format("Couldn't move the old {} aside: {}", fname, ec.message())};
+            }
+            std::string const name = freeMacroName(stem);
+            m.name = name;
+            if (!writeAll(dir / (name + ".brrr"), convert::toGucciBot(m)))
+                return {false, fmt::format("Couldn't save {}.brrr.", name)};
+            if (inReplays && !oldBrrr) {
+                std::filesystem::create_directories(dir / "converted", ec);
+                std::filesystem::rename(src, dir / "converted" / src.filename(), ec);
+            }
+            GucciEngine::get()->reloadMacroList();
+            std::string msg = fmt::format("{} ({}) is now \"{}\": {} inputs at {} TPS.", fname, res.format->name, name,
+                                          m.inputs.size(), m.tps);
+            for (auto const& n : m.notes)
+                msg += "\n" + n;
+            return {true, msg};
+        }
+
+        std::filesystem::path exportsDir() {
+            return replaysDir() / "exports";
+        }
+
+        // A saved macro written out in another bot's format, to replays/exports.
+        std::pair<bool, std::string> exportMacro(std::string const& name, convert::Format const& f) {
+            auto const file = GucciEngine::get()->findMacroFile(name);
+            if (file.empty())
+                return {false, fmt::format("Couldn't find \"{}\".", name)};
+            convert::Macro m;
+            std::string err;
+            if (!convert::fromGucciBot(readAll(file), m, err))
+                return {false, err};
+            auto const out = convert::write(m, f);
+            if (!out.error.empty())
+                return {false, out.error};
+            std::error_code ec;
+            std::filesystem::create_directories(exportsDir(), ec);
+            auto const path = exportsDir() / (name + std::string(f.ext));
+            if (!writeAll(path, out.bytes))
+                return {false, fmt::format("Couldn't save {}.", fileNameOf(path))};
+            std::string msg = fmt::format("Saved exports/{} ({}).", fileNameOf(path), f.name);
+            for (auto const& n : out.notes)
+                msg += "\n" + n;
+            return {true, msg};
+        }
+
+        // Import from anywhere: the file picker, the BIG BRRRR track picker's
+        // crash-safe way (pages/themes.cpp): an arc coroutine, the handle
+        // dropped, the result handed over on the main thread.
+        struct PickedMacro {
+            bool ready = false;
+            std::optional<std::filesystem::path> path;
+            std::string error;
+        };
+        PickedMacro s_pickedMacro;
+        bool s_macroPickPending = false;
+
+        arc::Future<int> pickMacroTask() {
+            geode::utils::file::FilePickOptions options;
+            options.filters.push_back({"Macros",
+                                       {"*.gdr", "*.gdr2", "*.json", "*.slc", "*.scbf1", "*.tcm", "*.ybot", "*.xd",
+                                        "*.mhr", "*.echo", "*.replay", "*.zbf", "*.kd", "*.rush", "*.freplay", "*.xbot",
+                                        "*.url", "*.txt", "*.brrr"}});
+            geode::utils::file::PickResult result =
+                co_await geode::utils::file::pick(geode::utils::file::PickMode::OpenFile, std::move(options));
+            PickedMacro got;
+            got.ready = true;
+            if (result.isOk())
+                got.path = std::move(result).unwrap();
+            else
+                got.error = std::move(result).unwrapErr();
+            geode::queueInMainThread([got = std::move(got)]() mutable {
+                s_pickedMacro = std::move(got);
+                s_macroPickPending = false;
+            });
+            co_return 0;
+        }
+
+        // Under the list: other bots' macros found in the replays folder, and
+        // the way to bring one in from anywhere.
+        void foreignMacrosSection() {
+            auto* gb = GucciEngine::get();
+            if (s_pickedMacro.ready) {
+                PickedMacro got = std::move(s_pickedMacro);
+                s_pickedMacro = PickedMacro{};
+                if (!got.error.empty()) {
+                    g_rowNote = "The file picker failed: " + got.error;
+                    g_rowNoteOk = false;
+                } else if (got.path) {
+                    std::tie(g_rowNoteOk, g_rowNote) = convertMacroFile(*got.path, false);
+                }
+            }
+            kit::Section("From other bots");
+            kit::Hint("GDR, Silicate, TcBot, yBot, xdBot, Mega Hack, Echo and more, and GucciBot 1.x's old .brrr. Drop "
+                      "them in the replays folder, or import one from anywhere; the original stays as it was.");
+            ImGui::BeginDisabled(s_macroPickPending || gb->isRecording());
+            if (kit::Button(s_macroPickPending ? "Choosing..." : "Import a macro")) {
+                s_macroPickPending = true;
+                // The handle is a temporary: dropping it detaches the task.
+                (void)geode::async::runtime().spawn(pickMacroTask());
+            }
+            if (!gb->foreignMacros.empty()) {
+                ImGui::SameLine();
+                if (kit::Button(fmt::format("Convert all {}", gb->foreignMacros.size()).c_str(), Tone::Accent)) {
+                    auto const names = gb->foreignMacros;
+                    int done = 0;
+                    std::string failed;
+                    for (auto const& n : names) {
+                        auto const [ok, msg] = convertMacroFile(replaysDir() / n, true);
+                        if (ok)
+                            done++;
+                        else
+                            failed += "\n" + msg;
+                    }
+                    g_rowNoteOk = failed.empty();
+                    g_rowNote = fmt::format("Converted {} of {}.{}", done, names.size(), failed);
+                }
+            }
+            ImGui::EndDisabled();
+            kit::RowBegin("Shift frames", "If a converted macro dies early, try one frame either way");
+            ImGui::SliderInt("##convertshift", &g_convertShift, -3, 3, g_convertShift == 0 ? "as saved" : "%+d");
+            kit::RowEnd();
+            static std::map<std::string, std::string> s_formatOf;
+            std::string convertNow;
+            for (auto const& n : gb->foreignMacros) {
+                ImGui::PushID(n.c_str());
+                auto it = s_formatOf.find(n);
+                if (it == s_formatOf.end()) {
+                    auto const* f = convert::detect(readAll(replaysDir() / n), n);
+                    it = s_formatOf.emplace(n, f ? std::string(f->name) : std::string("not a format GucciBot knows"))
+                             .first;
+                }
+                ImGui::BeginDisabled(gb->isRecording());
+                if (ImGui::SmallButton("Convert"))
+                    convertNow = n;
+                ImGui::EndDisabled();
+                ImGui::SameLine();
+                ImGui::TextUnformatted(n.c_str());
+                ImGui::SameLine();
+                ImGui::TextDisabled("%s", it->second.c_str());
+                ImGui::PopID();
+            }
+            if (!convertNow.empty())
+                std::tie(g_rowNoteOk, g_rowNote) = convertMacroFile(replaysDir() / convertNow, true);
+        }
+
         // The "..." menu on a saved macro's row (a right click opens it too).
         // What it does is handed back, to run once the list has been drawn.
         std::function<void()> macroRowMenu(std::string const& name, std::string const& ext) {
@@ -396,6 +598,24 @@ namespace gucci::ui {
                 ImGui::SetTooltip("Open a level first");
             if (!ext.empty() && ext != ".brrr" && ImGui::MenuItem("Convert to .brrr"))
                 act = [who] { g_rowNote = GucciEngine::get()->moveMacro(who, who, ".brrr"); };
+            if (ImGui::BeginMenu("Export as")) {
+                for (auto const& f : convert::formats()) {
+                    if (!f.canWrite)
+                        continue;
+                    if (ImGui::MenuItem(std::string(f.name).c_str())) {
+                        convert::Format const* fp = &f;
+                        act = [who, fp] { std::tie(g_rowNoteOk, g_rowNote) = exportMacro(who, *fp); };
+                    }
+                }
+                ImGui::Separator();
+                if (ImGui::MenuItem("Open the exports folder"))
+                    act = [] {
+                        std::error_code ec;
+                        std::filesystem::create_directories(exportsDir(), ec);
+                        geode::utils::file::openFolder(exportsDir());
+                    };
+                ImGui::EndMenu();
+            }
             ImGui::Separator();
             kit::InputText("rename", &s_rename, "new name");
             if (kit::Button("Rename", Tone::Plain, -1.f)) {
@@ -415,8 +635,10 @@ namespace gucci::ui {
             ImGui::EndDisabled();
             if (recording)
                 kit::Hint("Stop recording first.");
-            if (act)
+            if (act) {
                 g_rowNote.clear();
+                g_rowNoteOk = false;
+            }
             return act;
         }
 
@@ -697,8 +919,9 @@ namespace gucci::ui {
             ImGui::EndChild();
             if (afterList)
                 afterList();
+            foreignMacrosSection();
             if (!g_rowNote.empty())
-                kit::Note(g_rowNote.c_str(), Tone::Warn);
+                kit::Note(g_rowNote.c_str(), g_rowNoteOk ? Tone::Good : Tone::Warn);
             kit::EndCard();
         }
 

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-19-eu (The macro converter core: 26 formats incl. Silicate, TcBot, GDR and old 1.x .brrr; not in the menu yet)"
+    "2026-10-19-ev (Other bots macros convert in the game: Saved macros has Convert, Import a macro and Export as)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -1249,6 +1249,9 @@ namespace gucci {
 
         std::vector<std::string> storedMacros;
         std::set<std::string> incompatibleMacros;
+        // Other bots' macros in the replays folder, and GucciBot 1.x's old
+        // .brrr files, by file name: the Saved macros card converts them.
+        std::vector<std::string> foreignMacros;
         std::map<std::string, std::string> storedMacroExts;  // name -> its file's extension (the theme tag)
         std::unordered_set<std::string> jaMacros;
         std::unordered_set<std::string> giddeyMacros;

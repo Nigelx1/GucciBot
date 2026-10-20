@@ -9,6 +9,7 @@
 #include "core/setup_check.hpp"
 #include "core/standdown.hpp"
 #include "hacks/hud.hpp"
+#include "tools/macro_convert.hpp"
 #include "tools/selfcheck.hpp"
 
 #include <Geode/Geode.hpp>
@@ -1287,6 +1288,7 @@ namespace gucci {
         storedMacros.clear();
         storedMacroExts.clear();
         incompatibleMacros.clear();
+        foreignMacros.clear();
         jaMacros.clear();
         giddeyMacros.clear();
         toosiiMacros.clear();
@@ -1319,7 +1321,17 @@ namespace gucci {
                 continue;
             auto ext = it.path().extension().string();
             auto stem = it.path().stem().string();
-            if (std::find(known.begin(), known.end(), ext) != known.end()) {
+            bool isKnown = std::find(known.begin(), known.end(), ext) != known.end();
+            // GucciBot 1.x saved .brrr too, in its old format: that one gets
+            // converted, not listed.
+            if (isKnown && ext == ".brrr") {
+                char magic[4] = {};
+                std::ifstream f(it.path(), std::ios::binary);
+                f.read(magic, 4);
+                if (std::memcmp(magic, "BRR\0", 4) == 0)
+                    isKnown = false;
+            }
+            if (isKnown) {
                 storedMacros.push_back(stem);
                 storedMacroExts[stem] = ext;
                 if (ext == ".ja")
@@ -1374,11 +1386,13 @@ namespace gucci {
                     if (!isBuiltin)
                         customThemeMacrosByExt[bare].insert(stem);
                 }
-            } else if (ext == ".gdr" || ext == ".xd" || ext == ".json" || ext == ".brr") {
+            } else if (convert::looksImportable(it.path().filename().string())) {
                 incompatibleMacros.insert(stem);
+                foreignMacros.push_back(it.path().filename().string());
             }
         }
         std::sort(storedMacros.begin(), storedMacros.end());
+        std::sort(foreignMacros.begin(), foreignMacros.end());
     }
 
     void GucciEngine::applyIntervalAutosave() {
