@@ -46,7 +46,7 @@ namespace gucci::ui::pages {
         bool changed = false;
         changed |= kit::SliderRow("Line width", nullptr, &style.lineWidth, 0.1f, 3.f, "%.2f");
         changed |= kit::SliderRow("Fill", "How solid the inside of each box is", &style.fill, 0.f, 1.f, "%.2f");
-        if (kit::FeatureBegin("Parts and colours", "Pick what is drawn, and in which colour", &g_showParts)) {
+        if (kit::FeatureBegin("Parts and colors", "Pick what is drawn, and in which color", &g_showParts)) {
             for (int i = 0; i < HitboxOverlay::PartCount; ++i) {
                 auto const part = static_cast<HitboxOverlay::Part>(i);
                 auto& ps = style.parts[i];

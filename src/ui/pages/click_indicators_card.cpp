@@ -53,8 +53,8 @@ namespace gucci::ui::pages {
             changed |= kit::SliderRow("Most on screen", "In the level and in the lane", &s.maxNotes, 1, 60);
             changed |= kit::SliderRow("Timing offset", "Every indicator later (+) or earlier (-)", &s.offsetMs, -2000,
                                       2000, "%d ms");
-            changed |= colourRows("Colour", nullptr, s.color, &s.transparency);
-            changed |= colourRows("Player 2 colour", "Two-player macros", s.p2Color, &s.p2Transparency);
+            changed |= colourRows("Color", nullptr, s.color, &s.transparency);
+            changed |= colourRows("Player 2 color", "Two-player macros", s.p2Color, &s.p2Transparency);
             changed |= kit::SliderRow("Tap line thickness", "In level units; a block is 30", &s.lineWidth, 1.f, 20.f,
                                       "%.1f");
             changed |= kit::SliderRow("Tap threshold", "Shorter presses draw as taps, longer ones as holds", &s.tapMs,
@@ -66,7 +66,7 @@ namespace gucci::ui::pages {
                                       &s.holdTracks);
             changed |= kit::SwitchRow("Badge on the press edge", "A small square level with you, easier to follow",
                                       &s.pressBadge);
-            changed |= kit::SwitchRow("Target square on you", "A badge centred in it is perfect timing",
+            changed |= kit::SwitchRow("Target square on you", "A badge centered in it is perfect timing",
                                       &s.playerSquare);
             if (s.pressBadge || s.playerSquare)
                 changed |= kit::SliderRow("Badge size", "On screen, whatever the zoom", &s.badgeSize, 2.f, 20.f,
@@ -74,7 +74,7 @@ namespace gucci::ui::pages {
             changed |= kit::SwitchRow("Line through you", "An indicator touching it is the frame the macro clicks",
                                       &s.playerLine);
             if (s.playerLine)
-                changed |= colourRows("Line colour", nullptr, s.playerColor, &s.playerTransparency);
+                changed |= colourRows("Line color", nullptr, s.playerColor, &s.playerTransparency);
 
             kit::Section("Rhythm lane");
             changed |= kit::SwitchRow("Rhythm lane", "Presses fall toward a hit line at the edge of the screen",
@@ -89,7 +89,7 @@ namespace gucci::ui::pages {
                                           &s.laneWindow, 0.3f, 6.f, "%.1f s");
                 changed |= kit::SliderRow("Size", nullptr, &s.laneScale, 0.4f, 2.5f, "%.2fx");
                 static const char* const kShapes[] = {"Slabs", "Circles"};
-                changed |= kit::ChoiceRow("Notes", "Circles: a flat osu!mania lane, grey capsules for holds",
+                changed |= kit::ChoiceRow("Notes", "Circles: a flat osu!mania lane, gray capsules for holds",
                                           &s.noteShape, kShapes, 2);
                 if (s.noteShape == 0)
                     changed |= kit::SliderRow("Perspective", "How hard the lane tapers away", &s.laneDepth, 0.2f, 4.f,

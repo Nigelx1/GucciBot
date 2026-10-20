@@ -90,12 +90,12 @@ namespace gucci::ui::pages {
                 changed |= kit::SliderRow("Look-ahead", lookHint.c_str(), &gb->indicatorLookahead,
                                           indicator::kMinLookahead, indicator::kMaxLookahead, "%d ticks");
                 changed |= kit::SliderRow("Opacity", nullptr, &gb->indicatorOpacity, 0.05f, 1.f, "%.2f");
-                colourRow("Safe colour", &gb->indicatorSafeColorR, &gb->indicatorSafeColorG,
+                colourRow("Safe color", &gb->indicatorSafeColorR, &gb->indicatorSafeColorG,
                           &gb->indicatorSafeColorB, changed);
-                colourRow("Unsafe colour", &gb->indicatorDangerColorR, &gb->indicatorDangerColorG,
+                colourRow("Unsafe color", &gb->indicatorDangerColorR, &gb->indicatorDangerColorG,
                           &gb->indicatorDangerColorB, changed);
                 changed |= kit::SwitchRow("Flash on click",
-                                          "Each click you make flashes in the colour the indicator showed then",
+                                          "Each click you make flashes in the color the indicator showed then",
                                           &gb->indicatorFlashEnabled);
                 kit::Gap();
                 liveLine();

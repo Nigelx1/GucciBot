@@ -325,7 +325,7 @@ namespace gucci::ui::pages {
                     names.push_back(t.name);
                 for (auto const& t : customs)
                     names.push_back(t.name + " (yours)");
-                kit::RowBegin("Start from", "Copies that theme's colours and words into this one");
+                kit::RowBegin("Start from", "Copies that theme's colors and words into this one");
                 int choice = ed.startFrom;
                 if (kit::Dropdown("start", &choice, names) && choice != ed.startFrom) {
                     size_t const index = static_cast<size_t>(choice);
@@ -360,7 +360,7 @@ namespace gucci::ui::pages {
             kit::EndCard();
 
             kit::BeginCard("Look", nullptr);
-            kit::Section("Colours");
+            kit::Section("Colors");
             kit::ColorRow("Accent", "Buttons, highlights and headings", &d.accent, false);
             kit::ColorRow("Background", "The window behind everything", &d.background, false);
             kit::ColorRow("Cards", "The panels the controls sit on", &d.card, false);
@@ -369,7 +369,7 @@ namespace gucci::ui::pages {
             kit::Section("Shape");
             kit::SliderRow("Corner radius", nullptr, &d.radius, 0.f, 14.f, "%.0f px");
             kit::SliderRow("Opacity", "How solid the window is", &d.opacity, 0.3f, 1.f, "%.2f");
-            kit::SwitchRow("Pulse", "The accent colour breathes", &d.pulse);
+            kit::SwitchRow("Pulse", "The accent color breathes", &d.pulse);
             kit::EndCard();
 
             kit::BeginCard("Words", nullptr);

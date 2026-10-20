@@ -1661,7 +1661,7 @@ namespace gucci::ui {
                 kit::RowEnd();
             }
 #endif
-            kit::SwitchRow("Cycle the accent colour", nullptr, &look().accentCycle);
+            kit::SwitchRow("Cycle the accent color", nullptr, &look().accentCycle);
             kit::SwitchRow("Animations", nullptr, &look().effects);
             bool compact = g_compact;
             if (kit::SwitchRow("Compact mode", "A small quick-controls window instead of this one", &compact))

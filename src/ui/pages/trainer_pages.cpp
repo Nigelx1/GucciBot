@@ -288,7 +288,7 @@ namespace gucci::ui::pages {
             bool const following = tr::followsLevel(k);
 
             kit::BeginCard("Click Trainer",
-                           "The macro's clicks scroll past a fixed centre line at real speed. Tap space, up or W "
+                           "The macro's clicks scroll past a fixed center line at real speed. Tap space, up or W "
                            "along with it, or play the level: every press and release you make shows up as a white "
                            "line under the macro's.");
             if (kit::SwitchRow("Click bar", "Off stops its clock and stops listening for your keys", &s.barEnabled))

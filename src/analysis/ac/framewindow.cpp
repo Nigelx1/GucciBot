@@ -814,7 +814,7 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
         return report;
     }
     if (rs.m_actionAtom.m_actions.empty()) {
-        report.message = "No macro loaded. Load one to analyse.";
+        report.message = "No macro loaded. Load one to analyze.";
         return report;
     }
     if (!bot->isPlaying()) {
@@ -3148,7 +3148,7 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
 
 void FrameWindowAnalyzer::cancel() {
     if (!m_running) return;
-    this->finish("Cancelled.", false);
+    this->finish("Canceled.", false);
 }
 
 void FrameWindowAnalyzer::tick(PlayLayer* pl) {

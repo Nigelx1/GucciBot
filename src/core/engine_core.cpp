@@ -2786,7 +2786,7 @@ namespace gucci {
             fwAcConflicts = fmt::format(
                 "These mods are enabled and change how frames are stepped, so "
                 "Calculate's numbers may be wrong and some clicks may come back "
-                "as a grey \"?\" it could not measure:\n{}\n"
+                "as a gray \"?\" it could not measure:\n{}\n"
                 "Disable them before measuring.",
                 out);
         return fwAcConflicts;
