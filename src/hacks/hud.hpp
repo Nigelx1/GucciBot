@@ -38,7 +38,7 @@ namespace gucci::hud {
     };
 
     // In the order they are drawn, top to bottom.
-    inline constexpr std::array<Readout, 22> kReadouts = {{
+    inline constexpr std::array<Readout, 24> kReadouts = {{
         {&HudConfig::showFrame, "hud_show_frame", "hud_showFrame", "Frame",
          "GucciBot's frame counter, the one macros are keyed on", Bot},
         {&HudConfig::showTPS, "hud_show_tps", "hud_showTPS", "TPS", "Physics ticks per second", Bot},
@@ -47,6 +47,10 @@ namespace gucci::hud {
         {&HudConfig::showActionIndex, "hud_show_action_index", nullptr, "Action index",
          "How far through the macro's actions playback is", Bot},
         {&HudConfig::showLastInput, "hud_show_last_input", nullptr, "Ticks since last input", nullptr, Bot},
+        {&HudConfig::showCPS, "hud_show_cps", nullptr, "CPS",
+         "Jump presses in the last second: yours, or the macro's while it plays", Bot},
+        {&HudConfig::showMaxCPS, "hud_show_max_cps", nullptr, "Max CPS", "The most in any one second this attempt",
+         Bot},
         {&HudConfig::showIntentional, "hud_show_intentional", nullptr, "Intentional death",
          "Whether the next death is meant to happen (recording: armed; playback: expected)", Bot},
         {&HudConfig::showTickLimit, "hud_show_tick_limit", nullptr, "Tick limit",

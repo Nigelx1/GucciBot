@@ -23,6 +23,7 @@
 
 #include "core/platform.hpp"
 #include "hacks/hud.hpp"
+#include "hacks/cps.hpp"
 
 #include "core/GucciBot.hpp"
 #include "analysis/ac/shim.hpp"
@@ -188,6 +189,15 @@ namespace gucci::hud {
             }
             if (field == &HudConfig::showTickLimit)
                 return tickLimit(upd);
+            if (field == &HudConfig::showCPS || field == &HudConfig::showMaxCPS) {
+                bool const best = field == &HudConfig::showMaxCPS;
+                auto const count = [best](bool p2) { return best ? cps::most(p2) : cps::now(p2); };
+                const char* name = best ? "Max CPS" : "CPS";
+                // Both players' counts in a two-player level, as Silicate shows them.
+                if (pl->m_levelSettings && pl->m_levelSettings->m_twoPlayerMode)
+                    return fmt::format("{}: {} / {}", name, count(false), count(true));
+                return fmt::format("{}: {}", name, count(false));
+            }
 
             if (field == &HudConfig::showX)
                 return perPlayer("X", p1, p2, [](PlayerObject* p) { return fmt::format("{:.6f}", p->m_position.x); });

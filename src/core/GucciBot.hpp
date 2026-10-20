@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-19-ev (Other bots macros convert in the game: Saved macros has Convert, Import a macro and Export as)"
+    "2026-10-20-ew (Calculate bands get an image and a pulse; the HUD gets CPS and Max CPS; American spelling in the menu)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -580,6 +580,8 @@ namespace gucci {
         bool showTickLimit = false;
         bool showLastInput = false;
         bool showOrbs = false;
+        bool showCPS = false;
+        bool showMaxCPS = false;
         bool bigFont = false;
         float scale = 1.0f;
         float opacity = 1.0f;

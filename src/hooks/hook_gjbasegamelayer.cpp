@@ -3,6 +3,7 @@
 #include "audio/playsound.hpp"
 #include "trainers/calibration.hpp"
 #include "trainers/click_indicators.hpp"
+#include "hacks/cps.hpp"
 #include "hacks/indicator.hpp"
 #include "hooks/util_midhook.hpp"
 #include "trainers/jupiterghost.hpp"
@@ -541,6 +542,10 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         // anticroom's analyzer plays its tier sounds itself, from its render
         // path, so there is nothing to drive from the action dispatch now.
 
+        // The macro's jump presses count toward the HUD's CPS while it plays (Silicate's spot).
+        if (button == 1 && action.m_holding)
+            cps::push(action.m_player2);
+
         queueButton(button, action.m_holding, gb->replay.playerFlipped(action.m_player2), 0.0);
     }
 
@@ -613,6 +618,7 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
                     indicator::onRealClick(!player1, pressed);
                 if (pressed) {
                     CalibrationService::get().onRealClick();
+                    cps::push(!player1);
                 }
                 // The practice trainers' click bars and Click Indicators
                 // scoring: timed off the input event itself, in the frame the

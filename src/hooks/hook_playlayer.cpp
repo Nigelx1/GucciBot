@@ -16,6 +16,7 @@
 #include "absense/route/atlas.hpp"
 #include "absense/route/planner.hpp"
 #include "absense/judge.hpp"
+#include "hacks/cps.hpp"
 #include "hacks/hitboxes.hpp"
 #include "hacks/noclip_accuracy.hpp"
 #include "trainers/jupiterghost.hpp"
@@ -542,6 +543,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
         checkIfResetWasExpected(deathFrame);
         bool hasAddedCheckpoint = handleResetWithCheckpoints(deathFrame);
         upd.resetFrame();
+        cps::clear();
 
         HitboxOverlay::get()->clearTrail();
         // Only the attempt that gets through should shape a generated trail,
