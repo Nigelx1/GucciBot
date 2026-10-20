@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-19-ep (Credits: Isaiah joins the promo help, under DashBlaze)"
+    "2026-10-19-eq (Credits in the order of Nigels video: ace, DashBlaze, then Isaiah before Absent; aura is plain promo help like the others)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

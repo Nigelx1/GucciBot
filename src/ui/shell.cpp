@@ -1350,10 +1350,10 @@ namespace gucci::ui {
                 {"anticroom", "Calculate is his analyzer, ported in near-verbatim; sub-tick CBF recording and the render intro card too."},
                 {"dihmaster500", "Tester; asked for auto safe mode and the Disable bot switch, and his testing "
                                  "caught safe mode breaking start positions."},
-                {"aura", "Promo help: got the 2.0 launch promo set up with ace."},
+                {"aura", "Promo help."},
+                {"ace", "Promo help."},
                 {"DashBlaze", "Promo help."},
                 {"Isaiah", "Promo help."},
-                {"ace", "Promo help."},
                 {"Absent", "Absense; the Pathfinder's default engine is his."},
                 {"NaN GD", "Started the whole frame-window trend; the L* precision formula is his too (nandl.pages.dev)."},
                 {"Bogdaner09", "Made click indicators free and open source after a paid one turned out to be an exit "

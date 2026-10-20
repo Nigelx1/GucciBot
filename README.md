@@ -143,10 +143,10 @@ There's a [contact page](https://guccibot.net/contact/) on the site with the sam
 - **Juice** — designed the frame-window algorithm GucciBot ran on through 1.7, and the marker shapes in 1.8. Lead co-tester, professional bug-finder.
 - **anticroom** — 1.8's Calculate *is* his analyzer. He rewrote the frame-window system for Silicate, sent the source over, and it was ported in near-verbatim to replace GucciBot's own — the headline feature of 1.8 is his work. Sub-tick CBF recording and the render intro card in 2.alpha.3 are his too. Before that he sent GucciBot's first outside pull request, a real 7-fix accuracy pass. Also one of ToastyReplay's own devs.
 - **dihmaster500** — tester. Asked for auto safe mode with its cheat indicator, and for the Disable bot switch, then tested safe mode hard enough to catch it breaking start positions before anyone else hit it.
-- **aura** — promo help: he's the one who got the 2.0 launch promo set up with ace.
+- **aura** — promo help.
+- **ace** — promo help.
 - **DashBlaze** — promo help.
 - **Isaiah** — promo help.
-- **ace** — promo help.
 - **Absent** — Absense, another bot built on Silicate. Pathfinder's default engine is his: Absense's pathfinder, with its look-ahead and its model of the level, ported in whole in 2.0.0-beta.2. The in-game assistant server, Check Macro, Replace All, the respawn timer and the black orb autoclicker loop came from reading his source; that code is our own, the ideas are his.
 - **NaN GD** — the whole frame-window trend started with him. The L* precision formula is his too, published at [nandl.pages.dev](https://nandl.pages.dev/#formula): the number GucciBot puts on a macro is his math. He is careful to say frame windows alone don't determine difficulty, and GucciBot repeats that rather than overselling the number.
 - **Bogdaner09** — when a paid click-indicator mod turned out to be an exit scam, he's the one who started making the same thing free and open source ([github.com/Bogdaner09/mod](https://github.com/Bogdaner09/mod)). Nigel found it, and GucciBot's Click Indicators are built around his. Vibecoded by his own admission, so credit's probably owed elsewhere too.
