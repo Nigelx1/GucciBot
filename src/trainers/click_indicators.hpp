@@ -78,6 +78,9 @@ namespace gucci::clickind {
     };
     Tally tally();
     void resetTally();
+    // Showing in the level this frame. Safe mode counts it as a cheat (Nigel,
+    // 2026-10-19: it takes the memory out of memory levels).
+    bool active();
     // What the indicators are showing right now, for the card: "" when nothing.
     const char* showing();
 

@@ -5,6 +5,7 @@
 #include "absense/glue.hpp"
 #include "analysis/pathfinder.hpp"
 #include "hacks/autoclicker.hpp"
+#include "trainers/click_indicators.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/modify/GJGameLevel.hpp>
@@ -161,6 +162,7 @@ namespace gucci::safemode {
                || std::abs(u.m_speedhack - 1.0) > 1e-6 // speedhack
                || gb->noclipEnabled || u.m_preventDeath
                || gb->forcedPlatformer // a level played as platformer that isn't one
+               || clickind::active()   // the macro's clicks shown in the level: no memory left to test
                || u.m_paused // frame advance
                || Autoclicker::get()->enabled;
     }

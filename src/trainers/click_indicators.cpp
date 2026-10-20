@@ -657,6 +657,10 @@ namespace gucci::clickind {
         recount();
     }
 
+    bool active() {
+        return g_active;
+    }
+
     const char* showing() {
         return g_active ? g_src.label.c_str() : "";
     }

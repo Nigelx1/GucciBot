@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-19-em (Click Indicators is its own feature with all of Bogdaner09s options: badges, player square and line, hold draining, taps and holds, player 2 colours, timing offset, the rhythm lane and scoring; render pixel format choice)"
+    "2026-10-19-en (Click Indicators count as a cheat for safe mode while they show: they take the memory out of memory levels)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

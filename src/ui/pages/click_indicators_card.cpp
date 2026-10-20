@@ -38,7 +38,8 @@ namespace gucci::ui::pages {
         auto& s = ci::settings();
         bool changed = false;
         kit::BeginCard("Click Indicators",
-                       "Where the macro clicks, in the level and down a lane. It never clicks for you.");
+                       "Where the macro clicks, in the level and down a lane. It never clicks for you, but it "
+                       "counts as a cheat: safe mode keeps progress from saving while it shows.");
         changed |= kit::SwitchRow("Click Indicators",
                                   "In a trainer's level, that trainer's macro; anywhere else, the macro loaded on the "
                                   "Macro page, in its own level. Hidden while a macro plays or records.",
