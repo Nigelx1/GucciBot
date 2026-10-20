@@ -35,11 +35,11 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 - [ ] Theme tags showing which theme each macro was saved under: built -ek, untested
 
 ### Full conversion in the game
-- [ ] Other bots' macros (.gdr, .xd, .json and the rest) show in the list and convert in one click
-- [ ] Silicate .slc
-- [ ] Old .brrr v1, rebuilt fresh (never from the old ToastyReplay-era code)
-- [ ] The same formats as the site's converter, wherever possible
-- [ ] .flp (#19)
+- [ ] Other bots' macros (.gdr, .xd, .json and the rest) show in the list and convert in one click: built -ev (Saved macros > From other bots: Convert, Convert all, Import a macro, Shift frames; each macro's "..." > Export as), untested. Which frame each bot counts from needs an in-game check per bot: Silicate's are shifted by one (its engine is GucciBot's, one frame behind), the rest carry over as saved
+- [ ] Silicate .slc: built -eu (v3 and v2 from libslc's layout, v1, and anticroom's .scbf1); 60-odd real .slc v3 macros read cleanly; untested in-game
+- [ ] Old .brrr v1, rebuilt fresh (never from the old ToastyReplay-era code): built -eu, worked out from a real 1.x macro (format 4); it matches the bundled JMF .gdr frame for frame; untested in-game
+- [ ] The same formats as the site's converter, wherever possible: built -eu, 26 read and 20 written, all but ToastyReplay's .ttr3 and .ttrl (left out on purpose); every writer round-trips (tools/run_convert_tests)
+- [ ] .flp (#19): waiting on a sample; asked for one on #19 and none has come
 
 ### Calculate leftovers
 - [ ] The result stays visible after a run: built -el, untested
