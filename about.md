@@ -189,6 +189,7 @@ Real click-timing feedback and a synced video-review overlay, both built around 
 - **dihmaster500** — tester, and asked for auto safe mode with its cheat indicator and for the Disable bot switch; his testing caught safe mode breaking start positions
 - **aura** — promo help: he's the one who got the 2.0 launch promo set up with ace
 - **DashBlaze** — promo help
+- **Isaiah** — promo help
 - **ace** — promo help
 - **Absent** — Absense, another bot built on Silicate. Pathfinder's default engine is his: Absense's pathfinder, with its look-ahead and its model of the level, ported in whole. The assistant server, Check Macro, Replace All, the respawn timer and the black orb autoclicker loop are his ideas too, worked out again here from his source
 - **NaN GD** — the whole frame-window trend started with him, and the L* precision formula is his too, published at [nandl.pages.dev](https://nandl.pages.dev/#formula). The number GucciBot puts on a macro is his math

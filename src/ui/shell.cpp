@@ -1352,6 +1352,7 @@ namespace gucci::ui {
                                  "caught safe mode breaking start positions."},
                 {"aura", "Promo help: got the 2.0 launch promo set up with ace."},
                 {"DashBlaze", "Promo help."},
+                {"Isaiah", "Promo help."},
                 {"ace", "Promo help."},
                 {"Absent", "Absense; the Pathfinder's default engine is his."},
                 {"NaN GD", "Started the whole frame-window trend; the L* precision formula is his too (nandl.pages.dev)."},

@@ -145,6 +145,7 @@ There's a [contact page](https://guccibot.net/contact/) on the site with the sam
 - **dihmaster500** — tester. Asked for auto safe mode with its cheat indicator, and for the Disable bot switch, then tested safe mode hard enough to catch it breaking start positions before anyone else hit it.
 - **aura** — promo help: he's the one who got the 2.0 launch promo set up with ace.
 - **DashBlaze** — promo help.
+- **Isaiah** — promo help.
 - **ace** — promo help.
 - **Absent** — Absense, another bot built on Silicate. Pathfinder's default engine is his: Absense's pathfinder, with its look-ahead and its model of the level, ported in whole in 2.0.0-beta.2. The in-game assistant server, Check Macro, Replace All, the respawn timer and the black orb autoclicker loop came from reading his source; that code is our own, the ideas are his.
 - **NaN GD** — the whole frame-window trend started with him. The L* precision formula is his too, published at [nandl.pages.dev](https://nandl.pages.dev/#formula): the number GucciBot puts on a macro is his math. He is careful to say frame windows alone don't determine difficulty, and GucciBot repeats that rather than overselling the number.

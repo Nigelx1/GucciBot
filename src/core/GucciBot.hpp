@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-19-eo (Safe mode also counts what shows the way through a level as a cheat: path preview, macro path, practice range, the trainers ghosts)"
+    "2026-10-19-ep (Credits: Isaiah joins the promo help, under DashBlaze)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
