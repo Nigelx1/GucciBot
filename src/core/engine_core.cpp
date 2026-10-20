@@ -2366,8 +2366,10 @@ namespace gucci {
             [](auto, bool) {});
     }
 
-    // NO UPDATE CHECKER HERE ON PURPOSE -- removed in build 2026-09-13-b after
-    // it crashed the game on launch for real users (v1.6.5 shipped with it).
+    // The update checker is back since build -es, in core/update_check.cpp,
+    // built so this can't happen again (async::TaskHolder, no coroutine).
+    // The first one was removed in build 2026-09-13-b after it crashed the
+    // game on launch for real users (v1.6.5 shipped with it):
     //
     // It was a `geode::Task<void>` coroutine doing
     // `co_await web::WebRequest().get(...)`. That mixes two different async

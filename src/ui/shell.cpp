@@ -1371,6 +1371,19 @@ namespace gucci::ui {
                 botswitch::request(botOn);
             if (auto const* why = botswitch::waitingFor())
                 kit::Hint(why);
+            // The update checker (core/update_check.cpp): once a launch, from
+            // GitHub's releases, when the main menu first shows.
+            {
+                auto* mod = Mod::get();
+                bool check = mod->getSavedValue<bool>("update_check", true);
+                if (kit::SwitchRow("Check for updates", "Once a launch, says when a newer GucciBot is out", &check))
+                    mod->setSavedValue("update_check", check);
+                if (check) {
+                    bool pre = mod->getSavedValue<bool>("update_prereleases", false);
+                    if (kit::SwitchRow("Pre-releases too", "Betas count (they always do while you run one)", &pre))
+                        mod->setSavedValue("update_prereleases", pre);
+                }
+            }
             kit::EndCard();
 
             // Auto safe mode and the cheat dot (hacks/safemode.hpp), dihmaster500's ask.
