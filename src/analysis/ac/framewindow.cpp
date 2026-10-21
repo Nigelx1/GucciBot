@@ -5425,11 +5425,10 @@ void FrameWindowAnalyzer::dropMarkers() {
     m_markerNodes.clear();
 }
 
-// GucciBot: GD's mirror flags, under the names newer bindings give them or
-// the older ones this build may have (the CI and local bindings differ).
+// GucciBot: GD's "the level is flipping" flag, under the name newer bindings
+// give it or the older one this build may have (the CI and local bindings
+// differ).
 namespace {
-template <class S> auto mirroredOf(S const& gs, int) -> decltype(gs.m_isFlipped) { return gs.m_isFlipped; }
-template <class S> bool mirroredOf(S const& gs, long) { return gs.m_unkBool10; }
 template <class S> auto flippingOf(S const& gs, int) -> decltype(gs.m_isFlipping) { return gs.m_isFlipping; }
 template <class S> bool flippingOf(S const& gs, long) { return gs.m_unkBool12; }
 }  // namespace
@@ -5444,37 +5443,18 @@ void FrameWindowAnalyzer::cullOffscreen(PlayLayer* pl) {
     // marker came out upside down as well as round.
     float const layerScale = std::fabs(pl->m_objectLayer->getScaleY());
 
-    // GucciBot (2026-10-21, Nigel: mirror portals "make them all mirrored"):
-    // the markers live on the UI layer, at where their point of the level is
-    // on screen. A mirror the level's own transform carries is already in
-    // convertToWorldSpace; one GD puts on the picture past the layers is not,
-    // and the markers stood where the level would be unmirrored. That one is
-    // put on them here: the camera's flip about the middle of the screen,
-    // which through the flip is the same squeeze the level gets.
-    auto const& gs = pl->m_gameState;
-    bool const mirrored = mirroredOf(gs, 0);
-    bool const flipping = flippingOf(gs, 0);
-    bool const mirrorState = mirrored || flipping;
-    auto const t = pl->m_objectLayer->nodeToWorldTransform();
-    bool const layerMirrored = t.a * t.d - t.b * t.c < 0.f;
-    float flip = 1.f;
-    if (mirrorState && !layerMirrored && pl->m_cameraFlip >= -1.f && pl->m_cameraFlip <= 1.f)
-        flip = pl->m_cameraFlip;
-    {
-        // What GD does under a mirror portal, once each time it changes: the
-        // log says whether the guess above is the right one.
-        static int lastState = -1;
-        int const state = (mirrored ? 1 : 0) | (flipping ? 2 : 0) | (layerMirrored ? 4 : 0);
-        if (state != lastState) {
-            lastState = state;
-            geode::log::info("[FW] mirror: flipped {} flipping {}, camera flip {:.2f}, object layer scale {:.2f}/{:.2f} "
-                             "mirrored {}, markers flipped by {:.2f}",
-                             mirrored, flipping, pl->m_cameraFlip, pl->m_objectLayer->getScaleX(),
-                             pl->m_objectLayer->getScaleY(), layerMirrored, flip);
-        }
-    }
-    float const mid = winSize.width * 0.5f;
-
+    // GucciBot (2026-10-21): a mirror portal flips the object layer itself
+    // (x scale -1, camera flip -1: Nigel's -fh log), so convertToWorldSpace
+    // already had the markers on the right spot; it was the signed scale above
+    // that turned them round. Through the flip animation GD may squeeze the
+    // layers above them too, and Nigel saw markers by a portal off: each one
+    // is placed in its own parent's space, which takes in whatever is done to
+    // the layers between (and an offset UI layer on a phone). The log says,
+    // once a flip, how far the markers' parent was squeezed.
+    bool const flipping = flippingOf(pl->m_gameState, 0);
+    static bool wasFlipping = false;
+    static float leastSqueeze = 1.f;
+    static int squeezeSeen = 0;
     for (auto it = m_markerNodes.begin(); it != m_markerNodes.end();) {
         auto* node = it->m_node;
         if (!node || !node->getParent()) {
@@ -5483,12 +5463,18 @@ void FrameWindowAnalyzer::cullOffscreen(PlayLayer* pl) {
             continue;
         }
 
-        CCPoint screen =
+        CCPoint const screen =
             pl->m_objectLayer->convertToWorldSpace(it->m_world);
-        screen.x = mid + (screen.x - mid) * flip;
-        node->setPosition(screen);
-        node->setScaleX(layerScale * std::fabs(flip));
-        node->setScaleY(layerScale);
+        // (Squeezed flat for the one frame in the middle of a flip, the
+        // parent's space has no inverse: the marker keeps last frame's spot.)
+        auto const t = node->getParent()->nodeToWorldTransform();
+        if (std::fabs(t.a * t.d - t.b * t.c) > 1e-6f)
+            node->setPosition(node->getParent()->convertToNodeSpace(screen));
+        node->setScale(layerScale);
+        if (flipping) {
+            leastSqueeze = std::min(leastSqueeze, std::fabs(t.a));
+            squeezeSeen++;
+        }
 
         if (screen.x < -margin || screen.x > winSize.width + margin ||
             screen.y < -margin || screen.y > winSize.height + margin) {
@@ -5498,6 +5484,16 @@ void FrameWindowAnalyzer::cullOffscreen(PlayLayer* pl) {
             continue;
         }
         ++it;
+    }
+    if (flipping) {
+        wasFlipping = true;
+    } else if (wasFlipping) {
+        wasFlipping = false;
+        if (squeezeSeen > 0)
+            geode::log::info("[FW] mirror flip done: the markers' parent was squeezed to {:.2f} of its width at most "
+                             "(1.00: nothing above the level squeezed; {} marker frames)", leastSqueeze, squeezeSeen);
+        leastSqueeze = 1.f;
+        squeezeSeen = 0;
     }
 }
 
