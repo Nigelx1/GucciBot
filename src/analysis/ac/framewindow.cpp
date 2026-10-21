@@ -3173,6 +3173,18 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
     auto& pf = bot->practiceFix();
 
     auto const now = Clock::now();
+
+    // GucciBot: the time cap (Calculate page, Speed). Past it the run stops
+    // where it is, as Cancel would, but keeps and saves what it measured.
+    if (int const cap = SLSettings::get()->frameWindow.timeCapMinutes;
+        cap > 0 && now - m_runStart > std::chrono::minutes(cap)) {
+        this->finish(fmt::format("Stopped at the {}-minute time cap with {} of {} inputs measured. Raise the "
+                                 "cap (Calculate page, Speed) to measure the rest.",
+                                 cap, m_measured, m_total),
+                     true);
+        return;
+    }
+
     int64_t budgetMs = std::max(1, m_budgetMs->inner());
     if (m_turbo->inner()) {
         budgetMs = std::clamp(m_turboBudgetMs->inner(), 1, 2000);

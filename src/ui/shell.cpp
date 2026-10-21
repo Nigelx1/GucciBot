@@ -2082,6 +2082,18 @@ namespace gucci::ui {
                     UseFont f(Font::Small);
                     ImGui::ProgressBar(fw.progress(), ImVec2(260.f, 0.f),
                                        fmt::format("Calculate {:.0f}%", fw.progress() * 100.f).c_str());
+                    // How long it has run, and a rough guess at the rest while
+                    // the main count runs (the passes after it aren't counted).
+                    double const elapsed = fw.elapsedSeconds();
+                    auto const clock = [](double sec) {
+                        int const s = static_cast<int>(sec);
+                        return fmt::format("{}:{:02}", s / 60, s % 60);
+                    };
+                    std::string timing = clock(elapsed) + " so far";
+                    float const p = fw.progress();
+                    if (p > 0.05f && p < 1.f && fw.stage() != "dependent" && fw.stage() != "suggest")
+                        timing += ", about " + clock(elapsed * (1.0 - p) / p) + " to go";
+                    ImGui::TextDisabled("%s", timing.c_str());
                     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 260.f);
                     ImGui::TextUnformatted(fw.status().c_str());
                     ImGui::PopTextWrapPos();

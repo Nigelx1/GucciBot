@@ -185,6 +185,10 @@ class FrameWindowAnalyzer {
     size_t progressIndex() const { return m_index; }
     size_t progressTotal() const { return m_total; }
     std::string const& status() const { return m_status; }
+    // GucciBot: seconds since the run started (0 when none is running).
+    double elapsedSeconds() const {
+        return m_running ? std::chrono::duration<double>(std::chrono::steady_clock::now() - m_runStart).count() : 0.0;
+    }
     // GucciBot: whether the last run finished cleanly, for the page to show
     // its result as a note or a warning after the run.
     bool lastRunOk() const { return m_lastOk; }

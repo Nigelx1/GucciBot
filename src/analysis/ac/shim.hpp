@@ -239,6 +239,9 @@ struct FrameWindowSettings {
     bool suggestEnabled = true;
     int suggestBelow = 2;
     int suggestZ = 3;
+    // GucciBot: a run longer than this many minutes stops where it is and keeps
+    // what it measured (0: no cap).
+    int timeCapMinutes = 0;
     // Turbo: spend a much bigger slice of each frame on the analysis. Faster,
     // at the cost of the game being close to frozen while it runs.
     bool turbo = false;

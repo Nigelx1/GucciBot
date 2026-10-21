@@ -107,6 +107,7 @@ namespace gucci::fwstore {
             {"fwac_label_test_count", &FW::labelTestCount, 1, 100},
             {"fwac_suggest_below", &FW::suggestBelow, 1, 10},
             {"fwac_suggest_z", &FW::suggestZ, 1, 8},
+            {"fwac_time_cap", &FW::timeCapMinutes, 0, 600},
         };
 
         constexpr Field<int64_t> kInt64s[] = {

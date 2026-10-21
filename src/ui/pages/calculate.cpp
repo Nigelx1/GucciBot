@@ -718,6 +718,9 @@ namespace gucci::ui::pages {
                        "Physics ticks run per game update while analysing. The ticks are the same; this only skips "
                        "the scheduler and effects between them",
                        &FW::stepBatch, "%d");
+                slider("Time cap",
+                       "Stops a run that goes on longer than this and keeps what it measured. 0 has no cap",
+                       &FW::timeCapMinutes, s.timeCapMinutes == 0 ? "no cap" : "%d min");
 
                 labellingSection();
 

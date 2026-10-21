@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-20-ey (Review fixes: a GBR6 save bloat, Silicate files from nat-converter, safer converting, CPS on sub-tick presses)"
+    "2026-10-20-ez (ToastyReplay .ttr3 in the converter; Calculate gets a time cap and shows time so far and to go)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
