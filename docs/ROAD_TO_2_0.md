@@ -38,7 +38,7 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 - [ ] Other bots' macros (.gdr, .xd, .json and the rest) show in the list and convert in one click: built -ev (Saved macros > From other bots: Convert, Convert all, Import a macro, Shift frames; each macro's "..." > Export as), untested. Which frame each bot counts from needs an in-game check per bot: Silicate's are shifted by one (its engine is GucciBot's, one frame behind), the rest carry over as saved
 - [ ] Silicate .slc: built -eu (v3 and v2 from libslc's layout, v1, and anticroom's .scbf1); 60-odd real .slc v3 macros read cleanly; untested in-game
 - [ ] Old .brrr v1, rebuilt fresh (never from the old ToastyReplay-era code): built -eu, worked out from a real 1.x macro (format 4); it matches the bundled JMF .gdr frame for frame; untested in-game
-- [ ] The same formats as the site's converter, wherever possible: built -eu, 26 read and 20 written, all but ToastyReplay's .ttr3 and .ttrl (left out on purpose); every writer round-trips (tools/run_convert_tests)
+- [ ] The same formats as the site's converter, wherever possible: built -eu, and .ttr3 in -ez at Nigel's call (27 read, 21 written; .ttrl still out); every writer round-trips (tools/run_convert_tests)
 - [ ] .flp (#19): waiting on a sample; asked for one on #19 and none has come
 
 ### Calculate leftovers
@@ -62,18 +62,18 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 - [ ] Status bar: what the bot is doing (recording, playing, calculating, pathfinding, rendering), plus frame, TPS, speed and inputs: built -es (under every page title), untested
 - [ ] Update checker, tried again (removed in 1.7 because it crashed the game on launch; this time it waits until the game is fully up): built -es with a crash guard (a crash mid-check switches it off for the next launch), untested; not run on launch here (GD was closed)
 - [ ] Trainer video import for the normal Trainer, with a file picker that can't crash: built -et (the Trainer page's own Video Mode card; one Video Mode at a time), untested
-- [ ] Eclipse speedhack override
-- [ ] Moving wave spam (#25)
+- [ ] Eclipse speedhack override: parked (Nigel, 2026-10-20: GucciBot overriding other mod menus' speedhacks, "too many moving parts"; maybe later)
+- [ ] Moving wave spam (#25): goes with the AI pathfinder (Nigel, 2026-10-20)
 - [ ] CPS on the HUD (#28): built -ew (CPS and Max CPS, ported from Silicate), untested; Nigel keeps the speedhack as it is
 - [ ] Converter: GDR2 macros reading as all player 2 (#15). The reader matches libGDR's own; needs the reporter's file
 - [ ] Bug reporters' follow-ups: #20 Android practice-death crash (likely the same bug as the Mac one, fixed in -ei; needs a phone test); #23 start positions and checkpoints; #11, #13 and the -103 error; macros ignoring inputs (#14, #8, #18); logs from the Calculate reports
-- [ ] about.md, the README and the site match what ships
+- [x] about.md, the README and the site match what ships: -fa (acad95e) and the site (aaa4a8b)
 
 ## 3. Calculate
 
 - [x] Port audit against anticroom's original (docs/CALC_PORT_AUDIT.md): two port faults fixed (builds -ed, -ee), plus the end-of-level death (-ef)
 - [ ] The strict count, plus "my suggestion is x frames" using Juice's Alignment-Independent method (credited), flagged in the frame editor: built -ex, untested (a pass after the strict count, for strict windows of 2 or fewer right after another input; on by default, Calculate page > Suggestions for suspicious clicks)
-- [ ] Speed: progress and a time cap (resetting to checkpoints is 87% of the time)
+- [ ] Speed: progress and a time cap (resetting to checkpoints is 87% of the time): built -ez (a time cap that keeps what it measured, and time so far and to go in the level), untested; the restores themselves aren't faster yet
 - [ ] Markers in the ground (#26; the fix in build -dt is untested)
 - [ ] The trail check being one frame off; recheck the 42,000-frame noclip runaway
 - [ ] Markers missing for player 1 in some dual levels, showing only on player 2 during duals (#27; TheCinnyBun, Helios, TUAPEKA ...). The player-1 marker uses the mark's saved position and the twin uses the trail; look at why the first is missing there
@@ -109,7 +109,7 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 
 - [ ] A feature-by-feature test of the rebuild and the new menu
 - [ ] Cosmetics: the Mega Hack-style skin, the animated backdrop, BrrrBot's snow, the old title bar and fades, a menu opacity slider
-- [ ] Click sounds' background noise
+- [ ] Click sounds' background noise: built -fa (a pack's noise track loops under the clicks), untested
 
 ## Release
 
