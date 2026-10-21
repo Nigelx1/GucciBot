@@ -90,14 +90,21 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 - [ ] Markers in the ground (#26; the fix in build -dt is untested)
 - [ ] The trail check being one frame off; recheck the 42,000-frame noclip runaway
 - [ ] Markers missing for player 1 in some dual levels, showing only on player 2 during duals (#27; TheCinnyBun, Helios, TUAPEKA ...). The player-1 marker uses the mark's saved position and the twin uses the trail; look at why the first is missing there
+- [ ] Mirror portals mirror the markers (Nigel, 2026-10-21): built -fh (the markers take GD's camera flip when the level's own transform doesn't carry it), untested; a "[FW] mirror:" log line says which way GD mirrors
+- [ ] Ask Nigel: an overall difficulty number beside L* (his idea, 2026-10-21; L* is a precision rate by NaN's own account). Proposal sent: L* plus what isn't timing (control load, transitions, duals, reading), calibrated on a community list
 
 ## 4. AI pathfinder (AI_PATHFINDER_PLAN.md)
 
 - [ ] A map that knows when blocks move and appear
 - [ ] The AI trying every orb and toggle choice
-- [ ] Building the map in slices, so the game stops freezing for about 9 seconds: built -ff (the ghost run takes a share of each frame; the map is built at once from the objects and again when the ghost is back), untested
+- [x] Building the map in slices, so the game stops freezing for about 9 seconds: built -ff, seen working in Nigel's 2026-10-21 log (each map's ghost done in under a quarter second, spread over 8 to 44 frames)
+- [ ] The route engine drives (the plan's real R4: the whole-level route chooses, physics finds each leg's exact clicks, proven dead ends crossed off, jumps back to the cause). What's built only adds route ideas to the old picker, which still keeps whatever survives 4 seconds (Nigel: "it doesn't seem like an AI choosing when to click with knowing the whole level")
+- [x] No straight-line hovering: the hold-a-height steers removed in -fg (120 clicks a second on the wave)
+- [ ] ToE2: never presses a required blue orb near 80% (dies at x 23280)
+- [ ] Deadlocked: 22%; leads in memory (moving blocks the trigger model follows are judged as blocks that cannot move; a slope drift at tick 5251)
+- [ ] Coins: a "Collect coins" switch, off by default; each coin a gate the route must pass. After the route engine drives
 - [ ] Re-run the review of builds -dm to -dq that got cut off
-- [ ] The bar (Nigel, 2026-10-21, eased from every RobTop level + 16 of 20 online): RobTop's three demons (Clubstep, Theory of Everything 2, Deadlocked), The Nightmare, Bloodbath, LIMBO, Orbit, Heliopolis
+- [ ] The bar (Nigel, 2026-10-21, eased from every RobTop level + 16 of 20 online): RobTop's three demons (Clubstep, Theory of Everything 2, Deadlocked), The Nightmare, Bloodbath, LIMBO, Orbit, Heliopolis. Baseline 2026-10-21 (build -ff): Clubstep 100%, ToE2 78% (84% once), Deadlocked 22%; the other five not run yet
 
 ## 5. Mac, iOS and Android parity (everything but the pathfinder)
 
