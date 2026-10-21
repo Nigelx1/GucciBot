@@ -5449,28 +5449,50 @@ void FrameWindowAnalyzer::cullOffscreen(PlayLayer* pl) {
     // marker came out upside down as well as round.
     float const layerScale = std::fabs(pl->m_objectLayer->getScaleY());
 
-    // GucciBot (2026-10-21): a mirror portal flips the object layer itself
-    // (x scale -1, camera flip -1: Nigel's -fh log), so convertToWorldSpace
-    // already had the markers on the right spot; it was the signed scale above
-    // that turned them round. Through the flip animation GD may squeeze the
-    // layers above them too, and Nigel saw markers by a portal off: each one
-    // is placed in its own parent's space, which takes in whatever is done to
-    // the layers between (and an offset UI layer on a phone). The log says,
-    // once a flip, how far the markers' parent was squeezed.
+    // GucciBot (2026-10-21, Nigel's tests -fh..-fj): how GD 2.2081 mirrors.
+    // The level's object layer itself is flipped (x scale -1, camera flip -1),
+    // so convertToWorldSpace has the markers right once a flip is over; the
+    // signed scale above is what had turned them round. But the flip is a
+    // 0.4-1.6 s animation, and through it the object layer stays as it was
+    // (the -fj log: progress runs 0 -> 1 into a mirror, 1 -> 0 out of one,
+    // eased, and the layer only swaps at the end - a mirror about the middle of
+    // the screen, 40.7 -> 529.6 on a 570-wide screen). What turns is the
+    // picture, past every layer the markers can see, so a jump in the flip got
+    // its marker where the player would be unflipped. While GD flips, the
+    // turn is put on the markers too: how far round the picture is, as a
+    // card turning shows it (cos of the progress), over what the object layer
+    // already has, about the middle of the screen. Not sure of the curve in
+    // between (cos is a guess; the ends are exact): the log names the node GD
+    // squeezes, once a flip.
     bool const flipping = flippingOf(pl->m_gameState, 0);
-    // (Nigel, -fi: a jump during the flip gets its marker where it would be
-    // before the flip. The flip's own timeline, a line a tick while it runs, to
-    // line up with what he sees: GD's progress and half, the camera flip, the
-    // object layer's x scale and x, and where the newest marker stands.)
-    static bool wasFlipping = false;
-    static auto flipStart = std::chrono::steady_clock::now();
-    static int flipLines = 0;
-    if (flipping && !wasFlipping) {
-        flipStart = std::chrono::steady_clock::now();
-        flipLines = 0;
+    float turn = 1.f;
+    if (flipping) {
+        float const p = std::clamp((float)flipProgressOf(pl->m_gameState, 0), 0.f, 1.f);
+        auto const lt = pl->m_objectLayer->nodeToWorldTransform();
+        float const layerSide = lt.a * lt.d - lt.b * lt.c < 0.f ? -1.f : 1.f;
+        turn = std::cos(p * 3.14159265f) * layerSide;
+        // Which node GD squeezes for the picture, once a flip, at about a
+        // quarter of the way: its x scale against the guess above.
+        static bool named = false;
+        if (p < 0.05f || p > 0.95f) named = false;
+        if (!named && p > 0.2f && p < 0.8f) {
+            named = true;
+            std::string found;
+            if (auto* kids = pl->getChildren()) {
+                for (auto* obj : CCArrayExt<CCNode*>(kids)) {
+                    float const sx = obj->getScaleX();
+                    if (std::fabs(std::fabs(sx) - 1.f) > 0.01f || obj->getRotationY() != 0.f || obj->getSkewY() != 0.f)
+                        found += fmt::format(" [{} id '{}' x scale {:.3f} rotY {:.1f}]", typeid(*obj).name(),
+                                             obj->getID(), sx, obj->getRotationY());
+                }
+            }
+            geode::log::info("[FW] flip at progress {:.3f}: the guess turns markers by {:.3f}; play layer children "
+                             "not at scale 1:{}",
+                             p, turn, found.empty() ? std::string(" none") : found);
+        }
     }
-    wasFlipping = flipping;
-    float newestX = -1.f;
+    float const mid = winSize.width * 0.5f;
+
     for (auto it = m_markerNodes.begin(); it != m_markerNodes.end();) {
         auto* node = it->m_node;
         if (!node || !node->getParent()) {
@@ -5479,14 +5501,15 @@ void FrameWindowAnalyzer::cullOffscreen(PlayLayer* pl) {
             continue;
         }
 
-        CCPoint const screen =
+        CCPoint screen =
             pl->m_objectLayer->convertToWorldSpace(it->m_world);
+        screen.x = mid + (screen.x - mid) * turn;
         // (A parent squeezed flat has no inverse: the marker keeps its spot.)
         auto const t = node->getParent()->nodeToWorldTransform();
         if (std::fabs(t.a * t.d - t.b * t.c) > 1e-6f)
             node->setPosition(node->getParent()->convertToNodeSpace(screen));
-        node->setScale(layerScale);
-        newestX = screen.x;  // spawn order: the last one standing is the newest
+        node->setScaleX(layerScale * std::fabs(turn));
+        node->setScaleY(layerScale);
 
         if (screen.x < -margin || screen.x > winSize.width + margin ||
             screen.y < -margin || screen.y > winSize.height + margin) {
@@ -5496,16 +5519,6 @@ void FrameWindowAnalyzer::cullOffscreen(PlayLayer* pl) {
             continue;
         }
         ++it;
-    }
-    if (flipping && flipLines < 200) {
-        flipLines++;
-        auto const& gs = pl->m_gameState;
-        auto const ms =
-            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - flipStart).count();
-        geode::log::info("[FW] flip +{:.0f} ms: progress {:.3f}, second half {}, camera flip {:.2f}, object layer x "
-                         "scale {:.2f} at x {:.1f}, newest marker at screen x {:.1f}",
-                         ms, (float)flipProgressOf(gs, 0), (bool)secondHalfOf(gs, 0), pl->m_cameraFlip,
-                         pl->m_objectLayer->getScaleX(), pl->m_objectLayer->getPositionX(), newestX);
     }
 }
 

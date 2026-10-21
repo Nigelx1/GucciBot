@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-21-fj (Mirror flip timeline in the log, a line a tick, for the markers by a portal; no change in play)"
+    "2026-10-21-fk (Frame window markers turn with the picture through a mirror flip, not after it)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
