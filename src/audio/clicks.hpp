@@ -52,6 +52,11 @@ namespace gucci::clicks {
         bool inRenders = false;
         bool separateP2 = false;       // player 2 uses p2Pack instead of pack
         std::string p2Pack = "Clickbot";
+        // A pack's background noise track -- a sound with "noise" in its name
+        // in the pack's own folder (or player1's) -- looped under the clicks
+        // while they would play. Saved as clicks_noise and clicks_noise_volume.
+        bool noise = true;
+        float noiseVolume = 0.5f;      // 0 to 2
     };
 
     // Read from the mod's saved values the first time it is asked for.
@@ -81,6 +86,7 @@ namespace gucci::clicks {
         int softClicks = 0;
         int softReleases = 0;
         int unreadable = 0;      // sound files the game could not open
+        bool hasNoise = false;   // a background noise track, opened
     };
     PackStatus status(bool p2);
 
@@ -90,5 +96,10 @@ namespace gucci::clicks {
     // shifts it (1 plays it as it is): the Survival Indicator's cue
     // (hacks/indicator.cpp) rises with how little room is left.
     void playClick(bool p2, float pitch = 1.f);
+
+    // Once a frame: starts the background noise loop when click sounds would
+    // play now (in a level, not paused, the same switches as a click) and the
+    // pack has a noise track, and stops it when not.
+    void tickNoise();
 
 } // namespace gucci::clicks

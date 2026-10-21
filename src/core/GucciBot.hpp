@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-20-ez (ToastyReplay .ttr3 in the converter; Calculate gets a time cap and shows time so far and to go)"
+    "2026-10-20-fa (Click packs play their background noise; about, README and in-game credits brought up to date)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

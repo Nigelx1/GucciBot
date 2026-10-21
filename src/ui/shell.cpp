@@ -2,6 +2,7 @@
 // settings, and the ImGui hook the whole mod draws from. Written from scratch
 // on 2026-10-01 to replace the old menu (see ui.hpp).
 
+#include "audio/clicks.hpp"
 #include "tools/macro_convert.hpp"
 #include "core/platform.hpp"
 #include "core/setup_check.hpp"
@@ -2210,6 +2211,8 @@ namespace gucci::ui {
             }
             // Click Indicators' rhythm lane and verdict, menu open or not.
             clickind::drawOverlay();
+            // A click pack's background noise, on while clicks would play.
+            clicks::tickNoise();
             // Switched off but still in a level: what it was doing has stopped
             // (the analyzer above still walks back), and it leaves the game when
             // the level closes. Until then the menu is the switch.

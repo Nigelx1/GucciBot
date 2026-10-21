@@ -67,6 +67,8 @@ namespace gucci::ui::pages {
                                   counted(st.clicks, "click"), counted(st.releases, "release"),
                                   counted(st.softClicks, "soft click"), counted(st.softReleases, "soft release"))
                           .c_str());
+            if (st.hasNoise)
+                kit::Hint("With a background noise track.");
             if (st.clicks + st.softClicks == 0)
                 kit::Note("This pack has no click sounds, so presses stay silent.", Tone::Warn);
             if (st.unreadable > 0)
@@ -108,6 +110,17 @@ namespace gucci::ui::pages {
                                     &s.duringPlayback);
             dirty |= kit::SwitchRow("In renders", "Click while rendering, so the clicks are in the video",
                                     &s.inRenders);
+            dirty |= kit::SwitchRow("Background noise",
+                                    "A pack's noise track (a sound with \"noise\" in its name, in the pack's own "
+                                    "folder) plays on a loop under the clicks",
+                                    &s.noise);
+            if (s.noise) {
+                float noisePercent = s.noiseVolume * 100.f;
+                if (kit::SliderRow("Noise volume", nullptr, &noisePercent, 0.f, 200.f, "%.0f%%")) {
+                    s.noiseVolume = noisePercent / 100.f;
+                    dirty = true;
+                }
+            }
             dirty |= kit::SwitchRow("Separate pack for player 2", "For two-player levels", &s.separateP2);
             if (s.separateP2) {
                 if (packRow("Player 2 pack", "p2pack", &s.p2Pack)) {

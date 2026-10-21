@@ -5,6 +5,7 @@
 
 #include "audio/clicks.hpp"
 #include "audio/playsound.hpp"
+#include "core/bot_switch.hpp"
 
 #include "absense/glue.hpp"
 #include "core/GucciBot.hpp"
@@ -64,6 +65,7 @@ namespace gucci::clicks {
             std::array<std::array<Bank, KindCount>, 2> banks;   // [player][kind]
             std::array<std::array<int, KindCount>, 2> files{};  // sound files found
             int unreadable = 0;
+            FMOD::Sound* noise = nullptr;    // the background noise track, looping (in owned)
         };
 
         struct BuiltIn {
@@ -83,6 +85,8 @@ namespace gucci::clicks {
         FMOD::System* g_system = nullptr;
         std::map<std::string, Pack> g_packs;  // keyed by the name the settings hold
         std::vector<FMOD::Channel*> g_voices;
+        FMOD::Channel* g_noiseVoice = nullptr;  // the background noise playing, if any
+        FMOD::Sound* g_noiseSound = nullptr;    // ...and which track it is
         std::vector<BuiltIn> g_builtIns;
         std::vector<std::string> g_names;
         bool g_namesValid = false;
@@ -156,6 +160,29 @@ namespace gucci::clicks {
             }
             std::sort(found.begin(), found.end());
             return found;
+        }
+
+        // A pack's background noise: the first sound file with "noise" in its
+        // name in the pack's own folder, or player1's.
+        fs::path noiseIn(fs::path const& root) {
+            for (fs::path const& dir : {root, root / "player1"}) {
+                std::error_code ec;
+                if (!fs::is_directory(dir, ec))
+                    continue;
+                std::vector<fs::path> found;
+                for (fs::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec)) {
+                    std::error_code typeEc;
+                    if (!it->is_regular_file(typeEc) || !isSoundFile(it->path()))
+                        continue;
+                    if (lowerAscii(utf8(it->path().stem())).find("noise") != std::string::npos)
+                        found.push_back(it->path());
+                }
+                if (!found.empty()) {
+                    std::sort(found.begin(), found.end());
+                    return found.front();
+                }
+            }
+            return {};
         }
 
         // One kind's folder inside a pack (or player) folder; empty if it has none.
@@ -254,6 +281,7 @@ namespace gucci::clicks {
         // each once. A pack that is gone is stood in for by the default one.
         Pack load(std::string const& wanted, FMOD::System* sys) {
             Pack pack;
+            fs::path noiseFile;
             std::array<FileSet, 2> sets;  // [player]
             bool shared = true;           // player 2 plays player 1's sounds
             std::error_code ec;
@@ -265,6 +293,7 @@ namespace gucci::clicks {
                 sets[0] = b->files;
             } else if (!root.empty() && fs::is_directory(root, ec)) {
                 pack.name = wanted;
+                noiseFile = noiseIn(root);
                 if (fs::is_directory(root / "player1", ec)) {
                     sets[0] = filesOf(root / "player1");
                     if (fs::is_directory(root / "player2", ec)) {
@@ -315,6 +344,22 @@ namespace gucci::clicks {
                 pack.files[1] = pack.files[0];
             }
 
+            // Streamed, since a noise track can run long; it only ever plays once at a time.
+            if (sys && !noiseFile.empty()) {
+                FMOD::Sound* sound = nullptr;
+                FMOD_RESULT const res = sys->createSound(utf8(noiseFile).c_str(),
+                                                         FMOD_DEFAULT | FMOD_LOOP_NORMAL | FMOD_CREATESTREAM, nullptr,
+                                                         &sound);
+                if (res == FMOD_OK && sound) {
+                    pack.owned.push_back(sound);
+                    pack.noise = sound;
+                } else {
+                    ++pack.unreadable;
+                    log::warn("Click sounds: could not open the noise track {} (FMOD error {})", utf8(noiseFile),
+                              static_cast<int>(res));
+                }
+            }
+
             if (sys) {
                 auto const& b = pack.banks[0];
                 log::info("Click sounds: loaded {}{}{}: {} clicks, {} releases, {} soft clicks, {} soft releases{}",
@@ -335,6 +380,8 @@ namespace gucci::clicks {
                 // old one is already gone, so drop it without releasing.
                 g_packs.clear();
                 g_voices.clear();
+                g_noiseVoice = nullptr;
+                g_noiseSound = nullptr;
                 g_system = sys;
             }
 
@@ -489,6 +536,9 @@ namespace gucci::clicks {
             v.inRenders = mod->getSavedValue<bool>("clicks_render", v.inRenders);
             v.separateP2 = mod->getSavedValue<bool>("clicks_p2_separate", v.separateP2);
             v.p2Pack = mod->getSavedValue<std::string>("clicks_p2_pack", v.p2Pack);
+            v.noise = mod->getSavedValue<bool>("clicks_noise", v.noise);
+            v.noiseVolume =
+                std::clamp(static_cast<float>(mod->getSavedValue<double>("clicks_noise_volume", v.noiseVolume)), 0.f, 2.f);
             return v;
         }();
         return s;
@@ -505,6 +555,8 @@ namespace gucci::clicks {
         mod->setSavedValue<bool>("clicks_render", s.inRenders);
         mod->setSavedValue<bool>("clicks_p2_separate", s.separateP2);
         mod->setSavedValue<std::string>("clicks_p2_pack", s.p2Pack);
+        mod->setSavedValue<bool>("clicks_noise", s.noise);
+        mod->setSavedValue<double>("clicks_noise_volume", s.noiseVolume);
     }
 
     fs::path packsDir() {
@@ -565,12 +617,54 @@ namespace gucci::clicks {
         st.softClicks = count(SoftClick);
         st.softReleases = count(SoftRelease);
         st.unreadable = pack.unreadable;
+        st.hasNoise = pack.noise != nullptr;
         return st;
     }
 
     void playClick(bool p2, float pitch) {
         Pack& pack = packFor(p2);
         play(soundFor(pack, p2, Click), pitch);
+    }
+
+    void tickNoise() {
+        auto const stop = [] {
+            if (g_noiseVoice)
+                g_noiseVoice->stop();
+            g_noiseVoice = nullptr;
+            g_noiseSound = nullptr;
+        };
+        auto const& s = settings();
+        auto* gb = GucciEngine::get();
+        auto* pl = PlayLayer::get();
+        // The same switches as a click (triggerClickAudio), and only in a
+        // level that's running.
+        bool const want = s.enabled && s.noise && pl && !pl->m_isPaused && !gb->standingDown &&
+                          !botswitch::takenOut() && !(gb->isPlaying() && !s.duringPlayback) &&
+                          !(!s.inRenders && SLRenderer::get()->isRecording()) && !gb->analyzerOwnsRun() &&
+                          !absense::isRunning();
+        if (!want || !audioSystem()) {
+            stop();
+            return;
+        }
+        FMOD::Sound* const sound = packFor(false).noise;
+        if (!sound || !g_system) {
+            stop();
+            return;
+        }
+        float const volume = std::clamp(s.noiseVolume, 0.f, 2.f);
+        bool playing = false;
+        if (g_noiseVoice && g_noiseSound == sound && g_noiseVoice->isPlaying(&playing) == FMOD_OK && playing) {
+            g_noiseVoice->setVolume(volume);
+            return;
+        }
+        stop();
+        FMOD::Channel* voice = nullptr;
+        if (g_system->playSound(sound, nullptr, true, &voice) != FMOD_OK || !voice)
+            return;
+        voice->setVolume(volume);
+        voice->setPaused(false);
+        g_noiseVoice = voice;
+        g_noiseSound = sound;
     }
 
 } // namespace gucci::clicks
