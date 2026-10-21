@@ -850,6 +850,10 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
 
     std::vector<FrameWindowMark> kept;
     std::vector<FrameWindowMessage> keptMessages;
+    // GucciBot: hand-typed windows outlive the run (finish() puts them back).
+    m_manualKept.clear();
+    for (auto const& mk : m_results)
+        if (mk.manual) m_manualKept.push_back(mk);
     if (partial) {
         kept = m_results;
         keptMessages = m_messages;
@@ -3072,6 +3076,7 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
     m_trailP2.clear();
 
     if (m_partial) this->mergeKept();
+    this->reapplyManual();
 
     // Written straight to the file, not through FWLOG. FWLOG is gated on
     // the verbose toggle, and this one line is the summary of the whole run --
@@ -4477,6 +4482,11 @@ struct StoredMark {
     float suggestion = 0.f;
     int suggestAlignments = 0;
     float suggestCoverage = 0.f;
+    bool manual = false;
+    bool hadAuto = false;
+    int autoWindow = 0;
+    float autoSubframe = 0.f;
+    bool autoCbf = false;
 };
 
 struct StoredMessage {
@@ -4548,6 +4558,12 @@ static matjson::Value markToJson(StoredMark const& m) {
         {"suggestion", (double)m.suggestion},
         {"suggestAlignments", (int64_t)m.suggestAlignments},
         {"suggestCoverage", (double)m.suggestCoverage},
+        // GucciBot: a window typed by hand, and Calculate's count under it.
+        {"manual", m.manual},
+        {"hadAuto", m.hadAuto},
+        {"autoWindow", (int64_t)m.autoWindow},
+        {"autoSubframe", (double)m.autoSubframe},
+        {"autoCbf", m.autoCbf},
     });
 }
 
@@ -4665,6 +4681,11 @@ static bool fromJson(std::string const& text, StoredResults& out) {
             m.suggestion = (float)jreal(j, "suggestion", m.suggestion);
             m.suggestAlignments = (int)jnum(j, "suggestAlignments", m.suggestAlignments);
             m.suggestCoverage = (float)jreal(j, "suggestCoverage", m.suggestCoverage);
+            m.manual = jbool(j, "manual", m.manual);
+            m.hadAuto = jbool(j, "hadAuto", m.hadAuto);
+            m.autoWindow = (int)jnum(j, "autoWindow", m.autoWindow);
+            m.autoSubframe = (float)jreal(j, "autoSubframe", m.autoSubframe);
+            m.autoCbf = jbool(j, "autoCbf", m.autoCbf);
             out.marks.push_back(m);
         }
     }
@@ -4713,7 +4734,9 @@ bool FrameWindowAnalyzer::saveResults(std::filesystem::path const& path) const {
                              mk.splitWindow, mk.splitShift, mk.splitChecked,
                              mk.position.x, mk.position.y, mk.dependent,
                              mk.dependentMin, mk.dependentMax, mk.suggestion,
-                             mk.suggestAlignments, mk.suggestCoverage});
+                             mk.suggestAlignments, mk.suggestCoverage, mk.manual,
+                             mk.hadAuto, mk.autoWindow, mk.autoSubframe,
+                             mk.autoCbf});
     }
 
     out.messages.reserve(m_messages.size());
@@ -4781,6 +4804,11 @@ bool FrameWindowAnalyzer::loadResults(std::filesystem::path const& path) {
         mk.suggestion = sm.suggestion;
         mk.suggestAlignments = sm.suggestAlignments;
         mk.suggestCoverage = sm.suggestCoverage;
+        mk.manual = sm.manual;
+        mk.hadAuto = sm.hadAuto;
+        mk.autoWindow = sm.autoWindow;
+        mk.autoSubframe = sm.autoSubframe;
+        mk.autoCbf = sm.autoCbf;
         m_results.push_back(mk);
     }
 
@@ -6099,7 +6127,18 @@ void FrameWindowAnalyzer::applyLabelTo(PlayheadInput const& in, int window,
 
     if (window <= 0 && cbf <= 0.f) {
         if (in.mark < 0) return;
-        m_results.erase(m_results.begin() + in.mark);
+        // GucciBot: a hand entry over Calculate's own count goes back to that
+        // count; anything else goes, as before.
+        auto& had = m_results[in.mark];
+        if (had.manual && had.hadAuto) {
+            had.window = had.autoWindow;
+            had.subframe = had.autoSubframe;
+            had.cbf = had.autoCbf;
+            had.manual = false;
+            had.hadAuto = false;
+        } else {
+            m_results.erase(m_results.begin() + in.mark);
+        }
         this->markEdited();
         return;
     }
@@ -6111,6 +6150,13 @@ void FrameWindowAnalyzer::applyLabelTo(PlayheadInput const& in, int window,
     FrameWindowMark mk;
     if (in.mark >= 0) {
         mk = m_results[in.mark];
+        // GucciBot: remember Calculate's own count, for Clear.
+        if (!mk.manual) {
+            mk.hadAuto = true;
+            mk.autoWindow = mk.window;
+            mk.autoSubframe = mk.subframe;
+            mk.autoCbf = mk.cbf;
+        }
     } else {
         mk.frame = in.frame;
         mk.player2 = in.player2;
@@ -6139,6 +6185,7 @@ void FrameWindowAnalyzer::applyLabelTo(PlayheadInput const& in, int window,
     mk.desynced = false;
     mk.hidden = false;
     mk.unbounded = false;
+    mk.manual = true;
 
     if (in.mark >= 0) {
         m_results[in.mark] = mk;
@@ -6149,6 +6196,73 @@ void FrameWindowAnalyzer::applyLabelTo(PlayheadInput const& in, int window,
         m_results.insert(at, mk);
     }
     this->markEdited();
+}
+
+std::vector<FrameWindowAnalyzer::PlayheadInput> FrameWindowAnalyzer::allInputs(
+    bool releases) const {
+    std::vector<PlayheadInput> out;
+    auto const& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
+    int presses = 0;
+    for (auto const& a : actions) {
+        if (!isMeasurableInput(a)) continue;
+        if (a.m_holding) presses++;
+        if (!a.m_holding && !releases) continue;
+        PlayheadInput in;
+        in.valid = true;
+        in.frame = static_cast<uint32_t>(a.m_frame);
+        in.player2 = a.m_player2;
+        in.release = !a.m_holding;
+        in.number = presses;
+        out.push_back(in);
+    }
+    // Results are in frame order: one pass pairs them up.
+    for (auto& in : out) {
+        auto const at = std::lower_bound(
+            m_results.begin(), m_results.end(), in.frame,
+            [](FrameWindowMark const& m, uint32_t f) { return m.frame < f; });
+        for (auto it = at; it != m_results.end() && it->frame == in.frame; ++it)
+            if (it->player2 == in.player2 && it->release == in.release) {
+                in.mark = static_cast<int>(it - m_results.begin());
+                break;
+            }
+    }
+    return out;
+}
+
+void FrameWindowAnalyzer::reapplyManual() {
+    bool changed = false;
+    for (auto const& man : m_manualKept) {
+        auto it = std::find_if(m_results.begin(), m_results.end(), [&](FrameWindowMark const& mk) {
+            return mk.frame == man.frame && mk.player2 == man.player2 && mk.release == man.release;
+        });
+        if (it == m_results.end()) {
+            // Not measured this time: the hand entry stands as it was.
+            auto const at = std::upper_bound(
+                m_results.begin(), m_results.end(), man.frame,
+                [](uint32_t f, FrameWindowMark const& m) { return f < m.frame; });
+            m_results.insert(at, man);
+            changed = true;
+            continue;
+        }
+        if (it->manual) continue;  // kept already (a partial run's)
+        // The run's fresh count becomes what Clear goes back to.
+        FrameWindowMark mk = *it;
+        mk.hadAuto = true;
+        mk.autoWindow = it->window;
+        mk.autoSubframe = it->subframe;
+        mk.autoCbf = it->cbf;
+        mk.window = man.window;
+        mk.subframe = man.subframe;
+        mk.cbf = man.cbf;
+        mk.desynced = false;
+        mk.hidden = false;
+        mk.unbounded = false;
+        mk.manual = true;
+        *it = mk;
+        changed = true;
+    }
+    m_manualKept.clear();
+    if (changed) this->markEdited();
 }
 
 FrameWindowAnalyzer::Report FrameWindowAnalyzer::testPlayhead(PlayLayer* pl,

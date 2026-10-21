@@ -58,6 +58,14 @@ struct FrameWindowMark {
     float suggestion = 0.f;
     int suggestAlignments = 0;
     float suggestCoverage = 0.f;
+    // GucciBot: a window typed by hand (Manual Frame Windows, Juice's idea),
+    // and Calculate's own count under it, which Clear goes back to. A hand
+    // entry survives the next Calculate run.
+    bool manual = false;
+    bool hadAuto = false;
+    int autoWindow = 0;
+    float autoSubframe = 0.f;
+    bool autoCbf = false;
 };
 
 struct FrameWindowMessage {
@@ -111,6 +119,10 @@ class FrameWindowAnalyzer {
     // GucciBot: the same label on a given input (its frame, player and kind;
     // `mark` its result, or -1), so a click can be labelled from a list.
     void applyLabelTo(PlayheadInput const& in, int window, float cbf);
+    // GucciBot: every input that can be measured, in order (releases when
+    // `releases`), each with its result if it has one -- the rows of the
+    // Manual Frame Windows table.
+    std::vector<PlayheadInput> allInputs(bool releases) const;
     Report testPlayhead(PlayLayer* pl, int count);
     void tick(PlayLayer* pl);
     void cancel();
@@ -680,6 +692,10 @@ class FrameWindowAnalyzer {
     uint32_t m_probeFrom = 0;
     uint32_t m_probeTo = UINT32_MAX;
     std::vector<FrameWindowMark> m_keptResults;
+    // GucciBot: hand-typed windows from before a run, put back over its
+    // results when it finishes.
+    std::vector<FrameWindowMark> m_manualKept;
+    void reapplyManual();
     std::vector<FrameWindowMessage> m_keptMessages;
 
     bool inProbeRange(size_t index) const;

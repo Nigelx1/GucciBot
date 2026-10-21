@@ -18,6 +18,7 @@
 #include "core/platform.hpp"
 #include "ui/pages.hpp"
 #include "ui/kit.hpp"
+#include "ui/look.hpp"
 
 #include "analysis/ac/framewindow.hpp"
 #include "analysis/ac/fw_settings_store.hpp"
@@ -643,77 +644,180 @@ namespace gucci::ui::pages {
             fw.applyLabelTo(in, whole ? static_cast<int>(std::lround(frames)) : 0, whole ? 0.f : frames);
         }
 
-        // The suggestions (Juice's count for the suspicious clicks): where
-        // windows are edited by hand, each a press from becoming the window.
-        void suggestionsSection() {
+        // Manual Frame Windows (the old menu's table, Juice's idea), rebuilt
+        // 2026-10-21: every input of the macro, its window -- Calculate's, or
+        // one typed in -- and Calculate's suggestion where a suspicious click
+        // has one. A typed window survives the next run; Clear goes back to
+        // Calculate's own count.
+        void windowsTable() {
             auto* gb = GucciEngine::get();
             auto& fw = analyzer();
-            auto const& results = fw.results();
-            std::vector<size_t> open;
-            for (size_t i = 0; i < results.size(); i++)
-                if (results[i].suggestion > strictOf(results[i]) + 0.01f)
-                    open.push_back(i);
+            auto& s = S();
+            static bool s_onlySuggested = false;
 
-            kit::Section("My suggestions");
-            if (open.empty()) {
-                kit::Hint(results.empty() ? "Run Calculate first. Tight clicks right after another input get counted "
-                                            "Juice's way too, and any that come out wider show up here."
-                                          : "No suspicious click came out wider counted Juice's way.");
+            auto const rows = fw.allInputs(s.labelReleases);
+            auto const& results = fw.results();
+            auto const suggested = [&](FrameWindowAnalyzer::PlayheadInput const& in) {
+                if (in.mark < 0 || in.mark >= static_cast<int>(results.size()))
+                    return false;
+                auto const& mk = results[static_cast<size_t>(in.mark)];
+                return mk.suggestion > strictOf(mk) + 0.01f;
+            };
+
+            kit::Section("Every input");
+            if (rows.empty()) {
+                kit::Hint("Load a macro to see its inputs here.");
                 return;
             }
-            kit::Hint("Tight clicks right after another input, counted Juice's way too: with the input before moved "
-                      "across its own window (his Alignment-Independent method). Calculate's count stays as it is "
-                      "until you use one.");
-            bool changed = false;
-            int useAll = 0;
-            for (size_t i : open) {
-                auto const& mk = results[i];
-                ImGui::PushID(static_cast<int>(i));
-                kit::RowBegin(fmt::format("Frame {}{}{}", mk.frame, mk.player2 ? ", P2" : "", mk.release ? ", release" : "")
-                                  .c_str(),
-                              fmt::format("{:.0f}% of {} positions of the input before agree", mk.suggestCoverage * 100.f,
-                                          mk.suggestAlignments)
-                                  .c_str());
-                kit::Label(fmt::format("Calculate counts {:g}. My suggestion is {:g} frames.", strictOf(mk),
-                                       mk.suggestion)
-                               .c_str(),
-                           Tone::Accent);
-                ImGui::SameLine();
-                ImGui::BeginDisabled(fw.running());
-                if (kit::Button("Use")) {
-                    labelWith(fw, {true, mk.frame, mk.player2, mk.release, 0, static_cast<int>(i)}, mk.suggestion);
-                    changed = true;
+            kit::Hint("Type a window into any row, then Enter (0 clears it). A window you type stays through the next "
+                      "Calculate run; Clear goes back to Calculate's own count.");
+
+            int waiting = 0;
+            for (auto const& in : rows)
+                if (suggested(in))
+                    waiting++;
+            if (waiting > 0)
+                kit::Note(fmt::format("{} suspicious click{} came out wider counted Juice's way: the My suggestion "
+                                      "column has {}.",
+                                      waiting, waiting == 1 ? "" : "s", waiting == 1 ? "it" : "them")
+                              .c_str(),
+                          Tone::Accent);
+            kit::SwitchRow("Only rows with a suggestion", nullptr, &s_onlySuggested);
+
+            std::vector<size_t> shown;
+            for (size_t i = 0; i < rows.size(); i++)
+                if (!s_onlySuggested || suggested(rows[i]))
+                    shown.push_back(i);
+
+            // What a row asked for is done after the table is drawn: it changes
+            // the results the table is reading.
+            enum class Act { None, Set, Clear };
+            Act act = Act::None;
+            FrameWindowAnalyzer::PlayheadInput actOn;
+            float actValue = 0.f;
+
+            ImGuiTableFlags const flags = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
+                                          ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingFixedFit;
+            float const rowH = ImGui::GetFrameHeightWithSpacing();
+            float const height = std::min(380.f, rowH * (static_cast<float>(shown.size()) + 1.5f));
+            if (ImGui::BeginTable("##fwtable", 7, flags, ImVec2(0.f, height))) {
+                ImGui::TableSetupScrollFreeze(0, 1);
+                ImGui::TableSetupColumn("#");
+                ImGui::TableSetupColumn("Frame");
+                ImGui::TableSetupColumn("Input");
+                ImGui::TableSetupColumn("Window");
+                ImGui::TableSetupColumn("From");
+                ImGui::TableSetupColumn("My suggestion", ImGuiTableColumnFlags_WidthStretch);
+                ImGui::TableSetupColumn("");
+                ImGui::TableHeadersRow();
+
+                ImGuiListClipper clip;
+                clip.Begin(static_cast<int>(shown.size()));
+                while (clip.Step()) {
+                    for (int r = clip.DisplayStart; r < clip.DisplayEnd; r++) {
+                        auto const& in = rows[shown[static_cast<size_t>(r)]];
+                        FrameWindowMark const* mk =
+                            in.mark >= 0 && in.mark < static_cast<int>(results.size())
+                                ? &results[static_cast<size_t>(in.mark)]
+                                : nullptr;
+                        ImGui::PushID(static_cast<int>(in.frame * 4u + (in.player2 ? 2u : 0u) + (in.release ? 1u : 0u)));
+                        ImGui::TableNextRow();
+
+                        ImGui::TableNextColumn();
+                        ImGui::Text("%d", in.number);
+                        ImGui::TableNextColumn();
+                        ImGui::Text("%u", in.frame);
+                        ImGui::TableNextColumn();
+                        ImGui::TextUnformatted(
+                            fmt::format("{}{}", in.player2 ? "P2 " : "", in.release ? "release" : "press").c_str());
+
+                        ImGui::TableNextColumn();
+                        float value = mk ? strictOf(*mk) : 0.f;
+                        ImGui::SetNextItemWidth(72.f);
+                        ImGui::BeginDisabled(fw.running());
+                        ImGui::InputFloat("##w", &value, 0.f, 0.f, "%.2f");
+                        if (ImGui::IsItemDeactivatedAfterEdit() && act == Act::None) {
+                            act = value > 0.f ? Act::Set : Act::Clear;
+                            actOn = in;
+                            actValue = value;
+                        }
+                        ImGui::EndDisabled();
+
+                        ImGui::TableNextColumn();
+                        ImGui::TextDisabled("%s", !mk                ? "-"
+                                                  : mk->manual       ? "By hand"
+                                                  : mk->desynced     ? "Desynced"
+                                                                     : "Calculate");
+
+                        ImGui::TableNextColumn();
+                        if (mk && suggested(in)) {
+                            ImGui::TextColored(look().pal.accent, "%s",
+                                               fmt::format("{:g} frames", mk->suggestion).c_str());
+                            if (ImGui::IsItemHovered())
+                                ImGui::SetTooltip("My suggestion is %g frames (Calculate counts %g): with the input "
+                                                  "before it moved across its own window, %.0f%% of %d positions "
+                                                  "give it that (Juice's Alignment-Independent method).",
+                                                  mk->suggestion, strictOf(*mk), mk->suggestCoverage * 100.f,
+                                                  mk->suggestAlignments);
+                            ImGui::SameLine();
+                            ImGui::BeginDisabled(fw.running());
+                            if (ImGui::SmallButton("Use") && act == Act::None) {
+                                act = Act::Set;
+                                actOn = in;
+                                actValue = mk->suggestion;
+                            }
+                            ImGui::EndDisabled();
+                        }
+
+                        ImGui::TableNextColumn();
+                        if (mk && mk->manual) {
+                            ImGui::BeginDisabled(fw.running());
+                            if (ImGui::SmallButton("Clear") && act == Act::None) {
+                                act = Act::Clear;
+                                actOn = in;
+                            }
+                            ImGui::EndDisabled();
+                        }
+                        ImGui::PopID();
+                    }
                 }
-                ImGui::EndDisabled();
-                kit::RowEnd();
-                ImGui::PopID();
-                if (changed)
-                    break;  // the list moved under us
-                useAll++;
+                ImGui::EndTable();
             }
-            if (!changed && open.size() > 1) {
+
+            bool changed = false;
+            if (act != Act::None) {
+                labelWith(fw, actOn, act == Act::Set ? actValue : 0.f);
+                changed = true;
+            }
+            if (waiting > 1) {
                 ImGui::BeginDisabled(fw.running());
-                if (kit::Button(fmt::format("Use all {}", open.size()).c_str())) {
-                    // By frame and player, since each label can move the list.
-                    std::vector<FrameWindowMark> picks;
-                    for (size_t i : open)
-                        picks.push_back(results[i]);
-                    for (auto const& mk : picks) {
+                if (kit::Button(fmt::format("Use all {} suggestions", waiting).c_str())) {
+                    // One at a time, finding each again: every label can move
+                    // the results.
+                    struct Want {
+                        uint32_t frame;
+                        bool player2, release;
+                        float value;
+                    };
+                    std::vector<Want> wants;
+                    for (auto const& in : rows)
+                        if (suggested(in))
+                            wants.push_back({in.frame, in.player2, in.release,
+                                             results[static_cast<size_t>(in.mark)].suggestion});
+                    for (auto const& w : wants) {
                         int mark = -1;
-                        for (size_t k = 0; k < fw.results().size(); k++) {
-                            auto const& r = fw.results()[k];
-                            if (r.frame == mk.frame && r.player2 == mk.player2 && r.release == mk.release) {
+                        auto const& now = fw.results();
+                        for (size_t k = 0; k < now.size(); k++)
+                            if (now[k].frame == w.frame && now[k].player2 == w.player2 && now[k].release == w.release) {
                                 mark = static_cast<int>(k);
                                 break;
                             }
-                        }
-                        labelWith(fw, {true, mk.frame, mk.player2, mk.release, 0, mark}, mk.suggestion);
+                        labelWith(fw, {true, w.frame, w.player2, w.release, 0, mark}, w.value);
                     }
                     changed = true;
                 }
                 ImGui::EndDisabled();
             }
-            (void)useAll;
             if (changed) {
                 // Labels are results: kept with the macro, and L* moves.
                 gb->saveAcFrameWindowResults();
@@ -729,8 +833,6 @@ namespace gucci::ui::pages {
             kit::Section("At the playhead");
             kit::Hint("Pause on an input in the level and give it a window by hand, or measure just the last few, "
                       "without running a whole Calculate.");
-            flag("Include releases", "Count releases as inputs when finding the one under the playhead",
-                 &FW::labelReleases);
 
             auto const in = fw.playheadInput();
             if (in.valid) {
@@ -794,8 +896,10 @@ namespace gucci::ui::pages {
         // Nigel, 2026-10-21, couldn't find it): the suggestions and the
         // playhead labelling.
         void byHandCard() {
-            kit::BeginCard("Windows by hand", "Give an input its window yourself, or take Calculate's suggestion.");
-            suggestionsSection();
+            kit::BeginCard("Windows by hand", "Every input's window, Calculate's or yours, and Calculate's "
+                                              "suggestions for the suspicious ones.");
+            flag("Include releases", "List releases as inputs too, here and at the playhead", &FW::labelReleases);
+            windowsTable();
             labellingSection();
             kit::EndCard();
         }

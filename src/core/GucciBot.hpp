@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-21-fd (Calculate page: a Windows by hand card with my suggestions in it, one press to use one)"
+    "2026-10-21-fe (Manual Frame Windows is back: every input in a table, type any window, suggestions in it)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
