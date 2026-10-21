@@ -5431,6 +5431,12 @@ void FrameWindowAnalyzer::dropMarkers() {
 namespace {
 template <class S> auto flippingOf(S const& gs, int) -> decltype(gs.m_isFlipping) { return gs.m_isFlipping; }
 template <class S> bool flippingOf(S const& gs, long) { return gs.m_unkBool12; }
+template <class S> auto flipProgressOf(S const& gs, int) -> decltype(gs.m_levelFlipProgress) { return gs.m_levelFlipProgress; }
+template <class S> float flipProgressOf(S const& gs, long) { return gs.m_levelFlipping; }
+template <class S> auto secondHalfOf(S const& gs, int) -> decltype(gs.m_inSecondHalfOfFlipAnimation) {
+    return gs.m_inSecondHalfOfFlipAnimation;
+}
+template <class S> bool secondHalfOf(S const& gs, long) { return gs.m_unkBool11; }
 }  // namespace
 
 void FrameWindowAnalyzer::cullOffscreen(PlayLayer* pl) {
@@ -5452,9 +5458,19 @@ void FrameWindowAnalyzer::cullOffscreen(PlayLayer* pl) {
     // the layers between (and an offset UI layer on a phone). The log says,
     // once a flip, how far the markers' parent was squeezed.
     bool const flipping = flippingOf(pl->m_gameState, 0);
+    // (Nigel, -fi: a jump during the flip gets its marker where it would be
+    // before the flip. The flip's own timeline, a line a tick while it runs, to
+    // line up with what he sees: GD's progress and half, the camera flip, the
+    // object layer's x scale and x, and where the newest marker stands.)
     static bool wasFlipping = false;
-    static float leastSqueeze = 1.f;
-    static int squeezeSeen = 0;
+    static auto flipStart = std::chrono::steady_clock::now();
+    static int flipLines = 0;
+    if (flipping && !wasFlipping) {
+        flipStart = std::chrono::steady_clock::now();
+        flipLines = 0;
+    }
+    wasFlipping = flipping;
+    float newestX = -1.f;
     for (auto it = m_markerNodes.begin(); it != m_markerNodes.end();) {
         auto* node = it->m_node;
         if (!node || !node->getParent()) {
@@ -5465,16 +5481,12 @@ void FrameWindowAnalyzer::cullOffscreen(PlayLayer* pl) {
 
         CCPoint const screen =
             pl->m_objectLayer->convertToWorldSpace(it->m_world);
-        // (Squeezed flat for the one frame in the middle of a flip, the
-        // parent's space has no inverse: the marker keeps last frame's spot.)
+        // (A parent squeezed flat has no inverse: the marker keeps its spot.)
         auto const t = node->getParent()->nodeToWorldTransform();
         if (std::fabs(t.a * t.d - t.b * t.c) > 1e-6f)
             node->setPosition(node->getParent()->convertToNodeSpace(screen));
         node->setScale(layerScale);
-        if (flipping) {
-            leastSqueeze = std::min(leastSqueeze, std::fabs(t.a));
-            squeezeSeen++;
-        }
+        newestX = screen.x;  // spawn order: the last one standing is the newest
 
         if (screen.x < -margin || screen.x > winSize.width + margin ||
             screen.y < -margin || screen.y > winSize.height + margin) {
@@ -5485,15 +5497,15 @@ void FrameWindowAnalyzer::cullOffscreen(PlayLayer* pl) {
         }
         ++it;
     }
-    if (flipping) {
-        wasFlipping = true;
-    } else if (wasFlipping) {
-        wasFlipping = false;
-        if (squeezeSeen > 0)
-            geode::log::info("[FW] mirror flip done: the markers' parent was squeezed to {:.2f} of its width at most "
-                             "(1.00: nothing above the level squeezed; {} marker frames)", leastSqueeze, squeezeSeen);
-        leastSqueeze = 1.f;
-        squeezeSeen = 0;
+    if (flipping && flipLines < 200) {
+        flipLines++;
+        auto const& gs = pl->m_gameState;
+        auto const ms =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - flipStart).count();
+        geode::log::info("[FW] flip +{:.0f} ms: progress {:.3f}, second half {}, camera flip {:.2f}, object layer x "
+                         "scale {:.2f} at x {:.1f}, newest marker at screen x {:.1f}",
+                         ms, (float)flipProgressOf(gs, 0), (bool)secondHalfOf(gs, 0), pl->m_cameraFlip,
+                         pl->m_objectLayer->getScaleX(), pl->m_objectLayer->getPositionX(), newestX);
     }
 }
 
