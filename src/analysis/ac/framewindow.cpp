@@ -6089,9 +6089,12 @@ FrameWindowAnalyzer::PlayheadInput FrameWindowAnalyzer::playheadInput() const {
 }
 
 void FrameWindowAnalyzer::applyLabel(int window, float cbf) {
-    if (m_running) return;
+    this->applyLabelTo(this->playheadInput(), window, cbf);
+}
 
-    auto const in = this->playheadInput();
+void FrameWindowAnalyzer::applyLabelTo(PlayheadInput const& in, int window,
+                                       float cbf) {
+    if (m_running) return;
     if (!in.valid) return;
 
     if (window <= 0 && cbf <= 0.f) {

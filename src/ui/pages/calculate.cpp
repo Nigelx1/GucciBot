@@ -629,23 +629,138 @@ namespace gucci::ui::pages {
             kit::EndCard();
         }
 
+        // Calculate's own count for a mark, in frames: the sub-tick window
+        // when it measured one.
+        float strictOf(FrameWindowMark const& mk) {
+            float const v = mk.cbf && mk.subframe > 0.f ? mk.subframe : static_cast<float>(mk.window);
+            return std::round(v * 100.f) / 100.f;
+        }
+
+        // A label of `frames`: whole frames as a window, anything else as a
+        // sub-tick one.
+        void labelWith(FrameWindowAnalyzer& fw, FrameWindowAnalyzer::PlayheadInput const& in, float frames) {
+            bool const whole = std::fabs(frames - std::round(frames)) < 0.005f;
+            fw.applyLabelTo(in, whole ? static_cast<int>(std::lround(frames)) : 0, whole ? 0.f : frames);
+        }
+
+        // The suggestions (Juice's count for the suspicious clicks): where
+        // windows are edited by hand, each a press from becoming the window.
+        void suggestionsSection() {
+            auto* gb = GucciEngine::get();
+            auto& fw = analyzer();
+            auto const& results = fw.results();
+            std::vector<size_t> open;
+            for (size_t i = 0; i < results.size(); i++)
+                if (results[i].suggestion > strictOf(results[i]) + 0.01f)
+                    open.push_back(i);
+
+            kit::Section("My suggestions");
+            if (open.empty()) {
+                kit::Hint(results.empty() ? "Run Calculate first. Tight clicks right after another input get counted "
+                                            "Juice's way too, and any that come out wider show up here."
+                                          : "No suspicious click came out wider counted Juice's way.");
+                return;
+            }
+            kit::Hint("Tight clicks right after another input, counted Juice's way too: with the input before moved "
+                      "across its own window (his Alignment-Independent method). Calculate's count stays as it is "
+                      "until you use one.");
+            bool changed = false;
+            int useAll = 0;
+            for (size_t i : open) {
+                auto const& mk = results[i];
+                ImGui::PushID(static_cast<int>(i));
+                kit::RowBegin(fmt::format("Frame {}{}{}", mk.frame, mk.player2 ? ", P2" : "", mk.release ? ", release" : "")
+                                  .c_str(),
+                              fmt::format("{:.0f}% of {} positions of the input before agree", mk.suggestCoverage * 100.f,
+                                          mk.suggestAlignments)
+                                  .c_str());
+                kit::Label(fmt::format("Calculate counts {:g}. My suggestion is {:g} frames.", strictOf(mk),
+                                       mk.suggestion)
+                               .c_str(),
+                           Tone::Accent);
+                ImGui::SameLine();
+                ImGui::BeginDisabled(fw.running());
+                if (kit::Button("Use")) {
+                    labelWith(fw, {true, mk.frame, mk.player2, mk.release, 0, static_cast<int>(i)}, mk.suggestion);
+                    changed = true;
+                }
+                ImGui::EndDisabled();
+                kit::RowEnd();
+                ImGui::PopID();
+                if (changed)
+                    break;  // the list moved under us
+                useAll++;
+            }
+            if (!changed && open.size() > 1) {
+                ImGui::BeginDisabled(fw.running());
+                if (kit::Button(fmt::format("Use all {}", open.size()).c_str())) {
+                    // By frame and player, since each label can move the list.
+                    std::vector<FrameWindowMark> picks;
+                    for (size_t i : open)
+                        picks.push_back(results[i]);
+                    for (auto const& mk : picks) {
+                        int mark = -1;
+                        for (size_t k = 0; k < fw.results().size(); k++) {
+                            auto const& r = fw.results()[k];
+                            if (r.frame == mk.frame && r.player2 == mk.player2 && r.release == mk.release) {
+                                mark = static_cast<int>(k);
+                                break;
+                            }
+                        }
+                        labelWith(fw, {true, mk.frame, mk.player2, mk.release, 0, mark}, mk.suggestion);
+                    }
+                    changed = true;
+                }
+                ImGui::EndDisabled();
+            }
+            (void)useAll;
+            if (changed) {
+                // Labels are results: kept with the macro, and L* moves.
+                gb->saveAcFrameWindowResults();
+                lstar::Solver::get()->markDirty();
+            }
+        }
+
         void labellingSection() {
             auto* gb = GucciEngine::get();
             auto& fw = analyzer();
             auto& s = S();
 
-            kit::Section("Playhead labelling");
-            kit::Hint("Work on the input at or before the playhead without running a whole Calculate.");
+            kit::Section("At the playhead");
+            kit::Hint("Pause on an input in the level and give it a window by hand, or measure just the last few, "
+                      "without running a whole Calculate.");
             flag("Include releases", "Count releases as inputs when finding the one under the playhead",
                  &FW::labelReleases);
 
             auto const in = fw.playheadInput();
-            if (in.valid)
+            if (in.valid) {
                 kit::Hint(fmt::format("Input {} at frame {}{}{}", in.number, in.frame, in.player2 ? ", player 2" : "",
                                       in.release ? ", release" : "")
                               .c_str());
-            else
+                if (in.mark >= 0 && in.mark < static_cast<int>(fw.results().size())) {
+                    auto const& mk = fw.results()[static_cast<size_t>(in.mark)];
+                    if (mk.suggestion > strictOf(mk) + 0.01f) {
+                        kit::Note(fmt::format("Calculate counts {:g}. My suggestion is {:g} frames: with the input "
+                                              "before it moved across its own window, {:.0f}% of {} positions give "
+                                              "this one {:g} (Juice's Alignment-Independent method).",
+                                              strictOf(mk), mk.suggestion, mk.suggestCoverage * 100.f,
+                                              mk.suggestAlignments, mk.suggestion)
+                                      .c_str(),
+                                  Tone::Accent);
+                        ImGui::BeginDisabled(fw.running());
+                        if (kit::Button("Use my suggestion", Tone::Accent)) {
+                            labelWith(fw, in, mk.suggestion);
+                            gb->saveAcFrameWindowResults();
+                            lstar::Solver::get()->markDirty();
+                        }
+                        ImGui::EndDisabled();
+                    } else {
+                        kit::Hint(fmt::format("Calculate counts {:g}.", strictOf(mk)).c_str());
+                    }
+                }
+            } else {
                 kit::Hint("No input at or before the playhead.");
+            }
 
             slider("Window", "The window to give it. 0 with no sub-tick value removes its label", &FW::labelWindow,
                    "%d frames");
@@ -675,10 +790,19 @@ namespace gucci::ui::pages {
             kit::RowEnd();
         }
 
+        // Windows by hand, out where it can be found (it was inside Advanced;
+        // Nigel, 2026-10-21, couldn't find it): the suggestions and the
+        // playhead labelling.
+        void byHandCard() {
+            kit::BeginCard("Windows by hand", "Give an input its window yourself, or take Calculate's suggestion.");
+            suggestionsSection();
+            labellingSection();
+            kit::EndCard();
+        }
+
         void advancedCard() {
             auto& s = S();
-            kit::BeginCard("Advanced", "Run speed, what the screen does during a run, labelling by hand, and "
-                                       "debugging.");
+            kit::BeginCard("Advanced", "Run speed, what the screen does during a run, and debugging.");
             if (kit::FeatureBegin("Show advanced settings", nullptr, &g_showAdvanced)) {
                 kit::Section("While it runs");
                 if (feature("Analysis visuals", "Hide clutter on screen while the analyzer runs",
@@ -721,8 +845,6 @@ namespace gucci::ui::pages {
                 slider("Time cap",
                        "Stops a run that goes on longer than this and keeps what it measured. 0 has no cap",
                        &FW::timeCapMinutes, s.timeCapMinutes == 0 ? "no cap" : "%d min");
-
-                labellingSection();
 
                 kit::Section("Debug");
                 if (feature("Verbose log",
@@ -791,6 +913,7 @@ namespace gucci::ui::pages {
         g_changed = g_look = g_lstar = false;
 
         runCard();
+        byHandCard();
         measurementCard();
         cbfCard();
         overlayCard();

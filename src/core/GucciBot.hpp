@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-21-fc (Calculate's suggestions cover sub-tick clicks and sub-tick inputs before them; a notification when a run ends)"
+    "2026-10-21-fd (Calculate page: a Windows by hand card with my suggestions in it, one press to use one)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

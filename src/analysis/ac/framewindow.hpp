@@ -108,6 +108,9 @@ class FrameWindowAnalyzer {
 
     PlayheadInput playheadInput() const;
     void applyLabel(int window, float cbf);
+    // GucciBot: the same label on a given input (its frame, player and kind;
+    // `mark` its result, or -1), so a click can be labelled from a list.
+    void applyLabelTo(PlayheadInput const& in, int window, float cbf);
     Report testPlayhead(PlayLayer* pl, int count);
     void tick(PlayLayer* pl);
     void cancel();
