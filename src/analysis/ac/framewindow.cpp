@@ -3925,12 +3925,16 @@ void FrameWindowAnalyzer::finishDependentPair() {
 // be timed somewhere within Z frames too (depth-1 continuation, his VIABLE);
 // group the windows that are within half again of each other, and if the
 // biggest group holds at least half the alignments, its median is the
-// suggestion. It is shown only when it is wider than the strict window.
+// suggestion. It is kept only when it is at least half a frame wider than
+// Calculate's own count.
 //
 // Built on the dependent pass's machinery so it measures the way the rest of
 // Calculate does: the same checkpoint a frame before the pair, the same
 // placement (the input before moves with its release), the same legs and
-// leg targets. Whole frames only; CBF clicks are left alone.
+// targets, and for a click Calculate measured sub-tick (most tight clicks are),
+// the same resolution: a coarse scan at DEP_SCAN_PER_TICK points a tick, then
+// the window's edges bisected. (The first version skipped sub-tick clicks
+// altogether, so on VSC it found nothing: Nigel's test, 2026-10-21.)
 
 static int64_t suggestZ() {
     return std::clamp<int64_t>(SLSettings::get()->frameWindow.suggestZ, 1, 8);
@@ -3948,6 +3952,15 @@ bool FrameWindowAnalyzer::beginSuggestPass(std::string message) {
     int const below = std::clamp(fw.suggestBelow, 1, 10);
     int64_t const z = suggestZ();
 
+    // Sub-tick marks keep their window in CBF slots: beginDependentPass's scale.
+    int64_t cbfRes = 1;
+    if (m_subframeProbe->inner()) {
+        double const hz = static_cast<double>(
+            std::clamp<int64_t>(m_cbfInputHz->inner(), 240, MAX_CBF_HZ));
+        cbfRes = std::clamp<int64_t>(std::llround(hz / std::max(1.0, m_baseTps)), 1,
+                                     MAX_RESOLVABLE_SLOTS);
+    }
+
     m_sugClicks.clear();
     for (size_t a = 0; a < m_samples.size(); a++) {
         size_t const b = this->nextSampleFor(a);
@@ -3964,18 +3977,44 @@ bool FrameWindowAnalyzer::beginSuggestPass(std::string message) {
         auto const& ma = m_results[ra];
         auto const& mb = m_results[rb];
         if (ma.desynced || mb.desynced || mb.hidden || mb.unbounded) continue;
-        if (ma.cbf || mb.cbf) continue;
-        if (ma.window <= 0 || mb.window <= 0 || mb.window > below) continue;
+        if (ma.window <= 0 || mb.window <= 0) continue;
+
+        double const strict = mb.cbf && mb.subframe > 0.f
+                                  ? static_cast<double>(mb.subframe)
+                                  : static_cast<double>(mb.window);
+        if (strict > static_cast<double>(below)) continue;
 
         SuggestClick click;
         click.a = a;
         click.b = b;
         click.markB = rb;
-        int64_t const lo = std::max<int64_t>(-z, ma.low);
-        int64_t const hi = std::min<int64_t>(z, ma.high);
-        for (int64_t s = lo; s <= hi; s++) click.alignments.push_back(s);
+        click.res = mb.cbf ? cbfRes : 1;
+        click.strict = strict;
+        // Where the input before it goes: every whole frame its own window
+        // allows, or for one Calculate measured sub-tick, DEP_POINTS spread
+        // across its window as the dependent pass places it (a tight input
+        // before may not move a whole frame at all). Within Z either way.
+        if (ma.cbf) {
+            double const lo = std::max(-static_cast<double>(z),
+                                       static_cast<double>(ma.low) / static_cast<double>(cbfRes));
+            double const hi = std::min(static_cast<double>(z),
+                                       static_cast<double>(ma.high) / static_cast<double>(cbfRes));
+            if (hi > lo)
+                for (int k = 0; k < DEP_POINTS; k++)
+                    click.alignments.push_back(lo + (hi - lo) * k / (DEP_POINTS - 1));
+        } else {
+            int64_t const lo = std::max<int64_t>(-z, ma.low);
+            int64_t const hi = std::min<int64_t>(z, ma.high);
+            for (int64_t s = lo; s <= hi; s++)
+                click.alignments.push_back(static_cast<double>(s));
+        }
         // An input before it that can't move gives nothing to compare.
-        if (click.alignments.size() < 2) continue;
+        if (click.alignments.size() < 2) {
+            FWLOG("[fw][suggest] click {} ({:.2f} frames): the input before it "
+                  "can't move, nothing to compare",
+                  b + 1, strict);
+            continue;
+        }
         m_sugClicks.push_back(std::move(click));
     }
 
@@ -4013,10 +4052,12 @@ bool FrameWindowAnalyzer::stepSuggest(PlayLayer* pl) {
         int flagged = 0;
         for (auto const& mk : m_results)
             if (mk.suggestion > 0.f) flagged++;
-        if (flagged > 0)
-            m_sugFinishMessage += fmt::format(
-                " {} suspicious click{} got a suggestion (Frame Editor).",
-                flagged, flagged == 1 ? "" : "s");
+        m_sugFinishMessage += flagged > 0
+                                  ? fmt::format(" {} suspicious click{} got a suggestion "
+                                                "(Frame Editor).",
+                                                flagged, flagged == 1 ? "" : "s")
+                                  : std::string(" No suspicious click came out wider "
+                                                "counted Juice's way.");
         this->finish(std::move(m_sugFinishMessage), true);
         return true;
     }
@@ -4028,8 +4069,7 @@ bool FrameWindowAnalyzer::stepSuggest(PlayLayer* pl) {
         // The dependent pass's checkpoint: a frame before the earliest the
         // input before the click can go.
         double const earliest = static_cast<double>(m_originalFrames[aiA]) +
-                                m_originalOffsets[aiA] +
-                                static_cast<double>(click.alignments.front());
+                                m_originalOffsets[aiA] + click.alignments.front();
         uint32_t const base = static_cast<uint32_t>(
             std::max(0.0, std::floor(earliest) - 1.0));
 
@@ -4086,35 +4126,26 @@ bool FrameWindowAnalyzer::stepSuggest(PlayLayer* pl) {
                 return true;
             }
             // No timing of the input after it survived: a dead end.
-            m_sugViable.push_back(0);
             m_sugInCont = false;
-            m_sugScanAt++;
+            this->recordSuggestTest(false);
             return true;
         }
-        if (m_sugScanAt < m_sugScan.size()) {
+
+        int64_t shift = 0;
+        if (this->nextSuggestShift(shift)) {
+            m_sugShift = shift;
             this->launchSuggestLeg();
             return true;
         }
 
-        // This alignment's window: the run of viable timings around the
-        // viable one nearest the click's own.
-        int64_t width = 0;
-        size_t best = NO_INDEX;
-        for (size_t i = 0; i < m_sugScan.size(); i++) {
-            if (!m_sugViable[i]) continue;
-            if (best == NO_INDEX ||
-                std::abs(m_sugScan[i]) < std::abs(m_sugScan[best]))
-                best = i;
-        }
-        if (best != NO_INDEX) {
-            size_t left = best, right = best;
-            while (left > 0 && m_sugViable[left - 1]) left--;
-            while (right + 1 < m_sugScan.size() && m_sugViable[right + 1])
-                right++;
-            width = m_sugScan[right] - m_sugScan[left] + 1;
-        }
+        // This alignment's window: the run of viable timings around the one
+        // nearest the click's own, edges bisected, in frames.
+        double const width =
+            m_sugFound ? static_cast<double>(m_sugAlive - m_sugLow + 1) /
+                             static_cast<double>(click.res)
+                       : 0.0;
         m_sugWidths.push_back(width);
-        FWLOG("[fw][suggest] click {} with click {} at {:+d}: window {}",
+        FWLOG("[fw][suggest] click {} with click {} at {:+.2f}: window {:.2f}",
               click.b + 1, click.a + 1, click.alignments[m_sugAlign], width);
 
         if (++m_sugAlign >= click.alignments.size()) {
@@ -4140,30 +4171,96 @@ void FrameWindowAnalyzer::startSuggestAlignment() {
         return static_cast<double>(m_originalFrames[k]) + m_originalOffsets[k];
     };
 
-    int64_t const z = suggestZ();
-    double const aPos =
-        origin(aiA) + static_cast<double>(click.alignments[m_sugAlign]);
+    double const res = static_cast<double>(click.res);
+    double const aPos = origin(aiA) + click.alignments[m_sugAlign];
     double const bPos = origin(aiB);
 
-    // The click's own shifts: within Z, after the input before it (where it
-    // now is), not before the level, and before the input after it -- the
-    // bounds startDependentPoint uses, in whole frames.
-    int64_t lo = -z, hi = z;
-    lo = std::max<int64_t>(lo, static_cast<int64_t>(std::floor(aPos - bPos)) + 1);
-    lo = std::max<int64_t>(lo, static_cast<int64_t>(std::ceil(-bPos)));
+    // The click's own shifts, in res units: within Z frames, after the input
+    // before it (where it now is), not before the level, and before the input
+    // after it -- startDependentPoint's bounds.
+    int64_t const reach = suggestZ() * click.res;
+    int64_t lo = -reach, hi = reach;
+    lo = std::max<int64_t>(lo, static_cast<int64_t>(std::floor((aPos - bPos) * res)) + 1);
+    lo = std::max<int64_t>(lo, static_cast<int64_t>(std::ceil(-bPos * res)));
     size_t const next = this->nextActionFor(aiB, m_samples[click.b].player2);
     if (next != NO_INDEX)
         hi = std::min<int64_t>(
-            hi, static_cast<int64_t>(std::ceil(origin(next) - bPos)) - 1);
+            hi, static_cast<int64_t>(std::ceil((origin(next) - bPos) * res)) - 1);
 
     m_sugScan.clear();
     m_sugViable.clear();
     m_sugScanAt = 0;
+    m_sugEdgesSet = false;
+    m_sugFound = false;
     m_sugInCont = false;
     m_sugContScan.clear();
     m_sugContAt = 0;
     m_sugContAction = next;
-    for (int64_t s = lo; s <= hi; s++) m_sugScan.push_back(s);
+    if (hi < lo) return;
+
+    // Every frame for a whole-frame click; DEP_SCAN_PER_TICK points a tick
+    // for a sub-tick one, its edges bisected after (nextSuggestShift).
+    int64_t const stride = std::max<int64_t>(1, click.res / DEP_SCAN_PER_TICK);
+    for (int64_t t = lo; t <= hi; t += stride) m_sugScan.push_back(t);
+    if (m_sugScan.back() != hi) m_sugScan.push_back(hi);
+    if (lo <= 0 && hi >= 0 &&
+        std::find(m_sugScan.begin(), m_sugScan.end(), 0) == m_sugScan.end()) {
+        m_sugScan.push_back(0);
+        std::sort(m_sugScan.begin(), m_sugScan.end());
+    }
+}
+
+// nextDependentShift's walk: the scan first, then each edge of the viable run
+// nearest the click's own timing bisected down to one unit.
+bool FrameWindowAnalyzer::nextSuggestShift(int64_t& shift) {
+    if (m_sugScanAt < m_sugScan.size()) {
+        shift = m_sugScan[m_sugScanAt];
+        return true;
+    }
+
+    if (!m_sugEdgesSet) {
+        m_sugEdgesSet = true;
+        size_t best = NO_INDEX;
+        for (size_t i = 0; i < m_sugScan.size(); i++) {
+            if (!m_sugViable[i]) continue;
+            if (best == NO_INDEX ||
+                std::abs(m_sugScan[i]) < std::abs(m_sugScan[best]))
+                best = i;
+        }
+        m_sugFound = best != NO_INDEX;
+        if (!m_sugFound) return false;
+
+        size_t left = best;
+        while (left > 0 && m_sugViable[left - 1]) left--;
+        size_t right = best;
+        while (right + 1 < m_sugScan.size() && m_sugViable[right + 1]) right++;
+
+        m_sugLow = m_sugScan[left];
+        m_sugLowDead = left > 0 ? m_sugScan[left - 1] : m_sugLow;
+        m_sugAlive = m_sugScan[right];
+        m_sugDead = right + 1 < m_sugScan.size() ? m_sugScan[right + 1] : m_sugAlive;
+    }
+
+    if (m_sugLow - m_sugLowDead > 1) {
+        shift = std::midpoint(m_sugLowDead, m_sugLow);
+        return true;
+    }
+    if (m_sugDead - m_sugAlive > 1) {
+        shift = std::midpoint(m_sugAlive, m_sugDead);
+        return true;
+    }
+    return false;
+}
+
+void FrameWindowAnalyzer::recordSuggestTest(bool viable) {
+    if (m_sugScanAt < m_sugScan.size()) {
+        m_sugViable.push_back(viable ? 1 : 0);
+        m_sugScanAt++;
+    } else if (m_sugShift < m_sugLow) {
+        (viable ? m_sugLow : m_sugLowDead) = m_sugShift;
+    } else {
+        (viable ? m_sugAlive : m_sugDead) = m_sugShift;
+    }
 }
 
 void FrameWindowAnalyzer::buildSuggestContinuation(int64_t clickShift) {
@@ -4179,7 +4276,8 @@ void FrameWindowAnalyzer::buildSuggestContinuation(int64_t clickShift) {
     };
 
     int64_t const z = suggestZ();
-    double const bPos = origin(aiB) + static_cast<double>(clickShift);
+    double const bPos = origin(aiB) + static_cast<double>(clickShift) /
+                                          static_cast<double>(click.res);
     double const cPos = origin(aiC);
     int64_t lo = -z, hi = z;
     lo = std::max<int64_t>(lo, static_cast<int64_t>(std::floor(bPos - cPos)) + 1);
@@ -4211,14 +4309,14 @@ void FrameWindowAnalyzer::launchSuggestLeg() {
         return static_cast<double>(m_originalFrames[k]) + m_originalOffsets[k];
     };
 
-    double const aShift = static_cast<double>(click.alignments[m_sugAlign]);
+    double const aShift = click.alignments[m_sugAlign];
     this->placeAt(aiA, origin(aiA) + aShift);
     if (size_t const rel = this->pairedReleaseFor(aiA);
         rel != NO_INDEX && rel != aiB)
         this->placeAt(rel, origin(rel) + aShift);
 
-    int64_t const clickShift = m_sugScan[m_sugScanAt];
-    this->placeAt(aiB, origin(aiB) + static_cast<double>(clickShift));
+    this->placeAt(aiB, origin(aiB) + static_cast<double>(m_sugShift) /
+                                         static_cast<double>(click.res));
 
     size_t target = aiB;
     if (m_sugInCont) {
@@ -4250,16 +4348,14 @@ void FrameWindowAnalyzer::launchSuggestLeg() {
 void FrameWindowAnalyzer::recordSuggestLeg(bool survived) {
     if (!m_sugInCont) {
         if (!survived) {
-            m_sugViable.push_back(0);
-            m_sugScanAt++;
+            this->recordSuggestTest(false);
             return;
         }
         // It reached its own target. It counts only if the input after it can
         // still be timed (Juice's depth-1 continuation).
-        this->buildSuggestContinuation(m_sugScan[m_sugScanAt]);
+        this->buildSuggestContinuation(m_sugShift);
         if (m_sugContScan.empty()) {
-            m_sugViable.push_back(1);
-            m_sugScanAt++;
+            this->recordSuggestTest(true);
             return;
         }
         m_sugInCont = true;
@@ -4267,9 +4363,8 @@ void FrameWindowAnalyzer::recordSuggestLeg(bool survived) {
     }
 
     if (survived) {
-        m_sugViable.push_back(1);
         m_sugInCont = false;
-        m_sugScanAt++;
+        this->recordSuggestTest(true);
         return;
     }
     m_sugContAt++;
@@ -4281,17 +4376,13 @@ void FrameWindowAnalyzer::finishSuggestClick() {
 
     // Juice's grouping: windows within half again of the group's smallest
     // count as one size; a window of 0 only groups with 0.
-    std::vector<int64_t> w = m_sugWidths;
+    std::vector<double> w = m_sugWidths;
     std::sort(w.begin(), w.end());
     size_t bestStart = 0, bestLen = 0;
     bool tie = false;
     for (size_t i = 0; i < w.size();) {
         size_t j = i + 1;
-        while (j < w.size() &&
-               (w[i] == 0 ? w[j] == 0
-                          : static_cast<double>(w[j]) <=
-                                static_cast<double>(w[i]) * 1.5))
-            j++;
+        while (j < w.size() && (w[i] <= 0.0 ? w[j] <= 0.0 : w[j] <= w[i] * 1.5)) j++;
         size_t const len = j - i;
         if (len > bestLen) {
             bestStart = i;
@@ -4309,27 +4400,25 @@ void FrameWindowAnalyzer::finishSuggestClick() {
         w.empty() ? 0.f
                   : static_cast<float>(bestLen) / static_cast<float>(w.size());
 
-    float median = 0.f;
+    double median = 0.0;
     if (bestLen > 0) {
         size_t const mid = bestStart + bestLen / 2;
-        median = bestLen % 2 == 1
-                     ? static_cast<float>(w[mid])
-                     : 0.5f * static_cast<float>(w[mid - 1] + w[mid]);
+        median = bestLen % 2 == 1 ? w[mid] : 0.5 * (w[mid - 1] + w[mid]);
     }
 
     // Two groups of the same size is no answer, and a group under half the
-    // alignments isn't dominant. A suggestion no wider than the strict
-    // window says nothing new.
+    // alignments isn't dominant. A suggestion under half a frame wider than
+    // Calculate's own count says nothing new.
     bool const dominant = !tie && bestLen * 2 >= w.size() && w.size() >= 2;
-    if (dominant && median > static_cast<float>(mk.window))
-        mk.suggestion = median;
+    if (dominant && median >= click.strict + 0.5)
+        mk.suggestion = static_cast<float>(std::round(median * 100.0) / 100.0);
 
     std::string all;
-    for (int64_t x : m_sugWidths)
-        all += (all.empty() ? "" : " ") + std::to_string(x);
-    log::info("[fw][suggest] click {} (frame {}): strict {}, Juice's way {} "
+    for (double x : m_sugWidths)
+        all += fmt::format("{}{:.2f}", all.empty() ? "" : " ", x);
+    log::info("[fw][suggest] click {} (frame {}): strict {:.2f}, Juice's way {:.2f} "
               "over {} alignment(s) [{}], group {}/{}{}",
-              click.b + 1, mk.frame, mk.window, median, w.size(), all, bestLen,
+              click.b + 1, mk.frame, click.strict, median, w.size(), all, bestLen,
               w.size(),
               mk.suggestion > 0.f ? " -> suggested" : tie ? " (tie)" : "");
 

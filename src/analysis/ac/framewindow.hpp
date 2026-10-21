@@ -732,7 +732,9 @@ class FrameWindowAnalyzer {
         size_t a = 0;      // the sample before it
         size_t b = 0;      // the suspicious click's sample
         size_t markB = 0;  // its result
-        std::vector<int64_t> alignments;  // whole-frame shifts of the one before
+        std::vector<double> alignments;  // where the one before goes, in frames from its own
+        int64_t res = 1;    // the click's shifts per frame: CBF slots for a sub-tick click
+        double strict = 0;  // Calculate's own count for it, in frames
     };
 
     std::vector<SuggestClick> m_sugClicks;
@@ -742,19 +744,25 @@ class FrameWindowAnalyzer {
     bool m_sugAdvancing = false;
     bool m_sugLegActive = false;
     uint32_t m_sugLegTarget = 0;
-    std::vector<int64_t> m_sugScan;   // the click's shifts at this alignment
+    std::vector<int64_t> m_sugScan;   // the click's shifts at this alignment (in res units)
     std::vector<char> m_sugViable;    // per shift: survived, and the next input could follow
     size_t m_sugScanAt = 0;
+    int64_t m_sugShift = 0;           // the shift under test
+    bool m_sugEdgesSet = false;       // the scan is done; the edges are being bisected
+    bool m_sugFound = false;
+    int64_t m_sugLow = 0, m_sugLowDead = 0, m_sugAlive = 0, m_sugDead = 0;
     bool m_sugInCont = false;         // testing the input after it for this shift
     size_t m_sugContAction = 0;       // that input's action index, or NO_INDEX
     std::vector<int64_t> m_sugContScan;
     size_t m_sugContAt = 0;
-    std::vector<int64_t> m_sugWidths;  // the click's window at each alignment
+    std::vector<double> m_sugWidths;   // the click's window at each alignment, in frames
     std::string m_sugFinishMessage;
 
     bool beginSuggestPass(std::string message);
     bool stepSuggest(PlayLayer* pl);
     void startSuggestAlignment();
+    bool nextSuggestShift(int64_t& shift);
+    void recordSuggestTest(bool viable);
     void buildSuggestContinuation(int64_t clickShift);
     void launchSuggestLeg();
     void recordSuggestLeg(bool survived);

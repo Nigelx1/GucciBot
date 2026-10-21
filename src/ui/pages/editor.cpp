@@ -425,12 +425,13 @@ namespace gucci::ui::pages {
             for (auto const& mk : ::Bot::get()->frameWindow().results()) {
                 if (mk.suggestion <= 0.f || mk.frame != frame || mk.player2 != player2 || mk.release != release)
                     continue;
-                return fmt::format("\nMy suggestion is {:g} frame{}{} (Calculate counts {}).\nThe input before it pins "
+                float const strict = mk.cbf && mk.subframe > 0.f ? mk.subframe : static_cast<float>(mk.window);
+                return fmt::format("\nMy suggestion is {:g} frame{}{} (Calculate counts {:g}).\nThe input before it pins "
                                    "this one: moved across its own window, it leaves this {} {:g} in {:.0f}% of {} "
                                    "alignments (Juice's Alignment-Independent method).",
                                    mk.suggestion, mk.suggestion == 1.f ? "" : "s", release ? " for the release" : "",
-                                   mk.window, release ? "release" : "click", mk.suggestion, mk.suggestCoverage * 100.f,
-                                   mk.suggestAlignments);
+                                   std::round(strict * 100.f) / 100.f, release ? "release" : "click", mk.suggestion,
+                                   mk.suggestCoverage * 100.f, mk.suggestAlignments);
             }
             return {};
         }
