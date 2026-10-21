@@ -30,8 +30,14 @@ What still needs Windows:
 - 2 bytes per input. Matches yBot file sizes for human gameplay.
 - **Tap encoding** — wave/ship press+release pairs stored in 1 entry instead of 2. 50% smaller for those sections automatically.
 - **Autoclicker delta compression** — an autoclicker macro of any length, including octillions of clicks, stores in 4 bytes. The bot stores the *description* of the pattern, not the output.
-- Legacy BRR macros (the format before GBR6) don't load since 2.0.0-beta.3: that reader went out with the ToastyReplay code.
-- Imports both JSON and binary (MessagePack) GDR macros.
+- Old GucciBot 1.x macros (the BRR format from before GBR6) convert in the game, with the other bots' macros below.
+
+## Other Bots' Macros
+
+- **Convert in one click** — drop another bot's macro in the replays folder and **Saved macros** lists it under *From other bots* with its format and a Convert button (or Convert all). **Import a macro** takes one from anywhere instead. The original is kept.
+- **27 formats read**: GDR (Mega Hack, Macrobot, xdBot and more; binary and JSON), GDR2, Silicate (.slc v1 to v3, and anticroom's .scbf1 with its sub-tick clicks), TcBot (.tcm, practice sessions flattened to one run), ToastyReplay (.ttr3), yBot, xdBot, Mega Hack Replay, Echo, OmegaBot 2, ReplayBot, zBot, KD-Bot, Rush, Fembot, xBot, URL, TASBot, plain text, and GucciBot 1.x's old .brrr.
+- **Export as** any of 21 of them from a macro's "..." menu, into `replays/exports`, with a note on anything the format can't hold.
+- Silicate counts frames one behind GucciBot, so its macros are lined up for you. If another bot's macro dies early after converting, **Shift frames** nudges it a frame or two either way.
 
 ## Engine
 
@@ -59,7 +65,9 @@ What still needs Windows:
 ## Practice & Analysis
 
 - Macro diff viewer — compare two replays frame by frame
-- Frame-window analyzer ("Calculate") — per-click timing windows measured against the real game engine, rebuilt in 1.8 on anticroom's Silicate analyzer. Two algorithms (Time-Based and Recovery Range), sub-tick CBF measurement that reads windows finer than a single frame, and a full settings tab: how far a shifted input has to survive, how much room to leave before the next one, which inputs to measure, and how much of each frame to spend. Colour bands with per-band marker shapes (circle, star, spiral, polygon, as a single outline, an inner ring or filled), per-band sounds (the Bells by default) and importable sound packs, and an in-level legend counting how many clicks landed in each band. Results save alongside the macro. **Dependent Pair Search** re-measures an input with the one before it moved across its own window; **Test** re-runs the last few inputs while you record; and any input under the playhead can be labelled by hand.
+- Frame-window analyzer ("Calculate") — per-click timing windows measured against the real game engine, rebuilt in 1.8 on anticroom's Silicate analyzer. Two algorithms (Time-Based and Recovery Range), sub-tick CBF measurement that reads windows finer than a single frame, and a full settings tab: how far a shifted input has to survive, how much room to leave before the next one, which inputs to measure, and how much of each frame to spend. Color bands with per-band marker shapes (circle, star, spiral, polygon, as a single outline, an inner ring or filled) or your own image in place of the shape, a pulse on the marker or its label with your own fade-in, hold and fade-out, per-band sounds (the Bells by default, or every band to the Brrr or the Bells in one press), and an in-level legend counting how many clicks landed in each band. Results save alongside the macro. **Dependent Pair Search** re-measures an input with the one before it moved across its own window; **Test** re-runs the last few inputs while you record; and any input under the playhead can be labelled by hand.
+- **Suggestions for suspicious clicks** — Calculate counts every click strictly. A tight one right after another input is also counted with Juice's Alignment-Independent method, and when that comes out wider the Frame Editor flags it: "my suggestion is x frames".
+- **Time cap** for Calculate — a run that goes on too long stops and keeps what it measured. The in-level box shows how long it has run and roughly how long is left.
 - **Check Macro** — lists anything in a macro that would desync playback: a press while already held, a release with nothing held, actions out of order, bad values
 - TPS mid-macro changes, noclip accuracy display, macro trim/merge/surgery
 - Bot settings presets, metadata editor, autosave at level end and/or on a timer
@@ -119,10 +127,10 @@ A live green/red readout, right on screen while you play, for whether clicking *
 
 ## Click Indicators & Video Mode
 
-Real click-timing feedback and a synced video-review overlay, both built around the Jupiter My Favourite Trainer's click bar:
+Real click-timing feedback, and a synced video-review overlay on both trainers:
 
-- **Real scoring** — every real press/release you make against the macro's own click bar is matched to its nearest unanswered click and scored Perfect / OK / Miss, with the last timing delta shown live.
-- **Video Mode** — a full-screen review overlay (no level needs to be open) that plays the built-in Jupiter My Favourite showcase video riding the exact same click-bar clock as the macro, for reviewing a run against the timing data. Zero setup.
+- **Click Indicators** — the macro's clicks coming at you over the level, built around Bogdaner09's free and open-source mod with every one of its options: badges, the player square and line, draining holds, taps and holds, player 2 colors, a timing offset and the rhythm lane. It shows a trainer's macro in that trainer's level, or the loaded macro on its own level, and scores you Perfect / OK / Miss. Safe mode counts it as a cheat: it takes the memory out of memory levels.
+- **Video Mode** — a full-screen review overlay (no level needs to be open) riding the click bar's clock, for reviewing a run against the timing data. The Jupiter My Favourite tab plays the built-in showcase video with zero setup; the Trainer tab plays any video you pick.
 - **Alignment Tool** — scrub the video directly to the frame of the first real click, then snap the sync offset to it in one press instead of nudging a slider by trial and error.
 
 ## Rendering
@@ -137,6 +145,7 @@ Real click-timing feedback and a synced video-review overlay, both built around 
 - **Intro card** — an optional title card before the level: its name, your own lines, and your frame-window bands in their colours, fading in and out over black.
 - **Hear it while it renders** — optionally plays the render's audio through your speakers as it records.
 - **Render the next level I open**, and **leave the level when it finishes** — queue a render from the menu and walk away.
+- **Presets** — save your render settings by name; **Showcase** sets up an 8K60 lossless render in one press. A popup says when a render is done, the pixel format is yours to pick, and if FFmpeg is missing the Render page says so with a button to its folder.
 
 ## Themes
 
@@ -167,12 +176,16 @@ Real click-timing feedback and a synced video-review overlay, both built around 
 
 ## Extras
 
-- **Auto safe mode** — on by default. While a cheat is on (a macro, Calculate or Pathfinder playing, noclip, speedhack, a tick rate other than 240, the autoclicker, Prevent Death or frame advance), the attempt doesn't count: no completion, no new best, no percentage saved, nothing sent to the servers. Start positions work as normal, and GD's Testmode label stays out of the way. Turn it off and a small red dot shows in the top-left corner while a cheat is on, drawn into the game so recordings and renders show it; a green one can show while nothing is.
+- **Auto safe mode** — on by default. While a cheat is on (a macro, Calculate or Pathfinder playing, noclip, speedhack, a tick rate other than 240, the autoclicker, Prevent Death, frame advance, Force Platformer, or anything that shows the way through: Click Indicators, path preview, the macro path, practice range or a trainer's ghosts), the attempt doesn't count: no completion, no new best, no percentage saved, nothing sent to the servers. Start positions work as normal, and GD's Testmode label stays out of the way. Turn it off and a small red dot shows in the top-left corner while a cheat is on, drawn into the game so recordings and renders show it; a green one can show while nothing is.
 - **Setup check** — warns about the settings that break GucciBot's engine: GD's Auto-Checkpoints, other mods' practice fixes, Frame Extrapolation in Mega Hack or QOLMod, and other bots loaded alongside. Once per launch, on the Macro page, and when you hit Record or Play. It never changes another mod's settings.
 - **Disable bot** — one switch in Settings takes GucciBot out of the game without a restart: every hook and patch comes out, and the menu keeps only the switch that brings it back.
 - **Frame Editor** — a timeline view of a macro's inputs. Every press is a bar you can drag, stretch or shorten, with undo and redo, an overview strip for long macros, and separate lanes for player 2.
 - **Assistant Access** — an optional local server (Settings) that lets an AI assistant read what the bot is doing: the frame, the loaded macro, Calculate's windows, Pathfinder's progress and GucciBot's own logs, and step the game while something is going wrong. Off by default, your machine only, and it never reaches the network.
-- **HUD** — live readouts in the corner of the level: frame, TPS, position, velocities, rotation, bot state, plus debug readouts (game tick, speed, gravity, checkpoints, level time, time warp, random states, action index, touching orbs and more).
+- **HUD** — live readouts in the corner of the level: frame, TPS, position, velocities, rotation, bot state, CPS and Max CPS, plus debug readouts (game tick, speed, gravity, checkpoints, level time, time warp, random states, action index, touching orbs and more).
+- **Status bar** — under every page's title: what the bot is doing (recording, playing, calculating, pathfinding, rendering) with the frame, TPS, speed and inputs.
+- **Saved macros** — each macro's "..." menu (a right click opens it too) loads, Calculates, renames, deletes or exports it, or moves it to plain .brrr; the list follows the replays folder on its own and tags each macro with the theme it was saved under. **Open folder** is one press away.
+- **Hacks** — Force Platformer (a cheat), Instant Respawn and your own respawn delay, Show Macro Path, and No Mirror, optionally only while recording.
+- **Update check** — once a launch, from the main menu, against GucciBot's GitHub releases (Settings, with pre-releases optional). If a check ever fails to finish, it switches itself off.
 - **Editor tools** — Macro Buffing (lays a macro's path into the level as objects) and Replace All (swap every object of one id for another, undoable).
 - **Compact Mode** — a small corner panel (record/play, save/name/Calculate, macro picker, TPS/speed, frame stepping) instead of the full tabbed window, so the bot stays usable while you're actually playing.
 - **BIG BRRRR** — a joke toggle in Settings. You'll know it when you see it.
@@ -183,8 +196,8 @@ Real click-timing feedback and a synced video-review overlay, both built around 
 
 - **Nigelx1** — creator and owner of GucciBot; every idea, every theme, every decision is his call
 - **Claude** — wrote the code and this page. Essentially the whole codebase, not a euphemism.
-- **peony** — Silicate, the engine GucciBot is built on: GucciBot's engine is a port of hers, reconciled function by function in 2.0, and the bot wouldn't be close to what it is without it. The site's macro converter is built on her [nat-converter](https://github.com/peonii/nat-converter), with her permission. (Dropped the source like Gucci drops albums. Brrr.)
-- **Juice** — designed the frame-window algorithm GucciBot ran on through 1.7 and the marker shapes in 1.8; lead co-tester, ran the mod into the ground on purpose finding the bugs nobody else caught
+- **peony** — Silicate, the engine GucciBot is built on: GucciBot's engine is a port of hers, reconciled function by function in 2.0, and the bot wouldn't be close to what it is without it. The macro converter, on the site and in the game, is built on her [nat-converter](https://github.com/peonii/nat-converter), with her permission. (Dropped the source like Gucci drops albums. Brrr.)
+- **Juice** — designed the frame-window algorithm GucciBot ran on through 1.7 and the marker shapes in 1.8, and his Alignment-Independent method is back as Calculate's suggestion for suspicious clicks; lead co-tester, ran the mod into the ground on purpose finding the bugs nobody else caught
 - **anticroom** — 1.8's Calculate *is* his analyzer: his Silicate frame-window rewrite, ported in near-verbatim and now the whole feature. Sub-tick CBF recording and the render intro card are his work too. Before that, GucciBot's first outside pull request — a real 7-fix accuracy pass. Also one of ToastyReplay's own devs.
 - **dihmaster500** — tester, and asked for auto safe mode with its cheat indicator and for the Disable bot switch; his testing caught safe mode breaking start positions
 - **aura** — promo help

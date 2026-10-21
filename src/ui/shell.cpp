@@ -1746,8 +1746,8 @@ namespace gucci::ui {
             const Line lines[] = {
                 {"Nigelx1", "Creator and owner of GucciBot; every idea, every theme, every decision is his call."},
                 {"Claude", "Wrote the code. Essentially the whole codebase, not a euphemism."},
-                {"peony", "Silicate, the engine GucciBot is built on, and nat-converter, which the site's converter is built on."},
-                {"Juice", "Designed the frame-window algorithm GucciBot ran on through 1.7 and the marker shapes in 1.8; lead co-tester."},
+                {"peony", "Silicate, the engine GucciBot is built on, and nat-converter, which the macro converter is built on, on the site and in the game."},
+                {"Juice", "Designed the frame-window algorithm GucciBot ran on through 1.7 and the marker shapes in 1.8, and his Alignment-Independent method is back as Calculate's suggestion; lead co-tester."},
                 {"anticroom", "Calculate is his analyzer, ported in near-verbatim; sub-tick CBF recording and the render intro card too."},
                 {"dihmaster500", "Tester; asked for auto safe mode and the Disable bot switch, and his testing "
                                  "caught safe mode breaking start positions."},

@@ -41,12 +41,12 @@ GucciBot is public now — grab a build from [Releases](https://github.com/Nigel
 - 2 bytes per input — matches yBot-sized files for regular human gameplay.
 - Tap encoding: a wave/ship press+release pair stores as one entry instead of two.
 - Autoclicker delta compression: an autoclicker macro of *any* length — octillions of clicks, if you're feeling brave — stores in 4 bytes flat. It stores the pattern's description, not its output.
-- Legacy BRR macros (the format before GBR6) don't load since 2.0.0-beta.3: that reader went out with the ToastyReplay code.
+- Other bots' macros convert in one click: drop them in the replays folder (or **Import a macro**) and Saved macros lists them under *From other bots*. 27 formats read, among them GDR and GDR2, Silicate .slc, TcBot, ToastyReplay .ttr3, yBot, xdBot, Mega Hack, Echo and GucciBot 1.x's old .brrr, and 21 written back out with **Export as**. The full list is in [about.md](about.md#other-bots-macros).
 
 ## Practice & analysis
 
 - Macro diff viewer — put two replays side by side, frame by frame.
-- Calculate — per-click timing windows measured against the real game engine, not a guess. It runs on anticroom's Silicate analyzer: Time-Based and Recovery Range, sub-tick measurement finer than a single frame, colour bands with their own marker shapes and sounds, and an in-level legend.
+- Calculate — per-click timing windows measured against the real game engine, not a guess. It runs on anticroom's Silicate analyzer: Time-Based and Recovery Range, sub-tick measurement finer than a single frame, color bands with their own marker shapes, images, pulses and sounds, and an in-level legend. Tight clicks right after another input also get Juice's Alignment-Independent count, and the Frame Editor flags them: "my suggestion is x frames". A time cap stops a long run and keeps what it measured.
 - Mid-macro TPS changes, noclip accuracy readout, macro trim/merge/surgery.
 - Bot settings presets, a metadata editor, autosave on a timer or at level end.
 
@@ -65,6 +65,8 @@ Two flavors of the same toolset: one permanently pointed at the level "Jupiter M
 - **Segments** — name the hard parts, loop just those, get auto-suggested splits from click density.
 - **Stats** — attempts, session best, a death-position heatmap for when you want to know exactly where the level is bullying you.
 - Synced music, because grinding a segment in silence is a crime. Trap music, ideally.
+- **Video Mode** on both: the Jupiter tab plays its built-in showcase video, the Trainer tab plays any video you pick, riding the click bar's clock.
+- **Click Indicators** — the macro's clicks coming at you over the level, with every option of Bogdaner09's free mod, scored Perfect / OK / Miss. Counts as a cheat, since it takes the memory out of memory levels.
 
 ## Rendering
 
@@ -117,7 +119,7 @@ Also in Settings: **BIG BRRRR**, a core feature of this mod, and **Bass Shake**,
 
 ## Status
 
-**1.8** is the stable release. **2.0** (the `engine-port-2.0` branch) is in beta, at **2.0.0-beta.4**: GucciBot's engine reconciled against Silicate's function by function. Calculate, playback, practice-mode recording and the Pathfinder (Absense's, ported in) were confirmed in-game on beta.2. Beta.3 rebuilt the menu and every feature that came from ToastyReplay from scratch, and added macOS, iOS and Android. Beta.4's additions (auto safe mode, the setup check, the Disable bot switch, the phone menu, the Mac menu key) were tried in-game before release, and the Android build has run on a phone. Most of beta.3's rebuilt features still haven't had a feature-by-feature human test, and every fix still waiting on one says so in its own commit message. If you want something that's been tested by an actual human, use 1.8.
+**1.8** is the stable release. **2.0** is in beta, at **2.0.0-beta.4**, with work since then on the `multiplatform` branch (every push builds the universal package): GucciBot's engine reconciled against Silicate's function by function. Calculate, playback, practice-mode recording and the Pathfinder (Absense's, ported in) were confirmed in-game on beta.2. Beta.3 rebuilt the menu and every feature that came from ToastyReplay from scratch, and added macOS, iOS and Android. Beta.4's additions (auto safe mode, the setup check, the Disable bot switch, the phone menu, the Mac menu key) were tried in-game before release, and the Android build has run on a phone. Most of beta.3's rebuilt features still haven't had a feature-by-feature human test, and every fix still waiting on one says so in its own commit message. If you want something that's been tested by an actual human, use 1.8.
 
 ## Contact
 
@@ -139,8 +141,8 @@ There's a [contact page](https://guccibot.net/contact/) on the site with the sam
 
 - **Nigelx1** — creator and owner of GucciBot. Every idea, every theme, every decision is his call, down to the taste that keeps this from being a folder full of ternary chains.
 - **Claude** (Anthropic) — wrote essentially the entire codebase across every session of this project, including this README. Not a euphemism, not "AI-assisted," just the actual author of the code — Nigel wants that said plainly.
-- **peony** — Silicate, the physics engine this is built on: GucciBot's engine is a port of hers, reconciled function by function in 2.0, and it wouldn't be close to what it is without it. The site's [macro converter](https://guccibot.net/converter/) is built on her [nat-converter](https://github.com/peonii/nat-converter), with her permission. (Dropped the source like Gucci drops albums. Brrr.)
-- **Juice** — designed the frame-window algorithm GucciBot ran on through 1.7, and the marker shapes in 1.8. Lead co-tester, professional bug-finder.
+- **peony** — Silicate, the physics engine this is built on: GucciBot's engine is a port of hers, reconciled function by function in 2.0, and it wouldn't be close to what it is without it. The [macro converter](https://guccibot.net/converter/), on the site and in the game, is built on her [nat-converter](https://github.com/peonii/nat-converter), with her permission. (Dropped the source like Gucci drops albums. Brrr.)
+- **Juice** — designed the frame-window algorithm GucciBot ran on through 1.7, and the marker shapes in 1.8; his Alignment-Independent method is back as Calculate's suggestion for suspicious clicks. Lead co-tester, professional bug-finder.
 - **anticroom** — 1.8's Calculate *is* his analyzer. He rewrote the frame-window system for Silicate, sent the source over, and it was ported in near-verbatim to replace GucciBot's own — the headline feature of 1.8 is his work. Sub-tick CBF recording and the render intro card in 2.alpha.3 are his too. Before that he sent GucciBot's first outside pull request, a real 7-fix accuracy pass. Also one of ToastyReplay's own devs.
 - **dihmaster500** — tester. Asked for auto safe mode with its cheat indicator, and for the Disable bot switch, then tested safe mode hard enough to catch it breaking start positions before anyone else hit it.
 - **aura** — promo help.
