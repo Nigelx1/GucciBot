@@ -520,7 +520,7 @@ namespace gucci::ui {
         arc::Future<int> pickMacroTask() {
             geode::utils::file::FilePickOptions options;
             options.filters.push_back({"Macros",
-                                       {"*.gdr", "*.gdr2", "*.json", "*.slc", "*.scbf1", "*.tcm", "*.ybot", "*.xd",
+                                       {"*.gdr", "*.gdr2", "*.json", "*.slc", "*.scbf1", "*.tcm", "*.ttr3", "*.ybot", "*.xd",
                                         "*.mhr", "*.echo", "*.replay", "*.zbf", "*.kd", "*.rush", "*.freplay", "*.xbot",
                                         "*.url", "*.txt", "*.brrr"}});
             geode::utils::file::PickResult result =
@@ -553,7 +553,7 @@ namespace gucci::ui {
                 }
             }
             kit::Section("From other bots");
-            kit::Hint("GDR, Silicate, TcBot, yBot, xdBot, Mega Hack, Echo and more, and GucciBot 1.x's old .brrr. Drop "
+            kit::Hint("GDR, Silicate, TcBot, ToastyReplay, yBot, xdBot, Mega Hack, Echo and more, and GucciBot 1.x's old .brrr. Drop "
                       "them in the replays folder, or import one from anywhere; the original stays as it was.");
             ImGui::BeginDisabled(s_macroPickPending || gb->isRecording());
             if (kit::Button(s_macroPickPending ? "Choosing..." : "Import a macro")) {

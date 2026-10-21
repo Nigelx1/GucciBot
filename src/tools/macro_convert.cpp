@@ -2117,6 +2117,170 @@ namespace gucci::convert {
             return jsonBytes(j);
         }
 
+        // ---- ToastyReplay (.ttr3), Nigel's call (2026-10-20, knowing its
+        // licence is PolyForm Strict): ported from the site's converter, whose
+        // reader was written from the file layout. No ToastyReplay code is used
+        // or read here. "TTR3", u16 version, u16, u32 flags (8 two-player, 512
+        // converted, 1024 compressed), u32 header length, the metadata (u64
+        // source format, u64 game version, u32 level id, u16-length level name
+        // and author, f64 frame rate ...), then a section table (u16 count; u8
+        // kind + 3 reserved, u64 offset, u64 size each) and the payload, zlib
+        // when compressed. The inputs section (kind 1): u64 count, then f64
+        // seconds, u8 button, u8 bits (1 player 2, 2 pressed), u16 padding.
+        // Times, not frames: they become frames at the macro's rate.
+
+        // zlib, into a buffer that grows: a .ttr3 doesn't say how big its
+        // payload unpacks to.
+        bool inflateAll(uint8_t const* src, size_t n, Bytes& out, size_t cap) {
+            z_stream zs{};
+            if (inflateInit(&zs) != Z_OK)
+                return false;
+            zs.next_in = const_cast<Bytef*>(src);
+            zs.avail_in = (uInt)n;
+            out.clear();
+            int rc = Z_OK;
+            while (rc == Z_OK) {
+                if (out.size() >= cap) {
+                    rc = Z_MEM_ERROR;
+                    break;
+                }
+                size_t const at = out.size();
+                out.resize(std::min(cap, at + std::max<size_t>(4096, at)));
+                zs.next_out = out.data() + at;
+                zs.avail_out = (uInt)(out.size() - at);
+                rc = inflate(&zs, Z_NO_FLUSH);
+                out.resize(out.size() - zs.avail_out);
+            }
+            inflateEnd(&zs);
+            return rc == Z_STREAM_END;
+        }
+
+        bool readTtr3(Bytes const& b, Macro& m, std::string& err) {
+            Reader r(b, 4);
+            uint16_t const version = r.le<uint16_t>();
+            r.le<uint16_t>();
+            uint32_t const flags = r.le<uint32_t>();
+            uint32_t const headerLen = r.le<uint32_t>();
+            if (r.bad || version == 0 || version > 1) {
+                err = "This ToastyReplay macro's version (" + std::to_string(version) + ") isn't supported.";
+                return false;
+            }
+            if (headerLen < 16 || headerLen > b.size()) {
+                err = "The ToastyReplay macro's header is damaged.";
+                return false;
+            }
+            r.skip(8);  // source format
+            r.skip(8);  // game version
+            m.levelId = r.le<uint32_t>();
+            m.levelName = r.str(r.le<uint16_t>());
+            m.author = r.str(r.le<uint16_t>());
+            double const fps = r.le<double>();
+            if (r.bad || !std::isfinite(fps) || fps <= 0.0) {
+                err = "The ToastyReplay macro has no frame rate.";
+                return false;
+            }
+            m.tps = fps;
+
+            r.p = headerLen;
+            uint16_t const sections = r.le<uint16_t>();
+            uint64_t inputsAt = 0, payloadEnd = 0;
+            bool haveInputs = false;
+            for (uint16_t k = 0; k < sections && !r.bad; k++) {
+                uint8_t const kind = r.u8();
+                r.skip(3);
+                uint64_t const off = r.le<uint64_t>();
+                uint64_t const size = r.le<uint64_t>();
+                payloadEnd = std::max(payloadEnd, off + size);
+                if (kind == 1 && !haveInputs) {
+                    inputsAt = off;
+                    haveInputs = true;
+                }
+            }
+            if (r.bad || !haveInputs) {
+                err = "The ToastyReplay macro has no inputs in it.";
+                return false;
+            }
+            Bytes payload;
+            if (flags & 1024) {
+                if (!inflateAll(b.data() + r.p, b.size() - r.p, payload, 256u << 20)) {
+                    err = "The ToastyReplay macro's inputs don't unpack.";
+                    return false;
+                }
+            } else {
+                payload.assign(b.begin() + (std::ptrdiff_t)r.p, b.end());
+            }
+            (void)payloadEnd;
+            Reader q(payload, (size_t)inputsAt);
+            uint64_t const count = q.le<uint64_t>();
+            for (uint64_t k = 0; k < count && q.has(12); k++) {
+                double const sec = q.le<double>();
+                uint8_t const button = q.u8(), bits = q.u8();
+                q.skip(2);
+                if (!std::isfinite(sec))
+                    continue;
+                m.inputs.push_back(mk((int64_t)std::llround(sec * fps), bits & 2, bits & 1, button ? button : 1));
+            }
+            m.bot = "ToastyReplay";
+            return true;
+        }
+
+        Bytes writeTtr3(Macro const& m, std::vector<std::string>& notes) {
+            auto const list = inputsFor(m, false);
+            double const tps = m.tps > 0.0 ? m.tps : 240.0;
+            Writer sec;
+            sec.le<uint64_t>(list.size());
+            bool twoPlayer = false;
+            for (auto const& in : list) {
+                sec.le<double>((double)in.frame / tps);
+                sec.u8(in.button >= 1 && in.button <= 3 ? in.button : 1);
+                sec.u8(uint8_t((in.player2 ? 1 : 0) | (in.down ? 2 : 0)));
+                sec.le<uint16_t>(0);
+                twoPlayer = twoPlayer || in.player2;
+            }
+            uLongf packedLen = compressBound((uLong)sec.out.size());
+            Bytes packed(packedLen);
+            if (compress2(packed.data(), &packedLen, sec.out.data(), (uLong)sec.out.size(), Z_BEST_COMPRESSION) !=
+                Z_OK)
+                return {};
+            packed.resize(packedLen);
+
+            auto str16 = [](Writer& w, std::string const& s) {
+                size_t const n = std::min<size_t>(s.size(), 0xFFFF);
+                w.le<uint16_t>((uint16_t)n);
+                w.raw(std::string_view(s).substr(0, n));
+            };
+            Writer w;
+            w.raw("TTR3");
+            w.le<uint16_t>(1);  // version
+            w.le<uint16_t>(0);
+            w.le<uint32_t>(512u | 1024u | (twoPlayer ? 8u : 0u));  // converted, compressed, two-player
+            size_t const headerLenAt = w.out.size();
+            w.le<uint32_t>(0);  // filled in below
+            w.le<uint64_t>(0x00000000FFFF0003ull);  // source format, as the site writes it
+            w.le<uint64_t>(0);                      // game version
+            w.le<uint32_t>((uint32_t)std::clamp<int64_t>(m.levelId, 0, 0xFFFFFFFFll));
+            str16(w, m.levelName);
+            str16(w, m.author);
+            w.le<double>(tps);
+            w.le<uint32_t>(0);  // start position x
+            w.le<uint32_t>(0);  // start position y
+            w.le<uint64_t>(0);  // recorded at
+            w.le<uint32_t>(0);  // RNG seed
+            w.u8(0);            // accuracy mode
+            w.le<double>(list.empty() ? 0.0 : (double)list.back().frame / tps);  // length
+            uint32_t const headerLen = (uint32_t)w.out.size();
+            std::memcpy(w.out.data() + headerLenAt, &headerLen, 4);
+            w.le<uint16_t>(1);  // one section: the inputs
+            w.u8(1);
+            w.zeros(3);
+            w.le<uint64_t>(0);
+            w.le<uint64_t>(sec.out.size());
+            w.out.insert(w.out.end(), packed.begin(), packed.end());
+            notes.push_back("ToastyReplay keeps times in seconds, not frames: each input was written at its frame / " +
+                            numText(tps) + " seconds.");
+            return w.out;
+        }
+
         // ---- GucciBot 1.x's old .brrr ("BRR\0", format 4), worked out from a
         // real 1.x macro: a u32 version, a u16, a u32 that puts the payload at
         // 4 + it, three u16-length strings (author, name, level), the TPS and
@@ -2196,6 +2360,7 @@ namespace gucci::convert {
                 {{"slc1", "Silicate 1 (.slc, oldest)", ".slc", false, false, 1, false}, readSlc1, nullptr},
                 {{"scbf1", "Silicate CBF (.scbf1)", ".scbf1", true, false, 1, false}, readScbf, writeScbf},
                 {{"tcm", "TcBot (.tcm)", ".tcm", true, false, 0, true}, readTcm, writeTcm},
+                {{"ttr3", "ToastyReplay (.ttr3)", ".ttr3", true, false, 0, false}, readTtr3, writeTtr3},
                 {{"ybot2", "yBot (.ybot)", ".ybot", true, false, 0, false}, readYbot2, writeYbot2},
                 {{"ybot1", "yBot 1 (.ybot, older)", ".ybot", false, true, 0, false}, readYbot1, nullptr},
                 {{"xdbot", "xdBot (.xd)", ".xd", true, true, 0, false}, readXdBot, writeXdBot},
@@ -2280,6 +2445,8 @@ namespace gucci::convert {
                 return "slc2";
             if (startsWith(b, "SCBF"))
                 return "scbf1";
+            if (startsWith(b, "TTR3"))
+                return "ttr3";
             if (isTcm(b))
                 return "tcm";
             if (startsWith(b, "GDR"))
@@ -2355,7 +2522,7 @@ namespace gucci::convert {
     }
 
     bool looksImportable(std::string_view fileName) {
-        static constexpr std::string_view exts[] = {".gdr", ".gdr2", ".json", ".slc", ".scbf1", ".tcm", ".ybot",
+        static constexpr std::string_view exts[] = {".gdr", ".gdr2", ".json", ".slc", ".scbf1", ".tcm", ".ttr3", ".ybot",
                                                     ".xd", ".mhr", ".echo", ".replay", ".zbf", ".kd", ".rush",
                                                     ".freplay", ".xbot", ".url", ".txt", ".brrr"};
         for (auto e : exts)

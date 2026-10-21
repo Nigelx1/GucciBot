@@ -13,8 +13,9 @@
 // (git.puppy.lgbt/silicate/slc); .scbf1 from anticroom's Silicate fork; and
 // GucciBot 1.x's old .brrr worked out from a real 1.x macro, never from the
 // code that wrote it (that code was ToastyReplay's, and is gone). Every
-// reader here is written fresh from the layout. ToastyReplay's own formats
-// (.ttr3, .ttrl) are left out on purpose.
+// reader here is written fresh from the layout. ToastyReplay's .ttr3 is in at
+// Nigel's call (2026-10-20), ported from the site's reader with no ToastyReplay
+// code; .ttrl (ToastyReplay Lite) is still out.
 //
 // Frames are GucciBot's numbering throughout. A format whose bot counts one
 // frame behind GucciBot (Silicate's family: GucciBot records at getFrame()+1
