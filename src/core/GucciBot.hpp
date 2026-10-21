@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-21-ff (Pathfinder map: the ghost run goes a slice a frame, no more 9 s freeze; map redrawn when it is back)"
+    "2026-10-21-fg (Pathfinder: the hold-a-height steers are gone - no more 120 clicks a second straight-line wave)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
