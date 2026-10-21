@@ -48,7 +48,20 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 - [ ] Start-position warning: built -el (set when a macro recorded from a start position loads), untested
 - [ ] Reorder bands, and Brrr/Bells buttons for band sounds: built -el, untested
 - [ ] Mute during Calculate: built -el (Calculate page switch), untested
-- [ ] Per-band images, pulse and sound packs (the site still advertises them): built -ew (a band's own image in place of its shape; a pulse on the marker, the label or both, with fade-in, hold and fade-out; the Brrr and Bells packs came in -el), untested
+- [ ] Per-band images and pulse (the site advertises them): built -ew (a band's own image in place of its shape; a pulse on the marker, the label or both, with fade-in, hold and fade-out), untested
+
+### Slipped through: in docs/FEATURE_AUDIT.md, never carried onto this list (re-checked row by row, 2026-10-21)
+- [ ] Manual Frame Windows: the table of every input with a window you can type, marked auto or manual, with Clear (Juice's idea; the old menu had it). The suggestions go in it
+- [ ] Band sound packs: name, import and export a set of band sounds (the -ew line wrongly counted Brrr/Bells as this)
+- [ ] Import your own band sound and image files with a picker, and Import Folder for a whole folder of them
+- [ ] A color for the band pulse (the old pulse had one)
+- [ ] Legend groups: several bands counted on one legend row
+- [ ] Ring boldness: line thickness of the plain ring
+- [ ] The CBF placed / on-edge counter: counted per attempt, shown nowhere
+- [ ] Settings > Diagnostics: the startup self-check's results
+- [ ] The Log Frame Increments switch
+- [ ] HUD branding overlay: what it showed is unknown; waiting on Nigel's description
+- [ ] Ask Nigel: branch playback (View / Go) for the suggestion's alignments; Juice's numbers on the in-level markers (clashes with "markers stay strict")
 
 ### Render
 - [ ] Presets saved by name, plus the one-press Showcase preset (8K60 lossless): built -er (Showcase is lossless RGB x264 with FLAC in MKV: yuv444p isn't a format this renderer writes), untested
