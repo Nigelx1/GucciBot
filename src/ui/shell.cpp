@@ -2172,6 +2172,17 @@ namespace gucci::ui {
                     if (!analyzer.status().empty()) {
                         gbe->fwAcReport = analyzer.status();
                         gbe->fwAcOk = analyzer.lastRunOk();
+                        // Said where you are too: the in-level box goes away when
+                        // the run ends, and the Calculate page may be shut (Nigel,
+                        // 2026-10-21: "i dont see a finish message").
+                        std::string text = analyzer.status();
+                        if (text.size() > 140)
+                            text = text.substr(0, 137) + "...";
+                        Notification::create("Calculate: " + text,
+                                             analyzer.lastRunOk() ? NotificationIcon::Success
+                                                                  : NotificationIcon::Warning,
+                                             6.f)
+                            ->show();
                     }
                     gbe->unmuteAnalysisMusic();
                 }

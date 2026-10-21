@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-20-fa (Click packs play their background noise; about, README and in-game credits brought up to date)"
+    "2026-10-21-fc (Calculate's suggestions cover sub-tick clicks and sub-tick inputs before them; a notification when a run ends)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
