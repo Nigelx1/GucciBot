@@ -95,7 +95,7 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 
 - [ ] A map that knows when blocks move and appear
 - [ ] The AI trying every orb and toggle choice
-- [ ] Building the map in slices, so the game stops freezing for about 9 seconds
+- [ ] Building the map in slices, so the game stops freezing for about 9 seconds: built -ff (the ghost run takes a share of each frame; the map is built at once from the objects and again when the ghost is back), untested
 - [ ] Re-run the review of builds -dm to -dq that got cut off
 - [ ] The bar (Nigel, 2026-10-21, eased from every RobTop level + 16 of 20 online): RobTop's three demons (Clubstep, Theory of Everything 2, Deadlocked), The Nightmare, Bloodbath, LIMBO, Orbit, Heliopolis
 
