@@ -4025,100 +4025,206 @@ Trajectory::Leg Trajectory::sweepLeg(GJBaseGameLayer* pl, LegGoal const& goal) {
     return out;
 }
 
-Trajectory::GhostReport Trajectory::ghostRun(GJBaseGameLayer* pl, std::span<const std::pair<float, float>> speedPortals,
-                                             float nearX, int maxTicks, double maxMs, const std::function<bool(float x)>& want,
-                                             const std::function<void(float x, std::span<GameObject* const> nearby)>& seen) {
-    GhostReport out;
+// The ghost run, kept between slices (see beginGhost / stepGhost).
+struct Trajectory::GhostState {
+    Sim s;
+    std::vector<std::pair<float, float>> speedPortals;
+    size_t nextPortal = 0;
+    float nearX = 0.0f;
+    int maxTicks = 0;
+    double maxMs = 0.0;
+    std::function<bool(float x)> want;
+    std::function<void(float x, std::span<GameObject* const> nearby)> seen;
+    // What the triggers can move or toggle, by the 100-unit section it stands
+    // in at the start. A move takes an object a few sections at most, so the
+    // sections either side of the ghost (kReach) are where to look for it.
+    static constexpr int kReach = 6;
+    std::unordered_map<int, std::vector<GameObject*>> bySection;
+    std::vector<GameObject*> nearby;
+    GhostReport report;
+    SimSnapshot resume;  // the state at the end of a slice
+    bool over = false;
+
+    // The real game ticks before the next slice: everything the slice wrote is
+    // put back, as a search's pause does (World::restoreWritten).
+    void pause() {
+        s.snapshot(resume);
+        s.objects.restoreWritten();
+        s.mv.suspend();
+        gucci::gdAssign(s.pl->m_gameState, s.savedState);
+        for (int i = 0; i < s.count; i++) s.players[i]->setVisible(false);
+    }
+};
+
+void Trajectory::dropGhost() {
+    delete m_ghost;
+    m_ghost = nullptr;
+}
+
+Trajectory::GhostReport Trajectory::ghostSoFar() const {
+    return m_ghost ? m_ghost->report : GhostReport{};
+}
+
+bool Trajectory::beginGhost(GJBaseGameLayer* pl, std::vector<std::pair<float, float>> speedPortals, float nearX,
+                            int maxTicks, double maxMs, std::function<bool(float x)> want,
+                            std::function<void(float x, std::span<GameObject* const> nearby)> seen,
+                            GhostReport& refused) {
+    dropGhost();
+    refused = GhostReport{};
     if (m_search || m_simulating || m_drawing) {
-        out.why = "the simulation is busy";
-        return out;
+        refused.why = "the simulation is busy";
+        return false;
     }
     if (!pl || !pl->m_objects || !pl->m_player1 || !m_fakePlayer1 || !m_fakePlayer2 || pl->m_loadingProgress < 1.0f) {
-        out.why = "no level";
-        return out;
+        refused.why = "no level";
+        return false;
     }
     if (pl->m_player1->m_isDead || pl->m_playerDied) {
-        out.why = "the player is dead";
-        return out;
+        refused.why = "the player is dead";
+        return false;
     }
     const Killer keptKiller = m_killer;
     const uint64_t keptRand = m_teleportRand;
     using Clock = std::chrono::steady_clock;
     const auto started = Clock::now();
-    const auto elapsedMs = [&] { return std::chrono::duration<double, std::milli>(Clock::now() - started).count(); };
 
-    Sim s;
-    if (!s.begin(this, pl, true, false)) {
+    auto* st = new GhostState();
+    if (!st->s.begin(this, pl, true, false)) {
+        delete st;
         m_killer = keptKiller;
         m_teleportRand = keptRand;
-        out.why = "the simulation could not start here";
-        return out;
+        refused.why = "the simulation could not start here";
+        return false;
     }
-    if (!s.worldObjects || !s.def) {
+    if (!st->s.worldObjects || !st->s.def) {
         // Without the World a run carries what moves at the speed it moved
         // on the last real tick (MovingObjects): nothing to tell a whole
         // level by. The map keeps calling those columns unknown.
-        s.end();
+        st->s.end();
+        delete st;
         m_killer = keptKiller;
         m_teleportRand = keptRand;
-        out.why = "the World is off for this level";
-        return out;
+        refused.why = "the World is off for this level";
+        return false;
     }
-    out.ran = true;
-    s.objects.setAllRows(true);
-    // What the triggers can move or toggle, by the 100-unit section it stands
-    // in now. A move takes an object a few sections at most, so the sections
-    // either side of the ghost (`reach`) are where to look for it.
-    auto const md = world::materialDef(s.def);
-    std::unordered_map<int, std::vector<GameObject*>> bySection;
-    if (md) {
+    st->report.ran = true;
+    st->s.objects.setAllRows(true);
+    if (auto const md = world::materialDef(st->s.def)) {
         for (const int slot : md->slots) {
-            if (slot < 0 || (size_t)slot >= s.def->slots.size()) continue;
-            GameObject* o = s.def->slots[(size_t)slot];
-            if (o) bySection[(int)std::floor(o->getPositionX() / 100.0f)].push_back(o);
+            if (slot < 0 || (size_t)slot >= st->s.def->slots.size()) continue;
+            GameObject* o = st->s.def->slots[(size_t)slot];
+            if (o) st->bySection[(int)std::floor(o->getPositionX() / 100.0f)].push_back(o);
         }
     }
-    constexpr int reach = 6;
-    std::vector<GameObject*> nearby;
-    size_t nextPortal = 0;
-    for (int tick = 0; tick < maxTicks; tick++) {
-        if ((tick & 31) == 0 && elapsedMs() > maxMs) {
-            out.why = "out of time";
+    st->speedPortals = std::move(speedPortals);
+    st->nearX = nearX;
+    st->maxTicks = maxTicks;
+    st->maxMs = maxMs;
+    st->want = std::move(want);
+    st->seen = std::move(seen);
+    st->report.reachedX = st->s.pos().x;
+    // The first slice starts from here, on a later frame.
+    st->pause();
+    st->report.ms = std::chrono::duration<double, std::milli>(Clock::now() - started).count();
+    m_ghost = st;
+    m_killer = keptKiller;
+    m_teleportRand = keptRand;
+    return true;
+}
+
+bool Trajectory::stepGhost(std::chrono::steady_clock::time_point until) {
+    GhostState* st = m_ghost;
+    if (!st || st->over) return true;
+    if (m_simulating || m_drawing) return false;  // never inside somebody else's run
+    using Clock = std::chrono::steady_clock;
+    const auto started = Clock::now();
+    const Killer keptKiller = m_killer;
+    const uint64_t keptRand = m_teleportRand;
+    Sim& s = st->s;
+    GJBaseGameLayer* pl = s.pl;
+
+    // Back where the last slice left off (the copies and the game state may
+    // have been used for other things in between), as a search's slice does.
+    s.savedState = pl->m_gameState;
+    s.mv.resume();
+    s.objects.resume(s.savedState.m_currentProgress, s.savedState.m_commandIndex);
+    s.restore(st->resume);
+    m_delta = Bot::get()->updater().getPhysicsDt() * std::min(pl->m_gameState.m_timeWarp, 1.0f) * 60.0f;
+    const auto resumed = Clock::now();
+    // At least as long ticking as picking up took (the World compares every
+    // object it can move with the game's after a real tick): a slice that is
+    // all set-up would never get anywhere.
+    const auto deadline = std::max(until, resumed + (resumed - started));
+    const auto msSince = [&](Clock::time_point t) { return std::chrono::duration<double, std::milli>(Clock::now() - t).count(); };
+
+    GhostReport& out = st->report;
+    out.slices++;
+    for (;;) {
+        if (out.ticks >= st->maxTicks) {
+            out.why = "out of ticks";
+            st->over = true;
             break;
         }
+        if (out.ms + msSince(started) > st->maxMs) {
+            out.why = "out of time";
+            st->over = true;
+            break;
+        }
+        if (Clock::now() >= deadline) break;
         // A speed portal at or behind the ghost that it went past at another
         // height: parked as the game parks a touched one, for the next tick.
         const float x0 = s.pos().x;
-        while (nextPortal < speedPortals.size() && speedPortals[nextPortal].first <= x0) {
-            const float speed = speedPortals[nextPortal].second;
+        while (st->nextPortal < st->speedPortals.size() && st->speedPortals[st->nextPortal].first <= x0) {
+            const float speed = st->speedPortals[st->nextPortal].second;
             if (std::fabs(s.players[0]->m_playerSpeed - speed) > 1.0e-3f) pl->m_gameState.m_timeModRelated = speed;
-            nextPortal++;
+            st->nextPortal++;
         }
         (void)s.step(TickInput{0, false});
         // A hit does not stop the ghost: it is where the triggers have things
         // that matters, not whether a copy at its height lives.
         m_deadP1 = false;
         m_deadP2 = false;
-        out.ticks = tick + 1;
+        out.ticks++;
         const float x = s.pos().x;
         out.reachedX = x;
-        if (want(x)) {
-            nearby.clear();
+        if (st->want(x)) {
+            st->nearby.clear();
             const int sec = (int)std::floor(x / 100.0f);
-            for (int k = sec - reach; k <= sec + reach; k++) {
-                auto it = bySection.find(k);
-                if (it == bySection.end()) continue;
+            for (int k = sec - GhostState::kReach; k <= sec + GhostState::kReach; k++) {
+                auto it = st->bySection.find(k);
+                if (it == st->bySection.end()) continue;
                 for (GameObject* o : it->second)
-                    if (std::fabs(o->getPositionX() - x) <= nearX) nearby.push_back(o);
+                    if (std::fabs(o->getPositionX() - x) <= st->nearX) st->nearby.push_back(o);
             }
-            seen(x, nearby);
+            st->seen(x, st->nearby);
         }
-        if (s.complete()) break;
+        if (s.complete()) {
+            st->over = true;
+            break;
+        }
     }
-    s.end();
+    if (st->over) s.end();
+    else st->pause();
+    out.resumeMs += std::chrono::duration<double, std::milli>(resumed - started).count();
+    out.ms += msSince(started);
     m_killer = keptKiller;
     m_teleportRand = keptRand;
-    out.ms = elapsedMs();
+    return st->over;
+}
+
+Trajectory::GhostReport Trajectory::finishGhost() {
+    GhostState* st = m_ghost;
+    if (!st) return {};
+    if (!st->over) {
+        // Stopped between slices: ended from where the game stands now (the
+        // slice before put everything it wrote back).
+        st->s.savedState = st->s.pl->m_gameState;
+        st->s.mv.resume();
+        st->s.end();
+        if (!st->report.why) st->report.why = "stopped";
+    }
+    GhostReport out = st->report;
+    dropGhost();
     return out;
 }
 

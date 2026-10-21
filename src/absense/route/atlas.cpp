@@ -95,6 +95,32 @@ namespace {
     uint64_t g_nextAtlasId = 0;
     bool g_overlay = false;
 
+    // The ghost run (3b), out a slice a frame (tickGhost): what it has found
+    // so far, for the level and the read of it it is out in. Kept apart from
+    // the map, which is built again with it once the ghost is back.
+    struct Ghost {
+        GJBaseGameLayer* pl = nullptr;
+        unsigned generation = ~0u;
+        std::vector<std::pair<float, float>> speeds;  // the map's speed portals
+        std::vector<uint8_t> timed;
+        std::vector<std::vector<std::pair<float, float>>> boxes;   // (bottom, top)
+        std::vector<std::vector<std::pair<float, float>>> rounds;  // (centre y, radius)
+        bool running = false;  // out now (Trajectory::stepGhost)
+        bool retry = false;    // could not go out (the simulation was busy, say): tried again each second
+        bool fresh = false;    // back, and not in the map yet
+        float reachedX = 0.0f;
+        double ms = 0.0;
+        std::string note;
+        std::chrono::steady_clock::time_point lastTry;
+    };
+    Ghost g_ghost;
+    // The ghost's share of a frame, and what it may take in all: LIMBO's
+    // first 45% took 8.7 s in one go, which froze the game for all of it.
+    constexpr double kGhostShare = 0.3;
+    constexpr double kGhostSliceMinMs = 1.0;
+    constexpr double kGhostSliceMaxMs = 6.0;
+    constexpr double kGhostTotalMs = 120000.0;
+
     void subtract(float lo, float hi, std::vector<std::pair<float, float>>& blocked, std::vector<Opening>& out) {
         out.clear();
         if (hi <= lo) return;
@@ -110,7 +136,7 @@ namespace {
         if (hi - at > 1.0f) out.push_back({at, hi});
     }
 
-    std::unique_ptr<Atlas> build(GJBaseGameLayer* pl) {
+    std::unique_ptr<Atlas> build(GJBaseGameLayer* pl, unsigned generation) {
         auto const started = std::chrono::steady_clock::now();
         auto a = std::make_unique<Atlas>();
         if (pl->m_level) a->level = std::string(pl->m_level->m_levelName);
@@ -224,48 +250,31 @@ namespace {
         }
 
         // 3b. What moves, and when: a ghost runs the level in the simulation
-        // with the level's own triggers (Trajectory::ghostRun), and each column
-        // keeps what the triggers had in it while the ghost went through - the
-        // level as the player meets it, moving blocks and blocks that appear
-        // included. LIMBO is built out of those; left out, its map was "any
-        // height" from one end to the other. Raw extents here, the player's
-        // half added per column below.
-        std::vector<uint8_t> timed((size_t)columns, 0);
-        std::vector<std::vector<std::pair<float, float>>> timedBoxes((size_t)columns);   // (bottom, top)
-        std::vector<std::vector<std::pair<float, float>>> timedRounds((size_t)columns);  // (centre y, radius)
-        if (auto* traj = Bot::get()->trajectory().unsafeInner()) {
-            std::vector<std::pair<float, float>> speeds;
-            for (auto const& b : boxes)
-                if (b.o.kind == kSpeedPortal) speeds.push_back({b.cx(), b.o.power});
-            std::sort(speeds.begin(), speeds.end());
-            // A column is read while the ghost is within a few units of its
-            // middle, not the whole time it is in it: a block that moves
-            // swept a tall stretch of the column over those 30 units (half a
-            // second at the slowest speed), and the map called all of it
-            // blocked - ground Nigel's LIMBO macro stands on at x 1036.
-            constexpr float kMiddle = 6.0f;
-            const auto middleOf = [](float x) { return (std::floor(x / kColumnWidth) + 0.5f) * kColumnWidth; };
-            const auto report = traj->ghostRun(
-                pl, speeds, 75.0f, 400000, 8000.0, [&](float x) { return std::fabs(x - middleOf(x)) <= kMiddle; },
-                [&](float x, std::span<GameObject* const> nearby) {
-                    const int gc = std::clamp((int)std::floor(x / kColumnWidth), 0, columns - 1);
-                    timed[(size_t)gc] = 1;
-                    // What can touch a player whose centre is in the ghost's column.
-                    const float x0 = (float)gc * kColumnWidth - kPlayerHalf;
-                    const float x1 = (float)(gc + 1) * kColumnWidth + kPlayerHalf;
-                    for (GameObject* o : nearby) {
-                        gpu::Object ob;
-                        if (!gpu::classifyObject(o, ob) || !blocks(ob.kind)) continue;  // off just now, or nothing that stops a player
-                        if (ob.maxX < x0 || ob.minX > x1) continue;
-                        if (ob.radius > 0.0f) timedRounds[(size_t)gc].push_back({(ob.minY + ob.maxY) * 0.5f, ob.radius});
-                        else timedBoxes[(size_t)gc].push_back({ob.minY, ob.maxY});
-                    }
-                });
-            for (uint8_t t : timed) a->timedColumns += t;
-            a->timedTo = report.reachedX;
-            a->ghostMs = report.ms;
-            a->ghostNote = report.why ? report.why : "";
-            a->ghostBusy = !report.ran && report.why && std::string(report.why) == "the simulation is busy";
+        // with the level's own triggers (Trajectory::beginGhost), and each
+        // column keeps what the triggers had in it while the ghost went
+        // through - the level as the player meets it, moving blocks and blocks
+        // that appear included. LIMBO is built out of those; left out, its map
+        // was "any height" from one end to the other. The ghost runs a slice a
+        // frame (tickGhost) and the map is built again once it is back; until
+        // then a column it has not timed is what the objects alone say. Raw
+        // extents here, the player's half added per column below.
+        for (auto const& b : boxes)
+            if (b.o.kind == kSpeedPortal) a->speedPortals.push_back({b.cx(), b.o.power});
+        std::sort(a->speedPortals.begin(), a->speedPortals.end());
+        const bool ghostHere =
+            g_ghost.pl == pl && g_ghost.generation == generation && g_ghost.timed.size() == (size_t)columns;
+        std::vector<uint8_t> noGhost;
+        if (!ghostHere) noGhost.assign((size_t)columns, 0);
+        const std::vector<uint8_t>& timed = ghostHere ? g_ghost.timed : noGhost;
+        // (Only read where `timed` is set.)
+        auto const& timedBoxes = g_ghost.boxes;
+        auto const& timedRounds = g_ghost.rounds;
+        for (uint8_t t : timed) a->timedColumns += t;
+        if (ghostHere) {
+            a->timedTo = g_ghost.reachedX;
+            a->ghostMs = g_ghost.ms;
+            a->ghostNote = g_ghost.note;
+            a->ghostOut = g_ghost.running;
         }
         for (float x : toggledX) {
             const int c = std::clamp((int)std::floor(x / kColumnWidth), 0, columns - 1);
@@ -380,6 +389,53 @@ namespace {
         return a;
     }
 
+    // Sends the ghost out from where the player is, or notes why it cannot go
+    // yet (tickGhost tries again each second).
+    void sendGhost(GJBaseGameLayer* pl) {
+        g_ghost.lastTry = std::chrono::steady_clock::now();
+        g_ghost.retry = false;
+        auto* traj = Bot::get()->trajectory().unsafeInner();
+        if (!traj) {
+            g_ghost.note = "no simulation yet";
+            g_ghost.retry = true;
+            return;
+        }
+        // A column is read while the ghost is within a few units of its
+        // middle, not the whole time it is in it: a block that moves swept a
+        // tall stretch of the column over those 30 units (half a second at
+        // the slowest speed), and the map called all of it blocked - ground
+        // Nigel's LIMBO macro stands on at x 1036.
+        constexpr float kMiddle = 6.0f;
+        const int columns = (int)g_ghost.timed.size();
+        Trajectory::GhostReport refused;
+        const bool out = traj->beginGhost(
+            pl, g_ghost.speeds, 75.0f, 400000, kGhostTotalMs,
+            [](float x) { return std::fabs(x - (std::floor(x / kColumnWidth) + 0.5f) * kColumnWidth) <= kMiddle; },
+            [columns](float x, std::span<GameObject* const> nearby) {
+                const int gc = std::clamp((int)std::floor(x / kColumnWidth), 0, columns - 1);
+                g_ghost.timed[(size_t)gc] = 1;
+                // What can touch a player whose centre is in the ghost's column.
+                const float x0 = (float)gc * kColumnWidth - kPlayerHalf;
+                const float x1 = (float)(gc + 1) * kColumnWidth + kPlayerHalf;
+                for (GameObject* o : nearby) {
+                    gpu::Object ob;
+                    if (!gpu::classifyObject(o, ob) || !blocks(ob.kind)) continue;  // off just now, or nothing that stops a player
+                    if (ob.maxX < x0 || ob.minX > x1) continue;
+                    if (ob.radius > 0.0f) g_ghost.rounds[(size_t)gc].push_back({(ob.minY + ob.maxY) * 0.5f, ob.radius});
+                    else g_ghost.boxes[(size_t)gc].push_back({ob.minY, ob.maxY});
+                }
+            },
+            refused);
+        if (out) {
+            g_ghost.running = true;
+            g_ghost.note.clear();
+            return;
+        }
+        g_ghost.note = refused.why ? refused.why : "it could not start";
+        // A level without the World stays without it; anything else passes.
+        g_ghost.retry = g_ghost.note != "the World is off for this level";
+    }
+
     ccColor4F gateColor(GateKind k) {
         switch (k) {
             case GateKind::Fork: return ccc4f(1.0f, 1.0f, 1.0f, 0.85f);
@@ -457,27 +513,74 @@ const Atlas* atlasFor(GJBaseGameLayer* pl) {
     if (!Bot::get()->trajectory().exists() && PlayLayer::get()) Bot::get()->trajectory().init();
     const int count = pl->m_objects->count();
     const unsigned generation = moverCacheGeneration();
-    // A map whose ghost could not run (the simulation was busy with a search)
-    // is built again once a second until it can.
-    static auto lastBuild = std::chrono::steady_clock::now();
-    const bool retryGhost = g_atlas && g_atlas->ghostBusy &&
-                            std::chrono::steady_clock::now() - lastBuild > std::chrono::seconds(1);
-    // A ghost that ran out of time short of the end (LIMBO took 8.8 s for the
-    // first 45%): once the player is within 2000 units of where it stopped,
-    // the map is built again, the ghost starting from the player.
-    const bool extendGhost = g_atlas && g_atlas->ghostNote == "out of time" && pl->m_player1 &&
-                             pl->m_player1->getPositionX() > g_atlas->timedTo - 2000.0f &&
-                             std::chrono::steady_clock::now() - lastBuild > std::chrono::seconds(1);
-    if (!g_atlas || g_atlasFor != pl || g_atlasObjects != count || g_atlasGeneration != generation || retryGhost ||
-        extendGhost) {
-        lastBuild = std::chrono::steady_clock::now();
-        g_atlas = build(pl);
+    if (!g_atlas || g_atlasFor != pl || g_atlasObjects != count || g_atlasGeneration != generation || g_ghost.fresh) {
+        g_ghost.fresh = false;
+        g_atlas = build(pl, generation);
         g_atlas->id = ++g_nextAtlasId;
         g_atlasFor = pl;
         g_atlasObjects = count;
         g_atlasGeneration = generation;
+        // A level (or a read of it) the ghost has not been out in: it goes
+        // now, from where the player is.
+        if (g_ghost.pl != pl || g_ghost.generation != generation || g_ghost.timed.size() != g_atlas->columns.size()) {
+            if (auto* traj = Bot::get()->trajectory().unsafeInner()) traj->dropGhost();
+            const size_t columns = g_atlas->columns.size();
+            g_ghost = Ghost{};
+            g_ghost.pl = pl;
+            g_ghost.generation = generation;
+            g_ghost.speeds = g_atlas->speedPortals;
+            g_ghost.timed.assign(columns, 0);
+            g_ghost.boxes.assign(columns, {});
+            g_ghost.rounds.assign(columns, {});
+            sendGhost(pl);
+        }
     }
     return g_atlas.get();
+}
+
+void tickGhost(PlayLayer* pl) {
+    if (!pl || g_ghost.pl != pl) return;
+    auto* traj = Bot::get()->trajectory().unsafeInner();
+    if (!traj) return;
+    if (g_ghost.generation != moverCacheGeneration()) {
+        // The level was read again: what the ghost holds is of the old read.
+        // atlasFor sends a new one when the map is next asked for.
+        if (g_ghost.running) traj->dropGhost();
+        g_ghost.running = false;
+        g_ghost.retry = false;
+        return;
+    }
+    const auto now = std::chrono::steady_clock::now();
+    if (!g_ghost.running) {
+        if (g_ghost.retry && now - g_ghost.lastTry > std::chrono::seconds(1)) sendGhost(pl);
+        return;
+    }
+    if (!traj->ghosting()) {
+        // Dropped from under it (the simulation was made again): out again
+        // from where the player is, with what it found so far kept.
+        g_ghost.running = false;
+        g_ghost.retry = true;
+        return;
+    }
+    // One slice a frame drawn: Calculate, the pathfinder and its judge step
+    // the game many times inside one frame, each with its own postUpdate.
+    static unsigned lastFrame = ~0u;
+    const unsigned frame = CCDirector::sharedDirector()->getTotalFrames();
+    if (frame == lastFrame) return;
+    lastFrame = frame;
+    const double frameMs =
+        std::clamp((double)CCDirector::sharedDirector()->getAnimationInterval(), 1.0 / 1000.0, 1.0 / 30.0) * 1000.0;
+    const double sliceMs = std::clamp(frameMs * kGhostShare, kGhostSliceMinMs, kGhostSliceMaxMs);
+    if (!traj->stepGhost(now + std::chrono::microseconds((int64_t)(sliceMs * 1000.0)))) return;
+    const auto report = traj->finishGhost();
+    g_ghost.running = false;
+    g_ghost.reachedX = report.reachedX;
+    g_ghost.ms = report.ms;
+    g_ghost.note = report.why ? report.why : "";
+    g_ghost.fresh = true;  // the map takes it in when it is next asked for
+    log::info("[AbsPF] ghost run back: to x {:.0f}, {} ticks in {} slices, {:.0f} ms ({:.0f} of it picking up){}{}",
+              report.reachedX, report.ticks, report.slices, report.ms, report.resumeMs, report.why ? ": " : "",
+              report.why ? report.why : "");
 }
 
 std::string summary(Atlas const& a) {
@@ -485,13 +588,23 @@ std::string summary(Atlas const& a) {
     for (auto const& g : a.gates) counts[(int)g.kind]++;
     int moving = 0;
     for (auto const& c : a.columns) moving += c.dynamic ? 1 : 0;
-    return fmt::format("{}: {} columns, {} objects ({} moving, {} it can't follow), {} gates (forks {}, orbs {}, pads {}, "
-                       "portals {}, tight {}, spacing {}), {} columns with moving parts, built in {:.0f} ms",
-                       a.level.empty() ? std::string("level") : a.level, a.columns.size(), a.objects, a.movingObjects,
-                       a.unknownObjects, a.gates.size(), counts[0], counts[1], counts[2], counts[3], counts[4], counts[5],
-                       moving, a.buildMs) +
-           fmt::format("; {} columns timed by the ghost run (to x {:.0f}, {:.0f} ms{}{})", a.timedColumns, a.timedTo,
-                       a.ghostMs, a.ghostNote.empty() ? "" : ": ", a.ghostNote);
+    const std::string objects =
+        fmt::format("{}: {} columns, {} objects ({} moving, {} it can't follow), {} gates (forks {}, orbs {}, pads {}, "
+                    "portals {}, tight {}, spacing {}), {} columns with moving parts, built in {:.0f} ms",
+                    a.level.empty() ? std::string("level") : a.level, a.columns.size(), a.objects, a.movingObjects,
+                    a.unknownObjects, a.gates.size(), counts[0], counts[1], counts[2], counts[3], counts[4], counts[5],
+                    moving, a.buildMs);
+    // The map being shown, with the ghost still out for it: how far it is.
+    const bool current = g_atlas && a.id == g_atlas->id && g_ghost.pl == g_atlasFor;
+    if (current && g_ghost.running) {
+        auto* traj = Bot::get()->trajectory().unsafeInner();
+        const auto so = traj ? traj->ghostSoFar() : Trajectory::GhostReport{};
+        return objects + fmt::format("; the ghost run is out: at x {:.0f} of {:.0f}, {:.0f} ms so far", so.reachedX,
+                                     a.length, so.ms);
+    }
+    if (current && g_ghost.retry) return objects + fmt::format("; the ghost run is waiting: {}", g_ghost.note);
+    return objects + fmt::format("; {} columns timed by the ghost run (to x {:.0f}, {:.0f} ms{}{})", a.timedColumns,
+                                 a.timedTo, a.ghostMs, a.ghostNote.empty() ? "" : ": ", a.ghostNote);
 }
 
 bool overlayEnabled() {
@@ -509,8 +622,14 @@ void tickOverlay(PlayLayer* pl) {
         if (existing) existing->removeFromParent();
         return;
     }
-    if (existing) return;
-    if (auto const* a = atlasFor(pl)) pl->m_objectLayer->addChild(draw(*a), 1500);
+    // Drawn again when the map is built again (the ghost run back, say).
+    auto const* a = atlasFor(pl);
+    if (existing && a && existing->getTag() == (int)a->id) return;
+    if (existing) existing->removeFromParent();
+    if (!a) return;
+    auto* node = draw(*a);
+    node->setTag((int)a->id);
+    pl->m_objectLayer->addChild(node, 1500);
 }
 
 }  // namespace absense::route

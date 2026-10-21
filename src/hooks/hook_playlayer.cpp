@@ -592,7 +592,9 @@ class $modify(GB7PlayLayer, PlayLayer) {
         auto* gb = GucciEngine::get();
         if (gb->hackHideAttempts && m_attemptLabel)
             m_attemptLabel->setVisible(false);
-        // The AI pathfinder's level map, drawn over the level when it is switched on.
+        // The AI pathfinder's level map: its ghost run, a slice a frame, and the
+        // drawing over the level when it is switched on.
+        absense::route::tickGhost(this);
         absense::route::tickOverlay(this);
         absense::route::tickRoute(this);
     }

@@ -212,6 +212,7 @@ class Trajectory {
     struct SimSnapshot;
     struct Sim;
     struct SearchState;
+    struct GhostState;
    public:
     struct SimStart;  // see captureStart
     // Step R0 of AI_PATHFINDER_PLAN.md: what a simulated tick and a snapshot
@@ -284,23 +285,37 @@ class Trajectory {
     // in the simulation with the World stepping the level's triggers, never
     // pressing and never stopped by a hit. It takes every speed portal in
     // `speedPortals` (x, speed; in x order) as it reaches its x, so it keeps
-    // the player's time whatever height it is at. Every `every` ticks `seen`
-    // gets its x and the objects the triggers can move or toggle that stand
-    // within `nearX` of it - where the World has them at that tick. Nothing
-    // runs when the simulation is busy or the level has no World (`why`).
+    // the player's time whatever height it is at. On a tick where `want(x)`
+    // says so, `seen` gets its x and the objects the triggers can move or
+    // toggle that stand within `nearX` of it - where the World has them at
+    // that tick. Nothing runs when the simulation is busy or the level has no
+    // World (`why`).
     struct GhostReport {
         int ticks = 0;
         float reachedX = 0.0f;
-        double ms = 0.0;
+        double ms = 0.0;        // simulating, all slices together
+        double resumeMs = 0.0;  // ... of which picking up where the last slice left off
+        int slices = 0;
         bool ran = false;
         const char* why = nullptr;
     };
-    // `want(x)` says whether this tick is one `seen` should be asked about.
-    GhostReport ghostRun(GJBaseGameLayer* pl, std::span<const std::pair<float, float>> speedPortals, float nearX,
-                         int maxTicks, double maxMs, const std::function<bool(float x)>& want,
-                         const std::function<void(float x, std::span<GameObject* const> nearby)>& seen);
+    // It runs in slices, so the game does not wait for it (LIMBO's took 8.7 s
+    // in one go): beginGhost sets it up, each stepGhost runs it until `until`
+    // and puts the game back for the real tick in between, as a search's
+    // slices do, and finishGhost ends it with the report (true from stepGhost:
+    // it is over). `maxMs` is all the slices together. Between slices the copies
+    // are free for other runs; the next slice puts the ghost's own back.
+    bool beginGhost(GJBaseGameLayer* pl, std::vector<std::pair<float, float>> speedPortals, float nearX, int maxTicks,
+                    double maxMs, std::function<bool(float x)> want,
+                    std::function<void(float x, std::span<GameObject* const> nearby)> seen, GhostReport& refused);
+    bool stepGhost(std::chrono::steady_clock::time_point until);
+    GhostReport finishGhost();
+    bool ghosting() const { return m_ghost != nullptr; }
+    GhostReport ghostSoFar() const;  // how far the ghost out now has got
+    void dropGhost();
    private:
     SearchState* m_search = nullptr;  // a search in progress (beginSearch)
+    GhostState* m_ghost = nullptr;    // a ghost run in progress (beginGhost)
     // Groups a trigger that moves things targets (move, rotate, follow, scale,
     // keyframe, advanced follow, area effects): the objects the moving-object
     // scan watches from one real tick to the next, for the runs that carry
@@ -862,6 +877,7 @@ class Trajectory {
 
     ~Trajectory() {
         dropSearch();
+        dropGhost();
         m_fakePlayer1->m_maybeLastGroundObject = nullptr;
         m_fakePlayer2->m_maybeLastGroundObject = nullptr;
 

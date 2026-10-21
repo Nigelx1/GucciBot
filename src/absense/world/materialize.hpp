@@ -370,7 +370,7 @@ class Materializer {
     void end();
 
     std::size_t writtenCount() const { return m_written.size(); }
-    // The level map's ghost run (Trajectory::ghostRun): every row of the
+    // The level map's ghost run (Trajectory::beginGhost): every row of the
     // copy's columns, as for a spider, so what stands above or below the
     // ghost is where the log has it too.
     void setAllRows(bool on) { m_allRows = on; }

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-21-fe (Manual Frame Windows is back: every input in a table, type any window, suggestions in it)"
+    "2026-10-21-ff (Pathfinder map: the ghost run goes a slice a frame, no more 9 s freeze; map redrawn when it is back)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -6,7 +6,8 @@
 // the player's centre fits through there (its "openings") under the game mode
 // in force. Then come the gates, the places a route has a choice or gets
 // tight: forks, orbs, pads, portals, narrow gaps, and one at least every
-// couple of seconds. Built once per level read; nothing in the game changes.
+// couple of seconds. Built once per level read, and again once the ghost run
+// (what moves, and when) is back; nothing in the game changes.
 //
 // It is a map, not physics: the planner only uses it to choose, and the exact
 // simulation decides what is possible. Where it cannot be sure (something
@@ -15,6 +16,7 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 class GJBaseGameLayer;
@@ -64,18 +66,25 @@ namespace absense::route {
         std::vector<Gate> gates;
         std::vector<float> unknownX;
         double buildMs = 0.0;
-        // The ghost run (see Trajectory::ghostRun): how many columns it timed,
-        // how far it got, what it cost, and why it stopped short or did not run.
+        // The ghost run (see Trajectory::beginGhost): how many columns it
+        // timed, how far it got, what it cost, and why it stopped short or did
+        // not run.
         int timedColumns = 0;
         float timedTo = 0.0f;
         double ghostMs = 0.0;
         std::string ghostNote;
-        bool ghostBusy = false;  // the simulation was busy: built again shortly
+        bool ghostOut = false;  // still out when this map was built: it is built again when the ghost is back
+        std::vector<std::pair<float, float>> speedPortals;  // (x, speed), in x order: the ghost takes each one
     };
 
     // The map of the level `pl` is playing, built the first time it is asked
-    // for after the level was opened (and again if its objects change count).
+    // for after the level was opened (and again if its objects change count,
+    // or the ghost run is back).
     const Atlas* atlasFor(GJBaseGameLayer* pl);
+
+    // From PlayLayer::postUpdate: the ghost run a slice a frame (a share of
+    // the frame), so the game does not wait for it.
+    void tickGhost(PlayLayer* pl);
 
     // "Forks 12, orbs 30, ..." for the Pathfinder page and the logs.
     std::string summary(const Atlas& a);

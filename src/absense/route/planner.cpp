@@ -354,9 +354,15 @@ void tickRoute(PlayLayer* pl) {
         if (existing) existing->removeFromParent();
         return;
     }
-    if (existing) return;
+    // Drawn again when the map is built again (and the route planned again on it).
     auto const* a = atlasFor(pl);
-    if (auto const* p = shownPlan(pl); a && p) pl->m_objectLayer->addChild(draw(*a, *p), 1501);
+    if (existing && a && existing->getTag() == (int)a->id) return;
+    if (existing) existing->removeFromParent();
+    auto const* p = shownPlan(pl);
+    if (!a || !p) return;
+    auto* node = draw(*a, *p);
+    node->setTag((int)a->id);
+    pl->m_objectLayer->addChild(node, 1501);
 }
 
 }  // namespace absense::route
