@@ -5425,12 +5425,55 @@ void FrameWindowAnalyzer::dropMarkers() {
     m_markerNodes.clear();
 }
 
+// GucciBot: GD's mirror flags, under the names newer bindings give them or
+// the older ones this build may have (the CI and local bindings differ).
+namespace {
+template <class S> auto mirroredOf(S const& gs, int) -> decltype(gs.m_isFlipped) { return gs.m_isFlipped; }
+template <class S> bool mirroredOf(S const& gs, long) { return gs.m_unkBool10; }
+template <class S> auto flippingOf(S const& gs, int) -> decltype(gs.m_isFlipping) { return gs.m_isFlipping; }
+template <class S> bool flippingOf(S const& gs, long) { return gs.m_unkBool12; }
+}  // namespace
+
 void FrameWindowAnalyzer::cullOffscreen(PlayLayer* pl) {
     if (!pl || !pl->m_objectLayer) return;
 
     CCSize const winSize = CCDirector::get()->getWinSize();
     constexpr float margin = 300.f;
-    float const layerScale = pl->m_objectLayer->getScale();
+    // GucciBot: the zoom without a sign. Were a mirror to leave the object
+    // layer with a negative x scale, getScale() is that x scale, and every
+    // marker came out upside down as well as round.
+    float const layerScale = std::fabs(pl->m_objectLayer->getScaleY());
+
+    // GucciBot (2026-10-21, Nigel: mirror portals "make them all mirrored"):
+    // the markers live on the UI layer, at where their point of the level is
+    // on screen. A mirror the level's own transform carries is already in
+    // convertToWorldSpace; one GD puts on the picture past the layers is not,
+    // and the markers stood where the level would be unmirrored. That one is
+    // put on them here: the camera's flip about the middle of the screen,
+    // which through the flip is the same squeeze the level gets.
+    auto const& gs = pl->m_gameState;
+    bool const mirrored = mirroredOf(gs, 0);
+    bool const flipping = flippingOf(gs, 0);
+    bool const mirrorState = mirrored || flipping;
+    auto const t = pl->m_objectLayer->nodeToWorldTransform();
+    bool const layerMirrored = t.a * t.d - t.b * t.c < 0.f;
+    float flip = 1.f;
+    if (mirrorState && !layerMirrored && pl->m_cameraFlip >= -1.f && pl->m_cameraFlip <= 1.f)
+        flip = pl->m_cameraFlip;
+    {
+        // What GD does under a mirror portal, once each time it changes: the
+        // log says whether the guess above is the right one.
+        static int lastState = -1;
+        int const state = (mirrored ? 1 : 0) | (flipping ? 2 : 0) | (layerMirrored ? 4 : 0);
+        if (state != lastState) {
+            lastState = state;
+            geode::log::info("[FW] mirror: flipped {} flipping {}, camera flip {:.2f}, object layer scale {:.2f}/{:.2f} "
+                             "mirrored {}, markers flipped by {:.2f}",
+                             mirrored, flipping, pl->m_cameraFlip, pl->m_objectLayer->getScaleX(),
+                             pl->m_objectLayer->getScaleY(), layerMirrored, flip);
+        }
+    }
+    float const mid = winSize.width * 0.5f;
 
     for (auto it = m_markerNodes.begin(); it != m_markerNodes.end();) {
         auto* node = it->m_node;
@@ -5440,10 +5483,12 @@ void FrameWindowAnalyzer::cullOffscreen(PlayLayer* pl) {
             continue;
         }
 
-        CCPoint const screen =
+        CCPoint screen =
             pl->m_objectLayer->convertToWorldSpace(it->m_world);
+        screen.x = mid + (screen.x - mid) * flip;
         node->setPosition(screen);
-        node->setScale(layerScale);
+        node->setScaleX(layerScale * std::fabs(flip));
+        node->setScaleY(layerScale);
 
         if (screen.x < -margin || screen.x > winSize.width + margin ||
             screen.y < -margin || screen.y > winSize.height + margin) {

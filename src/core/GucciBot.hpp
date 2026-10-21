@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-21-fg (Pathfinder: the hold-a-height steers are gone - no more 120 clicks a second straight-line wave)"
+    "2026-10-21-fh (Frame window markers follow mirror portals; the log says what GD does there)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
