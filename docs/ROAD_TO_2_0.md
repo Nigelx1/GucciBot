@@ -51,7 +51,7 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 - [ ] Per-band images and pulse (the site advertises them): built -ew (a band's own image in place of its shape; a pulse on the marker, the label or both, with fade-in, hold and fade-out), untested
 
 ### Slipped through: in docs/FEATURE_AUDIT.md, never carried onto this list (re-checked row by row, 2026-10-21)
-- [ ] Manual Frame Windows: the table of every input with a window you can type, marked auto or manual, with Clear (Juice's idea; the old menu had it). The suggestions go in it
+- [ ] Manual Frame Windows: the table of every input with a window you can type, marked auto or manual, with Clear (Juice's idea; the old menu had it). The suggestions go in it: built -fe (Calculate > Windows by hand > Every input); Nigel checked the menu, 2026-10-21
 - [ ] Band sound packs: name, import and export a set of band sounds (the -ew line wrongly counted Brrr/Bells as this)
 - [ ] Import your own band sound and image files with a picker, and Import Folder for a whole folder of them
 - [ ] A color for the band pulse (the old pulse had one)
@@ -97,7 +97,7 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 - [ ] The AI trying every orb and toggle choice
 - [ ] Building the map in slices, so the game stops freezing for about 9 seconds
 - [ ] Re-run the review of builds -dm to -dq that got cut off
-- [ ] The bar: Nigel's 3 levels, every RobTop level, 16 of 20 online levels, Mindcap's levels
+- [ ] The bar (Nigel, 2026-10-21, eased from every RobTop level + 16 of 20 online): RobTop's three demons (Clubstep, Theory of Everything 2, Deadlocked), The Nightmare, Bloodbath, LIMBO, Orbit, Heliopolis
 
 ## 5. Mac, iOS and Android parity (everything but the pathfinder)
 
