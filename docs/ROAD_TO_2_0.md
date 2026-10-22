@@ -90,7 +90,7 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 - [ ] Markers in the ground (#26; the fix in build -dt is untested)
 - [ ] The trail check being one frame off; recheck the 42,000-frame noclip runaway
 - [ ] Markers missing for player 1 in some dual levels, showing only on player 2 during duals (#27; TheCinnyBun, Helios, TUAPEKA ...). The player-1 marker uses the mark's saved position and the twin uses the trail; look at why the first is missing there
-- [ ] Mirror portals mirror the markers (Nigel, 2026-10-21): -fh fixed the numbers (Nigel: "the numbers are right"; GD flips the object layer itself, and the markers took its signed scale); markers by a portal still off, -fi places them in their own layer's space through the flip, untested; a "[FW] mirror flip done" log line says whether GD squeezes the layers above
+- [x] Mirror portals and the markers (Nigel, 2026-10-21): fixed and confirmed in -fl ("it works"). GD flips the object layer itself, so the markers' signed scale had turned them round (-fh); through the flip GD turns the picture and draws the player off its spot in the level, so a jump mid-flip now starts on the player and slides onto its real spot by the end of the flip (-fk, -fl)
 - [ ] An overall difficulty number beside L* (Nigel's idea, 2026-10-21; L* is a precision rate by NaN's own account). Nigel agreed to L* plus four parts that aren't timing (control load, transitions, duals, reading), and says there are many more variables, some mattering far more than others: which ones, and their weights from a community list (needs macros of about 30 rated levels). After the weekly reset
 
 ## 4. AI pathfinder (AI_PATHFINDER_PLAN.md)
