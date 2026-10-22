@@ -655,7 +655,13 @@ namespace gucci {
         if (result.isErr())
             return result;
 
-        m_frame->pts = m_updateIndex - 1;
+        // The frame's own time, taken when it was captured (m_bufferPts, from
+        // the queue). m_updateIndex is the game's, which has moved on by the
+        // time this thread gets to the frame: with the encoder behind, frames
+        // queued together all came out with the same time, the muxer refused
+        // the repeat, and the render stopped ("Failed to write frame", Nigel
+        // 2026-10-21, about two seconds into every render).
+        m_frame->pts = m_bufferPts;
         ret = ff->avcodec_send_frame(m_videoCodecCtx.get(), m_frame.get());
         if (ret < 0) {
             if (ret == AVERROR(EAGAIN))
@@ -683,7 +689,8 @@ namespace gucci {
                 ret = ff->av_interleaved_write_frame(m_formatCtx, m_pkt.get());
             }
             if (ret < 0)
-                return geode::Err("Failed to write frame");
+                return geode::Err("Failed to write frame (FFmpeg error {}, pts {}, dts {})", ret, m_pkt->pts,
+                                  m_pkt->dts);
             ff->av_packet_unref(m_pkt.get());
         }
         return geode::Ok();

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-21-fl (A jump inside a mirror flip: its marker starts on the player and slides onto the level spot)"
+    "2026-10-21-fm (Renderer: each frame keeps its own time - no more Failed to write frame two seconds in)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
