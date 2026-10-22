@@ -246,7 +246,14 @@ class FrameWindowAnalyzer {
     struct MarkerNode {
         cocos2d::CCNode* m_node = nullptr;
         cocos2d::CCPoint m_world{};
+        // GucciBot: a jump inside a mirror portal's flip (see cullOffscreen):
+        // where on screen the player was drawn when it came, and how far the
+        // flip had got (-1: not one of those).
+        cocos2d::CCPoint m_start{};
+        float m_flipFrom = -1.f;
+        bool m_flipIn = true;
     };
+    void noteFlipMarker(PlayLayer* pl, FrameWindowMark const& mk);
     std::vector<MarkerNode> m_markerNodes;
 
     cocos2d::CCNode* markerContainer(PlayLayer* pl);

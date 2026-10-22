@@ -5183,6 +5183,20 @@ static std::string bandImageFile(std::string const& path) {
     return geode::utils::string::pathToString(p);
 }
 
+// GucciBot: GD's "the level is flipping" flag, under the name newer bindings
+// give it or the older one this build may have (the CI and local bindings
+// differ).
+namespace {
+template <class S> auto flippingOf(S const& gs, int) -> decltype(gs.m_isFlipping) { return gs.m_isFlipping; }
+template <class S> bool flippingOf(S const& gs, long) { return gs.m_unkBool12; }
+template <class S> auto flipProgressOf(S const& gs, int) -> decltype(gs.m_levelFlipProgress) { return gs.m_levelFlipProgress; }
+template <class S> float flipProgressOf(S const& gs, long) { return gs.m_levelFlipping; }
+template <class S> auto secondHalfOf(S const& gs, int) -> decltype(gs.m_inSecondHalfOfFlipAnimation) {
+    return gs.m_inSecondHalfOfFlipAnimation;
+}
+template <class S> bool secondHalfOf(S const& gs, long) { return gs.m_unkBool11; }
+}  // namespace
+
 void FrameWindowAnalyzer::spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
                                       FrameWindowTier const* tier) {
     auto* container = this->markerContainer(pl);
@@ -5332,8 +5346,37 @@ void FrameWindowAnalyzer::spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
               (at.x == 0.f && at.y == 0.f) ? "nothing on the path either, not drawn"
                                            : "took the macro path's");
     }
-    if (at.x != 0.f || at.y != 0.f) place(at);
+    if (at.x != 0.f || at.y != 0.f) {
+        place(at);
+        this->noteFlipMarker(pl, mk);
+    }
     if (auto const twin = this->dualTwin(pl, mk)) place(*twin);
+}
+
+// GucciBot (2026-10-21, Nigel's tests -fh..-fk): a jump inside a mirror
+// portal's flip. Through the flip GD draws the player away from where it is in
+// the level, and the click's saved spot is where it was drawn: the marker
+// came out on the player and stayed off the level for good. Nigel's rule (his
+// "B"): it starts on the player and slides onto the spot in the level by the
+// time the flip is over. The spot is the player's own position in the level
+// now (m_position: the marker spawns on the click's tick), the start is where
+// the player is drawn; cullOffscreen does the slide.
+void FrameWindowAnalyzer::noteFlipMarker(PlayLayer* pl, FrameWindowMark const& mk) {
+    if (m_markerNodes.empty() || !pl || !pl->m_objectLayer || !flippingOf(pl->m_gameState, 0)) return;
+    auto* player = mk.player2 ? pl->m_player2 : pl->m_player1;
+    if (!player) return;
+    auto& entry = m_markerNodes.back();
+    CCPoint const drawn = player->getPosition();
+    CCPoint const real = player->m_position;
+    auto const lt = pl->m_objectLayer->nodeToWorldTransform();
+    entry.m_start = pl->m_objectLayer->convertToWorldSpace(drawn);
+    entry.m_flipFrom = std::clamp((float)flipProgressOf(pl->m_gameState, 0), 0.f, 1.f);
+    entry.m_flipIn = lt.a * lt.d - lt.b * lt.c >= 0.f;  // the layer swaps at the end: unflipped now is a flip in
+    entry.m_world = real;
+    geode::log::info("[FW] jump in a flip: frame {} at progress {:.3f}, drawn at ({:.1f}, {:.1f}), in the level at "
+                     "({:.1f}, {:.1f}), saved ({:.1f}, {:.1f}), start on screen ({:.1f}, {:.1f})",
+                     mk.frame, entry.m_flipFrom, drawn.x, drawn.y, real.x, real.y, mk.position.x, mk.position.y,
+                     entry.m_start.x, entry.m_start.y);
 }
 
 std::optional<cocos2d::CCPoint> FrameWindowAnalyzer::dualTwin(
@@ -5425,19 +5468,6 @@ void FrameWindowAnalyzer::dropMarkers() {
     m_markerNodes.clear();
 }
 
-// GucciBot: GD's "the level is flipping" flag, under the name newer bindings
-// give it or the older one this build may have (the CI and local bindings
-// differ).
-namespace {
-template <class S> auto flippingOf(S const& gs, int) -> decltype(gs.m_isFlipping) { return gs.m_isFlipping; }
-template <class S> bool flippingOf(S const& gs, long) { return gs.m_unkBool12; }
-template <class S> auto flipProgressOf(S const& gs, int) -> decltype(gs.m_levelFlipProgress) { return gs.m_levelFlipProgress; }
-template <class S> float flipProgressOf(S const& gs, long) { return gs.m_levelFlipping; }
-template <class S> auto secondHalfOf(S const& gs, int) -> decltype(gs.m_inSecondHalfOfFlipAnimation) {
-    return gs.m_inSecondHalfOfFlipAnimation;
-}
-template <class S> bool secondHalfOf(S const& gs, long) { return gs.m_unkBool11; }
-}  // namespace
 
 void FrameWindowAnalyzer::cullOffscreen(PlayLayer* pl) {
     if (!pl || !pl->m_objectLayer) return;
@@ -5504,6 +5534,19 @@ void FrameWindowAnalyzer::cullOffscreen(PlayLayer* pl) {
         CCPoint screen =
             pl->m_objectLayer->convertToWorldSpace(it->m_world);
         screen.x = mid + (screen.x - mid) * turn;
+        // A jump inside the flip: from the player onto its spot, done when
+        // the flip is.
+        if (it->m_flipFrom >= 0.f) {
+            if (!flipping) {
+                it->m_flipFrom = -1.f;
+            } else {
+                float const p = std::clamp((float)flipProgressOf(pl->m_gameState, 0), 0.f, 1.f);
+                float const left = it->m_flipIn ? 1.f - it->m_flipFrom : it->m_flipFrom;
+                float const gone = it->m_flipIn ? p - it->m_flipFrom : it->m_flipFrom - p;
+                float const a = left > 1e-4f ? std::clamp(gone / left, 0.f, 1.f) : 1.f;
+                screen = it->m_start + (screen - it->m_start) * a;
+            }
+        }
         // (A parent squeezed flat has no inverse: the marker keeps its spot.)
         auto const t = node->getParent()->nodeToWorldTransform();
         if (std::fabs(t.a * t.d - t.b * t.c) > 1e-6f)

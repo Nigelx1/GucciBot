@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-21-fk (Frame window markers turn with the picture through a mirror flip, not after it)"
+    "2026-10-21-fl (A jump inside a mirror flip: its marker starts on the player and slides onto the level spot)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
