@@ -48,6 +48,21 @@ namespace gucci::fwstore {
     // Everything back to anticroom's defaults (bands included), then saved.
     void resetAll();
 
+    // Calculate's presets (GucciBot, 2026-10-23, after anticroom's
+    // antics-counter: beta.4's Accuracy, beta.7's Absolute, and no Fast):
+    // how strictly a shift is judged. A preset sets only the algorithm, the
+    // recovery window and Check past next input; everything else stays where
+    // the player put it. Balanced is the defaults, the strict count.
+    inline constexpr int kPresetCount = 3;
+    inline constexpr char const* kPresetNames[kPresetCount] = {"Balanced", "Accuracy", "Absolute"};
+
+    // Sets a preset's fields, then saves.
+    void applyPreset(int preset);
+
+    // The preset the settings match, or -1 (Custom). Worked out each time
+    // rather than stored, so it can't go stale.
+    int matchingPreset();
+
     // Only the bands back to their defaults, then saved.
     void resetBands();
 

@@ -200,9 +200,32 @@ namespace gucci::ui::pages {
             kit::EndCard();
         }
 
+        // What a Calculate preset does (fwstore::applyPreset), for its row's hint.
+        const char* presetHint(int preset) {
+            switch (preset) {
+                case 0:
+                    return "Balanced, the default: the strict count. A shift counts only if the macro survives it";
+                case 1:
+                    return "Accuracy: Recovery Range at 2. A shift that dies still counts if moving the next input up "
+                           "to 2 frames saves it. Slightly slower";
+                case 2:
+                    return "Absolute: Accuracy, and each test runs on past the next input (Check past next input, "
+                           "under Advanced). The most thorough and the slowest; experimental";
+                default:
+                    return "Custom: the settings below match none of the presets. A preset sets only the algorithm, "
+                           "the recovery window and Check past next input";
+            }
+        }
+
         void measurementCard() {
             auto& s = S();
             kit::BeginCard("Measurement", "How an input is judged.");
+
+            // GucciBot (2026-10-23): presets, after anticroom's antics-counter (beta.4's Accuracy, beta.7's
+            // Absolute; he dropped Fast). Read off the settings every frame, so Custom when none matches.
+            int preset = fwstore::matchingPreset();
+            if (kit::ChoiceRow("Preset", presetHint(preset), &preset, fwstore::kPresetNames, fwstore::kPresetCount))
+                fwstore::applyPreset(preset);
 
             const char* algos[] = {"Time-Based", "Recovery Range"};
             // GucciBot (2026-10-23): the hint said "Stricter", from anticroom's old tooltip, but Recovery Range only

@@ -363,6 +363,48 @@ namespace gucci::fwstore {
         save();
     }
 
+    namespace {
+
+        // The presets, in kPresetNames' order. A recovery window only counts
+        // with Recovery Range.
+        struct PresetDef {
+            FWA::Algorithm algorithm;
+            int recoveryRange;
+            bool checkPastNextInput;
+        };
+        constexpr PresetDef kPresets[kPresetCount] = {
+            {FWA::Algorithm::TimeBased, 0, false},
+            {FWA::Algorithm::RecoveryRange, 2, false},
+            {FWA::Algorithm::RecoveryRange, 2, true},
+        };
+
+    } // namespace
+
+    void applyPreset(int preset) {
+        if (preset < 0 || preset >= kPresetCount)
+            return;
+        auto const& p = kPresets[preset];
+        auto& fw = SLSettings::get()->frameWindow;
+        fw.algorithm = static_cast<int>(p.algorithm);
+        if (p.algorithm == FWA::Algorithm::RecoveryRange)
+            fw.recoveryRange = p.recoveryRange;
+        fw.checkPastNextInput = p.checkPastNextInput;
+        save();
+    }
+
+    int matchingPreset() {
+        auto const& fw = SLSettings::get()->frameWindow;
+        for (int i = 0; i < kPresetCount; i++) {
+            auto const& p = kPresets[i];
+            if (fw.algorithm != static_cast<int>(p.algorithm) || fw.checkPastNextInput != p.checkPastNextInput)
+                continue;
+            if (p.algorithm == FWA::Algorithm::RecoveryRange && fw.recoveryRange != p.recoveryRange)
+                continue;
+            return i;
+        }
+        return -1;
+    }
+
     void resetBands() {
         SLSettings::get()->frameWindow.tiers = FrameWindowSettings{}.tiers;
         save();
