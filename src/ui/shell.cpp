@@ -42,6 +42,7 @@
 #include <map>
 #include <optional>
 #include <span>
+#include <system_error>
 #include <Geode/utils/async.hpp>
 #include <Geode/utils/hash.hpp>
 #include <thread>
@@ -470,6 +471,27 @@ namespace gucci::ui {
             return geode::utils::string::pathToString(p.filename());
         }
 
+        // GucciBot (2026-10-23): part of a picked file's name (its stem or
+        // extension) spelled as macro names are: path::string(), on Windows
+        // the system code page, which the macro list reads names in. Nothing
+        // when that code page can't spell it (a Japanese name on an English
+        // Windows, an emoji), where path::string() throws; elsewhere it is the
+        // name's own bytes and never fails.
+        std::optional<std::string> spelledAs(std::filesystem::path const& part) {
+            try {
+                return part.string();
+            } catch (std::system_error const&) {
+                return std::nullopt;
+            }
+        }
+
+        // The note for a macro that came in under a plain name (spelledAs).
+        std::string plainNameNote(std::string const& name) {
+            return fmt::format("\nIts file name has characters Windows can't use in a macro name on this system, so "
+                               "the macro is called \"{}\".",
+                               name);
+        }
+
         // `want` itself if nothing is there, else "name (2).ext", "(3)"... next
         // to it, so a move never replaces a file (review 2026-10-20).
         std::filesystem::path freePath(std::filesystem::path const& want) {
@@ -512,8 +534,10 @@ namespace gucci::ui {
                 return {false, fmt::format("{}: {}", fname, res.error)};
             auto& m = res.macro;
             // Named the way the macro list names files (reloadMacroList), so the
-            // new macro shows and loads under the name it was converted to.
-            std::string stem = src.stem().string();
+            // new macro shows and loads under the name it was converted to; a
+            // name Windows can't spell that way comes in plain (spelledAs).
+            auto const spelledStem = spelledAs(src.stem());
+            std::string stem = spelledStem.value_or(inReplays ? "Converted macro" : "Imported macro");
             for (std::string_view inner : {".gdr", ".mhr"})  // "x.gdr.json" leaves ".gdr" on the stem
                 if (stem.size() > inner.size() && stem.ends_with(inner))
                     stem.resize(stem.size() - inner.size());
@@ -553,6 +577,8 @@ namespace gucci::ui {
             for (auto const& n : m.notes)
                 msg += "\n" + n;
             msg += moveNote;
+            if (!spelledStem)
+                msg += plainNameNote(name);
             if (savedAs)
                 *savedAs = name;
             return {true, msg};
@@ -669,10 +695,12 @@ namespace gucci::ui {
             if (!convert::fromGucciBot(bytes, m, err))
                 return {false, fmt::format("{}: {}", fname, err)};
             auto const known = knownMacroExtensions();
-            std::string ext = src.extension().string();
+            // A name or extension Windows can't spell comes in plain (spelledAs).
+            std::string ext = spelledAs(src.extension()).value_or(".brrr");
             if (std::find(known.begin(), known.end(), ext) == known.end())
                 ext = ".brrr";
-            std::string const name = freeMacroName(src.stem().string());
+            auto const spelledStem = spelledAs(src.stem());
+            std::string const name = freeMacroName(spelledStem.value_or("Imported macro"));
             auto const target = replaysDir() / (name + ext);
             if (!writeAll(target, bytes)) {
                 std::error_code ec;
@@ -685,6 +713,8 @@ namespace gucci::ui {
                                           name, m.inputs.size(), m.tps);
             if (g_convertShift != 0)
                 msg += "\nShift frames isn't used on a GucciBot macro: it came in as it was.";
+            if (!spelledStem)
+                msg += plainNameNote(name);
             return {true, msg};
         }
 
@@ -713,11 +743,14 @@ namespace gucci::ui {
             };
 
             // Already one of the saved macros: nothing to bring in.
+            // One whose name the macro list can't read isn't listed (spelledAs):
+            // it comes in below, under a plain name.
             if (ours && std::filesystem::equivalent(picked.parent_path(), replaysDir(), ec)) {
-                std::string const stem = picked.stem().string();
-                if (auto const listed = gb->findMacroFile(stem);
-                    !listed.empty() && std::filesystem::equivalent(listed, picked, ec))
-                    return {true, fmt::format("{} is already one of your saved macros{}.", fname, selectNote(stem))};
+                if (auto const stem = spelledAs(picked.stem())) {
+                    if (auto const listed = gb->findMacroFile(*stem);
+                        !listed.empty() && std::filesystem::equivalent(listed, picked, ec))
+                        return {true, fmt::format("{} is already one of your saved macros{}.", fname, selectNote(*stem))};
+                }
             }
 
             auto const dir = importedDir();
@@ -930,8 +963,9 @@ namespace gucci::ui {
 #endif
                     g_rowNoteOk = false;
                 } else if (got.path) {
-                    // A file name Windows can't spell in its code page throws
-                    // (std::filesystem::path::string()): a note, not a crash.
+                    // Anything that throws on the way is a note, not a crash. (A
+                    // file name Windows can't spell in its code page used to:
+                    // it comes in under a plain name now, spelledAs.)
                     try {
                         std::tie(g_rowNoteOk, g_rowNote) = importMacroFile(*got.path);
                     } catch (std::exception const& e) {
