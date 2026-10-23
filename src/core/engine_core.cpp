@@ -1424,19 +1424,40 @@ namespace gucci {
         knockerzMacros.clear();
         customThemeMacrosByExt.clear();
 
+        // GucciBot (2026-10-23): nothing in here may throw. It runs at launch
+        // (from $on_mod(Loaded), where nothing up the stack catches) and from
+        // the menu's draw, so one exception crashed GD, at every launch until
+        // the file was renamed. The folder calls take an error_code, and each
+        // file's names are read once, below.
         auto dir = getReplayDir();
-        if (!fs::exists(dir)) {
-            fs::create_directories(dir);
+        std::error_code ec;
+        if (!fs::exists(dir, ec)) {
+            fs::create_directories(dir, ec);
             return;
         }
 
         auto known = ui::knownMacroExtensions();
-        std::error_code ec;
-        for (auto& it : fs::directory_iterator(dir, ec)) {
-            if (!it.is_regular_file())
+        for (fs::directory_iterator walk(dir, ec), end; !ec && walk != end; walk.increment(ec)) {
+            auto const& it = *walk;
+            std::error_code typeEc;
+            if (!it.is_regular_file(typeEc))
                 continue;
-            auto ext = it.path().extension().string();
-            auto stem = it.path().stem().string();
+            // Windows: path::string() throws std::system_error for a name the
+            // system code page can't spell (Japanese on an English Windows,
+            // any emoji). Left out of the list instead of crashing GD. Listing
+            // it under a UTF-8 name wouldn't load it: the list's names go back
+            // into paths as narrow strings (dir / (name + ext)).
+            std::string ext, stem, fileName;
+            try {
+                ext = it.path().extension().string();
+                stem = it.path().stem().string();
+                fileName = it.path().filename().string();
+            } catch (std::system_error const&) {
+                log::warn("[GucciBot] Macro list: skipped \"{}\": Windows can't spell its name in this system's code "
+                          "page. Rename it with plain letters to see it.",
+                          geode::utils::string::pathToString(it.path().filename()));
+                continue;
+            }
             bool isKnown = std::find(known.begin(), known.end(), ext) != known.end();
             // GucciBot 1.x saved .brrr too, in its old format: that one gets
             // converted, not listed.
@@ -1502,9 +1523,9 @@ namespace gucci {
                     if (!isBuiltin)
                         customThemeMacrosByExt[bare].insert(stem);
                 }
-            } else if (convert::looksImportable(it.path().filename().string())) {
+            } else if (convert::looksImportable(fileName)) {
                 incompatibleMacros.insert(stem);
-                foreignMacros.push_back(it.path().filename().string());
+                foreignMacros.push_back(fileName);
             }
         }
         std::sort(storedMacros.begin(), storedMacros.end());
@@ -2620,8 +2641,13 @@ namespace gucci {
     }
 
     void GucciEngine::initialize() {
-        fs::create_directories(getReplayDir());
-        fs::create_directories(getPresetsDir());
+        // GucciBot (2026-10-23): nothing here may throw either (see
+        // reloadMacroList): the error_code forms.
+        {
+            std::error_code mkEc;
+            fs::create_directories(getReplayDir(), mkEc);
+            fs::create_directories(getPresetsDir(), mkEc);
+        }
 
         {
             std::error_code dirEc;
@@ -2634,7 +2660,9 @@ namespace gucci {
             std::ofstream jmLog(Mod::get()->getSaveDir() / "guccibot_jupitermacro.log",
                                 std::ios::trunc);
             if (jmLog) {
-                jmLog << "source=" << (Mod::get()->getResourcesDir() / "jupiter_my_favourite.gdr").string()
+                jmLog << "source="
+                      << geode::utils::string::pathToString(Mod::get()->getResourcesDir() /
+                                                            "jupiter_my_favourite.gdr")
                       << "\n";
                 jmLog << "jupiterMacro.loaded=" << (jupiterMacro.loaded ? 1 : 0) << "\n";
                 jmLog << "jupiterMacro.clickBarTps=" << jupiterMacro.clickBarTps << "\n";
@@ -2648,10 +2676,23 @@ namespace gucci {
         auto* mod = Mod::get();
         this->loadEngineSettings();
 
+        // GucciBot (2026-10-23): a preset is named by its file's stem, which
+        // on Windows throws for a name the system code page can't spell (as
+        // in reloadMacroList): skipped, not a crash at launch.
         std::error_code ec;
-        for (auto& entry : fs::directory_iterator(getPresetsDir(), ec)) {
+        for (fs::directory_iterator walk(getPresetsDir(), ec), end; !ec && walk != end; walk.increment(ec)) {
+            auto const& entry = *walk;
             if (entry.path().extension() != ".json")
                 continue;
+            std::string presetName;
+            try {
+                presetName = entry.path().stem().string();
+            } catch (std::system_error const&) {
+                log::warn("[GucciBot] Presets: skipped \"{}\": Windows can't spell its name in this system's code "
+                          "page. Rename it with plain letters to load it.",
+                          geode::utils::string::pathToString(entry.path().filename()));
+                continue;
+            }
             std::ifstream fin(entry.path());
             std::string json((std::istreambuf_iterator<char>(fin)), {});
             auto parsed = matjson::parse(json);
@@ -2659,7 +2700,7 @@ namespace gucci {
                 continue;
             // Anything an older preset file lacks keeps the settings this
             // launch started with, rather than the struct's defaults.
-            BotSettingsPreset p = capturePreset(*this, entry.path().stem().string());
+            BotSettingsPreset p = capturePreset(*this, presetName);
             presetFromJson(parsed.unwrap(), p);
             settingsPresets.push_back(p);
         }
