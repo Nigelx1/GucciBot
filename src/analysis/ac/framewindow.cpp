@@ -8205,21 +8205,59 @@ void FrameWindowAnalyzer::applyLabelTo(PlayheadInput const& in, int window,
     this->markEdited();
 }
 
+// GucciBot (2026-10-23): the windows a list of inputs owns, one each: the
+// first one left at its frame, player and kind, as allInputs pairs a row with
+// its window. Two inputs can share all three (a platformer Jump and Right on
+// one tick), each with a window of its own, and a page of the Every input
+// table can hold one of them and not the other: matching every window with
+// that key took the other page's one too. In frame order, as m_results is.
+static std::vector<size_t> marksOwnedBy(
+    std::vector<FrameWindowMark> const& results,
+    std::vector<FrameWindowAnalyzer::PlayheadInput> const& inputs) {
+    std::vector<size_t> owned;
+    for (auto const& in : inputs) {
+        if (!in.valid) continue;
+        auto const at = std::lower_bound(
+            results.begin(), results.end(), in.frame,
+            [](FrameWindowMark const& m, uint32_t f) { return m.frame < f; });
+        for (auto it = at; it != results.end() && it->frame == in.frame; ++it) {
+            auto const k = static_cast<size_t>(it - results.begin());
+            if (it->player2 == in.player2 && it->release == in.release &&
+                std::find(owned.begin(), owned.end(), k) == owned.end()) {
+                owned.push_back(k);
+                break;
+            }
+        }
+    }
+    return owned;
+}
+
 // GucciBot (2026-10-23): a page of the Every input table cleared at once
 // (anticroom's antics-counter beta.5 changelog: delete a whole page of frame
 // windows in the editor). Each window is found by its frame, player and kind,
-// not by index: every erase moves the ones after it. A typed window goes too,
-// rather than falling back to Calculate's count as a single Clear does.
+// not by index: the table's indices are from before the confirm. A typed
+// window goes too, rather than falling back to Calculate's count as a single
+// Clear does.
 size_t FrameWindowAnalyzer::eraseMarks(std::vector<PlayheadInput> const& inputs) {
     if (m_running || inputs.empty()) return 0;
-    size_t const erased = std::erase_if(m_results, [&](FrameWindowMark const& mk) {
-        return std::any_of(inputs.begin(), inputs.end(), [&](PlayheadInput const& in) {
-            return in.valid && in.frame == mk.frame && in.player2 == mk.player2 &&
-                   in.release == mk.release;
-        });
-    });
-    if (erased > 0) this->markEdited();
-    return erased;
+    auto const owned = marksOwnedBy(m_results, inputs);
+    if (owned.empty()) return 0;
+    std::vector<char> gone(m_results.size(), 0);
+    for (size_t k : owned) gone[k] = 1;
+    size_t kept = 0;
+    for (size_t k = 0; k < m_results.size(); k++) {
+        if (gone[k]) continue;
+        if (kept != k) m_results[kept] = std::move(m_results[k]);
+        kept++;
+    }
+    m_results.resize(kept);
+    this->markEdited();
+    return owned.size();
+}
+
+size_t FrameWindowAnalyzer::countMarks(std::vector<PlayheadInput> const& inputs) const {
+    if (m_running || inputs.empty()) return 0;
+    return marksOwnedBy(m_results, inputs).size();
 }
 
 std::vector<FrameWindowAnalyzer::PlayheadInput> FrameWindowAnalyzer::allInputs(

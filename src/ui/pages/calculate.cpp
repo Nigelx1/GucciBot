@@ -1151,14 +1151,18 @@ namespace gucci::ui::pages {
                 kit::OpenConfirm(kDeletePageId);
                 g_askDeletePage = false;
             }
-            std::string const deleteTitle =
-                fmt::format("Delete {} window{}?", g_pageToDelete.size(), g_pageToDelete.size() == 1 ? "" : "s");
+            // GucciBot (2026-10-23): the count is what Delete would take now,
+            // by eraseMarks' own rule (one window an input; none once another
+            // macro is loaded), so it is the number that goes. It can be fewer
+            // than the rows: two rows can show one shared window.
+            bool const sameMacro = GucciEngine::get()->replayName == g_pageToDeleteMacro;
+            size_t const deleting = sameMacro ? analyzer().countMarks(g_pageToDelete) : 0;
+            std::string const deleteTitle = fmt::format("Delete {} window{}?", deleting, deleting == 1 ? "" : "s");
             if (int const answer = kit::Confirm(kDeletePageId, deleteTitle.c_str(), g_pageToDeleteText.c_str(), "Delete");
                 answer != 0) {
                 // Windows are results: kept with the macro, and L* moves. Not
                 // if another macro was loaded while the confirm was up.
-                if (answer == 1 && GucciEngine::get()->replayName == g_pageToDeleteMacro &&
-                    analyzer().eraseMarks(g_pageToDelete) > 0) {
+                if (answer == 1 && sameMacro && analyzer().eraseMarks(g_pageToDelete) > 0) {
                     GucciEngine::get()->saveAcFrameWindowResults();
                     lstar::Solver::get()->markDirty();
                 }
