@@ -764,6 +764,27 @@ long FrameWindowAnalyzer::posRoom(size_t idx) const {
     return static_cast<long>(m_sweep);
 }
 
+// GucciBot (2026-10-23): one rule for how far a test leg runs, which was five
+// copies (beginShift, beginSetupLeg, beginRecovery, launchDependentLeg and
+// launchSuggestLeg): from an input placed at `from` to Slack frames before the
+// next measurable input after action `afterAi`, either player's, other than
+// `skip` (the input's own release, for the legs that pass over it), and at
+// least MIN_HORIZON, at most the horizon. Read off the actions as the leg has
+// placed them.
+int64_t FrameWindowAnalyzer::legReach(size_t afterAi, int64_t from,
+                                      size_t skip) const {
+    auto const& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
+    int64_t gap = static_cast<int64_t>(m_horizon);
+    for (size_t k = afterAi + 1; k < actions.size(); k++) {
+        if (k == skip) continue;
+        if (!isMeasurableInput(actions[k])) continue;
+        gap = static_cast<int64_t>(actions[k].m_frame) - from;
+        break;
+    }
+    return std::clamp<int64_t>(std::max<int64_t>(gap - m_slack_, 0),
+                               MIN_HORIZON, static_cast<int64_t>(m_horizon));
+}
+
 void FrameWindowAnalyzer::muteAudio() {
     if (m_mutedAudio) return;
     auto* engine = FMODAudioEngine::sharedEngine();
@@ -1157,20 +1178,8 @@ void FrameWindowAnalyzer::beginSetupLeg(SetupGroup const& sg) {
     int64_t const lastFrame =
         static_cast<int64_t>(m_originalFrames[lastAi]) + totalShift;
 
-        auto const& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
-    size_t const relIdx = this->pairedReleaseFor(lastAi);
-
-    int64_t gap = static_cast<int64_t>(m_horizon);
-    for (size_t k = lastAi + 1; k < actions.size(); k++) {
-        if (k == relIdx) continue;
-        if (!isMeasurableInput(actions[k])) continue;
-        gap = static_cast<int64_t>(actions[k].m_frame) - lastFrame;
-        break;
-    }
-
-    int64_t reach = std::max<int64_t>(gap - m_slack_, 0);
-    reach = std::clamp<int64_t>(reach, MIN_HORIZON,
-                                static_cast<int64_t>(m_horizon));
+    int64_t const reach =
+        this->legReach(lastAi, lastFrame, this->pairedReleaseFor(lastAi));
 
     m_setupLegTarget =
         static_cast<uint32_t>(std::max<int64_t>(lastFrame + reach, 0));
@@ -1921,19 +1930,8 @@ void FrameWindowAnalyzer::beginShift(int64_t shift, ShiftMode mode) {
         }
     }
 
-    size_t const relIdx = this->pairedReleaseFor(ai);
-
-    int64_t gap = static_cast<int64_t>(m_horizon);
-    for (size_t k = ai + 1; k < actions.size(); k++) {
-        if (k == relIdx) continue;
-        if (!isMeasurableInput(actions[k])) continue;
-        gap = static_cast<int64_t>(actions[k].m_frame) - shifted;
-        break;
-    }
-
-    int64_t reach = std::max<int64_t>(gap - m_slack_, 0);
-    reach = std::clamp<int64_t>(reach, MIN_HORIZON,
-                                static_cast<int64_t>(m_horizon));
+    int64_t const reach =
+        this->legReach(ai, shifted, this->pairedReleaseFor(ai));
 
     if (fraction > 0.0 && !m_subtickMacro) {
         auto* eng = cbf::Engine::get();
@@ -2584,16 +2582,7 @@ void FrameWindowAnalyzer::beginRecovery() {
         actions[niRel].m_frame =
             static_cast<uint64_t>(placed(niRel) + m_recoveryOffset);
 
-    int64_t recGap = static_cast<int64_t>(m_horizon);
-    for (size_t k = ni + 1; k < actions.size(); k++) {
-        if (k == niRel) continue;
-        if (!isMeasurableInput(actions[k])) continue;
-        recGap = static_cast<int64_t>(actions[k].m_frame) - nextShifted;
-        break;
-    }
-    int64_t recReach = std::max<int64_t>(recGap - m_slack_, 0);
-    recReach = std::clamp<int64_t>(recReach, MIN_HORIZON,
-                                   static_cast<int64_t>(m_horizon));
+    int64_t const recReach = this->legReach(ni, nextShifted, niRel);
 
     m_legPressFrame = static_cast<uint32_t>(std::max<int64_t>(shifted, 0));
     m_legPressBuffered = false;
@@ -3902,16 +3891,7 @@ void FrameWindowAnalyzer::launchDependentLeg(int64_t shift) {
 
     auto const& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
     int64_t const bFrame = static_cast<int64_t>(actions[aiB].m_frame);
-
-    int64_t gap = static_cast<int64_t>(m_horizon);
-    for (size_t k = aiB + 1; k < actions.size(); k++) {
-        if (!isMeasurableInput(actions[k])) continue;
-        gap = static_cast<int64_t>(actions[k].m_frame) - bFrame;
-        break;
-    }
-    int64_t const reach =
-        std::clamp<int64_t>(std::max<int64_t>(gap - m_slack_, 0), MIN_HORIZON,
-                            static_cast<int64_t>(m_horizon));
+    int64_t const reach = this->legReach(aiB, bFrame, NO_INDEX);
 
     m_depLegShift = shift;
     m_depLegTarget = static_cast<uint32_t>(std::max<int64_t>(bFrame + reach, 0));
@@ -4380,18 +4360,10 @@ void FrameWindowAnalyzer::launchSuggestLeg() {
     }
 
     // launchDependentLeg's target: the input, then up to the next one less
-    // the slack, at least MIN_HORIZON, at most the horizon.
+    // the slack, at least MIN_HORIZON, at most the horizon (legReach).
     auto const& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
     int64_t const tFrame = static_cast<int64_t>(actions[target].m_frame);
-    int64_t gap = static_cast<int64_t>(m_horizon);
-    for (size_t k = target + 1; k < actions.size(); k++) {
-        if (!isMeasurableInput(actions[k])) continue;
-        gap = static_cast<int64_t>(actions[k].m_frame) - tFrame;
-        break;
-    }
-    int64_t const reach =
-        std::clamp<int64_t>(std::max<int64_t>(gap - m_slack_, 0), MIN_HORIZON,
-                            static_cast<int64_t>(m_horizon));
+    int64_t const reach = this->legReach(target, tFrame, NO_INDEX);
 
     m_sugLegTarget = static_cast<uint32_t>(std::max<int64_t>(tFrame + reach, 0));
     m_sugLegActive = true;

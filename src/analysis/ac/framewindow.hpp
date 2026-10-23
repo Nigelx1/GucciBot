@@ -481,6 +481,9 @@ class FrameWindowAnalyzer {
     size_t nextActionFor(size_t ai, bool player2) const;
     size_t pairedReleaseFor(size_t ai) const;
     long posRoom(size_t idx) const;
+    // GucciBot (2026-10-23): how far a test leg runs past an input it placed
+    // at `from` (action `afterAi`). One rule; it was five copies.
+    int64_t legReach(size_t afterAi, int64_t from, size_t skip) const;
 
     double m_resultsTps = 240.0;
     int m_timingMark = -1;
