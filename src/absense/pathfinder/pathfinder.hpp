@@ -311,6 +311,11 @@ public:
         size_t holdAt = 0;
         bool holdAll = false;       // the all-at-once try has been made
         bool holdDone = false;
+        // A run that does not hold up held down whole gets its fresh presses
+        // back one at a time where the path needs them: the ones put back so
+        // far, and the tries spent on this run.
+        std::vector<int> holdRepress;
+        int holdRefine = 0;
         std::vector<TraceSample> guideRef;
         bool guideHaveRef = false;
         std::vector<int> guideKept;

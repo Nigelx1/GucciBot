@@ -1905,6 +1905,12 @@ bool AbsensePathfinder::trimStep(Decision& d) {
             for (int t = run.first; t <= run.second && (size_t)t < c.inputs.size(); t++) n += c.inputs[(size_t)t].presses;
             return n;
         };
+        // The next run, one by one: its fresh presses start over.
+        auto nextRun = [&]() {
+            d.holdAt++;
+            d.holdRepress.clear();
+            d.holdRefine = 0;
+        };
         while (!d.holdDone) {
             std::vector<TickInput> variant = c.inputs;
             int dropped = 0;
@@ -1914,27 +1920,81 @@ bool AbsensePathfinder::trimStep(Decision& d) {
                     dropped += pressesIn(run) - 1;
                 }
             } else {
-                if (d.holdAt >= d.holdRuns.size() || d.holdRuns.size() < 2) {
+                // (A single run is tried here too: on its own, with its fresh
+                // presses put back, it can hold up where the all-at-once try
+                // - the same script, without them - did not.)
+                if (d.holdAt >= d.holdRuns.size()) {
                     d.holdDone = true;
                     break;
                 }
-                holdRun(variant, d.holdRuns[d.holdAt]);
-                dropped = pressesIn(d.holdRuns[d.holdAt]) - 1;
+                const auto run = d.holdRuns[d.holdAt];
+                holdRun(variant, run);
+                // The fresh presses put back so far: a press while held is a
+                // release and a press inside the tick, as the game takes it.
+                for (const int t : d.holdRepress) variant[(size_t)t] = TickInput{1, true};
+                dropped = pressesIn(run) - 1 - (int)d.holdRepress.size();
+                if (!d.guideHaveRef) {
+                    // The script's own run, to see where a try leaves it.
+                    if (!mayWork()) return false;
+                    d.guideRef.clear();
+                    (void)runFor(d, c.inputs, trimTo, &d.guideRef);
+                    m_stats.simulations++;
+                    d.guideHaveRef = true;
+                }
             }
             if (isTabu(d.tick, variant, d.player2)) {
                 if (!d.holdAll) d.holdAll = true;
-                else d.holdAt++;
+                else nextRun();
                 continue;
             }
             if (!mayWork()) return false;  // more next time, the same try
             const bool took = tryTake(variant);
-            if (took) d.trimmed += std::max(0, dropped);
+            if (took) {
+                d.trimmed += std::max(0, dropped);
+                d.guideHaveRef = false;  // the script changed: its own run is another now
+            }
             if (!d.holdAll) {
                 d.holdAll = true;
                 if (took) d.holdDone = true;  // every run held: nothing left to try one by one
-            } else {
-                d.holdAt++;
+                continue;
             }
+            if (took) {
+                nextRun();
+                continue;
+            }
+            // Held down whole (or with the presses put back so far) the run
+            // does not do as well. Where the try first leaves the script's
+            // own path, the run's latest press at or before that tick comes
+            // back - fresh presses where the path needs them (an orb), the
+            // button held for the rest (the landings). Eight tries a run.
+            const auto run = d.holdRuns[d.holdAt];
+            if (!d.guideHaveRef || d.holdRefine >= 8) {
+                nextRun();
+                continue;
+            }
+            const auto& ref = d.guideRef;
+            const auto& got = d.scratchTrace;
+            size_t first = std::min(ref.size(), got.size());
+            for (size_t k = 0; k < std::min(ref.size(), got.size()); k++) {
+                if (std::fabs(ref[k].x - got[k].x) > 0.01f || std::fabs(ref[k].y - got[k].y) > 0.01f ||
+                    ref[k].dead != got[k].dead) {
+                    first = k;
+                    break;
+                }
+            }
+            int back = -1;
+            for (int t = std::min((int)first, run.second); t > run.first; t--) {
+                if (c.inputs[(size_t)t].presses == 0) continue;
+                if (std::find(d.holdRepress.begin(), d.holdRepress.end(), t) != d.holdRepress.end()) continue;
+                back = t;
+                break;
+            }
+            if (back < 0) {
+                nextRun();  // nothing in the run explains it
+                continue;
+            }
+            d.holdRepress.push_back(back);
+            d.holdRefine++;
         }
     }
 
@@ -3691,6 +3751,8 @@ void AbsensePathfinder::decide() {
         d.holdAt = 0;
         d.holdAll = false;
         d.holdDone = false;
+        d.holdRepress.clear();
+        d.holdRefine = 0;
         d.guideRef.clear();
         d.guideHaveRef = false;
         d.guideKept.clear();
@@ -4058,6 +4120,8 @@ void AbsensePathfinder::decide() {
         d.holdAt = 0;
         d.holdAll = false;
         d.holdDone = false;
+        d.holdRepress.clear();
+        d.holdRefine = 0;
         d.guideRef.clear();
         d.guideHaveRef = false;
         d.guideKept.clear();
