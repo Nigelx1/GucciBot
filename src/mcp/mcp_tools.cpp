@@ -985,6 +985,24 @@ namespace gucci::mcp {
         });
 
         server.addTool({
+            "gucci_abs_profile",
+            "The speed test's timers left on for every simulated run - a real pathfinder "
+            "run's, a search's, a leg's - until switched off: `start` clears and switches "
+            "them on, `read` returns what they have gathered (us a simulated tick by part, "
+            "materializeNear's parts and counts, run setup and putting away, snapshots, the "
+            "World's capture; totals in seconds), `stop` switches them off (the numbers stay "
+            "for `read`). Costs a little time on every tick while on.",
+            schemaOf({{"action", "string", "start | read | stop"}}),
+            [](matjson::Value const& a) {
+                auto const action = argStr(a, "action", "read");
+                if (action == "start") absense::profileRuns(true);
+                else if (action == "stop") absense::profileRuns(false);
+                else if (action != "read") throw ToolError("action must be start, read or stop");
+                return absense::runProfile();
+            },
+        });
+
+        server.addTool({
             "gucci_abs_benchmark",
             "Step R0 of AI_PATHFINDER_PLAN.md: time Absense's simulation from the real "
             "player's current state. Two runs (carry on, then hold) give microseconds "

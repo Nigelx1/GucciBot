@@ -278,6 +278,26 @@ class Trajectory {
     };
     Benchmark benchmark(GJBaseGameLayer* pl, int ticks, int snapshots);
 
+    // GucciBot (2026-10-23): the speed test's timers left running for every
+    // run until they are switched off (gucci_abs_profile): where a real
+    // pathfinder run's simulating goes, which the speed test from the
+    // player's spot cannot see (ORBIT simulated 2,390 ticks a second in a run
+    // where the test at its start says 30,000). All times are us in all.
+    struct RunProfile {
+        uint64_t steps = 0;
+        double step[5] = {};  // the World's triggers, the movers, near the copies, the copies, the rest
+        uint64_t begins = 0;
+        uint64_t ends = 0;
+        double setup[11] = {};
+        double end[4] = {};
+        uint64_t snapshots = 0;
+        uint64_t restores = 0;
+        double snapshotUs = 0.0;
+        double restoreUs = 0.0;
+    };
+    static void profileRuns(bool on);
+    static RunProfile runProfile();
+
     // Step R3 of AI_PATHFINDER_PLAN.md: the physics map with a goal. From the
     // real player's state it plays every way the button can go, tick by tick
     // (carrying on, plus alternativesFor's moves), merges states that come out

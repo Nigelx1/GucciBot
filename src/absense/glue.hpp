@@ -82,6 +82,10 @@ namespace absense {
     // real player's state (simulated ticks a second, snapshot save, restore
     // and size), also written to the game's log. Nothing in the game changes.
     matjson::Value benchmark(int ticks, int snapshots);
+    // GucciBot (2026-10-23): the speed test's timers on for every run until
+    // switched off, and what they have gathered (gucci_abs_profile).
+    void profileRuns(bool on);
+    matjson::Value runProfile();
 
     // Step R1 of AI_PATHFINDER_PLAN.md: the route planner's map of the whole
     // level (absense/route/atlas.hpp), drawn over it when shown.

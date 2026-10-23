@@ -482,6 +482,73 @@ matjson::Value absense::benchmark(int ticks, int snapshots) {
     return out;
 }
 
+void absense::profileRuns(bool on) {
+    Trajectory::profileRuns(on);
+}
+
+matjson::Value absense::runProfile() {
+    const Trajectory::RunProfile r = Trajectory::runProfile();
+    const world::NearProfile& np = world::g_nearProfile;
+    const world::CaptureProfile& cp = world::g_captureProfile;
+    auto out = matjson::Value::object();
+    const double steps = (double)std::max<uint64_t>(1, r.steps);
+    const double begins = (double)std::max<uint64_t>(1, r.begins);
+    const double ends = (double)std::max<uint64_t>(1, r.ends);
+    out["on"] = np.on;
+    out["simulated_ticks"] = (int64_t)r.steps;
+    // In all, seconds: what the ticks, the runs' setting up and putting
+    // away, and the snapshots took.
+    double ticksUs = 0.0;
+    for (double v : r.step) ticksUs += v;
+    double setupUs = 0.0;
+    for (double v : r.setup) setupUs += v;
+    double endUs = 0.0;
+    for (double v : r.end) endUs += v;
+    auto total = matjson::Value::object();
+    total["ticks_s"] = ticksUs / 1e6;
+    total["run_setup_s"] = setupUs / 1e6;
+    total["run_end_s"] = endUs / 1e6;
+    total["snapshots_s"] = r.snapshotUs / 1e6;
+    total["restores_s"] = r.restoreUs / 1e6;
+    out["total"] = total;
+    static constexpr const char* kStep[5] = {"world", "movers", "near", "iterate", "after"};
+    auto tick = matjson::Value::object();
+    for (int k = 0; k < 5; k++) tick[kStep[k]] = r.step[k] / steps;
+    out["us_a_tick"] = tick;
+    static constexpr const char* kNear[5] = {"pending", "dirty_buckets", "written", "reach", "carried"};
+    auto nearOut = matjson::Value::object();  // (near is a Windows macro)
+    for (int k = 0; k < 5; k++) nearOut[kNear[k]] = np.parts[k] / steps;
+    nearOut["looks"] = (double)np.looks / steps;
+    nearOut["written_looked_at"] = (double)np.written / steps;
+    nearOut["groups"] = (double)np.groups / steps;
+    nearOut["members"] = (double)np.members / steps;
+    nearOut["refreshes"] = (double)np.refreshes / steps;
+    nearOut["writes"] = (double)np.writes / steps;
+    out["near_a_tick"] = nearOut;
+    static constexpr const char* kSetup[11] = {"scan",  "state", "void",  "movers",  "copies", "capture",
+                                               "def",   "table", "carry", "objects", "rest"};
+    static constexpr const char* kEnd[4] = {"copies", "objects", "movers", "state"};
+    auto runs = matjson::Value::object();
+    runs["begun"] = (int64_t)r.begins;
+    for (int k = 0; k < 11; k++) runs[std::string("setup_") + kSetup[k]] = r.setup[k] / begins;
+    for (int k = 0; k < 4; k++) runs[std::string("end_") + kEnd[k]] = r.end[k] / ends;
+    out["us_a_run"] = runs;
+    auto snaps = matjson::Value::object();
+    snaps["taken"] = (int64_t)r.snapshots;
+    snaps["put_back"] = (int64_t)r.restores;
+    snaps["us_to_take"] = r.snapshots ? r.snapshotUs / (double)r.snapshots : 0.0;
+    snaps["us_to_put_back"] = r.restores ? r.restoreUs / (double)r.restores : 0.0;
+    out["snapshots"] = snaps;
+    static constexpr const char* kCapture[12] = {"contacts", "values",   "events",    "def",       "tier_de",  "commands",
+                                                 "spawns",   "toggles_items", "timers", "listeners", "sequences", "uncertain"};
+    auto capture = matjson::Value::object();
+    capture["calls"] = (int64_t)cp.calls;
+    const double calls = (double)std::max<uint64_t>(1, cp.calls);
+    for (int k = 0; k < 12; k++) capture[kCapture[k]] = cp.parts[k] / calls;
+    out["us_a_capture"] = capture;
+    return out;
+}
+
 namespace {
     // A gate's option for Assistant Access (step 4): its kind and band, the
     // object it is about, whether that must or must not fire, and the gravity

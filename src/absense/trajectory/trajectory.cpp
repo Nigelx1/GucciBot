@@ -1726,6 +1726,11 @@ struct StepProfile {
     double end[4] = {};
     uint64_t begins = 0;
     uint64_t ends = 0;
+    // Snapshots taken and put back (Sim::snapshot / restore).
+    double snapshot = 0.0;
+    double restore = 0.0;
+    uint64_t snapshots = 0;
+    uint64_t restores = 0;
 };
 StepProfile g_stepProfile;
 
@@ -2520,6 +2525,7 @@ struct Trajectory::Sim {
     // what a snapshot keeps; taking m_position here would put the copy back
     // at the start of the run on every restore.
     void snapshot(SimSnapshot& out) const {
+        ProfLap lap;  // the speed test's timer (see StepProfile)
         for (int i = 0; i < count; i++) {
             PlayerObject* p = players[i];
             SimPlayerSnap& s = out.p[i];
@@ -2571,9 +2577,12 @@ struct Trajectory::Sim {
         out.world = ws;
         if (worldStep) out.log = log;
         out.ticks = ticks;
+        lap(g_stepProfile.snapshot);
+        if (lap.on) g_stepProfile.snapshots++;
     }
 
     void restore(SimSnapshot& in) {
+        ProfLap lap;  // the speed test's timer (see StepProfile)
         // How many copies the tick being put back had, and which player each
         // one stood for: a dual or solo portal the abandoned branch crossed
         // moved both (enterDual / leaveDual). A copy the branch had and this
@@ -2645,6 +2654,8 @@ struct Trajectory::Sim {
         mv.nearX[0] = players[0]->getPositionX();
         mv.nearX[1] = count == 2 ? players[1]->getPositionX() : mv.nearX[0];
         mv.rewind(in.movingAt);
+        lap(g_stepProfile.restore);
+        if (lap.on) g_stepProfile.restores++;
     }
 
     void fill(RunResult& r) const {
@@ -3954,6 +3965,37 @@ Trajectory::Benchmark Trajectory::benchmark(GJBaseGameLayer* pl, int ticks, int 
     m_killer = keptKiller;
     m_teleportRand = keptRand;
     return b;
+}
+
+void Trajectory::profileRuns(bool on) {
+    if (on) {
+        g_stepProfile = StepProfile{};
+        world::g_nearProfile = world::NearProfile{};
+        world::g_captureProfile = world::CaptureProfile{};
+    }
+    g_stepProfile.on = on;
+    world::g_nearProfile.on = on;
+    world::g_captureProfile.on = on;
+}
+
+Trajectory::RunProfile Trajectory::runProfile() {
+    const StepProfile& p = g_stepProfile;
+    RunProfile r;
+    r.steps = p.steps;
+    r.step[0] = p.world;
+    r.step[1] = p.movers;
+    r.step[2] = p.nearby;
+    r.step[3] = p.iterate;
+    r.step[4] = p.after;
+    r.begins = p.begins;
+    r.ends = p.ends;
+    for (int k = 0; k < 11; k++) r.setup[k] = p.setup[k];
+    for (int k = 0; k < 4; k++) r.end[k] = p.end[k];
+    r.snapshots = p.snapshots;
+    r.restores = p.restores;
+    r.snapshotUs = p.snapshot;
+    r.restoreUs = p.restore;
+    return r;
 }
 
 // The leg search, kept between slices (see beginLeg / stepLeg).

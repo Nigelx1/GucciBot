@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-ha (World: a search branch only works out again where the written objects near the copy belong, not every one the search ever wrote - ORBIT's branches spent 54 us of 64 there)"
+    "2026-10-23-hb (Assistant Access: gucci_abs_profile keeps the speed test's timers on for real pathfinder runs - ORBIT still simulates only 2,390 ticks a second)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
