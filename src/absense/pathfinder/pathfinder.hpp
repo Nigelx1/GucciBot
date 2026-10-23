@@ -258,7 +258,8 @@ public:
         int best = -1;              // index of the best judged idea
         int fullSurvivors = 0;
         // Route: the route's leg search, a slice at a time, before the other
-        // ideas are made (docs/ROUTE_ENGINE_PLAN.md step 3).
+        // ideas are made (docs/ROUTE_ENGINE_PLAN.md step 3); a repair's rescue
+        // leg runs in it too (see beginRescueLeg).
         enum Stage { Route, Steers, Gpu, GpuFull, Search, Rest, Verdict, Trim };
         Stage stage = Steers;
         bool hard = false;          // needed more than the cheap ideas, or is repairing: worth remembering
@@ -294,7 +295,13 @@ public:
         bool gpuGained = false;     // the last round got further than any before it
         size_t restEnd = 0;         // the single-change and random ideas end here (the search's comes after)
         bool searching = false;     // the branching search is running
-        bool routeLeg = false;      // the route's leg search is out (the Route stage)
+        bool routeLeg = false;      // a leg search is out (the Route stage): the route's, or the rescue's below
+        // GucciBot (2026-10-23): this repair decision runs a rescue leg to a
+        // gate at rescueX (see beginRescueLeg) - still to begin while `rescue`
+        // is set, and the leg out is that one while `rescueLeg` is.
+        bool rescue = false;
+        bool rescueLeg = false;
+        float rescueX = 0.0f;
         // Where the search ran from and its key in the run memo (see memoStart).
         const Trajectory::SimStart* searchMemoFrom = nullptr;
         std::pair<uint64_t, uint64_t> searchKey{0, 0};
@@ -421,6 +428,13 @@ public:
     // why there were none - and the ideas made after the route's.
     void takeRouteLeg(Decision& d, const Trajectory::Leg& leg);
     void finishIdeas(Decision& d);
+    // GucciBot (2026-10-23): rescue legs. At the stops of a repair whose spot
+    // has beaten it before, a leg search for a way past the death: whether
+    // this decision runs one (and its gate), beginning it, and what it found
+    // put in front of the other ideas (see the definitions).
+    bool rescueWanted(Decision& d);
+    bool beginRescueLeg(Decision& d);
+    void takeRescueLeg(Decision& d, const Trajectory::Leg& leg);
     int calmTicks() const;
     // The counts every leg search gets, and why one could not run (logged);
     // true when it found a way.
@@ -588,6 +602,7 @@ public:
     struct Repair {
         bool active = false;
         uint64_t deathTick = 0;        // where the death is (real, or where the simulation sees it)
+        float deathX = 0.0f;           // ... and its x, as the spot is filed (a rescue leg's gate is past it)
         uint64_t from = 0;             // the tick the dead end was declared at (the stops count back from here)
         uint64_t floor = 0;            // never resume before this tick (the limit)
         int probe = 0;                 // how many stops were tried so far

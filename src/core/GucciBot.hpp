@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-hg (Pathfinder: a ship's or wave's spam of taps is tried without them - Clubstep's busiest second was a ship tapping every tick)"
+    "2026-10-23-hh (Pathfinder: a repair at a spot that has beaten it twice runs a rescue leg past the death from every stop and tries its ways first)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

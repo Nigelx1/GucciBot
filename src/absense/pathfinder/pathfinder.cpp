@@ -7,6 +7,7 @@
 #include <climits>
 #include <cstdarg>
 #include <cstdio>
+#include <iterator>
 
 #include "absense/compat/bot.hpp"
 #include "absense/compat/bot.hpp"
@@ -94,6 +95,10 @@ constexpr double kCalmSeconds = 0.033;
 // slices is only a safety stop, well past what the steps take.
 constexpr int kDriveLegSteps = 60000;
 constexpr double kDriveLegSafetyMs = 6000.0;
+// GucciBot (2026-10-23): how far past a repaired dead end a rescue leg's gate
+// is (see beginRescueLeg): two blocks, so a way in has got clear of what killed
+// the player there, not just up to it.
+constexpr float kRescuePast = 60.0f;
 // Nigel (2026-10-22, answer 3 in docs/ROUTE_ENGINE_PLAN.md): five minutes on
 // one spot - the best tick not moving on - and the run stops and says where.
 constexpr double kStuckSeconds = 300.0;
@@ -2666,6 +2671,124 @@ void AbsensePathfinder::finishIdeas(Decision& d) {
     d.stage = Decision::Steers;
 }
 
+// ---- Rescue legs (GucciBot, 2026-10-23)
+
+// A dead end that keeps coming back to one spot is repaired from the stops
+// before it, so the way past has to come from one of them. What a stop tries -
+// steers, taps and releases, the played path with an input moved, random ideas,
+// the branching search - are shapes tried one at a time, not a search for the
+// way, and a narrow way is easily none of them. On The Nightmare (online 13519,
+// the normal engine) every repair died at object 61 at (21345, 94) in a ball
+// corridor, 224 dead ends in five minutes, while the leg search
+// (gucci_route_leg, any height) from the saved path's state at tick 16050 found
+// a way to x 21500 in half a second; from tick 16200 there was none. So once a
+// spot has beaten a repair - two dead ends there, or widened - every stop's
+// decision of its repairs also runs a leg search from the stop's own state to a
+// gate two blocks past the dead end, at any height. Not with Route drives (its
+// decisions are legs already), not for two players with separate controls, and
+// not where a leg cannot go: a platformer, or a player going left or already
+// past the gate (legs go rightwards to a gate ahead of where they begin).
+bool AbsensePathfinder::rescueWanted(Decision& d) {
+    if (!m_repair.active || d.pair || absense::route::drivesEnabled()) return false;
+    auto* pl = PlayLayer::get();
+    if (!pl || pl->m_isPlatformer || d.tick >= m_repair.deathTick) return false;
+    const double tps = Bot::get()->updater().getTps();
+    const Trap* trap = trapAt(m_repair.deathTick, (uint64_t)std::lround(32.0 * std::max(1.0, tps / 240.0)));
+    if (!trap || (trap->fails < 2 && trap->level == 0)) return false;
+    d.rescueX = m_repair.deathX + kRescuePast;
+    const Trajectory::StartState st = decisionState(d);
+    return !st.goingLeft && st.x < d.rescueX;
+}
+
+// The rescue leg itself, from the decision's own state (a stop's kept start)
+// to x rescueX at any height, in slices like the route's legs (the Route
+// stage). Its budget is simulated steps - a drive leg's, and up to four times
+// that at a widened spot, as the search's grows there - so a stop gives the same
+// answer on every run; the clock is only a safety stop. No calm gap: a leg that
+// prefers one falls back to none only once everything has died with it, each
+// try starting over inside the same steps, and the way a rescue is for is the
+// one the calm ideas keep missing (its ways are still ranked fewest changes
+// first). False when it could not begin; the line says why.
+bool AbsensePathfinder::beginRescueLeg(Decision& d) {
+    d.rescue = false;  // one try a decision
+    auto* pl = PlayLayer::get();
+    auto* traj = Bot::get()->trajectory().unsafeInner();
+    Trajectory::Leg refused;
+    if (pl && traj) {
+        const double tps = Bot::get()->updater().getTps();
+        const int widened = 1 + std::min(d.level, 3);
+        Trajectory::LegGoal goal;
+        goal.inDecision = true;
+        goal.held = d.held;
+        goal.x = d.rescueX;
+        goal.lo = 1.0f;  // lo > hi: any height, as gucci_route_leg asks for it
+        goal.hi = 0.0f;
+        goal.maxTicks = d.H;
+        goal.frontierCap = 128;
+        goal.maxSteps = (int)std::lround(kDriveLegSteps * std::max(1.0, tps / 240.0) * widened);
+        goal.maxMs = kDriveLegSafetyMs * widened;
+        goal.dotsEvery = 0;
+        goal.witnesses = 3;
+        goal.calmTicks = 0;
+        if (traj->beginLeg(pl, goal, refused)) {
+            d.rescueLeg = true;
+            return true;
+        }
+    } else {
+        refused.error = "the simulation is not there";
+    }
+    takeRescueLeg(d, refused);
+    return false;
+}
+
+// What a rescue leg came back with: each way in an idea of its own - the way,
+// then a steer 16 on past the gate, as a route idea is made - put in front of
+// every other idea, so they are judged first. Nothing else about them is
+// special: no gate of the route's (better() gives them no place ahead), the
+// decision's own bar, the slack check and the trim as for any idea. One line
+// either way.
+void AbsensePathfinder::takeRescueLeg(Decision& d, const Trajectory::Leg& leg) {
+    const unsigned long long tick = (unsigned long long)d.tick;
+    const unsigned long long before = (unsigned long long)(m_repair.deathTick > d.tick ? m_repair.deathTick - d.tick : 0);
+    if (leg.error) {
+        log("tick %llu: rescue leg to x %.0f (%llu before the dead end) could not run: %s (%llu steps)", tick, d.rescueX,
+            before, leg.error, (unsigned long long)leg.steps);
+        return;
+    }
+    if (leg.outcome != Trajectory::Leg::Outcome::Found || leg.witness.empty()) {
+        const char* why = leg.outcome == Trajectory::Leg::Outcome::Impossible ? "impossible"
+                          : leg.outcome == Trajectory::Leg::Outcome::NotFound ? "nothing alive gets there"
+                                                                              : "out of room or steps";
+        log("tick %llu: rescue leg to x %.0f (%llu before the dead end): not found (%s) after %d ticks, %llu steps, "
+            "%.0f ms",
+            tick, d.rescueX, before, why, leg.ticks, (unsigned long long)leg.steps, leg.ms);
+        return;
+    }
+    const double tps = Bot::get()->updater().getTps();
+    const int lookahead = std::max(1, (int)std::lround(16.0 * std::max(1.0, tps / 240.0)));
+    std::vector<const std::vector<TickInput>*> ways{&leg.witness};
+    for (auto const& w : leg.alternates) ways.push_back(&w);
+    std::vector<Candidate> rescue;
+    for (size_t k = 0; k < ways.size(); k++) {
+        const std::vector<TickInput>& way = *ways[k];
+        if (way.empty() || (int)way.size() > d.H) continue;
+        Candidate c;
+        c.name = k == 0 ? fmt::format("rescue leg to x {:.0f}", d.rescueX)
+                        : fmt::format("rescue leg to x {:.0f} #{}", d.rescueX, k + 1);
+        c.steer = lookahead;
+        c.prefix = way;
+        rescue.push_back(std::move(c));
+    }
+    log("tick %llu: rescue leg to x %.0f (%llu before the dead end): found %zu way%s in after %d ticks, %llu steps, "
+        "%.0f ms; tried first",
+        tick, d.rescueX, before, rescue.size(), rescue.size() == 1 ? "" : "s", leg.ticks, (unsigned long long)leg.steps,
+        leg.ms);
+    // In front of the rest. Nothing points into the list yet - no idea has
+    // been judged, and the marks of the stages after this one are set later.
+    d.candidates.insert(d.candidates.begin(), std::make_move_iterator(rescue.begin()),
+                        std::make_move_iterator(rescue.end()));
+}
+
 // ---- Route drives (docs/ROUTE_ENGINE_PLAN.md step 5)
 
 // How far a drive's idea must live to get through: `clear` ticks past its gate
@@ -3114,6 +3237,9 @@ void AbsensePathfinder::decide() {
         // time (the Route stage below) instead of holding the game up for up to
         // a fifth of a second at every decision; the other ideas are made when
         // it is back, after its own, as before.
+        // GucciBot (2026-10-23): a stop of a repair whose spot has beaten it
+        // before also runs a rescue leg past the death (see beginRescueLeg).
+        d.rescue = rescueWanted(d);
         bool routeOut = false;
         if (absense::route::drivesEnabled() && !d.pair) {
             // GucciBot (docs/ROUTE_ENGINE_PLAN.md step 5), Route drives: this
@@ -3194,6 +3320,9 @@ void AbsensePathfinder::decide() {
                 else takeRouteLeg(d, refused);
             }
         }
+        // The rescue leg here when no route leg is out; otherwise after it, in
+        // the Route stage (one leg search runs at a time).
+        if (!routeOut && d.rescue) routeOut = beginRescueLeg(d);
         if (routeOut) {
             d.routeLeg = true;
             d.stage = Decision::Route;
@@ -3326,14 +3455,23 @@ void AbsensePathfinder::decide() {
         return d.next >= end;
     };
 
-    // ---- the route's leg search, a slice at a time (step 3)
+    // ---- the route's leg search, a slice at a time (step 3), and a repair's
+    // rescue leg after it
     if (d.stage == Decision::Route && !d.drives) {
         auto* traj = bot->trajectory().unsafeInner();
         if (d.routeLeg && traj && traj->legActive()) {
             if (!traj->stepLeg(m_deadline)) return;  // more next time
-            takeRouteLeg(d, traj->finishLeg());
+            if (d.rescueLeg) takeRescueLeg(d, traj->finishLeg());
+            else takeRouteLeg(d, traj->finishLeg());
+        } else if (d.rescueLeg) {
+            log("tick %llu: rescue leg to x %.0f: its search was dropped", (unsigned long long)d.tick, d.rescueX);
         }
         d.routeLeg = false;
+        d.rescueLeg = false;
+        if (d.rescue && beginRescueLeg(d)) {
+            d.routeLeg = true;
+            return;  // its slices from the next call on
+        }
         finishIdeas(d);
     }
 
@@ -5301,6 +5439,13 @@ void AbsensePathfinder::beginRepair() {
     // starts one stop further back than the last one did, so every failure
     // moves the retry a little earlier instead of hammering the same tick.
     const uint64_t slack = (uint64_t)std::lround(32.0 * scale);
+    // The obstacle's x, not the player's: a dead end the simulation
+    // declares from far before the spot must be filed under the same spot
+    // as a real death at it (the memory matches spots within 100 units).
+    // (GucciBot: the repair keeps it too - a rescue leg aims past it.)
+    auto* layer = PlayLayer::get();
+    const float atX = m_deadEndAt != 0 ? m_deadEndX
+                                       : (layer && layer->m_player1 ? layer->m_player1->m_position.x : 0.0f);
     Trap* trap = trapAt(obstacle, slack);
     if (trap) {
         // Only a real death counts: the simulation declaring the same dead end
@@ -5323,12 +5468,6 @@ void AbsensePathfinder::beginRepair() {
                 (unsigned long long)m_lastResume.tick, (unsigned long long)obstacle, trap->fails);
         }
     } else {
-        // The obstacle's x, not the player's: a dead end the simulation
-        // declares from far before the spot must be filed under the same spot
-        // as a real death at it (the memory matches spots within 100 units).
-        auto* layer = PlayLayer::get();
-        const float atX = m_deadEndAt != 0 ? m_deadEndX
-                                           : (layer && layer->m_player1 ? layer->m_player1->m_position.x : 0.0f);
         const bool learning = SLSettings::get()->pathfinder.learn && absense::memory::Store::get().isOpen();
         const int known = learning ? absense::memory::Store::get().spotFails(atX) : 0;
         m_traps.push_back({obstacle, std::max(1, known), atX});
@@ -5352,6 +5491,7 @@ void AbsensePathfinder::beginRepair() {
 
     m_repair.active = true;
     m_repair.deathTick = obstacle;
+    m_repair.deathX = atX;
     m_repair.from = tick;
     // A widened spot begins its walk a second further back a level, up to three.
     const uint64_t back = limit + (uint64_t)std::lround((double)std::min(trap->level, 3) * tps);
