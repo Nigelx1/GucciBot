@@ -347,8 +347,10 @@ namespace gucci::ui::pages {
                 if (s.subframeBisect)
                     flag("Faster sub-tick search",
                          "Fewer test runs for each sub-tick input: the search starts at the edges the whole-frame "
-                         "count found instead of walking out from the input. Windows should come out the same. Off "
-                         "while the two are being compared. Not with Full range sweep",
+                         "count found instead of walking out from the input. Windows come out the same unless one "
+                         "has a gap inside it smaller than a frame; this search can step over that gap, so the "
+                         "window can come out different, usually wider. Off while the two are being compared. Not "
+                         "with Full range sweep",
                          &FW::fastSubtick);
                 if (feature("Whole numbers on markers",
                             "Keep the whole-frame count on the markers and show the sub-tick value in the top right "

@@ -2560,6 +2560,14 @@ bool FrameWindowAnalyzer::captureDiedInSpan() const {
 // die), and bisects the tick between, as the usual search bisects its last
 // step. About 9 tests a side, and the same edge wherever the window has no gap.
 //
+// Where the window has a gap narrower than a tick, the two searches can end in
+// different places. This one tests whole ticks and then bisects, so it can
+// step over the gap and report the window wider than the usual search, which
+// stops at the first test that dies. Less often it reports it narrower: its
+// bisect can land on a dead slot that the usual search's stride stepped over.
+// Of two runs that disagree on a side, the one that tested a slot that died
+// inside the other's window has the strict edge on that side.
+//
 // The checks are there because the two passes don't test a shift the same
 // way. A sub-tick test moves the input alone (Buffer). The whole-frame pass
 // first moved the player's later inputs with it (Retime), and with Recovery
