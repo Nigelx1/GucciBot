@@ -22,6 +22,7 @@
 #include "analysis/trajectory.hpp"
 #include "tools/macro_check.hpp"
 #include "core/GucciBot.hpp"
+#include "hacks/safemode.hpp"
 #include "render/renderer.hpp"
 
 #include <Geode/Geode.hpp>
@@ -223,7 +224,10 @@ namespace gucci::mcp {
         server.addTool({
             "gucci_get_state",
             "Everything about what GucciBot and the game are doing right now: "
-            "build, mode, frame, level, player position, and who owns the run.",
+            "build, mode, frame, level, player position, who owns the run, and "
+            "safe_mode (switch: Hacks > Safe mode; auto: auto safe mode; "
+            "bot_runs_count: false when a macro, Calculate or pathfinder run "
+            "can't save progress or stats).",
             obj(),
             [](matjson::Value const&) {
                 auto* gb = GucciEngine::get();
@@ -237,6 +241,15 @@ namespace gucci::mcp {
                 out["tps"] = gb->updater.m_tps;
                 out["speedhack"] = gb->updater.m_speedhack;
                 out["paused"] = gb->updater.m_paused;
+                {
+                    // GucciBot (2026-10-23): automated runs only with one of these
+                    // on (they play on the owner's real account).
+                    auto sm = obj();
+                    sm["switch"] = gb->protectedMode;
+                    sm["auto"] = safemode::autoSafeMode();
+                    sm["bot_runs_count"] = !gb->protectedMode && !safemode::autoSafeMode();
+                    out["safe_mode"] = sm;
+                }
 
                 auto owner = runOwner();
                 out["run_owner"] = owner.empty() ? "none" : owner;
