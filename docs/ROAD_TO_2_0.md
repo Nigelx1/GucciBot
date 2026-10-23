@@ -134,7 +134,7 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 
 - [ ] The new GD version: Geode support, or the standalone copy
 - [ ] The trailer ships with 2.0
-- [ ] Release day: master and engine-port-2.0 level with multiplatform, version bump, about.md/README/site/changelog, tag v2.0.0, the GitHub package as Latest, the site's Download link
+- [ ] Release day: version bump, about.md/README/site/changelog, tag v2.0.0, the GitHub package as Latest, the site's Download link
 
 ## Not coming back
 

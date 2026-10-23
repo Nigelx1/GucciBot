@@ -29,13 +29,13 @@ A **Geometry Dash macro bot**, distributed as the Geode mod `nigelx1.guccibot` (
 
 **Target:** GD 2.2081, Geode 5.10.1 (Nigel runs 5.11.1 fine). Windows x64 is home (tested in-game by Nigel); macOS, iOS and Android since beta.3, built by CI (`.github/workflows/multi-platform.yml`). The Android build has run on a phone (Nigel, 2026-10-13); macOS and iOS have had little testing. `GB_NATIVE_ENGINE` (`src/core/platform.hpp`) marks what needs the Windows engine; memory project_multiplatform has the rest. **Versions (check source):** `MOD_VERSION "2.0.0-beta.4"`, `GBR6_VERSION 1`, `BRR_FORMAT_VERSION 4`.
 
-**Branches:** work happens on `multiplatform`; every push to it makes GitHub build the universal package (Section 2). `master` and `engine-port-2.0` are fast-forwarded to it at each release (last: beta.4, 2026-10-13), so all three are 2.0 code; keep them level. `master` became 2.0 code on 2026-10-02, to take the TTR code off the default branch. The 1.8 release download still exists as a tag/release.
+**Branches:** all work happens on `master` (Nigel, 2026-10-22: "permanently only work on master"); every push to it makes GitHub build the universal package (Section 2). `multiplatform` (where work happened until then) and `engine-port-2.0` are frozen: don't push to them. `master` became 2.0 code on 2026-10-02, to take the TTR code off the default branch. The 1.8 release download still exists as a tag/release.
 
 ---
 
 ## 2. Build & test
 
-- **One universal build (Nigel, 2026-10-12).** Every push to `multiplatform` makes GitHub build ONE `.geode`: all five platforms plus every resource. The renderer's FFmpeg DLLs come from the release asset in [guccibot-build-files](https://github.com/Nigelx1/guccibot-build-files), and the build checks their SHA-256. That file is THE build:
+- **One universal build (Nigel, 2026-10-12).** Every push to `master` makes GitHub build ONE `.geode`: all five platforms plus every resource. The renderer's FFmpeg DLLs come from the release asset in [guccibot-build-files](https://github.com/Nigelx1/guccibot-build-files), and the build checks their SHA-256. That file is THE build:
   - releases ship it as-is, with no more swapping in a local Windows binary;
   - testers get it;
   - `.\install_ci_build.bat` puts it in Nigel's game after you push. It waits about 8 minutes for the build, checks the 5 binaries and 7 DLLs, and keeps a copy in `build\ci\`.

@@ -107,7 +107,7 @@ Also in Settings: **BIG BRRRR**, a core feature of this mod, and **Bass Shake**,
 
 ## Building it
 
-- Target: Geometry Dash 2.2081. Every push to `multiplatform` builds Windows, macOS, iOS and Android on GitHub Actions (`.github/workflows/multi-platform.yml`) into **one `.geode` with everything in it**: all five platforms and every resource. That file *is* the release: one universal build per commit.
+- Target: Geometry Dash 2.2081. Every push to `master` builds Windows, macOS, iOS and Android on GitHub Actions (`.github/workflows/multi-platform.yml`) into **one `.geode` with everything in it**: all five platforms and every resource. That file *is* the release: one universal build per commit.
 - The renderer's FFmpeg DLLs are too big for this repo (one is over GitHub's 100 MB limit), so they live in [guccibot-build-files](https://github.com/Nigelx1/guccibot-build-files); the build downloads them and checks their SHA-256 before packing them in.
 - `.\install_ci_build.bat` installs GitHub's build of the commit you have checked out (waiting if it's still building) and keeps a copy in `build\ci\`.
 - Requires the [Geode SDK](https://geode-sdk.org/) and its usual toolchain (CMake, Ninja, MSVC).
@@ -119,7 +119,7 @@ Also in Settings: **BIG BRRRR**, a core feature of this mod, and **Bass Shake**,
 
 ## Status
 
-**1.8** is the stable release. **2.0** is in beta, at **2.0.0-beta.4**, with work since then on the `multiplatform` branch (every push builds the universal package): GucciBot's engine reconciled against Silicate's function by function. Calculate, playback, practice-mode recording and the Pathfinder (Absense's, ported in) were confirmed in-game on beta.2. Beta.3 rebuilt the menu and every feature that came from ToastyReplay from scratch, and added macOS, iOS and Android. Beta.4's additions (auto safe mode, the setup check, the Disable bot switch, the phone menu, the Mac menu key) were tried in-game before release, and the Android build has run on a phone. Most of beta.3's rebuilt features still haven't had a feature-by-feature human test, and every fix still waiting on one says so in its own commit message. If you want something that's been tested by an actual human, use 1.8.
+**1.8** is the stable release. **2.0** is in beta, at **2.0.0-beta.4**, with work since then on `master` (every push builds the universal package): GucciBot's engine reconciled against Silicate's function by function. Calculate, playback, practice-mode recording and the Pathfinder (Absense's, ported in) were confirmed in-game on beta.2. Beta.3 rebuilt the menu and every feature that came from ToastyReplay from scratch, and added macOS, iOS and Android. Beta.4's additions (auto safe mode, the setup check, the Disable bot switch, the phone menu, the Mac menu key) were tried in-game before release, and the Android build has run on a phone. Most of beta.3's rebuilt features still haven't had a feature-by-feature human test, and every fix still waiting on one says so in its own commit message. If you want something that's been tested by an actual human, use 1.8.
 
 ## Contact
 

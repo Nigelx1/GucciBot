@@ -7,7 +7,7 @@
 #   .\install_ci_build.bat            the commit checked out here (HEAD)
 #   .\install_ci_build.bat <commit>   another one
 #
-# Waits while GitHub is still building (a push to multiplatform takes about 8
+# Waits while GitHub is still building (a push to master takes about 8
 # minutes). Keeps a copy at build\ci\nigelx1.guccibot.geode for releases and
 # sharing. Needs the GitHub CLI (gh), signed in. Won't install while Geometry
 # Dash is running.
@@ -32,7 +32,7 @@ while ($true) {
         if ($run.status -eq "completed") { break }
         Write-Host "  still building ($($run.status))..."
     } else {
-        Write-Host "  no build for $short yet (pushed to multiplatform?) - waiting..."
+        Write-Host "  no build for $short yet (pushed to master?) - waiting..."
     }
     if ((Get-Date) -gt $deadline) { throw "no finished build for $short after 30 minutes" }
     Start-Sleep -Seconds 30

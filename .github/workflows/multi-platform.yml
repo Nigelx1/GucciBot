@@ -12,7 +12,7 @@ name: Multi-platform build
 on:
   workflow_dispatch:
   push:
-    branches: [multiplatform]
+    branches: [master]
 
 jobs:
   build:
