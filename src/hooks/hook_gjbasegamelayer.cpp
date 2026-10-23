@@ -41,6 +41,12 @@ namespace gucci::slopediag {
 }
 
 #if GB_NATIVE_ENGINE // Windows midhooks and raw addresses (core/platform.hpp)
+// Set while the game works through a queue processQueuedButtons has already
+// recorded (saveQueuedButtons): the handleButton calls inside it are those same
+// presses, and recording them again duplicated every tick with more than one
+// (see handleButton).
+static bool s_queueRecorded = false;
+
 static void shakeRandomOverride(SafetyHookContext& ctx) {
     uint64_t& state = GucciEngine::get()->replay.m_shakeRandomState;
     state = (int)((214013 * state + 2531011) >> 16) & 0x7FFF;
@@ -655,8 +661,18 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         //     here would land on the arrival frame, with no offset.
         // Silicate only records from the queue unless its alternate-hook
         // setting is on, which is why it never had the first problem.
+        //   - (2026-10-23) The game working through a queue that was just
+        //     recorded. The second copy was only ever swallowed when a tick had
+        //     one event: addAction drops an event that repeats the frame's
+        //     previous one, and a tick of release, press, release recorded
+        //     R P R from the queue and then P R again from here - R P R P R,
+        //     a press and a release the game never took. Absense's pathfinder
+        //     plays ticks like that all the time (taps from a held button, its
+        //     double presses), so its paths came back with phantom presses
+        //     that only showed at the next orb: ToE2 paths finished in the
+        //     run and died on a cold replay at 10%.
         if (!gb->isRecording() || gb->updater.inputFpsActive() ||
-            cbf::Engine::get()->m_midStep || scbf::LiveRecorder::get().recording()) {
+            cbf::Engine::get()->m_midStep || scbf::LiveRecorder::get().recording() || s_queueRecorded) {
             return GJBaseGameLayer::handleButton(pressed, button, player1);
         }
         addInputToReplay({.m_button = (PlayerButton)button,
@@ -755,6 +771,14 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
                 live.passThrough(m_queuedButtons);
             requeueInverted();
             saveQueuedButtons();
+            // The game's own processQueuedButtons below hands these to
+            // handleButton, which must not record them a second time.
+            struct QueueRecorded {
+                QueueRecorded() { s_queueRecorded = true; }
+                ~QueueRecorded() { s_queueRecorded = false; }
+            } queueRecorded;
+            GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
+            return;
         } else if (gb->isPlaying()) {
             uint32_t frame = gb->updater.getFrame();
             // The unshifted branch exists for GucciBot's own analyzer (Juice's

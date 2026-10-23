@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-gg (Assistant Access: the tick probe also counts the jump pushes and releases player 1 takes each tick)"
+    "2026-10-23-gh (Recording: a tick with several button events is recorded once, not with phantom extra presses - pathfinder paths now replay)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
