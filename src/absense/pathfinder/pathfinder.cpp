@@ -2232,7 +2232,19 @@ void AbsensePathfinder::decide() {
                 goal.witnesses = 3;
                 for (auto const& w : route->routes.front().points) goal.gates.push_back({w.x, w.band.lo, w.band.hi});
                 auto const leg = traj->sweepLeg(pl, goal);
-                if (leg.error) m_stats.routeErrors++;
+                if (leg.error) {
+                    m_stats.routeErrors++;
+                    // Why (step 1d): the first time each reason comes up, and
+                    // every 50th after that.
+                    static std::string s_lastWhy;
+                    static uint64_t s_sameWhy = 0;
+                    if (s_lastWhy != leg.error) {
+                        s_lastWhy = leg.error;
+                        s_sameWhy = 0;
+                    }
+                    if (s_sameWhy++ % 50 == 0)
+                        log("tick %llu: no route search here: %s", (unsigned long long)d.tick, leg.error);
+                }
                 if (!leg.error) {
                     m_stats.routeLegs++;
                     m_stats.routeTicks += (uint64_t)leg.ticks;

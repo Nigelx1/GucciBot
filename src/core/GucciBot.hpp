@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-22-fr (Pathfinder: random ideas and route legs come out the same on every run)"
+    "2026-10-22-fs (Pathfinder: the log says why a route search could not run)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
