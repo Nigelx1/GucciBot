@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-gk (Pathfinder: a result is named after its own level, not over the last level result)"
+    "2026-10-23-gl (Recording: going back to a kept state does not reseed the attempt)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

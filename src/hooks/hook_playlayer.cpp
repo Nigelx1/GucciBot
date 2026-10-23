@@ -355,8 +355,13 @@ class $modify(GB7PlayLayer, PlayLayer) {
                 state = gb->rngSeedVal;
 
             rs.m_startingSeedThisAttempt = state;
+            // A reset that forces a kept state (PracticeFix::resetWithState, the
+            // Absense pathfinder's kept-state restore) is a step back inside the
+            // same attempt, not a fresh one: reseeding there gave the macro a
+            // seed its earlier ticks were not played under, and a cold replay
+            // of a level with random triggers or variance went another way.
             if (gb->practiceFix.m_savedCheckpoints.empty() && !gb->practiceFix.m_loadCheckpoint &&
-                !gb->updater.m_canDie) {
+                !gb->practiceFix.m_forcedState && !gb->updater.m_canDie) {
                 state = 214013 * state + 2531011;
                 rs.m_startingSeed = state;
                 rs.m_startingSeedThisAttempt = state;
