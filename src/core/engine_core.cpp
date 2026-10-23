@@ -549,6 +549,13 @@ namespace gucci {
             } else {
                 m_actionAtom.m_actions.clear();
                 m_pathSamples.clear();
+                // GucciBot (2026-10-23): the clicks these windows were
+                // measured on are gone: drop them from memory, or Save writes
+                // them next to this new recording. The old macro's sidecar on
+                // disk is not touched. (Not in setMode(Recording): Calculate's
+                // Test at the playhead switches to recording right after
+                // measuring, and Record switched on and off would lose them.)
+                gb->forgetMacroWindows();
                 m_inputIndex = 0;
                 log::info("[GucciBot] Recording: died@{}, full restart (no checkpoint) "
                           "— cleared {} input(s), re-recording from frame 0",
@@ -2781,9 +2788,11 @@ namespace gucci {
     }
 
     // Loading a macro already swaps its windows in (loadAcResults clears
-    // first). This is for the paths that drop a macro without loading
-    // another -- starting a fresh recording, deleting the loaded macro --
-    // which used to leave the old macro's windows drawn over the level.
+    // first). This is for the paths that drop a macro's clicks without
+    // loading another -- a fresh recording (onReset's full restart), a
+    // pathfinder's macro replacing it -- which used to leave the old macro's
+    // windows drawn over the level and saved next to the new one. (Deleting
+    // the loaded macro keeps it loaded, windows too: Save brings it back.)
     void GucciEngine::forgetMacroWindows() {
         if (::Bot::get()->frameWindow().running())
             return;

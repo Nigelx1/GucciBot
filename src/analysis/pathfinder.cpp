@@ -1564,6 +1564,10 @@ namespace gucci {
                 return a.m_frame < b.m_frame;
             });
             gb->replay.m_actionAtom.m_actions = committed;
+            // GucciBot (2026-10-23): the frame windows in memory were measured
+            // on the clicks this replaces. Saved below with the search's
+            // macro, they would stand on clicks they were never measured on.
+            gb->forgetMacroWindows();
             resultInputCount = committed.size();
 
             // Save it to disk here rather than leaving the user to press

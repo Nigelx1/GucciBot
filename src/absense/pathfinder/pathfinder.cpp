@@ -367,6 +367,12 @@ bool AbsensePathfinder::start() {
         // GucciBot one later (getFrame() + 1). "Everything from tick t on" is
         // clipActions(t) there and clipFrom(t + 1) here.
         rs.m_actionAtom.clipFrom((uint32_t)tick + 1);
+        // GucciBot (2026-10-23): started before the loaded macro's first
+        // input (the level start), none of its clicks is left, and its frame
+        // windows would be saved with the search's macro (saveResult,
+        // saveFurthest).
+        if (rs.m_actionAtom.empty())
+            gucci::GucciEngine::get()->forgetMacroWindows();
         rs.m_inputIndex = rs.m_actionAtom.length();
         bot->setMode(Bot::Mode::Recording);
     }
