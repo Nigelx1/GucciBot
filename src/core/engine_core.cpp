@@ -449,21 +449,19 @@ namespace gucci {
                 continue;
             held[(a.m_player2 ? 3 : 0) + button - 1] = a.m_holding;
         }
-        bool const twoPlayer = pl->m_levelSettings && pl->m_levelSettings->m_twoPlayerMode;
         for (int lane = 0; lane < 6; lane++) {
             if (!held[lane])
                 continue;
             bool const p2 = lane >= 3;
             int const button = lane % 3 + 1;
-            // GucciBot (2026-10-23): in a two-player level a lane's flag names
-            // the player it moves, whatever Flip 2-Player Controls is set to:
-            // addInputToReplay stores the button side flipped by the setting,
-            // and GD flips a side by it again when the input is played, as
-            // Silicate's practice restore and maintain-gravity rely on.
-            // playerFlipped turns a flag into a button side, not a player; it
-            // picked the other player here while the setting was on. In a
-            // one-player level every lane moves player 1.
-            auto* who = (twoPlayer && p2) ? pl->m_player2 : pl->m_player1;
+            // GucciBot (2026-10-23): the player a lane's flag moves when it is
+            // played (flagMovesPlayer2): in a two-player level the flag itself
+            // outside platformer, whatever Flip 2-Player Controls is set to,
+            // and playerFlipped(flag) in a platformer, where GD doesn't flip
+            // sides. playerFlipped(flag) everywhere picked the other player
+            // outside platformer while the setting was on. In a one-player
+            // level every lane moves player 1.
+            auto* who = flagMovesPlayer2(pl, p2) ? pl->m_player2 : pl->m_player1;
             if (!who || (bool)who->m_holdingButtons[button])
                 continue;
             m_actionAtom.addAction(frame, static_cast<gb::ActionType>(button), false, p2);

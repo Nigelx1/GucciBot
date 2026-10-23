@@ -378,8 +378,9 @@ namespace gucci {
         // "Flip 2-Player Controls". addInputToReplay stores a button side
         // flipped by it, and playback queues a stored flag flipped by it again
         // (playerFlipped(flag)), so a flag is played on the side it was
-        // recorded from. Off, it returns its argument. Which player GD hands
-        // that side to depends on the level: see sideFor.
+        // recorded from while the setting stays as it was. Off, it returns its
+        // argument. Which player GD hands that side to depends on the level:
+        // see sideFor and flagMovesPlayer2.
         bool playerFlipped(bool player2) {
             return player2 ^ hasFlippedControls();
         }
@@ -400,6 +401,17 @@ namespace gucci {
             bool const twoPlayer =
                 layer && layer->m_levelSettings && layer->m_levelSettings->m_twoPlayerMode;
             return (twoPlayer && !layer->m_isPlatformer) ? playerFlipped(player2) : player2;
+        }
+        // The player a stored flag moves when it is played now (true: player
+        // 2). Playback queues playerFlipped(flag). Outside platformer GD flips
+        // that side back by the setting, so in a 2-player level the flag names
+        // the player whatever the setting is; in a platformer GD doesn't, so
+        // the side played is the player: playerFlipped(flag). In a 1-player
+        // level a click moves player 1 (and player 2 with it in a dual): false.
+        bool flagMovesPlayer2(GJBaseGameLayer* layer, bool flag) {
+            bool const twoPlayer =
+                layer && layer->m_levelSettings && layer->m_levelSettings->m_twoPlayerMode;
+            return twoPlayer && (layer->m_isPlatformer ? playerFlipped(flag) : flag);
         }
 
         void save(const std::filesystem::path& path, bool noOverwrite = false);

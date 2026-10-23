@@ -513,12 +513,12 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         // before the input is handed onward.
         if (auto& acfw = ::Bot::get()->frameWindow(); acfw.running()) {
             // GucciBot (2026-10-23): the player the press moves, as the
-            // analyzer's movesPlayer2 takes it: in a 2-player level the stored
-            // flag names it, Flip 2-Player Controls on or off (playerFlipped
-            // gives the button side to queue, not the player); in a 1-player
-            // level it is player 1.
-            bool const twoPlayer = m_levelSettings && m_levelSettings->m_twoPlayerMode;
-            auto* actor = (twoPlayer && action.m_player2) ? m_player2 : m_player1;
+            // analyzer's movesPlayer2 takes it (flagMovesPlayer2): in a
+            // 2-player level the stored flag outside platformer, Flip 2-Player
+            // Controls on or off, and the side it is queued on in a platformer;
+            // in a 1-player level player 1.
+            auto* actor =
+                gb->replay.flagMovesPlayer2(this, action.m_player2) ? m_player2 : m_player1;
             acfw.notePress(action.m_frame,
                            action.m_player2,
                            cbf::canSplit(actor,
