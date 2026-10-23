@@ -703,6 +703,49 @@ void Trajectory::scanMovedGroups(GJBaseGameLayer* pl) {
     }
 }
 
+namespace {
+// How far above the highest object a copy can touch the void begins: ten
+// blocks, for a moving object that rises above where it was read.
+constexpr float kVoidMargin = 300.0f;
+}  // namespace
+
+bool Trajectory::inVoid(GJBaseGameLayer* pl, PlayerObject* p) {
+    if (!pl || !p || !pl->m_objects) return false;
+    if (pl->m_isPlatformer || p->m_isSideways) return false;
+    // A ship, UFO, wave or swing can steer back; only gravity carries the rest.
+    if (p->m_isShip || p->m_isBird || p->m_isDart || p->m_isSwing) return false;
+    if (!p->m_isUpsideDown || p->m_yVelocity <= 0.0) return false;
+    if (m_voidTopGen != moverCacheGeneration()) {
+        m_voidTopGen = moverCacheGeneration();
+        // What a copy can touch: everything the collision pass looks at, less
+        // the triggers that only fire by position (they stand anywhere, often
+        // high above the level).
+        float top = 0.0f;
+        for (auto* o : geode::cocos::CCArrayExt<GameObject*>(pl->m_objects)) {
+            if (!o) continue;
+            switch (o->m_objectType) {
+                case GameObjectType::Decoration:
+                case GameObjectType::EnterEffectObject:
+                case GameObjectType::SecretCoin:
+                case GameObjectType::UserCoin:
+                case GameObjectType::Collectible:
+                case GameObjectType::CollisionObject:
+                    continue;
+                case GameObjectType::Modifier:
+                    if (o->m_classType == GameObjectClassType::Effect &&
+                        !static_cast<EffectGameObject*>(o)->m_isTouchTriggered)
+                        continue;
+                    break;
+                default:
+                    break;
+            }
+            top = std::max(top, o->getObjectRect().getMaxY());
+        }
+        m_voidTop = top;
+    }
+    return m_voidTop > 0.0f && p->getPositionY() > m_voidTop + kVoidMargin;
+}
+
 void Trajectory::noteKiller(PlayerObject* p, GameObject* object) {
     if (!isFakePlayer(p)) return;
     if (m_killer.valid) return;  // the first hit of a tick is the one
@@ -2325,6 +2368,17 @@ struct Trajectory::Sim {
                 queuedMod2 = pl->m_gameState.m_timeModRelated2;
                 pl->m_gameState.m_timeModRelated = 0;
                 pl->m_gameState.m_timeModRelated2 = false;
+            }
+        }
+        // GucciBot (2026-10-23): a copy that has fallen out of the top of the
+        // level is dead where it leaves, not where the game gets round to it
+        // (Trajectory::inVoid). No object killed it: the run's killer is none.
+        for (int i = 0; i < count; i++) {
+            PlayerObject* p = players[i];
+            const bool dead = (p == t->m_fakePlayer1 && t->m_deadP1) || (p == t->m_fakePlayer2 && t->m_deadP2);
+            if (!dead && t->inVoid(pl, p)) {
+                t->noteKiller(p, nullptr);
+                t->hasDied(p);
             }
         }
         if (queuedMod != 0.0f) {  // put back so snapshot() keeps it and the next step applies it to every copy

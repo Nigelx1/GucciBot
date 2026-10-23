@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-gd (World: a game event of a player that is not one of the run copies stays out of the run - it turned the World off some launches)"
+    "2026-10-23-ge (Pathfinder: falling up out of the level counts as a death where it starts - Deadlocked 54 percent)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

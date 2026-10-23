@@ -198,6 +198,10 @@ class Trajectory {
     std::vector<SimBroken> m_simBroken;
     bool m_deadP1;
     bool m_deadP2;
+    // The top of what a copy can touch in the level (see inVoid), worked out
+    // once per read of the level.
+    float m_voidTop = 0.0f;
+    unsigned m_voidTopGen = ~0u;
 
     // Part of the rebuild signature. The hook meant to set them
     // (hooks/PlayerObject.cpp) modifies a PlayerObject::handleButton that
@@ -467,6 +471,17 @@ class Trajectory {
 
     const Killer& lastKiller() const { return m_killer; }
     void noteKiller(PlayerObject* p, GameObject* object);
+    // GucciBot (2026-10-23): a copy that has fallen out of the top of the
+    // level. Upside-down in a kind that cannot steer (cube, robot, ball,
+    // spider), moving up, and more than kVoidMargin above every object the
+    // level has that it could touch: nothing can land it or turn its gravity
+    // round again, and the game only kills it seconds later, thousands of
+    // units up. Until then a run counted those seconds as survived, so a way
+    // into the void outlived every way across - Deadlocked's upside-down robot
+    // at 54% fell up through a gap in the ceiling on every path the
+    // pathfinder kept, and every one died on the same tick. A run now takes
+    // the copy as dead where it leaves (Sim::step).
+    bool inVoid(GJBaseGameLayer* pl, PlayerObject* p);
     void clearKiller() { m_killer = Killer{}; }
     void clearRingContacts() {
         for (auto& m : m_ringTouch) m.clear();
