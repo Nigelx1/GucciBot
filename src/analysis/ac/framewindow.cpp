@@ -5055,8 +5055,8 @@ void FrameWindowAnalyzer::finishDependentPair() {
     } else if (independent || hit == 0) {
         m_depIndependent++;
         verdict = fmt::format(
-            "independent: within a frame of its own count at every alignment, "
-            "keeps {}",
+            "independent: within a frame of its own count at every alignment "
+            "measured, keeps {}",
             shown(strictW));
     } else {
         // GucciBot (2026-10-23): the average over the alignments where it
