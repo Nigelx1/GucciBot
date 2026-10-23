@@ -320,6 +320,7 @@
 #include "absense/physics/gjbasegamelayer.hpp"
 #include "absense/trajectory/trajectory.hpp"
 #include "absense/world/def.hpp"
+#include "absense/world/materialize.hpp"
 #include "absense/world/offsets.hpp"
 #include "absense/world/world.hpp"
 
@@ -629,17 +630,16 @@ void spawnObjectsInOrder(Run& run, int group, double delay, std::span<const int>
     for (int slot : run.def->spawnTriggeredIn(group)) {
         GameObject* o = objectOf(run, slot);
         if (!o) continue;
-        // A trigger the run's own ops moved is where they left it; any other
-        // is where the run's start has it. GucciBot (2026-10-23): that is the
-        // table's pose (base), not the node's x: the materializer writes a
-        // trigger the real game has moved since back to the table's pose only
-        // when a copy's window reaches it (-gx), and a node can still hold
-        // where an abandoned branch wrote it. (The node's float is the double
-        // the game moved, so the float of the pose is what the node held
-        // whenever the trigger stood where the run's start has it.)
+        // getPosition() is the node's. A trigger the run's own ops moved is
+        // where they left it; any other stands where the game has it.
+        // GucciBot (2026-10-23): the node as the game has it - in a PlayLayer
+        // a move writes m_positionX and never the node (review of -hd, from
+        // the game's code), so it is where the trigger stood when the level was
+        // set up or a checkpoint loaded. The materializer moves the nodes it
+        // writes: for one it has written, the node it saved first.
+        float x = run.objects ? run.objects->gameNodeX(slot, o) : o->getPositionX();
         const Pose& pose = run.cache->pose(*run.log, slot);
         const Pose& base = run.cache->base(slot);
-        float x = (float)base.x;
         if (pose.x != base.x) {
             x = (float)pose.x;
             markUncertain(ws, group);

@@ -380,6 +380,11 @@ class Materializer {
     void end();
 
     std::size_t writtenCount() const { return m_written.size(); }
+    // GucciBot (2026-10-23): an object's node x as the game has it. The game
+    // reads a trigger's node (an ordered spawn, fire.cpp), and in a PlayLayer
+    // a move never moves a node; write() does move it, so for an object it
+    // has written this is the node it saved before its first write.
+    float gameNodeX(int slot, GameObject* o) const;
     // The level map's ghost run (Trajectory::beginGhost): every row of the
     // copy's columns, as for a spider, so what stands above or below the
     // ghost is where the log has it too.

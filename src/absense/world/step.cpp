@@ -400,22 +400,22 @@ void emitOp(Run& run, const Op& op) {
             // What moveObjects and the silent move add: the float step as a double.
             r.x += std::fabs((double)op.dx);
             r.y += std::fabs((double)op.dy);
-            // ... and the range of the signed sums (see GroupReach).
-            r.netX += (double)op.dx;
-            r.netY += (double)op.dy;
-            if (std::isnan(r.netX)) {
-                r.loX = -std::numeric_limits<double>::infinity();
-                r.hiX = std::numeric_limits<double>::infinity();
-            } else {
-                r.loX = std::min(r.loX, r.netX);
-                r.hiX = std::max(r.hiX, r.netX);
-            }
-            if (std::isnan(r.netY)) {
-                r.loY = -std::numeric_limits<double>::infinity();
-                r.hiY = std::numeric_limits<double>::infinity();
-            } else {
-                r.loY = std::min(r.loY, r.netY);
-                r.hiY = std::max(r.hiY, r.netY);
+            // ... and the range of the signed sum of its kind (see GroupReach;
+            // TranslateOptimized only moves decoration and has none).
+            if (op.kind != OpKind::TranslateOptimized) {
+                const int k = op.kind == OpKind::Place ? 1 : 0;
+                const auto widen = [](double& net, double& lo, double& hi, float d) {
+                    net += (double)d;
+                    if (std::isnan(net)) {
+                        lo = -std::numeric_limits<double>::infinity();
+                        hi = std::numeric_limits<double>::infinity();
+                        return;
+                    }
+                    lo = std::min(lo, net);
+                    hi = std::max(hi, net);
+                };
+                widen(r.netX[k], r.loX[k], r.hiX[k], op.dx);
+                widen(r.netY[k], r.loY[k], r.hiY[k], op.dy);
             }
             break;
         default:

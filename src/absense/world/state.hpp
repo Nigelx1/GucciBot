@@ -294,21 +294,26 @@ struct GroupReach {
     double x = 0.0;
     double y = 0.0;
     uint32_t ops = 0;
-    // GucciBot (2026-10-23): the same moves as signed sums, and the least and
-    // most each sum has been, 0 included (where the run began). A member's
-    // move by this group is the sum times how often it is listed, so every
-    // place it has been in the run - where it is, and anywhere it was written
-    // - is within the range; and an object that goes back and forth stays
-    // within what it covers, where the |d| sums grow with every step: ORBIT's
-    // platforms built sums of thousands of units over a 4 s look-ahead, and
-    // most members of their groups were worked out again on every tick. A
-    // NaN move opens the range all the way, as it made the |d| sums NaN.
-    double netX = 0.0;
-    double netY = 0.0;
-    double loX = 0.0;
-    double hiX = 0.0;
-    double loY = 0.0;
-    double hiY = 0.0;
+    // GucciBot (2026-10-23): the moves that can carry an object a copy meets
+    // as signed sums, one per kind - [0] Translate (the static array), [1]
+    // Place (m_groups) - and the least and most each sum has been, 0 included
+    // (where the run began). A member's move by this group's ops of one kind
+    // is that kind's sum times how often it is listed in that kind's array, at
+    // most the group's mult, so every place it has been in the run - where it
+    // is, and anywhere it was written - is within the ranges times mult; and
+    // an object that goes back and forth stays within what it covers, where
+    // the |d| sums grow with every step (ORBIT's platforms built sums of
+    // thousands of units over a 4 s look-ahead). TranslateOptimized is not
+    // in them: it moves m_optimizedGroups, which only ever holds decoration
+    // (world/step.cpp fact (e)) - one sum for both kinds counted a normal
+    // move twice on a group with members in both arrays, and a silent move
+    // once (review of -hc). A NaN move opens its range all the way.
+    double netX[2] = {0.0, 0.0};
+    double netY[2] = {0.0, 0.0};
+    double loX[2] = {0.0, 0.0};
+    double hiX[2] = {0.0, 0.0};
+    double loY[2] = {0.0, 0.0};
+    double hiY[2] = {0.0, 0.0};
 
     bool operator==(const GroupReach& other) const;
 };

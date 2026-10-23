@@ -154,6 +154,14 @@ bool sameBits(const T& a, const T& b) {
     if (std::is_floating_point_v<T>) return std::memcmp(&a, &b, sizeof(T)) == 0;
     return a == b;
 }
+// An array element by element (GroupReach's ranges).
+template <class T, std::size_t N>
+bool sameBits(const T (&a)[N], const T (&b)[N]) {
+    for (std::size_t i = 0; i < N; i++) {
+        if (!sameBits(a[i], b[i])) return false;
+    }
+    return true;
+}
 }  // namespace
 
 bool WCmd::operator==(const WCmd& o) const {
@@ -181,6 +189,7 @@ bool WCmd::operator==(const WCmd& o) const {
 }
 
 bool GroupReach::operator==(const GroupReach& o) const {
+    // (WORLD_SAME compares bit for bit, arrays included.)
     return WORLD_SAME(x) WORLD_SAME(y) WORLD_SAME(ops) WORLD_SAME(netX) WORLD_SAME(netY) WORLD_SAME(loX)
         WORLD_SAME(hiX) WORLD_SAME(loY) WORLD_SAME(hiY) true;
 }

@@ -1057,6 +1057,11 @@ bool Materializer::pointMeets(double x, double y, double rx, double ry, const Wi
 // run's log - and the table has it in the window. One whose group has an op
 // is the reach's: the reach loop of the same look goes through every member
 // whose table pose, grown by what its groups did, meets the window.
+float Materializer::gameNodeX(int slot, GameObject* o) const {
+    if (auto it = m_writtenOf.find(slot); it != m_writtenOf.end()) return m_written[it->second].orig.node.x;
+    return o ? o->getPositionX() : 0.0f;
+}
+
 bool Materializer::writtenMayMeet(const Run& run, const Written& wr, const Window& w) const {
     const WorldDef& def = *run.def;
     const int slot = wr.slot;
@@ -1326,10 +1331,12 @@ void Materializer::materializeNear(Run& run, PlayerObject* copy) {
                                        [](const std::pair<uint16_t, GroupReach>& e, uint16_t key) { return e.first < key; });
             if (it == reach.end() || it->first != h) continue;
             const double m = (double)md.mult[h];
-            lox += it->second.loX * m;
-            hix += it->second.hiX * m;
-            loy += it->second.loY * m;
-            hiy += it->second.hiY * m;
+            for (int k = 0; k < 2; k++) {
+                lox += it->second.loX[k] * m;
+                hix += it->second.hiX[k] * m;
+                loy += it->second.loY[k] * m;
+                hiy += it->second.hiY[k] * m;
+            }
         }
         if (!md.hasExtended[(std::size_t)g] && !boxMeetsRange(m_table->groupBox(g), lox, hix, loy, hiy, w)) {
             if (debugGroup(g)) {
