@@ -443,37 +443,44 @@ class $modify(GB7PlayLayer, PlayLayer) {
 
             bool p1H = m_uiLayer->m_p1Jumping || m_uiLayer->m_p1TouchId != -1;
             bool p2H = m_uiLayer->m_p2Jumping || m_uiLayer->m_p2TouchId != -1;
-            if (rs.hasFlippedControls())
+            // GucciBot (2026-10-23): UILayer keeps these by button side, and GD
+            // hands a side to the other player under Flip 2-Player Controls
+            // only outside platformer (see sideFor). In a 1-player level the
+            // swap changes nothing: both sides are player 1's.
+            if (rs.hasFlippedControls() && !m_isPlatformer)
                 std::swap(p1H, p2H);
             p1H |= p2H && !m_levelSettings->m_twoPlayerMode;
 
+            // Each player is put back on the side that moves it: sideFor in a
+            // 2-player level (playerFlipped outside platformer, the player's
+            // own side in one, where playerFlipped reached the other player),
+            // and as before in a 1-player level.
             auto check = [&](bool held, int button, bool p2) {
                 int idx = p2 ? 2 : 1;
                 auto* p = (idx == 1) ? m_player1 : m_player2;
+                bool const side = m_levelSettings->m_twoPlayerMode ? rs.sideFor(this, p2)
+                                                                   : rs.playerFlipped(p2);
                 if (held != (bool)p->m_holdingButtons[button])
-                    queueButton(button, held, rs.playerFlipped(p2), 0.0);
+                    queueButton(button, held, side, 0.0);
             };
             check(p1H, 1, false);
             // Platformer also has to put the held DIRECTION back, not just the
             // jump. Ported from Silicate 2026-09-22 along with the state that
             // feeds it -- updatePlatformerInputs was a no-op stub, so these
             // were never tracked and a restore left the player standing still.
-            // GucciBot (2026-10-23): updatePlatformerInputs keeps them by
-            // button side, as GD's queue names them, and in a 2-player level
-            // Flip 2-Player Controls hands each side to the other player, so
-            // they swap with it as the jump does above. Not in a 1-player
-            // level, where player 1 is checked against side 1's as before.
-            auto& pf = gb->practiceFix;
-            bool const swapSides = rs.hasFlippedControls() && m_levelSettings->m_twoPlayerMode;
+            // updatePlatformerInputs keeps them by button side, which in a
+            // platformer is the player's own: GD doesn't flip sides there.
             if (m_isPlatformer) {
-                check(swapSides ? pf.m_p2Left : pf.m_p1Left, 2, false);
-                check(swapSides ? pf.m_p2Right : pf.m_p1Right, 3, false);
+                auto& pf = gb->practiceFix;
+                check(pf.m_p1Left, 2, false);
+                check(pf.m_p1Right, 3, false);
             }
             if (m_levelSettings->m_twoPlayerMode) {
                 check(p2H, 1, true);
                 if (m_isPlatformer) {
-                    check(swapSides ? pf.m_p1Left : pf.m_p2Left, 2, true);
-                    check(swapSides ? pf.m_p1Right : pf.m_p2Right, 3, true);
+                    auto& pf = gb->practiceFix;
+                    check(pf.m_p2Left, 2, true);
+                    check(pf.m_p2Right, 3, true);
                 }
             }
             rs.m_lastInputs.clear();
@@ -482,34 +489,38 @@ class $modify(GB7PlayLayer, PlayLayer) {
         if (!gb->isRecording() && !gb->isPlaying()) {
             bool p1H = m_uiLayer->m_p1Jumping || m_uiLayer->m_p1TouchId != -1;
             bool p2H = m_uiLayer->m_p2Jumping || m_uiLayer->m_p2TouchId != -1;
-            if (rs.hasFlippedControls())
+            // By button side, swapped only where GD flips sides (see the
+            // recording branch above).
+            if (rs.hasFlippedControls() && !m_isPlatformer)
                 std::swap(p1H, p2H);
             p1H |= p2H && !m_levelSettings->m_twoPlayerMode;
 
+            // On the side that moves each player, as in the recording branch.
             auto check = [&](bool held, int button, bool p2) {
                 int idx = p2 ? 2 : 1;
                 auto* p = (idx == 1) ? m_player1 : m_player2;
+                bool const side = m_levelSettings->m_twoPlayerMode ? rs.sideFor(this, p2)
+                                                                   : rs.playerFlipped(p2);
                 if (held != (bool)p->m_holdingButtons[button])
-                    queueButton(button, held, rs.playerFlipped(p2), 0.0);
+                    queueButton(button, held, side, 0.0);
             };
             check(p1H, 1, false);
             // Platformer also has to put the held DIRECTION back, not just the
             // jump. Ported from Silicate 2026-09-22 along with the state that
             // feeds it -- updatePlatformerInputs was a no-op stub, so these
             // were never tracked and a restore left the player standing still.
-            // Swapped under Flip 2-Player Controls in a 2-player level, as in
-            // the recording branch above.
-            auto& pf = gb->practiceFix;
-            bool const swapSides = rs.hasFlippedControls() && m_levelSettings->m_twoPlayerMode;
+            // By button side, which in a platformer is the player's own.
             if (m_isPlatformer) {
-                check(swapSides ? pf.m_p2Left : pf.m_p1Left, 2, false);
-                check(swapSides ? pf.m_p2Right : pf.m_p1Right, 3, false);
+                auto& pf = gb->practiceFix;
+                check(pf.m_p1Left, 2, false);
+                check(pf.m_p1Right, 3, false);
             }
             if (m_levelSettings->m_twoPlayerMode) {
                 check(p2H, 1, true);
                 if (m_isPlatformer) {
-                    check(swapSides ? pf.m_p1Left : pf.m_p2Left, 2, true);
-                    check(swapSides ? pf.m_p1Right : pf.m_p2Right, 3, true);
+                    auto& pf = gb->practiceFix;
+                    check(pf.m_p2Left, 2, true);
+                    check(pf.m_p2Right, 3, true);
                 }
             }
         }
