@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-22-fs (Pathfinder: the log says why a route search could not run)"
+    "2026-10-22-ft (Pathfinder: the spike is handed over only while the player touches it)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

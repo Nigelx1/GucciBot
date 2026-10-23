@@ -4522,9 +4522,14 @@ void AbsensePathfinder::beginBacktrack() {
 // cold replay would have them. Not sure GD takes it from here rather than
 // from a collision: the log says, per rewind, and a pass that still ends early
 // is logged by the collision hook.
+// Only while the player touches the spike: that is when GD's own collision
+// pass hands it over, several ticks running after every respawn in normal
+// play, so this is that same call one pass early. Away from it, how GD would
+// take the call is unknown, so it is not made.
 void AbsensePathfinder::settleAnticheatSpike() {
     auto* pl = PlayLayer::get();
     if (!pl || !pl->m_anticheatSpike || !pl->m_player1 || pl->m_player1->m_isDead) return;
+    if (!pl->m_anticheatSpike->getObjectRect().intersectsRect(pl->m_player1->getObjectRect())) return;
     m_settlingSpike = true;
     pl->destroyPlayer(pl->m_player1, pl->m_anticheatSpike);
     m_settlingSpike = false;
