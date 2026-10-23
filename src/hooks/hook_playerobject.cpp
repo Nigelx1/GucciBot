@@ -134,23 +134,31 @@ class $modify(GB7PlayerObject, PlayerObject) {
         // isn't settled whether GD hands a player-2 press to it there - if it
         // does, that press moves player 1, and leaving it unsplit would put
         // every sub-tick test of it on the tick edge.
-        if (eng->splitsOnePlayer() && p2) {
-            eng->m_p1Split = eng->m_p1Split && eng->hasPendingFor(false);
-            eng->m_p2Split = eng->m_p2Split && eng->hasPendingFor(true);
+        // The engine keeps each held click by the button side it queues
+        // (Engine::fire hands GD that side), so a player's own click is the
+        // side that moves it: the other side in a classic 2-player level with
+        // Flip 2-Player Controls on (sideFor; GD flips it there, 2026-10-23).
+        auto& rs = gucci::GucciEngine::get()->replay;
+        bool const oneSplit = eng->splitsOnePlayer();
+        bool const p1Side = oneSplit && rs.sideFor(pl, false);
+        bool const p2Side = oneSplit ? rs.sideFor(pl, true) : true;
+        if (oneSplit && p2) {
+            eng->m_p1Split = eng->m_p1Split && eng->hasPendingFor(p1Side);
+            eng->m_p2Split = eng->m_p2Split && eng->hasPendingFor(p2Side);
         }
         // GucciBot (2026-10-23): what such a tick did, one verbose log line
         // each, to check it by: in a dual the measured player is split (when
         // it can be) and its click held for the split, and the other player
         // is neither - its click on the tick played on the tick edge.
-        if (eng->splitsOnePlayer() && SLSettings::get()->frameWindow.verbose)
+        if (oneSplit && SLSettings::get()->frameWindow.verbose)
             gucci::fwEngineLog(fmt::format(
                 "[fw][split] frame {}: sub-tick test of a player {} click at {:.4f} of "
                 "the tick ({}): split player 1 {}, player 2 {}; clicks held for the "
                 "split: player 1 {}, player 2 {}",
-                eng->tickFrame(), eng->tickPlayer() + 1, eng->fraction(),
+                eng->tickFrame(), rs.sideMovesPlayer2(pl, eng->tickPlayer() == 1) ? 2 : 1, eng->fraction(),
                 p2 ? "dual" : "no dual", eng->m_p1Split ? "yes" : "no",
-                eng->m_p2Split ? "yes" : "no", eng->hasPendingFor(false) ? "yes" : "no",
-                eng->hasPendingFor(true) ? "yes" : "no"));
+                eng->m_p2Split ? "yes" : "no", eng->hasPendingFor(p1Side) ? "yes" : "no",
+                eng->hasPendingFor(p2Side) ? "yes" : "no"));
         eng->m_p1Pos = this->getPosition();
         eng->m_p2Pos = p2 ? p2->getPosition() : cocos2d::CCPoint{};
 
