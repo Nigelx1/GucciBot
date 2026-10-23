@@ -205,9 +205,12 @@ namespace gucci::ui::pages {
             kit::BeginCard("Measurement", "How an input is judged.");
 
             const char* algos[] = {"Time-Based", "Recovery Range"};
+            // GucciBot (2026-10-23): the hint said "Stricter", from anticroom's old tooltip, but Recovery Range only
+            // ever rescues a shift, so it widens windows; his antics-counter beta.4 changelog says as much.
             if (kit::ChoiceRow("Algorithm",
-                               "Recovery Range requires the next input to still be able to recover before a shift "
-                               "counts. Stricter and slower.",
+                               "Time-Based counts a shift only if the macro survives it. Recovery Range also counts "
+                               "one that dies if moving the next input up to the recovery window either way saves "
+                               "it, so it is more lenient, and slower.",
                                &s.algorithm, algos, 2))
                 g_changed = true;
             if (s.algorithm == static_cast<int>(FrameWindowAnalyzer::Algorithm::RecoveryRange))

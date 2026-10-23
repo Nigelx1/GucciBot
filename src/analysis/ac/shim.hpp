@@ -133,7 +133,9 @@ struct FrameWindowSettings {
     int sweepRange = 14;
     int maxFrames = 480;
     int slack = 2;
-    int recoveryRange = 8;
+    // GucciBot (2026-10-23): 2, anticroom's own since antics-counter beta.4
+    // (his Accuracy preset turns Recovery Range on at 2); it was 8.
+    int recoveryRange = 2;
 
     // CBF sub-tick windows. On, at anticroom's own default, since 2026-09-20:
     // he confirmed the cube bug fixed in this source. The fix is visible here
