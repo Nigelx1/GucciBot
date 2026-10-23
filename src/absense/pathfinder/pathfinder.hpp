@@ -686,14 +686,6 @@ public:
     Freeze m_freeze;
     void beginFreeze();
     void endFreeze(const char* what);
-    // GucciBot: a stretch of hard flying decisions the game has had to wait
-    // for (see the commit in decide). In one, a flying decision's window - and
-    // so how much of its plan is played - is K, as on the ground, not 120
-    // ticks: there a decision takes seconds, and 120 ticks of plan last little
-    // more than one. It starts with a hard flying decision the game froze for
-    // and ends with the first decision that is not hard, not flying, a
-    // probe's, a repair's or a two-player pair's, or with going back.
-    bool m_hardStretch = false;
     // Where the game was meant to stop (realtime stops land a few ticks
     // late: the frame's remaining ticks still run); it goes back there.
     uint64_t m_pauseAt = UINT64_MAX;

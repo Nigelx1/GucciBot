@@ -422,7 +422,6 @@ bool AbsensePathfinder::start() {
     m_aheadFailed = false;
     m_aheadWait = AheadWait{};
     m_freeze = Freeze{};
-    m_hardStretch = false;
     m_confirmedKillers.clear();
     m_planKiller = 0;
     m_lessons.clear();
@@ -941,12 +940,6 @@ void AbsensePathfinder::tick() {
                 // A freeze whose decision found a dead end ends here: going
                 // back is the repair's time, not a wait for a decision.
                 endFreeze("a decision that found a dead end, going back");
-                if (m_hardStretch) {
-                    // ... and so does a stretch of hard flying decisions: the
-                    // repair's decisions are its own, and so is what follows.
-                    m_hardStretch = false;
-                    log("the hard flying stretch is over: going back");
-                }
                 beginBacktrack();
                 goto done;
             default:
@@ -2782,19 +2775,11 @@ void AbsensePathfinder::decide() {
         // How much of a plan gets played before the next decision: the
         // flying kinds drift from the simulation sooner, so less for them.
         // Clicks inside this window are the ones that count against an idea.
-        // GucciBot (2026-10-23): ... except in a stretch of hard flying
-        // decisions the game has had to wait for (m_hardStretch), where they
-        // get K as the ground kinds do. In Deadlocked's ship, UFO and wave such
-        // a decision took 3.2 s on average while its 120 ticks of plan lasted
-        // about 1.4 s of play, so the game froze for nearly every one of them
-        // (204 of 206 s of freezes). Probes and two-player pairs keep 120.
         PlayerObject* who = d.player2 ? pl->m_player2 : pl->m_player1;
         const bool flyingNow = m_probe.active ? (d.player2 ? m_probe.flying2 : m_probe.flying)
                                : m_ahead.active ? (d.player2 ? m_ahead.flying2 : m_ahead.flying)
                                                 : (who && (who->m_isDart || who->m_isShip || who->m_isBird || who->m_isSwing));
-        const int flyTicks = (int)std::lround(120.0 * std::max(1.0, tps / 240.0));
-        const bool stretch = cfg.smooth && m_hardStretch && !m_probe.active && !m_repair.active && !d.pair;
-        d.window = !flyingNow ? d.K : stretch ? std::max(d.K, flyTicks) : std::max(1, std::min(d.K, flyTicks));
+        d.window = flyingNow ? std::max(1, std::min(d.K, (int)std::lround(120.0 * std::max(1.0, tps / 240.0)))) : d.K;
         d.flying = flyingNow;
         m_prefixLength = d.K;
         m_decisionTick = d.tick;
@@ -4128,30 +4113,6 @@ void AbsensePathfinder::decide() {
     d.active = false;  // the decision is made
     m_pairSecondPass = false;
 
-    // GucciBot (2026-10-23): a stretch of hard flying decisions (m_hardStretch)
-    // starts with one the game had to wait for - the freeze still open here,
-    // which this decision ends below - and lasts while the decisions after it
-    // stay hard and flying (their own start's kind, as their window is).
-    {
-        const bool was = m_hardStretch;
-        m_hardStretch = !pair && !m_probe.active && !m_repair.active && d.flying && d.hard && (was || m_freeze.on);
-        const int flyTicks = (int)std::lround(120.0 * std::max(1.0, tps / 240.0));
-        if (m_hardStretch && !was) {
-            log("tick %llu: the game froze for this hard flying decision: from here a flying decision plays up to %d "
-                "ticks of its plan, not %d, while they stay hard",
-                (unsigned long long)tick, std::max(K, flyTicks), flyTicks);
-        } else if (was && !m_hardStretch) {
-            log("tick %llu: the hard flying stretch is over (%s): a flying decision plays up to %d ticks again",
-                (unsigned long long)tick,
-                pair             ? "a two-player decision"
-                : m_probe.active ? "a probe's decision"
-                : m_repair.active ? "a repair's decision"
-                : !d.flying      ? "a decision on the ground"
-                                 : "a decision that was not hard",
-                flyTicks);
-        }
-    }
-
     // Step R5: what this decision did about the route, for a dead end further
     // on to come back to. Read before anything below moves the start on
     // (decisionState reads a probe's or a decided-ahead start).
@@ -4227,28 +4188,14 @@ void AbsensePathfinder::decide() {
         // the simulation carries to its end - so there are half as many.
         commit = std::max(commit, std::min((2 * H) / 3, survived - margin));
     }
-    // GucciBot (2026-10-23): whether a decision flies is its own start's word
-    // (d.flying), not the live player's - a decision made ahead starts where
-    // the plan ends, and by the time it commits the live player can be
-    // another kind - and how far it is played is its window: 120 ticks, or K
-    // in a hard flying stretch (see the set-up), never less than 120. Probes
-    // and two-player pairs as before: the kept start's kind, the live players'.
-    const int flyTicks = (int)std::lround(120.0 * std::max(1.0, tps / 240.0));
-    bool flying = d.flying;
-    int flyMax = std::max(d.window, flyTicks);
-    if (m_probe.active) {
-        flying = m_probe.flying || (m_probe.pair && m_probe.flying2);
-        flyMax = flyTicks;
-    } else if (pair) {
-        flying = (pl->m_player1 && (pl->m_player1->m_isDart || pl->m_player1->m_isShip || pl->m_player1->m_isBird ||
-                                    pl->m_player1->m_isSwing)) ||
-                 (pl->m_player2 && (pl->m_player2->m_isDart || pl->m_player2->m_isShip || pl->m_player2->m_isBird ||
-                                    pl->m_player2->m_isSwing));
-        flyMax = flyTicks;
-    }
+    const bool flying = m_probe.active ? (m_probe.flying || (m_probe.pair && m_probe.flying2))
+                                       : ((pl->m_player1 && (pl->m_player1->m_isDart || pl->m_player1->m_isShip ||
+                                                             pl->m_player1->m_isBird || pl->m_player1->m_isSwing)) ||
+                                          (pair && pl->m_player2 && (pl->m_player2->m_isDart || pl->m_player2->m_isShip ||
+                                                                     pl->m_player2->m_isBird || pl->m_player2->m_isSwing)));
     if (!complete && flying) {
         // The flying kinds drift from the simulation sooner: think again more often.
-        commit = std::max(1, std::min(commit, flyMax));
+        commit = std::max(1, std::min(commit, (int)std::lround(120.0 * std::max(1.0, tps / 240.0))));
     }
     // A repair's try into the death (forcedCommit past what the idea lasts) is
     // played to the death tick in one go. Cut at K it stopped short ("trying
