@@ -267,6 +267,8 @@ class Trajectory {
         // the objects written put back, the movers, the game state put back.
         double usSetup[11] = {};
         double usEnd[4] = {};
+        // The World's capture, a part at a time (see world::CaptureProfile), in us a capture.
+        double usCapture[12] = {};
     };
     Benchmark benchmark(GJBaseGameLayer* pl, int ticks, int snapshots);
 

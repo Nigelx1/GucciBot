@@ -203,6 +203,18 @@ extern std::vector<int> g_debugGroups;
 // the hook), so a failure can say where its two runs part. Null otherwise.
 extern std::vector<std::string>* g_eventTrace;
 extern std::vector<int> g_debugUids;
+// GucciBot (2026-10-23): where World::captureLive's time goes, for the speed
+// test only (Trajectory::benchmark) - on LIMBO it took 216 ms a run. The
+// parts: the contacts, the tick's values, the event listeners, the level's
+// triggers, the running effects' reach, the commands, the spawns, the toggles
+// and items, the timers and their listeners, the collision and touch
+// listeners, the sequences, the uncertain marks.
+struct CaptureProfile {
+    bool on = false;
+    double parts[12] = {};
+    uint64_t calls = 0;
+};
+extern CaptureProfile g_captureProfile;
 inline bool debugGroup(int group) {
     return g_debugNotes && std::find(g_debugGroups.begin(), g_debugGroups.end(), group) != g_debugGroups.end();
 }

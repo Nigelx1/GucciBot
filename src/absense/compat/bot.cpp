@@ -448,6 +448,17 @@ matjson::Value absense::benchmark(int ticks, int snapshots) {
         parts += "; at the end";
         for (int k = 0; k < 4; k++) parts += fmt::format("{}{} {:.0f}", k ? ", " : " ", kEnd[k], b.usEnd[k]);
         geode::log::info("[AbsPF] speed test: setting a run up, in us: {}", parts);
+        static constexpr const char* kCapture[12] = {"contacts", "values",  "events",    "def",
+                                                     "tier_de",  "commands", "spawns",   "toggles_items",
+                                                     "timers",   "listeners", "sequences", "uncertain"};
+        auto capture = matjson::Value::object();
+        std::string captureParts;
+        for (int k = 0; k < 12; k++) {
+            capture[kCapture[k]] = b.usCapture[k];
+            captureParts += fmt::format("{}{} {:.0f}", k ? ", " : "", kCapture[k], b.usCapture[k]);
+        }
+        out["us_a_capture"] = capture;
+        geode::log::info("[AbsPF] speed test: the World's capture, in us: {}", captureParts);
     }
     geode::log::info("[AbsPF] speed test at frame {}: {:.0f} simulated ticks a second ({:.2f} us a tick over {} ticks "
                      "in {} runs), {:.0f} us to set a run up, a snapshot {:.1f} us to take and {:.1f} us to put back, "

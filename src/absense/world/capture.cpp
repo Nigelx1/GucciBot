@@ -8,6 +8,7 @@
 #include <Geode/Geode.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cstring>
 
 #include "absense/compat/bot.hpp"
@@ -218,8 +219,18 @@ WorldState World::captureLive(GJBaseGameLayer* pl, bool withActions) {
     ws.randomSeed = off::at<uint64_t>(reinterpret_cast<void*>(geode::base::get()), off::kRandomState);
     if (!pl) return ws;
     const GJGameState& gs = pl->m_gameState;
+    // (The speed test's timer, see CaptureProfile.)
+    const bool prof = g_captureProfile.on;
+    auto profAt = prof ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+    const auto lap = [&](int part) {
+        if (!prof) return;
+        const auto now = std::chrono::steady_clock::now();
+        g_captureProfile.parts[part] += std::chrono::duration<double, std::micro>(now - profAt).count();
+        profAt = now;
+    };
 
     captureContacts(pl, ws.contact);
+    lap(0);
 
     // The tick's own values.
     ws.tick = 0;
@@ -242,6 +253,7 @@ WorldState World::captureLive(GJBaseGameLayer* pl, bool withActions) {
     fillFrom(ws.goingBack, gs.m_spawnChannelRelated1);
     std::sort(ws.goingBack.begin(), ws.goingBack.end());
     ws.partial = !withActions;
+    lap(1);
 
     // What the last import held, field by field (see importShared).
     static Cow<std::vector<int>> lastRemaps;
@@ -287,9 +299,11 @@ WorldState World::captureLive(GJBaseGameLayer* pl, bool withActions) {
         }
         importShared(ws.eventStamps, std::move(stamps), lastStamps);
     }
+    lap(2);
 
     const std::shared_ptr<const WorldDef> defHolder = WorldDef::get(pl);
     const WorldDef* def = defHolder.get();
+    lap(3);
     std::vector<uint16_t>& uncertain = ws.uncertainGroups;
     // Spawns whose triggers fire when the World cannot tell (a kept start's
     // queued spawns), as groups and as single triggers.
@@ -303,6 +317,7 @@ WorldState World::captureLive(GJBaseGameLayer* pl, bool withActions) {
     // by key, or an object an effect that has gone has still to be put back,
     // leaves a run with nothing it can name.
     markLiveTierDE(pl, def, ws);
+    lap(4);
 
     // The game's counter of command uids (GroupCommandObject2::reset reads it
     // at 0x25770c and writes it back at 0x25784e, which World::init checks),
@@ -334,6 +349,7 @@ WorldState World::captureLive(GJBaseGameLayer* pl, bool withActions) {
             // begun around a kept start's capture still share theirs.
             if (withActions) importShared(ws.cmds, std::move(cmds), lastCmds);
         }
+        lap(5);
 
         if (!withActions && def) {
             // A kept start leaves the queued spawns out: what the triggers
@@ -367,6 +383,7 @@ WorldState World::captureLive(GJBaseGameLayer* pl, bool withActions) {
             }
             importShared(ws.spawns, std::move(spawns), lastSpawns);
         }
+        lap(6);
 
         // The toggle bits, bits 0..9999, as the words toggleGroup reads
         // (0x223c05: the vector<bool>'s word array at EM +0x4f8, 32 bits a
@@ -402,6 +419,7 @@ WorldState World::captureLive(GJBaseGameLayer* pl, bool withActions) {
             std::sort(persistentTimers.begin(), persistentTimers.end());
             importShared(ws.persistentTimers, std::move(persistentTimers), lastPersistentTimers);
         }
+        lap(7);
 
         // Timers in the map's list order: updateTimers 0x2633b4 copies the
         // keys in that order and runs them so.
@@ -477,6 +495,7 @@ WorldState World::captureLive(GJBaseGameLayer* pl, bool withActions) {
             }
             importShared(ws.timerListeners, std::move(timerListeners), lastTimerListeners);
         }
+        lap(8);
         {
             std::vector<WCollisionListener> collisions;
             for (const CollisionTriggerAction& a : em->m_unkVector230) {
@@ -513,6 +532,7 @@ WorldState World::captureLive(GJBaseGameLayer* pl, bool withActions) {
         }
     }
     importShared(ws.remaps, std::move(remaps), lastRemaps);
+    lap(9);
 
     // The sequence triggers' own state, which they keep on the object rather
     // than in the effect manager (world/fire.cpp (ab)): every key of both
@@ -565,6 +585,7 @@ WorldState World::captureLive(GJBaseGameLayer* pl, bool withActions) {
         });
         importShared(ws.sequences, std::move(sequences), lastSequences);
     }
+    lap(10);
 
     // The listeners the World does not fire yet - a collision trigger's -
     // toggle or spawn their groups from a path no run follows: those groups
@@ -604,6 +625,8 @@ WorldState World::captureLive(GJBaseGameLayer* pl, bool withActions) {
             markFireUncertain(*def, ws, d, d.target, d.center);
         }
     }
+    lap(11);
+    if (prof) g_captureProfile.calls++;
     return ws;
 }
 

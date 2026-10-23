@@ -3826,6 +3826,8 @@ Trajectory::Benchmark Trajectory::benchmark(GJBaseGameLayer* pl, int ticks, int 
     };
     g_stepProfile = StepProfile{};
     g_stepProfile.on = true;
+    world::g_captureProfile = world::CaptureProfile{};
+    world::g_captureProfile.on = true;
     for (int variant = 0; variant < 2; variant++) {
         const auto t0 = Clock::now();
         Sim s;
@@ -3848,6 +3850,9 @@ Trajectory::Benchmark Trajectory::benchmark(GJBaseGameLayer* pl, int ticks, int 
         b.runs++;
     }
     g_stepProfile.on = false;
+    world::g_captureProfile.on = false;
+    for (int k = 0; k < 12; k++)
+        b.usCapture[k] = world::g_captureProfile.parts[k] / (double)std::max<uint64_t>(1, world::g_captureProfile.calls);
     parts(0);
     for (int k = 0; k < 11; k++)
         b.usSetup[k] = g_stepProfile.setup[k] / (double)std::max<uint64_t>(1, g_stepProfile.begins);
