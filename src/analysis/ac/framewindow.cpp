@@ -5211,9 +5211,13 @@ void FrameWindowAnalyzer::launchDependentLeg(int64_t shift, ShiftMode mode,
     // player who clicks late plays the rest late too; Buffer moves it with
     // its release. It used to move alone, its release left behind, so a
     // later shift held the button for less and an earlier one for longer.
+    // GucciBot (2026-10-23): the 2-player fixes. Retime takes what the
+    // count's Retime takes (inRetimeTail): with pairs (pairDualClicks, a
+    // 1-player level) every input after it under either flag, where one click
+    // moves both players; without them its player's, as before.
     if (mode == ShiftMode::Retime) {
         for (size_t k = aiB; k < actions.size(); k++)
-            if (isMeasurableInput(actions[k]) && actions[k].m_player2 == p2)
+            if (this->inRetimeTail(k, aiB, p2))
                 this->placeAt(k, origin(k) + moved);
     } else {
         this->placeAt(aiB, origin(aiB) + moved);
