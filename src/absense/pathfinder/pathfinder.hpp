@@ -753,6 +753,11 @@ public:
     int m_savedMode = 0;
 
     std::chrono::steady_clock::time_point m_startedAt;
+    // How long the best tick has stood still, counted while the run runs (see
+    // tick(): five minutes of it and the run stops and says where).
+    uint64_t m_stuckBest = 0;
+    double m_stuckSeconds = 0.0;
+    std::chrono::steady_clock::time_point m_stuckClock{};
     // Frame pacing: a slice takes what is left of a frame at the target
     // frame rate. When the last frame came late the game's own share is
     // taken from it (the time between slices minus the slice) and the next

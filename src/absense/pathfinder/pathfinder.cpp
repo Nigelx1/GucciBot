@@ -75,6 +75,9 @@ constexpr double kCalmSeconds = 0.033;
 // slices is only a safety stop, well past what the steps take.
 constexpr int kDriveLegSteps = 60000;
 constexpr double kDriveLegSafetyMs = 6000.0;
+// Nigel (2026-10-22, answer 3 in docs/ROUTE_ENGINE_PLAN.md): five minutes on
+// one spot - the best tick not moving on - and the run stops and says where.
+constexpr double kStuckSeconds = 300.0;
 constexpr double kBackSeconds = 3.0;
 // The most a slice may take while the game is frozen and the search is the
 // only thing running. Not 100: with the game costing about 1.5 ms a frame a
@@ -428,6 +431,9 @@ bool AbsensePathfinder::start() {
     m_startedAt = std::chrono::steady_clock::now();
     m_lastRateAt = m_startedAt;
     m_lastRateTicks = 0;
+    m_stuckBest = tick;
+    m_stuckSeconds = 0.0;
+    m_stuckClock = m_startedAt;
     m_stats.message = "Searching";
 
     absense::gpu::Client::get().setEnabled(SLSettings::get()->pathfinder.gpu);
@@ -757,7 +763,32 @@ void AbsensePathfinder::tick() {
         return;
     }
     auto* pl = PlayLayer::get();
-    if (pl->m_isPaused || absense::modal::isOpen()) return;  // wait for the player
+    if (pl->m_isPaused || absense::modal::isOpen()) {
+        m_stuckClock = std::chrono::steady_clock::now();  // waiting for the player is no time on the spot
+        return;  // wait for the player
+    }
+
+    // Five minutes without the best tick moving on, whatever the route setting:
+    // the run stops and says where (kStuckSeconds). Time between two slices
+    // counts up to ten seconds, so a hitch of the whole machine is not taken
+    // for minutes of searching.
+    {
+        const auto now = std::chrono::steady_clock::now();
+        if (m_stats.bestTick != m_stuckBest) {
+            m_stuckBest = m_stats.bestTick;
+            m_stuckSeconds = 0.0;
+        } else {
+            m_stuckSeconds += std::clamp(std::chrono::duration<double>(now - m_stuckClock).count(), 0.0, 10.0);
+        }
+        m_stuckClock = now;
+        if (m_stuckSeconds >= kStuckSeconds) {
+            const std::string why =
+                fmt::format("stuck at x {:.0f} (tick {}) for 5 minutes", m_stats.bestX, m_stats.bestTick);
+            log("%s: the furthest it got has not moved on in that time", why.c_str());
+            giveUp(why);
+            return;
+        }
+    }
 
     const auto frameStart = std::chrono::steady_clock::now();
     // How long this slice may take. Two different jobs, so two budgets:

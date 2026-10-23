@@ -42,6 +42,11 @@ namespace gucci {
     // with agency, reaching back 9" -- the real fix was the input before.
     static constexpr int kCrampedPoints = 8;
 
+    // Nigel (2026-10-22, answer 3 in docs/ROUTE_ENGINE_PLAN.md): five minutes
+    // on one spot - the best not moving on - and the search stops and says
+    // where.
+    static constexpr double kStuckSeconds = 300.0;
+
     Pathfinder* Pathfinder::get() {
         static Pathfinder inst;
         return &inst;
@@ -136,6 +141,9 @@ namespace gucci {
         died = false;
         completed = false;
         confirming = false;
+        stuckBest = 0;
+        stuckSeconds = 0.0;
+        stuckClock = std::chrono::steady_clock::now();
 
         // Same pause-dismiss Calculate does before a headless run -- the
         // GUI is usually open (and GD paused) when Start gets pressed.
@@ -477,6 +485,26 @@ namespace gucci {
         auto* pl = PlayLayer::get();
         if (!pl)
             return;
+
+        // Five minutes without the best moving on: the search stops and says
+        // where (kStuckSeconds). Not while it confirms a finished macro.
+        {
+            auto const now = std::chrono::steady_clock::now();
+            if (bestFrame != stuckBest) {
+                stuckBest = bestFrame;
+                stuckSeconds = 0.0;
+            } else {
+                stuckSeconds += std::clamp(std::chrono::duration<double>(now - stuckClock).count(), 0.0, 1.0);
+            }
+            stuckClock = now;
+            if (!completed && !confirming && stuckSeconds >= kStuckSeconds) {
+                auto const why = fmt::format("stuck at x {:.0f} (tick {}) for 5 minutes", bestX, bestFrame);
+                log::info("[Pathfinder] {} -- giving up after {} runs, best {:.1f}%", why, runs, bestPct);
+                finish(false);
+                stage = why;  // finish says "failed"; this says where
+                return;
+            }
+        }
 
         if (completed) {
             if (confirming) {

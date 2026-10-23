@@ -2,6 +2,7 @@
 
 #include "core/GucciBot.hpp"
 
+#include <chrono>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -331,6 +332,13 @@ namespace gucci {
         // The run in flight is a deferred candidate being replayed so its
         // death (and this run's ring and agency map) can seed its node.
         bool replayingDeferred = false;
+        // Nigel (2026-10-22, answer 3 in docs/ROUTE_ENGINE_PLAN.md): five
+        // minutes without the best getting further and the search stops and
+        // says where (see tick). Counted while it runs: a second at most
+        // between two of its ticks, so a paused game is no time on the spot.
+        uint32_t stuckBest = 0;
+        double stuckSeconds = 0.0;
+        std::chrono::steady_clock::time_point stuckClock{};
 
         void handleDeath();
         void buildNodeFromDeath(uint32_t d);
