@@ -690,6 +690,11 @@ void AbsensePathfinder::onForeignReset() {
         m_expectReset = false;
         m_restorePending = false;
         m_restepping = false;
+        // GucciBot (2026-10-23): a portal the attempt that is over fired, still
+        // marked used after going back, would not fire for the real player again
+        // while a run from here expects it to (The Nightmare's yellow portal).
+        const std::string used = Bot::get()->trajectory().usedAhead(PlayLayer::get(), 4);
+        if (!used.empty()) log("back at tick %llu: still marked used ahead: %s", (unsigned long long)currentTick(), used.c_str());
         return;
     }
     stop("the level was reset");

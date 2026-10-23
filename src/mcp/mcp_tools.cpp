@@ -823,6 +823,91 @@ namespace gucci::mcp {
             },
         });
 
+        // GucciBot (2026-10-23): which portals, orbs and pads in a stretch of
+        // the level are marked used, and by which player, so a session can
+        // check what a respawn or the pathfinder's way back leaves behind (The
+        // Nightmare's yellow portal at x 21255 did not fire after going back).
+        server.addTool({
+            "gucci_used_objects",
+            "Objects a player activates (portals, orbs, pads, coins, triggers) in "
+            "a stretch of the level, with their used flags: uid, object id, type, "
+            "x, y, p1 (used by player 1), p2 (used by the other player), multi "
+            "(can be activated again) and contact (player 1's and player 2's "
+            "entries in the level's contact map, -1 for none). from_x/to_x "
+            "default to 100 behind player 1 and 2000 ahead; only_used (default "
+            "false) lists just the used ones. At most 200 are listed.",
+            schemaOf({{"from_x", "integer", "left edge of the stretch"},
+                      {"to_x", "integer", "right edge of the stretch"},
+                      {"only_used", "boolean", "only the objects marked used (default false)"}}),
+            [](matjson::Value const& a) {
+                auto* pl = requireLevel();
+                float const px = pl->m_player1 ? pl->m_player1->getPositionX() : 0.f;
+                float const from = (float)argInt(a, "from_x", (int64_t)px - 100);
+                float const to = (float)argInt(a, "to_x", (int64_t)px + 2000);
+                bool const onlyUsed = argBool(a, "only_used", false);
+                auto const& ids = pl->m_gameState.m_activatedObjectIDs;
+                int const uid1 = pl->m_player1 ? pl->m_player1->m_uniqueID : -1;
+                int const uid2 = pl->m_player2 ? pl->m_player2->m_uniqueID : -1;
+                auto contact = [&](int obj, int player) -> int64_t {
+                    if (player < 0) return -1;
+                    auto it = ids.find({obj, player});
+                    return it == ids.end() ? -1 : (int64_t)it->second;
+                };
+                auto list = matjson::Value::array();
+                int64_t found = 0;
+                if (pl->m_objects) {
+                    for (auto* o : CCArrayExt<GameObject*>(pl->m_objects)) {
+                        if (!o)
+                            continue;
+                        float const x = o->getPositionX();
+                        if (x < from || x > to)
+                            continue;
+                        switch (o->m_objectType) {
+                            case GameObjectType::Solid:
+                            case GameObjectType::Hazard:
+                            case GameObjectType::Decoration:
+                            case GameObjectType::Breakable:
+                            case GameObjectType::Slope:
+                            case GameObjectType::CollisionObject:
+                            case GameObjectType::AnimatedHazard:
+                                continue;
+                            default:
+                                break;
+                        }
+                        auto* e = typeinfo_cast<EnhancedGameObject*>(o);
+                        if (!e)
+                            continue;
+                        bool const used = e->m_activatedByPlayer1 || e->m_activatedByPlayer2;
+                        if (onlyUsed && !used)
+                            continue;
+                        if (++found > 200)
+                            continue;
+                        auto item = obj();
+                        item["uid"] = (int64_t)o->m_uniqueID;
+                        item["id"] = (int64_t)o->m_objectID;
+                        item["type"] = (int64_t)o->m_objectType;
+                        item["x"] = (double)x;
+                        item["y"] = (double)o->getPositionY();
+                        item["p1"] = e->m_activatedByPlayer1;
+                        item["p2"] = e->m_activatedByPlayer2;
+                        if (auto* fx = typeinfo_cast<EffectGameObject*>(o))
+                            item["multi"] = fx->canMultiActivate(pl->m_isPlatformer);
+                        auto c = matjson::Value::array();
+                        c.push(contact(o->m_uniqueID, uid1));
+                        c.push(contact(o->m_uniqueID, uid2));
+                        item["contact"] = c;
+                        list.push(item);
+                    }
+                }
+                auto out = obj();
+                out["frame"] = (int64_t)GucciEngine::get()->updater.getFrame();
+                out["player1_x"] = (double)px;
+                out["found"] = found;
+                out["objects"] = list;
+                return out;
+            },
+        });
+
         // Practice checkpoints, driven the way a player drives them, so a
         // session can check that a respawn really puts the level and the
         // player back where they were. `level_hash` fingerprints every

@@ -899,6 +899,9 @@ class Trajectory {
     struct SimStart;
     std::shared_ptr<SimStart> captureStart(GJBaseGameLayer* pl, bool p1);
     void useStart(std::shared_ptr<SimStart> start);
+    // GucciBot (2026-10-23): portals, orbs and pads ahead of the real players that
+    // are still marked used ("" when none), at most `max` of them described.
+    std::string usedAhead(GJBaseGameLayer* pl, int max) const;
     // Drops the cached checkpoint of the real player: called whenever the
     // real game runs a tick or is put back.
     void realStateChanged();
@@ -1128,6 +1131,9 @@ class TrajectoryManager {
     }
     void forgetClearedFlags() {
         if (m_trajectory) m_trajectory->forgetClearedFlags();
+    }
+    std::string usedAhead(GJBaseGameLayer* pl, int max) const {
+        return m_trajectory ? m_trajectory->usedAhead(pl, max) : std::string{};
     }
     void realStateChanged() {
         if (m_trajectory) m_trajectory->realStateChanged();

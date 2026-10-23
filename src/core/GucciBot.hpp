@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-hl (Calculate: anticroom's antics-counter changes, round 1 - Search distance, Max window, presets, Recovery Range fixes, Check past next input, decimal bands, Sort, page delete, dual markers, Leg trail, dated imports, UFO and CBF false flags; Safe mode blocks stats too; settings save right away)"
+    "2026-10-23-hm (Same as -hl, plus a check for The Nightmare: Assistant Access can list which portals, orbs and pads are marked used, and the pathfinder logs any still marked used ahead of the player after it goes back)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -1568,6 +1568,55 @@ static bool ringType(GameObjectType t) {
     }
 }
 
+// The objects that can be activated at all, found once per level (like the
+// mover cache): every stop of a repair, and every decision made ahead twice
+// (advanceStart and the start itself), read the kind of every object of the
+// level - a cache miss each - to keep a few hundred of them.
+static const std::vector<EnhancedGameObject*>& activatableObjects(GJBaseGameLayer* pl) {
+    static GJBaseGameLayer* activatableFor = nullptr;
+    static int activatableCount = -1;
+    static unsigned activatableGen = ~0u;
+    static std::vector<EnhancedGameObject*> activatable;
+    const int n = pl->m_objects->count();
+    if (activatableFor != pl || activatableCount != n || activatableGen != g_moverCacheGen) {
+        activatableFor = pl;
+        activatableCount = n;
+        activatableGen = g_moverCacheGen;
+        activatable.clear();
+        for (int i = 0; i < n; i++) {
+            auto* o = static_cast<GameObject*>(pl->m_objects->objectAtIndex(i));
+            if (!o || !activatableType(o->m_objectType)) continue;
+            if (auto* ce = geode::cast::typeinfo_cast<EnhancedGameObject*>(o)) activatable.push_back(ce);
+        }
+    }
+    return activatable;
+}
+
+// GucciBot (2026-10-23): what ahead of the real players is still marked used,
+// for the pathfinder's log after it goes back (see AbsensePathfinder::onForeignReset).
+std::string Trajectory::usedAhead(GJBaseGameLayer* pl, int max) const {
+    if (!pl || !pl->m_objects || !pl->m_player1) return {};
+    float from = pl->m_player1->getPositionX();
+    if (pl->m_gameState.m_isDualMode && pl->m_player2) from = std::max(from, pl->m_player2->getPositionX());
+    from += 30.0f;  // what the players are on is theirs
+    std::string out;
+    int count = 0;
+    for (EnhancedGameObject* e : activatableObjects(pl)) {
+        if (!e->m_activatedByPlayer1 && !e->m_activatedByPlayer2) continue;
+        GameObject* obj = e;
+        if (obj->getPositionX() <= from) continue;
+        if (++count > max) continue;
+        if (!out.empty()) out += ", ";
+        out += fmt::format("type {} id {} uid {} at x {:.0f} y {:.0f} ({})", (int)obj->m_objectType, obj->m_objectID,
+                           obj->m_uniqueID, obj->getPositionX(), obj->getPositionY(),
+                           e->m_activatedByPlayer1 && e->m_activatedByPlayer2 ? "both players"
+                           : e->m_activatedByPlayer1                          ? "player 1"
+                                                                              : "player 2");
+    }
+    if (count > max) out += fmt::format(" and {} more", count - max);
+    return out;
+}
+
 void Trajectory::useStart(std::shared_ptr<SimStart> start) {
     GJBaseGameLayer* pl = GJBaseGameLayer::get();
     // Put back what the previous start cleared (the objects are gone with
@@ -1586,27 +1635,7 @@ void Trajectory::useStart(std::shared_ptr<SimStart> start) {
     if (!pl || !pl->m_objects) return;
     m_clearedFor = pl;
     const float from = m_start->x;
-    // The objects that can be activated at all, found once per level (like the
-    // mover cache): every stop of a repair, and every decision made ahead twice
-    // (advanceStart and the start itself), read the kind of every object of the
-    // level - a cache miss each - to keep a few hundred of them.
-    static GJBaseGameLayer* activatableFor = nullptr;
-    static int activatableCount = -1;
-    static unsigned activatableGen = ~0u;
-    static std::vector<EnhancedGameObject*> activatable;
-    const int n = pl->m_objects->count();
-    if (activatableFor != pl || activatableCount != n || activatableGen != g_moverCacheGen) {
-        activatableFor = pl;
-        activatableCount = n;
-        activatableGen = g_moverCacheGen;
-        activatable.clear();
-        for (int i = 0; i < n; i++) {
-            auto* o = static_cast<GameObject*>(pl->m_objects->objectAtIndex(i));
-            if (!o || !activatableType(o->m_objectType)) continue;
-            if (auto* ce = geode::cast::typeinfo_cast<EnhancedGameObject*>(o)) activatable.push_back(ce);
-        }
-    }
-    for (EnhancedGameObject* e : activatable) {
+    for (EnhancedGameObject* e : activatableObjects(pl)) {
         GameObject* obj = e;
         // Only a flag that is set can need clearing: the cheap test first.
         if (!e->m_activatedByPlayer1 && !e->m_activatedByPlayer2) continue;
