@@ -707,43 +707,90 @@ namespace {
 // How far above the highest object a copy can touch the void begins: ten
 // blocks, for a moving object that rises above where it was read.
 constexpr float kVoidMargin = 300.0f;
+// The most a move trigger's lift adds to that (a group can be moved up again
+// and again; past this the rule would not mean much anyway).
+constexpr float kVoidMaxLift = 1200.0f;
+// How far ahead a trigger that can still save a copy in the void is looked
+// for, and how near the end the void does not count: further than a copy
+// travels before the game kills it itself (about 700 ticks), at any speed.
+constexpr float kVoidSaviorReach = 3000.0f;
 }  // namespace
 
-bool Trajectory::inVoid(GJBaseGameLayer* pl, PlayerObject* p) {
+void Trajectory::readVoidTop(GJBaseGameLayer* pl) {
+    if (!pl || !pl->m_objects || m_voidTopGen == moverCacheGeneration()) return;
+    m_voidTopGen = moverCacheGeneration();
+    // What a copy can touch: everything the collision pass looks at, less the
+    // triggers that only fire by position (they stand anywhere, often high
+    // above the level). Read at the start of a run, so every object stands
+    // where the real game has it.
+    float top = 0.0f;
+    float lift = 0.0f;
+    m_voidSaviors.clear();
+    for (auto* o : geode::cocos::CCArrayExt<GameObject*>(pl->m_objects)) {
+        if (!o) continue;
+        switch (o->m_objectID) {
+            case 2066:  // gravity
+            case 2900:  // rotate gameplay
+            case 3022:  // teleport
+            case 3600:  // end
+                // Fired by position (or spawned): the World runs them on the
+                // copy wherever it is, so one ahead can still save it.
+                m_voidSaviors.push_back(o->getPositionX());
+                continue;
+            case 901:  // move
+                if (o->m_classType == GameObjectClassType::Effect)
+                    lift = std::max(lift, static_cast<EffectGameObject*>(o)->m_moveOffset.y);
+                continue;
+            default:
+                break;
+        }
+        switch (o->m_objectType) {
+            case GameObjectType::Decoration:
+            case GameObjectType::EnterEffectObject:
+            case GameObjectType::SecretCoin:
+            case GameObjectType::UserCoin:
+            case GameObjectType::Collectible:
+            case GameObjectType::CollisionObject:
+                continue;
+            case GameObjectType::Modifier:
+                if (o->m_classType == GameObjectClassType::Effect &&
+                    !static_cast<EffectGameObject*>(o)->m_isTouchTriggered)
+                    continue;
+                break;
+            default:
+                break;
+        }
+        top = std::max(top, o->getObjectRect().getMaxY());
+    }
+    std::sort(m_voidSaviors.begin(), m_voidSaviors.end());
+    m_voidTop = top;
+    m_voidLift = std::clamp(lift, 0.0f, kVoidMaxLift);
+}
+
+bool Trajectory::inVoid(GJBaseGameLayer* pl, PlayerObject* p, float levelEnd) {
     if (!pl || !p || !pl->m_objects) return false;
     if (pl->m_isPlatformer || p->m_isSideways) return false;
     // A ship, UFO, wave or swing can steer back; only gravity carries the rest.
     if (p->m_isShip || p->m_isBird || p->m_isDart || p->m_isSwing) return false;
     if (!p->m_isUpsideDown || p->m_yVelocity <= 0.0) return false;
-    if (m_voidTopGen != moverCacheGeneration()) {
-        m_voidTopGen = moverCacheGeneration();
-        // What a copy can touch: everything the collision pass looks at, less
-        // the triggers that only fire by position (they stand anywhere, often
-        // high above the level).
-        float top = 0.0f;
-        for (auto* o : geode::cocos::CCArrayExt<GameObject*>(pl->m_objects)) {
-            if (!o) continue;
-            switch (o->m_objectType) {
-                case GameObjectType::Decoration:
-                case GameObjectType::EnterEffectObject:
-                case GameObjectType::SecretCoin:
-                case GameObjectType::UserCoin:
-                case GameObjectType::Collectible:
-                case GameObjectType::CollisionObject:
-                    continue;
-                case GameObjectType::Modifier:
-                    if (o->m_classType == GameObjectClassType::Effect &&
-                        !static_cast<EffectGameObject*>(o)->m_isTouchTriggered)
-                        continue;
-                    break;
-                default:
-                    break;
-            }
-            top = std::max(top, o->getObjectRect().getMaxY());
-        }
-        m_voidTop = top;
-    }
-    return m_voidTop > 0.0f && p->getPositionY() > m_voidTop + kVoidMargin;
+    if (m_voidTopGen != moverCacheGeneration() || m_voidTop <= 0.0f) return false;  // read at the run's start
+    if (p->getPositionY() <= m_voidTop + kVoidMargin + m_voidLift) return false;
+    // ... and nothing ahead can still save it: the end is not near, and no
+    // teleport, gravity, rotate-gameplay or end trigger stands ahead.
+    const float x = p->getPositionX();
+    if (levelEnd > 0.0f && levelEnd - x < kVoidSaviorReach) return false;
+    auto it = std::lower_bound(m_voidSaviors.begin(), m_voidSaviors.end(), x - 30.0f);
+    if (it != m_voidSaviors.end() && *it < x + kVoidSaviorReach) return false;
+    return true;
+}
+
+void Trajectory::noteVoidDeath(PlayerObject* p) {
+    if (!isFakePlayer(p) || m_killer.valid) return;
+    noteKiller(p, nullptr);
+    m_killer.voidDeath = true;
+    m_killer.certainty = world::Certainty::Static;
+    m_killer.x = p->getPositionX();
+    m_killer.y = p->getPositionY();
 }
 
 void Trajectory::noteKiller(PlayerObject* p, GameObject* object) {
@@ -1737,6 +1784,7 @@ struct Trajectory::Sim {
         auto& updater = Bot::get()->updater();
         t->scanMovedGroups(pl);
         savedState = pl->m_gameState;
+        t->readVoidTop(pl);  // before this run moves anything (inVoid)
         mv.begin(pl);
         config.m_bypassConfig = true;
         config.m_silent = true;
@@ -2376,8 +2424,8 @@ struct Trajectory::Sim {
         for (int i = 0; i < count; i++) {
             PlayerObject* p = players[i];
             const bool dead = (p == t->m_fakePlayer1 && t->m_deadP1) || (p == t->m_fakePlayer2 && t->m_deadP2);
-            if (!dead && t->inVoid(pl, p)) {
-                t->noteKiller(p, nullptr);
+            if (!dead && t->inVoid(pl, p, levelEnd)) {
+                t->noteVoidDeath(p);
                 t->hasDied(p);
             }
         }

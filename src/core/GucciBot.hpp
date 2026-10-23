@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-gi (Recording fix of -gh builds on Mac, iOS and Android too)"
+    "2026-10-23-gj (Pathfinder: the void rule spares a copy a trigger or the end can still save, and its death is a certain one)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

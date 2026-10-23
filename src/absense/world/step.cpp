@@ -22,9 +22,10 @@
 // (b) addToSection 0x226500: sx = (int)trunc((double)m_sectionXFactor *
 //     m_positionX) - the double position, not the node's - with m_positionX
 //     <= 0 giving 0 and m_positionX >= 1e7 giving (double)(factor * 1e7f);
-//     sy the same with m_positionY and m_sectionYFactor. Both factors
-//     are 0.01f (GJBaseGameLayer::init 0x206fc8): a section is 100 units, and
-//     +0x36a0 / +0x36a4 are not widths. The outer vectors grow to sx + 1, the
+//     sy the same with m_positionY and m_sectionYFactor. GJBaseGameLayer::init
+//     0x206fc8 sets both to 0.01f, but in a PlayLayer the y factor reads 0
+//     (logged 2026-10-23): every object is in row 0 there, and only x makes
+//     sections of 100 units. +0x36a0 / +0x36a4 are factors, not widths. The outer vectors grow to sx + 1, the
 //     inner to sy + 1 (their count and dirty vectors with them), and a null
 //     bucket is allocated as an empty 0x18-byte vector (operator new 0x4d0770).
 //     In a bucket: bucket[count] = object when count < size, push_back

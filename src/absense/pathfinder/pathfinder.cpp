@@ -2005,8 +2005,9 @@ bool AbsensePathfinder::evaluate(Candidate& c, int horizon, bool held, std::vect
             // The simulation is right about where it stands: nothing in the
             // level can move it, or everything that can is a kind the World
             // runs for this run (world::certaintyOf).
-            c.killerStatic = m.died && m.killer.valid && m.killer.id != 0 &&
-                             m.killer.certainty != Trajectory::Killer::Certainty::Uncertain;
+            c.killerStatic = m.died && m.killer.valid &&
+                             ((m.killer.id != 0 && m.killer.certainty != Trajectory::Killer::Certainty::Uncertain) ||
+                              m.killer.voidDeath);
             c.killerId = m.killer.valid ? m.killer.id : 0;
             c.killerUid = m.killer.valid ? m.killer.uid : 0;
             c.killerX = m.killer.x;
@@ -2023,8 +2024,12 @@ bool AbsensePathfinder::evaluate(Candidate& c, int horizon, bool held, std::vect
     c.evaluated = true;
     {
         const auto& k = Bot::get()->trajectory().lastKiller();
-        c.killerStatic = r.died && k.valid && k.id != 0 &&
-                         k.certainty != Trajectory::Killer::Certainty::Uncertain;
+        // A fall out of the top of the level is as certain as a static spike
+        // (Trajectory::inVoid): going back from it, not playing into it - the
+        // game only kills the player seconds later, and a repair started from
+        // there would sit past the gap that caused it.
+        c.killerStatic = r.died && k.valid &&
+                         ((k.id != 0 && k.certainty != Trajectory::Killer::Certainty::Uncertain) || k.voidDeath);
         c.killerId = k.valid ? k.id : 0;
         c.killerUid = k.valid ? k.uid : 0;
         c.killerX = k.x;

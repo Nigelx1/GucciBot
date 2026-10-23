@@ -201,6 +201,13 @@ class Trajectory {
     // The top of what a copy can touch in the level (see inVoid), worked out
     // once per read of the level.
     float m_voidTop = 0.0f;
+    // The highest any move trigger lifts its group: a block lifted after the
+    // top was read can stand above it.
+    float m_voidLift = 0.0f;
+    // Where the triggers stand that can still save a copy in the void (a
+    // teleport, gravity or rotate-gameplay trigger, or the end trigger),
+    // sorted by x.
+    std::vector<float> m_voidSaviors;
     unsigned m_voidTopGen = ~0u;
 
     // Part of the rebuild signature. The hook meant to set them
@@ -461,6 +468,10 @@ class Trajectory {
         // called every object of a group a move trigger targets movable even
         // where the run runs that trigger itself.
         bool movable = false;
+        // GucciBot (2026-10-23): the copy fell out of the top of the level
+        // (inVoid) - no object, and as certain as a death gets: nothing in
+        // the level can bring it back.
+        bool voidDeath = false;
     };
     // A spot the real game killed the player at although the simulation saw
     // nothing there, and the real tick it happened on (see addPhantom).
@@ -481,7 +492,12 @@ class Trajectory {
     // at 54% fell up through a gap in the ceiling on every path the
     // pathfinder kept, and every one died on the same tick. A run now takes
     // the copy as dead where it leaves (Sim::step).
-    bool inVoid(GJBaseGameLayer* pl, PlayerObject* p);
+    bool inVoid(GJBaseGameLayer* pl, PlayerObject* p, float levelEnd);
+    // The level's top for inVoid, read once per read of the level, at the start
+    // of a run (before the run moves anything).
+    void readVoidTop(GJBaseGameLayer* pl);
+    // A copy died of the void: the run's killer is none, certain, where it is.
+    void noteVoidDeath(PlayerObject* p);
     void clearKiller() { m_killer = Killer{}; }
     void clearRingContacts() {
         for (auto& m : m_ringTouch) m.clear();
