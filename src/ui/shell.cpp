@@ -621,6 +621,43 @@ namespace gucci::ui {
             return text ? std::move(text).unwrap() : std::string();
         }
 
+        // GucciBot (2026-10-23): the macro an import made is that file's only
+        // while it is still the macro the import wrote. Deleting or renaming a
+        // macro frees its name, and whatever takes the name next (another file
+        // imported under the same name, a recording saved as it) isn't the
+        // first file's: picking that one again selected the other macro and
+        // said to delete it. So imported/index.json keeps the SHA-256 of the
+        // macro file each import wrote ("macroSha256", by nudge as "macros"
+        // is), and a name an import takes goes from every other file's entry.
+        std::string macroFileSha256(std::string const& name) {
+            auto const file = GucciEngine::get()->findMacroFile(name);
+            if (file.empty())
+                return "";
+            std::string unreadable;
+            auto const bytes = readAll(file, &unreadable);
+            if (!unreadable.empty())
+                return "";
+            return geode::sha256(std::span<uint8_t const>(bytes)).toString();
+        }
+
+        // `name` gone from an index entry's macros, and from their hashes.
+        void forgetImportedName(matjson::Value& entry, std::string const& name) {
+            if (!entry.isObject() || !std::as_const(entry)["macros"].isObject())
+                return;
+            std::vector<std::string> nudges;
+            for (auto const& m : std::as_const(entry)["macros"]) {
+                auto const key = m.getKey();
+                auto const was = m.asString();
+                if (key && was.isOk() && was.unwrap() == name)
+                    nudges.push_back(*key);
+            }
+            for (auto const& n : nudges)
+                entry["macros"].erase(n);
+            if (std::as_const(entry)["macroSha256"].isObject())
+                for (auto const& n : nudges)
+                    entry["macroSha256"].erase(n);
+        }
+
         // A GucciBot macro from somewhere else, copied into replays/ as it
         // is, under a free name (it used to be refused as "already a GucciBot
         // macro").
@@ -694,8 +731,12 @@ namespace gucci::ui {
             matjson::Value const seen = std::as_const(index)[hash];
             std::string const nudge = std::to_string(ours ? 0 : g_convertShift);
 
-            // Imported before, at this nudge, and that macro is still here.
-            if (auto const was = textAt(seen["macros"], nudge); !was.empty() && !gb->findMacroFile(was).empty()) {
+            // Imported before, at this nudge, and that macro is still the one
+            // the import wrote, byte for byte. An entry written before the
+            // hashes were kept has none: that file is converted again.
+            auto const was = textAt(seen["macros"], nudge);
+            auto const wrote = textAt(seen["macroSha256"], nudge);
+            if (!was.empty() && !wrote.empty() && macroFileSha256(was) == wrote) {
                 auto const date = textAt(seen, "date");
                 return {true, fmt::format("{} was first imported {} as \"{}\"{}. To import it afresh, delete that "
                                           "macro first.",
@@ -757,11 +798,24 @@ namespace gucci::ui {
             matjson::Value macros = std::as_const(entry)["macros"].isObject() ? std::as_const(entry)["macros"]
                                                                                : matjson::Value::object();
             macros.set(nudge, name);
+            matjson::Value hashes = std::as_const(entry)["macroSha256"].isObject()
+                                        ? std::as_const(entry)["macroSha256"]
+                                        : matjson::Value::object();
+            if (auto const made = macroFileSha256(name); !made.empty())
+                hashes.set(nudge, made);
+            else
+                hashes.erase(nudge);
             entry.set("file", geode::utils::string::pathToString(original));
             entry.set("date", date);
             if (!copy.empty())
                 entry.set("copy", fileNameOf(copy));
             entry.set("macros", std::move(macros));
+            entry.set("macroSha256", std::move(hashes));
+            // The name is this file's now: another file's entry still holding
+            // it (that macro deleted or renamed since) would select this one.
+            for (auto& other : index)
+                if (other.getKey() != hash)
+                    forgetImportedName(other, name);
             index.set(hash, std::move(entry));
             std::filesystem::create_directories(dir, ec);
             if (auto written = geode::utils::file::writeStringSafe(indexFile, index.dump()); !written)
