@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-gp (Pathfinder: the trim holds a run of taps down where that does the same - bouncing cubes stop spamming)"
+    "2026-10-23-gs (World: a simulated copy never sends game events to the real level - the World start-up check stops failing)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

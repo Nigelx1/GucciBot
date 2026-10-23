@@ -892,8 +892,27 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         // event triggers would spawn real groups. The run fires its own event
         // listeners instead (world::onEvent). This slot held `if (false)`
         // until the look-ahead it is about existed here (2026-09-28).
-        if (auto& t = ::Bot::get()->trajectory(); t.drawing() || t.simulating()) {
+        auto& t = ::Bot::get()->trajectory();
+        if (t.drawing() || t.simulating()) {
             world::onEvent((int)event, p1, p2);
+            return;
+        }
+        // GucciBot (2026-10-23): a copy's event outside a simulated tick is no
+        // more the level's than one inside it. The copies are set up from the
+        // real player between ticks (Sim::begin, a restore), and putting back
+        // a copy's gravity that an earlier run left flipped raises
+        // GravityRestored: that went to the real game - the level's event
+        // triggers could fire on it, the real effect manager stamped it, and
+        // the World took that stamp into the next run's state. The second of
+        // two runs from one tick (its copy already the right way up) then
+        // began from other stamps than the first, the World's start-up check
+        // failed, and the World stayed off for the whole launch - one launch
+        // stalled Deadlocked at 23% where every other passed it in a minute.
+        if (auto* traj = t.unsafeInner(); traj && p2 != 0 &&
+            ((traj->m_fakePlayer1 && p2 == traj->m_fakePlayer1->m_uniqueID) ||
+             (traj->m_fakePlayer2 && p2 == traj->m_fakePlayer2->m_uniqueID))) {
+            if (world::g_eventTrace)
+                world::g_eventTrace->push_back(fmt::format("{}/{}/p{} of a copy, kept from the real game", (int)event, p1, p2));
             return;
         }
         if (world::g_eventTrace) world::g_eventTrace->push_back(fmt::format("{}/{}/p{} to the real game", (int)event, p1, p2));
