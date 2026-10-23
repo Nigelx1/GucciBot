@@ -77,6 +77,16 @@ std::shared_ptr<const MaterialDef> materialDef(const std::shared_ptr<const World
 // A level is set up or torn down (forgetLevel): the derived data goes with it.
 void forgetMaterialDef();
 
+// GucciBot (2026-10-23): the objects the real game moved away from a table
+// (BaseTable::liveDiff), by section column - where each stands now and where
+// the table has it - for the materializer to write back a column at a time
+// (Materializer::writePending). The same for every run from one table at one
+// real tick, so it is kept (pendingColumns).
+struct PendingColumns {
+    std::vector<std::vector<int>> columns;  // slots by column, each column's in pending order
+    std::vector<int> always;                // extended collision, or no section to file it by: written at once
+};
+
 // An object that moved on the step before a table was read, by something the
 // World does not follow: carried on at that step's speed, as MovingObjects
 // carries it (the fallback path), for as long as the run lasts.
@@ -445,6 +455,22 @@ class Materializer {
     // next materialize wherever they are.
     std::vector<int> m_pending;
     bool m_pendingPass = false;
+    // GucciBot (2026-10-23): on a layer that files every object in one row (a
+    // PlayLayer: its y factor is 0, see m_fy) they are written back a column
+    // at a time instead, the first time a copy's window reaches the column
+    // where each stands or where the table has it - nothing in a column no
+    // window has reached can meet a copy. LIMBO's real game moves about 5,000
+    // objects between a kept start's tick and the tick it plays, and writing
+    // every one of them at each run's first look was 32 ms a run: 46 s of 108
+    // s of deciding. A copy that teleports gets every column at once
+    // (catchUpAll); a layer with rows keeps the pass of everything at once.
+    void startPending(Run& run);
+    void writePending(Run& run, const Window* window);
+    std::shared_ptr<const PendingColumns> m_pendingColumns;
+    std::vector<uint8_t> m_pendingDone;  // the columns written back this run
+    bool m_pendingLazy = false;
+    uint32_t m_pendingProgress = 0;      // the live tick pendDiff compared the table with
+    uint32_t m_pendingCommandIndex = 0;
     bool m_stale[2] = {true, true};
     bool m_haveWindow[2] = {false, false};
     Window m_window[2];

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-gw (a pathfinder run logs what keeping the World caches up cost it - tables, diffs, captures, starts - to find where the time of LIMBO's searches goes)"
+    "2026-10-23-gx (World: the objects the real game moved are written back a column at a time as a copy reaches them, not all at each run's start - LIMBO spent 46 s of 108 there)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

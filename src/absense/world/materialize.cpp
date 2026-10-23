@@ -37,6 +37,8 @@
 
 #include "absense/world/materialize.hpp"
 
+#include <optional>
+
 #include <Geode/Geode.hpp>
 
 #include <algorithm>
@@ -866,6 +868,8 @@ void Materializer::begin(GJBaseGameLayer* pl, std::shared_ptr<const BaseTable> t
 void Materializer::pendDiff(uint32_t liveProgress, uint32_t liveCommandIndex) {
     m_pending.clear();
     if (m_table) m_pending = m_table->liveDiff(liveProgress, liveCommandIndex);
+    m_pendingProgress = liveProgress;
+    m_pendingCommandIndex = liveCommandIndex;
     m_pendingPass = true;
     m_stale[0] = m_stale[1] = true;
 }
@@ -898,6 +902,8 @@ void Materializer::restoreWritten() {
     // What the real game had moved away from the table is back where the game
     // has it: written again on the next materializeNear.
     m_pendingPass = true;
+    m_pendingLazy = false;
+    m_pendingDone.clear();
 }
 
 void Materializer::end() {
@@ -910,6 +916,9 @@ void Materializer::end() {
     // read through m_carry, which is empty now - see desired().
     m_pending.clear();
     m_pendingPass = false;
+    m_pendingLazy = false;
+    m_pendingDone.clear();
+    m_pendingColumns.reset();
     m_pl = nullptr;
 }
 
@@ -1138,7 +1147,7 @@ void Materializer::materializeNear(Run& run, PlayerObject* copy) {
         UpkeepTimer upkeep(g_upkeep.pending);
         g_upkeep.pending.items += m_pending.size();
         m_pendingPass = false;
-        for (int slot : m_pending) refresh(run, slot, nullptr);
+        startPending(run);
     }
     const int ci = (copy == run.player2 && run.player2) ? 1 : 0;
     const Window pass = windowOf(copy);
@@ -1155,6 +1164,9 @@ void Materializer::materializeNear(Run& run, PlayerObject* copy) {
         w.y0 = 0;
         w.y1 = kMaxSection;
     }
+    // The objects the real game moved, in the columns this window reaches
+    // for the first time (startPending).
+    if (m_pendingLazy) writePending(run, &w);
     const bool look = m_stale[ci] || !m_haveWindow[ci] || !(m_window[ci] == w);
     if (look) {
         // What this run (or a branch it abandoned) wrote, near enough to be
@@ -1238,12 +1250,108 @@ void Materializer::materializeNear(Run& run, PlayerObject* copy) {
     m_haveWindow[ci] = true;
 }
 
+namespace {
+// The last index built (Materializer::startPending): every run from one table
+// at one real tick has the same pending list, and the same objects standing
+// where they stand. The table is held, so its address cannot be another's.
+struct PendingCache {
+    std::shared_ptr<const BaseTable> table;
+    uint32_t progress = 0;
+    uint32_t commandIndex = 0;
+    uint64_t epoch = 0;
+    std::size_t count = 0;
+    std::shared_ptr<const PendingColumns> columns;
+};
+PendingCache g_pendingCache;
+}  // namespace
+
+void Materializer::startPending(Run& run) {
+    m_pendingLazy = false;
+    m_pendingDone.clear();
+    if (m_fy > 0.0 || m_pending.empty() || !m_table || !run.def) {
+        for (int slot : m_pending) refresh(run, slot, nullptr);
+        return;
+    }
+    PendingCache& c = g_pendingCache;
+    if (!(c.columns && c.table == m_table && c.progress == m_pendingProgress &&
+          c.commandIndex == m_pendingCommandIndex && c.epoch == g_realEpoch && c.count == m_pending.size())) {
+        auto out = std::make_shared<PendingColumns>();
+        const WorldDef& def = *run.def;
+        auto put = [&out](int column, int slot) {
+            if (column < 0 || column > kMaxSection) return false;
+            if ((std::size_t)column >= out->columns.size()) out->columns.resize((std::size_t)column + 1);
+            auto& list = out->columns[(std::size_t)column];
+            if (list.empty() || list.back() != slot) list.push_back(slot);
+            return true;
+        };
+        for (int slot : m_pending) {
+            if (slot < 0 || (std::size_t)slot >= def.slots.size()) continue;
+            GameObject* o = def.slots[(std::size_t)slot];
+            const uint8_t flags = def.flags[(std::size_t)slot];
+            if (!o || !(flags & kCollidable)) continue;  // refresh leaves these
+            // Extended collision is met from any section (the list +0x35e0).
+            if (flags & kExtended) {
+                out->always.push_back(slot);
+                continue;
+            }
+            // Where the table has it (and so where it belongs, unless the
+            // run's own ops move it - then the reach looks at it), and where
+            // it stands now, if it is filed at all.
+            const Pose* base = m_table->find(slot);
+            int sx = 0, sy = 0;
+            if (!base || !m_shadow.sectionOf(base->x, base->y, sx, sy) || !put(sx, slot)) {
+                out->always.push_back(slot);
+                continue;
+            }
+            const int now = off::at<int>(o, off::kSecX);
+            if (now >= 0 && now != sx && !put(now, slot)) out->always.push_back(slot);
+        }
+        c.table = m_table;
+        c.progress = m_pendingProgress;
+        c.commandIndex = m_pendingCommandIndex;
+        c.epoch = g_realEpoch;
+        c.count = m_pending.size();
+        c.columns = std::move(out);
+    }
+    m_pendingColumns = c.columns;
+    m_pendingLazy = true;
+    m_pendingDone.assign(m_pendingColumns->columns.size(), 0);
+    for (int slot : m_pendingColumns->always) refresh(run, slot, nullptr);
+}
+
+void Materializer::writePending(Run& run, const Window* window) {
+    if (!m_pendingLazy || !m_pendingColumns) return;
+    const auto& columns = m_pendingColumns->columns;
+    if (columns.empty()) return;
+    int x0 = 0;
+    int x1 = (int)columns.size() - 1;
+    if (window) {
+        x0 = std::max(x0, window->x0);
+        x1 = std::min(x1, window->x1);
+    }
+    std::optional<UpkeepTimer> upkeep;
+    for (int x = x0; x <= x1; x++) {
+        if (m_pendingDone[(std::size_t)x]) continue;
+        m_pendingDone[(std::size_t)x] = 1;
+        if (columns[(std::size_t)x].empty()) continue;
+        if (!upkeep) upkeep.emplace(g_upkeep.pendingColumns);
+        g_upkeep.pendingColumns.items += columns[(std::size_t)x].size();
+        // Through refresh's own window test: one filed here only by where the
+        // table has it, and moved on from there by the run's ops, is the
+        // reach's to write when its window comes.
+        for (int slot : columns[(std::size_t)x]) refresh(run, slot, window);
+    }
+}
+
 void Materializer::catchUpAll(Run& run) {
     if (!sameLevel(run)) return;
     if (m_pendingPass) {
         m_pendingPass = false;
+        m_pendingLazy = false;
         for (int slot : m_pending) refresh(run, slot, nullptr);
     }
+    // The columns no window has reached yet: all of them now.
+    if (m_pendingLazy) writePending(run, nullptr);
     for (std::size_t i = 0; i < m_written.size(); i++) refresh(run, m_written[i].slot, nullptr);
     const MaterialDef& md = *m_table->md;
     for (const auto& entry : run.ws->reach) {

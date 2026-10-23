@@ -599,6 +599,7 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
         line += part("start tables", u.startObjects, nullptr);
         line += part("starts stepped", u.stepStarts, "ticks");
         line += part("pending passes", u.pending, "objects");
+        line += part("pending column writes", u.pendingColumns, "objects");
         devlog::log(devlog::Cat::AbsensePathfinder, line);  // (log() stops at 511 characters)
     }
     if (m_stats.routeLegs > 0 || m_stats.routeErrors > 0) {

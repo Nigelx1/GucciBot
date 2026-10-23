@@ -236,6 +236,7 @@ struct Upkeep {
     Part startObjects;  // a kept start's table, undone from the ledger
     Part stepStarts;    // a kept start's state, stepped on from its keyframe
     Part pending;       // the objects the real game moved, written back at a run's first look
+    Part pendingColumns;  // ... or a column of them at a time, as a window reaches it (Materializer::writePending)
     Part runBegins;     // Sim::begin
     Part runEnds;       // Sim::end
 };
