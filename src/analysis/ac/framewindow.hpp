@@ -690,6 +690,17 @@ class FrameWindowAnalyzer {
     // inputs, else every action. And the entry offset action k gets.
     bool movesWith(size_t k, bool player2) const;
     int64_t entryShift(size_t k) const;
+    // GucciBot (2026-10-23): the 2-player fixes in a 1-player level. For each
+    // action, the same click stored again under the other player's flag on
+    // the same tick (some imports write a dual's click for both players), or
+    // NO_INDEX; empty unless the macro has such a pair (pairDualClicks).
+    std::vector<size_t> m_partner;
+    size_t partnerOf(size_t k) const {
+        return k < m_partner.size() ? m_partner[k] : NO_INDEX;
+    }
+    void pairDualClicks();
+    void followPartner(size_t k);
+    bool inRetimeTail(size_t k, size_t ai, bool player2) const;
 
     uint32_t m_recorded = 0;
     int64_t m_maxNeg = 0;

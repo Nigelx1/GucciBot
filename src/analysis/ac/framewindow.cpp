@@ -695,9 +695,15 @@ bool FrameWindowAnalyzer::collectSamples() {
         m_originalOffsets.push_back(scbf::offsetOf(a));
     }
     m_subtickMacro = scbf::hasOffsets(actions);
+    // GucciBot (2026-10-23): the 2-player fixes in a 1-player level: a click
+    // stored under both flags on one tick is one sample, its first half's.
+    this->pairDualClicks();
 
     for (size_t i = 0; i < actions.size(); i++) {
         if (!isMeasurableInput(actions[i])) continue;
+        if (size_t const partner = this->partnerOf(i);
+            partner != NO_INDEX && partner < i)
+            continue;
         Sample s;
         s.frame = static_cast<uint32_t>(actions[i].m_frame);
         s.player2 = actions[i].m_player2;
@@ -863,12 +869,19 @@ int64_t FrameWindowAnalyzer::legReach(size_t afterAi, int64_t from,
     // ended at them stopped short wherever the other player clicked, which in
     // a 2-player macro is all the time. Otherwise either player's, as before.
     bool const p2 = afterAi < actions.size() && actions[afterAi].m_player2;
+    // GucciBot (2026-10-23): the other half of a pair (pairDualClicks) is the
+    // same click, not the next input, and so is its release's other half when
+    // the release is passed over. Never true without pairs.
+    auto const partOf = [&](size_t k, size_t click, size_t rel) {
+        return k == this->partnerOf(click) || k == this->partnerOf(rel);
+    };
     // The first measurable input after action `after`, other than `skip` and
     // `also`.
     auto const nextInput = [&](size_t after, size_t also) {
         for (size_t k = after + 1; k < actions.size(); k++)
             if (k != skip && k != also && isMeasurableInput(actions[k]) &&
-                this->movesWith(k, p2))
+                this->movesWith(k, p2) && !partOf(k, afterAi, skip) &&
+                !partOf(k, after, also))
                 return k;
         return NO_INDEX;
     };
@@ -973,6 +986,89 @@ int64_t FrameWindowAnalyzer::entryShift(size_t k) const {
          !this->movesWith(k, m_samples[m_index].player2)))
         return 0;
     return m_entryOffset;
+}
+
+// GucciBot (2026-10-23): the 2-player fixes in a 1-player level (anticroom's
+// antics-counter beta.4 changelog keeps a normal dual counted together; no
+// source). There one click moves both players, and GucciBot's recorder writes
+// it once, under one flag. Some imported macros write a dual's click for each
+// player instead: the same press or release under both flags on one tick.
+// Counted as two inputs, each test moved one half and left the other playing
+// at the recorded time, so the click still landed there and the window
+// measured nothing real. With the switch on in a 1-player level such a pair is
+// one click: one sample (collectSamples), and every test moves both halves
+// (inRetimeTail, followPartner, bufferShiftValid, legReach). A press pair
+// counts only if its releases are a pair too, or neither has one, so moving a
+// click and its release always moves the whole of both.
+void FrameWindowAnalyzer::pairDualClicks() {
+    m_partner.clear();
+    if (!m_twoPlayer || m_twoPlayerLevel) return;
+
+    auto const& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
+    std::vector<size_t> partner(actions.size(), NO_INDEX);
+    // The same event on the same tick, at the same point in it, under the
+    // other flag. A macro is in frame order, so a tick's actions are together.
+    for (size_t i = 0; i < actions.size(); i++) {
+        if (partner[i] != NO_INDEX || !isMeasurableInput(actions[i])) continue;
+        for (size_t j = i + 1;
+             j < actions.size() && actions[j].m_frame == actions[i].m_frame; j++) {
+            if (partner[j] != NO_INDEX || !isMeasurableInput(actions[j])) continue;
+            if (actions[j].m_player2 == actions[i].m_player2 ||
+                actions[j].m_type != actions[i].m_type ||
+                actions[j].m_holding != actions[i].m_holding ||
+                scbf::offsetOf(actions[j]) != scbf::offsetOf(actions[i]))
+                continue;
+            partner[i] = j;
+            partner[j] = i;
+            break;
+        }
+    }
+
+    size_t pairs = 0;
+    for (size_t i = 0; i < actions.size(); i++) {
+        size_t const j = partner[i];
+        if (j == NO_INDEX || j < i) continue;
+        if (actions[i].m_holding) {
+            size_t const ri = this->pairedReleaseFor(i);
+            size_t const rj = this->pairedReleaseFor(j);
+            bool const releasesPair = ri == NO_INDEX
+                                          ? rj == NO_INDEX
+                                          : rj != NO_INDEX && partner[ri] == rj;
+            if (!releasesPair) {
+                partner[i] = NO_INDEX;
+                partner[j] = NO_INDEX;
+                continue;
+            }
+        }
+        pairs++;
+    }
+    if (pairs == 0) return;
+
+    m_partner = std::move(partner);
+    FWLOG("[fw][samples] 2-player fixes: {} click(s) stored under both players' "
+          "flags on one tick, each counted as one click",
+          pairs);
+}
+
+// GucciBot (2026-10-23): the other half of a pair (pairDualClicks) goes where
+// action k was just placed: the same tick, the same point in it.
+void FrameWindowAnalyzer::followPartner(size_t k) {
+    size_t const partner = this->partnerOf(k);
+    if (partner == NO_INDEX) return;
+    auto& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
+    actions[partner].m_frame = actions[k].m_frame;
+    scbf::setOffset(actions[partner], scbf::offsetOf(actions[k]));
+}
+
+// GucciBot (2026-10-23): whether a Retime move of input `ai` (a `player2` one)
+// carries action k: the input and the rest of its player's inputs, as before.
+// In a 1-player level whose macro has pairs (pairDualClicks), every input from
+// it on under either flag: one click moves both players there, so the two
+// flags are one stream of clicks, and a pair moves as one.
+bool FrameWindowAnalyzer::inRetimeTail(size_t k, size_t ai, bool player2) const {
+    auto const& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
+    return k >= ai && isMeasurableInput(actions[k]) &&
+           (actions[k].m_player2 == player2 || !m_partner.empty());
 }
 
 void FrameWindowAnalyzer::muteAudio() {
@@ -1336,6 +1432,9 @@ void FrameWindowAnalyzer::applySetupFrames(SetupGroup const& sg,
         actions[k].m_frame = static_cast<uint64_t>(std::max<int64_t>(
             static_cast<int64_t>(m_originalFrames[k]) + shift, 0));
     }
+    // GucciBot (2026-10-23): a pair's other half goes with its input
+    // (pairDualClicks); nothing without pairs.
+    for (size_t const ai : groupAi) this->followPartner(ai);
 }
 
 void FrameWindowAnalyzer::beginSetupGroup(SetupGroup const& sg) {
@@ -1476,6 +1575,13 @@ void FrameWindowAnalyzer::commitSetupGroup(SetupGroup const& sg) {
     size_t const lastAi = m_samples[sg.first + sg.count - 1].actionIndex;
     for (size_t k = m_samples[sg.first].actionIndex; k <= lastAi; k++)
         m_originalFrames[k] = actions[k].m_frame;
+    // GucciBot (2026-10-23): the other half of a pair (pairDualClicks) keeps
+    // its input's new frame too.
+    for (size_t j = 0; j < sg.count; j++) {
+        size_t const ai = m_samples[sg.first + j].actionIndex;
+        if (size_t const pair = this->partnerOf(ai); pair != NO_INDEX)
+            m_originalFrames[pair] = m_originalFrames[ai];
+    }
 
     for (size_t j = 0; j < sg.count; j++) {
         size_t const ai = m_samples[sg.first + j].actionIndex;
@@ -2071,6 +2177,29 @@ bool FrameWindowAnalyzer::bufferShiftValid(int64_t shift) const {
             relShifted >= static_cast<int64_t>(m_originalFrames[after]))
             return false;
     }
+
+    // GucciBot (2026-10-23): the other half of a pair (pairDualClicks) moves
+    // with it, so its own neighbors under its flag are checked the same way.
+    if (size_t const partner = this->partnerOf(ai); partner != NO_INDEX) {
+        bool const pp2 =
+            Bot::get()->replaySystem().m_actionAtom.m_actions[partner].m_player2;
+        if (size_t const prev = this->prevActionFor(partner, pp2);
+            prev != NO_INDEX &&
+            shifted <= static_cast<int64_t>(m_originalFrames[prev]))
+            return false;
+        if (size_t const next = this->nextActionFor(partner, pp2);
+            next != NO_INDEX &&
+            shifted >= static_cast<int64_t>(m_originalFrames[next]))
+            return false;
+        if (size_t const rel = this->pairedReleaseFor(partner); rel != NO_INDEX) {
+            int64_t const relShifted =
+                static_cast<int64_t>(m_originalFrames[rel]) + tickShift;
+            if (size_t const after = this->nextActionFor(rel, pp2);
+                after != NO_INDEX &&
+                relShifted >= static_cast<int64_t>(m_originalFrames[after]))
+                return false;
+        }
+    }
     return true;
 }
 
@@ -2123,8 +2252,9 @@ void FrameWindowAnalyzer::beginShift(int64_t shift, ShiftMode mode) {
         for (size_t k = 0; k < actions.size(); k++) {
             int64_t moved = static_cast<int64_t>(m_originalFrames[k]);
             moved += this->entryShift(k);  // GucciBot (2026-10-23): the 2-player fixes
-            bool const tail = k >= ai && isMeasurableInput(actions[k]) &&
-                              actions[k].m_player2 == thisP2;
+            // GucciBot (2026-10-23): the input and the rest of its player's;
+            // both flags' with pairs (inRetimeTail).
+            bool const tail = this->inRetimeTail(k, ai, thisP2);
             if (tail) moved += tickShift;
             moved = std::max<int64_t>(moved, 0);
             actions[k].m_frame = static_cast<uint64_t>(moved);
@@ -2139,12 +2269,14 @@ void FrameWindowAnalyzer::beginShift(int64_t shift, ShiftMode mode) {
         }
         actions[ai].m_frame =
             static_cast<uint64_t>(std::max<int64_t>(shifted, 0));
+        this->followPartner(ai);  // GucciBot (2026-10-23): the 2-player fixes
         if (size_t const rel = this->pairedReleaseFor(ai); rel != NO_INDEX) {
             int64_t relMoved =
                 static_cast<int64_t>(m_originalFrames[rel]) + tickShift;
             relMoved += this->entryShift(rel);  // GucciBot (2026-10-23): the 2-player fixes
             relMoved = std::max<int64_t>(relMoved, 0);
             actions[rel].m_frame = static_cast<uint64_t>(relMoved);
+            this->followPartner(rel);  // GucciBot (2026-10-23): the 2-player fixes
             m_releaseFrame = relMoved;
         }
     }
@@ -3080,9 +3212,7 @@ void FrameWindowAnalyzer::beginRecovery() {
     auto const placed = [&](size_t k) {
         int64_t moved = static_cast<int64_t>(m_originalFrames[k]);
         moved += this->entryShift(k);  // GucciBot (2026-10-23): the 2-player fixes
-        if (k >= ai && isMeasurableInput(actions[k]) &&
-            actions[k].m_player2 == thisP2)
-            moved += tickShift;
+        if (this->inRetimeTail(k, ai, thisP2)) moved += tickShift;
         return std::max<int64_t>(moved, 0);
     };
 
@@ -3101,17 +3231,24 @@ void FrameWindowAnalyzer::beginRecovery() {
     // (syncDispatch), so a rescue that passes the other player's click is
     // tried instead of skipped.
     bool const ownOnly = this->countsByPlayer();
+    // GucciBot (2026-10-23): the other halves of the next input's pair and of
+    // its release's (pairDualClicks) move with them; NO_INDEX without pairs.
+    size_t const niPair = this->partnerOf(ni);
+    size_t const niRelPair = this->partnerOf(niRel);
+    auto const movesHere = [&](size_t k) {
+        return k == ni || k == niRel || k == niPair || k == niRelPair;
+    };
     auto const fits = [&](size_t m) {
         int64_t const at = placed(m) + m_recoveryOffset;
         if (at < 0) return false;
         for (size_t k = m; k-- > 0;) {
-            if (k == ni || k == niRel) continue;
+            if (movesHere(k)) continue;
             if (ownOnly && !this->movesWith(k, thisP2)) continue;
             if (at <= placed(k)) return false;
             break;
         }
         for (size_t k = m + 1; k < actions.size(); k++) {
-            if (k == ni || k == niRel) continue;
+            if (movesHere(k)) continue;
             if (ownOnly && !this->movesWith(k, thisP2)) continue;
             if (at >= placed(k)) return false;
             break;
@@ -3149,9 +3286,12 @@ void FrameWindowAnalyzer::beginRecovery() {
                                 m_entryOffset + tickShift + m_recoveryOffset;
     actions[ni].m_frame =
         static_cast<uint64_t>(std::max<int64_t>(nextShifted, 0));
-    if (niRel != NO_INDEX)
+    this->followPartner(ni);  // GucciBot (2026-10-23): the 2-player fixes
+    if (niRel != NO_INDEX) {
         actions[niRel].m_frame =
             static_cast<uint64_t>(placed(niRel) + m_recoveryOffset);
+        this->followPartner(niRel);  // GucciBot (2026-10-23): the 2-player fixes
+    }
     this->syncDispatch(true);  // GucciBot (2026-10-23): the 2-player fixes
 
     // (Not with Check Past Next Input: this leg moves the next input itself,
@@ -3698,6 +3838,7 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
     // did. Every way a run ends comes through here (Cancel too).
     rs.clearDispatchOrder();
     m_dispatchLegArmed = false;
+    m_partner.clear();
     m_running = false;
     m_stageId = Stage::Idle;
 
@@ -4208,6 +4349,7 @@ void FrameWindowAnalyzer::placeAt(size_t k, double pos) {
     double const whole = std::max(0.0, std::floor(pos));
     action.m_frame = static_cast<uint64_t>(whole);
     scbf::setOffset(action, pos > whole ? pos - whole : 0.0);
+    this->followPartner(k);  // GucciBot (2026-10-23): the 2-player fixes
 }
 
 // ---- The dependent pass ------------------------------------------------------
