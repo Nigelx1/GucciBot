@@ -560,6 +560,14 @@ namespace gucci::mcp {
                 "Absense's engine: restart the level (Full Restart) and search from frame 0 "
                 "(default: the Pathfinder tab's switch). It also starts from the pause menu.";
             props["from_beginning"] = fromBeginning;
+            auto exactFlags = obj();
+            exactFlags["type"] = "boolean";
+            exactFlags["description"] =
+                "Absense's engine: turn the Pathfinder tab's \"Exact start flags (test)\" switch on or off before "
+                "starting (saved, as the tab's switch is; default: leave it as it is). A search takes it when it "
+                "starts: a run from an earlier tick then sees each portal, orb, pad and trigger used or not as the "
+                "game had it at that tick.";
+            props["exact_start_flags"] = exactFlags;
             schema["type"] = "object";
             schema["properties"] = props;
             schema["required"] = std::vector<std::string>{"action"};
@@ -592,6 +600,9 @@ namespace gucci::mcp {
                             // Queued: the start is carried out over the next
                             // frames (pause menu, restart); poll status.
                             bool const fromStart = argBool(a, "from_beginning", absense::startFromBeginning());
+                            if (a.contains("exact_start_flags"))
+                                absense::setExactStartFlags(argBool(a, "exact_start_flags", false));
+                            out["exact_start_flags"] = absense::exactStartFlags();
                             out["queued"] = absense::requestStart(fromStart);
                             out["from_beginning"] = fromStart;
                             out["message"] = absense::status().message;
@@ -623,6 +634,10 @@ namespace gucci::mcp {
                             ab["seconds"] = st.seconds;
                             ab["last_decision"] = st.lastDecision;
                             ab["message"] = st.message;
+                            // The running search's exact start flags, and the
+                            // switch the next start takes.
+                            ab["exact_start_flags"] = st.exactStartFlags;
+                            ab["exact_start_flags_switch"] = absense::exactStartFlags();
                             out["absense"] = ab;
                         }
                         out["active"] = pf->active;

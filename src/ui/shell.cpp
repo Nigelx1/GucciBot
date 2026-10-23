@@ -1636,6 +1636,16 @@ namespace gucci::ui {
                                "plays the way physics finds into it. Off: the pathfinder as it was",
                                &guided, guidance, 3))
                 absense::setRouteGuidance(guided);
+            // GucciBot (2026-10-23): a test switch for The Nightmare's 75%
+            // stall, off by default and saved with the mod; a search takes it
+            // when it starts (Trajectory::useStartExact).
+            bool exactFlags = absense::exactStartFlags();
+            if (kit::SwitchRow("Exact start flags (test)",
+                               "Off by default. On: when the pathfinder looks at an earlier moment, each portal, orb, "
+                               "pad and trigger counts as used or not exactly as the game had it then, instead of a "
+                               "guess from where the player stood. Takes effect when a search starts",
+                               &exactFlags))
+                absense::setExactStartFlags(exactFlags);
             auto const s = absense::status();
             kit::RowBegin("", nullptr);
             if (!s.running && !absense::startPending()) {

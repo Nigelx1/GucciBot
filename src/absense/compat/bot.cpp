@@ -219,6 +219,7 @@ absense::Status absense::status() {
     out.seconds = s.seconds;
     out.lastDecision = s.lastDecision;
     out.message = s.message;
+    out.exactStartFlags = out.running && SLSettings::get()->pathfinder.exactStartFlags;
     if (s_pending.active)
         out.message = s_pending.fromBeginning ? "Restarting the level to start from its beginning..." : "Starting...";
     else if (!out.running && !s_pendingNote.empty())

@@ -59,6 +59,7 @@ namespace absense {
         double seconds = 0.0;
         std::string lastDecision;
         std::string message;        // why it stopped, or a note while it runs
+        bool exactStartFlags = false;  // the running search took exact start flags on (see exactStartFlags())
     };
     Status status();
 
