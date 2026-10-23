@@ -420,6 +420,7 @@ bool AbsensePathfinder::start() {
     m_livePending = false;
     m_ahead = Ahead{};
     m_aheadFailed = false;
+    m_aheadWait = AheadWait{};
     m_freeze = Freeze{};
     m_confirmedKillers.clear();
     m_planKiller = 0;
@@ -4282,6 +4283,7 @@ void AbsensePathfinder::decide() {
         m_planIndex = 0;
         m_planTrace = std::move(trace);
         m_aheadFailed = false;
+        m_aheadWait = AheadWait{};  // a plan of its own: its end is tried afresh
     }
     m_lastReplanTick = tick;
     (void)ahead;
@@ -4398,6 +4400,20 @@ void AbsensePathfinder::beginAhead() {
     if (at >= m_plan.size()) return;
     const Start* now = startAt(from);
     if (!now || !now->sim) return;
+    // GucciBot (2026-10-23): refused already for this same plan end (below),
+    // and the live player is still not the kind it ends in: the same run would
+    // only be refused again. Run every frame, it held Deadlocked at half speed
+    // for 4-15 s before every portal (about 75 s of one run) with nothing being
+    // decided. The try comes back the frame the player is that kind, as it
+    // always did, and now and then before, in case a run from where the player
+    // is by then ends as another kind. (Not for a plan that dies before its
+    // end: from a later start it may well not, and holding that try back would
+    // move the start the decision ahead is made from.)
+    const uint64_t end = from + (uint64_t)(m_plan.size() - at);
+    if (m_aheadWait.end == end && m_aheadWait.replan == m_lastReplanTick && from < m_aheadWait.retryAt &&
+        (Trajectory::startState(*now->sim).mode != m_aheadWait.mode ||
+         (m_aheadWait.mode2 >= 0 && Trajectory::startState(*now->sim, true).mode != m_aheadWait.mode2)))
+        return;
     std::span<const TickInput> rest(m_plan.data() + at, m_plan.size() - at);
     std::span<const TickInput> rest2;
     if (at < m_plan2.size()) rest2 = std::span<const TickInput>(m_plan2.data() + at, m_plan2.size() - at);
@@ -4409,10 +4425,25 @@ void AbsensePathfinder::beginAhead() {
     // appended plan eight ticks later by some 550 units, while the one that
     // stayed in one kind was followed for 153 ticks. Such a plan plays out and
     // the decision at its end is made from the real state.
-    if (Trajectory::startState(*now->sim).mode != Trajectory::startState(*future).mode) return;
-    if (Trajectory::startCount(*future) == 2 &&
-        Trajectory::startState(*now->sim, true).mode != Trajectory::startState(*future, true).mode)
+    const int endMode = Trajectory::startState(*future).mode;
+    const int endMode2 = Trajectory::startCount(*future) == 2 ? Trajectory::startState(*future, true).mode : -1;
+    if (Trajectory::startState(*now->sim).mode != endMode ||
+        (endMode2 >= 0 && Trajectory::startState(*now->sim, true).mode != endMode2)) {
+        // Remembered (see above), and logged once a plan end.
+        const bool fresh = m_aheadWait.end != end || m_aheadWait.replan != m_lastReplanTick;
+        const uint64_t every = (uint64_t)std::lround(60.0 * std::max(1.0, Bot::get()->updater().getTps() / 240.0));
+        m_aheadWait = {end, m_lastReplanTick, from + std::max<uint64_t>(every, rest.size() / 4), endMode, endMode2};
+        if (fresh) {
+            static constexpr const char* kKinds[] = {"cube", "ship", "ball", "UFO", "wave", "robot", "spider", "swing"};
+            auto kind = [](int mode) { return mode >= 0 && mode < 8 ? kKinds[mode] : "?"; };
+            const bool second = Trajectory::startState(*now->sim).mode == endMode;  // it is player 2 that changes
+            log("tick %llu: the plan ends at tick %llu as a %s while %s is a %s: the decision about its end waits for "
+                "the portal",
+                (unsigned long long)from, (unsigned long long)end, kind(second ? endMode2 : endMode),
+                second ? "player 2" : "the player", kind(Trajectory::startState(*now->sim, second).mode));
+        }
         return;
+    }
     m_ahead.active = true;
     m_ahead.tick = from + rest.size();
     m_ahead.start = future;
@@ -4524,9 +4555,11 @@ void AbsensePathfinder::beginFreeze() {
         m_freeze.into = m_decision.active ? secondsSince(m_decision.began) : 0.0;  // (begun, not set up yet)
     } else {
         // What kept beginAhead from starting one.
+        const bool portal = m_aheadWait.end == m_liveNextTick && m_aheadWait.replan == m_lastReplanTick;
         m_freeze.why = m_aheadFailed                        ? "the decision ahead of it found a dead end"
                        : m_planKnownDeath != UINT64_MAX     ? "the plan was played into a death, for the game's word"
                        : separateNow()                      ? "two-player mode decides from the real state"
+                       : portal                             ? "the plan ends past a portal, as another kind of player"
                                                             : "none could begin";
     }
 }
@@ -5621,6 +5654,7 @@ void AbsensePathfinder::finishRestore() {
         if (m_probe.hasLesson) m_lessons.push_back(std::move(m_probe.lesson));  // after the drop above: the stale ones are gone
         m_probe = Probe{};
         m_aheadFailed = false;  // a plan of its own: the decision about its end is worth making again
+        m_aheadWait = AheadWait{};
         if (m_repair.active) resumeFrom(tick);
         m_phase = Phase::Committing;
         // Realtime: the game plays this plan on its own clock too, and the

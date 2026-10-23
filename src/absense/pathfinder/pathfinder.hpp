@@ -652,6 +652,18 @@ public:
     };
     Ahead m_ahead;
     bool m_aheadFailed = false;  // the decision about this plan's end found nothing: the plan plays out, the real state decides
+    // GucciBot: the last time beginAhead was refused because the plan ends as
+    // another kind of player than the live one (past a portal). Until the live
+    // player is that kind, or the plan or its end changes, another try only
+    // runs the whole rest of the plan again to be refused again - every frame,
+    // for as long as the plan takes to reach the portal.
+    struct AheadWait {
+        uint64_t end = UINT64_MAX;     // the tick the refused plan ends at
+        uint64_t replan = UINT64_MAX;  // ... and the decision that last made it (m_lastReplanTick)
+        uint64_t retryAt = 0;          // from this tick on it is tried again anyway
+        int mode = -1, mode2 = -1;     // the kinds of player it ends in (mode2: -1 without a second player)
+    };
+    AheadWait m_aheadWait;
     void goLive();
     void pauseLive();
     void beginAhead();
