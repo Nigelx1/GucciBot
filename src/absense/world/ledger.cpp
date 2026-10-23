@@ -795,6 +795,8 @@ const WorldState& WorldStart::materialize() const {
     }
     auto stepped = std::make_shared<WorldState>(*keyframe);
     if (step) {
+        UpkeepTimer upkeep(g_upkeep.stepStarts);
+        g_upkeep.stepStarts.items += (uint64_t)offset;
         OpLog log;
         log.reset((uint32_t)stepped->tick);
         ObjectCache cache;
@@ -833,6 +835,7 @@ bool ledgerStartObjects(GJBaseGameLayer* pl, const std::shared_ptr<const WorldDe
         }
     }
     if (!mark) return false;
+    UpkeepTimer upkeep(g_upkeep.startObjects);
     std::shared_ptr<const BaseTable> now = baseTable(pl, def, liveProgress, liveCommandIndex);
     if (!now) return false;
     std::vector<std::pair<int, Pose>> undo;

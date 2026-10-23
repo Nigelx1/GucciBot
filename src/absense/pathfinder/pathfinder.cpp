@@ -16,6 +16,7 @@
 #include "absense/compat/devlog.hpp"
 #include "absense/gpu/client.hpp"
 #include "absense/route/planner.hpp"
+#include "absense/world/world.hpp"
 #include "absense/compat/modal.hpp"
 #include "ui/ui.hpp"
 
@@ -293,6 +294,7 @@ bool AbsensePathfinder::start() {
     auto* bot = Bot::get();
     auto* pl = PlayLayer::get();
     m_stats = Stats{};
+    world::g_upkeep = world::Upkeep{};  // logged at the stop
     // Per run (step 1): the log caps, the route-search reason, and the card's
     // random pools, so a run repeats whatever ran before it in the session.
     m_spikeLines = 0;
@@ -576,6 +578,29 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
         m_stats.secondsSim > 0.0 ? (double)m_stats.simulatedTicks / m_stats.secondsSim : 0.0,
         m_stats.simulations > 0 ? (double)m_stats.simulatedTicks / (double)m_stats.simulations : 0.0,
         m_stats.secondsRestore, m_stats.secondsReal, m_stats.unitMs);
+    {
+        // GucciBot (2026-10-23): what keeping the World's caches up cost the
+        // run (world::Upkeep): count, seconds, and what each went through.
+        const world::Upkeep& u = world::g_upkeep;
+        auto part = [](const char* name, const world::Upkeep::Part& p, const char* what) {
+            if (p.n == 0) return std::string();
+            std::string s = fmt::format("; {} {} in {:.2f}s", p.n, name, p.us / 1e6);
+            if (what && p.items > 0) s += fmt::format(" ({:.0f} {} each)", (double)p.items / (double)p.n, what);
+            return s;
+        };
+        std::string line = fmt::format("World upkeep: {} runs set up in {:.2f}s and {} put away in {:.2f}s",
+                                       u.runBegins.n, u.runBegins.us / 1e6, u.runEnds.n, u.runEnds.us / 1e6);
+        line += part("level reads", u.levelReads, "objects");
+        line += part("object writer views", u.materialDefs, nullptr);
+        line += part("object tables", u.tables, "objects");
+        line += part("live diffs", u.diffs, "moved");
+        line += part("carry lists", u.carries, "movers");
+        line += part("captures", u.captures, nullptr);
+        line += part("start tables", u.startObjects, nullptr);
+        line += part("starts stepped", u.stepStarts, "ticks");
+        line += part("pending passes", u.pending, "objects");
+        devlog::log(devlog::Cat::AbsensePathfinder, line);  // (log() stops at 511 characters)
+    }
     if (m_stats.routeLegs > 0 || m_stats.routeErrors > 0) {
         const double legs = (double)std::max<uint64_t>(1, m_stats.routeLegs);
         log("route: %llu searches to the next gate (%llu found a way, %llu none, %llu out of room or time, %llu could not run, %llu of those stopped by the clock), %.0f ms and %.0f ticks a search on average, %llu route ideas played; %llu dead ends went back to where the route was left, %llu took it there",

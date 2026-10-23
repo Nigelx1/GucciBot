@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-gv (the speed test times each part of the World capture a simulated run begins with - 216 ms of the 270 a run takes to set up on LIMBO)"
+    "2026-10-23-gw (a pathfinder run logs what keeping the World caches up cost it - tables, diffs, captures, starts - to find where the time of LIMBO's searches goes)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

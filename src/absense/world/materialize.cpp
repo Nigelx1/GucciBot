@@ -246,6 +246,7 @@ void forgetMaterialDef() {
 std::shared_ptr<const MaterialDef> materialDef(const std::shared_ptr<const WorldDef>& def) {
     if (!def) return nullptr;
     if (g_materialDef && g_materialDef->def == def) return g_materialDef;
+    UpkeepTimer upkeep(g_upkeep.materialDefs);
     auto md = std::make_shared<MaterialDef>();
     md->def = def;
     const std::size_t n = def->slots.size();
@@ -336,6 +337,7 @@ const std::vector<int>& BaseTable::liveDiff(uint32_t liveProgress, uint32_t live
     if (m_diffValid && m_diffProgress == liveProgress && m_diffIndex == liveCommandIndex && m_diffEpoch == g_realEpoch) {
         return m_diff;
     }
+    UpkeepTimer upkeep(g_upkeep.diffs);
     m_diff.clear();
     // The table's own tick with nothing real in between: the objects stand
     // where it read them (runs put back everything they write before the game
@@ -353,6 +355,7 @@ const std::vector<int>& BaseTable::liveDiff(uint32_t liveProgress, uint32_t live
             if (o && !sameLive(extraPoses[i], o)) m_diff.push_back(extraSlots[i]);
         }
     }
+    g_upkeep.diffs.items += m_diff.size();
     m_diffValid = true;
     m_diffProgress = liveProgress;
     m_diffIndex = liveCommandIndex;
@@ -369,6 +372,8 @@ std::shared_ptr<const BaseTable> baseTable(GJBaseGameLayer* pl, const std::share
         g_lastTable->commandIndex == liveCommandIndex && g_lastTable->epoch == g_realEpoch) {
         return g_lastTable;
     }
+    UpkeepTimer upkeep(g_upkeep.tables);
+    g_upkeep.tables.items += md->slots.size();
     auto t = std::make_shared<BaseTable>();
     t->md = md;
     t->pl = pl;
@@ -452,6 +457,8 @@ std::shared_ptr<const std::vector<Carry>> carriedMovers(const BaseTable& table, 
                                                         const WorldDef& def) {
     auto out = std::make_shared<std::vector<Carry>>();
     if (table.movers.empty()) return out;
+    UpkeepTimer upkeep(g_upkeep.carries);
+    g_upkeep.carries.items += table.movers.size();
     // The groups the state's move commands move, and on which axes the step
     // follows them: all of them run in the World (world/step.cpp), a camera
     // lock's axis with no input.
@@ -1128,6 +1135,8 @@ bool Materializer::sameLevel(const Run& run) const {
 void Materializer::materializeNear(Run& run, PlayerObject* copy) {
     if (!copy || !sameLevel(run)) return;
     if (m_pendingPass) {
+        UpkeepTimer upkeep(g_upkeep.pending);
+        g_upkeep.pending.items += m_pending.size();
         m_pendingPass = false;
         for (int slot : m_pending) refresh(run, slot, nullptr);
     }

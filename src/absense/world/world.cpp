@@ -26,6 +26,7 @@ std::vector<std::string>* g_debugNotes = nullptr;
 std::vector<int> g_debugGroups;
 std::vector<std::string>* g_eventTrace = nullptr;
 CaptureProfile g_captureProfile;
+Upkeep g_upkeep;
 std::vector<int> g_debugUids;
 
 // A state made current on its own (the drawn prediction without a run of its

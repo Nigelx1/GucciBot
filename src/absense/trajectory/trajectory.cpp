@@ -1816,6 +1816,7 @@ struct Trajectory::Sim {
         PlayerObject* realPlayer = p1 ? pl->m_player1 : pl->m_player2;
         if (!realPlayer) return false;
         auto& updater = Bot::get()->updater();
+        world::UpkeepTimer upkeep(world::g_upkeep.runBegins);
         ProfLap lap;  // the speed test's timer (see StepProfile)
         t->scanMovedGroups(pl);
         lap(g_stepProfile.setup[0]);
@@ -2658,6 +2659,7 @@ struct Trajectory::Sim {
     }
 
     void end() {
+        world::UpkeepTimer upkeep(world::g_upkeep.runEnds);
         ProfLap lap;  // the speed test's timer (see StepProfile)
         for (int i = 0; i < count; i++) players[i]->setVisible(false);
         t->deactivateAllRemembered();

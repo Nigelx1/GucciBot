@@ -825,6 +825,8 @@ std::shared_ptr<const WorldDef> WorldDef::get(GJBaseGameLayer* layer) {
     const unsigned gen = moverCacheGeneration();
     const int n = (int)layer->m_objects->count();
     if (g_def && g_def->pl == layer && g_def->gen == gen && g_def->objectCount == n) return g_def;
+    UpkeepTimer upkeep(g_upkeep.levelReads);
+    g_upkeep.levelReads.items += (uint64_t)n;
     auto def = std::make_shared<WorldDef>();
     def->gen = gen;
     def->build(layer);

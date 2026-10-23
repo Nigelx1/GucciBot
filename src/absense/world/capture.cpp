@@ -210,6 +210,7 @@ void World::captureContacts(GJBaseGameLayer* pl, std::vector<std::pair<int, uint
 }
 
 WorldState World::captureLive(GJBaseGameLayer* pl, bool withActions) {
+    UpkeepTimer upkeep(g_upkeep.captures);
     WorldState ws;
     ws.seed = Bot::get()->replaySystem().m_teleportRandomState;
     // The game's own generator, which the random triggers and a spawn's delay

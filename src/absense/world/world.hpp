@@ -24,6 +24,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <span>
 #include <string>
@@ -215,6 +216,41 @@ struct CaptureProfile {
     uint64_t calls = 0;
 };
 extern CaptureProfile g_captureProfile;
+// GucciBot (2026-10-23): what keeping the World's caches up costs, counted
+// for every pathfinder run (AbsensePathfinder::start clears it, stop logs it).
+// Each counted call is a tick's or a run's worth of work, never a step's, so
+// the count and the clock cost nothing that shows: LIMBO's searches crawled
+// while a simulated tick there costs what it costs anywhere.
+struct Upkeep {
+    struct Part {
+        uint64_t n = 0;      // calls
+        double us = 0.0;     // their time
+        uint64_t items = 0;  // what they went through (objects, ticks)
+    };
+    Part levelReads;    // WorldDef::get reading the level again
+    Part materialDefs;  // the object writer's view of a level read
+    Part tables;        // the table of where the objects stand, read again (a new real tick)
+    Part diffs;         // a table compared with the objects (a run or slice after real ticks)
+    Part carries;       // what a table carries, worked out
+    Part captures;      // World::captureLive
+    Part startObjects;  // a kept start's table, undone from the ledger
+    Part stepStarts;    // a kept start's state, stepped on from its keyframe
+    Part pending;       // the objects the real game moved, written back at a run's first look
+    Part runBegins;     // Sim::begin
+    Part runEnds;       // Sim::end
+};
+extern Upkeep g_upkeep;
+struct UpkeepTimer {
+    Upkeep::Part& part;
+    std::chrono::steady_clock::time_point at = std::chrono::steady_clock::now();
+    explicit UpkeepTimer(Upkeep::Part& p) : part(p) {}
+    ~UpkeepTimer() {
+        part.n++;
+        part.us += std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - at).count();
+    }
+    UpkeepTimer(const UpkeepTimer&) = delete;
+    UpkeepTimer& operator=(const UpkeepTimer&) = delete;
+};
 inline bool debugGroup(int group) {
     return g_debugNotes && std::find(g_debugGroups.begin(), g_debugGroups.end(), group) != g_debugGroups.end();
 }
