@@ -843,10 +843,11 @@ long FrameWindowAnalyzer::posRoom(size_t idx) const {
 // GucciBot (2026-10-23): one rule for how far a test leg runs, which was five
 // copies (beginShift, beginSetupLeg, beginRecovery, launchDependentLeg and
 // launchSuggestLeg): from an input placed at `from` to Slack frames before the
-// next measurable input after action `afterAi`, either player's, other than
-// `skip` (the input's own release, for the legs that pass over it), and at
-// least MIN_HORIZON, at most the horizon. Read off the actions as the leg has
-// placed them.
+// next measurable input after action `afterAi`, either player's (the same
+// player's with the 2-player fixes in a 2-player level), other than `skip`
+// (the input's own release, for the legs that pass over it), and at least
+// MIN_HORIZON, at most the horizon. Read off the actions as the leg has placed
+// them.
 //
 // `pastNext` is Check Past Next Input (anticroom's antics-counter beta.7
 // changelog): the leg runs on past that input, and its own release, to Slack
@@ -855,11 +856,19 @@ long FrameWindowAnalyzer::posRoom(size_t idx) const {
 int64_t FrameWindowAnalyzer::legReach(size_t afterAi, int64_t from,
                                       size_t skip, bool pastNext) const {
     auto const& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
+    // GucciBot (2026-10-23): the 2-player fixes (anticroom's antics-counter
+    // beta.4 and beta.6 changelogs; no source). In a 2-player level with them
+    // on, the next input is the same player's own (movesWith): the other
+    // player's clicks play at their recorded timing then, and a test that
+    // ended at them stopped short wherever the other player clicked, which in
+    // a 2-player macro is all the time. Otherwise either player's, as before.
+    bool const p2 = afterAi < actions.size() && actions[afterAi].m_player2;
     // The first measurable input after action `after`, other than `skip` and
     // `also`.
     auto const nextInput = [&](size_t after, size_t also) {
         for (size_t k = after + 1; k < actions.size(); k++)
-            if (k != skip && k != also && isMeasurableInput(actions[k]))
+            if (k != skip && k != also && isMeasurableInput(actions[k]) &&
+                this->movesWith(k, p2))
                 return k;
         return NO_INDEX;
     };
@@ -2651,8 +2660,11 @@ uint32_t FrameWindowAnalyzer::captureDeathInSpan() const {
     // GucciBot (2026-10-23): with Check Past Next Input the nominal leg runs
     // on past the next input, so a capture death up to its end is in this
     // click's span too. Otherwise the nominal leg dies there, the click reads
-    // as desynced, and its full sweep never runs.
-    if (m_pastNext) hi = std::max(hi, m_nominalTarget);
+    // as desynced, and its full sweep never runs. The same with the 2-player
+    // fixes in a 2-player level, where it runs on past the other player's
+    // inputs to this player's next one (legReach).
+    if (m_pastNext || this->countsByPlayer())
+        hi = std::max(hi, m_nominalTarget);
 
     for (uint32_t const d : m_captureDeaths)
         if (d >= lo && d <= hi) return d;
