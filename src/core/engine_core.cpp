@@ -2712,6 +2712,7 @@ namespace gucci {
             return;
         inputModsSynced = true;
         inputModsPausedState = want;
+        fwAcConflictsChecked = false;  // whether CBF counts as a conflict follows this
 
         auto* self = Mod::get();
         auto* cbfMod = Loader::get()->getInstalledMod("syzzi.click_between_frames");
@@ -2763,9 +2764,11 @@ namespace gucci {
     const std::string& GucciEngine::analyzerConflicts() {
         if (fwAcConflictsChecked) return fwAcConflicts;
         fwAcConflictsChecked = true;
+        fwAcConflicts.clear();
 
+        static constexpr const char* kCbf = "syzzi.click_between_frames";
         static constexpr std::pair<const char*, const char*> kKnown[] = {
-            {"syzzi.click_between_frames",
+            {kCbf,
              "splits the physics step, which GucciBot 1.8 also does itself"},
             {"toastexgd.its-all-frame-perfects",
              "hooks the same checkpoint and reset path the analyzer drives"},
@@ -2776,9 +2779,25 @@ namespace gucci {
             {"zilko.xdbot", "is another macro bot replaying inputs"},
         };
 
+        // GucciBot (2026-10-23): Click Between Frames only while it would
+        // really be splitting ticks under Calculate. syncInputMods pauses it
+        // (soft toggle on, physics bypass off) for every recording and
+        // playback, and Calculate only runs in playback, so listing it
+        // whenever it was loaded told everyone with CBF to disable it for
+        // nothing. It counts now only if it's live while GucciBot has it
+        // paused: turned back on in CBF's own settings since. (anticroom's
+        // antics-counter beta.7 changelog: "Fixed false flags that ticks were
+        // modified by other mods".)
+        auto const cbfLive = [&] {
+            auto* cbf = Loader::get()->getLoadedMod(kCbf);
+            return cbf && inputModsPausedState &&
+                   (!cbf->getSettingValue<bool>("soft-toggle") || cbf->getSettingValue<bool>("physics-bypass"));
+        };
+
         std::string out;
         for (auto const& [id, why] : kKnown) {
             if (!Loader::get()->isModLoaded(id)) continue;
+            if (std::string_view(id) == kCbf && !cbfLive()) continue;
             if (!out.empty()) out += "\n";
             out += fmt::format("  - {} ({})", id, why);
         }
@@ -2816,6 +2835,7 @@ namespace gucci {
         pl->m_isPaused = false;
 
         auto const r = ::Bot::get()->frameWindow().start(pl);
+        fwAcConflictsChecked = false;  // checked again for every run
         if (auto const& conflicts = this->analyzerConflicts(); !conflicts.empty()) {
             log::warn("[GucciBot] frame windows: {}", conflicts);
             fwEngineLog(fmt::format("[fw][conflict] {}", conflicts));

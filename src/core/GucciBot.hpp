@@ -1105,8 +1105,10 @@ namespace gucci {
         bool fwAcOk = false;
 
         // Other enabled mods that step physics or hook the same reset /
-        // checkpoint path as the analyzer. Computed once on first use.
-        // See analyzerConflicts() in engine_core.cpp for why this matters.
+        // checkpoint path as the analyzer. Worked out again for every run and
+        // whenever the input-mod pause changes (Click Between Frames only
+        // counts while it's live; see analyzerConflicts() in engine_core.cpp
+        // for why this matters).
         std::string fwAcConflicts;
         bool fwAcConflictsChecked = false;
         // Input mods paused while GucciBot records or plays (see
