@@ -458,6 +458,15 @@ matjson::Value absense::benchmark(int ticks, int snapshots) {
             captureParts += fmt::format("{}{} {:.0f}", k ? ", " : "", kCapture[k], b.usCapture[k]);
         }
         out["us_a_capture"] = capture;
+        static constexpr const char* kNear[5] = {"pending", "dirty_buckets", "written", "reach", "carried"};
+        static constexpr const char* kNearCounts[6] = {"looks", "written_looked_at", "groups", "members", "refreshes",
+                                                       "writes"};
+        for (int k = 0; k < 2; k++) {
+            auto nearOut = matjson::Value::object();  // (near is a Windows macro)
+            for (int p = 0; p < 5; p++) nearOut[kNear[p]] = b.usNearParts[k][p];
+            for (int p = 0; p < 6; p++) nearOut[kNearCounts[p]] = b.nearCounts[k][p];
+            out[k == 0 ? "near_a_tick_plain" : "near_a_tick_branch"] = nearOut;
+        }
         geode::log::info("[AbsPF] speed test: the World's capture, in us: {}", captureParts);
     }
     geode::log::info("[AbsPF] speed test at frame {}: {:.0f} simulated ticks a second ({:.2f} us a tick over {} ticks "

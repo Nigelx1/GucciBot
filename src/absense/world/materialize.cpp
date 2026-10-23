@@ -1050,6 +1050,7 @@ void Materializer::refresh(Run& run, int slot, const Window* window) {
     GameObject* o = def.slots[(std::size_t)slot];
     const uint8_t flags = def.flags[(std::size_t)slot];
     if (!o || !(flags & kCollidable)) return;
+    if (g_nearProfile.on) g_nearProfile.refreshes++;
     const Pose want = desired(run, slot);
     auto it = m_writtenOf.find(slot);
     Written* w = it != m_writtenOf.end() ? &m_written[it->second] : nullptr;
@@ -1103,6 +1104,7 @@ void Materializer::refresh(Run& run, int slot, const Window* window) {
 }
 
 void Materializer::write(Written& w, const Pose& p, uint8_t flags) {
+    if (g_nearProfile.on) g_nearProfile.writes++;
     GameObject* o = w.o;
     // The buckets first, from the slots the object has now; an object with
     // extended collision is in the list +0x35e0 whatever its section, and one
@@ -1171,6 +1173,17 @@ bool Materializer::sameLevel(const Run& run) const {
 
 void Materializer::materializeNear(Run& run, PlayerObject* copy) {
     if (!copy || !sameLevel(run)) return;
+    // (The speed test's timer, see NearProfile.)
+    NearProfile& np = g_nearProfile;
+    const bool prof = np.on;
+    auto profAt = prof ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+    const auto lap = [&](int part) {
+        if (!prof) return;
+        const auto now = std::chrono::steady_clock::now();
+        np.parts[part] += std::chrono::duration<double, std::micro>(now - profAt).count();
+        profAt = now;
+    };
+    if (prof) np.calls++;
     if (m_pendingPass) {
         UpkeepTimer upkeep(g_upkeep.pending);
         m_pendingPass = false;
@@ -1182,7 +1195,9 @@ void Materializer::materializeNear(Run& run, PlayerObject* copy) {
     // Only checkCollisions sorts, and only its 3x3: a spider's taller window
     // below is read unsorted (staticObjectsInRect 0x211260 never looks at the
     // flags), so it copies nothing more.
+    lap(0);
     m_shadow.shadowDirty(pass.x0, pass.x1, pass.y0, pass.y1);
+    lap(1);
     Window w = pass;
     if (copy->m_isSpider || m_allRows) {
         // Every row of the columns (see world/materialize.hpp): the spider's
@@ -1197,12 +1212,18 @@ void Materializer::materializeNear(Run& run, PlayerObject* copy) {
         refreshPendingAlways(run);
         writePending(run, &w);
     }
+    lap(0);
     const bool look = m_stale[ci] || !m_haveWindow[ci] || !(m_window[ci] == w);
     if (look) {
         // What this run (or a branch it abandoned) wrote, near enough to be
         // met: back where the log has it now.
+        if (prof) {
+            np.looks++;
+            np.written += m_written.size();
+        }
         for (std::size_t i = 0; i < m_written.size(); i++) refresh(run, m_written[i].slot, &w);
     }
+    lap(2);
     const MaterialDef& md = *m_table->md;
     const auto& reach = run.ws->reach;
     for (const auto& entry : reach) {
@@ -1244,7 +1265,9 @@ void Materializer::materializeNear(Run& run, PlayerObject* copy) {
             }
             continue;
         }
+        if (prof) np.groups++;
         forMembers(*run.def, g, [&](int slot) {
+            if (prof) np.members++;
             const int i = md.indexOf[(std::size_t)slot];
             if (i < 0) {
                 if (GameObject* o = run.def->slots[(std::size_t)slot]; o && debugUid(o->m_uniqueID))
@@ -1267,6 +1290,7 @@ void Materializer::materializeNear(Run& run, PlayerObject* copy) {
             refresh(run, slot, &w);
         });
     }
+    lap(3);
     if (m_carry) {
         // The same for what is carried: one far from the window, which nothing
         // of the run has written or moved, is left without reading it (an area
@@ -1275,6 +1299,7 @@ void Materializer::materializeNear(Run& run, PlayerObject* copy) {
             if (!carriedAway(run, c, w)) refresh(run, c.slot, &w);
         }
     }
+    lap(4);
     m_stale[ci] = false;
     m_window[ci] = w;
     m_haveWindow[ci] = true;

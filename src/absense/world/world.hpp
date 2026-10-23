@@ -216,6 +216,24 @@ struct CaptureProfile {
     uint64_t calls = 0;
 };
 extern CaptureProfile g_captureProfile;
+// GucciBot (2026-10-23): where Materializer::materializeNear's time goes, for
+// the speed test only (Trajectory::benchmark) - on ORBIT it was most of a
+// simulated tick. The parts: the objects the real game moved, the dirty
+// buckets copied, the written objects looked at again, the groups the run's
+// ops reach, the carried objects. The counts: looks, groups and members gone
+// through, refreshes, writes.
+struct NearProfile {
+    bool on = false;
+    double parts[5] = {};
+    uint64_t calls = 0;
+    uint64_t looks = 0;
+    uint64_t written = 0;  // written objects looked at again
+    uint64_t groups = 0;   // reached groups whose members were gone through
+    uint64_t members = 0;
+    uint64_t refreshes = 0;
+    uint64_t writes = 0;
+};
+extern NearProfile g_nearProfile;
 // GucciBot (2026-10-23): what keeping the World's caches up costs, counted
 // for every pathfinder run (AbsensePathfinder::start clears it, stop logs it).
 // Each counted call is a tick's or a run's worth of work, never a step's, so

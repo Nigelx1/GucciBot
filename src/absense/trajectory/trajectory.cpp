@@ -3830,6 +3830,16 @@ Trajectory::Benchmark Trajectory::benchmark(GJBaseGameLayer* pl, int ticks, int 
     g_stepProfile.on = true;
     world::g_captureProfile = world::CaptureProfile{};
     world::g_captureProfile.on = true;
+    world::g_nearProfile = world::NearProfile{};
+    world::g_nearProfile.on = true;
+    // materializeNear's parts and counts, a tick at a time.
+    const auto nearParts = [&b](int k, uint64_t ticks) {
+        const world::NearProfile& np = world::g_nearProfile;
+        const double n = (double)std::max<uint64_t>(1, ticks);
+        for (int p = 0; p < 5; p++) b.usNearParts[k][p] = np.parts[p] / n;
+        const uint64_t counts[6] = {np.looks, np.written, np.groups, np.members, np.refreshes, np.writes};
+        for (int p = 0; p < 6; p++) b.nearCounts[k][p] = (double)counts[p] / n;
+    };
     for (int variant = 0; variant < 2; variant++) {
         const auto t0 = Clock::now();
         Sim s;
@@ -3853,6 +3863,8 @@ Trajectory::Benchmark Trajectory::benchmark(GJBaseGameLayer* pl, int ticks, int 
     }
     g_stepProfile.on = false;
     world::g_captureProfile.on = false;
+    world::g_nearProfile.on = false;
+    nearParts(0, g_stepProfile.steps);
     for (int k = 0; k < 12; k++)
         b.usCapture[k] = world::g_captureProfile.parts[k] / (double)std::max<uint64_t>(1, world::g_captureProfile.calls);
     parts(0);
@@ -3918,6 +3930,8 @@ Trajectory::Benchmark Trajectory::benchmark(GJBaseGameLayer* pl, int ticks, int 
             b.reach = s.ws.reach.size();
             g_stepProfile = StepProfile{};
             g_stepProfile.on = true;
+            world::g_nearProfile = world::NearProfile{};
+            world::g_nearProfile.on = true;
             double branchUs = 0.0;
             for (int i = 0; i < snapshots; i++) {
                 const auto a = Clock::now();
@@ -3930,6 +3944,8 @@ Trajectory::Benchmark Trajectory::benchmark(GJBaseGameLayer* pl, int ticks, int 
                 b.branches++;
             }
             g_stepProfile.on = false;
+            world::g_nearProfile.on = false;
+            nearParts(1, g_stepProfile.steps);
             parts(1);
             if (b.branches > 0) b.usPerBranch = branchUs / (double)b.branches;
             s.end();

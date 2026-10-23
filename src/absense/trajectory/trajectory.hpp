@@ -269,6 +269,12 @@ class Trajectory {
         double usEnd[4] = {};
         // The World's capture, a part at a time (see world::CaptureProfile), in us a capture.
         double usCapture[12] = {};
+        // materializeNear, a part at a time (see world::NearProfile), in us a
+        // tick, for the plain runs ([0]) and the branches ([1]); and its
+        // counts a tick: looks, written objects looked at again, groups and
+        // members gone through, refreshes, writes.
+        double usNearParts[2][5] = {};
+        double nearCounts[2][6] = {};
     };
     Benchmark benchmark(GJBaseGameLayer* pl, int ticks, int snapshots);
 

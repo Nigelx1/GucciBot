@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-gy (World: a search branch put back looks at the moved objects' columns again - -gx answered two ways; Assistant Access: a tool the game runs late no longer writes into a dead call)"
+    "2026-10-23-gz (the speed test times each part of writing the moved objects near a copy, with counts - most of an ORBIT tick)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
