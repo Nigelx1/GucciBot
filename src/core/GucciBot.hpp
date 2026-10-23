@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-hk (Hacks: the Safe mode switch really keeps a run from counting now, and stays on across launches - it did nothing before)"
+    "2026-10-23-hl (Calculate: anticroom's antics-counter changes, round 1 - Search distance, Max window, presets, Recovery Range fixes, Check past next input, decimal bands, Sort, page delete, dual markers, Leg trail, dated imports, UFO and CBF false flags; Safe mode blocks stats too; settings save right away)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
