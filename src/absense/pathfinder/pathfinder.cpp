@@ -5400,6 +5400,20 @@ bool AbsensePathfinder::afterTick(uint64_t tick, const TickInput& in, const Tick
             m_stats.divergences++;
             log("real path left the simulated one at tick %llu (off by %.2f, %.2f): thinking again from here",
                 (unsigned long long)now, dx, dy);
+            // GucciBot (2026-10-23): what differs, for the cause - The
+            // Nightmare's 75% wall is a 1.74-unit part at tick 16371 that a
+            // plain run from the same tick never shows.
+            {
+                PlayerObject* p = pl->m_player1;
+                const TraceSample* prev = m_planIndex >= 2 ? &m_planTrace[m_planIndex - 2] : nullptr;
+                log("  real: y %.3f vy %.3f%s%s%s; simulated: y %.3f vy %.3f%s%s%s; the tick before, simulated y %.3f vy "
+                    "%.3f; plan tick %zu of %zu",
+                    p->m_position.y, (double)p->m_yVelocity, p->m_isOnGround ? " ground" : "",
+                    p->m_isUpsideDown ? " upside-down" : "", p->m_isBall ? " ball" : "", expected.y,
+                    (double)expected.yVel, expected.onGround ? " ground" : "", expected.upsideDown ? " upside-down" : "",
+                    expected.held ? " held" : "", prev ? prev->y : 0.0f, prev ? (double)prev->yVel : 0.0, m_planIndex,
+                    m_planTrace.size());
+            }
             if (m_live) m_pauseAt = now;  // the frame's remaining ticks still run: back to here first
             pauseLive();
             cancelAhead();

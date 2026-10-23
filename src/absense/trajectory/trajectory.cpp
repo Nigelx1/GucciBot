@@ -3445,6 +3445,7 @@ RunResult Trajectory::run(GJBaseGameLayer* pl, bool p1,
             sample.xVel = static_cast<float>(player->m_platformerXVelocity);
             sample.rotation = player->getRotation();
             sample.onGround = player->m_isOnGround;
+            sample.upsideDown = player->m_isUpsideDown;
             sample.held = s.down;
             sample.dead = dead;
             sample.ring = m_ringsUsed != ringsBefore;

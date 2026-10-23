@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-hi (Pathfinder: a rescue leg aims further past the death each time the spot beats it again - The Nightmare's corridor killed every way two blocks past)"
+    "2026-10-23-hj (Pathfinder: when the game parts from the plan, the log says how - velocity, ground, gravity - to find The Nightmare's 75% mismatch)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

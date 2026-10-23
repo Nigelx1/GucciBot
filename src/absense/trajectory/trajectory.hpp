@@ -117,6 +117,7 @@ struct TraceSample {
     bool held = false;       // jump button down after this tick's inputs
     bool dead = false;
     bool ring = false;       // GucciBot (2026-10-23): the copy used an orb on this tick (Trajectory::noteRingUsed)
+    bool upsideDown = false; // GucciBot (2026-10-23): its gravity, for the divergence line (AbsensePathfinder)
     bool dual = false;       // the second player was simulated too
     float x2 = 0.0f;         // its position (dual mode)
     float y2 = 0.0f;
