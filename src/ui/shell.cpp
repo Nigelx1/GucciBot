@@ -34,6 +34,7 @@
 #include <imgui-cocos.hpp>
 
 #include <algorithm>
+#include <cerrno>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -433,9 +434,27 @@ namespace gucci::ui {
 
         int g_convertShift = 0;  // a nudge, in frames, on top of each format's own
 
-        std::vector<uint8_t> readAll(std::filesystem::path const& p) {
+        // GucciBot (2026-10-23): a file that won't open says so in `error`
+        // instead of reading as empty ("The file is empty."): Android's picker
+        // can hand back a path GD isn't allowed to read.
+        std::vector<uint8_t> readAll(std::filesystem::path const& p, std::string* error = nullptr) {
             std::ifstream f(p, std::ios::binary);
+            if (!f) {
+                int const why = errno;
+                if (error)
+                    *error = fmt::format("Couldn't open {}{}", geode::utils::string::pathToString(p.filename()),
+                                         why ? ": " + std::generic_category().message(why) : std::string("."));
+                return {};
+            }
             return std::vector<uint8_t>((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+        }
+
+        // Where a macro goes when it can't be picked: the replays folder
+        // needs no permission, and lists it with a Convert button.
+        std::string replaysFolderHint() {
+            return fmt::format("Copy it into GucciBot's replays folder instead ({}) and it will show below with a "
+                               "Convert button.",
+                               geode::utils::string::pathToString(replaysDir()));
         }
 
         bool writeAll(std::filesystem::path const& p, std::vector<uint8_t> const& bytes) {
@@ -481,7 +500,10 @@ namespace gucci::ui {
         // 1.x .brrr to <name>.brrr.1x, next to its replacement), so it isn't
         // offered again.
         std::pair<bool, std::string> convertMacroFile(std::filesystem::path const& src, bool inReplays) {
-            auto const bytes = readAll(src);
+            std::string unreadable;
+            auto const bytes = readAll(src, &unreadable);
+            if (!unreadable.empty())
+                return {false, inReplays ? unreadable : unreadable + "\n" + replaysFolderHint()};
             auto const fname = fileNameOf(src);
             auto res = convert::read(bytes, fname, g_convertShift);
             if (!res.ok())
@@ -599,7 +621,20 @@ namespace gucci::ui {
                 PickedMacro got = std::move(s_pickedMacro);
                 s_pickedMacro = PickedMacro{};
                 if (!got.error.empty()) {
-                    g_rowNote = "The file picker failed: " + got.error;
+#if defined(GEODE_IS_ANDROID)
+                    // GucciBot (2026-10-23), after anticroom's antics-counter
+                    // beta.6 changelog ("might have fixed the Android
+                    // permission error when importing macros"). Geode's
+                    // launcher sends this same "Permission error" when the
+                    // picker is cancelled, when the file has no real path, and
+                    // when all-files access is refused, so the note fits all
+                    // three and gives the way round the picker.
+                    g_rowNote = fmt::format("No file came back from the picker ({}). If you chose one, Android "
+                                            "didn't let GucciBot open it. {}",
+                                            got.error, replaysFolderHint());
+#else
+                    g_rowNote = fmt::format("The file picker failed: {}\n{}", got.error, replaysFolderHint());
+#endif
                     g_rowNoteOk = false;
                 } else if (got.path) {
                     std::tie(g_rowNoteOk, g_rowNote) = convertMacroFile(*got.path, false);
