@@ -182,6 +182,11 @@ struct FrameWindowSettings {
     bool analysisVisuals = true;
     bool lockCamera = true;
     bool hideSpawnEffects = true;
+    // GucciBot (2026-10-23): the Leg Trail, anticroom's idea from his
+    // antics-counter changelog (beta.5, improved in beta.6): every test run
+    // drawn in the level while a run counts. It only draws, so it's off by
+    // default and changes no count.
+    bool legTrail = false;
     int budgetMs = 8;
     bool adaptiveBudget = true;
     int budgetSharePercent = 35;

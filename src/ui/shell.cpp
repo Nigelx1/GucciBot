@@ -2547,8 +2547,10 @@ namespace gucci::ui {
                     GucciEngine::get()->muteAnalysisMusic();
                 s_wasRunning = running;
                 analyzer.tick(PlayLayer::get());
-                if (auto* pl = PlayLayer::get())
+                if (auto* pl = PlayLayer::get()) {
                     analyzer.updateProgressOverlay(pl);
+                    analyzer.updateLegTrail(pl);
+                }
             }
 
             look().refresh();

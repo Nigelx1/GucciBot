@@ -829,6 +829,9 @@ static void tickSettledWork() {
             // Silicate's trail buffer records here too: both players' hitboxes,
             // once per settled frame, while the player is alive.
             ::Bot::get()->trailBuffer().saveTick(pl);
+            // GucciBot (2026-10-23): and Calculate's Leg Trail, each tick of a
+            // test run (inline; one flag unless a run is drawing a leg).
+            ::Bot::get()->frameWindow().noteLegTick(pl);
 
             // Absense's pathfinder, after every real tick (Absense's frame
             // midhook, same order): its own bookkeeping, then the World's

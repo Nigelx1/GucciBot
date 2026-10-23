@@ -652,6 +652,10 @@ bool FrameWindowAnalyzer::onSuppressedDeath(cocos2d::CCNode* player,
             p ? p->m_isOnGround : false);
     }
 
+    // GucciBot (2026-10-23): where a test run died, for the Leg Trail's X.
+    if (m_legOpen && !m_probeDied)
+        this->noteTrailDeath(typeinfo_cast<PlayerObject*>(player));
+
     m_probeDied = true;
     return true;
 }
@@ -1260,6 +1264,7 @@ void FrameWindowAnalyzer::beginSetupLeg(SetupGroup const& sg) {
     cbf::Engine::get()->reset();
 
     if (!this->restoreToBranch()) return;
+    this->openTrailLeg();  // GucciBot (2026-10-23): a leg starts, for the Leg Trail
 
     this->applySetupFrames(sg, m_setupLeaderShift, m_setupCombo);
 
@@ -1958,6 +1963,7 @@ void FrameWindowAnalyzer::beginShift(int64_t shift, ShiftMode mode) {
     this->restoreOffsets();
 
     if (!this->restoreToBranch()) return;
+    this->openTrailLeg();  // GucciBot (2026-10-23): a leg starts, for the Leg Trail
 
     size_t const ai = m_samples[m_index].actionIndex;
 
@@ -2687,6 +2693,7 @@ void FrameWindowAnalyzer::beginRecovery() {
     this->restoreOffsets();
 
     if (!this->restoreToBranch()) return;
+    this->openTrailLeg();  // GucciBot (2026-10-23): a leg starts, for the Leg Trail
 
     for (size_t k = 0; k < actions.size(); k++)
         actions[k].m_frame = static_cast<uint64_t>(placed(k));
@@ -3136,6 +3143,8 @@ void FrameWindowAnalyzer::nextClick() {
 }
 
 void FrameWindowAnalyzer::finish(std::string message, bool ok) {
+    // GucciBot (2026-10-23): the Leg Trail is only for while a run counts.
+    this->dropLegTrail();
     // If the capture pass died, it carried on with noclip so the run could
     // still produce something -- but a player that cannot die survives every
     // shift, so the windows come back pinned to the sweep limit and read as
@@ -3653,6 +3662,7 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
                     if (r == StepResult::OutOfBudget) return;
                     bool const survived = r != StepResult::Died;
                     m_setupLegActive = false;
+                    this->closeTrailLeg(survived);  // GucciBot (2026-10-23): the Leg Trail
 
                     if (survived) {
                         m_setupSurvivors.emplace_back(m_setupLeaderShift,
@@ -3690,6 +3700,7 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
                 auto const r = this->stepToward(pl, m_testTarget);
                 if (r == StepResult::OutOfBudget) return;
 
+                this->closeTrailLeg(r != StepResult::Died);  // GucciBot (2026-10-23): the Leg Trail
                 this->concludeShift(r != StepResult::Died);
                 continue;
             }
@@ -3925,6 +3936,7 @@ bool FrameWindowAnalyzer::stepDependent(PlayLayer* pl) {
     auto const r = this->stepToward(pl, m_depLegTarget);
     if (r == StepResult::OutOfBudget) return false;
     m_depLegActive = false;
+    this->closeTrailLeg(r != StepResult::Died);  // GucciBot (2026-10-23): the Leg Trail
     this->recordDependentLeg(r != StepResult::Died);
     return true;
 }
@@ -4022,6 +4034,7 @@ void FrameWindowAnalyzer::launchDependentLeg(int64_t shift) {
 
     cbf::Engine::get()->reset();
     if (!this->restoreToBranch()) return;
+    this->openTrailLeg();  // GucciBot (2026-10-23): a leg starts, for the Leg Trail
     this->resetActions();
 
     double const res = static_cast<double>(m_depRes);
@@ -4344,6 +4357,7 @@ bool FrameWindowAnalyzer::stepSuggest(PlayLayer* pl) {
     auto const r = this->stepToward(pl, m_sugLegTarget);
     if (r == StepResult::OutOfBudget) return false;
     m_sugLegActive = false;
+    this->closeTrailLeg(r != StepResult::Died);  // GucciBot (2026-10-23): the Leg Trail
     this->recordSuggestLeg(r != StepResult::Died);
     return true;
 }
@@ -4488,6 +4502,7 @@ void FrameWindowAnalyzer::launchSuggestLeg() {
 
     cbf::Engine::get()->reset();
     if (!this->restoreToBranch()) return;
+    this->openTrailLeg();  // GucciBot (2026-10-23): a leg starts, for the Leg Trail
     this->resetActions();
 
     auto const origin = [this](size_t k) {
@@ -6335,6 +6350,322 @@ void FrameWindowAnalyzer::updateProgressOverlay(PlayLayer* pl) {
     label->setPosition({6.f, 6.f});
     label->setColor(m_restoreFailed ? cocos2d::ccColor3B{255, 110, 110}
                                     : cocos2d::ccColor3B{190, 230, 255});
+}
+
+// ---- GucciBot (2026-10-23): the Leg Trail -----------------------------------
+//
+// anticroom's antics-counter has one since beta.5 ("shows what the auto frame
+// window counter is doing during a run", improved in beta.6). We have his
+// changelog, not his code, so the look is ours. Each test run (a leg) is taken
+// tick by tick from the engine's settled point (noteLegTick), and drawn in the
+// level's object layer, as the macro path is: it sits on the level, zooms
+// with it, and turns with a mirror portal's flip, which a marker in the UI
+// layer has to be moved by hand for (cullOffscreen). Under it, a thin white
+// line of the capture's own run. The leg playing is yellow; one that reached
+// its target is green, one that died red, with an X where it died; older legs
+// fade. The legs are the input under test's: the first leg of the next input
+// clears them, and only the newest LEG_TRAIL_KEEP stay.
+//
+// It costs nothing while Calculate isn't running: noteLegTick checks one flag
+// and updateLegTrail a few, and the nodes go when the run finishes.
+
+// A point closer than this to the last one adds nothing.
+static constexpr float LEG_STEP = 2.5f;
+// One that carries on in a straight line (flat ground, a ship held level)
+// stretches the last segment instead of adding one, up to this long...
+static constexpr float LEG_RUN = 40.f;
+// ...while the turn stays under this (the sine of about 1.7 degrees).
+static constexpr float LEG_BEND = 0.03f;
+// The x of a point that breaks a line.
+static constexpr float LEG_BREAK = -1e9f;
+static constexpr size_t LEG_LINE_MAX = 4096;
+// The capture's line is drawn this many ticks either side of the input's
+// legs, not the whole level.
+static constexpr int LEG_CAPTURE_MARGIN = 480;
+
+static bool isLegBreak(cocos2d::CCPoint const& p) { return p.x < -1e8f; }
+
+static void breakLegLine(std::vector<cocos2d::CCPoint>& line) {
+    if (!line.empty() && !isLegBreak(line.back()))
+        line.push_back({LEG_BREAK, LEG_BREAK});
+}
+
+// Adds p to a line, thinned. Returns whether the line changed.
+static bool addLegPoint(std::vector<cocos2d::CCPoint>& line, cocos2d::CCPoint p) {
+    if (line.empty() || isLegBreak(line.back())) {
+        line.push_back(p);
+        return true;
+    }
+    auto& last = line.back();
+    float const dx = p.x - last.x;
+    float const dy = p.y - last.y;
+    float const step = dx * dx + dy * dy;
+    if (step < LEG_STEP * LEG_STEP) return false;
+    if (line.size() >= 2 && !isLegBreak(line[line.size() - 2])) {
+        auto const& a = line[line.size() - 2];
+        float const ux = last.x - a.x;
+        float const uy = last.y - a.y;
+        float const rx = p.x - a.x;
+        float const ry = p.y - a.y;
+        float const cross = ux * dy - uy * dx;
+        if (ux * dx + uy * dy > 0.f && rx * rx + ry * ry <= LEG_RUN * LEG_RUN &&
+            cross * cross <= LEG_BEND * LEG_BEND * (ux * ux + uy * uy) * step) {
+            last = p;
+            return true;
+        }
+    }
+    if (line.size() >= LEG_LINE_MAX) return false;
+    line.push_back(p);
+    return true;
+}
+
+// A point a line has to end on (where it died, or reached its target),
+// unless the last tick put it there already.
+static void endLegLine(std::vector<cocos2d::CCPoint>& line, cocos2d::CCPoint p) {
+    if (line.empty() || line.back().x != p.x || line.back().y != p.y)
+        line.push_back(p);
+}
+
+static void drawLegLine(cocos2d::CCDrawNode* node,
+                        std::vector<cocos2d::CCPoint> const& line, float radius,
+                        cocos2d::ccColor4F const& color) {
+    for (size_t k = 1; k < line.size(); k++) {
+        auto const& a = line[k - 1];
+        auto const& b = line[k];
+        // (A segment of no length has no direction to draw it by.)
+        if (isLegBreak(a) || isLegBreak(b) || (a.x == b.x && a.y == b.y)) continue;
+        node->drawSegment(a, b, radius, color);
+    }
+}
+
+// Found by ID each time, never kept: a level that closes takes them with it.
+static cocos2d::CCDrawNode* legTrailNode(PlayLayer* pl, char const* id, int z,
+                                         bool& created) {
+    created = false;
+    if (auto* node = typeinfo_cast<cocos2d::CCDrawNode*>(
+            pl->m_objectLayer->getChildByID(id)))
+        return node;
+    auto* node = cocos2d::CCDrawNode::create();
+    if (!node) return nullptr;
+    node->setID(id);
+    node->setBlendFunc({GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA});
+    node->m_bUseArea = false;  // as the macro path has it (macropath.cpp)
+    pl->m_objectLayer->addChild(node, z);
+    created = true;
+    return node;
+}
+
+void FrameWindowAnalyzer::openTrailLeg() {
+    if (!m_running || !SLSettings::get()->frameWindow.legTrail) return;
+    auto* pl = PlayLayer::get();
+    if (!pl || m_index >= m_samples.size()) return;
+
+    if (m_index != m_trailSample) {
+        m_trailLegs.clear();
+        m_trailSample = m_index;
+    }
+    // One that was never judged (nothing leaves one) isn't drawn as either.
+    if (m_legOpen && !m_trailLegs.empty()) m_trailLegs.pop_back();
+
+    // Room for this one: the newest LEG_TRAIL_KEEP, and within the point
+    // budget, so long legs (a big Horizon) keep fewer.
+    size_t points = 0;
+    for (auto const& leg : m_trailLegs)
+        points += leg.line[0].size() + leg.line[1].size();
+    size_t drop = 0;
+    while (drop < m_trailLegs.size() &&
+           (m_trailLegs.size() - drop >= LEG_TRAIL_KEEP ||
+            points > LEG_TRAIL_POINTS)) {
+        points -= m_trailLegs[drop].line[0].size() +
+                  m_trailLegs[drop].line[1].size();
+        drop++;
+    }
+    m_trailLegs.erase(m_trailLegs.begin(),
+                      m_trailLegs.begin() + static_cast<std::ptrdiff_t>(drop));
+
+    // Which player to follow is the recorder's rule (engine_core.cpp): the
+    // stored flag is flipped by Flip 2-Player Controls, and only moves
+    // player 2 in a 2-player level. In a 1-player level the click moves both,
+    // so player 2 is drawn too while it's in a dual.
+    bool const twoPlayer =
+        pl->m_levelSettings && pl->m_levelSettings->m_twoPlayerMode;
+    TrailLeg leg;
+    leg.player2 = twoPlayer && Bot::get()->replaySystem().playerFlipped(
+                                   m_samples[m_index].player2);
+    leg.twin = !twoPlayer;
+    m_trailLegs.push_back(std::move(leg));
+    m_legOpen = true;
+    m_trailVersion++;
+    // Where it starts: the branch the restore just put the player at.
+    this->recordLegTick(pl);
+}
+
+void FrameWindowAnalyzer::recordLegTick(GJBaseGameLayer* pl) {
+    if (!pl || m_trailLegs.empty()) return;
+    auto& leg = m_trailLegs.back();
+    // After the death the rest of a batch still steps (the death is
+    // swallowed); none of that is the leg's.
+    if (leg.died) return;
+
+    bool const dual = pl->m_gameState.m_isDualMode && pl->m_player2;
+    bool const onP2 = leg.player2 && dual;
+    auto* p = onP2 ? pl->m_player2 : pl->m_player1;
+    if (!p) return;
+
+    bool changed = false;
+    if (onP2 != leg.onP2) {
+        breakLegLine(leg.line[0]);
+        leg.onP2 = onP2;
+    }
+    changed |= addLegPoint(leg.line[0], p->m_position);
+    if (leg.twin) {
+        if (dual)
+            changed |= addLegPoint(leg.line[1], pl->m_player2->m_position);
+        else
+            breakLegLine(leg.line[1]);
+    }
+    if (changed) m_trailVersion++;
+}
+
+void FrameWindowAnalyzer::noteTrailDeath(PlayerObject* p) {
+    if (!m_legOpen || m_trailLegs.empty() || !p) return;
+    auto& leg = m_trailLegs.back();
+    if (leg.died) return;
+    leg.died = true;
+    leg.deathAt = p->m_position;
+
+    // The dying player's own line ends on the X. (In a 2-player level the
+    // other player's line isn't drawn; the X still marks where it died.)
+    auto* pl = PlayLayer::get();
+    bool const isP2 = pl && p == pl->m_player2;
+    if (isP2 == leg.onP2)
+        endLegLine(leg.line[0], p->m_position);
+    else if (leg.twin && isP2)
+        endLegLine(leg.line[1], p->m_position);
+    m_trailVersion++;
+}
+
+void FrameWindowAnalyzer::closeTrailLeg(bool survived) {
+    if (!m_legOpen || m_trailLegs.empty()) {
+        m_legOpen = false;
+        return;
+    }
+    m_legOpen = false;
+    auto& leg = m_trailLegs.back();
+    leg.end = survived ? LegEnd::Passed : LegEnd::Died;
+    // Where it ended: its target, or for a death that didn't come through
+    // destroyPlayer, where the player stood when stepToward saw it.
+    if (!leg.died) {
+        if (auto* pl = PlayLayer::get()) {
+            auto* p = leg.onP2 && pl->m_player2 ? pl->m_player2 : pl->m_player1;
+            if (p) {
+                endLegLine(leg.line[0], p->m_position);
+                if (!survived) {
+                    leg.died = true;
+                    leg.deathAt = p->m_position;
+                }
+            }
+        }
+    }
+    m_trailVersion++;
+}
+
+void FrameWindowAnalyzer::dropLegTrail() {
+    m_trailLegs.clear();
+    m_trailSample = NO_INDEX;
+    m_legOpen = false;
+    m_trailVersion++;
+    m_trailDrawn = UINT32_MAX;
+    m_trailCaptureFrom = 0;
+    m_trailCaptureTo = 0;
+    if (!m_trailShown) return;
+    m_trailShown = false;
+    auto* pl = PlayLayer::get();
+    if (!pl || !pl->m_objectLayer) return;
+    if (auto* node = pl->m_objectLayer->getChildByID("framewindow-leg-trail"_spr))
+        node->removeFromParent();
+    if (auto* node = pl->m_objectLayer->getChildByID("framewindow-leg-capture"_spr))
+        node->removeFromParent();
+}
+
+void FrameWindowAnalyzer::updateLegTrail(PlayLayer* pl) {
+    if (!m_running || !SLSettings::get()->frameWindow.legTrail || !pl ||
+        !pl->m_objectLayer) {
+        // Nothing running, or switched off mid-run: nothing stays behind.
+        if (m_trailShown || m_legOpen || !m_trailLegs.empty())
+            this->dropLegTrail();
+        return;
+    }
+
+    bool created = false;
+    auto* capture =
+        legTrailNode(pl, "framewindow-leg-capture"_spr, 1602, created);
+    if (created) m_trailCaptureFrom = m_trailCaptureTo = 0;
+    auto* legs = legTrailNode(pl, "framewindow-leg-trail"_spr, 1603, created);
+    if (created) m_trailDrawn = UINT32_MAX;
+    if (!capture || !legs) return;
+    m_trailShown = true;
+
+    // The capture's own run, around the input under test (while the capture
+    // plays, behind where it has got to). Drawn again only when that window
+    // moves: once an input, and every frame of the capture.
+    uint32_t focus = Bot::get()->updater().getFrame();
+    if (m_stageId != Stage::Capture && m_index < m_samples.size())
+        focus = m_samples[m_index].frame;
+    size_t const span =
+        static_cast<size_t>(std::max(0, m_horizon) + LEG_CAPTURE_MARGIN);
+    size_t const from = focus > span ? focus - span : 0;
+    size_t const to =
+        std::min(m_capturePath.size(), static_cast<size_t>(focus) + span + 1);
+    if (from != m_trailCaptureFrom || to != m_trailCaptureTo) {
+        m_trailCaptureFrom = from;
+        m_trailCaptureTo = to;
+        std::vector<cocos2d::CCPoint> line;
+        for (size_t f = from; f < to; f++) {
+            if (isLegBreak(m_capturePath[f]))  // a frame the capture never set
+                breakLegLine(line);
+            else
+                addLegPoint(line, m_capturePath[f]);
+        }
+        capture->clear();
+        drawLegLine(capture, line, 0.5f, ccc4f(1.f, 1.f, 1.f, 0.45f));
+    }
+
+    if (m_trailDrawn == m_trailVersion) return;
+    m_trailDrawn = m_trailVersion;
+    legs->clear();
+
+    // The newest finished leg at 0.9, fading to 0.15 for the oldest kept.
+    size_t done = 0;
+    for (auto const& leg : m_trailLegs)
+        if (leg.end != LegEnd::Running) done++;
+    size_t rank = 0;
+    for (auto const& leg : m_trailLegs) {
+        if (leg.end == LegEnd::Running) {
+            for (auto const& line : leg.line)
+                drawLegLine(legs, line, 1.f, ccc4f(1.f, 0.85f, 0.2f, 1.f));
+            continue;
+        }
+        float const age = done > 1 ? static_cast<float>(done - 1 - rank) /
+                                         static_cast<float>(done - 1)
+                                   : 0.f;
+        rank++;
+        float const alpha = 0.9f - 0.75f * age;
+        bool const died = leg.end == LegEnd::Died;
+        auto const color = died ? ccc4f(1.f, 0.32f, 0.32f, alpha)
+                                : ccc4f(0.3f, 0.95f, 0.4f, alpha);
+        for (auto const& line : leg.line)
+            drawLegLine(legs, line, 0.75f, color);
+        if (died && leg.died) {
+            float const arm = 5.f;
+            auto const at = leg.deathAt;
+            auto const cross = ccc4f(1.f, 0.32f, 0.32f, std::min(1.f, alpha + 0.1f));
+            legs->drawSegment(ccp(at.x - arm, at.y - arm), ccp(at.x + arm, at.y + arm),
+                              1.1f, cross);
+            legs->drawSegment(ccp(at.x - arm, at.y + arm), ccp(at.x + arm, at.y - arm),
+                              1.1f, cross);
+        }
+    }
 }
 
 void FrameWindowAnalyzer::render(PlayLayer* pl) {

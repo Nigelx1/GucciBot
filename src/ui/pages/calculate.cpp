@@ -1037,6 +1037,11 @@ namespace gucci::ui::pages {
                          &FW::hideSpawnEffects);
                     kit::FeatureEnd();
                 }
+                // GucciBot (2026-10-23): anticroom's Leg Trail (antics-counter beta.5 and beta.6).
+                flag("Leg trail",
+                     "Draw each test in the level as it plays: yellow while it runs, green when it makes it, red "
+                     "with an X where it dies. The thin white line is the macro's own run",
+                     &FW::legTrail);
 
                 kit::Section("Speed");
                 if (feature("Turbo",

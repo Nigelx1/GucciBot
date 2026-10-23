@@ -137,6 +137,10 @@ class FrameWindowAnalyzer {
     void cancel();
     void render(PlayLayer* pl);
     void updateProgressOverlay(PlayLayer* pl);
+    // GucciBot (2026-10-23): the Leg Trail (anticroom's, antics-counter
+    // beta.5/beta.6) drawn in the level, once a drawn frame, beside the
+    // progress overlay. Removes itself when no run is drawing one.
+    void updateLegTrail(PlayLayer* pl);
 
     bool running() const { return m_running; }
     // True only during the capture pass -- the run that establishes the
@@ -157,6 +161,14 @@ class FrameWindowAnalyzer {
     void notePress(uint32_t frame, bool player2, bool splittable,
                    bool onGround, double yVelocity);
     uint32_t legPressFrame() const { return m_legPressFrame; }
+
+    // GucciBot (2026-10-23): one physics tick of a test run, for the Leg
+    // Trail. From the engine's settled point, every tick: a batched step only
+    // comes back to the analyzer every few dozen ticks, and a line through
+    // those would cut across every jump. Nothing unless a leg is being drawn.
+    void noteLegTick(GJBaseGameLayer* pl) {
+        if (m_legOpen) this->recordLegTick(pl);
+    }
 
     int displayWindow(FrameWindowMark const& mk) const;
     bool cameraLocked() const;
@@ -853,6 +865,39 @@ class FrameWindowAnalyzer {
     void endTrip(PlayLayer* pl, bool arrived, std::string title,
                  std::string detail);
     void updateTripLabel(PlayLayer* pl);
+
+    // ---- GucciBot (2026-10-23): the Leg Trail (framewindow.cpp, before
+    // render()). The input under test's legs, newest last.
+    enum class LegEnd : uint8_t { Running, Passed, Died };
+    struct TrailLeg {
+        // [0]: the player whose input is tested. [1]: player 2 through a
+        // dual in a 1-player level, where the click moves both. A point with
+        // x at LEG_BREAK breaks a line (a dual ended, or [0] changed player).
+        std::vector<cocos2d::CCPoint> line[2];
+        cocos2d::CCPoint deathAt{};
+        LegEnd end = LegEnd::Running;
+        bool died = false;     // deathAt is in; what a batch steps past it isn't the leg's
+        bool player2 = false;  // a player-2 input in a 2-player level
+        bool twin = false;     // a 1-player level: player 2 is drawn through duals
+        bool onP2 = false;     // line[0] is following player 2 now
+    };
+    static constexpr size_t LEG_TRAIL_KEEP = 30;
+    static constexpr size_t LEG_TRAIL_POINTS = 8000;  // across the kept legs
+    std::vector<TrailLeg> m_trailLegs;
+    size_t m_trailSample = NO_INDEX;
+    bool m_legOpen = false;
+    bool m_trailShown = false;
+    uint32_t m_trailVersion = 0;
+    uint32_t m_trailDrawn = UINT32_MAX;
+    // The capture's line drawn: frames [from, to) of m_capturePath.
+    size_t m_trailCaptureFrom = 0;
+    size_t m_trailCaptureTo = 0;
+
+    void openTrailLeg();
+    void closeTrailLeg(bool survived);
+    void recordLegTick(GJBaseGameLayer* pl);
+    void noteTrailDeath(PlayerObject* p);
+    void dropLegTrail();
 
     static constexpr double HUD_FLASH_SECONDS = 0.53;
 

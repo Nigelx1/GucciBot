@@ -64,6 +64,7 @@ namespace gucci::fwstore {
             {"fwac_analysis_visuals", &FW::analysisVisuals},
             {"fwac_lock_camera", &FW::lockCamera},
             {"fwac_hide_spawn", &FW::hideSpawnEffects},
+            {"fwac_leg_trail", &FW::legTrail},
             {"fwac_adaptive_budget", &FW::adaptiveBudget},
             {"fwac_full_range_sweep", &FW::fullRangeSweep},
             {"fwac_check_past_next", &FW::checkPastNextInput},
