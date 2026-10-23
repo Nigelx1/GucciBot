@@ -550,7 +550,9 @@ namespace gucci {
                 // GucciBot (2026-10-23): the clicks these windows were
                 // measured on are gone: drop them from memory, or Save writes
                 // them next to this new recording. The old macro's sidecar on
-                // disk is not touched. (Not in setMode(Recording): Calculate's
+                // disk is not touched, and nothing measured from here on is
+                // written to it until this recording is saved
+                // (fwWindowsForgotten). (Not in setMode(Recording): Calculate's
                 // Test at the playhead switches to recording right after
                 // measuring, and Record switched on and off would lose them.)
                 gb->forgetMacroWindows();
@@ -1190,6 +1192,12 @@ namespace gucci {
         saveAcResults(path);
         savePathSamples(path, m_pathSamples);
         saveTrainerProgress(path, m_trainerBestX);
+        // GucciBot (2026-10-23): saved under the name in the name field, the
+        // windows in memory are that file's now (see forgetMacroWindows). A
+        // save elsewhere (Absense's furthest path) leaves them unattached.
+        std::error_code sameEc;
+        if (gb->fwWindowsForgotten && fs::equivalent(path, getCurrentPath(), sameEc))
+            gb->fwWindowsForgotten = false;
     }
 
     void GucciReplaySystem::buildClickIntervals(double tps) {
@@ -1290,6 +1298,7 @@ namespace gucci {
                       f.deaths.size());
             loadFwMarks(path);
             loadAcResults(path);
+            gb->fwWindowsForgotten = false;
             loadPathSamples(path, m_pathSamples);
             m_trainerBestX = loadTrainerProgress(path);
             buildClickIntervals(gb->updater.m_tps);
@@ -1315,6 +1324,7 @@ namespace gucci {
             log::info("[GucciBot] Loaded legacy BRR: {} inputs", m_actionAtom.length());
             loadFwMarks(path);
             loadAcResults(path);
+            gb->fwWindowsForgotten = false;
             m_pathSamples.clear();
             m_trainerBestX = 0.f;
             buildClickIntervals(gb->updater.m_tps);
@@ -2804,6 +2814,13 @@ namespace gucci {
     // anticroom's. Every existing caller (setMode, the pause/quit paths, the
     // UI) keeps working without knowing which analyzer is underneath.
     void GucciEngine::saveAcFrameWindowResults() {
+        // GucciBot (2026-10-23): windows kept after the loaded macro's clicks
+        // were dropped (fwWindowsForgotten) belong to no file yet. The name
+        // field still names the old macro, and writing them there replaced
+        // its saved windows, typed ones included, with this recording's.
+        // They are written when the macro is saved.
+        if (fwWindowsForgotten)
+            return;
         auto const path = replay.getCurrentPath();
         if (path.empty())
             return;
@@ -2831,6 +2848,10 @@ namespace gucci {
                       path.filename().string());
             return true;
         }
+        // Not next to the old macro (see saveAcFrameWindowResults): kept in
+        // memory until the macro is saved.
+        if (fwWindowsForgotten)
+            return false;
         saveAcResults(path, false);
         return false;
     }
@@ -2841,12 +2862,15 @@ namespace gucci {
     // pathfinder's macro replacing it -- which used to leave the old macro's
     // windows drawn over the level and saved next to the new one. (Deleting
     // the loaded macro keeps it loaded, windows too: Save brings it back.)
+    // What is measured after this stays off the old macro's sidecar until
+    // the macro is saved or another is loaded (fwWindowsForgotten).
     void GucciEngine::forgetMacroWindows() {
         if (::Bot::get()->frameWindow().running())
             return;
         ::Bot::get()->frameWindow().clear();
         fwMarks.clear();
         fwHasData = false;
+        fwWindowsForgotten = true;
     }
 
     bool GucciEngine::analyzerOwnsRun() const {

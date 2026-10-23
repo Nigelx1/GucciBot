@@ -1142,6 +1142,11 @@ namespace gucci {
         // Drops the frame windows in memory (not the sidecar on disk) when
         // the macro they belong to stops being the loaded one.
         void forgetMacroWindows();
+        // Set by forgetMacroWindows, cleared when the macro is loaded or saved
+        // under the name in the name field. Until then the windows in memory
+        // are not the windows of the file that name points at (it still names
+        // the old macro), so they are kept in memory only.
+        bool fwWindowsForgotten = false;
         std::vector<StoredFrame> fwCapStack;
         void analyzeFrameWindows();
 
