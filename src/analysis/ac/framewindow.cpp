@@ -1999,7 +1999,12 @@ void FrameWindowAnalyzer::concludeShift(bool survived) {
         }
     }
 
-    if (survived && m_shiftMode == ShiftMode::Buffer) {
+    // GucciBot (2026-10-23): not a recovery leg. One that rescued a shift whose
+    // Buffer try had died still had that try's mode, so it came in here: it was
+    // counted as buffer-assisted, and it returned before m_recoveryActive was
+    // cleared below, so the next shift skipped its own Buffer try and went on
+    // from this one's recovery offset.
+    if (survived && m_shiftMode == ShiftMode::Buffer && !m_recoveryActive) {
         m_bufferSurvivors++;
         this->advanceSweep(true);
         return;
