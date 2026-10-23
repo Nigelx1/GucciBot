@@ -378,6 +378,29 @@ namespace gucci {
         bool current = m_dispatchOrder.size() == acts.size();
         for (size_t p = 1; current && p < m_dispatchOrder.size(); p++)
             current = before(m_dispatchOrder[p - 1], m_dispatchOrder[p]);
+        if (!current && m_dispatchOrder.size() == acts.size()) {
+            // A test moves a few inputs a few frames, so the order it had is
+            // nearly right: insertion sort puts it right for little more than
+            // the check above, where a full sort costs a lot more on every one
+            // of a run's thousands of tests. Past a budget it gives up for the
+            // full sort (the order stays a permutation of the actions at every
+            // step, so either way it ends the same).
+            size_t budget = acts.size() * 8 + 64;
+            current = true;
+            for (size_t p = 1; current && p < m_dispatchOrder.size(); p++) {
+                size_t const v = m_dispatchOrder[p];
+                size_t q = p;
+                while (q > 0 && before(v, m_dispatchOrder[q - 1])) {
+                    m_dispatchOrder[q] = m_dispatchOrder[q - 1];
+                    q--;
+                    if (--budget == 0) {
+                        current = false;
+                        break;
+                    }
+                }
+                m_dispatchOrder[q] = v;
+            }
+        }
         if (!current) {
             m_dispatchOrder.resize(acts.size());
             std::iota(m_dispatchOrder.begin(), m_dispatchOrder.end(), size_t{0});
