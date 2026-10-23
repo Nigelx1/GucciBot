@@ -2695,7 +2695,14 @@ bool AbsensePathfinder::rescueWanted(Decision& d) {
     const double tps = Bot::get()->updater().getTps();
     const Trap* trap = trapAt(m_repair.deathTick, (uint64_t)std::lround(32.0 * std::max(1.0, tps / 240.0)));
     if (!trap || (trap->fails < 2 && trap->level == 0)) return false;
-    d.rescueX = m_repair.deathX + kRescuePast;
+    // Further past the death each time the spot beats the repair again, up to
+    // five times as far: in The Nightmare's 75% ball corridor the rescue legs
+    // found ways two blocks past the death at once, and each died just after
+    // (2026-10-23 -hh: the next spikes between x 21375 and 21416, 220 dead
+    // ends) - the way that does get through, found by hand, was some five
+    // blocks long.
+    const int further = std::min(4, std::max(trap->fails - 2, trap->level));
+    d.rescueX = m_repair.deathX + kRescuePast * (float)(1 + further);
     const Trajectory::StartState st = decisionState(d);
     return !st.goingLeft && st.x < d.rescueX;
 }
