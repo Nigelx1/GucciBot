@@ -124,6 +124,16 @@ class $modify(GB7PlayerObject, PlayerObject) {
 
         eng->m_p1Split = cbf::canSplit(this, tickGround);
         eng->m_p2Split = cbf::canSplit(p2, tickGround);  // false for a null p2
+        // GucciBot (2026-10-23): a tick Calculate's 2-player fixes armed for
+        // one player (a 2-player level) splits only a player whose own input
+        // waits on it. The other one takes the plain tick it took in the
+        // capture; split, its step was cut in two around a click that isn't
+        // its own (anticroom's antics-counter beta.4 changelog; no source).
+        // Every other tick splits both, as before.
+        if (eng->splitsOnePlayer()) {
+            eng->m_p1Split = eng->m_p1Split && eng->hasPendingFor(false);
+            eng->m_p2Split = eng->m_p2Split && eng->hasPendingFor(true);
+        }
         eng->m_p1Pos = this->getPosition();
         eng->m_p2Pos = p2 ? p2->getPosition() : cocos2d::CCPoint{};
 

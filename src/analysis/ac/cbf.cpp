@@ -15,22 +15,31 @@ Engine* Engine::get() {
     return &instance;
 }
 
-void Engine::arm(uint32_t frame, double fraction) {
+void Engine::arm(uint32_t frame, double fraction, int player) {
     if (!(fraction > 0.0 && fraction < 1.0)) return;
 
+    // GucciBot (2026-10-23): one arm per frame and player (see Armed::player);
+    // with every arm at -1, one per frame, as before.
     for (auto& a : m_armed) {
-        if (a.frame == frame) {
+        if (a.frame == frame && a.player == player) {
             a.fraction = fraction;
             return;
         }
     }
-    m_armed.push_back(Armed{frame, fraction});
+    m_armed.push_back(Armed{frame, fraction, player});
 }
 
-double const* Engine::findArmed(uint32_t frame) const {
+Armed const* Engine::findArmed(uint32_t frame, int player) const {
     for (auto const& a : m_armed)
-        if (a.frame == frame) return &a.fraction;
+        if (a.frame == frame && (player < 0 || a.player < 0 || a.player == player))
+            return &a;
     return nullptr;
+}
+
+bool Engine::hasPendingFor(bool player2) const {
+    for (auto const& d : m_pending)
+        if (d.player2 == player2) return true;
+    return false;
 }
 
 void Engine::reset() {
@@ -51,11 +60,16 @@ bool Engine::capture(uint32_t frame, int button, bool holding, bool player2) {
     if (button < 1 || button > 3) return false;
     if (!m_pending.empty() && frame != m_tickFrame) return false;
 
-    double const* f = this->findArmed(frame);
-    if (!f) return false;
+    // GucciBot (2026-10-23): an arm for the other player doesn't take this
+    // input (Armed::player); an arm for any player, the only kind without
+    // Calculate's 2-player fixes, takes it as before.
+    Armed const* a = this->findArmed(frame, player2 ? 1 : 0);
+    if (!a) return false;
 
     m_tickFrame = frame;
-    m_tickFraction = *f;
+    m_tickFraction = a->fraction;
+    // One player's tick only if every input it took was armed for that player.
+    m_tickPlayer = m_pending.empty() || m_tickPlayer == a->player ? a->player : -1;
     m_pending.push_back({button, holding, player2});
     return true;
 }
@@ -82,6 +96,7 @@ void Engine::fire() {
 
 void Engine::endTick() {
     m_tickFraction = 0.0;
+    m_tickPlayer = -1;
     m_pending.clear();
     m_fired = false;
     m_midStep = false;

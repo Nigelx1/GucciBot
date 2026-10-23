@@ -922,6 +922,21 @@ void FrameWindowAnalyzer::checkLegDispatch() {
             m_legCounter, m_index + 1, played, due, m_dispatchLegFrom, to);
 }
 
+// GucciBot (2026-10-23): the 2-player fixes (anticroom's antics-counter beta.4
+// changelog, "when both players clicked on the same tick, the windows were
+// counted together like a normal dual"; no source). A CBF split armed for the
+// input under test takes only its own player's input in a 2-player level: the
+// flag un-flipped, as playback un-flips it. The other player's click on the
+// same tick stays on the tick edge, where the capture had it. -1 otherwise:
+// any input on the tick, as before; in a 1-player level one click moves both
+// players, so the tick is theirs together.
+int FrameWindowAnalyzer::cbfArmPlayer() const {
+    if (!this->splitsByPlayer() || m_index >= m_samples.size()) return -1;
+    return Bot::get()->replaySystem().playerFlipped(m_samples[m_index].player2)
+               ? 1
+               : 0;
+}
+
 void FrameWindowAnalyzer::muteAudio() {
     if (m_mutedAudio) return;
     auto* engine = FMODAudioEngine::sharedEngine();
@@ -2107,12 +2122,15 @@ void FrameWindowAnalyzer::beginShift(int64_t shift, ShiftMode mode) {
 
     if (fraction > 0.0 && !m_subtickMacro) {
         auto* eng = cbf::Engine::get();
-        eng->arm(static_cast<uint32_t>(std::max<int64_t>(shifted, 0)), fraction);
+        // GucciBot (2026-10-23): -1 (any input) but with the 2-player fixes.
+        int const armFor = this->cbfArmPlayer();
+        eng->arm(static_cast<uint32_t>(std::max<int64_t>(shifted, 0)), fraction,
+                 armFor);
         if (mode == ShiftMode::Retime) {
             for (int64_t f : m_tailArm)
-                eng->arm(static_cast<uint32_t>(f), fraction);
+                eng->arm(static_cast<uint32_t>(f), fraction, armFor);
         } else if (m_releaseFrame >= 0 && m_releaseFrame != shifted) {
-            eng->arm(static_cast<uint32_t>(m_releaseFrame), fraction);
+            eng->arm(static_cast<uint32_t>(m_releaseFrame), fraction, armFor);
         }
     }
 
@@ -3071,7 +3089,8 @@ void FrameWindowAnalyzer::beginRecovery() {
         shifted = this->placeSubtick(ai, m_shift, m_entryOffset);
     else if (fraction > 0.0)
         cbf::Engine::get()->arm(
-            static_cast<uint32_t>(std::max<int64_t>(shifted, 0)), fraction);
+            static_cast<uint32_t>(std::max<int64_t>(shifted, 0)), fraction,
+            this->cbfArmPlayer());  // GucciBot (2026-10-23): the 2-player fixes
 
     int64_t const nextShifted = static_cast<int64_t>(m_samples[recIdx].frame) +
                                 m_entryOffset + tickShift + m_recoveryOffset;

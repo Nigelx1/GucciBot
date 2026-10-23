@@ -161,6 +161,14 @@ class FrameWindowAnalyzer {
     bool countsByPlayer() const {
         return m_running && m_twoPlayer && m_twoPlayerLevel;
     }
+    // ...and the macro has no sub-tick offsets of its own, so a CBF split is
+    // armed for the measured player alone (cbf::Engine::arm's `player`).
+    bool splitsByPlayer() const {
+        return this->countsByPlayer() && !m_subtickMacro;
+    }
+    // GucciBot (2026-10-23): the 2-player fixes are on for this run, in any
+    // level.
+    bool twoPlayerFixes() const { return m_running && m_twoPlayer; }
 
     bool returning() const { return m_trip.active; }
     uint32_t returnFrame() const { return m_trip.frame; }
@@ -670,6 +678,9 @@ class FrameWindowAnalyzer {
     // checkLegDispatch looks at it when it ends.
     void syncDispatch(bool legStarts = false);
     void checkLegDispatch();
+    // GucciBot (2026-10-23): who a CBF split for the input under test is armed
+    // for (cbf::Armed::player): its own player with splitsByPlayer, else -1.
+    int cbfArmPlayer() const;
     uint32_t m_dispatchLegFrom = 0;
     size_t m_dispatchLegStart = 0;
     bool m_dispatchLegArmed = false;

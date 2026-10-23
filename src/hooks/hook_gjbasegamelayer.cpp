@@ -513,7 +513,15 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         // before the input is handed onward.
         if (auto& acfw = ::Bot::get()->frameWindow(); acfw.running()) {
             bool const flipped = gb->replay.playerFlipped(action.m_player2);
-            auto* actor = flipped ? m_player2 : m_player1;
+            // GucciBot (2026-10-23): with Calculate's 2-player fixes, player 2
+            // only in a 2-player level. In a 1-player level the click moves
+            // player 1 whatever its flag, and an input stored as player 2
+            // (Flip 2-Player Controls, some imports) read player 2's ground
+            // state here.
+            bool const onP2 = acfw.twoPlayerFixes()
+                                  ? flipped && m_levelSettings && m_levelSettings->m_twoPlayerMode
+                                  : flipped;
+            auto* actor = onP2 ? m_player2 : m_player1;
             acfw.notePress(action.m_frame,
                            action.m_player2,
                            cbf::canSplit(actor,
@@ -541,8 +549,17 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
             bool const flipped2 = gb->replay.playerFlipped(action.m_player2);
             auto* eng = cbf::Engine::get();
             double const offset = scbf::offsetOf(action);
-            if (offset > 0.0 && !eng->isArmed(action.m_frame))
-                eng->arm(action.m_frame, offset);
+            // GucciBot (2026-10-23): Calculate's 2-player fixes split the tick
+            // for this input's own player in a 2-player level, so the other
+            // player's click on the same tick isn't split with it (anticroom's
+            // antics-counter beta.4 changelog; no source). Not for a macro
+            // with sub-tick offsets of its own (CBF Recording): its recording
+            // split both players on every such tick, so it replays that way.
+            // Outside Calculate, and with the switch off: any input, as before.
+            int const armFor =
+                ::Bot::get()->frameWindow().splitsByPlayer() ? (flipped2 ? 1 : 0) : -1;
+            if (offset > 0.0 && !eng->isArmed(action.m_frame, armFor))
+                eng->arm(action.m_frame, offset, armFor);
             bool const splits = offset > 0.0 || ::Bot::get()->frameWindow().armsTicks();
             if (splits && eng->capture(action.m_frame, button, action.m_holding, flipped2))
                 return;
