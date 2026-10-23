@@ -77,7 +77,10 @@ namespace {
         used |= fire(keys.onAutoFlip, k, [&] { gb->updater.m_autoFlipOnDeath = !gb->updater.m_autoFlipOnDeath; });
         used |= fire(keys.onPreventDeath, k, [&] { gb->updater.m_preventDeath = !gb->updater.m_preventDeath; });
         used |= fire(keys.onMirrorInputs, k, [&] { gb->replay.m_mirrorInputs = !gb->replay.m_mirrorInputs; });
-        used |= fire(keys.onSafeMode, k, [&] { gb->protectedMode = !gb->protectedMode; });
+        used |= fire(keys.onSafeMode, k, [&] {
+            gb->protectedMode = !gb->protectedMode;
+            Mod::get()->setSavedValue("hack_safe_mode", gb->protectedMode);  // as the switch saves it
+        });
         used |= fire(keys.onCompactMode, k, [&] { ui::setCompactMode(!ui::compactMode()); });
         return used;
     }

@@ -97,6 +97,7 @@ namespace gucci::ui {
             {"hack_no_flash", &GucciEngine::hackNoSpikeFlash},
             {"hack_auto_retry", &GucciEngine::hackAutoRetry},
             {"hack_respawn_instant", &GucciEngine::hackRespawnInstant},
+            {"hack_safe_mode", &GucciEngine::protectedMode},
             {"hack_force_platformer", &GucciEngine::hackForcePlatformer},
             {"hack_no_mirror_recording_only", &GucciEngine::noMirrorRecordingOnly},
             {"show_macro_path", &GucciEngine::showMacroPath},
@@ -989,7 +990,7 @@ namespace gucci::ui {
             if (gb->noclipEnabled)
                 engineSwitch("Flash on a blocked death", "Tints the player when noclip saves you", &gb->noclipDeathFlash,
                              "hack_noclip_flash");
-            engineSwitch("Safe mode", "No progress or stats are saved", &gb->protectedMode, nullptr);
+            engineSwitch("Safe mode", "No progress or stats are saved", &gb->protectedMode, "hack_safe_mode");
             engineSwitch("Instant respawn", "Respawn the moment you die", &gb->hackRespawnInstant,
                          "hack_respawn_instant");
             engineSwitch("Auto retry", "Respawn after your own delay instead of GD's", &gb->hackAutoRetry,

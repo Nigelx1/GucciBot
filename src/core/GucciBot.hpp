@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-hj (Pathfinder: when the game parts from the plan, the log says how - velocity, ground, gravity - to find The Nightmare's 75% mismatch)"
+    "2026-10-23-hk (Hacks: the Safe mode switch really keeps a run from counting now, and stays on across launches - it did nothing before)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

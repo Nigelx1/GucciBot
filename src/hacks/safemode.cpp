@@ -196,9 +196,17 @@ namespace gucci::safemode {
 using namespace gucci;
 
 namespace {
-    // A run safe mode keeps from counting: auto safe mode on, and a cheat on at
-    // some point in this attempt (or right now).
+    // A run safe mode keeps from counting: the Safe mode switch on (Hacks >
+    // Gameplay - nothing counts, cheat or not), or auto safe mode on and a
+    // cheat on at some point in this attempt (or right now).
+    // GucciBot (2026-10-23): the switch did nothing until now. It set
+    // protectedMode and nothing read it - a half-port since the -bz menu (the
+    // old menu only saved it), and it wasn't saved either, so it was off again
+    // at every launch. Silicate's SafeMode.cpp is the full version; the stats,
+    // achievements and attempt counts it also keeps are still to come.
     bool shielded() {
+        if (GucciEngine::get()->protectedMode)
+            return true;
         return safemode::autoSafeMode() && (safemode::g_tainted || safemode::cheatingNow());
     }
 } // namespace
@@ -247,8 +255,10 @@ class $modify(GB7SafeModePlayLayer, PlayLayer) {
         if (now)
             safemode::g_tainted = true;
         bool const cheated = now || safemode::g_tainted; // this attempt
+        // (Red: a cheat with nothing keeping the run from counting.)
         if (auto* red = m_fields->red)
-            red->setVisible(cheated && !safemode::autoSafeMode() && !safemode::dotHidden());
+            red->setVisible(cheated && !safemode::autoSafeMode() && !GucciEngine::get()->protectedMode &&
+                            !safemode::dotHidden());
         if (auto* green = m_fields->green)
             green->setVisible(!cheated && safemode::greenDot());
     }
