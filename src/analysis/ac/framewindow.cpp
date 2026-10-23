@@ -40,7 +40,8 @@ struct ScopeTimer {
 };
 
 // Last frame seen by the nominal-leg trace, to spot a leg stepping out of
-// step with the capture. Diagnostic only.
+// step with the capture. Diagnostic only. Forgotten at every restore and
+// replay from frame 0, so a rewind isn't read as a jump.
 static uint32_t g_traceLastFrame = UINT32_MAX;
 
 static std::ofstream g_fwLog;
@@ -441,7 +442,7 @@ FrameWindowAnalyzer::StepResult FrameWindowAnalyzer::stepToward(PlayLayer* pl,
                 // which is invisible in position alone.
                 int const advanced =
                     g_traceLastFrame == UINT32_MAX
-                        ? 1
+                        ? batch
                         : static_cast<int>(cf) -
                               static_cast<int>(g_traceLastFrame);
                 g_traceLastFrame = cf;
@@ -460,12 +461,20 @@ FrameWindowAnalyzer::StepResult FrameWindowAnalyzer::stepToward(PlayLayer* pl,
                                    : (it->second ? 1 : 0);
                     }());
 
-                if (advanced != 1)
+                // GucciBot (2026-10-23): against the ticks this step asked
+                // for, and not on a step a death cut short. Every rewind to
+                // the checkpoint or to frame 0 read as a jump back (-12,
+                // -230), and once a leg left the capture it steps in batches
+                // and read as a jump of the batch (+35): 947 warnings in
+                // Nigel's log and not one a real tick problem. (anticroom's
+                // antics-counter beta.7 changelog: "Fixed false flags that
+                // ticks were modified by other mods".)
+                if (advanced != batch && !m_probeDied && !pl->m_playerDied)
                     FWWARN(
                         "[fw][trace] click {}: frame jumped {} -> {} ({} "
-                        "frames) inside a leg -- the leg is not stepping in "
-                        "step with the capture",
-                        m_index + 1, cf - advanced, cf, advanced);
+                        "frames for a step of {}) inside a leg -- the leg is "
+                        "not stepping in step with the capture",
+                        m_index + 1, cf - advanced, cf, advanced, batch);
 
                 if (!m_pathDiverged && dx * dx + dy * dy > 0.0025f) {
                     m_pathDiverged = true;
@@ -1392,6 +1401,7 @@ void FrameWindowAnalyzer::hardResetToStart() {
     m_probeDied = false;
     m_noclipNextAdvance = true;
     m_pathDiverged = false;
+    g_traceLastFrame = UINT32_MAX;
 }
 
 void FrameWindowAnalyzer::checkCaptureAgainstTrail(PlayLayer* pl,
@@ -1794,6 +1804,7 @@ bool FrameWindowAnalyzer::restoreToBranch() {
     uint32_t const bf = updater.getFrame();
 
     m_probeDied = false;
+    g_traceLastFrame = UINT32_MAX;
     m_restoring = true;
     pf.resetWithState(m_saved);
     m_restoring = false;
