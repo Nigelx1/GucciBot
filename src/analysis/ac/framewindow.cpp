@@ -4742,9 +4742,17 @@ double FrameWindowAnalyzer::depPlaced(size_t k) const {
     auto const& pair = m_depPairs[m_depCursor];
     size_t const aiA = m_samples[pair.a].actionIndex;
     size_t const aiB = m_samples[pair.b].actionIndex;
+    size_t const relA = this->pairedReleaseFor(aiA);
+    auto const aligned = [&](size_t j) {
+        return j == aiA || (j != aiB && j == relA);
+    };
+    // GucciBot (2026-10-23): the 2-player fixes. The other halves of their
+    // pairs (pairDualClicks) too: placeAt takes them along. NO_INDEX
+    // without pairs, so nothing changes then.
+    size_t const half = this->partnerOf(k);
     double pos =
         static_cast<double>(m_originalFrames[k]) + m_originalOffsets[k];
-    if (k == aiA || (k != aiB && k == this->pairedReleaseFor(aiA)))
+    if (aligned(k) || (half != NO_INDEX && aligned(half)))
         pos += m_depPoints[m_depPoint];
     return pos;
 }
@@ -4776,23 +4784,46 @@ int FrameWindowAnalyzer::nextDepRecovery(int64_t shift, int from) const {
     size_t const niRel = this->pairedReleaseFor(ni);
     double const moved =
         static_cast<double>(shift) / static_cast<double>(pair.resB);
+    // GucciBot (2026-10-23): the 2-player fixes, as in beginRecovery. A Retime
+    // leg moves the count's Retime tail (inRetimeTail), and placeAt takes the
+    // other half of a pair (pairDualClicks) wherever its input goes, so a
+    // half whose input is in the tail is moved with it too. Without pairs,
+    // the input and the rest of its player's inputs, as before.
     auto const frameOf = [&](size_t k) {
-        double pos = this->depPlaced(k);
-        if (k >= aiB && isMeasurableInput(actions[k]) &&
-            actions[k].m_player2 == p2)
-            pos += moved;
+        size_t const half = this->partnerOf(k);
+        bool const retimed =
+            this->inRetimeTail(k, aiB, p2) ||
+            (half != NO_INDEX && this->inRetimeTail(half, aiB, p2));
+        double const pos =
+            retimed ? static_cast<double>(m_originalFrames[k]) +
+                          m_originalOffsets[k] + moved
+                    : this->depPlaced(k);
         return static_cast<int64_t>(std::max(0.0, std::floor(pos)));
+    };
+    // GucciBot (2026-10-23): the 2-player fixes, as in beginRecovery. In a
+    // 2-player level the action beside it is the player's own (movesWith):
+    // the replay plays the other player's at their frames whatever this does
+    // to the macro's order (syncDispatch). And the other halves of the next
+    // input's pair and of its release's move with them. Neither without the
+    // 2-player fixes.
+    bool const ownOnly = this->countsByPlayer();
+    size_t const niPair = this->partnerOf(ni);
+    size_t const niRelPair = this->partnerOf(niRel);
+    auto const movesHere = [&](size_t k) {
+        return k == ni || k == niRel || k == niPair || k == niRelPair;
     };
     auto const fits = [&](size_t m, int o) {
         int64_t const at = frameOf(m) + o;
         if (at < 0) return false;
         for (size_t k = m; k-- > 0;) {
-            if (k == ni || k == niRel) continue;
+            if (movesHere(k)) continue;
+            if (ownOnly && !this->movesWith(k, p2)) continue;
             if (at <= frameOf(k)) return false;
             break;
         }
         for (size_t k = m + 1; k < actions.size(); k++) {
-            if (k == ni || k == niRel) continue;
+            if (movesHere(k)) continue;
+            if (ownOnly && !this->movesWith(k, p2)) continue;
             if (at >= frameOf(k)) return false;
             break;
         }
