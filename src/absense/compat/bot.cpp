@@ -420,11 +420,29 @@ matjson::Value absense::benchmark(int ticks, int snapshots) {
     out["us_per_snapshot_save"] = b.usPerSave;
     out["us_per_snapshot_restore"] = b.usPerRestore;
     out["snapshot_bytes_roughly"] = (int64_t)b.snapshotBytes;
+    out["branches"] = (int64_t)b.branches;
+    out["us_per_branch"] = b.usPerBranch;
+    out["written_before_branches"] = (int64_t)b.written;
+    out["groups_reached"] = (int64_t)b.reach;
+    for (int k = 0; k < 2; k++) {
+        auto p = matjson::Value::object();
+        p["world"] = b.usWorld[k];
+        p["movers"] = b.usMovers[k];
+        p["near"] = b.usNear[k];
+        p["iterate"] = b.usIterate[k];
+        p["after"] = b.usAfter[k];
+        out[k == 0 ? "us_a_tick_plain" : "us_a_tick_branch"] = p;
+    }
     geode::log::info("[AbsPF] speed test at frame {}: {:.0f} simulated ticks a second ({:.2f} us a tick over {} ticks "
                      "in {} runs), {:.0f} us to set a run up, a snapshot {:.1f} us to take and {:.1f} us to put back, "
                      "about {} bytes, World {}",
                      bot->updater().getFrame(), perSecond, b.usPerTick, b.ticks, b.runs, b.usPerRun, b.usPerSave,
                      b.usPerRestore, b.snapshotBytes, b.worldOn ? "on" : "off");
+    geode::log::info("[AbsPF] speed test: a branch (put back, one tick) {:.1f} us with {} objects written and {} groups "
+                     "reached; a tick's parts in us, plain / branch: World {:.1f} / {:.1f}, movers {:.1f} / {:.1f}, "
+                     "near the copies {:.1f} / {:.1f}, the copies {:.1f} / {:.1f}, the rest {:.1f} / {:.1f}",
+                     b.usPerBranch, b.written, b.reach, b.usWorld[0], b.usWorld[1], b.usMovers[0], b.usMovers[1],
+                     b.usNear[0], b.usNear[1], b.usIterate[0], b.usIterate[1], b.usAfter[0], b.usAfter[1]);
     return out;
 }
 

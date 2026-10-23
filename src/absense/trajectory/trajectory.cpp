@@ -1707,6 +1707,21 @@ void Trajectory::realStateChanged() {
 // unload.
 namespace {
 SavedPlayerCheckpoint* g_dualClone = nullptr;
+
+// GucciBot (2026-10-23): where a simulated tick's time goes, for the speed
+// test only (Trajectory::benchmark): LIMBO's searches managed a few hundred
+// steps a second where a plain run does hundreds of thousands. Off, it costs
+// a branch for each part of the step.
+struct StepProfile {
+    bool on = false;
+    double world = 0.0;    // the World's triggers, with the tick's input
+    double movers = 0.0;   // MovingObjects::step
+    double nearby = 0.0;   // the objects written near the copies (materializeNear)
+    double iterate = 0.0;  // the copies' own update and collision pass
+    double after = 0.0;    // the rest: the void rule, the spawn walk, the contacts
+    uint64_t steps = 0;
+};
+StepProfile g_stepProfile;
 }  // namespace
 
 // A scripted run of the copies: the copy of player 1 (or 2), plus the copy
@@ -2342,6 +2357,16 @@ struct Trajectory::Sim {
             }
         };
         const TickInput in2 = separate ? otherAt(idx) : in;
+        // (The speed test's timer, see StepProfile.)
+        using ProfClock = std::chrono::steady_clock;
+        const bool prof = g_stepProfile.on;
+        ProfClock::time_point profAt = prof ? ProfClock::now() : ProfClock::time_point{};
+        const auto lap = [&](double& into) {
+            if (!prof) return;
+            const auto now = ProfClock::now();
+            into += std::chrono::duration<double, std::micro>(now - profAt).count();
+            profAt = now;
+        };
         if (worldStep) {
             // GJBaseGameLayer::update's order (world/step.cpp (h)): the queued
             // spawns and the parked speed; processCommands - the command index,
@@ -2370,11 +2395,13 @@ struct Trajectory::Sim {
             apply(players[0], in, down, false);
             if (count == 2) apply(players[1], in2, separate ? downOther : down, false);
         }
+        lap(g_stepProfile.world);
         down = in.held;
         if (separate) downOther = in2.held;
         mv.nearX[0] = players[0]->getPositionX();
         mv.nearX[1] = count == 2 ? players[1]->getPositionX() : mv.nearX[0];
         mv.step(Bot::get()->updater().getPhysicsDt());
+        lap(g_stepProfile.movers);
         static float colors[4] = {0, 0, 0, 0};
         bool deadOwn = false;
         bool deadOther = false;
@@ -2403,12 +2430,14 @@ struct Trajectory::Sim {
                                   (t->m_deadP2 && (masks[i] & TrajectoryMode::Player2) != 0))) {
                 objects.materializeNear(run, players[i]);
             }
+            lap(g_stepProfile.nearby);
             // iterate() only reports a death on the call after the one that
             // hit; a tick that hits something is not a survived tick.
             if (t->iterate(pl, players[i], masks[i], colors, held, stepCount, config)) {
                 if (i == 0) deadOwn = true;
                 else deadOther = true;
             }
+            lap(g_stepProfile.iterate);
             // A speed portal this copy touched belongs to the top of the next tick
             // (above); the other copy's iterate() must not take it this tick.
             if (pl->m_gameState.m_timeModRelated != 0.0f) {
@@ -2449,6 +2478,8 @@ struct Trajectory::Sim {
             otherDead = true;
             otherSurvived = (int)idx;
         }
+        lap(g_stepProfile.after);
+        if (prof) g_stepProfile.steps++;
         simulated++;
         ticks++;
         if (!separate) return deadOwn || deadOther;  // one input for both: either death ends it
@@ -3755,6 +3786,17 @@ Trajectory::Benchmark Trajectory::benchmark(GJBaseGameLayer* pl, int ticks, int 
     // player is, for as long as each run lasts (at most `ticks`).
     double stepUs = 0.0;
     double runUs = 0.0;
+    // Where the time goes, a part at a time (see StepProfile), in us a tick.
+    const auto parts = [&b](int k) {
+        const double n = (double)std::max<uint64_t>(1, g_stepProfile.steps);
+        b.usWorld[k] = g_stepProfile.world / n;
+        b.usMovers[k] = g_stepProfile.movers / n;
+        b.usNear[k] = g_stepProfile.nearby / n;
+        b.usIterate[k] = g_stepProfile.iterate / n;
+        b.usAfter[k] = g_stepProfile.after / n;
+    };
+    g_stepProfile = StepProfile{};
+    g_stepProfile.on = true;
     for (int variant = 0; variant < 2; variant++) {
         const auto t0 = Clock::now();
         Sim s;
@@ -3776,6 +3818,8 @@ Trajectory::Benchmark Trajectory::benchmark(GJBaseGameLayer* pl, int ticks, int 
         b.ticks += (uint64_t)n;
         b.runs++;
     }
+    g_stepProfile.on = false;
+    parts(0);
     if (b.runs == 0) {
         m_killer = keptKiller;
         m_teleportRand = keptRand;
@@ -3824,6 +3868,31 @@ Trajectory::Benchmark Trajectory::benchmark(GJBaseGameLayer* pl, int ticks, int 
             bytes += (w.toggleDelta.size() + w.triggeredOnce.size() + w.contact[0].size() + w.contact[1].size()) * 8;
             bytes += w.reach.size() * sizeof(w.reach[0]);
             b.snapshotBytes = bytes;
+            // Branches, as a search takes them: the run goes on past the
+            // snapshot first (a search's other branches do, and what they
+            // write stays written), then the snapshot is put back and one
+            // tick stepped from it, pressed and not by turns.
+            s.restore(snap);
+            for (int i = 0; i < std::min(ticks, 600); i++)
+                if (s.step(TickInput{}) || s.complete()) break;
+            b.written = s.objects.writtenCount();
+            b.reach = s.ws.reach.size();
+            g_stepProfile = StepProfile{};
+            g_stepProfile.on = true;
+            double branchUs = 0.0;
+            for (int i = 0; i < snapshots; i++) {
+                const auto a = Clock::now();
+                s.restore(snap);
+                TickInput in;
+                in.held = (i & 1) != 0;
+                in.presses = (uint8_t)(i & 1);
+                (void)s.step(in);
+                branchUs += us(Clock::now() - a);
+                b.branches++;
+            }
+            g_stepProfile.on = false;
+            parts(1);
+            if (b.branches > 0) b.usPerBranch = branchUs / (double)b.branches;
             s.end();
         }
     }

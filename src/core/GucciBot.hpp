@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-gs (World: a simulated copy never sends game events to the real level - the World start-up check stops failing)"
+    "2026-10-23-gt (Pathfinder: a held run gets fresh presses back only where the path needs them - orb flips between landings stop being spam; the speed test times a search branch and each part of a tick)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

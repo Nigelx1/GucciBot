@@ -243,6 +243,22 @@ class Trajectory {
         double usPerSave = 0.0;         // taking one snapshot
         double usPerRestore = 0.0;      // putting one back
         std::size_t snapshotBytes = 0;  // roughly one snapshot (its World lists counted in full; the ops log left out)
+        // GucciBot (2026-10-23): a branch, as the searches take one - a
+        // snapshot put back and one tick stepped from it - after the run has
+        // gone on past the snapshot, as a search's other branches do.
+        int branches = 0;
+        double usPerBranch = 0.0;
+        // Where a tick's time goes, in us a tick, for the plain runs ([0]) and
+        // the branches ([1]): the World's triggers, the movers, the objects
+        // written near the copies, the copies' own update and collision pass,
+        // and the rest of the tick.
+        double usWorld[2] = {0.0, 0.0};
+        double usMovers[2] = {0.0, 0.0};
+        double usNear[2] = {0.0, 0.0};
+        double usIterate[2] = {0.0, 0.0};
+        double usAfter[2] = {0.0, 0.0};
+        std::size_t written = 0;  // objects the branch run had written when the branches began
+        std::size_t reach = 0;    // groups its ops reached
     };
     Benchmark benchmark(GJBaseGameLayer* pl, int ticks, int snapshots);
 
