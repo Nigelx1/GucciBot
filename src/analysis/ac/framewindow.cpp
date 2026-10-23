@@ -905,6 +905,7 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
     this->clear();
 
     m_sweep = std::clamp(m_sweepRange->inner(), 1, MAX_SWEEP);
+    m_maxWin = std::max(0, m_maxWindow->inner());
     m_horizon = std::max(MIN_HORIZON, m_maxFrames->inner());
     m_slack_ = std::max(0, m_slack->inner());
     m_recovery = std::max(0, m_recoveryRange->inner());
@@ -943,13 +944,13 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
     FWLOG(
         "[fw][start] level=\"{}\" id={} replay=\"{}\" tps={:.0f} macroTps={:.0f} "
         "actions={} samples={} "
-        "sweep={} horizon={} slack={} recovery={} algo={} fullRange={} "
-        "pastNext={} budget={}ms",
+        "sweep={} maxWindow={} horizon={} slack={} recovery={} algo={} "
+        "fullRange={} pastNext={} budget={}ms",
         pl->m_level ? std::string(pl->m_level->m_levelName) : std::string{"?"},
         pl->m_level ? pl->m_level->m_levelID.value() : 0, rs.m_replayName,
         updater.m_tps, rs.m_initialTPS,
-        rs.m_actionAtom.m_actions.size(), m_samples.size(), m_sweep, m_horizon,
-        m_slack_, m_recovery, static_cast<int>(m_algo),
+        rs.m_actionAtom.m_actions.size(), m_samples.size(), m_sweep, m_maxWin,
+        m_horizon, m_slack_, m_recovery, static_cast<int>(m_algo),
         m_fullRangeSweep->inner(), m_pastNext, m_budgetMs->inner());
 
     FWLOG("[fw][start] turbo={} turboBudget={}ms adaptive={} share={}% max={}ms",
@@ -1333,6 +1334,7 @@ void FrameWindowAnalyzer::beginClick() {
     m_low = 0;
     m_high = 0;
     m_validCount = 0;
+    m_hitMaxWindow = false;
     m_deadShifts.clear();
     m_bufferSurvivors = 0;
     m_bisect = false;
@@ -2073,6 +2075,26 @@ void FrameWindowAnalyzer::advanceSweep(bool survived) {
 
     if (survived && counting && !m_bisect) m_validCount++;
 
+    // GucciBot (2026-10-23): Max Window, from anticroom's antics-counter beta.6
+    // changelog. A whole-frame count that reaches it stops here: the input is
+    // marked wide (N+) and the run moves on, instead of sweeping out to the
+    // Search distance. Only the plain count, where m_validCount is the
+    // unbroken run around the macro's own timing - not an entry-sweep re-test,
+    // and not the search for any survivor once the nominal has died.
+    if (survived && counting && m_fine <= 1 && m_maxWin > 0 &&
+        m_validCount >= m_maxWin && !m_nominalDied && !m_entryActive) {
+        if (m_phase == Phase::Earlier)
+            m_low = m_shift;
+        else if (m_phase == Phase::Later)
+            m_high = m_shift;
+        m_hitMaxWindow = true;
+        FWLOG("[fw][click {}] window reached Max Window ({}) at shift {:+d}, "
+              "marked wide",
+              m_index + 1, m_maxWin, m_shift);
+        this->finishClick();
+        return;
+    }
+
     if (m_nominalDied && survived && m_phase != Phase::Nominal) {
         if (m_validCount == 1) {
             m_low = m_shift;
@@ -2413,6 +2435,9 @@ bool FrameWindowAnalyzer::captureDiedInSpan() const {
 bool FrameWindowAnalyzer::startSubframeProbe() {
     if (!m_subframeProbe->inner()) return false;
     if (m_fine > 1) return false;
+    // GucciBot (2026-10-23): a window that reached Max Window is a lenient
+    // one; no sub-tick pass, even with Count every input on.
+    if (m_hitMaxWindow) return false;
 
     double const hz =
         static_cast<double>(std::clamp<int64_t>(m_cbfInputHz->inner(), 240,
@@ -2681,6 +2706,7 @@ FrameWindowMark FrameWindowAnalyzer::buildMark() const {
     int64_t const swept = maxNeg + maxPos + 1;
     int64_t const counted = m_fine > 1 && mk.cbf ? m_validCount : mk.window;
     mk.unbounded = swept > 0 && counted >= swept;
+    mk.wide = m_hitMaxWindow;
 
     if (!nominalDied) {
         mk.saturatedLow = maxNeg > 0 && low <= -maxNeg;
@@ -2750,6 +2776,12 @@ void FrameWindowAnalyzer::finishClick() {
         m_sampleBand[m_index] = {
             static_cast<int>(m_fine > 1 ? m_coarseLow : mk.low),
             static_cast<int>(m_fine > 1 ? m_coarseHigh : mk.high)};
+    // GucciBot (2026-10-23): a wide mark's low and high are where its count
+    // stopped at Max Window, one side only, so the next click's entry sweep
+    // isn't pinned to them: no band, no entries.
+    if (mk.wide && !m_entryActive && !m_entryDone &&
+        m_index < m_sampleBand.size())
+        m_sampleBand[m_index] = {0, 0};
 
     if (this->advanceEntryPass(mk)) return;
 
@@ -2824,13 +2856,13 @@ void FrameWindowAnalyzer::finishClick() {
     FWLOG(
         "[fw][click {}] RESULT window={} low={} high={} clamped={} desync={} "
         "subframe={:.3f} solid={} holes={} split={} splitAt={:+d} satLow={} satHigh={} unbounded={} "
-        "cbf={} fine={} gm={} bufAsst={} hz={} pos=({:.1f},{:.1f}) {:.2f}% "
+        "wide={} cbf={} fine={} gm={} bufAsst={} hz={} pos=({:.1f},{:.1f}) {:.2f}% "
         "trust={}",
         m_index + 1, mk.window, mk.low, mk.high, mk.clampedByNeighbour,
         mk.desynced, mk.subframe, mk.solid, mk.holes,
         mk.splitChecked ? (mk.splitWindow ? "true" : "false") : "unchecked",
         mk.splitShift, mk.saturatedLow,
-        mk.saturatedHigh, mk.unbounded, mk.cbf, m_fine, mk.gamemode,
+        mk.saturatedHigh, mk.unbounded, mk.wide, mk.cbf, m_fine, mk.gamemode,
         mk.bufferAssisted, mk.hz, mk.position.x, mk.position.y, mk.percent,
         mk.desynced          ? "none (desynced)"
         : mk.window <= 0 && !(mk.subframe > 0.f)
@@ -2838,6 +2870,7 @@ void FrameWindowAnalyzer::finishClick() {
         : mk.splitWindow     ? "MACRO-RELATIVE (works outside the band)"
         : !mk.splitChecked   ? "bisected (band assumed contiguous)"
         : !mk.solid          ? "UPPER BOUND (band has holes)"
+        : mk.wide            ? "FLOOR (stopped at Max Window)"
         : (mk.saturatedLow || mk.saturatedHigh)
                              ? "FLOOR (edge on sweep limit)"
         : mk.bufferAssisted  ? "buffer-assisted (input moved alone)"
@@ -2864,6 +2897,9 @@ bool FrameWindowAnalyzer::advanceEntryPass(FrameWindowMark const& mk) {
         if (m_entryDone) return false;
         if (m_index == 0) return false;
         if (mk.desynced) return false;
+        // GucciBot (2026-10-23): a wide click (Max Window) isn't a tight
+        // one, whatever the threshold.
+        if (mk.wide) return false;
         if (window <= 0) return false;
         if (window > std::max(0, m_tightThreshold->inner())) return false;
 
@@ -2923,6 +2959,7 @@ bool FrameWindowAnalyzer::advanceEntryPass(FrameWindowMark const& mk) {
     m_low = 0;
     m_high = 0;
     m_validCount = 0;
+    m_hitMaxWindow = false;
     m_deadShifts.clear();
     m_bufferSurvivors = 0;
     m_bisect = false;
@@ -3056,12 +3093,13 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
 
     {
         int notSolid = 0, saturated = 0, unbounded = 0, desynced = 0,
-            bufferAssisted = 0, cbf = 0, split = 0;
+            bufferAssisted = 0, cbf = 0, split = 0, wide = 0;
         for (auto const& mk : m_results) {
             if (mk.desynced) { desynced++; continue; }
             if (!mk.solid) notSolid++;
             if (mk.saturatedLow || mk.saturatedHigh) saturated++;
             if (mk.unbounded) unbounded++;
+            if (mk.wide) wide++;
             if (mk.bufferAssisted) bufferAssisted++;
             if (mk.splitWindow) split++;
             if (mk.cbf) cbf++;
@@ -3069,15 +3107,15 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
         auto const& lg = [&](int n) { return n ? "WARN" : "ok"; };
         log::info(
             "[fw][audit] {} marks: {} desynced, {} not solid [{}], {} on the "
-            "sweep limit [{}], {} split [{}], {} unbounded, {} buffer-assisted, "
+            "sweep limit [{}], {} split [{}], {} unbounded, {} wide, {} buffer-assisted, "
             "{} sub-tick measured. Fine legs crossed a neighbouring input: {} [{}]. "
-            "stepBatch={} inputHz={} sweep={} horizon={} slack={} pastNext={} "
-            "tps={:.0f}",
+            "stepBatch={} inputHz={} sweep={} maxWindow={} horizon={} slack={} "
+            "pastNext={} tps={:.0f}",
             m_results.size(), desynced, notSolid, lg(notSolid), saturated,
-            lg(saturated), split, lg(split), unbounded, bufferAssisted, cbf,
+            lg(saturated), split, lg(split), unbounded, wide, bufferAssisted, cbf,
             m_fineCrossedNeighbour, lg(m_fineCrossedNeighbour ? 1 : 0),
-            m_stepBatch->inner(), m_cbfInputHz->inner(), m_sweep, m_horizon,
-            m_slack_, m_pastNext, m_baseTps);
+            m_stepBatch->inner(), m_cbfInputHz->inner(), m_sweep, m_maxWin,
+            m_horizon, m_slack_, m_pastNext, m_baseTps);
     }
 
     // The analyzer shifts the real macro's action frames to probe them and
@@ -3650,6 +3688,11 @@ bool FrameWindowAnalyzer::beginDependentPass(std::string message) {
         auto const& mb = m_results[rb];
         if (ma.desynced || mb.desynced) continue;
         if (ma.window <= 0 || mb.window <= 0) continue;
+        // GucciBot (2026-10-23): no pair with a wide mark (Max Window) in it.
+        // Its low..high is where its count stopped, one side only, so the
+        // input before would be moved across half its band, and a wide click
+        // is a lenient one.
+        if (ma.wide || mb.wide) continue;
 
         double const scale =
             ma.cbf ? static_cast<double>(std::max<int64_t>(1, m_depRes)) : 1.0;
@@ -4040,6 +4083,9 @@ bool FrameWindowAnalyzer::beginSuggestPass(std::string message) {
         auto const& mb = m_results[rb];
         if (ma.desynced || mb.desynced || mb.hidden || mb.unbounded) continue;
         if (ma.window <= 0 || mb.window <= 0) continue;
+        // GucciBot (2026-10-23): nor with a wide mark (Max Window): see
+        // beginDependentPass.
+        if (ma.wide || mb.wide) continue;
 
         double const strict = mb.cbf && mb.subframe > 0.f
                                   ? static_cast<double>(mb.subframe)
@@ -4505,6 +4551,7 @@ struct StoredMark {
     int64_t high = 0;
     bool clampedByNeighbour = false;
     bool unbounded = false;
+    bool wide = false;
     float subframe = 0.f;
     bool hidden = false;
     bool player2 = false;
@@ -4578,6 +4625,8 @@ static matjson::Value markToJson(StoredMark const& m) {
         {"high", m.high},
         {"clampedByNeighbour", m.clampedByNeighbour},
         {"unbounded", m.unbounded},
+        // GucciBot: Calculate's count stopped at Max Window (2026-10-23).
+        {"wide", m.wide},
         {"subframe", (double)m.subframe},
         {"hidden", m.hidden},
         {"player2", m.player2},
@@ -4703,6 +4752,7 @@ static bool fromJson(std::string const& text, StoredResults& out) {
             m.clampedByNeighbour =
                 jbool(j, "clampedByNeighbour", m.clampedByNeighbour);
             m.unbounded = jbool(j, "unbounded", m.unbounded);
+            m.wide = jbool(j, "wide", m.wide);
             m.subframe = (float)jreal(j, "subframe", m.subframe);
             m.hidden = jbool(j, "hidden", m.hidden);
             m.player2 = jbool(j, "player2", m.player2);
@@ -4776,7 +4826,8 @@ bool FrameWindowAnalyzer::saveResults(std::filesystem::path const& path) const {
     out.marks.reserve(m_results.size());
     for (auto const& mk : m_results) {
         out.marks.push_back({mk.frame, mk.window, mk.low, mk.high,
-                             mk.clampedByNeighbour, mk.unbounded, mk.subframe,
+                             mk.clampedByNeighbour, mk.unbounded, mk.wide,
+                             mk.subframe,
                              mk.hidden, mk.player2, mk.release, mk.desynced,
                              mk.percent, mk.cbf, mk.bufferAssisted,
                              mk.setupGroup, mk.gamemode, mk.setupLow,
@@ -4828,6 +4879,7 @@ bool FrameWindowAnalyzer::loadResults(std::filesystem::path const& path) {
         mk.high = sm.high;
         mk.clampedByNeighbour = sm.clampedByNeighbour;
         mk.unbounded = sm.unbounded;
+        mk.wide = sm.wide;
         mk.subframe = sm.subframe;
         mk.hidden = sm.hidden;
         mk.player2 = sm.player2;
@@ -4927,8 +4979,12 @@ void FrameWindowAnalyzer::updateTiming(PlayLayer* pl,
                               mk->setupHigh > 0 &&
                               mk->setupLow != mk->setupHigh;
 
+    // GucciBot (2026-10-23): a count that stopped at Max Window is a floor,
+    // so its ms gets a + and its Hz, which would be a ceiling, isn't shown.
+    bool const wide = mk && mk->wide && !mk->manual;
+
     bool const hzReadout = mk && m_showHzReadout->inner() && hzValue > 0 &&
-                           (cbfReadout || msReadout || rangeReadout);
+                           !wide && (cbfReadout || msReadout || rangeReadout);
 
     if (!hzReadout && hzNode) {
         hzNode->removeFromParent();
@@ -5007,8 +5063,8 @@ void FrameWindowAnalyzer::updateTiming(PlayLayer* pl,
     CCLabelBMFont* msLabel = nullptr;
     if (msReadout) {
         msLabel = place(msNode, "framewindow-timing"_spr,
-                        fmt::format("{:.{}f} ms", ms, places), top, 0.6f,
-                        fineColour);
+                        fmt::format("{:.{}f}{} ms", ms, places, wide ? "+" : ""),
+                        top, 0.6f, fineColour);
         top -= msLabel->getScaledContentSize().height + 3.f;
     }
 
@@ -5257,6 +5313,7 @@ void FrameWindowAnalyzer::spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
 
     bool const wholeOnly = mk.cbf && m_cbfWholeMarkers->inner();
 
+    // GucciBot (2026-10-23): N+ for a count that stopped at Max Window.
     std::string text;
     if (mk.dependent > 0.f && !mk.desynced)
         text = "~" + this->formatSubframe(mk.dependent);
@@ -5265,7 +5322,7 @@ void FrameWindowAnalyzer::spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
     else if (mk.desynced)
         text = "?";
     else
-        text = formatWindow(mk.window);
+        text = formatWindow(mk.window) + (mk.wide && !mk.manual ? "+" : "");
 
     if (!mk.desynced) text = this->decorate(mk, std::move(text));
 

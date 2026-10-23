@@ -482,6 +482,10 @@ namespace gucci::mcp {
                                 e["player2"] = true;
                             if (mk.unbounded)
                                 e["unbounded"] = true;
+                            // Calculate's count stopped at Max Window: the
+                            // window is at least `window` (2026-10-23).
+                            if (mk.wide && !mk.manual)
+                                e["wide"] = true;
                             if (mk.desynced)
                                 e["desynced"] = true;
                             if (mk.cbf)

@@ -89,6 +89,8 @@ namespace gucci::fwstore {
         constexpr Field<int> kInts[] = {
             {"fwac_algorithm", &FW::algorithm, 0, 1},
             {"fwac_sweep_range", &FW::sweepRange, 1, FWA::MAX_SWEEP},
+            // 0 is off. A window can't be wider than the whole search.
+            {"fwac_max_window", &FW::maxWindow, 0, 2 * FWA::MAX_SWEEP + 1},
             {"fwac_max_frames", &FW::maxFrames, FWA::MIN_HORIZON, 2400},
             {"fwac_slack", &FW::slack, 0, 20},
             {"fwac_recovery_range", &FW::recoveryRange, 0, 20},

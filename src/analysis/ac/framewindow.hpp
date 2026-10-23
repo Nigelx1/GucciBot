@@ -27,6 +27,11 @@ struct FrameWindowMark {
     int64_t high = 0;
     bool clampedByNeighbour = false;
     bool unbounded = false;
+    // GucciBot (2026-10-23): Calculate's count stopped at Max Window, so the
+    // window is at least `window` (drawn N+; L* takes it at that), and low..high
+    // is where the count stopped, one side only. A window typed by hand over it
+    // leaves this set for Clear to go back to: read it with !manual.
+    bool wide = false;
     float subframe = 0.f;
     bool hidden = false;
     bool player2 = false;
@@ -365,6 +370,8 @@ class FrameWindowAnalyzer {
         "framewindow.algorithm", &SLSettings::get()->frameWindow.algorithm);
     SLValuePtr<int> m_sweepRange = SLValue<int>::create(
         "framewindow.sweep_range", &SLSettings::get()->frameWindow.sweepRange);
+    SLValuePtr<int> m_maxWindow = SLValue<int>::create(
+        "framewindow.max_window", &SLSettings::get()->frameWindow.maxWindow);
     SLValuePtr<int> m_maxFrames = SLValue<int>::create(
         "framewindow.max_frames", &SLSettings::get()->frameWindow.maxFrames);
     SLValuePtr<int> m_slack = SLValue<int>::create(
@@ -596,6 +603,7 @@ class FrameWindowAnalyzer {
     bool m_desyncPending = false;
 
     int m_sweep = 6;
+    int m_maxWin = 0;
     int m_horizon = 240;
     int m_slack_ = 3;
     int m_recovery = 4;
@@ -618,6 +626,8 @@ class FrameWindowAnalyzer {
     int64_t m_low = 0;
     int64_t m_high = 0;
     int64_t m_validCount = 0;
+    // GucciBot (2026-10-23): this click's count stopped at Max Window.
+    bool m_hitMaxWindow = false;
     bool m_bisect = false;
     bool m_scanning = false;
     int64_t m_scanStep = 1;

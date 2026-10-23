@@ -131,6 +131,10 @@ struct FrameWindowSettings {
     bool enabled = true;
     int algorithm = 0;
     int sweepRange = 14;
+    // GucciBot (2026-10-23): Max Window, from anticroom's antics-counter beta.6
+    // changelog: a whole-frame count that reaches this many frames stops there,
+    // the input is marked wide (N+) and the run moves on. 0: off, today's count.
+    int maxWindow = 0;
     int maxFrames = 480;
     int slack = 2;
     // GucciBot (2026-10-23): 2, anticroom's own since antics-counter beta.4

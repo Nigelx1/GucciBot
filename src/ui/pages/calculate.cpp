@@ -223,6 +223,11 @@ namespace gucci::ui::pages {
                    "How many frames on either side of each input to test. Testing stops at the first death, so a "
                    "wide range is still fast on tight inputs",
                    &FW::sweepRange, "%d frames");
+            // GucciBot (2026-10-23): Max Window, from anticroom's antics-counter beta.6 changelog.
+            slider("Max window",
+                   "Stops counting an input once its window reaches this many frames and marks it N+, so a lenient "
+                   "input doesn't take a whole search. Off counts every window out to the search distance",
+                   &FW::maxWindow, s.maxWindow == 0 ? "off" : "%d frames");
             // GucciBot (2026-10-23): this said the player "must survive" this long; it only caps each test, as
             // anticroom's own tooltip says.
             slider("Horizon",
