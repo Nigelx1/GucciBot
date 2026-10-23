@@ -160,7 +160,7 @@ namespace gucci {
             copies().init();
         }
         auto* t = copies().unsafeInner();
-        if (!t || t->searching() || t->usingStart() || t->drawing() || t->simulating())
+        if (!t || t->searching() || t->legActive() || t->usingStart() || t->drawing() || t->simulating())
             return false;
         sync(pl, false);
         return true;

@@ -3409,7 +3409,7 @@ void Trajectory::checkWorldBranches(GJBaseGameLayer* pl) {
     if (world::World::disabled) return;
     // Not in the middle of somebody else's run: a paused search owns the
     // copies between its slices, and a start stands in for the players.
-    if (m_search || m_start || m_simulating || m_drawing) return;
+    if (m_search || m_leg || m_start || m_simulating || m_drawing) return;
     if (!pl || !pl->m_objects || !pl->m_player1 || !m_fakePlayer1 || !m_fakePlayer2) return;
     if (pl->m_loadingProgress < 1.0f) return;  // the group arrays are not final yet
     if (pl->m_player1->m_isDead || pl->m_playerDied) return;
@@ -3595,7 +3595,7 @@ Trajectory::Benchmark Trajectory::benchmark(GJBaseGameLayer* pl, int ticks, int 
     b.worldOn = !world::World::disabled;
     // The same rules as the branch check: not inside somebody else's run, and
     // only on a level that is all there.
-    if (m_search || m_start || m_simulating || m_drawing) {
+    if (m_search || m_leg || m_start || m_simulating || m_drawing) {
         b.error = "the simulation is busy: stop the pathfinder and try again";
         return b;
     }
@@ -3694,40 +3694,21 @@ Trajectory::Benchmark Trajectory::benchmark(GJBaseGameLayer* pl, int ticks, int 
     return b;
 }
 
-Trajectory::Leg Trajectory::sweepLeg(GJBaseGameLayer* pl, LegGoal const& goal) {
-    Leg out;
-    if (m_search || m_simulating || m_drawing || (m_start && !goal.inDecision)) {
-        out.error = "the simulation is busy: stop the pathfinder and try again";
-        return out;
-    }
-    if (!pl || !pl->m_objects || !pl->m_player1 || !m_fakePlayer1 || !m_fakePlayer2 || pl->m_loadingProgress < 1.0f) {
-        out.error = "open a level first";
-        return out;
-    }
-    if (pl->m_player1->m_isDead || pl->m_playerDied) {
-        out.error = "the player is dead: try again once the attempt has restarted";
-        return out;
-    }
-    const Killer keptKiller = m_killer;
-    const uint64_t keptRand = m_teleportRand;
-    using Clock = std::chrono::steady_clock;
-    const auto started = Clock::now();
-    const auto elapsedMs = [&] { return std::chrono::duration<double, std::milli>(Clock::now() - started).count(); };
-
-    auto const& buttons = pl->m_player1->m_holdingButtons;
-    auto const held = buttons.find(static_cast<int>(PlayerButton::Jump));
-    const bool downNow = goal.inDecision ? goal.held : (held != buttons.end() && held->second);
-
+// The leg search, kept between slices (see beginLeg / stepLeg).
+struct Trajectory::LegState {
     Sim s;
-    if (!s.begin(this, pl, true, downNow)) {
-        m_killer = keptKiller;
-        m_teleportRand = keptRand;
-        out.error = "the simulation could not start here";
-        return out;
-    }
+    LegGoal goal;
+    Leg out;
+    float goalX = 0.0f;
+    float goalLo = 1.0f;
+    float goalHi = 0.0f;
+    bool anyBand = true;
+    bool downNow = false;
 
     // Every state kept, for tracing the way back; the live ones carry their
-    // snapshot.
+    // snapshot, how calm the way to them was, and which class they are in
+    // (gravity, kind, size and the goal object fired) for the frontier's
+    // quotas.
     struct Node {
         int parent;
         TickInput in;
@@ -3736,13 +3717,19 @@ Trajectory::Leg Trajectory::sweepLeg(GJBaseGameLayer* pl, LegGoal const& goal) {
     struct Live {
         int node = 0;
         bool down = false;
-        float score = 0.0f;  // how far from the band
+        bool dropped = false;    // merged into a better state with the same key
+        float score = 0.0f;      // how far from the band
+        int lastChange = -100000;
+        int changes = 0;
+        int fastChanges = 0;
+        int cls = 0;
         SimSnapshot snap;
     };
     // A state, merged with any other that comes out the same: where the
-    // players are and how they move, what they are, and the button.
+    // players are and how they move, what they are, the button, the speed,
+    // whether the copy is on an orb, and the goal object fired or not.
     struct Key {
-        int64_t v[6] = {};
+        int64_t v[8] = {};
         bool operator==(Key const& o) const { return std::memcmp(v, o.v, sizeof v) == 0; }
     };
     struct KeyHash {
@@ -3752,15 +3739,38 @@ Trajectory::Leg Trajectory::sweepLeg(GJBaseGameLayer* pl, LegGoal const& goal) {
             return (size_t)h;
         }
     };
-    const auto q = [&](double value, double step) -> int64_t {
+    struct Crossing {
+        int node;
+        int parent;
+        float room;
+        float y;
+        int changes;
+        int fastChanges;
+    };
+    std::vector<Node> nodes;
+    std::vector<Live> frontier;
+    std::vector<Live> next;
+    std::unordered_map<Key, size_t, KeyHash> seen;  // key -> its state in `next`
+    std::vector<Crossing> crossings;
+    SimSnapshot root;  // the start, for a relaxed retry
+    int tick = 0;
+    size_t fi = 0;           // the next state of the frontier to step this tick
+    int firstCross = -1;     // the tick the first way in was found
+    int calm = 0;            // the gap in force
+    double ms = 0.0;         // all the slices together
+    bool paused = false;
+    bool over = false;
+
+    int64_t q(double value, double step) const {
         if (goal.exact) {
             int64_t bits;
             std::memcpy(&bits, &value, sizeof bits);
             return bits;
         }
         return (int64_t)std::llround(value / step);
-    };
-    const auto keyOf = [&](bool down) {
+    }
+    bool onOrb(PlayerObject* p) const { return p && p->m_touchingRings && p->m_touchingRings->count() > 0; }
+    Key keyOf(Trajectory* t, bool down) const {
         Key k;
         PlayerObject* p = s.players[0];
         k.v[0] = q(p->getPositionX(), 0.05);
@@ -3769,83 +3779,203 @@ Trajectory::Leg Trajectory::sweepLeg(GJBaseGameLayer* pl, LegGoal const& goal) {
         k.v[3] = (int64_t)p->m_isShip | (int64_t)p->m_isBird << 1 | (int64_t)p->m_isBall << 2 | (int64_t)p->m_isDart << 3 |
                  (int64_t)p->m_isRobot << 4 | (int64_t)p->m_isSpider << 5 | (int64_t)p->m_isSwing << 6 |
                  (int64_t)p->m_isUpsideDown << 7 | (int64_t)p->m_isOnGround << 8 | (int64_t)down << 9 |
-                 (int64_t)(p->m_vehicleSize < 0.8f) << 10 | (int64_t)(s.count == 2) << 11;
+                 (int64_t)(p->m_vehicleSize < 0.8f) << 10 | (int64_t)(s.count == 2) << 11 | (int64_t)onOrb(p) << 12 |
+                 (int64_t)(goal.fireObject && t->copyFired(p, goal.fireObject)) << 13 |
+                 (int64_t)(goal.avoidObject && t->copyFired(p, goal.avoidObject)) << 14;
         if (s.count == 2) {
             k.v[4] = q(s.players[1]->getPositionY(), 0.25);
             k.v[5] = q(s.players[1]->m_yVelocity, 0.05);
         }
+        k.v[6] = q(p->m_playerSpeed, 0.01);
         return k;
-    };
-    // The goal: its own, or the first of `gates` more than a column ahead of
-    // where the run begins.
-    float goalX = goal.x;
-    float goalLo = goal.lo;
-    float goalHi = goal.hi;
-    if (!goal.gates.empty()) {
-        const float startX = s.pos().x;
-        goalX = -1.0f;
-        for (auto const& g : goal.gates) {
-            if (g[0] <= startX + 30.0f) continue;
-            goalX = g[0];
-            goalLo = g[1];
-            goalHi = g[2];
-            break;
-        }
-        if (goalX < 0.0f) {
-            s.end();
-            m_killer = keptKiller;
-            m_teleportRand = keptRand;
-            out.error = "no gate ahead";
-            return out;
-        }
     }
-    out.gateX = goalX;
-    out.gateLo = goalLo;
-    out.gateHi = goalHi;
-    const bool anyBand = goalLo > goalHi;
-    const auto bandDistance = [&](float y) {
+    // The class a state keeps a share of a capped frontier for: gravity, kind,
+    // size, and the goal object fired - so both sides of an orb survive.
+    int classOf(Trajectory* t) const {
+        PlayerObject* p = s.players[0];
+        return (int)p->m_isUpsideDown | (int)(p->m_vehicleSize < 0.8f) << 1 |
+               (int)(goal.fireObject && t->copyFired(p, goal.fireObject)) << 2 |
+               ((int)p->m_isShip | (int)p->m_isBird << 1 | (int)p->m_isBall << 2 | (int)p->m_isDart << 3 |
+                (int)p->m_isRobot << 4 | (int)p->m_isSpider << 5 | (int)p->m_isSwing << 6)
+                   << 3;
+    }
+    float bandDistance(float y) const {
         if (anyBand) return 0.0f;
         return y < goalLo ? goalLo - y : (y > goalHi ? y - goalHi : 0.0f);
-    };
-
-    std::vector<Node> nodes;
-    std::vector<Live> frontier;
-    std::vector<Live> next;
-    std::unordered_set<Key, KeyHash> seen;
-    {
-        const auto p = s.pos();
-        nodes.push_back({-1, TickInput{}, p.x, p.y});
-        Live root;
-        root.down = downNow;
-        s.snapshot(root.snap);
-        frontier.push_back(std::move(root));
     }
-    int found = -1;
-    // The ways in on the first tick any state gets in: where each one crossed,
-    // the state it came from, and how far inside the band it was. The first
-    // one found used to be the answer, and the first one found hugs an edge
-    // as often as not - a way that only works to the tick (LIMBO, 1.5%).
-    struct Crossing {
-        int node;
-        int parent;
-        float room;
-    };
-    std::vector<Crossing> crossings;
-    Alternative alts[8];
-    for (int tick = 0; tick < goal.maxTicks && !frontier.empty() && found < 0; tick++) {
-        if (goal.maxSteps > 0 && out.steps >= (uint64_t)goal.maxSteps) break;  // out of budget, the same way every run
-        if (elapsedMs() > goal.maxMs) {
-            if (goal.maxSteps > 0) out.error = "the leg search hit its time safety before its step budget";
-            break;
-        }
+    // Back to the start for another try (a relaxed gap).
+    void restart() {
+        nodes.clear();
+        frontier.clear();
         next.clear();
         seen.clear();
-        for (auto& f : frontier) {
-            s.restore(f.snap);
-            // Carrying on, then every way alternativesFor gives the button.
-            TickInput moves[10];
-            int m = 0;
-            moves[m++] = TickInput{0, f.down};
+        crossings.clear();
+        tick = 0;
+        fi = 0;
+        firstCross = -1;
+        out.capped = false;
+        out.exitsElsewhere = 0;
+        out.dots.clear();
+        s.restore(root);
+        const auto p = s.pos();
+        nodes.push_back({-1, TickInput{}, p.x, p.y});
+        Live r;
+        r.down = downNow;
+        s.snapshot(r.snap);
+        frontier.push_back(std::move(r));
+    }
+    void pause() {
+        s.objects.restoreWritten();
+        s.mv.suspend();
+        gucci::gdAssign(s.pl->m_gameState, s.savedState);
+        for (int i = 0; i < s.count; i++) s.players[i]->setVisible(false);
+        paused = true;
+    }
+};
+
+void Trajectory::dropLeg() {
+    delete m_leg;
+    m_leg = nullptr;
+}
+
+bool Trajectory::beginLeg(GJBaseGameLayer* pl, LegGoal const& goal, Leg& refused) {
+    dropLeg();
+    refused = Leg{};
+    if (m_search || m_simulating || m_drawing || (m_start && !goal.inDecision)) {
+        refused.error = "the simulation is busy: stop the pathfinder and try again";
+        return false;
+    }
+    if (!pl || !pl->m_objects || !pl->m_player1 || !m_fakePlayer1 || !m_fakePlayer2 || pl->m_loadingProgress < 1.0f) {
+        refused.error = "open a level first";
+        return false;
+    }
+    if (pl->m_player1->m_isDead || pl->m_playerDied) {
+        refused.error = "the player is dead: try again once the attempt has restarted";
+        return false;
+    }
+    const Killer keptKiller = m_killer;
+    const uint64_t keptRand = m_teleportRand;
+    using Clock = std::chrono::steady_clock;
+    const auto started = Clock::now();
+
+    auto const& buttons = pl->m_player1->m_holdingButtons;
+    auto const held = buttons.find(static_cast<int>(PlayerButton::Jump));
+    auto* L = new LegState();
+    L->goal = goal;
+    L->downNow = goal.inDecision ? goal.held : (held != buttons.end() && held->second);
+    if (!L->s.begin(this, pl, true, L->downNow)) {
+        delete L;
+        m_killer = keptKiller;
+        m_teleportRand = keptRand;
+        refused.error = "the simulation could not start here";
+        return false;
+    }
+    // The goal: its own, or the first of `gates` more than a column ahead of
+    // where the run begins.
+    L->goalX = goal.x;
+    L->goalLo = goal.lo;
+    L->goalHi = goal.hi;
+    if (!goal.gates.empty()) {
+        const float startX = L->s.pos().x;
+        L->goalX = -1.0f;
+        for (auto const& g : goal.gates) {
+            if (g[0] <= startX + 30.0f) continue;
+            L->goalX = g[0];
+            L->goalLo = g[1];
+            L->goalHi = g[2];
+            break;
+        }
+        if (L->goalX < 0.0f) {
+            L->s.end();
+            delete L;
+            m_killer = keptKiller;
+            m_teleportRand = keptRand;
+            refused.error = "no gate ahead";
+            return false;
+        }
+    }
+    L->anyBand = L->goalLo > L->goalHi;
+    L->out.gateX = L->goalX;
+    L->out.gateLo = L->goalLo;
+    L->out.gateHi = L->goalHi;
+    L->calm = std::max(0, goal.calmTicks);
+    L->s.snapshot(L->root);
+    L->restart();
+    L->pause();  // the first slice starts from here, on a later frame
+    L->ms = std::chrono::duration<double, std::milli>(Clock::now() - started).count();
+    m_leg = L;
+    m_killer = keptKiller;
+    m_teleportRand = keptRand;
+    return true;
+}
+
+bool Trajectory::stepLeg(std::chrono::steady_clock::time_point until) {
+    LegState* L = m_leg;
+    if (!L || L->over) return true;
+    if (m_simulating || m_drawing) return false;  // never inside somebody else's run
+    using Clock = std::chrono::steady_clock;
+    const auto started = Clock::now();
+    const auto msSince = [&] { return std::chrono::duration<double, std::milli>(Clock::now() - started).count(); };
+    const Killer keptKiller = m_killer;
+    const uint64_t keptRand = m_teleportRand;
+    Sim& s = L->s;
+    GJBaseGameLayer* pl = s.pl;
+    LegGoal const& goal = L->goal;
+    Leg& out = L->out;
+
+    if (L->paused) {
+        // Back where the last slice left off (the real game has stepped, and
+        // the copies may have been used for other runs in between); each state
+        // restores its own snapshot before it is stepped.
+        s.savedState = pl->m_gameState;
+        s.mv.resume();
+        if (s.worldObjects) s.objects.resume(s.savedState.m_currentProgress, s.savedState.m_commandIndex);
+        m_delta = Bot::get()->updater().getPhysicsDt() * std::min(pl->m_gameState.m_timeWarp, 1.0f) * 60.0f;
+        L->paused = false;
+    }
+    out.slices++;
+
+    Alternative alts[8];
+    bool finished = false;  // the search (this try) has ended
+    for (;;) {
+        if (L->fi == 0) {
+            // A new tick: is this try over, or the whole search?
+            const bool collected = L->firstCross >= 0 && L->tick >= L->firstCross + std::max(1, goal.collectTicks);
+            if (collected || L->tick >= goal.maxTicks || L->frontier.empty()) {
+                // Nothing in, everything dead, with a gap in force: tried again
+                // at half the gap, then with none (the same budget).
+                if (L->crossings.empty() && L->frontier.empty() && L->calm > 1) {
+                    L->calm = L->calm > 2 ? L->calm / 2 : 1;
+                    out.relaxed++;
+                    L->restart();
+                    continue;
+                }
+                finished = true;
+                break;
+            }
+            if (goal.maxSteps > 0 && out.steps >= (uint64_t)goal.maxSteps) {
+                finished = true;  // out of budget, the same way every run
+                break;
+            }
+            if (L->ms + msSince() > goal.maxMs) {
+                if (goal.maxSteps > 0) out.error = "the leg search hit its time safety before its step budget";
+                finished = true;
+                break;
+            }
+            L->next.clear();
+            L->seen.clear();
+        }
+        if (Clock::now() >= until) break;  // carried on next slice, from this state
+
+        auto& f = L->frontier[L->fi];
+        s.restore(f.snap);
+        // Carrying on, then every way alternativesFor gives the button - a
+        // change only once the gap since the last one has passed, or on an orb.
+        TickInput moves[10];
+        int m = 0;
+        moves[m++] = TickInput{0, f.down};
+        const bool mayChange = L->calm <= 1 || L->tick - f.lastChange >= L->calm || L->onOrb(s.players[0]);
+        if (mayChange) {
             const int n = alternativesFor(s.players[0], f.down, alts, false);
             for (int i = 0; i < n && m < 10; i++) {
                 const TickInput t = alts[i].first;
@@ -3853,104 +3983,202 @@ Trajectory::Leg Trajectory::sweepLeg(GJBaseGameLayer* pl, LegGoal const& goal) {
                 for (int j = 0; j < m; j++) dup |= moves[j].presses == t.presses && moves[j].held == t.held;
                 if (!dup) moves[m++] = t;
             }
-            for (int i = 0; i < m; i++) {
-                if (i > 0) s.restore(f.snap);
-                const bool dead = s.step(moves[i]);
-                out.steps++;
-                if (dead) continue;
-                const auto p = s.pos();
-                const bool complete = s.complete();
-                if (p.x >= goalX || complete) {
-                    if (complete || bandDistance(p.y) == 0.0f) {
-                        nodes.push_back({f.node, moves[i], p.x, p.y});
-                        // The end of the level beats any band; with no band
-                        // every way in has the same room. Room is counted up
-                        // to a block and a half: past that a way in is not
-                        // hugging anything, and ranking on would only send
-                        // the run to the middle of a wide band - on LIMBO,
-                        // where everything moves, the band is the whole
-                        // height of the level (105 to 2738).
-                        const float room = complete ? 1.0e9f
-                                           : anyBand ? 0.0f
-                                                     : std::min(45.0f, std::min(p.y - goalLo, goalHi - p.y));
-                        crossings.push_back({(int)nodes.size() - 1, f.node, room});
-                    } else {
-                        out.exitsElsewhere++;
-                    }
-                    continue;
+        }
+        for (int i = 0; i < m; i++) {
+            if (i > 0) s.restore(f.snap);
+            const bool dead = s.step(moves[i]);
+            out.steps++;
+            if (dead) continue;
+            const bool change = moves[i].presses > 0 || moves[i].held != f.down;
+            const int changes = f.changes + (change ? 1 : 0);
+            const int fast = f.fastChanges + (change && goal.calmTicks > 1 && L->tick - f.lastChange < goal.calmTicks ? 1 : 0);
+            const auto p = s.pos();
+            const bool complete = s.complete();
+            if (p.x >= L->goalX || complete) {
+                PlayerObject* who = s.players[0];
+                const bool fired = !goal.fireObject || copyFired(who, goal.fireObject);
+                const bool avoided = !goal.avoidObject || !copyFired(who, goal.avoidObject);
+                if (complete || (L->bandDistance(p.y) == 0.0f && fired && avoided)) {
+                    L->nodes.push_back({f.node, moves[i], p.x, p.y});
+                    // The end of the level beats any band; with no band every
+                    // way in has the same room. Room is counted up to a block
+                    // and a half: past that a way in is not hugging anything,
+                    // and ranking on would only send the run to the middle of a
+                    // wide band - on LIMBO, where everything moves, the band is
+                    // the whole height of the level (105 to 2738).
+                    const float room = complete ? 1.0e9f
+                                       : L->anyBand ? 0.0f
+                                                    : std::min(45.0f, std::min(p.y - L->goalLo, L->goalHi - p.y));
+                    L->crossings.push_back({(int)L->nodes.size() - 1, f.node, room, p.y, changes, fast});
+                    if (L->firstCross < 0) L->firstCross = L->tick;
+                } else {
+                    out.exitsElsewhere++;
                 }
-                if (!seen.insert(keyOf(moves[i].held)).second) continue;
-                nodes.push_back({f.node, moves[i], p.x, p.y});
-                Live c;
-                c.node = (int)nodes.size() - 1;
-                c.down = moves[i].held;
-                c.score = bandDistance(p.y);
-                s.snapshot(c.snap);
-                next.push_back(std::move(c));
+                continue;
             }
+            // Merged with any state that came out the same: the one free to
+            // change its input soonest stays, then the one with fewer changes.
+            LegState::Live c;
+            c.node = 0;
+            c.down = moves[i].held;
+            c.score = L->bandDistance(p.y);
+            c.lastChange = change ? L->tick : f.lastChange;
+            c.changes = changes;
+            c.fastChanges = fast;
+            const auto key = L->keyOf(this, moves[i].held);
+            auto at = L->seen.find(key);
+            if (at != L->seen.end()) {
+                LegState::Live& had = L->next[at->second];
+                const bool better = c.lastChange != had.lastChange ? c.lastChange < had.lastChange
+                                    : c.fastChanges != had.fastChanges ? c.fastChanges < had.fastChanges
+                                                                       : c.changes < had.changes;
+                if (!better) continue;
+                had.dropped = true;  // (Lives are never move-assigned: GD maps on Android)
+            }
+            L->nodes.push_back({f.node, moves[i], p.x, p.y});
+            c.node = (int)L->nodes.size() - 1;
+            c.cls = L->classOf(this);
+            s.snapshot(c.snap);
+            L->seen[key] = L->next.size();
+            L->next.push_back(std::move(c));
         }
-        if (!crossings.empty()) {
-            // The most room first; ties keep the order they were found in.
-            std::stable_sort(crossings.begin(), crossings.end(),
-                             [](Crossing const& l, Crossing const& r) { return l.room > r.room; });
-            found = crossings.front().node;
-        }
-        out.ticks = tick + 1;
-        out.peakFrontier = std::max(out.peakFrontier, (int)next.size());
-        if ((int)next.size() > goal.frontierCap) {
-            // Room for the ones closest to the band (ties: the earlier found).
-            // Sorted by index, and the kept ones moved into a fresh list: a
-            // Live's snapshot holds GD maps, and on Android those can't be
-            // move-assigned, which sorting the Lives themselves needs (CI's
-            // Android builds failed on it from 2026-10-14).
+
+        if (++L->fi < L->frontier.size()) continue;
+        // The tick is done: the next frontier.
+        L->fi = 0;
+        out.ticks = L->tick + 1;
+        std::vector<size_t> alive;
+        alive.reserve(L->next.size());
+        for (size_t k = 0; k < L->next.size(); k++)
+            if (!L->next[k].dropped) alive.push_back(k);
+        out.peakFrontier = std::max(out.peakFrontier, (int)alive.size());
+        // Ranked: near the band first (in 30-unit steps, so calmness decides
+        // between states about as close), then the calmer way, then the
+        // nearer, then the earlier found. Indices are sorted, never the Lives.
+        auto& nx = L->next;
+        const auto ranked = [&nx](size_t a, size_t b) {
+            auto const& l = nx[a];
+            auto const& r = nx[b];
+            const int lb = (int)(l.score / 30.0f), rb = (int)(r.score / 30.0f);
+            if (lb != rb) return lb < rb;
+            if (l.fastChanges != r.fastChanges) return l.fastChanges < r.fastChanges;
+            if (l.changes != r.changes) return l.changes < r.changes;
+            if (l.score != r.score) return l.score < r.score;
+            return l.node < r.node;
+        };
+        std::vector<size_t> keep;
+        if ((int)alive.size() > goal.frontierCap) {
+            // Room for each class first (so both sides of an orb, a gravity or
+            // a size survive the cap), then the best of the rest.
             out.capped = true;
-            std::vector<size_t> order(next.size());
-            for (size_t k = 0; k < order.size(); k++) order[k] = k;
-            std::stable_sort(order.begin(), order.end(), [&next](size_t a, size_t b) {
-                Live const& l = next[a];
-                Live const& r = next[b];
-                return l.score != r.score ? l.score < r.score : l.node < r.node;
-            });
-            std::vector<Live> kept;
-            kept.reserve((size_t)goal.frontierCap);
-            for (size_t k = 0; k < (size_t)goal.frontierCap; k++) kept.push_back(std::move(next[order[k]]));
-            next.swap(kept);
+            std::stable_sort(alive.begin(), alive.end(), ranked);
+            std::vector<int> classes;
+            for (size_t k : alive)
+                if (std::find(classes.begin(), classes.end(), nx[k].cls) == classes.end()) classes.push_back(nx[k].cls);
+            const size_t share = std::max<size_t>(1, (size_t)goal.frontierCap / std::max<size_t>(1, classes.size()));
+            std::vector<char> taken(alive.size(), 0);
+            for (int cls : classes) {
+                size_t got = 0;
+                for (size_t k = 0; k < alive.size() && got < share; k++) {
+                    if (nx[alive[k]].cls != cls) continue;
+                    taken[k] = 1;
+                    got++;
+                }
+            }
+            for (size_t k = 0; k < alive.size() && keep.size() < (size_t)goal.frontierCap; k++)
+                if (taken[k]) keep.push_back(alive[k]);
+            for (size_t k = 0; k < alive.size() && keep.size() < (size_t)goal.frontierCap; k++)
+                if (!taken[k]) keep.push_back(alive[k]);
+            std::sort(keep.begin(), keep.end());  // the order they were found in
+        } else {
+            keep = std::move(alive);
         }
-        if (goal.dotsEvery > 0 && tick % goal.dotsEvery == 0 && out.dots.size() < 40000)
-            for (auto const& c : next) out.dots.emplace_back(nodes[(size_t)c.node].x, nodes[(size_t)c.node].y);
-        frontier.swap(next);
+        std::vector<LegState::Live> fresh;
+        fresh.reserve(keep.size());
+        for (size_t k : keep) fresh.push_back(std::move(nx[k]));
+        if (goal.dotsEvery > 0 && L->tick % goal.dotsEvery == 0 && out.dots.size() < 40000)
+            for (auto const& c : fresh) out.dots.emplace_back(L->nodes[(size_t)c.node].x, L->nodes[(size_t)c.node].y);
+        L->frontier.swap(fresh);
+        L->next.clear();
+        L->tick++;
     }
 
-    if (found >= 0) {
-        out.outcome = Leg::Outcome::Found;
-        const auto traceBack = [&](int at, std::vector<TickInput>& inputs, std::vector<std::pair<float, float>>* path) {
-            for (int i = at; i > 0; i = nodes[(size_t)i].parent) {
-                inputs.push_back(nodes[(size_t)i].in);
-                if (path) path->emplace_back(nodes[(size_t)i].x, nodes[(size_t)i].y);
+    if (finished) {
+        L->over = true;
+        if (!L->crossings.empty()) {
+            // The calmest way in, then the most room; ties keep the order found.
+            auto& cr = L->crossings;
+            std::stable_sort(cr.begin(), cr.end(), [](LegState::Crossing const& l, LegState::Crossing const& r) {
+                if (l.fastChanges != r.fastChanges) return l.fastChanges < r.fastChanges;
+                if (l.changes != r.changes) return l.changes < r.changes;
+                return l.room > r.room;
+            });
+            out.outcome = Leg::Outcome::Found;
+            const auto traceBack = [&](int at, std::vector<TickInput>& inputs, std::vector<std::pair<float, float>>* path) {
+                for (int i = at; i > 0; i = L->nodes[(size_t)i].parent) {
+                    inputs.push_back(L->nodes[(size_t)i].in);
+                    if (path) path->emplace_back(L->nodes[(size_t)i].x, L->nodes[(size_t)i].y);
+                }
+                std::reverse(inputs.begin(), inputs.end());
+                if (path) std::reverse(path->begin(), path->end());
+            };
+            traceBack(cr.front().node, out.witness, &out.path);
+            out.changes = cr.front().changes;
+            out.fastChanges = cr.front().fastChanges;
+            // The others, from different states before them and at different
+            // heights: two ways that only differ in their last input, or come
+            // in at the same height, are one way.
+            std::vector<int> from{cr.front().parent};
+            std::vector<int> heights{(int)std::floor(cr.front().y / 15.0f)};
+            for (size_t k = 1; k < cr.size() && (int)out.alternates.size() + 1 < goal.witnesses; k++) {
+                const int h = (int)std::floor(cr[k].y / 15.0f);
+                if (std::find(from.begin(), from.end(), cr[k].parent) != from.end()) continue;
+                if (std::find(heights.begin(), heights.end(), h) != heights.end()) continue;
+                from.push_back(cr[k].parent);
+                heights.push_back(h);
+                out.alternates.emplace_back();
+                traceBack(cr[k].node, out.alternates.back(), nullptr);
             }
-            std::reverse(inputs.begin(), inputs.end());
-            if (path) std::reverse(path->begin(), path->end());
-        };
-        traceBack(found, out.witness, &out.path);
-        // The others, one per state they came in from: two ways that only
-        // differ in their very last input are one way.
-        std::vector<int> from{crossings.front().parent};
-        for (size_t k = 1; k < crossings.size() && (int)out.alternates.size() + 1 < goal.witnesses; k++) {
-            if (std::find(from.begin(), from.end(), crossings[k].parent) != from.end()) continue;
-            from.push_back(crossings[k].parent);
-            out.alternates.emplace_back();
-            traceBack(crossings[k].node, out.alternates.back(), nullptr);
+        } else if (L->frontier.empty() && !out.error) {
+            // Nothing alive any more: a proof only if nothing was ever dropped
+            // and no input was held back for calm.
+            out.outcome = out.capped ? Leg::Outcome::OutOfBudget
+                                     : (goal.exact && L->calm <= 1 ? Leg::Outcome::Impossible : Leg::Outcome::NotFound);
         }
-    } else if (frontier.empty()) {
-        // Nothing alive any more: a proof only if nothing was ever dropped.
-        out.outcome = out.capped ? Leg::Outcome::OutOfBudget
-                                 : (goal.exact ? Leg::Outcome::Impossible : Leg::Outcome::NotFound);
+        out.calmUsed = L->calm;
+        s.end();
+    } else {
+        L->pause();
     }
-    s.end();
+    L->ms += msSince();
+    out.ms = L->ms;
     m_killer = keptKiller;
     m_teleportRand = keptRand;
-    out.ms = elapsedMs();
+    return L->over;
+}
+
+Trajectory::Leg Trajectory::finishLeg() {
+    LegState* L = m_leg;
+    if (!L) return {};
+    if (!L->over) {
+        // Stopped between slices: ended from where the game stands now (the
+        // slice before put everything it wrote back).
+        L->s.savedState = L->s.pl->m_gameState;
+        L->s.mv.resume();
+        L->s.end();
+        if (!L->out.error) L->out.error = "stopped";
+    }
+    Leg out = std::move(L->out);
+    dropLeg();
     return out;
+}
+
+Trajectory::Leg Trajectory::sweepLeg(GJBaseGameLayer* pl, LegGoal const& goal) {
+    Leg refused;
+    if (!beginLeg(pl, goal, refused)) return refused;
+    while (!stepLeg(std::chrono::steady_clock::time_point::max())) {
+    }
+    return finishLeg();
 }
 
 // The ghost run, kept between slices (see beginGhost / stepGhost).
@@ -3999,7 +4227,7 @@ bool Trajectory::beginGhost(GJBaseGameLayer* pl, std::vector<std::pair<float, fl
                             GhostReport& refused) {
     dropGhost();
     refused = GhostReport{};
-    if (m_search || m_simulating || m_drawing) {
+    if (m_search || m_leg || m_simulating || m_drawing) {
         refused.why = "the simulation is busy";
         return false;
     }
@@ -5394,7 +5622,7 @@ void Trajectory::splitStep(GJBaseGameLayer* pl, PlayerObject* copy, float delta)
 bool Trajectory::subtickPose(GJBaseGameLayer* pl, bool p1, float fraction, TrajectoryPlayerData& out,
                              bool& died) {
     died = false;
-    if (!pl || m_drawing || m_simulating || m_search || m_start) return false;
+    if (!pl || m_drawing || m_simulating || m_search || m_leg || m_start) return false;
     const GJGameState state = pl->m_gameState;
     const float savedDelta = m_delta;
     auto pending = std::move(m_actions);
@@ -5430,7 +5658,7 @@ bool Trajectory::subtickPose(GJBaseGameLayer* pl, bool p1, float fraction, Traje
 bool Trajectory::subtickBranch(GJBaseGameLayer* pl, bool p1, float fraction, bool hold, int ticks,
                                std::vector<cocos2d::CCPoint>& path) {
     path.clear();
-    if (!pl || m_drawing || m_simulating || m_search || m_start) return false;
+    if (!pl || m_drawing || m_simulating || m_search || m_leg || m_start) return false;
     const GJGameState state = pl->m_gameState;
     const float savedDelta = m_delta;
     auto pending = std::move(m_actions);

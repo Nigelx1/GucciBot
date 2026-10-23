@@ -260,6 +260,20 @@ class Trajectory {
         // of the states that reach the gate on the first tick any does, the
         // ones with the most room in the band, from different states before it.
         int witnesses = 1;
+        // GucciBot (docs/ROUTE_ENGINE_PLAN.md step 3): calm inputs. A change of
+        // input is offered only this many ticks after the state's last one
+        // (0: any time); a press while the copy touches an orb is exempt, the
+        // game asks for those. With nothing found, it is tried again at half
+        // the gap and then with none, inside the same step budget.
+        int calmTicks = 0;
+        // ... ways in keep being collected this many ticks after the first, and
+        // the answer is the calmest (fewest fast changes, fewest changes, then
+        // the most room), the others in different 15-unit heights.
+        int collectTicks = 4;
+        // A way in counts only if this object fired on the way (a route
+        // option's USE), or only if this one did not (its SKIP).
+        EnhancedGameObject* fireObject = nullptr;
+        EnhancedGameObject* avoidObject = nullptr;
     };
     struct Leg {
         // Impossible: exact and nothing dropped (every move it offers was tried; its
@@ -281,8 +295,29 @@ class Trajectory {
         float gateX = 0.0f;  // the goal it went for (from `gates`, or the goal's own)
         float gateLo = 1.0f;
         float gateHi = 0.0f;
+        // GucciBot (step 3): the witness's input changes, how many of them came
+        // closer than LegGoal::calmTicks after the one before, the gap that
+        // found it (after any relaxing), and how many times it was relaxed.
+        int changes = 0;
+        int fastChanges = 0;
+        int calmUsed = 0;
+        int relaxed = 0;
+        int slices = 0;
     };
     Leg sweepLeg(GJBaseGameLayer* pl, const LegGoal& goal);
+    // GucciBot (docs/ROUTE_ENGINE_PLAN.md step 3): the same search in slices,
+    // so a decision does not hold the game up: beginLeg sets it up (false and
+    // the reason in `refused` when it cannot), each stepLeg runs it until
+    // `until` and puts the game back for the real tick in between - as the
+    // search and the ghost run do - and finishLeg hands back the Leg (true from
+    // stepLeg: it is over). The budget is LegGoal::maxSteps, simulated steps,
+    // so the same leg comes out the same however it is sliced; maxMs (all the
+    // slices together) is only a safety stop. sweepLeg is the three in one go.
+    bool beginLeg(GJBaseGameLayer* pl, const LegGoal& goal, Leg& refused);
+    bool stepLeg(std::chrono::steady_clock::time_point until);
+    Leg finishLeg();
+    bool legActive() const { return m_leg != nullptr; }
+    void dropLeg();
 
     // The level map that knows when (step R1 of AI_PATHFINDER_PLAN.md, for
     // what moves): a ghost copy of player 1 runs on from where the player is,
@@ -320,6 +355,8 @@ class Trajectory {
    private:
     SearchState* m_search = nullptr;  // a search in progress (beginSearch)
     GhostState* m_ghost = nullptr;    // a ghost run in progress (beginGhost)
+    struct LegState;
+    LegState* m_leg = nullptr;        // a leg search in progress (beginLeg)
     // Groups a trigger that moves things targets (move, rotate, follow, scale,
     // keyframe, advanced follow, area effects): the objects the moving-object
     // scan watches from one real tick to the next, for the runs that carry
@@ -879,6 +916,7 @@ class Trajectory {
     ~Trajectory() {
         dropSearch();
         dropGhost();
+        dropLeg();
         m_fakePlayer1->m_maybeLastGroundObject = nullptr;
         m_fakePlayer2->m_maybeLastGroundObject = nullptr;
 
@@ -966,6 +1004,7 @@ class TrajectoryManager {
         return {};
     }
     bool searching() const { return m_trajectory && m_trajectory->searching(); }
+    bool legActive() const { return m_trajectory && m_trajectory->legActive(); }
     bool simulatesBoth(GJBaseGameLayer* pl, bool p1) const { return m_trajectory && m_trajectory->simulatesBoth(pl, p1); }
     bool separateControls(GJBaseGameLayer* pl) const { return m_trajectory && m_trajectory->separateControls(pl); }
     Trajectory::HitboxCheck checkHitboxes(GJBaseGameLayer* pl, bool p1) {

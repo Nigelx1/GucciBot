@@ -223,7 +223,9 @@ public:
         size_t next = 0;            // next idea to judge
         int best = -1;              // index of the best judged idea
         int fullSurvivors = 0;
-        enum Stage { Steers, Gpu, GpuFull, Search, Rest, Verdict, Trim };
+        // Route: the route's leg search, a slice at a time, before the other
+        // ideas are made (docs/ROUTE_ENGINE_PLAN.md step 3).
+        enum Stage { Route, Steers, Gpu, GpuFull, Search, Rest, Verdict, Trim };
         Stage stage = Steers;
         bool hard = false;          // needed more than the cheap ideas, or is repairing: worth remembering
         std::string situation;      // for the priors (which kinds of idea win here)
@@ -258,6 +260,7 @@ public:
         bool gpuGained = false;     // the last round got further than any before it
         size_t restEnd = 0;         // the single-change and random ideas end here (the search's comes after)
         bool searching = false;     // the branching search is running
+        bool routeLeg = false;      // the route's leg search is out (the Route stage)
         // Where the search ran from and its key in the run memo (see memoStart).
         const Trajectory::SimStart* searchMemoFrom = nullptr;
         std::pair<uint64_t, uint64_t> searchKey{0, 0};
@@ -314,6 +317,11 @@ public:
     void decide();
     void buildCandidates(std::vector<Candidate>& out, bool held, int horizon);
     void buildSteeredCandidates(std::vector<Candidate>& out, bool held, int horizon);
+    // GucciBot (step 3): what a route leg search came back with - its ideas, or
+    // why there were none - and the ideas made after the route's.
+    void takeRouteLeg(Decision& d, const Trajectory::Leg& leg);
+    void finishIdeas(Decision& d);
+    int calmTicks() const;
     // Scores a big pool of ideas on the graphics card and adds the best few
     // as ordinary candidates (the simulation still judges them). How many
     // were added, or 0 when the card was not used.

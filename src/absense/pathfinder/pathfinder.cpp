@@ -64,6 +64,8 @@ constexpr double kMinLookahead = 0.75;
 // of every frame (as much as it can while the game still draws and the stop
 // key still answers - the search runs at about 95% of wall clock).
 constexpr double kLookahead = 4.0;
+// GucciBot (step 3): the calm gap of a route leg (see calmTicks).
+constexpr double kCalmSeconds = 0.033;
 constexpr double kBackSeconds = 3.0;
 // The most a slice may take while the game is frozen and the search is the
 // only thing running. Not 100: with the game costing about 1.5 ms a frame a
@@ -428,6 +430,9 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
     if (m_decision.searching && !leavingLevel && bot->trajectory().searching()) {
         std::vector<TickInput> dropped;
         (void)bot->trajectory().finishSearch(dropped);  // puts the game state back
+    }
+    if (m_decision.routeLeg && !leavingLevel) {
+        if (auto* traj = bot->trajectory().unsafeInner(); traj && traj->legActive()) (void)traj->finishLeg();
     }
     m_decision = Decision{};
     if (!leavingLevel || PlayLayer::get()) bot->trajectory().useStart(nullptr);  // puts the objects' flags back
@@ -1959,6 +1964,103 @@ bool AbsensePathfinder::evaluate(Candidate& c, int horizon, bool held, std::vect
 // while it has time): the cheap ideas are judged a few at a time, and only
 // when none of them lasts the whole horizon does the branching search run,
 // also in slices, so the game keeps drawing whatever the search costs.
+// GucciBot (docs/ROUTE_ENGINE_PLAN.md step 3): the calm gap, the shortest
+// time between two input changes a route leg may use before it counts as fast
+// clicking: 33 ms, about 15 clicks a second at most, until Nigel picks his
+// number. A leg goes below it only where nothing calmer gets through.
+int AbsensePathfinder::calmTicks() const {
+    const double tps = Bot::get()->updater().getTps();
+    return std::max(1, (int)std::lround(kCalmSeconds * tps));
+}
+
+// What a route leg search came back with: its ways in as ideas, or why there
+// were none (step R4's handling, lifted out of decide() when the search was
+// sliced in step 3).
+void AbsensePathfinder::takeRouteLeg(Decision& d, const Trajectory::Leg& leg) {
+    const double tps = Bot::get()->updater().getTps();
+    if (leg.error) {
+        m_stats.routeErrors++;
+        const bool clock = std::string_view(leg.error).find("time safety") != std::string_view::npos;
+        if (clock) m_stats.legSafety++;
+        // Why (step 1d): the first time each reason comes up in a
+        // run, and every 50th after that.
+        if (m_routeWhy != leg.error) {
+            m_routeWhy = leg.error;
+            m_routeWhyCount = 0;
+        }
+        if (m_routeWhyCount++ % 50 == 0)
+            log("tick %llu: no route search here: %s (%llu steps, %.0f ms)", (unsigned long long)d.tick,
+                leg.error, (unsigned long long)leg.steps, leg.ms);
+    }
+    if (!leg.error) {
+        m_stats.routeLegs++;
+        m_stats.routeTicks += (uint64_t)leg.ticks;
+        m_stats.routeMs += leg.ms;
+        const bool found = leg.outcome == Trajectory::Leg::Outcome::Found && !leg.witness.empty();
+        if (!found) (leg.outcome == Trajectory::Leg::Outcome::OutOfBudget ? m_stats.routeBudget : m_stats.routeNone)++;
+        // A gate whose gap keeps failing gets priced up and the route planned again.
+        absense::route::noteLeg(leg.gateX, leg.gateLo, found);
+        if (found) {
+            m_stats.routeFound++;
+            // The way in with the most room, then up to two others
+            // through the same gate, so the verdict's late-input
+            // check has more than one of the route's ways to pick from.
+            // Each is steered on past the gate (a steer 16 that
+            // starts with the way as its script): held there
+            // instead, the idea was judged on whatever the held
+            // button ran into next, not on the route.
+            std::vector<const std::vector<TickInput>*> ways{&leg.witness};
+            for (auto const& w : leg.alternates) ways.push_back(&w);
+            const int lookahead = std::max(1, (int)std::lround(16.0 * std::max(1.0, tps / 240.0)));
+            for (size_t k = 0; k < ways.size(); k++) {
+                const std::vector<TickInput>& way = *ways[k];
+                if (way.empty() || (int)way.size() > d.H) continue;
+                Candidate c;
+                char name[64];
+                if (k == 0) std::snprintf(name, sizeof(name), "route to x %.0f", leg.gateX);
+                else std::snprintf(name, sizeof(name), "route to x %.0f #%zu", leg.gateX, k + 1);
+                c.name = name;
+                c.steer = lookahead;
+                c.prefix = way;
+                c.gateTicks = (int)way.size();
+                d.candidates.push_back(std::move(c));
+                d.routeIdeas = true;
+                d.routeGateX = leg.gateX;
+            }
+        }
+    }
+}
+
+// The ideas after the route's: the steered ones, then the rest, with the kinds
+// that usually win here first.
+void AbsensePathfinder::finishIdeas(Decision& d) {
+    const bool learning = SLSettings::get()->pathfinder.learn && absense::memory::Store::get().isOpen();
+    buildSteeredCandidates(d.candidates, d.held, d.H);
+    d.steersEnd = d.candidates.size();
+    buildCandidates(d.candidates, d.held, d.H);
+    if (learning && d.candidates.size() > d.steersEnd) {
+        // The kinds of idea that usually win in this situation go first
+        // (scored once each: a score builds a string and walks two maps,
+        // and a comparison sort asked for two of them per comparison).
+        auto& mem = absense::memory::Store::get();
+        const size_t n = d.candidates.size() - d.steersEnd;
+        std::vector<std::pair<uint32_t, size_t>> order(n);
+        for (size_t i = 0; i < n; i++) order[i] = {mem.score(d.situation, d.candidates[d.steersEnd + i].name), i};
+        std::stable_sort(order.begin(), order.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+        std::vector<Candidate> sorted;
+        sorted.reserve(n);
+        for (const auto& [score, i] : order) sorted.push_back(std::move(d.candidates[d.steersEnd + i]));
+        std::move(sorted.begin(), sorted.end(), d.candidates.begin() + (std::ptrdiff_t)d.steersEnd);
+    }
+    for (size_t i = d.steersEnd; i < d.candidates.size(); i++) {
+        if (d.candidates[i].name == "keep") {
+            d.keep = (int)i;
+            break;
+        }
+    }
+    d.stage = Decision::Steers;
+}
+
 void AbsensePathfinder::decide() {
     auto* bot = Bot::get();
     auto* pl = PlayLayer::get();
@@ -2228,6 +2330,11 @@ void AbsensePathfinder::decide() {
         // gate, as the physics map finds it from this decision's state. One
         // more idea, judged like the rest; when the search runs out of room
         // or time, or no way exists, the usual ideas carry on alone.
+        // GucciBot (docs/ROUTE_ENGINE_PLAN.md step 3): searched a slice at a
+        // time (the Route stage below) instead of holding the game up for up to
+        // a fifth of a second at every decision; the other ideas are made when
+        // it is back, after its own, as before.
+        bool routeOut = false;
         if (absense::route::guidanceEnabled() && !d.pair) {
             auto const* route = absense::route::guidePlan(pl);
             auto* traj = bot->trajectory().unsafeInner();
@@ -2237,92 +2344,37 @@ void AbsensePathfinder::decide() {
                 goal.held = d.held;
                 goal.maxTicks = d.H;
                 goal.frontierCap = 128;
-                // Steps, not milliseconds (docs/ROUTE_ENGINE_PLAN.md step 1c):
-                // the same leg comes out the same on every run. The clock is
-                // only a safety stop until step 3 slices this search.
+                // Steps, not milliseconds (step 1c): the same leg comes out the
+                // same on every run, however it is sliced. The clock, over all
+                // the slices, is only a safety stop.
                 goal.maxSteps = 15000;
-                goal.maxMs = 500.0;  // about 3x what 15,000 steps took on the one level measured (9.3 us each)
+                goal.maxMs = 2000.0;
                 goal.dotsEvery = 0;
                 goal.witnesses = 3;
+                goal.calmTicks = calmTicks();
                 for (auto const& w : route->routes.front().points) goal.gates.push_back({w.x, w.band.lo, w.band.hi});
-                auto const leg = traj->sweepLeg(pl, goal);
-                if (leg.error) {
-                    m_stats.routeErrors++;
-                    const bool clock = std::string_view(leg.error).find("time safety") != std::string_view::npos;
-                    if (clock) m_stats.legSafety++;
-                    // Why (step 1d): the first time each reason comes up in a
-                    // run, and every 50th after that.
-                    if (m_routeWhy != leg.error) {
-                        m_routeWhy = leg.error;
-                        m_routeWhyCount = 0;
-                    }
-                    if (m_routeWhyCount++ % 50 == 0)
-                        log("tick %llu: no route search here: %s (%llu steps, %.0f ms)", (unsigned long long)d.tick,
-                            leg.error, (unsigned long long)leg.steps, leg.ms);
-                }
-                if (!leg.error) {
-                    m_stats.routeLegs++;
-                    m_stats.routeTicks += (uint64_t)leg.ticks;
-                    m_stats.routeMs += leg.ms;
-                    const bool found = leg.outcome == Trajectory::Leg::Outcome::Found && !leg.witness.empty();
-                    if (!found) (leg.outcome == Trajectory::Leg::Outcome::OutOfBudget ? m_stats.routeBudget : m_stats.routeNone)++;
-                    // A gate whose gap keeps failing gets priced up and the route planned again.
-                    absense::route::noteLeg(leg.gateX, leg.gateLo, found);
-                    if (found) {
-                        m_stats.routeFound++;
-                        // The way in with the most room, then up to two others
-                        // through the same gate, so the verdict's late-input
-                        // check has more than one of the route's ways to pick from.
-                        // Each is steered on past the gate (a steer 16 that
-                        // starts with the way as its script): held there
-                        // instead, the idea was judged on whatever the held
-                        // button ran into next, not on the route.
-                        std::vector<const std::vector<TickInput>*> ways{&leg.witness};
-                        for (auto const& w : leg.alternates) ways.push_back(&w);
-                        const int lookahead = std::max(1, (int)std::lround(16.0 * std::max(1.0, tps / 240.0)));
-                        for (size_t k = 0; k < ways.size(); k++) {
-                            const std::vector<TickInput>& way = *ways[k];
-                            if (way.empty() || (int)way.size() > d.H) continue;
-                            Candidate c;
-                            char name[64];
-                            if (k == 0) std::snprintf(name, sizeof(name), "route to x %.0f", leg.gateX);
-                            else std::snprintf(name, sizeof(name), "route to x %.0f #%zu", leg.gateX, k + 1);
-                            c.name = name;
-                            c.steer = lookahead;
-                            c.prefix = way;
-                            c.gateTicks = (int)way.size();
-                            d.candidates.push_back(std::move(c));
-                            d.routeIdeas = true;
-                            d.routeGateX = leg.gateX;
-                        }
-                    }
-                }
+                Trajectory::Leg refused;
+                if (traj->beginLeg(pl, goal, refused)) routeOut = true;
+                else takeRouteLeg(d, refused);
             }
         }
-        buildSteeredCandidates(d.candidates, d.held, d.H);
-        d.steersEnd = d.candidates.size();
-        buildCandidates(d.candidates, d.held, d.H);
-        if (learning && d.candidates.size() > d.steersEnd) {
-            // The kinds of idea that usually win in this situation go first
-            // (scored once each: a score builds a string and walks two maps,
-            // and a comparison sort asked for two of them per comparison).
-            auto& mem = absense::memory::Store::get();
-            const size_t n = d.candidates.size() - d.steersEnd;
-            std::vector<std::pair<uint32_t, size_t>> order(n);
-            for (size_t i = 0; i < n; i++) order[i] = {mem.score(d.situation, d.candidates[d.steersEnd + i].name), i};
-            std::stable_sort(order.begin(), order.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
-            std::vector<Candidate> sorted;
-            sorted.reserve(n);
-            for (const auto& [score, i] : order) sorted.push_back(std::move(d.candidates[d.steersEnd + i]));
-            std::move(sorted.begin(), sorted.end(), d.candidates.begin() + (std::ptrdiff_t)d.steersEnd);
+        if (routeOut) {
+            d.routeLeg = true;
+            d.stage = Decision::Route;
+        } else {
+            finishIdeas(d);
         }
-        for (size_t i = d.steersEnd; i < d.candidates.size(); i++) {
-            if (d.candidates[i].name == "keep") {
-                d.keep = (int)i;
-                break;
-            }
+    }
+
+    // ---- the route's leg search, a slice at a time (step 3)
+    if (d.stage == Decision::Route) {
+        auto* traj = bot->trajectory().unsafeInner();
+        if (d.routeLeg && traj && traj->legActive()) {
+            if (!traj->stepLeg(m_deadline)) return;  // more next time
+            takeRouteLeg(d, traj->finishLeg());
         }
-        d.stage = Decision::Steers;
+        d.routeLeg = false;
+        finishIdeas(d);
     }
 
     const int H = d.H;
@@ -3479,6 +3531,9 @@ void AbsensePathfinder::cancelAhead() {
         std::vector<TickInput> dropped;
         (void)bot->trajectory().finishSearch(dropped);
     }
+    if (m_decision.routeLeg) {
+        if (auto* traj = bot->trajectory().unsafeInner(); traj && traj->legActive()) (void)traj->finishLeg();
+    }
     m_decision = Decision{};
     m_pairSecondPass = false;
     m_ahead = Ahead{};
@@ -3658,6 +3713,9 @@ void AbsensePathfinder::escalate(const char* why) {
         std::vector<TickInput> dropped;
         (void)bot->trajectory().finishSearch(dropped);
     }
+    if (m_decision.routeLeg) {
+        if (auto* traj = bot->trajectory().unsafeInner(); traj && traj->legActive()) (void)traj->finishLeg();
+    }
     m_decision = Decision{};
     m_pairSecondPass = false;
     m_plan.clear();
@@ -3758,6 +3816,9 @@ bool AbsensePathfinder::moveStartBack() {
     if (m_decision.searching && bot->trajectory().searching()) {
         std::vector<TickInput> dropped;
         (void)bot->trajectory().finishSearch(dropped);
+    }
+    if (m_decision.routeLeg) {
+        if (auto* traj = bot->trajectory().unsafeInner(); traj && traj->legActive()) (void)traj->finishLeg();
     }
     m_decision = Decision{};
     m_pairSecondPass = false;

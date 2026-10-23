@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-22-fu (Pathfinder: the spike handover really happens (GD flag), counts per run, R5 picks only usable choices)"
+    "2026-10-22-fv (Pathfinder step 3: the route search runs in slices, repeats, and keeps clicks calm)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
