@@ -4528,11 +4528,21 @@ void FrameWindowAnalyzer::startDependentPoint() {
     // Its room, as Calculate's own count gives it: within the search
     // distance, not before the level, and on a later frame than the input
     // before it of its player (here, where this alignment put that one).
+    // GucciBot (2026-10-23): but, as in the count, an input this alignment
+    // leaves where the macro has it never keeps it from its own timing. The
+    // macro can have two of its player's inputs on one frame (a platformer's
+    // two buttons), and the count still tries its own timing then, only not
+    // earlier; here that input's frame kept it out, and at every alignment.
     int64_t const reach = static_cast<int64_t>(m_sweep) * pair.resB;
-    double floorFrame = 0.0;
-    if (size_t const prev = this->prevActionFor(aiB, p2); prev != NO_INDEX)
-        floorFrame = std::floor(this->depPlaced(prev)) + 1.0;
-    m_depLo = std::max(-reach, firstOnOrAfter(bPos, floorFrame));
+    m_depLo = std::max(-reach, firstOnOrAfter(bPos, 0.0));
+    if (size_t const prev = this->prevActionFor(aiB, p2); prev != NO_INDEX) {
+        int64_t later =
+            firstOnOrAfter(bPos, std::floor(this->depPlaced(prev)) + 1.0);
+        size_t const aiA = m_samples[pair.a].actionIndex;
+        if (prev != aiA && prev != this->pairedReleaseFor(aiA))
+            later = std::min<int64_t>(later, 0);
+        m_depLo = std::max(m_depLo, later);
+    }
     m_depHi = reach;
 
     // What a Buffer test leaves where it is: the input stays before its
@@ -4568,9 +4578,13 @@ void FrameWindowAnalyzer::startDependentPoint() {
         // A sub-tick shift moves it with its release only, as the count's
         // sub-tick pass does. (That pass only warns when one crosses the
         // next input; this keeps short of it, so no test plays its player's
-        // inputs out of order and stalls the replay.)
+        // inputs out of order and stalls the replay.) GucciBot (2026-10-23):
+        // those inputs come after it, so no alignment moves them: like the
+        // one before it above, they never keep it from its own timing.
         m_depHi = std::min(
-            {m_depHi, rel != NO_INDEX ? releaseRoom : pressRoom, holdHi});
+            {m_depHi,
+             std::max<int64_t>(rel != NO_INDEX ? releaseRoom : pressRoom, 0),
+             holdHi});
         m_depLo = std::max(m_depLo, holdLo);
         m_depBufLo = m_depLo;
         m_depBufHi = m_depHi;
