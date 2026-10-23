@@ -223,8 +223,11 @@ namespace gucci::ui::pages {
                    "How many frames on either side of each input to test. Testing stops at the first death, so a "
                    "wide range is still fast on tight inputs",
                    &FW::sweepRange, "%d frames");
+            // GucciBot (2026-10-23): this said the player "must survive" this long; it only caps each test, as
+            // anticroom's own tooltip says.
             slider("Horizon",
-                   "How many ticks the player must survive after a shifted input. 240 is one second at 240 TPS",
+                   "The longest a test runs after a shifted input. A test ends Slack frames before the next input, "
+                   "so this only cuts it short when that input is far off. 240 is one second at 240 TPS",
                    &FW::maxFrames, "%d ticks");
             slider("Slack",
                    "Ends a test early when the next input is this close, so it isn't judged on frames that belong "
@@ -954,6 +957,14 @@ namespace gucci::ui::pages {
                 slider("Time cap",
                        "Stops a run that goes on longer than this and keeps what it measured. 0 has no cap",
                        &FW::timeCapMinutes, s.timeCapMinutes == 0 ? "no cap" : "%d min");
+
+                // GucciBot (2026-10-23): from anticroom's antics-counter beta.7 changelog, experimental there too.
+                kit::Section("Experimental");
+                flag("Check past next input",
+                     "Each test runs on to just before the input after the next one, so a death this shift causes "
+                     "after the next input isn't missed. Stricter and slower: a death the next input's own timing "
+                     "causes counts against this one too",
+                     &FW::checkPastNextInput);
 
                 kit::Section("Debug");
                 if (feature("Verbose log",

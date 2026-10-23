@@ -65,6 +65,7 @@ namespace gucci::fwstore {
             {"fwac_hide_spawn", &FW::hideSpawnEffects},
             {"fwac_adaptive_budget", &FW::adaptiveBudget},
             {"fwac_full_range_sweep", &FW::fullRangeSweep},
+            {"fwac_check_past_next", &FW::checkPastNextInput},
             {"fwac_test_ship_releases", &FW::testShipReleases},
             {"fwac_test_all_releases", &FW::testAllReleases},
             {"fwac_orb_aware_skip", &FW::orbAwareReleaseSkip},

@@ -405,6 +405,9 @@ class FrameWindowAnalyzer {
     SLValuePtr<bool> m_fullRangeSweep = SLValue<bool>::create(
         "framewindow.full_range",
         &SLSettings::get()->frameWindow.fullRangeSweep);
+    SLValuePtr<bool> m_checkPastNext = SLValue<bool>::create(
+        "framewindow.check_past_next",
+        &SLSettings::get()->frameWindow.checkPastNextInput);
     SLValuePtr<bool> m_testAllReleases = SLValue<bool>::create(
         "framewindow.all_releases",
         &SLSettings::get()->frameWindow.testAllReleases);
@@ -482,8 +485,10 @@ class FrameWindowAnalyzer {
     size_t pairedReleaseFor(size_t ai) const;
     long posRoom(size_t idx) const;
     // GucciBot (2026-10-23): how far a test leg runs past an input it placed
-    // at `from` (action `afterAi`). One rule; it was five copies.
-    int64_t legReach(size_t afterAi, int64_t from, size_t skip) const;
+    // at `from` (action `afterAi`). One rule; it was five copies. `pastNext`:
+    // Check Past Next Input.
+    int64_t legReach(size_t afterAi, int64_t from, size_t skip,
+                     bool pastNext = false) const;
 
     double m_resultsTps = 240.0;
     int m_timingMark = -1;
@@ -595,6 +600,7 @@ class FrameWindowAnalyzer {
     int m_slack_ = 3;
     int m_recovery = 4;
     Algorithm m_algo = Algorithm::TimeBased;
+    bool m_pastNext = false;
 
     uint32_t m_recorded = 0;
     int64_t m_maxNeg = 0;
@@ -639,6 +645,8 @@ class FrameWindowAnalyzer {
 
     bool m_testActive = false;
     uint32_t m_testTarget = 0;
+    // GucciBot (2026-10-23): where this click's nominal leg ends.
+    uint32_t m_nominalTarget = 0;
     bool m_restoreFailed = false;
     bool m_probeDied = false;
 

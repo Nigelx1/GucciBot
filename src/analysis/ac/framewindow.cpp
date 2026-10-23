@@ -771,15 +771,32 @@ long FrameWindowAnalyzer::posRoom(size_t idx) const {
 // `skip` (the input's own release, for the legs that pass over it), and at
 // least MIN_HORIZON, at most the horizon. Read off the actions as the leg has
 // placed them.
+//
+// `pastNext` is Check Past Next Input (anticroom's antics-counter beta.7
+// changelog): the leg runs on past that input, and its own release, to Slack
+// frames before the one after it, or as far as with no next input when
+// nothing comes after it - and never shorter than without.
 int64_t FrameWindowAnalyzer::legReach(size_t afterAi, int64_t from,
-                                      size_t skip) const {
+                                      size_t skip, bool pastNext) const {
     auto const& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
+    // The first measurable input after action `after`, other than `skip` and
+    // `also`.
+    auto const nextInput = [&](size_t after, size_t also) {
+        for (size_t k = after + 1; k < actions.size(); k++)
+            if (k != skip && k != also && isMeasurableInput(actions[k]))
+                return k;
+        return NO_INDEX;
+    };
     int64_t gap = static_cast<int64_t>(m_horizon);
-    for (size_t k = afterAi + 1; k < actions.size(); k++) {
-        if (k == skip) continue;
-        if (!isMeasurableInput(actions[k])) continue;
-        gap = static_cast<int64_t>(actions[k].m_frame) - from;
-        break;
+    if (size_t const next = nextInput(afterAi, NO_INDEX); next != NO_INDEX) {
+        gap = static_cast<int64_t>(actions[next].m_frame) - from;
+        if (pastNext) {
+            size_t const beyond = nextInput(next, this->pairedReleaseFor(next));
+            gap = std::max<int64_t>(
+                gap, beyond == NO_INDEX
+                         ? static_cast<int64_t>(m_horizon)
+                         : static_cast<int64_t>(actions[beyond].m_frame) - from);
+        }
     }
     return std::clamp<int64_t>(std::max<int64_t>(gap - m_slack_, 0),
                                MIN_HORIZON, static_cast<int64_t>(m_horizon));
@@ -892,6 +909,7 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
     m_slack_ = std::max(0, m_slack->inner());
     m_recovery = std::max(0, m_recoveryRange->inner());
     m_algo = static_cast<Algorithm>(m_algorithm->inner());
+    m_pastNext = m_checkPastNext->inner();
 
     if (!this->collectSamples()) {
         if (partial) restore();
@@ -926,13 +944,13 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
         "[fw][start] level=\"{}\" id={} replay=\"{}\" tps={:.0f} macroTps={:.0f} "
         "actions={} samples={} "
         "sweep={} horizon={} slack={} recovery={} algo={} fullRange={} "
-        "budget={}ms",
+        "pastNext={} budget={}ms",
         pl->m_level ? std::string(pl->m_level->m_levelName) : std::string{"?"},
         pl->m_level ? pl->m_level->m_levelID.value() : 0, rs.m_replayName,
         updater.m_tps, rs.m_initialTPS,
         rs.m_actionAtom.m_actions.size(), m_samples.size(), m_sweep, m_horizon,
         m_slack_, m_recovery, static_cast<int>(m_algo),
-        m_fullRangeSweep->inner(), m_budgetMs->inner());
+        m_fullRangeSweep->inner(), m_pastNext, m_budgetMs->inner());
 
     FWLOG("[fw][start] turbo={} turboBudget={}ms adaptive={} share={}% max={}ms",
           m_turbo->inner(), m_turboBudgetMs->inner(),
@@ -1178,8 +1196,8 @@ void FrameWindowAnalyzer::beginSetupLeg(SetupGroup const& sg) {
     int64_t const lastFrame =
         static_cast<int64_t>(m_originalFrames[lastAi]) + totalShift;
 
-    int64_t const reach =
-        this->legReach(lastAi, lastFrame, this->pairedReleaseFor(lastAi));
+    int64_t const reach = this->legReach(
+        lastAi, lastFrame, this->pairedReleaseFor(lastAi), m_pastNext);
 
     m_setupLegTarget =
         static_cast<uint32_t>(std::max<int64_t>(lastFrame + reach, 0));
@@ -1339,6 +1357,7 @@ void FrameWindowAnalyzer::beginClick() {
     m_tickBuffered.clear();
     m_fineCrossedNeighbour = false;
     m_testActive = false;
+    m_nominalTarget = 0;
     m_recoveryActive = false;
 
     FWLOG(
@@ -1931,7 +1950,7 @@ void FrameWindowAnalyzer::beginShift(int64_t shift, ShiftMode mode) {
     }
 
     int64_t const reach =
-        this->legReach(ai, shifted, this->pairedReleaseFor(ai));
+        this->legReach(ai, shifted, this->pairedReleaseFor(ai), m_pastNext);
 
     if (fraction > 0.0 && !m_subtickMacro) {
         auto* eng = cbf::Engine::get();
@@ -1951,6 +1970,8 @@ void FrameWindowAnalyzer::beginShift(int64_t shift, ShiftMode mode) {
     m_legPressBuffered = false;
     m_legPressSeen = false;
     m_testTarget = static_cast<uint32_t>(std::max<int64_t>(shifted + reach, 0));
+    // GucciBot (2026-10-23): where the nominal leg ends (captureDeathInSpan).
+    if (shift == 0) m_nominalTarget = m_testTarget;
     m_testActive = true;
     m_stageId = Stage::Probe;
     m_legCounter++;
@@ -2371,9 +2392,14 @@ uint32_t FrameWindowAnalyzer::captureDeathInSpan() const {
     if (!m_captureNoclip || m_captureDeaths.empty()) return UINT32_MAX;
 
     uint32_t const lo = m_branchFrame;
-    uint32_t const hi = m_index + 1 < m_samples.size()
-                            ? m_samples[m_index + 1].frame
-                            : m_recorded + m_horizon;
+    uint32_t hi = m_index + 1 < m_samples.size()
+                      ? m_samples[m_index + 1].frame
+                      : m_recorded + m_horizon;
+    // GucciBot (2026-10-23): with Check Past Next Input the nominal leg runs
+    // on past the next input, so a capture death up to its end is in this
+    // click's span too. Otherwise the nominal leg dies there, the click reads
+    // as desynced, and its full sweep never runs.
+    if (m_pastNext) hi = std::max(hi, m_nominalTarget);
 
     for (uint32_t const d : m_captureDeaths)
         if (d >= lo && d <= hi) return d;
@@ -2582,6 +2608,8 @@ void FrameWindowAnalyzer::beginRecovery() {
         actions[niRel].m_frame =
             static_cast<uint64_t>(placed(niRel) + m_recoveryOffset);
 
+    // (Not with Check Past Next Input: this leg moves the next input itself,
+    // so it already ends past it, where the main legs end with it on.)
     int64_t const recReach = this->legReach(ni, nextShifted, niRel);
 
     m_legPressFrame = static_cast<uint32_t>(std::max<int64_t>(shifted, 0));
@@ -3043,12 +3071,13 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
             "[fw][audit] {} marks: {} desynced, {} not solid [{}], {} on the "
             "sweep limit [{}], {} split [{}], {} unbounded, {} buffer-assisted, "
             "{} sub-tick measured. Fine legs crossed a neighbouring input: {} [{}]. "
-            "stepBatch={} inputHz={} sweep={} horizon={} slack={} tps={:.0f}",
+            "stepBatch={} inputHz={} sweep={} horizon={} slack={} pastNext={} "
+            "tps={:.0f}",
             m_results.size(), desynced, notSolid, lg(notSolid), saturated,
             lg(saturated), split, lg(split), unbounded, bufferAssisted, cbf,
             m_fineCrossedNeighbour, lg(m_fineCrossedNeighbour ? 1 : 0),
             m_stepBatch->inner(), m_cbfInputHz->inner(), m_sweep, m_horizon,
-            m_slack_, m_baseTps);
+            m_slack_, m_pastNext, m_baseTps);
     }
 
     // The analyzer shifts the real macro's action frames to probe them and
@@ -3891,7 +3920,7 @@ void FrameWindowAnalyzer::launchDependentLeg(int64_t shift) {
 
     auto const& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
     int64_t const bFrame = static_cast<int64_t>(actions[aiB].m_frame);
-    int64_t const reach = this->legReach(aiB, bFrame, NO_INDEX);
+    int64_t const reach = this->legReach(aiB, bFrame, NO_INDEX, m_pastNext);
 
     m_depLegShift = shift;
     m_depLegTarget = static_cast<uint32_t>(std::max<int64_t>(bFrame + reach, 0));
@@ -4360,7 +4389,9 @@ void FrameWindowAnalyzer::launchSuggestLeg() {
     }
 
     // launchDependentLeg's target: the input, then up to the next one less
-    // the slack, at least MIN_HORIZON, at most the horizon (legReach).
+    // the slack, at least MIN_HORIZON, at most the horizon (legReach). Not
+    // with Check Past Next Input: the continuation above already tests the
+    // input after it, and the suggestion stays apart from the count.
     auto const& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
     int64_t const tFrame = static_cast<int64_t>(actions[target].m_frame);
     int64_t const reach = this->legReach(target, tFrame, NO_INDEX);

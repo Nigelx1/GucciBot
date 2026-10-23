@@ -180,6 +180,11 @@ struct FrameWindowSettings {
     int maxBudgetMs = 60;
     int stepBatch = 35;
     bool fullRangeSweep = false;
+    // GucciBot (2026-10-23): Check Past Next Input, from anticroom's
+    // antics-counter beta.7 changelog (experimental there too): a test runs on
+    // to just before the input after the next one, so a death the shift causes
+    // after the next input isn't missed. Off: today's count.
+    bool checkPastNextInput = false;
     bool testShipReleases = true;
     bool testAllReleases = false;
     bool orbAwareReleaseSkip = true;
