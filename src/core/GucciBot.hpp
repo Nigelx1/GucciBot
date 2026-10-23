@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-22-fp (Pathfinder: GD gets its anticheat spike after every rewind - slope launches kept)"
+    "2026-10-22-fq (Pathfinder: the jump back to the route stays within the repair floor, and must clear the bar)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

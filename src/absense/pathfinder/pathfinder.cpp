@@ -2316,11 +2316,13 @@ void AbsensePathfinder::decide() {
     };
     // Step R5: of the route ideas judged so far, the best one that gets to its
     // gate alive (-1: none).
-    auto routeReached = [&]() {
+    // (`need`: also lasting that long - the forced verdict asks for the
+    // decision's own bar, docs/ROUTE_ENGINE_PLAN.md step 1b.)
+    auto routeReached = [&](int need = 0) {
         int pick = -1;
         for (const size_t i : d.tried) {
             const Candidate& c = d.candidates[i];
-            if (c.gateTicks <= 0 || !c.evaluated || c.survived < c.gateTicks) continue;
+            if (c.gateTicks <= 0 || !c.evaluated || c.survived < c.gateTicks || c.survived < need) continue;
             if (pick < 0 || better(c, d.candidates[(size_t)pick])) pick = (int)i;
         }
         return pick;
@@ -2331,7 +2333,7 @@ void AbsensePathfinder::decide() {
     auto haveFull = [&]() {
         return (d.best >= 0 && (d.candidates[(size_t)d.best].complete || d.candidates[(size_t)d.best].survived >= H ||
                                 routeViable(d.candidates[(size_t)d.best]))) ||
-               (d.forceRoute && routeReached() >= 0);
+               (d.forceRoute && routeReached(std::min(d.need, d.H)) >= 0);
     };
     // Judges the ideas [d.next, end) a slice at a time; true once they are all
     // done (or one of them settled it).
@@ -2813,7 +2815,7 @@ void AbsensePathfinder::decide() {
         // alive is played there, to the gate, whatever else lasts longer.
         if (d.forceRoute) {
             d.forceRoute = false;  // once: the verdict is picked up again next slice when the check runs on
-            const int pick = routeReached();
+            const int pick = routeReached(std::min(d.need, d.H));
             if (pick >= 0) {
                 d.best = pick;
                 best = &candidates[(size_t)pick];
@@ -4214,6 +4216,13 @@ void AbsensePathfinder::beginBacktrack() {
         Trap* trap = trapAt(m_repair.deathTick, (uint64_t)std::lround(32.0 * std::max(1.0, tps / 240.0)));
         for (auto it = m_routeChoices.rbegin(); it != m_routeChoices.rend(); ++it) {
             if (it->tick >= tick || it->tick < m_stats.startTick || it->taken || !it->reached) continue;
+            // GucciBot (docs/ROUTE_ENGINE_PLAN.md step 1b): no further back
+            // than the repair's own floor. Unbounded, a dead end went 3137
+            // ticks back on Deadlocked and 3753 on ToE2 to retake a route idea
+            // that had nothing to do with it, and came straight back to die in
+            // the same place. Jumping back to the decision that caused a dead
+            // end is the route engine's job (step 6), with a ledger behind it.
+            if (it->tick < m_repair.floor) break;
             if (trap && std::find(trap->routeForced.begin(), trap->routeForced.end(), it->tick) != trap->routeForced.end())
                 continue;
             if (trap) trap->routeForced.push_back(it->tick);
