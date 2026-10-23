@@ -495,6 +495,7 @@ class FrameWindowAnalyzer {
     bool startSubframeProbe();
     // GucciBot (2026-10-23): Faster sub-tick search (framewindow.cpp, before
     // startSubframeProbe).
+    void clearSubtickSeed();
     void planSubtickSeed(bool coarseHoles);
     void seedSubtickSide(Phase side);
     void walkSubtickSide(Phase side);

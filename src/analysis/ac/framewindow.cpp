@@ -1443,8 +1443,7 @@ void FrameWindowAnalyzer::beginClick() {
     m_recoveryActive = false;
     // GucciBot (2026-10-23): Faster sub-tick search, nothing left from the
     // last input (a run that stopped in the middle of one too).
-    m_seedPlan = false;
-    m_seedLeg = false;
+    this->clearSubtickSeed();
 
     FWLOG(
         "[fw][click {}/{}] frame={} p{} {} negRoom={} posRoom={} maxNeg={} "
@@ -2577,19 +2576,26 @@ bool FrameWindowAnalyzer::captureDiedInSpan() const {
 // count as holes in the window. A side whose edge sits on the search limit, or
 // whose tick past the edge is out of reach, is searched the usual way too.
 
-// Whether this input's sub-tick pass is seeded, side by side. Everything off
-// with the switch off.
-void FrameWindowAnalyzer::planSubtickSeed(bool coarseHoles) {
+// Nothing left of a seeded plan: for a new input, an entry pass and each plan.
+void FrameWindowAnalyzer::clearSubtickSeed() {
     m_seedPlan = false;
     m_seedStarted = false;
     m_seedLeg = false;
     m_seedOuterStep = false;
     m_fineNominalSkipped = false;
+    m_seedInner = 0;
+    m_seedOuter = 0;
     m_seedEarly = SeedMode::Off;
     m_seedLate = SeedMode::Off;
     m_seedWhy = "";
     m_seedEarlyWhy = "";
     m_seedLateWhy = "";
+}
+
+// Whether this input's sub-tick pass is seeded, side by side. Everything off
+// with the switch off.
+void FrameWindowAnalyzer::planSubtickSeed(bool coarseHoles) {
+    this->clearSubtickSeed();
     if (!m_fastSub) return;
 
     // The whole window, as the whole-frame pass left it.
@@ -3346,8 +3352,7 @@ bool FrameWindowAnalyzer::advanceEntryPass(FrameWindowMark const& mk) {
     m_scanning = false;
     m_islandSeed = 0;
     // GucciBot (2026-10-23): an entry pass is whole-frame only.
-    m_seedPlan = false;
-    m_seedLeg = false;
+    this->clearSubtickSeed();
     m_negCounting = true;
     m_posCounting = true;
     m_nominalDied = false;
