@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-gl (Recording: going back to a kept state does not reseed the attempt)"
+    "2026-10-23-gm (Pathfinder: the trim takes needless taps out in chunks, so runs of spam clicks thin out)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

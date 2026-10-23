@@ -286,9 +286,17 @@ public:
         int trimMax = 0;
         size_t trimAt = 0;          // the switch being looked at
         int trimVariant = 0;        // which change to it is tried next
-        int trimmed = 0;            // switches taken out so far
+        int trimmed = 0;            // clicks taken out so far: a chunk's presses, one per switch changed
         int trimFrom = 0;           // how far the chosen idea lasted before the trim
         bool trimComplete = false;  // ... and whether it reached the end
+        // The trim's first pass, the taps in chunks (see trimStep): its tries
+        // and their cap (0: not begun yet), how many taps a chunk holds at
+        // this step of the halving, and the tap the next chunk starts at.
+        int chunkTries = 0;
+        int chunkMax = 0;
+        int chunkSize = 0;
+        size_t chunkAt = 0;
+        bool chunkDone = false;     // ... and that it is over: the switches' turn
         // Two-player mode (separate controls): which player this decision
         // is for, and the other player's script over the horizon, held
         // fixed while this one is decided (player 1 first, with player 2
@@ -413,8 +421,11 @@ public:
     // Takes the switches the chosen idea does not need out of it, a few
     // simulated tries per slice (a lone tap, a press-release pair, a change
     // of state made later or not at all - whatever leaves the copy just as
-    // far along): the same path with fewer clicks. Only the part of the
-    // plan that will be played is looked at. True once it is done.
+    // far along): the same path with fewer clicks. Its taps go first, in
+    // chunks - all of them, then halves, quarters and so on - so a run of
+    // spam the path does not need goes in a few tries, not one at a time.
+    // Only the part of the plan that will be played is looked at. True once
+    // it is done.
     bool trimStep(Decision& d);
     void addCandidate(std::vector<Candidate>& out, std::vector<TickInput> inputs, std::string name, bool held);
     bool evaluate(Candidate& c, int horizon, bool held, std::vector<TraceSample>* trace = nullptr);

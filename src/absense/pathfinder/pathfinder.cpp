@@ -1754,6 +1754,114 @@ bool AbsensePathfinder::trimStep(Decision& d) {
     // says so and the settle run below is neither possible nor needed.
     const int trimTo = c.complete ? H : std::min(H, std::max(d.need, d.K + d.margin));
 
+    // One try of a change, the same for both passes below: the variant is run
+    // as far as trimTo and takes the script's place when it does as well - it
+    // reaches the end of the level, or it lasts as long, up to trimTo. This is
+    // the only way a change goes in: a calmer script that gets less far is
+    // never taken.
+    auto tryTake = [&](std::vector<TickInput>& variant) {
+        d.scratchTrace.clear();
+        const RunResult r = runFor(d, variant, trimTo, &d.scratchTrace);
+        m_stats.simulations++;
+        m_stats.simulatedTicks += (uint64_t)std::max(0, r.survived);
+        const bool asGood = r.complete ? true : (!c.complete && r.survived >= std::min(c.survived, trimTo));
+        if (!asGood) return false;
+        c.inputs = std::move(variant);
+        // Measured, except where the try only reached the cap - that one is
+        // settled by the whole-horizon run below. Where the cap is the
+        // horizon there is no such run and nothing to settle: reaching it
+        // is the whole answer, and holding on to the old figure would
+        // understate an idea the trim made last longer.
+        if (r.complete || r.survived < trimTo || trimTo >= H) c.survived = r.survived;
+        c.complete = r.complete;
+        d.bestTrace.swap(d.scratchTrace);  // the trimmed script's own samples
+        d.bestTraceFor = -1;               // it is the chosen one's now, not a candidate's
+        d.bestTraceTick = currentTick();
+        return true;
+    };
+
+    // ---- The taps first, in chunks. A tap here is a press that leaves the
+    // button as it found it: within its own tick (a tap, a double, a re-press
+    // while holding), or on the next tick by a plain release (a press that
+    // takes it down and lets go a tick later - the unit orb spam is made of).
+    // Taking one out leaves the button as it was in every other tick, so any
+    // set of them can go together, and the ones left are still taps.
+    //   One switch at a time (the pass below) a run of spam mostly survived:
+    // a 120-tick commit of orb spam is sixty taps and a hundred and twenty
+    // switches, and that pass stops at 96 tries (ToE2 at 85% had 240 presses
+    // in its busiest second, one every tick at 240 TPS). So first all of the
+    // taps at once; where the copy does not get as far without them, halves,
+    // then quarters and so on (delta debugging), keeping every chunk whose
+    // removal holds up. Down to chunks of two: a single tap is the switch
+    // pass's, which tries each one on its own anyway.
+    //   A chunk goes on tryTake's test and nothing else, so no press the copy
+    // needs is taken out. The tries come in one fixed order, each size's
+    // chunks left to right; the clock only decides which slice the next one
+    // runs in, and where the pass is up to lives in the Decision. (A route
+    // drive's plan never gets here: the trim is skipped for it, see decide.)
+    if (!d.chunkDone) {
+        std::vector<int> taps;  // the tick of each tap's press, inside the window
+        auto collectTaps = [&]() {
+            taps.clear();
+            for (int i = 0; i < window; i++) {
+                const TickInput& in = c.inputs[(size_t)i];
+                if (in.presses == 0) continue;
+                const bool before = i == 0 ? held : c.inputs[(size_t)i - 1].held;
+                if (in.held == before || (!before && (size_t)i + 1 < c.inputs.size() &&
+                                          c.inputs[(size_t)i + 1].presses == 0 && !c.inputs[(size_t)i + 1].held))
+                    taps.push_back(i);
+            }
+        };
+        collectTaps();
+        if (d.chunkMax <= 0) {
+            // 24 tries at 240 TPS. At a higher tick rate the same stretch of
+            // play holds more taps (orb spam's unit is two ticks at any rate)
+            // and the switch pass's cap stays where it is, so this one grows
+            // with the rate - up to that same cap, so the whole trim's cap at
+            // most doubles.
+            const double scale = std::max(1.0, Bot::get()->updater().getTps() / 240.0);
+            d.chunkMax = std::min(96, (int)std::lround(24.0 * scale));
+            d.chunkSize = (int)taps.size();  // all of them at once, first
+            d.chunkAt = 0;
+        }
+        for (;;) {
+            if (d.chunkAt >= taps.size()) {
+                // Every chunk of this size has had its try: halve the size.
+                d.chunkSize = (d.chunkSize + 1) / 2;
+                d.chunkAt = 0;
+            }
+            if (d.chunkSize < 2 || taps.size() < 2 || d.chunkTries >= d.chunkMax) {
+                d.chunkDone = true;
+                break;
+            }
+            const size_t end = std::min(taps.size(), d.chunkAt + (size_t)d.chunkSize);
+            if (end - d.chunkAt < 2) {  // a lone tap left over at the end: the switch pass's
+                d.chunkAt = end;
+                continue;
+            }
+            std::vector<TickInput> variant = c.inputs;
+            int presses = 0;
+            for (size_t k = d.chunkAt; k < end; k++) {
+                const int i = taps[k];
+                presses += c.inputs[(size_t)i].presses;
+                variant[(size_t)i] = TickInput{0, i == 0 ? held : c.inputs[(size_t)i - 1].held};
+            }
+            // Never what already led nowhere from this tick (see the tabu check below).
+            if (isTabu(d.tick, variant, d.player2)) {
+                d.chunkAt = end;
+                continue;
+            }
+            if (!mayWork()) return false;  // more next time, from this same chunk
+            d.chunkTries++;
+            if (tryTake(variant)) {
+                d.trimmed += presses;
+                collectTaps();  // the taps after it move up: the next chunk starts where this one did
+            } else {
+                d.chunkAt = end;
+            }
+        }
+    }
+
     // The ticks inside the window where the input changes.
     std::vector<int> sw;
     auto collect = [&]() {
@@ -1818,25 +1926,9 @@ bool AbsensePathfinder::trimStep(Decision& d) {
             continue;
         }
         d.trimTries++;
-        d.scratchTrace.clear();
-        const RunResult r = runFor(d, variant, trimTo, &d.scratchTrace);
-        m_stats.simulations++;
-        m_stats.simulatedTicks += (uint64_t)std::max(0, r.survived);
-        const bool asGood = r.complete ? true : (!c.complete && r.survived >= std::min(c.survived, trimTo));
-        if (asGood) {
-            c.inputs = std::move(variant);
-            // Measured, except where the try only reached the cap - that one is
-            // settled by the whole-horizon run below. Where the cap is the
-            // horizon there is no such run and nothing to settle: reaching it
-            // is the whole answer, and holding on to the old figure would
-            // understate an idea the trim made last longer.
-            if (r.complete || r.survived < trimTo || trimTo >= H) c.survived = r.survived;
-            c.complete = r.complete;
+        if (tryTake(variant)) {
             d.trimmed++;
             d.trimVariant = 0;
-            d.bestTrace.swap(d.scratchTrace);  // the trimmed script's own samples
-            d.bestTraceFor = -1;               // it is the chosen one's now, not a candidate's
-            d.bestTraceTick = currentTick();
             collect();  // the switch list changed; look at the same place again
         } else {
             d.trimVariant++;
@@ -3377,6 +3469,11 @@ void AbsensePathfinder::decide() {
         d.trimAt = 0;
         d.trimVariant = 0;
         d.trimmed = 0;
+        d.chunkTries = 0;
+        d.chunkMax = 0;
+        d.chunkSize = 0;
+        d.chunkAt = 0;
+        d.chunkDone = false;
         d.stage = Decision::Trim;
     }
 
@@ -3729,6 +3826,11 @@ void AbsensePathfinder::decide() {
         d.trimAt = 0;
         d.trimVariant = 0;
         d.trimmed = 0;
+        d.chunkTries = 0;
+        d.chunkMax = 0;
+        d.chunkSize = 0;
+        d.chunkAt = 0;
+        d.chunkDone = false;
         d.stage = Decision::Trim;
     }
 
