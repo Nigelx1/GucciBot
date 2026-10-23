@@ -34,7 +34,7 @@ What still needs Windows:
 
 ## Other Bots' Macros
 
-- **Convert in one click** — drop another bot's macro in the replays folder and **Saved macros** lists it under *From other bots* with its format and a Convert button (or Convert all). **Import a macro** takes one from anywhere instead. The original is kept.
+- **Convert in one click** — drop another bot's macro in the replays folder and **Saved macros** lists it under *From other bots* with its format and a Convert button (or Convert all). **Import a macro** takes one from anywhere instead, a GucciBot macro too. The original stays where it was, and a copy dated the day it was first imported is kept in `replays/imported`, where the picker opens on Windows and macOS; importing the same file again selects the macro it became instead of making a second one.
 - **27 formats read**: GDR (Mega Hack, Macrobot, xdBot and more; binary and JSON), GDR2, Silicate (.slc v1 to v3, and anticroom's .scbf1 with its sub-tick clicks), TcBot (.tcm, practice sessions flattened to one run), ToastyReplay (.ttr3), yBot, xdBot, Mega Hack Replay, Echo, OmegaBot 2, ReplayBot, zBot, KD-Bot, Rush, Fembot, xBot, URL, TASBot, plain text, and GucciBot 1.x's old .brrr.
 - **Export as** any of 21 of them from a macro's "..." menu, into `replays/exports`, with a note on anything the format can't hold.
 - Silicate counts frames one behind GucciBot, so its macros are lined up for you. If another bot's macro dies early after converting, **Shift frames** nudges it a frame or two either way.

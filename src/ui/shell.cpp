@@ -35,12 +35,15 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <map>
 #include <optional>
+#include <span>
 #include <Geode/utils/async.hpp>
+#include <Geode/utils/hash.hpp>
 #include <thread>
 #include <cctype>
 
@@ -495,15 +498,14 @@ namespace gucci::ui {
             return name;
         }
 
-        // Another format's macro, saved as a GucciBot one in replays/. One
-        // that was in the replays folder moves to replays/converted (an old
-        // 1.x .brrr to <name>.brrr.1x, next to its replacement), so it isn't
-        // offered again.
-        std::pair<bool, std::string> convertMacroFile(std::filesystem::path const& src, bool inReplays) {
-            std::string unreadable;
-            auto const bytes = readAll(src, &unreadable);
-            if (!unreadable.empty())
-                return {false, inReplays ? unreadable : unreadable + "\n" + replaysFolderHint()};
+        // Another format's macro (the bytes of `src`), saved as a GucciBot one
+        // in replays/ and named after `src`. One that was in the replays
+        // folder moves to replays/converted (an old 1.x .brrr to
+        // <name>.brrr.1x, next to its replacement), so it isn't offered again.
+        // The name it was saved under goes to `savedAs`.
+        std::pair<bool, std::string> convertMacroBytes(std::vector<uint8_t> const& bytes,
+                                                       std::filesystem::path const& src, bool inReplays,
+                                                       std::string* savedAs = nullptr) {
             auto const fname = fileNameOf(src);
             auto res = convert::read(bytes, fname, g_convertShift);
             if (!res.ok())
@@ -551,6 +553,221 @@ namespace gucci::ui {
             for (auto const& n : m.notes)
                 msg += "\n" + n;
             msg += moveNote;
+            if (savedAs)
+                *savedAs = name;
+            return {true, msg};
+        }
+
+        // A macro in the replays folder, converted (its Convert button).
+        std::pair<bool, std::string> convertMacroFile(std::filesystem::path const& src) {
+            std::string unreadable;
+            auto const bytes = readAll(src, &unreadable);
+            if (!unreadable.empty())
+                return {false, unreadable};
+            return convertMacroBytes(bytes, src, true);
+        }
+
+        // GucciBot (2026-10-23): Import a macro keeps what it imports, after
+        // anticroom's antics-counter beta.6 changelog ("imported macros
+        // copied into the mod's macros folder with the date first imported;
+        // Import opens that folder"). The picked file is kept in
+        // replays/imported as "YYYY-MM-DD <its name>", dated the day it first
+        // came in, once however often it comes in again; the macro list
+        // doesn't look in there (it reads replays/ itself only).
+        // replays/imported/index.json remembers, by each file's SHA-256, the
+        // macro it became at each Shift frames nudge, so importing the same
+        // file again selects that macro instead of making "Name (2)".
+        std::filesystem::path importedDir() {
+            return replaysDir() / "imported";
+        }
+
+        std::filesystem::path pathFromUtf8(std::string const& s) {
+            return std::filesystem::path(std::u8string(s.begin(), s.end()));
+        }
+
+        // Today as YYYY-MM-DD, local time; empty if the clock can't say.
+        std::string todayDate() {
+            std::time_t const t = std::time(nullptr);
+            std::tm tm{};
+#ifdef _WIN32
+            if (localtime_s(&tm, &t) != 0)
+                return "";
+#else
+            if (!localtime_r(&t, &tm))
+                return "";
+#endif
+            char buf[16];
+            return std::strftime(buf, sizeof buf, "%Y-%m-%d", &tm) ? std::string(buf) : std::string();
+        }
+
+        // The "YYYY-MM-DD" a kept copy's name starts with, or empty.
+        std::string datePrefixOf(std::string const& name) {
+            if (name.size() < 11 || name[10] != ' ')
+                return "";
+            for (size_t i = 0; i < 10; ++i)
+                if ((i == 4 || i == 7) ? name[i] != '-' : !std::isdigit(static_cast<unsigned char>(name[i])))
+                    return "";
+            return name.substr(0, 10);
+        }
+
+        bool sameBytes(std::filesystem::path const& p, std::vector<uint8_t> const& bytes) {
+            std::error_code ec;
+            auto const size = std::filesystem::file_size(p, ec);
+            return !ec && size == bytes.size() && readAll(p) == bytes;
+        }
+
+        std::string textAt(matjson::Value const& v, std::string_view key) {
+            auto text = v[key].asString();
+            return text ? std::move(text).unwrap() : std::string();
+        }
+
+        // A GucciBot macro from somewhere else, copied into replays/ as it
+        // is, under a free name (it used to be refused as "already a GucciBot
+        // macro").
+        std::pair<bool, std::string> copyGucciBotMacro(std::vector<uint8_t> const& bytes,
+                                                       std::filesystem::path const& src, std::string& savedAs) {
+            auto const fname = fileNameOf(src);
+            convert::Macro m;
+            std::string err;
+            if (!convert::fromGucciBot(bytes, m, err))
+                return {false, fmt::format("{}: {}", fname, err)};
+            auto const known = knownMacroExtensions();
+            std::string ext = src.extension().string();
+            if (std::find(known.begin(), known.end(), ext) == known.end())
+                ext = ".brrr";
+            std::string const name = freeMacroName(src.stem().string());
+            auto const target = replaysDir() / (name + ext);
+            if (!writeAll(target, bytes)) {
+                std::error_code ec;
+                std::filesystem::remove(target, ec);
+                return {false, fmt::format("Couldn't save {}{}.", name, ext)};
+            }
+            GucciEngine::get()->reloadMacroList();
+            savedAs = name;
+            std::string msg = fmt::format("{} is a GucciBot macro, copied in as \"{}\": {} inputs at {} TPS.", fname,
+                                          name, m.inputs.size(), m.tps);
+            if (g_convertShift != 0)
+                msg += "\nShift frames isn't used on a GucciBot macro: it came in as it was.";
+            return {true, msg};
+        }
+
+        // What Import a macro does with the file picked.
+        std::pair<bool, std::string> importMacroFile(std::filesystem::path const& picked) {
+            auto* gb = GucciEngine::get();
+            std::string unreadable;
+            auto const bytes = readAll(picked, &unreadable);
+            if (!unreadable.empty())
+                return {false, unreadable + "\n" + replaysFolderHint()};
+            auto const fname = fileNameOf(picked);
+            if (bytes.empty())
+                return {false, fmt::format("{}: The file is empty.", fname)};
+            bool const ours = convert::isGucciBot(bytes);
+            std::error_code ec;
+            // A macro that's already here is selected (loaded, as a click on
+            // its row does), unless it already is (loading it again would drop
+            // unsaved changes) or a run is on.
+            auto const selectNote = [gb](std::string const& name) -> std::string {
+                if (gb->replayName == name)
+                    return ", already selected";
+                if (gb->isRecording() || gb->analyzerOwnsRun())
+                    return "";
+                loadMacroByName(name);
+                return ", now selected";
+            };
+
+            // Already one of the saved macros: nothing to bring in.
+            if (ours && std::filesystem::equivalent(picked.parent_path(), replaysDir(), ec)) {
+                std::string const stem = picked.stem().string();
+                if (auto const listed = gb->findMacroFile(stem);
+                    !listed.empty() && std::filesystem::equivalent(listed, picked, ec))
+                    return {true, fmt::format("{} is already one of your saved macros{}.", fname, selectNote(stem))};
+            }
+
+            auto const dir = importedDir();
+            auto const indexFile = dir / "index.json";
+            auto index = matjson::Value::object();
+            if (auto parsed = geode::utils::file::readJson(indexFile); parsed && parsed.unwrap().isObject())
+                index = std::move(parsed).unwrap();
+            else if (std::filesystem::exists(indexFile, ec))
+                log::warn("[GucciBot] {} isn't readable JSON, starting it again", indexFile);
+            std::string const hash = geode::sha256(std::span<uint8_t const>(bytes)).toString();
+            matjson::Value const seen = std::as_const(index)[hash];
+            std::string const nudge = std::to_string(ours ? 0 : g_convertShift);
+
+            // Imported before, at this nudge, and that macro is still here.
+            if (auto const was = textAt(seen["macros"], nudge); !was.empty() && !gb->findMacroFile(was).empty()) {
+                auto const date = textAt(seen, "date");
+                return {true, fmt::format("{} was first imported {} as \"{}\"{}. To import it afresh, delete that "
+                                          "macro first.",
+                                          fname, date.empty() ? "earlier" : "on " + date, was, selectNote(was))};
+            }
+
+            // Its copy here, if one is already kept (under any name).
+            std::filesystem::path copy;
+            if (auto const kept = pathFromUtf8(textAt(seen, "copy")).filename();
+                !kept.empty() && sameBytes(dir / kept, bytes))
+                copy = dir / kept;
+            if (copy.empty())
+                for (auto const& e : std::filesystem::directory_iterator(dir, ec)) {
+                    std::error_code typeEc;
+                    if (e.is_regular_file(typeEc) && e.path().filename() != "index.json" &&
+                        sameBytes(e.path(), bytes)) {
+                        copy = e.path();
+                        break;
+                    }
+                }
+            std::string date = textAt(seen, "date");
+            if (date.empty() && !copy.empty())
+                date = datePrefixOf(fileNameOf(copy));
+            if (date.empty())
+                date = todayDate();
+            // Named for the file picked; a kept copy picked from here goes by
+            // the name it came in with.
+            std::filesystem::path original = picked.filename();
+            if (!copy.empty() && std::filesystem::equivalent(copy, picked, ec)) {
+                if (auto const first = pathFromUtf8(textAt(seen, "file")).filename(); !first.empty())
+                    original = first;
+                else if (!datePrefixOf(fname).empty())
+                    original = pathFromUtf8(fname.substr(11));
+            }
+
+            std::string name;
+            auto [ok, msg] = ours ? copyGucciBotMacro(bytes, original, name)
+                                  : convertMacroBytes(bytes, original, false, &name);
+            if (!ok)
+                return {false, msg};
+
+            if (copy.empty()) {
+                std::filesystem::create_directories(dir, ec);
+                std::filesystem::path keptName(date.empty() ? std::string() : date + " ");
+                keptName += original;
+                auto const want = freePath(dir / keptName);
+                if (writeAll(want, bytes))
+                    copy = want;
+                else
+                    std::filesystem::remove(want, ec);
+            }
+            if (copy.empty())
+                msg += "\nCouldn't keep a copy of the original in replays/imported.";
+            else
+                msg += fmt::format("\nFirst imported {}: the original is kept as imported/{}.",
+                                   date.empty() ? "today" : date, fileNameOf(copy));
+
+            matjson::Value entry = seen.isObject() ? seen : matjson::Value::object();
+            matjson::Value macros = std::as_const(entry)["macros"].isObject() ? std::as_const(entry)["macros"]
+                                                                               : matjson::Value::object();
+            macros.set(nudge, name);
+            entry.set("file", geode::utils::string::pathToString(original));
+            entry.set("date", date);
+            if (!copy.empty())
+                entry.set("copy", fileNameOf(copy));
+            entry.set("macros", std::move(macros));
+            index.set(hash, std::move(entry));
+            std::filesystem::create_directories(dir, ec);
+            if (auto written = geode::utils::file::writeStringSafe(indexFile, index.dump()); !written)
+                msg += fmt::format("\nCouldn't update imported/index.json ({}), so importing it again makes a "
+                                   "second macro.",
+                                   written.unwrapErr());
             return {true, msg};
         }
 
@@ -592,14 +809,36 @@ namespace gucci::ui {
         PickedMacro s_pickedMacro;
         bool s_macroPickPending = false;
 
-        arc::Future<int> pickMacroTask() {
+        // GucciBot (2026-10-23): where the picker opens, replays/imported
+        // (made if it isn't there), per antics-counter beta.6's "Import opens
+        // that folder". Windows and macOS only: Geode hands Android's launcher
+        // just the folder's last name, and iOS writes an empty file at the
+        // path and doesn't open there.
+        std::optional<std::filesystem::path> importPickerFolder() {
+#if defined(GEODE_IS_DESKTOP)
+            std::error_code ec;
+            std::filesystem::create_directories(importedDir(), ec);
+            if (std::filesystem::is_directory(importedDir(), ec))
+                return importedDir();
+#endif
+            return std::nullopt;
+        }
+
+        arc::Future<int> pickMacroTask(std::optional<std::filesystem::path> folder) {
             geode::utils::file::FilePickOptions options;
+            options.defaultPath = std::move(folder);
             options.filters.push_back({"Macros",
                                        {"*.gdr", "*.gdr2", "*.json", "*.slc", "*.scbf1", "*.tcm", "*.ttr3", "*.ybot", "*.xd",
                                         "*.mhr", "*.echo", "*.replay", "*.zbf", "*.kd", "*.rush", "*.freplay", "*.xbot",
                                         "*.url", "*.txt", "*.brrr"}});
             geode::utils::file::PickResult result =
-                co_await geode::utils::file::pick(geode::utils::file::PickMode::OpenFile, std::move(options));
+                co_await geode::utils::file::pick(geode::utils::file::PickMode::OpenFile, options);
+            // Windows fails the whole pick, before the dialog shows, when it
+            // can't open at the folder (Geode's nfdwin.cpp): then without it.
+            if (options.defaultPath && result.isErr() && result.unwrapErr() == "Unable to set default path to dialog") {
+                options.defaultPath.reset();
+                result = co_await geode::utils::file::pick(geode::utils::file::PickMode::OpenFile, std::move(options));
+            }
             PickedMacro got;
             got.ready = true;
             if (result.isOk())
@@ -637,17 +876,26 @@ namespace gucci::ui {
 #endif
                     g_rowNoteOk = false;
                 } else if (got.path) {
-                    std::tie(g_rowNoteOk, g_rowNote) = convertMacroFile(*got.path, false);
+                    // A file name Windows can't spell in its code page throws
+                    // (std::filesystem::path::string()): a note, not a crash.
+                    try {
+                        std::tie(g_rowNoteOk, g_rowNote) = importMacroFile(*got.path);
+                    } catch (std::exception const& e) {
+                        g_rowNoteOk = false;
+                        g_rowNote = fmt::format("Couldn't import {}: {}", fileNameOf(*got.path), e.what());
+                    }
                 }
             }
             kit::Section("From other bots");
             kit::Hint("GDR, Silicate, TcBot, ToastyReplay, yBot, xdBot, Mega Hack, Echo and more, and GucciBot 1.x's old .brrr. Drop "
-                      "them in the replays folder, or import one from anywhere; the original stays as it was.");
+                      "them in the replays folder, or import one (or a GucciBot macro) from anywhere: the original "
+                      "stays where it was, a copy dated the day it first came in is kept in replays/imported, and "
+                      "importing it again selects the macro it became.");
             ImGui::BeginDisabled(s_macroPickPending || gb->isRecording());
             if (kit::Button(s_macroPickPending ? "Choosing..." : "Import a macro")) {
                 s_macroPickPending = true;
                 // The handle is a temporary: dropping it detaches the task.
-                (void)geode::async::runtime().spawn(pickMacroTask());
+                (void)geode::async::runtime().spawn(pickMacroTask(importPickerFolder()));
             }
             if (!gb->foreignMacros.empty()) {
                 ImGui::SameLine();
@@ -656,7 +904,7 @@ namespace gucci::ui {
                     int done = 0;
                     std::string failed;
                     for (auto const& n : names) {
-                        auto const [ok, msg] = convertMacroFile(replaysDir() / n, true);
+                        auto const [ok, msg] = convertMacroFile(replaysDir() / n);
                         if (ok)
                             done++;
                         else
@@ -691,7 +939,7 @@ namespace gucci::ui {
                 ImGui::PopID();
             }
             if (!convertNow.empty())
-                std::tie(g_rowNoteOk, g_rowNote) = convertMacroFile(replaysDir() / convertNow, true);
+                std::tie(g_rowNoteOk, g_rowNote) = convertMacroFile(replaysDir() / convertNow);
         }
 
         // The "..." menu on a saved macro's row (a right click opens it too).
