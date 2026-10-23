@@ -2838,6 +2838,14 @@ namespace gucci {
     // with no saved file yet, what it measured is kept as before. A run never
     // deletes the file. True when the windows saved before the run were kept.
     bool GucciEngine::saveAcResultsAfterRun(bool ok) {
+        // Forgotten windows (see saveAcFrameWindowResults) have no saved file
+        // yet: the sidecar the name field points at is the old macro's. Not
+        // written there, and not read back from there after a run that didn't
+        // finish either -- those windows were measured on clicks this
+        // recording doesn't have, and its next save would write them next to
+        // it. What the run measured stays, as with no saved file.
+        if (fwWindowsForgotten)
+            return false;
         auto const path = replay.getCurrentPath();
         if (path.empty())
             return false;
@@ -2848,10 +2856,6 @@ namespace gucci {
                       path.filename().string());
             return true;
         }
-        // Not next to the old macro (see saveAcFrameWindowResults): kept in
-        // memory until the macro is saved.
-        if (fwWindowsForgotten)
-            return false;
         saveAcResults(path, false);
         return false;
     }
