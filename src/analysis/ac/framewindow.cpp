@@ -149,8 +149,12 @@ bool FrameWindowAnalyzer::isSetupMode(char gamemode) {
     return gamemode == 'H' || gamemode == 'W';
 }
 
+// GucciBot (2026-10-23): wave and robot only. A UFO doesn't hold: a held
+// button gives it nothing past the first boost, so its windows were getting a
+// ^ they didn't earn (anticroom's antics-counter beta.7 changelog: "Include
+// Hold Modes no longer marks UFO inputs").
 bool FrameWindowAnalyzer::isHoldMode(char gamemode) {
-    return gamemode == 'U' || gamemode == 'V' || gamemode == 'R';
+    return gamemode == 'V' || gamemode == 'R';
 }
 
 bool FrameWindowAnalyzer::setupVarying(FrameWindowMark const& mk) const {
@@ -2842,7 +2846,7 @@ void FrameWindowAnalyzer::finishClick() {
     if (bufferSurvivors > 0) {
         char const gm = m_samples[m_index].gamemode;
         bool const heldThrust = gm == 'R' || gm == 'H' || gm == 'W' ||
-                                gm == 'V' || gm == 'U';
+                                gm == 'V';
         FWWARN(
             "[fw][click {}] {} offset(s) survived only as isolated shifts, "
             "rest of the macro left at recorded timing{}",

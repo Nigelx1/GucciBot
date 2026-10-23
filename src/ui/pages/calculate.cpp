@@ -385,7 +385,7 @@ namespace gucci::ui::pages {
                             "sweep get ~",
                             &FW::markSetupVarying, true)) {
                     flag("Include hold modes",
-                         "Also mark UFO, wave and robot inputs. They depend on setup much less, so off keeps wave "
+                         "Also mark wave and robot inputs. They depend on setup much less, so off keeps wave "
                          "sections cleaner",
                          &FW::setupHoldModes, true);
                     kit::FeatureEnd();
