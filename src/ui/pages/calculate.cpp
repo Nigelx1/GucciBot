@@ -270,13 +270,24 @@ namespace gucci::ui::pages {
                  "span. About 3x the work",
                  &FW::entrySweep);
             // GucciBot (2026-10-23): reworked after anticroom's antics-counter beta.6 changelog (framewindow.cpp,
-            // above beginDependentPass); the hint says what it does now.
-            flag("Dependent pair search",
-                 "Re-measures each tight input with the input just before it moved to the edges of its own window, "
-                 "when that input is within the search distance. If that changes its window by more than a frame, "
-                 "the marker shows ~N, its average window where it can still be hit. Tight means within the Tight "
-                 "threshold, on the Sub-tick (CBF) counting card",
-                 &FW::dependentSearch);
+            // above beginDependentPass); the hint says what it does now. It checks the inputs within the Tight
+            // threshold whatever else is on, and the Sub-tick (CBF) counting card shows that slider only while it
+            // counts tight inputs alone, so otherwise the slider is here, under the switch.
+            bool const tightOnCbf = s.subframeProbe && !s.subframeAll;
+            std::string const dependentHint =
+                std::string("Re-measures each tight input with the input just before it moved to the edges of its "
+                            "own window, when that input is within the search distance. If that changes its window "
+                            "by more than a frame, the marker shows ~N, its average window where it can still be "
+                            "hit. Tight means within the Tight threshold") +
+                (tightOnCbf ? ", on the Sub-tick (CBF) counting card" : ", which shows below while this is on");
+            if (feature("Dependent pair search", dependentHint.c_str(), &FW::dependentSearch)) {
+                if (!tightOnCbf)
+                    slider("Tight threshold",
+                           "Only inputs with a window this tight or tighter are re-measured. The same setting as the "
+                           "Tight threshold on the Sub-tick (CBF) counting card",
+                           &FW::tightThreshold, "%d frames");
+                kit::FeatureEnd();
+            }
             if (feature("Suggestions for suspicious clicks",
                         "Calculate's count stays strict. A tight click right after another input is also counted "
                         "Juice's way (his Alignment-Independent method: the input before it moved across its own "
@@ -335,8 +346,12 @@ namespace gucci::ui::pages {
 
                 flag("Count every input", "Instead of only tight ones. Each one takes a full sub-tick pass",
                      &FW::subframeAll);
+                // GucciBot (2026-10-23): the hint says Dependent pair search reads it too (its own copy of this
+                // slider shows under that switch when this one is hidden).
                 if (!s.subframeAll)
-                    slider("Tight threshold", "Only inputs with a window this tight or tighter are counted",
+                    slider("Tight threshold",
+                           "Only inputs with a window this tight or tighter are counted. It also picks which inputs "
+                           "Dependent pair search re-measures",
                            &FW::tightThreshold, "%d frames");
                 flag("Bisect edges",
                      "Binary-searches the edges instead of testing every slot. Much faster, but can't see gaps "
