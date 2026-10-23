@@ -350,3 +350,12 @@ Then the 8 bar levels unattended (Clubstep, ToE2, Deadlocked, The Nightmare, Blo
 - Should the bar be measured with your own macro for the level loaded as a hint (the baseline ToE2 and Deadlocked runs had yours loaded), or with no macro at all?
 - Once Route drives beats today's engine on Clubstep and ToE2, should it become the default, with today's engine kept as a choice? Or should it stay a switch until the whole bar passes?
 - If handing GD's anti-cheat spike to the game after each rewind doesn't fix the lost slope launches, may the pathfinder hide that spike from the player after its own rewinds? This would only apply during pathfinder runs; normal play and the start of the level stay untouched.
+
+### Nigel's answers (2026-10-22)
+
+1. Calm inputs: "nothing should count as spam or not". So the gap is a preference, never a rule or a label: legs prefer a 33 ms gap and the calmest way in, fall back to no gap where nothing calmer gets through, and nothing is called spam in the log or the menu.
+2. Speed: slower than today on easy levels is fine, but only if it gets the hard ones to 100%.
+3. Stuck: 5 minutes on one spot, then it stops and says where.
+4. The bar is run with no macro loaded.
+5. Route drives stays a switch until all eight bar levels pass.
+6. If handing GD the spike after a rewind does not fix the lost slope launches, the pathfinder may hide the spike from the player after its own rewinds (pathfinder runs only).
