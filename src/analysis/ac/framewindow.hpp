@@ -154,6 +154,14 @@ class FrameWindowAnalyzer {
 
     bool armsTicks() const { return m_running && !m_subtickMacro; }
 
+    // GucciBot (2026-10-23): this run counts with the 2-player fixes (the
+    // switch as it was when the run started) in a 2-player level. The replay
+    // then hands out actions in frame order (GucciReplaySystem::
+    // m_dispatchOrder, kept by syncDispatch).
+    bool countsByPlayer() const {
+        return m_running && m_twoPlayer && m_twoPlayerLevel;
+    }
+
     bool returning() const { return m_trip.active; }
     uint32_t returnFrame() const { return m_trip.frame; }
     float returnProgress() const;
@@ -441,6 +449,9 @@ class FrameWindowAnalyzer {
     SLValuePtr<bool> m_checkPastNext = SLValue<bool>::create(
         "framewindow.check_past_next",
         &SLSettings::get()->frameWindow.checkPastNextInput);
+    SLValuePtr<bool> m_twoPlayerFixes = SLValue<bool>::create(
+        "framewindow.two_player_fixes",
+        &SLSettings::get()->frameWindow.twoPlayerFixes);
     SLValuePtr<bool> m_testAllReleases = SLValue<bool>::create(
         "framewindow.all_releases",
         &SLSettings::get()->frameWindow.testAllReleases);
@@ -648,6 +659,20 @@ class FrameWindowAnalyzer {
     int m_recovery = 4;
     Algorithm m_algo = Algorithm::TimeBased;
     bool m_pastNext = false;
+    // GucciBot (2026-10-23): the 2-player fixes for this run, and whether its
+    // level is a 2-player one; both taken when it starts.
+    bool m_twoPlayer = false;
+    bool m_twoPlayerLevel = false;
+
+    // GucciBot (2026-10-23): the replay's dispatch order for the actions as
+    // they stand now, its cursor after the current frame (countsByPlayer
+    // only; nothing otherwise). `legStarts`: a test leg starts here, and
+    // checkLegDispatch looks at it when it ends.
+    void syncDispatch(bool legStarts = false);
+    void checkLegDispatch();
+    uint32_t m_dispatchLegFrom = 0;
+    size_t m_dispatchLegStart = 0;
+    bool m_dispatchLegArmed = false;
 
     uint32_t m_recorded = 0;
     int64_t m_maxNeg = 0;

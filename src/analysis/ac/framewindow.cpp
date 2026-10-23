@@ -878,6 +878,50 @@ int64_t FrameWindowAnalyzer::legReach(size_t afterAi, int64_t from,
                                MIN_HORIZON, static_cast<int64_t>(m_horizon));
 }
 
+// GucciBot (2026-10-23): the 2-player fixes (anticroom's antics-counter beta.6
+// changelog, "Fixed inputs getting skipped while counting 2-player macros"; no
+// source). The replay plays the actions in frame order while this run counts
+// by player (GucciReplaySystem::m_dispatchOrder); this puts the order right
+// for the frames the actions stand at now, with its cursor after the current
+// frame. Called after every placement of a leg - a restore's onReset seats the
+// cursor before the leg has moved anything - and after every put-back. Without
+// the 2-player fixes in a 2-player level it does nothing, and the replay hands
+// actions out in the macro's own order, as before.
+void FrameWindowAnalyzer::syncDispatch(bool legStarts) {
+    if (!this->countsByPlayer()) return;
+    auto& rs = Bot::get()->replaySystem();
+    uint32_t const frame = Bot::get()->updater().getFrame();
+    rs.seatDispatchOrder(frame);
+    if (legStarts) {
+        m_dispatchLegFrom = frame;
+        m_dispatchLegStart = rs.m_dispatchCursor;
+        m_dispatchLegArmed = true;
+    }
+}
+
+// GucciBot (2026-10-23): proof that a test leg skipped nothing: every action
+// due after the frame it started from, up to the frame it ended on, was handed
+// out. A line per leg in the verbose log, and a warning when one wasn't.
+void FrameWindowAnalyzer::checkLegDispatch() {
+    if (!m_dispatchLegArmed) return;
+    m_dispatchLegArmed = false;
+    auto& rs = Bot::get()->replaySystem();
+    if (!rs.dispatchByOrder()) return;
+    uint32_t const to = Bot::get()->updater().getFrame();
+    int64_t const start = static_cast<int64_t>(m_dispatchLegStart);
+    int64_t const due = static_cast<int64_t>(rs.dispatchDueBy(to)) - start;
+    int64_t const played = static_cast<int64_t>(rs.m_dispatchCursor) - start;
+    FWLOG("[fw][dispatch] leg {}: {} of {} macro action(s) due after frame {} up to "
+          "{} played",
+          m_legCounter, played, due, m_dispatchLegFrom, to);
+    if (played != due)
+        FWWARN(
+            "[fw][dispatch] leg {} (click {}): {} of the {} macro action(s) due "
+            "after frame {} up to {} played, so this test didn't play the macro "
+            "as placed",
+            m_legCounter, m_index + 1, played, due, m_dispatchLegFrom, to);
+}
+
 void FrameWindowAnalyzer::muteAudio() {
     if (m_mutedAudio) return;
     auto* engine = FMODAudioEngine::sharedEngine();
@@ -989,6 +1033,11 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
     m_pastNext = m_checkPastNext->inner();
     // GucciBot (2026-10-23): taken once, so a run is all one search or the other.
     m_fastSub = m_fastSubtick->inner();
+    // GucciBot (2026-10-23): the 2-player fixes hold for the whole run, so
+    // flipping the switch mid-run changes nothing until the next one.
+    m_twoPlayer = m_twoPlayerFixes->inner();
+    m_twoPlayerLevel = pl->m_levelSettings && pl->m_levelSettings->m_twoPlayerMode;
+    m_dispatchLegArmed = false;
 
     if (!this->collectSamples()) {
         if (partial) restore();
@@ -1023,13 +1072,14 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
         "[fw][start] level=\"{}\" id={} replay=\"{}\" tps={:.0f} macroTps={:.0f} "
         "actions={} samples={} "
         "sweep={} maxWindow={} horizon={} slack={} recovery={} algo={} "
-        "fullRange={} pastNext={} fastSubtick={} budget={}ms",
+        "fullRange={} pastNext={} fastSubtick={} budget={}ms twoPlayerFixes={} twoPlayerLevel={}",
         pl->m_level ? std::string(pl->m_level->m_levelName) : std::string{"?"},
         pl->m_level ? pl->m_level->m_levelID.value() : 0, rs.m_replayName,
         updater.m_tps, rs.m_initialTPS,
         rs.m_actionAtom.m_actions.size(), m_samples.size(), m_sweep, m_maxWin,
         m_horizon, m_slack_, m_recovery, static_cast<int>(m_algo),
-        m_fullRangeSweep->inner(), m_pastNext, m_fastSub, m_budgetMs->inner());
+        m_fullRangeSweep->inner(), m_pastNext, m_fastSub, m_budgetMs->inner(), m_twoPlayer,
+        m_twoPlayerLevel);
 
     FWLOG("[fw][start] turbo={} turboBudget={}ms adaptive={} share={}% max={}ms",
           m_turbo->inner(), m_turboBudgetMs->inner(),
@@ -1088,6 +1138,9 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
     logPlayerState("pre-reset", pl->m_player1);
     pl->resetLevel();
     rs.onReset(0);
+    // GucciBot (2026-10-23): with the 2-player fixes in a 2-player level, the
+    // replay walks the actions in frame order from here to the end of the run.
+    this->syncDispatch();
     // Right here is the state the capture pass starts from. On Congregation
     // the capture runs the level at the wrong speed and diverges from frame
     // 1, and nothing logged the speed at this exact moment -- the statediff
@@ -1270,6 +1323,7 @@ void FrameWindowAnalyzer::beginSetupLeg(SetupGroup const& sg) {
     this->openTrailLeg();  // GucciBot (2026-10-23): a leg starts, for the Leg Trail
 
     this->applySetupFrames(sg, m_setupLeaderShift, m_setupCombo);
+    this->syncDispatch(true);  // GucciBot (2026-10-23): the 2-player fixes
 
     size_t const lastAi = m_samples[sg.first + sg.count - 1].actionIndex;
     int totalShift = m_setupLeaderShift;
@@ -1355,6 +1409,9 @@ void FrameWindowAnalyzer::commitSetupGroup(SetupGroup const& sg) {
             "[fw][setup] group {}..{}: no joint alignment survives, keeping "
             "recorded timing",
             sg.first + 1, sg.first + sg.count);
+        // GucciBot (2026-10-23): the 2-player fixes. The frames are still the
+        // last joint leg's here (the click's own first leg puts them back).
+        this->syncDispatch();
         return;
     }
 
@@ -1371,6 +1428,7 @@ void FrameWindowAnalyzer::commitSetupGroup(SetupGroup const& sg) {
 
     for (size_t k = 0; k < actions.size(); k++)
         actions[k].m_frame = m_originalFrames[k];
+    this->syncDispatch();  // GucciBot (2026-10-23): the 2-player fixes
 
     std::string offsets;
     for (size_t j = 0; j < sg.count; j++) {
@@ -2058,6 +2116,8 @@ void FrameWindowAnalyzer::beginShift(int64_t shift, ShiftMode mode) {
         }
     }
 
+    this->syncDispatch(true);  // GucciBot (2026-10-23): the 2-player fixes
+
     m_pathDiverged = false;
     g_traceLastFrame = UINT32_MAX;
     m_shift = shift;
@@ -2106,6 +2166,7 @@ void FrameWindowAnalyzer::concludeShift(bool survived) {
     for (size_t i = 0; i < actions.size(); i++)
         actions[i].m_frame = m_originalFrames[i];
     this->restoreOffsets();
+    this->syncDispatch();  // GucciBot (2026-10-23): the 2-player fixes
 
     m_testActive = false;
 
@@ -3019,6 +3080,7 @@ void FrameWindowAnalyzer::beginRecovery() {
     if (niRel != NO_INDEX)
         actions[niRel].m_frame =
             static_cast<uint64_t>(placed(niRel) + m_recoveryOffset);
+    this->syncDispatch(true);  // GucciBot (2026-10-23): the 2-player fixes
 
     // (Not with Check Past Next Input: this leg moves the next input itself,
     // so it already ends past it, where the main legs end with it on.)
@@ -3510,12 +3572,12 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
             "sweep limit [{}], {} split [{}], {} unbounded, {} wide, {} buffer-assisted, "
             "{} sub-tick measured. Fine legs crossed a neighbouring input: {} [{}]. "
             "stepBatch={} inputHz={} sweep={} maxWindow={} horizon={} slack={} "
-            "pastNext={} tps={:.0f}",
+            "pastNext={} tps={:.0f} twoPlayerFixes={}",
             m_results.size(), desynced, notSolid, lg(notSolid), saturated,
             lg(saturated), split, lg(split), unbounded, wide, bufferAssisted, cbf,
             m_fineCrossedNeighbour, lg(m_fineCrossedNeighbour ? 1 : 0),
             m_stepBatch->inner(), m_cbfInputHz->inner(), m_sweep, m_maxWin,
-            m_horizon, m_slack_, m_pastNext, m_baseTps);
+            m_horizon, m_slack_, m_pastNext, m_baseTps, m_twoPlayer);
     }
 
     // The analyzer shifts the real macro's action frames to probe them and
@@ -3558,6 +3620,12 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
     // hands the level back for normal play, so it has to run under normal
     // rules; with it inside the run, a macro whose first input sits on frame 0
     // would come back with that input skipped.
+    //
+    // GucciBot (2026-10-23): the same for the 2-player fixes' dispatch order:
+    // gone before that reset, so normal play hands actions out as it always
+    // did. Every way a run ends comes through here (Cancel too).
+    rs.clearDispatchOrder();
+    m_dispatchLegArmed = false;
     m_running = false;
     m_stageId = Stage::Idle;
 
@@ -3979,6 +4047,7 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
                     if (r == StepResult::OutOfBudget) return;
                     bool const survived = r != StepResult::Died;
                     m_setupLegActive = false;
+                    this->checkLegDispatch();  // GucciBot (2026-10-23): the 2-player fixes
                     this->closeTrailLeg(survived);  // GucciBot (2026-10-23): the Leg Trail
 
                     if (survived) {
@@ -4017,6 +4086,7 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
                 auto const r = this->stepToward(pl, m_testTarget);
                 if (r == StepResult::OutOfBudget) return;
 
+                this->checkLegDispatch();  // GucciBot (2026-10-23): the 2-player fixes
                 this->closeTrailLeg(r != StepResult::Died);  // GucciBot (2026-10-23): the Leg Trail
                 this->concludeShift(r != StepResult::Died);
                 continue;
@@ -4058,6 +4128,7 @@ void FrameWindowAnalyzer::resetActions() {
         actions[k].m_frame = m_originalFrames[k];
         scbf::setOffset(actions[k], m_originalOffsets[k]);
     }
+    this->syncDispatch();  // GucciBot (2026-10-23): the 2-player fixes
 }
 
 void FrameWindowAnalyzer::placeAt(size_t k, double pos) {
@@ -4401,6 +4472,7 @@ bool FrameWindowAnalyzer::stepDependent(PlayLayer* pl) {
     auto const r = this->stepToward(pl, m_depLegTarget);
     if (r == StepResult::OutOfBudget) return false;
     m_depLegActive = false;
+    this->checkLegDispatch();  // GucciBot (2026-10-23): the 2-player fixes
     this->closeTrailLeg(r != StepResult::Died);  // GucciBot (2026-10-23): the Leg Trail
     this->recordDependentLeg(r != StepResult::Died);
     return true;
@@ -4874,6 +4946,7 @@ void FrameWindowAnalyzer::launchDependentLeg(int64_t shift, ShiftMode mode,
             this->placeAt(ni, origin(ni) + extra);
             if (niRel != NO_INDEX) this->placeAt(niRel, origin(niRel) + extra);
         }
+    this->syncDispatch(true);  // GucciBot (2026-10-23): the 2-player fixes, after every placement
 
     // As far as the count's own tests of it run: past its own release to
     // the input after (legReach, as beginShift calls it). It stopped at the
@@ -5346,6 +5419,7 @@ bool FrameWindowAnalyzer::stepSuggest(PlayLayer* pl) {
     auto const r = this->stepToward(pl, m_sugLegTarget);
     if (r == StepResult::OutOfBudget) return false;
     m_sugLegActive = false;
+    this->checkLegDispatch();  // GucciBot (2026-10-23): the 2-player fixes
     this->closeTrailLeg(r != StepResult::Died);  // GucciBot (2026-10-23): the Leg Trail
     this->recordSuggestLeg(r != StepResult::Died);
     return true;
@@ -5514,6 +5588,7 @@ void FrameWindowAnalyzer::launchSuggestLeg() {
                                static_cast<double>(m_sugContScan[m_sugContAt]));
         target = aiC;
     }
+    this->syncDispatch(true);  // GucciBot (2026-10-23): the 2-player fixes
 
     // launchDependentLeg's target: the input, then up to the next one less
     // the slack, at least MIN_HORIZON, at most the horizon (legReach). Not

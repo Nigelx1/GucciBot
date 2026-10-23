@@ -204,6 +204,11 @@ struct FrameWindowSettings {
     // to just before the input after the next one, so a death the shift causes
     // after the next input isn't missed. Off: today's count.
     bool checkPastNextInput = false;
+    // GucciBot (2026-10-23): 2-player fixes, from anticroom's antics-counter
+    // beta.4 and beta.6 changelogs (no source): how Calculate counts 2-player
+    // macros and dual levels (FrameWindowAnalyzer::countsByPlayer and what
+    // reads it). Off: today's count, while the two are compared.
+    bool twoPlayerFixes = false;
     bool testShipReleases = true;
     bool testAllReleases = false;
     bool orbAwareReleaseSkip = true;

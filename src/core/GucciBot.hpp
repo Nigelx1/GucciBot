@@ -325,8 +325,39 @@ namespace gucci {
         [[nodiscard]] std::optional<gb::Action> getNextInput(uint32_t frame);
 
         void advanceInputIndex() {
+            if (this->dispatchByOrder()) {
+                m_inputIndex = ++m_dispatchCursor;
+                return;
+            }
             m_inputIndex++;
         }
+
+        // GucciBot (2026-10-23): Calculate's 2-player fixes (anticroom's
+        // antics-counter beta.6 changelog, "Fixed inputs getting skipped while
+        // counting 2-player macros"; no source). Playback hands the actions
+        // out in their order in the macro, each only on its own frame. A test
+        // that moved one player's input past the other player's left the
+        // action at the index on a frame already gone: it never played, and
+        // nothing after it did either, for both players.
+        //
+        // While Calculate runs with its 2-player fixes in a 2-player level it
+        // fills m_dispatchOrder: every action's index, in frame order (within
+        // a frame, the macro's own order), walked by m_dispatchCursor. The
+        // cursor then stands in for the index in getCurrentQueuedInput,
+        // getNextInput, advanceInputIndex and onReset, and m_inputIndex is
+        // kept equal to it - how many actions have been handed out - so what
+        // reads m_inputIndex (the HUD, Assistant Access, the log) sees what it
+        // always did for a macro in frame order. Empty: the old path, as it
+        // was. seatDispatchOrder rebuilds the order whenever the frames no
+        // longer give it, then puts the cursor on the first action after
+        // `frame`; clearDispatchOrder empties it when the run ends.
+        std::vector<size_t> m_dispatchOrder;
+        size_t m_dispatchCursor = 0;
+        bool dispatchByOrder() const;
+        void seatDispatchOrder(uint32_t frame);
+        // How many actions of the order are on or before `frame`.
+        size_t dispatchDueBy(uint32_t frame) const;
+        void clearDispatchOrder();
         void onReset(uint32_t respawnFrame, uint32_t deathFrame);
         void releaseButtonsNotHeldAfterRespawn(uint32_t frame);
         // Silicate's signature. GucciBot added deathFrame, which is used only

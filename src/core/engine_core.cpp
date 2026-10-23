@@ -24,6 +24,7 @@
 #include <fstream>
 #include <algorithm>
 #include <cstring>
+#include <numeric>
 
 using namespace geode::prelude;
 
@@ -326,12 +327,26 @@ namespace gucci {
     }
 
     std::optional<gb::Action> GucciReplaySystem::getCurrentQueuedInput() const {
+        if (this->dispatchByOrder()) {
+            if (m_dispatchCursor >= m_dispatchOrder.size())
+                return std::nullopt;
+            return m_actionAtom.m_actions[m_dispatchOrder[m_dispatchCursor]];
+        }
         if (m_inputIndex >= m_actionAtom.length())
             return std::nullopt;
         return m_actionAtom.m_actions[m_inputIndex];
     }
 
     std::optional<gb::Action> GucciReplaySystem::getNextInput(uint32_t frame) {
+        if (this->dispatchByOrder()) {
+            if (m_dispatchCursor >= m_dispatchOrder.size())
+                return std::nullopt;
+            auto const& next = m_actionAtom.m_actions[m_dispatchOrder[m_dispatchCursor]];
+            if (next.m_frame != frame)
+                return std::nullopt;
+            m_inputIndex = ++m_dispatchCursor;
+            return next;
+        }
         if (m_inputIndex >= m_actionAtom.length())
             return std::nullopt;
         auto& input = m_actionAtom.m_actions[m_inputIndex];
@@ -340,6 +355,53 @@ namespace gucci {
             return input;
         }
         return std::nullopt;
+    }
+
+    // GucciBot (2026-10-23): Calculate's 2-player fixes; see m_dispatchOrder.
+    // Only while Calculate owns the run with them on (fixed for the whole run
+    // when it starts) and has set the order, for the actions the order was
+    // made for. Otherwise false, and every caller takes the old path.
+    bool GucciReplaySystem::dispatchByOrder() const {
+        if (m_dispatchOrder.empty() || m_dispatchOrder.size() != m_actionAtom.length())
+            return false;
+        auto const& fw = ::Bot::get()->frameWindow();
+        return fw.running() && fw.countsByPlayer();
+    }
+
+    void GucciReplaySystem::seatDispatchOrder(uint32_t frame) {
+        auto const& acts = m_actionAtom.m_actions;
+        // Frame order; within a frame, the macro's own order (a stable sort by
+        // frame, which is what the macro is in when it loads).
+        auto const before = [&acts](size_t a, size_t b) {
+            return acts[a].m_frame != acts[b].m_frame ? acts[a].m_frame < acts[b].m_frame : a < b;
+        };
+        bool current = m_dispatchOrder.size() == acts.size();
+        for (size_t p = 1; current && p < m_dispatchOrder.size(); p++)
+            current = before(m_dispatchOrder[p - 1], m_dispatchOrder[p]);
+        if (!current) {
+            m_dispatchOrder.resize(acts.size());
+            std::iota(m_dispatchOrder.begin(), m_dispatchOrder.end(), size_t{0});
+            std::sort(m_dispatchOrder.begin(), m_dispatchOrder.end(), before);
+        }
+        // The first action after `frame`: Calculate's rule in onReset (an
+        // action on the frame itself was handed out on the frame before).
+        m_dispatchCursor = this->dispatchDueBy(frame);
+        m_inputIndex = m_dispatchCursor;
+    }
+
+    size_t GucciReplaySystem::dispatchDueBy(uint32_t frame) const {
+        auto const& acts = m_actionAtom.m_actions;
+        if (m_dispatchOrder.size() != acts.size())
+            return 0;
+        auto const at = std::partition_point(m_dispatchOrder.begin(), m_dispatchOrder.end(),
+                                             [&acts, frame](size_t k) { return acts[k].m_frame <= frame; });
+        return static_cast<size_t>(at - m_dispatchOrder.begin());
+    }
+
+    void GucciReplaySystem::clearDispatchOrder() {
+        m_dispatchOrder.clear();
+        m_dispatchOrder.shrink_to_fit();
+        m_dispatchCursor = 0;
     }
 
     // The macro's buttons on the respawn tick are the ones the respawned
@@ -394,9 +456,15 @@ namespace gucci {
             return;
         auto& acts = rs.m_actionAtom.m_actions;
         double tps = rs.m_initialTPS;
-        for (size_t i = 0; i < rs.m_inputIndex && i < acts.size(); ++i)
-            if (acts[i].m_type == gb::ActionType::TPS && acts[i].m_tps > 0.0)
-                tps = acts[i].m_tps;
+        // GucciBot (2026-10-23): with Calculate's dispatch order (its 2-player
+        // fixes), the actions handed over are the order's up to its cursor.
+        bool const byOrder = rs.dispatchByOrder();
+        size_t const handed = byOrder ? rs.m_dispatchCursor : rs.m_inputIndex;
+        for (size_t i = 0; i < handed && i < acts.size(); ++i) {
+            size_t const k = byOrder ? rs.m_dispatchOrder[i] : i;
+            if (acts[k].m_type == gb::ActionType::TPS && acts[k].m_tps > 0.0)
+                tps = acts[k].m_tps;
+        }
         auto& upd = GucciEngine::get()->updater;
         if (upd.m_tps != tps) {
             upd.setTps(tps);
@@ -484,15 +552,22 @@ namespace gucci {
             // Scoped to the analyzer for now: normal playback has the same
             // latent bug, but changing respawn behaviour for every macro needs
             // its own change and its own test.
-            bool const exclusive = GucciEngine::get()->analyzerOwnsRun();
-            m_inputIndex = static_cast<size_t>(std::distance(
-                m_actionAtom.m_actions.begin(),
-                std::find_if(m_actionAtom.m_actions.begin(),
-                             m_actionAtom.m_actions.end(),
-                             [respawnFrame, exclusive](const gb::Action& a) {
-                                 return exclusive ? a.m_frame > respawnFrame
-                                                  : a.m_frame >= respawnFrame;
-                             })));
+            //
+            // GucciBot (2026-10-23): with Calculate's 2-player fixes, the same
+            // rule in the dispatch order (see m_dispatchOrder).
+            if (this->dispatchByOrder()) {
+                this->seatDispatchOrder(respawnFrame);
+            } else {
+                bool const exclusive = GucciEngine::get()->analyzerOwnsRun();
+                m_inputIndex = static_cast<size_t>(std::distance(
+                    m_actionAtom.m_actions.begin(),
+                    std::find_if(m_actionAtom.m_actions.begin(),
+                                 m_actionAtom.m_actions.end(),
+                                 [respawnFrame, exclusive](const gb::Action& a) {
+                                     return exclusive ? a.m_frame > respawnFrame
+                                                      : a.m_frame >= respawnFrame;
+                                 })));
+            }
         }
         applyTpsAtIndex(*this, hadTpsChanges);
     }

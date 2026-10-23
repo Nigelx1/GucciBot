@@ -1095,6 +1095,12 @@ namespace gucci::ui::pages {
                      "after the next input isn't missed. Stricter and slower: a death the next input's own timing "
                      "causes counts against this one too",
                      &FW::checkPastNextInput);
+                // GucciBot (2026-10-23): from anticroom's antics-counter beta.4 and beta.6 changelogs.
+                flag("2-player fixes",
+                     "For 2-player macros and dual levels: a test moves only the measured player's clicks and plays "
+                     "the other player's at their own timing, none skipped. This can change their windows, mostly "
+                     "wider where they were cut short. Off by default while it's compared with the old count",
+                     &FW::twoPlayerFixes);
 
                 kit::Section("Debug");
                 if (feature("Verbose log",
