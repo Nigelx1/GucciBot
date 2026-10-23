@@ -599,6 +599,22 @@ namespace gucci::ui::pages {
                 g_openBands.insert(nt.id);
                 g_changed = g_look = true;
             }
+            // GucciBot (2026-10-23): anticroom's antics-counter beta.5 has a
+            // Sort by Window beside the arrows. Smallest window first, ties
+            // by the largest; stable, so equal bands keep their order. Ids go
+            // with their bands, so open editors and HUD counts stay right.
+            ImGui::SameLine();
+            if (kit::Button("Sort by window")) {
+                std::stable_sort(tiers.begin(), tiers.end(), [](FrameWindowTier const& a, FrameWindowTier const& b) {
+                    if (a.minWindow != b.minWindow)
+                        return a.minWindow < b.minWindow;
+                    return a.maxWindow < b.maxWindow;
+                });
+                g_changed = g_look = true;
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Smallest window first. A window takes the first band it fits, so where bands "
+                                  "overlap this changes which one it lands in.");
             ImGui::SameLine();
             if (kit::Button("Reset bands")) {
                 fwstore::resetBands();
