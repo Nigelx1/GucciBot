@@ -430,6 +430,9 @@ class Materializer {
     // A carried object refresh would leave where it is, told from the table
     // alone (see materializeNear).
     bool carriedAway(const Run& run, const Carry& c, const Window& w) const;
+    // Whether a written object can need writing again in this window, told
+    // without working out where the run's log has it (see materializeNear).
+    bool writtenMayMeet(const Run& run, const Written& wr, const Window& w) const;
     void pendDiff(uint32_t liveProgress, uint32_t liveCommandIndex);
 
     GJBaseGameLayer* m_pl = nullptr;

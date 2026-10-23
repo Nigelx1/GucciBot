@@ -1016,6 +1016,44 @@ bool Materializer::pointMeets(double x, double y, double rx, double ry, const Wi
     return x + rx >= xlo && x - rx <= xhi && y + ry >= ylo && y - ry <= yhi;
 }
 
+// GucciBot (2026-10-23): refresh works out where the run's log has an object
+// (desired replays the log's ops for it), and after a restore that was most
+// of a branch's tick - ORBIT's 76 written objects took 54 us of a branch's 64,
+// and every object any branch of a search writes stays on the list. A written
+// object can only need writing again in this window when it stands in it now,
+// is met from any section (extended collision) or carried (it moves every
+// tick), or belongs at the table's pose - no group of it has an op in this
+// run's log - and the table has it in the window. One whose group has an op
+// is the reach's: the reach loop of the same look goes through every member
+// whose table pose, grown by what its groups did, meets the window.
+bool Materializer::writtenMayMeet(const Run& run, const Written& wr, const Window& w) const {
+    const WorldDef& def = *run.def;
+    const int slot = wr.slot;
+    if (!wr.o || slot < 0 || (std::size_t)slot >= def.slots.size()) return true;
+    if (def.flags[(std::size_t)slot] & kExtended) return true;
+    if (inWindow(w, off::at<int>(wr.o, off::kSecX), off::at<int>(wr.o, off::kSecY))) return true;
+    if (m_carry && m_carryOf.contains(slot)) return true;
+    const MaterialDef& md = *m_table->md;
+    // The reach loop only goes through members the object writer holds (an
+    // area effect's extra object is not one): any other is looked at here.
+    if ((std::size_t)slot >= md.indexOf.size() || md.indexOf[(std::size_t)slot] < 0) return true;
+    const auto& reach = run.ws->reach;
+    bool reached = false;
+    for (uint16_t g : def.groupsOf(slot)) {
+        auto it = std::lower_bound(reach.begin(), reach.end(), g,
+                                   [](const std::pair<uint16_t, GroupReach>& e, uint16_t key) { return e.first < key; });
+        if (it == reach.end() || it->first != g) continue;
+        // (A group with no co-groups is passed over by the reach loop: then
+        // nothing else looks at this one, and it is looked at here.)
+        if (md.coGroupsOf(g).empty()) return true;
+        reached = true;
+    }
+    if (reached) return false;
+    const Pose* base = m_table->find(slot);
+    if (!base) return true;
+    return pointMeets(base->x, base->y, 1.0, 1.0, w);
+}
+
 bool Materializer::carriedAway(const Run& run, const Carry& c, const Window& w) const {
     const WorldDef& def = *run.def;
     if (c.slot < 0 || (std::size_t)c.slot >= def.slots.size()) return false;
@@ -1221,7 +1259,9 @@ void Materializer::materializeNear(Run& run, PlayerObject* copy) {
             np.looks++;
             np.written += m_written.size();
         }
-        for (std::size_t i = 0; i < m_written.size(); i++) refresh(run, m_written[i].slot, &w);
+        for (std::size_t i = 0; i < m_written.size(); i++) {
+            if (writtenMayMeet(run, m_written[i], w)) refresh(run, m_written[i].slot, &w);
+        }
     }
     lap(2);
     const MaterialDef& md = *m_table->md;

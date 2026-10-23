@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-gz (the speed test times each part of writing the moved objects near a copy, with counts - most of an ORBIT tick)"
+    "2026-10-23-ha (World: a search branch only works out again where the written objects near the copy belong, not every one the search ever wrote - ORBIT's branches spent 54 us of 64 there)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
