@@ -40,13 +40,13 @@ namespace gucci::slopediag {
     void log(std::string const& line);
 }
 
-#if GB_NATIVE_ENGINE // Windows midhooks and raw addresses (core/platform.hpp)
 // Set while the game works through a queue processQueuedButtons has already
 // recorded (saveQueuedButtons): the handleButton calls inside it are those same
 // presses, and recording them again duplicated every tick with more than one
 // (see handleButton).
 static bool s_queueRecorded = false;
 
+#if GB_NATIVE_ENGINE // Windows midhooks and raw addresses (core/platform.hpp)
 static void shakeRandomOverride(SafetyHookContext& ctx) {
     uint64_t& state = GucciEngine::get()->replay.m_shakeRandomState;
     state = (int)((214013 * state + 2531011) >> 16) & 0x7FFF;

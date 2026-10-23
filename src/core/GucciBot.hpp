@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-gh (Recording: a tick with several button events is recorded once, not with phantom extra presses - pathfinder paths now replay)"
+    "2026-10-23-gi (Recording fix of -gh builds on Mac, iOS and Android too)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
