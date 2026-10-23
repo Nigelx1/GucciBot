@@ -1720,8 +1720,27 @@ struct StepProfile {
     double iterate = 0.0;  // the copies' own update and collision pass
     double after = 0.0;    // the rest: the void rule, the spawn walk, the contacts
     uint64_t steps = 0;
+    // Setting a run up (Sim::begin) and putting the game back (Sim::end), a
+    // part at a time (see Benchmark::usSetup / usEnd).
+    double setup[11] = {};
+    double end[4] = {};
+    uint64_t begins = 0;
+    uint64_t ends = 0;
 };
 StepProfile g_stepProfile;
+
+// One part's time into the profile, from the last lap (or the start).
+struct ProfLap {
+    bool on = g_stepProfile.on;
+    std::chrono::steady_clock::time_point at = on ? std::chrono::steady_clock::now()
+                                                  : std::chrono::steady_clock::time_point{};
+    void operator()(double& into) {
+        if (!on) return;
+        const auto now = std::chrono::steady_clock::now();
+        into += std::chrono::duration<double, std::micro>(now - at).count();
+        at = now;
+    }
+};
 }  // namespace
 
 // A scripted run of the copies: the copy of player 1 (or 2), plus the copy
@@ -1797,10 +1816,15 @@ struct Trajectory::Sim {
         PlayerObject* realPlayer = p1 ? pl->m_player1 : pl->m_player2;
         if (!realPlayer) return false;
         auto& updater = Bot::get()->updater();
+        ProfLap lap;  // the speed test's timer (see StepProfile)
         t->scanMovedGroups(pl);
+        lap(g_stepProfile.setup[0]);
         savedState = pl->m_gameState;
+        lap(g_stepProfile.setup[1]);
         t->readVoidTop(pl);  // before this run moves anything (inVoid)
+        lap(g_stepProfile.setup[2]);
         mv.begin(pl);
+        lap(g_stepProfile.setup[3]);
         config.m_bypassConfig = true;
         config.m_silent = true;
         levelEnd = pl->m_levelLength;
@@ -1916,6 +1940,7 @@ struct Trajectory::Sim {
         // The next group teleport draws what the game would draw next from the
         // run's start (read only: the replay system's state is never written).
         t->m_teleportRand = from ? from->teleportRand : Bot::get()->replaySystem().m_teleportRandomState;
+        lap(g_stepProfile.setup[4]);
         // The World's state the run starts from: the kept start's, or the live
         // game's (its contacts and the replay system's teleport seed, read only).
         ws = world::WorldState{};
@@ -1953,6 +1978,7 @@ struct Trajectory::Sim {
                 ws = world::WorldState{};
             }
         }
+        lap(g_stepProfile.setup[5]);
         // The level's triggers: a run with the World steps them from the state
         // above, with the log of what they do to objects (a start carried along
         // a plan brings the plan's).
@@ -1967,6 +1993,7 @@ struct Trajectory::Sim {
                 if (fromWorld && fromWorld->log) log = *fromWorld->log;
                 else log.reset((uint32_t)ws.tick);
                 cache.reset(def);
+                lap(g_stepProfile.setup[6]);
                 // Where the objects the log moves stand before it: the table
                 // of this tick for a run from the live game, the one a start
                 // brings (read at the tick its log begins) for a start. A state
@@ -1995,7 +2022,9 @@ struct Trajectory::Sim {
                         }
                     } else {
                         table = world::baseTable(pl, def, savedState.m_currentProgress, savedState.m_commandIndex);
+                        lap(g_stepProfile.setup[7]);
                         if (table) carry = world::carriedMovers(*table, ws, *def);
+                        lap(g_stepProfile.setup[8]);
                     }
                 }
                 if (table && carry) {
@@ -2008,6 +2037,7 @@ struct Trajectory::Sim {
                     // every tick past the table's own.
                     objects.begin(pl, table, carry, savedState.m_currentProgress, savedState.m_commandIndex,
                                   fromWorld ? fromWorld->baseTick : (int)ws.tick);
+                    lap(g_stepProfile.setup[9]);
                 }
                 ws.commandIndex = pl->m_gameState.m_commandIndex;
                 run.pl = pl;
@@ -2050,6 +2080,8 @@ struct Trajectory::Sim {
         // start was captured there); whether the game is in it right now is not
         // the question - a probe looks at a tick the game has left.
         syncSeparate();
+        lap(g_stepProfile.setup[10]);
+        if (lap.on) g_stepProfile.begins++;
         return true;
     }
 
@@ -2357,16 +2389,7 @@ struct Trajectory::Sim {
             }
         };
         const TickInput in2 = separate ? otherAt(idx) : in;
-        // (The speed test's timer, see StepProfile.)
-        using ProfClock = std::chrono::steady_clock;
-        const bool prof = g_stepProfile.on;
-        ProfClock::time_point profAt = prof ? ProfClock::now() : ProfClock::time_point{};
-        const auto lap = [&](double& into) {
-            if (!prof) return;
-            const auto now = ProfClock::now();
-            into += std::chrono::duration<double, std::micro>(now - profAt).count();
-            profAt = now;
-        };
+        ProfLap lap;  // the speed test's timer (see StepProfile)
         if (worldStep) {
             // GJBaseGameLayer::update's order (world/step.cpp (h)): the queued
             // spawns and the parked speed; processCommands - the command index,
@@ -2479,7 +2502,7 @@ struct Trajectory::Sim {
             otherSurvived = (int)idx;
         }
         lap(g_stepProfile.after);
-        if (prof) g_stepProfile.steps++;
+        if (lap.on) g_stepProfile.steps++;
         simulated++;
         ticks++;
         if (!separate) return deadOwn || deadOther;  // one input for both: either death ends it
@@ -2635,19 +2658,25 @@ struct Trajectory::Sim {
     }
 
     void end() {
+        ProfLap lap;  // the speed test's timer (see StepProfile)
         for (int i = 0; i < count; i++) players[i]->setVisible(false);
         t->deactivateAllRemembered();
         t->clearRingContacts();
         t->m_actions.clear();
+        lap(g_stepProfile.end[0]);
         // World::restoreWritten: every object field and bucket the run wrote.
         objects.end();
+        lap(g_stepProfile.end[1]);
         mv.end();
+        lap(g_stepProfile.end[2]);
         t->m_simBroken.clear();
         t->m_simRealTick = -1;  // no run's tick to measure a phantom spot against
         gucci::gdAssign(pl->m_gameState, savedState);  // never read again after this
         // A copy the run picked up at a dual portal goes out of sight with it.
         if (t->m_fakePlayer1) t->m_fakePlayer1->setVisible(false);
         if (t->m_fakePlayer2) t->m_fakePlayer2->setVisible(false);
+        lap(g_stepProfile.end[3]);
+        if (lap.on) g_stepProfile.ends++;
     }
 };
 
@@ -3820,6 +3849,9 @@ Trajectory::Benchmark Trajectory::benchmark(GJBaseGameLayer* pl, int ticks, int 
     }
     g_stepProfile.on = false;
     parts(0);
+    for (int k = 0; k < 11; k++)
+        b.usSetup[k] = g_stepProfile.setup[k] / (double)std::max<uint64_t>(1, g_stepProfile.begins);
+    for (int k = 0; k < 4; k++) b.usEnd[k] = g_stepProfile.end[k] / (double)std::max<uint64_t>(1, g_stepProfile.ends);
     if (b.runs == 0) {
         m_killer = keptKiller;
         m_teleportRand = keptRand;

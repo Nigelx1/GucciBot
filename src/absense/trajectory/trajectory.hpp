@@ -259,6 +259,14 @@ class Trajectory {
         double usAfter[2] = {0.0, 0.0};
         std::size_t written = 0;  // objects the branch run had written when the branches began
         std::size_t reach = 0;    // groups its ops reached
+        // Where setting a run up and putting the game back goes, in us a run
+        // (the plain runs): the moved-group scan, the game state kept, the
+        // void's top, the movers, the copies, the World's capture, the
+        // level's triggers, the table of where the objects stand, what it
+        // carries, the object writer, the rest; then at the end the copies,
+        // the objects written put back, the movers, the game state put back.
+        double usSetup[11] = {};
+        double usEnd[4] = {};
     };
     Benchmark benchmark(GJBaseGameLayer* pl, int ticks, int snapshots);
 

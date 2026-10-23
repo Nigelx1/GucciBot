@@ -433,6 +433,22 @@ matjson::Value absense::benchmark(int ticks, int snapshots) {
         p["after"] = b.usAfter[k];
         out[k == 0 ? "us_a_tick_plain" : "us_a_tick_branch"] = p;
     }
+    {
+        static constexpr const char* kSetup[11] = {"scan",  "state", "void",  "movers",  "copies", "capture",
+                                                   "def",   "table", "carry", "objects", "rest"};
+        static constexpr const char* kEnd[4] = {"copies", "objects", "movers", "state"};
+        auto setup = matjson::Value::object();
+        for (int k = 0; k < 11; k++) setup[kSetup[k]] = b.usSetup[k];
+        out["us_a_run_setup"] = setup;
+        auto end = matjson::Value::object();
+        for (int k = 0; k < 4; k++) end[kEnd[k]] = b.usEnd[k];
+        out["us_a_run_end"] = end;
+        std::string parts;
+        for (int k = 0; k < 11; k++) parts += fmt::format("{}{} {:.0f}", k ? ", " : "", kSetup[k], b.usSetup[k]);
+        parts += "; at the end";
+        for (int k = 0; k < 4; k++) parts += fmt::format("{}{} {:.0f}", k ? ", " : " ", kEnd[k], b.usEnd[k]);
+        geode::log::info("[AbsPF] speed test: setting a run up, in us: {}", parts);
+    }
     geode::log::info("[AbsPF] speed test at frame {}: {:.0f} simulated ticks a second ({:.2f} us a tick over {} ticks "
                      "in {} runs), {:.0f} us to set a run up, a snapshot {:.1f} us to take and {:.1f} us to put back, "
                      "about {} bytes, World {}",
