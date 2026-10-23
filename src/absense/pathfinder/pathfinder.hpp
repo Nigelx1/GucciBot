@@ -302,6 +302,13 @@ public:
         // Before the chunks, the taps the path needs (see trimStep): the
         // script's own run as the reference, the taps put back so far, the
         // tries, and whether the pass is over.
+        // First of all, runs of taps held down instead (see trimStep): the
+        // runs to try one by one once all of them at once has failed, and
+        // whether the pass is over.
+        std::vector<std::pair<int, int>> holdRuns;
+        size_t holdAt = 0;
+        bool holdAll = false;       // the all-at-once try has been made
+        bool holdDone = false;
         std::vector<TraceSample> guideRef;
         bool guideHaveRef = false;
         std::vector<int> guideKept;

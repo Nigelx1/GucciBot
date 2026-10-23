@@ -1824,6 +1824,89 @@ bool AbsensePathfinder::trimStep(Decision& d) {
     // again, until the script with only those taps does as well (tryTake) or
     // the tries run out - one run for each tap the path needs. Nothing goes
     // in unless it passes tryTake, so the most this costs is its tries.
+    // ---- First of all: runs of taps held down instead. A cube or robot that
+    // lands with the button down jumps at once, which is all a press on every
+    // other tick does for it: Clubstep's mini cube bounced along the top
+    // blocks on 140 presses a second where one held press does the same. No
+    // pass below can find that - they only take presses out, and every one of
+    // those presses is a jump. A run is taps no more than three ticks apart,
+    // eight or more of them; held from its first tap through its last, with
+    // the script as it was after that. All the runs at once first, then each
+    // on its own, every try on tryTake's test - so where only a fresh press
+    // does it (an orb), the run stays as it was.
+    if (!d.holdDone) {
+        if (d.holdRuns.empty() && !d.holdAll) {
+            int start = -1, last = -1, count = 0;
+            auto close = [&]() {
+                if (count >= 8) d.holdRuns.push_back({start, last});
+                start = -1;
+                count = 0;
+            };
+            for (int i = 0; i < window; i++) {
+                const TickInput& in = c.inputs[(size_t)i];
+                if (in.presses == 0) continue;
+                const bool before = i == 0 ? held : c.inputs[(size_t)i - 1].held;
+                const bool tap = in.held == before || (!before && (size_t)i + 1 < c.inputs.size() &&
+                                                       c.inputs[(size_t)i + 1].presses == 0 &&
+                                                       !c.inputs[(size_t)i + 1].held);
+                if (!tap) {
+                    close();
+                    continue;
+                }
+                if (start >= 0 && i - last > 3) close();
+                if (start < 0) start = i;
+                last = i;
+                count++;
+            }
+            close();
+            if (d.holdRuns.empty()) d.holdDone = true;
+        }
+        // One run held down: a press where it starts (none if the button is
+        // down already), down through its last tap's tick, and the script's
+        // own state from the tick after.
+        auto holdRun = [&](std::vector<TickInput>& v, std::pair<int, int> run) {
+            const bool before = run.first == 0 ? held : c.inputs[(size_t)run.first - 1].held;
+            v[(size_t)run.first] = TickInput{(uint8_t)(before ? 0 : 1), true};
+            for (int t = run.first + 1; t <= run.second && (size_t)t < v.size(); t++) v[(size_t)t] = TickInput{0, true};
+        };
+        auto pressesIn = [&](std::pair<int, int> run) {
+            int n = 0;
+            for (int t = run.first; t <= run.second && (size_t)t < c.inputs.size(); t++) n += c.inputs[(size_t)t].presses;
+            return n;
+        };
+        while (!d.holdDone) {
+            std::vector<TickInput> variant = c.inputs;
+            int dropped = 0;
+            if (!d.holdAll) {
+                for (const auto& run : d.holdRuns) {
+                    holdRun(variant, run);
+                    dropped += pressesIn(run) - 1;
+                }
+            } else {
+                if (d.holdAt >= d.holdRuns.size() || d.holdRuns.size() < 2) {
+                    d.holdDone = true;
+                    break;
+                }
+                holdRun(variant, d.holdRuns[d.holdAt]);
+                dropped = pressesIn(d.holdRuns[d.holdAt]) - 1;
+            }
+            if (isTabu(d.tick, variant, d.player2)) {
+                if (!d.holdAll) d.holdAll = true;
+                else d.holdAt++;
+                continue;
+            }
+            if (!mayWork()) return false;  // more next time, the same try
+            const bool took = tryTake(variant);
+            if (took) d.trimmed += std::max(0, dropped);
+            if (!d.holdAll) {
+                d.holdAll = true;
+                if (took) d.holdDone = true;  // every run held: nothing left to try one by one
+            } else {
+                d.holdAt++;
+            }
+        }
+    }
+
     if (!d.guideDone) {
         std::vector<int> taps;  // as the chunk pass below has them
         for (int i = 0; i < window; i++) {
@@ -3572,6 +3655,10 @@ void AbsensePathfinder::decide() {
         d.chunkAt = 0;
         d.chunkDone = false;
         d.trimWindow = 0;
+        d.holdRuns.clear();
+        d.holdAt = 0;
+        d.holdAll = false;
+        d.holdDone = false;
         d.guideRef.clear();
         d.guideHaveRef = false;
         d.guideKept.clear();
@@ -3935,6 +4022,10 @@ void AbsensePathfinder::decide() {
         d.chunkAt = 0;
         d.chunkDone = false;
         d.trimWindow = 0;
+        d.holdRuns.clear();
+        d.holdAt = 0;
+        d.holdAll = false;
+        d.holdDone = false;
         d.guideRef.clear();
         d.guideHaveRef = false;
         d.guideKept.clear();

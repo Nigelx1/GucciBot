@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-go (Pathfinder: the trim covers everything a realtime plan plays, not just its first third)"
+    "2026-10-23-gp (Pathfinder: the trim holds a run of taps down where that does the same - bouncing cubes stop spamming)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
