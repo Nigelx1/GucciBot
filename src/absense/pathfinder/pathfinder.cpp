@@ -4475,6 +4475,27 @@ void AbsensePathfinder::beginBacktrack() {
     m_phase = Phase::Restoring;
 }
 
+// GucciBot (2026-10-22, docs/ROUTE_ENGINE_PLAN.md step 1a): a rewind loads a
+// checkpoint, and GD arms its anticheat spike again with it. Until GD's own
+// destroyPlayer has had the spike, every collision pass that touches it ends
+// before PlayerObject::postCollision - where GD launches the player off the
+// top of a slope - so the first ticks played again after a rewind lost their
+// launch: Deadlocked's ball left the ramp at tick 5250 the first time
+// (ret=0, postCollision ran) and not after the rewind to 5248 (ret=1, it did
+// not), and the game and the simulation parted there. Handing GD the spike
+// once, before anything is played again, puts the re-stepped ticks where a
+// cold replay would have them. Not sure GD takes it from here rather than
+// from a collision: the log says, per rewind, and a pass that still ends early
+// is logged by the collision hook.
+void AbsensePathfinder::settleAnticheatSpike() {
+    auto* pl = PlayLayer::get();
+    if (!pl || !pl->m_anticheatSpike || !pl->m_player1 || pl->m_player1->m_isDead) return;
+    m_settlingSpike = true;
+    pl->destroyPlayer(pl->m_player1, pl->m_anticheatSpike);
+    m_settlingSpike = false;
+    m_stats.spikeSettles++;
+}
+
 void AbsensePathfinder::finishRestore() {
     const auto t0 = std::chrono::steady_clock::now();
     const double realBefore = m_stats.secondsReal;
@@ -4489,6 +4510,7 @@ void AbsensePathfinder::finishRestore() {
     } restoreTimer{m_stats, t0, realBefore};
     if (!m_restepping) {
         Bot::get()->trajectory().realStateChanged();  // the game was put back: the player is another state
+        settleAnticheatSpike();
     }
     uint64_t tick = currentTick();
     if (!m_restepping && (tick > m_backtrackTarget + 2 || tick + 2 < m_backtrackTarget)) {

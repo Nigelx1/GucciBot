@@ -677,8 +677,21 @@ class $modify(GB7PlayLayer, PlayLayer) {
 
         // Records it when one of the objects the trail buffer generated is
         // what killed you -- how you find out a built structure is too tight.
-        if (obj)
+        if (obj && obj != m_anticheatSpike)
             ::Bot::get()->trailBuffer().reportKill(player, obj);
+
+        // Absense's pathfinder driving: when GD gets its anticheat spike, and
+        // whether it was handed over after a rewind (settleAnticheatSpike) or
+        // met in a collision pass (docs/ROUTE_ENGINE_PLAN.md step 1a).
+        if (obj == m_anticheatSpike && ::Bot::get()->pathfinder().isRunning()) {
+            static int s_lines = 0;
+            if (s_lines < 200) {
+                s_lines++;
+                geode::log::info("[AbsPF] anticheat spike to GD at frame {} ({})", gb->updater.getFrame(),
+                                 ::Bot::get()->pathfinder().settlingSpike() ? "handed over after a rewind"
+                                                                          : "met in a collision pass");
+            }
+        }
 
         // The anticheat spike always goes to GD, whoever owns the run, as in
         // Silicate's conditionalDestroyPlayer. Until GD's destroyPlayer has

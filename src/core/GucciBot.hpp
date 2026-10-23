@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-22-fo (Version 2.0.0-beta.5)"
+    "2026-10-22-fp (Pathfinder: GD gets its anticheat spike after every rewind - slope launches kept)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

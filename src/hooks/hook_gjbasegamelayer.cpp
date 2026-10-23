@@ -22,6 +22,7 @@
 #include "analysis/ac/cbf.hpp"
 #include "analysis/ac/framewindow.hpp"
 #include "trailbuf/trailbuf.hpp"
+#include "absense/pathfinder/pathfinder.hpp"
 #include "replay/scbf_input.hpp"
 #include "absense/compat/bot.hpp"
 #include "absense/pathfinder/pathfinder.hpp"
@@ -360,6 +361,18 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
             gucci::slopediag::g_checkCalls++;
 
         int const result = GJBaseGameLayer::checkCollisions(player, dt, ignoreDamage);
+
+        // A real player's pass that ended early without a death, while
+        // Absense's pathfinder drives: GD skipped postCollision (and a slope
+        // launch with it) for that tick - docs/ROUTE_ENGINE_PLAN.md step 1a.
+        if (real && result == 1 && !player->m_isDead && ::Bot::get()->pathfinder().isRunning()) {
+            static int s_lines = 0;
+            if (s_lines < 200) {
+                s_lines++;
+                geode::log::info("[AbsPF] collision pass for player {} ended early at frame {} without a death",
+                                 player == m_player2 ? 2 : 1, GucciEngine::get()->updater.getFrame());
+            }
+        }
 
         if (p1 && wasOn && !player->m_isOnSlope) {
             auto* gb = GucciEngine::get();

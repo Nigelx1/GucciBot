@@ -69,6 +69,7 @@ class AbsensePathfinder {
         uint64_t routeNone = 0;     // ... where nothing alive got there
         uint64_t routeBudget = 0;   // ... that ran out of room or time first
         uint64_t routeErrors = 0;   // ... that could not run (no gate ahead, busy)
+        uint64_t spikeSettles = 0;  // rewinds after which GD was handed its anticheat spike (step 1a)
         uint64_t routeTicks = 0;    // ticks those searches covered
         double routeMs = 0.0;       // and the time they took
         uint64_t routeWins = 0;     // route ideas that were the one played
@@ -101,6 +102,9 @@ class AbsensePathfinder {
     SLValuePtr<bool> m_running = SLValue<bool>::create("pathfinder.running", &m_runningFlag);
 
     bool isRunning() const { return m_phase != Phase::Idle && m_phase != Phase::Done; }
+    // GucciBot: the anticheat spike being handed to GD after a rewind (see
+    // settleAnticheatSpike), for the hooks' log lines.
+    bool settlingSpike() const { return m_settlingSpike; }
     Phase phase() const { return m_phase; }
     const Stats& stats() const { return m_stats; }
 
@@ -384,6 +388,8 @@ public:
     bool m_runningFlag = false;
     Stats m_stats;
     std::mt19937 m_rng;
+    bool m_settlingSpike = false;
+    void settleAnticheatSpike();
 
     // Plan being committed (inputs for the ticks after the decision) and
     // what was committed at every tick since the start.
