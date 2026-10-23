@@ -228,6 +228,7 @@ public:
         int need = 0;               // the bar an idea has to clear to be viable (settled at set-up, see decide)
         int level = 0;              // the widening of the spot this decision is about (see widenLevel / escalate)
         int window = 0;             // ticks of the plan that will be played (the rest is decided again)
+        bool flying = false;        // the player flies (ship, UFO, wave, swing): the window is short
         uint64_t tick = 0;
         bool held = false;
         std::vector<Candidate> candidates;
@@ -288,6 +289,7 @@ public:
         int trimVariant = 0;        // which change to it is tried next
         int trimmed = 0;            // clicks taken out so far: a chunk's presses, one per switch changed
         int trimFrom = 0;           // how far the chosen idea lasted before the trim
+        int trimWindow = 0;         // the ticks the trim looks at: what will be played (0: not worked out yet)
         bool trimComplete = false;  // ... and whether it reached the end
         // The trim's first pass, the taps in chunks (see trimStep): its tries
         // and their cap (0: not begun yet), how many taps a chunk holds at

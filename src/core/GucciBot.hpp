@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-gn (Pathfinder: the trim keeps only the taps the path needs, found by the path - orb corridors stop being spam)"
+    "2026-10-23-go (Pathfinder: the trim covers everything a realtime plan plays, not just its first third)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

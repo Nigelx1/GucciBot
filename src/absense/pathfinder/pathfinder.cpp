@@ -1738,7 +1738,20 @@ bool AbsensePathfinder::trimStep(Decision& d) {
     if (!pl || c.inputs.empty() || (d.forcedCommit > 0 && d.forcedCommit > c.survived)) return true;
     const int H = d.H;
     const bool held = d.held;
-    const int window = std::max(1, std::min(d.window, (int)c.inputs.size()));
+    // GucciBot (2026-10-23): the ticks that will really be played. In realtime
+    // a plan that lasts the whole horizon is committed for two thirds of it
+    // (the commit in decide), past the window the next decision starts from,
+    // so the trim looks that far too: it stopped at the window, and the
+    // committed half past it went out with every click in it - ToE2's busiest
+    // second (198 presses of orb spam) began on the window's last tick.
+    // Worked out once, from the idea as chosen, so every slice sees the same.
+    if (d.trimWindow <= 0) {
+        int w = d.window;
+        if (!d.flying && !c.complete && SLSettings::get()->pathfinder.smooth && c.survived >= H)
+            w = std::max(w, std::min((2 * H) / 3, c.survived - d.margin));
+        d.trimWindow = std::max(1, w);
+    }
+    const int window = std::max(1, std::min(d.trimWindow, (int)c.inputs.size()));
     // How far a try has to hold up: the bar this decision applied (d.need) and
     // enough past the ordinary commit for it not to shrink (that one is
     // min(K, survived - margin)). Past that a try is look-ahead the next
@@ -1752,7 +1765,8 @@ bool AbsensePathfinder::trimStep(Decision& d) {
     // good, nothing is trimmed, and the pass spends up to trimMax runs proving
     // it. That one gets the whole horizon, where a try that still completes
     // says so and the settle run below is neither possible nor needed.
-    const int trimTo = c.complete ? H : std::min(H, std::max(d.need, d.K + d.margin));
+    // (GucciBot: past the trim's own window, which can be longer than K now.)
+    const int trimTo = c.complete ? H : std::min(H, std::max(d.need, std::max(d.K, window) + d.margin));
 
     // One try of a change, the same for both passes below: the variant is run
     // as far as trimTo and takes the script's place when it does as well - it
@@ -2651,6 +2665,7 @@ void AbsensePathfinder::decide() {
                                : m_ahead.active ? (d.player2 ? m_ahead.flying2 : m_ahead.flying)
                                                 : (who && (who->m_isDart || who->m_isShip || who->m_isBird || who->m_isSwing));
         d.window = flyingNow ? std::max(1, std::min(d.K, (int)std::lround(120.0 * std::max(1.0, tps / 240.0)))) : d.K;
+        d.flying = flyingNow;
         m_prefixLength = d.K;
         m_decisionTick = d.tick;
         // Step R5: the first decision after going back for a dead end, at the
@@ -3556,6 +3571,7 @@ void AbsensePathfinder::decide() {
         d.chunkSize = 0;
         d.chunkAt = 0;
         d.chunkDone = false;
+        d.trimWindow = 0;
         d.guideRef.clear();
         d.guideHaveRef = false;
         d.guideKept.clear();
@@ -3918,6 +3934,7 @@ void AbsensePathfinder::decide() {
         d.chunkSize = 0;
         d.chunkAt = 0;
         d.chunkDone = false;
+        d.trimWindow = 0;
         d.guideRef.clear();
         d.guideHaveRef = false;
         d.guideKept.clear();
