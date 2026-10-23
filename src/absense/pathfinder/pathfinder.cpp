@@ -849,6 +849,18 @@ void AbsensePathfinder::tick() {
         const double gameMs = std::clamp(std::max(m_gameMs, m_gameMsAvg), 0.0, 500.0);
         if (m_live) {
             m_budgetMs = std::clamp(frame - gameMs, kMinBudgetMs, std::min(cap, frame * kLiveFrameShare));
+            // GucciBot (2026-10-23): ... except in the plan's last quarter
+            // second while the decision about its end is still being made:
+            // then the slice takes what it would with the game frozen, and the
+            // game slows down there instead of stopping dead a moment later.
+            // The slice's time comes out of the frame's ticks (calculateSteps),
+            // so the plan lasts longer while the decision gets most of the
+            // clock - most of ToE2's freezes missed the plan's end by a fraction
+            // of a second. Nothing decided or played changes, only which
+            // frames the work lands in.
+            const size_t left = m_plan.size() > m_planIndex ? m_plan.size() - m_planIndex : 0;
+            if (m_ahead.active && left <= (size_t)std::lround(Bot::get()->updater().getTps() / 4.0))
+                m_budgetMs = std::clamp(cap - gameMs, kMinBudgetMs, cap);
         } else if (!pcfg.smooth) {
             m_budgetMs = cap;  // as fast as it goes, but the frame still gets drawn
         } else {
