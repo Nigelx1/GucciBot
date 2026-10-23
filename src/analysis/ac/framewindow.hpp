@@ -680,6 +680,10 @@ class FrameWindowAnalyzer {
     void checkLegDispatch();
     uint32_t m_dispatchLegFrom = 0;
     size_t m_dispatchLegStart = 0;
+    // The leg's actions placed on or before the frame it starts from that
+    // the macro has after it: the order counts them handed out, so they
+    // never play.
+    size_t m_dispatchLegBehind = 0;
     bool m_dispatchLegArmed = false;
     // GucciBot (2026-10-23): who a CBF split for the input under test is armed
     // for (cbf::Armed::player): its own player with splitsByPlayer, else -1.

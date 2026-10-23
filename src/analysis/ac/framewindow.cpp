@@ -917,13 +917,24 @@ void FrameWindowAnalyzer::syncDispatch(bool legStarts) {
     if (legStarts) {
         m_dispatchLegFrom = frame;
         m_dispatchLegStart = rs.m_dispatchCursor;
+        // An action the leg placed on or before the frame it starts from,
+        // where the macro has it after: seated as handed out, so it never
+        // plays (it would have been played before the restore). Counted as
+        // due, so checkLegDispatch reports it.
+        auto const& actions = rs.m_actionAtom.m_actions;
+        size_t behind = 0;
+        for (size_t k = 0; k < actions.size() && k < m_originalFrames.size(); k++)
+            if (m_originalFrames[k] > frame && actions[k].m_frame <= frame) behind++;
+        m_dispatchLegBehind = behind;
         m_dispatchLegArmed = true;
     }
 }
 
 // GucciBot (2026-10-23): proof that a test leg skipped nothing: every action
 // due after the frame it started from, up to the frame it ended on, was handed
-// out. A line per leg in the verbose log, and a warning when one wasn't.
+// out, and the leg put none of the macro's later actions on or before that
+// frame, where they can't play. A line per leg in the verbose log, and a
+// warning when one wasn't.
 void FrameWindowAnalyzer::checkLegDispatch() {
     if (!m_dispatchLegArmed) return;
     m_dispatchLegArmed = false;
@@ -931,7 +942,8 @@ void FrameWindowAnalyzer::checkLegDispatch() {
     if (!rs.dispatchByOrder()) return;
     uint32_t const to = Bot::get()->updater().getFrame();
     int64_t const start = static_cast<int64_t>(m_dispatchLegStart);
-    int64_t const due = static_cast<int64_t>(rs.dispatchDueBy(to)) - start;
+    int64_t const behind = static_cast<int64_t>(m_dispatchLegBehind);
+    int64_t const due = static_cast<int64_t>(rs.dispatchDueBy(to)) - start + behind;
     int64_t const played = static_cast<int64_t>(rs.m_dispatchCursor) - start;
     FWLOG("[fw][dispatch] leg {}: {} of {} macro action(s) due after frame {} up to "
           "{} played",
@@ -939,9 +951,11 @@ void FrameWindowAnalyzer::checkLegDispatch() {
     if (played != due)
         FWWARN(
             "[fw][dispatch] leg {} (click {}): {} of the {} macro action(s) due "
-            "after frame {} up to {} played, so this test didn't play the macro "
-            "as placed",
-            m_legCounter, m_index + 1, played, due, m_dispatchLegFrom, to);
+            "after frame {} up to {} played ({} of them placed on or before frame "
+            "{}, where this test can't play them), so this test didn't play the "
+            "macro as placed",
+            m_legCounter, m_index + 1, played, due, m_dispatchLegFrom, to, behind,
+            m_dispatchLegFrom);
 }
 
 // GucciBot (2026-10-23): the 2-player fixes (anticroom's antics-counter beta.4
