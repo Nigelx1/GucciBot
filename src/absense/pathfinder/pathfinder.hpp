@@ -71,6 +71,19 @@ class AbsensePathfinder {
         uint64_t routeBudget = 0;   // ... that ran out of room or time first
         uint64_t routeErrors = 0;   // ... that could not run (no gate ahead, busy)
         uint64_t spikeSettles = 0;  // rewinds after which GD was handed its anticheat spike (step 1a)
+        // GucciBot (2026-10-23): how the trim's hold pass went (trimStep): the
+        // times every run held at once, the runs tried one by one, and of
+        // those the ones that held as they were, the ones that held with
+        // presses put back (and how many), the ones given up at the cap of
+        // put-back presses, and the ones where nothing in the run explained
+        // the difference.
+        uint64_t holdAll = 0;
+        uint64_t holdRuns = 0;
+        uint64_t holdAsIs = 0;
+        uint64_t holdRefined = 0;
+        uint64_t holdPutBack = 0;
+        uint64_t holdCapped = 0;
+        uint64_t holdUnexplained = 0;
         uint64_t spikeMet = 0;      // ... and times GD got it from a collision pass instead
         uint64_t spikePasses = 0;   // real-player passes the spike ended early (each one skips a slope launch)
         uint64_t legSafety = 0;     // route searches stopped by the clock before their step budget

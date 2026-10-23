@@ -162,6 +162,7 @@ struct ClickRate {
     int clicks = 0;
     double seconds = 0.0;  // of play
     int busiest = 0;       // the most in any one second of it
+    int busiestFrom = 0;   // GucciBot (2026-10-23): the path's tick that second begins at
 };
 
 ClickRate clickRate(const std::vector<TickInput>& history, double tps) {
@@ -181,7 +182,10 @@ ClickRate clickRate(const std::vector<TickInput>& history, double tps) {
     for (size_t i = 0; i < per.size(); i++) {
         inWindow += per[i];
         if (i >= window) inWindow -= per[i - window];
-        out.busiest = std::max(out.busiest, inWindow);
+        if (inWindow > out.busiest) {
+            out.busiest = inWindow;
+            out.busiestFrom = (int)(i + 1 >= window ? i + 1 - window : 0);
+        }
     }
     return out;
 }
@@ -565,11 +569,19 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
     // and for how long in all (realtime; each wait has its own line, endFreeze).
     log("stopped: %s (%llu ticks committed, %llu decisions, %llu simulations, %llu backtracks, best tick %llu, %.1fs; "
         "the game froze %llu times waiting for a decision, %.1f s in all; "
-        "%d clicks in %.1f s of play: %.1f a second on average, %d in the busiest second)",
+        "%d clicks in %.1f s of play: %.1f a second on average, %d in the busiest second, from tick %d)",
         reason.c_str(), (unsigned long long)m_stats.committedTicks, (unsigned long long)m_stats.decisions,
         (unsigned long long)m_stats.simulations, (unsigned long long)m_stats.backtracks,
         (unsigned long long)m_stats.bestTick, m_stats.seconds, (unsigned long long)m_stats.freezes,
-        m_stats.freezeSeconds, cps.clicks, cps.seconds, cpsAverage, cps.busiest);
+        m_stats.freezeSeconds, cps.clicks, cps.seconds, cpsAverage, cps.busiest, cps.busiestFrom);
+    if (m_stats.holdAll > 0 || m_stats.holdRuns > 0) {
+        log("trim's hold pass: every run held at once %llu times; %llu runs tried one by one - %llu held as they were, "
+            "%llu with presses put back (%llu in all), %llu given up at 8 put back, %llu with nothing in the run to explain it",
+            (unsigned long long)m_stats.holdAll, (unsigned long long)m_stats.holdRuns,
+            (unsigned long long)m_stats.holdAsIs, (unsigned long long)m_stats.holdRefined,
+            (unsigned long long)m_stats.holdPutBack, (unsigned long long)m_stats.holdCapped,
+            (unsigned long long)m_stats.holdUnexplained);
+    }
     // How fast the simulator really is (AI_PATHFINDER_PLAN.md, R0): every
     // time and memory estimate in the plan waits on these numbers.
     log("speed: %llu simulated ticks in %.1fs of deciding (%.0f ticks/s), %.1f ticks per simulation, "
@@ -1981,10 +1993,20 @@ bool AbsensePathfinder::trimStep(Decision& d) {
             }
             if (!d.holdAll) {
                 d.holdAll = true;
-                if (took) d.holdDone = true;  // every run held: nothing left to try one by one
+                if (took) {
+                    d.holdDone = true;  // every run held: nothing left to try one by one
+                    m_stats.holdAll++;
+                }
                 continue;
             }
             if (took) {
+                if (d.holdRepress.empty()) {
+                    m_stats.holdAsIs++;
+                } else {
+                    m_stats.holdRefined++;
+                    m_stats.holdPutBack += d.holdRepress.size();
+                }
+                m_stats.holdRuns++;
                 nextRun();
                 continue;
             }
@@ -1995,6 +2017,8 @@ bool AbsensePathfinder::trimStep(Decision& d) {
             // button held for the rest (the landings). Eight tries a run.
             const auto run = d.holdRuns[d.holdAt];
             if (!d.guideHaveRef || d.holdRefine >= 8) {
+                m_stats.holdRuns++;
+                m_stats.holdCapped++;
                 nextRun();
                 continue;
             }
@@ -2016,6 +2040,8 @@ bool AbsensePathfinder::trimStep(Decision& d) {
                 break;
             }
             if (back < 0) {
+                m_stats.holdRuns++;
+                m_stats.holdUnexplained++;
                 nextRun();  // nothing in the run explains it
                 continue;
             }
