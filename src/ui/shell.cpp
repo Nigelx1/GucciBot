@@ -1752,7 +1752,6 @@ namespace gucci::ui {
                 {"anticroom", "Calculate is his analyzer, ported in near-verbatim; sub-tick CBF recording and the render intro card too."},
                 {"dihmaster500", "Tester; asked for auto safe mode and the Disable bot switch, and his testing "
                                  "caught safe mode breaking start positions."},
-                {"aura", "Promo help."},
                 {"ace", "Promo help."},
                 {"DashBlaze", "Promo help."},
                 {"Isaiah", "Promo help."},

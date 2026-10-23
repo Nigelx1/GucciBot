@@ -200,7 +200,6 @@ Real click-timing feedback, and a synced video-review overlay on both trainers:
 - **Juice** — designed the frame-window algorithm GucciBot ran on through 1.7 and the marker shapes in 1.8, and his Alignment-Independent method is back as Calculate's suggestion for suspicious clicks; lead co-tester, ran the mod into the ground on purpose finding the bugs nobody else caught
 - **anticroom** — 1.8's Calculate *is* his analyzer: his Silicate frame-window rewrite, ported in near-verbatim and now the whole feature. Sub-tick CBF recording and the render intro card are his work too. Before that, GucciBot's first outside pull request — a real 7-fix accuracy pass. Also one of ToastyReplay's own devs.
 - **dihmaster500** — tester, and asked for auto safe mode with its cheat indicator and for the Disable bot switch; his testing caught safe mode breaking start positions
-- **aura** — promo help
 - **ace** — promo help
 - **DashBlaze** — promo help
 - **Isaiah** — promo help

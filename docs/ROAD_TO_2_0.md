@@ -4,7 +4,7 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 
 ## 1. Credits (done)
 
-- [x] New order, "Promo help" for aura, DashBlaze and ace, chagh for the converter, peony third (build -eg)
+- [x] New order, "Promo help" for DashBlaze and ace, chagh for the converter, peony third (build -eg)
 - [x] Nigel's wording: dihmaster500 tester, NaN GD the frame-window originator, Bogdaner09 open source, GWDdoS optimization help, ToastexGD foundation (build -eh); site live
 
 ## 2. Minor features and bugs (next, starting with the Mac crash log)

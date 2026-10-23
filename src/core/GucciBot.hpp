@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-21-fm (Renderer: each frame keeps its own time - no more Failed to write frame two seconds in)"
+    "2026-10-22-fn (Credits: aura removed at his request)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
