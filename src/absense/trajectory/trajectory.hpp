@@ -116,6 +116,7 @@ struct TraceSample {
     bool onGround = false;
     bool held = false;       // jump button down after this tick's inputs
     bool dead = false;
+    bool ring = false;       // GucciBot (2026-10-23): the copy used an orb on this tick (Trajectory::noteRingUsed)
     bool dual = false;       // the second player was simulated too
     float x2 = 0.0f;         // its position (dual mode)
     float y2 = 0.0f;
@@ -559,6 +560,7 @@ class Trajectory {
    private:
     std::unordered_map<uintptr_t, unsigned> m_ringTouch[2];  // ring -> last simulated tick in contact
     std::unordered_map<uintptr_t, unsigned> m_ringUsed[2];   // ring -> tick it was activated on
+    uint64_t m_ringsUsed = 0;  // GucciBot: orbs the copies have used, ever (a trace's TraceSample::ring)
     Killer m_killer;
     std::shared_ptr<SimStart> m_start;  // runs begin from this instead of the real player (see useStart)
     std::vector<Phantom> m_phantoms;

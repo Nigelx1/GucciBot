@@ -77,6 +77,12 @@ class AbsensePathfinder {
         // presses put back (and how many), the ones given up at the cap of
         // put-back presses, and the ones where nothing in the run explained
         // the difference.
+        // ... and the spam pass before it: the times it thinned a script,
+        // the presses that took out, and the times its thinned script did
+        // not do as well.
+        uint64_t spamThinned = 0;
+        uint64_t spamDropped = 0;
+        uint64_t spamFailed = 0;
         uint64_t holdAll = 0;
         uint64_t holdRuns = 0;
         uint64_t holdAsIs = 0;
@@ -324,6 +330,7 @@ public:
         size_t holdAt = 0;
         bool holdAll = false;       // the all-at-once try has been made
         bool holdDone = false;
+        bool spamDone = false;      // the spam pass has had its one try (see trimStep)
         // A run that does not hold up held down whole gets its fresh presses
         // back one at a time where the path needs them: the ones put back so
         // far, and the tries spent on this run.

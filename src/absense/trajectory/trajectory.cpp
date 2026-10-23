@@ -823,6 +823,7 @@ void Trajectory::noteKiller(PlayerObject* p, GameObject* object) {
 void Trajectory::noteRingUsed(PlayerObject* p, GameObject* ring) {
     if (!isFakePlayer(p) || !ring) return;
     m_ringUsed[p == m_fakePlayer2 ? 1 : 0][(uintptr_t)ring] = simTickOf(p);
+    m_ringsUsed++;
 }
 
 // The copy carries the player's own ring bookkeeping (the rings it is on,
@@ -3429,6 +3430,7 @@ RunResult Trajectory::run(GJBaseGameLayer* pl, bool p1,
     result.minY = result.maxY = s.players[0]->getPositionY();
     for (int i = 0; i < ticks; i++) {
         const TickInput in = inputs.empty() ? TickInput{} : inputs[std::min<size_t>((size_t)i, inputs.size() - 1)];
+        const uint64_t ringsBefore = m_ringsUsed;
         const bool dead = s.step(in);
         s.fill(result);
         if (m_traceWatch) m_traceWatch(i + 1);
@@ -3445,6 +3447,7 @@ RunResult Trajectory::run(GJBaseGameLayer* pl, bool p1,
             sample.onGround = player->m_isOnGround;
             sample.held = s.down;
             sample.dead = dead;
+            sample.ring = m_ringsUsed != ringsBefore;
             if (s.count == 2) {
                 sample.dual = true;
                 const cocos2d::CCPoint pos2 = s.players[1]->getPosition();

@@ -582,6 +582,12 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
             (unsigned long long)m_stats.holdPutBack, (unsigned long long)m_stats.holdCapped,
             (unsigned long long)m_stats.holdUnexplained);
     }
+    if (m_stats.spamThinned > 0 || m_stats.spamFailed > 0) {
+        log("trim's spam pass: %llu scripts thinned to the presses their path used (%llu presses out), %llu that did not "
+            "hold up thinned",
+            (unsigned long long)m_stats.spamThinned, (unsigned long long)m_stats.spamDropped,
+            (unsigned long long)m_stats.spamFailed);
+    }
     // How fast the simulator really is (AI_PATHFINDER_PLAN.md, R0): every
     // time and memory estimate in the plan waits on these numbers.
     log("speed: %llu simulated ticks in %.1fs of deciding (%.0f ticks/s), %.1f ticks per simulation, "
@@ -1893,6 +1899,65 @@ bool AbsensePathfinder::trimStep(Decision& d) {
     // again, until the script with only those taps does as well (tryTake) or
     // the tries run out - one run for each tap the path needs. Nothing goes
     // in unless it passes tryTake, so the most this costs is its tries.
+    // ---- GucciBot (2026-10-23), before everything: a spam of taps thinned by
+    // its own path. An orb spam idea presses on every tick, and in its run a
+    // press does something on two kinds of tick only - the one an orb is used
+    // on (TraceSample::ring), and one the copy stands on the ground (a jump,
+    // a gravity flip, a teleport); every other press is pressed in the air
+    // with nothing to touch. Clubstep's busiest second was an orb spam
+    // committed for 320 ticks, 240 presses, and the passes below - which have
+    // to find the needed presses one try at a time - ran out of tries well
+    // before the dozen or so its orbs need. So: every other tap out at once,
+    // once, on tryTake's test like everything else; on the ground and in the
+    // air alike for the modes a tap in the air changes nothing (not the
+    // flying ones: a ship's or a UFO's press always does something).
+    if (!d.spamDone) {
+        if (d.flying || window < 16) {
+            d.spamDone = true;
+        } else {
+            if (!d.guideHaveRef) {
+                if (!mayWork()) return false;  // more next time
+                d.guideRef.clear();
+                (void)runFor(d, c.inputs, trimTo, &d.guideRef);
+                m_stats.simulations++;
+                d.guideHaveRef = true;
+            }
+            d.spamDone = true;
+            const auto& ref = d.guideRef;
+            std::vector<TickInput> variant = c.inputs;
+            int dropped = 0;
+            for (int i = 1; i < window && (size_t)i < ref.size(); i++) {
+                const TickInput& in = c.inputs[(size_t)i];
+                if (in.presses == 0) continue;
+                const bool before = c.inputs[(size_t)i - 1].held;
+                // A tap, as the passes below have it: the button left as it was
+                // found, within the tick or by a plain release on the next.
+                const bool tap = in.held == before || (!before && (size_t)i + 1 < c.inputs.size() &&
+                                                       c.inputs[(size_t)i + 1].presses == 0 &&
+                                                       !c.inputs[(size_t)i + 1].held);
+                if (!tap) continue;
+                // ref[i] is the state after input i, ref[i - 1] the state it met.
+                if (ref[(size_t)i].ring || ref[(size_t)i - 1].onGround || ref[(size_t)i].dead) continue;
+                variant[(size_t)i] = TickInput{0, before};
+                dropped += in.presses;
+            }
+            if (dropped >= 8 && !isTabu(d.tick, variant, d.player2)) {
+                if (!mayWork()) {
+                    d.spamDone = false;  // the same try next time
+                    return false;
+                }
+                if (tryTake(variant)) {
+                    d.trimmed += dropped;
+                    d.guideHaveRef = false;  // the script changed: its own run is another now
+                    m_stats.spamThinned++;
+                    m_stats.spamDropped += (uint64_t)dropped;
+                } else {
+                    m_stats.spamFailed++;
+                }
+            }
+        }
+    }
+
     // ---- First of all: runs of taps held down instead. A cube or robot that
     // lands with the button down jumps at once, which is all a press on every
     // other tick does for it: Clubstep's mini cube bounced along the top
@@ -3803,6 +3868,7 @@ void AbsensePathfinder::decide() {
         d.holdAt = 0;
         d.holdAll = false;
         d.holdDone = false;
+        d.spamDone = false;
         d.holdRepress.clear();
         d.holdRefine = 0;
         d.guideRef.clear();
@@ -4172,6 +4238,7 @@ void AbsensePathfinder::decide() {
         d.holdAt = 0;
         d.holdAll = false;
         d.holdDone = false;
+        d.spamDone = false;
         d.holdRepress.clear();
         d.holdRefine = 0;
         d.guideRef.clear();

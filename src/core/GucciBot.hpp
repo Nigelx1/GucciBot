@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-he (fixes a crash reopening a level with random triggers; moved-object ranges per kind of move - -hc could miss a block; ordered spawns read the node as the game has it; stop line: where the busiest second is, how the hold pass went)"
+    "2026-10-23-hf (Pathfinder: an orb spam keeps only the presses its own path used - on an orb or on the ground - so Clubstep's 240-press second can go)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
