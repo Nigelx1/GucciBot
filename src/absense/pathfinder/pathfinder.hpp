@@ -78,6 +78,9 @@ class AbsensePathfinder {
         uint64_t routeWins = 0;     // route ideas that were the one played
         uint64_t routeJumps = 0;    // step R5: dead ends that went back to where the route was left
         uint64_t routeRetaken = 0;  // ... and took the route there
+        uint64_t driveDecisions = 0;  // step 5 (Route drives): decisions played as a leg to the next gate's option
+        uint64_t driveHandoffs = 0;   // ... and decided by today's engine instead (no option got through)
+        uint64_t driveNoGate = 0;     // ... of those, with no gate to aim at (past the last one, say)
         uint64_t startTick = 0;
         uint64_t currentTick = 0;
         uint64_t bestTick = 0;
@@ -205,6 +208,15 @@ public:
         // over (with `steer` set; see Trajectory::steer's prefix).
         std::vector<TickInput> prefix;
         std::string name;
+        // Step 5 (Route drives): the option of the decision's gate this idea is
+        // a way through (an index into Decision::driveOptions; -1: not a
+        // drive's idea), and that way as the leg search found it: its input
+        // changes, how many of them came fast, and its room in the band at the
+        // gate (Trajectory::Leg::ways).
+        int driveOption = -1;
+        int legChanges = 0;
+        int legFast = 0;
+        float legRoom = 0.0f;
     };
 
     // A decision in progress (decide() works in slices).
@@ -306,6 +318,42 @@ public:
         // route idea whose way to its gate is all that is known to hold up a
         // tick late, or that is played although nothing of it does.
         int routeCap = 0;
+        // Step 5 of docs/ROUTE_ENGINE_PLAN.md, Route drives: this decision's
+        // target is the next gate. Its options from the decision's own state,
+        // best first by the cost to go (FREE last), are tried one leg search
+        // at a time in the Route stage, until the ways one leg finds get
+        // through (see drivePasses in decide); the drive's verdict then plays
+        // one of them exactly as far as the gate. None does: today's verdict
+        // decides this one (a handoff).
+        struct DriveOption {
+            float x = 0.0f;              // the gate's x
+            float lo = 1.0f, hi = 0.0f;  // the band to cross it in
+            int uid = 0;                 // the object it is about (0: none)
+            bool mustFire = false;       // ... which must fire on the way (use, touch, fire)
+            bool mustNotFire = false;    // ... or must not (skip, avoid)
+            bool free = false;           // FREE: anywhere in a gap, nothing asked
+            float gapLo = 0.0f;          // the bottom of the gap its band lies in
+            std::string text;            // "use 230-290 at the blue orb, x 21825" (route::describe)
+            std::string label;           // "use 230-290"
+            std::string result;          // what its leg came to, for the handoff's log line
+        };
+        bool drives = false;     // made by the route drive (Route drives, one player deciding)
+        std::vector<DriveOption> driveOptions;
+        size_t driveAt = 0;      // the option whose leg is out, or the next to try
+        size_t driveJudged = 0;  // the ideas before this are judged, or are not the drive's
+        bool drivePass = false;  // a way got through: the verdict is the drive's
+        int clear = 0;           // how far past its gate a drive's idea must live (the bar's clearance)
+        int driveNeed = 0;       // ... and as far as this, while a repair's spot is ahead (0: none)
+        float driveGateX = 0.0f; // the gate of the best option, for the log
+        std::string driveWhat;   // ... and what it is ("blue orb", "spacing")
+        std::string driveWhy;    // why there was nothing to aim at (no options)
+        // The drive's verdict: the ways that got through, calmest first, each
+        // run with every input a tick late (one a slice) until one holds up.
+        std::vector<size_t> passers;
+        size_t passAt = 0;
+        int passChecked = 0;
+        int passChosen = -1;
+        bool passDone = false;
     };
 
     struct Anchor {
@@ -322,6 +370,22 @@ public:
     void takeRouteLeg(Decision& d, const Trajectory::Leg& leg);
     void finishIdeas(Decision& d);
     int calmTicks() const;
+    // The counts every leg search gets, and why one could not run (logged);
+    // true when it found a way.
+    bool countLeg(Decision& d, const Trajectory::Leg& leg);
+    // GucciBot (step 5): the route drive's legs, one option of the gate at a
+    // time. beginDriveLeg begins the leg of the next option that can begin one
+    // (false: none left); takeDriveLeg turns what a leg found into ideas, each
+    // its way to the gate steered on past it; driveOutcome says what one
+    // option's ideas came to; driveHandoff logs why today's engine decides.
+    bool beginDriveLeg(Decision& d);
+    void takeDriveLeg(Decision& d, const Trajectory::Leg& leg);
+    std::string driveOutcome(const Decision& d, int option) const;
+    void driveHandoff(Decision& d);
+    // How far a drive's idea must live (its gate, then `clear` ticks, or a
+    // repair's spot), and whether it gets through (see the definitions).
+    int driveBar(const Decision& d, const Candidate& c) const;
+    bool drivePasses(const Decision& d, const Candidate& c) const;
     // Scores a big pool of ideas on the graphics card and adds the best few
     // as ordinary candidates (the simulation still judges them). How many
     // were added, or 0 when the card was not used.
@@ -413,6 +477,8 @@ public:
     int m_spikePassLines = 0;
     std::string m_routeWhy;    // the last reason a route search could not run, this run
     uint64_t m_routeWhyCount = 0;
+    std::string m_driveWhy;    // the last reason a route drive had no gate to aim at, this run
+    uint64_t m_driveWhyCount = 0;
     void settleAnticheatSpike();
 
     // Plan being committed (inputs for the ticks after the decision) and

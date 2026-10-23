@@ -307,6 +307,19 @@ class Trajectory {
         int calmUsed = 0;
         int relaxed = 0;
         int slices = 0;
+        // GucciBot (docs/ROUTE_ENGINE_PLAN.md step 5): every way in, the
+        // witness first and then the alternates in order: its height where it
+        // crossed the gate's x, its room in the band there (counted to 45, as
+        // the ranking does), and its input changes and how many of them came
+        // closer than LegGoal::calmTicks after the one before. The route drive
+        // picks the way it plays by these.
+        struct Way {
+            float y = 0.0f;
+            float room = 0.0f;
+            int changes = 0;
+            int fastChanges = 0;
+        };
+        std::vector<Way> ways;
     };
     Leg sweepLeg(GJBaseGameLayer* pl, const LegGoal& goal);
     // GucciBot (docs/ROUTE_ENGINE_PLAN.md step 3): the same search in slices,
@@ -827,6 +840,7 @@ class Trajectory {
         float playerSpeed = 1.0f, speedMultiplier = 1.0f, vehicleSize = 1.0f;
         int mode = 0;
         bool upsideDown = false, onGround = false, held = false;
+        bool goingLeft = false;  // GucciBot (step 5): travelling towards smaller x (a reversed section)
     };
     static StartState startState(const SimStart& s, bool second = false);
     // The same for the live player.

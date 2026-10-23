@@ -66,6 +66,15 @@ constexpr double kMinLookahead = 0.75;
 constexpr double kLookahead = 4.0;
 // GucciBot (step 3): the calm gap of a route leg (see calmTicks).
 constexpr double kCalmSeconds = 0.033;
+// GucciBot (docs/ROUTE_ENGINE_PLAN.md step 5): what one leg of a route drive,
+// one option of the next gate, may simulate - steps at 240 TPS, scaled with
+// the tick rate so a leg covers the same stretch of level at any rate. Nigel's
+// speed test put a simulated tick at 1.5-3.4 us, so this is 100-200 ms of
+// simulating (the states' snapshots on top), in slices. Steps, not time, so
+// the same leg comes out the same on every run; the clock over all of a leg's
+// slices is only a safety stop, well past what the steps take.
+constexpr int kDriveLegSteps = 60000;
+constexpr double kDriveLegSafetyMs = 6000.0;
 constexpr double kBackSeconds = 3.0;
 // The most a slice may take while the game is frozen and the search is the
 // only thing running. Not 100: with the game costing about 1.5 ms a frame a
@@ -237,6 +246,8 @@ bool AbsensePathfinder::start() {
     m_spikeInPass = false;
     m_routeWhy.clear();
     m_routeWhyCount = 0;
+    m_driveWhy.clear();
+    m_driveWhyCount = 0;
     m_gpuSeed = 0;
     if (!pl || !pl->m_player1) {
         m_stats.message = "Open a level first.";
@@ -497,6 +508,12 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
             (unsigned long long)m_stats.routeErrors, (unsigned long long)m_stats.legSafety, m_stats.routeMs / legs,
             (double)m_stats.routeTicks / legs, (unsigned long long)m_stats.routeWins,
             (unsigned long long)m_stats.routeJumps, (unsigned long long)m_stats.routeRetaken);
+    }
+    if (m_stats.driveDecisions > 0 || m_stats.driveHandoffs > 0) {
+        log("route drives: %llu decisions played as a leg to the next gate's option, %llu decided by today's engine "
+            "(%llu of those with no gate to aim at)",
+            (unsigned long long)m_stats.driveDecisions, (unsigned long long)m_stats.driveHandoffs,
+            (unsigned long long)m_stats.driveNoGate);
     }
     log("anticheat spike: handed to GD after %llu rewinds (of %llu times back); met %llu times in a collision pass, "
         "ending %llu real passes early",
@@ -1973,11 +1990,9 @@ int AbsensePathfinder::calmTicks() const {
     return std::max(1, (int)std::lround(kCalmSeconds * tps));
 }
 
-// What a route leg search came back with: its ways in as ideas, or why there
-// were none (step R4's handling, lifted out of decide() when the search was
-// sliced in step 3).
-void AbsensePathfinder::takeRouteLeg(Decision& d, const Trajectory::Leg& leg) {
-    const double tps = Bot::get()->updater().getTps();
+// The counts every leg search gets (step R4's, the route drive's), and why one
+// could not run; true when it found a way.
+bool AbsensePathfinder::countLeg(Decision& d, const Trajectory::Leg& leg) {
     if (leg.error) {
         m_stats.routeErrors++;
         const bool clock = std::string_view(leg.error).find("time safety") != std::string_view::npos;
@@ -1991,17 +2006,27 @@ void AbsensePathfinder::takeRouteLeg(Decision& d, const Trajectory::Leg& leg) {
         if (m_routeWhyCount++ % 50 == 0)
             log("tick %llu: no route search here: %s (%llu steps, %.0f ms)", (unsigned long long)d.tick,
                 leg.error, (unsigned long long)leg.steps, leg.ms);
+        return false;
     }
+    m_stats.routeLegs++;
+    m_stats.routeTicks += (uint64_t)leg.ticks;
+    m_stats.routeMs += leg.ms;
+    const bool found = leg.outcome == Trajectory::Leg::Outcome::Found && !leg.witness.empty();
+    if (found) m_stats.routeFound++;
+    else (leg.outcome == Trajectory::Leg::Outcome::OutOfBudget ? m_stats.routeBudget : m_stats.routeNone)++;
+    return found;
+}
+
+// What a route leg search came back with: its ways in as ideas, or why there
+// were none (step R4's handling, lifted out of decide() when the search was
+// sliced in step 3).
+void AbsensePathfinder::takeRouteLeg(Decision& d, const Trajectory::Leg& leg) {
+    const double tps = Bot::get()->updater().getTps();
+    const bool found = countLeg(d, leg);
     if (!leg.error) {
-        m_stats.routeLegs++;
-        m_stats.routeTicks += (uint64_t)leg.ticks;
-        m_stats.routeMs += leg.ms;
-        const bool found = leg.outcome == Trajectory::Leg::Outcome::Found && !leg.witness.empty();
-        if (!found) (leg.outcome == Trajectory::Leg::Outcome::OutOfBudget ? m_stats.routeBudget : m_stats.routeNone)++;
         // A gate whose gap keeps failing gets priced up and the route planned again.
         absense::route::noteLeg(leg.gateX, leg.gateLo, found);
         if (found) {
-            m_stats.routeFound++;
             // The way in with the most room, then up to two others
             // through the same gate, so the verdict's late-input
             // check has more than one of the route's ways to pick from.
@@ -2059,6 +2084,179 @@ void AbsensePathfinder::finishIdeas(Decision& d) {
         }
     }
     d.stage = Decision::Steers;
+}
+
+// ---- Route drives (docs/ROUTE_ENGINE_PLAN.md step 5)
+
+// How far a drive's idea must live to get through: `clear` ticks past its gate
+// with the steering carrying on - the cheap form of the two-leg rule: what
+// comes right after the gate must not be certain death - and, while a repair's
+// spot is ahead, past that spot as well. Within the decision's horizon.
+int AbsensePathfinder::driveBar(const Decision& d, const Candidate& c) const {
+    return std::min(d.H, std::max(c.gateTicks + d.clear, d.driveNeed));
+}
+
+// Every way a leg finds crosses the gate's x inside its option's band with the
+// object fired or not as asked (the leg's own test); the idea gets through
+// when it also lives as far as driveBar says, or finishes the level.
+bool AbsensePathfinder::drivePasses(const Decision& d, const Candidate& c) const {
+    return c.driveOption >= 0 && c.gateTicks > 0 && c.evaluated && !c.inputs.empty() &&
+           (c.complete || c.survived >= driveBar(d, c));
+}
+
+// The leg of the next option that can begin one: from the decision's own state
+// (its kept start, or the end of the plan playing when it is decided ahead),
+// into the option's band at the gate's x, with its object fired or not as the
+// option asks. False when no option is left.
+bool AbsensePathfinder::beginDriveLeg(Decision& d) {
+    auto* pl = PlayLayer::get();
+    auto* traj = Bot::get()->trajectory().unsafeInner();
+    if (!pl || !traj) return false;
+    const double tps = Bot::get()->updater().getTps();
+    for (; d.driveAt < d.driveOptions.size(); d.driveAt++) {
+        Decision::DriveOption& o = d.driveOptions[d.driveAt];
+        Trajectory::LegGoal goal;
+        goal.inDecision = true;
+        goal.held = d.held;
+        goal.maxTicks = d.H;
+        goal.frontierCap = 128;
+        goal.maxSteps = (int)std::lround(kDriveLegSteps * std::max(1.0, tps / 240.0));
+        goal.maxMs = kDriveLegSafetyMs;
+        goal.dotsEvery = 0;
+        goal.witnesses = 3;
+        goal.calmTicks = calmTicks();
+        // The gate itself, by its x and the option's band - not as `gates`,
+        // which skip a gate less than a column ahead of where the run begins:
+        // the next gate can be that close (nextChoices takes the first column
+        // of gates past the one the decision is in).
+        goal.x = o.x;
+        goal.lo = o.lo;
+        goal.hi = o.hi;
+        if (o.uid != 0 && (o.mustFire || o.mustNotFire)) {
+            GameObject* found = absense::route::objectOf(pl, o.uid);
+            auto* object = found ? geode::cast::typeinfo_cast<EnhancedGameObject*>(found) : nullptr;
+            if (!object) {
+                // A use or a skip the leg cannot check is no use or skip: the
+                // band alone could be crossed either way.
+                o.result = "its object is not in the level";
+                continue;
+            }
+            if (o.mustFire) goal.fireObject = object;
+            else goal.avoidObject = object;
+        }
+        Trajectory::Leg refused;
+        if (traj->beginLeg(pl, goal, refused)) return true;
+        (void)countLeg(d, refused);
+        o.result = fmt::format("could not run ({})", refused.error ? refused.error : "no reason given");
+    }
+    return false;
+}
+
+// What a drive's leg came back with: each way it found into the option's band
+// an idea of its own - the way, then a steer 16 on past the gate, as step R4's
+// route ideas - or why there was none.
+void AbsensePathfinder::takeDriveLeg(Decision& d, const Trajectory::Leg& leg) {
+    if (d.driveAt >= d.driveOptions.size()) return;
+    Decision::DriveOption& o = d.driveOptions[d.driveAt];
+    const bool found = countLeg(d, leg);
+    if (leg.error) {
+        o.result = fmt::format("could not run ({})", leg.error);
+        return;
+    }
+    // A gap nothing gets into with nothing asked of the way (FREE) is priced
+    // up, and the next ranking tries elsewhere first. Only FREE: a use or a
+    // skip that fails says nothing about the gap around it.
+    if (o.free) absense::route::noteLeg(o.x, o.gapLo, found);
+    if (!found) {
+        o.result = leg.outcome == Trajectory::Leg::Outcome::OutOfBudget
+                       ? fmt::format("out of room after {} ticks", leg.ticks)
+                   : leg.outcome == Trajectory::Leg::Outcome::Impossible ? std::string("impossible")
+                                                                         : std::string("no way in");
+        return;
+    }
+    const double tps = Bot::get()->updater().getTps();
+    const int lookahead = std::max(1, (int)std::lround(16.0 * std::max(1.0, tps / 240.0)));
+    std::vector<const std::vector<TickInput>*> ways{&leg.witness};
+    for (auto const& w : leg.alternates) ways.push_back(&w);
+    int added = 0;
+    for (size_t k = 0; k < ways.size(); k++) {
+        const std::vector<TickInput>& way = *ways[k];
+        if (way.empty() || (int)way.size() > d.H) continue;
+        Candidate c;
+        c.name = k == 0 ? fmt::format("route: {} at x {:.0f}", o.label, o.x)
+                        : fmt::format("route: {} at x {:.0f} #{}", o.label, o.x, k + 1);
+        c.steer = lookahead;
+        c.prefix = way;
+        c.gateTicks = (int)way.size();
+        c.driveOption = (int)d.driveAt;
+        if (k < leg.ways.size()) {
+            c.legChanges = leg.ways[k].changes;
+            c.legFast = leg.ways[k].fastChanges;
+            c.legRoom = leg.ways[k].room;
+        }
+        d.candidates.push_back(std::move(c));
+        added++;
+    }
+    o.result = fmt::format("{} way{} in", added, added == 1 ? "" : "s");
+}
+
+// What one option's ideas came to, for the handoff's log line.
+std::string AbsensePathfinder::driveOutcome(const Decision& d, int option) const {
+    int ways = 0;
+    int repeats = 0;
+    int judged = 0;
+    int longest = INT_MIN;
+    int needed = 0;
+    for (size_t i = 0; i < d.candidates.size(); i++) {
+        const Candidate& c = d.candidates[i];
+        if (c.driveOption != option) continue;
+        ways++;
+        if (!c.evaluated || c.inputs.empty()) continue;
+        if (std::find(d.tried.begin(), d.tried.end(), i) == d.tried.end()) {
+            repeats++;  // what already led nowhere from this tick (the tabu)
+            continue;
+        }
+        judged++;
+        if (c.survived - c.gateTicks > longest) {
+            longest = c.survived - c.gateTicks;
+            needed = driveBar(d, c) - c.gateTicks;
+        }
+    }
+    if (judged == 0) {
+        if (repeats > 0) return fmt::format("{} way{} in, each a dead end already tried from here", ways, ways == 1 ? "" : "s");
+        return fmt::format("{} way{} in, none could be run on", ways, ways == 1 ? "" : "s");
+    }
+    if (longest < 0) return fmt::format("{} way{} in, the best dies {} ticks before the gate", ways, ways == 1 ? "" : "s", -longest);
+    return fmt::format("{} way{} in, the best lives {} ticks past the gate of {} needed", ways, ways == 1 ? "" : "s", longest,
+                       needed);
+}
+
+// No option of the gate got through, or there was no gate to aim at: today's
+// verdict decides this one, and the log says why (step 6 replaces this).
+void AbsensePathfinder::driveHandoff(Decision& d) {
+    m_stats.driveHandoffs++;
+    if (d.driveOptions.empty()) {
+        m_stats.driveNoGate++;
+        // Past the last gate a level's end decides here hundreds of times:
+        // each reason the first time it comes up in a run, and every 50th after.
+        if (m_driveWhy != d.driveWhy) {
+            m_driveWhy = d.driveWhy;
+            m_driveWhyCount = 0;
+        }
+        if (m_driveWhyCount++ % 50 == 0)
+            log("tick %llu: route: %s; today's engine decides (%llu times so far)", (unsigned long long)d.tick,
+                d.driveWhy.c_str(), (unsigned long long)m_stats.driveNoGate);
+        return;
+    }
+    std::string tried;
+    for (const Decision::DriveOption& o : d.driveOptions) {
+        if (o.result.empty()) continue;
+        tried += fmt::format("{}{}: {}", tried.empty() ? "" : "; ", o.label, o.result);
+    }
+    devlog::log(devlog::Cat::AbsensePathfinder,
+                fmt::format("tick {}: route: gate x {:.0f} ({}) - no option got through ({}); today's engine decides "
+                            "this one",
+                            d.tick, d.driveGateX, d.driveWhat, tried));
 }
 
 void AbsensePathfinder::decide() {
@@ -2335,7 +2533,54 @@ void AbsensePathfinder::decide() {
         // a fifth of a second at every decision; the other ideas are made when
         // it is back, after its own, as before.
         bool routeOut = false;
-        if (absense::route::guidanceEnabled() && !d.pair) {
+        if (absense::route::drivesEnabled() && !d.pair) {
+            // GucciBot (docs/ROUTE_ENGINE_PLAN.md step 5), Route drives: this
+            // decision's target is the next gate, seen from the decision's own
+            // state - a kept start's, or the end of the plan playing when it is
+            // decided ahead - not from the live player, and not from the route
+            // planned once from the level's start. The gate's options, best
+            // first by the cost to go (FREE last), are tried one leg at a time
+            // in the Route stage below.
+            d.drives = true;
+            d.clear = clear;
+            d.driveNeed = seeTo > d.tick ? std::min(d.need, d.H) : 0;
+            d.driveJudged = d.candidates.size();  // the ideas made above are the usual stages' to judge
+            const Trajectory::StartState st = decisionState(d);
+            auto const* atlas = absense::route::atlasFor(pl);
+            if (pl->m_isPlatformer) {
+                d.driveWhy = "a platformer level has no way forward to plan";
+            } else if (st.goingLeft) {
+                d.driveWhy = fmt::format("the player is going left at x {:.0f} (the gates are planned rightwards)", st.x);
+            } else if (!atlas) {
+                d.driveWhy = "no level map yet";
+            } else {
+                for (auto const& r : absense::route::nextChoices(*atlas, st.x, st.y, st.upsideDown ? 1 : 0)) {
+                    if (r.gate < 0 || (size_t)r.gate >= atlas->gates.size()) continue;
+                    auto const& g = atlas->gates[(size_t)r.gate];
+                    Decision::DriveOption o;
+                    o.x = r.x;
+                    o.lo = r.option.band.lo;
+                    o.hi = r.option.band.hi;
+                    o.uid = r.option.objectUid;
+                    o.mustFire = r.option.mustFire;
+                    o.mustNotFire = r.option.mustNotFire;
+                    o.free = r.option.kind == absense::route::OptionKind::Free;
+                    o.gapLo = r.option.opening >= 0 && (size_t)r.option.opening < g.options.size()
+                                  ? g.options[(size_t)r.option.opening].lo
+                                  : o.lo;
+                    o.text = absense::route::describe(g, r.option);
+                    o.label = fmt::format("{} {:.0f}-{:.0f}", absense::route::optionKindName(r.option.kind), o.lo, o.hi);
+                    if (d.driveOptions.empty()) {
+                        d.driveGateX = g.x;
+                        d.driveWhat = *g.what ? g.what : absense::route::gateKindName(g.kind);
+                    }
+                    d.driveOptions.push_back(std::move(o));
+                }
+                if (d.driveOptions.empty()) d.driveWhy = fmt::format("no gate ahead of x {:.0f}", st.x);
+            }
+            routeOut = beginDriveLeg(d);
+            if (!routeOut) driveHandoff(d);
+        } else if (absense::route::guidanceEnabled() && !d.pair) {
             auto const* route = absense::route::guidePlan(pl);
             auto* traj = bot->trajectory().unsafeInner();
             if (route && !route->routes.empty() && traj) {
@@ -2366,22 +2611,15 @@ void AbsensePathfinder::decide() {
         }
     }
 
-    // ---- the route's leg search, a slice at a time (step 3)
-    if (d.stage == Decision::Route) {
-        auto* traj = bot->trajectory().unsafeInner();
-        if (d.routeLeg && traj && traj->legActive()) {
-            if (!traj->stepLeg(m_deadline)) return;  // more next time
-            takeRouteLeg(d, traj->finishLeg());
-        }
-        d.routeLeg = false;
-        finishIdeas(d);
-    }
-
     const int H = d.H;
     // Step R4: with the planned route followed, a route idea that reaches its
     // gate alive (in the exact simulation) and clears this decision's bar
     // goes ahead of every other idea that does not finish the level.
-    const bool guided = absense::route::guidanceEnabled();
+    // Not with Route drives (step 5): a drive's ideas get through on the
+    // drive's own bar, and when none does, today's verdict decides with them
+    // as ordinary ideas - ahead of everything, one that lives to its gate but
+    // not `clear` past it would be played straight into what kills it there.
+    const bool guided = absense::route::guidanceEnabled() && !absense::route::drivesEnabled();
     auto routeViable = [&](const Candidate& c) {
         return guided && c.gateTicks > 0 && c.evaluated && c.survived >= c.gateTicks && c.survived >= std::min(d.need, H);
     };
@@ -2496,6 +2734,85 @@ void AbsensePathfinder::decide() {
         }
         return d.next >= end;
     };
+
+    // ---- the route's leg search, a slice at a time (step 3)
+    if (d.stage == Decision::Route && !d.drives) {
+        auto* traj = bot->trajectory().unsafeInner();
+        if (d.routeLeg && traj && traj->legActive()) {
+            if (!traj->stepLeg(m_deadline)) return;  // more next time
+            takeRouteLeg(d, traj->finishLeg());
+        }
+        d.routeLeg = false;
+        finishIdeas(d);
+    }
+
+    // ---- Route drives (step 5): the gate's options one leg at a time, each
+    // leg's ways judged as soon as it is back (a run each, steered on past the
+    // gate), until one gets through; then the drive's verdict, and none of the
+    // other ideas. No option gets through: the other ideas are made and today's
+    // verdict decides, with the ways found among them.
+    if (d.stage == Decision::Route && d.drives) {
+        auto* traj = bot->trajectory().unsafeInner();
+        for (;;) {
+            if (d.routeLeg) {
+                if (traj && traj->legActive()) {
+                    if (!traj->stepLeg(m_deadline)) return;  // more next time
+                    takeDriveLeg(d, traj->finishLeg());
+                } else if (d.driveAt < d.driveOptions.size()) {
+                    d.driveOptions[d.driveAt].result = "its search was dropped";
+                }
+                d.routeLeg = false;
+            }
+            while (d.driveJudged < d.candidates.size()) {
+                const size_t i = d.driveJudged;
+                Candidate& c = d.candidates[i];
+                if (c.driveOption < 0 || c.evaluated) {
+                    d.driveJudged++;
+                    continue;
+                }
+                if (!mayWork()) return;  // more next time
+                d.driveJudged++;
+                // Run as far as the bar it has to clear: the steering only
+                // looks ahead of each tick, so a longer run would choose the
+                // same inputs up to there, and whatever lies past the bar
+                // decides nothing here.
+                d.scratchTrace.clear();
+                if (!evaluate(c, driveBar(d, c), d.held, &d.scratchTrace)) return;
+                if (c.inputs.empty()) continue;  // nothing could be steered from here
+                if (isTabu(d.tick, c.inputs, d.player2)) continue;  // already led nowhere from this tick
+                d.tried.push_back(i);
+                if (d.best < 0 || better(c, d.candidates[(size_t)d.best])) d.best = (int)i;
+                if (d.best == (int)i && !d.scratchTrace.empty()) {
+                    d.bestTrace.swap(d.scratchTrace);
+                    d.bestTraceFor = d.best;
+                    d.bestTraceTick = currentTick();
+                }
+            }
+            for (const size_t i : d.tried) {
+                if (drivePasses(d, d.candidates[i])) {
+                    d.drivePass = true;
+                    break;
+                }
+            }
+            if (d.drivePass) break;
+            // Nothing of this option got through: the next one.
+            if (d.driveAt < d.driveOptions.size()) {
+                Decision::DriveOption& o = d.driveOptions[d.driveAt];
+                bool found = false;
+                for (const Candidate& c : d.candidates) found |= c.driveOption == (int)d.driveAt;
+                if (found) o.result = driveOutcome(d, (int)d.driveAt);
+                d.driveAt++;
+            }
+            if (!beginDriveLeg(d)) break;  // none left
+            d.routeLeg = true;
+        }
+        if (d.drivePass) {
+            d.stage = Decision::Verdict;
+        } else {
+            driveHandoff(d);
+            finishIdeas(d);
+        }
+    }
 
     // 1. Carrying on and the steered ideas: cheap, and enough most of the time.
     if (d.stage == Decision::Steers) {
@@ -2895,6 +3212,67 @@ void AbsensePathfinder::decide() {
         d.stage = haveFull() ? Decision::Verdict : Decision::Search;
     }
 
+    // ---- Route drives' verdict (step 5), in place of the one below: of the
+    // ways that got through, the calmest - fewest fast changes, then fewest
+    // changes, then the most room in the band at the gate - that also holds up
+    // with every input a tick late as far as its bar (a run per slice, six at
+    // most; when none does, the calmest anyway). It is played exactly to its
+    // gate, untrimmed: the trim keeps a variant that lives as long, and one that
+    // misses the orb or the band would pass that test.
+    if (d.stage == Decision::Verdict && d.drivePass) {
+        if (!d.passDone) {
+            if (d.passers.empty()) {
+                for (const size_t i : d.tried)
+                    if (drivePasses(d, d.candidates[i])) d.passers.push_back(i);
+                // Indices are sorted, never the ideas (see trajectory.cpp's Android rule).
+                std::stable_sort(d.passers.begin(), d.passers.end(), [&](size_t a, size_t b) {
+                    const Candidate& ca = d.candidates[a];
+                    const Candidate& cb = d.candidates[b];
+                    if (ca.legFast != cb.legFast) return ca.legFast < cb.legFast;
+                    if (ca.legChanges != cb.legChanges) return ca.legChanges < cb.legChanges;
+                    return ca.legRoom > cb.legRoom;
+                });
+            }
+            while (d.passAt < d.passers.size() && d.passChecked < 6 && mayWork()) {
+                const Candidate& c = d.candidates[d.passers[d.passAt]];
+                d.passChecked++;
+                if (robust(c, driveBar(d, c), d.held, driveBar(d, c))) {
+                    d.passChosen = (int)d.passers[d.passAt];
+                    break;
+                }
+                d.passAt++;
+            }
+            if (d.passChosen < 0 && d.passAt < d.passers.size() && d.passChecked < 6) return;  // more next time
+            d.passDone = true;
+        }
+        const size_t pick = d.passChosen >= 0 ? (size_t)d.passChosen : d.passers.front();
+        const Candidate& chosen = d.candidates[pick];
+        if (d.passChosen < 0) {
+            m_stats.fragile++;
+            log("tick %llu: %s only works to the tick (no way through holds up a tick late); played anyway, as far as "
+                "its gate (%d ticks)",
+                (unsigned long long)d.tick, chosen.name.c_str(), chosen.gateTicks);
+        }
+        m_planKnownDeath = UINT64_MAX;
+        d.best = (int)pick;
+        d.routeCap = chosen.gateTicks;
+        // The kept samples are the best idea's by today's order; the drive may
+        // have taken another one.
+        if (d.bestTraceFor != (int)pick) d.bestTraceTick = UINT64_MAX;
+        d.viable = true;
+        d.chosen = chosen;
+        d.chosenRaw = chosen.inputs;
+        d.trimFrom = chosen.survived;
+        d.trimComplete = chosen.complete;
+        d.forcedCommit = -1;
+        d.trimTries = 0;
+        d.trimMax = 0;
+        d.trimAt = 0;
+        d.trimVariant = 0;
+        d.trimmed = 0;
+        d.stage = Decision::Trim;
+    }
+
     // ---- the verdict: which idea, and whether it is any good
     if (d.stage == Decision::Verdict) {
         const uint64_t tick = d.tick;
@@ -3252,7 +3630,9 @@ void AbsensePathfinder::decide() {
     // slices of its own: before, it ran in whatever was left of the frame the
     // verdict fell in - nothing, most of the time, since the ideas are judged
     // right up to the deadline - so plans went out with every click in them.
-    if (d.stage == Decision::Trim) {
+    // (Not a route drive's: see its verdict. The leg already took the calmest
+    // way in.)
+    if (d.stage == Decision::Trim && !d.drivePass) {
         if (!trimStep(d)) return;  // more next time
         if (d.trimmed > 0) m_stats.clicksDropped += (uint64_t)d.trimmed;
     }
@@ -3389,7 +3769,13 @@ void AbsensePathfinder::decide() {
     // and the next decision is made there.
     // Step R5: the route taken where a dead end came back to is played all the
     // way to its gate, so the next decision cannot leave it again right there.
-    if (d.routeForced && !complete) {
+    // Step 5 (Route drives): a drive's way is played exactly to the gate
+    // crossing, whatever the kind of player - the next decision is about the
+    // gate after it, made from the crossing (ahead of it while this plays,
+    // unless the plan changes the kind of player).
+    if (d.drivePass && !complete) {
+        commit = std::max(1, d.routeCap);
+    } else if (d.routeForced && !complete) {
         commit = std::max(1, d.routeCap);
     } else if (d.routeCap > 0 && !complete && forcedCommit <= 0) {
         commit = std::max(1, std::min(commit, d.routeCap));
@@ -3472,6 +3858,19 @@ void AbsensePathfinder::decide() {
     m_lastReplanTick = tick;
     (void)ahead;
 
+    // Step 5: the route drive's line for this decision - the gate, the option,
+    // how its way was found and how calm it is, and what is played.
+    if (d.drivePass && best->driveOption >= 0 && (size_t)best->driveOption < d.driveOptions.size()) {
+        m_stats.driveDecisions++;
+        const Decision::DriveOption& o = d.driveOptions[(size_t)best->driveOption];
+        devlog::log(devlog::Cat::AbsensePathfinder,
+                    fmt::format("tick {}: route: {}: leg by search (option {} of {}), {} input change{} ({} fast), "
+                                "{} ticks clear past the gate{}; playing {} ticks{}",
+                                tick, o.text, best->driveOption + 1, d.driveOptions.size(), best->legChanges,
+                                best->legChanges == 1 ? "" : "s", best->legFast, driveBar(d, *best) - best->gateTicks,
+                                d.passChosen >= 0 ? ", holds up a tick late" : ", only to the tick", commit,
+                                ahead ? " (decided ahead)" : ""));
+    }
     if (name.rfind("route", 0) == 0) m_stats.routeWins++;
     char buf[200];
     std::snprintf(buf, sizeof(buf), "tick %llu: %s (lasts %s%d ticks), committing %d%s%s", (unsigned long long)tick,
@@ -4313,8 +4712,11 @@ void AbsensePathfinder::beginBacktrack() {
     // LIMBO took an orb off the route at 1.5%, died at 2%, and walked back stop
     // by stop to the start of the level. Once per repair, and once per spot for
     // each decision gone back to (Trap::routeForced); then the walk as before.
-    if (absense::route::guidanceEnabled() && !m_repair.routeJumped && m_goTo == UINT64_MAX &&
-        m_repair.retryTarget == UINT64_MAX) {
+    // Not with Route drives (docs/ROUTE_ENGINE_PLAN.md step 5): its decisions
+    // never leave the route that way, and the jump back to the gate that
+    // caused a dead end is step 6's, with a ledger behind it.
+    if (absense::route::guidanceEnabled() && !absense::route::drivesEnabled() && !m_repair.routeJumped &&
+        m_goTo == UINT64_MAX && m_repair.retryTarget == UINT64_MAX) {
         m_repair.routeJumped = true;
         Trap* trap = trapAt(m_repair.deathTick, (uint64_t)std::lround(32.0 * std::max(1.0, tps / 240.0)));
         for (auto it = m_routeChoices.rbegin(); it != m_routeChoices.rend(); ++it) {

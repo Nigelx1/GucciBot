@@ -1380,6 +1380,7 @@ Trajectory::StartState Trajectory::startState(const SimStart& s, bool second) {
     out.upsideDown = c.m_isUpsideDown;
     out.onGround = c.m_isOnGround;
     out.held = second ? s.held2 : s.held;
+    out.goingLeft = c.m_isGoingLeft;
     return out;
 }
 
@@ -1401,6 +1402,7 @@ Trajectory::StartState Trajectory::liveState(GJBaseGameLayer* pl, bool p1) {
     out.onGround = p->m_isOnGround;
     auto it = p->m_holdingButtons.find(static_cast<int>(PlayerButton::Jump));
     out.held = it != p->m_holdingButtons.end() && it->second;
+    out.goingLeft = p->m_isGoingLeft;
     return out;
 }
 bool Trajectory::startHeld2(const SimStart& s) { return s.held2; }
@@ -4159,6 +4161,7 @@ bool Trajectory::stepLeg(std::chrono::steady_clock::time_point until) {
             traceBack(cr.front().node, out.witness, &out.path);
             out.changes = cr.front().changes;
             out.fastChanges = cr.front().fastChanges;
+            out.ways.push_back({cr.front().y, cr.front().room, cr.front().changes, cr.front().fastChanges});
             // The others, from different states before them and at different
             // heights: two ways that only differ in their last input, or come
             // in at the same height, are one way.
@@ -4172,6 +4175,7 @@ bool Trajectory::stepLeg(std::chrono::steady_clock::time_point until) {
                 heights.push_back(h);
                 out.alternates.emplace_back();
                 traceBack(cr[k].node, out.alternates.back(), nullptr);
+                out.ways.push_back({cr[k].y, cr[k].room, cr[k].changes, cr[k].fastChanges});
             }
         } else if (L->frontier.empty() && !out.error) {
             // Nothing alive any more: a proof only if nothing was ever dropped
