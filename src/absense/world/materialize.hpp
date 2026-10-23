@@ -425,6 +425,8 @@ class Materializer {
     GJBaseGameLayer* m_pl = nullptr;
     // The layer's section factors, read once: the window tests below run for
     // every member of every group a run has moved, on every tick of every copy.
+    // A factor of 0 (or less) is the game's own: every position falls in
+    // section 0 of that axis, and the tests take the axis as unbounded.
     double m_fx = 0.01;
     double m_fy = 0.01;
     std::shared_ptr<const BaseTable> m_table;

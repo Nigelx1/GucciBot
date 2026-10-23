@@ -837,8 +837,21 @@ void Materializer::begin(GJBaseGameLayer* pl, std::shared_ptr<const BaseTable> t
     if (pl) {
         const SectionGrid grid = SectionGrid::of(pl);
         m_shadow.attach(grid);
-        m_fx = grid.factorX > 0.0f ? (double)grid.factorX : 0.01;
-        m_fy = grid.factorY > 0.0f ? (double)grid.factorY : 0.01;
+        // GucciBot (2026-10-23): the factors as the game has them. A factor of
+        // 0 put a fallback of 0.01 here, while the game, the shadow and
+        // copySection all file every position in section 0 of that axis: the
+        // window of a copy was then rows -2..2 by the game's sections but
+        // y < 300 by these tests, and every moving object above that was never
+        // written - Deadlocked's pad that drops from the ceiling at 22% stayed
+        // up in every run, so the blue orb before it always looked fatal.
+        m_fx = (double)grid.factorX;
+        m_fy = (double)grid.factorY;
+        static float loggedX = -1.0f, loggedY = -1.0f;
+        if (grid.factorX != loggedX || grid.factorY != loggedY) {
+            loggedX = grid.factorX;
+            loggedY = grid.factorY;
+            geode::log::info("[AbsPF] World: the level's section factors are x {} y {}", grid.factorX, grid.factorY);
+        }
     }
     pendDiff(liveProgress, liveCommandIndex);
 }
@@ -936,11 +949,13 @@ bool Materializer::boxMeets(const Box& box, double rx, double ry, const Window& 
     const double inf = std::numeric_limits<double>::infinity();
     // Section k holds the positions whose factor times the position truncates
     // to k; section 0 everything at or below zero as well. A unit of slack
-    // either side for the float of the factor.
-    const double xlo = w.x0 <= 0 ? -inf : (double)w.x0 / m_fx - 1.0;
-    const double xhi = (double)(w.x1 + 1) / m_fx + 1.0;
-    const double ylo = w.y0 <= 0 ? -inf : (double)w.y0 / m_fy - 1.0;
-    const double yhi = (double)(w.y1 + 1) / m_fy + 1.0;
+    // either side for the float of the factor. A factor of 0 files everything
+    // in section 0 of its axis, which every window holds: no bound there.
+    const bool byX = m_fx > 0.0, byY = m_fy > 0.0;
+    const double xlo = (w.x0 <= 0 || !byX) ? -inf : (double)w.x0 / m_fx - 1.0;
+    const double xhi = !byX ? inf : (double)(w.x1 + 1) / m_fx + 1.0;
+    const double ylo = (w.y0 <= 0 || !byY) ? -inf : (double)w.y0 / m_fy - 1.0;
+    const double yhi = !byY ? inf : (double)(w.y1 + 1) / m_fy + 1.0;
     return (double)box.maxX + rx >= xlo && (double)box.minX - rx <= xhi && (double)box.maxY + ry >= ylo &&
            (double)box.minY - ry <= yhi;
 }
@@ -949,10 +964,11 @@ bool Materializer::pointMeets(double x, double y, double rx, double ry, const Wi
     if (std::isnan(x) || std::isnan(y) || std::isnan(rx) || std::isnan(ry)) return true;
     const double inf = std::numeric_limits<double>::infinity();
     // The same bounds as boxMeets, for one position in double.
-    const double xlo = w.x0 <= 0 ? -inf : (double)w.x0 / m_fx - 1.0;
-    const double xhi = (double)(w.x1 + 1) / m_fx + 1.0;
-    const double ylo = w.y0 <= 0 ? -inf : (double)w.y0 / m_fy - 1.0;
-    const double yhi = (double)(w.y1 + 1) / m_fy + 1.0;
+    const bool byX = m_fx > 0.0, byY = m_fy > 0.0;
+    const double xlo = (w.x0 <= 0 || !byX) ? -inf : (double)w.x0 / m_fx - 1.0;
+    const double xhi = !byX ? inf : (double)(w.x1 + 1) / m_fx + 1.0;
+    const double ylo = (w.y0 <= 0 || !byY) ? -inf : (double)w.y0 / m_fy - 1.0;
+    const double yhi = !byY ? inf : (double)(w.y1 + 1) / m_fy + 1.0;
     return x + rx >= xlo && x - rx <= xhi && y + ry >= ylo && y - ry <= yhi;
 }
 

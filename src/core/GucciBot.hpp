@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-ga (World branch check: a failure also lists the game events of both runs)"
+    "2026-10-23-gb (Pathfinder: moving objects above y 300 move in the simulation too - the pad that drops at Deadlocked 22 percent)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
