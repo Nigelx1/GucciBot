@@ -1632,11 +1632,18 @@ void FrameWindowAnalyzer::beginClick() {
         actionRoom = static_cast<long>(m_recorded) -
                      static_cast<long>(m_originalFrames[prev]) - 1;
 
+    // GucciBot (2026-10-23): with the 2-player fixes in a 2-player level, no
+    // earlier than frame 1. The branch can't go below frame 0, and an action
+    // plays the frame before its own, so a restore to frame 0 has already
+    // played frame 0's: an input moved onto it never fires (the frame order
+    // skips it, the old order stalled on it). Without them, as before.
+    long const startRoom = this->countsByPlayer()
+                               ? std::max<long>(0, static_cast<long>(m_recorded) - 1)
+                               : static_cast<long>(m_recorded);
     m_maxNeg = std::clamp<int64_t>(
         m_sweep, 0,
         std::max<int64_t>(
-            0, std::min<int64_t>({nRoom, actionRoom,
-                                  static_cast<long>(m_recorded)})));
+            0, std::min<int64_t>({nRoom, actionRoom, startRoom})));
     m_maxPos = m_sweep;
     m_clamped = m_maxNeg < m_sweep;
 
@@ -3187,6 +3194,26 @@ bool FrameWindowAnalyzer::startSubframeProbe() {
         room += std::llround(
             m_originalOffsets[m_samples[m_index].actionIndex] *
             static_cast<double>(mult));
+    // GucciBot (2026-10-23): with the 2-player fixes in a 2-player level, the
+    // deepest slot lands on the tick after the branch at the earliest. The
+    // room above reaches onto the branch frame itself, and a click there (at
+    // any fraction) belongs to a tick the restore has already played, so it
+    // never fires: the frame order skips it, the old order stalled on it. Only
+    // the island scan of a click no frame-grid timing survives goes that deep.
+    // With an offset of its own the click stays one slot further off, so a
+    // float rounding in placeSubtick can't put it back on that frame. Without
+    // the 2-player fixes, as before.
+    if (this->countsByPlayer()) {
+        room = (static_cast<int64_t>(m_recorded) -
+                static_cast<int64_t>(m_branchFrame) - 1) *
+               mult;
+        if (m_subtickMacro)
+            room += std::max<int64_t>(
+                0, static_cast<int64_t>(std::floor(
+                       m_originalOffsets[m_samples[m_index].actionIndex] *
+                       static_cast<double>(mult))) -
+                       1);
+    }
     m_maxNeg = std::min<int64_t>(m_maxNeg, std::max<int64_t>(room, 0));
 
     FWLOG("[fw][click {}] fine sweep range -{}..+{} fine ticks (branch {})",
