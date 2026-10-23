@@ -703,6 +703,17 @@ namespace gucci::ui::pages {
             fw.applyLabelTo(in, whole ? static_cast<int>(std::lround(frames)) : 0, whole ? 0.f : frames);
         }
 
+        // GucciBot (2026-10-23): the table below in pages, and a delete for a
+        // whole page's windows (anticroom's antics-counter beta.5 changelog).
+        // What to delete is kept from the press until the confirm answers,
+        // since the table can change in between, with the macro it was for.
+        constexpr size_t kTablePage = 50;
+        constexpr const char* kDeletePageId = "##fw-delete-page";
+        std::vector<FrameWindowAnalyzer::PlayheadInput> g_pageToDelete;
+        std::string g_pageToDeleteText;
+        std::string g_pageToDeleteMacro;
+        bool g_askDeletePage = false;
+
         // Manual Frame Windows (the old menu's table, Juice's idea), rebuilt
         // 2026-10-21: every input of the macro, its window -- Calculate's, or
         // one typed in -- and Calculate's suggestion where a suspicious click
@@ -713,6 +724,8 @@ namespace gucci::ui::pages {
             auto& fw = analyzer();
             auto& s = S();
             static bool s_onlySuggested = false;
+            static int s_page = 0;
+            static int s_drawnPage = -1;
 
             auto const rows = fw.allInputs(s.labelReleases);
             auto const& results = fw.results();
@@ -741,12 +754,33 @@ namespace gucci::ui::pages {
                                       waiting, waiting == 1 ? "" : "s", waiting == 1 ? "it" : "them")
                               .c_str(),
                           Tone::Accent);
-            kit::SwitchRow("Only rows with a suggestion", nullptr, &s_onlySuggested);
+            if (kit::SwitchRow("Only rows with a suggestion", nullptr, &s_onlySuggested))
+                s_page = 0;
 
             std::vector<size_t> shown;
             for (size_t i = 0; i < rows.size(); i++)
                 if (!s_onlySuggested || suggested(rows[i]))
                     shown.push_back(i);
+
+            // Pages of the rows shown, so after the filter above.
+            size_t const pages = std::max<size_t>(1, (shown.size() + kTablePage - 1) / kTablePage);
+            s_page = std::clamp(s_page, 0, static_cast<int>(pages) - 1);
+            size_t const first = static_cast<size_t>(s_page) * kTablePage;
+            size_t const last = std::min(shown.size(), first + kTablePage);
+            if (pages > 1) {
+                ImGui::BeginDisabled(s_page == 0);
+                if (kit::Button("Prev"))
+                    s_page--;
+                ImGui::EndDisabled();
+                ImGui::SameLine();
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextUnformatted(fmt::format("Page {} of {}", s_page + 1, pages).c_str());
+                ImGui::SameLine();
+                ImGui::BeginDisabled(s_page + 1 >= static_cast<int>(pages));
+                if (kit::Button("Next"))
+                    s_page++;
+                ImGui::EndDisabled();
+            }
 
             // What a row asked for is done after the table is drawn: it changes
             // the results the table is reading.
@@ -758,8 +792,13 @@ namespace gucci::ui::pages {
             ImGuiTableFlags const flags = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
                                           ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingFixedFit;
             float const rowH = ImGui::GetFrameHeightWithSpacing();
-            float const height = std::min(380.f, rowH * (static_cast<float>(shown.size()) + 1.5f));
+            float const height = std::min(380.f, rowH * (static_cast<float>(last - first) + 1.5f));
             if (ImGui::BeginTable("##fwtable", 7, flags, ImVec2(0.f, height))) {
+                // Another page starts at its top.
+                if (s_drawnPage != s_page) {
+                    ImGui::SetScrollY(0.f);
+                    s_drawnPage = s_page;
+                }
                 ImGui::TableSetupScrollFreeze(0, 1);
                 ImGui::TableSetupColumn("#");
                 ImGui::TableSetupColumn("Frame");
@@ -771,10 +810,10 @@ namespace gucci::ui::pages {
                 ImGui::TableHeadersRow();
 
                 ImGuiListClipper clip;
-                clip.Begin(static_cast<int>(shown.size()));
+                clip.Begin(static_cast<int>(last - first));
                 while (clip.Step()) {
                     for (int r = clip.DisplayStart; r < clip.DisplayEnd; r++) {
-                        auto const& in = rows[shown[static_cast<size_t>(r)]];
+                        auto const& in = rows[shown[first + static_cast<size_t>(r)]];
                         FrameWindowMark const* mk =
                             in.mark >= 0 && in.mark < static_cast<int>(results.size())
                                 ? &results[static_cast<size_t>(in.mark)]
@@ -876,7 +915,28 @@ namespace gucci::ui::pages {
                     changed = true;
                 }
                 ImGui::EndDisabled();
+                ImGui::SameLine();
             }
+
+            // Every window on this page, after a confirm (see confirms()).
+            std::vector<FrameWindowAnalyzer::PlayheadInput> onPage;
+            for (size_t r = first; r < last; r++)
+                if (rows[shown[r]].mark >= 0)
+                    onPage.push_back(rows[shown[r]]);
+            ImGui::BeginDisabled(fw.running() || onPage.empty());
+            if (kit::Button("Delete this page's windows", Tone::Bad)) {
+                int const a = rows[shown[first]].number;
+                int const b = rows[shown[last - 1]].number;
+                g_pageToDeleteText = fmt::format(
+                    "Every window on this page ({}) goes, typed ones included, here and in the copy saved next to "
+                    "the macro. This can't be undone; the next Calculate run measures them again.",
+                    a == b ? fmt::format("input {}", a) : fmt::format("inputs {} to {}", a, b));
+                g_pageToDelete = std::move(onPage);
+                g_pageToDeleteMacro = gb->replayName;
+                g_askDeletePage = true;
+            }
+            ImGui::EndDisabled();
+
             if (changed) {
                 // Labels are results: kept with the macro, and L* moves.
                 gb->saveAcFrameWindowResults();
@@ -1057,6 +1117,24 @@ namespace gucci::ui::pages {
                     GucciEngine::get()->fwAcReport.clear();
                     lstar::Solver::get()->markDirty();
                 }
+            }
+
+            if (g_askDeletePage) {
+                kit::OpenConfirm(kDeletePageId);
+                g_askDeletePage = false;
+            }
+            std::string const deleteTitle =
+                fmt::format("Delete {} window{}?", g_pageToDelete.size(), g_pageToDelete.size() == 1 ? "" : "s");
+            if (int const answer = kit::Confirm(kDeletePageId, deleteTitle.c_str(), g_pageToDeleteText.c_str(), "Delete");
+                answer != 0) {
+                // Windows are results: kept with the macro, and L* moves. Not
+                // if another macro was loaded while the confirm was up.
+                if (answer == 1 && GucciEngine::get()->replayName == g_pageToDeleteMacro &&
+                    analyzer().eraseMarks(g_pageToDelete) > 0) {
+                    GucciEngine::get()->saveAcFrameWindowResults();
+                    lstar::Solver::get()->markDirty();
+                }
+                g_pageToDelete.clear();
             }
 
             if (g_askReset) {

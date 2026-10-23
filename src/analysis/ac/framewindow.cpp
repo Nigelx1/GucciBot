@@ -6464,6 +6464,23 @@ void FrameWindowAnalyzer::applyLabelTo(PlayheadInput const& in, int window,
     this->markEdited();
 }
 
+// GucciBot (2026-10-23): a page of the Every input table cleared at once
+// (anticroom's antics-counter beta.5 changelog: delete a whole page of frame
+// windows in the editor). Each window is found by its frame, player and kind,
+// not by index: every erase moves the ones after it. A typed window goes too,
+// rather than falling back to Calculate's count as a single Clear does.
+size_t FrameWindowAnalyzer::eraseMarks(std::vector<PlayheadInput> const& inputs) {
+    if (m_running || inputs.empty()) return 0;
+    size_t const erased = std::erase_if(m_results, [&](FrameWindowMark const& mk) {
+        return std::any_of(inputs.begin(), inputs.end(), [&](PlayheadInput const& in) {
+            return in.valid && in.frame == mk.frame && in.player2 == mk.player2 &&
+                   in.release == mk.release;
+        });
+    });
+    if (erased > 0) this->markEdited();
+    return erased;
+}
+
 std::vector<FrameWindowAnalyzer::PlayheadInput> FrameWindowAnalyzer::allInputs(
     bool releases) const {
     std::vector<PlayheadInput> out;

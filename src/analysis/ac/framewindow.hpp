@@ -124,6 +124,10 @@ class FrameWindowAnalyzer {
     // GucciBot: the same label on a given input (its frame, player and kind;
     // `mark` its result, or -1), so a click can be labelled from a list.
     void applyLabelTo(PlayheadInput const& in, int window, float cbf);
+    // GucciBot (2026-10-23): these inputs' windows removed at once, typed
+    // ones too (the Every input table's page delete). Nothing while a run
+    // is on. Returns how many went.
+    size_t eraseMarks(std::vector<PlayheadInput> const& inputs);
     // GucciBot: every input that can be measured, in order (releases when
     // `releases`), each with its result if it has one -- the rows of the
     // Manual Frame Windows table.
