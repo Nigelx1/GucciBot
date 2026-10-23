@@ -18,7 +18,7 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 - [x] Recording wrote phantom presses (fixed -gh/-gi, 2026-10-23): a tick with more than one button event (a release and a press inside one tick) was recorded as R P R P R instead of R P R, because every press is recorded twice and the duplicate check only looked at the frame's last event (since the 2026-09-28 Zafari 2 fix). Nothing moved until the next orb, which the extra buffered press fired early - every Absense pathfinder path with taps or double presses failed its cold replay (ToE2 at 10%). Human recordings with a release and a press in one tick had it too; macros recorded 2026-09-28..10-23 may hold the extra presses
 - [ ] Mac: respawning to a checkpoint crashes. Fixed in build -ei (the action manager re-entered during the respawn's refresh tick; Windows always skipped it), waiting for Nigel's Mac test
 - [x] Reopening a level with random triggers could crash the game, or quietly damage its memory where it didn't (fixed -he, 2026-10-23; the batches since reopened ORBIT, Clubstep, ToE2 and The Nightmare dozens of times without a crash): the practice fix keeps a pointer into every advanced random trigger, and the list was never emptied when a level closed - Silicate empties it in PlayLayer init, onQuit and goEdit, the port never called it - so the next level's first reset wrote its seed through the last level's freed triggers. Found when the game crashed reopening ORBIT
-- [ ] Hacks > Gameplay > Safe mode did nothing (fixed -hk, 2026-10-23, untested in-game): it set a flag nothing read - a half-port since the -bz menu - and wasn't saved, so it was off again at every launch; with it on, a completion, a death's percent and the new-best popup all went through. It now keeps a run from counting, cheat or not, and stays on across launches. Silicate's version also leaves stats, achievements and the attempt and jump counts alone: being added (antics-counter round 1)
+- [ ] Hacks > Gameplay > Safe mode did nothing (fixed -hk, 2026-10-23, untested in-game): it set a flag nothing read - a half-port since the -bz menu - and wasn't saved, so it was off again at every launch; with it on, a completion, a death's percent and the new-best popup all went through. It now keeps a run from counting, cheat or not, and stays on across launches. Silicate's version also leaves stats, achievements and the attempt and jump counts alone: built -hl (credit peony), untested
 
 ### Switches that do nothing
 - [ ] Force Platformer (the code behind it is gone and needs writing): built -ej, untested; safe mode counts it as a cheat
@@ -49,7 +49,7 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 - [ ] Conflicting-mod warning in the menu (it's only logged now): built -el, untested
 - [ ] An in-level progress box with Cancel: built -el, untested
 - [ ] Start-position warning: built -el (set when a macro recorded from a start position loads), untested
-- [ ] Reorder bands, and Brrr/Bells buttons for band sounds: built -el, untested
+- [ ] Reorder bands, and Brrr/Bells buttons for band sounds: built -el, untested; a Sort by window button built -hl, untested
 - [ ] Mute during Calculate: built -el (Calculate page switch), untested
 - [ ] Per-band images and pulse (the site advertises them): built -ew (a band's own image in place of its shape; a pulse on the marker, the label or both, with fade-in, hold and fade-out), untested
 
@@ -88,11 +88,22 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 ## 3. Calculate
 
 - [x] Port audit against anticroom's original (docs/CALC_PORT_AUDIT.md): two port faults fixed (builds -ed, -ee), plus the end-of-level death (-ef)
+- [ ] anticroom's antics-counter changes, round 1 (his beta.2-beta.7 changelogs; no source, written from the descriptions): built -hl (2026-10-23), untested in-game, review running alongside Nigel's test:
+  - Search distance (Sweep range renamed), Max window (a window that reaches it shows N+ and counting moves on), presets Balanced / Accuracy / Absolute
+  - Recovery Range: three fixes (state leak, the next input moves with its release, offsets that can't play are skipped); it widens windows on purpose
+  - Check past next input (Advanced, experimental, off by default); a test leg's reach is one rule now (legReach)
+  - Decimal band edges for CBF windows, Sort by window, the Every input table in pages with Delete this page's windows
+  - UFO inputs lose the hold-mode mark; Click Between Frames isn't flagged while paused; the trace's false frame-jumped warnings
+  - A canceled or failed run keeps the windows saved before it (Save On Finish)
+  - The Leg trail (Advanced > While it runs): each test run drawn in the level
+  - Import: a dated copy in replays/imported, the picker opens there, a file already imported is selected; Android's permission note
+  - Text boxes let go of the keyboard after a click on the game; settings reach the disk a moment after they change
+- [ ] antics-counter round 2 (changes counts: needs an A/B test by Nigel or Juice on the same macros): 2-player order-independent dispatch and player-aware CBF arming (the same-tick dual bug, skipped inputs); the Dependent Pair Search rework; CBF speed (seed the sub-tick search from the whole-frame result)
 - [ ] The strict count, plus "my suggestion is x frames" using Juice's Alignment-Independent method (credited), flagged in the frame editor: built -ex, untested (a pass after the strict count, for strict windows of 2 or fewer right after another input; on by default, Calculate page > Suggestions for suspicious clicks)
 - [ ] Speed: progress and a time cap (resetting to checkpoints is 87% of the time): built -ez (a time cap that keeps what it measured, and time so far and to go in the level), untested; the restores themselves aren't faster yet
 - [ ] Markers in the ground (#26; the fix in build -dt is untested)
 - [ ] The trail check being one frame off; recheck the 42,000-frame noclip runaway
-- [ ] Markers missing for player 1 in some dual levels, showing only on player 2 during duals (#27; TheCinnyBun, Helios, TUAPEKA ...). The player-1 marker uses the mark's saved position and the twin uses the trail; look at why the first is missing there
+- [ ] Markers missing for player 1 in some dual levels, showing only on player 2 during duals (#27; TheCinnyBun, Helios, TUAPEKA ...): built -hl, untested. Likely cause: inputs stored as player 2 in a 1-player level (recorded with Flip 2-Player Controls on, or some imports); markers now go on both players in a dual whatever the flag. Not sure it's the reporter's cause: their macros haven't been seen
 - [x] Mirror portals and the markers (Nigel, 2026-10-21): fixed and confirmed in -fl ("it works"). GD flips the object layer itself, so the markers' signed scale had turned them round (-fh); through the flip GD turns the picture and draws the player off its spot in the level, so a jump mid-flip now starts on the player and slides onto its real spot by the end of the flip (-fk, -fl)
 
 ## 4. AI pathfinder (AI_PATHFINDER_PLAN.md)
