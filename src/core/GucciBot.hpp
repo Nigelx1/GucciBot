@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-hm (Same as -hl, plus a check for The Nightmare: Assistant Access can list which portals, orbs and pads are marked used, and the pathfinder logs any still marked used ahead of the player after it goes back)"
+    "2026-10-23-hn (Calculate: antics-counter round 2, every part behind a new switch that starts off - 2-player fixes, Faster sub-tick search, and a reworked Dependent pair search; Assistant Access reports Safe mode)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
