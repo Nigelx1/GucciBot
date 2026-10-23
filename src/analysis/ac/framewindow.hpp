@@ -794,9 +794,11 @@ class FrameWindowAnalyzer {
     static constexpr int DEP_POINTS = 7;
     static constexpr int DEP_SCAN_PER_TICK = 8;
     // GucciBot (2026-10-23): the dependent pass, reworked (framewindow.cpp,
-    // above beginDependentPass). How many scan legs an alignment may spend
-    // looking for a timing of the input that survives once every guess at
-    // where it went has died.
+    // above beginDependentPass). How many timings of the input an alignment
+    // may scan looking for one that survives, once every guess at where it
+    // went has died. A timing is one test run for a sub-tick input; for a
+    // whole-frame one that dies, also its Buffer try, and with Recovery
+    // Range its recovery legs (up to twice the recovery window more).
     static constexpr int DEP_SEARCH_LEGS = 24;
 
     // A tight input (b) and the input before it of the same player (a).
