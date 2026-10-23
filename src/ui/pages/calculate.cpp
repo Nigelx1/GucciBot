@@ -1098,9 +1098,11 @@ namespace gucci::ui::pages {
                 // GucciBot (2026-10-23): from anticroom's antics-counter beta.4 and beta.6 changelogs.
                 flag("2-player fixes",
                      "For 2-player macros and dual levels. In a 2-player level a test moves only the measured "
-                     "player's clicks and plays the other player's at their own timing, none skipped; in a 1-player "
-                     "level a click a macro stores for both players counts once. This can change their windows, "
-                     "mostly wider where they were cut short. Off by default while it's compared with the old count",
+                     "player's clicks, plays the other player's at their own timing with none skipped, and runs on "
+                     "to the measured player's next click; in a 1-player level a click a macro stores for both "
+                     "players counts once. Their windows can come out wider or narrower: wider where tests skipped "
+                     "or moved the other player's clicks, narrower where a test now runs further and meets a later "
+                     "death. Off by default while it's compared with the old count",
                      &FW::twoPlayerFixes);
 
                 kit::Section("Debug");
