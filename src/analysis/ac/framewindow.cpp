@@ -246,13 +246,20 @@ FrameWindowAnalyzer::parseColored(std::string const& text) {
 
 FrameWindowTier const* FrameWindowAnalyzer::visibleTierFor(
     FrameWindowMark const& mk) const {
-    auto const* tier = this->tierFor(this->displayWindow(mk));
+    // GucciBot (2026-10-23): the number the marker prints, picked the way
+    // displayWindow() picks its whole count, for a band with decimal edges.
+    double value = mk.window;
+    if (mk.dependent > 0.f)
+        value = mk.dependent;
+    else if (mk.subframe > 0.f && !(mk.cbf && m_cbfWholeMarkers->inner()))
+        value = mk.subframe;
+    auto const* tier = this->tierForValue(this->displayWindow(mk), value);
     return tier && tier->showInHud ? tier : nullptr;
 }
 
 FrameWindowTier const* FrameWindowAnalyzer::tierForFrames(float frames) const {
     if (!(frames > 0.f)) return nullptr;
-    return this->tierFor(static_cast<int>(std::floor(frames)));
+    return this->tierForValue(static_cast<int>(std::floor(frames)), frames);
 }
 
 void FrameWindowAnalyzer::splitSlots(int64_t slots, int& tickShift,
@@ -4553,11 +4560,32 @@ std::string FrameWindowAnalyzer::formatWindow(int window) {
     return fmt::format("{}", window);
 }
 
-FrameWindowTier const* FrameWindowAnalyzer::tierFor(int window) const {
-    auto const& tiers = SLSettings::get()->frameWindow.tiers;
-    for (auto const& t : tiers) {
-        if (window >= t.minWindow && window <= t.maxWindow) return &t;
+// GucciBot (2026-10-23): band edges can be decimals, like 0.3-0.5 and 0.5-1
+// for sub-tick windows (anticroom's antics-counter beta.5 changelog). A band
+// whose edges are both whole numbers holds whole windows, exactly as before:
+// `whole` is the caller's whole count. A band with a decimal edge holds
+// `value` itself, rounded to the places the marker prints, so two markers that
+// both read 0.50 land in the same band.
+bool FrameWindowAnalyzer::bandHolds(FrameWindowTier const& t, int whole,
+                                    double value) const {
+    if (t.minWindow == std::floor(t.minWindow) &&
+        t.maxWindow == std::floor(t.maxWindow)) {
+        double const w = whole;
+        return w >= t.minWindow && w <= t.maxWindow;
     }
+    double const scale =
+        std::pow(10.0, std::clamp(m_subframeDecimals->inner(), 0, 4));
+    double const shown = std::round(value * scale) / scale;
+    // An edge is a float: 0.3 is stored a hair off 0.3, so allow a hair.
+    constexpr double EDGE_SLACK = 1e-5;
+    return shown >= t.minWindow - EDGE_SLACK &&
+           shown <= t.maxWindow + EDGE_SLACK;
+}
+
+FrameWindowTier const* FrameWindowAnalyzer::tierForValue(int whole,
+                                                         double value) const {
+    for (auto const& t : SLSettings::get()->frameWindow.tiers)
+        if (this->bandHolds(t, whole, value)) return &t;
     return nullptr;
 }
 
@@ -5141,7 +5169,8 @@ std::string FrameWindowAnalyzer::describe() const {
     });
 
     int top = 1;
-    for (auto const& b : bands) top = std::max(top, b.maxWindow);
+    for (auto const& b : bands)
+        top = std::max(top, static_cast<int>(std::ceil(b.maxWindow)));
 
     std::vector<int> individual(top + 1, 0);
     int individualOver = 0;
@@ -5171,8 +5200,10 @@ std::string FrameWindowAnalyzer::describe() const {
         add(lo, 1.0 - frac);
         if (frac > 0.0) add(lo + 1, frac);
 
+        // GucciBot (2026-10-23): a band with decimal edges takes the sub-tick
+        // value itself; whole bands still take it floored.
         for (size_t b = 0; b < bands.size(); b++) {
-            if (lo >= bands[b].minWindow && lo <= bands[b].maxWindow) {
+            if (this->bandHolds(bands[b], lo, in.m_frames)) {
                 grouped[b]++;
                 break;
             }
@@ -5215,8 +5246,8 @@ std::string FrameWindowAnalyzer::describe() const {
         std::string const name =
             !t.text.empty() ? t.text
             : t.minWindow == t.maxWindow
-                ? fmt::format("{}", t.minWindow)
-                : fmt::format("{}-{}", t.minWindow, t.maxWindow);
+                ? fmt::format("{:g}", t.minWindow)
+                : fmt::format("{:g}-{:g}", t.minWindow, t.maxWindow);
         out += fmt::format("{}: {}\n", name, grouped[b]);
     }
 
@@ -5859,8 +5890,8 @@ void FrameWindowAnalyzer::rebuildHud(PlayLayer* pl) {
         std::string const name =
             tier.text.empty()
                 ? (tier.minWindow == tier.maxWindow
-                       ? fmt::format("{}", tier.minWindow)
-                       : fmt::format("{}-{}", tier.minWindow, tier.maxWindow))
+                       ? fmt::format("{:g}", tier.minWindow)
+                       : fmt::format("{:g}-{:g}", tier.minWindow, tier.maxWindow))
                 : tier.text;
 
         auto* label = CCLabelBMFont::create(

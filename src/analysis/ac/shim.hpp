@@ -95,10 +95,14 @@ class TrailBuffer;
 
 struct FrameWindowTier {
     int id = 1;
-    int minWindow = 0;
+    // GucciBot (2026-10-23): the edges can be decimals, like 0.3-0.5 for
+    // sub-tick (CBF) windows (anticroom's antics-counter beta.5 changelog). A
+    // band with two whole edges holds whole windows as it always did; see
+    // FrameWindowAnalyzer::bandHolds.
+    float minWindow = 0.f;
     // GucciBot's bands top out at 10 -- past that a window is lenient enough
     // that the exact number stops mattering. anticroom's default is 999.
-    int maxWindow = 10;
+    float maxWindow = 10.f;
     std::string text = "";
     std::string audioPath = "";
     std::array<float, 4> color = {1.f, 1.f, 1.f, 1.f};

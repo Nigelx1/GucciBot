@@ -66,7 +66,8 @@ namespace gucci::fwstore {
     // Only the bands back to their defaults, then saved.
     void resetBands();
 
-    // Smallest and largest window a band edge may be set to.
+    // Largest window a band edge may be set to (the smallest is 0). Edges
+    // can be decimals since 2026-10-23, kept to 4 places.
     inline constexpr int kBandWindowMax = 999;
 
 } // namespace gucci::fwstore

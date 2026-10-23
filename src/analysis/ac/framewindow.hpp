@@ -266,7 +266,10 @@ class FrameWindowAnalyzer {
     void dropMarkers();
 
     void resetDisplay();
-    FrameWindowTier const* tierFor(int window) const;
+    // The first band holding a window: `whole` is its whole count, `value`
+    // the number the marker prints (a sub-tick or ~ value, else the same).
+    FrameWindowTier const* tierForValue(int whole, double value) const;
+    bool bandHolds(FrameWindowTier const& t, int whole, double value) const;
     static std::string formatWindow(int window);
 
     SLValuePtr<bool> m_statePlayerDiff = SLValue<bool>::create(

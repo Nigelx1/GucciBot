@@ -162,12 +162,14 @@ namespace gucci {
             bands.reserve(tiers.size());
 
             for (auto const& tier : tiers) {
-                int const lo = tier.minWindow;
-                int const hi = tier.maxWindow;
+                // GucciBot (2026-10-23): band edges can be decimals (0.3-0.5);
+                // {:g} prints a whole edge as before, 2 not 2.0.
+                double const lo = tier.minWindow;
+                double const hi = tier.maxWindow;
 
                 std::string const range =
                     tier.text.empty()
-                        ? (lo == hi ? fmt::format("{}", lo) : fmt::format("{}-{}", lo, hi))
+                        ? (lo == hi ? fmt::format("{:g}", lo) : fmt::format("{:g}-{:g}", lo, hi))
                         : tier.text;
 
                 std::string const hz = lo <= 0 ? fmt::format(">{}Hz", trimNumber(safeTps))
@@ -183,8 +185,8 @@ namespace gucci {
                     {"{ms}", ms},
                     {"{low}", low},
                     {"{high}", high},
-                    {"{min}", fmt::format("{}", lo)},
-                    {"{max}", fmt::format("{}", hi)},
+                    {"{min}", fmt::format("{:g}", lo)},
+                    {"{max}", fmt::format("{:g}", hi)},
                 };
 
                 auto const byte = [](float v) {

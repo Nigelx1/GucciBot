@@ -422,19 +422,25 @@ namespace gucci::ui::pages {
             if (!t.text.empty())
                 return t.text;
             if (t.minWindow == t.maxWindow)
-                return fmt::format("{} frame{}", t.minWindow, t.minWindow == 1 ? "" : "s");
-            return fmt::format("{} - {} frames", t.minWindow, t.maxWindow);
+                return fmt::format("{:g} frame{}", t.minWindow, t.minWindow == 1.f ? "" : "s");
+            return fmt::format("{:g} - {:g} frames", t.minWindow, t.maxWindow);
         }
 
         void bandDetails(FrameWindowTier& t) {
             bool changed = false;
-            kit::RowBegin("Window", "Smallest and largest window in this band, in frames");
+            // GucciBot (2026-10-23): decimal edges, after anticroom's
+            // antics-counter beta.5. The buttons still step whole frames, so a
+            // whole band stays whole unless a decimal is typed.
+            kit::RowBegin("Window", "Smallest and largest window in this band, in frames. Whole numbers hold whole "
+                                    "windows (a sub-tick 1.3 counts as 1). A decimal edge, like 0.3 to 0.5, holds "
+                                    "sub-tick (CBF) values as they're printed: on the markers when Whole numbers on "
+                                    "markers is off, and always in the top right readout and Copy info");
             float const half = (kit::Avail() - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
             ImGui::SetNextItemWidth(half);
-            changed |= ImGui::InputInt("##min", &t.minWindow);
+            changed |= ImGui::InputFloat("##min", &t.minWindow, 1.f, 100.f, "%g");
             ImGui::SameLine();
             ImGui::SetNextItemWidth(half);
-            changed |= ImGui::InputInt("##max", &t.maxWindow);
+            changed |= ImGui::InputFloat("##max", &t.maxWindow, 1.f, 100.f, "%g");
             kit::RowEnd();
 
             kit::RowBegin("Label", "Shown instead of the frame count on the marker and in the HUD. Empty shows the "
@@ -585,7 +591,8 @@ namespace gucci::ui::pages {
                 for (auto const& x : tiers)
                     nt.id = std::max(nt.id, x.id + 1);
                 if (!tiers.empty()) {
-                    nt.minWindow = std::min(tiers.back().maxWindow + 1, fwstore::kBandWindowMax);
+                    nt.minWindow = std::min(std::floor(tiers.back().maxWindow) + 1.f,
+                                            static_cast<float>(fwstore::kBandWindowMax));
                     nt.maxWindow = nt.minWindow;
                 }
                 tiers.push_back(nt);

@@ -11,6 +11,7 @@
 #include <matjson.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <set>
 #include <string>
 #include <vector>
@@ -153,6 +154,26 @@ namespace gucci::fwstore {
 
         // ---- bands ----------------------------------------------------------
 
+        // GucciBot (2026-10-23): a band edge can be a decimal now. It keeps
+        // at most the 4 places a marker can print (formatSubframe), so 0.3
+        // and a typed 0.30000001 are one edge, and NaN can't get in.
+        float bandEdge(float v, float lo) {
+            if (!std::isfinite(v))
+                v = lo;
+            v = std::clamp(v, lo, static_cast<float>(kBandWindowMax));
+            return std::round(v * 10000.f) / 10000.f;
+        }
+
+        // A whole edge is written as an integer, as it always was, so bands
+        // without decimals save exactly as before and an older build reads
+        // them unchanged; a decimal edge is written as a number.
+        matjson::Value edgeJson(float v) {
+            double const d = std::round(static_cast<double>(v) * 10000.0) / 10000.0;
+            if (d == std::floor(d))
+                return matjson::Value(static_cast<int64_t>(d));
+            return matjson::Value(d);
+        }
+
         // The bands as one JSON array in a string, in the format the pre-bz
         // build wrote, so saved bands load unchanged.
         std::string dumpTiers(std::vector<FrameWindowTier> const& tiers) {
@@ -160,8 +181,8 @@ namespace gucci::fwstore {
             for (auto const& t : tiers) {
                 auto o = matjson::Value::object();
                 o["id"] = t.id;
-                o["min"] = t.minWindow;
-                o["max"] = t.maxWindow;
+                o["min"] = edgeJson(t.minWindow);
+                o["max"] = edgeJson(t.maxWindow);
                 o["text"] = t.text;
                 o["audio"] = t.audioPath;
                 o["hud"] = t.showInHud;
@@ -209,8 +230,8 @@ namespace gucci::fwstore {
         // with. Shared by load and save, so a typed-in value can't be saved
         // out of range either.
         void clampTier(FrameWindowTier& t) {
-            t.minWindow = std::clamp(t.minWindow, 0, kBandWindowMax);
-            t.maxWindow = std::clamp(t.maxWindow, t.minWindow, kBandWindowMax);
+            t.minWindow = bandEdge(t.minWindow, 0.f);
+            t.maxWindow = bandEdge(t.maxWindow, t.minWindow);
             for (auto& c : t.color)
                 c = std::clamp(c, 0.f, 1.f);
             int const shape = std::clamp(static_cast<int>(t.style.shape), 0, 3);
@@ -259,8 +280,10 @@ namespace gucci::fwstore {
                     continue;
                 FrameWindowTier t;
                 t.id = static_cast<int>(jint(j, "id", static_cast<int64_t>(i) + 1));
-                t.minWindow = static_cast<int>(jint(j, "min", def.minWindow));
-                t.maxWindow = static_cast<int>(jint(j, "max", def.maxWindow));
+                // Saves from before 2026-10-23 hold whole numbers; read as
+                // numbers, those and decimal edges both come back.
+                t.minWindow = static_cast<float>(jreal(j, "min", def.minWindow));
+                t.maxWindow = static_cast<float>(jreal(j, "max", def.maxWindow));
                 t.text = jstr(j, "text", "");
                 t.audioPath = jstr(j, "audio", "");
                 t.showInHud = jbool(j, "hud", true);
