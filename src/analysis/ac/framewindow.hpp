@@ -56,6 +56,10 @@ struct FrameWindowMark {
     float dependent = 0.f;
     float dependentMin = 0.f;
     float dependentMax = 0.f;
+    // GucciBot (2026-10-23): with a ~N (dependent), the share of the input
+    // before's alignments at which this one can still be hit; ~N is the
+    // average over those. 0: no ~N, or one from before this was kept.
+    float dependentCoverage = 0.f;
     // GucciBot: Juice's Alignment-Independent count, for a suspicious click
     // only (see beginSuggestPass): its window taken over every alignment of
     // the input before it. 0 = no suggestion. Calculate's count stays
@@ -785,9 +789,20 @@ class FrameWindowAnalyzer {
     bool inProbeRange(size_t index) const;
     void mergeKept();
 
+    // The Suggest pass places its alignments and scans with these too, so
+    // they stay as they are.
     static constexpr int DEP_POINTS = 7;
     static constexpr int DEP_SCAN_PER_TICK = 8;
+    // GucciBot (2026-10-23): the dependent pass, reworked (framewindow.cpp,
+    // above beginDependentPass). How many scan legs an alignment may spend
+    // looking for a timing of the input that survives once every guess at
+    // where it went has died.
+    static constexpr int DEP_SEARCH_LEGS = 24;
 
+    // A tight input (b) and the input before it of the same player (a).
+    // Shifts of b are counted in its own units: whole frames, or CBF slots
+    // when Calculate counted its window sub-tick (res); a's alignments are in
+    // frames.
     struct DependentPair {
         size_t a = 0;
         size_t b = 0;
@@ -797,7 +812,28 @@ class FrameWindowAnalyzer {
         // GucciBot (2026-10-23): the pair's checkpoint, a frame before the
         // earliest the input before goes. The pairs run in this order.
         uint32_t base = 0;
+        int64_t resA = 1;
+        int64_t resB = 1;
+        // b's own window, Calculate's count, in b's units.
+        int64_t strictLo = 0;
+        int64_t strictHi = 0;
     };
+    struct DependentTest {
+        int64_t shift = 0;
+        bool survived = false;
+    };
+    // b's window at one alignment of a.
+    struct DependentPoint {
+        double at = 0.0;
+        bool survived = false;
+        bool noRoom = false;
+        int64_t lo = 0;
+        int64_t hi = 0;
+        bool clippedLo = false;
+        bool clippedHi = false;
+        int legs = 0;
+    };
+    enum class DepProbe : uint8_t { Find, Low, High };
 
     std::vector<DependentPair> m_depPairs;
     size_t m_depCursor = 0;
@@ -807,27 +843,53 @@ class FrameWindowAnalyzer {
     bool m_depLegActive = false;
     uint32_t m_depLegTarget = 0;
     int64_t m_depLegShift = 0;
+    ShiftMode m_depLegMode = ShiftMode::Buffer;
     std::vector<double> m_depPoints;
     size_t m_depPoint = 0;
-    std::vector<int64_t> m_depWidths;
-    std::vector<int64_t> m_depScan;
-    std::vector<char> m_depScanAlive;
-    size_t m_depScanAt = 0;
-    bool m_depEdgesSet = false;
+    std::vector<DependentPoint> m_depDone;
+    // The alignment under test: every shift of b tried there, the room b has
+    // (m_depLo..m_depHi; a Buffer leg only up to m_depBufHi), the guesses
+    // still to try (shift, group), and b's window's edges as they're found.
+    std::vector<DependentTest> m_depTested;
+    std::vector<std::pair<int64_t, int>> m_depQueue;
+    size_t m_depQueueAt = 0;
+    int m_depQueueGroup = -1;
+    int64_t m_depLo = 0;
+    int64_t m_depHi = 0;
+    int64_t m_depBufHi = 0;
     bool m_depFound = false;
-    int64_t m_depLow = 0;
-    int64_t m_depLowDead = 0;
-    int64_t m_depAlive = 0;
-    int64_t m_depDead = 0;
+    int64_t m_depSurvivor = 0;
+    DepProbe m_depProbe = DepProbe::Find;
+    int64_t m_depLowStep = 1;
+    int64_t m_depHighStep = 1;
+    bool m_depLowDone = false;
+    bool m_depHighDone = false;
+    int64_t m_depLowEdge = 0;
+    int64_t m_depHighEdge = 0;
+    bool m_depLowClipped = false;
+    bool m_depHighClipped = false;
+    bool m_depRetry = false;
+    int m_depPointLegs = 0;
+    int m_depPairLegs = 0;
+    // The pass as a whole, for its summary line.
+    long long m_depLegs = 0;
+    int m_depIndependent = 0;
+    int m_depFlagged = 0;
+    int m_depSkipped = 0;
+    std::chrono::steady_clock::time_point m_depPassStart{};
+    std::chrono::steady_clock::time_point m_depPairStart{};
     std::string m_depFinishMessage;
 
     bool beginDependentPass(std::string message);
     bool stepDependent(PlayLayer* pl);
     void startDependentPoint();
-    bool nextDependentShift(int64_t& shift);
-    void launchDependentLeg(int64_t shift);
+    bool nextDependentShift(int64_t& shift, ShiftMode& mode);
+    void launchDependentLeg(int64_t shift, ShiftMode mode);
     void recordDependentLeg(bool survived);
+    void finishDependentPoint();
     void finishDependentPair();
+    double depPlaced(size_t k) const;
+    bool depBufferValid(int64_t shift) const;
     void resetActions();
     void placeAt(size_t k, double pos);
     size_t resultFor(size_t sample) const;

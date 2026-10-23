@@ -4067,6 +4067,41 @@ void FrameWindowAnalyzer::placeAt(size_t k, double pos) {
     scbf::setOffset(action, pos > whole ? pos - whole : 0.0);
 }
 
+// ---- The dependent pass ------------------------------------------------------
+//
+// anticroom's, from his 2026-09-26 "slc count" drop: an input whose window
+// depends on where the input before it landed is measured again with that
+// input moved across its own window, and its window becomes the average,
+// shown as ~N. Reworked 2026-10-23 after his antics-counter beta.6 changelog
+// ("Dependent Pair Search improved: a lot faster and more accurate"). We have
+// the changelog, not his source, so the rework is ours, aimed at what was
+// wrong with our copy: it scanned the input across the whole search distance
+// at an eighth of a tick, at seven alignments, for nearly every input
+// (hundreds of test runs each); it measured whole-frame windows in sub-tick
+// slots; it moved the input alone, without its release; and zero-width
+// alignments pulled the average down.
+//
+// Now, for a tight input whose input before it is within the search distance
+// (beginDependentPass):
+// - The input before goes to the edges of its own window, and for a window
+//   Calculate counted sub-tick, halfway to each edge too. At its own timing
+//   the input's window is Calculate's count, so that isn't measured again.
+// - The input is measured in its own units (whole frames, or CBF slots for a
+//   window counted sub-tick) and moved the way its own count moved it: a whole
+//   frame with the rest of its player's inputs (Retime), and when that dies,
+//   with only its release (Buffer); a sub-tick shift with its release. Each
+//   test runs as far as the count's own do (legReach).
+// - Its window is searched from its own: the two edges, then the same moved
+//   along with the input before, then inside each, then a short scan nearest
+//   its own timing. From a timing that survives, each edge is tested one unit
+//   past it first, then walked a frame at a time (as the count walks them), or
+//   for slots galloped out and bisected back (as the count's sub-tick pass
+//   bisects, with Bisect edges on).
+// - The pair is independent when the input survives at every alignment and
+//   its window there is within a frame of its own count; nothing changes then.
+//   Otherwise ~N is the average over the alignments where it can still be hit,
+//   Calculate's count among them, and the share of them is kept with it.
+
 bool FrameWindowAnalyzer::beginDependentPass(std::string message) {
     m_depRes = 1;
     if (m_subframeProbe->inner()) {
@@ -4110,17 +4145,30 @@ bool FrameWindowAnalyzer::beginDependentPass(std::string message) {
         if (ma.wide || mb.wide) continue;
         if (mb.window > tight) continue;
 
-        double const scale =
-            ma.cbf ? static_cast<double>(std::max<int64_t>(1, m_depRes)) : 1.0;
+        // GucciBot (2026-10-23): each in its own units, whole frames or, for
+        // a window Calculate counted sub-tick, CBF slots. A whole-frame
+        // window used to be searched in slots whenever sub-tick counting was
+        // on, so its ~N wasn't in the unit of its own count.
         DependentPair pair;
         pair.a = a;
         pair.b = b;
         pair.markB = rb;
-        pair.aLo = static_cast<double>(ma.low) / scale;
-        pair.aHi = static_cast<double>(ma.high) / scale;
+        pair.resA = ma.cbf ? m_depRes : 1;
+        pair.resB = mb.cbf ? m_depRes : 1;
+        pair.aLo = static_cast<double>(ma.low) / static_cast<double>(pair.resA);
+        pair.aHi = static_cast<double>(ma.high) / static_cast<double>(pair.resA);
         if (pair.aHi <= pair.aLo) continue;
+        pair.strictLo = mb.low;
+        pair.strictHi = mb.high;
+        if (pair.strictHi < pair.strictLo) continue;
 
         size_t const aiA = m_samples[a].actionIndex;
+        // Not when the input before is still held as this one comes (two
+        // buttons of one player, in a platformer): its release, which moves
+        // with it, would land among this one's.
+        if (size_t const relA = this->pairedReleaseFor(aiA);
+            relA != NO_INDEX && relA > m_samples[b].actionIndex)
+            continue;
         double const earliest = static_cast<double>(m_originalFrames[aiA]) +
                                 m_originalOffsets[aiA] +
                                 std::min(pair.aLo, 0.0);
@@ -4146,16 +4194,27 @@ bool FrameWindowAnalyzer::beginDependentPass(std::string message) {
                          return x.base < y.base;
                      });
 
-    log::info("[fw][dependent] checking {} pair(s) at {} slot(s)/tick: tight "
-              "inputs (window {} or less) with the input before within {} "
-              "frames",
-              m_depPairs.size(), m_depRes, tight, m_sweep);
+    {
+        auto const line = fmt::format(
+            "[fw][dependent] checking {} pair(s): tight inputs (window {} or "
+            "less) with the input before within {} frames; sub-tick windows in "
+            "{} slot(s) a frame",
+            m_depPairs.size(), tight, m_sweep, m_depRes);
+        log::info("{}", line);
+        fwFileLog(line);
+    }
 
     m_depFinishMessage = std::move(message);
     m_depCursor = 0;
     m_depBaseReady = false;
     m_depAdvancing = false;
     m_depLegActive = false;
+    m_depRetry = false;
+    m_depLegs = 0;
+    m_depIndependent = 0;
+    m_depFlagged = 0;
+    m_depSkipped = 0;
+    m_depPassStart = Clock::now();
     m_phase = Phase::Later;
     m_shift = 0;
     m_stageId = Stage::Dependent;
@@ -4173,6 +4232,20 @@ bool FrameWindowAnalyzer::stepDependent(PlayLayer* pl) {
     if (m_depCursor >= m_depPairs.size()) {
         this->resetActions();
         cbf::Engine::get()->reset();
+        // GucciBot (2026-10-23): what the pass found and what it cost, in the
+        // file whether or not Verbose log is on.
+        {
+            double const secs =
+                std::chrono::duration<double>(Clock::now() - m_depPassStart)
+                    .count();
+            auto const line = fmt::format(
+                "[fw][dependent] done: {} pair(s) in {:.1f} s and {} test "
+                "runs: {} independent, {} shown as ~N, {} skipped",
+                m_depPairs.size(), secs, m_depLegs, m_depIndependent,
+                m_depFlagged, m_depSkipped);
+            log::info("{}", line);
+            fwFileLog(line);
+        }
         // GucciBot: Juice's count for the suspicious clicks comes after.
         if (this->beginSuggestPass(m_depFinishMessage))
             return true;
@@ -4186,6 +4259,10 @@ bool FrameWindowAnalyzer::stepDependent(PlayLayer* pl) {
         uint32_t const base = pair.base;
 
         if (!m_depAdvancing) {
+            m_depPairStart = Clock::now();
+            m_depPairLegs = 0;
+            m_status = fmt::format("Checking dependent pairs: {} of {}",
+                                   m_depCursor + 1, m_depPairs.size());
             cbf::Engine::get()->reset();
             this->resetActions();
             if (m_haveCheckpoint && m_saved.m_frameOffset <= base) {
@@ -4207,6 +4284,7 @@ bool FrameWindowAnalyzer::stepDependent(PlayLayer* pl) {
             FWWARN("[fw][dependent] could not reach frame {} for click {}, "
                       "skipping it",
                       base, pair.b + 1);
+            m_depSkipped++;
             m_depCursor++;
             return true;
         }
@@ -4228,47 +4306,79 @@ bool FrameWindowAnalyzer::stepDependent(PlayLayer* pl) {
         m_saved = pf.createCheckpoint(m_cpObject, updater.getFrame());
         m_haveCheckpoint = true;
 
+        // GucciBot (2026-10-23): where the input before goes: the edges of
+        // its own window, and for one counted sub-tick halfway to each edge
+        // too, on its own grid. Not its own timing: there the input's window
+        // is Calculate's count.
+        double const resA = static_cast<double>(pair.resA);
+        std::vector<double> at{pair.aLo, pair.aHi};
+        if (pair.resA > 1) {
+            at.push_back(std::round(pair.aLo * 0.5 * resA) / resA);
+            at.push_back(std::round(pair.aHi * 0.5 * resA) / resA);
+        }
+        // An alignment that would take the input before, or its release,
+        // past another input of its player that stays put is left out: in
+        // its own count Retime moved those along, here they stay, and inputs
+        // out of order stall the replay.
+        size_t const aiA = m_samples[pair.a].actionIndex;
+        size_t const aiB = m_samples[pair.b].actionIndex;
+        size_t const relA = this->pairedReleaseFor(aiA);
+        auto const& actions = bot->replaySystem().m_actionAtom.m_actions;
+        auto const keepsOrder = [&](double p) {
+            double last = -1.0;
+            for (size_t k = aiA; k < aiB; k++) {
+                if (!isMeasurableInput(actions[k]) ||
+                    actions[k].m_player2 != actions[aiA].m_player2)
+                    continue;
+                double pos = static_cast<double>(m_originalFrames[k]) +
+                             m_originalOffsets[k];
+                if (k == aiA || k == relA) pos += p;
+                double const frame = std::floor(pos);
+                if (frame < last) return false;
+                last = frame;
+            }
+            return true;
+        };
         m_depPoints.clear();
-        m_depPoints.push_back(pair.aLo);
-        m_depPoints.push_back(pair.aHi);
-        for (int k = 1; k < DEP_POINTS - 1; k++)
-            m_depPoints.push_back(pair.aLo + (pair.aHi - pair.aLo) * k /
-                                                 (DEP_POINTS - 1));
-        if (m_depRes <= 1 && !m_results[this->resultFor(pair.a)].cbf) {
-            for (auto& p : m_depPoints) p = std::round(p);
-            std::vector<double> unique;
-            for (double p : m_depPoints)
-                if (std::find(unique.begin(), unique.end(), p) == unique.end())
-                    unique.push_back(p);
-            m_depPoints = std::move(unique);
+        for (double p : at) {
+            bool const seen = std::any_of(
+                m_depPoints.begin(), m_depPoints.end(),
+                [p](double q) { return std::abs(q - p) < 1e-9; });
+            if (std::abs(p) < 1e-9 || seen) continue;
+            if (!keepsOrder(p)) {
+                FWLOG("[fw][dependent] click {}: click {} at {:+g} would pass "
+                      "another of its player's inputs, left out",
+                      pair.b + 1, pair.a + 1, p);
+                continue;
+            }
+            m_depPoints.push_back(p);
         }
 
-        m_depWidths.clear();
+        m_depDone.clear();
         m_depPoint = 0;
-        m_depBaseReady = true;
         m_index = pair.b;
+        if (m_depPoints.empty()) {
+            FWWARN("[fw][dependent] click {}: click {} can't move without "
+                   "passing another of its player's inputs, skipping it",
+                   pair.b + 1, pair.a + 1);
+            m_depSkipped++;
+            m_depCursor++;
+            return true;
+        }
+        m_depBaseReady = true;
         this->startDependentPoint();
         return true;
     }
 
     if (!m_depLegActive) {
         int64_t shift = 0;
-        if (this->nextDependentShift(shift)) {
-            this->launchDependentLeg(shift);
+        ShiftMode mode = ShiftMode::Buffer;
+        if (this->nextDependentShift(shift, mode)) {
+            this->launchDependentLeg(shift, mode);
             return true;
         }
 
-        m_depWidths.push_back(m_depFound ? m_depAlive - m_depLow + 1 : 0);
-
-        if (m_depPoint == 1 && std::abs(m_depWidths[0] - m_depWidths[1]) <= 1) {
-            FWLOG("[fw][dependent] click {} after {}: same window at both "
-                  "edges, independent",
-                  pair.b + 1, pair.a + 1);
-            m_depWidths.clear();
-            this->finishDependentPair();
-            return true;
-        }
-
+        this->finishDependentPoint();
         if (++m_depPoint >= m_depPoints.size()) {
             this->finishDependentPair();
             return true;
@@ -4285,168 +4395,482 @@ bool FrameWindowAnalyzer::stepDependent(PlayLayer* pl) {
     return true;
 }
 
-void FrameWindowAnalyzer::startDependentPoint() {
+// GucciBot (2026-10-23): where action k sits at this alignment before the
+// input under test is moved: the input before and its release moved to it,
+// the rest where the macro has them.
+double FrameWindowAnalyzer::depPlaced(size_t k) const {
     auto const& pair = m_depPairs[m_depCursor];
     size_t const aiA = m_samples[pair.a].actionIndex;
     size_t const aiB = m_samples[pair.b].actionIndex;
+    double pos =
+        static_cast<double>(m_originalFrames[k]) + m_originalOffsets[k];
+    if (k == aiA || (k != aiB && k == this->pairedReleaseFor(aiA)))
+        pos += m_depPoints[m_depPoint];
+    return pos;
+}
 
-    double const res = static_cast<double>(m_depRes);
-    double const aPos = static_cast<double>(m_originalFrames[aiA]) +
-                        m_originalOffsets[aiA] + m_depPoints[m_depPoint];
-    double const bPos =
-        static_cast<double>(m_originalFrames[aiB]) + m_originalOffsets[aiB];
+// GucciBot (2026-10-23): whether a Buffer test (the input and its release
+// moved, the rest left) may use this shift at this alignment: the room
+// startDependentPoint worked out, by bufferShiftValid's rule.
+bool FrameWindowAnalyzer::depBufferValid(int64_t shift) const {
+    return shift >= m_depLo && shift <= m_depBufHi;
+}
 
-    int64_t const reach = static_cast<int64_t>(m_sweep) * m_depRes;
-    int64_t lo = -reach;
-    int64_t hi = reach;
+void FrameWindowAnalyzer::startDependentPoint() {
+    auto const& pair = m_depPairs[m_depCursor];
+    size_t const aiB = m_samples[pair.b].actionIndex;
+    bool const p2 = m_samples[pair.b].player2;
+    double const res = static_cast<double>(pair.resB);
+    auto const origin = [this](size_t k) {
+        return static_cast<double>(m_originalFrames[k]) + m_originalOffsets[k];
+    };
+    double const bPos = origin(aiB);
 
-    lo = std::max<int64_t>(
-        lo, static_cast<int64_t>(std::floor((aPos - bPos) * res)) + 1);
-    lo = std::max<int64_t>(lo,
-                           static_cast<int64_t>(std::ceil(-bPos * res)));
-    if (size_t const next = this->nextActionFor(aiB, m_samples[pair.b].player2);
-        next != NO_INDEX) {
-        double const nPos = static_cast<double>(m_originalFrames[next]) +
-                            m_originalOffsets[next];
-        hi = std::min<int64_t>(
-            hi, static_cast<int64_t>(std::ceil((nPos - bPos) * res)) - 1);
+    m_depTested.clear();
+    m_depQueue.clear();
+    m_depQueueAt = 0;
+    m_depQueueGroup = -1;
+    m_depFound = false;
+    m_depSurvivor = 0;
+    m_depProbe = DepProbe::Find;
+    m_depLowStep = 1;
+    m_depHighStep = 1;
+    m_depLowDone = false;
+    m_depHighDone = false;
+    m_depLowEdge = 0;
+    m_depHighEdge = 0;
+    m_depLowClipped = false;
+    m_depHighClipped = false;
+    m_depRetry = false;
+    m_depPointLegs = 0;
+
+    // The frame a shift puts something at `pos` on, as placeAt puts it; the
+    // least shift that puts it on frame f or later; the most that keeps it
+    // before frame f. (Worked out, then checked against frameAt: a position
+    // plus slots doesn't always land on a whole frame exactly in floating
+    // point.)
+    auto const frameAt = [res](double pos, int64_t s) {
+        return std::floor(pos + static_cast<double>(s) / res);
+    };
+    auto const firstOnOrAfter = [&](double pos, double f) {
+        auto s = static_cast<int64_t>(std::ceil((f - pos) * res));
+        while (frameAt(pos, s) < f) s++;
+        while (frameAt(pos, s - 1) >= f) s--;
+        return s;
+    };
+    auto const lastBefore = [&](double pos, double f) {
+        return firstOnOrAfter(pos, f) - 1;
+    };
+
+    // Its room, as Calculate's own count gives it: within the search
+    // distance, not before the level, and on a later frame than the input
+    // before it of its player (here, where this alignment put that one).
+    int64_t const reach = static_cast<int64_t>(m_sweep) * pair.resB;
+    double floorFrame = 0.0;
+    if (size_t const prev = this->prevActionFor(aiB, p2); prev != NO_INDEX)
+        floorFrame = std::floor(this->depPlaced(prev)) + 1.0;
+    m_depLo = std::max(-reach, firstOnOrAfter(bPos, floorFrame));
+    m_depHi = reach;
+
+    // What a Buffer test leaves where it is: the input stays before its
+    // player's next input, and its release before the input after that.
+    size_t const next = this->nextActionFor(aiB, p2);
+    size_t const rel = this->pairedReleaseFor(aiB);
+    int64_t pressRoom = reach;
+    if (next != NO_INDEX)
+        pressRoom = lastBefore(bPos, std::floor(this->depPlaced(next)));
+    int64_t releaseRoom = reach;
+    if (rel != NO_INDEX)
+        if (size_t const after = this->nextActionFor(rel, p2); after != NO_INDEX)
+            releaseRoom =
+                lastBefore(origin(rel), std::floor(this->depPlaced(after)));
+    if (pair.resB > 1) {
+        // A sub-tick shift moves it with its release only, as the count's
+        // sub-tick pass does. (That pass only warns when one crosses the
+        // next input; this keeps short of it, so no test plays its player's
+        // inputs out of order and stalls the replay.)
+        m_depHi = std::min(m_depHi, rel != NO_INDEX ? releaseRoom : pressRoom);
+        m_depBufHi = m_depHi;
+    } else {
+        // bufferShiftValid's rule as it reads, for the Buffer try of a
+        // whole-frame shift that died retimed.
+        m_depBufHi = std::min({reach, pressRoom, releaseRoom});
     }
 
-    m_depScan.clear();
-    m_depScanAlive.clear();
-    m_depScanAt = 0;
-    m_depEdgesSet = false;
-    m_depFound = false;
-    if (hi < lo) return;
+    if (m_depLo > m_depHi) return;
 
-    int64_t const stride = std::max<int64_t>(1, m_depRes / DEP_SCAN_PER_TICK);
-    for (int64_t t = lo; t <= hi; t += stride) m_depScan.push_back(t);
-    if (m_depScan.back() != hi) m_depScan.push_back(hi);
-    if (lo <= 0 && hi >= 0 &&
-        std::find(m_depScan.begin(), m_depScan.end(), 0) == m_depScan.end()) {
-        m_depScan.push_back(0);
-        std::sort(m_depScan.begin(), m_depScan.end());
+    // Where to look for a timing of it that survives, in groups tried whole,
+    // so when one of a group survives, both of the window's edges it gave
+    // are known: (0) its own window's edges; (1) the same moved along with
+    // the input before (in that input's own count, a whole-frame shift of it
+    // retimed this one with it, and survived); (2) inside its own window and
+    // (3) inside the moved one; (4) a short scan, nearest its own timing
+    // first.
+    int64_t const L = pair.strictLo;
+    int64_t const H = pair.strictHi;
+    int64_t const follow = std::llround(m_depPoints[m_depPoint] * res);
+    bool const inside = L < 0 && 0 < H;
+    auto const add = [&](int64_t s, int group) {
+        m_depQueue.emplace_back(std::clamp(s, m_depLo, m_depHi), group);
+    };
+    add(L, 0);
+    add(H, 0);
+    if (follow != 0) {
+        add(L + follow, 1);
+        add(H + follow, 1);
+    }
+    if (inside) add(0, 2);
+    if (follow != 0 && inside) add(follow, 3);
+
+    int64_t const stride =
+        pair.resB > 1 ? std::max<int64_t>(1, pair.resB / DEP_SCAN_PER_TICK) : 1;
+    int64_t const from =
+        std::max(m_depLo, std::min(L, L + follow) - pair.resB);
+    int64_t const to = std::min(m_depHi, std::max(H, H + follow) + pair.resB);
+    std::vector<int64_t> scan;
+    int64_t first = from / stride * stride;
+    if (first < from) first += stride;
+    for (int64_t s = first; s <= to; s += stride) scan.push_back(s);
+    std::sort(scan.begin(), scan.end(), [](int64_t x, int64_t y) {
+        return std::abs(x) != std::abs(y) ? std::abs(x) < std::abs(y) : x < y;
+    });
+    int added = 0;
+    for (int64_t s : scan) {
+        if (added >= DEP_SEARCH_LEGS) break;
+        bool const queued = std::any_of(
+            m_depQueue.begin(), m_depQueue.end(),
+            [s](std::pair<int64_t, int> const& q) { return q.first == s; });
+        if (queued) continue;
+        m_depQueue.emplace_back(s, 4);
+        added++;
     }
 }
 
-bool FrameWindowAnalyzer::nextDependentShift(int64_t& shift) {
-    if (m_depScanAt < m_depScan.size()) {
-        shift = m_depScan[m_depScanAt];
+bool FrameWindowAnalyzer::nextDependentShift(int64_t& shift,
+                                             ShiftMode& mode) {
+    auto const& pair = m_depPairs[m_depCursor];
+
+    // A whole-frame shift that died retimed gets its Buffer try first, as in
+    // Calculate's own count (concludeShift).
+    if (m_depRetry) {
+        m_depRetry = false;
+        shift = m_depLegShift;
+        mode = ShiftMode::Buffer;
         return true;
     }
+    mode = pair.resB > 1 ? ShiftMode::Buffer : ShiftMode::Retime;
+    if (m_depLo > m_depHi) return false;
 
-    if (!m_depEdgesSet) {
-        m_depEdgesSet = true;
-        size_t best = NO_INDEX;
-        for (size_t i = 0; i < m_depScan.size(); i++) {
-            if (!m_depScanAlive[i]) continue;
-            if (best == NO_INDEX ||
-                std::abs(m_depScan[i]) < std::abs(m_depScan[best]))
-                best = i;
+    // -1: not tried here yet; 0: died; 1: survived.
+    auto const result = [this](int64_t s) {
+        for (auto const& t : m_depTested)
+            if (t.shift == s) return t.survived ? 1 : 0;
+        return -1;
+    };
+
+    // A timing that survives: the guesses in order, a group at a time.
+    while (m_depQueueAt < m_depQueue.size()) {
+        auto const [s, group] = m_depQueue[m_depQueueAt];
+        if (m_depFound && group != m_depQueueGroup) {
+            // One edge of its own window survived and the other didn't: the
+            // window may have moved along with the input before, and those
+            // guesses (next) would give both its edges.
+            int ownSurvived = 0;
+            for (auto const& q : m_depQueue)
+                if (q.second == 0 && result(q.first) == 1) ownSurvived++;
+            bool const moved =
+                m_depQueueGroup == 0 && group == 1 && ownSurvived == 1;
+            if (!moved) break;
         }
-        m_depFound = best != NO_INDEX;
-        if (!m_depFound) return false;
-
-        size_t left = best;
-        while (left > 0 && m_depScanAlive[left - 1]) left--;
-        size_t right = best;
-        while (right + 1 < m_depScan.size() && m_depScanAlive[right + 1])
-            right++;
-
-        m_depLow = m_depScan[left];
-        m_depLowDead = left > 0 ? m_depScan[left - 1] : m_depLow;
-        m_depAlive = m_depScan[right];
-        m_depDead = right + 1 < m_depScan.size() ? m_depScan[right + 1]
-                                                 : m_depAlive;
-    }
-
-    if (m_depLow - m_depLowDead > 1) {
-        shift = std::midpoint(m_depLowDead, m_depLow);
+        m_depQueueAt++;
+        if (result(s) != -1) continue;
+        m_depQueueGroup = group;
+        m_depProbe = DepProbe::Find;
+        shift = s;
         return true;
     }
-    if (m_depDead - m_depAlive > 1) {
-        shift = std::midpoint(m_depAlive, m_depDead);
-        return true;
+    if (!m_depFound) return false;
+
+    // From it, each edge of its window: one unit past the edge first (an
+    // edge that didn't move takes one test), then walked a unit at a time,
+    // or for slots galloped out and bisected back (Bisect edges, as the
+    // count's sub-tick pass). What's been tried already says where to start.
+    bool const halve = pair.resB > 1 && m_subframeBisect->inner() &&
+                       !m_fullRangeSweep->inner();
+    int64_t const s0 = m_depSurvivor;
+
+    if (!m_depLowDone) {
+        bool dead = false;
+        int64_t deadAt = 0;
+        for (auto const& t : m_depTested)
+            if (!t.survived && t.shift < s0 && (!dead || t.shift > deadAt)) {
+                dead = true;
+                deadAt = t.shift;
+            }
+        int64_t alive = s0;
+        for (auto const& t : m_depTested)
+            if (t.survived && t.shift < alive && (!dead || t.shift > deadAt))
+                alive = t.shift;
+        if (dead && alive - deadAt <= 1) {
+            m_depLowDone = true;
+            m_depLowEdge = alive;
+        } else if (alive <= m_depLo) {
+            m_depLowDone = true;
+            m_depLowEdge = alive;
+            m_depLowClipped = true;
+        } else {
+            if (m_depLowStep <= 1)
+                shift = alive - 1;
+            else if (dead)
+                shift = halve ? std::midpoint(deadAt, alive) : alive - 1;
+            else
+                shift = std::max(m_depLo, alive - m_depLowStep);
+            m_depProbe = DepProbe::Low;
+            return true;
+        }
+    }
+
+    if (!m_depHighDone) {
+        bool dead = false;
+        int64_t deadAt = 0;
+        for (auto const& t : m_depTested)
+            if (!t.survived && t.shift > s0 && (!dead || t.shift < deadAt)) {
+                dead = true;
+                deadAt = t.shift;
+            }
+        int64_t alive = s0;
+        for (auto const& t : m_depTested)
+            if (t.survived && t.shift > alive && (!dead || t.shift < deadAt))
+                alive = t.shift;
+        if (dead && deadAt - alive <= 1) {
+            m_depHighDone = true;
+            m_depHighEdge = alive;
+        } else if (alive >= m_depHi) {
+            m_depHighDone = true;
+            m_depHighEdge = alive;
+            m_depHighClipped = true;
+        } else {
+            if (m_depHighStep <= 1)
+                shift = alive + 1;
+            else if (dead)
+                shift = halve ? std::midpoint(deadAt, alive) : alive + 1;
+            else
+                shift = std::min(m_depHi, alive + m_depHighStep);
+            m_depProbe = DepProbe::High;
+            return true;
+        }
     }
     return false;
 }
 
-void FrameWindowAnalyzer::launchDependentLeg(int64_t shift) {
+void FrameWindowAnalyzer::launchDependentLeg(int64_t shift, ShiftMode mode) {
     auto const& pair = m_depPairs[m_depCursor];
     size_t const aiA = m_samples[pair.a].actionIndex;
     size_t const aiB = m_samples[pair.b].actionIndex;
+    bool const p2 = m_samples[pair.b].player2;
 
     cbf::Engine::get()->reset();
     if (!this->restoreToBranch()) return;
     this->openTrailLeg();  // GucciBot (2026-10-23): a leg starts, for the Leg Trail
     this->resetActions();
 
-    double const res = static_cast<double>(m_depRes);
-    double const aShift = m_depPoints[m_depPoint];
+    auto const& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
     auto const origin = [this](size_t k) {
         return static_cast<double>(m_originalFrames[k]) + m_originalOffsets[k];
     };
+    double const aShift = m_depPoints[m_depPoint];
+    double const moved =
+        static_cast<double>(shift) / static_cast<double>(pair.resB);
 
+    size_t const relA = this->pairedReleaseFor(aiA);
     this->placeAt(aiA, origin(aiA) + aShift);
-    if (size_t const rel = this->pairedReleaseFor(aiA);
-        rel != NO_INDEX && rel != aiB)
-        this->placeAt(rel, origin(rel) + aShift);
+    if (relA != NO_INDEX && relA != aiB)
+        this->placeAt(relA, origin(relA) + aShift);
 
-    double const bPos = origin(aiB) + static_cast<double>(shift) / res;
-    this->placeAt(aiB, bPos);
+    // GucciBot (2026-10-23): the input moved the way its own count moves it
+    // (beginShift): Retime takes the rest of its player's inputs along, as a
+    // player who clicks late plays the rest late too; Buffer moves it with
+    // its release. It used to move alone, its release left behind, so a
+    // later shift held the button for less and an earlier one for longer.
+    if (mode == ShiftMode::Retime) {
+        for (size_t k = aiB; k < actions.size(); k++)
+            if (isMeasurableInput(actions[k]) && actions[k].m_player2 == p2)
+                this->placeAt(k, origin(k) + moved);
+    } else {
+        this->placeAt(aiB, origin(aiB) + moved);
+        if (size_t const relB = this->pairedReleaseFor(aiB); relB != NO_INDEX)
+            this->placeAt(relB, origin(relB) + moved);
+    }
 
-    auto const& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
+    // As far as the count's own tests of it run: past its own release to
+    // the input after (legReach, as beginShift calls it). It stopped at the
+    // release before, so a short hold was judged on a 12-frame leg.
     int64_t const bFrame = static_cast<int64_t>(actions[aiB].m_frame);
-    int64_t const reach = this->legReach(aiB, bFrame, NO_INDEX, m_pastNext);
+    int64_t const reach =
+        this->legReach(aiB, bFrame, this->pairedReleaseFor(aiB), m_pastNext);
 
     m_depLegShift = shift;
+    m_depLegMode = mode;
     m_depLegTarget = static_cast<uint32_t>(std::max<int64_t>(bFrame + reach, 0));
     m_depLegActive = true;
     m_legCounter++;
+    m_depPointLegs++;
+    m_depPairLegs++;
+    m_depLegs++;
 }
 
 void FrameWindowAnalyzer::recordDependentLeg(bool survived) {
+    auto const& pair = m_depPairs[m_depCursor];
     int64_t const shift = m_depLegShift;
 
-    if (m_depScanAt < m_depScan.size()) {
-        m_depScanAlive.push_back(survived ? 1 : 0);
-        m_depScanAt++;
-    } else if (shift < m_depLow) {
-        (survived ? m_depLow : m_depLowDead) = shift;
+    FWLOG("[fw][dependent] leg {}: click {} {:+d} {} {}, click {} at {:+g}: "
+          "{} (target {})",
+          m_legCounter, pair.b + 1, shift, pair.resB > 1 ? "slots" : "frames",
+          m_depLegMode == ShiftMode::Retime ? "retimed" : "with its release",
+          pair.a + 1, m_depPoints[m_depPoint], survived ? "survived" : "died",
+          m_depLegTarget);
+
+    if (!survived && pair.resB <= 1 && m_depLegMode == ShiftMode::Retime &&
+        shift != 0 && this->depBufferValid(shift)) {
+        m_depRetry = true;
+        return;
+    }
+
+    m_depTested.push_back({shift, survived});
+    if (!survived) return;
+    if (!m_depFound) {
+        m_depFound = true;
+        m_depSurvivor = shift;
+    }
+
+    // A gallop step that held: the next goes further, the count's own
+    // Search stride after the first slot, then twice as far each time.
+    if (pair.resB > 1 && m_subframeBisect->inner() &&
+        !m_fullRangeSweep->inner()) {
+        int64_t const stride = std::max<int64_t>(
+            2, pair.resB * std::clamp(m_subframeScanPercent->inner(), 1, 100) /
+                   100);
+        auto const grow = [stride](int64_t step) {
+            return step <= 1 ? stride : step * 2;
+        };
+        if (m_depProbe == DepProbe::Low)
+            m_depLowStep = grow(m_depLowStep);
+        else if (m_depProbe == DepProbe::High)
+            m_depHighStep = grow(m_depHighStep);
+    }
+}
+
+void FrameWindowAnalyzer::finishDependentPoint() {
+    auto const& pair = m_depPairs[m_depCursor];
+
+    DependentPoint pt;
+    pt.at = m_depPoints[m_depPoint];
+    pt.legs = m_depPointLegs;
+    pt.noRoom = m_depLo > m_depHi;
+    pt.survived = m_depFound && m_depLowDone && m_depHighDone;
+    if (pt.survived) {
+        pt.lo = m_depLowEdge;
+        pt.hi = m_depHighEdge;
+        pt.clippedLo = m_depLowClipped;
+        pt.clippedHi = m_depHighClipped;
+    }
+    m_depDone.push_back(pt);
+
+    if (pt.survived) {
+        double const frames = static_cast<double>(pt.hi - pt.lo + 1) /
+                              static_cast<double>(pair.resB);
+        FWLOG("[fw][dependent] click {} with click {} at {:+g}: window "
+              "{:+d}..{:+d} {} = {:.2f} frames{} ({} test runs)",
+              pair.b + 1, pair.a + 1, pt.at, pt.lo, pt.hi,
+              pair.resB > 1 ? "slots" : "frames", frames,
+              pt.clippedLo || pt.clippedHi ? ", an edge stopped at its room"
+                                           : "",
+              pt.legs);
     } else {
-        (survived ? m_depAlive : m_depDead) = shift;
+        FWLOG("[fw][dependent] click {} with click {} at {:+g}: {} ({} "
+              "test runs)",
+              pair.b + 1, pair.a + 1, pt.at,
+              pt.noRoom ? "no room left for it after the input before"
+                        : "no timing of it survives near its own",
+              pt.legs);
     }
 }
 
 void FrameWindowAnalyzer::finishDependentPair() {
     auto const& pair = m_depPairs[m_depCursor];
+    auto& mk = m_results[pair.markB];
+    double const res = static_cast<double>(pair.resB);
+    auto const shown = [&](int64_t units) {
+        double const frames = static_cast<double>(units) / res;
+        return pair.resB > 1 ? fmt::format("{:.2f}", frames)
+                             : fmt::format("{}", units);
+    };
 
-    if (m_depWidths.size() >= 2) {
-        auto const [lo, hi] =
-            std::minmax_element(m_depWidths.begin(), m_depWidths.end());
-        double const res = static_cast<double>(m_depRes);
-        double const mean =
-            std::accumulate(m_depWidths.begin(), m_depWidths.end(), 0.0) /
-            static_cast<double>(m_depWidths.size()) / res;
-
-        auto& mk = m_results[pair.markB];
-        mk.dependent = static_cast<float>(std::max(mean, 1.0 / res));
-        mk.dependentMin = static_cast<float>(*lo / res);
-        mk.dependentMax = static_cast<float>(*hi / res);
-
-        log::info(
-            "[fw][dependent] click {} after {}: {} alone, {:.3f} averaged over "
-            "the previous input's window (min {:.3f}, max {:.3f}, {} points)",
-            pair.b + 1, pair.a + 1,
-            mk.subframe > 0.f ? fmt::format("{:.3f}", mk.subframe)
-                              : std::to_string(mk.window),
-            mean, mk.dependentMin, mk.dependentMax, m_depWidths.size());
+    // At the input before's own timing the window is Calculate's count.
+    int64_t const strictW = pair.strictHi - pair.strictLo + 1;
+    std::vector<int64_t> widths{strictW};
+    bool independent = true;
+    std::string each;
+    for (auto const& pt : m_depDone) {
+        int64_t const w = pt.survived ? pt.hi - pt.lo + 1 : 0;
+        widths.push_back(w);
+        // Within a frame of its own count, wherever the input before is.
+        if (!pt.survived || std::abs(w - strictW) > pair.resB)
+            independent = false;
+        each += fmt::format("{}{:+g}: {}", each.empty() ? "" : ", ", pt.at,
+                            pt.survived ? shown(w) : std::string("can't be hit"));
     }
+
+    int hit = 0;
+    double sum = 0.0;
+    for (int64_t w : widths)
+        if (w > 0) {
+            hit++;
+            sum += static_cast<double>(w);
+        }
+    auto const [lo, hi] = std::minmax_element(widths.begin(), widths.end());
+
+    std::string verdict;
+    if (independent || hit == 0) {
+        m_depIndependent++;
+        verdict = fmt::format(
+            "independent: within a frame of its own count at every alignment, "
+            "keeps {}",
+            shown(strictW));
+    } else {
+        // GucciBot (2026-10-23): the average over the alignments where it
+        // can still be hit (zero-width ones pulled it down), and how many of
+        // them that is.
+        double const mean = sum / static_cast<double>(hit) / res;
+        mk.dependent = static_cast<float>(std::max(mean, 1.0 / res));
+        mk.dependentMin = static_cast<float>(static_cast<double>(*lo) / res);
+        mk.dependentMax = static_cast<float>(static_cast<double>(*hi) / res);
+        mk.dependentCoverage =
+            static_cast<float>(hit) / static_cast<float>(widths.size());
+        m_depFlagged++;
+        verdict = fmt::format(
+            "dependent: shown as ~{:.2f}, the average where it can be hit ({} of "
+            "{} alignments, min {:.2f}, max {:.2f})",
+            mk.dependent, hit, widths.size(), mk.dependentMin,
+            mk.dependentMax);
+    }
+
+    double const secs =
+        std::chrono::duration<double>(Clock::now() - m_depPairStart).count();
+    auto const line = fmt::format(
+        "[fw][dependent] click {} (frame {}) after click {}: own count {}{}; "
+        "with click {} at {} -> {}; {} test runs, {:.1f} s",
+        pair.b + 1, mk.frame, pair.a + 1, shown(strictW),
+        pair.resB > 1 ? " (sub-tick)" : "", pair.a + 1,
+        each.empty() ? std::string("its own timing only") : each, verdict,
+        m_depPairLegs, secs);
+    log::info("{}", line);
+    fwFileLog(line);
 
     m_depCursor++;
     m_depBaseReady = false;
     m_depLegActive = false;
-    m_depWidths.clear();
+    m_depDone.clear();
 }
 
 // ---- GucciBot: Juice's Alignment-Independent method, as the suggestion ----
@@ -5034,6 +5458,7 @@ struct StoredMark {
     float dependent = 0.f;
     float dependentMin = 0.f;
     float dependentMax = 0.f;
+    float dependentCoverage = 0.f;
     float suggestion = 0.f;
     int suggestAlignments = 0;
     float suggestCoverage = 0.f;
@@ -5075,7 +5500,7 @@ namespace fwstore {
 // here is dropped silently on save. Keep the two in step.
 
 static matjson::Value markToJson(StoredMark const& m) {
-    return matjson::makeObject({
+    auto mark = matjson::makeObject({
         {"frame", (int64_t)m.frame},
         {"window", (int64_t)m.window},
         {"low", m.low},
@@ -5122,6 +5547,12 @@ static matjson::Value markToJson(StoredMark const& m) {
         {"autoSubframe", (double)m.autoSubframe},
         {"autoCbf", m.autoCbf},
     });
+    // GucciBot (2026-10-23): how much of the input before's window a ~N
+    // stands on (the reworked dependent pass). Only on a click that has one,
+    // so a results file without one reads exactly as before.
+    if (m.dependentCoverage > 0.f)
+        mark.set("dependentCoverage", (double)m.dependentCoverage);
+    return mark;
 }
 
 static matjson::Value messageToJson(StoredMessage const& m) {
@@ -5236,6 +5667,8 @@ static bool fromJson(std::string const& text, StoredResults& out) {
             m.dependent = (float)jreal(j, "dependent", m.dependent);
             m.dependentMin = (float)jreal(j, "dependentMin", m.dependentMin);
             m.dependentMax = (float)jreal(j, "dependentMax", m.dependentMax);
+            m.dependentCoverage =
+                (float)jreal(j, "dependentCoverage", m.dependentCoverage);
             m.suggestion = (float)jreal(j, "suggestion", m.suggestion);
             m.suggestAlignments = (int)jnum(j, "suggestAlignments", m.suggestAlignments);
             m.suggestCoverage = (float)jreal(j, "suggestCoverage", m.suggestCoverage);
@@ -5292,7 +5725,8 @@ bool FrameWindowAnalyzer::saveResults(std::filesystem::path const& path) const {
                              mk.saturatedLow, mk.saturatedHigh,
                              mk.splitWindow, mk.splitShift, mk.splitChecked,
                              mk.position.x, mk.position.y, mk.dependent,
-                             mk.dependentMin, mk.dependentMax, mk.suggestion,
+                             mk.dependentMin, mk.dependentMax,
+                             mk.dependentCoverage, mk.suggestion,
                              mk.suggestAlignments, mk.suggestCoverage, mk.manual,
                              mk.hadAuto, mk.autoWindow, mk.autoSubframe,
                              mk.autoCbf});
@@ -5361,6 +5795,7 @@ bool FrameWindowAnalyzer::loadResults(std::filesystem::path const& path) {
         mk.dependent = sm.dependent;
         mk.dependentMin = sm.dependentMin;
         mk.dependentMax = sm.dependentMax;
+        mk.dependentCoverage = sm.dependentCoverage;
         mk.suggestion = sm.suggestion;
         mk.suggestAlignments = sm.suggestAlignments;
         mk.suggestCoverage = sm.suggestCoverage;
