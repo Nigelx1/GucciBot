@@ -5219,13 +5219,17 @@ bool AbsensePathfinder::applyInput(const TickInput& in, bool player2) {
     // (player 1's inputs are queued first; player 2's are added to them).
     if (!player2) pl->m_queuedButtons.clear();
     bool down = playerHeld(player2);
+    // GucciBot (2026-10-23): player2 is the player (playerHeld reads it), and
+    // GD is given the side that moves it (see sideFor): the raw flag drove the
+    // other player under Flip 2-Player Controls.
+    const bool side = Bot::get()->replaySystem().sideFor(pl, player2);
     for (uint8_t k = 0; k < in.presses; k++) {
-        if (down) pl->queueButton(1, false, player2, 0.0);
-        pl->queueButton(1, true, player2, 0.0);
+        if (down) pl->queueButton(1, false, side, 0.0);
+        pl->queueButton(1, true, side, 0.0);
         down = true;
     }
     if (down != in.held) {
-        pl->queueButton(1, in.held, player2, 0.0);
+        pl->queueButton(1, in.held, side, 0.0);
     }
     return true;
 }

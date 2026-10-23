@@ -630,10 +630,15 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
             if (!gb->replay.m_mirrorInputs)
                 continue;
             bool inv = gb->replay.m_mirrorInverted;
-            queueButton((int)cmd.m_button,
-                        cmd.m_isPush ^ inv,
-                        gb->replay.playerFlipped(!cmd.m_isPlayer2),
-                        0.0);
+            // GucciBot (2026-10-23): onto the other player, which the other
+            // side moves whatever Flip 2-Player Controls is set to: the queue
+            // holds button sides, and GD hands both to a player the same way.
+            // Silicate's playerFlipped(!side) (its GJBaseGameLayer.cpp:437)
+            // mirrored onto the same player while the setting was on; with it
+            // off the two are the same side. In a 1-player level, where a side
+            // picks no player, the mirror takes the other side with the
+            // setting on as it always did with it off.
+            queueButton((int)cmd.m_button, cmd.m_isPush ^ inv, !cmd.m_isPlayer2, 0.0);
         }
     }
 

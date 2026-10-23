@@ -117,6 +117,9 @@ namespace absense::judge {
         r.ran = true;
 
         int const n = std::max(0, ticks);
+        // The side that moves player 1 (see sideFor; Flip 2-Player Controls
+        // hands side 1 to player 2 in a 2-player level).
+        bool const side = gb->replay.sideFor(pl, false);
         for (int i = 0; i < n && !inputs.empty(); i++) {
             TickInput const& in = inputs[std::min((size_t)i, inputs.size() - 1)];
             // A tick's input as AbsensePathfinder::applyInput queues it.
@@ -124,12 +127,12 @@ namespace absense::judge {
             bool down = jumpHeld(pl->m_player1);
             for (uint8_t k = 0; k < in.presses; k++) {
                 if (down)
-                    pl->queueButton(1, false, false, 0.0);
-                pl->queueButton(1, true, false, 0.0);
+                    pl->queueButton(1, false, side, 0.0);
+                pl->queueButton(1, true, side, 0.0);
                 down = true;
             }
             if (down != in.held)
-                pl->queueButton(1, in.held, false, 0.0);
+                pl->queueButton(1, in.held, side, 0.0);
 
             // One tick, as the pathfinder's stepGame runs one.
             upd.stepOnce();

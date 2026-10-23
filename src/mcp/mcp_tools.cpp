@@ -1040,7 +1040,9 @@ namespace gucci::mcp {
                 auto* pl = requireLevel();
                 bool const press = argBool(a, "press", true);
                 bool const p2 = argBool(a, "player2", false);
-                pl->queueButton(1, press, p2, 0.0);
+                // player2 is the player, queued on the side that moves it
+                // (see sideFor; Flip 2-Player Controls swaps them).
+                pl->queueButton(1, press, GucciEngine::get()->replay.sideFor(pl, p2), 0.0);
                 auto out = obj();
                 out["queued"] = press ? "press" : "release";
                 out["player2"] = p2;

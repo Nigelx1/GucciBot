@@ -458,17 +458,22 @@ class $modify(GB7PlayLayer, PlayLayer) {
             // jump. Ported from Silicate 2026-09-22 along with the state that
             // feeds it -- updatePlatformerInputs was a no-op stub, so these
             // were never tracked and a restore left the player standing still.
+            // GucciBot (2026-10-23): updatePlatformerInputs keeps them by
+            // button side, as GD's queue names them, and in a 2-player level
+            // Flip 2-Player Controls hands each side to the other player, so
+            // they swap with it as the jump does above. Not in a 1-player
+            // level, where player 1 is checked against side 1's as before.
+            auto& pf = gb->practiceFix;
+            bool const swapSides = rs.hasFlippedControls() && m_levelSettings->m_twoPlayerMode;
             if (m_isPlatformer) {
-                auto& pf = gb->practiceFix;
-                check(pf.m_p1Left, 2, false);
-                check(pf.m_p1Right, 3, false);
+                check(swapSides ? pf.m_p2Left : pf.m_p1Left, 2, false);
+                check(swapSides ? pf.m_p2Right : pf.m_p1Right, 3, false);
             }
             if (m_levelSettings->m_twoPlayerMode) {
                 check(p2H, 1, true);
                 if (m_isPlatformer) {
-                    auto& pf = gb->practiceFix;
-                    check(pf.m_p2Left, 2, true);
-                    check(pf.m_p2Right, 3, true);
+                    check(swapSides ? pf.m_p1Left : pf.m_p2Left, 2, true);
+                    check(swapSides ? pf.m_p1Right : pf.m_p2Right, 3, true);
                 }
             }
             rs.m_lastInputs.clear();
@@ -492,17 +497,19 @@ class $modify(GB7PlayLayer, PlayLayer) {
             // jump. Ported from Silicate 2026-09-22 along with the state that
             // feeds it -- updatePlatformerInputs was a no-op stub, so these
             // were never tracked and a restore left the player standing still.
+            // Swapped under Flip 2-Player Controls in a 2-player level, as in
+            // the recording branch above.
+            auto& pf = gb->practiceFix;
+            bool const swapSides = rs.hasFlippedControls() && m_levelSettings->m_twoPlayerMode;
             if (m_isPlatformer) {
-                auto& pf = gb->practiceFix;
-                check(pf.m_p1Left, 2, false);
-                check(pf.m_p1Right, 3, false);
+                check(swapSides ? pf.m_p2Left : pf.m_p1Left, 2, false);
+                check(swapSides ? pf.m_p2Right : pf.m_p1Right, 3, false);
             }
             if (m_levelSettings->m_twoPlayerMode) {
                 check(p2H, 1, true);
                 if (m_isPlatformer) {
-                    auto& pf = gb->practiceFix;
-                    check(pf.m_p2Left, 2, true);
-                    check(pf.m_p2Right, 3, true);
+                    check(swapSides ? pf.m_p1Left : pf.m_p2Left, 2, true);
+                    check(swapSides ? pf.m_p1Right : pf.m_p2Right, 3, true);
                 }
             }
         }
@@ -841,8 +848,11 @@ class $modify(GB7PlayLayer, PlayLayer) {
             upd.backwardsStep();
             processQueuedButtons(0.0, true);
             if (upd.m_autoFlipOnDeath) {
+                // The side that moves the player who died (see sideFor): the
+                // raw p2 flipped the other player under Flip 2-Player
+                // Controls.
                 bool p2 = (player == m_player2);
-                queueButton(1, !player->m_jumpBuffered, p2, 0.0);
+                queueButton(1, !player->m_jumpBuffered, gb->replay.sideFor(this, p2), 0.0);
                 upd.setPaused(false);
             }
         }

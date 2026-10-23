@@ -1390,10 +1390,15 @@ namespace gucci {
 
         setMode(Mode::Recording);
 
+        // A lane is a stored flag, which names its player: each is released
+        // on the side that moves that player (see sideFor). handleButton's
+        // last argument is "player 1's side". p == 0 took the flag as the
+        // side, which under Flip 2-Player Controls let go of the other player
+        // and recorded the release on the other player's lane.
         for (int p = 0; p < 2; ++p)
             for (int b = 1; b <= 3; ++b)
                 if (held[p][b])
-                    pl->handleButton(false, b, p == 0);
+                    pl->handleButton(false, b, !replay.sideFor(pl, p == 1));
 
         log::info(
             "[GucciBot] Resume recording @ frame {} — {} actions kept", now, atom.m_actions.size());

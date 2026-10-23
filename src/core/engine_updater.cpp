@@ -871,7 +871,10 @@ static void tickSettledWork() {
                             return;
                         upd.setPaused(true);
                         if (upd.m_autoFlipOnDeath) {
-                            pl->queueButton(1, !p->m_jumpBuffered, p2, 0.0);
+                            // The side that moves p (see sideFor): the raw p2
+                            // flipped the other player under Flip 2-Player
+                            // Controls.
+                            pl->queueButton(1, !p->m_jumpBuffered, gb->replay.sideFor(pl, p2), 0.0);
                             upd.setPaused(false);
                         }
                     };
@@ -1091,12 +1094,17 @@ static void tickSettledWork() {
     // The autoclicker queues real buttons. Firing one inside an analyzer leg
     // would put an input into the run that the macro never contained, and the
     // window measured from it would be meaningless. Analyzer wins.
+    // Its lanes are the players themselves (autoclicker.cpp reads
+    // m_player1/m_player2), so each is queued on the side that moves that
+    // player (see sideFor).
     if (auto* pll = PlayLayer::get(); pll && !gb->analyzerOwnsRun()) {
         auto res = Autoclicker::get()->processTick();
+        bool const side1 = gb->replay.sideFor(pll, false);
+        bool const side2 = gb->replay.sideFor(pll, true);
         for (bool down : res.p1)
-            pll->queueButton(1, down, false, 0.0);
+            pll->queueButton(1, down, side1, 0.0);
         for (bool down : res.p2)
-            pll->queueButton(1, down, true, 0.0);
+            pll->queueButton(1, down, side2, 0.0);
     }
 }
 #if GB_NATIVE_ENGINE // Windows midhooks and raw addresses (core/platform.hpp)
