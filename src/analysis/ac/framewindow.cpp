@@ -4077,12 +4077,22 @@ bool FrameWindowAnalyzer::beginDependentPass(std::string message) {
             MAX_RESOLVABLE_SLOTS);
     }
 
+    // GucciBot (2026-10-23): only the pairs that can matter, from anticroom's
+    // antics-counter beta.6 changelog ("Dependent Pair Search improved: a lot
+    // faster and more accurate"; his changelog, no source). It took every
+    // input whose input before was within the Horizon, which is nearly every
+    // input, at hundreds of test runs each. Now: a tight input (its window at
+    // most the Tight threshold), whose input before is within the search
+    // distance of it, so close enough to pin it.
+    int const tight = std::max(0, m_tightThreshold->inner());
+
     m_depPairs.clear();
     for (size_t a = 0; a < m_samples.size(); a++) {
         size_t const b = this->nextSampleFor(a);
         if (b == NO_INDEX) continue;
+        if (!this->inProbeRange(b)) continue;
         if (m_samples[b].frame - m_samples[a].frame >
-            static_cast<uint32_t>(m_horizon))
+            static_cast<uint32_t>(m_sweep))
             continue;
 
         size_t const ra = this->resultFor(a);
@@ -4091,13 +4101,14 @@ bool FrameWindowAnalyzer::beginDependentPass(std::string message) {
 
         auto const& ma = m_results[ra];
         auto const& mb = m_results[rb];
-        if (ma.desynced || mb.desynced) continue;
+        if (ma.desynced || mb.desynced || mb.hidden || mb.unbounded) continue;
         if (ma.window <= 0 || mb.window <= 0) continue;
         // GucciBot (2026-10-23): no pair with a wide mark (Max Window) in it.
         // Its low..high is where its count stopped, one side only, so the
         // input before would be moved across half its band, and a wide click
         // is a lenient one.
         if (ma.wide || mb.wide) continue;
+        if (mb.window > tight) continue;
 
         double const scale =
             ma.cbf ? static_cast<double>(std::max<int64_t>(1, m_depRes)) : 1.0;
@@ -4109,16 +4120,36 @@ bool FrameWindowAnalyzer::beginDependentPass(std::string message) {
         pair.aHi = static_cast<double>(ma.high) / scale;
         if (pair.aHi <= pair.aLo) continue;
 
+        size_t const aiA = m_samples[a].actionIndex;
+        double const earliest = static_cast<double>(m_originalFrames[aiA]) +
+                                m_originalOffsets[aiA] +
+                                std::min(pair.aLo, 0.0);
+        pair.base = static_cast<uint32_t>(
+            std::max(0.0, std::floor(earliest) - 1.0));
+
         m_depPairs.push_back(pair);
     }
 
     if (m_depPairs.empty()) {
-        FWLOG("[fw][dependent] no input pairs close enough to check");
+        FWLOG("[fw][dependent] no tight input with the input before it within "
+              "{} frames to check",
+              m_sweep);
         return false;
     }
 
-    log::info("[fw][dependent] checking {} pair(s) at {} slot(s)/tick",
-              m_depPairs.size(), m_depRes);
+    // GucciBot (2026-10-23): in checkpoint order, so each pair's checkpoint
+    // is reached by playing on from the last one. In input order a pair whose
+    // input before can go earlier than the last pair's (and in a 2-player
+    // macro, any pair after the other player's) replayed from frame 0.
+    std::stable_sort(m_depPairs.begin(), m_depPairs.end(),
+                     [](DependentPair const& x, DependentPair const& y) {
+                         return x.base < y.base;
+                     });
+
+    log::info("[fw][dependent] checking {} pair(s) at {} slot(s)/tick: tight "
+              "inputs (window {} or less) with the input before within {} "
+              "frames",
+              m_depPairs.size(), m_depRes, tight, m_sweep);
 
     m_depFinishMessage = std::move(message);
     m_depCursor = 0;
@@ -4150,13 +4181,9 @@ bool FrameWindowAnalyzer::stepDependent(PlayLayer* pl) {
     }
 
     auto const& pair = m_depPairs[m_depCursor];
-    size_t const aiA = m_samples[pair.a].actionIndex;
 
     if (!m_depBaseReady) {
-        double const earliest = static_cast<double>(m_originalFrames[aiA]) +
-                                m_originalOffsets[aiA] + pair.aLo;
-        uint32_t const base = static_cast<uint32_t>(
-            std::max(0.0, std::floor(earliest) - 1.0));
+        uint32_t const base = pair.base;
 
         if (!m_depAdvancing) {
             cbf::Engine::get()->reset();

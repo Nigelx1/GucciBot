@@ -794,6 +794,9 @@ class FrameWindowAnalyzer {
         size_t markB = 0;
         double aLo = 0.0;
         double aHi = 0.0;
+        // GucciBot (2026-10-23): the pair's checkpoint, a frame before the
+        // earliest the input before goes. The pairs run in this order.
+        uint32_t base = 0;
     };
 
     std::vector<DependentPair> m_depPairs;
