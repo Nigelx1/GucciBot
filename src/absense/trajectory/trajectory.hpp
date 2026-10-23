@@ -232,6 +232,7 @@ class Trajectory {
     struct GhostState;
    public:
     struct SimStart;  // see captureStart
+    struct StartFlags;  // a kept start's record of the objects' flags (exact start flags, see recordStartFlags)
     // Step R0 of AI_PATHFINDER_PLAN.md: what a simulated tick and a snapshot
     // cost, timed from the real player's state. Nothing in the game changes.
     struct Benchmark {
@@ -574,12 +575,25 @@ class Trajectory {
     bool hitsPhantom(PlayerObject* p) const;
     // Activation flags cleared on objects ahead of the start while it is in
     // use (object, player 1 flag, player 2 flag), put back by useStart(nullptr).
+    // (With exact start flags, every flag useStart changed, either way.)
     struct ClearedFlag {
         EnhancedGameObject* object;
         bool p1, p2;
     };
     std::vector<ClearedFlag> m_clearedFlags;
     GJBaseGameLayer* m_clearedFor = nullptr;  // the layer those objects belong to
+
+    // GucciBot (2026-10-23): the Pathfinder's "exact start flags" test switch
+    // (PathfinderSettings::exactStartFlags, off by default; see useStart).
+    // recordStartFlags fills a kept start's record; useStartExact puts it on
+    // the objects. The last record is kept so the starts after it share it
+    // while nothing in it changes; the scratch list is where a new one is
+    // built.
+    void recordStartFlags(GJBaseGameLayer* pl, SimStart& s);
+    void useStartExact(GJBaseGameLayer* pl);
+    void noteExactFlag(const SimStart& s, EnhancedGameObject* e, uint8_t now, uint8_t want, uint8_t old, int realTick);
+    std::shared_ptr<const StartFlags> m_lastFlags;
+    std::vector<std::pair<EnhancedGameObject*, uint8_t>> m_flagScratch;
 
     // ---- Drawing the prediction. Everything below belongs to the drawn lines
     // (update, simulate, runPrediction and the drawing half of iterate). A Sim
@@ -895,10 +909,38 @@ class Trajectory {
     // tick it played, and looks at a dead end from earlier ticks without
     // the game going back first). useStart() makes the runs begin from it
     // until useStart(nullptr); objects ahead of it that the real player
-    // has activated since are treated as untouched meanwhile.
+    // has activated since are treated as untouched meanwhile. (With the
+    // Pathfinder's exact start flags on, the objects are set as the start
+    // recorded them instead - see useStartExact.)
     struct SimStart;
     std::shared_ptr<SimStart> captureStart(GJBaseGameLayer* pl, bool p1);
     void useStart(std::shared_ptr<SimStart> start);
+    // GucciBot (2026-10-23): what exact start flags did in a pathfinder run,
+    // for its stop line: the starts put in use, how many of them stood at or
+    // ahead of the real game (left as the game has them), the objects whose
+    // flags came out other than the old rule would have left them, the
+    // objects written - cleared, and set again because the start had them
+    // used while the game has them fresh (which a game that puts every flag
+    // back on a rewind never needs) - and the lines logged (a few a run).
+    struct ExactFlagStats {
+        uint64_t starts = 0;
+        uint64_t ahead = 0;
+        uint64_t differ = 0;
+        uint64_t cleared = 0;
+        uint64_t setAgain = 0;
+        int lines = 0;
+    };
+    void resetExactFlagStats() {
+        m_exactStats = ExactFlagStats{};
+        m_exactLogged.clear();
+    }
+    const ExactFlagStats& exactFlagStats() const { return m_exactStats; }
+
+   private:
+    ExactFlagStats m_exactStats;
+    std::vector<std::array<int, 4>> m_exactLogged;  // (uid, flags left, old rule's, start ahead) logged this run
+
+   public:
     // GucciBot (2026-10-23): portals, orbs and pads ahead of the real players that
     // are still marked used ("" when none), at most `max` of them described.
     std::string usedAhead(GJBaseGameLayer* pl, int max) const;
@@ -1131,6 +1173,12 @@ class TrajectoryManager {
     }
     void forgetClearedFlags() {
         if (m_trajectory) m_trajectory->forgetClearedFlags();
+    }
+    void resetExactFlagStats() {
+        if (m_trajectory) m_trajectory->resetExactFlagStats();
+    }
+    Trajectory::ExactFlagStats exactFlagStats() const {
+        return m_trajectory ? m_trajectory->exactFlagStats() : Trajectory::ExactFlagStats{};
     }
     std::string usedAhead(GJBaseGameLayer* pl, int max) const {
         return m_trajectory ? m_trajectory->usedAhead(pl, max) : std::string{};

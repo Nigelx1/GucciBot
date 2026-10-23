@@ -1305,6 +1305,29 @@ struct Trajectory::SimSnapshot {
     unsigned int ticks = 0;
 };
 
+// GucciBot (2026-10-23): the Pathfinder's "exact start flags" (a test switch,
+// off by default: PathfinderSettings::exactStartFlags). A kept start's record
+// of the activatable objects marked used at its tick (recordStartFlags): the
+// ones in its range (SimStart::flagsFrom on) that had a flag set, sorted by
+// object, with their two flags - bit 0 m_activatedByPlayer1, bit 1
+// m_activatedByPlayer2. An object in the range it does not list was fresh. Of
+// one read of one level (`layer`, `gen`): useStartExact never puts the record
+// of another on the objects.
+struct Trajectory::StartFlags {
+    using Entry = std::pair<EnhancedGameObject*, uint8_t>;
+    GJBaseGameLayer* layer = nullptr;
+    unsigned gen = 0;
+    std::vector<Entry> used;
+    static bool before(const Entry& a, const Entry& b) {
+        return std::less<const EnhancedGameObject*>{}(a.first, b.first);
+    }
+    // The flags recorded for `e`, or -1 when it is not listed.
+    int find(EnhancedGameObject* e) const {
+        const auto it = std::lower_bound(used.begin(), used.end(), Entry{e, 0}, before);
+        return it != used.end() && it->first == e ? (int)it->second : -1;
+    }
+};
+
 // The players' state at some tick of the real path, kept so a run can
 // begin from it later (see useStart).
 struct Trajectory::SimStart {
@@ -1342,6 +1365,15 @@ struct Trajectory::SimStart {
     // the old path (MovingObjects), unless its first run comes while the game
     // still stands at its tick (see Sim::begin).
     std::shared_ptr<world::WorldStart> world;
+    // GucciBot (2026-10-23): exact start flags (off by default; see
+    // useStartExact). The objects' flags at this tick, for every activatable
+    // object at x >= flagsFrom (recordStartFlags), shared with the starts
+    // before it while they are the same; null while the switch is off.
+    // `carried`: made by advanceStart - it stands where the plan being played
+    // takes the game, and keeps no record of its own.
+    std::shared_ptr<const StartFlags> flags;
+    float flagsFrom = 0.0f;
+    bool carried = false;
 };
 
 std::shared_ptr<Trajectory::SimStart> Trajectory::captureStart(GJBaseGameLayer* pl, bool p1) {
@@ -1414,6 +1446,8 @@ std::shared_ptr<Trajectory::SimStart> Trajectory::captureStart(GJBaseGameLayer* 
         s->held2 = it != o->m_holdingButtons.end() && it->second;
         s->flying2 = o->m_isShip || o->m_isBird || o->m_isDart || o->m_isSwing;
     }
+    // GucciBot (2026-10-23): exact start flags (off by default).
+    if (SLSettings::get()->pathfinder.exactStartFlags) recordStartFlags(pl, *s);
     return s;
 }
 
@@ -1617,6 +1651,274 @@ std::string Trajectory::usedAhead(GJBaseGameLayer* pl, int max) const {
     return out;
 }
 
+// ---- GucciBot (2026-10-23): the Pathfinder's "exact start flags", a test
+// switch for The Nightmare's 75% stall (PathfinderSettings::exactStartFlags,
+// off by default). Nothing below runs while it is off.
+
+static uint8_t flagBits(const EnhancedGameObject* e) {
+    return (uint8_t)((e->m_activatedByPlayer1 ? 1 : 0) | (e->m_activatedByPlayer2 ? 2 : 0));
+}
+
+static void setFlagBits(EnhancedGameObject* e, uint8_t bits) {
+    e->m_activatedByPlayer1 = (bits & 1) != 0;
+    e->m_activatedByPlayer2 = (bits & 2) != 0;
+}
+
+static const char* flagWords(uint8_t bits) {
+    switch (bits & 3) {
+        case 0: return "fresh";
+        case 1: return "used";
+        case 2: return "used (player 2)";
+        default: return "used (both players)";
+    }
+}
+
+static const char* flagKind(GameObjectType t) {
+    if (ringType(t)) return "orb";
+    switch (t) {
+        case GameObjectType::InverseGravityPortal:
+        case GameObjectType::NormalGravityPortal:
+        case GameObjectType::GravityTogglePortal:
+            return "gravity portal";
+        case GameObjectType::YellowJumpPad:
+        case GameObjectType::PinkJumpPad:
+        case GameObjectType::GravityPad:
+        case GameObjectType::RedJumpPad:
+        case GameObjectType::SpiderPad:
+            return "pad";
+        case GameObjectType::Modifier:
+            return "trigger";
+        case GameObjectType::Special:
+        case GameObjectType::EnterEffectObject:
+            return "object";
+        default:
+            return "portal";
+    }
+}
+
+// How far any activatable object of the level reaches from its centre along x
+// (its box either side, or its circle), worked out once per read of the level
+// like the list itself, and never taken as more than 20 blocks.
+static float activatableReach(GJBaseGameLayer* pl) {
+    static GJBaseGameLayer* reachFor = nullptr;
+    static int reachCount = -1;
+    static unsigned reachGen = ~0u;
+    static float reach = 0.0f;
+    const std::vector<EnhancedGameObject*>& list = activatableObjects(pl);
+    const int n = pl->m_objects->count();
+    if (reachFor != pl || reachCount != n || reachGen != g_moverCacheGen) {
+        reachFor = pl;
+        reachCount = n;
+        reachGen = g_moverCacheGen;
+        reach = 0.0f;
+        for (EnhancedGameObject* e : list) {
+            GameObject* o = e;
+            const float x = o->getPositionX();
+            const cocos2d::CCRect r = o->getObjectRect();
+            reach = std::max({reach, x - r.getMinX(), r.getMaxX() - x, (float)o->m_objectRadius});
+        }
+        reach = std::min(reach, 600.0f);
+    }
+    return reach;
+}
+
+// What the old rule - the loop at the end of useStart - leaves on `e` for a run
+// from `s`, its flags being `now`: the same tests in the same order, writing
+// nothing. Exact start flags compare with it for the log, and keep it where a
+// start's record does not reach. The loop itself stays exactly as it was; keep
+// this in step with it.
+static uint8_t oldStartRule(const Trajectory::SimStart& s, EnhancedGameObject* e, uint8_t now) {
+    if (!now) return 0;  // only a flag that is set can need clearing
+    GameObject* obj = e;
+    const float from = s.x;
+    const bool ring = ringType(obj->m_objectType);
+    unsigned onUnfired = 0;  // bit k: the start's player k
+    if (ring) {
+        const auto* key = static_cast<cocos2d::CCObject*>(obj);
+        for (int k = 0; k < s.count; k++) {
+            const SavedPlayerCheckpoint& c = s.p[k].player;
+            if (c.m_ringRelatedSet.count(obj->m_uniqueID)) continue;
+            if (c.m_touchedRings.count(obj->m_uniqueID) ||
+                std::find(c.m_touchingRings.begin(), c.m_touchingRings.end(), key) != c.m_touchingRings.end())
+                onUnfired |= 1u << k;
+        }
+    }
+    if (!onUnfired && obj->getPositionX() <= from) return now;
+    bool before = false;
+    for (int k = 0; k < s.count && !before; k++) {
+        if (onUnfired & (1u << k)) continue;
+        const SimPlayerSnap& sp = s.p[k];
+        if (sp.player.m_ringRelatedSet.count(obj->m_uniqueID)) {
+            before = true;
+            break;
+        }
+        if (onUnfired && obj->getPositionX() <= sp.position.x) {
+            before = true;
+            break;
+        }
+        if (ring && !sp.player.m_isGoingLeft && !sp.player.m_isSideways &&
+            obj->getObjectRect().getMinX() > sp.position.x + 15.0f * std::max(0.6f, sp.player.m_vehicleSize))
+            continue;
+        const float half = 15.0f * std::max(0.6f, sp.player.m_vehicleSize) + 6.0f;
+        if (obj->m_objectRadius > 0.0f) {
+            const float dx = obj->getPositionX() - sp.position.x;
+            const float dy = obj->getPositionY() - sp.position.y;
+            const float r = obj->m_objectRadius + half;
+            before = dx * dx + dy * dy <= r * r;
+        } else {
+            const cocos2d::CCRect box(sp.position.x - half, sp.position.y - half, half * 2.0f, half * 2.0f);
+            before = obj->getObjectRect().intersectsRect(box);
+        }
+    }
+    if (onUnfired) {
+        uint8_t out = now;
+        for (int k = 0; k < s.count; k++) {
+            if (!(onUnfired & (1u << k)) && before) continue;
+            out = (uint8_t)(out & ((k == 0) == s.p1 ? ~1u : ~2u));
+        }
+        return out;
+    }
+    return before ? now : 0;
+}
+
+// A kept start's record of the objects' flags at its tick (see useStartExact),
+// taken from the game right after the tick. Its range is every activatable
+// object at x >= flagsFrom: the start's rearmost player (the other one of a
+// dual start counts too) less twice the most a box can still reach behind a
+// player's centre and touch it - half a full-size player (15) and the old
+// rule's 6 units of slack, plus how far the level's widest activatable object
+// reaches from its centre (at least 45: a mode portal on its side) - so a
+// portal, pad or orb a player is still on, its centre behind the player's,
+// is in, and doubled for one a trigger has turned or scaled since. Where a
+// player of the start can travel back to smaller x - going left, sideways, or
+// in a platformer level - the range is the whole level. Behind the range the
+// old rule decides, which keeps the flags as the game has them: going forward
+// the game does not get back there (a teleport or a reverse that takes it back
+// is the exception, and is what the old rule gets wrong there too).
+void Trajectory::recordStartFlags(GJBaseGameLayer* pl, SimStart& s) {
+    if (!pl || !pl->m_objects || s.count <= 0) return;
+    const std::vector<EnhancedGameObject*>& list = activatableObjects(pl);
+    bool whole = pl->m_isPlatformer;
+    float rear = std::numeric_limits<float>::max();
+    for (int k = 0; k < s.count; k++) {
+        const SimPlayerSnap& sp = s.p[k];
+        if (sp.player.m_isGoingLeft || sp.player.m_isSideways) whole = true;
+        rear = std::min(rear, sp.position.x);
+    }
+    const float behind = 2.0f * (21.0f + std::max(45.0f, activatableReach(pl)));
+    const float from = whole ? std::numeric_limits<float>::lowest() : rear - behind;
+    // The game's own flags. A start in use has changed some (useStart), and
+    // kept what they were in m_clearedFlags.
+    std::vector<StartFlags::Entry> changed;
+    if (!m_clearedFlags.empty() && m_clearedFor == pl) {
+        changed.reserve(m_clearedFlags.size());
+        for (const ClearedFlag& c : m_clearedFlags)
+            changed.push_back({c.object, (uint8_t)((c.p1 ? 1 : 0) | (c.p2 ? 2 : 0))});
+        std::sort(changed.begin(), changed.end(), StartFlags::before);
+    }
+    m_flagScratch.clear();
+    for (EnhancedGameObject* e : list) {
+        uint8_t bits = flagBits(e);
+        if (!changed.empty()) {
+            const auto it = std::lower_bound(changed.begin(), changed.end(), StartFlags::Entry{e, 0}, StartFlags::before);
+            if (it != changed.end() && it->first == e) bits = it->second;
+        }
+        if (!bits) continue;
+        if (static_cast<GameObject*>(e)->getPositionX() < from) continue;
+        m_flagScratch.push_back({e, bits});
+    }
+    std::sort(m_flagScratch.begin(), m_flagScratch.end(), StartFlags::before);
+    // The flags change far less often than a tick: the starts in between share one record.
+    if (m_lastFlags && m_lastFlags->layer == pl && m_lastFlags->gen == g_moverCacheGen &&
+        m_lastFlags->used == m_flagScratch) {
+        s.flags = m_lastFlags;
+    } else {
+        auto rec = std::make_shared<StartFlags>();
+        rec->layer = pl;
+        rec->gen = g_moverCacheGen;
+        rec->used = m_flagScratch;
+        m_lastFlags = rec;
+        s.flags = std::move(rec);
+    }
+    s.flagsFrom = from;
+}
+
+// One object whose flags exact start flags left other than the old rule would
+// have: counted, and logged the first time it comes out that way in a run (for
+// a start ahead of the game and for one behind it, each), a few lines a run at
+// most - so an in-game run shows whether this was the cause.
+void Trajectory::noteExactFlag(const SimStart& s, EnhancedGameObject* e, uint8_t now, uint8_t want, uint8_t old,
+                               int realTick) {
+    constexpr int kLines = 8;
+    m_exactStats.differ++;
+    if (m_exactStats.lines >= kLines) return;
+    GameObject* obj = e;
+    const bool ahead = s.carried || s.moveTick >= realTick;
+    const std::array<int, 4> key{obj->m_uniqueID, (int)want, (int)old, ahead ? 1 : 0};
+    if (std::find(m_exactLogged.begin(), m_exactLogged.end(), key) != m_exactLogged.end()) return;
+    m_exactLogged.push_back(key);
+    m_exactStats.lines++;
+    devlog::log(devlog::Cat::AbsensePathfinder,
+                fmt::format("exact flags (start at tick {}{}, game at tick {}): {} uid {} (id {}) at x {:.0f} y {:.0f} "
+                            "{} {} (old rule: {})",
+                            s.moveTick, s.carried ? ", carried ahead" : "", realTick, flagKind(obj->m_objectType),
+                            obj->m_uniqueID, obj->m_objectID, obj->getPositionX(), obj->getPositionY(),
+                            want == now ? "kept" : "made", flagWords(want), flagWords(old)));
+}
+
+// useStart with the Pathfinder's exact start flags on. GD puts the flags back
+// itself when the pathfinder goes back: resetLevel clears every object's
+// (EnhancedGameObject::resetObject) and loadFromCheckpoint writes back the ones
+// the checkpoint saved (saveActiveSaveObjects), so after a rewind each flag is
+// what it was at the kept state's own tick, and the path played again from
+// there sets the same ones again. A start kept at a tick of the path the game
+// played therefore knows the flags the game will have when it is back at that
+// tick: its record. Every activatable object in the record's range is set to
+// exactly that - a flag set since is cleared, one the start had is set again -
+// and the old guess from where the start's players stand (the loop in useStart)
+// only decides outside the range, or for a start without a record of this
+// level. What was on each object goes into m_clearedFlags, so useStart(nullptr)
+// puts the game's own flags back whichever way they were changed.
+//
+// A start at the game's own tick or ahead of it - one carried ahead along the
+// plan being played (advanceStart, for a decision made ahead), or the start of
+// the tick the game stands at - is left as the game has it. Along one path the
+// game only ever sets flags, so every flag it has now it still has at that
+// tick, and what the plan fires on the way is the copies' own: activated1/2,
+// which they ask before any real flag, and the World's triggeredOnce. Nothing
+// may be written then either: the game plays on while a decision made ahead
+// holds its start (beginAhead), and a flag written there would change what the
+// real player does - a pad it has yet to reach skipped, one it is on fired
+// again - and the path found would not replay from a cold start.
+void Trajectory::useStartExact(GJBaseGameLayer* pl) {
+    const SimStart& s = *m_start;
+    const int realTick = (int)Bot::get()->updater().getFrame();
+    const bool ahead = s.carried || s.moveTick >= realTick;
+    const StartFlags* rec = nullptr;
+    if (!ahead && s.flags && s.flags->layer == pl && s.flags->gen == g_moverCacheGen) rec = s.flags.get();
+    m_exactStats.starts++;
+    if (ahead) m_exactStats.ahead++;
+    for (EnhancedGameObject* e : activatableObjects(pl)) {
+        const uint8_t now = flagBits(e);
+        const int recorded = rec ? rec->find(e) : -1;
+        // Fresh and not in the record: fresh it stays, under either rule.
+        if (!now && recorded < 0) continue;
+        const uint8_t old = oldStartRule(s, e, now);
+        uint8_t want = old;
+        if (ahead) {
+            want = now;
+        } else if (rec && (recorded >= 0 || static_cast<GameObject*>(e)->getPositionX() >= s.flagsFrom)) {
+            want = recorded >= 0 ? (uint8_t)recorded : 0;
+        }
+        if (want != old) noteExactFlag(s, e, now, want, old, realTick);
+        if (want == now) continue;
+        m_clearedFlags.push_back({e, (now & 1) != 0, (now & 2) != 0});
+        setFlagBits(e, want);
+        if (want & ~now) m_exactStats.setAgain++;
+        else m_exactStats.cleared++;
+    }
+}
+
 void Trajectory::useStart(std::shared_ptr<SimStart> start) {
     GJBaseGameLayer* pl = GJBaseGameLayer::get();
     // Put back what the previous start cleared (the objects are gone with
@@ -1634,6 +1936,13 @@ void Trajectory::useStart(std::shared_ptr<SimStart> start) {
     if (!m_start) return;
     if (!pl || !pl->m_objects) return;
     m_clearedFor = pl;
+    // GucciBot (2026-10-23): the Pathfinder's exact start flags (off by
+    // default) set the objects from the start's record instead of the loop
+    // below, which is left exactly as it was.
+    if (SLSettings::get()->pathfinder.exactStartFlags) {
+        useStartExact(pl);
+        return;
+    }
     const float from = m_start->x;
     for (EnhancedGameObject* e : activatableObjects(pl)) {
         GameObject* obj = e;
@@ -4869,6 +5178,20 @@ std::shared_ptr<Trajectory::SimStart> Trajectory::advanceStart(GJBaseGameLayer* 
             out->moveTick = from->moveTick + stepped;
             out->held = s.down;
             out->held2 = s.downOther;
+            if (SLSettings::get()->pathfinder.exactStartFlags) {
+                // GucciBot (2026-10-23): exact start flags. The flags the game
+                // will have here are its own at the source's tick plus what the
+                // plan fires on the way. The first are the game's as they stand
+                // (the source is the tick the game is at, or the one it has just
+                // played, and the game only sets flags going forward); the
+                // second are the copies' own - activated1/2 below, which every
+                // copy asks before a real flag (the collision pass, the dual's
+                // other player, the spawn walk), and the World's triggeredOnce
+                // in the keyframe above. So this start keeps no record:
+                // useStartExact leaves the objects as the game has them, the
+                // only safe thing while the game plays the plan on (beginAhead).
+                out->carried = true;
+            }
             // A pad, portal or trigger the plan already used must not fire again for a
             // run from the new start (the real player has not reached it, so its own
             // flag is still off). Rings go in too: the list only holds the rings the run

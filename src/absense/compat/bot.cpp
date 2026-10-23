@@ -182,6 +182,14 @@ void absense::setStartFromBeginning(bool on) {
     geode::Mod::get()->setSavedValue("pf_start_from_zero", on);
 }
 
+bool absense::exactStartFlags() {
+    return geode::Mod::get()->getSavedValue<bool>("pf_exact_start_flags", false);
+}
+
+void absense::setExactStartFlags(bool on) {
+    geode::Mod::get()->setSavedValue("pf_exact_start_flags", on);
+}
+
 void absense::stopPathfinder() {
     if (s_pending.active) {
         s_pending.active = false;

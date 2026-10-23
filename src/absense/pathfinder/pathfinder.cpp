@@ -15,6 +15,7 @@
 #include "absense/compat/bot.hpp"
 #include "absense/compat/bot.hpp"
 #include "absense/compat/devlog.hpp"
+#include "absense/glue.hpp"
 #include "absense/gpu/client.hpp"
 #include "absense/route/planner.hpp"
 #include "absense/world/world.hpp"
@@ -481,6 +482,11 @@ bool AbsensePathfinder::start() {
     // second it costs moves out of a slice.
     absense::gpu::Client::get().prewarm();
     if (SLSettings::get()->pathfinder.learn) absense::memory::Store::get().open(pl);
+    // GucciBot (2026-10-23): the "exact start flags" test switch (Pathfinder
+    // page, off by default), taken now - before the first kept start - and
+    // kept for the whole run (PathfinderSettings::exactStartFlags).
+    SLSettings::get()->pathfinder.exactStartFlags = absense::exactStartFlags();
+    bot->trajectory().resetExactFlagStats();
     keepAnchor();
     keepStart();
     m_phase = Phase::Deciding;
@@ -491,6 +497,12 @@ bool AbsensePathfinder::start() {
         kLookahead, SLSettings::get()->pathfinder.effort,
         Bot::get()->trajectory().simulatesBoth(PlayLayer::get(), true) ? ", dual: both players simulated" : "",
         (pl->m_levelSettings && pl->m_levelSettings->m_twoPlayerMode) ? ", two-player: each player decided in turn" : "");
+    log("exact start flags: %s",
+        SLSettings::get()->pathfinder.exactStartFlags
+            ? "on (a run from a kept start sees each portal, orb, pad and trigger used or not as the game had it at "
+              "that tick)"
+            : "off (a run from a kept start takes whatever is marked used ahead of its player, and not under it, as "
+              "unused)");
     return true;
 }
 
@@ -650,6 +662,15 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
         "ending %llu real passes early",
         (unsigned long long)m_stats.spikeSettles, (unsigned long long)m_stats.backtracks,
         (unsigned long long)m_stats.spikeMet, (unsigned long long)m_stats.spikePasses);
+    if (SLSettings::get()->pathfinder.exactStartFlags) {
+        // GucciBot (2026-10-23): what the exact start flags test switch did.
+        const auto x = bot->trajectory().exactFlagStats();
+        log("exact start flags: %llu kept starts put in use (%llu at or ahead of the game, left as it has them); %llu "
+            "times an object came out other than the old rule would have left it (%d logged above); %llu objects "
+            "cleared, %llu set used again",
+            (unsigned long long)x.starts, (unsigned long long)x.ahead, (unsigned long long)x.differ, x.lines,
+            (unsigned long long)x.cleared, (unsigned long long)x.setAgain);
+    }
 
     if (done) {
         m_phase = Phase::Done;

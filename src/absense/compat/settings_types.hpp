@@ -74,6 +74,14 @@ namespace absense_settings {
         uint32_t anchorEvery = 10;    // ticks between kept game states
         uint32_t maxAnchors = 6000;   // clamped to 8..64 in pathfinder.cpp
         bool saveWhenDone = true;     // write the replay when the level is done
+        // GucciBot (2026-10-23): a test switch for The Nightmare's 75% stall,
+        // off by default. On, a kept start records which portals, orbs, pads
+        // and triggers were marked used at its tick, and a run from it sees
+        // exactly those (Trajectory::useStart) instead of the old guess from
+        // where its player stood. The search's own copy: AbsensePathfinder::
+        // start() takes it from the saved switch (absense::exactStartFlags,
+        // the Pathfinder page) and it holds for the whole run.
+        bool exactStartFlags = false;
         bool holdInputs = true;       // allow holds (off: taps and doubles only)
         double maxBackSeconds = 3.0;  // how far back a dead end may send the search
         bool smooth = true;           // keep the frame rate while it thinks
