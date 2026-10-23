@@ -937,6 +937,35 @@ int FrameWindowAnalyzer::cbfArmPlayer() const {
                : 0;
 }
 
+// GucciBot (2026-10-23): the 2-player fixes (anticroom's antics-counter beta.4
+// changelog; no source). The joint setup sweep and the entry offset move every
+// action from a point on - the other player's clicks too, so a test of one
+// player retimed the other, and the other's deaths came out of this one's
+// window. In a 2-player level with the 2-player fixes they move only the
+// measured player's own inputs; the other player's clicks, and the macro's TPS
+// and death actions, which belong to neither, stay where they were recorded.
+// The replay plays them all in frame order whatever that does to the macro's
+// order (syncDispatch). Otherwise every action moves, as before.
+bool FrameWindowAnalyzer::movesWith(size_t k, bool player2) const {
+    if (!this->countsByPlayer()) return true;
+    auto const& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
+    return k < actions.size() && isMeasurableInput(actions[k]) &&
+           actions[k].m_player2 == player2;
+}
+
+// The entry offset (advanceEntryPass) action k gets: everything from the
+// previous input on, or with the 2-player fixes in a 2-player level that
+// player's own inputs from there (movesWith). The previous input is the
+// measured one's own player's: the entry pass only runs then.
+int64_t FrameWindowAnalyzer::entryShift(size_t k) const {
+    if (!m_entryActive || k < m_entryPrevAi) return 0;
+    if (this->countsByPlayer() &&
+        (m_index >= m_samples.size() ||
+         !this->movesWith(k, m_samples[m_index].player2)))
+        return 0;
+    return m_entryOffset;
+}
+
 void FrameWindowAnalyzer::muteAudio() {
     if (m_mutedAudio) return;
     auto* engine = FMODAudioEngine::sharedEngine();
@@ -1283,10 +1312,14 @@ void FrameWindowAnalyzer::applySetupFrames(SetupGroup const& sg,
     std::vector<size_t> groupAi(sg.count);
     for (size_t j = 0; j < sg.count; j++)
         groupAi[j] = m_samples[sg.first + j].actionIndex;
+    // GucciBot (2026-10-23): a group is one player's (detectSetupGroups).
+    bool const groupP2 = m_samples[sg.first].player2;
 
     for (size_t k = 0; k < actions.size(); k++) {
         int64_t shift = 0;
-        if (k >= aiF) {
+        // GucciBot (2026-10-23): with the 2-player fixes in a 2-player level,
+        // only the group's player's inputs (movesWith).
+        if (k >= aiF && this->movesWith(k, groupP2)) {
             shift = leaderShift;
             for (size_t j = 1; j < sg.count; j++)
                 if (k >= groupAi[j]) shift += combo[j - 1];
@@ -2080,7 +2113,7 @@ void FrameWindowAnalyzer::beginShift(int64_t shift, ShiftMode mode) {
         m_bufferTried = false;
         for (size_t k = 0; k < actions.size(); k++) {
             int64_t moved = static_cast<int64_t>(m_originalFrames[k]);
-            if (m_entryActive && k >= m_entryPrevAi) moved += m_entryOffset;
+            moved += this->entryShift(k);  // GucciBot (2026-10-23): the 2-player fixes
             bool const tail = k >= ai && isMeasurableInput(actions[k]) &&
                               actions[k].m_player2 == thisP2;
             if (tail) moved += tickShift;
@@ -2091,7 +2124,7 @@ void FrameWindowAnalyzer::beginShift(int64_t shift, ShiftMode mode) {
     } else {
         for (size_t k = 0; k < actions.size(); k++) {
             int64_t moved = static_cast<int64_t>(m_originalFrames[k]);
-            if (m_entryActive && k >= m_entryPrevAi) moved += m_entryOffset;
+            moved += this->entryShift(k);  // GucciBot (2026-10-23): the 2-player fixes
             actions[k].m_frame =
                 static_cast<uint64_t>(std::max<int64_t>(moved, 0));
         }
@@ -2100,7 +2133,7 @@ void FrameWindowAnalyzer::beginShift(int64_t shift, ShiftMode mode) {
         if (size_t const rel = this->pairedReleaseFor(ai); rel != NO_INDEX) {
             int64_t relMoved =
                 static_cast<int64_t>(m_originalFrames[rel]) + tickShift;
-            if (m_entryActive && rel >= m_entryPrevAi) relMoved += m_entryOffset;
+            relMoved += this->entryShift(rel);  // GucciBot (2026-10-23): the 2-player fixes
             relMoved = std::max<int64_t>(relMoved, 0);
             actions[rel].m_frame = static_cast<uint64_t>(relMoved);
             m_releaseFrame = relMoved;
@@ -3034,7 +3067,7 @@ void FrameWindowAnalyzer::beginRecovery() {
     // player's inputs moved with it, as in a Retime leg.
     auto const placed = [&](size_t k) {
         int64_t moved = static_cast<int64_t>(m_originalFrames[k]);
-        if (m_entryActive && k >= m_entryPrevAi) moved += m_entryOffset;
+        moved += this->entryShift(k);  // GucciBot (2026-10-23): the 2-player fixes
         if (k >= ai && isMeasurableInput(actions[k]) &&
             actions[k].m_player2 == thisP2)
             moved += tickShift;
@@ -3050,16 +3083,24 @@ void FrameWindowAnalyzer::beginRecovery() {
     // later input played - and the shift was judged on inputs nobody made.
     size_t const ni = m_samples[recIdx].actionIndex;
     size_t const niRel = this->pairedReleaseFor(ni);
+    // GucciBot (2026-10-23): with the 2-player fixes in a 2-player level the
+    // action beside it is the player's own (movesWith): the replay plays the
+    // other player's at their frames whatever this does to the macro's order
+    // (syncDispatch), so a rescue that passes the other player's click is
+    // tried instead of skipped.
+    bool const ownOnly = this->countsByPlayer();
     auto const fits = [&](size_t m) {
         int64_t const at = placed(m) + m_recoveryOffset;
         if (at < 0) return false;
         for (size_t k = m; k-- > 0;) {
             if (k == ni || k == niRel) continue;
+            if (ownOnly && !this->movesWith(k, thisP2)) continue;
             if (at <= placed(k)) return false;
             break;
         }
         for (size_t k = m + 1; k < actions.size(); k++) {
             if (k == ni || k == niRel) continue;
+            if (ownOnly && !this->movesWith(k, thisP2)) continue;
             if (at >= placed(k)) return false;
             break;
         }

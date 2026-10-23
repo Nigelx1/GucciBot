@@ -678,12 +678,18 @@ class FrameWindowAnalyzer {
     // checkLegDispatch looks at it when it ends.
     void syncDispatch(bool legStarts = false);
     void checkLegDispatch();
-    // GucciBot (2026-10-23): who a CBF split for the input under test is armed
-    // for (cbf::Armed::player): its own player with splitsByPlayer, else -1.
-    int cbfArmPlayer() const;
     uint32_t m_dispatchLegFrom = 0;
     size_t m_dispatchLegStart = 0;
     bool m_dispatchLegArmed = false;
+    // GucciBot (2026-10-23): who a CBF split for the input under test is armed
+    // for (cbf::Armed::player): its own player with splitsByPlayer, else -1.
+    int cbfArmPlayer() const;
+    // GucciBot (2026-10-23): whether a move that carries everything after a
+    // point (the joint setup sweep, the entry offset) carries action k, for a
+    // move of a `player2` input: with countsByPlayer only that player's own
+    // inputs, else every action. And the entry offset action k gets.
+    bool movesWith(size_t k, bool player2) const;
+    int64_t entryShift(size_t k) const;
 
     uint32_t m_recorded = 0;
     int64_t m_maxNeg = 0;
