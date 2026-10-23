@@ -129,8 +129,12 @@ class $modify(GB7PlayerObject, PlayerObject) {
         // waits on it. The other one takes the plain tick it took in the
         // capture; split, its step was cut in two around a click that isn't
         // its own (anticroom's antics-counter beta.4 changelog; no source).
-        // Every other tick splits both, as before.
-        if (eng->splitsOnePlayer()) {
+        // Every other tick splits both, as before. Outside a dual (no p2)
+        // player 1 splits as before too: it is the only player then, and it
+        // isn't settled whether GD hands a player-2 press to it there - if it
+        // does, that press moves player 1, and leaving it unsplit would put
+        // every sub-tick test of it on the tick edge.
+        if (eng->splitsOnePlayer() && p2) {
             eng->m_p1Split = eng->m_p1Split && eng->hasPendingFor(false);
             eng->m_p2Split = eng->m_p2Split && eng->hasPendingFor(true);
         }
