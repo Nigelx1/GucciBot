@@ -56,6 +56,7 @@ namespace gucci::ui {
         Keys g_keys;
         int* g_captureTarget = nullptr;
         int* g_justCaptured = nullptr;
+        bool g_menuClosed = false;  // let go of the keyboard next frame (setOpen)
 
         struct KeySlot {
             const char* saveKey;
@@ -170,8 +171,17 @@ namespace gucci::ui {
     }
 
     void setOpen(bool open) {
-        if (g_open && !open)
+        if (g_open && !open) {
             saveSettings();
+            // GucciBot (2026-10-23): closing the menu lets go of the keyboard.
+            // A hotkey button left on "Press a key..." stayed armed, so the
+            // next key pressed in the level was bound to it (Space could
+            // become the menu key); and whatever ImGui had active lets go too.
+            // (anticroom's antics-counter beta.5 changelog: "Text boxes in the
+            // menu staying selected after the menu closes".)
+            g_captureTarget = nullptr;
+            g_menuClosed = true;
+        }
         g_open = open;
     }
 
@@ -2134,7 +2144,8 @@ namespace gucci::ui {
             ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_Appearing,
                                     ImVec2(0.5f, 0.5f));
             ImGui::SetNextWindowSize(ImVec2(360.f, 0.f), ImGuiCond_Always);
-            if (ImGui::Begin("GucciBot##switchedoff", &g_open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize)) {
+            bool open = true;  // closed through setOpen, as the main window is
+            if (ImGui::Begin("GucciBot##switchedoff", &open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize)) {
                 kit::BeginCard("GucciBot", "Switched off: out of the game until you switch it back on.");
                 bool on = botswitch::wanted();
                 if (kit::SwitchRow("GucciBot", "On puts everything back, no restart needed", &on))
@@ -2144,12 +2155,17 @@ namespace gucci::ui {
                 kit::EndCard();
             }
             ImGui::End();
+            if (!open)
+                setOpen(false);
         }
 
         void frame() {
             // The master switch's once-a-frame step: here the game's update for
             // the frame is over, so its code and hooks can come out or go back.
             botswitch::service();
+            // A text box lets go of the keyboard after a click on the game, or
+            // when the menu closes (ui/touch.cpp).
+            touch::letGoOfKeyboard(std::exchange(g_menuClosed, false));
 #if defined(GEODE_IS_MOBILE)
             // Before any window is drawn, so a scroll lands this frame.
             touch::frame();

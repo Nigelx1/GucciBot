@@ -1,19 +1,39 @@
-// The menu on a touch screen: see ui/touch.hpp. Android and iOS only.
+// The menu on a touch screen: see ui/touch.hpp. Android and iOS only, but for
+// letting go of the keyboard after a click on the game, which every platform
+// has.
 
 #include "ui/touch.hpp"
 
 #include <Geode/Geode.hpp>
-
-#if defined(GEODE_IS_MOBILE)
-
 #include <Geode/modify/CCTouchDispatcher.hpp>
 #include <imgui-cocos.hpp>
 #include <imgui_internal.h>
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 using namespace geode::prelude;
+
+namespace gucci::ui::touch {
+
+    namespace {
+        // A click or tap went to the game since the last frame (GBMenuTouch).
+        bool g_gameTouched = false;
+    } // namespace
+
+    void letGoOfKeyboard(bool always) {
+        bool const touched = std::exchange(g_gameTouched, false);
+        ImGuiContext* g = ImGui::GetCurrentContext();
+        if (!g || !(always || (touched && g->ActiveId != 0)))
+            return;
+        ImGui::ClearActiveID();
+        ImGui::SetWindowFocus(nullptr);
+    }
+
+} // namespace gucci::ui::touch
+
+#if defined(GEODE_IS_MOBILE)
 
 namespace gucci::ui::touch {
 
@@ -179,6 +199,8 @@ namespace gucci::ui::touch {
 
 } // namespace gucci::ui::touch
 
+#endif
+
 // imgui-cocos (its hooks.cpp) hands a touch to ImGui only when
 // io.WantCaptureMouse says the menu is under it, and that was worked out at the
 // last frame, from where the last touch was: a screen has no hovering. So the
@@ -187,6 +209,15 @@ namespace gucci::ui::touch {
 // the menu was eaten. This runs before imgui-cocos and answers for the touch
 // that is starting. An open popup still takes every tap (a tap outside closes
 // it), and a finger already down keeps what it had.
+//
+// GucciBot (2026-10-23): on every platform now, to note a click or tap that
+// goes to the game. imgui-cocos gives ImGui only the release of one, and ImGui
+// lets go of a text box only on a press somewhere else, so a box typed in
+// stayed active: imgui-cocos then ate every key (Space, Up and W didn't jump,
+// hotkeys stopped) and a phone kept its keyboard up. The menu lets go of the
+// keyboard on the next frame (letGoOfKeyboard), as ImGui does for a click on
+// nothing. (anticroom's antics-counter beta.5 changelog: "Text boxes in the
+// menu staying selected after the menu closes, taking all input".)
 class $modify(GBMenuTouch, CCTouchDispatcher) {
     static void onModify(auto& self) {
         (void)self.setHookPriorityPre("cocos2d::CCTouchDispatcher::touches", Priority::Early);
@@ -196,6 +227,7 @@ class $modify(GBMenuTouch, CCTouchDispatcher) {
         ImGuiContext* g = ImGui::GetCurrentContext();
         if (type == CCTOUCHBEGAN && touches && g && ImGuiCocos::get().isInitialized() && ImGuiCocos::get().isVisible()) {
             if (auto* touch = static_cast<CCTouch*>(touches->anyObject())) {
+#if defined(GEODE_IS_MOBILE)
                 // Between frames, Active means drawn in the last one.
                 ImVec2 const at = ImGuiCocos::cocosToFrame(touch->getLocation());
                 bool over = false;
@@ -210,10 +242,13 @@ class $modify(GBMenuTouch, CCTouchDispatcher) {
                     g->IO.WantCaptureMouse = true;
                 else if (!g->IO.MouseDown[0] && g->OpenPopupStack.Size == 0)
                     g->IO.WantCaptureMouse = false;
+#endif
+                // What imgui-cocos (next) sends on to the game.
+                if (!g->IO.WantCaptureMouse && !g->IO.MouseDown[0] &&
+                    ImGuiCocos::get().getInputMode() != ImGuiCocos::InputMode::Blocking)
+                    gucci::ui::touch::g_gameTouched = true;
             }
         }
         CCTouchDispatcher::touches(touches, event, type);
     }
 };
-
-#endif
