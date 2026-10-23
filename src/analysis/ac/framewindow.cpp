@@ -2623,7 +2623,7 @@ FrameWindowMark FrameWindowAnalyzer::buildMark() const {
         if ((mk.saturatedLow || mk.saturatedHigh) && !mk.unbounded)
             FWWARN(
                 "[fw][click {}] window {}..{} on the sweep limit ({}{}{}): "
-                "{} is a floor, raise Sweep Range",
+                "{} is a floor, raise Search Distance",
                 m_index + 1, low, high, mk.saturatedLow ? "-" : "",
                 mk.saturatedLow && mk.saturatedHigh ? " and " : "",
                 mk.saturatedHigh ? "+" : "",
@@ -2974,7 +2974,7 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
             fmt::format(
                 "The macro died during the capture pass{}, so the rest of the "
                 "run was measured on a player that could not die -- every "
-                "window here is pinned to the sweep limit and none of them "
+                "window here is pinned to the search distance and none of them "
                 "mean anything. The macro itself is fine; the level did not "
                 "replay the same way. Try Step Batch = 1 under Speed: at a "
                 "high batch the level's moving objects advance in one jump "

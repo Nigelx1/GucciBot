@@ -214,7 +214,9 @@ namespace gucci::ui::pages {
                 slider("Recovery window", "How far the next input can be moved while looking for a recovery",
                        &FW::recoveryRange, "%d frames");
 
-            slider("Sweep range",
+            // GucciBot (2026-10-23): "Sweep range" until now. anticroom renamed it in antics-counter beta.6 so it
+            // isn't mistaken for Max Window; it is saved under the same key (fwac_sweep_range) as before.
+            slider("Search distance",
                    "How many frames on either side of each input to test. Testing stops at the first death, so a "
                    "wide range is still fast on tight inputs",
                    &FW::sweepRange, "%d frames");
