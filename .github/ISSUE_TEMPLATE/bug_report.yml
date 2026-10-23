@@ -11,7 +11,7 @@ body:
     attributes:
       label: GucciBot version
       description: In Geode's mod list, or in the corner of GucciBot's menu.
-      placeholder: e.g. 2.0.0-beta.4
+      placeholder: e.g. 2.0.0-beta.5
     validations:
       required: true
   - type: dropdown

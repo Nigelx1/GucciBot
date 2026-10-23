@@ -104,9 +104,10 @@ ENGINE_AUDIT.md the 2026-09-26/27 audit against Silicate: every finding and how 
 
 ---
 
-## 6. Current state (2026-10-13)
+## 6. Current state (2026-10-22)
 
-- **2.0.0-beta.4** is the latest pre-release (2026-10-13): auto safe mode (dihmaster500's ask), the setup check, the Disable bot switch, the phone menu, the Mac menu key, renderer files that fill themselves in, hotkeys that remember. It was the first release shipped as GitHub's universal package, unchanged. Nigel tried builds -cp..-cx in-game; -cy (renderer self-heal) and -cz (hotkeys) went out untested at his call. Stable ("latest") is still 1.8.
+- **2.0.0-beta.5** is the latest pre-release (2026-10-22, at Nigel's call without a full test pass): the in-game macro converter, Manual Frame Windows and Calculate's suggestions, the AI pathfinder's first steps (level map, planned route, Follow the planned route), Click Indicators, CPS, the renderer's stop-at-two-seconds fix, mirror-portal markers. Work is on `master` only from 2026-10-22.
+- **2.0.0-beta.4** was the pre-release before it (2026-10-13): auto safe mode (dihmaster500's ask), the setup check, the Disable bot switch, the phone menu, the Mac menu key, renderer files that fill themselves in, hotkeys that remember. It was the first release shipped as GitHub's universal package, unchanged. Nigel tried builds -cp..-cx in-game; -cy (renderer self-heal) and -cz (hotkeys) went out untested at his call. Stable ("latest") is still 1.8.
 - **Roadmap to 2.0 (Nigel, 2026-10-13):**
   1. AI pathfinder.
   2. Calculate tweaks: flag suspicious clicks, with suggestions.

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-22-fn (Credits: aura removed at his request)"
+    "2026-10-22-fo (Version 2.0.0-beta.5)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

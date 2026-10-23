@@ -46,7 +46,7 @@ GucciBot is public now — grab a build from [Releases](https://github.com/Nigel
 ## Practice & analysis
 
 - Macro diff viewer — put two replays side by side, frame by frame.
-- Calculate — per-click timing windows measured against the real game engine, not a guess. It runs on anticroom's Silicate analyzer: Time-Based and Recovery Range, sub-tick measurement finer than a single frame, color bands with their own marker shapes, images, pulses and sounds, and an in-level legend. Tight clicks right after another input also get Juice's Alignment-Independent count, and the Frame Editor flags them: "my suggestion is x frames". A time cap stops a long run and keeps what it measured.
+- Calculate — per-click timing windows measured against the real game engine, not a guess. It runs on anticroom's Silicate analyzer: Time-Based and Recovery Range, sub-tick measurement finer than a single frame, color bands with their own marker shapes, images, pulses and sounds, and an in-level legend. Tight clicks right after another input also get Juice's Alignment-Independent count: "my suggestion is x frames", in the Windows by hand table where every input's window can be typed in, and flagged in the Frame Editor. A time cap stops a long run and keeps what it measured.
 - Mid-macro TPS changes, noclip accuracy readout, macro trim/merge/surgery.
 - Bot settings presets, a metadata editor, autosave on a timer or at level end.
 
@@ -119,7 +119,7 @@ Also in Settings: **BIG BRRRR**, a core feature of this mod, and **Bass Shake**,
 
 ## Status
 
-**1.8** is the stable release. **2.0** is in beta, at **2.0.0-beta.4**, with work since then on `master` (every push builds the universal package): GucciBot's engine reconciled against Silicate's function by function. Calculate, playback, practice-mode recording and the Pathfinder (Absense's, ported in) were confirmed in-game on beta.2. Beta.3 rebuilt the menu and every feature that came from ToastyReplay from scratch, and added macOS, iOS and Android. Beta.4's additions (auto safe mode, the setup check, the Disable bot switch, the phone menu, the Mac menu key) were tried in-game before release, and the Android build has run on a phone. Most of beta.3's rebuilt features still haven't had a feature-by-feature human test, and every fix still waiting on one says so in its own commit message. If you want something that's been tested by an actual human, use 1.8.
+**1.8** is the stable release. **2.0** is in beta, at **2.0.0-beta.5**, with work since then on `master` (every push builds the universal package): GucciBot's engine reconciled against Silicate's function by function. Calculate, playback, practice-mode recording and the Pathfinder (Absense's, ported in) were confirmed in-game on beta.2. Beta.3 rebuilt the menu and every feature that came from ToastyReplay from scratch, and added macOS, iOS and Android. Beta.4's additions (auto safe mode, the setup check, the Disable bot switch, the phone menu, the Mac menu key) were tried in-game before release, and the Android build has run on a phone. Beta.5's (the in-game macro converter, Manual Frame Windows, Calculate's suggestions, the AI pathfinder's first steps) went out before a full in-game test. Most of beta.3's rebuilt features still haven't had a feature-by-feature human test, and every fix still waiting on one says so in its own commit message. If you want something that's been tested by an actual human, use 1.8.
 
 ## Contact
 

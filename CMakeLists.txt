@@ -113,7 +113,7 @@ if (WIN32)
 endif()
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
-    MOD_VERSION="2.0.0-beta.4"
+    MOD_VERSION="2.0.0-beta.5"
     NOMINMAX
     _HAS_ITERATOR_DEBUGGING=0
 )

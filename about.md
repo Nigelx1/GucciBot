@@ -1,4 +1,4 @@
-# GucciBot 2.0.0-beta.4
+# GucciBot 2.0.0-beta.5
 
 > Frame perfect. Ice cold. Brrr.
 
@@ -66,8 +66,9 @@ What still needs Windows:
 
 - Macro diff viewer — compare two replays frame by frame
 - Frame-window analyzer ("Calculate") — per-click timing windows measured against the real game engine, rebuilt in 1.8 on anticroom's Silicate analyzer. Two algorithms (Time-Based and Recovery Range), sub-tick CBF measurement that reads windows finer than a single frame, and a full settings tab: how far a shifted input has to survive, how much room to leave before the next one, which inputs to measure, and how much of each frame to spend. Color bands with per-band marker shapes (circle, star, spiral, polygon, as a single outline, an inner ring or filled) or your own image in place of the shape, a pulse on the marker or its label with your own fade-in, hold and fade-out, per-band sounds (the Bells by default, or every band to the Brrr or the Bells in one press), and an in-level legend counting how many clicks landed in each band. Results save alongside the macro. **Dependent Pair Search** re-measures an input with the one before it moved across its own window; **Test** re-runs the last few inputs while you record; and any input under the playhead can be labelled by hand.
-- **Suggestions for suspicious clicks** — Calculate counts every click strictly. A tight one right after another input is also counted with Juice's Alignment-Independent method, and when that comes out wider the Frame Editor flags it: "my suggestion is x frames".
-- **Time cap** for Calculate — a run that goes on too long stops and keeps what it measured. The in-level box shows how long it has run and roughly how long is left.
+- **Suggestions for suspicious clicks** — Calculate counts every click strictly. A tight one right after another input is also counted with Juice's Alignment-Independent method, and when that comes out wider, Windows by hand shows it next to Calculate's count ("my suggestion is x frames", one press to use it) and the Frame Editor flags the click.
+- **Manual Frame Windows** — every input of the macro in one table: type any window yourself, keep Calculate's, or take its suggestion. A window you type stays through the next Calculate run, and Clear goes back to Calculate's own count.
+- **Time cap** for Calculate — a run that goes on too long stops and keeps what it measured. The in-level box shows how long it has run and roughly how long is left, and a notification says when it's done.
 - **Check Macro** — lists anything in a macro that would desync playback: a press while already held, a release with nothing held, actions out of order, bad values
 - TPS mid-macro changes, noclip accuracy display, macro trim/merge/surgery
 - Bot settings presets, metadata editor, autosave at level end and/or on a timer
@@ -84,7 +85,8 @@ Two engines, picked at the top of the Pathfinder tab.
 - **Plays where you can see it** — the level runs in real time while it plans the next stretch, with its progress in the corner.
 - **Goes back when it has to** — a dead end sends it back through Backwards Stepping's stored frames to try another way, and further back each time a spot keeps biting.
 - **Learns levels** — what got it past a spot is remembered per level and tried first the next time, so searching a level again is faster.
-- **Holds a height** — GucciBot's addition: in ship, wave, UFO and swing it also tries holding the player at a spread of heights, the way you'd thread a ship through a gap.
+- **Maps the whole level** — **Show the level map** draws the gaps the player fits through, the choices (forks, orbs, pads, portals) and the parts that move; a copy of the player rides the level in the background to time what moves, without holding the game up.
+- **Plans a route through it** — **Show the planned route** draws the way through the whole level it would take. With **Follow the planned route (AI)** on, each decision first tries the way GD's physics finds to the route's next gate, and a dead end jumps back to where it left the route.
 - **Starts how you like** — from wherever the level is, straight from the pause menu, or with **Start from the beginning** on, from frame 0 after a Full Restart.
 
 **Classic** — GucciBot's own search, still there.
