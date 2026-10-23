@@ -131,6 +131,39 @@ double secondsSince(const std::chrono::steady_clock::time_point& t) {
     return std::chrono::duration<double>(std::chrono::steady_clock::now() - t).count();
 }
 
+// GucciBot (docs/ROUTE_ENGINE_PLAN.md step 5): how fast the path played
+// clicks, for the stop line - from the inputs committed on it, each press and
+// each hold that starts without one (applyInput presses for those), over the
+// whole path and in its busiest second. The button before the first tick is
+// not kept: that tick counts only its presses.
+struct ClickRate {
+    int clicks = 0;
+    double seconds = 0.0;  // of play
+    int busiest = 0;       // the most in any one second of it
+};
+
+ClickRate clickRate(const std::vector<TickInput>& history, double tps) {
+    ClickRate out;
+    if (history.empty() || tps <= 0.0) return out;
+    out.seconds = (double)history.size() / tps;
+    const size_t window = std::max<size_t>(1, (size_t)std::lround(tps));
+    std::vector<int> per(history.size(), 0);
+    for (size_t i = 0; i < history.size(); i++) {
+        const TickInput& in = history[i];
+        int n = in.presses;
+        if (n == 0 && in.held && i > 0 && !history[i - 1].held) n = 1;
+        per[i] = n;
+        out.clicks += n;
+    }
+    int inWindow = 0;
+    for (size_t i = 0; i < per.size(); i++) {
+        inWindow += per[i];
+        if (i >= window) inWindow -= per[i - window];
+        out.busiest = std::max(out.busiest, inWindow);
+    }
+    return out;
+}
+
 // The first cheap look every idea gets before the few that survive it are run
 // over the whole horizon. An eighth of the plain look-ahead, not an eighth of
 // the horizon: a repair widens the horizon to as much as kMaxRepairSeconds so
@@ -483,15 +516,23 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
 
     m_stats.seconds = secondsSince(m_startedAt);
     m_stats.message = reason;
+    // Clicks a second on the path played (step 5), on the page too: whether the
+    // run clicks like a person is something to see without opening the log.
+    const ClickRate cps = clickRate(m_history, updater.getTps());
+    const double cpsAverage = cps.seconds > 0.0 ? (double)cps.clicks / cps.seconds : 0.0;
+    if (cps.seconds > 0.0)
+        m_stats.message += fmt::format(" ({:.1f} clicks a second on average, {} in the busiest second)", cpsAverage,
+                                       cps.busiest);
     // The program stays for the next run (it ends with the game, or when the
     // setting goes off): killing it here made the first decision of every run
     // pay for launching it - a third of a second inside one slice.
     absense::gpu::Client::get().forgetLevel();
     absense::memory::Store::get().close(m_stats.bestProgress);
-    log("stopped: %s (%llu ticks committed, %llu decisions, %llu simulations, %llu backtracks, best tick %llu, %.1fs)",
+    log("stopped: %s (%llu ticks committed, %llu decisions, %llu simulations, %llu backtracks, best tick %llu, %.1fs; "
+        "%d clicks in %.1f s of play: %.1f a second on average, %d in the busiest second)",
         reason.c_str(), (unsigned long long)m_stats.committedTicks, (unsigned long long)m_stats.decisions,
         (unsigned long long)m_stats.simulations, (unsigned long long)m_stats.backtracks,
-        (unsigned long long)m_stats.bestTick, m_stats.seconds);
+        (unsigned long long)m_stats.bestTick, m_stats.seconds, cps.clicks, cps.seconds, cpsAverage, cps.busiest);
     // How fast the simulator really is (AI_PATHFINDER_PLAN.md, R0): every
     // time and memory estimate in the plan waits on these numbers.
     log("speed: %llu simulated ticks in %.1fs of deciding (%.0f ticks/s), %.1f ticks per simulation, "
