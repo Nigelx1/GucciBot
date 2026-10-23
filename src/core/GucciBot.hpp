@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-gj (Pathfinder: the void rule spares a copy a trigger or the end can still save, and its death is a certain one)"
+    "2026-10-23-gk (Pathfinder: a result is named after its own level, not over the last level result)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

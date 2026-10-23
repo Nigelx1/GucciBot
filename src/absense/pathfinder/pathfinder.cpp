@@ -23,6 +23,24 @@
 
 using namespace geode::prelude;
 
+// The name the last result was saved under, and the level it was found on
+// (saveResult). The Macro tab keeps that name afterwards, so it is not the
+// user's: on another level it would have every later result written over the
+// first one's file - two ToE2 runs went into "Deadlocked 2.brrr" over the
+// Deadlocked path that had replayed to 100%.
+static std::string g_resultName;
+static std::string g_resultLevel;
+
+// The macro's own name, if the user gave it one for this level.
+static std::string userMacroName(PlayLayer* pl) {
+    auto* gb = gucci::GucciEngine::get();
+    std::string name = gb->replayName;
+    if (!name.empty() && name == g_resultName && pl && pl->m_level &&
+        std::string(pl->m_level->m_levelName) != g_resultLevel)
+        return {};
+    return name;
+}
+
 // Where a found path is written. Absense wrote .slc files to a folder of its
 // own; here it goes where GucciBot's macros live and is named as the classic
 // Pathfinder names its result: the macro's own name if the user gave it
@@ -30,7 +48,7 @@ using namespace geode::prelude;
 // theme's format. `suffix` goes on the end of the name ("" or " furthest").
 static std::filesystem::path gucciMacroPath(PlayLayer* pl, const std::string& suffix, std::string& nameOut) {
     auto* gb = gucci::GucciEngine::get();
-    std::string base = gb->replayName;
+    std::string base = userMacroName(pl);
     if (base.empty()) {
         if (pl && pl->m_level) {
             static constexpr std::string_view kIllegal = "\\/:*?\"<>|";
@@ -5246,7 +5264,7 @@ void AbsensePathfinder::finishRestore() {
 void AbsensePathfinder::saveResult() {
     auto* gb = gucci::GucciEngine::get();
     auto& rs = Bot::get()->replaySystem();
-    const bool named = !gb->replayName.empty();
+    const bool named = !userMacroName(PlayLayer::get()).empty();
     std::string name;
     auto path = gucciMacroPath(PlayLayer::get(), "", name);
     std::error_code ec;
@@ -5265,6 +5283,8 @@ void AbsensePathfinder::saveResult() {
     }
     // The Macro tab shows (and saves to) this name from now on.
     gb->replayName = name;
+    g_resultName = name;
+    if (auto* pl = PlayLayer::get(); pl && pl->m_level) g_resultLevel = pl->m_level->m_levelName;
     rs.save(path);
     log("saved %s", path.filename().string().c_str());
     Notification::create(fmt::format("Macro saved as \"{}\"", name), NotificationIcon::Success)->show();
