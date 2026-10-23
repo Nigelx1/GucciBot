@@ -297,6 +297,14 @@ public:
         int chunkSize = 0;
         size_t chunkAt = 0;
         bool chunkDone = false;     // ... and that it is over: the switches' turn
+        // Before the chunks, the taps the path needs (see trimStep): the
+        // script's own run as the reference, the taps put back so far, the
+        // tries, and whether the pass is over.
+        std::vector<TraceSample> guideRef;
+        bool guideHaveRef = false;
+        std::vector<int> guideKept;
+        int guideTries = 0;
+        bool guideDone = false;
         // Two-player mode (separate controls): which player this decision
         // is for, and the other player's script over the horizon, held
         // fixed while this one is decided (player 1 first, with player 2

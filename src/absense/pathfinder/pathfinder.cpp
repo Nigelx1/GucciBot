@@ -1799,6 +1799,88 @@ bool AbsensePathfinder::trimStep(Decision& d) {
     // chunks left to right; the clock only decides which slice the next one
     // runs in, and where the pass is up to lives in the Decision. (A route
     // drive's plan never gets here: the trim is skipped for it, see decide.)
+    // ---- Before the chunks: the taps the path needs, found by the path itself.
+    // A press in a corridor of orbs matters on the tick the copy is on one (or
+    // takes off the ground) and nowhere else, so in the spam that crosses it
+    // the needed ones are spread out - one in every few - and every chunk of
+    // any size holds one: ToE2's blue-orb run kept 198 presses in a second
+    // through the chunks. So: every tap out at once and the run compared
+    // with the script's own run, tick for tick; where it first leaves that
+    // path, the last tap taken out at or before that tick goes back in, and
+    // again, until the script with only those taps does as well (tryTake) or
+    // the tries run out - one run for each tap the path needs. Nothing goes
+    // in unless it passes tryTake, so the most this costs is its tries.
+    if (!d.guideDone) {
+        std::vector<int> taps;  // as the chunk pass below has them
+        for (int i = 0; i < window; i++) {
+            const TickInput& in = c.inputs[(size_t)i];
+            if (in.presses == 0) continue;
+            const bool before = i == 0 ? held : c.inputs[(size_t)i - 1].held;
+            if (in.held == before || (!before && (size_t)i + 1 < c.inputs.size() &&
+                                      c.inputs[(size_t)i + 1].presses == 0 && !c.inputs[(size_t)i + 1].held))
+                taps.push_back(i);
+        }
+        // A handful of taps is the chunks' and the switches' (they try each
+        // one anyway); this is for runs of them.
+        if (taps.size() < 8) d.guideDone = true;
+        const double scale = std::max(1.0, Bot::get()->updater().getTps() / 240.0);
+        const int guideMax = std::min(48, (int)std::lround(16.0 * scale));
+        if (!d.guideDone && !d.guideHaveRef) {
+            if (!mayWork()) return false;  // more next time
+            d.guideRef.clear();
+            (void)runFor(d, c.inputs, trimTo, &d.guideRef);
+            m_stats.simulations++;
+            d.guideHaveRef = true;
+        }
+        while (!d.guideDone) {
+            if (d.guideTries >= guideMax) {
+                d.guideDone = true;
+                break;
+            }
+            std::vector<TickInput> variant = c.inputs;
+            int presses = 0;
+            for (const int i : taps) {
+                if (std::find(d.guideKept.begin(), d.guideKept.end(), i) != d.guideKept.end()) continue;
+                presses += c.inputs[(size_t)i].presses;
+                variant[(size_t)i] = TickInput{0, i == 0 ? held : c.inputs[(size_t)i - 1].held};
+            }
+            if (presses == 0 || isTabu(d.tick, variant, d.player2)) {
+                d.guideDone = true;
+                break;
+            }
+            if (!mayWork()) return false;  // more next time, the same try
+            d.guideTries++;
+            if (tryTake(variant)) {
+                d.trimmed += presses;
+                d.guideDone = true;
+                break;
+            }
+            // Where the run first left the script's own path (tryTake left
+            // the failed try's samples in scratchTrace): a sample is the
+            // state after its input, so the cause is a tap at or before it.
+            const auto& ref = d.guideRef;
+            const auto& got = d.scratchTrace;
+            size_t first = std::min(ref.size(), got.size());
+            for (size_t k = 0; k < std::min(ref.size(), got.size()); k++) {
+                if (std::fabs(ref[k].x - got[k].x) > 0.01f || std::fabs(ref[k].y - got[k].y) > 0.01f ||
+                    ref[k].dead != got[k].dead) {
+                    first = k;
+                    break;
+                }
+            }
+            int back = -1;
+            for (const int i : taps) {
+                if ((size_t)i > first) break;
+                if (std::find(d.guideKept.begin(), d.guideKept.end(), i) == d.guideKept.end()) back = i;
+            }
+            if (back < 0) {
+                d.guideDone = true;  // nothing taken out explains it: the chunks' turn
+                break;
+            }
+            d.guideKept.push_back(back);
+        }
+    }
+
     if (!d.chunkDone) {
         std::vector<int> taps;  // the tick of each tap's press, inside the window
         auto collectTaps = [&]() {
@@ -3474,6 +3556,11 @@ void AbsensePathfinder::decide() {
         d.chunkSize = 0;
         d.chunkAt = 0;
         d.chunkDone = false;
+        d.guideRef.clear();
+        d.guideHaveRef = false;
+        d.guideKept.clear();
+        d.guideTries = 0;
+        d.guideDone = false;
         d.stage = Decision::Trim;
     }
 
@@ -3831,6 +3918,11 @@ void AbsensePathfinder::decide() {
         d.chunkSize = 0;
         d.chunkAt = 0;
         d.chunkDone = false;
+        d.guideRef.clear();
+        d.guideHaveRef = false;
+        d.guideKept.clear();
+        d.guideTries = 0;
+        d.guideDone = false;
         d.stage = Decision::Trim;
     }
 
