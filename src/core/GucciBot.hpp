@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-gb (Pathfinder: moving objects above y 300 move in the simulation too - the pad that drops at Deadlocked 22 percent)"
+    "2026-10-23-gc (Pathfinder step 5: Route drives - one leg per gate, on its own switch; a 5 minute stuck stop; clicks a second on the stop line)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

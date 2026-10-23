@@ -284,6 +284,8 @@ bool AbsensePathfinder::start() {
     m_routeWhyCount = 0;
     m_driveWhy.clear();
     m_driveWhyCount = 0;
+    m_driveCrossTick = UINT64_MAX;
+    m_driveCrossX = 0.0f;
     m_gpuSeed = 0;
     if (!pl || !pl->m_player1) {
         m_stats.message = "Open a level first.";
@@ -2626,7 +2628,16 @@ void AbsensePathfinder::decide() {
             } else if (!atlas) {
                 d.driveWhy = "no level map yet";
             } else {
-                for (auto const& r : absense::route::nextChoices(*atlas, st.x, st.y, st.upsideDown ? 1 : 0)) {
+                // At the crossing the last drive was played to, the next gate
+                // is looked for from that gate's x: the crossing lands up to a
+                // tick's travel past it, which can be in the next column, and
+                // nextChoices starts after the column it is given - a gate in
+                // that next column would be passed over.
+                float fromX = st.x;
+                if (d.tick == m_driveCrossTick && st.x >= m_driveCrossX &&
+                    st.x - m_driveCrossX < absense::route::kColumnWidth)
+                    fromX = m_driveCrossX;
+                for (auto const& r : absense::route::nextChoices(*atlas, fromX, st.y, st.upsideDown ? 1 : 0)) {
                     if (r.gate < 0 || (size_t)r.gate >= atlas->gates.size()) continue;
                     auto const& g = atlas->gates[(size_t)r.gate];
                     Decision::DriveOption o;
@@ -2844,12 +2855,13 @@ void AbsensePathfinder::decide() {
                 }
                 if (!mayWork()) return;  // more next time
                 d.driveJudged++;
-                // Run as far as the bar it has to clear: the steering only
-                // looks ahead of each tick, so a longer run would choose the
-                // same inputs up to there, and whatever lies past the bar
-                // decides nothing here.
+                // Over the whole horizon, as every other idea: only the bar
+                // decides whether it gets through, but the dead ends a repair
+                // forbids at a stop are prefixes of up to a third of the horizon
+                // (isTabu), and a script shorter than one never matches it - a
+                // way that already failed from here would be played again.
                 d.scratchTrace.clear();
-                if (!evaluate(c, driveBar(d, c), d.held, &d.scratchTrace)) return;
+                if (!evaluate(c, H, d.held, &d.scratchTrace)) return;
                 if (c.inputs.empty()) continue;  // nothing could be steered from here
                 if (isTabu(d.tick, c.inputs, d.player2)) continue;  // already led nowhere from this tick
                 d.tried.push_back(i);
@@ -3935,11 +3947,16 @@ void AbsensePathfinder::decide() {
     if (d.drivePass && best->driveOption >= 0 && (size_t)best->driveOption < d.driveOptions.size()) {
         m_stats.driveDecisions++;
         const Decision::DriveOption& o = d.driveOptions[(size_t)best->driveOption];
+        if (!complete) {
+            m_driveCrossTick = tick + (uint64_t)commit;
+            m_driveCrossX = o.x;
+        }
         devlog::log(devlog::Cat::AbsensePathfinder,
                     fmt::format("tick {}: route: {}: leg by search (option {} of {}), {} input change{} ({} fast), "
-                                "{} ticks clear past the gate{}; playing {} ticks{}",
+                                "lives {}{} ticks past the gate ({} needed){}; playing {} ticks{}",
                                 tick, o.text, best->driveOption + 1, d.driveOptions.size(), best->legChanges,
-                                best->legChanges == 1 ? "" : "s", best->legFast, driveBar(d, *best) - best->gateTicks,
+                                best->legChanges == 1 ? "" : "s", best->legFast, best->survived >= H ? ">=" : "",
+                                best->survived - best->gateTicks, driveBar(d, *best) - best->gateTicks,
                                 d.passChosen >= 0 ? ", holds up a tick late" : ", only to the tick", commit,
                                 ahead ? " (decided ahead)" : ""));
     }

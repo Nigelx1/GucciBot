@@ -322,7 +322,7 @@ public:
         // target is the next gate. Its options from the decision's own state,
         // best first by the cost to go (FREE last), are tried one leg search
         // at a time in the Route stage, until the ways one leg finds get
-        // through (see drivePasses in decide); the drive's verdict then plays
+        // through (see drivePasses); the drive's verdict then plays
         // one of them exactly as far as the gate. None does: today's verdict
         // decides this one (a handoff).
         struct DriveOption {
@@ -479,6 +479,10 @@ public:
     uint64_t m_routeWhyCount = 0;
     std::string m_driveWhy;    // the last reason a route drive had no gate to aim at, this run
     uint64_t m_driveWhyCount = 0;
+    // The crossing the last route drive was played to: the tick it lands on
+    // and its gate's x (see the drive's set-up in decide).
+    uint64_t m_driveCrossTick = UINT64_MAX;
+    float m_driveCrossX = 0.0f;
     void settleAnticheatSpike();
 
     // Plan being committed (inputs for the ticks after the decision) and
