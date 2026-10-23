@@ -365,6 +365,24 @@ matjson::Value absense::benchmark(int ticks, int snapshots) {
     return out;
 }
 
+namespace {
+    // A gate's option for Assistant Access (step 4): its kind and band, the
+    // object it is about, whether that must or must not fire, and the gravity
+    // it leaves.
+    matjson::Value choiceJson(absense::route::Option const& o) {
+        auto e = matjson::Value::object();
+        e["kind"] = std::string(absense::route::optionKindName(o.kind));
+        e["band"] = fmt::format("{:.0f}-{:.0f}", o.band.lo, o.band.hi);
+        if (o.objectUid != 0) e["uid"] = (int64_t)o.objectUid;
+        if (o.mustFire) e["fire"] = std::string("must");
+        if (o.mustNotFire) e["fire"] = std::string("must not");
+        if (o.flipsGravity) e["gravity_after"] = std::string("flips");
+        else if (o.gravityAfter == 0) e["gravity_after"] = std::string("normal");
+        else if (o.gravityAfter == 1) e["gravity_after"] = std::string("upside down");
+        return e;
+    }
+}  // namespace
+
 bool absense::levelMapShown() {
     return route::overlayEnabled();
 }
@@ -409,11 +427,18 @@ matjson::Value absense::levelMap(float from, float to) {
         if (g.x < from || g.x > to) continue;
         auto e = matjson::Value::object();
         e["kind"] = std::string(route::gateKindName(g.kind));
+        if (*g.what) e["what"] = std::string(g.what);
         e["x"] = (double)g.x;
         e["y"] = (double)g.y;
+        // Step 4: the gate's stable key, column/kind/object uid.
+        e["key"] = fmt::format("{}/{}/{}", g.key.column, route::gateKindName(g.key.kind), g.key.objectUid);
+        if (g.key.objectUid != 0) e["uid"] = (int64_t)g.key.objectUid;
         auto options = matjson::Value::array();
         for (auto const& o : g.options) options.push(fmt::format("{:.0f}-{:.0f}", o.lo, o.hi));
         e["options"] = options;
+        auto choices = matjson::Value::array();
+        for (auto const& o : g.choices) choices.push(choiceJson(o));
+        e["choices"] = choices;
         gates.push(e);
     }
     out["gates"] = gates;
@@ -443,30 +468,45 @@ std::string absense::routeSummary() {
 
 matjson::Value absense::routePlan(float fromX, float fromY, int limit) {
     auto out = matjson::Value::object();
-    auto const* a = route::atlasFor(PlayLayer::get());
+    auto* pl = PlayLayer::get();
+    auto const* a = route::atlasFor(pl);
     if (!a) {
         out["error"] = "not in a level, or it is still loading";
         return out;
     }
-    auto const p = route::plan(*a, fromX, fromY);
+    // Planned with player 1's gravity now (step 4: it changes how a cube or
+    // robot climbs and falls, and gravity orbs, pads and portals change it).
+    const int gravity = pl && pl->m_player1 && pl->m_player1->m_isUpsideDown ? 1 : 0;
+    auto const p = route::plan(*a, fromX, fromY, gravity);
     out["summary"] = route::summary(p);
+    out["gravity"] = std::string(gravity ? "upside down" : "normal");
     auto routes = matjson::Value::array();
     for (size_t k = 0; k < p.routes.size(); k++) {
         auto const& r = p.routes[k];
         auto e = matjson::Value::object();
         e["cost"] = r.cost;
         if (k == 0) {
+            // Each waypoint: where, the option it takes in which gap, and the
+            // gravity after it.
             auto points = matjson::Value::array();
             for (size_t i = 0; i < r.points.size() && (int)i < limit; i++) {
                 auto const& w = r.points[i];
-                points.push(fmt::format("x {:.0f}: {:.0f}-{:.0f} (step {:.1f})", w.x, w.band.lo, w.band.hi, w.step));
+                if (w.gate < 0 || (size_t)w.gate >= a->gates.size()) {
+                    points.push(fmt::format("x {:.0f}: from y {:.0f}, gravity {}", w.x, w.band.lo,
+                                            w.gravity ? "upside down" : "normal"));
+                    continue;
+                }
+                points.push(fmt::format("x {:.0f}: {} (gap {:.0f}-{:.0f}, gravity {} after, step {:.1f})", w.x,
+                                        route::describe(a->gates[(size_t)w.gate], w.option), w.band.lo, w.band.hi,
+                                        w.gravity ? "upside down" : "normal", w.step));
             }
             e["points"] = points;
         } else {
-            // Where it first leaves the best route.
+            // Where it first leaves the best route: another option or gap at
+            // a gate.
             auto const& best = p.routes.front().points;
             for (size_t i = 0; i < r.points.size() && i < best.size(); i++) {
-                if (std::fabs(r.points[i].band.lo - best[i].band.lo) < 0.5f) continue;
+                if (r.points[i].gate == best[i].gate && r.points[i].choice == best[i].choice) continue;
                 e["leaves_best_at_x"] = (double)r.points[i].x;
                 break;
             }
@@ -474,6 +514,21 @@ matjson::Value absense::routePlan(float fromX, float fromY, int limit) {
         routes.push(e);
     }
     out["routes"] = routes;
+    // Step 4: from (fromX, fromY), the next gate's options best first by the
+    // cost to go (the way there plus the cheapest way on to the level's end).
+    auto next = matjson::Value::array();
+    for (auto const& c : route::nextChoices(*a, fromX, fromY, gravity)) {
+        if (c.gate < 0 || (size_t)c.gate >= a->gates.size()) continue;
+        auto const& g = a->gates[(size_t)c.gate];
+        auto e = choiceJson(c.option);
+        e["x"] = (double)c.x;
+        e["gate"] = *g.what ? std::string(g.what) : std::string(route::gateKindName(g.kind));
+        e["cost"] = c.cost;
+        e["step"] = c.step;
+        e["gravity_then"] = std::string(c.gravity ? "upside down" : "normal");
+        next.push(e);
+    }
+    out["next_gate"] = next;
     return out;
 }
 
@@ -486,21 +541,28 @@ matjson::Value absense::routeLeg(float gateX, float lo, float hi, int maxTicks, 
         out["error"] = "not in a level";
         return out;
     }
+    std::string option;  // what the route does at that gate, when it is the route's
     if (gateX <= 0.0f) {
-        // The next gate of the planned route, a column or more ahead.
+        // The next gate of the planned route, a column or more ahead, in the
+        // band of the option the route takes there (step 4: an orb's contact
+        // region for a USE, the gap beside it for a SKIP, the whole gap for
+        // FREE).
         auto const* plan = route::shownPlan(pl);
         if (!plan || plan->routes.empty()) {
             out["error"] = "no planned route here";
             return out;
         }
+        auto const* a = route::atlasFor(pl);
         const float px = pl->m_player1->getPositionX();
         auto const& points = plan->routes.front().points;
         for (size_t i = 1; i < points.size(); i++) {  // [0] is where it was planned from, not a gate
             auto const& w = points[i];
             if (w.x <= px + route::kColumnWidth) continue;
             gateX = w.x;
-            lo = w.band.lo;
-            hi = w.band.hi;
+            lo = w.option.band.lo;
+            hi = w.option.band.hi;
+            if (a && w.gate >= 0 && (size_t)w.gate < a->gates.size())
+                option = route::describe(a->gates[(size_t)w.gate], w.option);
             break;
         }
         if (gateX <= 0.0f) {
@@ -535,6 +597,7 @@ matjson::Value absense::routeLeg(float gateX, float lo, float hi, int maxTicks, 
     out["outcome"] = std::string(outcome);
     out["gate_x"] = (double)gateX;
     out["band"] = lo > hi ? std::string("any") : fmt::format("{:.0f}-{:.0f}", lo, hi);
+    if (!option.empty()) out["option"] = option;
     out["ticks"] = (int64_t)leg.ticks;
     out["simulated_ticks"] = (int64_t)leg.steps;
     out["peak_states"] = (int64_t)leg.peakFrontier;
@@ -558,9 +621,10 @@ matjson::Value absense::routeLeg(float gateX, float lo, float hi, int maxTicks, 
     }
     if (!script.empty()) out["script"] = script;
     route::showLeg(pl, leg.dots, leg.path);
-    geode::log::info("[AbsPF] leg to x {:.0f} ({}): {} after {} ticks, {} simulated, {} states at most{}, {:.0f} ms",
-                     gateX, lo > hi ? std::string("any height") : fmt::format("{:.0f}-{:.0f}", lo, hi), outcome,
-                     leg.ticks, leg.steps, leg.peakFrontier, leg.capped ? " (some dropped for room)" : "", leg.ms);
+    geode::log::info("[AbsPF] leg to x {:.0f} ({}{}): {} after {} ticks, {} simulated, {} states at most{}, {:.0f} ms",
+                     gateX, lo > hi ? std::string("any height") : fmt::format("{:.0f}-{:.0f}", lo, hi),
+                     option.empty() ? std::string() : ", the route's " + option, outcome, leg.ticks, leg.steps,
+                     leg.peakFrontier, leg.capped ? " (some dropped for room)" : "", leg.ms);
     return out;
 }
 

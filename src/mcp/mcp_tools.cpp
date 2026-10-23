@@ -1010,8 +1010,14 @@ namespace gucci::mcp {
             "Step R1 of AI_PATHFINDER_PLAN.md: the route planner's map of the level being "
             "played. Columns one block wide with the game mode, the room it gives the "
             "player's centre (band) and the gaps the centre fits through (openings), and "
-            "the gates (forks, orbs, pads, portals, tight gaps, spacing) with the bands a "
-            "route can take there, between x `from` and `to`. Nothing in the game changes.",
+            "the gates (forks, orbs, pads, portals, toggles, tight gaps, waists, spacing) "
+            "with the gaps a route can be in there (options), between x `from` and `to`. "
+            "Step 4 of docs/ROUTE_ENGINE_PLAN.md: each gate also has its stable key "
+            "(column/kind/object uid), what it is (e.g. blue orb) and its choices, what a "
+            "route can do there: use/skip an orb, touch/avoid a pad or portal, fire/skip a "
+            "toggle, free (anywhere in a gap, tried last), each with its band, the object's "
+            "uid, whether it must or must not fire, and the gravity it leaves. Nothing in "
+            "the game changes.",
             schemaOf({{"from", "integer", "left edge x (default: 300 behind the player)"},
                       {"to", "integer", "right edge x (default: from + 1200)"}}),
             [](matjson::Value const& a) {
@@ -1030,10 +1036,14 @@ namespace gucci::mcp {
         server.addTool({
             "gucci_route_plan",
             "Step R2 of AI_PATHFINDER_PLAN.md: plan a route through the whole level on "
-            "the level map from (from_x, from_y): at each gate, the gap to be in, priced "
-            "by length, tightness and what the map cannot vouch for. Returns the best "
-            "route's first `limit` waypoints and where the next best leave it. Nothing "
-            "is played and nothing in the game changes.",
+            "the level map from (from_x, from_y), with player 1's gravity now: at each "
+            "gate, the option it takes (step 4: use/skip, touch/avoid, fire/skip, free) "
+            "in which gap, and the gravity after it, priced by length, tightness and what "
+            "the map cannot vouch for. Returns the best route's first `limit` waypoints, "
+            "where the next best leave it, and next_gate: the next gate's options from "
+            "(from_x, from_y) best first by the cost to go (the way there plus the "
+            "cheapest way on to the level's end; free last). Nothing is played and "
+            "nothing in the game changes.",
             schemaOf({{"from_x", "integer", "where to plan from (default: the player's x)"},
                       {"from_y", "integer", "the height to plan from (default: the player's y)"},
                       {"limit", "integer", "waypoints to return (default 60, max 2000)"}}),
@@ -1071,14 +1081,15 @@ namespace gucci::mcp {
             "Step R3 of AI_PATHFINDER_PLAN.md: the physics map with a goal. From the real "
             "player's state, play every way the button can go tick by tick (merging states "
             "that come out the same) until one reaches x `gate_x` inside the band lo..hi. "
-            "Without gate_x: the next gate of the planned route. Returns found (with the way "
+            "Without gate_x: the next gate of the planned route, in the band of the option "
+            "the route takes there (an orb's contact region for a use). Returns found (with the way "
             "as a script), impossible (exact and nothing dropped: every move it offers was "
             "tried, close to a proof), not_found (similar states merged: not a proof), or "
             "out_of_budget, and draws it over the level. The game waits while it runs; "
             "nothing in the real game changes.",
             schemaOf({{"gate_x", "integer", "the gate's x (default: the next gate of the planned route)"},
-                      {"lo", "integer", "bottom of the band (default: the route's)"},
-                      {"hi", "integer", "top of the band (default: the route's; lo > hi = any height)"},
+                      {"lo", "integer", "bottom of the band (default: the route's option there)"},
+                      {"hi", "integer", "top of the band (default: the route's option there; lo > hi = any height)"},
                       {"max_ticks", "integer", "default 2400"},
                       {"cap", "integer", "states kept a tick (default 192, max 1024)"},
                       {"exact", "boolean", "merge only identical states, for a proof (default false)"},

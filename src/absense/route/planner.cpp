@@ -3,12 +3,14 @@
 #include <Geode/Geode.hpp>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <limits>
-#include <memory>
 #include <map>
-#include <tuple>
+#include <memory>
+#include <utility>
 
 using namespace geode::prelude;
 
@@ -59,8 +61,9 @@ namespace {
     }
 
     // The price of getting from `from` (in column c0) to the band `to` (in
-    // column c1 > c0) through the map's gaps, column by column.
-    double stepCost(Atlas const& a, int c0, Interval from, int c1, Opening to) {
+    // column c1 > c0) through the map's gaps, column by column, with gravity
+    // upside down or not on the way.
+    double stepCost(Atlas const& a, int c0, Interval from, int c1, Opening to, bool upsideDown) {
         std::vector<Interval> reach{from};
         std::vector<Interval> next;
         double cost = 0.0;
@@ -68,6 +71,9 @@ namespace {
             auto const& col = a.columns[(size_t)c];
             float rise, fall;
             envelope(col.mode, col.mini, rise, fall);
+            // Upside down, a cube or robot jumps down and falls up: the two
+            // swap. (The other modes climb and fall alike here.)
+            if (upsideDown) std::swap(rise, fall);
             const float half = kHalf * (col.mini ? 0.6f : 1.0f);
             next.clear();
             double tight = 1.0;
@@ -127,36 +133,228 @@ namespace {
     constexpr double kFailedGap = 5000.0;
     std::map<std::pair<int, int>, int> g_fails;
     uint64_t g_failsAtlas = 0;
+    // Up by one whenever what failed changes (a gap priced up, a new map): the
+    // gate graph is priced again with it.
+    uint64_t g_failsVersion = 1;
     bool g_replan = false;
     double failPrice(int column, float lo) {
         auto const it = g_fails.find({column, (int)std::lround(lo)});
         return it != g_fails.end() && it->second >= kFailsToPrice ? kFailedGap : 0.0;
     }
+    void syncFails(Atlas const& a) {
+        if (g_failsAtlas == a.id) return;
+        g_fails.clear();  // a new map: what failed on the old one says nothing
+        g_failsAtlas = a.id;
+        g_failsVersion++;
+    }
 
+    // One option of a column's gates, as the planner sees it.
+    struct Choice {
+        int gate = -1;     // index into Atlas::gates
+        int index = -1;    // into that gate's choices
+        float x = 0.0f;    // the gate's x
+        Option opt;
+        Opening gap;       // the opening its band lies in (Waypoint::band)
+    };
+
+    // A column with gates: one step of a route, the options of every gate in
+    // it together (gates sharing a column used to lose all but the first).
     struct Layer {
         int column = 0;
-        float x = 0.0f;
-        std::vector<Opening> options;
+        std::vector<Choice> choices;  // named options first, then FREE
+        // choices[0, eligible) are what a route may take here: the named
+        // options where the gates offer any, else the FREE ones. Beside named
+        // options FREE is the fallback, tried last, not a route choice: its
+        // band is all of theirs together, so it would undercut every one of
+        // them while saying nothing about what to do.
+        size_t eligible = 0;
     };
 
-    struct Label {
-        double cost;
-        int prevOption;
-        int prevRank;
-        double step;  // what arriving here cost
+    // Ties: use, touch and fire, then skip and avoid, then FREE.
+    int kindRank(OptionKind k) {
+        switch (k) {
+            case OptionKind::Use: case OptionKind::Touch: case OptionKind::Fire: return 0;
+            case OptionKind::Skip: case OptionKind::Avoid: return 1;
+            default: return 2;
+        }
+    }
+
+    // Costs compared to a thousandth, so two ways summed in a different order
+    // tie as they should and the tie rules decide.
+    int64_t costKey(double c) {
+        if (!std::isfinite(c)) return std::numeric_limits<int64_t>::max();
+        return (int64_t)std::llround(c * 1000.0);
+    }
+
+    void buildLayers(Atlas const& a, std::vector<Layer>& layers) {
+        layers.clear();
+        for (size_t gi = 0; gi < a.gates.size(); gi++) {
+            auto const& g = a.gates[gi];
+            if (g.choices.empty()) continue;
+            if (layers.empty() || layers.back().column != g.column) {
+                layers.emplace_back();
+                layers.back().column = g.column;
+            }
+            auto& layer = layers.back();
+            for (size_t k = 0; k < g.choices.size(); k++) {
+                auto const& o = g.choices[k];
+                if (o.kind == OptionKind::Free) {
+                    // Every gate in a column has its gaps: one FREE per gap.
+                    bool again = false;
+                    for (auto const& c : layer.choices)
+                        if (c.opt.kind == OptionKind::Free && std::fabs(c.opt.band.lo - o.band.lo) < 0.5f &&
+                            std::fabs(c.opt.band.hi - o.band.hi) < 0.5f) {
+                            again = true;
+                            break;
+                        }
+                    if (again) continue;
+                }
+                Choice c;
+                c.gate = (int)gi;
+                c.index = (int)k;
+                c.x = g.x;
+                c.opt = o;
+                c.gap = o.opening >= 0 && (size_t)o.opening < g.options.size() ? g.options[(size_t)o.opening] : o.band;
+                layer.choices.push_back(c);
+            }
+        }
+        for (auto& layer : layers) {
+            std::sort(layer.choices.begin(), layer.choices.end(), [](Choice const& l, Choice const& r) {
+                const int kl = kindRank(l.opt.kind);
+                const int kr = kindRank(r.opt.kind);
+                if (kl != kr) return kl < kr;
+                if (l.opt.band.lo != r.opt.band.lo) return l.opt.band.lo < r.opt.band.lo;
+                if (l.gate != r.gate) return l.gate < r.gate;
+                return l.index < r.index;
+            });
+            size_t named = 0;
+            for (auto const& c : layer.choices) named += c.opt.kind != OptionKind::Free ? 1 : 0;
+            layer.eligible = named > 0 ? named : layer.choices.size();
+        }
+    }
+
+    // The gates as the planner walks them, priced once per map (and again
+    // when a gap is priced up): every way from an option of one column to an
+    // option of the next, both ways up, and from each option the cheapest way
+    // on to the level's end (the cost to go). Plans from anywhere and the
+    // next gate's ranking all read it.
+    struct Graph {
+        uint64_t atlas = 0;
+        uint64_t fails = 0;
+        bool built = false;
+        std::vector<Layer> layers;
+        // asym[c]: how many of the columns before c are cube or robot, the
+        // modes whose climb and fall swap upside down.
+        std::vector<int> asym;
+        // edge[i]: layer i to i + 1, at ((o * n) + b) * 2 + gravity on the
+        // way (n: layer i + 1's choices, b one it may take).
+        std::vector<std::vector<double>> edge;
+        // ctg[i]: at b * 2 + gravity after b, the cheapest way from choice b
+        // of layer i on to the level's end.
+        std::vector<std::vector<double>> ctg;
+        int edges = 0;
+        double ms = 0.0;
     };
+    Graph g_graph;
+
+    Graph const& graphFor(Atlas const& a) {
+        syncFails(a);
+        if (g_graph.built && g_graph.atlas == a.id && g_graph.fails == g_failsVersion) return g_graph;
+        auto const started = std::chrono::steady_clock::now();
+        Graph gr;
+        gr.atlas = a.id;
+        gr.fails = g_failsVersion;
+        gr.built = true;
+        buildLayers(a, gr.layers);
+        gr.asym.assign(a.columns.size() + 1, 0);
+        for (size_t c = 0; c < a.columns.size(); c++)
+            gr.asym[c + 1] = gr.asym[c] + ((a.columns[c].mode == 0 || a.columns[c].mode == 5) ? 1 : 0);
+        const size_t L = gr.layers.size();
+        gr.edge.resize(L > 0 ? L - 1 : 0);
+        for (size_t i = 0; i + 1 < L; i++) {
+            auto const& from = gr.layers[i];
+            auto const& to = gr.layers[i + 1];
+            const size_t n = to.choices.size();
+            auto& e = gr.edge[i];
+            e.assign(from.choices.size() * n * 2, 0.0);
+            // Which way up only changes the price where a cube or robot is on the way.
+            const bool sides = gr.asym[(size_t)to.column + 1] - gr.asym[(size_t)from.column + 1] > 0;
+            for (size_t o = 0; o < from.choices.size(); o++) {
+                const Interval start{from.choices[o].opt.band.lo, from.choices[o].opt.band.hi};
+                for (size_t b = 0; b < to.eligible; b++) {
+                    auto const& ch = to.choices[b];
+                    const double price = failPrice(to.column, ch.gap.lo);
+                    const double up = stepCost(a, from.column, start, to.column, ch.opt.band, false) + price;
+                    const double down =
+                        sides ? stepCost(a, from.column, start, to.column, ch.opt.band, true) + price : up;
+                    e[(o * n + b) * 2] = up;
+                    e[(o * n + b) * 2 + 1] = down;
+                    gr.edges += sides ? 2 : 1;
+                }
+            }
+        }
+        // The cost to go, from the level's end back.
+        gr.ctg.resize(L);
+        if (L > 0) gr.ctg[L - 1].assign(gr.layers[L - 1].choices.size() * 2, 0.0);
+        for (size_t k = L > 0 ? L - 1 : 0; k-- > 0;) {
+            auto const& here = gr.layers[k];
+            auto const& next = gr.layers[k + 1];
+            const size_t n = next.choices.size();
+            auto const& e = gr.edge[k];
+            auto const& later = gr.ctg[k + 1];
+            auto& out = gr.ctg[k];
+            out.assign(here.choices.size() * 2, 0.0);
+            for (size_t o = 0; o < here.choices.size(); o++)
+                for (int g = 0; g < 2; g++) {
+                    double best = std::numeric_limits<double>::infinity();
+                    for (size_t b = 0; b < next.eligible; b++) {
+                        const int g2 = gravityAfter(next.choices[b].opt, g);
+                        best = std::min(best, e[(o * n + b) * 2 + (size_t)g] + later[b * 2 + (size_t)g2]);
+                    }
+                    out[o * 2 + (size_t)g] = best;
+                }
+        }
+        gr.ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
+        g_graph = std::move(gr);
+        return g_graph;
+    }
+
+    // The first layer past column c (layers.size() when there is none).
+    size_t firstAfter(Graph const& gr, int c) {
+        size_t f = 0;
+        while (f < gr.layers.size() && gr.layers[f].column <= c) f++;
+        return f;
+    }
+
+    std::string rankingText(Atlas const& a, std::vector<Ranked> const& next, size_t most) {
+        std::string out;
+        for (size_t i = 0; i < next.size() && i < most; i++) {
+            auto const& r = next[i];
+            if (r.gate < 0 || (size_t)r.gate >= a.gates.size()) continue;
+            out += fmt::format("{}{} (cost {:.1f})", out.empty() ? "" : "; ", describe(a.gates[(size_t)r.gate], r.option),
+                               r.cost);
+        }
+        if (next.size() > most) out += fmt::format("; {} more", next.size() - most);
+        return out;
+    }
 
     std::unique_ptr<Plan> g_plan;
     uint64_t g_planAtlas = 0;  // the id of the map it was planned on
     bool g_routeShown = false;
 
-    // Where the line is drawn in a band: its middle, but near the floor of an
-    // open-sky gap (cube and robot), not up in the sky.
+    // Where the line is drawn at a waypoint: the middle of the band of the
+    // option it takes, but near the floor of an open-sky gap (cube and
+    // robot), not up in the sky.
     float drawY(Atlas const& a, Waypoint const& w) {
         auto const& col = a.columns[(size_t)std::clamp(w.column, 0, (int)a.columns.size() - 1)];
-        const float h = w.band.hi - w.band.lo;
-        if (col.mode == 0 || col.mode == 5) return w.band.lo + std::min(h * 0.5f, 45.0f);
-        return w.band.lo + h * 0.5f;
+        auto const& band = w.option.band;
+        const float h = band.hi - band.lo;
+        if (col.mode == 0 || col.mode == 5) return band.lo + std::min(h * 0.5f, 45.0f);
+        return band.lo + h * 0.5f;
+    }
+
+    bool sameStep(Waypoint const& l, Waypoint const& r) {
+        return l.gate == r.gate && l.choice == r.choice;
     }
 
     CCDrawNode* draw(Atlas const& a, Plan const& p) {
@@ -170,9 +368,7 @@ namespace {
             for (size_t i = 0; i + 1 < r.points.size() && i + 1 < best.points.size(); i++) {
                 auto const& u = r.points[i];
                 auto const& v = r.points[i + 1];
-                const bool same = std::fabs(u.band.lo - best.points[i].band.lo) < 0.5f &&
-                                  std::fabs(v.band.lo - best.points[i + 1].band.lo) < 0.5f;
-                if (same) continue;
+                if (sameStep(u, best.points[i]) && sameStep(v, best.points[i + 1])) continue;
                 node->drawSegment(ccp(u.x, drawY(a, u)), ccp(v.x, drawY(a, v)), 1.0f, ccc4f(1.0f, 1.0f, 1.0f, 0.35f));
             }
         }
@@ -185,71 +381,177 @@ namespace {
             node->drawSegment(ccp(u.x, drawY(a, u)), ccp(v.x, drawY(a, v)), 2.0f,
                               doubtful ? ccc4f(1.0f, 0.25f, 0.25f, 0.95f) : ccc4f(1.0f, 0.8f, 0.2f, 0.95f));
         }
+        // Step 4: the options at the gates on the way. Each gate's own options
+        // get their letter (U use, S skip, T touch, A avoid, F fire), dim, at
+        // their band; the one the route takes is gold and larger, just above
+        // where the route crosses, with a dot there.
+        for (size_t i = 1; i < best.points.size(); i++) {
+            auto const& w = best.points[i];
+            auto it = std::lower_bound(a.gates.begin(), a.gates.end(), w.column,
+                                       [](Gate const& g, int c) { return g.column < c; });
+            for (; it != a.gates.end() && it->column == w.column; ++it) {
+                const int gi = (int)(it - a.gates.begin());
+                for (size_t k = 0; k < it->choices.size(); k++) {
+                    auto const& o = it->choices[k];
+                    if (o.kind == OptionKind::Free || (gi == w.gate && (int)k == w.choice)) continue;
+                    drawMark(node, o.kind, it->x + 4.0f, markY(o.band), 8.0f, 0.55f);
+                }
+            }
+            if (w.option.kind == OptionKind::Free) continue;
+            const float y = drawY(a, w);
+            node->drawDot(ccp(w.x, y), 2.5f, ccc4f(1.0f, 0.8f, 0.2f, 0.95f));
+            drawMark(node, w.option.kind, w.x + 3.0f, y + 11.0f, 11.0f, 0.95f, true);
+        }
         return node;
     }
 
 }  // namespace
 
-Plan plan(Atlas const& a, float fromX, float fromY) {
+Plan plan(Atlas const& a, float fromX, float fromY, int fromGravity) {
     auto const started = std::chrono::steady_clock::now();
     Plan p;
     p.fromX = fromX;
     p.fromY = fromY;
+    p.fromGravity = fromGravity ? 1 : 0;
     if (a.columns.empty()) return p;
+    Graph const& gr = graphFor(a);
 
-    // The layers: where the player is, then each column with a gate ahead
-    // (several gates in one column share its gaps).
+    // The layers: where the player is, then each column with gates ahead.
     const int startColumn = std::clamp((int)std::floor(fromX / kColumnWidth), 0, (int)a.columns.size() - 1);
-    std::vector<Layer> layers;
-    layers.push_back({startColumn, fromX, {Opening{fromY, fromY}}});
-    for (auto const& g : a.gates) {
-        if (g.column <= layers.back().column || g.options.empty()) continue;
-        layers.push_back({g.column, g.x, g.options});
+    const size_t L = gr.layers.size();
+    const size_t f = firstAfter(gr, startColumn);
+    p.layers = (int)(L - f);
+    Waypoint start;
+    start.column = startColumn;
+    start.x = fromX;
+    start.band = Opening{fromY, fromY};
+    start.option.band = start.band;
+    start.gravity = p.fromGravity;
+    if (f >= L) {
+        // No gate ahead: the route is where it is.
+        Route only;
+        only.points.push_back(start);
+        p.routes.push_back(std::move(only));
+        p.ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
+        return p;
     }
-    p.layers = (int)layers.size() - 1;
 
-    // Cheapest-first, kRoutesKept per gap: the layers only ever go forward, so
-    // each gate's best ways come from the one before it.
-    std::vector<std::vector<std::vector<Label>>> labels(layers.size());
-    labels[0] = {{Label{0.0, -1, -1, 0.0}}};
-    for (size_t i = 1; i < layers.size(); i++) {
-        auto const& from = layers[i - 1];
-        auto const& here = layers[i];
-        labels[i].resize(here.options.size());
-        for (size_t b = 0; b < here.options.size(); b++) {
-            std::vector<std::tuple<double, int, int, double>> candidates;
-            for (size_t o = 0; o < from.options.size(); o++) {
-                if (labels[i - 1][o].empty()) continue;
-                const double step = stepCost(a, from.column, Interval{from.options[o].lo, from.options[o].hi},
-                                             here.column, here.options[b]) +
-                                    failPrice(here.column, here.options[b].lo);
-                p.edges++;
-                for (size_t r = 0; r < labels[i - 1][o].size(); r++)
-                    candidates.emplace_back(labels[i - 1][o][r].cost + step, (int)o, (int)r, step);
-            }
-            std::sort(candidates.begin(), candidates.end());
-            for (size_t k = 0; k < candidates.size() && k < (size_t)kRoutesKept; k++) {
-                auto const& [cost, o, r, step] = candidates[k];
-                labels[i][b].push_back(Label{cost, o, r, step});
+    // Cheapest-first, kRoutesKept per option and gravity: the layers only
+    // ever go forward, so each gate's best ways come from the one before it.
+    struct Label {
+        double cost;
+        int prev;         // the choice at the layer before (-1: the start)
+        int prevGravity;  // ... and the gravity after it
+        int prevRank;
+        double step;      // what arriving here cost
+    };
+    // labels[i - f][b * 2 + g]: the ways to choice b of layer i that leave
+    // gravity g after it.
+    std::vector<std::vector<std::vector<Label>>> labels(L - f);
+    {
+        auto const& first = gr.layers[f];
+        labels[0].resize(first.choices.size() * 2);
+        const Interval at{fromY, fromY};
+        for (size_t b = 0; b < first.eligible; b++) {
+            auto const& ch = first.choices[b];
+            const double step = stepCost(a, startColumn, at, first.column, ch.opt.band, p.fromGravity == 1) +
+                                failPrice(first.column, ch.gap.lo);
+            p.edges++;
+            const int g2 = gravityAfter(ch.opt, p.fromGravity);
+            labels[0][b * 2 + (size_t)g2].push_back(Label{step, -1, p.fromGravity, -1, step});
+        }
+    }
+    struct Candidate {
+        double cost;
+        int prev;
+        int prevGravity;
+        int prevRank;
+        double step;
+    };
+    std::array<std::vector<Candidate>, 2> candidates;
+    for (size_t i = f + 1; i < L; i++) {
+        auto const& from = gr.layers[i - 1];
+        auto const& here = gr.layers[i];
+        const size_t n = here.choices.size();
+        auto const& before = labels[i - 1 - f];
+        auto& now = labels[i - f];
+        now.resize(n * 2);
+        auto const& e = gr.edge[i - 1];
+        for (size_t b = 0; b < here.eligible; b++) {
+            candidates[0].clear();
+            candidates[1].clear();
+            for (size_t o = 0; o < from.eligible; o++)
+                for (int g = 0; g < 2; g++) {
+                    auto const& ways = before[o * 2 + (size_t)g];
+                    if (ways.empty()) continue;
+                    const double step = e[(o * n + b) * 2 + (size_t)g];
+                    p.edges++;
+                    const int g2 = gravityAfter(here.choices[b].opt, g);
+                    for (size_t r = 0; r < ways.size(); r++)
+                        candidates[(size_t)g2].push_back(Candidate{ways[r].cost + step, (int)o, g, (int)r, step});
+                }
+            for (size_t g2 = 0; g2 < 2; g2++) {
+                auto& cs = candidates[g2];
+                std::sort(cs.begin(), cs.end(), [](Candidate const& l, Candidate const& r) {
+                    const int64_t kl = costKey(l.cost);
+                    const int64_t kr = costKey(r.cost);
+                    if (kl != kr) return kl < kr;
+                    if (l.prev != r.prev) return l.prev < r.prev;
+                    if (l.prevGravity != r.prevGravity) return l.prevGravity < r.prevGravity;
+                    return l.prevRank < r.prevRank;
+                });
+                for (size_t k = 0; k < cs.size() && k < (size_t)kRoutesKept; k++)
+                    now[b * 2 + g2].push_back(Label{cs[k].cost, cs[k].prev, cs[k].prevGravity, cs[k].prevRank, cs[k].step});
             }
         }
     }
 
     // The cheapest ways to the last gate, traced back.
-    const size_t last = layers.size() - 1;
-    std::vector<std::tuple<double, int, int>> ends;
-    for (size_t b = 0; b < labels[last].size(); b++)
-        for (size_t r = 0; r < labels[last][b].size(); r++) ends.emplace_back(labels[last][b][r].cost, (int)b, (int)r);
-    std::sort(ends.begin(), ends.end());
+    struct End {
+        double cost;
+        int choice;
+        int gravity;
+        int rank;
+    };
+    std::vector<End> ends;
+    auto const& last = labels[L - 1 - f];
+    for (size_t b = 0; b < gr.layers[L - 1].eligible; b++)
+        for (int g = 0; g < 2; g++) {
+            auto const& ways = last[b * 2 + (size_t)g];
+            for (size_t r = 0; r < ways.size(); r++) ends.push_back(End{ways[r].cost, (int)b, g, (int)r});
+        }
+    std::sort(ends.begin(), ends.end(), [](End const& l, End const& r) {
+        const int64_t kl = costKey(l.cost);
+        const int64_t kr = costKey(r.cost);
+        if (kl != kr) return kl < kr;
+        if (l.choice != r.choice) return l.choice < r.choice;
+        if (l.gravity != r.gravity) return l.gravity < r.gravity;
+        return l.rank < r.rank;
+    });
     for (size_t k = 0; k < ends.size() && k < (size_t)kRoutesKept; k++) {
-        auto [cost, b, r] = ends[k];
         Route route;
-        route.cost = cost;
-        route.points.resize(layers.size());
-        for (size_t i = last + 1; i-- > 0;) {
-            auto const& lab = labels[i][(size_t)b][(size_t)r];
-            route.points[i] = Waypoint{layers[i].column, layers[i].x, layers[i].options[(size_t)b], lab.step};
-            b = lab.prevOption;
+        route.cost = ends[k].cost;
+        route.points.resize(1 + (L - f));
+        route.points[0] = start;
+        int b = ends[k].choice;
+        int g = ends[k].gravity;
+        int r = ends[k].rank;
+        for (size_t i = L; i-- > f;) {
+            auto const& lab = labels[i - f][(size_t)b * 2 + (size_t)g][(size_t)r];
+            auto const& layer = gr.layers[i];
+            auto const& ch = layer.choices[(size_t)b];
+            Waypoint w;
+            w.column = layer.column;
+            w.x = ch.x;
+            w.band = ch.gap;
+            w.step = lab.step;
+            w.gate = ch.gate;
+            w.choice = ch.index;
+            w.option = ch.opt;
+            w.gravity = g;
+            route.points[1 + (i - f)] = w;
+            b = lab.prev;
+            g = lab.prevGravity;
             r = lab.prevRank;
             if (b < 0) break;
         }
@@ -259,15 +561,69 @@ Plan plan(Atlas const& a, float fromX, float fromY) {
     return p;
 }
 
+std::vector<Ranked> nextChoices(Atlas const& a, float x, float y, int gravity) {
+    std::vector<Ranked> out;
+    if (a.columns.empty()) return out;
+    Graph const& gr = graphFor(a);
+    gravity = gravity ? 1 : 0;
+    const int column = std::clamp((int)std::floor(x / kColumnWidth), 0, (int)a.columns.size() - 1);
+    const size_t f = firstAfter(gr, column);
+    if (f >= gr.layers.size()) return out;
+    auto const& layer = gr.layers[f];
+    auto const& later = gr.ctg[f];
+    const Interval at{y, y};
+    for (size_t b = 0; b < layer.choices.size(); b++) {
+        auto const& ch = layer.choices[b];
+        Ranked r;
+        r.gate = ch.gate;
+        r.choice = ch.index;
+        r.x = ch.x;
+        r.option = ch.opt;
+        r.gravity = gravityAfter(ch.opt, gravity);
+        r.step = stepCost(a, column, at, layer.column, ch.opt.band, gravity == 1) + failPrice(layer.column, ch.gap.lo);
+        r.cost = r.step + later[b * 2 + (size_t)r.gravity];
+        out.push_back(r);
+    }
+    std::sort(out.begin(), out.end(), [](Ranked const& l, Ranked const& r) {
+        const bool lf = l.option.kind == OptionKind::Free;
+        const bool rf = r.option.kind == OptionKind::Free;
+        if (lf != rf) return rf;  // FREE last
+        const int64_t kl = costKey(l.cost);
+        const int64_t kr = costKey(r.cost);
+        if (kl != kr) return kl < kr;
+        const int ql = kindRank(l.option.kind);
+        const int qr = kindRank(r.option.kind);
+        if (ql != qr) return ql < qr;
+        if (l.option.band.lo != r.option.band.lo) return l.option.band.lo < r.option.band.lo;
+        if (l.gate != r.gate) return l.gate < r.gate;
+        return l.choice < r.choice;
+    });
+    return out;
+}
+
+std::vector<Ranked> nextChoices(GJBaseGameLayer* pl, float x, float y, int gravity) {
+    auto const* a = atlasFor(pl);
+    if (!a) return {};
+    if (gravity < 0) gravity = pl->m_player1 && pl->m_player1->m_isUpsideDown ? 1 : 0;
+    return nextChoices(*a, x, y, gravity);
+}
+
 const Plan* shownPlan(GJBaseGameLayer* pl) {
     auto const* a = atlasFor(pl);
     if (!a || !pl->m_player1) return nullptr;
     if (!g_plan || g_planAtlas != a->id) {
-        const float half = kHalf * (pl->m_player1->m_vehicleSize < 0.8f ? 0.6f : 1.0f);
-        const float y = std::max(pl->m_player1->getPositionY(), 90.0f + half);
-        g_plan = std::make_unique<Plan>(plan(*a, pl->m_player1->getPositionX(), y));
+        auto* p1 = pl->m_player1;
+        const float half = kHalf * (p1->m_vehicleSize < 0.8f ? 0.6f : 1.0f);
+        const float x = p1->getPositionX();
+        const float y = std::max(p1->getPositionY(), 90.0f + half);
+        const int gravity = p1->m_isUpsideDown ? 1 : 0;
+        g_plan = std::make_unique<Plan>(plan(*a, x, y, gravity));
         g_planAtlas = a->id;
         log::info("[AbsPF] route plan: {}", summary(*g_plan));
+        // What it would do at the next gate from here, best first (step 4):
+        // the ranking a decision there would start from.
+        auto const next = nextChoices(*a, x, y, gravity);
+        if (!next.empty()) log::info("[AbsPF] route: the next gate's options from here, best first: {}", rankingText(*a, next, 6));
     }
     return g_plan.get();
 }
@@ -276,11 +632,25 @@ std::string summary(Plan const& p) {
     if (p.routes.empty()) return fmt::format("no route found from x {:.0f} ({} gates)", p.fromX, p.layers);
     auto const& best = p.routes.front();
     int doubtful = 0;
-    for (auto const& w : best.points) doubtful += w.step >= kOffMap ? 1 : 0;
-    return fmt::format("best route from x {:.0f} through {} gates, cost {:.0f}{}; {} kept, {} ways priced in {:.1f} ms",
-                       p.fromX, p.layers, best.cost,
-                       doubtful ? fmt::format(", {} stretches the map doubts (red)", doubtful) : std::string(),
-                       p.routes.size(), p.edges, p.ms);
+    int taken[6] = {};
+    for (auto const& w : best.points) {
+        doubtful += w.step >= kOffMap ? 1 : 0;
+        if (w.gate >= 0) taken[std::clamp((int)w.option.kind, 0, 5)]++;
+    }
+    std::string options;
+    for (OptionKind k : {OptionKind::Use, OptionKind::Skip, OptionKind::Touch, OptionKind::Avoid, OptionKind::Fire}) {
+        if (taken[(int)k] == 0) continue;
+        options += fmt::format("{}{} {}", options.empty() ? "" : ", ", optionKindName(k), taken[(int)k]);
+    }
+    return fmt::format(
+        "best route from x {:.0f}{} through {} gates, cost {:.0f}{}{}; {} kept, {} ways priced in {:.1f} ms", p.fromX,
+        p.fromGravity ? " (upside down)" : "", p.layers, best.cost,
+        doubtful ? fmt::format(", {} stretches the map doubts (red)", doubtful) : std::string(),
+        options.empty() ? std::string()
+                        : fmt::format("; at orbs, pads and portals it would {} (letters on the route: U use, S skip, "
+                                      "T touch, A avoid, F fire)",
+                                      options),
+        p.routes.size(), p.edges, p.ms);
 }
 
 namespace {
@@ -292,15 +662,14 @@ namespace {
 const Plan* guidePlan(GJBaseGameLayer* pl) {
     auto const* a = atlasFor(pl);
     if (!a) return nullptr;
-    if (g_failsAtlas != a->id) {
-        g_fails.clear();  // a new map: what failed on the old one says nothing
-        g_failsAtlas = a->id;
-    }
+    syncFails(*a);
     if (!g_guide || g_guideAtlas != a->id || g_replan) {
         g_replan = false;
-        // The level starts on the floor: y 105, or 99 when it starts mini.
+        // The level starts on the floor: y 105, or 99 when it starts mini;
+        // upside down if the level's settings say so.
         const bool mini = pl->m_levelSettings && pl->m_levelSettings->m_startMini;
-        g_guide = std::make_unique<Plan>(plan(*a, 0.0f, 90.0f + kHalf * (mini ? 0.6f : 1.0f)));
+        const bool flipped = pl->m_levelSettings && pl->m_levelSettings->m_isFlipped;
+        g_guide = std::make_unique<Plan>(plan(*a, 0.0f, 90.0f + kHalf * (mini ? 0.6f : 1.0f), flipped ? 1 : 0));
         g_guideAtlas = a->id;
         log::info("[AbsPF] route to follow: {}", summary(*g_guide));
     }
@@ -317,6 +686,7 @@ void noteLeg(float gateX, float lo, bool found) {
     int& n = g_fails[{column, (int)std::lround(lo)}];
     if (++n == kFailsToPrice) {
         g_replan = true;
+        g_failsVersion++;  // the gate graph is priced again with it
         log::info("[AbsPF] route: the gap at x {:.0f} (from y {:.0f}) failed {} times; planning again", gateX, lo, n);
     }
 }

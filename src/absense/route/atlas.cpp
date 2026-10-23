@@ -5,7 +5,9 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <limits>
 #include <memory>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "absense/compat/bot.hpp"
@@ -28,9 +30,18 @@ namespace {
     // A gap whose room for the centre is under this many player halves is
     // tight: physically, under about two player heights.
     constexpr float kTightHalves = 2.0f;
+    // Step 4 (docs/ROUTE_ENGINE_PLAN.md): a gap whose room for the centre
+    // narrows to under this many halves - three player heights - gets a gate
+    // where it is narrowest (a waist). ToE2's big ship dies in a slope
+    // "diamond" whose waists are 79 units: over the tight rule's two halves,
+    // so the route never named a height to go through them at.
+    constexpr float kWaistHalves = 6.0f;
     // At least one gate this many columns apart (600 units, about two seconds
     // at normal speed), so no stretch of the route is left unplanned.
     constexpr int kGateSpacing = 20;
+    // A piece of a gap thinner than this is no band to aim for (subtract
+    // drops gaps that thin too).
+    constexpr float kMinBand = 1.0f;
 
     enum Kind : uint32_t {
         kSolid = 0, kHazard = 1, kJumpOrb = 2, kGravityOrb = 3, kJumpPad = 4, kGravityPad = 5,
@@ -74,8 +85,22 @@ namespace {
     struct Box {
         gpu::Object o;
         bool moving = false;
+        int uid = 0;     // the object's m_uniqueID
+        int index = -1;  // ... and where it is in the layer's object list
         float cx() const { return (o.minX + o.maxX) * 0.5f; }
         float cy() const { return (o.minY + o.maxY) * 0.5f; }
+    };
+
+    // A toggle orb (1594 and 3643, the game's custom rings: a press while
+    // touching switches a group on or off, or spawns it) or a touch trigger
+    // (1595: once the player is past it, a press or release switches its
+    // group). Neither is something classify() reads.
+    struct Toggle {
+        int uid = 0;
+        int index = -1;
+        float minX = 0.0f, minY = 0.0f, maxX = 0.0f, maxY = 0.0f;  // a touch trigger: its position, both corners
+        int target = 0;    // the group it switches
+        bool orb = false;  // a toggle orb, else a touch trigger
     };
 
     struct Change {
@@ -94,6 +119,9 @@ namespace {
     unsigned g_atlasGeneration = ~0u;
     uint64_t g_nextAtlasId = 0;
     bool g_overlay = false;
+    // The objects the map's gates are at, by uid: where each is in the layer's
+    // object list (objectOf), for the map in g_atlas.
+    std::unordered_map<int, int> g_uidIndex;
 
     // The ghost run (3b), out a slice a frame (tickGhost): what it has found
     // so far, for the level and the read of it it is out in. Kept apart from
@@ -120,6 +148,116 @@ namespace {
     constexpr double kGhostSliceMinMs = 1.0;
     constexpr double kGhostSliceMaxMs = 6.0;
     constexpr double kGhostTotalMs = 120000.0;
+
+    // What the object is, in the words a player uses (classify's power tells
+    // the orbs and pads of one kind apart: 1.0 yellow, 0.72 pink, 1.38 red
+    // jump orbs; 0.8 blue, 1.0 green gravity orbs; 1.0 yellow, 0.65 pink, 1.25
+    // red pads).
+    const char* objectWhat(gpu::Object const& o) {
+        switch (o.kind) {
+            case kJumpOrb: return o.power < 0.86f ? "pink orb" : (o.power < 1.19f ? "yellow orb" : "red orb");
+            case kGravityOrb: return o.power < 0.9f ? "blue orb" : "green orb";
+            case kDropOrb: return "black orb";
+            case kSpiderOrb: return "spider orb";
+            case kDashOrb: return "green dash orb";
+            case kGravityDashOrb: return "pink dash orb";
+            case kJumpPad: return o.power < 0.82f ? "pink pad" : (o.power < 1.12f ? "yellow pad" : "red pad");
+            case kGravityPad: return "blue pad";
+            case kSpiderPad: return "spider pad";
+            case kGravityPortalDown: return "normal gravity portal";
+            case kGravityPortalUp: return "upside-down gravity portal";
+            case kGravityToggle: return "gravity toggle portal";
+            case kSpeedPortal: return "speed portal";
+            case kModePortal: {
+                static const char* const kModes[] = {"cube portal",  "ship portal",  "ball portal",   "UFO portal",
+                                                     "wave portal",  "robot portal", "spider portal", "swing portal"};
+                return kModes[std::clamp((int)std::lround(o.power), 0, 7)];
+            }
+            case kSizePortal: return o.power < 0.8f ? "mini portal" : "normal size portal";
+            default: return "";
+        }
+    }
+
+    // Step 4: the choices at an object a route goes through or around. In:
+    // the column's openings inside the object's contact region [lo, hi] (its
+    // box grown by the player's half), each piece one `through` option that
+    // must fire it. Out: the openings minus that region, each piece one
+    // `around` option that must not; where nothing is left outside and
+    // `aroundInside` is set (an orb, which only a press fires), the whole
+    // openings, passed without a press. Nothing is offered when the region
+    // misses every opening (the object is out of reach), or for a pad or
+    // portal with no way around it (TOUCH alone: every way through touches it).
+    void contactChoices(Gate& g, float lo, float hi, OptionKind through, OptionKind around, bool aroundInside, int uid,
+                        int8_t gravity, bool flips) {
+        std::vector<Option> in;
+        std::vector<Option> out;
+        for (size_t k = 0; k < g.options.size(); k++) {
+            auto const& o = g.options[k];
+            Option piece;
+            piece.objectUid = uid;
+            piece.opening = (int)k;
+            const float a = std::max(o.lo, lo);
+            const float b = std::min(o.hi, hi);
+            if (b - a > kMinBand) {
+                piece.kind = through;
+                piece.band = {a, b};
+                piece.mustFire = true;
+                piece.gravityAfter = gravity;
+                piece.flipsGravity = flips;
+                in.push_back(piece);
+            }
+            piece.kind = around;
+            piece.mustFire = false;
+            piece.mustNotFire = true;
+            piece.gravityAfter = -1;
+            piece.flipsGravity = false;
+            if (lo - o.lo > kMinBand) {
+                piece.band = {o.lo, std::min(o.hi, lo)};
+                out.push_back(piece);
+            }
+            if (o.hi - hi > kMinBand) {
+                piece.band = {std::max(o.lo, hi), o.hi};
+                out.push_back(piece);
+            }
+        }
+        if (in.empty()) return;
+        if (out.empty() && aroundInside) {
+            for (size_t k = 0; k < g.options.size(); k++) {
+                Option piece;
+                piece.kind = around;
+                piece.band = g.options[k];
+                piece.objectUid = uid;
+                piece.mustNotFire = true;
+                piece.opening = (int)k;
+                out.push_back(piece);
+            }
+        }
+        g.choices.insert(g.choices.end(), in.begin(), in.end());
+        g.choices.insert(g.choices.end(), out.begin(), out.end());
+    }
+
+    // Every gate's last options: anywhere in one of its gaps, nothing asked.
+    void freeChoices(Gate& g) {
+        for (size_t k = 0; k < g.options.size(); k++) {
+            Option o;
+            o.band = g.options[k];
+            o.opening = (int)k;
+            g.choices.push_back(o);
+        }
+    }
+
+    // A gate at column c, with that column's gaps as its options.
+    Gate makeGate(Atlas const& a, GateKind kind, int c, float x, float y, int uid, const char* what) {
+        Gate g;
+        g.kind = kind;
+        g.column = c;
+        g.x = x;
+        g.y = y;
+        g.options = a.columns[(size_t)c].openings;
+        g.key = GateKey{c, kind, uid};
+        g.what = what;
+        return g;
+    }
 
     void subtract(float lo, float hi, std::vector<std::pair<float, float>>& blocked, std::vector<Opening>& out) {
         out.clear();
@@ -150,6 +288,7 @@ namespace {
         // group at all, which made most of a level "moving" on the map.)
         const int n = pl->m_objects ? pl->m_objects->count() : 0;
         std::unordered_set<int> dynamicGroups;
+        std::vector<Toggle> toggles;
         for (int i = 0; i < n; i++) {
             auto* o = static_cast<GameObject*>(pl->m_objects->objectAtIndex(i));
             if (!o) continue;
@@ -165,9 +304,34 @@ namespace {
                 default:
                     continue;
             }
-            if (auto* e = geode::cast::typeinfo_cast<EffectGameObject*>(o); e && e->m_targetGroupID > 0)
-                dynamicGroups.insert(e->m_targetGroupID);
+            auto* e = geode::cast::typeinfo_cast<EffectGameObject*>(o);
+            if (!e || e->m_targetGroupID <= 0) continue;
+            dynamicGroups.insert(e->m_targetGroupID);
+            // Step 4: a touch trigger the player crosses (one another trigger
+            // spawns has no place in the level, and one that is off now is
+            // left to the ghost) is a FIRE / SKIP gate where it stands, if
+            // its group holds something the player can touch (checked below).
+            if (o->m_objectID == 1595 && !e->m_isSpawnTriggered && !o->m_isGroupDisabled && !o->m_isDisabled) {
+                Toggle t;
+                t.uid = o->m_uniqueID;
+                t.index = i;
+                t.minX = t.maxX = o->getPositionX();
+                t.minY = t.maxY = o->getPositionY();
+                t.target = e->m_targetGroupID;
+                toggles.push_back(t);
+            }
         }
+        // The groups that hold something the player can touch (a block, a
+        // hazard, an orb, a pad or a portal, on now or switched on later):
+        // switching one of those can change a route, switching scenery cannot.
+        // Only gathered when there is a touch trigger to ask about (so far the
+        // list holds nothing else).
+        std::unordered_set<int> playerGroups;
+        const bool wantGroups = !toggles.empty();
+        const auto noteGroups = [&](GameObject* o) {
+            if (!wantGroups || o->m_groupCount <= 0 || !o->m_groups) return;
+            for (int g = 0; g < o->m_groupCount && g < 10; g++) playerGroups.insert((int)(*o->m_groups)[(size_t)g]);
+        };
         const auto movesOrToggles = [&](GameObject* o) {
             const cocos2d::CCPoint start = o->m_startPosition;
             if (std::fabs(o->getPositionX() - start.x) > 0.01f || std::fabs(o->getPositionY() - start.y) > 0.01f)
@@ -190,6 +354,21 @@ namespace {
             if (gpu::objectChangesEverything(obj)) {
                 unknownX.push_back(obj->getPositionX());
                 a->unknownObjects++;
+                // Step 4: a toggle orb is still an orb to press or not. What
+                // it switches stays the map's blind spot (its column is
+                // unknown), but the choice is named.
+                if (obj->m_objectType == GameObjectType::CustomRing) {
+                    const cocos2d::CCRect r = obj->getObjectRect();
+                    Toggle t;
+                    t.uid = obj->m_uniqueID;
+                    t.index = i;
+                    t.minX = r.getMinX();
+                    t.minY = r.getMinY();
+                    t.maxX = r.getMaxX();
+                    t.maxY = r.getMaxY();
+                    t.orb = true;
+                    toggles.push_back(t);
+                }
                 continue;
             }
             if ((obj->m_isGroupDisabled || obj->m_isDisabled) && movesOrToggles(obj)) {
@@ -202,10 +381,14 @@ namespace {
                 if (!gpu::classifyObject(obj, probe, true)) continue;
                 toggledX.push_back(obj->getPositionX());
                 a->movingObjects++;
+                noteGroups(obj);
                 continue;
             }
             Box b;
             if (!gpu::classifyObject(obj, b.o)) continue;
+            noteGroups(obj);
+            b.uid = obj->m_uniqueID;
+            b.index = i;
             b.moving = movesOrToggles(obj);
             if (b.moving) a->movingObjects++;
             levelEnd = std::max(levelEnd, b.o.maxX);
@@ -333,10 +516,12 @@ namespace {
             subtract(col.bandLo, col.bandHi, blocked, col.openings);
         }
 
-        // 4. Gates: orbs, pads and portals; forks where a gap splits; tight
-        // gaps; and one at least every kGateSpacing columns.
+        // 4. Gates: orbs, pads and portals; toggle orbs and touch triggers;
+        // forks where a gap splits; tight gaps and waists; and one at least
+        // every kGateSpacing columns. Each with what a route can do there
+        // (step 4): the object's own options, then FREE.
         std::vector<Gate> gates;
-        auto optionsAt = [&](int c) { return a->columns[(size_t)c].openings; };
+        g_uidIndex.clear();
         for (auto const& b : boxes) {
             GateKind kind;
             if (isOrb(b.o.kind)) kind = GateKind::Orb;
@@ -344,8 +529,84 @@ namespace {
             else if (isPortal(b.o.kind)) kind = GateKind::Portal;
             else continue;
             const int c = std::clamp((int)std::floor(b.cx() / kColumnWidth), 0, columns - 1);
-            gates.push_back({kind, c, b.cx(), b.cy(), optionsAt(c)});
+            Gate g = makeGate(*a, kind, c, b.cx(), b.cy(), b.uid, objectWhat(b.o));
+            const float half = kPlayerHalf * (a->columns[(size_t)c].mini ? 0.6f : 1.0f);
+            const float r = b.o.radius;
+            const float lo = r > 0.0f ? b.cy() - r - half : b.o.minY - half;
+            const float hi = r > 0.0f ? b.cy() + r + half : b.o.maxY + half;
+            const bool facingDown = (b.o.flags & gpu::kFlagFacingDown) != 0;
+            // The gravity it leaves: gravity pads and portals set it, spider
+            // orbs and pads put the player on the far side the way they face
+            // (phys::bumpPlayer, ringJump: turned the way it faces, then the
+            // spider's own jump flips it), blue, green and pink dash orbs and
+            // the toggle portal flip it.
+            int8_t gravity = -1;
+            bool flips = false;
+            switch (b.o.kind) {
+                case kGravityOrb: case kGravityDashOrb: case kGravityToggle: flips = true; break;
+                case kGravityPad: case kSpiderPad: case kSpiderOrb: gravity = facingDown ? 0 : 1; break;
+                case kGravityPortalDown: gravity = 0; break;
+                case kGravityPortalUp: gravity = 1; break;
+                default: break;
+            }
+            if (kind == GateKind::Orb) {
+                contactChoices(g, lo, hi, OptionKind::Use, OptionKind::Skip, true, b.uid, gravity, flips);
+            } else if (b.o.kind != kSpeedPortal) {
+                // A speed portal stays a gate with nothing to choose: the
+                // ghost's timing of everything after it assumes it is taken.
+                contactChoices(g, lo, hi, OptionKind::Touch, OptionKind::Avoid, false, b.uid, gravity, flips);
+            }
+            freeChoices(g);
+            g_uidIndex[b.uid] = b.index;
+            gates.push_back(std::move(g));
         }
+        for (auto const& t : toggles) {
+            if (!t.orb && playerGroups.count(t.target) == 0) continue;
+            const float cx = (t.minX + t.maxX) * 0.5f;
+            const float cy = (t.minY + t.maxY) * 0.5f;
+            const int c = std::clamp((int)std::floor(cx / kColumnWidth), 0, columns - 1);
+            Gate g = makeGate(*a, GateKind::Toggle, c, cx, cy, t.uid, t.orb ? "toggle orb" : "touch trigger");
+            if (t.orb) {
+                const float half = kPlayerHalf * (a->columns[(size_t)c].mini ? 0.6f : 1.0f);
+                contactChoices(g, t.minY - half, t.maxY + half, OptionKind::Fire, OptionKind::Skip, true, t.uid, -1,
+                               false);
+            } else {
+                // A touch trigger fires on the input, not on contact: from
+                // its x on, a press (or release) switches its group. So no
+                // band of its own: FIRE is a press after it while it holds,
+                // SKIP none.
+                for (size_t k = 0; k < g.options.size(); k++) {
+                    Option fire;
+                    fire.kind = OptionKind::Fire;
+                    fire.band = g.options[k];
+                    fire.objectUid = t.uid;
+                    fire.mustFire = true;
+                    fire.opening = (int)k;
+                    g.choices.push_back(fire);
+                }
+                for (size_t k = 0; k < g.options.size(); k++) {
+                    Option skip;
+                    skip.kind = OptionKind::Skip;
+                    skip.band = g.options[k];
+                    skip.objectUid = t.uid;
+                    skip.mustNotFire = true;
+                    skip.opening = (int)k;
+                    g.choices.push_back(skip);
+                }
+            }
+            freeChoices(g);
+            g_uidIndex[t.uid] = t.index;
+            gates.push_back(std::move(g));
+        }
+        // The smallest height of the gaps in column k that overlap `o` (as
+        // good as unlimited when none does).
+        const auto heightNear = [&](int k, Opening const& o) {
+            float best = std::numeric_limits<float>::max();
+            if (k < 0 || k >= columns) return best;
+            for (auto const& p : a->columns[(size_t)k].openings)
+                if (p.lo < o.hi && p.hi > o.lo) best = std::min(best, p.hi - p.lo);
+            return best;
+        };
         int lastGate = -1000;
         for (int c = 1; c < columns; c++) {
             auto const& col = a->columns[(size_t)c];
@@ -353,18 +614,41 @@ namespace {
             if (col.openings.empty()) continue;
             const float half = kPlayerHalf * (col.mini ? 0.6f : 1.0f);
             bool tight = false;
-            for (auto const& o : col.openings)
-                if (o.hi - o.lo < kTightHalves * half) tight = true;
+            bool waist = false;
+            for (auto const& o : col.openings) {
+                const float h = o.hi - o.lo;
+                if (h < kTightHalves * half) tight = true;
+                // A waist: the gap gets narrower here than in the column
+                // before and no narrower in the next, so the gate sits at the
+                // narrowest point of the squeeze, not on every step into it.
+                if (h < kWaistHalves * half && h < heightNear(c - 1, o) - 1.0f && h <= heightNear(c + 1, o) + 0.5f)
+                    waist = true;
+            }
             if (!prev.openings.empty() && col.openings.size() > prev.openings.size()) {
-                gates.push_back({GateKind::Fork, c, col.x0, 0.0f, col.openings});
+                Gate g = makeGate(*a, GateKind::Fork, c, col.x0, 0.0f, 0, "");
+                freeChoices(g);
+                gates.push_back(std::move(g));
                 lastGate = c;
             } else if (tight && c - lastGate > 3) {
-                gates.push_back({GateKind::Tight, c, col.x0, 0.0f, col.openings});
+                Gate g = makeGate(*a, GateKind::Tight, c, col.x0, 0.0f, 0, "");
+                freeChoices(g);
+                gates.push_back(std::move(g));
+                lastGate = c;
+            } else if (waist && c - lastGate > 3) {
+                Gate g = makeGate(*a, GateKind::Waist, c, col.x0, 0.0f, 0, "");
+                freeChoices(g);
+                gates.push_back(std::move(g));
                 lastGate = c;
             }
         }
+        // Column, then kind, then where, then the object: the same order on
+        // every build, whatever order the level lists its objects in.
         std::sort(gates.begin(), gates.end(), [](Gate const& l, Gate const& r) {
-            return l.column != r.column ? l.column < r.column : (int)l.kind < (int)r.kind;
+            if (l.column != r.column) return l.column < r.column;
+            if (l.kind != r.kind) return (int)l.kind < (int)r.kind;
+            if (l.x != r.x) return l.x < r.x;
+            if (l.y != r.y) return l.y < r.y;
+            return l.key.objectUid < r.key.objectUid;
         });
         lastGate = 0;
         std::vector<Gate> spaced;
@@ -372,13 +656,15 @@ namespace {
         for (int c = 0; c < columns; c++) {
             bool here = false;
             while (gi < gates.size() && gates[gi].column == c) {
-                spaced.push_back(gates[gi++]);
+                spaced.push_back(std::move(gates[gi++]));
                 here = true;
             }
             if (here) {
                 lastGate = c;
             } else if (c - lastGate >= kGateSpacing && !a->columns[(size_t)c].openings.empty()) {
-                spaced.push_back({GateKind::Spacing, c, a->columns[(size_t)c].x0, 0.0f, optionsAt(c)});
+                Gate g = makeGate(*a, GateKind::Spacing, c, a->columns[(size_t)c].x0, 0.0f, 0, "");
+                freeChoices(g);
+                spaced.push_back(std::move(g));
                 lastGate = c;
             }
         }
@@ -443,7 +729,22 @@ namespace {
             case GateKind::Pad: return ccc4f(1.0f, 0.4f, 0.9f, 0.9f);
             case GateKind::Portal: return ccc4f(0.7f, 0.5f, 1.0f, 0.9f);
             case GateKind::Tight: return ccc4f(1.0f, 0.6f, 0.1f, 0.9f);
+            case GateKind::Waist: return ccc4f(1.0f, 0.75f, 0.35f, 0.8f);
+            case GateKind::Toggle: return ccc4f(1.0f, 0.95f, 0.3f, 0.9f);
             default: return ccc4f(0.6f, 0.6f, 0.6f, 0.35f);
+        }
+    }
+
+    // An option's own colour: what it asks for in greens and yellow, what it
+    // keeps away from in reds.
+    ccColor4F markColor(OptionKind k, float alpha) {
+        switch (k) {
+            case OptionKind::Use: return ccc4f(0.35f, 1.0f, 0.45f, alpha);
+            case OptionKind::Touch: return ccc4f(0.4f, 1.0f, 0.85f, alpha);
+            case OptionKind::Fire: return ccc4f(1.0f, 0.95f, 0.3f, alpha);
+            case OptionKind::Skip: return ccc4f(1.0f, 0.4f, 0.4f, alpha);
+            case OptionKind::Avoid: return ccc4f(1.0f, 0.6f, 0.3f, alpha);
+            default: return ccc4f(1.0f, 1.0f, 1.0f, alpha);
         }
     }
 
@@ -475,16 +776,26 @@ namespace {
             }
             c = end;
         }
-        // Gates: a line across the bands a route can be in; orbs, pads and
-        // portals get a dot where they are.
+        // Gates: a line across the bands a route can be in; orbs, pads,
+        // portals and toggles get a dot where they are.
         for (auto const& g : a.gates) {
             if (g.options.empty()) continue;
             const float lo = g.options.front().lo;
             const float hi = g.options.back().hi;
             const auto colour = gateColor(g.kind);
             node->drawSegment(ccp(g.x, lo), ccp(g.x, hi), g.kind == GateKind::Spacing ? 0.6f : 1.0f, colour);
-            if (g.kind == GateKind::Orb || g.kind == GateKind::Pad || g.kind == GateKind::Portal)
+            if (g.kind == GateKind::Orb || g.kind == GateKind::Pad || g.kind == GateKind::Portal ||
+                g.kind == GateKind::Toggle)
                 node->drawDot(ccp(g.x, g.y), 4.0f, colour);
+            // Step 4: the gate's own options, each a thin bar over its band
+            // just right of the line and its letter (FREE, everywhere, has
+            // neither).
+            for (auto const& o : g.choices) {
+                if (o.kind == OptionKind::Free) continue;
+                const float top = std::min(o.band.hi, o.band.lo + 600.0f);  // open sky: not up to the level's top
+                node->drawSegment(ccp(g.x + 3.0f, o.band.lo), ccp(g.x + 3.0f, top), 0.8f, markColor(o.kind, 0.7f));
+                drawMark(node, o.kind, g.x + 6.0f, markY(o.band), 9.0f, 0.85f);
+            }
         }
         // What the map cannot follow past: a red line, floor to sky.
         for (float x : a.unknownX)
@@ -501,7 +812,89 @@ const char* gateKindName(GateKind k) {
         case GateKind::Pad: return "pad";
         case GateKind::Portal: return "portal";
         case GateKind::Tight: return "tight";
+        case GateKind::Waist: return "waist";
+        case GateKind::Toggle: return "toggle";
         default: return "spacing";
+    }
+}
+
+const char* optionKindName(OptionKind k) {
+    switch (k) {
+        case OptionKind::Use: return "use";
+        case OptionKind::Skip: return "skip";
+        case OptionKind::Touch: return "touch";
+        case OptionKind::Avoid: return "avoid";
+        case OptionKind::Fire: return "fire";
+        default: return "free";
+    }
+}
+
+int gravityAfter(Option const& o, int before) {
+    if (o.gravityAfter >= 0) return o.gravityAfter;
+    return o.flipsGravity ? 1 - before : before;
+}
+
+std::string describe(Gate const& g, Option const& o) {
+    std::string out = fmt::format("{} {:.0f}-{:.0f} at the {}, x {:.0f}", optionKindName(o.kind), o.band.lo, o.band.hi,
+                                  *g.what ? g.what : gateKindName(g.kind), g.x);
+    if (o.flipsGravity) out += ", flips gravity";
+    else if (o.gravityAfter == 0) out += ", gravity normal after";
+    else if (o.gravityAfter == 1) out += ", gravity upside down after";
+    return out;
+}
+
+GameObject* objectOf(GJBaseGameLayer* pl, int uid) {
+    if (!pl || !pl->m_objects || uid == 0) return nullptr;
+    const int n = (int)pl->m_objects->count();
+    if (pl == g_atlasFor) {
+        auto const it = g_uidIndex.find(uid);
+        if (it != g_uidIndex.end() && it->second >= 0 && it->second < n) {
+            auto* o = static_cast<GameObject*>(pl->m_objects->objectAtIndex((unsigned)it->second));
+            if (o && o->m_uniqueID == uid) return o;
+        }
+    }
+    for (int i = 0; i < n; i++) {
+        auto* o = static_cast<GameObject*>(pl->m_objects->objectAtIndex((unsigned)i));
+        if (o && o->m_uniqueID == uid) return o;
+    }
+    return nullptr;
+}
+
+float markY(Opening const& band) {
+    // The middle of the band, but never more than 45 above its bottom: an
+    // open-sky gap reaches the top of the level.
+    return band.lo + std::min((band.hi - band.lo) * 0.5f, 45.0f);
+}
+
+void drawMark(CCDrawNode* node, OptionKind kind, float x, float y, float size, float alpha, bool taken) {
+    // Letters on a 4 x 6 grid, bottom-left at (0, 0).
+    struct Stroke {
+        float x0, y0, x1, y1;
+    };
+    static const Stroke kU[] = {{0, 6, 0, 0}, {0, 0, 4, 0}, {4, 0, 4, 6}};
+    static const Stroke kS[] = {{4, 6, 0, 6}, {0, 6, 0, 3}, {0, 3, 4, 3}, {4, 3, 4, 0}, {4, 0, 0, 0}};
+    static const Stroke kT[] = {{0, 6, 4, 6}, {2, 6, 2, 0}};
+    static const Stroke kA[] = {{0, 0, 2, 6}, {2, 6, 4, 0}, {1, 3, 3, 3}};
+    static const Stroke kF[] = {{0, 0, 0, 6}, {0, 6, 4, 6}, {0, 3, 3, 3}};
+    const Stroke* strokes = nullptr;
+    size_t count = 0;
+    switch (kind) {
+        case OptionKind::Use: strokes = kU; count = sizeof(kU) / sizeof(kU[0]); break;
+        case OptionKind::Skip: strokes = kS; count = sizeof(kS) / sizeof(kS[0]); break;
+        case OptionKind::Touch: strokes = kT; count = sizeof(kT) / sizeof(kT[0]); break;
+        case OptionKind::Avoid: strokes = kA; count = sizeof(kA) / sizeof(kA[0]); break;
+        case OptionKind::Fire: strokes = kF; count = sizeof(kF) / sizeof(kF[0]); break;
+        default: return;
+    }
+    if (!node || size <= 0.0f) return;
+    const float s = size / 6.0f;
+    const float x0 = x;
+    const float y0 = y - size * 0.5f;
+    const ccColor4F colour = taken ? ccc4f(1.0f, 0.8f, 0.2f, alpha) : markColor(kind, alpha);
+    const float width = std::max(0.45f, size * (taken ? 0.08f : 0.06f));
+    for (size_t i = 0; i < count; i++) {
+        auto const& st = strokes[i];
+        node->drawSegment(ccp(x0 + st.x0 * s, y0 + st.y0 * s), ccp(x0 + st.x1 * s, y0 + st.y1 * s), width, colour);
     }
 }
 
@@ -584,16 +977,27 @@ void tickGhost(PlayLayer* pl) {
 }
 
 std::string summary(Atlas const& a) {
-    int counts[6] = {};
-    for (auto const& g : a.gates) counts[(int)g.kind]++;
+    int counts[8] = {};
+    int choosing = 0;  // gates with options of their own (use/skip, touch/avoid, fire/skip)
+    for (auto const& g : a.gates) {
+        counts[std::clamp((int)g.kind, 0, 7)]++;
+        for (auto const& o : g.choices)
+            if (o.kind != OptionKind::Free) {
+                choosing++;
+                break;
+            }
+    }
     int moving = 0;
     for (auto const& c : a.columns) moving += c.dynamic ? 1 : 0;
-    const std::string objects =
-        fmt::format("{}: {} columns, {} objects ({} moving, {} it can't follow), {} gates (forks {}, orbs {}, pads {}, "
-                    "portals {}, tight {}, spacing {}), {} columns with moving parts, built in {:.0f} ms",
-                    a.level.empty() ? std::string("level") : a.level, a.columns.size(), a.objects, a.movingObjects,
-                    a.unknownObjects, a.gates.size(), counts[0], counts[1], counts[2], counts[3], counts[4], counts[5],
-                    moving, a.buildMs);
+    const std::string objects = fmt::format(
+        "{}: {} columns, {} objects ({} moving, {} it can't follow), {} gates (forks {}, orbs {}, pads {}, portals {}, "
+        "toggles {}, tight {}, waists {}, spacing {}; {} with options of their own), {} columns with moving parts, "
+        "built in {:.0f} ms",
+        a.level.empty() ? std::string("level") : a.level, a.columns.size(), a.objects, a.movingObjects,
+        a.unknownObjects, a.gates.size(), counts[(int)GateKind::Fork], counts[(int)GateKind::Orb],
+        counts[(int)GateKind::Pad], counts[(int)GateKind::Portal], counts[(int)GateKind::Toggle],
+        counts[(int)GateKind::Tight], counts[(int)GateKind::Waist], counts[(int)GateKind::Spacing], choosing, moving,
+        a.buildMs);
     // The map being shown, with the ghost still out for it: how far it is.
     const bool current = g_atlas && a.id == g_atlas->id && g_ghost.pl == g_atlasFor;
     if (current && g_ghost.running) {

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-22-fv (Pathfinder step 3: the route search runs in slices, repeats, and keeps clicks calm)"
+    "2026-10-23-fw (Pathfinder step 4: gates name their options - orb use/skip, pad/portal touch/avoid - and the next gate is ranked from the player)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
