@@ -1060,6 +1060,7 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
     m_probeDied = false;
     m_captureHeartbeat = 0;
     m_legCounter = 0;
+    m_fineLegsRun = 0;
     m_index = 0;
     m_total = m_samples.size();
     m_stageId = Stage::Capture;
@@ -2057,6 +2058,11 @@ void FrameWindowAnalyzer::beginShift(int64_t shift, ShiftMode mode) {
     m_testActive = true;
     m_stageId = Stage::Probe;
     m_legCounter++;
+    // GucciBot (2026-10-23): a sub-tick leg, counted for the log.
+    if (m_fine > 1) {
+        m_fineLegsClick++;
+        m_fineLegsRun++;
+    }
 
     FWLOG(
         "[fw][leg {}] click {} slot={:+d} -> tick{:+d} @ {:.4f} of the tick, "
@@ -2566,6 +2572,7 @@ bool FrameWindowAnalyzer::startSubframeProbe() {
     m_coarseBufferSurvivors = m_bufferSurvivors;
     m_fine = mult;
     m_fineLegs = 0;
+    m_fineLegsClick = 0;
 
     int const coarseReach =
         impossible ? std::max(IMPOSSIBLE_SWEEP_TICKS, m_sweep) : m_sweep;
@@ -2847,6 +2854,11 @@ void FrameWindowAnalyzer::finishClick() {
     if (!m_entryActive && this->startSubframeProbe()) return;
 
     FrameWindowMark mk = this->buildMark();
+
+    // GucciBot (2026-10-23): what this input's sub-tick pass cost.
+    if (m_fine > 1)
+        FWLOG("[fw][click {}] sub-tick search: {} legs", m_index + 1,
+              m_fineLegsClick);
 
     if (m_desyncPending) {
         if (!mk.desynced) m_desynced = std::max(0, m_desynced - 1);
@@ -3276,9 +3288,12 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
     // and that is not persisted on Nigel's machine: the file showed 11 starts
     // and 0 finishes, which reads exactly like every run hanging.
     {
+        // GucciBot (2026-10-23): fineLegs, the sub-tick legs among them.
         auto const fin_ = fmt::format(
-            "[fw][finish] ok={} measured={} skipped={} desynced={} legs={} msg={}",
-            ok, m_measured, m_skipped, m_desynced, m_legCounter, message);
+            "[fw][finish] ok={} measured={} skipped={} desynced={} legs={} "
+            "fineLegs={} msg={}",
+            ok, m_measured, m_skipped, m_desynced, m_legCounter, m_fineLegsRun,
+            message);
         log::info("{}", fin_);
         fwFileLog(fin_);
     }

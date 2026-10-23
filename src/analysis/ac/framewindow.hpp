@@ -587,6 +587,10 @@ class FrameWindowAnalyzer {
     long long m_stepNanos = 0;
     long long m_stepCount = 0;
     long long m_fineLegs = 0;
+    // GucciBot (2026-10-23): sub-tick legs, the nominal too, for the log: this
+    // input's, and the run's for the [fw][finish] line.
+    long long m_fineLegsClick = 0;
+    long long m_fineLegsRun = 0;
     bool m_warnedResolution = false;
     long long m_restoreNanos = 0;
     long long m_restoreCount = 0;
