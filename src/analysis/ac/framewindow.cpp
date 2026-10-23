@@ -4818,7 +4818,8 @@ void FrameWindowAnalyzer::finishDependentPoint() {
         FWLOG("[fw][dependent] click {} with click {} at {:+g}: {} ({} "
               "test runs)",
               pair.b + 1, pair.a + 1, pt.at,
-              pt.noRoom ? "no room left for it after the input before"
+              pt.noRoom ? "no room for it between the inputs around it, left "
+                          "out"
                         : "no timing of it survives near its own",
               pt.legs);
     }
@@ -4840,6 +4841,18 @@ void FrameWindowAnalyzer::finishDependentPair() {
     bool independent = true;
     std::string each;
     for (auto const& pt : m_depDone) {
+        // GucciBot (2026-10-23): an alignment that left it no room is left
+        // out, as one that would pass another input is. Its room ends where
+        // inputs that stay put begin (for a sub-tick input, which moves with
+        // its release only, the input after it) or at the search distance,
+        // and the input before can take all of it; in that input's own
+        // count everything after it moved along, and survived. Nothing was
+        // tested here, so it says nothing about whether it can be hit.
+        if (pt.noRoom) {
+            each += fmt::format("{}{:+g}: no room, left out",
+                                each.empty() ? "" : ", ", pt.at);
+            continue;
+        }
         int64_t const w = pt.survived ? pt.hi - pt.lo + 1 : 0;
         widths.push_back(w);
         // Within a frame of its own count, wherever the input before is.
@@ -4859,7 +4872,14 @@ void FrameWindowAnalyzer::finishDependentPair() {
     auto const [lo, hi] = std::minmax_element(widths.begin(), widths.end());
 
     std::string verdict;
-    if (independent || hit == 0) {
+    if (widths.size() < 2) {
+        // GucciBot (2026-10-23): every alignment left out, so nothing to
+        // compare it with; it keeps its own count, as a skipped pair does.
+        m_depSkipped++;
+        verdict = fmt::format(
+            "skipped: no alignment left room for it, keeps {}",
+            shown(strictW));
+    } else if (independent || hit == 0) {
         m_depIndependent++;
         verdict = fmt::format(
             "independent: within a frame of its own count at every alignment, "
