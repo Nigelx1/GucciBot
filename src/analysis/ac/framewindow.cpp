@@ -2509,11 +2509,6 @@ void FrameWindowAnalyzer::beginRecovery() {
         return;
     }
 
-    cbf::Engine::get()->reset();
-    this->restoreOffsets();
-
-    if (!this->restoreToBranch()) return;
-
     size_t const ai = m_samples[m_index].actionIndex;
     bool const thisP2 = m_samples[m_index].player2;
 
@@ -2521,14 +2516,57 @@ void FrameWindowAnalyzer::beginRecovery() {
     double fraction = 0.0;
     this->splitSlots(m_shift, tickShift, fraction);
 
-    for (size_t k = 0; k < actions.size(); k++) {
+    // Where the shift puts each action: the click and the rest of its
+    // player's inputs moved with it, as in a Retime leg.
+    auto const placed = [&](size_t k) {
         int64_t moved = static_cast<int64_t>(m_originalFrames[k]);
         if (m_entryActive && k >= m_entryPrevAi) moved += m_entryOffset;
         if (k >= ai && isMeasurableInput(actions[k]) &&
             actions[k].m_player2 == thisP2)
             moved += tickShift;
-        actions[k].m_frame = static_cast<uint64_t>(std::max<int64_t>(moved, 0));
+        return std::max<int64_t>(moved, 0);
+    };
+
+    // GucciBot (2026-10-23): the next input moves with its own release now,
+    // and an offset that puts either of them on or past the action beside it
+    // is skipped, as is offset 0 (the Retime leg that just died, played
+    // again). The press used to move alone: once the offset passed the length
+    // of its hold it landed after its own release, and playback fires actions
+    // only in their order, so the replay stopped there - the button held, no
+    // later input played - and the shift was judged on inputs nobody made.
+    size_t const ni = m_samples[recIdx].actionIndex;
+    size_t const niRel = this->pairedReleaseFor(ni);
+    auto const fits = [&](size_t m) {
+        int64_t const at = placed(m) + m_recoveryOffset;
+        if (at < 0) return false;
+        for (size_t k = m; k-- > 0;) {
+            if (k == ni || k == niRel) continue;
+            if (at <= placed(k)) return false;
+            break;
+        }
+        for (size_t k = m + 1; k < actions.size(); k++) {
+            if (k == ni || k == niRel) continue;
+            if (at >= placed(k)) return false;
+            break;
+        }
+        return true;
+    };
+    while (m_recoveryOffset <= m_recovery &&
+           (m_recoveryOffset == 0 || !fits(ni) ||
+            (niRel != NO_INDEX && !fits(niRel))))
+        m_recoveryOffset++;
+    if (m_recoveryOffset > m_recovery) {
+        this->advanceSweep(false);
+        return;
     }
+
+    cbf::Engine::get()->reset();
+    this->restoreOffsets();
+
+    if (!this->restoreToBranch()) return;
+
+    for (size_t k = 0; k < actions.size(); k++)
+        actions[k].m_frame = static_cast<uint64_t>(placed(k));
 
     int64_t shifted =
         static_cast<int64_t>(m_recorded) + m_entryOffset + tickShift;
@@ -2538,17 +2576,17 @@ void FrameWindowAnalyzer::beginRecovery() {
         cbf::Engine::get()->arm(
             static_cast<uint32_t>(std::max<int64_t>(shifted, 0)), fraction);
 
-    size_t const ni = m_samples[recIdx].actionIndex;
     int64_t const nextShifted = static_cast<int64_t>(m_samples[recIdx].frame) +
                                 m_entryOffset + tickShift + m_recoveryOffset;
     actions[ni].m_frame =
         static_cast<uint64_t>(std::max<int64_t>(nextShifted, 0));
-
-    size_t const recRelIdx = this->pairedReleaseFor(ni);
+    if (niRel != NO_INDEX)
+        actions[niRel].m_frame =
+            static_cast<uint64_t>(placed(niRel) + m_recoveryOffset);
 
     int64_t recGap = static_cast<int64_t>(m_horizon);
     for (size_t k = ni + 1; k < actions.size(); k++) {
-        if (k == recRelIdx) continue;
+        if (k == niRel) continue;
         if (!isMeasurableInput(actions[k])) continue;
         recGap = static_cast<int64_t>(actions[k].m_frame) - nextShifted;
         break;
@@ -2565,6 +2603,11 @@ void FrameWindowAnalyzer::beginRecovery() {
     m_testActive = true;
     m_recoveryActive = true;
     m_stageId = Stage::Recover;
+    m_legCounter++;
+
+    FWLOG("[fw][recover] click {} shift={:+d}: next input moved {:+d} to frame {}{}, target={}",
+          m_index + 1, m_shift, m_recoveryOffset, nextShifted,
+          niRel != NO_INDEX ? " with its release" : "", m_testTarget);
 }
 
 FrameWindowMark FrameWindowAnalyzer::buildMark() const {
