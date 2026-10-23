@@ -467,8 +467,10 @@ class Materializer {
     void startPending(Run& run);
     void writePending(Run& run, const Window* window);
     std::shared_ptr<const PendingColumns> m_pendingColumns;
-    std::vector<uint8_t> m_pendingDone;  // the columns written back this run
+    std::vector<uint8_t> m_pendingDone;  // the columns looked at since the run began or was last put back
     bool m_pendingLazy = false;
+    bool m_pendingAlwaysDue = false;     // the `always` list to look at again (a snapshot was put back)
+    void refreshPendingAlways(Run& run);
     uint32_t m_pendingProgress = 0;      // the live tick pendDiff compared the table with
     uint32_t m_pendingCommandIndex = 0;
     bool m_stale[2] = {true, true};

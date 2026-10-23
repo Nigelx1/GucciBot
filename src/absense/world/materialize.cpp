@@ -221,6 +221,20 @@ std::shared_ptr<const BaseTable> g_lastTable;
 // reads or moves it.
 uint64_t g_realEpoch = 1;
 
+// The last pending index built (Materializer::startPending): every run from
+// one table at one real tick has the same pending list, and the same objects
+// standing where they stand. The table is held, so its address cannot be
+// another's; it goes when the real game moves on or the level does.
+struct PendingCache {
+    std::shared_ptr<const BaseTable> table;
+    uint32_t progress = 0;
+    uint32_t commandIndex = 0;
+    uint64_t epoch = 0;
+    std::size_t count = 0;
+    std::shared_ptr<const PendingColumns> columns;
+};
+PendingCache g_pendingCache;
+
 // The level the WorldDef was read from is still the one set up: the objects
 // its slots name have not been let go of.
 bool defCurrent(const WorldDef* def) { return def && def->gen == moverCacheGeneration(); }
@@ -230,6 +244,7 @@ bool defCurrent(const WorldDef* def) { return def && def->gen == moverCacheGener
 void noteRealStateChanged() {
     g_realEpoch++;
     g_lastTable.reset();
+    g_pendingCache = PendingCache{};  // of the real state that has just changed
 }
 
 // ------------------------------------------------------------ MaterialDef
@@ -243,6 +258,7 @@ std::span<const uint16_t> MaterialDef::coGroupsOf(int group) const {
 void forgetMaterialDef() {
     g_materialDef.reset();
     g_lastTable.reset();
+    g_pendingCache = PendingCache{};
 }
 
 std::shared_ptr<const MaterialDef> materialDef(const std::shared_ptr<const WorldDef>& def) {
@@ -888,6 +904,16 @@ void Materializer::invalidate() {
     // left them - the same script answered two ways.
     m_memo[0].clear();
     m_memo[1].clear();
+    // ... and the pending columns (writePending): a column looked at under
+    // the abandoned branch's log can hold an object refresh left where it
+    // stood - already where that branch had it, or neither where it stood nor
+    // where it belonged in that window - which the branch put back here,
+    // with another log, may need written. Looked at again as its windows
+    // reach them, the `always` list at the next look.
+    if (m_pendingLazy) {
+        std::fill(m_pendingDone.begin(), m_pendingDone.end(), uint8_t{0});
+        m_pendingAlwaysDue = true;
+    }
 }
 
 void Materializer::restoreWritten() {
@@ -903,6 +929,7 @@ void Materializer::restoreWritten() {
     // has it: written again on the next materializeNear.
     m_pendingPass = true;
     m_pendingLazy = false;
+    m_pendingAlwaysDue = false;
     m_pendingDone.clear();
 }
 
@@ -917,6 +944,7 @@ void Materializer::end() {
     m_pending.clear();
     m_pendingPass = false;
     m_pendingLazy = false;
+    m_pendingAlwaysDue = false;
     m_pendingDone.clear();
     m_pendingColumns.reset();
     m_pl = nullptr;
@@ -1145,7 +1173,6 @@ void Materializer::materializeNear(Run& run, PlayerObject* copy) {
     if (!copy || !sameLevel(run)) return;
     if (m_pendingPass) {
         UpkeepTimer upkeep(g_upkeep.pending);
-        g_upkeep.pending.items += m_pending.size();
         m_pendingPass = false;
         startPending(run);
     }
@@ -1165,8 +1192,11 @@ void Materializer::materializeNear(Run& run, PlayerObject* copy) {
         w.y1 = kMaxSection;
     }
     // The objects the real game moved, in the columns this window reaches
-    // for the first time (startPending).
-    if (m_pendingLazy) writePending(run, &w);
+    // for the first time since the run began or was put back (startPending).
+    if (m_pendingLazy) {
+        refreshPendingAlways(run);
+        writePending(run, &w);
+    }
     const bool look = m_stale[ci] || !m_haveWindow[ci] || !(m_window[ci] == w);
     if (look) {
         // What this run (or a branch it abandoned) wrote, near enough to be
@@ -1250,25 +1280,12 @@ void Materializer::materializeNear(Run& run, PlayerObject* copy) {
     m_haveWindow[ci] = true;
 }
 
-namespace {
-// The last index built (Materializer::startPending): every run from one table
-// at one real tick has the same pending list, and the same objects standing
-// where they stand. The table is held, so its address cannot be another's.
-struct PendingCache {
-    std::shared_ptr<const BaseTable> table;
-    uint32_t progress = 0;
-    uint32_t commandIndex = 0;
-    uint64_t epoch = 0;
-    std::size_t count = 0;
-    std::shared_ptr<const PendingColumns> columns;
-};
-PendingCache g_pendingCache;
-}  // namespace
-
 void Materializer::startPending(Run& run) {
     m_pendingLazy = false;
+    m_pendingAlwaysDue = false;
     m_pendingDone.clear();
     if (m_fy > 0.0 || m_pending.empty() || !m_table || !run.def) {
+        g_upkeep.pending.items += m_pending.size();
         for (int slot : m_pending) refresh(run, slot, nullptr);
         return;
     }
@@ -1289,8 +1306,10 @@ void Materializer::startPending(Run& run) {
             GameObject* o = def.slots[(std::size_t)slot];
             const uint8_t flags = def.flags[(std::size_t)slot];
             if (!o || !(flags & kCollidable)) continue;  // refresh leaves these
-            // Extended collision is met from any section (the list +0x35e0).
-            if (flags & kExtended) {
+            // Extended collision is met from any section (the list +0x35e0),
+            // and an effect object's node is read wherever it is - a spawn
+            // trigger's x orders an ordered spawn (fire.cpp spawnObjectsInOrder).
+            if (flags & (kExtended | kEffect)) {
                 out->always.push_back(slot);
                 continue;
             }
@@ -1316,6 +1335,14 @@ void Materializer::startPending(Run& run) {
     m_pendingColumns = c.columns;
     m_pendingLazy = true;
     m_pendingDone.assign(m_pendingColumns->columns.size(), 0);
+    m_pendingAlwaysDue = true;
+    refreshPendingAlways(run);
+}
+
+void Materializer::refreshPendingAlways(Run& run) {
+    if (!m_pendingAlwaysDue || !m_pendingColumns) return;
+    m_pendingAlwaysDue = false;
+    g_upkeep.pending.items += m_pendingColumns->always.size();
     for (int slot : m_pendingColumns->always) refresh(run, slot, nullptr);
 }
 
@@ -1351,7 +1378,10 @@ void Materializer::catchUpAll(Run& run) {
         for (int slot : m_pending) refresh(run, slot, nullptr);
     }
     // The columns no window has reached yet: all of them now.
-    if (m_pendingLazy) writePending(run, nullptr);
+    if (m_pendingLazy) {
+        refreshPendingAlways(run);
+        writePending(run, nullptr);
+    }
     for (std::size_t i = 0; i < m_written.size(); i++) refresh(run, m_written[i].slot, nullptr);
     const MaterialDef& md = *m_table->md;
     for (const auto& entry : run.ws->reach) {
