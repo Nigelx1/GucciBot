@@ -149,6 +149,16 @@ class $modify(GB7PlayLayer, PlayLayer) {
 
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
         auto* gb = GucciEngine::get();
+        // GucciBot (2026-10-23): Silicate's PlayLayer::init and onQuit both
+        // clear the practice fix's lists of the level's objects (removeAll);
+        // the port never called it. Every advanced random trigger adds a
+        // pointer into itself as a level loads (hook_randtriggergameobject.cpp),
+        // so the next level's first reset wrote its seed through the last
+        // level's freed triggers (updateRandomSeedOnReset) - the crash of
+        // 2026-10-23 08:05 reopening ORBIT, and heap damage where it did not
+        // crash. Before the enabled check: the triggers add themselves either
+        // way.
+        gb->practiceFix.removeAll();
         if (!gb->enabled)
             return PlayLayer::init(level, useReplay, dontCreateObjects);
 
@@ -203,6 +213,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
         PlayLayer::onQuit();
         gb->practiceFix.clearStoredFrames();
         gb->practiceFix.clearPlatformer(true);
+        gb->practiceFix.removeAll();  // the level's objects are gone (see init)
         gb->replay.onExit();
         Autoclicker::get()->reset();
     }

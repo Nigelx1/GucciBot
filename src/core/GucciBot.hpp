@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-hd (World: an ordered spawn reads its triggers' x from the run's start, not the nodes - moved triggers no longer have to be written back on every restore)"
+    "2026-10-23-he (fixes a crash reopening a level with random triggers; moved-object ranges per kind of move - -hc could miss a block; ordered spawns read the node as the game has it; stop line: where the busiest second is, how the hold pass went)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
