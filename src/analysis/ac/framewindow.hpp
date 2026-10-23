@@ -364,6 +364,9 @@ class FrameWindowAnalyzer {
     SLValuePtr<int> m_subframeScanPercent = SLValue<int>::create(
         "framewindow.subframe_scan_percent",
         &SLSettings::get()->frameWindow.subframeScanPercent);
+    // GucciBot (2026-10-23): Faster sub-tick search (planSubtickSeed).
+    SLValuePtr<bool> m_fastSubtick = SLValue<bool>::create(
+        "framewindow.fast_subtick", &SLSettings::get()->frameWindow.fastSubtick);
     SLValuePtr<int> m_subframeDecimals = SLValue<int>::create(
         "framewindow.subframe_decimals",
         &SLSettings::get()->frameWindow.subframeDecimals);
@@ -490,6 +493,14 @@ class FrameWindowAnalyzer {
     bool bufferShiftValid(int64_t shift) const;
     int64_t nextBisectShift() const;
     bool startSubframeProbe();
+    // GucciBot (2026-10-23): Faster sub-tick search (framewindow.cpp, before
+    // startSubframeProbe).
+    void planSubtickSeed(bool coarseHoles);
+    void seedSubtickSide(Phase side);
+    void walkSubtickSide(Phase side);
+    void launchSeedLeg(int64_t slot, bool outer);
+    void advanceSeed(bool survived);
+    std::string describeSubtickSearch() const;
     void concludeShift(bool survived);
     void advanceSweep(bool survived);
     void noteSweepStep(bool survived, bool counting);
@@ -660,6 +671,26 @@ class FrameWindowAnalyzer {
     int64_t m_gallopStep = 1;
     int64_t m_bisectLo = 0;
     int64_t m_bisectHi = 0;
+
+    // GucciBot (2026-10-23): Faster sub-tick search. How a side of a sub-tick
+    // pass is searched: Off (no seeded plan, both sides searched the usual
+    // way), None (no room that side), Walk (the usual way: no bracket from
+    // the whole-frame edge), Seeded (from it), Fallback (a check disagreed
+    // with the whole-frame count, then the usual way).
+    enum class SeedMode : uint8_t { Off, None, Walk, Seeded, Fallback };
+    bool m_fastSub = false;        // the switch, as this run started
+    bool m_seedPlan = false;       // this sub-tick pass seeds the sides it can
+    bool m_seedStarted = false;    // ...and got as far as starting one
+    bool m_seedLeg = false;        // the leg running is one of the seed's checks
+    bool m_seedOuterStep = false;  // ...of the tick past the edge, not a tick up to it
+    bool m_fineNominalSkipped = false;
+    int64_t m_seedInner = 0;       // this side's bracket, in slots: the edge tick...
+    int64_t m_seedOuter = 0;       // ...and the tick past it
+    SeedMode m_seedEarly = SeedMode::Off;
+    SeedMode m_seedLate = SeedMode::Off;
+    char const* m_seedWhy = "";    // why a click or a side isn't seeded, for the log
+    char const* m_seedEarlyWhy = "";
+    char const* m_seedLateWhy = "";
 
     bool m_negCounting = true;
     bool m_posCounting = true;

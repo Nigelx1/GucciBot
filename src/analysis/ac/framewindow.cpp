@@ -987,6 +987,8 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
     m_recovery = std::max(0, m_recoveryRange->inner());
     m_algo = static_cast<Algorithm>(m_algorithm->inner());
     m_pastNext = m_checkPastNext->inner();
+    // GucciBot (2026-10-23): taken once, so a run is all one search or the other.
+    m_fastSub = m_fastSubtick->inner();
 
     if (!this->collectSamples()) {
         if (partial) restore();
@@ -1021,13 +1023,13 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
         "[fw][start] level=\"{}\" id={} replay=\"{}\" tps={:.0f} macroTps={:.0f} "
         "actions={} samples={} "
         "sweep={} maxWindow={} horizon={} slack={} recovery={} algo={} "
-        "fullRange={} pastNext={} budget={}ms",
+        "fullRange={} pastNext={} fastSubtick={} budget={}ms",
         pl->m_level ? std::string(pl->m_level->m_levelName) : std::string{"?"},
         pl->m_level ? pl->m_level->m_levelID.value() : 0, rs.m_replayName,
         updater.m_tps, rs.m_initialTPS,
         rs.m_actionAtom.m_actions.size(), m_samples.size(), m_sweep, m_maxWin,
         m_horizon, m_slack_, m_recovery, static_cast<int>(m_algo),
-        m_fullRangeSweep->inner(), m_pastNext, m_budgetMs->inner());
+        m_fullRangeSweep->inner(), m_pastNext, m_fastSub, m_budgetMs->inner());
 
     FWLOG("[fw][start] turbo={} turboBudget={}ms adaptive={} share={}% max={}ms",
           m_turbo->inner(), m_turboBudgetMs->inner(),
@@ -1439,6 +1441,10 @@ void FrameWindowAnalyzer::beginClick() {
     m_testActive = false;
     m_nominalTarget = 0;
     m_recoveryActive = false;
+    // GucciBot (2026-10-23): Faster sub-tick search, nothing left from the
+    // last input (a run that stopped in the middle of one too).
+    m_seedPlan = false;
+    m_seedLeg = false;
 
     FWLOG(
         "[fw][click {}/{}] frame={} p{} {} negRoom={} posRoom={} maxNeg={} "
@@ -2147,6 +2153,14 @@ void FrameWindowAnalyzer::concludeShift(bool survived) {
 }
 
 void FrameWindowAnalyzer::advanceSweep(bool survived) {
+    // GucciBot (2026-10-23): a check of Faster sub-tick search's bracket goes
+    // to its own steps, and is never a hole in the window. (Only ever set with
+    // the switch on.)
+    if (m_seedLeg) {
+        this->advanceSeed(survived);
+        return;
+    }
+
     if (!survived && !m_recoveryActive &&
         m_deadShifts.size() < MAX_DEAD_TRACKED)
         m_deadShifts.push_back(m_shift);
@@ -2271,6 +2285,13 @@ void FrameWindowAnalyzer::advanceSweep(bool survived) {
         }
 
         if (m_bisect) {
+            // GucciBot (2026-10-23): Faster sub-tick search starts each side
+            // from the whole-frame edge where it can (never with it off).
+            if (m_seedPlan && (m_maxNeg > 0 || m_maxPos > 0)) {
+                this->seedSubtickSide(m_maxNeg > 0 ? Phase::Earlier
+                                                   : Phase::Later);
+                return;
+            }
             m_gallopping = true;
             m_gallopStep = m_scanStep;
             if (m_maxNeg > 0) {
@@ -2380,6 +2401,12 @@ void FrameWindowAnalyzer::advanceSweep(bool survived) {
         if (m_maxPos <= 0) {
             m_validCount = m_high - m_low + 1;
             this->finishClick();
+            return;
+        }
+
+        // GucciBot (2026-10-23): Faster sub-tick search, the later side.
+        if (m_seedPlan) {
+            this->seedSubtickSide(Phase::Later);
             return;
         }
 
@@ -2518,6 +2545,241 @@ bool FrameWindowAnalyzer::captureDiedInSpan() const {
     return this->captureDeathInSpan() != UINT32_MAX;
 }
 
+// ---- GucciBot (2026-10-23): Faster sub-tick search --------------------------
+//
+// From anticroom's antics-counter beta.6 changelog ("Small CBF count speed
+// optimization"). We have his changelog, not his code, so the search is ours.
+//
+// A sub-tick (CBF) pass searches each side out from the input's own timing in
+// steps of Search stride (5% of a tick), then bisects the step where a test
+// first dies: 70 to 80 tests an input in Nigel's log, for edges the
+// whole-frame pass had already found to the tick. With the switch on, a side
+// starts from there. The whole-frame pass kept the edge tick and lost the tick
+// past it, so the edge lies between the two: the side tests each whole tick
+// out to the edge tick (they should survive), then the tick past it (it should
+// die), and bisects the tick between, as the usual search bisects its last
+// step. About 9 tests a side, and the same edge wherever the window has no gap.
+//
+// The checks are there because the two passes don't test a shift the same
+// way. A sub-tick test moves the input alone (Buffer). The whole-frame pass
+// first moved the player's later inputs with it (Retime), and with Recovery
+// Range it can rescue a shift by moving the next input. When a check disagrees
+// with the whole-frame count, that side is searched the usual way after all,
+// from the start, so it ends as it would with the switch off; the checks never
+// count as holes in the window. A side whose edge sits on the search limit, or
+// whose tick past the edge is out of reach, is searched the usual way too.
+
+// Whether this input's sub-tick pass is seeded, side by side. Everything off
+// with the switch off.
+void FrameWindowAnalyzer::planSubtickSeed(bool coarseHoles) {
+    m_seedPlan = false;
+    m_seedStarted = false;
+    m_seedLeg = false;
+    m_seedOuterStep = false;
+    m_fineNominalSkipped = false;
+    m_seedEarly = SeedMode::Off;
+    m_seedLate = SeedMode::Off;
+    m_seedWhy = "";
+    m_seedEarlyWhy = "";
+    m_seedLateWhy = "";
+    if (!m_fastSub) return;
+
+    // The whole window, as the whole-frame pass left it.
+    if (!m_bisect)
+        m_seedWhy = "Bisect edges is off, or Full range sweep is on";
+    else if (m_scanning || m_coarseNominalDied)
+        m_seedWhy = "the macro's own timing dies here";
+    else if (coarseHoles ||
+             m_coarseHigh - m_coarseLow + 1 != m_coarseWindow)
+        m_seedWhy = "the whole-frame window has a gap";
+    else if (m_splitWindow)
+        m_seedWhy = "a shift past a gap in the whole-frame window survives";
+    if (*m_seedWhy) {
+        FWLOG("[fw][click {}] faster sub-tick search: not here, {}",
+              m_index + 1, m_seedWhy);
+        return;
+    }
+
+    // Each side: the edge tick and the tick past it, both tested by the
+    // whole-frame pass and inside this pass's range. `edge` is in ticks out
+    // from the input, `coarseRoom` the whole-frame pass's range that side.
+    auto const side = [this](int64_t edge, int64_t coarseRoom, int64_t room,
+                             char const*& why) {
+        if (room <= 0) return SeedMode::None;
+        if (edge >= coarseRoom) {
+            why = "its whole-frame edge is on the search limit";
+            return SeedMode::Walk;
+        }
+        if ((edge + 1) * m_fine > room) {
+            why = "the tick past its edge is out of reach";
+            return SeedMode::Walk;
+        }
+        return SeedMode::Seeded;
+    };
+    m_seedEarly = side(-m_coarseLow, m_coarseMaxNeg, m_maxNeg, m_seedEarlyWhy);
+    m_seedLate = side(m_coarseHigh, m_coarseMaxPos, m_maxPos, m_seedLateWhy);
+    m_seedPlan = m_seedEarly == SeedMode::Seeded ||
+                 m_seedLate == SeedMode::Seeded;
+    if (!m_seedPlan) {
+        m_seedWhy = "neither edge can be bracketed";
+        FWLOG("[fw][click {}] faster sub-tick search: not here, {}",
+              m_index + 1, m_seedWhy);
+        return;
+    }
+
+    // The pass's own nominal test (slot 0) is left out only where it can do
+    // nothing but repeat the whole-frame nominal, which survived. In a macro
+    // with no sub-tick offsets, a slot-0 test puts every action, the input's
+    // release too, on the frame the whole-frame nominal put it, arms no split
+    // tick, runs to the same target from the same checkpoint and is stepped
+    // and judged the same way, and Time-Based judged that nominal on that one
+    // test. Not with Recovery Range, where the whole-frame nominal can have
+    // survived only with the next input moved; and not in a macro recorded
+    // with sub-tick offsets, where placing the input works its offset out
+    // again in floating point (placeSubtick), which can come out a hair
+    // different.
+    m_fineNominalSkipped =
+        !m_subtickMacro && m_algo == Algorithm::TimeBased;
+
+    auto const plan = [this](SeedMode mode, int64_t edge, int64_t out,
+                             char const* name, char const* why) {
+        switch (mode) {
+            case SeedMode::Seeded: {
+                int64_t const a = edge * m_fine;
+                int64_t const b = (edge + out) * m_fine;
+                return fmt::format("{} edge in slots {:+d}..{:+d}", name,
+                                   std::min(a, b - out), std::max(a, b - out));
+            }
+            case SeedMode::Walk:
+                return fmt::format("{} side the usual way ({})", name, why);
+            default:
+                return fmt::format("no {} side", name);
+        }
+    };
+    FWLOG("[fw][click {}] faster sub-tick search: {}, {}{}", m_index + 1,
+          plan(m_seedEarly, m_coarseLow, -1, "earlier", m_seedEarlyWhy),
+          plan(m_seedLate, m_coarseHigh, 1, "later", m_seedLateWhy),
+          m_fineNominalSkipped
+              ? "; slot 0 not tested again, the whole-frame nominal survived"
+              : "");
+}
+
+// Starts one side of a seeded pass: from its bracket when it has one, the
+// usual way when it hasn't.
+void FrameWindowAnalyzer::seedSubtickSide(Phase side) {
+    m_seedStarted = true;
+    m_phase = side;
+    bool const early = side == Phase::Earlier;
+    if ((early ? m_seedEarly : m_seedLate) != SeedMode::Seeded) {
+        this->walkSubtickSide(side);
+        return;
+    }
+    int64_t const edge = early ? m_coarseLow : m_coarseHigh;
+    int64_t const out = early ? -1 : 1;
+    m_seedInner = edge * m_fine;
+    m_seedOuter = (edge + out) * m_fine;
+    // The first whole tick out from the input; when the edge is the input's
+    // own tick (slot 0, the nominal), straight to the tick past it.
+    if (edge == 0)
+        this->launchSeedLeg(m_seedOuter, true);
+    else
+        this->launchSeedLeg(out * m_fine, false);
+}
+
+// One side the usual way, out from the input, set up exactly as advanceSweep
+// sets it up with the switch off.
+void FrameWindowAnalyzer::walkSubtickSide(Phase side) {
+    m_phase = side;
+    m_gallopping = true;
+    m_gallopStep = m_scanStep;
+    if (side == Phase::Earlier) {
+        m_bisectLo = -m_maxNeg;
+        m_bisectHi = 0;
+    } else {
+        m_bisectLo = m_islandSeed;
+        m_bisectHi = m_maxPos;
+        if (m_bisectLo >= m_bisectHi) {
+            m_high = m_bisectLo;
+            m_validCount = m_high - m_low + 1;
+            this->finishClick();
+            return;
+        }
+    }
+    this->beginShift(this->nextBisectShift());
+}
+
+void FrameWindowAnalyzer::launchSeedLeg(int64_t slot, bool outer) {
+    m_seedLeg = true;
+    m_seedOuterStep = outer;
+    this->beginShift(slot);
+}
+
+// A check came back (advanceSweep sends it here). A whole tick out to the edge
+// tick should survive and the tick past the edge should die; then the tick
+// between is bisected by advanceSweep's own bisect, without the gallop.
+void FrameWindowAnalyzer::advanceSeed(bool survived) {
+    m_seedLeg = false;
+    bool const early = m_phase == Phase::Earlier;
+
+    if (m_seedOuterStep == survived) {
+        (early ? m_seedEarly : m_seedLate) = SeedMode::Fallback;
+        FWLOG(
+            "[fw][click {}] faster sub-tick search: tick {:+d} {} with the "
+            "input moved alone, though the whole-frame count {} it; the {} "
+            "side is searched the usual way",
+            m_index + 1, m_shift / m_fine, survived ? "survives" : "dies",
+            survived ? "found it dead" : "kept", early ? "earlier" : "later");
+        this->walkSubtickSide(m_phase);
+        return;
+    }
+
+    if (!m_seedOuterStep) {
+        if (m_shift != m_seedInner)
+            this->launchSeedLeg(m_shift + (early ? -m_fine : m_fine), false);
+        else
+            this->launchSeedLeg(m_seedOuter, true);
+        return;
+    }
+
+    m_gallopping = false;
+    if (early) {
+        m_bisectLo = m_seedOuter + 1;
+        m_bisectHi = m_seedInner;
+    } else {
+        m_bisectLo = m_seedInner;
+        m_bisectHi = m_seedOuter - 1;
+    }
+    this->beginShift(this->nextBisectShift());
+}
+
+// How this input's sub-tick pass searched, for its "sub-tick search" line.
+std::string FrameWindowAnalyzer::describeSubtickSearch() const {
+    if (!m_fastSub) return "old walk";
+    if (!m_seedPlan) return fmt::format("old walk (not seeded: {})", m_seedWhy);
+    if (!m_seedStarted) return "old walk (its slot 0 test died)";
+    auto const name = [](SeedMode mode, char const* why) {
+        switch (mode) {
+            case SeedMode::Seeded:
+                return std::string("seeded");
+            case SeedMode::Fallback:
+                return std::string("fell back to the walk");
+            case SeedMode::Walk:
+                return fmt::format("walked, {}", why);
+            default:
+                return std::string("no room");
+        }
+    };
+    bool const fellBack = m_seedEarly == SeedMode::Fallback ||
+                          m_seedLate == SeedMode::Fallback;
+    return fmt::format("{} (earlier side {}, later side {}{})",
+                       fellBack ? "fallback" : "seeded",
+                       name(m_seedEarly, m_seedEarlyWhy),
+                       name(m_seedLate, m_seedLateWhy),
+                       m_fineNominalSkipped ? ", slot 0 from the whole-frame "
+                                              "nominal"
+                                            : "");
+}
+
 bool FrameWindowAnalyzer::startSubframeProbe() {
     if (!m_subframeProbe->inner()) return false;
     if (m_fine > 1) return false;
@@ -2589,6 +2851,13 @@ bool FrameWindowAnalyzer::startSubframeProbe() {
         m_index + 1, why, mult, static_cast<double>(mult) * m_baseTps,
         m_baseTps, 1000.0 / (m_baseTps * mult), coarseReach);
 
+    // GucciBot (2026-10-23): for Faster sub-tick search, whether a shift died
+    // inside the whole-frame window (its dead shifts are cleared just below).
+    bool const coarseHoles =
+        m_fastSub &&
+        std::any_of(m_deadShifts.begin(), m_deadShifts.end(),
+                    [this](int64_t d) { return d > m_low && d < m_high; });
+
     m_phase = Phase::Nominal;
     m_shift = 0;
     m_low = 0;
@@ -2631,6 +2900,15 @@ bool FrameWindowAnalyzer::startSubframeProbe() {
 
     FWLOG("[fw][click {}] fine sweep range -{}..+{} fine ticks (branch {})",
           m_index + 1, m_maxNeg, m_maxPos, m_branchFrame);
+
+    // GucciBot (2026-10-23): Faster sub-tick search (all of it off with the
+    // switch off). Where slot 0 would only repeat the whole-frame nominal,
+    // which survived, the pass goes on as if it had run and survived.
+    this->planSubtickSeed(coarseHoles);
+    if (m_fineNominalSkipped) {
+        this->advanceSweep(true);
+        return true;
+    }
 
     this->beginShift(0);
     return true;
@@ -2855,10 +3133,11 @@ void FrameWindowAnalyzer::finishClick() {
 
     FrameWindowMark mk = this->buildMark();
 
-    // GucciBot (2026-10-23): what this input's sub-tick pass cost.
+    // GucciBot (2026-10-23): what this input's sub-tick pass cost, and how
+    // it searched (Faster sub-tick search).
     if (m_fine > 1)
-        FWLOG("[fw][click {}] sub-tick search: {} legs", m_index + 1,
-              m_fineLegsClick);
+        FWLOG("[fw][click {}] sub-tick search: {} legs, {}", m_index + 1,
+              m_fineLegsClick, this->describeSubtickSearch());
 
     if (m_desyncPending) {
         if (!mk.desynced) m_desynced = std::max(0, m_desynced - 1);
@@ -3058,6 +3337,9 @@ bool FrameWindowAnalyzer::advanceEntryPass(FrameWindowMark const& mk) {
     m_bisect = false;
     m_scanning = false;
     m_islandSeed = 0;
+    // GucciBot (2026-10-23): an entry pass is whole-frame only.
+    m_seedPlan = false;
+    m_seedLeg = false;
     m_negCounting = true;
     m_posCounting = true;
     m_nominalDied = false;
@@ -3291,9 +3573,9 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
         // GucciBot (2026-10-23): fineLegs, the sub-tick legs among them.
         auto const fin_ = fmt::format(
             "[fw][finish] ok={} measured={} skipped={} desynced={} legs={} "
-            "fineLegs={} msg={}",
+            "fineLegs={} fastSubtick={} msg={}",
             ok, m_measured, m_skipped, m_desynced, m_legCounter, m_fineLegsRun,
-            message);
+            m_fastSub, message);
         log::info("{}", fin_);
         fwFileLog(fin_);
     }
@@ -6305,6 +6587,7 @@ void FrameWindowAnalyzer::updateProgressOverlay(PlayLayer* pl) {
     flag(m_bisect, "bisect");
     flag(m_scanning, "scan");
     flag(m_gallopping, "gallop");
+    flag(m_seedLeg, "seed");  // GucciBot (2026-10-23): a Faster sub-tick search check
     flag(m_captureNoclip, "capdied");
     flag(m_restoreFailed, "RESTOREFAIL");
     flag(m_shiftMode == ShiftMode::Buffer, "buffer");

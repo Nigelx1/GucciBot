@@ -172,6 +172,12 @@ struct FrameWindowSettings {
     bool subframeBisect = true;
     bool subframeAll = false;
     int subframeScanPercent = 5;
+    // GucciBot (2026-10-23): Faster sub-tick search, from anticroom's
+    // antics-counter beta.6 changelog ("Small CBF count speed optimization";
+    // his changelog only, so the search is ours): a sub-tick pass starts from
+    // the edges the whole-frame count found instead of walking out from the
+    // input. Off: today's count, while the two are compared.
+    bool fastSubtick = false;
     int tightThreshold = 4;
     bool jointSetupSweep = true;
     bool entrySweep = false;

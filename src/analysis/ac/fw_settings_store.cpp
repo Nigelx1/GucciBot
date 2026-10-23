@@ -54,6 +54,7 @@ namespace gucci::fwstore {
             {"fwac_lstar_use_fatigue", &FW::lstarUseFatigue},
             {"fwac_lstar_use_cps", &FW::lstarUseCps},
             {"fwac_subframe_bisect", &FW::subframeBisect},
+            {"fwac_fast_subtick", &FW::fastSubtick},
             {"fwac_subframe_all", &FW::subframeAll},
             {"fwac_joint_setup_sweep", &FW::jointSetupSweep},
             {"fwac_entry_sweep", &FW::entrySweep},

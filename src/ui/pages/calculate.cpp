@@ -342,6 +342,14 @@ namespace gucci::ui::pages {
                        "Distance between probes before an edge is bisected. Smaller gaps can be missed; 1 tests every "
                        "slot",
                        &FW::subframeScanPercent, "%d%%");
+                // GucciBot (2026-10-23): from anticroom's antics-counter beta.6 changelog ("Small CBF count speed
+                // optimization"); the search is ours. Only with bisected edges, so only shown with them.
+                if (s.subframeBisect)
+                    flag("Faster sub-tick search",
+                         "Fewer test runs for each sub-tick input: the search starts at the edges the whole-frame "
+                         "count found instead of walking out from the input. Windows should come out the same. Off "
+                         "while the two are being compared. Not with Full range sweep",
+                         &FW::fastSubtick);
                 if (feature("Whole numbers on markers",
                             "Keep the whole-frame count on the markers and show the sub-tick value in the top right "
                             "readout instead",
