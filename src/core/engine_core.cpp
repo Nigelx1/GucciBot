@@ -876,12 +876,17 @@ namespace gucci {
     // every save and read it back on load; that went out with it in build -e,
     // so a measured macro came back blank. anticroom's analyzer has the same
     // pair -- they were simply never wired to anything.
-    static void saveAcResults(const fs::path& macroPath) {
+    //
+    // No windows left removes the file (Clear, the last window taken off by
+    // hand, a new recording saved over the macro), unless allowDelete is false:
+    // a Calculate run never deletes it (saveAcResultsAfterRun).
+    static void saveAcResults(const fs::path& macroPath, bool allowDelete = true) {
         auto& acfw = ::Bot::get()->frameWindow();
         auto const sc = fwAcSidecarPath(macroPath);
         std::error_code ec;
         if (acfw.results().empty()) {
-            fs::remove(sc, ec);
+            if (allowDelete)
+                fs::remove(sc, ec);
             return;
         }
         if (acfw.saveResults(sc))
@@ -2644,6 +2649,31 @@ namespace gucci {
         if (path.empty())
             return;
         saveAcResults(path);
+    }
+
+    // GucciBot (2026-10-23): Save On Finish (anticroom's antics-counter beta.6
+    // changelog) was always on here, but it saved whenever a run stopped, for
+    // any reason. A full run clears the old windows as it starts, so canceling
+    // one early deleted the saved file (nothing left to save), canceling it
+    // midway replaced the file with the part it had done, and a failed capture
+    // overwrote it with windows pinned to the sweep limit. Now a run that
+    // didn't finish leaves a saved file alone and puts its windows back on
+    // screen, so saving the macro afterwards writes them, not the partial set;
+    // with no saved file yet, what it measured is kept as before. A run never
+    // deletes the file. True when the windows saved before the run were kept.
+    bool GucciEngine::saveAcResultsAfterRun(bool ok) {
+        auto const path = replay.getCurrentPath();
+        if (path.empty())
+            return false;
+        std::error_code ec;
+        if (!ok && fs::exists(fwAcSidecarPath(path), ec)) {
+            loadAcResults(path);
+            log::info("[GucciBot] frame windows: the run didn't finish, kept the windows saved alongside {}",
+                      path.filename().string());
+            return true;
+        }
+        saveAcResults(path, false);
+        return false;
     }
 
     // Loading a macro already swaps its windows in (loadAcResults clears

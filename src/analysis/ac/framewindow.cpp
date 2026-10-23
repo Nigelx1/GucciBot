@@ -3077,7 +3077,6 @@ void FrameWindowAnalyzer::nextClick() {
 }
 
 void FrameWindowAnalyzer::finish(std::string message, bool ok) {
-    m_lastOk = ok;
     // If the capture pass died, it carried on with noclip so the run could
     // still produce something -- but a player that cannot die survives every
     // shift, so the windows come back pinned to the sweep limit and read as
@@ -3101,6 +3100,10 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
                     : fmt::format(" at frame {}", m_captureDeaths.front())) +
             message;
     }
+    // GucciBot (2026-10-23): taken after the capture check above, not before
+    // it, so a run measured on a player that couldn't die doesn't read as a
+    // clean finish (the page, its notification and Save On Finish ask this).
+    m_lastOk = ok;
     auto bot = Bot::get();
     auto& updater = bot->updater();
     auto& rs = bot->replaySystem();

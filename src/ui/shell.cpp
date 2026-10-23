@@ -2170,11 +2170,15 @@ namespace gucci::ui {
                 bool const running = analyzer.running();
                 if (s_wasRunning && !running) {
                     auto* gbe = GucciEngine::get();
-                    gbe->saveAcFrameWindowResults();
+                    // GucciBot (2026-10-23): a run that was canceled or failed
+                    // no longer deletes or replaces the windows saved before it.
+                    std::string const kept = gbe->saveAcResultsAfterRun(analyzer.lastRunOk())
+                                                 ? " The windows saved before this run are kept."
+                                                 : "";
                     // The run's own last word stays on the Calculate page; the
                     // start message ("Analysing N inputs.") used to.
                     if (!analyzer.status().empty()) {
-                        gbe->fwAcReport = analyzer.status();
+                        gbe->fwAcReport = analyzer.status() + kept;
                         gbe->fwAcOk = analyzer.lastRunOk();
                         // Said where you are too: the in-level box goes away when
                         // the run ends, and the Calculate page may be shut (Nigel,
@@ -2182,7 +2186,7 @@ namespace gucci::ui {
                         std::string text = analyzer.status();
                         if (text.size() > 140)
                             text = text.substr(0, 137) + "...";
-                        Notification::create("Calculate: " + text,
+                        Notification::create("Calculate: " + text + kept,
                                              analyzer.lastRunOk() ? NotificationIcon::Success
                                                                   : NotificationIcon::Warning,
                                              6.f)

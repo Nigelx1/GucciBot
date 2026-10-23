@@ -1069,6 +1069,10 @@ namespace gucci {
         void saveFwMarksNow();
         // Writes the analyzer's results next to the current macro.
         void saveAcFrameWindowResults();
+        // What a Calculate run that just stopped leaves next to the macro (the
+        // menu calls it): a run that didn't finish keeps the windows saved
+        // before it, and returns true when it did.
+        bool saveAcResultsAfterRun(bool ok);
         // Drops the frame windows in memory (not the sidecar on disk) when
         // the macro they belong to stops being the loaded one.
         void forgetMacroWindows();
