@@ -1908,11 +1908,10 @@ bool AbsensePathfinder::trimStep(Decision& d) {
     // committed for 320 ticks, 240 presses, and the passes below - which have
     // to find the needed presses one try at a time - ran out of tries well
     // before the dozen or so its orbs need. So: every other tap out at once,
-    // once, on tryTake's test like everything else; on the ground and in the
-    // air alike for the modes a tap in the air changes nothing (not the
-    // flying ones: a ship's or a UFO's press always does something).
+    // once, on tryTake's test like everything else. Flying, where a press can
+    // matter on any tick, every tap is tried out instead (see below).
     if (!d.spamDone) {
-        if (d.flying || window < 16) {
+        if (window < 16) {
             d.spamDone = true;
         } else {
             if (!d.guideHaveRef) {
@@ -1937,7 +1936,12 @@ bool AbsensePathfinder::trimStep(Decision& d) {
                                                        !c.inputs[(size_t)i + 1].held);
                 if (!tap) continue;
                 // ref[i] is the state after input i, ref[i - 1] the state it met.
-                if (ref[(size_t)i].ring || ref[(size_t)i - 1].onGround || ref[(size_t)i].dead) continue;
+                // (Flying, every tap is tried out: a ship's or a wave's spam is
+                // taps that come and go inside a tick, which can do nothing at
+                // all - Clubstep's busiest second on -hf was a ship's orb spam,
+                // 230 presses. tryTake says whether they did.)
+                if (!d.flying && (ref[(size_t)i].ring || ref[(size_t)i - 1].onGround)) continue;
+                if (ref[(size_t)i].dead) continue;
                 variant[(size_t)i] = TickInput{0, before};
                 dropped += in.presses;
             }

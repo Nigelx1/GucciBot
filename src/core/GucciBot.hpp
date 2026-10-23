@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-hf (Pathfinder: an orb spam keeps only the presses its own path used - on an orb or on the ground - so Clubstep's 240-press second can go)"
+    "2026-10-23-hg (Pathfinder: a ship's or wave's spam of taps is tried without them - Clubstep's busiest second was a ship tapping every tick)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
