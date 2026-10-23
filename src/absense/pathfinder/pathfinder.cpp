@@ -5221,7 +5221,7 @@ bool AbsensePathfinder::applyInput(const TickInput& in, bool player2) {
     bool down = playerHeld(player2);
     // GucciBot (2026-10-23): player2 is the player (playerHeld reads it), and
     // GD is given the side that moves it (see sideFor): the raw flag drove the
-    // other player under Flip 2-Player Controls.
+    // other player under Flip 2-Player Controls outside platformer.
     const bool side = Bot::get()->replaySystem().sideFor(pl, player2);
     for (uint8_t k = 0; k < in.presses; k++) {
         if (down) pl->queueButton(1, false, side, 0.0);

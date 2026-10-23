@@ -375,26 +375,31 @@ namespace gucci {
         bool hasFlippedControls() {
             return GameManager::get()->getGameVariable("0010");
         }
-        // "Flip 2-Player Controls". In a 2-player level GD hands a button side
-        // to the other player while it is on, so this converts both ways: the
-        // side that moves player 2 (or 1) is playerFlipped(player2), and the
-        // player a side moves is playerFlipped(side) -- what addInputToReplay
-        // stores, so a stored flag names its player and is played as
-        // playerFlipped(flag). Off, it returns its argument.
+        // "Flip 2-Player Controls". addInputToReplay stores a button side
+        // flipped by it, and playback queues a stored flag flipped by it again
+        // (playerFlipped(flag)), so a flag is played on the side it was
+        // recorded from. Off, it returns its argument. Which player GD hands
+        // that side to depends on the level: see sideFor.
         bool playerFlipped(bool player2) {
             return player2 ^ hasFlippedControls();
         }
         // The side to give GD (queueButton's isPlayer2, or the opposite of
         // handleButton's isPlayer1) to press or release player 2 (or 1)
-        // itself: playerFlipped in a 2-player level. In a 1-player level a
-        // side picks no player -- a click moves player 1, and player 2 with it
-        // in a dual -- so it stays the player's own, as with the setting off,
-        // and GucciBot's readers of the side (the CPS count, click sounds, the
+        // itself. GJBaseGameLayer::handleButton (2.2081 Windows 0x2338e0)
+        // hands a side to the other player while the setting is on, but only
+        // outside platformer: it skips the flip while m_isPlatformer is set
+        // (processQueuedButtons passes the queue's side straight in, and
+        // UILayer's keys queue fixed sides). So in a 2-player level it is
+        // playerFlipped, and in a 2-player platformer (Force platformer
+        // included) the player's own side. In a 1-player level a side picks
+        // no player -- a click moves player 1, and player 2 with it in a dual
+        // -- so it stays the player's own, as with the setting off, and
+        // GucciBot's readers of the side (the CPS count, click sounds, the
         // Survival Indicator) see the click as they do then.
         bool sideFor(GJBaseGameLayer* layer, bool player2) {
             bool const twoPlayer =
                 layer && layer->m_levelSettings && layer->m_levelSettings->m_twoPlayerMode;
-            return twoPlayer ? playerFlipped(player2) : player2;
+            return (twoPlayer && !layer->m_isPlatformer) ? playerFlipped(player2) : player2;
         }
 
         void save(const std::filesystem::path& path, bool noOverwrite = false);

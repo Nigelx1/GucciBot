@@ -850,7 +850,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
             if (upd.m_autoFlipOnDeath) {
                 // The side that moves the player who died (see sideFor): the
                 // raw p2 flipped the other player under Flip 2-Player
-                // Controls.
+                // Controls outside platformer.
                 bool p2 = (player == m_player2);
                 queueButton(1, !player->m_jumpBuffered, gb->replay.sideFor(this, p2), 0.0);
                 upd.setPaused(false);

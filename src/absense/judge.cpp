@@ -118,7 +118,7 @@ namespace absense::judge {
 
         int const n = std::max(0, ticks);
         // The side that moves player 1 (see sideFor; Flip 2-Player Controls
-        // hands side 1 to player 2 in a 2-player level).
+        // hands side 1 to player 2 in a 2-player level outside platformer).
         bool const side = gb->replay.sideFor(pl, false);
         for (int i = 0; i < n && !inputs.empty(); i++) {
             TickInput const& in = inputs[std::min((size_t)i, inputs.size() - 1)];

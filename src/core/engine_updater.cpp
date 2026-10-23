@@ -873,7 +873,7 @@ static void tickSettledWork() {
                         if (upd.m_autoFlipOnDeath) {
                             // The side that moves p (see sideFor): the raw p2
                             // flipped the other player under Flip 2-Player
-                            // Controls.
+                            // Controls outside platformer.
                             pl->queueButton(1, !p->m_jumpBuffered, gb->replay.sideFor(pl, p2), 0.0);
                             upd.setPaused(false);
                         }
