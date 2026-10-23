@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-hn (Calculate: antics-counter round 2, every part behind a new switch that starts off - 2-player fixes, Faster sub-tick search, and a reworked Dependent pair search; Assistant Access reports Safe mode)"
+    "2026-10-23-ho (Fixes from the reviews: page delete, imports, new recordings keep the old macro's windows off, backups keep windows, a crash at launch on odd file names; Flip 2-Player Controls handled the way GD does it everywhere)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
