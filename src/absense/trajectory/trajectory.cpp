@@ -1996,8 +1996,18 @@ struct Trajectory::Sim {
             def = world::WorldDef::get(pl);
             if (def) {
                 worldStep = true;
-                if (fromWorld && fromWorld->log) log = *fromWorld->log;
-                else log.reset((uint32_t)ws.tick);
+                if (fromWorld && fromWorld->log) {
+                    log = *fromWorld->log;
+                } else {
+                    log.reset((uint32_t)ws.tick);
+                    // GucciBot (2026-10-23): the reach is a function of the log
+                    // (WorldState::reach), and a fresh log has no ops yet. A
+                    // start stepped on from its keyframe carried the stepping's,
+                    // whose log is gone and whose moves its table already has:
+                    // harmless while the reach only bounded with |d| sums, not
+                    // with the signed ranges the materializer reads now.
+                    ws.reach.clear();
+                }
                 cache.reset(def);
                 lap(g_stepProfile.setup[6]);
                 // Where the objects the log moves stand before it: the table

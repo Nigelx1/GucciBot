@@ -427,6 +427,10 @@ class Materializer {
     static bool inWindow(const Window& w, int sx, int sy) { return sx >= w.x0 && sx <= w.x1 && sy >= w.y0 && sy <= w.y1; }
     bool boxMeets(const Box& box, double rx, double ry, const Window& w) const;
     bool pointMeets(double x, double y, double rx, double ry, const Window& w) const;
+    // The same, grown by the least (lo, at most 0) and the most (hi) a group's
+    // members can have been moved by on each axis (GroupReach's ranges).
+    bool boxMeetsRange(const Box& box, double lox, double hix, double loy, double hiy, const Window& w) const;
+    bool pointMeetsRange(double x, double y, double lox, double hix, double loy, double hiy, const Window& w) const;
     // A carried object refresh would leave where it is, told from the table
     // alone (see materializeNear).
     bool carriedAway(const Run& run, const Carry& c, const Window& w) const;

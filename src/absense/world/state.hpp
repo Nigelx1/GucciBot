@@ -294,6 +294,21 @@ struct GroupReach {
     double x = 0.0;
     double y = 0.0;
     uint32_t ops = 0;
+    // GucciBot (2026-10-23): the same moves as signed sums, and the least and
+    // most each sum has been, 0 included (where the run began). A member's
+    // move by this group is the sum times how often it is listed, so every
+    // place it has been in the run - where it is, and anywhere it was written
+    // - is within the range; and an object that goes back and forth stays
+    // within what it covers, where the |d| sums grow with every step: ORBIT's
+    // platforms built sums of thousands of units over a 4 s look-ahead, and
+    // most members of their groups were worked out again on every tick. A
+    // NaN move opens the range all the way, as it made the |d| sums NaN.
+    double netX = 0.0;
+    double netY = 0.0;
+    double loX = 0.0;
+    double hiX = 0.0;
+    double loY = 0.0;
+    double hiY = 0.0;
 
     bool operator==(const GroupReach& other) const;
 };

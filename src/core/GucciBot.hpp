@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-hb (Assistant Access: gucci_abs_profile keeps the speed test's timers on for real pathfinder runs - ORBIT still simulates only 2,390 ticks a second)"
+    "2026-10-23-hc (World: moved objects are looked at by the range their groups have covered, not every step summed - a platform going back and forth no longer has its whole group worked out every tick)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

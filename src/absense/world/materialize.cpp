@@ -1004,6 +1004,37 @@ bool Materializer::boxMeets(const Box& box, double rx, double ry, const Window& 
            (double)box.minY - ry <= yhi;
 }
 
+bool Materializer::boxMeetsRange(const Box& box, double lox, double hix, double loy, double hiy,
+                                 const Window& w) const {
+    if (box.empty()) return false;
+    if (std::isnan(box.minX) || std::isnan(box.maxX) || std::isnan(box.minY) || std::isnan(box.maxY) ||
+        std::isnan(lox) || std::isnan(hix) || std::isnan(loy) || std::isnan(hiy)) {
+        return true;
+    }
+    const double inf = std::numeric_limits<double>::infinity();
+    // The bounds of boxMeets.
+    const bool byX = m_fx > 0.0, byY = m_fy > 0.0;
+    const double xlo = (w.x0 <= 0 || !byX) ? -inf : (double)w.x0 / m_fx - 1.0;
+    const double xhi = !byX ? inf : (double)(w.x1 + 1) / m_fx + 1.0;
+    const double ylo = (w.y0 <= 0 || !byY) ? -inf : (double)w.y0 / m_fy - 1.0;
+    const double yhi = !byY ? inf : (double)(w.y1 + 1) / m_fy + 1.0;
+    return (double)box.maxX + hix >= xlo && (double)box.minX + lox <= xhi && (double)box.maxY + hiy >= ylo &&
+           (double)box.minY + loy <= yhi;
+}
+
+bool Materializer::pointMeetsRange(double x, double y, double lox, double hix, double loy, double hiy,
+                                   const Window& w) const {
+    if (std::isnan(x) || std::isnan(y) || std::isnan(lox) || std::isnan(hix) || std::isnan(loy) || std::isnan(hiy))
+        return true;
+    const double inf = std::numeric_limits<double>::infinity();
+    const bool byX = m_fx > 0.0, byY = m_fy > 0.0;
+    const double xlo = (w.x0 <= 0 || !byX) ? -inf : (double)w.x0 / m_fx - 1.0;
+    const double xhi = !byX ? inf : (double)(w.x1 + 1) / m_fx + 1.0;
+    const double ylo = (w.y0 <= 0 || !byY) ? -inf : (double)w.y0 / m_fy - 1.0;
+    const double yhi = !byY ? inf : (double)(w.y1 + 1) / m_fy + 1.0;
+    return x + hix >= xlo && x + lox <= xhi && y + hiy >= ylo && y + loy <= yhi;
+}
+
 bool Materializer::pointMeets(double x, double y, double rx, double ry, const Window& w) const {
     if (std::isnan(x) || std::isnan(y) || std::isnan(rx) || std::isnan(ry)) return true;
     const double inf = std::numeric_limits<double>::infinity();
@@ -1287,16 +1318,20 @@ void Materializer::materializeNear(Run& run, PlayerObject* copy) {
         const uint64_t seen = (uint64_t)entry.second.ops + 1;
         if (!look && memo == seen) continue;
         memo = seen;
-        double rx = 0.0, ry = 0.0;
+        // The least and the most a member can have been moved by, by every
+        // group of the group's members (GroupReach's ranges), and a unit.
+        double lox = -1.0, hix = 1.0, loy = -1.0, hiy = 1.0;
         for (uint16_t h : co) {
             auto it = std::lower_bound(reach.begin(), reach.end(), h,
                                        [](const std::pair<uint16_t, GroupReach>& e, uint16_t key) { return e.first < key; });
             if (it == reach.end() || it->first != h) continue;
             const double m = (double)md.mult[h];
-            rx += it->second.x * m;
-            ry += it->second.y * m;
+            lox += it->second.loX * m;
+            hix += it->second.hiX * m;
+            loy += it->second.loY * m;
+            hiy += it->second.hiY * m;
         }
-        if (!md.hasExtended[(std::size_t)g] && !boxMeets(m_table->groupBox(g), rx + 1.0, ry + 1.0, w)) {
+        if (!md.hasExtended[(std::size_t)g] && !boxMeetsRange(m_table->groupBox(g), lox, hix, loy, hiy, w)) {
             if (debugGroup(g)) {
                 const Box& b = m_table->groupBox(g);
                 g_debugNotes->push_back(fmt::format(
@@ -1322,10 +1357,11 @@ void Materializer::materializeNear(Run& run, PlayerObject* copy) {
             // moves was most of the step). Where it stands is bound the same
             // way: unwritten, it is at the table pose; written and in the
             // window, it was put where the log had it at the last look or
-            // since, and the sums only grow until a restore, which looks again.
+            // since, and the ranges only widen until a restore, which looks
+            // again.
             if (!(run.def->flags[(std::size_t)slot] & kExtended)) {
                 const Pose& base = m_table->poses[(std::size_t)i];
-                if (!pointMeets(base.x, base.y, rx + 1.0, ry + 1.0, w)) return;
+                if (!pointMeetsRange(base.x, base.y, lox, hix, loy, hiy, w)) return;
             }
             refresh(run, slot, &w);
         });

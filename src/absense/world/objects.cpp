@@ -181,7 +181,8 @@ bool WCmd::operator==(const WCmd& o) const {
 }
 
 bool GroupReach::operator==(const GroupReach& o) const {
-    return WORLD_SAME(x) WORLD_SAME(y) WORLD_SAME(ops) true;
+    return WORLD_SAME(x) WORLD_SAME(y) WORLD_SAME(ops) WORLD_SAME(netX) WORLD_SAME(netY) WORLD_SAME(loX)
+        WORLD_SAME(hiX) WORLD_SAME(loY) WORLD_SAME(hiY) true;
 }
 
 bool WSpawn::operator==(const WSpawn& o) const {
