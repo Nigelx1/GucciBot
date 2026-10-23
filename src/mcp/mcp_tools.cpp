@@ -1189,10 +1189,11 @@ namespace gucci::mcp {
                     auto out = obj();
                     auto fmtSample = [](uint32_t f, tickprobe::Sample const& s) {
                         return fmt::format("{} x={:.3f} y={:.3f} vy={:.3f} r={:.1f}{}{} {} dt={:.5f}{} xd={:.6f} "
-                                           "hid={:02x} rings={}",
+                                           "hid={:02x} rings={} btn=+{}-{}",
                                            f, s.x, s.y, s.yVel, s.rot,
                                            s.held ? " H" : "", s.onGround ? " G" : "", s.mode, s.dt,
-                                           s.split ? " SPLIT" : "", s.extraDelta, s.hidden, s.rings);
+                                           s.split ? " SPLIT" : "", s.extraDelta, s.hidden, s.rings, s.pushes,
+                                           s.releases);
                     };
                     auto range = [](std::map<uint32_t, tickprobe::Sample> const& m) {
                         auto r = obj();
@@ -1237,7 +1238,8 @@ namespace gucci::mcp {
                             auto const& t = it->second;
                             if (std::fabs(s.x - t.x) > 1e-3f || std::fabs(s.y - t.y) > 1e-3f ||
                                 std::fabs(s.yVel - t.yVel) > 1e-3f || s.held != t.held ||
-                                s.mode != t.mode || s.hidden != t.hidden || s.rings != t.rings) {
+                                s.mode != t.mode || s.hidden != t.hidden || s.rings != t.rings ||
+                                s.pushes != t.pushes || s.releases != t.releases) {
                                 first = f;
                                 break;
                             }

@@ -32,12 +32,18 @@ namespace gucci::tickprobe {
         // touching.
         uint8_t hidden = 0;
         uint8_t rings = 0;
+        // The jump pushes and releases player 1 actually took during the
+        // tick (PlayerObject::pushButton / releaseButton), whoever queued them.
+        uint8_t pushes = 0;
+        uint8_t releases = 0;
     };
 
     // Written by PlayerObject::update's hook for the real player 1, read and
     // cleared when the tick's sample is taken.
     inline float lastDt = 0.f;
     inline bool lastSplit = false;
+    inline uint8_t lastPushes = 0;
+    inline uint8_t lastReleases = 0;
 
     inline bool armed = false;
     inline std::map<uint32_t, Sample> current;

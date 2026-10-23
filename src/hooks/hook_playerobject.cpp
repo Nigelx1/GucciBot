@@ -66,6 +66,23 @@ namespace gucci::slopediag {
 }
 
 class $modify(GB7PlayerObject, PlayerObject) {
+    // gucci_tick_probe: the jump pushes and releases the real player 1 takes,
+    // counted per tick (the probe's sample reads and clears them).
+    bool pushButton(PlayerButton button) {
+        if (tickprobe::armed && button == PlayerButton::Jump) {
+            if (auto* ppl = PlayLayer::get(); ppl && this == ppl->m_player1 && tickprobe::lastPushes < 255)
+                tickprobe::lastPushes++;
+        }
+        return PlayerObject::pushButton(button);
+    }
+    bool releaseButton(PlayerButton button) {
+        if (tickprobe::armed && button == PlayerButton::Jump) {
+            if (auto* ppl = PlayLayer::get(); ppl && this == ppl->m_player1 && tickprobe::lastReleases < 255)
+                tickprobe::lastReleases++;
+        }
+        return PlayerObject::releaseButton(button);
+    }
+
     // Splits one physics tick into sub-steps so an input can land BETWEEN
     // them, which is what makes sub-tick (CBF) frame windows mean anything.
     // Ported from Silicate 2026-09-20. Without it the CBF engine still armed

@@ -812,9 +812,13 @@ static void tickSettledWork() {
                               (p->m_touchedRing ? 16 : 0) | (p->m_isUpsideDown ? 32 : 0) |
                               (p->m_wasJumpBuffered ? 64 : 0)),
                     (uint8_t)std::min<unsigned>(255, p->m_touchingRings ? p->m_touchingRings->count() : 0),
+                    tickprobe::lastPushes,
+                    tickprobe::lastReleases,
                 };
                 tickprobe::lastDt = 0.f;
                 tickprobe::lastSplit = false;
+                tickprobe::lastPushes = 0;
+                tickprobe::lastReleases = 0;
             }
             if (upd.m_pauseAtFrame != 0 && upd.getFrame() >= upd.m_pauseAtFrame) {
                 upd.m_pauseAtFrame = 0;

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-gf (Assistant Access: the tick probe also records the orb and click state, and can read its reference run)"
+    "2026-10-23-gg (Assistant Access: the tick probe also counts the jump pushes and releases player 1 takes each tick)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
