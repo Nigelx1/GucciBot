@@ -1167,6 +1167,12 @@ namespace gucci::mcp {
                 p["type"] = "integer";
                 props[k] = p;
             }
+            {
+                auto which = obj();
+                which["type"] = "string";
+                which["description"] = "read: \"reference\" for the saved run (default: the recording)";
+                props["which"] = which;
+            }
             schema["type"] = "object";
             schema["properties"] = props;
             schema["required"] = std::vector<std::string>{"action"};
@@ -1182,10 +1188,11 @@ namespace gucci::mcp {
                     auto const what = argStr(a, "action");
                     auto out = obj();
                     auto fmtSample = [](uint32_t f, tickprobe::Sample const& s) {
-                        return fmt::format("{} x={:.3f} y={:.3f} vy={:.3f} r={:.1f}{}{} {} dt={:.5f}{} xd={:.6f}",
+                        return fmt::format("{} x={:.3f} y={:.3f} vy={:.3f} r={:.1f}{}{} {} dt={:.5f}{} xd={:.6f} "
+                                           "hid={:02x} rings={}",
                                            f, s.x, s.y, s.yVel, s.rot,
                                            s.held ? " H" : "", s.onGround ? " G" : "", s.mode, s.dt,
-                                           s.split ? " SPLIT" : "", s.extraDelta);
+                                           s.split ? " SPLIT" : "", s.extraDelta, s.hidden, s.rings);
                     };
                     auto range = [](std::map<uint32_t, tickprobe::Sample> const& m) {
                         auto r = obj();
@@ -1207,7 +1214,9 @@ namespace gucci::mcp {
                         int64_t const every = std::max<int64_t>(1, argInt(a, "every", 1));
                         auto rows = matjson::Value::array();
                         size_t count = 0;
-                        for (auto const& [f, s] : tickprobe::current) {
+                        // `which`: "reference" reads the saved run instead.
+                        auto const& src = argStr(a, "which") == "reference" ? tickprobe::saved : tickprobe::current;
+                        for (auto const& [f, s] : src) {
                             if ((int64_t)f < from || (int64_t)f > to || ((int64_t)f - from) % every != 0)
                                 continue;
                             rows.push(fmtSample(f, s));
@@ -1228,7 +1237,7 @@ namespace gucci::mcp {
                             auto const& t = it->second;
                             if (std::fabs(s.x - t.x) > 1e-3f || std::fabs(s.y - t.y) > 1e-3f ||
                                 std::fabs(s.yVel - t.yVel) > 1e-3f || s.held != t.held ||
-                                s.mode != t.mode) {
+                                s.mode != t.mode || s.hidden != t.hidden || s.rings != t.rings) {
                                 first = f;
                                 break;
                             }

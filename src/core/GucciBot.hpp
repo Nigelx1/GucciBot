@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-ge (Pathfinder: falling up out of the level counts as a death where it starts - Deadlocked 54 percent)"
+    "2026-10-23-gf (Assistant Access: the tick probe also records the orb and click state, and can read its reference run)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -25,6 +25,13 @@ namespace gucci::tickprobe {
         float dt = 0.f;
         bool split = false;
         double extraDelta = 0.0;
+        // The orb and click state a tick leaves behind, which moves nothing
+        // until an orb is touched: m_jumpBuffered, m_stateRingJump,
+        // m_stateRingJump2, m_ringJumpRelated, m_touchedRing, m_isUpsideDown
+        // and m_wasJumpBuffered as bits 0..6, and how many rings the player is
+        // touching.
+        uint8_t hidden = 0;
+        uint8_t rings = 0;
     };
 
     // Written by PlayerObject::update's hook for the real player 1, read and

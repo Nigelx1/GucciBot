@@ -807,6 +807,11 @@ static void tickSettledWork() {
                     tickprobe::lastDt,
                     tickprobe::lastSplit,
                     pl->m_extraDelta,
+                    (uint8_t)((p->m_jumpBuffered ? 1 : 0) | (p->m_stateRingJump ? 2 : 0) |
+                              (p->m_stateRingJump2 ? 4 : 0) | (p->m_ringJumpRelated ? 8 : 0) |
+                              (p->m_touchedRing ? 16 : 0) | (p->m_isUpsideDown ? 32 : 0) |
+                              (p->m_wasJumpBuffered ? 64 : 0)),
+                    (uint8_t)std::min<unsigned>(255, p->m_touchingRings ? p->m_touchingRings->count() : 0),
                 };
                 tickprobe::lastDt = 0.f;
                 tickprobe::lastSplit = false;
