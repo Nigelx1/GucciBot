@@ -1407,10 +1407,11 @@ void Materializer::startPending(Run& run) {
             GameObject* o = def.slots[(std::size_t)slot];
             const uint8_t flags = def.flags[(std::size_t)slot];
             if (!o || !(flags & kCollidable)) continue;  // refresh leaves these
-            // Extended collision is met from any section (the list +0x35e0),
-            // and an effect object's node is read wherever it is - a spawn
-            // trigger's x orders an ordered spawn (fire.cpp spawnObjectsInOrder).
-            if (flags & (kExtended | kEffect)) {
+            // Extended collision is met from any section (the list +0x35e0).
+            // (An ordered spawn reads its triggers' x from the run's poses, not
+            // the nodes - fire.cpp spawnObjectsInOrder - so effect objects can
+            // wait for their columns like the rest.)
+            if (flags & kExtended) {
                 out->always.push_back(slot);
                 continue;
             }

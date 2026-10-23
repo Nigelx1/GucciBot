@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-hc (World: moved objects are looked at by the range their groups have covered, not every step summed - a platform going back and forth no longer has its whole group worked out every tick)"
+    "2026-10-23-hd (World: an ordered spawn reads its triggers' x from the run's start, not the nodes - moved triggers no longer have to be written back on every restore)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
