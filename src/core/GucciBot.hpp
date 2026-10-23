@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-22-fq (Pathfinder: the jump back to the route stays within the repair floor, and must clear the bar)"
+    "2026-10-22-fr (Pathfinder: random ideas and route legs come out the same on every run)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -1177,6 +1177,16 @@ void AbsensePathfinder::buildCandidates(std::vector<Candidate>& out, bool held, 
     std::uniform_int_distribution<int> tickDist(0, H - 1);
     std::uniform_int_distribution<int> countDist(1, 6);
     std::uniform_int_distribution<int> kindDist(0, 9);
+    // GucciBot (docs/ROUTE_ENGINE_PLAN.md step 1c): seeded from the level,
+    // the tick and the visit instead of random_device, so the same spot gets
+    // the same random ideas on every run - a run can be repeated, and a fix
+    // compared with the run before it.
+    {
+        uint64_t seed = 0x9E3779B97F4A7C15ull ^ (m_decision.tick * 0xBF58476D1CE4E5B9ull) ^ ((uint64_t)visits << 40);
+        if (auto* pl = PlayLayer::get(); pl && pl->m_level)
+            seed ^= (uint64_t)(uint32_t)pl->m_level->m_levelID.value() * 0x94D049BB133111EBull;
+        m_rng.seed((std::mt19937::result_type)(seed ^ (seed >> 29)));
+    }
     for (int r = 0; r < randoms; r++) {
         auto v = base();
         const int n = countDist(m_rng);
@@ -2213,7 +2223,11 @@ void AbsensePathfinder::decide() {
                 goal.held = d.held;
                 goal.maxTicks = d.H;
                 goal.frontierCap = 128;
-                goal.maxMs = 200.0;
+                // Steps, not milliseconds (docs/ROUTE_ENGINE_PLAN.md step 1c):
+                // the same leg comes out the same on every run. The clock is
+                // only a safety stop until step 3 slices this search.
+                goal.maxSteps = 20000;
+                goal.maxMs = 250.0;
                 goal.dotsEvery = 0;
                 goal.witnesses = 3;
                 for (auto const& w : route->routes.front().points) goal.gates.push_back({w.x, w.band.lo, w.band.hi});

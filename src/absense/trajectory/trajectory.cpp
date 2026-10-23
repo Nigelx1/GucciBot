@@ -3833,7 +3833,11 @@ Trajectory::Leg Trajectory::sweepLeg(GJBaseGameLayer* pl, LegGoal const& goal) {
     std::vector<Crossing> crossings;
     Alternative alts[8];
     for (int tick = 0; tick < goal.maxTicks && !frontier.empty() && found < 0; tick++) {
-        if (elapsedMs() > goal.maxMs) break;
+        if (goal.maxSteps > 0 && out.steps >= (uint64_t)goal.maxSteps) break;  // out of budget, the same way every run
+        if (elapsedMs() > goal.maxMs) {
+            if (goal.maxSteps > 0) out.error = "the leg search hit its time safety before its step budget";
+            break;
+        }
         next.clear();
         seen.clear();
         for (auto& f : frontier) {

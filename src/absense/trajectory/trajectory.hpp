@@ -243,6 +243,10 @@ class Trajectory {
         int maxTicks = 2400;
         int frontierCap = 192;  // states kept a tick, the closest to the band first
         double maxMs = 3000.0;
+        // GucciBot: simulated steps it may take (0: no limit). Unlike maxMs it
+        // gives the same answer every time; with it set, maxMs is only a
+        // safety stop, and tripping it is an error, not an answer.
+        int maxSteps = 0;
         bool exact = false;     // merge only states that are the same bit for bit (what a proof needs)
         int dotsEvery = 4;      // keep where the states are every N ticks, for the drawing
         // Called from a pathfinder decision (step R4): runs begin from its kept
