@@ -4089,8 +4089,10 @@ void FrameWindowAnalyzer::placeAt(size_t k, double pos) {
 // - The input is measured in its own units (whole frames, or CBF slots for a
 //   window counted sub-tick) and moved the way its own count moved it: a whole
 //   frame with the rest of its player's inputs (Retime), and when that dies,
-//   with only its release (Buffer); a sub-tick shift with its release. Each
-//   test runs as far as the count's own do (legReach).
+//   with only its release (Buffer), and with Recovery Range, when that dies
+//   too, with the input after it moved up to the recovery window either way
+//   (beginRecovery); a sub-tick shift with its release. Each test runs as far
+//   as the count's own do (legReach).
 // - Its window is searched from its own: the two edges, then the same moved
 //   along with the input before, then inside each, then a short scan nearest
 //   its own timing. Its window there is the unbroken run around the timing
@@ -4381,8 +4383,9 @@ bool FrameWindowAnalyzer::stepDependent(PlayLayer* pl) {
     if (!m_depLegActive) {
         int64_t shift = 0;
         ShiftMode mode = ShiftMode::Buffer;
-        if (this->nextDependentShift(shift, mode)) {
-            this->launchDependentLeg(shift, mode);
+        int recovery = 0;
+        if (this->nextDependentShift(shift, mode, recovery)) {
+            this->launchDependentLeg(shift, mode, recovery);
             return true;
         }
 
@@ -4425,6 +4428,54 @@ bool FrameWindowAnalyzer::depBufferValid(int64_t shift) const {
     return shift >= m_depBufLo && shift <= m_depBufHi;
 }
 
+// GucciBot (2026-10-23): with Recovery Range, the first offset from `from`
+// on, within the recovery window, by which a recovery leg of this
+// whole-frame shift may move the input after it: not 0 (the leg that just
+// died, played again), and not one that puts it or its release on or past
+// the action beside it. beginRecovery's rule, on the actions where this
+// alignment and a Retime leg of this shift put them. Past the window when
+// there is none, or no input after it to move.
+int FrameWindowAnalyzer::nextDepRecovery(int64_t shift, int from) const {
+    auto const& pair = m_depPairs[m_depCursor];
+    size_t const nb = this->nextSampleFor(pair.b);
+    if (nb == NO_INDEX) return m_recovery + 1;
+
+    auto const& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
+    size_t const aiB = m_samples[pair.b].actionIndex;
+    bool const p2 = m_samples[pair.b].player2;
+    size_t const ni = m_samples[nb].actionIndex;
+    size_t const niRel = this->pairedReleaseFor(ni);
+    double const moved =
+        static_cast<double>(shift) / static_cast<double>(pair.resB);
+    auto const frameOf = [&](size_t k) {
+        double pos = this->depPlaced(k);
+        if (k >= aiB && isMeasurableInput(actions[k]) &&
+            actions[k].m_player2 == p2)
+            pos += moved;
+        return static_cast<int64_t>(std::max(0.0, std::floor(pos)));
+    };
+    auto const fits = [&](size_t m, int o) {
+        int64_t const at = frameOf(m) + o;
+        if (at < 0) return false;
+        for (size_t k = m; k-- > 0;) {
+            if (k == ni || k == niRel) continue;
+            if (at <= frameOf(k)) return false;
+            break;
+        }
+        for (size_t k = m + 1; k < actions.size(); k++) {
+            if (k == ni || k == niRel) continue;
+            if (at >= frameOf(k)) return false;
+            break;
+        }
+        return true;
+    };
+    int o = from;
+    while (o <= m_recovery &&
+           (o == 0 || !fits(ni, o) || (niRel != NO_INDEX && !fits(niRel, o))))
+        o++;
+    return o;
+}
+
 void FrameWindowAnalyzer::startDependentPoint() {
     auto const& pair = m_depPairs[m_depCursor];
     size_t const aiB = m_samples[pair.b].actionIndex;
@@ -4452,6 +4503,8 @@ void FrameWindowAnalyzer::startDependentPoint() {
     m_depLowClipped = false;
     m_depHighClipped = false;
     m_depRetry = false;
+    m_depRetryRecovery = 0;
+    m_depLegRecovery = 0;
     m_depPointLegs = 0;
 
     // The frame a shift puts something at `pos` on, as placeAt puts it; the
@@ -4578,16 +4631,19 @@ void FrameWindowAnalyzer::startDependentPoint() {
     }
 }
 
-bool FrameWindowAnalyzer::nextDependentShift(int64_t& shift,
-                                             ShiftMode& mode) {
+bool FrameWindowAnalyzer::nextDependentShift(int64_t& shift, ShiftMode& mode,
+                                             int& recovery) {
     auto const& pair = m_depPairs[m_depCursor];
 
     // A whole-frame shift that died retimed gets its Buffer try first, as in
-    // Calculate's own count (concludeShift).
+    // Calculate's own count (concludeShift), then with Recovery Range its
+    // recovery legs (recordDependentLeg).
+    recovery = 0;
     if (m_depRetry) {
         m_depRetry = false;
         shift = m_depLegShift;
-        mode = ShiftMode::Buffer;
+        recovery = m_depRetryRecovery;
+        mode = recovery != 0 ? ShiftMode::Retime : ShiftMode::Buffer;
         return true;
     }
     mode = pair.resB > 1 ? ShiftMode::Buffer : ShiftMode::Retime;
@@ -4751,7 +4807,8 @@ bool FrameWindowAnalyzer::nextDependentShift(int64_t& shift,
     return false;
 }
 
-void FrameWindowAnalyzer::launchDependentLeg(int64_t shift, ShiftMode mode) {
+void FrameWindowAnalyzer::launchDependentLeg(int64_t shift, ShiftMode mode,
+                                             int recovery) {
     auto const& pair = m_depPairs[m_depCursor];
     size_t const aiA = m_samples[pair.a].actionIndex;
     size_t const aiB = m_samples[pair.b].actionIndex;
@@ -4790,16 +4847,39 @@ void FrameWindowAnalyzer::launchDependentLeg(int64_t shift, ShiftMode mode) {
             this->placeAt(relB, origin(relB) + moved);
     }
 
+    // GucciBot (2026-10-23): a recovery leg (Recovery Range): retimed as
+    // above, then the input after it, with its release, moved `recovery`
+    // frames more, as beginRecovery moves it in the count's own legs.
+    size_t ni = NO_INDEX;
+    size_t niRel = NO_INDEX;
+    if (recovery != 0)
+        if (size_t const nb = this->nextSampleFor(pair.b); nb != NO_INDEX) {
+            ni = m_samples[nb].actionIndex;
+            niRel = this->pairedReleaseFor(ni);
+            double const extra = moved + static_cast<double>(recovery);
+            this->placeAt(ni, origin(ni) + extra);
+            if (niRel != NO_INDEX) this->placeAt(niRel, origin(niRel) + extra);
+        }
+
     // As far as the count's own tests of it run: past its own release to
     // the input after (legReach, as beginShift calls it). It stopped at the
-    // release before, so a short hold was judged on a 12-frame leg.
-    int64_t const bFrame = static_cast<int64_t>(actions[aiB].m_frame);
-    int64_t const reach =
-        this->legReach(aiB, bFrame, this->pairedReleaseFor(aiB), m_pastNext);
+    // release before, so a short hold was judged on a 12-frame leg. A
+    // recovery leg runs from the input it moved, as beginRecovery's does.
+    int64_t target = 0;
+    if (ni != NO_INDEX) {
+        int64_t const nFrame = static_cast<int64_t>(actions[ni].m_frame);
+        target = nFrame + this->legReach(ni, nFrame, niRel);
+    } else {
+        int64_t const bFrame = static_cast<int64_t>(actions[aiB].m_frame);
+        target = bFrame + this->legReach(aiB, bFrame,
+                                         this->pairedReleaseFor(aiB),
+                                         m_pastNext);
+    }
 
     m_depLegShift = shift;
     m_depLegMode = mode;
-    m_depLegTarget = static_cast<uint32_t>(std::max<int64_t>(bFrame + reach, 0));
+    m_depLegRecovery = ni != NO_INDEX ? recovery : 0;
+    m_depLegTarget = static_cast<uint32_t>(std::max<int64_t>(target, 0));
     m_depLegActive = true;
     m_legCounter++;
     m_depPointLegs++;
@@ -4814,14 +4894,36 @@ void FrameWindowAnalyzer::recordDependentLeg(bool survived) {
     FWLOG("[fw][dependent] leg {}: click {} {:+d} {} {}, click {} at {:+g}: "
           "{} (target {})",
           m_legCounter, pair.b + 1, shift, pair.resB > 1 ? "slots" : "frames",
-          m_depLegMode == ShiftMode::Retime ? "retimed" : "with its release",
+          m_depLegRecovery != 0
+              ? fmt::format("retimed, the input after it moved {:+d} more",
+                            m_depLegRecovery)
+          : m_depLegMode == ShiftMode::Retime ? std::string("retimed")
+                                              : std::string("with its release"),
           pair.a + 1, m_depPoints[m_depPoint], survived ? "survived" : "died",
           m_depLegTarget);
 
-    if (!survived && pair.resB <= 1 && m_depLegMode == ShiftMode::Retime &&
-        shift != 0 && this->depBufferValid(shift)) {
+    // A whole-frame shift that died retimed gets its Buffer try, as in
+    // Calculate's own count (concludeShift).
+    if (!survived && pair.resB <= 1 && m_depLegRecovery == 0 &&
+        m_depLegMode == ShiftMode::Retime && shift != 0 &&
+        this->depBufferValid(shift)) {
         m_depRetry = true;
+        m_depRetryRecovery = 0;
         return;
+    }
+    // GucciBot (2026-10-23): then, with Recovery Range, its recovery legs, as
+    // the count gives them (concludeShift, beginRecovery): its strict window
+    // keeps a shift the input after it moved can save, so this one has to
+    // as well, or its window here comes out narrower at every alignment and
+    // the pair is flagged for nothing (the Accuracy and Absolute presets).
+    if (!survived && pair.resB <= 1 && m_algo == Algorithm::RecoveryRange) {
+        int const from =
+            m_depLegRecovery == 0 ? -m_recovery : m_depLegRecovery + 1;
+        if (int const o = this->nextDepRecovery(shift, from); o <= m_recovery) {
+            m_depRetry = true;
+            m_depRetryRecovery = o;
+            return;
+        }
     }
 
     m_depTested.push_back({shift, survived});

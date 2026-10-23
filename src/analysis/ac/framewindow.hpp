@@ -874,6 +874,11 @@ class FrameWindowAnalyzer {
     bool m_depLowClipped = false;
     bool m_depHighClipped = false;
     bool m_depRetry = false;
+    // GucciBot (2026-10-23): with Recovery Range, the offset the input after
+    // it moves in the retry to run next (0: its Buffer try), and in the leg
+    // just run (0: not a recovery leg).
+    int m_depRetryRecovery = 0;
+    int m_depLegRecovery = 0;
     int m_depPointLegs = 0;
     int m_depPairLegs = 0;
     // The pass as a whole, for its summary line.
@@ -888,13 +893,14 @@ class FrameWindowAnalyzer {
     bool beginDependentPass(std::string message);
     bool stepDependent(PlayLayer* pl);
     void startDependentPoint();
-    bool nextDependentShift(int64_t& shift, ShiftMode& mode);
-    void launchDependentLeg(int64_t shift, ShiftMode mode);
+    bool nextDependentShift(int64_t& shift, ShiftMode& mode, int& recovery);
+    void launchDependentLeg(int64_t shift, ShiftMode mode, int recovery);
     void recordDependentLeg(bool survived);
     void finishDependentPoint();
     void finishDependentPair();
     double depPlaced(size_t k) const;
     bool depBufferValid(int64_t shift) const;
+    int nextDepRecovery(int64_t shift, int from) const;
     void resetActions();
     void placeAt(size_t k, double pos);
     size_t resultFor(size_t sample) const;
