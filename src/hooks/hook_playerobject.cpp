@@ -138,6 +138,19 @@ class $modify(GB7PlayerObject, PlayerObject) {
             eng->m_p1Split = eng->m_p1Split && eng->hasPendingFor(false);
             eng->m_p2Split = eng->m_p2Split && eng->hasPendingFor(true);
         }
+        // GucciBot (2026-10-23): what such a tick did, one verbose log line
+        // each, to check it by: in a dual the measured player is split (when
+        // it can be) and its click held for the split, and the other player
+        // is neither - its click on the tick played on the tick edge.
+        if (eng->splitsOnePlayer() && SLSettings::get()->frameWindow.verbose)
+            gucci::fwEngineLog(fmt::format(
+                "[fw][split] frame {}: sub-tick test of a player {} click at {:.4f} of "
+                "the tick ({}): split player 1 {}, player 2 {}; clicks held for the "
+                "split: player 1 {}, player 2 {}",
+                eng->tickFrame(), eng->tickPlayer() + 1, eng->fraction(),
+                p2 ? "dual" : "no dual", eng->m_p1Split ? "yes" : "no",
+                eng->m_p2Split ? "yes" : "no", eng->hasPendingFor(false) ? "yes" : "no",
+                eng->hasPendingFor(true) ? "yes" : "no"));
         eng->m_p1Pos = this->getPosition();
         eng->m_p2Pos = p2 ? p2->getPosition() : cocos2d::CCPoint{};
 

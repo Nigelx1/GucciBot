@@ -47,6 +47,10 @@ class Engine {
     // split, and whether this tick was armed for one player only.
     bool hasPendingFor(bool player2) const;
     bool splitsOnePlayer() const { return m_tickPlayer >= 0; }
+    // The tick taken, and the player it was armed for (Armed::player), for
+    // the verbose log's [fw][split] line.
+    uint32_t tickFrame() const { return m_tickFrame; }
+    int tickPlayer() const { return m_tickPlayer; }
 
     bool beginTick();
     double fraction() const { return m_tickFraction; }
