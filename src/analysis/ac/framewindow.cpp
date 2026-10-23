@@ -4416,9 +4416,10 @@ double FrameWindowAnalyzer::depPlaced(size_t k) const {
 
 // GucciBot (2026-10-23): whether a Buffer test (the input and its release
 // moved, the rest left) may use this shift at this alignment: the room
-// startDependentPoint worked out, by bufferShiftValid's rule.
+// startDependentPoint worked out, by bufferShiftValid's rule, with its
+// release kept after any input of its player inside its hold.
 bool FrameWindowAnalyzer::depBufferValid(int64_t shift) const {
-    return shift >= m_depLo && shift <= m_depBufHi;
+    return shift >= m_depBufLo && shift <= m_depBufHi;
 }
 
 void FrameWindowAnalyzer::startDependentPoint() {
@@ -4489,16 +4490,38 @@ void FrameWindowAnalyzer::startDependentPoint() {
         if (size_t const after = this->nextActionFor(rel, p2); after != NO_INDEX)
             releaseRoom =
                 lastBefore(origin(rel), std::floor(this->depPlaced(after)));
+    // GucciBot (2026-10-23): another of its player's inputs inside its hold
+    // (a platformer's other button) stays where it is while a Buffer test
+    // moves the input and its release: the input may go no later than that
+    // one's frame, and its release no earlier than the frame of the last one
+    // before it. Playback fires a frame's actions in their order, so on the
+    // same frame is fine and past it stalls the replay (the input waits for a
+    // frame that has gone by, and nothing after it plays). Both bounds keep
+    // the input's own timing in, as the macro has it.
+    int64_t holdHi = reach;
+    int64_t holdLo = -reach;
+    if (rel != NO_INDEX && next != rel) {
+        holdHi = lastBefore(bPos, std::floor(this->depPlaced(next)) + 1.0);
+        if (size_t const inside = this->prevActionFor(rel, p2);
+            inside != NO_INDEX && inside != aiB)
+            holdLo = firstOnOrAfter(origin(rel),
+                                    std::floor(this->depPlaced(inside)));
+    }
     if (pair.resB > 1) {
         // A sub-tick shift moves it with its release only, as the count's
         // sub-tick pass does. (That pass only warns when one crosses the
         // next input; this keeps short of it, so no test plays its player's
         // inputs out of order and stalls the replay.)
-        m_depHi = std::min(m_depHi, rel != NO_INDEX ? releaseRoom : pressRoom);
+        m_depHi = std::min(
+            {m_depHi, rel != NO_INDEX ? releaseRoom : pressRoom, holdHi});
+        m_depLo = std::max(m_depLo, holdLo);
+        m_depBufLo = m_depLo;
         m_depBufHi = m_depHi;
     } else {
         // bufferShiftValid's rule as it reads, for the Buffer try of a
-        // whole-frame shift that died retimed.
+        // whole-frame shift that died retimed, and its release kept after
+        // an input inside its hold, as above.
+        m_depBufLo = std::max(m_depLo, holdLo);
         m_depBufHi = std::min({reach, pressRoom, releaseRoom});
     }
 

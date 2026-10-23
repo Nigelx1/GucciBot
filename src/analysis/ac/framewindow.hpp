@@ -848,14 +848,16 @@ class FrameWindowAnalyzer {
     size_t m_depPoint = 0;
     std::vector<DependentPoint> m_depDone;
     // The alignment under test: every shift of b tried there, the room b has
-    // (m_depLo..m_depHi; a Buffer leg only up to m_depBufHi), the guesses
-    // still to try (shift, group), and b's window's edges as they're found.
+    // (m_depLo..m_depHi; a Buffer leg only m_depBufLo..m_depBufHi), the
+    // guesses still to try (shift, group), and b's window's edges as they're
+    // found.
     std::vector<DependentTest> m_depTested;
     std::vector<std::pair<int64_t, int>> m_depQueue;
     size_t m_depQueueAt = 0;
     int m_depQueueGroup = -1;
     int64_t m_depLo = 0;
     int64_t m_depHi = 0;
+    int64_t m_depBufLo = 0;
     int64_t m_depBufHi = 0;
     bool m_depFound = false;
     int64_t m_depSurvivor = 0;
