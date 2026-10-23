@@ -860,6 +860,9 @@ class FrameWindowAnalyzer {
     int64_t m_depBufLo = 0;
     int64_t m_depBufHi = 0;
     bool m_depFound = false;
+    // The timing its window is the run around (the one nearest its own that
+    // survived), once the guesses are done.
+    bool m_depAnchored = false;
     int64_t m_depSurvivor = 0;
     DepProbe m_depProbe = DepProbe::Find;
     int64_t m_depLowStep = 1;

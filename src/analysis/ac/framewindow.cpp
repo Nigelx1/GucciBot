@@ -4093,10 +4093,13 @@ void FrameWindowAnalyzer::placeAt(size_t k, double pos) {
 //   test runs as far as the count's own do (legReach).
 // - Its window is searched from its own: the two edges, then the same moved
 //   along with the input before, then inside each, then a short scan nearest
-//   its own timing. From a timing that survives, each edge is tested one unit
-//   past it first, then walked a frame at a time (as the count walks them), or
-//   for slots galloped out and bisected back (as the count's sub-tick pass
-//   bisects, with Bisect edges on).
+//   its own timing. Its window there is the unbroken run around the timing
+//   nearest its own that survived (its own timing is tried first when it
+//   lies between two that survived). Each edge is tested one unit past it
+//   first, then walked a unit at a time through every unit (as the count
+//   walks them), or for slots with Bisect edges on galloped out and bisected
+//   back (as the count's sub-tick pass bisects, taking the window as whole
+//   between the timings it tested).
 // - The pair is independent when the input survives at every alignment and
 //   its window there is within a frame of its own count; nothing changes then.
 //   Otherwise ~N is the average over the alignments where it can still be hit,
@@ -4438,6 +4441,7 @@ void FrameWindowAnalyzer::startDependentPoint() {
     m_depQueueGroup = -1;
     m_depFound = false;
     m_depSurvivor = 0;
+    m_depAnchored = false;
     m_depProbe = DepProbe::Find;
     m_depLowStep = 1;
     m_depHighStep = 1;
@@ -4619,13 +4623,69 @@ bool FrameWindowAnalyzer::nextDependentShift(int64_t& shift,
     }
     if (!m_depFound) return false;
 
+    // GucciBot (2026-10-23): its window here is the unbroken run around the
+    // timing nearest its own that survived, as Calculate's count is the run
+    // around its own. Both edges of its own window can survive with its own
+    // timing dead in between, so that timing, when it lies between two that
+    // survived and hasn't been tried, is tried first.
+    if (!m_depAnchored) {
+        bool have = false;
+        int64_t lowest = 0;
+        int64_t highest = 0;
+        int64_t nearest = 0;
+        for (auto const& t : m_depTested) {
+            if (!t.survived) continue;
+            if (!have || std::abs(t.shift) < std::abs(nearest))
+                nearest = t.shift;
+            lowest = have ? std::min(lowest, t.shift) : t.shift;
+            highest = have ? std::max(highest, t.shift) : t.shift;
+            have = true;
+        }
+        if (lowest < 0 && 0 < highest && result(0) == -1) {
+            m_depProbe = DepProbe::Find;
+            shift = 0;
+            return true;
+        }
+        m_depSurvivor = nearest;
+        m_depAnchored = true;
+    }
+
     // From it, each edge of its window: one unit past the edge first (an
     // edge that didn't move takes one test), then walked a unit at a time,
     // or for slots galloped out and bisected back (Bisect edges, as the
     // count's sub-tick pass). What's been tried already says where to start.
+    // GucciBot (2026-10-23): a walk goes from it through every unit, as the
+    // count's does, so a timing inside the window that dies ends the window
+    // there; only galloping takes the window as whole between timings it
+    // tested, as the count's Bisect edges does.
     bool const halve = pair.resB > 1 && m_subframeBisect->inner() &&
                        !m_fullRangeSweep->inner();
     int64_t const s0 = m_depSurvivor;
+
+    if (!m_depLowDone && !halve) {
+        int64_t t = s0 - 1;
+        while (t >= m_depLo && result(t) == 1) t--;
+        if (t >= m_depLo && result(t) == -1) {
+            shift = t;
+            m_depProbe = DepProbe::Low;
+            return true;
+        }
+        m_depLowDone = true;
+        m_depLowEdge = t + 1;
+        m_depLowClipped = t < m_depLo;
+    }
+    if (!m_depHighDone && !halve) {
+        int64_t t = s0 + 1;
+        while (t <= m_depHi && result(t) == 1) t++;
+        if (t <= m_depHi && result(t) == -1) {
+            shift = t;
+            m_depProbe = DepProbe::High;
+            return true;
+        }
+        m_depHighDone = true;
+        m_depHighEdge = t - 1;
+        m_depHighClipped = t > m_depHi;
+    }
 
     if (!m_depLowDone) {
         bool dead = false;
@@ -4650,7 +4710,7 @@ bool FrameWindowAnalyzer::nextDependentShift(int64_t& shift,
             if (m_depLowStep <= 1)
                 shift = alive - 1;
             else if (dead)
-                shift = halve ? std::midpoint(deadAt, alive) : alive - 1;
+                shift = std::midpoint(deadAt, alive);
             else
                 shift = std::max(m_depLo, alive - m_depLowStep);
             m_depProbe = DepProbe::Low;
@@ -4681,7 +4741,7 @@ bool FrameWindowAnalyzer::nextDependentShift(int64_t& shift,
             if (m_depHighStep <= 1)
                 shift = alive + 1;
             else if (dead)
-                shift = halve ? std::midpoint(deadAt, alive) : alive + 1;
+                shift = std::midpoint(deadAt, alive);
             else
                 shift = std::min(m_depHi, alive + m_depHighStep);
             m_depProbe = DepProbe::High;
@@ -4766,10 +4826,7 @@ void FrameWindowAnalyzer::recordDependentLeg(bool survived) {
 
     m_depTested.push_back({shift, survived});
     if (!survived) return;
-    if (!m_depFound) {
-        m_depFound = true;
-        m_depSurvivor = shift;
-    }
+    m_depFound = true;
 
     // A gallop step that held: the next goes further, the count's own
     // Search stride after the first slot, then twice as far each time.
