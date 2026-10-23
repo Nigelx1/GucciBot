@@ -4268,6 +4268,11 @@ bool FrameWindowAnalyzer::stepDependent(PlayLayer* pl) {
             if (m_haveCheckpoint && m_saved.m_frameOffset <= base) {
                 if (!this->restoreToBranch()) return true;
             } else {
+                // GucciBot (2026-10-23): said, so a run's log shows the pairs
+                // going in checkpoint order: only the first should need it.
+                FWLOG("[fw][dependent] click {}: replaying from frame 0 to "
+                      "reach frame {}",
+                      pair.b + 1, base);
                 this->hardResetToStart();
             }
             m_depAdvancing = true;
