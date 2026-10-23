@@ -512,16 +512,13 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         // Placed exactly where Silicate places it: after the button filter,
         // before the input is handed onward.
         if (auto& acfw = ::Bot::get()->frameWindow(); acfw.running()) {
-            bool const flipped = gb->replay.playerFlipped(action.m_player2);
-            // GucciBot (2026-10-23): with Calculate's 2-player fixes, player 2
-            // only in a 2-player level. In a 1-player level the click moves
-            // player 1 whatever its flag, and an input stored as player 2
-            // (Flip 2-Player Controls, some imports) read player 2's ground
-            // state here.
-            bool const onP2 = acfw.twoPlayerFixes()
-                                  ? flipped && m_levelSettings && m_levelSettings->m_twoPlayerMode
-                                  : flipped;
-            auto* actor = onP2 ? m_player2 : m_player1;
+            // GucciBot (2026-10-23): the player the press moves, as the
+            // analyzer's movesPlayer2 takes it: in a 2-player level the stored
+            // flag names it, Flip 2-Player Controls on or off (playerFlipped
+            // gives the button side to queue, not the player); in a 1-player
+            // level it is player 1.
+            bool const twoPlayer = m_levelSettings && m_levelSettings->m_twoPlayerMode;
+            auto* actor = (twoPlayer && action.m_player2) ? m_player2 : m_player1;
             acfw.notePress(action.m_frame,
                            action.m_player2,
                            cbf::canSplit(actor,

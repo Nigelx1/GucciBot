@@ -206,7 +206,10 @@ TrailBuffer::Report TrailBuffer::placeSpikes(LevelEditorLayer* editor) {
         for (auto const& a : rs.m_actionAtom.m_actions) {
             if (a.m_type != slc::ActionType::Jump) continue;
             if (!a.m_holding && !m_spikeReleases->inner()) continue;
-            if (twoPlayer && rs.playerFlipped(a.m_player2) != player2) continue;
+            // GucciBot (2026-10-23): in a 2-player level the stored flag names
+            // the player the click moves, whatever Flip 2-Player Controls is
+            // set to (playerFlipped gives the button side, not the player).
+            if (twoPlayer && a.m_player2 != player2) continue;
             clicks.push_back(static_cast<uint32_t>(a.m_frame));
         }
         std::sort(clicks.begin(), clicks.end());

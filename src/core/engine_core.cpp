@@ -455,9 +455,15 @@ namespace gucci {
                 continue;
             bool const p2 = lane >= 3;
             int const button = lane % 3 + 1;
-            // A lane's flag is stored flipped (see addInputToReplay), and it
-            // only moves player 2 in a two-player level.
-            auto* who = (twoPlayer && playerFlipped(p2)) ? pl->m_player2 : pl->m_player1;
+            // GucciBot (2026-10-23): in a two-player level a lane's flag names
+            // the player it moves, whatever Flip 2-Player Controls is set to:
+            // addInputToReplay stores the button side flipped by the setting,
+            // and GD flips a side by it again when the input is played, as
+            // Silicate's practice restore and maintain-gravity rely on.
+            // playerFlipped turns a flag into a button side, not a player; it
+            // picked the other player here while the setting was on. In a
+            // one-player level every lane moves player 1.
+            auto* who = (twoPlayer && p2) ? pl->m_player2 : pl->m_player1;
             if (!who || (bool)who->m_holdingButtons[button])
                 continue;
             m_actionAtom.addAction(frame, static_cast<gb::ActionType>(button), false, p2);

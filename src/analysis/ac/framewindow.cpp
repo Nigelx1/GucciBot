@@ -341,18 +341,23 @@ static bool isMeasurableInput(slc::Action const& action) {
     }
 }
 
-// GucciBot (2026-10-23, issue #27): the player an input moves. Its stored flag
-// is the button side XOR "Flip 2-Player Controls" (addInputToReplay), so in a
-// 2-player level it is un-flipped the way playback does it. In a 1-player
-// level the flag says nothing about the player: a click moves player 1, and
-// player 2 with it while the two are in a dual. A macro recorded with Flip
-// 2-Player Controls on stores every input of a 1-player level as player 2
-// (some imports do too); the capture read player 2 for those, so their
-// markers stood on player 2 in a dual and nowhere after it.
+// GucciBot (2026-10-23, issue #27): the player an input moves. In a 2-player
+// level the stored flag names it, whatever "Flip 2-Player Controls" is set
+// to: the flag is the button side XOR the setting at record time
+// (addInputToReplay), playback queues it XOR the setting now, and GD flips a
+// side by the setting again on the way to a player, as Silicate's practice
+// restore and maintain-gravity rely on. playerFlipped turns a flag into a
+// button side, never into a player: un-flipping the flag here picked the other
+// player while the setting was on. In a 1-player level the flag says nothing
+// about the player: a click moves player 1, and player 2 with it while the two
+// are in a dual. A macro recorded with Flip 2-Player Controls on stores every
+// input of a 1-player level as player 2 (some imports do too); the capture
+// read player 2 for those, so their markers stood on player 2 in a dual and
+// nowhere after it.
 static bool movesPlayer2(PlayLayer* pl, bool flag) {
     bool const twoPlayer =
         pl && pl->m_levelSettings && pl->m_levelSettings->m_twoPlayerMode;
-    return twoPlayer && Bot::get()->replaySystem().playerFlipped(flag);
+    return twoPlayer && flag;
 }
 
 // GucciBot (2026-10-23, issue #27): where a player was on a frame, for a
@@ -7814,15 +7819,14 @@ void FrameWindowAnalyzer::openTrailLeg() {
     m_trailLegs.erase(m_trailLegs.begin(),
                       m_trailLegs.begin() + static_cast<std::ptrdiff_t>(drop));
 
-    // Which player to follow is the recorder's rule (engine_core.cpp): the
-    // stored flag is flipped by Flip 2-Player Controls, and only moves
-    // player 2 in a 2-player level. In a 1-player level the click moves both,
-    // so player 2 is drawn too while it's in a dual.
+    // Which player to follow is movesPlayer2's rule: in a 2-player level the
+    // stored flag names the player, Flip 2-Player Controls on or off. In a
+    // 1-player level the click moves both, so player 2 is drawn too while
+    // it's in a dual.
     bool const twoPlayer =
         pl->m_levelSettings && pl->m_levelSettings->m_twoPlayerMode;
     TrailLeg leg;
-    leg.player2 = twoPlayer && Bot::get()->replaySystem().playerFlipped(
-                                   m_samples[m_index].player2);
+    leg.player2 = twoPlayer && m_samples[m_index].player2;
     leg.twin = !twoPlayer;
     m_trailLegs.push_back(std::move(leg));
     m_legOpen = true;
