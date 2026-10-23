@@ -2004,6 +2004,14 @@ void onEvent(int event, int material, int playerUid) {
     if (player != 0) {
         if (run->player1 && player == run->player1->m_uniqueID) player = 1;
         else if (run->player2 && player == run->player2->m_uniqueID) player = 2;
+        // GucciBot (2026-10-23): an id that is neither one of this run's
+        // copies nor the game's own 1 or 2 is another copy's - the one outside
+        // the dual part, or another module's fork - and its events are not the
+        // run's. One such (GravityRestored, raised during a step with id 19700)
+        // was stamped into the run's state in one run and not in the same run
+        // made through branches, and the World's start-up check turned the
+        // World off for the whole launch over it.
+        else if (player != 1 && player != 2) return;
     }
     const int key = material * 10000 + player;
     {

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-gc (Pathfinder step 5: Route drives - one leg per gate, on its own switch; a 5 minute stuck stop; clicks a second on the stop line)"
+    "2026-10-23-gd (World: a game event of a player that is not one of the run copies stays out of the run - it turned the World off some launches)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
