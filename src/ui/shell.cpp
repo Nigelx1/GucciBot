@@ -1203,11 +1203,15 @@ namespace gucci::ui {
             bool fromStart = absense::startFromBeginning();
             if (kit::SwitchRow("Start from the beginning", nullptr, &fromStart))
                 absense::setStartFromBeginning(fromStart);
-            bool guided = absense::routeGuidance();
-            if (kit::SwitchRow("Follow the planned route (AI)",
-                               "Each decision first tries the way the physics map finds to the planned route's next "
-                               "gate. Off: the pathfinder as it was",
-                               &guided))
+            // Off / Route ideas (step R4) / Route drives (docs/ROUTE_ENGINE_PLAN.md
+            // step 5), saved with the mod.
+            int guided = std::clamp(absense::routeGuidance(), 0, 2);
+            const char* guidance[] = {"Off", "Route ideas", "Route drives"};
+            if (kit::ChoiceRow("Follow the planned route (AI)",
+                               "Route ideas: each decision also tries the way physics finds to the planned route's "
+                               "next gate. Route drives: each decision aims at the planned route's next gate and "
+                               "plays the way physics finds into it. Off: the pathfinder as it was",
+                               &guided, guidance, 3))
                 absense::setRouteGuidance(guided);
             auto const s = absense::status();
             kit::RowBegin("", nullptr);

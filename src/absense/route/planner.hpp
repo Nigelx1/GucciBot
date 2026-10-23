@@ -106,9 +106,21 @@ namespace absense::route {
     // level's start (so every gate ahead of wherever it starts is on it),
     // cached until the map changes.
     const Plan* guidePlan(GJBaseGameLayer* pl);
-    // Pathfinder page > Follow the planned route.
+    // Pathfinder page > Follow the planned route (AI), saved with the mod.
+    // Off: the pathfinder as it was. Route ideas (step R4): each decision also
+    // tries the physics map's way to the planned route's next gate. Route
+    // drives (docs/ROUTE_ENGINE_PLAN.md step 5): each decision aims at the
+    // next gate's best option from where it is and plays the way physics
+    // finds into it, only as far as the gate. Off unless picked (Nigel,
+    // 2026-10-22: it stays a switch until all eight bar levels pass).
+    enum class Guidance : uint8_t { Off = 0, Ideas = 1, Drives = 2 };
+    Guidance guidance();
+    void setGuidance(Guidance g);
+    // Route ideas or Route drives: the route is followed (step R4's code runs
+    // in both).
     bool guidanceEnabled();
-    void setGuidance(bool on);
+    // Route drives.
+    bool drivesEnabled();
     // What the physics map found when it went for the gap (lo) at the gate at x:
     // a gap it keeps failing to reach is priced up and the route planned again.
     void noteLeg(float gateX, float lo, bool found);

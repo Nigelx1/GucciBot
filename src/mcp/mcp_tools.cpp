@@ -1062,16 +1062,32 @@ namespace gucci::mcp {
 
         server.addTool({
             "gucci_route_guidance",
-            "Step R4 of AI_PATHFINDER_PLAN.md: switch 'Follow the planned route (AI)' on or "
-            "off (the Pathfinder page's switch). With it on, each Absense decision first asks "
-            "the physics map for the way to the planned route's next gate, and that idea goes "
-            "first when it reaches the gate alive and clears the decision's bar. Without `on`, "
-            "reports the switch.",
-            schemaOf({{"on", "boolean", "true to follow the route, false for the pathfinder as it was"}}),
+            "The Pathfinder page's 'Follow the planned route (AI)' setting, saved with the mod. "
+            "off: the pathfinder as it was. ideas (step R4 of AI_PATHFINDER_PLAN.md): each "
+            "Absense decision also asks the physics map for the way to the planned route's next "
+            "gate, and that idea goes first when it reaches the gate alive and clears the "
+            "decision's bar. drives (docs/ROUTE_ENGINE_PLAN.md step 5): each decision aims at "
+            "the next gate's options from where it is, best first, one leg search at a time, "
+            "and plays the first way physics finds through one only as far as the gate; when "
+            "no option gets through, today's engine decides that one. `on` is the old switch "
+            "(true: ideas, false: off). Without either, reports the setting.",
+            schemaOf({{"mode", "string", "off, ideas or drives"},
+                      {"on", "boolean", "the old switch: true for ideas, false for off"}}),
             [](matjson::Value const& a) {
-                if (a.contains("on")) absense::setRouteGuidance(a["on"].asBool().unwrapOr(false));
+                if (a.contains("mode")) {
+                    auto const m = argStr(a, "mode");
+                    if (m == "off") absense::setRouteGuidance(0);
+                    else if (m == "ideas") absense::setRouteGuidance(1);
+                    else if (m == "drives") absense::setRouteGuidance(2);
+                    else throw ToolError("mode must be off, ideas or drives");
+                } else if (a.contains("on")) {
+                    absense::setRouteGuidance(argBool(a, "on", false) ? 1 : 0);
+                }
+                static char const* const kModes[] = {"off", "ideas", "drives"};
+                int const mode = std::clamp(absense::routeGuidance(), 0, 2);
                 auto out = matjson::Value::object();
-                out["on"] = absense::routeGuidance();
+                out["mode"] = std::string(kModes[mode]);
+                out["on"] = mode != 0;
                 return out;
             },
         });

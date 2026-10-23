@@ -86,7 +86,7 @@ Two engines, picked at the top of the Pathfinder tab.
 - **Goes back when it has to** — a dead end sends it back through Backwards Stepping's stored frames to try another way, and further back each time a spot keeps biting.
 - **Learns levels** — what got it past a spot is remembered per level and tried first the next time, so searching a level again is faster.
 - **Maps the whole level** — **Show the level map** draws the gaps the player fits through, the choices (forks, orbs, pads, portals) and the parts that move; a copy of the player rides the level in the background to time what moves, without holding the game up.
-- **Plans a route through it** — **Show the planned route** draws the way through the whole level it would take. With **Follow the planned route (AI)** on, each decision first tries the way GD's physics finds to the route's next gate, and a dead end jumps back to where it left the route.
+- **Plans a route through it** — **Show the planned route** draws the way through the whole level it would take. **Follow the planned route (AI)** set to **Route ideas** has each decision first try the way GD's physics finds to the route's next gate, and a dead end jump back to where it left the route. Set to **Route drives** (experimental), every decision aims at the next gate's best choice from where the player is (use or skip an orb, touch or avoid a pad or portal) and plays the way physics finds through it, only as far as that gate.
 - **Starts how you like** — from wherever the level is, straight from the pause menu, or with **Start from the beginning** on, from frame 0 after a Full Restart.
 
 **Classic** — GucciBot's own search, still there.

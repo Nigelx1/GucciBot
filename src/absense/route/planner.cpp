@@ -656,7 +656,14 @@ std::string summary(Plan const& p) {
 namespace {
     std::unique_ptr<Plan> g_guide;
     uint64_t g_guideAtlas = 0;  // the id of the map it was planned on
-    bool g_guidance = false;
+    // Follow the planned route: read from the mod's saved values the first
+    // time it is asked for (-1: not yet), then kept here - every decision asks.
+    constexpr const char* kGuidanceKey = "pf_route_mode";
+    int g_guidance = -1;
+    int guidanceValue() {
+        if (g_guidance < 0) g_guidance = std::clamp(Mod::get()->getSavedValue<int>(kGuidanceKey, 0), 0, 2);
+        return g_guidance;
+    }
 }
 
 const Plan* guidePlan(GJBaseGameLayer* pl) {
@@ -676,8 +683,21 @@ const Plan* guidePlan(GJBaseGameLayer* pl) {
     return g_guide.get();
 }
 
+Guidance guidance() {
+    return (Guidance)guidanceValue();
+}
+
+void setGuidance(Guidance g) {
+    g_guidance = std::clamp((int)g, 0, 2);
+    Mod::get()->setSavedValue<int>(kGuidanceKey, g_guidance);
+}
+
 bool guidanceEnabled() {
-    return g_guidance;
+    return guidanceValue() != (int)Guidance::Off;
+}
+
+bool drivesEnabled() {
+    return guidanceValue() == (int)Guidance::Drives;
 }
 
 void noteLeg(float gateX, float lo, bool found) {
@@ -689,10 +709,6 @@ void noteLeg(float gateX, float lo, bool found) {
         g_failsVersion++;  // the gate graph is priced again with it
         log::info("[AbsPF] route: the gap at x {:.0f} (from y {:.0f}) failed {} times; planning again", gateX, lo, n);
     }
-}
-
-void setGuidance(bool on) {
-    g_guidance = on;
 }
 
 bool routeShown() {
