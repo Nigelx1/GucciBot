@@ -228,6 +228,14 @@ bool AbsensePathfinder::start() {
     auto* bot = Bot::get();
     auto* pl = PlayLayer::get();
     m_stats = Stats{};
+    // Per run (step 1): the log caps, the route-search reason, and the card's
+    // random pools, so a run repeats whatever ran before it in the session.
+    m_spikeLines = 0;
+    m_spikePassLines = 0;
+    m_spikeInPass = false;
+    m_routeWhy.clear();
+    m_routeWhyCount = 0;
+    m_gpuSeed = 0;
     if (!pl || !pl->m_player1) {
         m_stats.message = "Open a level first.";
         return false;
@@ -476,13 +484,19 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
         m_stats.secondsSim > 0.0 ? (double)m_stats.simulatedTicks / m_stats.secondsSim : 0.0,
         m_stats.simulations > 0 ? (double)m_stats.simulatedTicks / (double)m_stats.simulations : 0.0,
         m_stats.secondsRestore, m_stats.secondsReal, m_stats.unitMs);
-    if (m_stats.routeLegs > 0)
-        log("route: %llu searches to the next gate (%llu found a way, %llu none, %llu out of room or time, %llu could not run), %.0f ms and %.0f ticks a search on average, %llu route ideas played; %llu dead ends went back to where the route was left, %llu took it there",
+    if (m_stats.routeLegs > 0 || m_stats.routeErrors > 0) {
+        const double legs = (double)std::max<uint64_t>(1, m_stats.routeLegs);
+        log("route: %llu searches to the next gate (%llu found a way, %llu none, %llu out of room or time, %llu could not run, %llu of those stopped by the clock), %.0f ms and %.0f ticks a search on average, %llu route ideas played; %llu dead ends went back to where the route was left, %llu took it there",
             (unsigned long long)m_stats.routeLegs, (unsigned long long)m_stats.routeFound,
             (unsigned long long)m_stats.routeNone, (unsigned long long)m_stats.routeBudget,
-            (unsigned long long)m_stats.routeErrors, m_stats.routeMs / (double)m_stats.routeLegs,
-            (double)m_stats.routeTicks / (double)m_stats.routeLegs, (unsigned long long)m_stats.routeWins,
+            (unsigned long long)m_stats.routeErrors, (unsigned long long)m_stats.legSafety, m_stats.routeMs / legs,
+            (double)m_stats.routeTicks / legs, (unsigned long long)m_stats.routeWins,
             (unsigned long long)m_stats.routeJumps, (unsigned long long)m_stats.routeRetaken);
+    }
+    log("anticheat spike: handed to GD after %llu rewinds (of %llu times back); met %llu times in a collision pass, "
+        "ending %llu real passes early",
+        (unsigned long long)m_stats.spikeSettles, (unsigned long long)m_stats.backtracks,
+        (unsigned long long)m_stats.spikeMet, (unsigned long long)m_stats.spikePasses);
 
     if (done) {
         m_phase = Phase::Done;
@@ -2226,24 +2240,25 @@ void AbsensePathfinder::decide() {
                 // Steps, not milliseconds (docs/ROUTE_ENGINE_PLAN.md step 1c):
                 // the same leg comes out the same on every run. The clock is
                 // only a safety stop until step 3 slices this search.
-                goal.maxSteps = 20000;
-                goal.maxMs = 250.0;
+                goal.maxSteps = 15000;
+                goal.maxMs = 500.0;  // about 3x what 15,000 steps took on the one level measured (9.3 us each)
                 goal.dotsEvery = 0;
                 goal.witnesses = 3;
                 for (auto const& w : route->routes.front().points) goal.gates.push_back({w.x, w.band.lo, w.band.hi});
                 auto const leg = traj->sweepLeg(pl, goal);
                 if (leg.error) {
                     m_stats.routeErrors++;
-                    // Why (step 1d): the first time each reason comes up, and
-                    // every 50th after that.
-                    static std::string s_lastWhy;
-                    static uint64_t s_sameWhy = 0;
-                    if (s_lastWhy != leg.error) {
-                        s_lastWhy = leg.error;
-                        s_sameWhy = 0;
+                    const bool clock = std::string_view(leg.error).find("time safety") != std::string_view::npos;
+                    if (clock) m_stats.legSafety++;
+                    // Why (step 1d): the first time each reason comes up in a
+                    // run, and every 50th after that.
+                    if (m_routeWhy != leg.error) {
+                        m_routeWhy = leg.error;
+                        m_routeWhyCount = 0;
                     }
-                    if (s_sameWhy++ % 50 == 0)
-                        log("tick %llu: no route search here: %s", (unsigned long long)d.tick, leg.error);
+                    if (m_routeWhyCount++ % 50 == 0)
+                        log("tick %llu: no route search here: %s (%llu steps, %.0f ms)", (unsigned long long)d.tick,
+                            leg.error, (unsigned long long)leg.steps, leg.ms);
                 }
                 if (!leg.error) {
                     m_stats.routeLegs++;
@@ -3233,11 +3248,12 @@ void AbsensePathfinder::decide() {
         rc.tick = tick;
         rc.x = decisionState(d).x;
         rc.gateX = d.routeGateX;
+        rc.horizon = d.H;
         for (const size_t i : d.tried) {
             const Candidate& c = d.candidates[i];
             if (c.gateTicks > 0 && c.evaluated && c.survived >= c.gateTicks) {
                 rc.reached = true;
-                break;
+                rc.routeSurvived = std::max(rc.routeSurvived, c.survived);
             }
         }
         rc.taken = best->gateTicks > 0;
@@ -4249,6 +4265,15 @@ void AbsensePathfinder::beginBacktrack() {
             // the same place. Jumping back to the decision that caused a dead
             // end is the route engine's job (step 6), with a ledger behind it.
             if (it->tick < m_repair.floor) break;
+            // ... and only one whose route idea lasted to the dead end there:
+            // the forced verdict asks that of it, and the ideas repeat now, so
+            // a jump to one that did not is a real rewind for nothing.
+            if (it->routeSurvived >= 0 && it->horizon > 0) {
+                const uint64_t want =
+                    std::min<uint64_t>(m_repair.deathTick > it->tick ? m_repair.deathTick - it->tick + 8 : 8,
+                                       (uint64_t)it->horizon);
+                if ((uint64_t)it->routeSurvived < want) continue;
+            }
             if (trap && std::find(trap->routeForced.begin(), trap->routeForced.end(), it->tick) != trap->routeForced.end())
                 continue;
             if (trap) trap->routeForced.push_back(it->tick);
@@ -4519,21 +4544,42 @@ void AbsensePathfinder::beginBacktrack() {
 // (ret=0, postCollision ran) and not after the rewind to 5248 (ret=1, it did
 // not), and the game and the simulation parted there. Handing GD the spike
 // once, before anything is played again, puts the re-stepped ticks where a
-// cold replay would have them. Not sure GD takes it from here rather than
-// from a collision: the log says, per rewind, and a pass that still ends early
-// is logged by the collision hook.
-// Only while the player touches the spike: that is when GD's own collision
-// pass hands it over, several ticks running after every respawn in normal
-// play, so this is that same call one pass early. Away from it, how GD would
-// take the call is unknown, so it is not made.
+// cold replay would have them.
+// How GD 2.2081 does it (read from the game, 2026-10-22): resetLevel clears
+// PlayLayer::m_damageVerified (not in practice mode); while it is clear,
+// updateVerifyDamage puts the spike on player 1 at the top of every step,
+// before the player's update and collision pass; destroyPlayer with the spike
+// only sets the flag and returns, wherever the spike is, and never kills (it
+// returns first when player 1 is locked or the player has died). So the flag
+// is set here, through GD's own destroyPlayer, before anything is stepped:
+// the spike then stays where it was, off the player. (-ft guarded this on the
+// spike touching the player, which it never is between a rewind and the next
+// step - that made it do nothing.)
 void AbsensePathfinder::settleAnticheatSpike() {
     auto* pl = PlayLayer::get();
     if (!pl || !pl->m_anticheatSpike || !pl->m_player1 || pl->m_player1->m_isDead) return;
-    if (!pl->m_anticheatSpike->getObjectRect().intersectsRect(pl->m_player1->getObjectRect())) return;
+    if (pl->m_damageVerified) return;  // nothing re-armed it (practice mode, or no reset)
     m_settlingSpike = true;
     pl->destroyPlayer(pl->m_player1, pl->m_anticheatSpike);
     m_settlingSpike = false;
     m_stats.spikeSettles++;
+}
+
+void AbsensePathfinder::noteSpike(uint64_t frame) {
+    if (m_settlingSpike) {
+        if (m_spikeLines++ < 100) log("anticheat spike handed to GD after a rewind (frame %llu)", (unsigned long long)frame);
+        return;
+    }
+    m_spikeInPass = true;  // the collision pass running now met it
+    m_stats.spikeMet++;
+    if (m_spikeLines++ < 100) log("anticheat spike met in a collision pass (frame %llu)", (unsigned long long)frame);
+}
+
+void AbsensePathfinder::noteSpikePass(bool player2, uint64_t frame) {
+    m_stats.spikePasses++;
+    if (m_spikePassLines++ < 100)
+        log("the anticheat spike ended player %d's collision pass early at frame %llu (no postCollision: no slope launch)",
+            player2 ? 2 : 1, (unsigned long long)frame);
 }
 
 void AbsensePathfinder::finishRestore() {

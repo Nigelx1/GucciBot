@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-22-ft (Pathfinder: the spike is handed over only while the player touches it)"
+    "2026-10-22-fu (Pathfinder: the spike handover really happens (GD flag), counts per run, R5 picks only usable choices)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

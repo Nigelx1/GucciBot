@@ -70,6 +70,9 @@ class AbsensePathfinder {
         uint64_t routeBudget = 0;   // ... that ran out of room or time first
         uint64_t routeErrors = 0;   // ... that could not run (no gate ahead, busy)
         uint64_t spikeSettles = 0;  // rewinds after which GD was handed its anticheat spike (step 1a)
+        uint64_t spikeMet = 0;      // ... and times GD got it from a collision pass instead
+        uint64_t spikePasses = 0;   // real-player passes the spike ended early (each one skips a slope launch)
+        uint64_t legSafety = 0;     // route searches stopped by the clock before their step budget
         uint64_t routeTicks = 0;    // ticks those searches covered
         double routeMs = 0.0;       // and the time they took
         uint64_t routeWins = 0;     // route ideas that were the one played
@@ -105,6 +108,14 @@ class AbsensePathfinder {
     // GucciBot: the anticheat spike being handed to GD after a rewind (see
     // settleAnticheatSpike), for the hooks' log lines.
     bool settlingSpike() const { return m_settlingSpike; }
+    // From the hooks: GD got its anticheat spike (destroyPlayer), and a real
+    // player's collision pass ended early because of it (checkCollisions,
+    // which clears the per-pass mark before the pass). Counted per run, and
+    // logged up to a cap per run (docs/ROUTE_ENGINE_PLAN.md step 1a).
+    void noteSpike(uint64_t frame);
+    void clearSpikeInPass() { m_spikeInPass = false; }
+    bool spikeInPass() const { return m_spikeInPass; }
+    void noteSpikePass(bool player2, uint64_t frame);
     Phase phase() const { return m_phase; }
     const Stats& stats() const { return m_stats; }
 
@@ -389,6 +400,11 @@ public:
     Stats m_stats;
     std::mt19937 m_rng;
     bool m_settlingSpike = false;
+    bool m_spikeInPass = false;
+    int m_spikeLines = 0;      // log lines this run (capped)
+    int m_spikePassLines = 0;
+    std::string m_routeWhy;    // the last reason a route search could not run, this run
+    uint64_t m_routeWhyCount = 0;
     void settleAnticheatSpike();
 
     // Plan being committed (inputs for the ticks after the decision) and
@@ -458,6 +474,8 @@ public:
         uint64_t tick = 0;
         float x = 0.0f;
         float gateX = 0.0f;
+        int routeSurvived = -1;  // the longest a route idea that got to its gate lasted there
+        int horizon = 0;         // ... out of the decision's look-ahead
         bool reached = false;  // a route idea got to its gate alive there
         bool taken = false;    // ... and a route idea was the one played
     };

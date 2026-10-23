@@ -360,19 +360,17 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         if (p1)
             gucci::slopediag::g_checkCalls++;
 
+        // A real player's pass the anticheat spike ended early (GD skips
+        // postCollision, and a slope launch with it), while Absense's
+        // pathfinder drives - docs/ROUTE_ENGINE_PLAN.md step 1a. Marked by the
+        // destroyPlayer hook during this pass, so a death the pathfinder turns
+        // into a dead end (which also ends the pass early) does not count.
+        auto& absPf = ::Bot::get()->pathfinder();
+        bool const watchSpike = real && absPf.isRunning();
+        if (watchSpike) absPf.clearSpikeInPass();
         int const result = GJBaseGameLayer::checkCollisions(player, dt, ignoreDamage);
-
-        // A real player's pass that ended early without a death, while
-        // Absense's pathfinder drives: GD skipped postCollision (and a slope
-        // launch with it) for that tick - docs/ROUTE_ENGINE_PLAN.md step 1a.
-        if (real && result == 1 && !player->m_isDead && ::Bot::get()->pathfinder().isRunning()) {
-            static int s_lines = 0;
-            if (s_lines < 200) {
-                s_lines++;
-                geode::log::info("[AbsPF] collision pass for player {} ended early at frame {} without a death",
-                                 player == m_player2 ? 2 : 1, GucciEngine::get()->updater.getFrame());
-            }
-        }
+        if (watchSpike && result == 1 && absPf.spikeInPass())
+            absPf.noteSpikePass(player == m_player2, GucciEngine::get()->updater.getFrame());
 
         if (p1 && wasOn && !player->m_isOnSlope) {
             auto* gb = GucciEngine::get();

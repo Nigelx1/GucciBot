@@ -680,18 +680,11 @@ class $modify(GB7PlayLayer, PlayLayer) {
         if (obj && obj != m_anticheatSpike)
             ::Bot::get()->trailBuffer().reportKill(player, obj);
 
-        // Absense's pathfinder driving: when GD gets its anticheat spike, and
-        // whether it was handed over after a rewind (settleAnticheatSpike) or
-        // met in a collision pass (docs/ROUTE_ENGINE_PLAN.md step 1a).
-        if (obj == m_anticheatSpike && ::Bot::get()->pathfinder().isRunning()) {
-            static int s_lines = 0;
-            if (s_lines < 200) {
-                s_lines++;
-                geode::log::info("[AbsPF] anticheat spike to GD at frame {} ({})", gb->updater.getFrame(),
-                                 ::Bot::get()->pathfinder().settlingSpike() ? "handed over after a rewind"
-                                                                          : "met in a collision pass");
-            }
-        }
+        // Absense's pathfinder driving: GD getting its anticheat spike, handed
+        // over after a rewind or met in a collision pass (counted and logged
+        // per run there; docs/ROUTE_ENGINE_PLAN.md step 1a).
+        if (obj == m_anticheatSpike && player == m_player1 && ::Bot::get()->pathfinder().isRunning())
+            ::Bot::get()->pathfinder().noteSpike(gb->updater.getFrame());
 
         // The anticheat spike always goes to GD, whoever owns the run, as in
         // Silicate's conditionalDestroyPlayer. Until GD's destroyPlayer has
