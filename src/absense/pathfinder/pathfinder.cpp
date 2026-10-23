@@ -420,6 +420,7 @@ bool AbsensePathfinder::start() {
     m_livePending = false;
     m_ahead = Ahead{};
     m_aheadFailed = false;
+    m_freeze = Freeze{};
     m_confirmedKillers.clear();
     m_planKiller = 0;
     m_lessons.clear();
@@ -480,6 +481,9 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
     auto* bot = Bot::get();
     auto& updater = bot->updater();
     auto& pf = bot->practiceFix();
+    // Stopped while the game waited for a decision: that wait is over too
+    // (logged before the decision below is let go of, and in the run's total).
+    endFreeze("a decision when the run stopped");
 
     const bool done = m_completed;
     if (currentTick() >= m_stats.bestTick) rememberBest();
@@ -554,11 +558,15 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
     // pay for launching it - a third of a second inside one slice.
     absense::gpu::Client::get().forgetLevel();
     absense::memory::Store::get().close(m_stats.bestProgress);
+    // The stop line also says how often the game had to wait for a decision,
+    // and for how long in all (realtime; each wait has its own line, endFreeze).
     log("stopped: %s (%llu ticks committed, %llu decisions, %llu simulations, %llu backtracks, best tick %llu, %.1fs; "
+        "the game froze %llu times waiting for a decision, %.1f s in all; "
         "%d clicks in %.1f s of play: %.1f a second on average, %d in the busiest second)",
         reason.c_str(), (unsigned long long)m_stats.committedTicks, (unsigned long long)m_stats.decisions,
         (unsigned long long)m_stats.simulations, (unsigned long long)m_stats.backtracks,
-        (unsigned long long)m_stats.bestTick, m_stats.seconds, cps.clicks, cps.seconds, cpsAverage, cps.busiest);
+        (unsigned long long)m_stats.bestTick, m_stats.seconds, (unsigned long long)m_stats.freezes,
+        m_stats.freezeSeconds, cps.clicks, cps.seconds, cpsAverage, cps.busiest);
     // How fast the simulator really is (AI_PATHFINDER_PLAN.md, R0): every
     // time and memory estimate in the plan waits on these numbers.
     log("speed: %llu simulated ticks in %.1fs of deciding (%.0f ticks/s), %.1f ticks per simulation, "
@@ -891,6 +899,13 @@ void AbsensePathfinder::tick() {
                         if (!m_ahead.active) goto done;  // nothing to decide ahead of: wait for the plan
                     } else {
                         pauseLive();
+                        // GucciBot (2026-10-23): the plan ran out between two
+                        // frames with nothing decided about its end: the game
+                        // waits for that decision just as when the plan runs
+                        // out in liveInput, so it is a freeze too (it was not
+                        // counted). Not when the last tick's bookkeeping, run
+                        // by pauseLive, has just found a death or a drift.
+                        if (m_phase == Phase::Committing && !m_completed) beginFreeze();
                         m_phase = Phase::Deciding;
                     }
                     break;
@@ -909,6 +924,9 @@ void AbsensePathfinder::tick() {
                     break;
                 }
                 pauseLive();
+                // A freeze whose decision found a dead end ends here: going
+                // back is the repair's time, not a wait for a decision.
+                endFreeze("a decision that found a dead end, going back");
                 beginBacktrack();
                 goto done;
             default:
@@ -2644,6 +2662,7 @@ void AbsensePathfinder::decide() {
         const double tps = bot->updater().getTps();
         d = Decision{};
         d.active = true;
+        d.began = sliceStart;
         d.H = std::clamp((int)std::lround(std::max(kLookahead, kMinLookahead) * tps), kMinHorizon, kMaxHorizon);
         d.K = std::max(6, d.H / 3);
         d.margin = std::max(3, d.H / 8);
@@ -4311,6 +4330,7 @@ void AbsensePathfinder::decide() {
     }
     m_stats.lastDecision = buf;
     log("%s [%zu of %zu ideas tried]%s", buf, triedCount, ideaCount, ahead ? " (ahead)" : "");
+    endFreeze("this decision");  // if the game was waiting for it (it plays again below)
     if (m_repair.active) resumeFrom(tick);
     m_phase = Phase::Committing;
     // Realtime: the game plays the plan on its own clock from here.
@@ -4465,7 +4485,7 @@ void AbsensePathfinder::liveInput() {
         // the game never made.
         m_pauseAt = m_liveNextTick;
         pauseLive();
-        m_stats.freezes++;
+        beginFreeze();
         m_phase = Phase::Deciding;
         return;
     }
@@ -4485,6 +4505,66 @@ void AbsensePathfinder::liveInput() {
 
 void AbsensePathfinder::afterLiveTick() {
     // Nothing here any more: see liveInput().
+}
+
+// GucciBot (2026-10-23): the plan ran out before the decision about its end
+// was made, and the game waits for it - a freeze. Counted here and logged when
+// it ends (endFreeze), with what was being decided when the game stopped.
+// Four Deadlocked runs froze 127 times for 206 s, up to 14 s at once, and the
+// log had nothing to say which decisions the game was waiting on.
+void AbsensePathfinder::beginFreeze() {
+    m_stats.freezes++;
+    m_freeze = Freeze{};
+    m_freeze.on = true;
+    m_freeze.at = std::chrono::steady_clock::now();
+    m_freeze.tick = m_liveNextTick;
+    m_freeze.begun = m_ahead.active;
+    if (m_freeze.begun) {
+        m_freeze.stage = m_decision.stage;
+        m_freeze.into = m_decision.active ? secondsSince(m_decision.began) : 0.0;  // (begun, not set up yet)
+    } else {
+        // What kept beginAhead from starting one.
+        m_freeze.why = m_aheadFailed                        ? "the decision ahead of it found a dead end"
+                       : m_planKnownDeath != UINT64_MAX     ? "the plan was played into a death, for the game's word"
+                       : separateNow()                      ? "two-player mode decides from the real state"
+                                                            : "none could begin";
+    }
+}
+
+// GucciBot (2026-10-23): the game has stopped waiting (see beginFreeze). One
+// line a freeze: how long, where, what was being decided when the game
+// stopped, and what kind of decision it waited for - flying or not (its own
+// start's kind), hard or not (it needed more than the cheap ideas), and a
+// route drive's or not.
+void AbsensePathfinder::endFreeze(const char* what) {
+    if (!m_freeze.on) return;
+    m_freeze.on = false;
+    const double waited = secondsSince(m_freeze.at);
+    m_stats.freezeSeconds += waited;
+    const Decision& d = m_decision;
+    auto stageName = [](Decision::Stage s) -> const char* {
+        switch (s) {
+            case Decision::Route: return "its route legs";
+            case Decision::Steers: return "the steered ideas";
+            case Decision::Gpu: return "the card";
+            case Decision::GpuFull: return "the card's best";
+            case Decision::Search: return "the search";
+            case Decision::Rest: return "the other ideas";
+            case Decision::Verdict: return "the verdict";
+            case Decision::Trim: return "the trim";
+        }
+        return "?";
+    };
+    char ahead[160];
+    if (m_freeze.begun) {
+        std::snprintf(ahead, sizeof(ahead), "begun ahead %.2f s before the plan ran out, at %s then", m_freeze.into,
+                      stageName(m_freeze.stage));
+    } else {
+        std::snprintf(ahead, sizeof(ahead), "nothing decided ahead: %s", m_freeze.why);
+    }
+    log("tick %llu: the game waited %.2f s for %s (%s); %s, %s%s", (unsigned long long)m_freeze.tick, waited, what,
+        ahead, d.flying ? "flying" : "on the ground", d.hard ? "hard" : "not hard",
+        d.drivePass ? ", a route drive" : d.drives ? ", a route drive today's engine decided" : "");
 }
 
 void AbsensePathfinder::giveUp(const std::string& reason) {

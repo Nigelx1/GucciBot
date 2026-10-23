@@ -64,6 +64,7 @@ class AbsensePathfinder {
         uint64_t humanWins = 0;     // ... that were the one played
         uint64_t aheadDecisions = 0; // decisions made about where a plan ends while it was still playing
         uint64_t freezes = 0;       // times the game had to wait for a decision (realtime)
+        double freezeSeconds = 0.0; // ... and how long it waited, all of them together
         uint64_t routeLegs = 0;     // step R4: physics-map searches to the planned route's next gate
         uint64_t routeFound = 0;    // ... that found a way there
         uint64_t routeNone = 0;     // ... where nothing alive got there
@@ -230,6 +231,7 @@ public:
         int window = 0;             // ticks of the plan that will be played (the rest is decided again)
         bool flying = false;        // the player flies (ship, UFO, wave, swing): the window is short
         uint64_t tick = 0;
+        std::chrono::steady_clock::time_point began{};  // when it was set up (a freeze's line says how long it had run)
         bool held = false;
         std::vector<Candidate> candidates;
         std::vector<size_t> tried;  // indexes of the judged ideas
@@ -656,6 +658,22 @@ public:
     void cancelAhead();
     bool afterTick(uint64_t tick, const TickInput& in, const TickInput& in2);
     uint64_t m_liveNextTick = 0;  // the tick the next live input is for
+    // GucciBot: a freeze - the plan ran out before the decision about its end
+    // was made, and the game waits - from where it stopped to the decision
+    // that ends it. Nothing else logs one: the count (m_stats.freezes) was
+    // all there was, and only on MCP. beginFreeze notes it, endFreeze logs it.
+    struct Freeze {
+        bool on = false;
+        std::chrono::steady_clock::time_point at{};
+        uint64_t tick = 0;                         // where the plan ran out
+        bool begun = false;                        // a decision about it was being made ahead then ...
+        Decision::Stage stage = Decision::Steers;  // ... and was at this stage
+        double into = 0.0;                         // ... after this long (seconds)
+        const char* why = "";                      // none was: why not
+    };
+    Freeze m_freeze;
+    void beginFreeze();
+    void endFreeze(const char* what);
     // Where the game was meant to stop (realtime stops land a few ticks
     // late: the frame's remaining ticks still run); it goes back there.
     uint64_t m_pauseAt = UINT64_MAX;
