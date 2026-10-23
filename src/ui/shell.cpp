@@ -144,10 +144,51 @@ namespace gucci::ui {
                 gb->*(s.field) = mod->getSavedValue<bool>(s.key, gb->*(s.field));
             for (auto const& f : kUiLoadedFloats)
                 gb->*(f.field) = static_cast<float>(mod->getSavedValue<double>(f.key, gb->*(f.field)));
+            auto* brrr = BigBrrrManager::get();
+            brrr->shakeEnabled = mod->getSavedValue<bool>("brrr_shake", brrr->shakeEnabled);
+            brrr->flickerIntensity = std::clamp(
+                static_cast<float>(mod->getSavedValue<double>("brrr_flicker", brrr->flickerIntensity)), 0.f, 1.f);
         }
 
         void saveEngineSwitch(const char* key, bool value) {
             Mod::get()->setSavedValue(key, value);
+        }
+
+        // GucciBot (2026-10-23): saved values reach the disk (saved.json) about
+        // two seconds after the last change, and when the menu closes. Geode
+        // writes saved.json only when GD saves (quitting the game normally),
+        // so a crash, a killed game or a phone closing it in the background
+        // lost every change since then (anticroom's antics-counter beta.6
+        // changelog: "Fixed settings resetting every time you reopen the game
+        // for some people"). Every saved value counts, whoever set it: they're
+        // compared with what was last written twice a second, never every
+        // frame, and the write waits until they stop changing, so a slider
+        // being dragged is written once, after it stops.
+        void writeSavedValues(bool now) {
+            using Clock = std::chrono::steady_clock;
+            static std::optional<matjson::Value> s_written;  // as last written (at first, as loaded)
+            static matjson::Value s_seen;                     // as at the last look
+            static Clock::time_point s_lastLook{}, s_changedAt{};
+            auto const t = Clock::now();
+            if (!now && t - s_lastLook < std::chrono::milliseconds(500))
+                return;
+            s_lastLook = t;
+            auto* mod = Mod::get();
+            auto const& saved = mod->getSaveContainerConst();
+            if (!s_written) {
+                s_written = saved;
+                s_seen = saved;
+                return;
+            }
+            if (!(saved == s_seen)) {
+                s_seen = saved;
+                s_changedAt = t;
+            }
+            if (saved == *s_written || (!now && t - s_changedAt < std::chrono::seconds(2)))
+                return;
+            if (auto res = mod->saveData(); !res)
+                log::warn("[GucciBot] couldn't write the saved settings: {}", res.unwrapErr());
+            s_written = saved;
         }
     } // namespace
 
@@ -1743,9 +1784,14 @@ namespace gucci::ui {
             bool brrrOn = brrr->enabled;
             if (kit::SwitchRow("BIG BRRRR", nullptr, &brrrOn))
                 brrr->setEnabled(brrrOn);
-            kit::SwitchRow("Shake", "The menu shakes with the bass", &brrr->shakeEnabled);
-            kit::SliderRow("Flicker", "How hard the menu flickers with the bass", &brrr->flickerIntensity, 0.f, 1.f,
-                           "%.2f");
+            // GucciBot (2026-10-23): Shake and Flicker are saved (they reset at
+            // every launch); the switch itself stays per launch, as it starts
+            // the music.
+            if (kit::SwitchRow("Shake", "The menu shakes with the bass", &brrr->shakeEnabled))
+                saveEngineSwitch("brrr_shake", brrr->shakeEnabled);
+            if (kit::SliderRow("Flicker", "How hard the menu flickers with the bass", &brrr->flickerIntensity, 0.f,
+                               1.f, "%.2f"))
+                saveFloat("brrr_flicker", brrr->flickerIntensity);
             if (kit::Button("Open the BIG BRRRR folder"))
                 brrr->openBrrrFolder();
             kit::EndCard();
@@ -2163,9 +2209,12 @@ namespace gucci::ui {
             // The master switch's once-a-frame step: here the game's update for
             // the frame is over, so its code and hooks can come out or go back.
             botswitch::service();
+            bool const menuClosed = std::exchange(g_menuClosed, false);
             // A text box lets go of the keyboard after a click on the game, or
             // when the menu closes (ui/touch.cpp).
-            touch::letGoOfKeyboard(std::exchange(g_menuClosed, false));
+            touch::letGoOfKeyboard(menuClosed);
+            // Settings to disk a moment after they change, and as the menu closes.
+            writeSavedValues(menuClosed);
 #if defined(GEODE_IS_MOBILE)
             // Before any window is drawn, so a scroll lands this frame.
             touch::frame();
