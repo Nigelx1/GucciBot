@@ -4760,7 +4760,9 @@ double FrameWindowAnalyzer::depPlaced(size_t k) const {
 // GucciBot (2026-10-23): whether a Buffer test (the input and its release
 // moved, the rest left) may use this shift at this alignment: the room
 // startDependentPoint worked out, by bufferShiftValid's rule, with its
-// release kept after any input of its player inside its hold.
+// release kept after any input of its player inside its hold, and the other
+// half of its pair (the 2-player fixes) kept among its own flag's the same
+// way.
 bool FrameWindowAnalyzer::depBufferValid(int64_t shift) const {
     return shift >= m_depBufLo && shift <= m_depBufHi;
 }
@@ -4934,6 +4936,60 @@ void FrameWindowAnalyzer::startDependentPoint() {
             holdLo = firstOnOrAfter(origin(rel),
                                     std::floor(this->depPlaced(inside)));
     }
+    // GucciBot (2026-10-23): the 2-player fixes in a 1-player level. The
+    // other half of its pair (pairDualClicks), which a Buffer test moves with
+    // it (placeAt), keeps the same room among the inputs of its own flag:
+    // after the one before it, before the one after it, its release before
+    // the input after that, and in order with one inside its hold. The
+    // count's Buffer try checks it the same way (bufferShiftValid). A 1-player
+    // level plays the macro in its own order, so a half moved past one of
+    // them stalled the replay. The other half shares its frame and its
+    // release's, so its room is worked out from the same positions. Without
+    // pairs these stay as wide as the search distance and change nothing.
+    int64_t halfLo = -reach;     // the least shift, for either kind of test
+    int64_t halfBufHi = reach;   // the most, for a whole-frame Buffer try
+    int64_t halfSubHi = reach;   // the most, for a sub-tick shift
+    if (size_t const half = this->partnerOf(aiB); half != NO_INDEX) {
+        bool const hp2 =
+            Bot::get()->replaySystem().m_actionAtom.m_actions[half].m_player2;
+        if (size_t const prev = this->prevActionFor(half, hp2);
+            prev != NO_INDEX) {
+            halfLo = firstOnOrAfter(bPos,
+                                    std::floor(this->depPlaced(prev)) + 1.0);
+            // Unless this alignment moved it (the other half of the input
+            // before or of its release), it never keeps it from its own
+            // timing, as above.
+            size_t const aiA = m_samples[pair.a].actionIndex;
+            size_t const relA = this->pairedReleaseFor(aiA);
+            size_t const its = this->partnerOf(prev);
+            if (its == NO_INDEX || (its != aiA && its != relA))
+                halfLo = std::min<int64_t>(halfLo, 0);
+        }
+        size_t const hNext = this->nextActionFor(half, hp2);
+        size_t const hRel = this->pairedReleaseFor(half);
+        int64_t hPress = reach;
+        if (hNext != NO_INDEX)
+            hPress = lastBefore(bPos, std::floor(this->depPlaced(hNext)));
+        int64_t hRelease = reach;
+        if (hRel != NO_INDEX)
+            if (size_t const after = this->nextActionFor(hRel, hp2);
+                after != NO_INDEX)
+                hRelease = lastBefore(origin(hRel),
+                                      std::floor(this->depPlaced(after)));
+        int64_t hHoldHi = reach;
+        if (hRel != NO_INDEX && hNext != hRel) {
+            hHoldHi =
+                lastBefore(bPos, std::floor(this->depPlaced(hNext)) + 1.0);
+            if (size_t const inside = this->prevActionFor(hRel, hp2);
+                inside != NO_INDEX && inside != half)
+                halfLo = std::max(
+                    halfLo, firstOnOrAfter(origin(hRel),
+                                           std::floor(this->depPlaced(inside))));
+        }
+        halfBufHi = std::min(hPress, hRelease);
+        halfSubHi = std::min(
+            std::max<int64_t>(hRel != NO_INDEX ? hRelease : hPress, 0), hHoldHi);
+    }
     if (pair.resB > 1) {
         // A sub-tick shift moves it with its release only, as the count's
         // sub-tick pass does. (That pass only warns when one crosses the
@@ -4944,16 +5000,16 @@ void FrameWindowAnalyzer::startDependentPoint() {
         m_depHi = std::min(
             {m_depHi,
              std::max<int64_t>(rel != NO_INDEX ? releaseRoom : pressRoom, 0),
-             holdHi});
-        m_depLo = std::max(m_depLo, holdLo);
+             holdHi, halfSubHi});
+        m_depLo = std::max({m_depLo, holdLo, halfLo});
         m_depBufLo = m_depLo;
         m_depBufHi = m_depHi;
     } else {
         // bufferShiftValid's rule as it reads, for the Buffer try of a
         // whole-frame shift that died retimed, and its release kept after
         // an input inside its hold, as above.
-        m_depBufLo = std::max(m_depLo, holdLo);
-        m_depBufHi = std::min({reach, pressRoom, releaseRoom});
+        m_depBufLo = std::max({m_depLo, holdLo, halfLo});
+        m_depBufHi = std::min({reach, pressRoom, releaseRoom, halfBufHi});
     }
 
     if (m_depLo > m_depHi) return;
