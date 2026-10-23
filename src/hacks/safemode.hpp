@@ -2,8 +2,11 @@
 
 // Auto safe mode (dihmaster500's ask; Nigel's spec, 2026-10-12). While a cheat
 // is on, a run doesn't count: finishing the level, a new best and a death's %
-// save nothing and send nothing (hacks/safemode.cpp has how; GD's own test-mode
-// flag, which start positions use, is never left changed). Invisible: no label.
+// save nothing and send nothing, and GD's stats, achievements and the level's
+// attempt and jump counts don't move (hacks/safemode.cpp has how; GD's own
+// test-mode flag, which start positions use, is never left changed). The Safe
+// mode switch (Hacks > Gameplay) does the same, cheat or not. Invisible: no
+// label.
 //
 // With auto safe mode off, a small red dot shows in the top-left corner while a
 // cheat is on (or was, this attempt), drawn into the game so recordings and

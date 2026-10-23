@@ -10,7 +10,10 @@
 
 #include <Geode/Geode.hpp>
 #include <Geode/modify/GJGameLevel.hpp>
+#include <Geode/modify/GameManager.hpp>
+#include <Geode/modify/GameStatsManager.hpp>
 #include <Geode/modify/PlayLayer.hpp>
+#include <Geode/modify/PlayerObject.hpp>
 #include <Geode/utils/hash.hpp>
 
 #include <array>
@@ -203,7 +206,7 @@ namespace {
     // protectedMode and nothing read it - a half-port since the -bz menu (the
     // old menu only saved it), and it wasn't saved either, so it was off again
     // at every launch. Silicate's SafeMode.cpp is the full version; the stats,
-    // achievements and attempt counts it also keeps are still to come.
+    // achievements and attempt counts it also keeps are at the end of this file.
     bool shielded() {
         if (GucciEngine::get()->protectedMode)
             return true;
@@ -283,5 +286,110 @@ class $modify(GB7SafeModeLevel, GJGameLevel) {
         if (PlayLayer::get() && shielded())
             return;
         GJGameLevel::savePercentage(percent, isPracticeMode, clicks, attempts, isChkValid);
+    }
+};
+
+// GucciBot (2026-10-23): the rest of Silicate's safe mode (its
+// src/hooks/SafeMode.cpp, by peony, GPL-3), under the same rule as the rest of
+// this file: while a run is kept from counting, GD's stats aren't added to,
+// achievements aren't reported, and the level's attempts and jumps and the
+// session's attempt counts stay where they were. Hooked very late, as Silicate
+// does, so only GD's own change is undone.
+//
+// Silicate's version is written for GD 2.2091. It also keeps the level's
+// practice attempts and raises a "speed changed" flag around a death and a
+// completion, both through raw offsets into 2.2091's classes. Neither is
+// ported: 2.2081 has no practice attempt count (2.209 added it), and the
+// offsets don't hold here; a death's percent and a completion are kept from
+// counting above, the way QOLMod does it.
+namespace {
+    // Puts a value back as it was when the scope ends (Silicate's KeepValue).
+    template <class T>
+    class KeepValue {
+    public:
+        explicit KeepValue(T& value) : m_value(value), m_saved(value) {}
+        ~KeepValue() {
+            m_value = m_saved;
+        }
+        KeepValue(KeepValue const&) = delete;
+        KeepValue& operator=(KeepValue const&) = delete;
+
+    private:
+        T& m_value;
+        T m_saved;
+    };
+} // namespace
+
+class $modify(GB7SafeModeCounts, PlayLayer) {
+    static void onModify(auto& self) {
+        (void)self.setHookPriority("PlayLayer::resetLevel", Priority::VeryLate);
+        (void)self.setHookPriority("PlayLayer::updateAttempts", Priority::VeryLate);
+    }
+
+    // A new attempt: the level's attempt count. (Silicate keeps the session's
+    // in updateAttempts, which a reset calls; both are kept in both here, in
+    // case 2.2081 counts them in the other one.)
+    void resetLevel() {
+        if (!m_level || !shielded())
+            return PlayLayer::resetLevel();
+        auto* gm = GameManager::get();
+        KeepValue attempts(m_level->m_attempts);
+        KeepValue session(gm->m_sessionAttempts);
+        KeepValue session2(gm->m_sessionAttempts2);
+        KeepValue normal(gm->m_sessionNormalAttempts);
+        PlayLayer::resetLevel();
+    }
+
+    void updateAttempts() {
+        if (!m_level || !shielded())
+            return PlayLayer::updateAttempts();
+        auto* gm = GameManager::get();
+        KeepValue attempts(m_level->m_attempts);
+        KeepValue session(gm->m_sessionAttempts);
+        KeepValue session2(gm->m_sessionAttempts2);
+        KeepValue normal(gm->m_sessionNormalAttempts);
+        PlayLayer::updateAttempts();
+    }
+};
+
+class $modify(GB7SafeModeJumps, PlayerObject) {
+    static void onModify(auto& self) {
+        (void)self.setHookPriority("PlayerObject::incrementJumps", Priority::VeryLate);
+    }
+
+    void incrementJumps() {
+        auto* pl = PlayLayer::get();
+        if (!pl || !pl->m_level || !shielded())
+            return PlayerObject::incrementJumps();
+        KeepValue jumps(pl->m_level->m_jumps);
+        PlayerObject::incrementJumps();
+    }
+};
+
+// Every stat GD adds to in a level: jumps, attempts, orbs, stars and the rest.
+class $modify(GB7SafeModeStats, GameStatsManager) {
+    static void onModify(auto& self) {
+        (void)self.setHookPriority("GameStatsManager::incrementStat", Priority::VeryLate);
+    }
+
+    void incrementStat(char const* key, int amount) {
+        if (PlayLayer::get() && shielded())
+            return;
+        GameStatsManager::incrementStat(key, amount);
+    }
+};
+
+// Silicate hooks AchievementManager::reportAchievementWithID, which has no
+// Windows address in 2.2081's bindings; GameManager's has one on every
+// platform.
+class $modify(GB7SafeModeAchievements, GameManager) {
+    static void onModify(auto& self) {
+        (void)self.setHookPriority("GameManager::reportAchievementWithID", Priority::VeryLate);
+    }
+
+    void reportAchievementWithID(char const* key, int percent, bool dontNotify) {
+        if (PlayLayer::get() && shielded())
+            return;
+        GameManager::reportAchievementWithID(key, percent, dontNotify);
     }
 };
