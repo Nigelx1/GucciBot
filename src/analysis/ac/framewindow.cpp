@@ -1985,7 +1985,14 @@ void FrameWindowAnalyzer::beginShift(int64_t shift, ShiftMode mode) {
     if (m_fine > 1 && mode == ShiftMode::Retime) {
         mode = ShiftMode::Buffer;
 
-        if (shift != 0 && !this->bufferShiftValid(shift)) {
+        // GucciBot (2026-10-23): not for Faster sub-tick search's test of the
+        // tick past the edge (only ever run with the switch on). That leg is
+        // outside the window: when it dies, as it should, it adds nothing to
+        // it, and when it survives the side is searched the usual way, whose
+        // legs warn for themselves. On the later side the usual search seldom
+        // reaches that tick, so the warning only set the two runs' logs apart.
+        if (shift != 0 && !(m_seedLeg && m_seedOuterStep) &&
+            !this->bufferShiftValid(shift)) {
             m_fineCrossedNeighbour = true;
             FWLOG(
                 "[fw][leg {}] click {} slot={:+d} crosses a neighbouring "
