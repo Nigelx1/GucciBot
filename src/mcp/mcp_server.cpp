@@ -257,62 +257,70 @@ namespace gucci::mcp {
     // a crash generator.
     matjson::Value Server::callToolOnMainThread(std::string const& name,
                                                 matjson::Value const& args) {
-        matjson::Value result;
-        std::string error;
-
+        // GucciBot (2026-10-23): the call's state is on the heap, shared with
+        // pump(). It was this function's locals, captured by reference: a tool
+        // the main thread took up just as the 10 s wait gave up (a pathfinder
+        // decision freezing the game) wrote its result into a stack frame that
+        // was gone - the crash of 2026-10-23 05:36 at the result's assignment -
+        // and its finish set the shared done flag the next call was waiting on.
+        auto call = std::make_shared<Call>();
+        call->name = name;
+        call->args = args;
         {
             std::lock_guard lock(m_callMutex);
-            m_callDone = false;
-            m_callPending = true;
-            m_callFn = [this, &name, &args, &result, &error] {
-                for (auto const& t : m_tools) {
-                    if (t.name != name)
-                        continue;
-                    try {
-                        result = t.run(args);
-                    } catch (ToolError const& e) {
-                        error = e.message;
-                    } catch (std::exception const& e) {
-                        error = std::string("internal error: ") + e.what();
-                    } catch (...) {
-                        error = "internal error";
-                    }
-                    return;
-                }
-                error = "no tool called " + name;
-            };
+            m_call = call;
         }
 
         {
             std::unique_lock lock(m_callMutex);
             // If the game is not pumping -- hard paused, or shutting down --
             // this must not park a socket thread forever.
-            if (!m_callCv.wait_for(lock, std::chrono::seconds(10),
-                                   [this] { return m_callDone; })) {
-                m_callPending = false;
+            if (!m_callCv.wait_for(lock, std::chrono::seconds(10), [&call] { return call->done; })) {
+                // Not run at all if pump() has not taken it yet; if it is
+                // running, it finishes into the call, which it holds too.
+                call->abandoned = true;
+                if (m_call == call)
+                    m_call.reset();
                 throw ToolError("the game did not run the tool within 10s (is it frozen?)");
             }
         }
 
-        if (!error.empty())
-            throw ToolError(error);
-        return result;
+        if (!call->error.empty())
+            throw ToolError(call->error);
+        return call->result;
     }
 
     void Server::pump() {
-        std::function<void()> fn;
+        std::shared_ptr<Call> call;
         {
             std::lock_guard lock(m_callMutex);
-            if (!m_callPending)
+            call = std::move(m_call);
+            m_call.reset();
+            if (!call || call->abandoned)
                 return;
-            fn = m_callFn;
-            m_callPending = false;
         }
-        if (fn)
-            fn();
+        matjson::Value result;
+        std::string error = "no tool called " + call->name;
+        for (auto const& t : m_tools) {
+            if (t.name != call->name)
+                continue;
+            error.clear();
+            try {
+                result = t.run(call->args);
+            } catch (ToolError const& e) {
+                error = e.message;
+            } catch (std::exception const& e) {
+                error = std::string("internal error: ") + e.what();
+            } catch (...) {
+                error = "internal error";
+            }
+            break;
+        }
         {
             std::lock_guard lock(m_callMutex);
-            m_callDone = true;
+            call->result = std::move(result);
+            call->error = std::move(error);
+            call->done = true;
         }
         m_callCv.notify_all();
     }

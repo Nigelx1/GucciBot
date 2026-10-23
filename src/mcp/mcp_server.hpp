@@ -26,6 +26,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -92,12 +93,21 @@ namespace gucci::mcp {
         std::vector<Tool> m_tools;
 
         // One in-flight main-thread call at a time: the socket thread parks
-        // here until pump() has run the tool and filled in the result.
+        // here until pump() has run the tool and filled in the result. Each
+        // call's state is its own and shared with pump(): a call the socket
+        // thread has given up on (the 10 s wait) can still be running on the
+        // main thread, and it needs somewhere to write that is still there.
+        struct Call {
+            std::string name;
+            matjson::Value args;
+            matjson::Value result;
+            std::string error;
+            bool done = false;       // pump() has run it (under m_callMutex)
+            bool abandoned = false;  // the socket thread stopped waiting (under m_callMutex)
+        };
         std::mutex m_callMutex;
         std::condition_variable m_callCv;
-        bool m_callPending = false;
-        bool m_callDone = false;
-        std::function<void()> m_callFn;
+        std::shared_ptr<Call> m_call;  // queued for pump(), not yet taken
     };
 
     // Everything the server does, appended to guccibot_mcp.log in the mod's
