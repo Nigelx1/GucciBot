@@ -391,12 +391,11 @@ namespace gucci {
         // outside platformer: it skips the flip while m_isPlatformer is set
         // (processQueuedButtons passes the queue's side straight in, and
         // UILayer's keys queue fixed sides). So in a 2-player level it is
-        // playerFlipped, and in a 2-player platformer (Force platformer
-        // included) the player's own side. In a 1-player level a side picks
-        // no player -- a click moves player 1, and player 2 with it in a dual
-        // -- so it stays the player's own, as with the setting off, and
-        // GucciBot's readers of the side (the CPS count, click sounds, the
-        // Survival Indicator) see the click as they do then.
+        // playerFlipped outside platformer, and the player's own side in a
+        // platformer (Force platformer included). In a 1-player level a side
+        // picks no player -- a click moves player 1, and player 2 with it in
+        // a dual -- so it stays the player's own, as with the setting off, and
+        // click sounds, which go by side, play as they do then.
         bool sideFor(GJBaseGameLayer* layer, bool player2) {
             bool const twoPlayer =
                 layer && layer->m_levelSettings && layer->m_levelSettings->m_twoPlayerMode;
@@ -412,6 +411,15 @@ namespace gucci {
             bool const twoPlayer =
                 layer && layer->m_levelSettings && layer->m_levelSettings->m_twoPlayerMode;
             return twoPlayer && (layer->m_isPlatformer ? playerFlipped(flag) : flag);
+        }
+        // The player a button side moves (true: player 2), as GD hands it
+        // over (see sideFor): in a 2-player level the other player's while
+        // the setting is on, outside platformer; in a 1-player level player 1
+        // (and player 2 with it in a dual): false.
+        bool sideMovesPlayer2(GJBaseGameLayer* layer, bool side) {
+            bool const twoPlayer =
+                layer && layer->m_levelSettings && layer->m_levelSettings->m_twoPlayerMode;
+            return twoPlayer && (layer->m_isPlatformer ? side : playerFlipped(side));
         }
 
         void save(const std::filesystem::path& path, bool noOverwrite = false);

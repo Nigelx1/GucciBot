@@ -501,8 +501,12 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         // The macro's jump presses count toward the HUD's CPS while it plays
         // (Silicate's spot), before the CBF hand-off below can return with a
         // sub-tick press (review 2026-10-20).
+        // By the player the press moves (flagMovesPlayer2), not its stored
+        // flag: a 1-player macro recorded with Flip 2-Player Controls on
+        // stores every press as player 2's, and player 2's count isn't shown
+        // in a 1-player level.
         if (button == 1 && action.m_holding)
-            cps::push(action.m_player2);
+            cps::push(gb->replay.flagMovesPlayer2(this, action.m_player2));
 
         // Tell anticroom's analyzer the moment a press is actually applied,
         // and in what state the player was when it landed -- notably whether
@@ -651,19 +655,25 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         if (button == 1) {
             triggerClickAudio(!player1, button, pressed);
             if (!gb->isPlaying()) {
+                // GucciBot (2026-10-23): the player the click moves, not its
+                // side. Flip 2-Player Controls hands a side to the other player
+                // in a 2-player level outside platformer, and in a 1-player
+                // level both sides are player 1's: the readers below score or
+                // count the click as that player's.
+                bool const mover2 = gb->replay.sideMovesPlayer2(this, !player1);
                 // The Survival Indicator's flash and accuracy (hacks/indicator.hpp).
                 if (gb->survivalIndicator)
-                    indicator::onRealClick(!player1, pressed);
+                    indicator::onRealClick(mover2, pressed);
                 if (pressed) {
                     CalibrationService::get().onRealClick();
-                    cps::push(!player1);
+                    cps::push(mover2);
                 }
                 // The practice trainers' click bars and Click Indicators
                 // scoring: timed off the input event itself, in the frame the
                 // click really arrived in, not polled from the menu.
                 trainers::onLevelInput(pressed);
                 // Click Indicators' scoring, against the macro it shows.
-                clickind::onRealClick(!player1, pressed);
+                clickind::onRealClick(mover2, pressed);
             }
         }
         // GucciBot records a press twice over -- here, and from the queue in

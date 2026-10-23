@@ -166,10 +166,14 @@ namespace scbf {
 
         // A real press made while stepped into the tick records at this split
         // (LiveRecorder::place reads fraction()); run the tick so it lands.
-        auto const changesHold = [pl](PlayerButtonCommand const& cmd) {
+        auto const changesHold = [pl, gb](PlayerButtonCommand const& cmd) {
             if (!scbf::isLivePress(cmd))
                 return false;
-            auto* player = cmd.m_isPlayer2 ? pl->m_player2 : pl->m_player1;
+            // GucciBot (2026-10-23): the player the queued side moves (Flip
+            // 2-Player Controls swaps them outside platformer; player 1 in a
+            // 1-player level), not the side read as a player.
+            auto* player =
+                gb->replay.sideMovesPlayer2(pl, cmd.m_isPlayer2) ? pl->m_player2 : pl->m_player1;
             if (!player)
                 return false;
             auto const it = player->m_holdingButtons.find(static_cast<int>(cmd.m_button));

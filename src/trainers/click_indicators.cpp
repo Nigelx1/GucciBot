@@ -138,8 +138,13 @@ namespace gucci::clickind {
                 }
                 if (a.m_type != gb::ActionType::Jump)
                     continue;
-                int const p = a.m_player2 ? 1 : 0;
-                if (a.m_player2)
+                // GucciBot (2026-10-23): by the player the click moves when
+                // played (flagMovesPlayer2), as live clicks are scored, not by
+                // its stored flag: a 1-player macro recorded with Flip
+                // 2-Player Controls on stores every click as player 2's.
+                bool const second = gb->replay.flagMovesPlayer2(pl, a.m_player2);
+                int const p = second ? 1 : 0;
+                if (second)
                     src.dual = true;
                 double const f = (double)a.m_frame + a.m_subtick;
                 if (a.m_holding) {
