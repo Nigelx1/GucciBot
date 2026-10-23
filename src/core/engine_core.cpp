@@ -620,6 +620,8 @@ namespace gucci {
         return dir / (gb->replayName + ".brrr");
     }
 
+    static fs::path sidecarPath(const fs::path& macroPath, const char* ext);
+
     void GucciReplaySystem::backupExisting(const fs::path& path) {
         if (!fs::exists(path))
             return;
@@ -627,6 +629,23 @@ namespace gucci {
         backup.replace_extension(".brrr.bak");
         std::error_code ec;
         fs::copy_file(path, backup, fs::copy_options::overwrite_existing, ec);
+        if (ec)
+            return;
+        // GucciBot (2026-10-23): the frame windows go with it, as the backup's
+        // own sidecars (replays/sidecars/<name>.brrr.bak.fwac and .fw). A new
+        // recording saved over a macro drops its windows (forgetMacroWindows),
+        // typed ones included, and no Calculate run gives those back, so a
+        // backup without them brought back the clicks alone. A macro with none
+        // leaves its backup with none.
+        for (char const* ext : {".fwac", ".fw"}) {
+            auto const from = sidecarPath(path, ext);
+            auto const to = sidecarPath(backup, ext);
+            std::error_code sideEc;
+            if (fs::exists(from, sideEc))
+                fs::copy_file(from, to, fs::copy_options::overwrite_existing, sideEc);
+            else
+                fs::remove(to, sideEc);
+        }
     }
 
     void GucciReplaySystem::createBackup() {
