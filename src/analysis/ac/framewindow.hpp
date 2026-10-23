@@ -710,7 +710,8 @@ class FrameWindowAnalyzer {
     void spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
                      FrameWindowTier const* tier);
     std::optional<cocos2d::CCPoint> dualTwin(PlayLayer* pl,
-                                             FrameWindowMark const& mk) const;
+                                             FrameWindowMark const& mk,
+                                             char const** from = nullptr) const;
     void rebuildHud(PlayLayer* pl);
     void updateLStarHud(PlayLayer* pl);
     // Frames of the inputs handed to the L* solver, in the order it sorted

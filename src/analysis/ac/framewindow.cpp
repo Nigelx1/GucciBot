@@ -340,6 +340,54 @@ static bool isMeasurableInput(slc::Action const& action) {
             return false;
     }
 }
+
+// GucciBot (2026-10-23, issue #27): the player an input moves. Its stored flag
+// is the button side XOR "Flip 2-Player Controls" (addInputToReplay), so in a
+// 2-player level it is un-flipped the way playback does it. In a 1-player
+// level the flag says nothing about the player: a click moves player 1, and
+// player 2 with it while the two are in a dual. A macro recorded with Flip
+// 2-Player Controls on stores every input of a 1-player level as player 2
+// (some imports do too); the capture read player 2 for those, so their
+// markers stood on player 2 in a dual and nowhere after it.
+static bool movesPlayer2(PlayLayer* pl, bool flag) {
+    bool const twoPlayer =
+        pl && pl->m_levelSettings && pl->m_levelSettings->m_twoPlayerMode;
+    return twoPlayer && Bot::get()->replaySystem().playerFlipped(flag);
+}
+
+// GucciBot (2026-10-23, issue #27): where a player was on a frame, for a
+// marker. This attempt's trail first (Silicate's trail buffer: every tick
+// while Macro Buffing's trail is on, player 2 only in a dual), then the macro
+// path (the players' level positions, kept with the macro; it can be out of
+// date once the inputs are edited). Nothing when neither has it, which for
+// player 2 means it wasn't in a dual there.
+struct MarkerSpot {
+    cocos2d::CCPoint at;
+    char const* from;
+};
+static std::optional<MarkerSpot> markerSpot(uint32_t frame, bool player2) {
+    auto const& trail = Bot::get()->trailBuffer().stream(player2 ? 1 : 0);
+    auto const it = std::upper_bound(
+        trail.begin(), trail.end(), frame,
+        [](uint32_t f, tbuf::Sample const& s) { return f < s.frame; });
+    if (it != trail.begin()) {
+        auto const& s = *(it - 1);
+        if (frame - s.frame <= 1)
+            return MarkerSpot{{(s.rect.minX + s.rect.maxX) * 0.5f,
+                               (s.rect.minY + s.rect.maxY) * 0.5f},
+                              "trail"};
+    }
+    auto const& path = gucci::GucciEngine::get()->replay.m_pathSamples;
+    if (frame < path.size()) {
+        auto const& ps = path[frame];
+        if (!player2 && (ps.p1x != 0.f || ps.p1y != 0.f))
+            return MarkerSpot{{ps.p1x, ps.p1y}, "path"};
+        if (player2 && ps.hasP2 && (ps.p2x != 0.f || ps.p2y != 0.f))
+            return MarkerSpot{{ps.p2x, ps.p2y}, "path"};
+    }
+    return std::nullopt;
+}
+
 FrameWindowAnalyzer::StepResult FrameWindowAnalyzer::stepToward(PlayLayer* pl,
                                                                uint32_t until) {
     auto& updater = Bot::get()->updater();
@@ -511,7 +559,11 @@ FrameWindowAnalyzer::StepResult FrameWindowAnalyzer::stepToward(PlayLayer* pl,
             while (m_index < m_samples.size() &&
                    m_samples[m_index].frame <= now) {
                 auto& s = m_samples[m_index];
-                auto* sp = s.player2 ? pl->m_player2 : pl->m_player1;
+                // GucciBot (2026-10-23, issue #27): the player the input
+                // moves, not the flag's (movesPlayer2), so the spot, the
+                // gamemode the release filter reads and the orbs are its.
+                auto* sp = movesPlayer2(pl, s.player2) ? pl->m_player2
+                                                       : pl->m_player1;
                 if (sp) {
                     s.position = sp->getPosition();
                     s.gamemode = gamemodeOf(sp);
@@ -5486,28 +5538,47 @@ void FrameWindowAnalyzer::spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
         this->trackMarker(node, at);
     };
 
+    // GucciBot (2026-10-23, issue #27): the marker goes on the player the
+    // input moves (movesPlayer2): in a 1-player level that is player 1 whatever
+    // the flag, with the twin below on player 2 during a dual.
+    bool const onP2 = movesPlayer2(pl, mk.player2);
+
     // GucciBot (issue #26): a mark whose position was never captured, or was
     // saved without one, stands at the level's origin - under the floor at the
     // start of the level and off the screen everywhere else, so the reporter
-    // saw one marker "in the ground" and none anywhere they clicked. The path
-    // the macro was played or recorded along knows where the player was.
+    // saw one marker "in the ground" and none anywhere they clicked. The trail
+    // or the path the macro was played or recorded along knows where the
+    // player was. (#27) So do they when the saved spot may be the other
+    // player's: until 2026-10-23 the capture read the flag's player, so a
+    // saved spot is surely this player's only where the flag says this player.
     CCPoint at = mk.position;
-    if (at.x == 0.f && at.y == 0.f) {
-        auto const& path = gucci::GucciEngine::get()->replay.m_pathSamples;
-        if (mk.frame < path.size()) {
-            auto const& ps = path[mk.frame];
-            if (!mk.player2) at = CCPoint{ps.p1x, ps.p1y};
-            else if (ps.hasP2) at = CCPoint{ps.p2x, ps.p2y};
+    bool const saved = at.x != 0.f || at.y != 0.f;
+    char const* from = saved ? "saved" : "nowhere, not drawn";
+    if (!saved || mk.player2 != onP2) {
+        if (auto const spot = markerSpot(mk.frame, onP2)) {
+            at = spot->at;
+            from = spot->from;
         }
-        FWLOG("[fw][marker] frame={} p{} had no position; {}", mk.frame, mk.player2 ? 2 : 1,
-              (at.x == 0.f && at.y == 0.f) ? "nothing on the path either, not drawn"
-                                           : "took the macro path's");
     }
     if (at.x != 0.f || at.y != 0.f) {
         place(at);
         this->noteFlipMarker(pl, mk);
     }
-    if (auto const twin = this->dualTwin(pl, mk)) place(*twin);
+    char const* twinFrom = "";
+    auto const twin = this->dualTwin(pl, mk, &twinFrom);
+    if (twin) place(*twin);
+
+    // For checking #27 on the reporter's levels (TheCinnyBun, Helios,
+    // TUAPEKA): every marker that isn't a plain saved spot on the flag's own
+    // player -- a twin, a flag that isn't its player, a spot from elsewhere.
+    if (twin || !saved || mk.player2 != onP2)
+        FWLOG("[fw][marker] frame={} flag p{} -> marker on p{} at ({:.1f},{:.1f}) "
+              "from {} (saved ({:.1f},{:.1f})); twin {}",
+              mk.frame, mk.player2 ? 2 : 1, onP2 ? 2 : 1, at.x, at.y, from,
+              mk.position.x, mk.position.y,
+              twin ? fmt::format("on p2 at ({:.1f},{:.1f}) from {}", twin->x,
+                                 twin->y, twinFrom)
+                   : std::string("none"));
 }
 
 // GucciBot (2026-10-21, Nigel's tests -fh..-fk): a jump inside a mirror
@@ -5520,7 +5591,8 @@ void FrameWindowAnalyzer::spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
 // the player is drawn; cullOffscreen does the slide.
 void FrameWindowAnalyzer::noteFlipMarker(PlayLayer* pl, FrameWindowMark const& mk) {
     if (m_markerNodes.empty() || !pl || !pl->m_objectLayer || !flippingOf(pl->m_gameState, 0)) return;
-    auto* player = mk.player2 ? pl->m_player2 : pl->m_player1;
+    // (2026-10-23, #27: the marker's own player, as spawnMarker picks it.)
+    auto* player = movesPlayer2(pl, mk.player2) ? pl->m_player2 : pl->m_player1;
     if (!player) return;
     auto& entry = m_markerNodes.back();
     CCPoint const drawn = player->getPosition();
@@ -5536,23 +5608,23 @@ void FrameWindowAnalyzer::noteFlipMarker(PlayLayer* pl, FrameWindowMark const& m
                      entry.m_start.x, entry.m_start.y);
 }
 
+// GucciBot (2026-10-23, issue #27; anticroom's antics-counter beta.5
+// changelog: indicators on both players in normal duals). In a 1-player level
+// a click moves both players while they are in a dual, so every mark there
+// gets a twin on player 2 -- before, only one flagged player 1 did, and one
+// stored as player 2 had its own marker on player 2 and no twin. Player 2's
+// spot was the live trail alone, so turning Macro Buffing's trail off lost
+// every twin; the macro path backs it up now (markerSpot). Neither has
+// player 2 outside a dual, so a mark there has no twin.
 std::optional<cocos2d::CCPoint> FrameWindowAnalyzer::dualTwin(
-    PlayLayer* pl, FrameWindowMark const& mk) const {
-    if (mk.player2 || !pl->m_levelSettings ||
-        pl->m_levelSettings->m_twoPlayerMode)
+    PlayLayer* pl, FrameWindowMark const& mk, char const** from) const {
+    if (!pl->m_levelSettings || pl->m_levelSettings->m_twoPlayerMode)
         return std::nullopt;
 
-    auto const& other = Bot::get()->trailBuffer().stream(1);
-    auto const it = std::upper_bound(
-        other.begin(), other.end(), mk.frame,
-        [](uint32_t f, tbuf::Sample const& s) { return f < s.frame; });
-    if (it == other.begin()) return std::nullopt;
-
-    auto const& s = *(it - 1);
-    if (mk.frame - s.frame > 1) return std::nullopt;
-
-    return cocos2d::CCPoint((s.rect.minX + s.rect.maxX) * 0.5f,
-                            (s.rect.minY + s.rect.maxY) * 0.5f);
+    auto const spot = markerSpot(mk.frame, true);
+    if (!spot) return std::nullopt;
+    if (from) *from = spot->from;
+    return spot->at;
 }
 
 void FrameWindowAnalyzer::spawnMessages(PlayLayer* pl, uint32_t frame) {
@@ -6097,7 +6169,12 @@ void FrameWindowAnalyzer::updateDisplay(PlayLayer* pl) {
                 mk.desynced ? nullptr : this->visibleTierFor(mk);
             if (!mk.desynced && !tier) continue;
 
-            int& lastSpawn = mk.player2 ? m_lastSpawn2P : m_lastSpawn1P;
+            // GucciBot (2026-10-23, #27): one marker a frame per player the
+            // markers stand on, not per flag: in a 1-player level a pair of
+            // inputs flagged player 1 and player 2 on one tick is one click,
+            // and both would draw the same marker and twin.
+            int& lastSpawn = movesPlayer2(pl, mk.player2) ? m_lastSpawn2P
+                                                           : m_lastSpawn1P;
             if (markers && static_cast<int>(mk.frame) != lastSpawn) {
                 lastSpawn = static_cast<int>(mk.frame);
                 this->spawnMarker(pl, mk, tier);
@@ -6428,14 +6505,16 @@ void FrameWindowAnalyzer::applyLabelTo(PlayheadInput const& in, int window,
         mk.player2 = in.player2;
         mk.release = in.release;
 
-        auto* player =
-            pl ? (in.player2 ? pl->m_player2 : pl->m_player1) : nullptr;
+        // GucciBot (2026-10-23, #27): the player the input moves, as the
+        // capture takes it (movesPlayer2).
+        bool const moved2 = movesPlayer2(pl, in.player2);
+        auto* player = pl ? (moved2 ? pl->m_player2 : pl->m_player1) : nullptr;
         if (player) {
             mk.position = player->getPosition();
             mk.gamemode = gamemodeOf(player);
         }
 
-        for (auto const& t : Bot::get()->trailBuffer().stream(in.player2)) {
+        for (auto const& t : Bot::get()->trailBuffer().stream(moved2 ? 1 : 0)) {
             if (t.frame != in.frame) continue;
             mk.position = cocos2d::CCPoint((t.rect.minX + t.rect.maxX) * 0.5f,
                                            (t.rect.minY + t.rect.maxY) * 0.5f);
