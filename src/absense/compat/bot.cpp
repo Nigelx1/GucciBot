@@ -244,7 +244,8 @@ namespace {
     }
 }  // namespace
 
-matjson::Value absense::simulate(std::vector<ScriptTick> const& script, int ticks, int every) {
+matjson::Value absense::simulate(std::vector<ScriptTick> const& script, int ticks, int every,
+                                 std::string const& watch) {
     auto out = matjson::Value::object();
     auto* pl = PlayLayer::get();
     auto* bot = Bot::get();
@@ -271,9 +272,71 @@ matjson::Value absense::simulate(std::vector<ScriptTick> const& script, int tick
     bool const downNow = it != buttons.end() && it->second;
     auto const inputs = scriptInputs(script, downNow);
 
+    // The objects to follow, picked before the run moves anything.
+    std::vector<GameObject*> watched;
+    if (!watch.empty() && pl->m_objects) {
+        float nx = 0.0f, ny = 0.0f, nr = -1.0f;
+        std::vector<int> uids;
+        if (watch.rfind("near:", 0) == 0) {
+            if (std::sscanf(watch.c_str() + 5, "%f,%f,%f", &nx, &ny, &nr) != 3) nr = -1.0f;
+        } else {
+            for (auto const& part : geode::utils::string::split(watch, ",")) {
+                if (auto v = geode::utils::numFromString<int>(geode::utils::string::trim(part))) uids.push_back(*v);
+            }
+        }
+        for (auto* o : geode::cocos::CCArrayExt<GameObject*>(pl->m_objects)) {
+            if (!o) continue;
+            if (nr >= 0.0f) {
+                if (std::hypot(o->getPositionX() - nx, o->getPositionY() - ny) <= nr) watched.push_back(o);
+            } else if (std::find(uids.begin(), uids.end(), o->m_uniqueID) != uids.end()) {
+                watched.push_back(o);
+            }
+            if (watched.size() >= 64) break;
+        }
+    }
+    std::vector<std::string> notes;
+    auto events = matjson::Value::array();
+    auto watchOut = matjson::Value::array();
+    int const watchEvery = std::max(1, every);
+    std::string lastNote;
+    auto describe = [](int tick, GameObject* o) {
+        auto const rect = o->getObjectRect();
+        return fmt::format("{} uid {} id {} at {:.1f},{:.1f} rect {:.1f},{:.1f} {:.1f}x{:.1f}{}{}", tick, o->m_uniqueID,
+                           o->m_objectID, o->getPositionX(), o->getPositionY(), rect.origin.x, rect.origin.y,
+                           rect.size.width, rect.size.height, o->m_isGroupDisabled ? " group-off" : "",
+                           o->m_isDisabled ? " off" : "");
+    };
+    if (!watch.empty()) {
+        for (auto* o : watched) watchOut.push(describe(0, o));
+        world::g_debugGroups.clear();
+        world::g_debugUids.clear();
+        for (auto* o : watched) {
+            world::g_debugUids.push_back(o->m_uniqueID);
+            if (o->m_groups)
+                for (int g = 0; g < o->m_groupCount && g < 10; g++) world::g_debugGroups.push_back((*o->m_groups)[(size_t)g]);
+        }
+        world::g_debugNotes = &notes;
+        t->m_traceWatch = [&](int tick) {
+            for (auto const& n : notes) {
+                if (n == lastNote) continue;  // a contact repeats every tick
+                lastNote = n;
+                if (events.size() < 600) events.push(fmt::format("{} {}", tick, n));
+            }
+            notes.clear();
+            if (tick % watchEvery == 0)
+                for (auto* o : watched) watchOut.push(describe(tick, o));
+        };
+    }
+
     t->clearKiller();
     std::vector<TraceSample> trace;
     auto const r = t->run(pl, true, inputs, ticks, downNow, &trace);
+    t->m_traceWatch = nullptr;
+    world::g_debugNotes = nullptr;
+    if (!watch.empty()) {
+        out["watched"] = watchOut;
+        out["events"] = events;
+    }
 
     out["start_frame"] = (int64_t)bot->updater().getFrame();
     out["button_down_at_start"] = downNow;

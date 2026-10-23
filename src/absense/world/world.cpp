@@ -22,6 +22,11 @@ uint64_t g_spareSeed = 0;
 WorldState* current() { return g_current; }
 Run* currentRun() { return g_run; }
 
+std::vector<std::string>* g_debugNotes = nullptr;
+std::vector<int> g_debugGroups;
+std::vector<std::string>* g_eventTrace = nullptr;
+std::vector<int> g_debugUids;
+
 // A state made current on its own (the drawn prediction without a run of its
 // own) is not any run's: the run slot is cleared for its lifetime.
 Scope::Scope(WorldState* ws) : was(g_current), wasRun(g_run) {

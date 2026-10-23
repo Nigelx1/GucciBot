@@ -22,9 +22,11 @@
 
 #include <Geode/Geode.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <span>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -189,6 +191,24 @@ Certainty certaintyOf(GJBaseGameLayer* pl, GameObject* object);
 // is the other caller once it lands.
 uint64_t drifts();
 void noteDrift(const char* what);
+
+// Diagnostics (gucci_abs_simulate's `watch`): set while a watched run is in
+// progress. The copies' touch triggers and the World's fires write what
+// happened to them here, one line each; null otherwise, and nothing is noted.
+extern std::vector<std::string>* g_debugNotes;
+// With the notes: the groups whose move steps are noted, and the objects (by
+// uid) whose writes into the level are noted.
+extern std::vector<int> g_debugGroups;
+// The branch check's trace of the game events the copies raise (onEvent and
+// the hook), so a failure can say where its two runs part. Null otherwise.
+extern std::vector<std::string>* g_eventTrace;
+extern std::vector<int> g_debugUids;
+inline bool debugGroup(int group) {
+    return g_debugNotes && std::find(g_debugGroups.begin(), g_debugGroups.end(), group) != g_debugGroups.end();
+}
+inline bool debugUid(int uid) {
+    return g_debugNotes && std::find(g_debugUids.begin(), g_debugUids.end(), uid) != g_debugUids.end();
+}
 
 // A running command of the game as a WCmd (its remap keys go into the pool it is handed),
 // and whether a WCmd holds exactly what the command does, bit for bit.

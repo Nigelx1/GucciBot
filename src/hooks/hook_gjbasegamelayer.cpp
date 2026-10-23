@@ -872,6 +872,7 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
             world::onEvent((int)event, p1, p2);
             return;
         }
+        if (world::g_eventTrace) world::g_eventTrace->push_back(fmt::format("{}/{}/p{} to the real game", (int)event, p1, p2));
         if (event == GJGameEvent::CheckpointRespawn &&
             !GucciEngine::get()->practiceFix.m_shouldLoadPlatformer)
             return;

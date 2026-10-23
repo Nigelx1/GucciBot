@@ -3244,6 +3244,7 @@ RunResult Trajectory::run(GJBaseGameLayer* pl, bool p1,
         const TickInput in = inputs.empty() ? TickInput{} : inputs[std::min<size_t>((size_t)i, inputs.size() - 1)];
         const bool dead = s.step(in);
         s.fill(result);
+        if (m_traceWatch) m_traceWatch(i + 1);
         if (trace) {
             PlayerObject* player = s.players[0];
             const cocos2d::CCPoint pos = player->getPosition();
@@ -3380,7 +3381,18 @@ std::string worldDifference(const world::WorldState& a, const world::WorldState&
     GB_WDIFF_COW(touchListeners)
     GB_WDIFF_COW(timerListeners)
     GB_WDIFF_COW(eventListeners)
-    GB_WDIFF_COW(eventStamps)
+    if (!(a.eventStamps == b.eventStamps)) {
+        // Which events: (event, material*10000 + player, command index).
+        auto list = [](const std::vector<world::WEventStamp>& v) {
+            std::string out;
+            for (std::size_t i = 0; i < v.size() && i < 16; i++)
+                out += fmt::format("{}{}/{}@{}", i ? " " : "", v[i].event, v[i].key, v[i].index);
+            if (v.size() > 16) out += " ...";
+            return out;
+        };
+        return fmt::format("eventStamps (size {} vs {}: [{}] vs [{}])", a.eventStamps->size(), b.eventStamps->size(),
+                           list(*a.eventStamps), list(*b.eventStamps));
+    }
     GB_WDIFF_COW(persistentTimers)
     GB_WDIFF_COW(sequences)
     GB_WDIFF(seed)
@@ -3483,6 +3495,11 @@ void Trajectory::checkWorldBranches(GJBaseGameLayer* pl) {
 
     std::vector<uint64_t> straight;
     std::vector<uint64_t> branched;
+    std::vector<std::string> straightEvents, branchedEvents;
+    struct EventTrace {
+        explicit EventTrace(std::vector<std::string>* to) { world::g_eventTrace = to; }
+        ~EventTrace() { world::g_eventTrace = nullptr; }
+    };
     int straightSurvived = 0, branchedSurvived = 0;
     bool straightDied = false, branchedDied = false;
     bool worldStep = false;
@@ -3491,6 +3508,7 @@ void Trajectory::checkWorldBranches(GJBaseGameLayer* pl) {
     world::OpLog straightLog, branchedLog;
 
     {
+        EventTrace trace(&straightEvents);
         Sim s;
         if (!s.begin(this, pl, true, false)) {
             m_killer = keptKiller;
@@ -3513,6 +3531,7 @@ void Trajectory::checkWorldBranches(GJBaseGameLayer* pl) {
         s.end();
     }
     {
+        EventTrace trace(&branchedEvents);
         Sim s;
         if (!s.begin(this, pl, true, false)) {
             m_killer = keptKiller;
@@ -3526,12 +3545,14 @@ void Trajectory::checkWorldBranches(GJBaseGameLayer* pl) {
                 // own inputs, its own triggers, its own ops, undone again.
                 s.snapshot(snap);
                 branches++;
+                branchedEvents.push_back(fmt::format("[branch at {}", i));
                 for (int k = 0; k < kCheckBranchTicks; k++) {
                     const bool dead = s.step(checkBranchAt(i + k));
                     (void)sample(s);  // a branch reads poses too: its cache entries must not leak
                     if (dead) break;
                 }
                 s.restore(snap);
+                branchedEvents.push_back("restored]");
             }
             const bool dead = s.step(checkScriptAt(i));
             branched.push_back(sample(s));
@@ -3551,7 +3572,7 @@ void Trajectory::checkWorldBranches(GJBaseGameLayer* pl) {
     m_teleportRand = keptRand;
 
     const char* bad = nullptr;
-    char detail[192] = {};
+    char detail[768] = {};
     if (straightDied != branchedDied || straightSurvived != branchedSurvived) {
         bad = "a run through branches lasts a different number of ticks";
         std::snprintf(detail, sizeof(detail), "straight %d ticks (died %d), branched %d ticks (died %d)",
@@ -3582,6 +3603,19 @@ void Trajectory::checkWorldBranches(GJBaseGameLayer* pl) {
         // devlog keeps only the pathfinder's own lines, so the detail goes to
         // the game's log as well: it is how the cause gets found.
         geode::log::warn("[AbsPF] World branch check failed: {} ({})", bad, detail);
+        {
+            // Where the two runs' events part (the copies' uids, then each
+            // run's events as event/material/player@command index).
+            auto join = [](const std::vector<std::string>& v) {
+                std::string out;
+                for (std::size_t i = 0; i < v.size() && out.size() < 1800; i++) out += (i ? " " : "") + v[i];
+                return out;
+            };
+            geode::log::warn("[AbsPF] branch check events - copies p{} p{}, players p{} p{}; straight: {}; branched: {}",
+                             m_fakePlayer1 ? m_fakePlayer1->m_uniqueID : 0, m_fakePlayer2 ? m_fakePlayer2->m_uniqueID : 0,
+                             pl->m_player1 ? pl->m_player1->m_uniqueID : 0, pl->m_player2 ? pl->m_player2->m_uniqueID : 0,
+                             join(straightEvents), join(branchedEvents));
+        }
         return;
     }
     devlog::logf(devlog::Cat::System,

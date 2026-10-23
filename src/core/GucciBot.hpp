@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-fw (Pathfinder step 4: gates name their options - orb use/skip, pad/portal touch/avoid - and the next gate is ranked from the player)"
+    "2026-10-23-ga (World branch check: a failure also lists the game events of both runs)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

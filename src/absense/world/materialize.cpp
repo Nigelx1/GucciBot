@@ -993,15 +993,28 @@ void Materializer::refresh(Run& run, int slot, const Window* window) {
     const Pose want = desired(run, slot);
     auto it = m_writtenOf.find(slot);
     Written* w = it != m_writtenOf.end() ? &m_written[it->second] : nullptr;
-    if (w ? sameWritable(w->pose, want) : sameLive(want, o)) return;
+    const bool noted = debugUid(o->m_uniqueID);
+    if (w ? sameWritable(w->pose, want) : sameLive(want, o)) {
+        if (noted)
+            g_debugNotes->push_back(fmt::format("  materializer: uid {} belongs at {:.2f},{:.2f}, where it {}",
+                                                o->m_uniqueID, want.x, want.y, w ? "was written" : "stands"));
+        return;
+    }
     if (window && !(flags & kExtended)) {
         // Neither where it stands nor where it belongs is anywhere the copy's
         // collision pass can reach: it waits until the window comes near.
         int wx = 0, wy = 0;
         const bool wantIn = m_shadow.sectionOf(want.x, want.y, wx, wy) && inWindow(*window, wx, wy);
         const bool nowIn = inWindow(*window, off::at<int>(o, off::kSecX), off::at<int>(o, off::kSecY));
-        if (!wantIn && !nowIn) return;
+        if (!wantIn && !nowIn) {
+            if (noted)
+                g_debugNotes->push_back(fmt::format("  materializer: uid {} waits (out of the window)", o->m_uniqueID));
+            return;
+        }
     }
+    if (noted)
+        g_debugNotes->push_back(
+            fmt::format("  materializer: uid {} written at {:.2f},{:.2f}", o->m_uniqueID, want.x, want.y));
     if (!w) {
         Written fresh;
         fresh.o = o;
@@ -1128,6 +1141,10 @@ void Materializer::materializeNear(Run& run, PlayerObject* copy) {
     for (const auto& entry : reach) {
         const int g = entry.first;
         const auto co = md.coGroupsOf(g);
+        if (debugGroup(g)) {
+            g_debugNotes->push_back(fmt::format("  materializer: group {} has {} ops, {} co-groups, look {}", g,
+                                                entry.second.ops, co.size(), look ? "yes" : "no"));
+        }
         if (co.empty()) continue;  // no member a copy can collide with
         // No op on the group itself since this copy last looked, and the
         // window is the same: none of its members has moved through it. A
@@ -1151,10 +1168,22 @@ void Materializer::materializeNear(Run& run, PlayerObject* copy) {
             rx += it->second.x * m;
             ry += it->second.y * m;
         }
-        if (!md.hasExtended[(std::size_t)g] && !boxMeets(m_table->groupBox(g), rx + 1.0, ry + 1.0, w)) continue;
+        if (!md.hasExtended[(std::size_t)g] && !boxMeets(m_table->groupBox(g), rx + 1.0, ry + 1.0, w)) {
+            if (debugGroup(g)) {
+                const Box& b = m_table->groupBox(g);
+                g_debugNotes->push_back(fmt::format(
+                    "  materializer: group {} box {:.0f}..{:.0f} x {:.0f}..{:.0f} misses the window {}..{} x {}..{}", g,
+                    b.minX, b.maxX, b.minY, b.maxY, w.x0, w.x1, w.y0, w.y1));
+            }
+            continue;
+        }
         forMembers(*run.def, g, [&](int slot) {
             const int i = md.indexOf[(std::size_t)slot];
-            if (i < 0) return;
+            if (i < 0) {
+                if (GameObject* o = run.def->slots[(std::size_t)slot]; o && debugUid(o->m_uniqueID))
+                    g_debugNotes->push_back(fmt::format("  materializer: uid {} is not one it writes", o->m_uniqueID));
+                return;
+            }
             // A member whose table pose, grown by what every group of the
             // group's members has done, is nowhere near the window is neither
             // in it nor bound for it, and refresh would leave it: skipped

@@ -654,6 +654,12 @@ void stepTick(Run& run, float dt) {
             const int group = (int)WorldDef::clampGroup(n.group);
             const float fx = (float)n.sx;
             const float fy = (float)n.sy;
+            if (debugGroup(group)) {
+                g_debugNotes->push_back(fmt::format(
+                    "  step: group {} moves ({:.3f},{:.3f}), optimized ({:.3f},{:.3f}); {} static members, {} optimized, {} in all",
+                    group, fx, fy, (float)n.ox, (float)n.oy, run.def->staticMembers(group).size(),
+                    run.def->optimizedMembers(group).size(), run.def->members(group).size()));
+            }
             if (!run.def->staticMembers(group).empty() && (fx != 0.0f || fy != 0.0f || n.force)) {
                 Op op;
                 op.tick = (uint32_t)ws.tick;

@@ -1120,7 +1120,11 @@ namespace gucci::mcp {
             "repeats to `ticks`. Nothing in the real game changes.",
             schemaOf({{"script", "string", "steps, e.g. h20 r15 p1 h40"},
                       {"ticks", "integer", "ticks to run (default: the script's length, max 3000)"},
-                      {"every", "integer", "report the path every N ticks (default 4)"}}),
+                      {"every", "integer", "report the path every N ticks (default 4)"},
+                      {"watch", "string",
+                       "objects to follow as the run has them, every `every` ticks: uids \"5308,5340\" or "
+                       "\"near:x,y,r\"; also lists the touch triggers the copy meets and what the World does "
+                       "with them"}}),
             [](matjson::Value const& a) {
                 requireFreeRun();
                 requireLevel();
@@ -1128,7 +1132,7 @@ namespace gucci::mcp {
                 int const ticks = (int)std::clamp<int64_t>(
                     argInt(a, "ticks", std::max<int64_t>(1, (int64_t)held.size())), 1, 3000);
                 int const every = (int)std::clamp<int64_t>(argInt(a, "every", 4), 1, 240);
-                auto out = absense::simulate(held, ticks, every);
+                auto out = absense::simulate(held, ticks, every, argStr(a, "watch"));
                 if (out.contains("error"))
                     throw ToolError(out["error"].asString().unwrapOr("failed"));
                 return out;

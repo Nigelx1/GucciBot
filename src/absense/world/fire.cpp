@@ -1881,7 +1881,11 @@ void touchedTrigger(Run& run, PlayerObject* copy, EffectGameObject* object) {
     if (!run.def || !run.ws || !object) return;
     const int slot = run.def->slotOf(object);
     const int di = slot >= 0 ? run.def->defOfSlot[(std::size_t)slot] : -1;
-    if (di < 0) return;
+    if (di < 0) {
+        if (g_debugNotes)
+            g_debugNotes->push_back(fmt::format("  World: {} is not one of its triggers (slot {})", object->m_uniqueID, slot));
+        return;
+    }
     const TriggerDef& d = run.def->triggers[(std::size_t)di];
     switch (d.kind) {
         case Kind::Speed:
@@ -1921,7 +1925,12 @@ void touchedTrigger(Run& run, PlayerObject* copy, EffectGameObject* object) {
         ids.erase(ids.begin() + (std::ptrdiff_t)at);
         there = false;
     }
-    if (there) return;  // it has already fired for this player
+    if (there) {
+        if (g_debugNotes) g_debugNotes->push_back(fmt::format("  World: {} already in the triggered set", d.uid));
+        return;  // it has already fired for this player
+    }
+    if (g_debugNotes)
+        g_debugNotes->push_back(fmt::format("  World: {} fires (kind {}, target group {})", d.uid, (int)d.kind, d.target));
     {
         // storeTriggeredID 0x261ff0.
         std::vector<std::pair<int, int>>& ids = ws.triggeredIds.edit();
@@ -1982,6 +1991,10 @@ void onButton(Run& run, PlayerObject* copy, bool down) {
 
 void onEvent(int event, int material, int playerUid) {
     Run* run = currentRun();
+    if (g_eventTrace) {
+        g_eventTrace->push_back(fmt::format("{}/{}/p{}@{}", event, material, playerUid,
+                                            run && run->ws ? (int)run->ws->commandIndex : -1));
+    }
     if (!run || !run->ws || !run->def) return;
     WorldState& ws = *run->ws;
     // GJBaseGameLayer::gameEventTriggered 0x231ff0, fact (ac). A copy's uid is

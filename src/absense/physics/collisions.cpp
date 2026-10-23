@@ -447,8 +447,16 @@ void collisionCheckObjects(GJBaseGameLayer* pl, PlayerObject* player,
 
         if ((bot->trajectory().playerHasActivated(player, obj) ||
              bot->trajectory().realPlayerHasActivated(player, obj)) &&
-            (object->m_objectType != GameObjectType::Slope))
+            (object->m_objectType != GameObjectType::Slope)) {
+            if (world::g_debugNotes && object->m_objectType == GameObjectType::Modifier && obj->m_isTouchTriggered) {
+                world::g_debugNotes->push_back(fmt::format(
+                    "touch trigger {} (id {} at {:.0f},{:.0f}) skipped: {}", obj->m_uniqueID, obj->m_objectID,
+                    obj->getPositionX(), obj->getPositionY(),
+                    bot->trajectory().playerHasActivated(player, obj) ? "this copy fired it already"
+                                                                      : "the real player has it marked activated"));
+            }
             continue;
+        }
 
         bool overlaps = true;
 
@@ -735,6 +743,11 @@ void collisionCheckObjects(GJBaseGameLayer* pl, PlayerObject* player,
                     // asks the run, not World::disabled: see world::current).
                     if (!world::current()) obj->activatedByPlayer(player);
 
+                    if (world::g_debugNotes && obj->m_isTouchTriggered) {
+                        world::g_debugNotes->push_back(fmt::format("touch trigger {} (id {} at {:.0f},{:.0f}) touched",
+                                                                   obj->m_uniqueID, obj->m_objectID,
+                                                                   obj->getPositionX(), obj->getPositionY()));
+                    }
                     if (obj->m_isTouchTriggered) {
                         // Bot::get()->trajectory().scheduleAction(
                         //     [player, pl, obj]() {

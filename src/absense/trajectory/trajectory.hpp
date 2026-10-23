@@ -141,6 +141,10 @@ class Trajectory {
    public:
     PlayerObject* m_fakePlayer1;
     PlayerObject* m_fakePlayer2;
+    // Diagnostics (gucci_abs_simulate's `watch`): called by run() after every
+    // tick with the tick's number (1-based), while the run's objects are where
+    // the tick left them. Empty otherwise.
+    std::function<void(int)> m_traceWatch;
 
    private:
     std::unordered_set<uintptr_t> m_activatedObjectsP1;

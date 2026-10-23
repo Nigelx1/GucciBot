@@ -66,7 +66,12 @@ namespace absense {
         bool press = false;  // a press on this tick (a release first if the button is down)
         bool held = false;   // the button is down after the tick
     };
-    matjson::Value simulate(std::vector<ScriptTick> const& script, int ticks, int every);
+    // `watch`: objects to follow as the run has them, every `every` ticks -
+    // a comma-separated list of uids, or "near:x,y,r" for every object within
+    // r of (x, y) when the run starts - with the copies' touch triggers and
+    // the World's fires along the way. Empty: neither.
+    matjson::Value simulate(std::vector<ScriptTick> const& script, int ticks, int every,
+                            std::string const& watch = {});
 
     // gucci_sim_vs_real: the same script from the same moment, once in the
     // simulation and once for real (absense/judge.hpp), and the first tick the
