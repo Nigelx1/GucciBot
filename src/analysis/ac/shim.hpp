@@ -257,6 +257,9 @@ struct FrameWindowSettings {
     // --- anticroom's 2026-09-26 source drop ("slc count") -----------------
     // Dependent search: measures inputs whose window moves depending on where
     // the input before them landed, instead of treating every click alone.
+    // GucciBot (2026-10-23): reworked after his antics-counter beta.6
+    // changelog to tight inputs only, a few test runs each (framewindow.cpp,
+    // above beginDependentPass). Still off by default.
     bool dependentSearch = false;
     // GucciBot: Juice's Alignment-Independent count as a suggestion for
     // suspicious clicks -- a strict window of suggestBelow frames or fewer

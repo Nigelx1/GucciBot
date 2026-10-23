@@ -269,9 +269,13 @@ namespace gucci::ui::pages {
                  "Re-tests tight inputs with the previous input placed at each edge of its window and reports the "
                  "span. About 3x the work",
                  &FW::entrySweep);
+            // GucciBot (2026-10-23): reworked after anticroom's antics-counter beta.6 changelog (framewindow.cpp,
+            // above beginDependentPass); the hint says what it does now.
             flag("Dependent pair search",
-                 "Re-measures each input with the previous one moved across its own window. If the timing carries "
-                 "over, the window becomes the average and shows as ~N",
+                 "Re-measures each tight input with the input just before it moved to the edges of its own window, "
+                 "when that input is within the search distance. If that changes its window by more than a frame, "
+                 "the marker shows ~N, its average window where it can still be hit. Tight means within the Tight "
+                 "threshold, on the Sub-tick (CBF) counting card",
                  &FW::dependentSearch);
             if (feature("Suggestions for suspicious clicks",
                         "Calculate's count stays strict. A tight click right after another input is also counted "
