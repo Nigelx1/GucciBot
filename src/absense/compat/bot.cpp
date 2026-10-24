@@ -240,6 +240,10 @@ namespace {
     // The script as the pathfinder would hand it over: a press on each tick
     // the button goes down (or is pressed again), and whether it is down
     // after the tick.
+    // GucciBot (2026-10-24): a press with the button up after the tick is a
+    // tap inside the tick (the script's t<N>): {1, false}, which Sim::step and
+    // the real game (judge::run) both play as a press and a release before the
+    // tick's physics. A press used to leave the button down whatever the step.
     std::vector<TickInput> scriptInputs(std::vector<absense::ScriptTick> const& script, bool downNow) {
         std::vector<TickInput> inputs;
         inputs.reserve(script.size());
@@ -247,7 +251,7 @@ namespace {
         for (auto const& s : script) {
             TickInput in;
             in.presses = (s.press || (s.held && !down)) ? 1 : 0;
-            in.held = s.held || s.press;
+            in.held = s.held;
             inputs.push_back(in);
             down = in.held;
         }
@@ -807,15 +811,17 @@ matjson::Value absense::routeLeg(float gateX, float lo, float hi, int maxTicks, 
     out["exact"] = exact;
     out["passed_outside_the_band"] = (int64_t)leg.exitsElsewhere;
     out["ms"] = leg.ms;
-    // The way as a script: h<N> hold, r<N> release, p<N> a press on each tick.
+    // The way as a script: h<N> hold, r<N> release, p<N> a press on each tick,
+    // t<N> a tap inside each tick (GucciBot, 2026-10-24: a press let go inside
+    // its own tick used to come out as p, which plays back held).
+    const auto stepOf = [](TickInput const& in) { return in.presses > 0 ? (in.held ? 'p' : 't') : (in.held ? 'h' : 'r'); };
     std::string script;
     for (size_t i = 0; i < leg.witness.size();) {
         auto const& in = leg.witness[i];
-        const char c = in.presses > 0 ? 'p' : (in.held ? 'h' : 'r');
+        const char c = stepOf(in);
         size_t j = i + 1;
         while (j < leg.witness.size()) {
-            auto const& w = leg.witness[j];
-            if ((w.presses > 0 ? 'p' : (w.held ? 'h' : 'r')) != c) break;
+            if (stepOf(leg.witness[j]) != c) break;
             j++;
         }
         script += fmt::format("{}{}{}", script.empty() ? "" : " ", c, j - i);

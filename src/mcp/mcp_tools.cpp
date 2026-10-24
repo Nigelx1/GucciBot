@@ -138,13 +138,18 @@ namespace gucci::mcp {
         // Scripts for the Absense diagnostics: space-separated steps, h<N> =
         // hold N ticks, r<N> = release N ticks, p<N> = press on each of N
         // ticks (a release first when already held).
+        // GucciBot (2026-10-24): t<N> = a tap inside each of N ticks: pressed
+        // and let go again before the tick's physics, so the button is up when
+        // the player moves - the input the pathfinder's taps and its UFO moves
+        // give (docs/AI_KNOWS_THE_GAME_PLAN.md step 1: "t1 r20" against "p1 r20"
+        // says whether the game acts on such a press).
         std::vector<absense::ScriptTick> parseAbsScript(std::string const& text) {
             std::vector<absense::ScriptTick> held;
             std::istringstream in(text);
             std::string step;
             while (in >> step) {
-                if (step.size() < 2 || (step[0] != 'h' && step[0] != 'r' && step[0] != 'p'))
-                    throw ToolError("script steps are h<N>, r<N> or p<N>, got \"" + step + "\"");
+                if (step.size() < 2 || (step[0] != 'h' && step[0] != 'r' && step[0] != 'p' && step[0] != 't'))
+                    throw ToolError("script steps are h<N>, r<N>, p<N> or t<N>, got \"" + step + "\"");
                 int n = 0;
                 try {
                     n = std::stoi(step.substr(1));
@@ -153,7 +158,9 @@ namespace gucci::mcp {
                 }
                 if (n < 1 || n > 3000)
                     throw ToolError("tick counts are 1 to 3000");
-                held.insert(held.end(), (size_t)n, absense::ScriptTick{step[0] == 'p', step[0] != 'r'});
+                // p and t press; h and p leave the button down after the tick.
+                held.insert(held.end(), (size_t)n,
+                            absense::ScriptTick{step[0] == 'p' || step[0] == 't', step[0] == 'h' || step[0] == 'p'});
                 if (held.size() > 3000)
                     throw ToolError("script longer than 3000 ticks");
             }
@@ -1509,7 +1516,8 @@ namespace gucci::mcp {
             "that come out the same) until one reaches x `gate_x` inside the band lo..hi. "
             "Without gate_x: the next gate of the planned route, in the band of the option "
             "the route takes there (an orb's contact region for a use). Returns found (with the way "
-            "as a script), impossible (exact and nothing dropped: every move it offers was "
+            "as a script gucci_abs_simulate can play: h hold, r release, p press, t a tap inside the "
+            "tick), impossible (exact and nothing dropped: every move it offers was "
             "tried, close to a proof), not_found (similar states merged: not a proof), or "
             "out_of_budget, and draws it over the level. The game waits while it runs; "
             "nothing in the real game changes.",
@@ -1542,9 +1550,13 @@ namespace gucci::mcp {
             "state along a scripted input, and report the path, how far it got and "
             "what killed it. `script` is space-separated steps, h<N> = hold N ticks, "
             "r<N> = release N ticks, p<N> = press on each of N ticks (a release "
-            "first when already held), e.g. \"h20 r15 p1 h40\"; the last step "
-            "repeats to `ticks`. Nothing in the real game changes.",
-            schemaOf({{"script", "string", "steps, e.g. h20 r15 p1 h40"},
+            "first when already held; the button stays down through the tick), "
+            "t<N> = a tap inside each of N ticks (pressed and let go again before "
+            "the tick's physics, so the button is up when the player moves), e.g. "
+            "\"h20 r15 p1 h40\"; the last step repeats to `ticks`. \"t1 r20\" against "
+            "\"p1 r20\" shows whether a press let go inside its own tick does "
+            "anything. Nothing in the real game changes.",
+            schemaOf({{"script", "string", "steps, e.g. h20 r15 p1 h40 (t1: a tap inside one tick)"},
                       {"ticks", "integer", "ticks to run (default: the script's length, max 3000)"},
                       {"every", "integer", "report the path every N ticks (default 4)"},
                       {"watch", "string",
@@ -1700,8 +1712,11 @@ namespace gucci::mcp {
             "twice -- in Absense's pathfinder simulation, then for real (the "
             "death is caught, not died) -- and report both outcomes, what killed "
             "each, and the first tick the two part. The game is put back to "
-            "where it was afterwards. Script as for gucci_abs_simulate.",
-            schemaOf({{"script", "string", "steps, e.g. h20 r15 p1 h40"},
+            "where it was afterwards. Script as for gucci_abs_simulate: h<N> hold, "
+            "r<N> release, p<N> press (held through the tick), t<N> a tap inside "
+            "the tick (pressed and let go before the physics). \"t1 r20\" here says "
+            "whether the real game and the simulation agree about such a tap.",
+            schemaOf({{"script", "string", "steps, e.g. h20 r15 p1 h40 (t1: a tap inside one tick)"},
                       {"ticks", "integer", "ticks to run (default: the script's length, max 1500)"},
                       {"every", "integer", "report both paths every N ticks (default 10)"}}),
             [](matjson::Value const& a) {

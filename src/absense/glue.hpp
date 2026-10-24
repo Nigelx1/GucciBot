@@ -78,6 +78,9 @@ namespace absense {
     struct ScriptTick {
         bool press = false;  // a press on this tick (a release first if the button is down)
         bool held = false;   // the button is down after the tick
+        // GucciBot (2026-10-24): a press with `held` false is a tap inside the
+        // tick (the scripts' t<N>): pressed and let go again before the tick's
+        // physics, so the button is up when the player moves.
     };
     // `watch`: objects to follow as the run has them, every `every` ticks -
     // a comma-separated list of uids, or "near:x,y,r" for every object within
