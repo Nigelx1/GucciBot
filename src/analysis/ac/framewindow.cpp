@@ -5078,6 +5078,7 @@ void FrameWindowAnalyzer::startDependentPoint() {
     // Without pairs these stay as wide as the search distance.
     int64_t keepLo = -reach;
     int64_t keepHi = reach;
+    bool kept = false;
     {
         size_t const halfB = this->partnerOf(aiB);
         size_t const halfRel = this->partnerOf(rel);
@@ -5092,6 +5093,7 @@ void FrameWindowAnalyzer::startDependentPoint() {
                  k < std::max(x, other) && !between; k++)
                 between = !moves(k);
             if (!between) continue;
+            kept = true;
             double const at = origin(x);
             keepLo = std::max(keepLo, firstOnOrAfter(at, std::floor(at)));
             keepHi = std::min(keepHi, lastBefore(at, std::floor(at) + 1.0));
@@ -5109,6 +5111,11 @@ void FrameWindowAnalyzer::startDependentPoint() {
              std::max<int64_t>(rel != NO_INDEX ? releaseRoom : pressRoom, 0),
              holdHi, halfSubHi, keepHi});
         m_depLo = std::max({m_depLo, holdLo, halfLo, keepLo});
+        // The count's own sub-tick legs don't keep to the halves' frame (they
+        // only warn when one crosses an input), so a window measured inside
+        // it can't be set against the count's: no room, at any alignment, and
+        // the pair keeps its own count (left out, as 'no room').
+        if (kept) m_depHi = m_depLo - 1;
         m_depBufLo = m_depLo;
         m_depBufHi = m_depHi;
     } else {
