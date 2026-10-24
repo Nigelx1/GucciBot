@@ -1687,12 +1687,25 @@ static const char* flagKind(GameObjectType t) {
         case GameObjectType::SpiderPad:
             return "pad";
         case GameObjectType::Modifier:
-            return "trigger";
+            return "trigger or speed portal";  // (the object id tells which)
         case GameObjectType::Special:
         case GameObjectType::EnterEffectObject:
             return "object";
         default:
             return "portal";
+    }
+}
+
+// A portal, pad or orb - what a player sets off by touching it or clicking on
+// it - rather than a trigger, speed portal or other modifier.
+static bool portalPadOrOrb(GameObjectType t) {
+    switch (t) {
+        case GameObjectType::Modifier:
+        case GameObjectType::Special:
+        case GameObjectType::EnterEffectObject:
+            return false;
+        default:
+            return true;
     }
 }
 
@@ -1844,26 +1857,68 @@ void Trajectory::recordStartFlags(GJBaseGameLayer* pl, SimStart& s) {
 }
 
 // One object whose flags exact start flags left other than the old rule would
-// have: counted, and logged the first time it comes out that way in a run (for
-// a start ahead of the game and for one behind it, each), a few lines a run at
-// most - so an in-game run shows whether this was the cause.
+// have, so an in-game run shows whether the old rule was the cause: counted by
+// kind (Trajectory::ExactDiff), kept among the last few of its kind for the
+// stop line, and logged the first time it comes out that way in a run - for a
+// start ahead of the game and for one behind it, each. Every kind has its own
+// budget of lines a run (kExactLines): a pathfinder looks back from many kept
+// starts a few ticks short of a pad or portal the game has used since, and
+// those objects - made fresh where the old rule's slack kept them used - could
+// take all eight lines of the one budget there was long before 75% of The
+// Nightmare (118 looks back before tick 16360 in the run of 10:24), leaving
+// none for the line about its yellow portal (now 12 a run for a portal, pad or
+// orb kept used that the old rule would have made fresh).
 void Trajectory::noteExactFlag(const SimStart& s, EnhancedGameObject* e, uint8_t now, uint8_t want, uint8_t old,
                                int realTick) {
-    constexpr int kLines = 8;
-    m_exactStats.differ++;
-    if (m_exactStats.lines >= kLines) return;
     GameObject* obj = e;
+    const ExactDiff kind = (want & ~old) == 0                 ? MadeFresh
+                           : (want & ~now) != 0               ? MadeUsed
+                           : portalPadOrOrb(obj->m_objectType) ? KeptUsed
+                                                               : KeptUsedOther;
+    m_exactStats.differ[kind]++;
     const bool ahead = s.carried || s.moveTick >= realTick;
-    const std::array<int, 4> key{obj->m_uniqueID, (int)want, (int)old, ahead ? 1 : 0};
+    // The last few of the kind, the newest last (an object seen again moves to the end).
+    std::vector<ExactRecent>& recent = m_exactRecent[kind];
+    std::erase_if(recent, [obj](const ExactRecent& r) { return r.uid == obj->m_uniqueID; });
+    recent.push_back(ExactRecent{obj->m_uniqueID, obj->m_objectID, obj->getPositionX(), obj->getPositionY(), s.moveTick,
+                                 realTick, s.carried, flagKind(obj->m_objectType), want});
+    if (recent.size() > (kind == KeptUsed ? 6u : 3u)) recent.erase(recent.begin());
+    if (m_exactStats.lines[kind] >= kExactLines[kind]) return;
+    const std::array<int, 3> key{obj->m_uniqueID, (int)kind, ahead ? 1 : 0};
     if (std::find(m_exactLogged.begin(), m_exactLogged.end(), key) != m_exactLogged.end()) return;
     m_exactLogged.push_back(key);
-    m_exactStats.lines++;
+    const bool last = ++m_exactStats.lines[kind] == kExactLines[kind];
     devlog::log(devlog::Cat::AbsensePathfinder,
                 fmt::format("exact flags (start at tick {}{}, game at tick {}): {} uid {} (id {}) at x {:.0f} y {:.0f} "
-                            "{} {} (old rule: {})",
+                            "{} {} (old rule: {}){}",
                             s.moveTick, s.carried ? ", carried ahead" : "", realTick, flagKind(obj->m_objectType),
                             obj->m_uniqueID, obj->m_objectID, obj->getPositionX(), obj->getPositionY(),
-                            want == now ? "kept" : "made", flagWords(want), flagWords(old)));
+                            want == now ? "kept" : "made", flagWords(want), flagWords(old),
+                            last ? fmt::format(" - the last of {} lines of this kind this run; the stop line names the "
+                                               "last few of each kind",
+                                               kExactLines[kind])
+                                 : std::string()));
+}
+
+std::string Trajectory::exactFlagRecent() const {
+    static constexpr const char* kKinds[kExactDiffKinds] = {
+        "portals, pads and orbs kept used that the old rule would have made fresh",
+        "objects made used again (the start had them used, the game has them fresh)",
+        "triggers, speed portals and other objects kept used that the old rule would have made fresh",
+        "objects made fresh that the old rule would have left used"};
+    std::string out;
+    for (int k = 0; k < kExactDiffKinds; k++) {
+        if (m_exactRecent[k].empty()) continue;
+        if (!out.empty()) out += "; ";
+        out += fmt::format("{} ({} in all): ", kKinds[k], m_exactStats.differ[k]);
+        for (size_t i = 0; i < m_exactRecent[k].size(); i++) {
+            const ExactRecent& r = m_exactRecent[k][i];
+            out += fmt::format("{}{} uid {} (id {}) at x {:.0f} y {:.0f}, {} for a start at tick {}{} (game at tick {})",
+                               i ? ", " : "", r.what, r.uid, r.id, r.x, r.y, flagWords(r.want), r.startTick,
+                               r.carried ? " carried ahead" : "", r.gameTick);
+        }
+    }
+    return out;
 }
 
 // useStart with the Pathfinder's exact start flags on. GD puts the flags back
@@ -1898,6 +1953,7 @@ void Trajectory::useStartExact(GJBaseGameLayer* pl) {
     if (!ahead && s.flags && s.flags->layer == pl && s.flags->gen == g_moverCacheGen) rec = s.flags.get();
     m_exactStats.starts++;
     if (ahead) m_exactStats.ahead++;
+    else if (!rec) m_exactStats.unrecorded++;
     for (EnhancedGameObject* e : activatableObjects(pl)) {
         const uint8_t now = flagBits(e);
         const int recorded = rec ? rec->find(e) : -1;

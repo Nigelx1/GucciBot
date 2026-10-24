@@ -663,13 +663,27 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
         (unsigned long long)m_stats.spikeSettles, (unsigned long long)m_stats.backtracks,
         (unsigned long long)m_stats.spikeMet, (unsigned long long)m_stats.spikePasses);
     if (SLSettings::get()->pathfinder.exactStartFlags) {
-        // GucciBot (2026-10-23): what the exact start flags test switch did.
+        // GucciBot (2026-10-23): what the exact start flags test switch did:
+        // the counts, the lines logged of each kind against its budget (a kind
+        // whose lines ran out has more than its lines show), and the last few
+        // objects of each kind, logged or not (devlog: log() stops at 511
+        // characters).
         const auto x = bot->trajectory().exactFlagStats();
-        log("exact start flags: %llu kept starts put in use (%llu at or ahead of the game, left as it has them); %llu "
-            "times an object came out other than the old rule would have left it (%d logged above); %llu objects "
-            "cleared, %llu set used again",
-            (unsigned long long)x.starts, (unsigned long long)x.ahead, (unsigned long long)x.differ, x.lines,
-            (unsigned long long)x.cleared, (unsigned long long)x.setAgain);
+        using T = Trajectory;
+        devlog::log(devlog::Cat::AbsensePathfinder,
+                    fmt::format("exact start flags: {} kept starts put in use ({} at or ahead of the game, left as it "
+                                "has them; {} with no record, left to the old rule); objects that came out other than "
+                                "the old rule would have left them: {} portals, pads and orbs kept used ({} lines "
+                                "logged, of {}), {} made used again ({}, of {}), {} triggers and others kept used ({}, "
+                                "of {}), {} made fresh ({}, of {}); objects written: {} cleared, {} set used again",
+                                x.starts, x.ahead, x.unrecorded, x.differ[T::KeptUsed], x.lines[T::KeptUsed],
+                                T::kExactLines[T::KeptUsed], x.differ[T::MadeUsed], x.lines[T::MadeUsed],
+                                T::kExactLines[T::MadeUsed], x.differ[T::KeptUsedOther], x.lines[T::KeptUsedOther],
+                                T::kExactLines[T::KeptUsedOther], x.differ[T::MadeFresh], x.lines[T::MadeFresh],
+                                T::kExactLines[T::MadeFresh], x.cleared, x.setAgain));
+        const std::string recent = bot->trajectory().exactFlagRecent();
+        if (!recent.empty())
+            devlog::log(devlog::Cat::AbsensePathfinder, "exact start flags, the last few of each kind: " + recent);
     }
 
     if (done) {

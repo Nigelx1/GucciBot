@@ -915,30 +915,64 @@ class Trajectory {
     struct SimStart;
     std::shared_ptr<SimStart> captureStart(GJBaseGameLayer* pl, bool p1);
     void useStart(std::shared_ptr<SimStart> start);
-    // GucciBot (2026-10-23): what exact start flags did in a pathfinder run,
-    // for its stop line: the starts put in use, how many of them stood at or
-    // ahead of the real game (left as the game has them), the objects whose
-    // flags came out other than the old rule would have left them, the
-    // objects written - cleared, and set again because the start had them
-    // used while the game has them fresh (which a game that puts every flag
-    // back on a rewind never needs) - and the lines logged (a few a run).
+    // GucciBot (2026-10-23): how an object's flags came out with exact start
+    // flags where the old rule would have left them otherwise (noteExactFlag),
+    // each kind with its own budget of log lines a run:
+    //  - KeptUsed: a portal, pad or orb the game has used, which the old rule
+    //    would have made fresh - The Nightmare's yellow portal, if the old
+    //    rule is what went wrong there;
+    //  - MadeUsed: an object set used again, which the start had used and the
+    //    game has fresh now (a game that put every flag back on a rewind would
+    //    never need it);
+    //  - KeptUsedOther: a trigger, speed portal or other object kept used
+    //    where the old rule would have made it fresh;
+    //  - MadeFresh: one made fresh that the old rule would have left used
+    //    (the common one: a pad a start's player was a few units short of,
+    //    inside the old rule's 6 units of slack, that the game has used since).
+    enum ExactDiff { KeptUsed = 0, MadeUsed = 1, KeptUsedOther = 2, MadeFresh = 3, kExactDiffKinds = 4 };
+    static constexpr int kExactLines[kExactDiffKinds] = {12, 4, 4, 4};
+    // What exact start flags did in a pathfinder run, for its stop line: the
+    // starts put in use, how many of them stood at or ahead of the real game
+    // (left as the game has them) and how many had no record of their own
+    // (left to the old rule), the objects that came out other than the old
+    // rule would have left them and the lines logged about them, by kind, and
+    // the objects written - cleared, and set used again.
     struct ExactFlagStats {
         uint64_t starts = 0;
         uint64_t ahead = 0;
-        uint64_t differ = 0;
+        uint64_t unrecorded = 0;
+        uint64_t differ[kExactDiffKinds] = {};
+        int lines[kExactDiffKinds] = {};
         uint64_t cleared = 0;
         uint64_t setAgain = 0;
-        int lines = 0;
     };
     void resetExactFlagStats() {
         m_exactStats = ExactFlagStats{};
         m_exactLogged.clear();
+        for (auto& r : m_exactRecent) r.clear();
     }
     const ExactFlagStats& exactFlagStats() const { return m_exactStats; }
+    // The last few objects of each kind (the newest last), whether their lines
+    // were logged or not: what the stop line names, so a run that used up a
+    // budget early still shows what happened where it ended up stuck. "" when
+    // nothing came out other than the old rule would have left it.
+    std::string exactFlagRecent() const;
 
    private:
     ExactFlagStats m_exactStats;
-    std::vector<std::array<int, 4>> m_exactLogged;  // (uid, flags left, old rule's, start ahead) logged this run
+    std::vector<std::array<int, 3>> m_exactLogged;  // (uid, kind, start ahead) logged this run
+    struct ExactRecent {
+        int uid = 0;
+        int id = 0;
+        float x = 0.0f;
+        float y = 0.0f;
+        int startTick = 0;
+        int gameTick = 0;
+        bool carried = false;
+        const char* what = "";
+        uint8_t want = 0;  // the flags it was left with
+    };
+    std::vector<ExactRecent> m_exactRecent[kExactDiffKinds];
 
    public:
     // GucciBot (2026-10-23): portals, orbs and pads ahead of the real players that
@@ -1180,6 +1214,7 @@ class TrajectoryManager {
     Trajectory::ExactFlagStats exactFlagStats() const {
         return m_trajectory ? m_trajectory->exactFlagStats() : Trajectory::ExactFlagStats{};
     }
+    std::string exactFlagRecent() const { return m_trajectory ? m_trajectory->exactFlagRecent() : std::string{}; }
     std::string usedAhead(GJBaseGameLayer* pl, int max) const {
         return m_trajectory ? m_trajectory->usedAhead(pl, max) : std::string{};
     }
