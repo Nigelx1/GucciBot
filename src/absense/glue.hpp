@@ -40,6 +40,13 @@ namespace absense {
     // PathfinderSettings::exactStartFlags).
     bool exactStartFlags();
     void setExactStartFlags(bool on);
+    // GucciBot (2026-10-23): the Pathfinder tab's "Remember solutions" switch
+    // (saved, off by default): whether a search reads and writes the level's
+    // learned solutions (PathfinderSettings::learn, the memory under learned/).
+    // Off, every run is cold - what the pathfinder knows is the game, not this
+    // level's earlier runs.
+    bool rememberSolutions();
+    void setRememberSolutions(bool on);
     void stopPathfinder();
     bool isRunning();
 

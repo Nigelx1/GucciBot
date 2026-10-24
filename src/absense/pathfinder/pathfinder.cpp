@@ -482,6 +482,11 @@ bool AbsensePathfinder::start() {
     // same program, the same greeting, the same answers - only the third of a
     // second it costs moves out of a slice.
     absense::gpu::Client::get().prewarm();
+    // GucciBot (2026-10-23): the Remember solutions switch (off by default),
+    // taken now and kept for the run: off, the level's learned solutions are
+    // neither read nor written, so a run is cold (they carried hundreds of
+    // remembered solutions into runs counted as cold).
+    SLSettings::get()->pathfinder.learn = absense::rememberSolutions();
     if (SLSettings::get()->pathfinder.learn) absense::memory::Store::get().open(pl);
     // GucciBot (2026-10-23): the "exact start flags" test switch (Pathfinder
     // page, off by default), taken now - before the first kept start - and
@@ -498,6 +503,10 @@ bool AbsensePathfinder::start() {
         kLookahead, SLSettings::get()->pathfinder.effort,
         Bot::get()->trajectory().simulatesBoth(PlayLayer::get(), true) ? ", dual: both players simulated" : "",
         (pl->m_levelSettings && pl->m_levelSettings->m_twoPlayerMode) ? ", two-player: each player decided in turn" : "");
+    log("remember solutions: %s",
+        SLSettings::get()->pathfinder.learn
+            ? "on (solutions from earlier runs of this level are tried, and new ones saved)"
+            : "off (a cold run: nothing from earlier runs of this level is used)");
     log("exact start flags: %s",
         SLSettings::get()->pathfinder.exactStartFlags
             ? "on (a run from a kept start sees each portal, orb, pad and trigger used or not as the game had it at "

@@ -1646,6 +1646,14 @@ namespace gucci::ui {
                                "guess from where the player stood. Takes effect when a search starts",
                                &exactFlags))
                 absense::setExactStartFlags(exactFlags);
+            // GucciBot (2026-10-23): off, every search is cold.
+            bool remember = absense::rememberSolutions();
+            if (kit::SwitchRow("Remember solutions",
+                               "Off by default: every search is cold, using nothing from earlier runs of this level. "
+                               "On: what got past a spot before is tried first, and new ways past are saved for next "
+                               "time. Takes effect when a search starts",
+                               &remember))
+                absense::setRememberSolutions(remember);
             auto const s = absense::status();
             kit::RowBegin("", nullptr);
             if (!s.running && !absense::startPending()) {
