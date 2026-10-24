@@ -133,7 +133,7 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 - [ ] Checkpoint placement
 - [ ] iOS: the game slows down at 1,000+ TPS (#30)
 
-## 6. Standalone copy (Windows, no Geode)
+## 6. Standalone copy - dropped (Nigel, 2026-10-23: "ditch the standalone copy")
 
 - [ ] One codebase with a build switch: a loader, the hooks, a small stand-in for the parts of Geode GucciBot uses, and bindings for the new GD version
 
@@ -150,12 +150,14 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 - [ ] Click sounds' background noise: built -fa (a pack's noise track loops under the clicks), untested
 
 ## Release
+Target: 2.0 by Thanksgiving, Thursday 2026-11-26 (Nigel, 2026-10-23). Checkpoint 2026-11-15: if the pathfinder hasn't reached the bar by then, Nigel decides between shipping it marked experimental or holding 2.0.
 
 - [ ] The new GD version: Geode support, or the standalone copy
 - [ ] The trailer ships with 2.0
 - [ ] Release day: version bump, about.md/README/site/changelog, tag v2.0.0, the GitHub package as Latest, the site's Download link
 
 ## Not coming back
+- The standalone Windows copy (no Geode): dropped 2026-10-23 to make 2.0 by Thanksgiving (Nov 26)
 
 - An overall difficulty number beside L* (dropped by Nigel, 2026-10-21, after agreeing to it the same day)
 - The "Macro Saved" popup (removed at Nigel's ask)
