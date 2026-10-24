@@ -4691,15 +4691,29 @@ bool FrameWindowAnalyzer::stepDependent(PlayLayer* pl) {
         size_t const aiB = m_samples[pair.b].actionIndex;
         size_t const relA = this->pairedReleaseFor(aiA);
         auto const& actions = bot->replaySystem().m_actionAtom.m_actions;
+        // GucciBot (2026-10-23): the 2-player fixes in a 1-player level. With
+        // pairs (pairDualClicks) the two flags are one stream of clicks there,
+        // played in the macro's own order, and placeAt moves the other halves
+        // of the input before and of its release with them. So every input
+        // between them, under either flag, keeps its order too, those halves
+        // moved with them: an import that writes a tick's clicks one flag at
+        // a time puts the other half of an earlier release among them, and
+        // passing it stalled every leg at that alignment. Without pairs,
+        // partnerOf is NO_INDEX and only its player's inputs count, as before.
+        bool const eitherFlag = !m_partner.empty();
+        size_t const halfA = this->partnerOf(aiA);
+        size_t const halfRel = this->partnerOf(relA);
         auto const keepsOrder = [&](double p) {
             double last = -1.0;
             for (size_t k = aiA; k < aiB; k++) {
                 if (!isMeasurableInput(actions[k]) ||
-                    actions[k].m_player2 != actions[aiA].m_player2)
+                    (!eitherFlag &&
+                     actions[k].m_player2 != actions[aiA].m_player2))
                     continue;
                 double pos = static_cast<double>(m_originalFrames[k]) +
                              m_originalOffsets[k];
-                if (k == aiA || k == relA) pos += p;
+                if (k == aiA || k == relA || k == halfA || k == halfRel)
+                    pos += p;
                 double const frame = std::floor(pos);
                 if (frame < last) return false;
                 last = frame;
