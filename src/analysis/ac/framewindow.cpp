@@ -2223,6 +2223,28 @@ bool FrameWindowAnalyzer::bufferShiftValid(int64_t shift) const {
                 return false;
         }
     }
+
+    // GucciBot (2026-10-23): and when an action this test leaves where it is
+    // sits between the two halves of the input, or of its release, in the
+    // macro (an import that writes a tick's clicks one flag at a time: P1
+    // release, P1 press, P2 release, P2 press), the halves share its frame,
+    // and moved off it one half passes it whichever way they go. Only a shift
+    // within the frame keeps the macro in order then. The dependent pass's
+    // room has the same rule (startDependentPoint). NO_INDEX without pairs.
+    if (tickShift != 0) {
+        size_t const rel = this->pairedReleaseFor(ai);
+        size_t const halfAi = this->partnerOf(ai);
+        size_t const halfRel = this->partnerOf(rel);
+        auto const moves = [&](size_t k) {
+            return k == ai || k == rel || k == halfAi || k == halfRel;
+        };
+        for (size_t const x : {ai, rel}) {
+            size_t const other = this->partnerOf(x);
+            if (other == NO_INDEX) continue;
+            for (size_t k = std::min(x, other) + 1; k < std::max(x, other); k++)
+                if (!moves(k)) return false;
+        }
+    }
     return true;
 }
 
@@ -5046,6 +5068,35 @@ void FrameWindowAnalyzer::startDependentPoint() {
         halfSubHi = std::min(
             std::max<int64_t>(hRel != NO_INDEX ? hRelease : hPress, 0), hHoldHi);
     }
+    // GucciBot (2026-10-23): and when an action this test leaves where it is
+    // sits between the two halves of the input, or of its release, in the
+    // macro (an import that writes a tick's clicks one flag at a time: P1
+    // release, P1 press, P2 release, P2 press), the halves keep their frame.
+    // They share that action's frame, and moved off it one half passes it
+    // whichever way they go. A shift within the frame (sub-tick) passes
+    // nothing. bufferShiftValid has the same rule for the count's Buffer try.
+    // Without pairs these stay as wide as the search distance.
+    int64_t keepLo = -reach;
+    int64_t keepHi = reach;
+    {
+        size_t const halfB = this->partnerOf(aiB);
+        size_t const halfRel = this->partnerOf(rel);
+        auto const moves = [&](size_t k) {
+            return k == aiB || k == rel || k == halfB || k == halfRel;
+        };
+        for (size_t const x : {aiB, rel}) {
+            size_t const other = this->partnerOf(x);
+            if (other == NO_INDEX) continue;
+            bool between = false;
+            for (size_t k = std::min(x, other) + 1;
+                 k < std::max(x, other) && !between; k++)
+                between = !moves(k);
+            if (!between) continue;
+            double const at = origin(x);
+            keepLo = std::max(keepLo, firstOnOrAfter(at, std::floor(at)));
+            keepHi = std::min(keepHi, lastBefore(at, std::floor(at) + 1.0));
+        }
+    }
     if (pair.resB > 1) {
         // A sub-tick shift moves it with its release only, as the count's
         // sub-tick pass does. (That pass only warns when one crosses the
@@ -5056,16 +5107,17 @@ void FrameWindowAnalyzer::startDependentPoint() {
         m_depHi = std::min(
             {m_depHi,
              std::max<int64_t>(rel != NO_INDEX ? releaseRoom : pressRoom, 0),
-             holdHi, halfSubHi});
-        m_depLo = std::max({m_depLo, holdLo, halfLo});
+             holdHi, halfSubHi, keepHi});
+        m_depLo = std::max({m_depLo, holdLo, halfLo, keepLo});
         m_depBufLo = m_depLo;
         m_depBufHi = m_depHi;
     } else {
         // bufferShiftValid's rule as it reads, for the Buffer try of a
         // whole-frame shift that died retimed, and its release kept after
         // an input inside its hold, as above.
-        m_depBufLo = std::max({m_depLo, holdLo, halfLo});
-        m_depBufHi = std::min({reach, pressRoom, releaseRoom, halfBufHi});
+        m_depBufLo = std::max({m_depLo, holdLo, halfLo, keepLo});
+        m_depBufHi =
+            std::min({reach, pressRoom, releaseRoom, halfBufHi, keepHi});
     }
 
     if (m_depLo > m_depHi) return;
