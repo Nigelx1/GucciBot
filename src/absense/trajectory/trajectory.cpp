@@ -4443,8 +4443,35 @@ struct Trajectory::LegState {
         int changes = 0;
         int fastChanges = 0;
         int cls = 0;
+        // GucciBot (2026-10-24): the units the search plays (see stepLeg):
+        // the next tick has to let go (the second tick of a thenRelease
+        // move), the spam the state rides (a press every spamPeriod ticks;
+        // spamPhase is the next tick's place in it), and whether an orb its
+        // last press fired is hidden from it on the next tick (ringHidden).
+        bool releaseNext = false;
+        int spamPeriod = 0;
+        int spamPhase = 0;
+        bool ringHidden = false;
         SimSnapshot snap;
     };
+    // GucciBot (2026-10-24): one move of a state: the tick's input and what
+    // its child carries on with (the Live fields above).
+    struct Move {
+        TickInput in;
+        bool releaseNext = false;
+        int spamPeriod = 0;
+        int spamPhase = 0;
+        bool same(const Move& o) const {
+            return in.presses == o.in.presses && in.held == o.in.held && releaseNext == o.releaseNext &&
+                   spamPeriod == o.spamPeriod && spamPhase == o.spamPhase;
+        }
+    };
+    // ... and those fields as key bits: two states the same in every other
+    // way but bound to different inputs next are not the same state.
+    static int64_t unitBits(const Live& c) {
+        return (int64_t)c.releaseNext | (int64_t)c.ringHidden << 1 | (int64_t)std::min(c.spamPeriod, 255) << 2 |
+               (int64_t)(c.spamPhase & 255) << 10;
+    }
     // A state, merged with any other that comes out the same: where the
     // players are and how they move, what they are, the button, the speed,
     // whether the copy is on an orb, and the goal object fired or not.
@@ -4495,7 +4522,7 @@ struct Trajectory::LegState {
         return (int64_t)std::llround(value / step);
     }
     bool onOrb(PlayerObject* p) const { return p && p->m_touchingRings && p->m_touchingRings->count() > 0; }
-    Key keyOf(Trajectory* t, bool down) const {
+    Key keyOf(Trajectory* t, bool down, int64_t units) const {
         Key k;
         PlayerObject* p = s.players[0];
         k.v[0] = q(p->getPositionX(), 0.05);
@@ -4509,7 +4536,7 @@ struct Trajectory::LegState {
                  (int64_t)(goal.avoidObject && t->copyFired(p, goal.avoidObject)) << 14 |
                  (int64_t)p->m_jumpBuffered << 15 | (int64_t)p->m_stateRingJump << 16 |
                  (int64_t)(p->m_stateJumpBuffered != 0) << 17 | (int64_t)p->m_stateRingJump2 << 18 |
-                 (int64_t)p->m_wasJumpBuffered << 19;
+                 (int64_t)p->m_wasJumpBuffered << 19 | units << 20;
         if (s.count == 2) {
             k.v[4] = q(s.players[1]->getPositionY(), 0.25);
             k.v[5] = q(s.players[1]->m_yVelocity, 0.05);
@@ -4700,25 +4727,45 @@ bool Trajectory::stepLeg(std::chrono::steady_clock::time_point until) {
         s.restore(f.snap);
         // Carrying on, then every way alternativesFor gives the button - a
         // change only once the gap since the last one has passed, or on an orb.
-        TickInput moves[10];
+        // GucciBot (2026-10-24): with the units the branching search plays
+        // (docs/AI_KNOWS_THE_GAME_PLAN.md 2.5 item 9). A move that lets go on
+        // the next tick (Alternative::thenRelease: the orb spam unit, a double
+        // press on an orb) has that release as its child's only move; a spam
+        // (Alternative::spamPeriod) is its child's way of carrying on - a press
+        // every so many ticks - until another move stops it; and an orb the
+        // last press fired is out of m_touchingRings on the next tick, so the
+        // child is told so (ringHidden), as the search's branches are. Until
+        // now a leg played a unit's first tick and then held the button.
+        LegState::Move moves[10];
         int m = 0;
-        moves[m++] = TickInput{0, f.down};
-        const bool mayChange = L->calm <= 1 || L->tick - f.lastChange >= L->calm || L->onOrb(s.players[0]);
-        if (mayChange) {
-            const int n = alternativesFor(s.players[0], f.down, alts, false);
-            for (int i = 0; i < n && m < 10; i++) {
-                const TickInput t = alts[i].first;
-                bool dup = false;
-                for (int j = 0; j < m; j++) dup |= moves[j].presses == t.presses && moves[j].held == t.held;
-                if (!dup) moves[m++] = t;
+        PlayerObject* const here = s.players[0];
+        if (f.releaseNext) {
+            moves[m++] = {TickInput{0, false}, false, f.spamPeriod, f.spamPeriod > 0 ? (f.spamPhase + 1) % f.spamPeriod : 0};
+        } else {
+            const TickInput carry = f.spamPeriod > 0 ? orbSpamTick(f.spamPhase, f.spamPeriod) : TickInput{0, f.down};
+            moves[m++] = {carry, false, f.spamPeriod, f.spamPeriod > 0 ? (f.spamPhase + 1) % f.spamPeriod : 0};
+            const bool mayChange = L->calm <= 1 || L->tick - f.lastChange >= L->calm || L->onOrb(here);
+            if (mayChange) {
+                const int n = alternativesFor(here, f.down, alts, f.ringHidden);
+                for (int i = 0; i < n && m < 10; i++) {
+                    const int period = alts[i].spamPeriod;
+                    const LegState::Move mv{alts[i].first, alts[i].thenRelease, period, period > 0 ? 1 % period : 0};
+                    bool dup = false;
+                    for (int j = 0; j < m; j++) dup |= moves[j].same(mv);
+                    if (!dup) moves[m++] = mv;
+                }
             }
         }
+        // A press made on a multi-activate orb fires it, and the orb is out of
+        // m_touchingRings until the next tick's collision pass.
+        const bool onMultiHere = spamsOrbs(here) && onMultiActivateRing(here);
         for (int i = 0; i < m; i++) {
             if (i > 0) s.restore(f.snap);
-            const bool dead = s.step(moves[i]);
+            const TickInput in = moves[i].in;
+            const bool dead = s.step(in);
             out.steps++;
             if (dead) continue;
-            const bool change = moves[i].presses > 0 || moves[i].held != f.down;
+            const bool change = in.presses > 0 || in.held != f.down;
             const int changes = f.changes + (change ? 1 : 0);
             const int fast = f.fastChanges + (change && goal.calmTicks > 1 && L->tick - f.lastChange < goal.calmTicks ? 1 : 0);
             const auto p = s.pos();
@@ -4728,7 +4775,7 @@ bool Trajectory::stepLeg(std::chrono::steady_clock::time_point until) {
                 const bool fired = !goal.fireObject || copyFired(who, goal.fireObject);
                 const bool avoided = !goal.avoidObject || !copyFired(who, goal.avoidObject);
                 if (complete || (L->bandDistance(p.y) == 0.0f && fired && avoided)) {
-                    L->nodes.push_back({f.node, moves[i], p.x, p.y});
+                    L->nodes.push_back({f.node, in, p.x, p.y});
                     // The end of the level beats any band; with no band every
                     // way in has the same room. Room is counted up to a block
                     // and a half: past that a way in is not hugging anything,
@@ -4749,12 +4796,16 @@ bool Trajectory::stepLeg(std::chrono::steady_clock::time_point until) {
             // change its input soonest stays, then the one with fewer changes.
             LegState::Live c;
             c.node = 0;
-            c.down = moves[i].held;
+            c.down = in.held;
             c.score = L->bandDistance(p.y);
             c.lastChange = change ? L->tick : f.lastChange;
             c.changes = changes;
             c.fastChanges = fast;
-            const auto key = L->keyOf(this, moves[i].held);
+            c.releaseNext = moves[i].releaseNext;
+            c.spamPeriod = moves[i].spamPeriod;
+            c.spamPhase = moves[i].spamPhase;
+            c.ringHidden = (in.presses > 0 && onMultiHere) || c.spamPeriod > 0;
+            const auto key = L->keyOf(this, in.held, LegState::unitBits(c));
             auto at = L->seen.find(key);
             if (at != L->seen.end()) {
                 LegState::Live& had = L->next[at->second];
@@ -4764,7 +4815,7 @@ bool Trajectory::stepLeg(std::chrono::steady_clock::time_point until) {
                 if (!better) continue;
                 had.dropped = true;  // (Lives are never move-assigned: GD maps on Android)
             }
-            L->nodes.push_back({f.node, moves[i], p.x, p.y});
+            L->nodes.push_back({f.node, in, p.x, p.y});
             c.node = (int)L->nodes.size() - 1;
             c.cls = L->classOf(this);
             s.snapshot(c.snap);
