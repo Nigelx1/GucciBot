@@ -805,8 +805,11 @@ void Trajectory::noteKiller(PlayerObject* p, GameObject* object) {
         m_killer.id = object->m_objectID;
         m_killer.uid = object->m_uniqueID;
         m_killer.type = (int)object->m_objectType;
-        m_killer.x = object->getPositionX();
-        m_killer.y = object->getPositionY();
+        // GucciBot (2026-10-24): where the object really is (m_positionX/Y),
+        // not its sprite: an enter effect slides the sprite near the screen's
+        // edge, and The Nightmare's killer spots were filed 43-56 units off.
+        m_killer.x = (float)object->m_positionX;
+        m_killer.y = (float)object->m_positionY;
         m_killer.rot = object->getRotation();
         m_killer.outerOb = object->m_shouldUseOuterOb;
         m_killer.rect = object->getObjectRect();
