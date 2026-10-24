@@ -556,12 +556,18 @@ class Trajectory {
     void clearRingContacts() {
         for (auto& m : m_ringTouch) m.clear();
         for (auto& m : m_ringUsed) m.clear();
+        m_ringsUsedHash[0] = m_ringsUsedHash[1] = 0;
     }
+    // GucciBot (2026-10-24): which orbs a copy has used since its run began,
+    // as one number (the same set gives the same number, in any order): the
+    // leg search's merge key (docs/AI_KNOWS_THE_GAME_PLAN.md 2.5 item 9).
+    uint64_t ringsUsedHash(const PlayerObject* p) const { return m_ringsUsedHash[p == m_fakePlayer2 ? 1 : 0]; }
 
    private:
     std::unordered_map<uintptr_t, unsigned> m_ringTouch[2];  // ring -> last simulated tick in contact
     std::unordered_map<uintptr_t, unsigned> m_ringUsed[2];   // ring -> tick it was activated on
     uint64_t m_ringsUsed = 0;  // GucciBot: orbs the copies have used, ever (a trace's TraceSample::ring)
+    uint64_t m_ringsUsedHash[2] = {0, 0};  // GucciBot (2026-10-24): see ringsUsedHash
     Killer m_killer;
     std::shared_ptr<SimStart> m_start;  // runs begin from this instead of the real player (see useStart)
     std::vector<Phantom> m_phantoms;

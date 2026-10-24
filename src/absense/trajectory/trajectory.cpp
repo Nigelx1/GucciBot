@@ -822,7 +822,18 @@ void Trajectory::noteKiller(PlayerObject* p, GameObject* object) {
 
 void Trajectory::noteRingUsed(PlayerObject* p, GameObject* ring) {
     if (!isFakePlayer(p) || !ring) return;
-    m_ringUsed[p == m_fakePlayer2 ? 1 : 0][(uintptr_t)ring] = simTickOf(p);
+    const int i = p == m_fakePlayer2 ? 1 : 0;
+    // GucciBot (2026-10-24): the run's set of used orbs, as a sum of one
+    // scrambled number per orb (see ringsUsedHash). An orb counts once:
+    // phys::ringJump marks it fired for the run (rememberActivatedObject)
+    // right after this, so a multi-activate orb fired again adds nothing.
+    if (!copyFired(p, static_cast<EnhancedGameObject*>(ring))) {
+        uint64_t z = (uint64_t)(uintptr_t)ring + 0x9E3779B97F4A7C15ull;
+        z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
+        z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
+        m_ringsUsedHash[i] += z ^ (z >> 31);
+    }
+    m_ringUsed[i][(uintptr_t)ring] = simTickOf(p);
     m_ringsUsed++;
 }
 
@@ -1289,6 +1300,7 @@ struct Trajectory::SimSnapshot {
     std::unordered_set<uintptr_t> activated2;
     std::unordered_map<uintptr_t, unsigned> ringTouch[2];
     std::unordered_map<uintptr_t, unsigned> ringUsed[2];
+    uint64_t ringsUsedHash[2] = {0, 0};  // GucciBot (2026-10-24): Trajectory::ringsUsedHash
     std::vector<TrajectoryAction> actions;
     bool dead1 = false;
     bool dead2 = false;
@@ -2624,6 +2636,7 @@ struct Trajectory::Sim {
             const int pi = partner == t->m_fakePlayer2 ? 1 : 0;
             t->m_ringTouch[pi].clear();
             t->m_ringUsed[pi].clear();
+            t->m_ringsUsedHash[pi] = 0;
         }
         // 0x216a06-0x216a5b: the gravity and the y speed the dual part gives
         // the new player - mirrored unless the level has unlinked dual gravity
@@ -2963,6 +2976,7 @@ struct Trajectory::Sim {
         for (int i = 0; i < 2; i++) {
             out.ringTouch[i] = t->m_ringTouch[i];
             out.ringUsed[i] = t->m_ringUsed[i];
+            out.ringsUsedHash[i] = t->m_ringsUsedHash[i];
         }
         out.actions = t->m_actions;
         out.dead1 = t->m_deadP1;
@@ -3035,6 +3049,7 @@ struct Trajectory::Sim {
         for (int i = 0; i < 2; i++) {
             t->m_ringTouch[i] = in.ringTouch[i];
             t->m_ringUsed[i] = in.ringUsed[i];
+            t->m_ringsUsedHash[i] = in.ringsUsedHash[i];
         }
         t->m_actions = in.actions;
         t->m_deadP1 = in.dead1;
@@ -4433,6 +4448,11 @@ struct Trajectory::LegState {
     // A state, merged with any other that comes out the same: where the
     // players are and how they move, what they are, the button, the speed,
     // whether the copy is on an orb, and the goal object fired or not.
+    // GucciBot (2026-10-24): ... and the press GD still has buffered
+    // (m_jumpBuffered, m_stateRingJump and the copies its update takes of
+    // them: a held button whose press has been used up is not one whose press
+    // is still waiting), and which orbs the copy has used since the leg began
+    // (an orb used in this contact cannot be used again).
     struct Key {
         int64_t v[8] = {};
         bool operator==(Key const& o) const { return std::memcmp(v, o.v, sizeof v) == 0; }
@@ -4486,12 +4506,16 @@ struct Trajectory::LegState {
                  (int64_t)p->m_isUpsideDown << 7 | (int64_t)p->m_isOnGround << 8 | (int64_t)down << 9 |
                  (int64_t)(p->m_vehicleSize < 0.8f) << 10 | (int64_t)(s.count == 2) << 11 | (int64_t)onOrb(p) << 12 |
                  (int64_t)(goal.fireObject && t->copyFired(p, goal.fireObject)) << 13 |
-                 (int64_t)(goal.avoidObject && t->copyFired(p, goal.avoidObject)) << 14;
+                 (int64_t)(goal.avoidObject && t->copyFired(p, goal.avoidObject)) << 14 |
+                 (int64_t)p->m_jumpBuffered << 15 | (int64_t)p->m_stateRingJump << 16 |
+                 (int64_t)(p->m_stateJumpBuffered != 0) << 17 | (int64_t)p->m_stateRingJump2 << 18 |
+                 (int64_t)p->m_wasJumpBuffered << 19;
         if (s.count == 2) {
             k.v[4] = q(s.players[1]->getPositionY(), 0.25);
             k.v[5] = q(s.players[1]->m_yVelocity, 0.05);
         }
         k.v[6] = q(p->m_playerSpeed, 0.01);
+        k.v[7] = (int64_t)t->ringsUsedHash(p);
         return k;
     }
     // The class a state keeps a share of a capped frontier for: gravity, kind,
