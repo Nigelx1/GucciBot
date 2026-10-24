@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-hr (Pathfinder: Human hints, a switch that starts off - off, a search uses no macro at all; on, only a macro made on this level. The loaded macro used to steer every run, whatever level it was for)"
+    "2026-10-23-hs (Pathfinder: the human-macro idea is gone - a search never uses a macro, the way it has to on a level nobody has one for)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
