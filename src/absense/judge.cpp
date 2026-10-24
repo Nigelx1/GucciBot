@@ -172,8 +172,10 @@ namespace absense::judge {
             r.killerId = s_killer->m_objectID;
             r.killerUid = s_killer->m_uniqueID;
             r.killerType = static_cast<int>(s_killer->m_objectType);
-            r.killerX = s_killer->getPositionX();
-            r.killerY = s_killer->getPositionY();
+            // GucciBot (2026-10-24): where it really is, as the copies' killer
+            // is read now (the sprite slides with an enter effect).
+            r.killerX = (float)s_killer->m_positionX;
+            r.killerY = (float)s_killer->m_positionY;
         }
 
         // Back to where it started: the player, the level and the frame
