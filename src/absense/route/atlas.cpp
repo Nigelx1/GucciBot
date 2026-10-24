@@ -315,8 +315,11 @@ namespace {
                 Toggle t;
                 t.uid = o->m_uniqueID;
                 t.index = i;
-                t.minX = t.maxX = o->getPositionX();
-                t.minY = t.maxY = o->getPositionY();
+                // GucciBot (2026-10-24): where the object really is
+                // (m_positionX/Y), not its sprite, which GD's enter effects
+                // slide near the screen's edge (applyEnterEffect 0x3b1660).
+                t.minX = t.maxX = (float)o->m_positionX;
+                t.minY = t.maxY = (float)o->m_positionY;
                 t.target = e->m_targetGroupID;
                 toggles.push_back(t);
             }
@@ -334,7 +337,13 @@ namespace {
         };
         const auto movesOrToggles = [&](GameObject* o) {
             const cocos2d::CCPoint start = o->m_startPosition;
-            if (std::fabs(o->getPositionX() - start.x) > 0.01f || std::fabs(o->getPositionY() - start.y) > 0.01f)
+            // GucciBot (2026-10-24): the object's own position, which a move
+            // writes, against where the level put it. The sprite's
+            // (getPosition) slides with an enter effect near the screen's
+            // edge, so a map built mid-level could call an object coming on
+            // screen "moved" - most likely why ToE2's map had 2020 moving
+            // objects built mid-level against 0 at tick 1.
+            if (std::fabs((float)o->m_positionX - start.x) > 0.01f || std::fabs((float)o->m_positionY - start.y) > 0.01f)
                 return true;  // already moved
             if (o->m_groupCount <= 0 || !o->m_groups) return false;
             for (int g = 0; g < o->m_groupCount && g < 10; g++)
@@ -352,7 +361,7 @@ namespace {
             auto* obj = static_cast<GameObject*>(pl->m_objects->objectAtIndex(i));
             if (!obj) continue;
             if (gpu::objectChangesEverything(obj)) {
-                unknownX.push_back(obj->getPositionX());
+                unknownX.push_back((float)obj->m_positionX);
                 a->unknownObjects++;
                 // Step 4: a toggle orb is still an orb to press or not. What
                 // it switches stays the map's blind spot (its column is
@@ -379,7 +388,7 @@ namespace {
                 // counting those had 2,463 of its 2,519 columns doubted.
                 gpu::Object probe;
                 if (!gpu::classifyObject(obj, probe, true)) continue;
-                toggledX.push_back(obj->getPositionX());
+                toggledX.push_back((float)obj->m_positionX);
                 a->movingObjects++;
                 noteGroups(obj);
                 continue;

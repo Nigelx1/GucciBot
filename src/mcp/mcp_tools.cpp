@@ -1134,11 +1134,18 @@ namespace gucci::mcp {
         // the level are marked used, and by which player, so a session can
         // check what a respawn or the pathfinder's way back leaves behind (The
         // Nightmare's yellow portal at x 21255 did not fire after going back).
+        // GucciBot (2026-10-24): x and y are where the object really is
+        // (m_positionX/Y, what a move writes and the collision pass uses);
+        // sprite_x / sprite_y are its sprite, which GD's enter effects slide
+        // near the screen's edge - reading those made The Nightmare's blue
+        // portal look like it moved when it never had.
         server.addTool({
             "gucci_used_objects",
             "Objects a player activates (portals, orbs, pads, coins, triggers) in "
             "a stretch of the level, with their used flags: uid, object id, type, "
-            "x, y, p1 (used by player 1), p2 (used by the other player), multi "
+            "x, y (where the object really is, m_positionX/Y), sprite_x, sprite_y "
+            "(its sprite, which enter effects slide near the screen's edge), p1 "
+            "(used by player 1), p2 (used by the other player), multi "
             "(can be activated again) and contact (player 1's and player 2's "
             "entries in the level's contact map, -1 for none). from_x/to_x "
             "default to 100 behind player 1 and 2000 ahead; only_used (default "
@@ -1166,7 +1173,7 @@ namespace gucci::mcp {
                     for (auto* o : CCArrayExt<GameObject*>(pl->m_objects)) {
                         if (!o)
                             continue;
-                        float const x = o->getPositionX();
+                        float const x = (float)o->m_positionX;
                         if (x < from || x > to)
                             continue;
                         switch (o->m_objectType) {
@@ -1194,7 +1201,9 @@ namespace gucci::mcp {
                         item["id"] = (int64_t)o->m_objectID;
                         item["type"] = (int64_t)o->m_objectType;
                         item["x"] = (double)x;
-                        item["y"] = (double)o->getPositionY();
+                        item["y"] = o->m_positionY;
+                        item["sprite_x"] = (double)o->getPositionX();
+                        item["sprite_y"] = (double)o->getPositionY();
                         item["p1"] = e->m_activatedByPlayer1;
                         item["p2"] = e->m_activatedByPlayer2;
                         if (auto* fx = typeinfo_cast<EffectGameObject*>(o))
