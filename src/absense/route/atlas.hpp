@@ -87,10 +87,22 @@ namespace absense::route {
         int8_t gravityAfter = -1;
         bool flipsGravity = false;
         int opening = -1;  // which of the gate's openings (Gate::options) the band lies in
+        // GucciBot (2026-10-24, step 3 of docs/AI_KNOWS_THE_GAME_PLAN.md): a
+        // TOUCH of a teleport portal followed to its exit (747 and its linked
+        // 749, phys::teleportPlayer): the player's centre comes out at
+        // teleportY, x kept - or, for a portal that keeps the offset,
+        // teleportDy above where it went in.
+        bool teleports = false;
+        bool keepsOffset = false;
+        float teleportY = 0.0f;
+        float teleportDy = 0.0f;
     };
 
     // Gravity after taking `o` with `before` (0 normal, 1 flipped) in force.
     int gravityAfter(const Option& o, int before);
+    // Where the player's centre can be just after taking `o`: its band, or
+    // where a teleport puts it.
+    Opening afterOption(const Option& o);
 
     // The same gate on every build of the map for this read of the level
     // (the ghost run coming back rebuilds it): its column, its kind and the
@@ -135,6 +147,7 @@ namespace absense::route {
         int objects = 0;         // objects the map read
         int movingObjects = 0;   // ... that something moves or toggles (left out of the gaps)
         int unknownObjects = 0;  // ... past which the map cannot follow
+        int teleports = 0;       // GucciBot (step 3): teleport portals followed to their exit (gates of their own)
         std::vector<Column> columns;
         std::vector<Gate> gates;  // in column order
         std::vector<float> unknownX;

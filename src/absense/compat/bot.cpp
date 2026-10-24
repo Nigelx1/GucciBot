@@ -596,6 +596,12 @@ namespace {
         if (o.objectUid != 0) e["uid"] = (int64_t)o.objectUid;
         if (o.mustFire) e["fire"] = std::string("must");
         if (o.mustNotFire) e["fire"] = std::string("must not");
+        // GucciBot (step 3): a teleport followed to its exit.
+        if (o.teleports) {
+            const auto out = absense::route::afterOption(o);
+            e["teleports_to"] = o.keepsOffset ? fmt::format("{:+.0f} from where it goes in", o.teleportDy)
+                                              : fmt::format("y {:.0f}", (out.lo + out.hi) * 0.5f);
+        }
         if (o.flipsGravity) e["gravity_after"] = std::string("flips");
         else if (o.gravityAfter == 0) e["gravity_after"] = std::string("normal");
         else if (o.gravityAfter == 1) e["gravity_after"] = std::string("upside down");

@@ -280,7 +280,9 @@ namespace {
             // Which way up only changes the price where a cube or robot is on the way.
             const bool sides = gr.asym[(size_t)to.column + 1] - gr.asym[(size_t)from.column + 1] > 0;
             for (size_t o = 0; o < from.choices.size(); o++) {
-                const Interval start{from.choices[o].opt.band.lo, from.choices[o].opt.band.hi};
+                // GucciBot (step 3): after a teleport, from where it comes out.
+                const Opening sb = afterOption(from.choices[o].opt);
+                const Interval start{sb.lo, sb.hi};
                 for (size_t b = 0; b < to.eligible; b++) {
                     auto const& ch = to.choices[b];
                     const double price = failPrice(to.column, ch.gap.lo);
@@ -353,6 +355,14 @@ namespace {
         return band.lo + h * 0.5f;
     }
 
+    // Where the line leaves a waypoint: where it is drawn, or for a teleport
+    // (step 3), where the player comes out.
+    float leaveY(Atlas const& a, Waypoint const& w) {
+        if (!w.option.teleports) return drawY(a, w);
+        const Opening out = afterOption(w.option);
+        return (out.lo + out.hi) * 0.5f;
+    }
+
     bool sameStep(Waypoint const& l, Waypoint const& r) {
         return l.gate == r.gate && l.choice == r.choice;
     }
@@ -369,7 +379,7 @@ namespace {
                 auto const& u = r.points[i];
                 auto const& v = r.points[i + 1];
                 if (sameStep(u, best.points[i]) && sameStep(v, best.points[i + 1])) continue;
-                node->drawSegment(ccp(u.x, drawY(a, u)), ccp(v.x, drawY(a, v)), 1.0f, ccc4f(1.0f, 1.0f, 1.0f, 0.35f));
+                node->drawSegment(ccp(u.x, leaveY(a, u)), ccp(v.x, drawY(a, v)), 1.0f, ccc4f(1.0f, 1.0f, 1.0f, 0.35f));
             }
         }
         // The best route on top: gold, and red where the map thinks the mode
@@ -378,7 +388,7 @@ namespace {
             auto const& u = best.points[i];
             auto const& v = best.points[i + 1];
             const bool doubtful = v.step >= kOffMap;
-            node->drawSegment(ccp(u.x, drawY(a, u)), ccp(v.x, drawY(a, v)), 2.0f,
+            node->drawSegment(ccp(u.x, leaveY(a, u)), ccp(v.x, drawY(a, v)), 2.0f,
                               doubtful ? ccc4f(1.0f, 0.25f, 0.25f, 0.95f) : ccc4f(1.0f, 0.8f, 0.2f, 0.95f));
         }
         // Step 4: the options at the gates on the way. Each gate's own options

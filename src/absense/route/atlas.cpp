@@ -110,6 +110,25 @@ namespace {
         float y;       // the portal's centre (a flying mode's room is set from it)
     };
 
+    // GucciBot (2026-10-24, step 3): a teleport portal (747) with its linked
+    // exit (749, m_orangePortal), which the map follows instead of giving up
+    // at it. phys::teleportPlayer (physics/gjbasegamelayer.cpp:84-168): the
+    // player's centre goes to the portal's own y plus the height between the
+    // two portals as the level placed them, x kept; with "save offset" it
+    // keeps its height above the portal, with "ignore y" it stays where it is;
+    // its gravity setting (1 normal, 2 upside down, 3 flip) acts after.
+    struct Teleport {
+        int uid = 0;
+        int index = -1;
+        float minX = 0.0f, minY = 0.0f, maxX = 0.0f, maxY = 0.0f;  // the entrance's rect
+        float exitY = 0.0f;  // where the centre comes out
+        float dy = 0.0f;     // the exit's height above the entrance (start positions)
+        bool keepsOffset = false;
+        bool ignoreY = false;
+        int8_t gravity = -1;
+        bool flips = false;
+    };
+
     std::unique_ptr<Atlas> g_atlas;
     GJBaseGameLayer* g_atlasFor = nullptr;
     int g_atlasObjects = -1;
@@ -289,9 +308,41 @@ namespace {
         const int n = pl->m_objects ? pl->m_objects->count() : 0;
         std::unordered_set<int> dynamicGroups;
         std::vector<Toggle> toggles;
+        // GucciBot (2026-10-24, step 3): teleport portals the map follows to
+        // their exit, and the exits themselves (nothing on their own).
+        std::vector<Teleport> teleports;
+        std::unordered_set<const GameObject*> followed;
+        std::unordered_set<const GameObject*> exits;
         for (int i = 0; i < n; i++) {
             auto* o = static_cast<GameObject*>(pl->m_objects->objectAtIndex(i));
             if (!o) continue;
+            if (o->m_objectType == GameObjectType::TeleportPortal && o->m_objectID == 747 && !o->m_isGroupDisabled &&
+                !o->m_isDisabled) {
+                auto* tp = geode::cast::typeinfo_cast<TeleportPortalObject*>(o);
+                if (tp && tp->m_orangePortal) {
+                    Teleport t;
+                    t.uid = o->m_uniqueID;
+                    t.index = i;
+                    const cocos2d::CCRect r = o->getObjectRect();
+                    t.minX = r.getMinX();
+                    t.minY = r.getMinY();
+                    t.maxX = r.getMaxX();
+                    t.maxY = r.getMaxY();
+                    t.dy = tp->m_orangePortal->m_startPosition.y - o->m_startPosition.y;
+                    t.exitY = (float)o->m_positionY + t.dy;
+                    t.keepsOffset = tp->m_saveOffset;
+                    t.ignoreY = tp->m_ignoreY;
+                    switch (tp->m_gravityMode) {
+                        case 1: t.gravity = 0; break;
+                        case 2: t.gravity = 1; break;
+                        case 3: t.flips = true; break;
+                        default: break;
+                    }
+                    teleports.push_back(t);
+                    followed.insert(o);
+                    exits.insert(tp->m_orangePortal);
+                }
+            }
             switch (o->m_objectID) {
                 case 901: case 1346: case 1347: case 1814: case 2067:  // move, rotate, follow, follow player Y, scale
                 case 3032: case 3033:                                  // keyframes
@@ -360,6 +411,9 @@ namespace {
         for (int i = 0; i < n; i++) {
             auto* obj = static_cast<GameObject*>(pl->m_objects->objectAtIndex(i));
             if (!obj) continue;
+            // A teleport the map follows is a gate of its own (step 4 below),
+            // and its exit does nothing to a player who touches it.
+            if (followed.count(obj) != 0 || exits.count(obj) != 0) continue;
             if (gpu::objectChangesEverything(obj)) {
                 unknownX.push_back((float)obj->m_positionX);
                 a->unknownObjects++;
@@ -569,6 +623,29 @@ namespace {
             g_uidIndex[b.uid] = b.index;
             gates.push_back(std::move(g));
         }
+        // GucciBot (2026-10-24, step 3): a teleport portal followed to its
+        // exit: TOUCH it (the route carries on from where it comes out) or
+        // AVOID it, like any portal.
+        for (auto const& t : teleports) {
+            const float cx = (t.minX + t.maxX) * 0.5f;
+            const float cy = (t.minY + t.maxY) * 0.5f;
+            const int c = std::clamp((int)std::floor(cx / kColumnWidth), 0, columns - 1);
+            Gate g = makeGate(*a, GateKind::Portal, c, cx, cy, t.uid, "teleport portal");
+            const float half = kPlayerHalf * (a->columns[(size_t)c].mini ? 0.6f : 1.0f);
+            contactChoices(g, t.minY - half, t.maxY + half, OptionKind::Touch, OptionKind::Avoid, false, t.uid,
+                           t.gravity, t.flips);
+            for (auto& o : g.choices) {
+                if (o.kind != OptionKind::Touch || t.ignoreY) continue;
+                o.teleports = true;
+                o.keepsOffset = t.keepsOffset;
+                o.teleportY = t.exitY;
+                o.teleportDy = t.dy;
+            }
+            freeChoices(g);
+            g_uidIndex[t.uid] = t.index;
+            gates.push_back(std::move(g));
+        }
+        a->teleports = (int)teleports.size();
         for (auto const& t : toggles) {
             if (!t.orb && playerGroups.count(t.target) == 0) continue;
             const float cx = (t.minX + t.maxX) * 0.5f;
@@ -804,6 +881,14 @@ namespace {
                 const float top = std::min(o.band.hi, o.band.lo + 600.0f);  // open sky: not up to the level's top
                 node->drawSegment(ccp(g.x + 3.0f, o.band.lo), ccp(g.x + 3.0f, top), 0.8f, markColor(o.kind, 0.7f));
                 drawMark(node, o.kind, g.x + 6.0f, markY(o.band), 9.0f, 0.85f);
+                // GucciBot (step 3): a teleport followed to its exit, a line
+                // from the portal to where the player comes out.
+                if (o.teleports) {
+                    const Opening out = afterOption(o);
+                    node->drawSegment(ccp(g.x, g.y), ccp(g.x + 8.0f, (out.lo + out.hi) * 0.5f), 1.2f,
+                                      ccc4f(0.75f, 0.45f, 1.0f, 0.9f));
+                    node->drawDot(ccp(g.x + 8.0f, (out.lo + out.hi) * 0.5f), 3.0f, ccc4f(1.0f, 0.6f, 0.2f, 0.9f));
+                }
             }
         }
         // What the map cannot follow past: a red line, floor to sky.
@@ -843,9 +928,20 @@ int gravityAfter(Option const& o, int before) {
     return o.flipsGravity ? 1 - before : before;
 }
 
+Opening afterOption(Option const& o) {
+    if (!o.teleports) return o.band;
+    if (o.keepsOffset) return Opening{o.band.lo + o.teleportDy, o.band.hi + o.teleportDy};
+    return Opening{o.teleportY, o.teleportY};
+}
+
 std::string describe(Gate const& g, Option const& o) {
     std::string out = fmt::format("{} {:.0f}-{:.0f} at the {}, x {:.0f}", optionKindName(o.kind), o.band.lo, o.band.hi,
                                   *g.what ? g.what : gateKindName(g.kind), g.x);
+    if (o.teleports) {
+        const Opening to = afterOption(o);
+        out += o.keepsOffset ? fmt::format(", comes out {:.0f} higher", o.teleportDy)
+                             : fmt::format(", comes out at y {:.0f}", (to.lo + to.hi) * 0.5f);
+    }
     if (o.flipsGravity) out += ", flips gravity";
     else if (o.gravityAfter == 0) out += ", gravity normal after";
     else if (o.gravityAfter == 1) out += ", gravity upside down after";
@@ -999,11 +1095,11 @@ std::string summary(Atlas const& a) {
     int moving = 0;
     for (auto const& c : a.columns) moving += c.dynamic ? 1 : 0;
     const std::string objects = fmt::format(
-        "{}: {} columns, {} objects ({} moving, {} it can't follow), {} gates (forks {}, orbs {}, pads {}, portals {}, "
-        "toggles {}, tight {}, waists {}, spacing {}; {} with options of their own), {} columns with moving parts, "
-        "built in {:.0f} ms",
+        "{}: {} columns, {} objects ({} moving, {} it can't follow, {} teleports followed to their exit), {} gates "
+        "(forks {}, orbs {}, pads {}, portals {}, toggles {}, tight {}, waists {}, spacing {}; {} with options of "
+        "their own), {} columns with moving parts, built in {:.0f} ms",
         a.level.empty() ? std::string("level") : a.level, a.columns.size(), a.objects, a.movingObjects,
-        a.unknownObjects, a.gates.size(), counts[(int)GateKind::Fork], counts[(int)GateKind::Orb],
+        a.unknownObjects, a.teleports, a.gates.size(), counts[(int)GateKind::Fork], counts[(int)GateKind::Orb],
         counts[(int)GateKind::Pad], counts[(int)GateKind::Portal], counts[(int)GateKind::Toggle],
         counts[(int)GateKind::Tight], counts[(int)GateKind::Waist], counts[(int)GateKind::Spacing], choosing, moving,
         a.buildMs);
