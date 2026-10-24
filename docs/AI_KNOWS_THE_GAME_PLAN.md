@@ -1,582 +1,609 @@
-# An AI pathfinder that knows the game: the plan
+# The Route Map: an AI pathfinder that sees the whole level (the plan)
 
-2026-10-24. Part 1 is for Nigel. Part 2 is the build plan. Nothing in it is built yet, apart from the Remember solutions switch (-ht) that step 0 uses.
+2026-10-24. This replaces the "level brief" version of this file from earlier today, which Nigel turned down. Part 1 is for Nigel. Part 2 is the build plan. None of it is built yet. The finished pieces sitting on stopped branches land first, in step M0.
 
 ## Part 1: For Nigel
 
-**What "knows the game" means.** Today's pathfinder only learns what Geometry Dash is by dying. It tries a fixed menu of click patterns and keeps whatever survives longest over the next 4 seconds. After a death, it nudges the clicks near that spot. That's why every new kind of wall has needed its own patch.
+**What it is.** It's a GPS for a level. Before it plays, the pathfinder looks at the whole level at once and plans a route from start to finish. Then GD's own physics turns that route into exact clicks and checks them. Nothing is trained, nothing is remembered between runs, no macro is used, and nothing is written for one level or for one kind of object.
 
-The new one reads the level before it plays, the way you would. It splits the level into parts by what you are in each one: cube, ship, UFO and so on, which way up, what size, what speed. For each part it knows what can't change once you're inside (a UFO can't flip itself) and which earlier choice decided that. Then it plans how to go into each part. GD's own physics still finds every exact click and has the last word, so a wrong idea costs time, never a bad macro. It never uses a macro or anything from earlier runs, and nothing in it is written for one level.
+**How it works.**
+1. **The map.** One hidden copy of the player runs through the whole level first, without clicking, to see where everything is at every moment, moving blocks included. The map is every place the player could be at each 1/60 of a second: height, rising or falling and how fast, mode, gravity, size and speed. Places inside blocks or spikes are left out.
+2. **The roads.** A road is what a click, a hold or a release does from a place. How each mode moves through open air is measured from GD itself on every run. For anything you touch (the ground, a slope, an orb, a pad, a portal), the map asks GD's own code what happens. No object gets a rule. A blue pad, a fake orb and a trap portal are all handled the same way: ask the game.
+3. **The route.** It works backwards from the end of the level and marks every place that still has a way to finish. Then it picks the safest route through those places: wide gaps and few clicks.
+4. **The clicks.** The map is only a sketch. GD's real physics drives the route on hidden copies and finds the exact clicks. The map just tells it which way to try first. Wherever the sketch was wrong, the physics finds out, that road is marked dead, and the whole level is planned again.
+5. **The check.** The real game plays the route quickly without drawing it. Deaths are noted instead of happening, safe mode stays on, nothing is saved, and afterwards the game is put back. One pass shows every spot where the route fails. Then the route is played for real and recorded, and the result still has to replay cold.
+6. **The repair.** A death in the check becomes a dead road on the map, explained in game terms. For example: "died at x 12185 on a ceiling spike in the UFO, entered right side up; the ball's last click decided that". The whole level is planned again, so the fix can start well before the death.
 
-**What it knows.**
-- What a click does in each of the 8 modes, and when a click does nothing. What every orb, pad and portal does, what kills you, and what a checkpoint puts back.
-- Each of these rules is tested against the game itself. If the game disagrees with a rule, that rule is switched off and named in the log.
-- Movement, like how high a cube jumps or how fast a UFO climbs, is measured from the game, not guessed.
-- The level as parts, the few ways into each part, and the earlier choices that decide which way in you get.
-- Everything it has tried in this run, so it never repeats itself.
-- Every spot where its simulation and the game disagree.
+**Your examples, with no rules:**
+- **A fake orb or trap portal.** GD says where touching it takes you, and from there nothing reaches the end. So the route never touches it.
+- **The bottom path that dead-ends 30 seconds later.** Working back from the end, nothing on the bottom path has a way to finish, all the way back to the fork. So the route clicks onto the top path at the fork, even before the top path is on screen.
+- **The UFO corridor whose top shrinks.** High places near the narrow end can't get down in time, so they have no way to finish, and neither do the high ways in. The route goes in low.
+- **Bloodbath's UFO, where every cold run dies today.** The ball's clicks set your gravity just before the UFO portal. If no right-side-up UFO place gets past the ceiling spike at x 12185, the ball's last click is chosen to go in upside down, about 2 seconds before the spike, without dying first. I'm not sure upside down is the only way through. If it isn't, the map will show the other way.
 
-**How it plays.**
-- Before going into a new part, it uses GD's physics to check that there is a way through from the way in it's about to take.
-- When it dies, it explains why in game terms, for example "died in the UFO; went in right side up; the ball's last click decided that". Then it goes back and changes that choice instead of the timing.
-- Where the game and its simulation disagree, it stops trusting the simulation there. It tries the clicks on the real game and says what differs.
-- Finished runs are still replayed from a cold start, and it still stops after 5 minutes stuck.
+**A correction to what I told you.** The map is a few million places, not a few hundred thousand. Building it takes about 10 to 60 seconds on a normal level and a few minutes on LIMBO or ORBIT, not a fraction of a second. A whole normal level should take about 3 to 8 minutes, close to what passing runs take today. I'm not sure of these numbers until Nov 5, when it's built and measured.
 
-**Why this fixes tonight's walls.** On Bloodbath, a ball click sets your gravity just before the UFO portal, about two seconds before the ceiling spike that kills the run. Today's repairs only shift clicks by a few ticks, and they only accept a fix that outlives that spike, so they keep picking right-side-up paths. The only run that got through without a macro went in upside down. The new pathfinder treats "which way up at the portal" as the choice and checks both ways before going in. If the UFO kills it anyway, it goes back to that ball click.
+**What it builds on.** These all stay: GD's physics on hidden copies of the player, the trigger model, the rewinds, the recorder and the cold-replay check. The fixes that were stopped on Oct 24 land first and help today's pathfinder too: the UFO fix, the drift check, and reading where objects really are. Today's pathfinder stays the default, behind a switch (Today / Route map), until all 8 bar levels pass on the new one.
 
-Two more things came out of tonight's logs:
-- **It can't fly a UFO.** The part of the pathfinder that searches for exact clicks can't fly a UFO at all. At both Bloodbath's and Clubstep's UFO walls, no click it tried changed anything. Most likely it presses and lets go within the same 1/240 of a second, and a UFO only flaps if the button is still down when the game moves it. I'm not sure yet. One test settles it, and that test is step 1. Catching facts like this is what the rule tests are for.
-- **It trusts the simulation over the game.** In the cold runs going right now, The Nightmare stopped at 90%. The game and the simulation disagreed at the same spot 100 times in a row, and the pathfinder believed the simulation every time.
+**LIMBO, ORBIT and Heliopolis.** The map is only as good as the simulator, and on those three levels the simulator is slow and often wrong today. On LIMBO it missed 22 of 32 deaths. So a second track runs alongside from day one:
+- count what each of those levels uses;
+- record how the real game really moves things, with a no-click pass where deaths are noted, safe mode on;
+- give those recordings to the simulator;
+- check routes on those levels on the real game.
 
-**What it builds on.** These all stay: GD's physics on hidden copies of the player, the trigger model, today's click finder, the level map, and the cold-replay check. The pile of patches (click nudges, escalation levels, rescue searches, "trying anyway") becomes one mechanism.
+Your macros for those levels are used only the way you already allowed: as a yardstick for where the simulator goes wrong, never to steer a run.
 
-| Step | What it adds | What you'll see |
+**What you'll see.** Every in-game test waits for your OK. Code and offline tests don't need your PC.
+
+| By | What lands | What you'd see |
 |---|---|---|
-| 0 | An honest yardstick: the 8 levels with no memory (running tonight) | So far: The Nightmare 90%, Bloodbath 31% (the UFO). Clubstep is at its 70% UFO wall as I write |
-| 1 | It knows what a click does in each mode, and the click search can fly | Bloodbath in practice, just before the UFO: "find a way through" draws a way past the spike |
-| 2 | It notices when the game and the simulation disagree | The Nightmare's 90% spot named within 3 tries, not 100 |
-| 3 | The level brief | An overlay of the parts and the gravity choices, to check against levels you know |
-| 4 | It looks before going into a part | Bloodbath from the start: "UFO: upside down gets through", then it gets past the spike |
-| 5 | Dead ends go back to their cause and are never repeated | Clubstep's, ToE2's and Bloodbath's walls each passed within 5 minutes |
-| 6 | Only clicks that do something | Fewer clicks, same passes |
-| 7 | About 10 levels it has never seen | A solved/failed list, each with a reason |
-| 8 | All 8 bar levels, unattended | The 2.0 bar |
+| Mon Oct 26 | The UFO fix and the shared fixes (today's pathfinder gets them too) | In practice at Bloodbath's and ToE2's UFOs, "Find a way" draws a way past the spike |
+| Thu Oct 29 | The heavy three measured | A table of where the simulator and the game disagree on LIMBO, ORBIT and Heliopolis |
+| Sun Nov 1 | GD's physics drives a whole route | "Plan the level" draws a full route on Clubstep, ToE2, The Nightmare and Bloodbath, without playing |
+| Thu Nov 5 | The map | "Show the route map": the planned route, plus every place that can still finish. Your three examples become automatic tests |
+| Mon Nov 9 | Check and repair | The new pathfinder beats Clubstep, ToE2, The Nightmare and Bloodbath cold |
+| Fri Nov 13 | Switches and toggles; new levels | Deadlocked, and your ~10 new levels overnight |
+| **Sun Nov 15** | **Checkpoint** | A report. You decide: ship it marked experimental, or hold 2.0 |
+| Sat Nov 21 | The heavy three | LIMBO, ORBIT and Heliopolis on the new pathfinder |
+| Tue Nov 24 | The bar | All 8 run unattended; you pick the default |
+| **Thu Nov 26** | **2.0** | After your in-game test |
 
 **Honest risks.**
-- Everything after step 1 depends on the click search being able to fly. If that takes more than one fix, steps 4 and 5 slip.
-- At some walls, "which way in" may be too rough a choice. It refines itself when that happens, but that costs time.
-- LIMBO, ORBIT and Heliopolis need the simulator itself made faster and more exact. This plan stops them spinning and makes them say why they're stuck. It doesn't get them to 100%.
-- Timing: steps 0 to 4 take about two weeks. Step 5 lands around the Nov 15 checkpoint, and steps 6 to 8 run close to Nov 26.
+- LIMBO, ORBIT and Heliopolis are the most likely to miss Thanksgiving. On Nov 15 you'll get measured numbers for them, not a promise.
+- The map is a simplified sketch and may be off on slopes or the spider. GD's physics always has the last word, so a wrong sketch costs time, never a bad macro.
+- If the UFO fix doesn't make the hidden copies fly, everything after it slips. The Oct 26 test settles that.
+- This is about 7,000 new lines in about four weeks, and the tests need your PC.
 
 **What I need from you.**
-1. A yes on this direction. Two bigger alternatives wait until after 2.0: a full rulebook that drives every click, and a trained "instinct". The instinct needs training, which you ruled out as the core.
-2. LIMBO, ORBIT and Heliopolis will probably be the holdouts at Nov 15. If you want them at 100% for 2.0, say so now and their simulator work starts alongside. That work is open-ended and would slow the rest a little.
-3. Before about Nov 10: around 10 non-platformer levels the pathfinder has never played, covering every mode.
-
-Nothing else changes for now. Per your rule, the new pathfinder stays a switch, with today's engine as the default, until all eight levels pass.
+1. A yes on this plan.
+2. A yes on the check in step 5: the real game plays the route quickly with deaths noted, then is put back. Safe mode stays on and nothing is saved. Without it, every failure costs a real death and a rewind, which is much slower on the heavy levels.
+3. Tell me when I can use the game for tests. Nothing runs until you say.
+4. About 10 levels it has never seen, covering every mode, by around Nov 10.
 
 ---
 
 ## Part 2: Build plan (for the engineer)
 
-Line numbers are at HEAD e3573f9 (build -ht). The designs and judges cited 49eb76d or c98a7dd, and pathfinder.cpp has shifted 10-40 lines since then, so search by function name.
+Line numbers are at master 9789add (build 2026-10-24-a). If they've moved, search by function name.
 
 ### 2.1 Constraints (Nigel's, all standing)
 
-- **No macros, no memory.** No macro ever steers a search (-hs). Bar runs use Remember solutions off (-ht), so "cold" means no macro and no memory.
-- **Training.** No training as the core. An optional trained decider can come later.
-- **Speed and stopping.** Slower is fine if the hard levels reach 100%. After 5 minutes stuck (kStuckSeconds), stop and say where.
-- **Cold replay.** A result counts only after it replays from a cold start.
-- **No level-specific fixes.** Never add a per-level or per-spot rule. A failure on a bar level is fixed as the general weakness it shows (memory feedback_pathfinder_generality).
-- **Calm inputs.** A gap between input changes is a preference, never a rule or a label ("nothing should count as spam").
-- **Platform and safety.** A Windows-only engine is fine. Automated runs only happen with safe mode on.
-- **Default.** The new engine stays a switch, with today's engine as the default, until all 8 bar levels pass.
+- **No macros, no memory.**
+  - No macro ever steers a search.
+  - Remember solutions (`pf_remember_solutions`) stays off for every measured run. "Cold" means no macro and no memory.
+  - Nigel's macros are only a yardstick for simulator mismatches (memory feedback_safe_mode_and_no_macros).
+- **No rules for levels or objects.** No level-specific fixes, and no rules per object ("be basic"). What an object does is asked of GD's own code.
+- **No training as the core.**
+- **Physics and cold replay.** GD's exact physics has the last word. A result counts only after a cold replay from a fresh open.
+- **Speed and stopping.** Slower is fine if the hard levels reach 100%. Stop after 5 minutes without progress (kStuckSeconds).
+- **Calm inputs** are a cost, never a rule.
+- **Platform.** A Windows-only engine is fine (GB_NATIVE_ENGINE).
+- **A switch.** The new engine stays behind a switch, with Today as the default, until all 8 bar levels pass: Clubstep, ToE2, Deadlocked, The Nightmare, Bloodbath, LIMBO, ORBIT and Heliopolis. All 8 must reach 100% for 2.0.
+- **Safety and the PC.**
+  - Safe mode is on for every automated run; the batch scripts refuse to run without it.
+  - Nothing runs in-game until Nigel says so. On 10-24 he said: "dont take control of my computer just yet".
+- **Deadline.** 2.0 by Thu Nov 26, with a checkpoint on Sun Nov 15 (ROAD_TO_2_0, Release section).
 
-### 2.2 Where things stand
+### 2.2 Facts the plan rests on
 
-**Builds that already landed.**
-- -hs removed the human-macro idea.
-- -ht added Remember solutions (`pf_remember_solutions`, default off, compat/bot.cpp:193).
-  - With it off, `start()` never opens `memory::Store` (pathfinder.cpp 489-490), so every `learning` gate is false. That means no remembered ideas, no priors reordering (finishIdeas 2702), no spot fails and no lessons.
-  - `learned/` still holds solutions recorded during macro-seeded runs. Back it up and empty it before anyone turns Remember on again.
-- Exact start flags is a test switch, off by default (settings_types.hpp:84), using the -hq rule (gdKeepsFlags, trajectory.cpp 1925).
-- Route mode is Off by default.
+**The cold baseline** (-ht/-24a, no macro, no memory):
 
-**The cold yardstick, being measured now.** Log `Geode 2026-10-23 23.38.11.log`; settings: -ht, Route Off, Remember off, Exact flags off.
+| Level | Result | Detail |
+|---|---|---|
+| Clubstep | 100% | |
+| ToE2 | 18.4% | x 5340, tick 4002. Killers obj 720 at (5369, 327) and (5369, 246), about 550 ticks into a UFO entered from a ship |
+| The Nightmare | 90.5% | x 25740. 213 dead ends at tick 19832 on obj 186 (25755, 225). 100 identical partings at tick 19698: real y 502.1, vy 5.7, right side up; simulated y 507.0, vy 13.3, upside down; each 8 ticks after a rewind to 19688 |
+| Bloodbath | 30.9% | Ceiling thorn obj 218 at (12185, 472), uid 7382, tick 8675. The UFO portal is at x 11715 (tick ~8328) after a ball section (x 10995-11715). All 4 cold normal-engine runs went in right side up. The cold Route drives pass went in upside down, died first at obj 216 (11789, 434) at tick 8370, and passed after a local repair |
+| Deadlocked | Not finished | GD crashed at 71% (fixed in -24a), not rerun |
+| LIMBO (-hp) | 14% | |
+| ORBIT (-hp) | 3% | |
+| Heliopolis (-hp) | 13% | |
 
-- **The Nightmare: stuck at 90.5%** (x 25740, tick 19821) after 501 s.
-  - 213 dead ends at death tick 19832, on object 186 at (25755, 225), each verdict "cannot move".
-  - 100 identical partings at tick 19698. Real: y 502.1, vy 5.7, normal gravity. Simulated: y 507.0, vy 13.3, upside down.
-  - This has the same shape as the old 75% wall: a gravity object counted as used in one and fresh in the other after a rewind. I'm not sure that's the cause here.
-- **Bloodbath: stuck at x 12167, tick 8675, on the UFO wall.**
-  - Every normal-engine run without a macro has stopped there: 4 of 4 now.
-  - This settles the open -hp question: Exact start flags did not cause the stall, because it stalls the same way with them off.
-  - Earlier in the run there were 75 + 52 identical partings at ticks 1119 (x off by 1.81) and 1127 (x off by 4.52). y was equal, and the x gap grows about 0.9 units a tick. That looks like the two disagreeing about a speed portal. Not checked.
-- **Clubstep:** running; at its 70% UFO wall (tick ~14600) at 00:02.
+**Code facts checked at 9789add:**
+1. **The search can't flap a UFO.**
+   - `alternativesFor` (trajectory.cpp 3393-3429) offers the UFO only `{1,false}` (plus `{2,true}` thenRelease on a ring), and it returns before the held branches.
+   - `Sim::step`'s `apply` (2769-2794) presses and releases before the update.
+   - The UFO flap in updateJump needs `m_stateRingJump && m_jumpBuffered` at the update (physics/player.cpp 609-611). It also reads `m_isOnSlope`, `m_wasOnSlope` and `m_slopeVelocity` (627-637).
+   - On step1-inputs, 380bb50 makes legs play thenRelease units, but its `alternativesFor` still has no UFO press held through the tick.
+   - Legs that start inside a UFO log exactly 4n−2 steps.
+2. **The drift check is muted after decisions made ahead.** `m_lastReplanTick = tick` is set at 4658 and checked at 5428. step2-trust ea7e4c4 fixes this.
+3. **The atlas reads sprite positions** (atlas.cpp 318-319, 336-337 and nearby), and GD's enter effects slide sprites. step3-brief 4d3c664 and be0d881 fix this.
+4. **LegState (4403-4539) is already a per-tick beam over exact SimSnapshots.** It has:
+   - a merge key, `keyOf` (4478): y 0.25, vy 0.05, mode, gravity, ground, held, mini, dual, on-orb, goal fired, and speed;
+   - class shares under a cap (4775-4800);
+   - pause and resume across slices (4532, 4631-4640);
+   - a deterministic step budget.
+5. **A session that begins from the live game has the exact object table.** `Sim::begin` calls `world::baseTable` (2428) when its first run comes while the game stands at its tick. Kept starts on LIMBO, ORBIT and Heliopolis never get a table (ledger coveredNow, and lastUncovered after every rewind).
+6. **SimSnapshot (1256-1306) copies by value:** activated1/2, ringTouch, ringUsed, activatedIDs, actions, WorldState and the OpLog. The OpLog's sealed chunks are shared by pointer, but the pointer vector grows with the session. So snapshot cost grows over a long session.
+7. **The ghost** (`beginGhost`/`stepGhost`, 4931-5076):
+   - it is a no-input World run that forces speed portals (5037-5044), ignores hits (5045-5049) and calls `setAllRows(true)` (4974);
+   - it never reported back on LIMBO or ORBIT on 10-23. The cause is unknown.
+8. **judge::run (judge.cpp 67-197):**
+   - it plays a script on the real game synchronously, without drawing, and queues inputs the way applyInput does;
+   - it stops at the first death (157-158), and noteDeath keeps only the first death (37-42);
+   - it puts the game back with `createCheckpoint` and `resetWithState` (94-100, 174-176);
+   - while it runs, `destroyPlayer` notes the real player's death and returns (hook_playlayer.cpp 687-690);
+   - nothing in the pathfinder calls it yet.
+9. **The Materializer.**
+   - `Materializer::write` (materialize.cpp 1180-1202) writes position, node position, last position, move marker, dirty words, group counter and the disabled flag. It writes no rotation and no scale.
+   - `startPending` (1391-1395) takes the full write-back whenever `m_fy > 0`. ORBIT logs a y section factor of 0.01 (44.9 s spent there), and Heliopolis very likely does too (105.5 s).
+10. **What the World runs.**
+    - It runs 29 trigger kinds (def.cpp `kindShipped` 194).
+    - It does not run rotate, follow, follow player Y, scale, collision, reset, advanced follow, keyframes, area and enter effects, or the camera. Their groups are Uncertain (`certaintyOf`, certainty.cpp 82).
+    - The flying floor and ceiling read the camera (tierd.cpp fact (i)), which is frozen at a run's start.
+11. **The switch parameter.** gucci_pathfinder's `engine` parameter already picks Absense or Classic. step2-trust 18f2d17 adds `brain` (today | understanding) and `model/engine.hpp`.
+12. **Throughput:**
+    - Real runs: 100-324k simulated ticks/s on normal levels, 42.5k on LIMBO, 48.4k on Heliopolis, 10.3k on ORBIT.
+    - Leg searches: about 100k steps/s on normal levels, 51k on LIMBO, 36k on Heliopolis, 14k on ORBIT.
+    - Stepping the real game without drawing: about 30-55 µs a tick on normal levels, 0.33 ms on Heliopolis, 0.79 ms on LIMBO and 1.07 ms on ORBIT. These come from log totals and are not verified per tick; H0 measures them.
 
-**The leg search cannot flap a UFO.** The evidence is strong; the cause is not confirmed.
+**Stopped branches** (not on master):
+- step1-inputs: 629920b, 6ef9938, 380bb50, cb9fc9b, plus uncommitted lineage-parity work in its worktree.
+- step2-trust: ea7e4c4, 18f2d17.
+- step3-brief: 4d3c664, be0d881, 8dcfc5e, d3da645, b1ebd51. The rulebook draft (d4850c1, b5b6ab3) and b64bbf0 are also on it; this plan does not land those.
 
-- Every rescue leg that started inside a UFO used exactly 4n−2 simulated steps over n ticks:
-  - Bloodbath -hp, stops 8321-8675 (8470: 114 ticks, 454 steps; 8602: 74 ticks, 294 steps);
-  - Bloodbath -ht: 624 legs;
-  - Clubstep -ht, stops 14315-14612 (14464: 161 ticks, 642 steps).
-- 4n−2 means one state on the first tick, then exactly two live states a tick (held and released), each with two moves. No input ever produced a third distinct state.
-- Bloodbath's legs from ball stops (7638-8238) all emptied at tick 8359, about 31 ticks after the UFO portal (around tick 8328).
-- The code path:
-  - stepLeg's moves are carry-on `{0, down}` plus alternativesFor's moves (trajectory.cpp 4679-4691).
-  - For the UFO, alternativesFor offers only `{1,false}` (3405-3409), plus `{2,true}` while on a ring.
-  - Sim::step's `apply()` (2769-2794) plays `{1,false}` as pushButton, then releaseButton, both before the physics update.
-  - If GD flaps the UFO only when the button is still down at the update, a same-tick tap does nothing. The merge key then folds every tapped child into the carry-on child.
-- The ideas that do fly the UFO keep the button down through the tick: "orb spam" (`{2,true}` then `{0,false}`), "hold", and steer's toggle `{1,true}`.
-- The branching search has the same `{1,false}` UFO alternative (3604), so in a UFO it explores flap timings only on rings.
-- Two things can't be settled from the logs alone:
-  - The alternative explanation (every tapped child dies on the spot) can't be ruled out.
-  - Whether the real game flaps on a same-tick tap is unknown.
-
-  Step 1's first test answers both.
-- **Checked and ruled out:**
-  - The frontier cap: these legs peaked at 2 states, far below 128.
-  - `m_touchingRings`: SavedPlayerCheckpoint restores it (core/checkpoint_player.cpp 188-190 and 449-450).
-
-**Other code facts confirmed at HEAD.**
-- **Movement limits** are typed in: planner.cpp envelope(), lines 29-43.
-- **Gravity on the route:**
-  - Rise and fall swap only in cube and robot columns (asym, 246-281).
-  - Gravity changes only through options (gravityAfter, atlas.cpp 832).
-  - So ball, spider and swing flips are invisible to the route.
-- **The atlas's "already moved" test** reads sprite positions (atlas.cpp 336-337; also 318-319, 355 and 382). GD's enter effects slide sprites.
-- **The divergence check is muted after ahead commits.**
-  - decide() sets `m_lastReplanTick = tick` at 4658. For an ahead decision, that tick is the plan's future end.
-  - afterTick only reports a parting once `now >= m_lastReplanTick + gap` (5428).
-- **materialize.cpp startPending** (1391-1399) takes the full write-back whenever `m_fy > 0`. ORBIT and Heliopolis log a y section factor of 0.01.
-- **gucci_abs_simulate and gucci_sim_vs_real can't express a same-tick tap.** In their script language (parseAbsScript, mcp_tools.cpp 136-156), `p` keeps the button down through the tick.
-- **judge::run** plays from wherever the real game is. Nothing in the pathfinder calls it yet; only gucci_sim_vs_real does (compat/bot.cpp 862).
-
-### 2.3 What gets built
-
-The core is Design 2 (Level Brief + Choice Backtracking), as both judges recommended. Pieces taken from the other two designs:
-
-**From Design 1:**
-- rule checks, adapted to run from real states instead of constructed copies;
-- measured movement;
-- gravity in every mode;
-- the atlas fixes: read `m_positionX/Y`, and follow teleport portals to their exit;
-- the whole-level situation plan with a reason for each step, used to order probes and shown on screen;
-- provenance of gravity, mode and size;
-- splitting a ledger bucket when exact answers disagree inside it;
-- never going back past the furthest good path;
-- the batch of levels it has never seen;
-- one narrow interface header.
-
-**From Design 3:**
-- leg diagnostics: peak frontier, the capped flag, cap and exact comparisons, and a protected lineage;
-- TraceSample gains mode, mini and speed;
-- the overnight harness.
-
-**Deferred until after 2.0:**
-- Design 1's fourth setting, where the model drives every step;
-- Design 3's trained net and its hooks H1-H6;
-- heavy-level World work, unless Nigel asks for it (side track B).
-
-**Two changes to the judges' order,** because of evidence that came in after they wrote:
-1. The leg fix becomes "inputs, measured", the rulebook's first family, because the leading suspect is input semantics, not ranking.
-2. Trust moves up to step 2, because tonight's cold runs show repeated identical partings as the first wall on two levels.
-
-### 2.4 Architecture
+### 2.3 Architecture
 
 ```
-level opens
-  route/atlas.cpp (fixed positions, teleports) --> route/brief.cpp: sections, locks, setters,
-                                                   entry classes, dynamics, killer movers
-  model/rules.cpp + calibrate.cpp ------------> input table, object rules, measured movement (checked)
-  model/situate.cpp --------------------------> per boundary: entry classes in order, with a reason
-
-decide()  --[model/engine.hpp: Contract stage]--> today's ideas / steers / search / legs (fixed menus)
-                                                  --> verdict: better(), robust(), trim, commit
-dead end  --[choice repair]--> explain (choices.cpp) --> ledger (model/ledger.cpp) --> attempts in cause order
-                                --> probing from kept starts, or anchors + sliced re-step --> restore
-afterTick --[model/trust.cpp]--> partings, unseen deaths, unrepeatable answers --> ask the game (judge::run)
+fresh open, game frozen at tick 1 (Phase::Planning; 33 ms slices keep the frame drawing)
+ 1 SCAN      one no-input copy from tick 1 (the ghost, grown): clock x(t), mover poses,
+             each portal's room asked of GD, camera, snapshots every 0.5 s
+ 2 TIMELINE  per tick: blocked y-intervals, surfaces, room, contact objects
+             (statics from the atlas object read at m_positionX/Y; movers from scan or recording)
+ 3 MOTION    open-air motion per mode/size/gravity/speed/warp/TPS, measured with GD's update, checked
+ 4 MAP       places + roads; contacts asked of GD (cached); forward sweep, backward sweep
+             -> cost to the end of every place; live corridor; best route per class
+ 5 DRIVE     exact A* on GD's physics in one Sim session from tick 1; h = the map's cost to go;
+             produces the exact inputs; sim evidence (dead places) flows back into the map
+ 6 REHEARSE  the real game plays the driven route without drawing, deaths noted, game put back
+             -> game evidence -> map re-plan -> drive -> rehearse from the first changed step
+Phase::Playing: the clean route through the commit path (recorded), drift check every tick
+ -> saveResult -> cold replay from a fresh open
 ```
 
 Principles:
-- **Physics decides.** The model picks targets, orders the work and assigns blame. The trust chain is unchanged: evaluate, robust, real-tick commit, divergence re-plan, cold replay. So a wrong model costs time, never a wrong macro.
-- **A switch.** `pf_engine = today | understanding`. On the Pathfinder page it reads "Engine: Today / Understanding (test)", and gucci_pathfinder takes `engine`. Understanding ignores the route switch and logs that it does.
-- **Shared-code fixes land for both engines.** These are step 1's input menus, step 2's divergence fix and the Exact start flags default. Each one is gated by a cold regression batch on Clubstep, ToE2 and Deadlocked.
-- **One interface.** pathfinder.cpp includes only `model/engine.hpp`.
-  - Every contract or repair decision logs one line starting `model:`, so a path the model never reached shows up as a missing line. This is the half-port check.
-- **Determinism.** Budgets are counted in simulated steps, orderings are stable, and the clock is only a safety stop.
-- **Handoffs.** These go to today's engine, are counted, and are logged ("model: today's engine decides this one: two players"):
-  - two-player decisions;
-  - platformer levels;
-  - a player going left;
-  - dual stretches.
+- **Physics decides.** The map orders the work. It never forbids a road: a place with no way home is a soft wall that the drive defers, never drops. A wrong map costs time, never a wrong macro.
+- **Evidence classes:**
+  - `map`: geometry and measured motion;
+  - `sim`: an exact copy killed by a Static or Modelled killer, in a trusted span;
+  - `proof`: the exact rung, in a trusted span;
+  - `game`: a rehearsal or a real death.
 
-### 2.5 New components and data structures
+  In untrusted spans, `sim` evidence kills nothing.
+- **One interface.** pathfinder.cpp includes only `routemap/engine.hpp` (step2-trust's `model/engine.hpp`, renamed). Every engine decision logs a `routemap:` line, so a path that is never reached shows up as a missing line. This is the half-port check.
+- **Determinism.** Budgets are counted in simulated steps, costs are integers, orderings are stable, and the clock is only a safety stop.
+- **Handoffs.** These go to Today and are logged: platformer, two-player with separate controls, reverse (1917) and rotate gameplay (2900).
 
-**1. model/rules.hpp/.cpp (~700 lines)**
-- **The input table.** Keyed by (mode, mini, gravity, where ∈ {ground, air, on orb}).
-  - It records which acts change the next 8 ticks compared with doing nothing.
-  - It is measured lazily: the first time a decision starts from a real kept start in a combination not yet measured, it runs 6 copies of 8 ticks from that start.
-  - It is cached per launch and TPS, and logged once, e.g. "model: UFO in the air: a tap inside the tick does nothing; a one-tick press flaps".
-- **`menuFor(p, down, onRing)`** replaces alternativesFor's hand-written menu.
-  - It offers every act that does something and nothing that doesn't.
-  - For a combination not yet measured, it falls back to today's menu.
-- **Object rules.** One row per `gpu::ObjectKind` (with power and flags).
-  - Rows are written from the binary transcriptions in physics/collisions.cpp and physics/player.cpp, and each row cites its source.
-  - They are checked from exact traces: when a copy fires an object (noteRingUsed 823, and the portal and pad hooks), the state before and after is compared with the row.
-  - A row that disagrees is switched off for the launch and logged, and nothing downstream relies on it.
-- **Death and checkpoint rows:** hazard, the side of a solid, the void (inVoid 770), and the flag rule (gdKeepsFlags 1925).
+A **step** is 1/60 s: 4 ticks at 240 TPS, or TPS/60 ticks in general. The map and the drive both use steps as their layers. The atlas's 30-unit "columns" are a different thing.
 
-**2. model/calibrate.cpp (~400)**
-- Per-tick vertical response per (mode, mini, speed, gravity, TPS), taken from the same 8-tick runs.
-- A 1-D integrator turns these into rise and fall per 30-unit column. This replaces envelope() and feeds "Show reach".
-- **Check:** one exact free-air run per mode against the integrator, within 1 unit. If it fails, the envelope stays generous and the log says so. I'm not sure every mode passes this check.
+### 2.4 The scan (`routemap/scan.*`, grown from beginGhost/stepGhost)
 
-**3. route/brief.hpp/.cpp (~900)**
-- Built whenever atlasFor builds the atlas.
-- **Sections** are cut at:
-  - mode, size, speed, dual, solo and teleport portals;
-  - the player-state triggers 2066, 2900, 3022 and 1932.
-- **Locked state:**
-  - Gravity is locked in cube, robot, ship, UFO and wave sections, except across a gravity object inside the section. It is free in ball, spider and swing.
-  - Mini, mode and speed are locked except across their own portals.
-- **Setters** come from a backward pass. For gravity:
-  - the previous ball, spider or swing section's flip region (its last surface contacts before the boundary);
-  - any gravity portal, orb or pad in between;
-  - further back, transitively, if the previous section is locked too.
-- **Entry classes** are gravity (only where a setter can change it) × band × rising or falling. The band is the openings at the section's first tight point or fork, or else thirds of the room.
-- **Dynamics:** each section is labeled Static, Modeled or Unknown, naming the trigger kinds the World doesn't run (world/def.cpp kindShipped, world/certainty.cpp).
-- **Killer movers:** gates whose choice targets a group that holds a killer inside the section (WorldDef group targeting).
-- **Room:** the atlas estimate, replaced by the exact flying bounds the first time a copy crosses the portal.
+- **Start.** It begins at tick 1 of a fresh open, before anything else runs, from the live game, so it has the exact table. "Plan from here" in practice begins from the live state instead. While planning, the game is frozen and the scan has the simulator to itself.
+- **What it does.** It takes no input, ignores hits, and forces each speed portal at its x (the existing code).
+- **What it records each tick:** x, player speed, time warp, the gravity mod, and the camera fields getMin/MaxPortalY read.
+- **Rooms.**
+  - At each mode, size, gravity, dual or solo portal it branches: restore the scan snapshot a few ticks before the portal, put the copy at the portal's center height, step through, then read the PortalState and the floor and ceiling.
+  - This is asked of GD, not computed. b64bbf0's numbers appear only as a cross-check in the log.
+- **Movers.** Each tick it records every collidable World slot within reach of x(t) (slot, m_positionX/Y, enabled). Rotation and scale come from the recording once H2 lands. Clubstep, ToE2, The Nightmare and Bloodbath read 0 movers at tick 1, so they cost nothing.
+- **Snapshots** every 0.5 s, as restart points for contact answers.
+- **Clock forks.** A speed portal that doesn't span the corridor is logged ("clock may fork at x"). The map uses the scan's clock, and the drive is exact regardless.
+- **Profiling.** Each part is timed (gucci_abs_profile). H1 finds why the ghost stalled on LIMBO and ORBIT. The candidates are `setAllRows(true)`, the per-slice resume cost, the 120 s cap, or a refusal while a search was active. I'm not sure which.
 
-**4. model/situate.cpp (~700, beside route/planner.cpp)**
-- The layered best-K search over situations, with:
-  - measured reach;
-  - gravity for every mode, with ball, spider and swing flips as transitions;
-  - a vertical label;
-  - ledger facts as removed or priced edges.
-- **Output:** for each boundary, the entry classes in preferred order, each with a reason, e.g. "flip in the ball before x 11715: the UFO is planned upside down". "Show the planned route" draws this.
+### 2.5 The corridor timeline (`routemap/timeline.*`)
 
-**5. pathfinder/choices.hpp/.cpp (~450)**
-- **ChoiceTrace** of the committed path, written in afterTick: the section entered and its class, the orbs, pads and portals fired, and which side of each fork. It is cut back on every rewind, the way dropLessonsAfter is.
-- **`entryClassOf(trace, boundaryX)`** reads an idea's class at a boundary.
-- **`explain(dead end)`** returns the section, the killer's uid and certainty, the class entered, the setters, the choices inside the section and the killer movers. It returns these as text and as the ordered list of repair attempts.
+Each tick fixes x, so every obstacle at that tick becomes a y-interval for the player's center. The timeline is kept per hitbox class: normal, mini, and the wave's if GD's differs. The sizes are read from the copy with getObjectRect, getObjectRect(0.3,0.3) and getOrientedBox after setFakeMode, never assumed.
 
-**6. model/ledger.hpp/.cpp (~600), plus tools/ledger_tests.cpp in run_tests.bat**
-- **Rungs** follow ROUTE_ENGINE_PLAN step 6, scaled by TPS/240:
-  - 128 states, 30k steps;
-  - 256 states, 100k steps;
-  - 512 states, 300k steps, half the calm gap;
-  - 1024 states, 1M steps, no calm gap;
-  - then an exact search in ground modes.
-- **Hard facts** come only from exact, uncapped, full-move searches whose deaths are Static (or Modeled with `world::drifts()` unchanged), confirmed by a straight re-run.
-- **Real deaths** never become hard facts.
-- **Splitting:** when exact answers disagree inside a bucket, it splits by the sign of vertical speed, then a finer y, then held.
-- **MCP:** gucci_route_ledger.
+Each tick has:
+- **hazard intervals:** the outer box, the oriented box where `m_shouldUseOuterOb` is set, and circles for saws, the way `phys::collisionCheckObjects` tests them;
+- **inner-solid intervals:** a side hit or being crushed, which is death;
+- **surfaces:** the tops and bottoms of solids, and slope lines;
+- **the room's floor and ceiling;**
+- **contact intervals,** each with its uid: orbs, pads, portals, slopes and touchable triggers.
 
-**7. model/trust.hpp/.cpp (~450)**
-- **Detection.** A parting key is (tick, dx and dy to 0.1). Three identical partings mark the ±32×scale ticks around them as an untrusted span.
-- **What differs.** Real against the plan trace:
-  - the gravity, mode, size and speed flags;
-  - the used flags of portals, orbs and pads within two columns, read through `m_positionX` and compared with the copy's fired set.
-- **Inside an untrusted span:**
-  - the simulation's verdicts make no facts and no "cannot move" dead ends;
-  - nothing is decided ahead, so the game waits at the decision;
-  - the top 3 ideas that cross the span are played on the real game with judge::run before one is committed, ranked by the real outcome.
-- **Also here:**
-  - the divergence fix;
-  - never going back past the furthest good path;
-  - stop lines that name the span.
+Where the data comes from:
+- Statics come from the atlas's object read (`gpu::classifyObject`) at m_positionX/Y (4d3c664), in an x-sorted index. They are computed per tick when asked for, not stored.
+- Movers come from the scan, or from a recording (H2).
 
-**8. model/engine.hpp/.cpp (~800)**
-- The interface, the Contract stage, the choice-repair driver, the handoffs and the `model:` lines.
+To stay optimistic:
+- Against hazards, the player's footprint is a circle inside the hitbox at every rotation.
+- Objects nobody can vouch for don't block; they add doubt cost. These are groups moved by a route-dependent trigger, or by a kind that nothing models or records.
 
-**9. Changes to trajectory/ (~400)**
-- **LegGoal** gains:
-  - `wantGravity`, `wantMode` and `wantMini`, checked at the crossing next to fireObject and avoidObject (stepLeg 4702-4706);
-  - `lineage`, a protected path that is never merged or dropped.
-- **Live** gains `spamPeriod`, `spamPhase` and `releaseNext`, so stepLeg honors `Alternative::thenRelease` and `spamPeriod`. `ringHidden` comes from the previous tick's press.
-- **keyOf (4478)** gains:
-  - the buffered-press flags (`m_jumpBuffered`, `m_stateRingJump`; check the Geode names);
-  - a hash of the rings used since the leg began (check that SimSnapshot carries `m_ringUsed`).
-- **TraceSample** gains mode, mini, speed, and the uid fired on that tick.
+The timeline takes a few MB per level.
 
-**10. UI and MCP (~400)**
-- The Engine switch.
-- "Show the level brief".
-- "Find a way through the next section" (practice).
-- New MCP tools: gucci_level_brief, gucci_route_ledger, gucci_model_rules, gucci_model_probe.
-- gucci_abs_simulate and gucci_sim_vs_real gain a `t` step (a tap inside the tick).
-- gucci_route_leg gains lineage and class options.
-- Rescue and drive leg log lines gain peak states, "dropped for room" and the relaxed count. compat/bot.cpp 805 already returns the first two to the MCP.
+### 2.6 Measured motion and contact answers (`routemap/motion.*`, `routemap/contacts.*`)
 
-In all, about 6k new lines and about 1k changed.
+**Motion tables.**
+- **What is measured.** A table is made for each combination the scan sees of mode, mini, gravity, speed, gravity mod, time warp and TPS. A hidden copy in open air runs GD's own `PlayerObject::update` with no collision pass, over:
+  - vertical speed on a 0.01 grid;
+  - the button state (up, down, and the buffered and ring flags as GD reads them);
+  - this tick's input (nothing, press, release, re-press, or a tap inside the tick).
+- **What is stored:** vy′, dy and dx. Each combination takes about 10-20 ms. Tables are measured on every launch, so nothing carries over.
+- **The key** is what updateJump reads (physics/player.cpp 516-799): yVelocity, upside down, gravity mod, vehicle size, speed and speed multiplier, jumpBuffered, stateRingJump, isAccelerating, onGround, dash and robot boost. Slope and dash ticks are contacts, not table entries.
+- **The input check**, per mode and situation (ground, air, on an orb): each input kind is compared with doing nothing over 8 ticks. A kind that changes nothing is not a road. It is logged once, for example `routemap: motion UFO normal 1x 240: a tap inside the tick does nothing; a one-tick press flaps`.
+- **The self-check:** three 240-tick random scripts composed from the table must match GD's update within 0.05 units. If they don't, the mode is logged as drifting, and the map uses only exact answers there, staying optimistic.
+
+**Contacts (no object rules).**
+- **Generic surface behaviors** are measured once per mode, size and gravity on the level's own blocks during the scan, then reused anywhere by translation and covered by the self-check:
+  - landing (stand: snap to the surface, vy 0, on the ground);
+  - sliding along a floor or ceiling in the flying modes;
+  - a side hit, which is death.
+- **Everything else is asked of GD for each object:**
+  - orbs of every kind, pads, and gravity, mode, size, speed, dual and teleport portals;
+  - dash orbs, toggle orbs, touch triggers and slopes;
+  - the ball's and the spider's presses from a surface. The spider's press is a raycast through the level's geometry in GD.
+- **How an answer is made:**
+  1. Take the scan snapshot nearest before the contact.
+  2. Step the scan copy in free air to a few ticks before the contact.
+  3. Overwrite its y, vy, mode (setFakeMode), gravity, size and button.
+  4. GD's code plays the contact with the road's input, using the copies' phys:: versions (hooks.cpp).
+  5. The state a few ticks later is the answer, cached per (uid, entry place, road).
+- **Exact answers win.** When the drive reaches a contact from an exact state, its answer replaces the set-up one. If the two disagree, that object takes answers only from exact states from then on. Until the drive gets there, the map treats the object optimistically: touching it may lead anywhere in the room. This is the riskiest new code, and it is only ever a first guess.
+
+### 2.7 The map (`routemap/places.*`, `routemap/sweep.*`)
+
+**Places.**
+- **The key:** step, y band (2 units), vy band (0.5), mode, mini, gravity, speed, held, plus a flags byte: the standing surface's id, buffered, dash and robot boost. A standing place exists once per surface per step. The bands are dials.
+- **Storage:** each step keeps a hash from key to index. A place takes 8-12 bytes: its cost from the start, its cost to the end, the road it came by, and flags (dead by map, sim, proof or game; untrusted; exact-only).
+
+**Roads.**
+- **Kinds:**
+  - keep;
+  - press at k;
+  - release at k;
+  - a one-tick press at k (press at k, release at k+1; the release can fall in the next step);
+  - a re-press while held;
+  - orb spam at a cadence of 2-4 while on a multi-activate orb.
+
+  Only the kinds the input check kept are used: at most 11, typically 1-8.
+- **Stamping.** A road starts from the place's corners and center and goes tick by tick:
+  - motion comes from the open-air table;
+  - a hazard or inner-solid interval kills that sample;
+  - a surface is a contact (stand or slide);
+  - a contact interval uses its contact answer.
+
+  The road lands in every place a surviving sample lands in, so the map stays optimistic.
+- **Costs** are integers:
+  - 1 per press;
+  - clearance under about 6 units, per tick;
+  - timing width: a road whose neighbors 1-2 ticks earlier or later die costs more, read from its sibling roads;
+  - doubt: near Uncertain killers or objects nobody vouches for.
+
+**Sweeps.**
+- **Forward,** from the start place in step order. x only increases outside reverse and backward-teleport stretches, so this is one pass over a layered graph with no queue. It gives each place its cost from the start.
+- **Backward,** from the level's end. It gives each place its cost to the end; infinite means no way home. Places that are finite both ways form the live corridor.
+- **The route** takes, step by step, the least cost so far plus cost to go. The best route of each class is also kept at the big choices: gravity and mode at each mode portal, each side of a fork, and each orb used or skipped.
+- **Incremental re-plans.** When places at step s die, the backward sweep re-runs from s toward the start until nothing changes (the LPA* idea). That takes seconds, not a rebuild.
+- **If a step holds too many places:** coarser bands where the clearance is large, 8-tick steps, or a beam with class shares (stepLeg's pattern at 4775-4797).
+- **Explanations** compare the costs per class at each choice. For example: `routemap: UFO x 11715: right side up - no way home (first blocked x 12185: obj 218 uid 7382 static); upside down - cost 311`.
+- **Overlay "Show the route map":** the live corridor, the planned route, and dead places colored by evidence, drawn with atlas.cpp's helpers. MCP: gucci_routemap and gucci_routemap_explain.
+- **Offline tests** (`tools/route_tests.cpp` in run_tests.bat) use synthetic timelines and a synthetic motion table. They cover Nigel's three examples (trap orb, dead-end fork, shrinking UFO corridor) and the Bloodbath shape (ball flips before a UFO under a ceiling thorn).
 
 ```cpp
-// model/rules.hpp
-enum class Act : uint8_t { TapInTick, PressOneTick, Hold, Release, Repress, SpamUnit };
-enum class Where : uint8_t { Ground, Air, OnOrb };
-struct InputRule { uint8_t mode; bool mini, upsideDown; Where where; uint8_t acts; bool measured; };
-struct ObjectRule { int kind; bool onPress, multi; int8_t gravitySet; bool gravityFlip;
-                    int8_t mode, mini; float speed, impulse; const char* source; bool checked, agrees; };
-// route/brief.hpp
-struct EntryClass { int8_t gravity /* -1: not choosable */; uint8_t band; int8_t vertical; uint8_t split; };
-struct Setter { enum Kind : uint8_t { Flips, GravityObject, ModePortal, SizePortal, SpeedPortal } kind;
-                float x0, x1; int uid; };
-struct Section { float x0, x1; uint8_t mode; bool mini; float speed; bool dual;
-                 float roomLo, roomHi; bool roomExact; uint8_t locked;  // Gravity|Mini|Mode|Speed
-                 std::vector<Setter> setters; std::vector<int> gates; std::vector<EntryClass> classes;
-                 enum class Dyn : uint8_t { Static, Modeled, Unknown } dyn;
-                 std::vector<int> unfollowedKinds, killerMoverGates; };
-// pathfinder/choices.hpp
-struct ChoiceEvent { uint64_t tick; float x; uint8_t kind; int section, uid; EntryClass cls; };
-struct Explanation { int section, killerUid; uint8_t certainty; EntryClass entered;
-                     std::vector<Setter> setters; std::vector<ChoiceEvent> inside; std::string text; };
-// model/ledger.hpp
-struct Bucket { int16_t yBin15; int8_t vSign; uint8_t mode, gravity, speedBin; bool mini, held; uint8_t split; };
-struct LedgerKey { uint8_t kind; int section; route::GateKey gate; int option; EntryClass cls; Bucket b; };
-struct Fact { enum : uint8_t { Unknown, Found, Soft, Hard, Untrusted } state; int rung, tries;
-              uint64_t fromTick; std::vector<TickInput> way; };
-struct Rung { int cap, steps240, calm; bool exact; };
-// model/trust.hpp
-struct Parting { uint64_t tick; int16_t dx10, dy10; int count; std::string what; };
-struct Span { uint64_t from, to; int partings, unseenDeaths, unrepeatable; bool untrusted; };
+// routemap/places.hpp
+struct PlaceKey { uint32_t step; int16_t yBand, vyBand; uint8_t mode, speed;
+                  uint8_t flags; /* gravity mini held standing buffered dash boost */ uint16_t surface; };
+struct Place    { uint32_t fromStart, toEnd, backPlace; uint8_t backRoad, evidence /* Map Sim Proof Game */, trust; };
+struct Road     { uint8_t kind /* Keep Press Release OneTick Repress Spam */, at, cadence; };
+// routemap/motion.hpp
+struct MotionKey  { uint8_t mode; bool mini, upsideDown; uint8_t speed, warp, tps; uint16_t gravityMod; };
+struct MotionStep { float vy, dy, dx; uint8_t flagsAfter; };
+// routemap/timeline.hpp
+struct Interval { float lo, hi; uint8_t kind /* Hazard InnerSolid Top Bottom Room Contact */, certainty; int uid; };
 ```
 
-### 2.6 Existing code: reused, changed, replaced
+### 2.8 The drive: exact A* on GD's physics (`routemap/drive.*`, `routemap/snapstore.*`)
 
-| Existing | Role in the new engine |
+- **The session.** One Sim session begins from the live game at the run's start, so it has the exact table. It pauses between slices the way `LegState::pause` does and resumes the way stepLeg does.
+- **A node** is an exact state at a step boundary: parent, road, g, h, tick, key, snapshot handle, and a state (Open, Closed, Dead, Deferred or Stub).
+- **The key** is keyOf (4478), plus 6ef9938 (buffered press, orbs used), plus the tick and x, plus a digest of the player-caused World events so far.
+  - Those events are touch triggers, toggle orbs, pickups, and count and collision events, each with its exact tick.
+  - The digest is event-sourced, so equal digests mean equal World states. Debug builds compare WorldState bit for bit when keys collide.
+  - Rung 0 quantizes y to 1.0 and vy to 0.5. Rung 1 uses today's leg key (0.25 and 0.05). The exact rung uses the raw bits.
+- **Roads** are the map's road kinds, played exactly with `Sim::step`, with the input check's verdicts applied.
+- **The search** is weighted A*: f = g + w·h, with w at 1.5-2, dropping toward 1.2 inside repairs. h is the map's cost to go for the place the node falls in.
+  - Nodes in places with no way home are Deferred: a soft wall, never dropped.
+  - A node outside the map gets the nearest place's h, and a `routemap: the map missed a state at x` line is logged as a map bug.
+  - When the map's h changes, the open list re-prioritizes lazily, when a node is popped.
+- **Partial expansion:** the map's preferred road is tried first. A node is popped again only if its other roads are needed.
+- **Caps:** B per step (64 at rung 0), with a share for each class (gravity × mode × mini × speed × side of a fork; classOf, grown). Dropped nodes become 16-byte stubs.
+- **Deadness:** a node whose children are all dead is dead, and that spreads to its parents. Dead places go back to the map as `sim` evidence only where the killer is Static or Modelled and the span is trusted.
+- **Rungs,** applied locally where the drive stalls: re-open the stubs, multiply B by 4, use a 1-tick grid, allow one more change per step, and use finer keys. The exact rung (bit keys, no cap, every road) gives a sim proof inside a trusted span, the same meaning as gucci_route_leg with exact=true.
+- **The snapstore.**
+  - Snapshots are kept for open nodes in the active window and for every 16th step.
+  - Other nodes are regenerated by replaying their parent chain.
+  - The cap is 512 MB, least recently used first.
+  - On every regeneration a parity check (from step1-inputs' lineage work) compares keys. A mismatch is a stepping bug: it is logged and the node is marked untrusted.
+- **Snapshot slimming,** measured first:
+  - drop activated and ring entries for objects more than 2 steps' worth of x behind, except on levels with reverse sections or backward teleports;
+  - group the OpLog's sealed chunks so a copy is tens of pointers, not thousands.
+- **Fallbacks:**
+  - If a whole-level session misbehaves (memory, OpLog growth), start a new session from an advanceStart node every N steps. An exact parent gives an exact table.
+  - If the map is late or slow, the drive runs on today's atlas cost to go (planner.cpp graphFor), with gravity added in every mode. The plan degrades; it doesn't stop.
+
+```cpp
+struct DKey  { uint32_t tick; int16_t xQ, yQ, vyQ, y2Q, vy2Q; uint16_t bits; /* mode grav mini held ground orb dual buffered */
+               uint8_t speedQ; uint64_t ringsUsed, worldEvents; };
+struct DNode { int32_t parent, snap; /* -1: regenerate */ Road road; uint8_t rung, state, session;
+               uint32_t g, h, tick; float x, y, vy; uint16_t liveChildren; };
+```
+
+### 2.9 The clicks
+
+- **The route is the script.** Every road is exact `TickInput`s (trajectory.hpp 85). There is no steering and no nudging.
+- **No same-tick UFO taps,** unless the input check shows they do something and the real game agrees in M0's test.
+- **Nets:** trimStep (1868) runs on the final script as a safety net. Tight roads get robust's one-tick-late test (2457) as a report only.
+
+### 2.10 Checking and repair (`routemap/rehearse.*`, `routemap/trust.*`)
+
+**The rehearsal** (judge::run, grown):
+- It plays from the real game standing at the plan's start. It is sliced across frames, with the updater paused between slices and `s_active` held.
+- Inputs are queued the way applyInput does.
+- It notes every death (the first hit of each tick; noteDeath resets every tick) and never stops.
+- It logs partings against the drive's trace: x, y, vy, gravity, mode, size, speed, and the uid fired that tick (d3da645). On the heavy levels it also records movers and the camera.
+- Then `resetWithState` puts the game back, and the frame and x are checked the way judge.cpp checks them.
+
+**Rehearsal anchors.** A GD checkpoint is kept every ~10 s of level (8-64 kept, as keepAnchor does). A later rehearsal starts from the latest anchor at or before the first changed tick. Normal levels can simply restart from tick 1, which takes seconds if the per-tick cost holds.
+
+**Repeatability.** Two rehearsals of the same script must match. The seeds are reset per attempt (updateRandomSeedOnReset, hook_playlayer.cpp 329-345). A mismatch is logged, and those spans become untrusted.
+
+**Only the first would-be death is firm `game` evidence.** Later ones happen after the player carried on through a spike, so they're hints until a rehearsal reaches them cleanly.
+
+**Risky part, reviewed in parallel with Nigel's test:** judge::run inside a run. The `judge::active()` checks in engine_updater.cpp 843-863 must not collide with the pathfinder's own stepping, and the restore must be exact.
+
+**Evidence to repair.**
+- **A death at an Uncertain killer:**
+  - `addPhantom` (1432) and a `game`-dead place;
+  - drive nodes simulated without the phantom, from its window on, are invalidated and re-expanded on demand.
+- **A death at a Static or Modelled killer, or a parting over 1 unit (kDivergence).** The simulation was wrong about something it was sure of, so:
+  - **The trust record.** Partings are keyed by tick and offset (to 0.1). Three identical ones mark ±32×scale ticks untrusted. The line names what differs: gravity, mode, size, speed, the used flags of portals, orbs and pads within two atlas columns read through m_positionX, and the object the copy fired.
+  - **A re-root.**
+    1. Rewind the real game to the latest anchor at or before the parting (rewindTo 4830, finishRestore 5964, settleAnticheatSpike 5937).
+    2. Re-step it to the parting tick on the route's inputs.
+    3. Begin a second Sim session from the live game, with the exact table and the real flags. That state becomes a root node.
+    4. The first session stays, for alternatives before the parting.
+  - **Untrusted spans.** Sim verdicts there kill nothing and prove nothing. The route through counts only once a rehearsal passes it. In small zones, candidate roads can be asked of the game (judge runs from the re-rooted state).
+- **Then:**
+  - the map's incremental backward update;
+  - the drive resumes. Its open list keeps every alternative, so the new route can leave the old one anywhere earlier;
+  - a rehearsal from the first changed step.
+- **Never worse** (saveFurthest 710): the furthest real-checked route is kept. A new route that rehearses worse is dropped, unless it is a forced class switch.
+- **An explanation line per repair.** For example: `routemap: died at x 12185 (ceiling thorn uid 7382, static) in the UFO entered right side up at x 11715; no road left that way; re-routed from x 11490 (ball flip); rehearsing from tick 8100`.
+
+**The run that counts** (Phase::Playing):
+- The rehearsed route goes through goLive/liveInput (4712/4866), applyInput (5229, queued buttons), stepGame (5251) and commitTick/afterTick (5261/5283), with anchors (keepAnchor 775). The drift check runs against the drive's trace every tick and is never muted (ea7e4c4).
+- Anything unexpected is handled like a death or parting above.
+- Then saveResult (6069) and the cold replay from a fresh open. Only a passing cold replay counts.
+
+**Stops.**
+- **kStuckSeconds:** 5 minutes with no new furthest exact-alive tick and no new furthest rehearsed tick (pathfinder.cpp 105, 905-925).
+- **"No road past x":** only after the exact rung agrees in a trusted span, or the game agrees in an untrusted one. It names the step, the classes ruled out and the evidence.
+- **"The same dead road again":** evidence flags and dead keys are never retried, and the stop line lists them. They serve as the nogood ledger.
+
+### 2.11 Moving objects, triggers and route-dependent levels
+
+1. **Movers driven by x** (the World's 29 kinds) are exact in the drive and timed in the map from the scan.
+2. **Kinds the World doesn't run** are Uncertain. In the map they don't block (they add doubt cost) until they are recorded (H2). In the drive, phantoms and rehearsals settle them.
+3. **Route-dependent triggers:** touch (1595), toggle orbs (1594, 3643), pickups, items and counts, collision triggers, on-death, and follow player Y (1814).
+   - The drive is exact through the World digest: pressing a toggle orb and not pressing it are different nodes.
+   - The map branches the scan (fire or skip) at each choice the atlas finds (its toggles and playerGroups in build) whose targets reach the live corridor. Places carry a branch tag until the two recordings agree again.
+   - At most 8 branches are live per region. Past that the region is "route-dependent": doubt cost, settled by the drive and by rehearsals.
+4. **Random triggers** (1912, 2068): the World marks their picks unsure. Rehearsals check repeatability, and spans driven by random picks are certified by the real game.
+5. **Teleport portals** are contact answers, and the clock jumps (8dcfc5e follows them in the atlas). A backward teleport hands that stretch to the drive alone.
+6. **Dual:** the drive keys both players (keyOf for count == 2; enterDual 2575). The map keeps pair places only while they stay few. Otherwise the stretch is optimistic in the map, with h taken from after the solo portal.
+7. **Time warp (1935) and gravity triggers (2066):** a motion table per warp factor and per gravity mod.
+
+### 2.12 The heavy-level simulator track (core, in parallel)
+
+- **H0, census** (code with M0): gucci_level_census reports, per level:
+  - trigger kinds and counts;
+  - for each kind the World doesn't run, how many collidable and killer objects its groups hold (WorldDef group reach);
+  - random triggers near the path;
+  - dual, teleport, rotate, reverse and platformer objects;
+  - toggle orbs and touch triggers;
+  - the y section factor;
+  - the real game's cost per tick, from a 2,000-tick judge run.
+
+  The census decides what H2-H4 need.
+- **H1, measure** (code by Oct 29):
+  - (a) the scan alone at tick 1 on LIMBO, ORBIT and Heliopolis, timed part by part;
+  - (b) a 2-D pending pass in `startPending` when `m_fy > 0`;
+  - (c) a no-input recording pass on the real game from tick 1 (deaths noted, safe mode on, nothing saved) that records the collidable movers near the player and the camera every tick. Compared with the scan, it gives the disagreement table: group, trigger kind, first tick and size of the miss.
+
+  The recording's clock is checked against the scan's. Past a speed portal the no-input player missed, the recording waits for the engine's own routes.
+- **H2, recorded movers and camera** (by Nov 11):
+  - The Materializer gets a second pose source: recorded poses per tick for groups no route-dependent trigger touches, used while the run's clock matches the recording.
+  - `Materializer::write` gains rotation, scale, and whatever GD's collision reads for oriented boxes. Check the binary and Silicate first.
+  - The recorded camera fields are written each simulated tick and put back at the end, so the flying bounds follow the camera (tierd.cpp (i)).
+  - Recorded groups count as Modelled while the clock matches.
+- **H3, the heavy three on the Route map** (by Nov 21): rehearsals along each route re-record movers and the camera as that route fires its triggers. Untrusted spans are certified by the game.
+- **H4, speed** (alongside):
+  - snapshot slimming;
+  - `materializeNear` after a restore re-reads only what the abandoned branch wrote. On ORBIT it takes 18-21 of the 31-35 µs per tick, and up to 64 µs in branches;
+  - per-stretch budgets.
+
+  Targets: ORBIT at 60k simulated ticks/s or more, Heliopolis at 100k or more.
+- **Porting trigger kinds from the binary** happens only where H1's table shows recording can't cover them, most likely follow player Y and collision triggers. Each one is checked against GD's own step, as the move command was.
+
+### 2.13 Existing code
+
+| Existing | Role |
 |---|---|
-| Trajectory::run, steer (3161), beginSearch/stepSearch, advanceStart (5094), captureStart (1357), useStart (1970) / useStartExact (1929), inVoid, phantoms, confirmed killers | Reused unchanged: the executor and the physics |
-| alternativesFor (3393) | Takes its menu from the measured input table (both engines) |
-| beginLeg / stepLeg / finishLeg (4546-4881) | Reused for probes and contract legs. Gets the menu fix, spam units, class goals, lineage and key bits |
-| decide() (3028), better() (3379), evaluate (2498), robust (2457), trimStep (1868) | Reused. The Contract stage sits after the judging loop and before the verdict. Probes ride the decision's existing leg slot (the Route and rescue plumbing, ~3356-3504) |
-| beginDriveLeg / takeDriveLeg / drivePasses (2868-2969) | Their plumbing becomes the contract legs |
-| commitTick (5261), afterTick (5283), keepStart (851), keepAnchor (775), rewindTo (4830), finishRestore (5964), saveFurthest (710), settleAnticheatSpike (5937), AheadWait at mode portals | Reused. afterTick feeds the ChoiceTrace and the trust record. Anchors are also kept at committed boundaries. Probes run where the game already waits at portals |
-| beginRepair (5474), beginBacktrack (5607), escalate (5003), moveStartBack (5072), rescueWanted / beginRescueLeg / takeRescueLeg (2747-2853) | Replaced by the choice repair when Engine = Understanding. They stay in today's engine |
-| atlas.cpp build | Positions read through m_positionX/Y; teleports followed to their exit |
-| planner.cpp envelope (29-43), stepCost (66), noteLeg's +5000 | Measured movement, gravity in every mode, the ledger |
-| materialize.cpp startPending (1391-1399) | Side track A |
-| judge::run | "Ask the game" in untrusted spans |
-| memory.cpp | Untouched; off for the bar |
-| GPU stage (dead: gpu=false) | Untouched. Optional cleanup commit later |
+| Trajectory::Sim (begin 2204, step 2724, snapshot 2925, restore 2982, end 3070); run (3809), captureStart (1357), advanceStart (5094), inVoid (770), addPhantom/hitsPhantom (1432/1448), noteKiller (796), enterDual (2575) | Reused: the physics |
+| World (step, fire, certaintyOf); Materializer | Reused. The Materializer gains a recorded pose source, rotation and scale writes, and the 2-D pending pass |
+| LegState, beginLeg/stepLeg/finishLeg (4403-4881) | Grown into the drive. Legs stay for Today and for "Find a way" |
+| alternativesFor (3393), keyOf (4478) | UFO: a press held through the tick, a one-tick press, and release and re-press from held. Merge key with buffered press and orbs used (M0, both engines) |
+| beginGhost/stepGhost | Grown into the scan |
+| atlas.cpp build (277), classify, toggles, draw helpers | Real positions, teleports. They feed the timeline, the map's branch points and the overlays |
+| planner.cpp | Kept for Today's route modes. Its cost to go is the drive's fallback guide |
+| judge::run | Grown into the rehearsal |
+| Executor: start (303), tick/mayWork (888/1089), goLive/liveInput, applyInput, stepGame, commitTick/afterTick, keepAnchor, keepStart, rewindTo, finishRestore, settleAnticheatSpike, onWouldDie, saveFurthest, saveResult | Reused, with new Phase::Planning and Phase::Playing. The drift check is unmuted for both engines |
+| decide(), better(), evaluate, the repair walk, escalation, rescue legs, Route ideas and drives | Left alone for Today. trimStep and robust are used as nets and reports |
+| memory.cpp, the GPU stage, model/rules.* | Untouched or not landed |
 
-### 2.7 Order of work
+**New** (about 7.2k lines):
 
-Dependencies: step 0, then steps 1, 2 and 3 in parallel worktrees, then 4, 5, 6, 7 and 8 in order. Side track A can happen at any time.
+| File | Lines |
+|---|---|
+| routemap/engine.* (phases, `routemap:` lines) | ~800 |
+| scan | ~500 |
+| timeline | ~600 |
+| motion | ~500 |
+| contacts | ~500 |
+| places and sweep | ~1,000 |
+| drive and snapstore | ~1,500 |
+| rehearse and trust | ~700 |
+| UI and MCP | ~600 |
+| tools/route_tests.cpp | ~500 |
 
-Rough calendar: step 0 by about Oct 25, steps 1-3 by about Nov 3, step 4 by about Nov 7, step 5 by about Nov 15-18, step 6 two days after that, and steps 7-8 run over nights to about Nov 24-26. If step 1's cause turns out to be a stepping bug rather than the input menu, add up to a week.
+The UI and MCP part is: the switch "Engine: Today / Route map (test)" saved as `pf_engine`; gucci_pathfinder `brain` = today | routemap; "Plan the level"; "Plan from here" in practice; "Show the route map"; gucci_routemap, gucci_routemap_explain, gucci_motion_table, gucci_rehearse and gucci_level_census.
 
-**Step 0: The honest yardstick (no engine change)**
+### 2.14 Order of work, with an in-game test per step
+
+Every in-game test waits for Nigel's go-ahead. Code and run_tests.bat don't need the game. Parallel worktrees:
+- **A:** M0 and the drive;
+- **B:** the map;
+- **C:** check and repair;
+- **D:** the heavy track.
+
+B and C start on Oct 26 against interfaces fixed in `routemap/engine.hpp`. Everything lands on master one commit per change.
+
+**M0, Sat Oct 24 to Mon Oct 26: shared fixes, both engines.**
 - **Build:**
-  - Let tonight's cold batch finish: 8 levels, Route Off, Remember off, flags off.
-  - On the same build with Exact start flags on, run The Nightmare and Bloodbath, then Clubstep, ToE2 and Deadlocked as a regression.
-  - If a night is free, run the 8 cold on Route drives, as the comparison for steps 4-5.
-  - Code: peak states, "dropped for room" and the relaxed count in the rescue and drive leg lines (takeRescueLeg 2817-2848, takeDriveLeg).
-- **Test** (Claude, unattended over Assistant Access when the PC is free; the scripts refuse without safe mode):
-  - a table per level: %, time, clicks a second, stop reason, cold replay;
-  - whether the partings at 19698 and 1119/1127 disappear with flags on.
-- **Decision:** if flags on clears those partings and costs nothing elsewhere, it becomes the default. It is GD's own rule (-hq).
-- **Retires:** nothing.
+  - Land these, one commit each: 629920b, 6ef9938, 380bb50, cb9fc9b, ea7e4c4, 18f2d17 (renamed to Route map, with `brain` = routemap and the header moved to `routemap/engine.hpp`), 4d3c664, be0d881, 8dcfc5e, d3da645 and b1ebd51.
+  - 8dcfc5e may need a hand merge, because it sits on b64bbf0 in atlas.cpp.
+  - New: the UFO menu in alternativesFor, which the branching search also uses at 3604.
+  - New: gucci_level_census.
+- **Test** (Claude, in practice, safe mode on):
+  - Inside Bloodbath's UFO (x ≈ 11800) and ToE2's (about 18%), run gucci_abs_simulate and gucci_sim_vs_real with `t1 r20`, `p1 r20` and `r21`.
 
-**Step 1: Inputs, measured; legs that can fly (gates steps 4-5)**
-- **First, the test that names the cause:**
-  - Add the `t` step to the script language.
-  - In practice inside a UFO, from the live state, run gucci_abs_simulate with `t1 r20`, then `p1 r20`, then `r21`.
-  - Run gucci_sim_vs_real with the same three scripts.
-- **Reading the result:**
+    | What happens with `t1` | Next step |
+    |---|---|
+    | Neither the copy nor the game flaps | The menu fix |
+    | Only the game flaps | Fix the copy's input path; check Silicate first |
+    | Both flap | Look further with the parity line |
+  - gucci_route_leg from a ball checkpoint at x 11300-11600 to x 12425, at any height, draws a way, or reports peak states above 2.
+  - No UFO leg logs 4n−2 steps.
+  - Regression: Clubstep cold on Today, 100%, with a cold replay.
+  - The census table for all 8 levels.
 
-  | What happens with `t1` | Meaning | Fix |
-  |---|---|---|
-  | Neither the copy nor the game flaps | The menus are wrong | The measured table |
-  | The game flaps, the copy doesn't | The copy's input path differs from GD's queued path (GJBaseGameLayer::handleButton) | The copy's input path. Check Silicate's version first (CLAUDE.md §5) |
-  | Both flap | Something else causes the die-off | Find it with the lineage parity line |
+**H1, by Thu Oct 29** (see 2.12). **Test:**
+- the scan finishes on LIMBO, ORBIT and Heliopolis with a time per part, or names what stops it;
+- ORBIT and Heliopolis pending time falls from 44.9 s and 105.5 s, with Today's % no worse;
+- the disagreement table.
 
-- **Build:**
-  - The input table and menuFor; alternativesFor uses them (both engines).
-  - stepLeg honors thenRelease, spamPeriod and ringHidden.
-  - The keyOf additions.
-  - LegGoal.lineage and a parity line: "leg parity: the played path dies at tick N in the leg but lives in a straight run". That line means a stepping or restore bug.
-  - "Tap at k" ideas become one-tick presses wherever a tap inside the tick does nothing.
+**M1, by Sun Nov 1: the drive in the simulation only.**
+- **Build:** Phase::Planning; the drive on the atlas guide; the snapstore and the parity check; "Plan the level" and "Plan from here"; the explored-places overlay; gucci_routemap.
+- **Test** (Claude, game frozen at tick 1, nothing played):
+  - Clubstep, ToE2, The Nightmare and Bloodbath each get a simulated route to the end within about 5 minutes.
+  - Bloodbath's route passes x 12185, and ToE2's passes x 5369.
+  - The log shows nodes, ticks/s, snapshot memory of 512 MB or less, and 0 parity mismatches.
+
+**M2, by Thu Nov 5: the map.**
+- **Build:** scan, timeline, motion tables and their check, contacts, places, sweeps, classes, explanations, the overlay and the route tests. The drive is now guided by the map.
 - **Test:**
-  - Nigel or Claude, in Bloodbath practice: checkpoint in the ball section around x 11300-11600, then press "Find a way through the next section" (or gucci_route_leg to x 12425, any height, cap 128 then 1024).
-    - Pass: a way past x 12300 is drawn, or "out of budget" names the class.
-    - Two presses give the same answer, and the game keeps drawing.
-  - The same at Clubstep's ship-to-UFO portal (~68%).
-  - Log: no UFO leg with 4n−2 steps, and peak states above 2.
-  - Regression, cold and unattended: Clubstep, ToE2 and Deadlocked complete, and their cold replays complete.
-  - If Clubstep's 70% wall now passes on the first visit, credit the general menu fix, not a level patch.
-- **Retires:** nothing. A rescue leg's "nothing alive gets there" only counts when the parity line is clean.
+  - Nigel looks at the overlay, with no run needed:
+    - Bloodbath 25-35%: does the corridor through the UFO keep only one gravity, and does the last ball flip before x 11715 match it?
+    - ToE2 15-20%;
+    - Clubstep 65-72%;
+    - The Nightmare 85-92%.
 
-**Step 2: Trust (parallel with step 3)**
-- **Build:**
-  - model/trust as described in 2.5.
-  - **Divergence fix:** m_lastReplanTick only rate-limits rethinks after real decisions. After an ahead commit, every committed tick is compared with the plan trace (afterTick 5419-5431).
-  - **Never lose the best path:** an attempt that dies before the dead end it was repairing restores the saved furthest path (saveFurthest) before the next attempt.
-  - Exact flags become the default if step 0 agreed.
-  - **Risky part:** judge::run inside a decision. Its `active()` checks in engine_updater.cpp 843-863 must not collide with the pathfinder's own stepping. Review this part, in parallel with Nigel's test.
+    The question for each: does it look like a way a player would go?
+  - Claude:
+    - map size and build time are logged per level, with one motion line per mode;
+    - on the same four levels, the drive simulates at least 30% fewer ticks than in M1;
+    - run_tests.bat passes.
+
+**M3, by Mon Nov 9: check and repair.**
+- **Build:** the rehearsal, the trust record, re-roots, evidence into the map and the drive, never worse, Phase::Playing, and the stop lines.
+- **Test** (an unattended cold batch: safe mode on, Remember off):
+  - Clubstep, ToE2, The Nightmare and Bloodbath each reach 100% with a cold replay. Deadlocked is a stretch goal.
+  - Bloodbath passes tick 8675 with no death there.
+  - The Nightmare passes x 25740, and its 19698 parting is gone or named within 3 partings.
+  - Every repair has its `routemap:` line.
+
+**H2, by Wed Nov 11.** **Test:**
+- gucci_sim_vs_real along recordings: ORBIT's tick-521 gravity parting, ORBIT's 1179-1192 ceiling partings, and LIMBO's moving-ground partings are gone or named;
+- in a LIMBO rehearsal, the deaths the simulation didn't see fall well below 22 of 32.
+
+**M4, by Fri Nov 13.**
+- **Build:** branch tags in the map, and a tools/selfplay batch: a level list, safe mode required, Remember off, a watchdog through gucci_restart_game, a cold replay of every result, and a morning report.
 - **Test:**
-  - The Nightmare cold with Exact flags off on purpose, which reproduces tick 19698.
-    - Pass: within 3 identical partings, the log reads "model: the simulation disagrees with the game at x … (tick 19698): …", naming the object or flag. The run then asks the game and gets through, or stops with that line, instead of repeating 100 times.
-    - With flags on, it completes cold and the cold replay completes.
-  - Bloodbath's 1119/1127 partings are named the same way.
-  - LIMBO for 15 minutes:
-    - it never falls more than one section behind its best tick (tonight it went from 7777 back to 5060);
-    - the stop line lists the untrusted spans.
-- **Retires:** in the Understanding engine, "trying anyway" inside untrusted spans; and re-running an identical rescue leg (memoized by start tick, goal and budget).
+  - Deadlocked: 100% cold, with a cold replay.
+  - Nigel's ~10 new levels overnight: a solved/failed list, each failure with its stop line.
 
-**Step 3: The level brief (read-only; parallel with steps 1-2)**
-- **Build:**
-  - **Position reads:** use m_positionX/Y at atlas.cpp 318-319, 336-337, 355 and 382, in noteKiller's x/y (796-809), and in gucci_used_objects.
-  - Teleport portals are followed to their linked exit.
-  - Object rules and their checks.
-  - calibrate.cpp, replacing envelope().
-  - Gravity for every mode in stepCost.
-  - route/brief, the "Show the level brief" overlay, gucci_level_brief, and the TraceSample additions.
-- **Test:**
-  - Nigel, with the overlay on, at Bloodbath 25-35% (the ball, then the UFO), The Nightmare 70-76% and ToE2 80-90%: do the parts and the gravity marks match the level?
-  - Claude, brief lines such as:
-    - "UFO x 11715-12210: gravity locked; decided by the ball's flips x 10995-11715", or the line names a gravity object inside;
-    - "Clubstep UFO ~70%: entered from a ship, gravity locked".
-  - Claude: ToE2 and The Nightmare maps built at tick 1 and mid-level give the same moving-object and gate counts (ToE2 gave 2020 against 0).
-  - Claude: "model: N rules checked, 0 disagree", or each disagreement named.
-  - Regression: Engine Today plays as before, since the brief is read-only.
-- **Retires:** the typed envelope.
+**Checkpoint, Sun Nov 15.**
+- The five normal levels, each cold and replayed cold.
+- For the heavy three: % reached, scan, map and drive times, and the disagreement table.
+- Nigel decides: ship it marked experimental, or hold 2.0.
 
-**Step 4: Look before going into a part (needs steps 1 and 3)**
-- **Build: the Contract stage.**
-  1. Group the judged ideas by the class each crosses the next boundary in.
-  2. Look each class up in the ledger.
-  3. Probe classes that are still unknown, in slices: advanceStart to the crossing, then a leg through the section to its end (or to the known dead spot plus clearance) at rung 0.
-  4. Contract legs ask for an untried class (gravity and band at the boundary).
-  5. In the verdict, rank class first (Found, then Unknown, then Soft, then Hard), then better().
-  6. Two-leg rule per section: a plan never crosses into a class without a Found way through. While a probe is still running, it commits up to the boundary minus the margin.
-  7. situate.cpp orders the classes and supplies the reasons.
-- **Test:**
-  - Claude, unattended: Bloodbath cold, Engine Understanding.
-    - Pass: the log has a line like "model: UFO x 11715: right side up - no way through (rung 0); upside down - a way through; going in upside down", and the run passes tick 8675 with no dead end there.
-  - Regression: Clubstep, ToE2 and Deadlocked complete on Understanding with cold replays, each in no more than 1.5× its step 0 time.
-  - Nigel: "Show the planned route" on Bloodbath and ToE2. Does the planned way into each part look like how he'd play it?
-- **Retires** (Understanding engine):
-  - Route ideas' legs and rescue legs before boundaries; contract legs replace them.
-  - Route drives' per-gate legs. A gate becomes a target only when an explanation names it.
+**H3, by Sat Nov 21.** **Test:** LIMBO, ORBIT and Heliopolis reach 100% cold with cold replays, or a stop line names the step and the evidence. Every rehearsal's would-be deaths are listed.
 
-**Step 5: Dead ends go back to the cause and never repeat (needs step 4)**
-- **Build:**
-  - choices.*, the ledger with rungs and splitting, and offline tests.
-  - With Understanding on, beginChoiceRepair/nextAttempt replace beginRepair, beginBacktrack and escalate. Attempts, in order:
-    1. Timing inside the section: today's stops and ideas, bounded by the section's start and its last choice point, plus a contract leg to past the death.
-    2. The newest untried option at a choice point inside the section.
-    3. Another entry class at its setter: a backjump into the setter's kept starts, contract legs that demand the class at the boundary, then a section probe.
-    4. The previous section, the same way.
-    5. The next rung, starting again from attempt 1.
-  - After the last rung: a report, then today's repair until the 5-minute stop.
-  - Class tabu.
-  - Backjumps past the ~10 s of kept starts go through anchors and the sliced re-step.
-  - A backjump that finds nothing returns to the best path.
-  - The stop line lists what the ledger ruled out.
-- **Test:**
-  - Bloodbath cold with the step 4 contract switched off, so the UFO has to be repaired.
-    - Pass: the log explains the death ("died in the UFO, entered right side up, decided by the ball's flips at x …"), lists the attempts in order, and goes back to the ball.
-    - gucci_route_ledger shows no (key, rung) tried twice.
-  - Clubstep 70%, ToE2 85% and Bloodbath's UFO: each passed within 5 minutes in at least 2 of 3 cold runs.
-  - run_tests.bat passes the ledger suite.
-- **Retires:** see 2.8.
+**M5, by Tue Nov 24.** **Test:** all 8 cold, unattended, in one batch, every 100% replayed cold. Nigel picks the default.
 
-**Step 6: Only clicks that do something (needs step 1; best after step 5)**
-- **Build:**
-  - Open-loop "orb spam at k" and "orb spam ×N" (buildCandidates 1314-1366) become spam while on a multi-activate orb, at a cadence of 2, 3 or 4.
-  - Steers and idea shapes never press where the input table says nothing happens.
-  - The trim stays.
-- **Test:** Claude, cold.
-  - Clubstep and ToE2 still pass on Understanding, with cold replays.
-  - A checker over each saved result counts presses on ticks where the table says nothing happens. Pass: 0.
-  - Clicks a second and the busiest second are reported against step 5. No cap, because nothing counts as spam.
-- **Retires:** the open-loop spam shapes. The spam trim pass becomes a no-op on Understanding results but stays as a net.
+**Release, Thu Nov 26.**
+- Tick ROAD_TO_2_0 step 4. Point AI_PATHFINDER_PLAN.md and docs/ROUTE_ENGINE_PLAN.md at this plan.
+- The version bump comes only after Nigel's in-game test.
 
-**Step 7: Levels it has never seen**
-- **Build:** tools/selfplay, grown from the scratchpad batch_runs.py and pf_timed.py:
-  - a level list;
-  - safe mode required, Remember off;
-  - a watchdog through gucci_restart_game;
-  - a cold replay of every result;
-  - a morning report.
-- **Test:**
-  - About 10 levels Nigel picks, covering all 8 modes, mini, dual, every speed, gravity portals and orbs. They run cold, overnight, on both engines.
-  - Count the 100%s that pass cold replay, and read every stop reason.
-  - A failure becomes a rule or brief fix only if it is a general GD fact.
+### 2.15 Size and speed (estimates, measured in M1, M2 and H1)
 
-**Step 8: The bar**
-- All 8 levels on Understanding, unattended and cold, with every 100% replayed cold.
-- Then Nigel decides the default. Only after that are retired patches deleted from today's engine, one commit each.
+**Normal level (Bloodbath: about 27k ticks, 6,750 steps):**
 
-**Side track A** (any time, its own commit): a 2-D pending pass when `m_fy > 0`.
-- Test on ORBIT and Heliopolis:
-  - the "World upkeep" pending time drops from 44.9 s and 105.5 s;
-  - simulated ticks a second rise;
-  - the % reached is no worse.
-- Expect a modest gain: pending passes were about 6% of ORBIT's deciding time and 14% of Heliopolis's.
+| Part | Estimate |
+|---|---|
+| Map | 2-13M places, 16-130 MB |
+| Each sweep | 2-15 s |
+| Contacts | 1-6 s |
+| Scan | under 0.5 s |
+| Drive | 0.5-2M steps with a good map: 10-60 s at about 100k steps/s |
+| Rehearsal | seconds |
+| Play | about 112 s |
+| Cold replay | about 112 s |
+| **First pass in all** | **about 3-8 minutes** |
 
-**Side track B** (only if Nigel asks): heavy-level simulator work. Not estimated.
-- start tables after rewinds (world/ledger.cpp coveredNow and lastUncovered);
-- the trigger kinds LIMBO, ORBIT and Heliopolis use that the World doesn't run;
-- flying bounds that follow the camera.
+**ORBIT and LIMBO** (44-55k ticks, 11-14k steps):
+- map: 5-25M places, sweeps of 5-40 s each;
+- rehearsal: 40-50 s, if about 1 ms a tick holds;
+- play: 185-230 s;
+- in all: 15-60 minutes, with no firm bound until H1-H4 land.
 
-### 2.8 Retirement map (Understanding engine; deleted from code only after the default flips)
+**Heliopolis** falls in between.
 
-| Today's patch | Becomes | From step |
-|---|---|---|
-| "played, input N moved ±1/2/4" | Timing ideas, only at stops inside the dead end's section | 5 |
-| Rescue legs (-hh/-hi) | Contract legs: to past the death inside the section, or to the boundary in a named class | 4-5 |
-| Escalation levels; widening after 60 real deaths | Budget rungs per ledger entry | 5 |
-| Floor "trying anyway" | "Ask the game" in untrusted spans; nothing elsewhere | 2 (untrusted), 5 (all) |
-| Traps, retries, 1/3 and 2/3 stop shifts | Ledger entries plus the step (a) stop list | 5 |
-| moveStartBack | A backjump to a setter through stored frames or anchors | 5 |
-| R5 (jump back to the decision that left the route) | The general backjump to the setter, at any distance | 5 |
-| Route ideas, Route drives | The Contract stage (sections and classes, not gates) | 4-5 |
-| noteLeg's +5000 | Ledger facts | 5 |
-| Typed envelope | Measured movement | 3 |
-| Open-loop orb spam shapes | Spam while on a multi-activate orb | 6 |
-| Divergence check muted after ahead commits | Fixed, both engines | 2 |
-| Exact start flags as an off-by-default test switch | On by default, if step 0 agrees; the switch stays for tests | 0 |
+**Memory:** the map 16-250 MB, the snapstore up to 512 MB, recorded movers about 50 MB on ORBIT, and anchors as today.
 
-These stay as they are:
-- the exact-prefix tabu, with the class tabu added on top;
-- forcedCommit and playing into a death, inside a section;
-- AheadWait, which now hosts probes;
-- the void rule;
-- phantoms and confirmed killers, which now feed the trust record;
-- the trim passes;
-- memory, off for the bar. After 2.0 it could store the classes that worked, never inputs.
-
-### 2.9 Working rules
+### 2.16 Working rules
 
 - **Build and commit (CLAUDE.md §0):**
   - one commit per logical change;
-  - `.\build_win.bat`, and look for "Build complete";
+  - `.\build_win.bat`, then look for "Build complete";
   - bump GB_BUILD_LABEL on every build, editing it by the line that ends in a backslash;
   - push to master and watch CI.
-- **Running the game:**
-  - Nothing in-game while Nigel uses the PC.
-  - Batches run only with safe mode on (the scripts check gucci_get_state) and Remember solutions off.
-- **Results:** a result counts only after a cold replay from a fresh open.
-- **Half-port checklist for steps 4-5.** Each of these paths must log its `model:` line, and each step's test log is grepped for all of them:
-  - live, ahead and probing decisions;
-  - the two-player handoff;
-  - the slack check (robust);
-  - the trim;
-  - the run memo key;
-  - the commit length;
-  - the drive paths.
-- **Offline tests:** the pure parts (the brief from synthetic atlases, the ledger, the cause order) go in run_tests.bat.
-- **Parallel worktrees.** Steps 1-3 touch mostly separate files:
-  - step 1: trajectory/ and model/rules;
-  - step 2: pathfinder.cpp afterTick and model/trust;
-  - step 3: route/, model/brief and calibrate.
-- **Reviews:** only for the risky parts (step 2's real-game asking, step 5's backjumps), run in parallel with Nigel's test and never gating it.
-- **Docs:**
-  - Tick docs/ROAD_TO_2_0.md step 4 as steps land.
-  - AI_PATHFINDER_PLAN.md still says "nothing here is built yet", and ROUTE_ENGINE_PLAN.md's line numbers are stale. Point both at this plan.
+- **Running the game:** nothing in-game until Nigel says; safe mode on and Remember off for every automated run.
+- **Results:** a result counts only after a cold replay.
+- **Reviews:** only for the risky parts (the rehearsal inside a run, Materializer pose writes, snapshot slimming), run in parallel with Nigel's test and never gating it.
+- **Half-port checklist:** each milestone's log is grepped for every `routemap:` line its paths must emit.
+- **Copy:** user-facing text in American English. Credits unchanged.
 
-### 2.10 Risks and open questions
+### 2.17 Risks and open questions
 
-- **The UFO hypothesis could be wrong.** Then the die-off is a stepping bug, for example state the snapshot doesn't carry across interleaved restores, such as the materializer's writes. The lineage parity line finds it, and fixing it is simulator work of unknown size.
-- **Entry classes could be too coarse.** Splitting fixes that, at a cost in time.
-- **Proofs will be rare in flying modes,** so most facts will be soft and progress comes from rungs. Switching back and forth between classes will need hysteresis, which is untested.
-- **Probes cost time.** Expect seconds per boundary on normal levels and minutes on ORBIT, with more waiting at portals.
-- **judge::run costs real ticks.** It is slow on heavy levels, and it must leave the game exactly as it was (it records the frame and x before and after).
-- **Long backjumps** past about 10 s go through anchors, which are megabytes each, 8 to 64 of them kept.
-- **Setters can be wrong** where toggles, items or counters couple choices that are far apart. The fallback is stepping back choice by choice through the ChoiceTrace, newest first.
-- **Realtime timing is nondeterministic:** whether a decision is made ahead or from the real state depends on timing.
-- **Exact flags as the default** could change levels that pass today. Step 0's A/B covers this.
-- **Not sure:**
-  - whether Bloodbath's UFO is purely an entry-gravity problem (the evidence is strong but indirect; step 1's practice test and step 4 will tell);
-  - what causes ToE2's 85% wall;
-  - what causes Bloodbath's parting at 1119/1127.
+1. **The map is a relaxation.** If it's too optimistic somewhere, the drive explores more there. That costs time, not correctness. Bands halve locally wherever the map keeps proving wrong.
+2. **The map could close a real road** (a wrong table, a misread hitbox, float rounding). Walls are soft and nodes are deferred, never dropped. "No road" stops a run only after the exact rung or the game agrees.
+3. **Contact answers from set-up copies** may miss a hidden field: rotation, ring contacts, buffered presses, slope state. Exact answers win, and an object that disagrees goes exact-only.
+4. **Place counts may be off by 10× in open flying rooms.** The answers are coarser bands, 8-tick steps, and beams.
+5. **A whole-level session has never run.** Unknowns: OpLog growth, the written sets, and the WorldState copy over 50k ticks. M1 measures them. The fallback is a session per N steps.
+6. **The UFO.** If a one-tick press doesn't fly the copies either, M0 shows it before anything leans on it.
+7. **The rehearsal inside a run:** collisions with `judge::active()`, the exactness of the restore, and the real game's tick cost on the heavy levels (H0 measures it).
+8. **The heavy levels:**
+   - toggles are dense (148 on LIMBO, 113 on ORBIT);
+   - random picks and collision triggers between objects;
+   - recorded poses must set everything GD's collision reads.
 
-### 2.11 Not in this plan
-
-- **Design 1's "model drives every step"** setting. It waits until legs pass step 1 and handoffs fall far below Route drives' 2015 of about 2240 decisions on cold ToE2.
-- **Design 3's trained net,** its hooks H1-H6 and the self-play corpus: after 2.0. Its training-data log could arrive earlier as an optional switch.
-- **Heavy-level World work** (side track B).
-- **Platformer, sub-tick (CBF) inputs, and coins.** Coins means each coin becomes a gate, after step 5.
+   This is the likeliest slip.
+9. **Handoffs.** If a bar level's hardest stretch is dual, platformer or reverse, the map is weak there.
+10. **Schedule.** About 7k lines in 4.5 weeks, and the tests wait for Nigel's PC. If M3 slips past Nov 12, Nov 15 shows 2-3 normal levels, not 5.
+11. **Not sure:**
+    - whether Bloodbath's UFO needs an upside-down entry;
+    - what causes The Nightmare's 19698 parting and Bloodbath's 1119/1127 partings;
+    - whether ToE2's 18% wall is only the UFO;
+    - whether rehearsals and play draw the same random numbers;
+    - why the ghost stalled on LIMBO and ORBIT;
+    - the real game's cost per tick.
+12. **Safety net.** Today stays the default, and nothing is deleted until Nigel flips the default.
