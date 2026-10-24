@@ -2804,6 +2804,17 @@ bool AbsensePathfinder::beginRescueLeg(Decision& d) {
     return false;
 }
 
+// GucciBot (2026-10-24): what a leg search's states came to, for the rescue
+// and drive leg lines (docs/AI_KNOWS_THE_GAME_PLAN.md step 0): the most live
+// states it carried on one tick, whether any were dropped for room (the cap:
+// an empty end is then no proof), and how often its calm gap was relaxed. A
+// UFO leg stuck at 2 live states is a leg that cannot fly.
+static std::string legStats(const Trajectory::Leg& leg) {
+    return fmt::format("peak {} live state{}, {}, calm gap relaxed {} time{}", leg.peakFrontier,
+                       leg.peakFrontier == 1 ? "" : "s", leg.capped ? "some dropped for room" : "none dropped for room",
+                       leg.relaxed, leg.relaxed == 1 ? "" : "s");
+}
+
 // What a rescue leg came back with: each way in an idea of its own - the way,
 // then a steer 16 on past the gate, as a route idea is made - put in front of
 // every other idea, so they are judged first. Nothing else about them is
@@ -2818,13 +2829,14 @@ void AbsensePathfinder::takeRescueLeg(Decision& d, const Trajectory::Leg& leg) {
             before, leg.error, (unsigned long long)leg.steps);
         return;
     }
+    const std::string stats = legStats(leg);
     if (leg.outcome != Trajectory::Leg::Outcome::Found || leg.witness.empty()) {
         const char* why = leg.outcome == Trajectory::Leg::Outcome::Impossible ? "impossible"
                           : leg.outcome == Trajectory::Leg::Outcome::NotFound ? "nothing alive gets there"
                                                                               : "out of room or steps";
         log("tick %llu: rescue leg to x %.0f (%llu before the dead end): not found (%s) after %d ticks, %llu steps, "
-            "%.0f ms",
-            tick, d.rescueX, before, why, leg.ticks, (unsigned long long)leg.steps, leg.ms);
+            "%.0f ms; %s",
+            tick, d.rescueX, before, why, leg.ticks, (unsigned long long)leg.steps, leg.ms, stats.c_str());
         return;
     }
     const double tps = Bot::get()->updater().getTps();
@@ -2843,9 +2855,9 @@ void AbsensePathfinder::takeRescueLeg(Decision& d, const Trajectory::Leg& leg) {
         rescue.push_back(std::move(c));
     }
     log("tick %llu: rescue leg to x %.0f (%llu before the dead end): found %zu way%s in after %d ticks, %llu steps, "
-        "%.0f ms; tried first",
+        "%.0f ms; %s; tried first",
         tick, d.rescueX, before, rescue.size(), rescue.size() == 1 ? "" : "s", leg.ticks, (unsigned long long)leg.steps,
-        leg.ms);
+        leg.ms, stats.c_str());
     // In front of the rest. Nothing points into the list yet - no idea has
     // been judged, and the marks of the stages after this one are set later.
     d.candidates.insert(d.candidates.begin(), std::make_move_iterator(rescue.begin()),
@@ -2929,6 +2941,7 @@ void AbsensePathfinder::takeDriveLeg(Decision& d, const Trajectory::Leg& leg) {
         o.result = fmt::format("could not run ({})", leg.error);
         return;
     }
+    o.legStats = legStats(leg);
     // A gap nothing gets into with nothing asked of the way (FREE) is priced
     // up, and the next ranking tries elsewhere first. Only FREE: a use or a
     // skip that fails says nothing about the gap around it.
@@ -3017,7 +3030,8 @@ void AbsensePathfinder::driveHandoff(Decision& d) {
     std::string tried;
     for (const Decision::DriveOption& o : d.driveOptions) {
         if (o.result.empty()) continue;
-        tried += fmt::format("{}{}: {}", tried.empty() ? "" : "; ", o.label, o.result);
+        tried += fmt::format("{}{}: {}{}", tried.empty() ? "" : "; ", o.label, o.result,
+                             o.legStats.empty() ? std::string() : " (" + o.legStats + ")");
     }
     devlog::log(devlog::Cat::AbsensePathfinder,
                 fmt::format("tick {}: route: gate x {:.0f} ({}) - no option got through ({}); today's engine decides "
@@ -4668,9 +4682,10 @@ void AbsensePathfinder::decide() {
             m_driveCrossX = o.x;
         }
         devlog::log(devlog::Cat::AbsensePathfinder,
-                    fmt::format("tick {}: route: {}: leg by search (option {} of {}), {} input change{} ({} fast), "
+                    fmt::format("tick {}: route: {}: leg by search (option {} of {}{}), {} input change{} ({} fast), "
                                 "lives {}{} ticks past the gate ({} needed){}; playing {} ticks{}",
-                                tick, o.text, best->driveOption + 1, d.driveOptions.size(), best->legChanges,
+                                tick, o.text, best->driveOption + 1, d.driveOptions.size(),
+                                o.legStats.empty() ? std::string() : "; " + o.legStats, best->legChanges,
                                 best->legChanges == 1 ? "" : "s", best->legFast, best->survived >= H ? ">=" : "",
                                 best->survived - best->gateTicks, driveBar(d, *best) - best->gateTicks,
                                 d.passChosen >= 0 ? ", holds up a tick late" : ", only to the tick", commit,

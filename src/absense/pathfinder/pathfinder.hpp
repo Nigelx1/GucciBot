@@ -391,6 +391,9 @@ public:
             std::string text;            // "use 230-290 at the blue orb, x 21825" (route::describe)
             std::string label;           // "use 230-290"
             std::string result;          // what its leg came to, for the handoff's log line
+            // GucciBot (2026-10-24): what its leg's states came to (peak live
+            // states, dropped for room, calm gap relaxed), for the log lines.
+            std::string legStats;
         };
         bool drives = false;     // made by the route drive (Route drives, one player deciding)
         std::vector<DriveOption> driveOptions;
