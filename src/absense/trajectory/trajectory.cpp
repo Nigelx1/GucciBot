@@ -1305,29 +1305,6 @@ struct Trajectory::SimSnapshot {
     unsigned int ticks = 0;
 };
 
-// GucciBot (2026-10-23): the Pathfinder's "exact start flags" (a test switch,
-// off by default: PathfinderSettings::exactStartFlags). A kept start's record
-// of the activatable objects marked used at its tick (recordStartFlags): the
-// ones in its range (SimStart::flagsFrom on) that had a flag set, sorted by
-// object, with their two flags - bit 0 m_activatedByPlayer1, bit 1
-// m_activatedByPlayer2. An object in the range it does not list was fresh. Of
-// one read of one level (`layer`, `gen`): useStartExact never puts the record
-// of another on the objects.
-struct Trajectory::StartFlags {
-    using Entry = std::pair<EnhancedGameObject*, uint8_t>;
-    GJBaseGameLayer* layer = nullptr;
-    unsigned gen = 0;
-    std::vector<Entry> used;
-    static bool before(const Entry& a, const Entry& b) {
-        return std::less<const EnhancedGameObject*>{}(a.first, b.first);
-    }
-    // The flags recorded for `e`, or -1 when it is not listed.
-    int find(EnhancedGameObject* e) const {
-        const auto it = std::lower_bound(used.begin(), used.end(), Entry{e, 0}, before);
-        return it != used.end() && it->first == e ? (int)it->second : -1;
-    }
-};
-
 // The players' state at some tick of the real path, kept so a run can
 // begin from it later (see useStart).
 struct Trajectory::SimStart {
@@ -1366,13 +1343,14 @@ struct Trajectory::SimStart {
     // still stands at its tick (see Sim::begin).
     std::shared_ptr<world::WorldStart> world;
     // GucciBot (2026-10-23): exact start flags (off by default; see
-    // useStartExact). The objects' flags at this tick, for every activatable
-    // object at x >= flagsFrom (recordStartFlags), shared with the starts
-    // before it while they are the same; null while the switch is off.
-    // `carried`: made by advanceStart - it stands where the plan being played
-    // takes the game, and keeps no record of its own.
-    std::shared_ptr<const StartFlags> flags;
-    float flagsFrom = 0.0f;
+    // recordStartFlags). Where this start stands in the log of the objects'
+    // flags: which log (0: none - kept while the switch was off) and how many
+    // changes it held when the start was kept. `carried`: made by
+    // advanceStart - it stands where the plan being played takes the game,
+    // and has no place in the log (useStartExact leaves the objects as the
+    // game has them).
+    uint64_t flagLog = 0;
+    uint64_t flagSeq = 0;
     bool carried = false;
 };
 
@@ -1709,37 +1687,11 @@ static bool portalPadOrOrb(GameObjectType t) {
     }
 }
 
-// How far any activatable object of the level reaches from its centre along x
-// (its box either side, or its circle), worked out once per read of the level
-// like the list itself, and never taken as more than 20 blocks.
-static float activatableReach(GJBaseGameLayer* pl) {
-    static GJBaseGameLayer* reachFor = nullptr;
-    static int reachCount = -1;
-    static unsigned reachGen = ~0u;
-    static float reach = 0.0f;
-    const std::vector<EnhancedGameObject*>& list = activatableObjects(pl);
-    const int n = pl->m_objects->count();
-    if (reachFor != pl || reachCount != n || reachGen != g_moverCacheGen) {
-        reachFor = pl;
-        reachCount = n;
-        reachGen = g_moverCacheGen;
-        reach = 0.0f;
-        for (EnhancedGameObject* e : list) {
-            GameObject* o = e;
-            const float x = o->getPositionX();
-            const cocos2d::CCRect r = o->getObjectRect();
-            reach = std::max({reach, x - r.getMinX(), r.getMaxX() - x, (float)o->m_objectRadius});
-        }
-        reach = std::min(reach, 600.0f);
-    }
-    return reach;
-}
-
 // What the old rule - the loop at the end of useStart - leaves on `e` for a run
 // from `s`, its flags being `now`: the same tests in the same order, writing
-// nothing. Exact start flags compare with it for the log, and keep it where a
-// start's record does not reach. The loop itself stays exactly as it was; keep
-// this in step with it.
+// nothing. Exact start flags compare with it for the log, and keep it for a
+// start with no record in the log. The loop itself stays exactly as it was;
+// keep this in step with it.
 static uint8_t oldStartRule(const Trajectory::SimStart& s, EnhancedGameObject* e, uint8_t now) {
     if (!now) return 0;  // only a flag that is set can need clearing
     GameObject* obj = e;
@@ -1794,66 +1746,83 @@ static uint8_t oldStartRule(const Trajectory::SimStart& s, EnhancedGameObject* e
     return before ? now : 0;
 }
 
-// A kept start's record of the objects' flags at its tick (see useStartExact),
-// taken from the game right after the tick. Its range is every activatable
-// object at x >= flagsFrom: the start's rearmost player (the other one of a
-// dual start counts too) less twice the most a box can still reach behind a
-// player's centre and touch it - half a full-size player (15) and the old
-// rule's 6 units of slack, plus how far the level's widest activatable object
-// reaches from its centre (at least 45: a mode portal on its side) - so a
-// portal, pad or orb a player is still on, its centre behind the player's,
-// is in, and doubled for one a trigger has turned or scaled since. Where a
-// player of the start can travel back to smaller x - going left, sideways, or
-// in a platformer level - the range is the whole level. Behind the range the
-// old rule decides, which keeps the flags as the game has them: going forward
-// the game does not get back there (a teleport or a reverse that takes it back
-// is the exception, and is what the old rule gets wrong there too).
+// A kept start's place in the log of the objects' flags (m_flagBits and
+// m_flagChanges), which this first brings up to date: every activatable
+// object of the level whose two flags are not what the log last had goes into
+// it, with what they were. The flags of a start of this log are then the
+// log's latest with every change since the start was kept undone, newest
+// first (useStartExact) - exactly what the game had when the start was kept,
+// for every object of the level: wherever it stands or has been moved to
+// since, whatever the players did after (going left, a teleport, the dual's
+// other player), a trigger spawned since or an orb a player is on. It holds
+// across the game going back too: going back is one more set of changes,
+// found at the next kept start and undone like any other for a start kept
+// before it.
+//
+// (It used to keep a record of the flagged objects from the start's rearmost
+// player less a margin on, and leave the rest to the old rule. Whether an
+// object was in that range was decided by where it stood when the start was
+// put in use, not when it was kept: an object a trigger moved into or out of
+// the range since, a trigger spawned behind it, or a run that turned round or
+// was teleported back there saw the game's flags of now, not the start's.)
+//
+// A kept start costs a read of every activatable object's two flags and a
+// byte compare each - the record read them all as well - and the log a few
+// bytes a change.
 void Trajectory::recordStartFlags(GJBaseGameLayer* pl, SimStart& s) {
-    if (!pl || !pl->m_objects || s.count <= 0) return;
+    if (!pl || !pl->m_objects) return;
     const std::vector<EnhancedGameObject*>& list = activatableObjects(pl);
-    bool whole = pl->m_isPlatformer;
-    float rear = std::numeric_limits<float>::max();
-    for (int k = 0; k < s.count; k++) {
-        const SimPlayerSnap& sp = s.p[k];
-        if (sp.player.m_isGoingLeft || sp.player.m_isSideways) whole = true;
-        rear = std::min(rear, sp.position.x);
+    const int objects = (int)pl->m_objects->count();
+    // A log is of one read of the list, which activatableObjects reads again
+    // exactly when one of these changes: then a new log begins, and a start of
+    // the old one has no record (useStartExact leaves it to the old rule).
+    const bool same = m_flagLog != 0 && m_flagLogFor == pl && m_flagLogGen == g_moverCacheGen &&
+                      m_flagLogObjects == objects && m_flagBits.size() == list.size();
+    if (!same) {
+        m_flagLog++;
+        m_flagLogFor = pl;
+        m_flagLogGen = g_moverCacheGen;
+        m_flagLogObjects = objects;
+        m_flagLogBase = 0;
+        m_flagChanges.clear();
+        m_flagBits.assign(list.size(), 0);
     }
-    const float behind = 2.0f * (21.0f + std::max(45.0f, activatableReach(pl)));
-    const float from = whole ? std::numeric_limits<float>::lowest() : rear - behind;
     // The game's own flags. A start in use has changed some (useStart), and
     // kept what they were in m_clearedFlags.
-    std::vector<StartFlags::Entry> changed;
+    using Own = std::pair<EnhancedGameObject*, uint8_t>;
+    const auto byObject = [](const Own& a, const Own& b) {
+        return std::less<const EnhancedGameObject*>{}(a.first, b.first);
+    };
+    std::vector<Own> changed;
     if (!m_clearedFlags.empty() && m_clearedFor == pl) {
         changed.reserve(m_clearedFlags.size());
         for (const ClearedFlag& c : m_clearedFlags)
             changed.push_back({c.object, (uint8_t)((c.p1 ? 1 : 0) | (c.p2 ? 2 : 0))});
-        std::sort(changed.begin(), changed.end(), StartFlags::before);
+        std::sort(changed.begin(), changed.end(), byObject);
     }
-    m_flagScratch.clear();
-    for (EnhancedGameObject* e : list) {
+    for (size_t i = 0; i < list.size(); i++) {
+        EnhancedGameObject* e = list[i];
         uint8_t bits = flagBits(e);
         if (!changed.empty()) {
-            const auto it = std::lower_bound(changed.begin(), changed.end(), StartFlags::Entry{e, 0}, StartFlags::before);
+            const auto it = std::lower_bound(changed.begin(), changed.end(), Own{e, 0}, byObject);
             if (it != changed.end() && it->first == e) bits = it->second;
         }
-        if (!bits) continue;
-        if (static_cast<GameObject*>(e)->getPositionX() < from) continue;
-        m_flagScratch.push_back({e, bits});
+        if (bits == m_flagBits[i]) continue;
+        if (same) m_flagChanges.push_back({(uint32_t)i, m_flagBits[i]});
+        m_flagBits[i] = bits;
     }
-    std::sort(m_flagScratch.begin(), m_flagScratch.end(), StartFlags::before);
-    // The flags change far less often than a tick: the starts in between share one record.
-    if (m_lastFlags && m_lastFlags->layer == pl && m_lastFlags->gen == g_moverCacheGen &&
-        m_lastFlags->used == m_flagScratch) {
-        s.flags = m_lastFlags;
-    } else {
-        auto rec = std::make_shared<StartFlags>();
-        rec->layer = pl;
-        rec->gen = g_moverCacheGen;
-        rec->used = m_flagScratch;
-        m_lastFlags = rec;
-        s.flags = std::move(rec);
+    // Only the changes since the oldest start still kept are ever undone - a
+    // few seconds' worth. A log grown past a million changes (8 MB: hours of
+    // searching with the game going back all the time) drops its older half,
+    // and a start kept before what is left has no record any more.
+    constexpr size_t kMaxChanges = size_t(1) << 20;
+    if (m_flagChanges.size() > kMaxChanges) {
+        const size_t drop = m_flagChanges.size() / 2;
+        m_flagChanges.erase(m_flagChanges.begin(), m_flagChanges.begin() + (std::ptrdiff_t)drop);
+        m_flagLogBase += drop;
     }
-    s.flagsFrom = from;
+    s.flagLog = m_flagLog;
+    s.flagSeq = m_flagLogBase + m_flagChanges.size();
 }
 
 // One object whose flags exact start flags left other than the old rule would
@@ -1928,12 +1897,13 @@ std::string Trajectory::exactFlagRecent() const {
 // what it was at the kept state's own tick, and the path played again from
 // there sets the same ones again. A start kept at a tick of the path the game
 // played therefore knows the flags the game will have when it is back at that
-// tick: its record. Every activatable object in the record's range is set to
-// exactly that - a flag set since is cleared, one the start had is set again -
-// and the old guess from where the start's players stand (the loop in useStart)
-// only decides outside the range, or for a start without a record of this
-// level. What was on each object goes into m_clearedFlags, so useStart(nullptr)
-// puts the game's own flags back whichever way they were changed.
+// tick: its place in the log (recordStartFlags). Every activatable object of
+// the level is set to exactly what it had then - a flag set since is cleared,
+// one the start had is set again - and the old guess from where the start's
+// players stand (the loop in useStart) only decides for a start with no record
+// in the log. What was on each object goes into m_clearedFlags, so
+// useStart(nullptr) puts the game's own flags back whichever way they were
+// changed.
 //
 // A start at the game's own tick or ahead of it - one carried ahead along the
 // plan being played (advanceStart, for a decision made ahead), or the start of
@@ -1949,23 +1919,30 @@ void Trajectory::useStartExact(GJBaseGameLayer* pl) {
     const SimStart& s = *m_start;
     const int realTick = (int)Bot::get()->updater().getFrame();
     const bool ahead = s.carried || s.moveTick >= realTick;
-    const StartFlags* rec = nullptr;
-    if (!ahead && s.flags && s.flags->layer == pl && s.flags->gen == g_moverCacheGen) rec = s.flags.get();
+    const std::vector<EnhancedGameObject*>& list = activatableObjects(pl);
+    // The flags at the start's tick: the log's latest, with every change since
+    // the start was kept undone, newest first.
+    const bool recorded = !ahead && s.flagLog != 0 && s.flagLog == m_flagLog && m_flagLogFor == pl &&
+                          m_flagLogGen == g_moverCacheGen && m_flagLogObjects == (int)pl->m_objects->count() &&
+                          m_flagBits.size() == list.size() && s.flagSeq >= m_flagLogBase &&
+                          s.flagSeq - m_flagLogBase <= m_flagChanges.size();
+    if (recorded) {
+        m_flagScratch.assign(m_flagBits.begin(), m_flagBits.end());
+        for (size_t k = m_flagChanges.size(); k > (size_t)(s.flagSeq - m_flagLogBase); k--)
+            m_flagScratch[m_flagChanges[k - 1].index] = m_flagChanges[k - 1].before;
+    }
     m_exactStats.starts++;
     if (ahead) m_exactStats.ahead++;
-    else if (!rec) m_exactStats.unrecorded++;
-    for (EnhancedGameObject* e : activatableObjects(pl)) {
+    else if (!recorded) m_exactStats.unrecorded++;
+    for (size_t i = 0; i < list.size(); i++) {
+        EnhancedGameObject* e = list[i];
         const uint8_t now = flagBits(e);
-        const int recorded = rec ? rec->find(e) : -1;
-        // Fresh and not in the record: fresh it stays, under either rule.
-        if (!now && recorded < 0) continue;
+        const uint8_t then = recorded ? m_flagScratch[i] : 0;
+        // Fresh now and fresh at the start's tick (or no record of it): fresh
+        // under either rule.
+        if (!now && !then) continue;
         const uint8_t old = oldStartRule(s, e, now);
-        uint8_t want = old;
-        if (ahead) {
-            want = now;
-        } else if (rec && (recorded >= 0 || static_cast<GameObject*>(e)->getPositionX() >= s.flagsFrom)) {
-            want = recorded >= 0 ? (uint8_t)recorded : 0;
-        }
+        const uint8_t want = ahead ? now : recorded ? then : old;
         if (want != old) noteExactFlag(s, e, now, want, old, realTick);
         if (want == now) continue;
         m_clearedFlags.push_back({e, (now & 1) != 0, (now & 2) != 0});
@@ -1993,8 +1970,9 @@ void Trajectory::useStart(std::shared_ptr<SimStart> start) {
     if (!pl || !pl->m_objects) return;
     m_clearedFor = pl;
     // GucciBot (2026-10-23): the Pathfinder's exact start flags (off by
-    // default) set the objects from the start's record instead of the loop
-    // below, which is left exactly as it was.
+    // default) set the objects to what they had at the start's tick (its
+    // place in the log of their flags) instead of the loop below, which is
+    // left exactly as it was.
     if (SLSettings::get()->pathfinder.exactStartFlags) {
         useStartExact(pl);
         return;

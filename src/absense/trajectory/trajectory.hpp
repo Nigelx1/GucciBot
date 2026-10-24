@@ -232,7 +232,6 @@ class Trajectory {
     struct GhostState;
    public:
     struct SimStart;  // see captureStart
-    struct StartFlags;  // a kept start's record of the objects' flags (exact start flags, see recordStartFlags)
     // Step R0 of AI_PATHFINDER_PLAN.md: what a simulated tick and a snapshot
     // cost, timed from the real player's state. Nothing in the game changes.
     struct Benchmark {
@@ -585,15 +584,30 @@ class Trajectory {
 
     // GucciBot (2026-10-23): the Pathfinder's "exact start flags" test switch
     // (PathfinderSettings::exactStartFlags, off by default; see useStart).
-    // recordStartFlags fills a kept start's record; useStartExact puts it on
-    // the objects. The last record is kept so the starts after it share it
-    // while nothing in it changes; the scratch list is where a new one is
-    // built.
+    // recordStartFlags brings the log of the objects' flags up to date at
+    // every kept start and notes the start's place in it; useStartExact puts
+    // the flags of a start's tick back on the objects from it.
     void recordStartFlags(GJBaseGameLayer* pl, SimStart& s);
     void useStartExact(GJBaseGameLayer* pl);
     void noteExactFlag(const SimStart& s, EnhancedGameObject* e, uint8_t now, uint8_t want, uint8_t old, int realTick);
-    std::shared_ptr<const StartFlags> m_lastFlags;
-    std::vector<std::pair<EnhancedGameObject*, uint8_t>> m_flagScratch;
+    // The log: every activatable object's two flags (bit 0 player 1, bit 1
+    // player 2) as the game had them when the last start was kept, indexed
+    // like activatableObjects() for the read of the level it is of, and every
+    // change found from one kept start to the next (the object's index and
+    // its flags before), oldest first, the first m_flagLogBase of them
+    // dropped. m_flagLog numbers the logs (0: none yet).
+    struct FlagChange {
+        uint32_t index;
+        uint8_t before;
+    };
+    uint64_t m_flagLog = 0;
+    GJBaseGameLayer* m_flagLogFor = nullptr;
+    unsigned m_flagLogGen = 0;
+    int m_flagLogObjects = -1;
+    uint64_t m_flagLogBase = 0;
+    std::vector<uint8_t> m_flagBits;
+    std::vector<FlagChange> m_flagChanges;
+    std::vector<uint8_t> m_flagScratch;  // a start's flags, worked out in useStartExact
 
     // ---- Drawing the prediction. Everything below belongs to the drawn lines
     // (update, simulate, runPrediction and the drawing half of iterate). A Sim
@@ -946,10 +960,16 @@ class Trajectory {
         uint64_t cleared = 0;
         uint64_t setAgain = 0;
     };
+    // A new pathfinder run's: the stats, and the log of the objects' flags
+    // (the next kept start begins a new one; see recordStartFlags).
     void resetExactFlagStats() {
         m_exactStats = ExactFlagStats{};
         m_exactLogged.clear();
         for (auto& r : m_exactRecent) r.clear();
+        m_flagLogFor = nullptr;
+        m_flagBits = {};
+        m_flagChanges = {};
+        m_flagScratch = {};
     }
     const ExactFlagStats& exactFlagStats() const { return m_exactStats; }
     // The last few objects of each kind (the newest last), whether their lines

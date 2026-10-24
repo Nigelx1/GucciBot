@@ -684,6 +684,7 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
         const std::string recent = bot->trajectory().exactFlagRecent();
         if (!recent.empty())
             devlog::log(devlog::Cat::AbsensePathfinder, "exact start flags, the last few of each kind: " + recent);
+        bot->trajectory().resetExactFlagStats();  // and the log of the objects' flags goes: the run's starts are gone
     }
 
     if (done) {
