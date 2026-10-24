@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-hq (Calculate: the 2-player fixes and Dependent pair search agree on paired clicks from imports; Pathfinder: Exact start flags only marks an object used again where GD itself keeps it through a respawn)"
+    "2026-10-23-hr (Pathfinder: Human hints, a switch that starts off - off, a search uses no macro at all; on, only a macro made on this level. The loaded macro used to steer every run, whatever level it was for)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
