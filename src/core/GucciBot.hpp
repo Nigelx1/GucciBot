@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-ht (Pathfinder: Remember solutions, a switch that starts off - every search is cold, using nothing from earlier runs of the level, unless it's on)"
+    "2026-10-24-a (Pathfinder: a crash fixed - the simulation's collision pass read used flags from slopes and other plain objects past their end, which crashed Deadlocked at 71%)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
