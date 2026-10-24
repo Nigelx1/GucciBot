@@ -190,6 +190,14 @@ void absense::setExactStartFlags(bool on) {
     geode::Mod::get()->setSavedValue("pf_exact_start_flags", on);
 }
 
+bool absense::humanHints() {
+    return geode::Mod::get()->getSavedValue<bool>("pf_human_hints", false);
+}
+
+void absense::setHumanHints(bool on) {
+    geode::Mod::get()->setSavedValue("pf_human_hints", on);
+}
+
 void absense::stopPathfinder() {
     if (s_pending.active) {
         s_pending.active = false;

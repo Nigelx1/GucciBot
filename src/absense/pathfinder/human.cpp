@@ -9,6 +9,7 @@
 
 #include "absense/compat/reference.hpp"
 #include "absense/compat/devlog.hpp"
+#include "absense/glue.hpp"
 
 using namespace geode::prelude;
 
@@ -39,9 +40,13 @@ void Reference::close() {
     m_presses = 0;
 }
 
-void Reference::open(PlayLayer* pl, const slc::ActionAtom* loaded, double loadedTps) {
+void Reference::open(PlayLayer* pl, const slc::ActionAtom* loaded, double loadedTps, const std::string& loadedLevel) {
     close();
     if (!pl || !pl->m_level) return;
+    if (!absense::humanHints()) {
+        devlog::logf(devlog::Cat::AbsensePathfinder, "human hints: off (no macro is used)");
+        return;
+    }
     const std::string name = fold(std::string(pl->m_level->m_levelName));
 
     // The folder: the file named after the level.
@@ -87,8 +92,12 @@ void Reference::open(PlayLayer* pl, const slc::ActionAtom* loaded, double loaded
         }
     }
 
-    // Failing that, what the player has loaded.
-    if (m_events.empty() && loaded && !loaded->m_actions.empty()) {
+    // Failing that, what the player has loaded - if it was made on this level.
+    if (m_events.empty() && loaded && !loaded->m_actions.empty() && fold(loadedLevel) != name) {
+        devlog::logf(devlog::Cat::AbsensePathfinder, "human hints: the loaded macro is for %s, not this level - not used",
+                     loadedLevel.empty() ? "an unknown level" : ("\"" + loadedLevel + "\"").c_str());
+    }
+    if (m_events.empty() && loaded && !loaded->m_actions.empty() && !name.empty() && fold(loadedLevel) == name) {
         // The rate it is playing at now is all the game can say about the
         // first frames (slc3 does not keep a starting rate once loaded);
         // its own TPS actions carry the rest.

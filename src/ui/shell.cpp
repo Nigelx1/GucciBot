@@ -1646,6 +1646,15 @@ namespace gucci::ui {
                                "guess from where the player stood. Takes effect when a search starts",
                                &exactFlags))
                 absense::setExactStartFlags(exactFlags);
+            // GucciBot (2026-10-23): off, a search uses no macro at all.
+            bool humanHints = absense::humanHints();
+            if (kit::SwitchRow("Human hints",
+                               "Off by default: the pathfinder plays the level with no macro at all. On: it also "
+                               "tries a macro of this level as ideas - a .slc in the replays folder named after the "
+                               "level, or the loaded macro if it was made on this level. Takes effect when a search "
+                               "starts",
+                               &humanHints))
+                absense::setHumanHints(humanHints);
             auto const s = absense::status();
             kit::RowBegin("", nullptr);
             if (!s.running && !absense::startPending()) {

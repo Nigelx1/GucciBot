@@ -30,7 +30,12 @@ class Reference {
     // Looks for the level's macro in the replays folder; failing that, uses
     // the actions loaded in the replay system when the search started (a
     // macro the player loaded by hand), at the tick rate they are in.
-    void open(PlayLayer* pl, const slc::ActionAtom* loaded, double loadedTps);
+    // GucciBot (2026-10-23): only with the Human hints switch on (off, the
+    // search uses no macro), and the loaded macro only when it was made on
+    // this level (`loadedLevel`, the level name its file keeps): it used to be
+    // taken whatever level it was for - a batch's previous level, or this
+    // level's own earlier solution, seeding runs counted as cold.
+    void open(PlayLayer* pl, const slc::ActionAtom* loaded, double loadedTps, const std::string& loadedLevel);
     void close();
 
     bool available() const { return !m_events.empty(); }

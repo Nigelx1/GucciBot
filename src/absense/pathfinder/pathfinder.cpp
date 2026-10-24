@@ -362,7 +362,8 @@ bool AbsensePathfinder::start() {
     // Record from here: whatever the replay had after this tick goes (the
     // human macro, if that is what was loaded, is kept as an idea first).
     const uint64_t tick = currentTick();
-    absense::human::Reference::get().open(pl, &rs.m_actionAtom, updater.getTps());
+    absense::human::Reference::get().open(pl, &rs.m_actionAtom, updater.getTps(),
+                                          gucci::GucciEngine::get()->loadedMacroLevelName);
     if (!bot->isRecording()) {
         // Silicate labels an input with the frame counter before its tick;
         // GucciBot one later (getFrame() + 1). "Everything from tick t on" is
@@ -658,6 +659,13 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
             (unsigned long long)m_stats.driveDecisions, (unsigned long long)m_stats.driveHandoffs,
             (unsigned long long)m_stats.driveNoGate);
     }
+    // GucciBot (2026-10-23): whether a macro steered this run, so a run seeded
+    // by one can't pass for a cold one (the Human hints switch, off by default).
+    if (absense::human::Reference::get().available())
+        log("human hints: %s - %llu ideas from it tried, %llu played", absense::human::Reference::get().source().c_str(),
+            (unsigned long long)m_stats.humanTried, (unsigned long long)m_stats.humanWins);
+    else
+        log("human hints: none - no macro steered this run");
     log("anticheat spike: handed to GD after %llu rewinds (of %llu times back); met %llu times in a collision pass, "
         "ending %llu real passes early",
         (unsigned long long)m_stats.spikeSettles, (unsigned long long)m_stats.backtracks,
