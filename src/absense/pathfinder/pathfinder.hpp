@@ -576,7 +576,16 @@ public:
     // What the simulation expected the committed plan to do, tick by tick;
     // the real game is checked against it while committing.
     std::vector<TraceSample> m_planTrace;
+    // GucciBot (2026-10-24, docs/AI_KNOWS_THE_GAME_PLAN.md step 2): the tick
+    // of the last decision made from the real game (not ahead): the drift
+    // check waits a few ticks after one before it may think again. A decision
+    // made ahead used to move it to the end of the plan it was about, which
+    // muted the check for the whole plan playing in front of it - and with a
+    // new decision made ahead about every plan's end, for good.
     uint64_t m_lastReplanTick = 0;
+    // ... and the tick the last decision of either kind was about: which plan
+    // a refused decision ahead was refused for (AheadWait::replan).
+    uint64_t m_planMadeAt = 0;
 
     // Dead ends: tick -> (length, hash) of input prefixes that led nowhere.
     struct Tabu {
@@ -698,7 +707,7 @@ public:
     // for as long as the plan takes to reach the portal.
     struct AheadWait {
         uint64_t end = UINT64_MAX;     // the tick the refused plan ends at
-        uint64_t replan = UINT64_MAX;  // ... and the decision that last made it (m_lastReplanTick)
+        uint64_t replan = UINT64_MAX;  // ... and the decision that last made it (m_planMadeAt)
         uint64_t retryAt = 0;          // from this tick on it is tried again anyway
         int mode = -1, mode2 = -1;     // the kinds of player it ends in (mode2: -1 without a second player)
     };

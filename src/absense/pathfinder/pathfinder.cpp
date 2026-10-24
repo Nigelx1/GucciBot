@@ -448,6 +448,7 @@ bool AbsensePathfinder::start() {
     m_planTailTick = UINT64_MAX;
     m_planTrace.clear();
     m_lastReplanTick = 0;
+    m_planMadeAt = 0;
     m_restorePending = false;
     m_restepping = false;
     m_wouldDie = false;
@@ -4652,6 +4653,12 @@ void AbsensePathfinder::decide() {
         // of it (the trace's ticks count from the start of the whole plan).
         const int base = (int)m_plan.size();
         for (TraceSample& sample : trace) sample.tick += base;
+        // GucciBot (2026-10-24): the trace and the plan stay tick for tick,
+        // since every tick of an appended plan is checked now (afterTick): a
+        // trace shorter than its plan (a run that ended early) is filled out
+        // with samples of tick 0, which the check passes over, and the new
+        // samples land on their own ticks.
+        if (m_planTrace.size() != (size_t)base) m_planTrace.resize((size_t)base, TraceSample{});
         m_plan.insert(m_plan.end(), plan.begin(), plan.end());
         if (!plan2.empty()) {
             m_plan2.resize(m_plan.size() - plan.size(), TickInput{0, m_pairHeld1});
@@ -4668,9 +4675,13 @@ void AbsensePathfinder::decide() {
         m_planTrace = std::move(trace);
         m_aheadFailed = false;
         m_aheadWait = AheadWait{};  // a plan of its own: its end is tried afresh
+        // GucciBot (2026-10-24): only a decision made from the real game holds
+        // the drift check off for a few ticks (afterTick); one made ahead is
+        // about a tick still to come, and the plan in front of it is checked
+        // tick by tick as it plays.
+        m_lastReplanTick = tick;
     }
-    m_lastReplanTick = tick;
-    (void)ahead;
+    m_planMadeAt = tick;
 
     // Step 5: the route drive's line for this decision - the gate, the option,
     // how its way was found and how calm it is, and what is played.
@@ -4795,7 +4806,7 @@ void AbsensePathfinder::beginAhead() {
     // end: from a later start it may well not, and holding that try back would
     // move the start the decision ahead is made from.)
     const uint64_t end = from + (uint64_t)(m_plan.size() - at);
-    if (m_aheadWait.end == end && m_aheadWait.replan == m_lastReplanTick && from < m_aheadWait.retryAt &&
+    if (m_aheadWait.end == end && m_aheadWait.replan == m_planMadeAt && from < m_aheadWait.retryAt &&
         (Trajectory::startState(*now->sim).mode != m_aheadWait.mode ||
          (m_aheadWait.mode2 >= 0 && Trajectory::startState(*now->sim, true).mode != m_aheadWait.mode2)))
         return;
@@ -4815,9 +4826,9 @@ void AbsensePathfinder::beginAhead() {
     if (Trajectory::startState(*now->sim).mode != endMode ||
         (endMode2 >= 0 && Trajectory::startState(*now->sim, true).mode != endMode2)) {
         // Remembered (see above), and logged once a plan end.
-        const bool fresh = m_aheadWait.end != end || m_aheadWait.replan != m_lastReplanTick;
+        const bool fresh = m_aheadWait.end != end || m_aheadWait.replan != m_planMadeAt;
         const uint64_t every = (uint64_t)std::lround(60.0 * std::max(1.0, Bot::get()->updater().getTps() / 240.0));
-        m_aheadWait = {end, m_lastReplanTick, from + std::max<uint64_t>(every, rest.size() / 4), endMode, endMode2};
+        m_aheadWait = {end, m_planMadeAt, from + std::max<uint64_t>(every, rest.size() / 4), endMode, endMode2};
         if (fresh) {
             static constexpr const char* kKinds[] = {"cube", "ship", "ball", "UFO", "wave", "robot", "spider", "swing"};
             auto kind = [](int mode) { return mode >= 0 && mode < 8 ? kKinds[mode] : "?"; };
@@ -4940,7 +4951,7 @@ void AbsensePathfinder::beginFreeze() {
         m_freeze.into = m_decision.active ? secondsSince(m_decision.began) : 0.0;  // (begun, not set up yet)
     } else {
         // What kept beginAhead from starting one.
-        const bool portal = m_aheadWait.end == m_liveNextTick && m_aheadWait.replan == m_lastReplanTick;
+        const bool portal = m_aheadWait.end == m_liveNextTick && m_aheadWait.replan == m_planMadeAt;
         m_freeze.why = m_aheadFailed                        ? "the decision ahead of it found a dead end"
                        : m_planKnownDeath != UINT64_MAX     ? "the plan was played into a death, for the game's word"
                        : separateNow()                      ? "two-player mode decides from the real state"
@@ -5370,7 +5381,8 @@ bool AbsensePathfinder::afterTick(uint64_t tick, const TickInput& in, const Tick
                 // all and the next try dies just past it again.
                 const size_t span = (size_t)std::max<long>(1, std::lround(4.0 * std::max(1.0, Bot::get()->updater().getTps() / 240.0)));
                 const size_t back = at >= span ? at - span : 0;
-                if (back < m_planTrace.size() && at < m_planTrace.size()) {
+                if (back < m_planTrace.size() && at < m_planTrace.size() && m_planTrace[back].tick > 0 &&
+                    m_planTrace[at].tick > 0) {
                     // The way in is the dead player's own path: player 2's from
                     // the trace when it was the one the game killed.
                     const bool p2 = m_wouldDie && m_wouldDieP2 && m_planTrace[at].dual;
@@ -5412,7 +5424,11 @@ bool AbsensePathfinder::afterTick(uint64_t tick, const TickInput& in, const Tick
     // gone somewhere else, the rest of the plan is built on sand - think
     // again from where the player really is (a few ticks between rethinks,
     // or a simulation that is always a little off would never get anywhere).
-    if (m_planIndex >= 1 && m_planIndex <= m_planTrace.size() && pl->m_player1) {
+    // GucciBot (2026-10-24): every tick of the plan, the ticks of a plan
+    // decided ahead and appended included (see m_lastReplanTick); a sample of
+    // tick 0 only fills out a trace that ended early (see the commit).
+    if (m_planIndex >= 1 && m_planIndex <= m_planTrace.size() && pl->m_player1 &&
+        m_planTrace[m_planIndex - 1].tick > 0) {
         const TraceSample& expected = m_planTrace[m_planIndex - 1];
         // A run switches on a dual or solo portal now (Sim::enterDual), so a
         // plan can be judged across one. This stays until the two can be held
@@ -6051,6 +6067,7 @@ void AbsensePathfinder::finishRestore() {
         m_planTrace = std::move(m_probe.trace);
         m_planIndex = 0;
         m_lastReplanTick = tick;
+        m_planMadeAt = tick;
         // A try played to let the game speak stays one: reset here, its death
         // was "not seen", filed as a phantom, and the killer never confirmed.
         m_planKnownDeath = m_probe.knownDeath;
