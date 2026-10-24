@@ -445,9 +445,19 @@ void collisionCheckObjects(GJBaseGameLayer* pl, PlayerObject* player,
             continue;
         }
 
-        if ((bot->trajectory().playerHasActivated(player, obj) ||
-             bot->trajectory().realPlayerHasActivated(player, obj)) &&
-            (object->m_objectType != GameObjectType::Slope)) {
+        // GucciBot (2026-10-24): only the enhanced classes (Effect, Animated,
+        // Enhanced: EnhancedGameObject and below) have the used flags these
+        // two read. A slope, or any other plain object (Game, Smart), is
+        // smaller, and asking it read past its end - garbage most of the time,
+        // an access violation when it ended a heap page (Deadlocked crashed
+        // here at tick 16951, in phys::activatedPlatformer). So the class and
+        // the slope are checked first, before any read.
+        const GameObjectClassType cls = object->m_classType;
+        const bool keepsFlags = cls == GameObjectClassType::Effect || cls == GameObjectClassType::Animated ||
+                                cls == GameObjectClassType::Enhanced;
+        if (keepsFlags && object->m_objectType != GameObjectType::Slope &&
+            (bot->trajectory().playerHasActivated(player, obj) ||
+             bot->trajectory().realPlayerHasActivated(player, obj))) {
             if (world::g_debugNotes && object->m_objectType == GameObjectType::Modifier && obj->m_isTouchTriggered) {
                 world::g_debugNotes->push_back(fmt::format(
                     "touch trigger {} (id {} at {:.0f},{:.0f}) skipped: {}", obj->m_uniqueID, obj->m_objectID,
