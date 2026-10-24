@@ -40,12 +40,6 @@ namespace absense {
     // PathfinderSettings::exactStartFlags).
     bool exactStartFlags();
     void setExactStartFlags(bool on);
-    // GucciBot (2026-10-23): the Pathfinder tab's "Human hints" switch (saved,
-    // off by default). Off, a search uses no macro at all (Nigel: everything
-    // has to work without macros); on, it may try a macro of this level as
-    // ideas (absense::human::Reference).
-    bool humanHints();
-    void setHumanHints(bool on);
     void stopPathfinder();
     bool isRunning();
 

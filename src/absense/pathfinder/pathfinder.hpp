@@ -28,8 +28,6 @@
 
 #include "absense/compat/bot.hpp"
 #include "absense/gpu/protocol.hpp"
-#include "human.hpp"
-#include "human.hpp"
 #include "memory.hpp"
 #include "absense/compat/settings.hpp"
 #include "absense/compat/settings.hpp"
@@ -60,8 +58,6 @@ class AbsensePathfinder {
         uint64_t gpuScripts = 0;    // ideas it scored
         uint64_t remembered = 0;    // remembered solutions tried as ideas
         uint64_t rememberedWins = 0; // ... that were the one played
-        uint64_t humanTried = 0;    // the human macro's inputs tried as ideas
-        uint64_t humanWins = 0;     // ... that were the one played
         uint64_t aheadDecisions = 0; // decisions made about where a plan ends while it was still playing
         uint64_t freezes = 0;       // times the game had to wait for a decision (realtime)
         double freezeSeconds = 0.0; // ... and how long it waited, all of them together

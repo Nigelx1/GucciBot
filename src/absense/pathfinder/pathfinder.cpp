@@ -359,11 +359,11 @@ bool AbsensePathfinder::start() {
     m_savedStoredFrames = Bot::get()->updater().m_maxBackstepFrames;
     m_savedMode = (int)gucci::GucciEngine::get()->mode;  // GucciBot keeps the mode on the engine
 
-    // Record from here: whatever the replay had after this tick goes (the
-    // human macro, if that is what was loaded, is kept as an idea first).
+    // Record from here: whatever the replay had after this tick goes.
+    // GucciBot (2026-10-23): no macro is an idea any more - Absense's "human"
+    // idea played the loaded macro (of any level) and seeded runs counted as
+    // cold; the pathfinder has to beat levels nobody has a macro for.
     const uint64_t tick = currentTick();
-    absense::human::Reference::get().open(pl, &rs.m_actionAtom, updater.getTps(),
-                                          gucci::GucciEngine::get()->loadedMacroLevelName);
     if (!bot->isRecording()) {
         // Silicate labels an input with the frame counter before its tick;
         // GucciBot one later (getFrame() + 1). "Everything from tick t on" is
@@ -522,7 +522,6 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
     m_livePending = false;
     m_ahead = Ahead{};
     m_lessons.clear();  // unconfirmed: not learned
-    absense::human::Reference::get().close();
     m_phase = Phase::Idle;
     m_runningFlag = false;
     m_restorePending = false;
@@ -659,13 +658,6 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
             (unsigned long long)m_stats.driveDecisions, (unsigned long long)m_stats.driveHandoffs,
             (unsigned long long)m_stats.driveNoGate);
     }
-    // GucciBot (2026-10-23): whether a macro steered this run, so a run seeded
-    // by one can't pass for a cold one (the Human hints switch, off by default).
-    if (absense::human::Reference::get().available())
-        log("human hints: %s - %llu ideas from it tried, %llu played", absense::human::Reference::get().source().c_str(),
-            (unsigned long long)m_stats.humanTried, (unsigned long long)m_stats.humanWins);
-    else
-        log("human hints: none - no macro steered this run");
     log("anticheat spike: handed to GD after %llu rewinds (of %llu times back); met %llu times in a collision pass, "
         "ending %llu real passes early",
         (unsigned long long)m_stats.spikeSettles, (unsigned long long)m_stats.backtracks,
@@ -3174,9 +3166,8 @@ void AbsensePathfinder::decide() {
         // What got it past here in an earlier run goes first: judged like
         // any other idea, but if it still works the decision is one idea.
         d.hard = m_repair.active;
-        // The same script twice is the same answer twice: over a stretch the
-        // human does not touch the button in, all five shifts are the same
-        // vector, and each would cost a whole-horizon run. (TickInput has no
+        // The same script twice is the same answer twice: two ideas that come
+        // out the same vector would each cost a whole-horizon run. (TickInput has no
         // operator==; comparing a dozen scripts is microseconds.)
         auto sameScript = [](const std::vector<TickInput>& a, const std::vector<TickInput>& b) {
             if (a.size() != b.size()) return false;
@@ -3208,35 +3199,6 @@ void AbsensePathfinder::decide() {
                 addCandidate(d.candidates, std::move(expanded), name, d.held);
                 d.candidates.back().memoryIndex = (int)i;
                 m_stats.remembered++;
-            }
-        }
-        // The human's macro for this level, at this tick, a tick or two
-        // either side as well (a different tick rate rounds the timing).
-        if (!d.player2 && absense::human::Reference::get().available()) {
-            const auto& human = absense::human::Reference::get();
-            std::vector<TickInput> script;
-            // A widened spot asks for the macro further either side too (two
-            // more 240-TPS ticks each way a level, up to eight): a macro made
-            // at another rate, or timed a few ticks off this route.
-            std::vector<int> shifts = {0, 1, -1, 2, -2};
-            {
-                const int unit = std::max(1, (int)std::lround(tps / 240.0));
-                for (int s = 3; s <= std::min(8, 2 + 2 * d.level); s++) {
-                    shifts.push_back(s * unit);
-                    shifts.push_back(-s * unit);
-                }
-            }
-            for (const int shift : shifts) {
-                // Not a break: a shift asks for the macro at another tick, so
-                // the end of the macro falls past one shift while an earlier
-                // one still has inputs to give.
-                if (!human.script(d.tick, d.H, tps, shift, d.held, script)) continue;
-                if (seen(script)) continue;  // no event fell in the window: the same script as a shift already there
-                char name[32];
-                if (shift == 0) std::snprintf(name, sizeof(name), "human");
-                else std::snprintf(name, sizeof(name), "human %+d", shift);
-                addCandidate(d.candidates, script, name, d.held);
-                m_stats.humanTried++;
             }
         }
         // A stop of a repair: what was played from here into the dead end, with one of its inputs moved a few ticks.
@@ -4521,7 +4483,7 @@ void AbsensePathfinder::decide() {
     }
 
     // Made whether or not the memory is on: confirmLessons only touches the
-    // memory when it is, and the human macro's wins are counted from these.
+    // memory when it is.
     // A plan the simulation already knows dies (a forced commit, or the best
     // idea played anyway at the floor) is not a way past anything, so there
     // is nothing to learn from it.
@@ -5022,8 +4984,8 @@ int AbsensePathfinder::widenLevel(uint64_t at) {
 // Every stop down to the floor failed. The search never stops on its own for
 // that: the spot's level goes up, and every level widens what is tried at the
 // stops already there - the whole search budget at every stop and more of it,
-// more of the ideas run over the whole horizon, the human macro shifted
-// further, more random ideas and card rounds, the game's word at the floor even
+// more of the ideas run over the whole horizon, more random ideas and card
+// rounds, the game's word at the floor even
 // for a killer the simulation calls static - and the floor goes a second
 // further back when anything is kept there (the start too, into the frames
 // stored before it), never further from the death than a decision at that
@@ -5210,7 +5172,6 @@ void AbsensePathfinder::confirmLessons(uint64_t now) {
                 mem.remember(it->state, it->inputs, it->lasted, true);
             }
         }
-        if (it->name.rfind("human", 0) == 0) m_stats.humanWins++;
         it = m_lessons.erase(it);
     }
 }

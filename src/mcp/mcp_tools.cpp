@@ -568,13 +568,6 @@ namespace gucci::mcp {
                 "starts: a run from an earlier tick then sees each portal, orb, pad and trigger used or not as the "
                 "game had it at that tick.";
             props["exact_start_flags"] = exactFlags;
-            auto humanHints = obj();
-            humanHints["type"] = "boolean";
-            humanHints["description"] =
-                "Absense's engine: turn the Pathfinder tab's \"Human hints\" switch on or off before starting (saved; "
-                "default: leave it as it is). Off (the default), a search uses no macro at all; on, it may try a "
-                "macro of this level as ideas.";
-            props["human_hints"] = humanHints;
             schema["type"] = "object";
             schema["properties"] = props;
             schema["required"] = std::vector<std::string>{"action"};
@@ -610,9 +603,6 @@ namespace gucci::mcp {
                             if (a.contains("exact_start_flags"))
                                 absense::setExactStartFlags(argBool(a, "exact_start_flags", false));
                             out["exact_start_flags"] = absense::exactStartFlags();
-                            if (a.contains("human_hints"))
-                                absense::setHumanHints(argBool(a, "human_hints", false));
-                            out["human_hints"] = absense::humanHints();
                             out["queued"] = absense::requestStart(fromStart);
                             out["from_beginning"] = fromStart;
                             out["message"] = absense::status().message;
@@ -648,7 +638,6 @@ namespace gucci::mcp {
                             // switch the next start takes.
                             ab["exact_start_flags"] = st.exactStartFlags;
                             ab["exact_start_flags_switch"] = absense::exactStartFlags();
-                            ab["human_hints_switch"] = absense::humanHints();
                             out["absense"] = ab;
                         }
                         out["active"] = pf->active;
