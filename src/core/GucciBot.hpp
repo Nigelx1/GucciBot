@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-hp (Pathfinder: Exact start flags, a test switch that starts off - runs from a kept start see exactly which portals, orbs and pads the game had used at that tick, for The Nightmare's yellow portal)"
+    "2026-10-23-hq (Calculate: the 2-player fixes and Dependent pair search agree on paired clicks from imports; Pathfinder: Exact start flags only marks an object used again where GD itself keeps it through a respawn)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
