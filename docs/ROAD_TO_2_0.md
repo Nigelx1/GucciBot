@@ -135,7 +135,7 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 
 ## 6. Standalone copy - dropped (Nigel, 2026-10-23: "ditch the standalone copy")
 
-- [ ] One codebase with a build switch: a loader, the hooks, a small stand-in for the parts of Geode GucciBot uses, and bindings for the new GD version
+- Dropped: ~~one codebase with a build switch: a loader, the hooks, a small stand-in for the parts of Geode GucciBot uses, and bindings for the new GD version~~
 
 ## 7. How-to, VirusTotal, GitHub replies
 
