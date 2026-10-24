@@ -4592,6 +4592,35 @@ bool FrameWindowAnalyzer::stepDependent(PlayLayer* pl) {
         uint32_t const base = pair.base;
 
         if (!m_depAdvancing) {
+            // GucciBot (2026-10-23): the 2-player fixes in a 1-player level.
+            // An import that writes a tick's clicks one flag at a time can
+            // store the other half of the input before (pairDualClicks), or of
+            // its release, after this input. placeAt keeps a pair's halves
+            // together, so a Retime leg, which moves everything from this input
+            // on, took the input before (or its release) along with that half,
+            // off its alignment, while its room still counted on the alignment.
+            // Left where it is, the half plays out of order. Either way the
+            // input before can't move without this input moving the same, so
+            // the pair is skipped. Never true without pairs.
+            size_t const aiA = m_samples[pair.a].actionIndex;
+            size_t const aiB = m_samples[pair.b].actionIndex;
+            size_t const relA = this->pairedReleaseFor(aiA);
+            auto const halfAfter = [&](size_t k) {
+                size_t const half = this->partnerOf(k);
+                return half != NO_INDEX && half > aiB;
+            };
+            if (halfAfter(aiA) ||
+                (relA != NO_INDEX && relA != aiB && halfAfter(relA))) {
+                FWWARN("[fw][dependent] click {}: click {} or its release is "
+                       "stored under both players' flags with its other half "
+                       "after this click, so it can't move without this one, "
+                       "skipping it",
+                       pair.b + 1, pair.a + 1);
+                m_depSkipped++;
+                m_depCursor++;
+                return true;
+            }
+
             m_depPairStart = Clock::now();
             m_depPairLegs = 0;
             m_status = fmt::format("Checking dependent pairs: {} of {}",
