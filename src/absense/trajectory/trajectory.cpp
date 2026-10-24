@@ -1915,6 +1915,17 @@ std::string Trajectory::exactFlagRecent() const {
 // holds its start (beginAhead), and a flag written there would change what the
 // real player does - a pad it has yet to reach skipped, one it is on fired
 // again - and the path found would not replay from a cold start.
+// GucciBot (2026-10-23): whether GD's own checkpoints keep this object's used
+// flags. resetLevel resets every object (resetObject clears both flags), then
+// loadFromCheckpoint writes back the flags it saved - only for the objects its
+// scan collected at the level's setup (scanActiveSaveObjects, inlined in
+// setupHasCompleted at 0x3a6790): a kind that takes the multi-activate option
+// (canAllowMultiActivate - portals, orbs, pads) and isn't set to it. Every other
+// object (speed portals, triggers) comes back from a rewind fresh.
+static bool gdKeepsFlags(GJBaseGameLayer* pl, EnhancedGameObject* e) {
+    return e->canAllowMultiActivate() && !e->canMultiActivate(pl->m_isPlatformer);
+}
+
 void Trajectory::useStartExact(GJBaseGameLayer* pl) {
     const SimStart& s = *m_start;
     const int realTick = (int)Bot::get()->updater().getFrame();
@@ -1942,7 +1953,11 @@ void Trajectory::useStartExact(GJBaseGameLayer* pl) {
         // under either rule.
         if (!now && !then) continue;
         const uint8_t old = oldStartRule(s, e, now);
-        const uint8_t want = ahead ? now : recorded ? then : old;
+        uint8_t want = ahead ? now : recorded ? then : old;
+        // Not used again where GD's checkpoints wouldn't keep it: when the
+        // game goes back to play from here, it has the object fresh (a speed
+        // portal used before the checkpoint it goes back to, say).
+        if ((want & ~now) && !gdKeepsFlags(pl, e)) want &= now;
         if (want != old) noteExactFlag(s, e, now, want, old, realTick);
         if (want == now) continue;
         m_clearedFlags.push_back({e, (now & 1) != 0, (now & 2) != 0});
