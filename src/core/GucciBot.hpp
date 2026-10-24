@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-23-ho (Fixes from the reviews: page delete, imports, new recordings keep the old macro's windows off, backups keep windows, a crash at launch on odd file names; Flip 2-Player Controls handled the way GD does it everywhere)"
+    "2026-10-23-hp (Pathfinder: Exact start flags, a test switch that starts off - runs from a kept start see exactly which portals, orbs and pads the game had used at that tick, for The Nightmare's yellow portal)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
