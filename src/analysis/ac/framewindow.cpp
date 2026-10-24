@@ -3298,9 +3298,18 @@ void FrameWindowAnalyzer::beginRecovery() {
         }
         return true;
     };
+    // GucciBot (2026-10-23): the other halves too. They move with the next
+    // input and its release (followPartner), and an import that writes a
+    // tick's clicks one flag at a time keeps another input between a half
+    // and its pair, so a half can pass an input its pair doesn't. Each is
+    // checked against the actions beside it the same way. NO_INDEX without
+    // pairs. nextDepRecovery checks the same, so the dependent pass rescues
+    // what this does.
     while (m_recoveryOffset <= m_recovery &&
            (m_recoveryOffset == 0 || !fits(ni) ||
-            (niRel != NO_INDEX && !fits(niRel))))
+            (niRel != NO_INDEX && !fits(niRel)) ||
+            (niPair != NO_INDEX && !fits(niPair)) ||
+            (niRelPair != NO_INDEX && !fits(niRelPair))))
         m_recoveryOffset++;
     if (m_recoveryOffset > m_recovery) {
         this->advanceSweep(false);
@@ -4874,9 +4883,13 @@ int FrameWindowAnalyzer::nextDepRecovery(int64_t shift, int from) const {
         }
         return true;
     };
+    // GucciBot (2026-10-23): and the other halves, as beginRecovery checks
+    // them. NO_INDEX without pairs.
     int o = from;
     while (o <= m_recovery &&
-           (o == 0 || !fits(ni, o) || (niRel != NO_INDEX && !fits(niRel, o))))
+           (o == 0 || !fits(ni, o) || (niRel != NO_INDEX && !fits(niRel, o)) ||
+            (niPair != NO_INDEX && !fits(niPair, o)) ||
+            (niRelPair != NO_INDEX && !fits(niRelPair, o))))
         o++;
     return o;
 }
