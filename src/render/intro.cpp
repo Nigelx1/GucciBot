@@ -359,23 +359,46 @@ namespace gucci {
         ccColor3B const white = {255, 255, 255};
         ccColor3B const grey = {0x7f, 0x7f, 0x7f};
 
-        add(fill(levelName, subs), LEFT_X, Y_NAME, LEFT_MAIN_H, 0.f, white, 255);
-        add(fill(settings.m_levelNote, subs), LEFT_X, Y_NOTE, LEFT_MAIN_H, 0.f, white, 255);
-        add(fill(settings.m_heading1, subs), LEFT_X, Y_HEAD1, LEFT_MAIN_H, 0.f, white, 255);
-        add(fill(settings.m_heading2, subs), LEFT_X, Y_HEAD2, LEFT_MAIN_H, 0.f, white, 255);
-        add(fill(settings.m_heading3, subs), LEFT_X, Y_HEAD3, LEFT_MAIN_H, 0.f, white, 255);
-        add(fill(settings.m_greyLine, subs), LEFT_X, Y_GREY, LEFT_SMALL_H, 0.f, grey, 255);
-        add(fill(settings.m_footerLine, subs), LEFT_X, Y_FOOTER, LEFT_SMALL_H, 0.f, white, 255);
+        std::vector<CCNode*> left, right;
+        auto keep = [](std::vector<CCNode*>& into, CCNode* label) {
+            if (label)
+                into.push_back(label);
+        };
+
+        keep(left, add(fill(levelName, subs), LEFT_X, Y_NAME, LEFT_MAIN_H, 0.f, white, 255));
+        keep(left, add(fill(settings.m_levelNote, subs), LEFT_X, Y_NOTE, LEFT_MAIN_H, 0.f, white, 255));
+        keep(left, add(fill(settings.m_heading1, subs), LEFT_X, Y_HEAD1, LEFT_MAIN_H, 0.f, white, 255));
+        keep(left, add(fill(settings.m_heading2, subs), LEFT_X, Y_HEAD2, LEFT_MAIN_H, 0.f, white, 255));
+        keep(left, add(fill(settings.m_heading3, subs), LEFT_X, Y_HEAD3, LEFT_MAIN_H, 0.f, white, 255));
+        keep(left, add(fill(settings.m_greyLine, subs), LEFT_X, Y_GREY, LEFT_SMALL_H, 0.f, grey, 255));
+        keep(left, add(fill(settings.m_footerLine, subs), LEFT_X, Y_FOOTER, LEFT_SMALL_H, 0.f, white, 255));
 
         int row = 0;
-        add(fill(settings.m_bandHeader, subs), RIGHT_X, RIGHT_TOP, RIGHT_H, 1.f, white, 255);
+        keep(right, add(fill(settings.m_bandHeader, subs), RIGHT_X, RIGHT_TOP, RIGHT_H, 1.f, white, 255));
         row++;
 
         for (auto const& band : collectBands(settings, tps)) {
-            add(band.m_line, RIGHT_X, RIGHT_TOP + RIGHT_STEP * row, RIGHT_H, 1.f, band.m_color, band.m_opacity);
+            keep(right, add(band.m_line, RIGHT_X, RIGHT_TOP + RIGHT_STEP * row, RIGHT_H, 1.f, band.m_color, band.m_opacity));
             row++;
-            add(band.m_time, RIGHT_X, RIGHT_TOP + RIGHT_STEP * row, RIGHT_H, 1.f, band.m_color, band.m_opacity);
+            keep(right, add(band.m_time, RIGHT_X, RIGHT_TOP + RIGHT_STEP * row, RIGHT_H, 1.f, band.m_color, band.m_opacity));
             row++;
+        }
+
+        // A long level name (or any left-hand line) ran into the legend
+        // (Squidward Circles, 2026-10-27). Shrink a line that would, so it ends
+        // a small gap before the legend lines beside it.
+        float const gap = win.width * 0.015f;
+        for (auto* label : left) {
+            CCRect const l = label->boundingBox();
+            float limit = win.width;
+            for (auto* r : right) {
+                CCRect const rb = r->boundingBox();
+                if (rb.getMaxY() > l.getMinY() && rb.getMinY() < l.getMaxY())
+                    limit = std::min(limit, rb.getMinX() - gap);
+            }
+            float const width = l.getMaxX() - l.getMinX();
+            if (width > 0.f && l.getMaxX() > limit)
+                label->setScale(label->getScale() * std::max(limit - l.getMinX(), width * 0.25f) / width);
         }
 
         this->setAlpha(0.f);
