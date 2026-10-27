@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-24-a (Pathfinder: a crash fixed - the simulation's collision pass read used flags from slopes and other plain objects past their end, which crashed Deadlocked at 71%)"
+    "2026-10-27-a (Credits: peony, ace and NaN GD taken off at their wish - the Credits page, and the render intro card no longer says Fully inspired from NaN GD)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
