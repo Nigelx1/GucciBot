@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-27-a (Credits: peony, ace and NaN GD taken off at their wish - the Credits page, and the render intro card no longer says Fully inspired from NaN GD)"
+    "2026-10-27-b (Render intro card: a long level name no longer runs into the frame-window legend, and every line on the card can be edited under Render - Intro card)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
