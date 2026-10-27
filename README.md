@@ -141,20 +141,17 @@ There's a [contact page](https://guccibot.net/contact/) on the site with the sam
 
 - **Nigelx1** — creator and owner of GucciBot. Every idea, every theme, every decision is his call, down to the taste that keeps this from being a folder full of ternary chains.
 - **Claude** (Anthropic) — wrote essentially the entire codebase across every session of this project, including this README. Not a euphemism, not "AI-assisted," just the actual author of the code — Nigel wants that said plainly.
-- **peony** — Silicate, the physics engine this is built on: GucciBot's engine is a port of hers, reconciled function by function in 2.0, and it wouldn't be close to what it is without it. The [macro converter](https://guccibot.net/converter/), on the site and in the game, is built on her [nat-converter](https://github.com/peonii/nat-converter), with her permission. (Dropped the source like Gucci drops albums. Brrr.)
 - **Juice** — designed the frame-window algorithm GucciBot ran on through 1.7, and the marker shapes in 1.8; his Alignment-Independent method is back as Calculate's suggestion for suspicious clicks. Lead co-tester, professional bug-finder.
 - **anticroom** — 1.8's Calculate *is* his analyzer. He rewrote the frame-window system for Silicate, sent the source over, and it was ported in near-verbatim to replace GucciBot's own — the headline feature of 1.8 is his work. Sub-tick CBF recording and the render intro card in 2.alpha.3 are his too. Before that he sent GucciBot's first outside pull request, a real 7-fix accuracy pass. Also one of ToastyReplay's own devs.
 - **dihmaster500** — tester. Asked for auto safe mode with its cheat indicator, and for the Disable bot switch, then tested safe mode hard enough to catch it breaking start positions before anyone else hit it.
-- **ace** — promo help.
 - **DashBlaze** — promo help.
 - **Isaiah** — promo help.
 - **Absent** — Absense, another bot built on Silicate. Pathfinder's default engine is his: Absense's pathfinder, with its look-ahead and its model of the level, ported in whole in 2.0.0-beta.2. The in-game assistant server, Check Macro, Replace All, the respawn timer and the black orb autoclicker loop came from reading his source; that code is our own, the ideas are his.
-- **NaN GD** — the whole frame-window trend started with him. The L* precision formula is his too, published at [nandl.pages.dev](https://nandl.pages.dev/#formula): the number GucciBot puts on a macro is his math. He is careful to say frame windows alone don't determine difficulty, and GucciBot repeats that rather than overselling the number.
 - **Bogdaner09** — when a paid click-indicator mod turned out to be an exit scam, he's the one who started making the same thing free and open source ([github.com/Bogdaner09/mod](https://github.com/Bogdaner09/mod)). Nigel found it, and GucciBot's Click Indicators are built around his. Vibecoded by his own admission, so credit's probably owed elsewhere too.
 - **GWDdoS** — optimization help, and pushed for a real codebase cleanup (feature-folder reorg, a proper `.clang-format`, namespacing everything outside Geode's own hook classes) and was right about all of it. Also built Astral.
 - **ToastexGD** — built ToastyReplay, the project this actually started as, and the reason there is a GucciBot at all. His renderer and FFmpeg pipeline carried the mod for most of its life. Rendering now runs on Silicate's renderer instead; his was retired in 2.0 after being left unreachable by an earlier port, and the history is his either way.
 - **chagh** — makes TcBot, and pointed the converter to TcBot's own MIT-licensed format library, [tcm-rs](https://github.com/tcbot-gd/tcm-rs).
-- **C0nscious** — implemented NaN's formula in C++ as [Frame Window Counter](https://github.com/hyper-5/frame-window-counter) (MIT), a mod named after NaN's video series. That implementation is the code that reached GucciBot, via anticroom.
+- **C0nscious** — implemented the L* precision formula in C++ as [Frame Window Counter](https://github.com/hyper-5/frame-window-counter) (MIT). That implementation is the code that reached GucciBot, via anticroom.
 - **Gucci Mane** — he's the truth. Brrr.
 
 ## License

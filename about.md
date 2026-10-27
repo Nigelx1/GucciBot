@@ -198,20 +198,17 @@ Real click-timing feedback, and a synced video-review overlay on both trainers:
 
 - **Nigelx1** — creator and owner of GucciBot; every idea, every theme, every decision is his call
 - **Claude** — wrote the code and this page. Essentially the whole codebase, not a euphemism.
-- **peony** — Silicate, the engine GucciBot is built on: GucciBot's engine is a port of hers, reconciled function by function in 2.0, and the bot wouldn't be close to what it is without it. The macro converter, on the site and in the game, is built on her [nat-converter](https://github.com/peonii/nat-converter), with her permission. (Dropped the source like Gucci drops albums. Brrr.)
 - **Juice** — designed the frame-window algorithm GucciBot ran on through 1.7 and the marker shapes in 1.8, and his Alignment-Independent method is back as Calculate's suggestion for suspicious clicks; lead co-tester, ran the mod into the ground on purpose finding the bugs nobody else caught
 - **anticroom** — 1.8's Calculate *is* his analyzer: his Silicate frame-window rewrite, ported in near-verbatim and now the whole feature. Sub-tick CBF recording and the render intro card are his work too. Before that, GucciBot's first outside pull request — a real 7-fix accuracy pass. Also one of ToastyReplay's own devs.
 - **dihmaster500** — tester, and asked for auto safe mode with its cheat indicator and for the Disable bot switch; his testing caught safe mode breaking start positions
-- **ace** — promo help
 - **DashBlaze** — promo help
 - **Isaiah** — promo help
 - **Absent** — Absense, another bot built on Silicate. Pathfinder's default engine is his: Absense's pathfinder, with its look-ahead and its model of the level, ported in whole. The assistant server, Check Macro, Replace All, the respawn timer and the black orb autoclicker loop are his ideas too, worked out again here from his source
-- **NaN GD** — the whole frame-window trend started with him, and the L* precision formula is his too, published at [nandl.pages.dev](https://nandl.pages.dev/#formula). The number GucciBot puts on a macro is his math
 - **Bogdaner09** — when a paid click-indicator mod turned out to be an exit scam, he's the one who started making the same thing free and open source ([github.com/Bogdaner09/mod](https://github.com/Bogdaner09/mod)), and GucciBot's Click Indicators are built around his. Vibecoded by his own admission, so credit's probably owed to whichever model wrote that too
 - **GWDdoS** — optimization help, and the codebase cleanup that got this repo public-ready; also built Astral
 - **ToastexGD** — built ToastyReplay, the project GucciBot actually started as and the reason there is a GucciBot at all. His renderer and FFmpeg pipeline carried this mod for most of its life; rendering now runs on Silicate's
 - **chagh** — makes TcBot, and pointed the converter to TcBot's own MIT-licensed format library, [tcm-rs](https://github.com/tcbot-gd/tcm-rs)
-- **C0nscious** — implemented NaN's formula in C++ as [Frame Window Counter](https://github.com/hyper-5/frame-window-counter) (MIT), which is the code that reached GucciBot
+- **C0nscious** — implemented the L* precision formula in C++ as [Frame Window Counter](https://github.com/hyper-5/frame-window-counter) (MIT), which is the code that reached GucciBot
 - **Gucci Mane** — he's the truth. Brrr.
 
 GucciBot is free software under the GNU General Public License v3.0, like Silicate, which it's built on.

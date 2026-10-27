@@ -2197,22 +2197,19 @@ namespace gucci::ui {
             const Line lines[] = {
                 {"Nigelx1", "Creator and owner of GucciBot; every idea, every theme, every decision is his call."},
                 {"Claude", "Wrote the code. Essentially the whole codebase, not a euphemism."},
-                {"peony", "Silicate, the engine GucciBot is built on, and nat-converter, which the macro converter is built on, on the site and in the game."},
                 {"Juice", "Designed the frame-window algorithm GucciBot ran on through 1.7 and the marker shapes in 1.8, and his Alignment-Independent method is back as Calculate's suggestion; lead co-tester."},
                 {"anticroom", "Calculate is his analyzer, ported in near-verbatim; sub-tick CBF recording and the render intro card too."},
                 {"dihmaster500", "Tester; asked for auto safe mode and the Disable bot switch, and his testing "
                                  "caught safe mode breaking start positions."},
-                {"ace", "Promo help."},
                 {"DashBlaze", "Promo help."},
                 {"Isaiah", "Promo help."},
                 {"Absent", "Absense; the Pathfinder's default engine is his."},
-                {"NaN GD", "Started the whole frame-window trend; the L* precision formula is his too (nandl.pages.dev)."},
                 {"Bogdaner09", "Made click indicators free and open source after a paid one turned out to be an exit "
                                "scam; ours are built around his."},
                 {"GWDdoS", "Optimization help, and the cleanup that got the repo public-ready; also built Astral."},
                 {"ToastexGD", "Built ToastyReplay, the project GucciBot started as."},
                 {"chagh", "Pointed the converter to TcBot's format library (tcm-rs)."},
-                {"C0nscious", "Implemented NaN's formula as Frame Window Counter (MIT)."},
+                {"C0nscious", "Implemented the L* precision formula as Frame Window Counter (MIT)."},
                 {"Gucci Mane", "He's the truth. Brrr."},
             };
             for (auto const& l : lines) {
