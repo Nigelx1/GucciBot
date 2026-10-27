@@ -402,6 +402,25 @@ namespace gucci::ui::pages {
                      &FW::enabled, true))
                 g_lstar = true;
             if (s.enabled) {
+                // Default Look (Nigel's 1.7 ask, rebuilt 2026-10-27): NaN GD's look
+                // drawn over the player's bands, which stay as they are
+                // (analysis/ac/default_look.hpp). Saved under 1.7's keys.
+                auto* gb = GucciEngine::get();
+                bool lookFlipped = false;
+                if (kit::FeatureBegin("Default Look",
+                                      "Draws the windows like the counter in NaN GD's videos: a plain ring per input in "
+                                      "his colors, the number on its left, and his 9-10 / 7-8 / 5-6 / 4 / 3 / 2 / 1 "
+                                      "legend. Your bands, shapes, images, pulses and Circle skin are kept, just not used "
+                                      "while it's on",
+                                      &gb->fwDefaultLook, nullptr, &lookFlipped)) {
+                    if (kit::SwitchRow("Bells", "Each window's own bell instead of the Brrr", &gb->fwDefaultLookBells))
+                        Mod::get()->setSavedValue("fw_default_look_bells", gb->fwDefaultLookBells);
+                    kit::FeatureEnd();
+                }
+                if (lookFlipped) {
+                    Mod::get()->setSavedValue("fw_default_look", gb->fwDefaultLook);
+                    g_look = true;
+                }
                 flag("Markers", "A marker at each measured input", &FW::showMarkers, true);
                 flag("Band HUD", "A running count in the corner of how many inputs of each band have been passed",
                      &FW::showHud, true);
@@ -427,10 +446,10 @@ namespace gucci::ui::pages {
                        &FW::subframeDecimals, "%d", true);
 
                 kit::Section("Markers");
-                if (!s.circleSkin)
+                if (!s.circleSkin || gb->fwDefaultLook)
                     slider("Marker radius", nullptr, &FW::markerRadius, "%.1f", true);
                 slider("Label size", nullptr, &FW::markerScale, "%.2fx", true);
-                if (feature("Circle skin",
+                if (!gb->fwDefaultLook && feature("Circle skin",
                             "The ring grows with the window, so how tight a click is reads at a glance. Replaces the "
                             "fixed radius",
                             &FW::circleSkin, true)) {
@@ -545,6 +564,9 @@ namespace gucci::ui::pages {
         void bandsCard() {
             auto& tiers = S().tiers;
             kit::BeginCard("Bands", "Colors, labels, shapes, images, pulses and sounds by window size. Hidden bands draw no markers.");
+            if (GucciEngine::get()->fwDefaultLook)
+                kit::Hint("Default Look is on, so the level uses NaN GD's colors and sounds. These bands are kept, and "
+                          "still decide which inputs L* and Copy info count.");
 
             int removeAt = -1;
             int moveFrom = -1, moveTo = -1;
@@ -1197,6 +1219,11 @@ namespace gucci::ui::pages {
                              "are kept.",
                              "Reset") == 1) {
                 fwstore::resetAll();
+                // Default Look lives on GucciEngine, not in the analyzer's settings.
+                auto* gb = GucciEngine::get();
+                gb->fwDefaultLook = gb->fwDefaultLookBells = false;
+                Mod::get()->setSavedValue("fw_default_look", false);
+                Mod::get()->setSavedValue("fw_default_look_bells", false);
                 g_openBands.clear();
                 g_look = true;
             }

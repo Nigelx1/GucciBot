@@ -2655,6 +2655,10 @@ namespace gucci {
         layoutMode = pick(false, "hack_layout_mode", "hack_layoutMode");
         noMirrorEffect = pick(false, "hack_no_mirror", "hack_noMirror");
         audioPitchEnabled = pick(true, "hack_audio_pitch", "hack_audioPitch");
+        // Default Look (analysis/ac/default_look.hpp), under 1.7's keys so a
+        // 1.7 user gets their choice back. The Calculate page saves them.
+        fwDefaultLook = pick(false, "fw_default_look", nullptr);
+        fwDefaultLookBells = pick(false, "fw_default_look_bells", nullptr);
         practiceRangeEnabled = pick(false, "practice_range", nullptr);
 
         // Saving.

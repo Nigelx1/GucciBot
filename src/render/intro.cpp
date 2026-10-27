@@ -14,6 +14,7 @@
 #include <filesystem>
 #include <limits>
 
+#include "analysis/ac/default_look.hpp"
 #include "analysis/ac/shim.hpp"
 
 using namespace cocos2d;
@@ -145,7 +146,8 @@ namespace gucci {
         };
 
         std::vector<Band> collectBands(RenderIntroSettings const& settings, double tps) {
-            auto tiers = SLSettings::get()->frameWindow.tiers;
+            // Default Look's bands when it's on, like the overlay (default_look.hpp).
+            auto tiers = gucci::defaultlook::on() ? gucci::defaultlook::bands() : SLSettings::get()->frameWindow.tiers;
 
             tiers.erase(std::remove_if(tiers.begin(),
                                        tiers.end(),

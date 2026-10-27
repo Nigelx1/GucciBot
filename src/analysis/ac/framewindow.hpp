@@ -585,6 +585,10 @@ class FrameWindowAnalyzer {
     bool setupVarying(FrameWindowMark const& mk) const;
     FrameWindowTier const* tierForFrames(float frames) const;
     FrameWindowTier const* visibleTierFor(FrameWindowMark const& mk) const;
+    // What the overlay draws with: Default Look's fixed bands when it's on
+    // (default_look.hpp), else the player's. L* and Copy info don't use these.
+    FrameWindowTier const* displayTierFor(FrameWindowMark const& mk) const;
+    std::vector<FrameWindowTier> const& hudBands() const;
     std::string decorate(FrameWindowMark const& mk, std::string text) const;
 
     struct SetupGroup {

@@ -3,6 +3,7 @@
 #include "trailbuf/trailbuf.hpp"
 
 #include "cbf.hpp"
+#include "default_look.hpp"
 
 #include <limits>
 
@@ -255,6 +256,18 @@ FrameWindowTier const* FrameWindowAnalyzer::visibleTierFor(
         value = mk.subframe;
     auto const* tier = this->tierForValue(this->displayWindow(mk), value);
     return tier && tier->showInHud ? tier : nullptr;
+}
+
+FrameWindowTier const* FrameWindowAnalyzer::displayTierFor(
+    FrameWindowMark const& mk) const {
+    if (gucci::defaultlook::on())
+        return gucci::defaultlook::bandFor(this->displayWindow(mk));
+    return this->visibleTierFor(mk);
+}
+
+std::vector<FrameWindowTier> const& FrameWindowAnalyzer::hudBands() const {
+    return gucci::defaultlook::on() ? gucci::defaultlook::bands()
+                                    : SLSettings::get()->frameWindow.tiers;
 }
 
 FrameWindowTier const* FrameWindowAnalyzer::tierForFrames(float frames) const {
@@ -6665,9 +6678,13 @@ void FrameWindowAnalyzer::updateTiming(PlayLayer* pl,
                  : ccColor3B{255, 255, 255};
     };
 
-    ccColor3B const colour = tint(this->visibleTierFor(*mk));
+    ccColor3B const colour = tint(this->displayTierFor(*mk));
     ccColor3B const fineColour =
-        mk->subframe > 0.f ? tint(this->tierForFrames(mk->subframe)) : colour;
+        mk->subframe > 0.f
+            ? tint(gucci::defaultlook::on()
+                       ? gucci::defaultlook::bandFor(static_cast<int>(std::floor(mk->subframe)))
+                       : this->tierForFrames(mk->subframe))
+            : colour;
 
     auto const win = CCDirector::get()->getWinSize();
 
@@ -6734,7 +6751,7 @@ void FrameWindowAnalyzer::updateTiming(PlayLayer* pl,
         auto const& next = m_results[i];
         if (next.unbounded || next.hidden) continue;
         if (next.desynced && !m_showDesynced->inner()) continue;
-        if (!next.desynced && !this->visibleTierFor(next)) continue;
+        if (!next.desynced && !this->displayTierFor(next)) continue;
         gap = static_cast<float>(next.frame - mk->frame) /
               static_cast<float>(tps);
         break;
@@ -6998,7 +7015,7 @@ void FrameWindowAnalyzer::spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
     // case every marker is the one configured size.
     auto const& fwcfg = SLSettings::get()->frameWindow;
     float radius = std::max(1.f, m_markerRadius->inner());
-    if (fwcfg.circleSkin) {
+    if (fwcfg.circleSkin && !gucci::defaultlook::on()) {
         int const w = std::max(0, this->displayWindow(mk));
         radius = std::clamp(fwcfg.circleSkinDotRadius +
                                 static_cast<float>(w) * fwcfg.circleSkinRadiusPerFrame,
@@ -7484,7 +7501,7 @@ void FrameWindowAnalyzer::rebuildHud(PlayLayer* pl) {
     hud->setPosition({8.f, CCDirector::get()->getWinSize().height - 8.f});
     pl->m_uiLayer->addChild(hud, 9999);
 
-    auto const& tiers = SLSettings::get()->frameWindow.tiers;
+    auto const& tiers = this->hudBands();
 
     auto const lift = [](float v) {
         return static_cast<GLubyte>(
@@ -7561,7 +7578,7 @@ void FrameWindowAnalyzer::refreshHudCounts(PlayLayer* pl) {
     auto* hud = pl->m_uiLayer->getChildByID("framewindow-hud"_spr);
     if (!hud) return;
 
-    for (auto const& tier : SLSettings::get()->frameWindow.tiers) {
+    for (auto const& tier : this->hudBands()) {
         auto* node = hud->getChildByID(fmt::format("framewindow-count-{}", tier.id));
         if (auto* label = typeinfo_cast<CCLabelBMFont*>(node)) {
             auto const it = m_hudCounts.find(tier.id);
@@ -7600,7 +7617,7 @@ void FrameWindowAnalyzer::updateHudFlash(PlayLayer* pl, uint32_t frame,
 
     CCLabelBMFont* lit = nullptr;
 
-    for (auto const& tier : SLSettings::get()->frameWindow.tiers) {
+    for (auto const& tier : this->hudBands()) {
         auto* node =
             hud->getChildByID(fmt::format("framewindow-count-{}", tier.id));
         auto* label = typeinfo_cast<CCLabelBMFont*>(node);
@@ -7646,7 +7663,7 @@ void FrameWindowAnalyzer::recountUpTo(uint32_t frame) {
         auto const& mk = m_results[i];
         if (mk.frame > frame) continue;
         if (mk.desynced) continue;
-        if (auto const* tier = this->visibleTierFor(mk)) {
+        if (auto const* tier = this->displayTierFor(mk)) {
             m_hudCounts[tier->id]++;
             m_timingMark = static_cast<int>(i);
         }
@@ -7719,7 +7736,7 @@ void FrameWindowAnalyzer::updateDisplay(PlayLayer* pl) {
             if (mk.desynced && !m_showDesynced->inner()) continue;
 
             auto const* tier =
-                mk.desynced ? nullptr : this->visibleTierFor(mk);
+                mk.desynced ? nullptr : this->displayTierFor(mk);
             if (!mk.desynced && !tier) continue;
 
             // GucciBot (2026-10-23, #27): one marker a frame per player the
@@ -8239,7 +8256,7 @@ void FrameWindowAnalyzer::render(PlayLayer* pl) {
         return;
     }
 
-    auto const& tiers = SLSettings::get()->frameWindow.tiers;
+    auto const& tiers = this->hudBands();
     if (!hud || m_hudBuiltGeneration != m_generation ||
         m_hudBuiltTiers != tiers.size()) {
         if (m_showHud->inner()) {
