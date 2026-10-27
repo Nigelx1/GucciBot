@@ -2023,6 +2023,23 @@ namespace gucci::ui {
                 saveSwitch("Use the level's name", nullptr, "render_intro_auto_name", d.m_autoLevelName);
                 if (!mod->getSavedValue<bool>("render_intro_auto_name", d.m_autoLevelName))
                     saveText("Name", nullptr, "render_intro_name", d.m_levelName.c_str(), "");
+                // The rest of the card's lines (RenderIntroSettings::load reads
+                // them; they had no fields until 2026-10-27). Blank hides a line.
+                saveText("Subtitle", "Under the name. Blank hides any line", "render_intro_note",
+                         d.m_levelNote.c_str(), "");
+                saveText("Heading 1", nullptr, "render_intro_heading_1", d.m_heading1.c_str(), "");
+                saveText("Heading 2", nullptr, "render_intro_heading_2", d.m_heading2.c_str(), "");
+                saveText("Heading 3", "{subfps} is the sub-tick rate", "render_intro_heading_3", d.m_heading3.c_str(),
+                         "");
+                saveText("Gray line", nullptr, "render_intro_grey", d.m_greyLine.c_str(), "");
+                saveText("Bottom line", nullptr, "render_intro_footer", d.m_footerLine.c_str(), "");
+                saveText("Legend title", "{tps} is the TPS", "render_intro_band_header", d.m_bandHeader.c_str(), "");
+                saveText("Legend rows", "{range} is the frames, {hz} the click rate", "render_intro_band_line",
+                         d.m_bandLine.c_str(), "");
+                saveText("Legend times", "{ms} is the window in milliseconds", "render_intro_band_time",
+                         d.m_bandTime.c_str(), "");
+                saveText("Font", "GD's bigFont.fnt, or a .ttf file name", "render_intro_font", d.m_font.c_str(),
+                         "bigFont.fnt");
                 saveSeconds("Fade in", "render_intro_fade_in", d.m_fadeInTime, 5.f);
                 saveSeconds("Hold", "render_intro_hold", d.m_holdTime, 10.f);
                 saveSeconds("Fade out", "render_intro_fade_out", d.m_fadeOutTime, 5.f);
