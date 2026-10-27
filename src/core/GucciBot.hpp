@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-27-b (Render intro card: a long level name no longer runs into the frame-window legend, and every line on the card can be edited under Render - Intro card)"
+    "2026-10-27-c (NaN GD is named again as where frame windows and L* come from - the Calculate page and the intro card line - without a credit entry)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
