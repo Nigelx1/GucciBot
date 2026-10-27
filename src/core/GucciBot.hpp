@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-27-c (NaN GD is named again as where frame windows and L* come from - the Calculate page and the intro card line - without a credit entry)"
+    "2026-10-27-d (Default Look is back - Calculate, Overlay - the overlay drawn like NaN GD's counter, his colors and legend, with the Brrr or his bells)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
