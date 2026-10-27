@@ -2014,7 +2014,7 @@ namespace gucci::ui {
             saveText("File name", "Blank picks one for you", "render_name", "", "automatic");
             kit::EndCard();
 
-            kit::BeginCard("Intro card", "anticroom's title card at the start of the video");
+            kit::BeginCard("Intro card", "anticroom's title card at the start of the video, inspired by NaN GD");
             ImGui::PushID("intro");
             RenderIntroSettings const d;
             bool intro = mod->getSavedValue<bool>("render_intro_enabled", d.m_enabled);
@@ -2226,7 +2226,7 @@ namespace gucci::ui {
                 {"GWDdoS", "Optimization help, and the cleanup that got the repo public-ready; also built Astral."},
                 {"ToastexGD", "Built ToastyReplay, the project GucciBot started as."},
                 {"chagh", "Pointed the converter to TcBot's format library (tcm-rs)."},
-                {"C0nscious", "Implemented the L* precision formula as Frame Window Counter (MIT)."},
+                {"C0nscious", "Implemented NaN GD's L* formula as Frame Window Counter (MIT)."},
                 {"Gucci Mane", "He's the truth. Brrr."},
             };
             for (auto const& l : lines) {

@@ -65,7 +65,7 @@ What still needs Windows:
 ## Practice & Analysis
 
 - Macro diff viewer — compare two replays frame by frame
-- Frame-window analyzer ("Calculate") — per-click timing windows measured against the real game engine, rebuilt in 1.8 on anticroom's Silicate analyzer. Two algorithms (Time-Based and Recovery Range), sub-tick CBF measurement that reads windows finer than a single frame, and a full settings tab: how far a shifted input has to survive, how much room to leave before the next one, which inputs to measure, and how much of each frame to spend. Color bands with per-band marker shapes (circle, star, spiral, polygon, as a single outline, an inner ring or filled) or your own image in place of the shape, a pulse on the marker or its label with your own fade-in, hold and fade-out, per-band sounds (the Bells by default, or every band to the Brrr or the Bells in one press), and an in-level legend counting how many clicks landed in each band. Results save alongside the macro. **Dependent Pair Search** re-measures an input with the one before it moved across its own window; **Test** re-runs the last few inputs while you record; and any input under the playhead can be labelled by hand.
+- Frame-window analyzer ("Calculate") — per-click timing windows measured against the real game engine, rebuilt in 1.8 on anticroom's Silicate analyzer. Two algorithms (Time-Based and Recovery Range), sub-tick CBF measurement that reads windows finer than a single frame, and a full settings tab: how far a shifted input has to survive, how much room to leave before the next one, which inputs to measure, and how much of each frame to spend. Color bands with per-band marker shapes (circle, star, spiral, polygon, as a single outline, an inner ring or filled) or your own image in place of the shape, a pulse on the marker or its label with your own fade-in, hold and fade-out, per-band sounds (the Bells by default, or every band to the Brrr or the Bells in one press), and an in-level legend counting how many clicks landed in each band. Results save alongside the macro. **Dependent Pair Search** re-measures an input with the one before it moved across its own window; **Test** re-runs the last few inputs while you record; and any input under the playhead can be labeled by hand. The whole frame-window trend started with NaN GD, and the L* precision number GucciBot puts on a macro comes from his formula, published at [nandl.pages.dev](https://nandl.pages.dev/#formula). He's careful to say frame windows alone don't determine difficulty, and GucciBot says the same.
 - **Suggestions for suspicious clicks** — Calculate counts every click strictly. A tight one right after another input is also counted with Juice's Alignment-Independent method, and when that comes out wider, Windows by hand shows it next to Calculate's count ("my suggestion is x frames", one press to use it) and the Frame Editor flags the click.
 - **Manual Frame Windows** — every input of the macro in one table: type any window yourself, keep Calculate's, or take its suggestion. A window you type stays through the next Calculate run, and Clear goes back to Calculate's own count.
 - **Time cap** for Calculate — a run that goes on too long stops and keeps what it measured. The in-level box shows how long it has run and roughly how long is left, and a notification says when it's done.
@@ -122,7 +122,7 @@ The same toolset as the Jupiter My Favourite Trainer, right next to it as its ow
 
 A live green/red readout, right on screen while you play, for whether clicking *right now* survives what's coming:
 
-- 4 styles — Ring, Classic, Converge, Pulse — with adjustable opacity, colour, and lookahead window.
+- 4 styles — Ring, Classic, Converge, Pulse — with adjustable opacity, color, and lookahead window.
 - Flash-on-click feedback and a pitch-shifted click cue tied to how tight the margin is.
 - Metronome-based calibration per gamemode, to line the cue up with your actual reaction lead/jitter.
 - Accuracy/streak HUD (`Accuracy: N%  Streak: N (Best: N)`) tracked off the indicator's own safe/unsafe calls.
@@ -144,7 +144,7 @@ Real click-timing feedback, and a synced video-review overlay on both trainers:
 - **Fade in and out** — the picture fades up at the start and down at the end, with the audio on the same curve, so a render doesn't cut hard from black or hard to silence. 1.5 seconds each by default; either end can be set to zero.
 - **Asynchronous frame capture** — readbacks are pipelined through a ring of GPU buffers with fences, instead of stalling the game every single frame waiting for one to copy out.
 - A render holds the view for its whole duration, so a resize, a DPI change or an alt-tab partway through no longer fights the output resolution.
-- **Intro card** — an optional title card before the level: its name, your own lines, and your frame-window bands in their colours, fading in and out over black.
+- **Intro card** — an optional title card before the level, inspired by NaN GD: its name, your own lines, and your frame-window bands in their colors, fading in and out over black.
 - **Hear it while it renders** — optionally plays the render's audio through your speakers as it records.
 - **Render the next level I open**, and **leave the level when it finishes** — queue a render from the menu and walk away.
 - **Presets** — save your render settings by name; **Showcase** sets up an 8K60 lossless render in one press. A popup says when a render is done, the pixel format is yours to pick, and if FFmpeg is missing the Render page says so with a button to its folder.
@@ -208,7 +208,7 @@ Real click-timing feedback, and a synced video-review overlay on both trainers:
 - **GWDdoS** — optimization help, and the codebase cleanup that got this repo public-ready; also built Astral
 - **ToastexGD** — built ToastyReplay, the project GucciBot actually started as and the reason there is a GucciBot at all. His renderer and FFmpeg pipeline carried this mod for most of its life; rendering now runs on Silicate's
 - **chagh** — makes TcBot, and pointed the converter to TcBot's own MIT-licensed format library, [tcm-rs](https://github.com/tcbot-gd/tcm-rs)
-- **C0nscious** — implemented the L* precision formula in C++ as [Frame Window Counter](https://github.com/hyper-5/frame-window-counter) (MIT), which is the code that reached GucciBot
+- **C0nscious** — implemented NaN GD's L* precision formula in C++ as [Frame Window Counter](https://github.com/hyper-5/frame-window-counter) (MIT), a mod named after NaN's video series; that implementation is the code that reached GucciBot
 - **Gucci Mane** — he's the truth. Brrr.
 
 GucciBot is free software under the GNU General Public License v3.0, like Silicate, which it's built on.

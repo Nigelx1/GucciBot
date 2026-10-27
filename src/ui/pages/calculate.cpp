@@ -146,7 +146,8 @@ namespace gucci::ui::pages {
             auto& fw = analyzer();
             auto const& actions = gb->replay.m_actionAtom.m_actions;
 
-            kit::BeginCard("Calculate", "Measures how far each input of the loaded macro can move and still pass.");
+            kit::BeginCard("Calculate", "Measures how far each input of the loaded macro can move and still pass. "
+                                         "The whole frame-window trend started with NaN GD.");
 
             if (fw.running()) {
                 kit::Progress(fw.progress(), fw.status().c_str());
@@ -661,8 +662,8 @@ namespace gucci::ui::pages {
             auto* solver = lstar::Solver::get();
 
             kit::BeginCard("Precision (L*)",
-                           "NaN's L*: the precision needed for a run of these windows to be expected within the "
-                           "target time. Higher is harder.");
+                           "NaN GD's L* (nandl.pages.dev): the precision needed for a run of these windows to be "
+                           "expected within the target time. Higher means more precise, which isn't the same as harder.");
 
             // Any change in this card (the switches, the inputs, the readout
             // being turned on) leaves the solved number stale.

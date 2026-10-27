@@ -24,12 +24,19 @@ namespace gucci {
 
         constexpr float LEFT_X = 0.0364f;
         constexpr float RIGHT_X = 0.9600f;
+        constexpr float CREDIT_X = 0.0120f;
+        constexpr float CREDIT_Y = 0.0100f;
 
         constexpr float LEFT_MAIN_H = 0.0984f;
         constexpr float LEFT_SMALL_H = 0.0610f;
         constexpr float RIGHT_H = 0.0569f;
+        constexpr float CREDIT_H = 0.0220f;
 
         constexpr float TTF_SUPERSAMPLE = 2.0f;
+
+        // Where the card's idea comes from: the frame-window trend started with
+        // NaN GD. Attribution, not a credit entry (Nigel, 2026-10-27).
+        constexpr char const* CREDIT_TEXT = "Fully inspired from NaN GD.";
 
         constexpr float RIGHT_TOP = 0.0354f;
         constexpr float RIGHT_STEP = 0.0588f;
@@ -382,6 +389,21 @@ namespace gucci {
             row++;
             keep(right, add(band.m_time, RIGHT_X, RIGHT_TOP + RIGHT_STEP * row, RIGHT_H, 1.f, band.m_color, band.m_opacity));
             row++;
+        }
+
+        if (auto* credit = makeLabel(CREDIT_TEXT, CREDIT_H)) {
+            float const natural = credit->getContentSize().height;
+            if (natural > 0.f)
+                credit->setScale(CREDIT_H * win.height / natural);
+            credit->setAnchorPoint({0.f, 1.f});
+            credit->setPosition({win.width * CREDIT_X, win.height * (1.f - CREDIT_Y)});
+
+            if (auto* rgba = dynamic_cast<CCRGBAProtocol*>(credit))
+                rgba->setColor(ccColor3B{255, 255, 255});
+
+            m_root->addChild(credit);
+            m_labels.push_back(Line{credit, 255});
+            left.push_back(credit);
         }
 
         // A long level name (or any left-hand line) ran into the legend

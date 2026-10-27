@@ -31,7 +31,7 @@ GucciBot is public now — grab a build from [Releases](https://github.com/Nigel
 
 - Records inputs at frame-perfect precision and plays them back the same way, every time.
 - Full checkpoint/practice-fix system ported from Silicate, so restores actually behave like they should instead of leaving hazards in whatever state GD's own native restore felt like that day.
-- A frame-window analyzer ("Calculate") that measures, per click, how many frames you actually had to work with — built from a real GD-community algorithm (see [Status](#status), because honesty matters more than a clean README).
+- A frame-window analyzer ("Calculate") that measures, per click, how many frames you actually had to work with — it runs on anticroom's Silicate analyzer. The whole frame-window trend started with NaN GD, and the L* precision number GucciBot puts on a macro comes from his formula, published at [nandl.pages.dev](https://nandl.pages.dev/#formula). He's careful to say frame windows alone don't determine difficulty, and GucciBot says the same.
 - In-engine video rendering straight to a file, no external recorder needed.
 - Auto safe mode, on by default: an attempt with a cheat on doesn't count. Plus a setup check that warns about the settings that break the engine.
 - A whole closet of themes, because if the bot's going to carry you through a level it should at least look like money doing it.
@@ -151,7 +151,7 @@ There's a [contact page](https://guccibot.net/contact/) on the site with the sam
 - **GWDdoS** — optimization help, and pushed for a real codebase cleanup (feature-folder reorg, a proper `.clang-format`, namespacing everything outside Geode's own hook classes) and was right about all of it. Also built Astral.
 - **ToastexGD** — built ToastyReplay, the project this actually started as, and the reason there is a GucciBot at all. His renderer and FFmpeg pipeline carried the mod for most of its life. Rendering now runs on Silicate's renderer instead; his was retired in 2.0 after being left unreachable by an earlier port, and the history is his either way.
 - **chagh** — makes TcBot, and pointed the converter to TcBot's own MIT-licensed format library, [tcm-rs](https://github.com/tcbot-gd/tcm-rs).
-- **C0nscious** — implemented the L* precision formula in C++ as [Frame Window Counter](https://github.com/hyper-5/frame-window-counter) (MIT). That implementation is the code that reached GucciBot, via anticroom.
+- **C0nscious** — implemented NaN GD's L* precision formula in C++ as [Frame Window Counter](https://github.com/hyper-5/frame-window-counter) (MIT), a mod named after NaN's video series. That implementation is the code that reached GucciBot, via anticroom.
 - **Gucci Mane** — he's the truth. Brrr.
 
 ## License
