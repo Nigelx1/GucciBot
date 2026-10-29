@@ -100,7 +100,10 @@ namespace gucci {
 
                 size_t cycles = 1;
                 size_t j = i + 2;
-                while (j + 1 < inputs.size()) {
+                // The entry stores the count in 16 bits: stop at 65,535 cycles
+                // so a longer run goes on in a new entry instead of being cut
+                // short (every later input landed early; polish sweep 2026-10-28).
+                while (j + 1 < inputs.size() && cycles < 65535) {
                     const auto& cp = inputs[j];
                     const auto& cr = inputs[j + 1];
                     if (!cp.pressed || cr.pressed)
