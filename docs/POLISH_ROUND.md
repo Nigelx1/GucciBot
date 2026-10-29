@@ -2,6 +2,21 @@
 
 A read-only sweep checked everything GucciBot advertises (README, about.md, the site, in-game hints, FEATURE_AUDIT.md) against the code, and hunted for half-ports and dead settings. A skeptic re-checked every finding, and only confirmed or partly-confirmed ones are listed. The same problem often shows up under several areas; fix it once and tick every copy. The pathfinder was out of scope (it's being remade).
 
+## Nigel's decisions (2026-10-28)
+
+1. BrrrBot's snow: **build it**.
+2. Compact Mode: **build the missing controls** (Calculate, macro picker, TPS/speed, frame stepping).
+3. Hotkey toggles: **stick after a restart**, same as the menu switch.
+4. The two audio-pitch switches: **merge into one**, but first prove they do exactly the same thing.
+5. Block the player's clicks during playback: **add the switch, on by default** (Silicate's behavior).
+6. The Survival Indicator **counts** for auto safe mode.
+7. "No death flash": **fix it**. It needs one in-game check, so Nigel tests the candidate.
+8. Astral lines on the site: **cut them**, and keep GWDdoS's credit card.
+9. In-level text messages: **build an editor** for them.
+10. src_backup_pre_strip_2026-07-05/: **removed from master** (done 2026-10-28; local copy kept; history not purged).
+
+All doc fixes and code-small fixes go ahead without asking. Re-run the ttrcheck over the whole tree after #10.
+
 Fix types: **doc** = wording only; **code-small** = under ~40 lines, low risk; **code-large** = bigger job; **decision** = Nigel chooses between building it and dropping the claim.
 
 ## README (8)
