@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-27-d (Default Look is back - Calculate, Overlay - the overlay drawn like NaN GD's counter, his colors and legend, with the Brrr or his bells)"
+    "2026-10-28-a (Macros: an autoclicker run longer than 65,535 clicks no longer gets cut short on save, which made every later input land early)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
