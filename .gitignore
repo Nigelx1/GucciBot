@@ -23,3 +23,6 @@ resources/ffmpeg.exe
 resources/ffmpeg(1).exe
 resources/ffmpeg_libs/avcodec-62.dll
 resources/ffmpeg_libs/avfilter-11.dll
+
+# Pre-strip source snapshot (2026-07-05): ToastyReplay-era code, kept local only (Nigel, 2026-10-28)
+src_backup_pre_strip_2026-07-05/
