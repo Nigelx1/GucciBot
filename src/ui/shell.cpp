@@ -1106,7 +1106,12 @@ namespace gucci::ui {
         void frameStepperCard() {
             auto* gb = GucciEngine::get();
             auto& upd = gb->updater;
+#if defined(GEODE_IS_IOS)
+            // No keys reach GucciBot on iOS (hacks/keybinds.cpp).
+            kit::BeginCard("Frame stepper", "Pause and move one tick at a time.");
+#else
             kit::BeginCard("Frame stepper", "Pause and move one tick at a time. The keys are in Settings > Keybinds.");
+#endif
             if (PlayLayer::get()) {
                 if (kit::Button(upd.m_paused ? "Resume" : "Pause", Tone::Accent))
                     upd.togglePaused();
@@ -2166,10 +2171,18 @@ namespace gucci::ui {
                 setCompactMode(compact);
             kit::EndCard();
 
+#if defined(GEODE_IS_IOS)
+            // The bindings have no keyboard dispatcher to hook on iOS
+            // (hacks/keybinds.cpp), so a key set here would never fire.
+            kit::BeginCard("Keybinds", nullptr);
+            kit::Note("Keys don't reach GucciBot on iOS: open the menu from the pause menu's GucciBot button.",
+                      Tone::Muted);
+#else
             kit::BeginCard("Keybinds", "Click a key, then press the new one. Right-click unbinds.");
             for (auto const& slot : kKeySlots)
                 if (kit::KeyRow(slot.label, nullptr, &(g_keys.*(slot.field))))
                     saveSettings();
+#endif
             kit::EndCard();
 
             kit::BeginCard("Assistant Access",
