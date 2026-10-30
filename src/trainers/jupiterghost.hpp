@@ -9,6 +9,8 @@ namespace gucci {
 
         void renderJupiterGhost(PlayLayer* pl);
         void notifyJupiterAttemptEnded();
+        // Forgets the best attempt's ghost (trainers::resetStats).
+        void resetBestGhost();
 
         void syncClickBarMusic(bool active, bool paused, double posSec);
         void stopClickBarMusic();

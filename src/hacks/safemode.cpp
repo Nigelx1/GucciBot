@@ -154,12 +154,18 @@ namespace gucci::safemode {
 
     // Anything that shows the way through the level counts as a cheat too
     // (Nigel, 2026-10-19: it takes the memory out of memory levels): Click
-    // Indicators, the path preview, the macro's path, its clicks near you
-    // (Practice range), and the trainers' ghosts in their own levels -- the
-    // macro's, and your best attempt's.
+    // Indicators, the Survival Indicator and its click cue, the path preview,
+    // the macro's path, its clicks near you (Practice range), and the
+    // trainers' ghosts in their own levels -- the macro's, and your best
+    // attempt's.
     bool showsTheWay() {
         auto* gb = GucciEngine::get();
         if (clickind::active() || gb->pathPreview)
+            return true;
+        // The Survival Indicator says, a tick at a time, whether a click now
+        // lives: the path preview's question, asked for you (Nigel,
+        // 2026-10-28). The cue only plays while it's on.
+        if (gb->survivalIndicator)
             return true;
         if (gb->showMacroPath && !gb->replay.m_pathSamples.empty())
             return true;

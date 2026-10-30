@@ -31,5 +31,6 @@ namespace gucci::ui::pages {
     void noclipAccuracyCard();  // pages/noclip_card.cpp (Hacks page)
     void videoModeCard();       // pages/videomode_card.cpp (JMF Trainer page)
     void trainerVideoModeCard();  // pages/videomode_card.cpp (Trainer page)
+    void videoModeSettings(bool jmf);  // pages/videomode_card.cpp: the card's settings, over the video while it plays
 
 } // namespace gucci::ui::pages

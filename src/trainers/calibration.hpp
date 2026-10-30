@@ -23,6 +23,7 @@ namespace gucci {
         GM_Wave,
         GM_Robot,
         GM_Spider,
+        GM_Swing,  // saved by name (calib_Swing_*), so adding it moved no one's values
         GM_Count
     };
 

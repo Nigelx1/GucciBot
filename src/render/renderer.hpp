@@ -23,6 +23,9 @@ namespace gucci {
         int m_height = 1080;
         uint32_t m_bitrate = 30'000'000;
         std::string m_codec = "libx264";
+        // Codec was left blank, so m_codec is the pick for the graphics card,
+        // and start() may fall back to libx264 when it won't open.
+        bool m_codecAuto = false;
         AVPixelFormat m_pixFmt = AV_PIX_FMT_YUV420P;
 
         int m_fps = 60;
@@ -32,8 +35,6 @@ namespace gucci {
         // the start and out at the end, and attenuates the audio with it.
         double m_fadeInTime = 1.5;
         double m_fadeOutTime = 1.5;
-        bool m_colorFix = true;
-        bool m_firstAttemptPause = false;
 
         std::string m_outputPath = "output";
         std::string m_extension = "mp4";
@@ -302,7 +303,6 @@ namespace gucci {
         bool m_recording = false;
 
         int m_frameCount = 0;
-        int m_seenFrames = 0;
         int m_updateIndex = 0;
         float m_endTime = 0;
 

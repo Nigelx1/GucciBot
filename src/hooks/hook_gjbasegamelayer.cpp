@@ -640,14 +640,15 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         if (gb->suppressInputCapture)
             return GJBaseGameLayer::handleButton(pressed, button, player1);
         if (button == 1) {
-            triggerClickAudio(!player1, button, pressed);
+            // GucciBot (2026-10-23): the player the click moves, not its
+            // side. Flip 2-Player Controls hands a side to the other player
+            // in a 2-player level outside platformer, and in a 1-player level
+            // both sides are player 1's. The readers below score or count the
+            // click as that player's, and since 2026-10-30 the click sound
+            // plays as that player's too (player 2's pack and soft timing).
+            bool const mover2 = gb->replay.sideMovesPlayer2(this, !player1);
+            triggerClickAudio(mover2, button, pressed);
             if (!gb->isPlaying()) {
-                // GucciBot (2026-10-23): the player the click moves, not its
-                // side. Flip 2-Player Controls hands a side to the other player
-                // in a 2-player level outside platformer, and in a 1-player
-                // level both sides are player 1's: the readers below score or
-                // count the click as that player's.
-                bool const mover2 = gb->replay.sideMovesPlayer2(this, !player1);
                 // The Survival Indicator's flash and accuracy (hacks/indicator.hpp).
                 if (gb->survivalIndicator)
                     indicator::onRealClick(mover2, pressed);

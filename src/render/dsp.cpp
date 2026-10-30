@@ -22,12 +22,21 @@ namespace gucci {
         SLRenderer::get()->setChannels(mixed);
     }
 
+    // Only the master recorder silences what it hears (a render isn't played
+    // aloud). The music, SFX and frame-window recorders sit on groups that
+    // feed the master, so they pass their sound on: silenced there, it never
+    // reached the master, and with Separate audio tracks on, the combined
+    // track lost the music, the sound effects and the cues.
     static FMOD_RESULT captureInto(AudioRecorder* recorder,
                                    float* inBuffer,
                                    float* outBuffer,
                                    unsigned int length,
                                    int inChannels) {
+        size_t const n = static_cast<size_t>(length) * inChannels;
+        bool const master = recorder == AudioRecorder::get();
         if (!recorder->m_shouldUpdateFmod) {
+            if (!master)
+                std::memcpy(outBuffer, inBuffer, n * sizeof(float));
             return FMOD_OK;
         }
 
@@ -37,7 +46,10 @@ namespace gucci {
         if (recorder->m_monSystem)
             recorder->m_monRing.push(inBuffer, length * inChannels);
 
-        std::memset(outBuffer, 0, length * inChannels * sizeof(float));
+        if (master)
+            std::memset(outBuffer, 0, n * sizeof(float));
+        else
+            std::memcpy(outBuffer, inBuffer, n * sizeof(float));
 
         return FMOD_OK;
     }

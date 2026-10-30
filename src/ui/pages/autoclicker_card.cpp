@@ -98,8 +98,13 @@ namespace gucci::ui::pages {
         auto* ac = Autoclicker::get();
         bool changed = false;
         kit::BeginCard("Autoclicker", "Clicks jump for you on a rhythm counted in ticks.");
-        if (kit::FeatureBegin("On", "While recording, its clicks go into the macro", &ac->enabled,
-                              &keys().onAutoclicker, &changed)) {
+#if defined(GEODE_IS_IOS)
+        int* const key = nullptr;  // no keys reach GucciBot on iOS (hacks/keybinds.cpp)
+#else
+        int* const key = &keys().onAutoclicker;
+#endif
+        if (kit::FeatureBegin("On", "While recording, its clicks go into the macro", &ac->enabled, key,
+                              &changed)) {
             statusRow(*ac);
             changed |= kit::SwitchRow("Only while holding", "Clicks only while you hold Space, W or Up",
                                       &ac->onlyWhileHolding);

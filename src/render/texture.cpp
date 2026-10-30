@@ -287,8 +287,15 @@ namespace gucci {
 
     void SLRenderTexture::destroy() {
 #if GB_DESKTOP_GL
-        glDeleteTextures(2, m_tex);
-        glDeleteFramebuffers(2, m_fbo);
+        // Each pass's shader program, framebuffer and texture: nothing called
+        // RenderPass::destroy, so every render left them behind. The next
+        // render's init makes new ones from its colorspace. (This used to
+        // delete m_tex, m_fbo and m_program of its own, which nothing ever
+        // created.) Runs on the GL thread once recording has stopped, so
+        // issue() and displayPreview() no longer read the passes.
+        for (auto& pass : m_passes)
+            pass.destroy();
+        m_passes.clear();
         for (int i = 0; i < RING_SIZE; i++) {
             if (m_fence[i]) {
                 glDeleteSync(static_cast<GLsync>(m_fence[i]));
@@ -298,7 +305,6 @@ namespace gucci {
         glDeleteBuffers(RING_SIZE, m_pbo);
         glDeleteVertexArrays(1, &m_quadVAO);
         glDeleteBuffers(1, &m_quadVBO);
-        glDeleteProgram(m_program);
 
         glBindFramebuffer(GL_FRAMEBUFFER, m_old_fbo);
 #else

@@ -2604,7 +2604,30 @@ namespace gucci {
         // mode for lock delta"). A saved Performance from before is not read.
         updater.m_lockDeltaMode = GucciUpdater::LockDeltaMode::Accuracy;
         updater.m_highTpsPrecision = pick(false, "updater_highTpsPrecision", nullptr);
-        updater.m_speedhackAudio = pick(true, "feat_speedhack_audio", "updater_speedhackAudio");
+        // One switch for the audio pitch since 2026-10-29 (feat_audio_pitch).
+        // There were two: Hacks > Engine's "Speedhack audio"
+        // (feat_speedhack_audio) and Hacks > Visual's "Audio pitch follows
+        // speed" (hack_audio_pitch), and the pitch followed the speed unless
+        // both were off. The first launch with one switch keeps each player's
+        // choice: off if either was switched off in the menu (a false under
+        // one of those two keys can only come from its switch, since this
+        // loader wrote their defaults as on), otherwise what they heard.
+        bool audioPitchWas = true;
+        if (!mod->hasSavedValue("feat_audio_pitch")) {
+            auto const saved = [mod](const char* key, const char* legacy) {
+                if (mod->hasSavedValue(key))
+                    return mod->getSavedValue<bool>(key, true);
+                return mod->hasSavedValue(legacy) ? mod->getSavedValue<bool>(legacy, true) : true;
+            };
+            auto const switchedOff = [mod](const char* key) {
+                return mod->hasSavedValue(key) && !mod->getSavedValue<bool>(key, true);
+            };
+            bool const heard = saved("feat_speedhack_audio", "updater_speedhackAudio") ||
+                               saved("hack_audio_pitch", "hack_audioPitch");
+            audioPitchWas = heard && !switchedOff("feat_speedhack_audio") && !switchedOff("hack_audio_pitch");
+        }
+        // Writes the migrated value under the new key when it isn't there yet.
+        updater.m_speedhackAudio = mod->getSavedValue<bool>("feat_audio_pitch", audioPitchWas);
         updater.m_inputFps = std::max(0.0, pick(0.0, "feat_input_fps", nullptr));
         // Frame pacing (Silicate's real_time / max_upr / dynamic_upr /
         // target_fps). These had no loader and no GUI -- fixed at their
@@ -2652,7 +2675,6 @@ namespace gucci {
         pathMoveStepInterval = std::clamp(pick(1, "hack_trajectory_move_interval", nullptr), 1, 30);
         layoutMode = pick(false, "hack_layout_mode", "hack_layoutMode");
         noMirrorEffect = pick(false, "hack_no_mirror", "hack_noMirror");
-        audioPitchEnabled = pick(true, "hack_audio_pitch", "hack_audioPitch");
         // Default Look (analysis/ac/default_look.hpp), under 1.7's keys so a
         // 1.7 user gets their choice back. The Calculate page saves them.
         fwDefaultLook = pick(false, "fw_default_look", nullptr);

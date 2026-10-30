@@ -29,10 +29,75 @@
 #endif
 #include <fmt/format.h>
 
+#include <algorithm>
+#include <unordered_set>
+#include <vector>
+
 using namespace geode::prelude;
 using namespace gucci;
 
+namespace {
+    // Hacks > Visual > No death flash. The first version hid a PlayLayer
+    // child by an ID nothing in GD sets, so it never did anything. GD's death
+    // effect (PlayerObject::playDeathEffect, which destroyPlayer reaches
+    // through playerDestroyed, read from the 2.2081 Windows binary) adds its
+    // pieces to the object layer and the player's own layer while
+    // destroyPlayer runs: the shattered icon and, in most of the effects, the
+    // bright circles (CCCircleWave) that make the flash. Not yet checked in
+    // the game: with the switch on, every death logs what it added and what
+    // was hidden.
+    using ChildSnapshot = std::vector<std::pair<CCNode*, std::unordered_set<CCNode*>>>;
+
+    // The children each of these parents has now (a parent named twice, once).
+    ChildSnapshot snapshotChildren(std::initializer_list<CCNode*> parents) {
+        ChildSnapshot out;
+        for (auto* parent : parents) {
+            if (!parent || std::any_of(out.begin(), out.end(), [&](auto const& p) { return p.first == parent; }))
+                continue;
+            std::unordered_set<CCNode*> had;
+            if (auto* children = parent->getChildren())
+                for (unsigned i = 0; i < children->count(); ++i)
+                    had.insert(static_cast<CCNode*>(children->objectAtIndex(i)));
+            out.emplace_back(parent, std::move(had));
+        }
+        return out;
+    }
+
+    // Hides the circles the death added since the snapshot, and logs every
+    // node it added, hidden or not.
+    void hideDeathFlash(ChildSnapshot const& before) {
+        std::string added;
+        int hidden = 0;
+        for (auto const& [parent, had] : before) {
+            auto* children = parent->getChildren();
+            if (!children)
+                continue;
+            for (unsigned i = 0; i < children->count(); ++i) {
+                auto* child = static_cast<CCNode*>(children->objectAtIndex(i));
+                if (!child || had.contains(child))
+                    continue;
+                auto* wave = typeinfo_cast<CCCircleWave*>(child);
+                if (wave) {
+                    wave->setVisible(false);
+                    ++hidden;
+                }
+                if (!added.empty())
+                    added += ", ";
+                added += wave ? fmt::format("{} ({}, hidden)", geode::cocos::getObjectName(child),
+                                            wave->m_circleMode == CircleMode::Filled ? "filled" : "outline")
+                              : std::string(geode::cocos::getObjectName(child));
+            }
+        }
+        log::info("[GucciBot] No death flash: the death added [{}]; {} hidden", added, hidden);
+    }
+} // namespace
+
 class $modify(GB7PlayLayer, PlayLayer) {
+    struct Fields {
+        // Hide percentage took GD's percentage label down, so switching it
+        // off puts the label back (and only then: GD's own option decides).
+        bool m_hidPercent = false;
+    };
 
     CheckpointObject* markCheckpoint() {
         if (!GucciEngine::get()->enabled)
@@ -639,6 +704,19 @@ class $modify(GB7PlayLayer, PlayLayer) {
         auto* gb = GucciEngine::get();
         if (gb->hackHideAttempts && m_attemptLabel)
             m_attemptLabel->setVisible(false);
+        // Hacks > Visual > Hide percentage: GD's percentage label, next to the
+        // progress bar.
+        if (m_percentageLabel) {
+            if (gb->hackHidePercentage) {
+                if (m_percentageLabel->isVisible()) {
+                    m_percentageLabel->setVisible(false);
+                    m_fields->m_hidPercent = true;
+                }
+            } else if (m_fields->m_hidPercent) {
+                m_fields->m_hidPercent = false;
+                m_percentageLabel->setVisible(true);
+            }
+        }
         // The AI pathfinder's level map: its ghost run, a slice a frame, and the
         // drawing over the level when it is switched on.
         absense::route::tickGhost(this);
@@ -792,7 +870,16 @@ class $modify(GB7PlayLayer, PlayLayer) {
             return;
         }
 
+        // No death flash: what GD's death effect adds is found by comparing
+        // the layers' children before and after (hideDeathFlash, above).
+        bool const noFlash = gb->hackNoSpikeFlash && obj != m_anticheatSpike;
+        auto const beforeDeath =
+            noFlash ? snapshotChildren({this, m_objectLayer, player ? player->getParent() : nullptr}) : ChildSnapshot{};
+
         PlayLayer::destroyPlayer(player, obj);
+
+        if (noFlash)
+            hideDeathFlash(beforeDeath);
 
         if (obj != m_anticheatSpike && !gb->isPlaying() && gbju::isJupiterLevel(this)) {
             gb->jupiterAttemptCount++;
@@ -816,11 +903,6 @@ class $modify(GB7PlayLayer, PlayLayer) {
                     gb->trainerSessionBestPct = pct;
             }
             gbtr::notifyTrainerAttemptEnded();
-        }
-
-        if (gb->hackNoSpikeFlash && obj != m_anticheatSpike) {
-            if (auto* fl = this->getChildByID("flash"))
-                fl->setVisible(false);
         }
 
         // Auto Retry: replace GD's own queued respawn with one on our delay, so

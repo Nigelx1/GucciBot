@@ -38,15 +38,20 @@ void FrameWindowSound::play(std::string const& path, float volume) {
 
     s_group->setVolume(engineSfx * std::clamp(volume, 0.f, 1.f));
 
-    std::filesystem::path audioPath(path);
+    // GucciBot: UTF-8 both ways, as the band image's file is read
+    // (framewindow.cpp, bandImageFile). The name is typed in Calculate, so it
+    // is UTF-8, and FMOD takes UTF-8 file names; std::string paths are the
+    // ANSI code page on Windows.
+    std::filesystem::path const given(std::u8string(path.begin(), path.end()));
+    std::filesystem::path audioPath = given;
     if (!audioPath.is_absolute()) {
         std::error_code rc;
-        audioPath = Mod::get()->getConfigDir() / path;
+        audioPath = Mod::get()->getConfigDir() / given;
         if (!std::filesystem::exists(audioPath, rc))
-            audioPath = Mod::get()->getResourcesDir() / path;
+            audioPath = Mod::get()->getResourcesDir() / given;
     }
 
-    std::string const key = audioPath.string();
+    std::string const key = geode::utils::string::pathToString(audioPath);
 
     FMOD::Sound* sound = nullptr;
     if (auto it = s_cache.find(key); it != s_cache.end()) {

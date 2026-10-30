@@ -28,6 +28,13 @@ namespace {
         return true;
     }
 
+    // A toggle by key, saved under the key its menu switch saves to, so it
+    // outlasts a restart the same way (Nigel, 2026-10-28).
+    void flipSaved(bool& value, const char* saveKey) {
+        value = !value;
+        Mod::get()->setSavedValue<bool>(saveKey, value);
+    }
+
     // One-shot toggles: the key is consumed when it matches.
     bool runToggles(int k) {
         auto* gb = GucciEngine::get();
@@ -54,16 +61,14 @@ namespace {
             else if (!gb->replay.m_actionAtom.empty())
                 gb->setMode(GucciEngine::Mode::Playing);
         });
-        used |= fire(keys.onNoclip, k, [&] { gb->noclipEnabled = !gb->noclipEnabled; });
-        used |= fire(keys.onTrajectory, k, [&] { gb->pathPreview = !gb->pathPreview; });
-        // Saved like the menu's switches, so a toggle by key outlasts a restart.
-        used |= fire(keys.onHitboxes, k, [&] {
-            gb->showHitboxes = !gb->showHitboxes;
-            Mod::get()->setSavedValue<bool>("hack_hitboxes", gb->showHitboxes);
-        });
-        used |= fire(keys.onLayoutMode, k, [&] { gb->layoutMode = !gb->layoutMode; });
-        used |= fire(keys.onNoMirror, k, [&] { gb->noMirrorEffect = !gb->noMirrorEffect; });
-        used |= fire(keys.onAudioPitch, k, [&] { gb->audioPitchEnabled = !gb->audioPitchEnabled; });
+        // Every setting a key flips is saved like its menu switch, so it
+        // outlasts a restart. RNG lock isn't: its switch doesn't save either.
+        used |= fire(keys.onNoclip, k, [&] { flipSaved(gb->noclipEnabled, "hack_noclip"); });
+        used |= fire(keys.onTrajectory, k, [&] { flipSaved(gb->pathPreview, "hack_trajectory"); });
+        used |= fire(keys.onHitboxes, k, [&] { flipSaved(gb->showHitboxes, "hack_hitboxes"); });
+        used |= fire(keys.onLayoutMode, k, [&] { flipSaved(gb->layoutMode, "hack_layout_mode"); });
+        used |= fire(keys.onNoMirror, k, [&] { flipSaved(gb->noMirrorEffect, "hack_no_mirror"); });
+        used |= fire(keys.onAudioPitch, k, [&] { flipSaved(gb->updater.m_speedhackAudio, "feat_audio_pitch"); });
         used |= fire(keys.onRngLock, k, [&] { gb->rngLocked = !gb->rngLocked; });
         used |= fire(keys.onAutoclicker, k, [&] {
             auto* ac = Autoclicker::get();
@@ -74,13 +79,10 @@ namespace {
             if (gb->isRecording())
                 gb->updater.m_canDie = !gb->updater.m_canDie;
         });
-        used |= fire(keys.onAutoFlip, k, [&] { gb->updater.m_autoFlipOnDeath = !gb->updater.m_autoFlipOnDeath; });
-        used |= fire(keys.onPreventDeath, k, [&] { gb->updater.m_preventDeath = !gb->updater.m_preventDeath; });
-        used |= fire(keys.onMirrorInputs, k, [&] { gb->replay.m_mirrorInputs = !gb->replay.m_mirrorInputs; });
-        used |= fire(keys.onSafeMode, k, [&] {
-            gb->protectedMode = !gb->protectedMode;
-            Mod::get()->setSavedValue("hack_safe_mode", gb->protectedMode);  // as the switch saves it
-        });
+        used |= fire(keys.onAutoFlip, k, [&] { flipSaved(gb->updater.m_autoFlipOnDeath, "feat_auto_flip"); });
+        used |= fire(keys.onPreventDeath, k, [&] { flipSaved(gb->updater.m_preventDeath, "feat_prevent_death"); });
+        used |= fire(keys.onMirrorInputs, k, [&] { flipSaved(gb->replay.m_mirrorInputs, "feat_mirror_inputs"); });
+        used |= fire(keys.onSafeMode, k, [&] { flipSaved(gb->protectedMode, "hack_safe_mode"); });
         used |= fire(keys.onCompactMode, k, [&] { ui::setCompactMode(!ui::compactMode()); });
         return used;
     }
@@ -123,12 +125,14 @@ class $modify(GucciKeys, CCKeyboardDispatcher) {
         if (live && !repeat && jumpKey(key))
             trainers::onKeyInput(down);
 
-        bool handled = false;
+        // Every key goes on to the game as well, bound or not. (Whether one was
+        // used only mattered to the autoclicker's old key tracking, which is
+        // gone: "only while holding" reads GD's UILayer now.)
         if (down && !repeat) {
 #ifdef GEODE_IS_MACOS
-            handled = runTogglesOnce(k);
+            runTogglesOnce(k);
 #else
-            handled = runToggles(k);
+            runToggles(k);
 #endif
         }
         if (!live)
@@ -137,16 +141,11 @@ class $modify(GucciKeys, CCKeyboardDispatcher) {
         // Held-repeat keys: frame step and step back, only while paused.
         if (down && gb->updater.m_paused) {
             auto const& keys = ui::keys();
-            if (keys.onFrameStep != 0 && k == keys.onFrameStep) {
+            if (keys.onFrameStep != 0 && k == keys.onFrameStep)
                 gb->updater.userStepForward();
-                handled = true;
-            }
-            if (keys.onBackStep != 0 && k == keys.onBackStep && gb->updater.userStepBack())
-                handled = true;
+            if (keys.onBackStep != 0 && k == keys.onBackStep)
+                gb->updater.userStepBack();
         }
-
-        if (!repeat && !handled && PlayLayer::get() && jumpKey(key))
-            Autoclicker::get()->trackUserInput(down, false);
 
         return CCKeyboardDispatcher::dispatchKeyboardMSG(key, down, repeat, timestamp);
     }

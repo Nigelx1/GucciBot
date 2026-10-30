@@ -84,8 +84,10 @@ namespace gucci {
                 RegCloseKey(hKey);
                 return GPUVendor::NVIDIA;
             }
-            if (keyName.find("VEN_1002") != std::string::npos ||
-                keyName.find("VEN_1022") != std::string::npos) {
+            // Radeon graphics only. VEN_1022 is AMD's CPU and chipset ID, and
+            // it sorts before NVIDIA's VEN_10DE, so every Ryzen PC with a
+            // GeForce card was handed AMF, which can't open there.
+            if (keyName.find("VEN_1002") != std::string::npos) {
                 RegCloseKey(hKey);
                 return GPUVendor::AMD;
             }
@@ -288,7 +290,8 @@ namespace gucci {
         m_settings.m_height = (int)mod->getSavedValue<int64_t>("render_height", 1080);
         m_settings.m_fps = (int)mod->getSavedValue<int64_t>("render_fps", 60);
         m_settings.m_codec = mod->getSavedValue<std::string>("render_codec", "");
-        if (m_settings.m_codec.empty())
+        m_settings.m_codecAuto = m_settings.m_codec.empty();
+        if (m_settings.m_codecAuto)
             m_settings.m_codec = getDefaultCodec();
 
         auto br = geode::utils::numFromString<int>(
@@ -303,7 +306,6 @@ namespace gucci {
                 .unwrapOr(3.f);
         m_settings.m_fadeInTime = mod->getSavedValue<double>("render_fade_in", 1.5);
         m_settings.m_fadeOutTime = mod->getSavedValue<double>("render_fade_out", 1.5);
-        m_settings.m_colorFix = mod->getSavedValue<bool>("render_color_fix", true);
         m_settings.m_audioCodec = mod->getSavedValue<std::string>("render_audio_codec", "aac");
         m_settings.m_musicVolume = mod->getSavedValue<double>("render_music_volume", 1.0);
         m_settings.m_sfxVolume = mod->getSavedValue<double>("render_sfx_volume", 1.0);
@@ -335,7 +337,6 @@ namespace gucci {
             return geode::Err("Not in a level");
 
         loadSettingsFromGeode();
-        m_seenFrames = 0;
 
         FMODAudioEngine::get()->m_system->getSoftwareFormat(&m_sampleRate, nullptr, &m_channels);
 
@@ -350,7 +351,9 @@ namespace gucci {
         std::string renderFolderStr = mod->getSavedValue<std::string>("render_output_folder", "");
         fs::path outDir;
         if (!renderFolderStr.empty()) {
-            outDir = fs::path(renderFolderStr);
+            // Typed in the menu, so UTF-8 (a std::string path is the ANSI
+            // code page on Windows).
+            outDir = fs::path(std::u8string(renderFolderStr.begin(), renderFolderStr.end()));
         } else {
             outDir = mod->getSaveDir() / "renders";
         }
@@ -382,26 +385,6 @@ namespace gucci {
         if (!m_formatCtx)
             return geode::Err("Failed to allocate output context");
 
-        m_videoCodec = ff->avcodec_find_encoder_by_name(m_settings.m_codec.c_str());
-        if (!m_videoCodec)
-            return geode::Err("Failed to find codec '{}'", m_settings.m_codec);
-
-        m_videoCodecCtx.reset(ff->avcodec_alloc_context3(m_videoCodec));
-        if (!m_videoCodecCtx)
-            return geode::Err("Failed to allocate codec context");
-
-        AVPixelFormat* outPixFmts = nullptr;
-        int outPixFmtCount = 0;
-        m_settings.m_pixFmt = AV_PIX_FMT_NONE;
-        if (ff->avcodec_get_supported_config(m_videoCodecCtx.get(),
-                                             m_videoCodec,
-                                             AV_CODEC_CONFIG_PIX_FORMAT,
-                                             0,
-                                             (const void**)&outPixFmts,
-                                             &outPixFmtCount) < 0) {
-            return geode::Err("Failed to query codec pixel-format capabilities");
-        }
-
         auto const makeColorspace = [](AVPixelFormat f) -> std::unique_ptr<Colorspace> {
             switch (f) {
             case AV_PIX_FMT_YUV420P:
@@ -425,44 +408,85 @@ namespace gucci {
                                         : wanted == "rgb24" ? AV_PIX_FMT_RGB24
                                                             : AV_PIX_FMT_NONE;
         std::unique_ptr<Colorspace> colorspace;
-        for (int i = 0; i < outPixFmtCount && wantedFmt != AV_PIX_FMT_NONE; i++) {
-            if (outPixFmts[i] == wantedFmt) {
-                m_settings.m_pixFmt = wantedFmt;
-                colorspace = makeColorspace(wantedFmt);
-                break;
-            }
-        }
-        for (int i = 0; i < outPixFmtCount && m_settings.m_pixFmt == AV_PIX_FMT_NONE; i++) {
-            if (auto cs = makeColorspace(outPixFmts[i])) {
-                m_settings.m_pixFmt = outPixFmts[i];
-                colorspace = std::move(cs);
-            }
-        }
-        if (m_settings.m_pixFmt == AV_PIX_FMT_NONE)
-            return geode::Err("Couldn't find a usable pixel format for codec '{}'",
-                              m_settings.m_codec);
 
-        m_videoCodecCtx->codec_id = m_videoCodec->id;
-        m_videoCodecCtx->pix_fmt = m_settings.m_pixFmt;
-        m_videoCodecCtx->width = m_settings.m_width;
-        m_videoCodecCtx->height = m_settings.m_height;
-        m_videoCodecCtx->bit_rate = m_settings.m_bitrate;
-        m_videoCodecCtx->time_base = {1, m_settings.m_fps};
-        m_videoCodecCtx->framerate = {m_settings.m_fps, 1};
-        m_videoCodecCtx->max_b_frames = 0;
-        m_videoCodecCtx->color_primaries = AVCOL_PRI_BT709;
-        m_videoCodecCtx->colorspace = AVCOL_SPC_BT709;
-        m_videoCodecCtx->color_trc = AVCOL_TRC_BT709;
-        m_videoCodecCtx->color_range = AVCOL_RANGE_MPEG;
-        if (m_formatCtx->oformat->flags & AVFMT_GLOBALHEADER)
-            m_videoCodecCtx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+        // Finds the video encoder, picks its pixel format and opens it. One
+        // lambda, so an encoder picked for the graphics card that won't open
+        // (no driver for it, a card that has since been taken out) gets a
+        // second try as libx264 instead of a render that never starts.
+        auto const openVideoCodec = [&](std::string const& name) -> geode::Result<> {
+            m_settings.m_codec = name;
+            m_videoCodec = ff->avcodec_find_encoder_by_name(name.c_str());
+            if (!m_videoCodec)
+                return geode::Err("Failed to find codec '{}'", name);
 
-        AVDictionary* video_opts = nullptr;
-        for (const auto& arg : args)
-            ff->av_dict_set(&video_opts, arg.m_name.c_str(), arg.m_value.c_str(), 0);
-        if (ff->avcodec_open2(m_videoCodecCtx.get(), m_videoCodec, &video_opts) < 0)
-            return geode::Err("Failed to open codec '{}'", m_settings.m_codec);
-        ff->av_dict_free(&video_opts);
+            m_videoCodecCtx.reset(ff->avcodec_alloc_context3(m_videoCodec));
+            if (!m_videoCodecCtx)
+                return geode::Err("Failed to allocate codec context");
+
+            AVPixelFormat* outPixFmts = nullptr;
+            int outPixFmtCount = 0;
+            m_settings.m_pixFmt = AV_PIX_FMT_NONE;
+            colorspace.reset();
+            if (ff->avcodec_get_supported_config(m_videoCodecCtx.get(),
+                                                 m_videoCodec,
+                                                 AV_CODEC_CONFIG_PIX_FORMAT,
+                                                 0,
+                                                 (const void**)&outPixFmts,
+                                                 &outPixFmtCount) < 0) {
+                return geode::Err("Failed to query codec pixel-format capabilities");
+            }
+            for (int i = 0; i < outPixFmtCount && wantedFmt != AV_PIX_FMT_NONE; i++) {
+                if (outPixFmts[i] == wantedFmt) {
+                    m_settings.m_pixFmt = wantedFmt;
+                    colorspace = makeColorspace(wantedFmt);
+                    break;
+                }
+            }
+            for (int i = 0; i < outPixFmtCount && m_settings.m_pixFmt == AV_PIX_FMT_NONE; i++) {
+                if (auto cs = makeColorspace(outPixFmts[i])) {
+                    m_settings.m_pixFmt = outPixFmts[i];
+                    colorspace = std::move(cs);
+                }
+            }
+            if (m_settings.m_pixFmt == AV_PIX_FMT_NONE)
+                return geode::Err("Couldn't find a usable pixel format for codec '{}'", name);
+
+            m_videoCodecCtx->codec_id = m_videoCodec->id;
+            m_videoCodecCtx->pix_fmt = m_settings.m_pixFmt;
+            m_videoCodecCtx->width = m_settings.m_width;
+            m_videoCodecCtx->height = m_settings.m_height;
+            m_videoCodecCtx->bit_rate = m_settings.m_bitrate;
+            m_videoCodecCtx->time_base = {1, m_settings.m_fps};
+            m_videoCodecCtx->framerate = {m_settings.m_fps, 1};
+            m_videoCodecCtx->max_b_frames = 0;
+            m_videoCodecCtx->color_primaries = AVCOL_PRI_BT709;
+            m_videoCodecCtx->colorspace = AVCOL_SPC_BT709;
+            m_videoCodecCtx->color_trc = AVCOL_TRC_BT709;
+            m_videoCodecCtx->color_range = AVCOL_RANGE_MPEG;
+            if (m_formatCtx->oformat->flags & AVFMT_GLOBALHEADER)
+                m_videoCodecCtx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+
+            AVDictionary* video_opts = nullptr;
+            for (const auto& arg : args)
+                ff->av_dict_set(&video_opts, arg.m_name.c_str(), arg.m_value.c_str(), 0);
+            int const opened = ff->avcodec_open2(m_videoCodecCtx.get(), m_videoCodec, &video_opts);
+            ff->av_dict_free(&video_opts);
+            if (opened < 0)
+                return geode::Err("Failed to open codec '{}'", name);
+            return geode::Ok();
+        };
+        if (auto r = openVideoCodec(m_settings.m_codec); r.isErr()) {
+            // Only an encoder GucciBot picked falls back: one typed into
+            // Codec is what the player asked for, so its error is shown.
+            if (!m_settings.m_codecAuto || m_settings.m_codec == "libx264")
+                return r;
+            geode::log::warn("[GucciBot] SLRenderer: {} (picked for this PC's graphics card), trying libx264",
+                             r.unwrapErr());
+            if (AVCodecContext* failed = m_videoCodecCtx.release())
+                ff->avcodec_free_context(&failed);
+            if (auto r2 = openVideoCodec("libx264"); r2.isErr())
+                return r2;
+        }
 
         m_videoStream = ff->avformat_new_stream(m_formatCtx, m_videoCodec);
         if (!m_videoStream)
@@ -851,7 +875,9 @@ namespace gucci {
         m_lastRender.duration = m_time + m_introTotal * (double)getDt();
         m_lastRender.fileSize = 0;
         std::error_code ec;
-        if (auto const sz = fs::file_size(fs::path(m_lastRender.path), ec); !ec)
+        // m_lastRender.path is UTF-8 (start() takes it from u8string()).
+        fs::path const file(std::u8string(m_lastRender.path.begin(), m_lastRender.path.end()));
+        if (auto const sz = fs::file_size(file, ec); !ec)
             m_lastRender.fileSize = sz;
         m_lastRender.pending = true;
     }
@@ -1069,9 +1095,7 @@ namespace gucci {
         if (!this->isRecording())
             return;
 
-        bool started = pl->m_started || (m_settings.m_firstAttemptPause && m_seenFrames >= 2);
-        m_seenFrames++;
-        if (pl->m_isPaused || !started)
+        if (pl->m_isPaused || !pl->m_started)
             return;
 
         // Intro frames used update indices too (they are the start of the

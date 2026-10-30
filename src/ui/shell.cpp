@@ -78,7 +78,7 @@ namespace gucci::ui {
             {"key_replay_toggle", "Start / stop playback", &Keys::onReplayToggle},
             {"key_noclip", "Noclip", &Keys::onNoclip},
             {"key_safe_mode", "Safe mode", &Keys::onSafeMode},
-            {"key_audio_pitch", "Audio pitch with speed", &Keys::onAudioPitch},
+            {"key_audio_pitch", "Audio pitch follows speed", &Keys::onAudioPitch},
             {"key_rng_lock", "RNG lock", &Keys::onRngLock},
             {"key_layout_mode", "Layout mode", &Keys::onLayoutMode},
             {"key_no_mirror", "No mirror effect", &Keys::onNoMirror},
@@ -1107,7 +1107,12 @@ namespace gucci::ui {
         void frameStepperCard() {
             auto* gb = GucciEngine::get();
             auto& upd = gb->updater;
+#if defined(GEODE_IS_IOS)
+            // No keys reach GucciBot on iOS (hacks/keybinds.cpp).
+            kit::BeginCard("Frame stepper", "Pause and move one tick at a time.");
+#else
             kit::BeginCard("Frame stepper", "Pause and move one tick at a time. The keys are in Settings > Keybinds.");
+#endif
             if (PlayLayer::get()) {
                 if (kit::Button(upd.m_paused ? "Resume" : "Pause", Tone::Accent))
                     upd.togglePaused();
@@ -1461,7 +1466,6 @@ namespace gucci::ui {
             engineSwitch("Hide attempts", nullptr, &gb->hackHideAttempts, "hack_hide_attempts");
             engineSwitch("Hide percentage", nullptr, &gb->hackHidePercentage, "hack_hide_percentage");
             engineSwitch("No death flash", nullptr, &gb->hackNoSpikeFlash, "hack_no_flash");
-            engineSwitch("Audio pitch follows speed", nullptr, &gb->audioPitchEnabled, "hack_audio_pitch");
             engineSwitch("Practice range", "Shows the loaded macro's clicks near you in the level. Counts as a cheat",
                          &gb->practiceRangeEnabled,
                          "practice_range");
@@ -1489,7 +1493,8 @@ namespace gucci::ui {
             kit::BeginCard("Engine", nullptr);
             engineSwitch("Lock delta", "Fixed physics step per tick", &upd.m_lockDelta, "feat_lock_delta");
             engineSwitch("Auto flip on death", nullptr, &upd.m_autoFlipOnDeath, "feat_auto_flip");
-            engineSwitch("Speedhack audio", nullptr, &upd.m_speedhackAudio, "feat_speedhack_audio");
+            engineSwitch("Audio pitch follows speed", "Music and sounds play faster or slower with the game speed",
+                         &upd.m_speedhackAudio, "feat_audio_pitch");
             engineSwitch("Scroll speed fix", nullptr, &upd.m_ssbFix, "feat_scroll_speed_fix");
             engineSwitch("High TPS precision", "Scales GD's velocity rounding with the tick rate. Changes physics",
                          &upd.m_highTpsPrecision, "updater_highTpsPrecision");
@@ -2182,10 +2187,18 @@ namespace gucci::ui {
                 setCompactMode(compact);
             kit::EndCard();
 
+#if defined(GEODE_IS_IOS)
+            // The bindings have no keyboard dispatcher to hook on iOS
+            // (hacks/keybinds.cpp), so a key set here would never fire.
+            kit::BeginCard("Keybinds", nullptr);
+            kit::Note("Keys don't reach GucciBot on iOS: open the menu from the pause menu's GucciBot button.",
+                      Tone::Muted);
+#else
             kit::BeginCard("Keybinds", "Click a key, then press the new one. Right-click unbinds.");
             for (auto const& slot : kKeySlots)
                 if (kit::KeyRow(slot.label, nullptr, &(g_keys.*(slot.field))))
                     saveSettings();
+#endif
             kit::EndCard();
 
             kit::BeginCard("Assistant Access",
@@ -2701,10 +2714,15 @@ namespace gucci::ui {
                 if (scene && !typeinfo_cast<CCTransitionScene*>(scene)) {
                     slr->m_lastRender.pending = false;
                     auto const r = slr->m_lastRender;
-                    std::filesystem::path const file(r.path);
+                    // The path is UTF-8, and so is the name shown: a std::string
+                    // path is the ANSI code page on Windows, which put the
+                    // wrong folder behind Open folder for a non-ASCII name
+                    // (and path.string() throws for one it can't spell).
+                    std::filesystem::path const file(std::u8string(r.path.begin(), r.path.end()));
                     std::string const body =
-                        fmt::format("Saved <cy>{}</c>\n{}x{} at {} fps, {:.1f} s, {:.1f} MB", file.filename().string(),
-                                    r.width, r.height, r.fps, r.duration, (double)r.fileSize / 1048576.0);
+                        fmt::format("Saved <cy>{}</c>\n{}x{} at {} fps, {:.1f} s, {:.1f} MB",
+                                    geode::utils::string::pathToString(file.filename()), r.width, r.height,
+                                    r.fps, r.duration, (double)r.fileSize / 1048576.0);
                     Loader::get()->queueInMainThread([body, dir = file.parent_path()] {
                         createQuickPopup("Render finished", body, "OK", "Open folder", [dir](auto, bool open) {
                             if (open)
@@ -2727,14 +2745,18 @@ namespace gucci::ui {
             }
             drawOverlay();
             // Video Mode: the click bar over the video instead of the menu,
-            // open or closed (the overlay has the way out). JMF's or the
-            // Trainer's; only one is ever on.
+            // open or closed (the overlay has the way out), and the Video Mode
+            // card's settings, folded, over the top of it (the page that
+            // holds the card isn't shown). JMF's or the Trainer's; only one
+            // is ever on.
             if (GucciEngine::get()->jupiterVideoModeEnabled) {
                 pages::jupiterVideoOverlay();
+                pages::videoModeSettings(true);
                 return;
             }
             if (GucciEngine::get()->trainerVideoModeEnabled) {
                 pages::trainerVideoOverlay();
+                pages::videoModeSettings(false);
                 return;
             }
             if (!g_open)

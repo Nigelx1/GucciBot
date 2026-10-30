@@ -114,7 +114,9 @@ private:
         auto* system = FMODAudioEngine::sharedEngine()->m_system;
         if (!system)
             return;
-        if (system->createSound(path.string().c_str(), FMOD_CREATESAMPLE, nullptr, &m_sound) !=
+        // FMOD takes UTF-8 file names (path.string() is the ANSI code page).
+        std::string const name = geode::utils::string::pathToString(path);
+        if (system->createSound(name.c_str(), FMOD_CREATESAMPLE, nullptr, &m_sound) !=
                 FMOD_OK ||
             !m_sound) {
             m_sound = nullptr;
@@ -177,21 +179,32 @@ public:
 
         if (!pl->m_started)
             return;
-
-        if (gb->trainerBestGhostEnabled && !gb->isPlaying() && pl->m_player1) {
-            m_liveAttemptPath.push_back({pl->m_player1->m_position.x, pl->m_player1->m_position.y});
+        // The ghosts belong to the trainer's own level, as its music does.
+        if (!gbtr::isTrainerLevel(pl)) {
+            m_liveAttemptPath.clear();
+            return;
         }
 
-        if (gb->trainerGhostEnabled && !gb->trainerMacro.pathSamples.empty()) {
-            uint32_t frame = resolveFrame(gb, gb->trainerMacro.pathSamples.size());
-            if (frame < gb->trainerMacro.pathSamples.size()) {
-                auto const& s = gb->trainerMacro.pathSamples[frame];
+        // Your attempt, for the best attempt's ghost: alive only (the wait
+        // after a death used to run on into the next attempt and put its
+        // ghost behind), and by frame, so it lines up with the macro's.
+        auto* p1 = pl->m_player1;
+        if (gb->trainerBestGhostEnabled && !gb->isPlaying() && p1 && !pl->m_playerDied && !p1->m_isDead)
+            recordLive(gb->updater.getFrame(), {p1->m_position.x, p1->m_position.y});
+
+        // One frame for both ghosts. Scrub reads it off the macro's path (your
+        // best's, when the macro has none), so the two show the same moment.
+        auto const& macroPath = gb->trainerMacro.pathSamples;
+        uint32_t const frame = resolveFrame(gb, !macroPath.empty() ? macroPath.size() : m_bestAttemptPath.size());
+
+        if (gb->trainerGhostEnabled && !macroPath.empty()) {
+            if (frame < macroPath.size()) {
+                auto const& s = macroPath[frame];
                 drawGhost(s.p1x, s.p1y, ccc4f(0.30f, 0.85f, 1.f, 0.65f));
             }
         }
 
         if (gb->trainerBestGhostEnabled && !m_bestAttemptPath.empty()) {
-            uint32_t frame = resolveFrame(gb, m_bestAttemptPath.size());
             if (frame < m_bestAttemptPath.size()) {
                 auto const& p = m_bestAttemptPath[frame];
                 drawGhost(p.first, p.second, ccc4f(1.f, 0.75f, 0.20f, 0.65f));
@@ -208,7 +221,30 @@ public:
         m_liveAttemptPath.clear();
     }
 
+    // Reset stats, or another macro: the best attempt so far no longer counts.
+    void resetBest() {
+        m_bestAttemptPath.clear();
+        m_bestReachX = 0.f;
+    }
+
 private:
+    // About 72 minutes at 240 TPS; past it the last place is kept.
+    static constexpr size_t kMaxPathFrames = size_t(1) << 20;
+
+    // The player's place at this frame of the live attempt. Frames are
+    // absolute: an attempt from a checkpoint starts part way in, and the
+    // frames before are filled with where it began, as is a gap of several
+    // ticks in one update (Lock delta off). A restart or a step back cuts
+    // the path back to the frame.
+    void recordLive(uint32_t frame, std::pair<float, float> pos) {
+        size_t const f = std::min<size_t>(frame, kMaxPathFrames);
+        if (m_liveAttemptPath.size() > f)
+            m_liveAttemptPath.resize(f);
+        while (m_liveAttemptPath.size() < f)
+            m_liveAttemptPath.push_back(m_liveAttemptPath.empty() ? pos : m_liveAttemptPath.back());
+        m_liveAttemptPath.push_back(pos);
+    }
+
     static uint32_t resolveFrame(GucciEngine* gb, size_t pathLen) {
         if (gb->trainerScrubActive)
             return (uint32_t)std::clamp(gb->trainerScrubPercent / 100.f * (float)pathLen,
@@ -247,6 +283,9 @@ namespace gucci::gbtr {
     }
     void notifyTrainerAttemptEnded() {
         TrainerGhostOverlay::get()->onAttemptEnded();
+    }
+    void resetBestGhost() {
+        TrainerGhostOverlay::get()->resetBest();
     }
     void syncTrainerClickBarMusic(bool active, bool paused, double posSec) {
         TrainerMusicSync::get()->syncPreview(active, paused, posSec);

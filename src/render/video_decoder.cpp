@@ -15,19 +15,23 @@ namespace gucci {
 
     bool VideoDecoder::open(const std::filesystem::path& path) {
         close();
+        // UTF-8, which FFmpeg takes file names in. path.string() is the ANSI
+        // code page on Windows, and throws for a name it can't spell: a video
+        // with such a name used to take the game down.
+        std::string const name = geode::utils::string::pathToString(path);
         auto* renderer = SLRenderer::get();
         if (!renderer->isFFmpegLoaded()) {
-            geode::log::error("[VideoDecoder] FFmpeg not loaded, can't open {}", path.string());
+            geode::log::error("[VideoDecoder] FFmpeg not loaded, can't open {}", name);
             return false;
         }
         auto* ff = renderer->ff;
 
-        if (ff->avformat_open_input(&m_formatCtx, path.string().c_str(), nullptr, nullptr) < 0) {
-            geode::log::error("[VideoDecoder] avformat_open_input failed for {}", path.string());
+        if (ff->avformat_open_input(&m_formatCtx, name.c_str(), nullptr, nullptr) < 0) {
+            geode::log::error("[VideoDecoder] avformat_open_input failed for {}", name);
             return false;
         }
         if (ff->avformat_find_stream_info(m_formatCtx, nullptr) < 0) {
-            geode::log::error("[VideoDecoder] avformat_find_stream_info failed for {}", path.string());
+            geode::log::error("[VideoDecoder] avformat_find_stream_info failed for {}", name);
             close();
             return false;
         }
@@ -39,7 +43,7 @@ namespace gucci {
             }
         }
         if (m_videoStreamIndex < 0) {
-            geode::log::error("[VideoDecoder] no video stream in {}", path.string());
+            geode::log::error("[VideoDecoder] no video stream in {}", name);
             close();
             return false;
         }
@@ -49,7 +53,7 @@ namespace gucci {
         if (!decoder) {
             geode::log::error("[VideoDecoder] no decoder for codec id {} in {}",
                               (int)stream->codecpar->codec_id,
-                              path.string());
+                              name);
             close();
             return false;
         }
@@ -57,7 +61,7 @@ namespace gucci {
         m_codecCtx = ff->avcodec_alloc_context3(decoder);
         if (!m_codecCtx || ff->avcodec_parameters_to_context(m_codecCtx, stream->codecpar) < 0 ||
             ff->avcodec_open2(m_codecCtx, decoder, nullptr) < 0) {
-            geode::log::error("[VideoDecoder] failed to open decoder for {}", path.string());
+            geode::log::error("[VideoDecoder] failed to open decoder for {}", name);
             close();
             return false;
         }
@@ -105,13 +109,13 @@ namespace gucci {
         m_frame = ff->av_frame_alloc();
         m_packet = ff->av_packet_alloc();
         if (!m_frame || !m_packet || m_timeBase <= 0.0) {
-            geode::log::error("[VideoDecoder] setup failed for {}", path.string());
+            geode::log::error("[VideoDecoder] setup failed for {}", name);
             close();
             return false;
         }
 
         geode::log::info("[VideoDecoder] Opened {} (source {}x{}, decoding at {}x{}, {:.2f}s)",
-                         path.string(),
+                         name,
                          m_width,
                          m_height,
                          m_outWidth,

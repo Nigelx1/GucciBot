@@ -811,6 +811,12 @@ namespace gucci::trainers {
         s.sessionBestPct = 0.f;
         s.deathPcts.clear();
         g_cleanLaps[idx(k)] = 0;
+        // The best attempt's ghost is this session's best too; selectMacro
+        // comes through here, so another macro starts it over as well.
+        if (k == Kind::Jupiter)
+            gbju::resetBestGhost();
+        else
+            gbtr::resetBestGhost();
     }
 
     // ------------------------------------------------------------ the Trainer's macro and track

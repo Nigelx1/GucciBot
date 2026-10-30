@@ -605,6 +605,11 @@ void GucciUpdater::backwardsStep(int n) {
     gb->practiceFix.m_loadCheckpoint = false;
 }
 
+// The only thing that sets the game's audio pitch, once a drawn frame
+// (drawScene, below), as Silicate does. Hacks > Engine's "Audio pitch follows
+// speed" is m_speedhackAudio. A second switch used to set the same pitch from
+// an FMODAudioEngine::update hook, but it never put the pitch back when it was
+// off, so either switch alone did nothing; the two were merged 2026-10-29.
 void GucciUpdater::updateAudioSpeedhack() {
     FMOD::ChannelGroup* master;
     FMODAudioEngine::get()->m_system->getMasterChannelGroup(&master);
@@ -1128,8 +1133,7 @@ class $modify(GB7CCDirector, CCDirector) {
         auto* sl = SLRenderer::get();
         if (sl->m_shouldStart)
             sl->startIfQueued();
-        if (pl && sl->isRecording() && !pl->m_isPaused &&
-            (pl->m_started || sl->m_settings.m_firstAttemptPause)) {
+        if (pl && sl->isRecording() && !pl->m_isPaused && pl->m_started) {
             float dt = sl->getDt();
             // Backpressure, as Silicate does it: if every slot in the readback
             // ring is still waiting on the encoder, don't advance the game this

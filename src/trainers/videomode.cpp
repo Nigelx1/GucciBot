@@ -157,11 +157,14 @@ namespace gucci::videomode {
                     w->failure = why;
                 }
             }
+            // UTF-8 for the log. path.string() throws on Windows for a name the
+            // ANSI code page can't spell, and on this thread that ends the game.
+            std::string const name = geode::utils::string::pathToString(path);
             if (!why.empty()) {
-                logLine("open failed: " + why + " (" + path.string() + ")");
+                logLine("open failed: " + why + " (" + name + ")");
                 return;
             }
-            logLine(fmt::format("opened {} at {}x{}, {:.2f}s, {:.3f}s a frame", path.string(), decoder.width(),
+            logLine(fmt::format("opened {} at {}x{}, {:.2f}s, {:.3f}s a frame", name, decoder.width(),
                                 decoder.height(), decoder.durationSec(), decoder.frameDurationSec()));
 
             std::vector<uint8_t> local;

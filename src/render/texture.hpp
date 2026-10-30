@@ -46,19 +46,15 @@ namespace gucci {
         // can still reason about the window it will be handed back to.
         uint32_t m_windowWidth = 0, m_windowHeight = 0;
 
-        uint32_t m_tex[2];
         uint32_t m_quadVAO, m_quadVBO;
 
         int m_old_fbo, m_old_rbo;
-        uint32_t m_fbo[2];
         uint32_t m_pbo[RING_SIZE] = {};
         void* m_fence[RING_SIZE] = {};
         uint8_t* m_slotData[RING_SIZE] = {};
         bool m_slotMapped[RING_SIZE] = {};
         int64_t m_issued = 0;
         int64_t m_mapped = 0;
-
-        uint32_t m_program;
     };
 
 } // namespace gucci
