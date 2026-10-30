@@ -23,6 +23,9 @@ namespace gucci {
         int m_height = 1080;
         uint32_t m_bitrate = 30'000'000;
         std::string m_codec = "libx264";
+        // Codec was left blank, so m_codec is the pick for the graphics card,
+        // and start() may fall back to libx264 when it won't open.
+        bool m_codecAuto = false;
         AVPixelFormat m_pixFmt = AV_PIX_FMT_YUV420P;
 
         int m_fps = 60;
