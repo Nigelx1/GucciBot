@@ -177,6 +177,11 @@ public:
 
         if (!pl->m_started)
             return;
+        // The ghosts belong to the trainer's own level, as its music does.
+        if (!gbtr::isTrainerLevel(pl)) {
+            m_liveAttemptPath.clear();
+            return;
+        }
 
         if (gb->trainerBestGhostEnabled && !gb->isPlaying() && pl->m_player1) {
             m_liveAttemptPath.push_back({pl->m_player1->m_position.x, pl->m_player1->m_position.y});
