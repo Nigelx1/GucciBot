@@ -880,7 +880,9 @@ class $modify(GB7PlayLayer, PlayLayer) {
         }
         if (!gb->autosaveAtLevelEnd)
             return;
-        if (!gb->isRecording() || gb->replay.m_actionAtom.empty())
+        // A macro with no name isn't saved until it gets one: it would be
+        // written as a file named only by its extension.
+        if (!gb->isRecording() || gb->replay.m_actionAtom.empty() || gb->replayName.empty())
             return;
         auto path = gb->replay.getCurrentPath();
         if (gb->replayBackupsEnabled)

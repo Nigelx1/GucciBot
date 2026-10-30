@@ -1563,7 +1563,8 @@ namespace gucci {
             autosaveIntervalSec = 1.0;
         if (replay.m_autosaveJobId == 0) {
             replay.m_autosaveJobId = scheduler.schedule(autosaveIntervalSec, [this] {
-                if (autosaveAtInterval && isRecording() && !replay.m_actionAtom.empty()) {
+                // Not without a name, as at the level's end (hook_playlayer.cpp).
+                if (autosaveAtInterval && isRecording() && !replay.m_actionAtom.empty() && !replayName.empty()) {
                     auto path = replay.getCurrentPath();
                     if (replayBackupsEnabled)
                         replay.backupExisting(path);
