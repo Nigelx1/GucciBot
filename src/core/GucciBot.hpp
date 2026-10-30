@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-30-a (Polish round: about 90 fixes - Compact Mode controls, BrrrBot snow, a text-in-the-level editor, one audio-pitch switch, hotkeys that stick, Hide percentage, Block inputs during playback, and more; see docs/POLISH_ROUND.md)"
+    "2026-10-30-b (Polish round finished: the update checker keeps itself on, presets refuse names they cannot save, and the last wrong hints)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
