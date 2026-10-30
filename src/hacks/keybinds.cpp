@@ -125,12 +125,14 @@ class $modify(GucciKeys, CCKeyboardDispatcher) {
         if (live && !repeat && jumpKey(key))
             trainers::onKeyInput(down);
 
-        bool handled = false;
+        // Every key goes on to the game as well, bound or not. (Whether one was
+        // used only mattered to the autoclicker's old key tracking, which is
+        // gone: "only while holding" reads GD's UILayer now.)
         if (down && !repeat) {
 #ifdef GEODE_IS_MACOS
-            handled = runTogglesOnce(k);
+            runTogglesOnce(k);
 #else
-            handled = runToggles(k);
+            runToggles(k);
 #endif
         }
         if (!live)
@@ -139,16 +141,11 @@ class $modify(GucciKeys, CCKeyboardDispatcher) {
         // Held-repeat keys: frame step and step back, only while paused.
         if (down && gb->updater.m_paused) {
             auto const& keys = ui::keys();
-            if (keys.onFrameStep != 0 && k == keys.onFrameStep) {
+            if (keys.onFrameStep != 0 && k == keys.onFrameStep)
                 gb->updater.userStepForward();
-                handled = true;
-            }
-            if (keys.onBackStep != 0 && k == keys.onBackStep && gb->updater.userStepBack())
-                handled = true;
+            if (keys.onBackStep != 0 && k == keys.onBackStep)
+                gb->updater.userStepBack();
         }
-
-        if (!repeat && !handled && PlayLayer::get() && jumpKey(key))
-            Autoclicker::get()->trackUserInput(down, false);
 
         return CCKeyboardDispatcher::dispatchKeyboardMSG(key, down, repeat, timestamp);
     }

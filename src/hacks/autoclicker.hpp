@@ -37,7 +37,8 @@ namespace gucci {
         };
 
         bool enabled = false;
-        // Click only while the player holds jump themselves.
+        // Click only while the player holds jump themselves: a key, a mouse
+        // button or a touch, read from GD's UILayer (autoclicker.cpp).
         bool onlyWhileHolding = false;
         // Player 2's settings only apply in two-player levels: anywhere else
         // the game gives Player 2's input to Player 1, so its clicks would
@@ -57,8 +58,6 @@ namespace gucci {
         // Every reset of the level (new attempt, respawn, step back, quit,
         // editor playtest): the rhythm starts over on the next tick.
         void reset();
-        // The player's own jump input, for onlyWhileHolding.
-        void trackUserInput(bool pressed, bool isPlayer2);
         // One-shot copy, not a link: change either side afterwards.
         void syncP2FromP1();
 
@@ -83,7 +82,6 @@ namespace gucci {
             bool down = false;            // the clicker is holding the button
         };
         Lane m_lanes[2];
-        bool m_userHolding[2] = {false, false};
 
         void runLane(int index, PlayerSettings const& cfg, bool applies, bool userHolds, bool busy,
                      uint64_t tick, std::vector<bool>& events);

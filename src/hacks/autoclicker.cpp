@@ -64,18 +64,29 @@ namespace gucci {
         constexpr uint64_t kBlackOrbLoopTicks = std::size(kBlackOrbLoop);
         static_assert(kBlackOrbLoopTicks == 5, "the black orb UFO loop is five ticks long");
 
-        // Which level each player's held jump key went down in (0: not held).
-        // keybinds.cpp only reports keys while a level is open, so a key let go
-        // of on the way out of one is never reported; a hold only counts in
-        // the level it began in.
-        uintptr_t g_heldIn[2] = {0, 0};
-
-        uintptr_t levelId(PlayLayer* pl) {
-            return reinterpret_cast<uintptr_t>(pl);
-        }
-
         bool twoPlayerLevel(PlayLayer* pl) {
             return pl && pl->m_levelSettings && pl->m_levelSettings->m_twoPlayerMode;
+        }
+
+        // Whether the player holds that player's jump themselves, for "only
+        // while holding". GD's UILayer keeps each button side's hold, from a
+        // key, a mouse button or a touch, on every platform; the clicker's own
+        // presses go straight to the game (engine_updater.cpp queues them) and
+        // never reach it. Read as hook_playlayer.cpp reads it to put holds
+        // back: by side, swapped where GD flips sides, and in a one-player
+        // level either side is player 1's. The first version only heard
+        // Space, W and Up, all as player 1's.
+        bool humanHolds(PlayLayer* pl, bool player2) {
+            auto* ui = pl ? pl->m_uiLayer : nullptr;
+            if (!ui)
+                return false;
+            bool p1 = ui->m_p1Jumping || ui->m_p1TouchId != -1;
+            bool p2 = ui->m_p2Jumping || ui->m_p2TouchId != -1;
+            if (GucciEngine::get()->replay.hasFlippedControls() && !pl->m_isPlatformer)
+                std::swap(p1, p2);
+            if (!twoPlayerLevel(pl))
+                p1 |= p2;
+            return player2 ? p2 : p1;
         }
 
         // Whether the game has that player's jump button down right now.
@@ -139,9 +150,8 @@ namespace gucci {
         }
         uint64_t const tick = GucciEngine::get()->updater.getFrame();
         bool const busy = buttonsOwner() != nullptr;
-        uintptr_t const here = levelId(pl);
-        runLane(0, p1, true, m_userHolding[0] && g_heldIn[0] == here, busy, tick, out.p1);
-        runLane(1, p2, twoPlayerLevel(pl), m_userHolding[1] && g_heldIn[1] == here, busy, tick, out.p2);
+        runLane(0, p1, true, humanHolds(pl, false), busy, tick, out.p1);
+        runLane(1, p2, twoPlayerLevel(pl), humanHolds(pl, true), busy, tick, out.p2);
         return out;
     }
 
@@ -259,12 +269,6 @@ namespace gucci {
         m_lanes[1] = Lane{};
     }
 
-    void Autoclicker::trackUserInput(bool pressed, bool isPlayer2) {
-        int const i = isPlayer2 ? 1 : 0;
-        m_userHolding[i] = pressed;
-        g_heldIn[i] = pressed ? levelId(PlayLayer::get()) : 0;
-    }
-
     void Autoclicker::syncP2FromP1() {
         // Everything, the on/off included, as Silicate's copy does.
         p2 = p1;
@@ -291,9 +295,8 @@ namespace gucci {
             return twoPlayer ? "both players are switched off" : "Player 1 is switched off";
 
         if (onlyWhileHolding) {
-            uintptr_t const here = levelId(pl);
-            bool const p1Held = p1.enabled && m_userHolding[0] && g_heldIn[0] == here;
-            bool const p2Held = p2Clicks && m_userHolding[1] && g_heldIn[1] == here;
+            bool const p1Held = p1.enabled && humanHolds(pl, false);
+            bool const p2Held = p2Clicks && humanHolds(pl, true);
             if (!p1Held && !p2Held)
                 return "jump is not held";
         }
