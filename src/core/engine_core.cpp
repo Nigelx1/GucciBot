@@ -2598,10 +2598,18 @@ namespace gucci {
     // separate question and a separate change.)
     void GucciEngine::loadEngineSettings() {
         auto* mod = Mod::get();
+        // A value found only under its old key is copied to the new one.
+        // Geode's setSavedValue writes nothing when the value equals what the
+        // key already reads as, and a missing key reads as false or 0: with
+        // only the old key on, switching the setting off never reached the
+        // save, and the old key turned it back on at the next launch.
         auto pick = [mod](auto def, const char* key, const char* legacy) {
             using T = decltype(def);
-            if (!mod->hasSavedValue(key) && legacy && mod->hasSavedValue(legacy))
-                return mod->getSavedValue<T>(legacy, def);
+            if (!mod->hasSavedValue(key) && legacy && mod->hasSavedValue(legacy)) {
+                T const v = mod->getSavedValue<T>(legacy, def);
+                mod->getSaveContainer()[key] = matjson::Value(v);
+                return v;
+            }
             return mod->getSavedValue<T>(key, def);
         };
 
