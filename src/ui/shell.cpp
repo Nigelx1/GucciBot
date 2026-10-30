@@ -2685,10 +2685,15 @@ namespace gucci::ui {
                 if (scene && !typeinfo_cast<CCTransitionScene*>(scene)) {
                     slr->m_lastRender.pending = false;
                     auto const r = slr->m_lastRender;
-                    std::filesystem::path const file(r.path);
+                    // The path is UTF-8, and so is the name shown: a std::string
+                    // path is the ANSI code page on Windows, which put the
+                    // wrong folder behind Open folder for a non-ASCII name
+                    // (and path.string() throws for one it can't spell).
+                    std::filesystem::path const file(std::u8string(r.path.begin(), r.path.end()));
                     std::string const body =
-                        fmt::format("Saved <cy>{}</c>\n{}x{} at {} fps, {:.1f} s, {:.1f} MB", file.filename().string(),
-                                    r.width, r.height, r.fps, r.duration, (double)r.fileSize / 1048576.0);
+                        fmt::format("Saved <cy>{}</c>\n{}x{} at {} fps, {:.1f} s, {:.1f} MB",
+                                    geode::utils::string::pathToString(file.filename()), r.width, r.height,
+                                    r.fps, r.duration, (double)r.fileSize / 1048576.0);
                     Loader::get()->queueInMainThread([body, dir = file.parent_path()] {
                         createQuickPopup("Render finished", body, "OK", "Open folder", [dir](auto, bool open) {
                             if (open)

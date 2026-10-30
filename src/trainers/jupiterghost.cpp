@@ -110,7 +110,9 @@ private:
         auto* system = FMODAudioEngine::sharedEngine()->m_system;
         if (!system)
             return;
-        if (system->createSound(path.string().c_str(), FMOD_CREATESAMPLE, nullptr, &m_sound) !=
+        // FMOD takes UTF-8 file names (path.string() is the ANSI code page).
+        std::string const name = geode::utils::string::pathToString(path);
+        if (system->createSound(name.c_str(), FMOD_CREATESAMPLE, nullptr, &m_sound) !=
                 FMOD_OK ||
             !m_sound) {
             m_sound = nullptr;

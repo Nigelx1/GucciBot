@@ -72,11 +72,15 @@ namespace gucci::ui {
     void Look::loadFonts() {
         ImGuiIO& io = ImGui::GetIO();
         auto dir = Mod::get()->getResourcesDir();
-        auto regular = (dir / "Roboto-Regular.ttf").string();
-        auto bold = (dir / "Roboto-Bold.ttf").string();
+        auto const regularFile = dir / "Roboto-Regular.ttf";
+        auto const boldFile = dir / "Roboto-Bold.ttf";
         std::error_code ec;
-        bool const haveRegular = std::filesystem::exists(regular, ec);
-        bool const haveBold = std::filesystem::exists(bold, ec);
+        bool const haveRegular = std::filesystem::exists(regularFile, ec);
+        bool const haveBold = std::filesystem::exists(boldFile, ec);
+        // ImGui opens font files by UTF-8 name. path.string() is the ANSI
+        // code page on Windows (and throws for a folder name it can't spell).
+        std::string const regular = geode::utils::string::pathToString(regularFile);
+        std::string const bold = geode::utils::string::pathToString(boldFile);
 
         // Body first: the first font loaded is ImGui's default.
         struct Want {

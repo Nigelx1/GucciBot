@@ -353,7 +353,9 @@ namespace gucci {
         std::string renderFolderStr = mod->getSavedValue<std::string>("render_output_folder", "");
         fs::path outDir;
         if (!renderFolderStr.empty()) {
-            outDir = fs::path(renderFolderStr);
+            // Typed in the menu, so UTF-8 (a std::string path is the ANSI
+            // code page on Windows).
+            outDir = fs::path(std::u8string(renderFolderStr.begin(), renderFolderStr.end()));
         } else {
             outDir = mod->getSaveDir() / "renders";
         }
@@ -875,7 +877,9 @@ namespace gucci {
         m_lastRender.duration = m_time + m_introTotal * (double)getDt();
         m_lastRender.fileSize = 0;
         std::error_code ec;
-        if (auto const sz = fs::file_size(fs::path(m_lastRender.path), ec); !ec)
+        // m_lastRender.path is UTF-8 (start() takes it from u8string()).
+        fs::path const file(std::u8string(m_lastRender.path.begin(), m_lastRender.path.end()));
+        if (auto const sz = fs::file_size(file, ec); !ec)
             m_lastRender.fileSize = sz;
         m_lastRender.pending = true;
     }

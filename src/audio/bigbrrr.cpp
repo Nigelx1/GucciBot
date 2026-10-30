@@ -59,7 +59,9 @@ namespace gucci {
     }
 
     static bool isPlayableAudioFile(std::filesystem::path const& p) {
-        auto ext = p.extension().string();
+        // Not path.string(): on Windows it throws for a name the ANSI code
+        // page can't spell, and this runs over every file in the folder.
+        auto ext = geode::utils::string::pathToString(p.extension());
         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
         return ext == ".mp3" || ext == ".wav" || ext == ".ogg";
     }
@@ -124,8 +126,10 @@ namespace gucci {
             return;
         }
 
+        // FMOD takes UTF-8 file names (path.string() is the ANSI code page).
+        std::string const name = geode::utils::string::pathToString(path);
         if (system->createSound(
-                path.string().c_str(), FMOD_CREATESAMPLE | FMOD_LOOP_NORMAL, nullptr, &sound) !=
+                name.c_str(), FMOD_CREATESAMPLE | FMOD_LOOP_NORMAL, nullptr, &sound) !=
                 FMOD_OK ||
             !sound) {
             sound = nullptr;
