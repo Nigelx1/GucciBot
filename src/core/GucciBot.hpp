@@ -394,8 +394,7 @@ namespace gucci {
         // playerFlipped outside platformer, and the player's own side in a
         // platformer (Force platformer included). In a 1-player level a side
         // picks no player -- a click moves player 1, and player 2 with it in
-        // a dual -- so it stays the player's own, as with the setting off, and
-        // click sounds, which go by side, play as they do then.
+        // a dual -- so it stays the player's own, as with the setting off.
         bool sideFor(GJBaseGameLayer* layer, bool player2) {
             bool const twoPlayer =
                 layer && layer->m_levelSettings && layer->m_levelSettings->m_twoPlayerMode;
