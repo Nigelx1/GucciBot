@@ -1770,7 +1770,9 @@ void FrameWindowAnalyzer::checkCaptureAgainstTrail(PlayLayer* pl,
 }
 
 void FrameWindowAnalyzer::captureStateBytes(PlayLayer* pl) {
-    if (!m_statePlayerDiff->inner() || !pl || !pl->m_player1) {
+    // GucciBot (2026-10-29): its switch shows under Verbose log, and only
+    // counts while that is on (Player state diff stayed on, out of sight).
+    if (!m_verbose->inner() || !m_statePlayerDiff->inner() || !pl || !pl->m_player1) {
         m_snapP1.clear();
         return;
     }
