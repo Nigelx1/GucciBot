@@ -1522,7 +1522,7 @@ namespace gucci::ui {
             engineSwitch("Practice range", "Shows the loaded macro's clicks near you in the level. Counts as a cheat",
                          &gb->practiceRangeEnabled,
                          "practice_range");
-            engineSwitch("Macro path", "Draws the loaded macro's whole path and its clicks in the level. Counts as a cheat",
+            engineSwitch("Macro path", "Draws the loaded macro's path and its clicks in the level. Counts as a cheat",
                          &gb->showMacroPath, "show_macro_path");
             if (gb->showMacroPath) {
                 if (kit::SliderRow("Marker size", nullptr, &gb->macroPathMarkerSize, 2.f, 24.f, "%.0f"))
@@ -1531,7 +1531,9 @@ namespace gucci::ui {
                     saveFloat("macro_path_line_opacity", gb->macroPathLineOpacity);
                 // The trainers' reveal (JMF Trainer Mode): the path only as far
                 // as your best, plus a little ahead.
-                engineSwitch("Only up to your best", "In a trainer, the path stops a little past your best attempt",
+                engineSwitch("Only up to your best",
+                             "The path stops a little past the farthest you've gotten with this macro loaded (saved "
+                             "with the macro)",
                              &gb->trainerRevealEnabled, "trainer_reveal");
                 if (gb->trainerRevealEnabled &&
                     kit::SliderRow("Show ahead", "How far past your best", &gb->trainerRevealBuffer, 0.f, 600.f,
@@ -1598,14 +1600,21 @@ namespace gucci::ui {
             // (presets/ in the save folder); the menu lost its way to them in -bz.
             kit::BeginCard("Presets", "Save the engine settings under a name, and load them back");
             static std::string s_presetName;
-            kit::RowBegin("Name", nullptr);
-            kit::InputText("presetname", &s_presetName, "preset name");
+            static bool s_presetFailed = false;
+            // A name the file system can't take was saved nowhere and quietly
+            // gone after a restart (polish item 94).
+            bool const badName = s_presetName.find_first_of("\\/:*?\"<>|") != std::string::npos;
+            kit::RowBegin("Name", badName ? "Give it a name without \\ / : * ? \" < > |" : nullptr);
+            if (kit::InputText("presetname", &s_presetName, "preset name"))
+                s_presetFailed = false;
             ImGui::SameLine();
-            ImGui::BeginDisabled(s_presetName.empty());
+            ImGui::BeginDisabled(s_presetName.empty() || badName);
             if (kit::Button("Save", Tone::Accent))
-                gb->saveBotSettingsPreset(s_presetName);
+                s_presetFailed = !gb->saveBotSettingsPreset(s_presetName);
             ImGui::EndDisabled();
             kit::RowEnd();
+            if (s_presetFailed)
+                kit::Note("Couldn't save it.", Tone::Warn);
             std::string toDelete;
             for (auto const& p : gb->settingsPresets) {
                 ImGui::PushID(p.name.c_str());
@@ -2262,7 +2271,9 @@ namespace gucci::ui {
             kit::EndCard();
 
             kit::BeginCard("Assistant Access",
-                           "Lets an AI assistant on this computer read the game and step it. 127.0.0.1 only.");
+                           "Lets an AI assistant on this computer read the game and drive it: step, press, record, "
+                           "open levels, restart. 127.0.0.1 only, but no password, so leave it off when you're not "
+                           "using it.");
             auto* server = mcp::Server::get();
             bool access = server->running();
             if (kit::SwitchRow("Assistant Access", "Off by default; remembered once you turn it on", &access))
