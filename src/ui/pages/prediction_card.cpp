@@ -105,7 +105,7 @@ namespace gucci::ui::pages {
         ImGui::EndDisabled();
         kit::RowEnd();
         if (!upd.m_backwardsStepping)
-            kit::Hint("Needs Backwards stepping (Hacks > Engine), to step back to the tick it finds.");
+            kit::Hint("Needs Backwards stepping (Macro > Frame stepper), to step back to the tick it finds.");
 
         // ---- the sub-tick preview
         kit::Section("Sub-tick preview");
