@@ -823,8 +823,11 @@ class FrameWindowAnalyzer {
     void applySetupFrames(SetupGroup const& sg, int leaderShift,
                           std::vector<int> const& combo);
     std::string formatSubframe(float frames) const;
+    // GucciBot (2026-10-29): `redraw` puts back a marker the player passed
+    // before the display was rebuilt: no pulse, no slide in from the player.
     void spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
-                     FrameWindowTier const* tier);
+                     FrameWindowTier const* tier, bool redraw = false);
+    void redrawPassed(PlayLayer* pl, uint32_t frame);
     std::optional<cocos2d::CCPoint> dualTwin(PlayLayer* pl,
                                              FrameWindowMark const& mk,
                                              char const** from = nullptr) const;

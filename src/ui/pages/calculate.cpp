@@ -43,9 +43,11 @@ namespace gucci::ui::pages {
         FrameWindowAnalyzer& analyzer() { return ::Bot::get()->frameWindow(); }
 
         // What changed this frame. Settings are saved once at the end of the
-        // page; a change to how windows look also redraws the HUD and markers
-        // (otherwise the HUD keeps its old bands until the next attempt), and
-        // a change to an L* input makes the solved number stale.
+        // page; a change to how windows look also rebuilds the HUD (otherwise
+        // it keeps its old bands until the next attempt) and draws the
+        // markers of the last few seconds again in the new look
+        // (FrameWindowAnalyzer::redrawPassed), and a change to an L* input
+        // makes the solved number stale.
         bool g_changed = false;
         bool g_look = false;
         bool g_lstar = false;

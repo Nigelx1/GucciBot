@@ -6976,7 +6976,7 @@ template <class S> bool secondHalfOf(S const& gs, long) { return gs.m_unkBool11;
 }  // namespace
 
 void FrameWindowAnalyzer::spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
-                                      FrameWindowTier const* tier) {
+                                      FrameWindowTier const* tier, bool redraw) {
     auto* container = this->markerContainer(pl);
     if (!container) return;
 
@@ -7089,8 +7089,9 @@ void FrameWindowAnalyzer::spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
         node->addChild(label);
 
         // The band's pulse as the marker appears: grow to the pulse size,
-        // hold, settle back -- on the marker, the label or both.
-        if (tier && !mk.desynced && (tier->pulseMarker || tier->pulseText)) {
+        // hold, settle back -- on the marker, the label or both. (Not when
+        // it is put back after a redraw: it pulsed when it appeared.)
+        if (tier && !mk.desynced && !redraw && (tier->pulseMarker || tier->pulseText)) {
             auto const pulse = [&](CCNode* n) {
                 float const base = n->getScale();
                 n->runAction(CCSequence::create(
@@ -7132,7 +7133,9 @@ void FrameWindowAnalyzer::spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
     }
     if (at.x != 0.f || at.y != 0.f) {
         place(at);
-        this->noteFlipMarker(pl, mk);
+        // (A marker put back mid-flip would slide in from where the player
+        // is now, not from where the click was.)
+        if (!redraw) this->noteFlipMarker(pl, mk);
     }
     char const* twinFrom = "";
     auto const twin = this->dualTwin(pl, mk, &twinFrom);
@@ -7670,6 +7673,33 @@ void FrameWindowAnalyzer::recountUpTo(uint32_t frame) {
     }
 }
 
+// GucciBot (2026-10-29): the display was rebuilt mid-level (a look change, an
+// edit to the windows, playback switched on), which wiped the markers the
+// player had passed, and nothing drew them again. The ones from the last few
+// seconds go back, the way the player left them: no sound and no HUD flash
+// (recountUpTo has counted them), with the text messages. Older ones are off
+// the screen, and cullOffscreen drops any that are. At the level's start
+// there is nothing to put back.
+void FrameWindowAnalyzer::redrawPassed(PlayLayer* pl, uint32_t frame) {
+    double const tps = Bot::get()->updater().m_tps;
+    uint32_t const back = static_cast<uint32_t>(4.0 * (tps > 0.0 ? tps : 240.0));
+    uint32_t const from = frame > back ? frame - back : 0;
+    for (auto const& mk : m_results) {
+        if (mk.frame < from || mk.frame > frame) continue;
+        // The live loop's rules (updateDisplay).
+        if (mk.unbounded || mk.hidden) continue;
+        if (mk.desynced && !m_showDesynced->inner()) continue;
+        auto const* tier = mk.desynced ? nullptr : this->displayTierFor(mk);
+        if (!mk.desynced && !tier) continue;
+        int& lastSpawn = movesPlayer2(pl, mk.player2) ? m_lastSpawn2P : m_lastSpawn1P;
+        if (static_cast<int>(mk.frame) == lastSpawn) continue;
+        lastSpawn = static_cast<int>(mk.frame);
+        this->spawnMarker(pl, mk, tier, true);
+    }
+    this->spawnMessages(pl, frame);
+    this->cullOffscreen(pl);
+}
+
 int FrameWindowAnalyzer::displayWindow(FrameWindowMark const& mk) const {
     if (mk.dependent > 0.f)
         return std::max(1, static_cast<int>(std::floor(mk.dependent)));
@@ -7697,6 +7727,7 @@ void FrameWindowAnalyzer::updateDisplay(PlayLayer* pl) {
         m_haveLastFrame = true;
         m_lastFrame = frame;
         this->recountUpTo(frame);
+        if (markers) this->redrawPassed(pl, frame);
         if (hud) {
             this->rebuildHud(pl);
             this->refreshHudCounts(pl);
