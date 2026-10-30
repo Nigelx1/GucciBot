@@ -2511,7 +2511,10 @@ namespace gucci::ui {
 
             // Sidebar
             ImGui::BeginChild("##side", ImVec2(150.f, 0.f), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar);
-            {
+            // The JMF page is JMF's own: the theme's name, subtitle, brand tag
+            // and page quote stay off it (Nigel, 2026-10-30; polish item 45).
+            bool const themeWords = !pageLook.on;
+            if (themeWords) {
                 UseFont f(Font::Title);
                 ImGui::PushStyleColor(ImGuiCol_Text, pal.accent);
                 ImGui::TextUnformatted(themes::active().name.c_str());
@@ -2521,7 +2524,7 @@ namespace gucci::ui {
                 UseFont f(Font::Small);
                 ImGui::PushStyleColor(ImGuiCol_Text, pal.muted);
                 // The theme's subtitle, then the version.
-                if (!themes::active().subtitle.empty())
+                if (themeWords && !themes::active().subtitle.empty())
                     ImGui::TextWrapped("%s", themes::active().subtitle.c_str());
                 ImGui::TextUnformatted(MOD_VERSION);
                 ImGui::PopStyleColor();
@@ -2552,7 +2555,7 @@ namespace gucci::ui {
             ImGui::EndChild();
 #endif
             float const closeY = ImGui::GetWindowHeight() - ImGui::GetFrameHeight() - 6.f;
-            if (auto const& brand = themes::active().brand; !brand.empty()) {
+            if (auto const& brand = themes::active().brand; themeWords && !brand.empty()) {
                 UseFont f(Font::Strong);
                 float const brandY = closeY - ImGui::GetTextLineHeightWithSpacing() - 2.f;
                 if (brandY > ImGui::GetCursorPosY())
@@ -2581,7 +2584,7 @@ namespace gucci::ui {
             // here the pages take turns with them.
             {
                 auto const& q = themes::quote(themes::active(), static_cast<themes::Slot>(g_page % themes::kSlotCount));
-                if (!q.text.empty()) {
+                if (!pageLook.on && !q.text.empty()) {
                     UseFont f(Font::Small);
                     ImGui::PushStyleColor(ImGuiCol_Text, pal.muted);
                     std::string const line = q.by.empty() ? q.text : q.text + "  " + q.by;
