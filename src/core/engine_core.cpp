@@ -2634,6 +2634,7 @@ namespace gucci {
         updater.m_maxUPR = (uint32_t)std::max(1, pick(10, "updater_max_upr", nullptr));
         updater.m_dynamicUpr = pick(false, "updater_dynamic_upr", nullptr);
         updater.m_fpsTarget = std::max(1.0, pick(60.0, "updater_fps_target", nullptr));
+        updater.m_logFrameIncrements = pick(false, "debug_tick_logs", nullptr);
 
         // Playback features.
         updater.m_ssbFix = pick(false, "feat_scroll_speed_fix", "updater_ssbFix");

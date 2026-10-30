@@ -824,15 +824,21 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
                 // whether getNextInput was even matching anything. Logging both
                 // branches (tagged separately) until this is actually diagnosed
                 // with real data instead of another guess.
-                log::info("[{}] f={} lookupFrame={} inputFrame={} idx={}/{} hold={} p2={}",
-                          gb->fwAnalyzing ? "CAP-IN" : "PLAY-IN",
-                          frame,
-                          lookupFrame,
-                          input->m_frame,
-                          gb->replay.m_inputIndex,
-                          gb->replay.m_actionAtom.m_actions.size(),
-                          input->m_holding ? 1 : 0,
-                          input->m_player2 ? 1 : 0);
+                //
+                // In the slope log, with the tick diagnostics on (Updater's
+                // m_logFrameIncrements, saved as debug_tick_logs): one line
+                // per input went into Geode's log on every playback and every
+                // Calculate test.
+                if (gb->updater.m_logFrameIncrements)
+                    gucci::slopediag::log(fmt::format("[{}] f={} lookupFrame={} inputFrame={} idx={}/{} hold={} p2={}",
+                                                      gb->fwAnalyzing ? "CAP-IN" : "PLAY-IN",
+                                                      frame,
+                                                      lookupFrame,
+                                                      input->m_frame,
+                                                      gb->replay.m_inputIndex,
+                                                      gb->replay.m_actionAtom.m_actions.size(),
+                                                      input->m_holding ? 1 : 0,
+                                                      input->m_player2 ? 1 : 0));
                 processReplayAction(input.value());
             }
         }

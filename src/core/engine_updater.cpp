@@ -42,11 +42,12 @@ static void slopeLog(const std::string& line) {
         g_slopeLog.open(path, std::ios::out | std::ios::trunc);
         log::info("[SLOPE] log file at: {}", path.string());
     }
+    // The file only: during playback and rendering this runs every tick,
+    // and copying each line into Geode's log flooded it.
     if (g_slopeLog.is_open()) {
         g_slopeLog << line << '\n';
         g_slopeLog.flush();
     }
-    log::info("[SLOPE] {}", line);
 }
 
 // Congregation slope diagnostic. Under the analyzer's capture GD's
@@ -926,33 +927,8 @@ static void tickSettledWork() {
         }
     }
 
-    if (gb->isPlaying()) {
-        bool logIt = !gb->fwAnalyzing;
-        if (logIt) {
-            auto* plr = PlayLayer::get();
-            if (plr && plr->m_player1) {
-                auto* p = plr->m_player1;
-                bool hold = false;
-                if (plr->m_uiLayer)
-                    hold = plr->m_uiLayer->m_p1Jumping || plr->m_uiLayer->m_p1TouchId != -1;
-                log::info("[DIAG] {} f={} x={:.3f} y={:.3f} xs={:.3f} ys={:.3f} rot={:.3f} g={} "
-                          "flip={} hold={} est={} ovf={:.4f} rs={}",
-                          gb->fwAnalyzing ? "CALC" : "PLAY",
-                          upd.getFrame(),
-                          (double)p->m_position.x,
-                          (double)p->m_position.y,
-                          (double)p->m_playerSpeed,
-                          (double)p->m_yVelocity,
-                          (double)p->getRotation(),
-                          p->m_isOnGround ? 1 : 0,
-                          p->m_isUpsideDown ? 1 : 0,
-                          hold ? 1 : 0,
-                          upd.estimatedStepCount,
-                          (double)upd.m_tpsOverflow,
-                          upd.m_respawnTimer);
-            }
-        }
-    }
+    // A per-tick [DIAG] line used to go to Geode's log here during playback.
+    // The slope log's per-tick line below has every field it had, so it went.
 
     // fwCkptCreatedThisFrame stays: Pathfinder sets it, it is not analyzer
     // state. The fwTick() call that used to follow is gone with GucciBot's
