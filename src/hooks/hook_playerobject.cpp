@@ -6,6 +6,7 @@
 #include "absense/compat/bot.hpp"
 #include "absense/trajectory/trajectory.hpp"
 #include "mcp/tickprobe.hpp"
+#include "trailbuf/trailbuf.hpp"
 #include <Geode/Geode.hpp>
 #include <Geode/modify/PlayerObject.hpp>
 using namespace geode::prelude;
@@ -347,6 +348,16 @@ class $modify(GB7PlayerObject, PlayerObject) {
         if (::Bot::get()->frameWindow().hideSpawnEffects())
             return;
         PlayerObject::spawnCircle();
+    }
+
+    // Macro Buffing's spider snaps (anticroom's caller, from his source
+    // drop): the trail buffer records where the spider dashed from and to,
+    // which the per-tick trail skips. saveSpiderDash takes only the real
+    // players, so a trajectory copy's dash isn't recorded. Absense hooks this
+    // too, to hide its copies' effects.
+    void playSpiderDashEffect(cocos2d::CCPoint p0, cocos2d::CCPoint p1) {
+        ::Bot::get()->trailBuffer().saveSpiderDash(this, p0, p1);
+        PlayerObject::playSpiderDashEffect(p0, p1);
     }
 
     void setYVelocity(double velocity, int type) {
