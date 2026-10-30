@@ -1,11 +1,13 @@
 // The Video Mode cards: JMF's on the JMF Trainer page (the bundled showcase
 // video) and the Trainer's on the Trainer page (a video you pick). The switch,
-// opacity, the sync offset and the Alignment Tool. The overlay and the decoder
-// are the engine's, in trainers/videomode.*; this draws their controls. Written
-// fresh for 2.0; the Trainer's since 2026-10-19.
+// opacity, the sync offset and the Alignment Tool; the last three are drawn
+// over the video while it plays (videoModeSettings). The overlay and the
+// decoder are the engine's, in trainers/videomode.*; this draws their
+// controls. Written fresh for 2.0; the Trainer's since 2026-10-19.
 
 #include "ui/kit.hpp"
 #include "ui/look.hpp"
+#include "ui/pages.hpp"
 
 #include "core/GucciBot.hpp"
 #include "trainers/videomode.hpp"
@@ -15,15 +17,13 @@
 #include <imgui.h>
 
 #include <algorithm>
+#include <cfloat>
 #include <cmath>
 #include <filesystem>
 #include <optional>
 #include <string>
 
 namespace gucci::ui::pages {
-
-    void videoModeCard();
-    void trainerVideoModeCard();
 
     namespace {
 
@@ -79,6 +79,20 @@ namespace gucci::ui::pages {
             bool& barEnabled;
         };
 
+        Binding jmfBinding() {
+            auto* gb = GucciEngine::get();
+            return {vm::Source::Jmf,          gb->jupiterVideoModeEnabled, gb->trainerVideoModeEnabled,
+                    gb->jupiterVideoOffsetSec, gb->jupiterVideoOpacity,  gb->jupiterClickBarPosSec,
+                    gb->jupiterClickBarEnabled};
+        }
+
+        Binding trainerBinding() {
+            auto* gb = GucciEngine::get();
+            return {vm::Source::Trainer,       gb->trainerVideoModeEnabled, gb->jupiterVideoModeEnabled,
+                    gb->trainerVideoOffsetSec, gb->trainerVideoOpacity,  gb->trainerClickBarPosSec,
+                    gb->trainerClickBarEnabled};
+        }
+
         void alignmentTool(Binding const& b) {
             auto* gb = GucciEngine::get();
             kit::Section("Alignment Tool");
@@ -131,6 +145,8 @@ namespace gucci::ui::pages {
         }
 
         // Everything under the switch, once this card's Video Mode is the one on.
+        // With Video Mode on, the video and its click bar take the menu's
+        // place, so this is drawn over the video (videoModeSettings, below).
         void cardBody(Binding const& b) {
             switch (vm::status()) {
                 case vm::Status::Off:
@@ -157,11 +173,11 @@ namespace gucci::ui::pages {
             }
 
             if (!b.barEnabled)
-                kit::Note("The click bar is off, so its clock stands still and so does the video. Turn it on in the "
-                          "Click Trainer above.",
+                kit::Note("The click bar is off, so its clock stands still and so does the video. Exit Video Mode "
+                          "and turn it on in the Click Trainer.",
                           Tone::Warn);
             else
-                kit::Hint("Resume, restart or drag the click bar above to play and skim the video; in the level it "
+                kit::Hint("Resume, restart or drag the click bar to play and skim the video; in the level it "
                           "follows your run.");
 
             // Shown in percent, kept as 0..1.
@@ -291,14 +307,12 @@ namespace gucci::ui::pages {
 
     void videoModeCard() {
         vm::ensureLoaded();
-        auto* gb = GucciEngine::get();
-        Binding const b{vm::Source::Jmf,          gb->jupiterVideoModeEnabled, gb->trainerVideoModeEnabled,
-                        gb->jupiterVideoOffsetSec, gb->jupiterVideoOpacity,  gb->jupiterClickBarPosSec,
-                        gb->jupiterClickBarEnabled};
+        Binding const b = jmfBinding();
 
         kit::BeginCard("Video Mode",
-                       "The built-in JMF showcase video, full screen behind the menu and on the click bar's clock, "
-                       "for reviewing a run against the macro's timing. No level needs to be open.");
+                       "The built-in JMF showcase video, full screen in place of the menu with the click bar over it, "
+                       "on the bar's clock, for reviewing a run against the macro's timing. No level needs to be "
+                       "open.");
         videoSwitch(b, "Plays the showcase video that ships with the mod; nothing to set up", true);
         if (b.enabled && vm::source() == vm::Source::Jmf)
             cardBody(b);
@@ -310,13 +324,11 @@ namespace gucci::ui::pages {
         vm::ensureLoaded();
         takePickedVideo();
         auto* gb = GucciEngine::get();
-        Binding const b{vm::Source::Trainer,       gb->trainerVideoModeEnabled, gb->jupiterVideoModeEnabled,
-                        gb->trainerVideoOffsetSec, gb->trainerVideoOpacity,  gb->trainerClickBarPosSec,
-                        gb->trainerClickBarEnabled};
+        Binding const b = trainerBinding();
 
         kit::BeginCard("Video Mode",
-                       "A video of your own, full screen behind the menu and on the click bar's clock, for "
-                       "reviewing a run against the macro's timing. No level needs to be open.");
+                       "A video of your own, full screen in place of the menu with the click bar over it, on the bar's "
+                       "clock, for reviewing a run against the macro's timing. No level needs to be open.");
         bool const haveVideo = !gb->trainerVideoPath.empty();
         kit::RowBegin("Video", haveVideo ? nullptr : "Pick one to start");
         if (haveVideo) {
@@ -334,6 +346,33 @@ namespace gucci::ui::pages {
             cardBody(b);
         showMessage(vm::Source::Trainer);
         kit::EndCard();
+    }
+
+    // While Video Mode is on, the video and its click bar take the menu's
+    // place (ui/shell.cpp), so the card above can't be seen and its settings
+    // couldn't be reached. They sit over the top of the video instead, in a
+    // small window that starts folded each time Video Mode comes on.
+    void videoModeSettings(bool jmf) {
+        vm::ensureLoaded();
+        Binding const b = jmf ? jmfBinding() : trainerBinding();
+        if (!b.enabled || vm::source() != b.source)
+            return;
+        if (jmf)
+            jupiterLookPush();
+        ImGuiIO const& io = ImGui::GetIO();
+        float const w = std::min(io.DisplaySize.x - 40.f, 560.f);
+        ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, 20.f), ImGuiCond_Always, ImVec2(0.5f, 0.f));
+        ImGui::SetNextWindowSizeConstraints(ImVec2(w, 0.f), ImVec2(w, FLT_MAX));
+        ImGui::SetNextWindowCollapsed(true, ImGuiCond_Appearing);
+        if (ImGui::Begin(jmf ? "Video settings##jmfvideosettings" : "Video settings##trainervideosettings", nullptr,
+                         ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                             ImGuiWindowFlags_NoFocusOnAppearing)) {
+            cardBody(b);
+            showMessage(b.source);
+        }
+        ImGui::End();
+        if (jmf)
+            jupiterLookPop();
     }
 
 } // namespace gucci::ui::pages
