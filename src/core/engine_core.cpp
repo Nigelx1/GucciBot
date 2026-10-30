@@ -625,7 +625,9 @@ namespace gucci {
             if (fs::exists(candidate, ec))
                 return candidate;
         }
-        return dir / (gb->replayName + ".brrr");
+        // Not saved yet: the name the menu's Save uses (the theme's
+        // extension), so an autosave and the sidecars don't end up as .brrr.
+        return dir / (gb->replayName + ui::macroExtension());
     }
 
     static fs::path sidecarPath(const fs::path& macroPath, const char* ext);
