@@ -1076,7 +1076,6 @@ namespace gucci {
     static void loadFwMarks(const fs::path& macroPath) {
         auto* gb = GucciEngine::get();
         gb->fwMarks.clear();
-        gb->fwHasData = false;
         auto sc = fwSidecarPath(macroPath);
         if (!fs::exists(sc))
             return;
@@ -1114,21 +1113,8 @@ namespace gucci {
                 break;
             gb->fwMarks.push_back({x, y, (int)w, p2 != 0, fr, pct, man != 0, rel != 0});
         }
-        gb->fwHasData = !gb->fwMarks.empty();
         log::info("[GucciBot] Frame-window: loaded {} persisted mark(s) from sidecar",
                   gb->fwMarks.size());
-    }
-
-    void GucciEngine::saveFwMarksNow() {
-        saveFwMarks(replay.getCurrentPath());
-        saveAcResults(replay.getCurrentPath());
-    }
-
-    bool GucciEngine::fwHasManualMarkAt(uint32_t frame, bool player2) const {
-        for (auto const& mk : fwMarks)
-            if (mk.manual && mk.frame == frame && mk.player2 == player2)
-                return true;
-        return false;
     }
 
     void GucciReplaySystem::save(const fs::path& path, bool noOverwrite) {
@@ -1359,7 +1345,7 @@ namespace gucci {
     }
 
     void GucciEngine::setMode(Mode m) {
-        if (fwAnalyzing && m != Mode::Playing && fwState != FwState::Finishing) {
+        if (fwAnalyzing && m != Mode::Playing) {
             cancelAnalysis();
         }
         Mode prev = mode;
@@ -2892,7 +2878,6 @@ namespace gucci {
             return;
         ::Bot::get()->frameWindow().clear();
         fwMarks.clear();
-        fwHasData = false;
         fwWindowsForgotten = true;
     }
 

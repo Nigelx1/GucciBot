@@ -82,19 +82,6 @@ void gucci::logFrameIncrement(const char* callSite, uint32_t frame, PlayerObject
     }
 }
 
-static std::ofstream g_calcDeathLog;
-void gucci::logCalcDeathTrace(const std::string& line) {
-    if (!g_calcDeathLog.is_open()) {
-        auto path = Mod::get()->getSaveDir() / "guccibot_calcdeath.log";
-        g_calcDeathLog.open(path, std::ios::out | std::ios::trunc);
-        log::info("[CALCDEATH] log file at: {}", path.string());
-    }
-    if (g_calcDeathLog.is_open()) {
-        g_calcDeathLog << line << '\n';
-        g_calcDeathLog.flush();
-    }
-}
-
 float GucciUpdater::getTimeWarp() const {
     if (auto* pl = PlayLayer::get()) {
         float tw = pl->m_gameState.m_timeWarp;
