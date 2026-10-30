@@ -471,7 +471,16 @@ namespace gucci {
         bool m_dynamicUpr = false;
         double m_fpsTarget = 60.0;
         uint32_t m_stepLimit = 10;
+        // Silicate's Use Visual Updates: "Scale with the tick rate" under
+        // Hacks > Frame pacing > Fixed (updater_visual_updates). Fixed
+        // pacing's cap is multiplied by the tick rate over GD's FPS cap, so it
+        // keeps up with a high tick rate. Silicate defaults it on; off here
+        // keeps GucciBot's pacing as it was. Nothing could switch it on until
+        // 2026-10-30.
         bool m_useVisualUpdates = false;
+        // What Fixed pacing's cap is multiplied by: 1 unless m_useVisualUpdates
+        // is on. calculateSteps applies it, and the HUD's tick limit shows it.
+        int visualUpdateFactor() const;
 
         uint32_t m_frame = 0;
         uint64_t m_frameOnLastAttempt = 0;

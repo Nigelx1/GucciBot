@@ -2611,6 +2611,8 @@ namespace gucci {
         // defaults.
         updater.m_realTime = pick(false, "updater_real_time", nullptr);
         updater.m_maxUPR = (uint32_t)std::max(1, pick(10, "updater_max_upr", nullptr));
+        // Silicate's use_visual_updates ("Scale with the tick rate").
+        updater.m_useVisualUpdates = pick(false, "updater_visual_updates", nullptr);
         updater.m_dynamicUpr = pick(false, "updater_dynamic_upr", nullptr);
         updater.m_fpsTarget = std::max(1.0, pick(60.0, "updater_fps_target", nullptr));
         updater.m_logFrameIncrements = pick(false, "debug_tick_logs", nullptr);

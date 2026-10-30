@@ -134,6 +134,18 @@ void GucciUpdater::noteDroppedTime() {
         m_droppedTimeFrame = this->getFrame();
 }
 
+// Silicate's "how many steps can we take in one VISUAL frame": the tick rate
+// over GD's FPS cap (240 when it isn't set), at least 1. Dynamic pacing
+// measures its own cap, so it is never multiplied.
+int GucciUpdater::visualUpdateFactor() const {
+    if (!m_useVisualUpdates || m_dynamicUpr)
+        return 1;
+    float fps = GameManager::get()->m_customFPSTarget;
+    if (fps <= 10.0f)
+        fps = 240.0f;
+    return std::max(1, (int)m_tps / (int)fps);
+}
+
 void GucciUpdater::calculateSteps(float dt, float targetDt) {
     // Absense's pathfinder thinks, and puts earlier states back, while the
     // frame stands still (drawScene). cocos measures this frame's delta after
@@ -176,13 +188,7 @@ void GucciUpdater::calculateSteps(float dt, float targetDt) {
     if (m_respawnTimer > 0)
         m_tpsOverflow = 0.0;
 
-    if (m_useVisualUpdates && !m_dynamicUpr) {
-        float fps = GameManager::get()->m_customFPSTarget;
-        if (fps <= 10.0f)
-            fps = 240.0f;
-        int modifier = (int)m_tps / (int)fps;
-        stepLimit *= std::max(1, modifier);
-    }
+    stepLimit *= this->visualUpdateFactor();
 
     // Was gb->renderer.recording -- the legacy TTR renderer, which has been
     // unreachable since SLRenderer took over, so this read false forever and
