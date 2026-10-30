@@ -59,7 +59,9 @@ namespace gucci::ui::kit {
     // A segmented control: all options visible, one selected.
     bool Choice(const char* id, int* index, const char* const* options, int count);
     bool Dropdown(const char* id, int* index, const char* const* options, int count);
-    bool Dropdown(const char* id, int* index, const std::vector<std::string>& options);
+    // With nothing picked (index out of range) it shows `placeholder`, muted.
+    bool Dropdown(const char* id, int* index, const std::vector<std::string>& options,
+                  const char* placeholder = nullptr);
     bool SliderFloat(const char* id, float* v, float lo, float hi, const char* fmt = "%.2f");
     bool SliderInt(const char* id, int* v, int lo, int hi, const char* fmt = "%d");
     bool InputFloat(const char* id, float* v, float step = 0.f, const char* fmt = "%.3f");

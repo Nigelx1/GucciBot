@@ -403,6 +403,31 @@ namespace gucci::ui {
             }
         }
 
+        // The loaded macro to the replays folder, under its name and the
+        // theme's extension: the Macro page's Save and Compact Mode's. With
+        // "Back up a macro before overwriting it" on, the file it replaces is
+        // backed up first (Compact Mode's Save skipped that).
+        void saveLoadedMacro() {
+            auto* gb = GucciEngine::get();
+            std::error_code ec;
+            std::filesystem::create_directories(replaysDir(), ec);
+            auto const path = replaysDir() / (gb->replayName + macroExtension());
+            if (gb->replayBackupsEnabled)
+                gb->replay.backupExisting(path);
+            gb->replay.save(path);
+            gb->reloadMacroList();
+        }
+
+        // Calculate from the Macro page or Compact Mode. Why a run didn't
+        // start is on the Calculate page, which may not be open: it's said
+        // where you are too.
+        void startCalculate() {
+            auto* gb = GucciEngine::get();
+            gb->analyzeFrameWindows();
+            if (!gb->fwAcOk && !gb->fwAcReport.empty())
+                Notification::create("Calculate: " + gb->fwAcReport, NotificationIcon::Warning, 4.f)->show();
+        }
+
         std::string g_rowNote;  // what the last row action said, when it failed
         bool g_rowNoteOk = false;  // ...or what it did, when that's worth saying
 
@@ -1102,6 +1127,33 @@ namespace gucci::ui {
             return act;
         }
 
+        // Pause, Step back and Step forward, with a level open: the Frame
+        // stepper card's buttons, and Compact Mode's (there the steps are < and
+        // >, so the three fit on one line). Step back needs Backwards stepping.
+        void stepButtons(bool compact) {
+            auto& upd = GucciEngine::get()->updater;
+            float const arrow = compact ? ImGui::GetFrameHeight() : 0.f;
+            float const pauseW = compact ? kit::Avail() - 2.f * (arrow + ImGui::GetStyle().ItemSpacing.x) : 0.f;
+            if (kit::Button(upd.m_paused ? "Resume" : "Pause", Tone::Accent, pauseW))
+                upd.togglePaused();
+            ImGui::SameLine();
+            ImGui::BeginDisabled(!upd.m_paused || !upd.m_backwardsStepping);
+            if (kit::Button(compact ? "<" : "Step back", Tone::Plain, arrow))
+                (void)upd.userStepBack();
+            ImGui::EndDisabled();
+            if (compact && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                ImGui::SetTooltip(upd.m_backwardsStepping
+                                      ? "Step back one tick"
+                                      : "Step back one tick: needs Backwards stepping (Macro > Frame stepper)");
+            ImGui::SameLine();
+            ImGui::BeginDisabled(!upd.m_paused);
+            if (kit::Button(compact ? ">" : "Step forward", Tone::Plain, arrow))
+                upd.userStepForward();
+            ImGui::EndDisabled();
+            if (compact && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                ImGui::SetTooltip("Step forward one tick");
+        }
+
         // Pause, step and step back from the menu as well as by key, with
         // backwards stepping (it was on Hacks > Engine) right where it is used.
         void frameStepperCard() {
@@ -1114,18 +1166,7 @@ namespace gucci::ui {
             kit::BeginCard("Frame stepper", "Pause and move one tick at a time. The keys are in Settings > Keybinds.");
 #endif
             if (PlayLayer::get()) {
-                if (kit::Button(upd.m_paused ? "Resume" : "Pause", Tone::Accent))
-                    upd.togglePaused();
-                ImGui::SameLine();
-                ImGui::BeginDisabled(!upd.m_paused || !upd.m_backwardsStepping);
-                if (kit::Button("Step back"))
-                    (void)upd.userStepBack();
-                ImGui::EndDisabled();
-                ImGui::SameLine();
-                ImGui::BeginDisabled(!upd.m_paused);
-                if (kit::Button("Step forward"))
-                    upd.userStepForward();
-                ImGui::EndDisabled();
+                stepButtons(false);
             } else {
                 kit::Hint("Open a level to step through it.");
             }
@@ -1138,6 +1179,39 @@ namespace gucci::ui {
                 }
             }
             kit::EndCard();
+        }
+
+        // Tick rate and Game speed: the Speed card's rows, and Compact Mode's
+        // (without the hints there).
+        void speedRows(bool hints) {
+            auto* gb = GucciEngine::get();
+            float tps = static_cast<float>(gb->updater.m_tps);
+#if GB_NATIVE_ENGINE
+            kit::RowBegin("Tick rate", hints ? "Physics ticks per second" : nullptr);
+            if (kit::InputFloat("tps", &tps, 1.f, "%.0f") && tps >= 1.f) {
+#else
+            // Only a rate GD can run here is taken (core/portable_tps.hpp), so
+            // a half-typed one ("4" on the way to 480) is passed over.
+            kit::RowBegin("Tick rate", hints ? "Physics ticks per second: 240, or 162 and up on this platform" : nullptr);
+            if (kit::InputFloat("tps", &tps, 1.f, "%.0f") && gucci::portable_tps::runnable(tps)) {
+#endif
+                gb->updater.setTps(tps);
+                Mod::get()->setSavedValue<double>("eng_tick_rate", tps);
+                // Typed while recording, the change goes into the macro, so
+                // playback switches rate on the same tick.
+                if (gb->isRecording())
+                    gb->recordTpsChange(tps);
+            }
+            kit::RowEnd();
+            // Typed, not a slider: any speed, exactly (a slider was the only
+            // way in, between 0.05x and 2x).
+            float speed = static_cast<float>(gb->updater.m_speedhack);
+            kit::RowBegin("Game speed", hints ? "Type it, e.g. 0.5 or 3 (1 is normal)" : nullptr);
+            if (kit::InputFloat("speed", &speed, 0.05f, "%.2f") && speed >= 0.01f && speed <= 20.f) {
+                gb->updater.m_speedhack = speed;
+                Mod::get()->setSavedValue<double>("eng_speed", speed);
+            }
+            kit::RowEnd();
         }
 
         void pageMacro() {
@@ -1187,21 +1261,14 @@ namespace gucci::ui {
             kit::RowBegin("File", nullptr);
             bool const canSave = !actions.empty() && !gb->replayName.empty();
             ImGui::BeginDisabled(!canSave);
-            if (kit::Button("Save", Tone::Accent)) {
-                std::error_code ec;
-                std::filesystem::create_directories(replaysDir(), ec);
-                auto path = replaysDir() / (gb->replayName + macroExtension());
-                if (gb->replayBackupsEnabled)
-                    gb->replay.backupExisting(path);
-                gb->replay.save(path);
-                gb->reloadMacroList();
-            }
+            if (kit::Button("Save", Tone::Accent))
+                saveLoadedMacro();
             ImGui::EndDisabled();
             ImGui::SameLine();
             bool const canCalc = PlayLayer::get() && !actions.empty();
             ImGui::BeginDisabled(!canCalc);
             if (kit::Button("Calculate"))
-                gb->analyzeFrameWindows();
+                startCalculate();
             ImGui::EndDisabled();
             kit::RowEnd();
             kit::Hint(fmt::format("{} actions  |  {:.0f} TPS{}", actions.size(), gb->updater.m_tps,
@@ -1217,52 +1284,38 @@ namespace gucci::ui {
             frameStepperCard();
 
             kit::BeginCard("Speed", nullptr);
-            float tps = static_cast<float>(gb->updater.m_tps);
-#if GB_NATIVE_ENGINE
-            kit::RowBegin("Tick rate", "Physics ticks per second");
-            if (kit::InputFloat("tps", &tps, 1.f, "%.0f") && tps >= 1.f) {
-#else
-            // Only a rate GD can run here is taken (core/portable_tps.hpp), so
-            // a half-typed one ("4" on the way to 480) is passed over.
-            kit::RowBegin("Tick rate", "Physics ticks per second: 240, or 162 and up on this platform");
-            if (kit::InputFloat("tps", &tps, 1.f, "%.0f") && gucci::portable_tps::runnable(tps)) {
-#endif
-                gb->updater.setTps(tps);
-                Mod::get()->setSavedValue<double>("eng_tick_rate", tps);
-                // Typed while recording, the change goes into the macro, so
-                // playback switches rate on the same tick.
-                if (gb->isRecording())
-                    gb->recordTpsChange(tps);
-            }
-            kit::RowEnd();
-            // Typed, not a slider: any speed, exactly (a slider was the only
-            // way in, between 0.05x and 2x).
-            float speed = static_cast<float>(gb->updater.m_speedhack);
-            kit::RowBegin("Game speed", "Type it, e.g. 0.5 or 3 (1 is normal)");
-            if (kit::InputFloat("speed", &speed, 0.05f, "%.2f") && speed >= 0.01f && speed <= 20.f) {
-                gb->updater.m_speedhack = speed;
-                Mod::get()->setSavedValue<double>("eng_speed", speed);
-            }
-            kit::RowEnd();
+            speedRows(true);
             kit::EndCard();
 
-            kit::BeginCard("Playback", nullptr);
+            kit::BeginCard("Recording and playback", nullptr);
             engineSwitch("Block inputs during playback", "Only the macro presses buttons", &gb->replay.m_ignoreInputs,
                          "replay_block_inputs");
-            engineSwitch("Mirror inputs", "Two-player levels: each player's press also presses for the other",
+            engineSwitch("Mirror inputs", "While recording, in two-player levels: each player's press also presses for "
+                                          "the other",
                          &gb->replay.m_mirrorInputs, "feat_mirror_inputs");
             if (gb->replay.m_mirrorInputs)
                 engineSwitch("Mirror inverted", "The other player gets the opposite", &gb->replay.m_mirrorInverted,
                              "feat_mirror_inverted");
-            engineSwitch("Maintain gravity", nullptr, &gb->replay.m_maintainGravity, "feat_maintain_gravity");
+            engineSwitch("Maintain gravity",
+                         "While recording: while Player 1 is upside down, a hold records as a release and a release "
+                         "as a hold",
+                         &gb->replay.m_maintainGravity, "feat_maintain_gravity");
             engineSwitch("Sub-tick clicks (CBF recording)", "Records each click where inside the tick you pressed it",
                          &gb->replay.m_scbfRecording, "scbf_recording");
             if (gb->replay.m_scbfRecording) {
                 engineSwitch("Split the tick at each click", nullptr, &gb->replay.m_scbfTickSplit, "scbf_tick_split");
+                // Either of these records on whole ticks instead, silently.
+                if (gb->updater.inputFpsActive())
+                    kit::Note("Input FPS (Hacks > Engine) is set, so clicks record on whole input ticks: sub-tick "
+                              "recording is off.",
+                              Tone::Warn);
+                else if (gb->replay.m_maintainGravity)
+                    kit::Note("Maintain gravity records its own inputs on whole ticks: sub-tick recording is off while "
+                              "it's on.",
+                              Tone::Warn);
                 // anticroom's count, which starts over at each respawn
-                // (replay/scbf_input.hpp). Maintain gravity records its own
-                // inputs, so the recorder sees none while it's on.
-                if (auto const& live = scbf::LiveRecorder::get(); live.recording() && !gb->replay.m_maintainGravity)
+                // (replay/scbf_input.hpp).
+                else if (auto const& live = scbf::LiveRecorder::get(); live.recording())
                     kit::Hint(fmt::format("This attempt: {} placed in the tick, {} on the edge{}", live.placed(),
                                           live.aligned(), live.splitting() ? "" : " (splitting is off)")
                                   .c_str());
@@ -1500,7 +1553,8 @@ namespace gucci::ui {
                          &upd.m_highTpsPrecision, "updater_highTpsPrecision");
             engineSwitch("Prevent death", "Steps back instead of dying", &upd.m_preventDeath, "feat_prevent_death");
             float inputFps = static_cast<float>(upd.m_inputFps);
-            kit::RowBegin("Input FPS", "Clicks land only on this many ticks a second. 0: every tick");
+            kit::RowBegin("Input FPS", "While recording, clicks land only on this many ticks a second (sub-tick "
+                                       "recording is off then). 0, or the tick rate and up: every tick");
             if (kit::InputFloat("inputfps", &inputFps, 0.f, "%.0f") && inputFps >= 0.f) {
                 upd.m_inputFps = inputFps;
                 Mod::get()->setSavedValue<double>("feat_input_fps", upd.m_inputFps);
@@ -2162,8 +2216,11 @@ namespace gucci::ui {
 
             // The theme is picked on the Themes page (this card had a second
             // picker for it).
+            // Saved as they change, as everything else here is: they were only
+            // saved when the menu closed, so a crash before that lost them.
             kit::BeginCard("Look", nullptr);
-            kit::SliderRow("Text size", nullptr, &look().textScale, 0.8f, 1.4f, "%.2fx");
+            if (kit::SliderRow("Text size", nullptr, &look().textScale, 0.8f, 1.4f, "%.2fx"))
+                saveSettings();
 #if defined(GEODE_IS_MOBILE)
             {
                 // Applied when the finger lifts: the slider grows and shrinks
@@ -2180,8 +2237,11 @@ namespace gucci::ui {
                 kit::RowEnd();
             }
 #endif
-            kit::SwitchRow("Cycle the accent color", nullptr, &look().accentCycle);
-            kit::SwitchRow("Animations", nullptr, &look().effects);
+            if (kit::SwitchRow("Cycle the accent color", nullptr, &look().accentCycle))
+                saveSettings();
+            if (kit::SwitchRow("Animations", "Switches slide, the JMF page's sky turns, BrrrBot's snow falls",
+                               &look().effects))
+                saveSettings();
             bool compact = g_compact;
             if (kit::SwitchRow("Compact mode", "A small quick-controls window instead of this one", &compact))
                 setCompactMode(compact);
@@ -2338,6 +2398,40 @@ namespace gucci::ui {
             ImGui::PopStyleColor();
         }
 
+        // The theme's falling snow (BrrrBot's), drawn under the whole window
+        // the way a page's backdrop is, so the cards stand in front of it.
+        // Only while the Look's animations are on. Each flake's place comes
+        // from the clock, so nothing is kept between frames, and a resized
+        // window just spreads them out.
+        void drawSnow() {
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            ImVec2 const a = ImGui::GetWindowPos();
+            ImVec2 const size = ImGui::GetWindowSize();
+            dl->PushClipRect(a, ImVec2(a.x + size.x, a.y + size.y), true);
+            double const t = ImGui::GetTime();
+            constexpr int kFlakes = 60;
+            for (int i = 0; i < kFlakes; ++i) {
+                // Fixed for each flake, from its number: where it starts, its
+                // sway, and how near it is (nearer is bigger, brighter, faster).
+                auto const rnd = [i](uint32_t salt) {
+                    uint32_t h = static_cast<uint32_t>(i + 1) * 2654435761u ^ salt * 0x9E3779B9u;
+                    h ^= h >> 15;
+                    h *= 0x2C1B3C6Du;
+                    h ^= h >> 12;
+                    return static_cast<float>(h & 0xFFFFu) / 65535.f;
+                };
+                float const close = rnd(1);  // 0 far .. 1 near
+                float const r = 1.f + 1.8f * close;
+                double const fall = 14.0 + 34.0 * close;  // units a second
+                double const span = size.y + 2.f * r;
+                float const y = static_cast<float>(std::fmod(rnd(2) * span + t * fall, span)) - r;
+                float const sway = (4.f + 6.f * close) * static_cast<float>(std::sin(t * (0.5 + rnd(3)) + rnd(4) * 6.2831853));
+                float const x = std::fmod(rnd(5) * size.x + sway + size.x, size.x);
+                dl->AddCircleFilled(ImVec2(a.x + x, a.y + y), r, u32(ImVec4(1.f, 1.f, 1.f, 0.25f + 0.45f * close)), 8);
+            }
+            dl->PopClipRect();
+        }
+
         void drawMain() {
             PageLook const pageLook(kPages[g_page].draw == pages::jupiterTrainer);
             auto const& pal = look().pal;
@@ -2374,6 +2468,8 @@ namespace gucci::ui {
             }
             if (kPages[g_page].backdrop)
                 kPages[g_page].backdrop();
+            else if (themes::active().snow && look().effects)
+                drawSnow();
             ImVec2 offset{0.f, 0.f};
             if (brrr->enabled) {
                 double const t = ImGui::GetTime();
@@ -2493,6 +2589,9 @@ namespace gucci::ui {
                 setOpen(false);
         }
 
+        // The quick controls while you play: the mode, a saved macro to load,
+        // its name, Save and Calculate, the tick rate and speed, and frame
+        // stepping in a level. Everything acts as it does in the full menu.
         void drawCompact() {
             auto* gb = GucciEngine::get();
             ImGui::SetNextWindowPos(ImVec2(12.f, 60.f), ImGuiCond_FirstUseEver);
@@ -2505,17 +2604,31 @@ namespace gucci::ui {
                     gb->setMode(mode == 1 ? GucciEngine::Mode::Recording
                                 : mode == 2 ? GucciEngine::Mode::Playing
                                             : GucciEngine::Mode::Idle);
-                kit::InputText("name", &gb->replayName, "macro name");
-                bool const canSave = !gb->replay.m_actionAtom.empty() && !gb->replayName.empty();
-                ImGui::BeginDisabled(!canSave);
-                if (kit::Button("Save", Tone::Accent, -1.f)) {
-                    auto dir = replaysDir();
-                    std::error_code ec;
-                    std::filesystem::create_directories(dir, ec);
-                    gb->replay.save(dir / (gb->replayName + macroExtension()));
-                    gb->reloadMacroList();
+                // A saved macro, loaded as a click in the Saved macros list
+                // loads it (not while recording).
+                auto const& saved = gb->storedMacros;
+                int pick = static_cast<int>(std::find(saved.begin(), saved.end(), gb->replayName) - saved.begin());
+                ImGui::BeginDisabled(gb->isRecording());
+                if (kit::Dropdown("macro", &pick, saved, saved.empty() ? "No saved macros" : "Load a saved macro")) {
+                    std::string const name = saved[static_cast<size_t>(pick)];
+                    loadMacroByName(name);
                 }
                 ImGui::EndDisabled();
+                kit::InputText("name", &gb->replayName, "macro name");
+                float const half = (kit::Avail() - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+                bool const canSave = !gb->replay.m_actionAtom.empty() && !gb->replayName.empty();
+                ImGui::BeginDisabled(!canSave);
+                if (kit::Button("Save", Tone::Accent, half))
+                    saveLoadedMacro();
+                ImGui::EndDisabled();
+                ImGui::SameLine();
+                ImGui::BeginDisabled(!PlayLayer::get() || gb->replay.m_actionAtom.empty());
+                if (kit::Button("Calculate", Tone::Plain, -1.f))
+                    startCalculate();
+                ImGui::EndDisabled();
+                speedRows(false);
+                if (PlayLayer::get())
+                    stepButtons(true);
                 if (kit::Button("Full menu", Tone::Plain, -1.f))
                     setCompactMode(false);
             }
@@ -2672,7 +2785,7 @@ namespace gucci::ui {
                                                  ? " The windows saved before this run are kept."
                                                  : "";
                     // The run's own last word stays on the Calculate page; the
-                    // start message ("Analysing N inputs.") used to.
+                    // start message ("Analyzing N inputs.") used to.
                     if (!analyzer.status().empty()) {
                         gbe->fwAcReport = analyzer.status() + kept;
                         gbe->fwAcOk = analyzer.lastRunOk();
@@ -2797,6 +2910,10 @@ $on_mod(Loaded) {
             gucci::ui::look().loadFonts();
             gucci::ui::themes::loadCustoms();
             gucci::ui::loadSettings();
+            // The macro list was first read at launch (GucciEngine::initialize),
+            // before the custom themes above were known, so macros saved with a
+            // custom theme's extension were missing from it until a Refresh.
+            gucci::GucciEngine::get()->reloadMacroList();
             if (Mod::get()->getSavedValue<bool>("assistant_access", false)) {
                 // Switched off (core/bot_switch.hpp): it starts when GucciBot does.
                 if (gucci::botswitch::wanted())

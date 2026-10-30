@@ -823,8 +823,11 @@ class FrameWindowAnalyzer {
     void applySetupFrames(SetupGroup const& sg, int leaderShift,
                           std::vector<int> const& combo);
     std::string formatSubframe(float frames) const;
+    // GucciBot (2026-10-29): `redraw` puts back a marker the player passed
+    // before the display was rebuilt: no pulse, no slide in from the player.
     void spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
-                     FrameWindowTier const* tier);
+                     FrameWindowTier const* tier, bool redraw = false);
+    void redrawPassed(PlayLayer* pl, uint32_t frame);
     std::optional<cocos2d::CCPoint> dualTwin(PlayLayer* pl,
                                              FrameWindowMark const& mk,
                                              char const** from = nullptr) const;
@@ -849,6 +852,22 @@ class FrameWindowAnalyzer {
     std::vector<FrameWindowMark> m_manualKept;
     void reapplyManual();
     std::vector<FrameWindowMessage> m_keptMessages;
+    // GucciBot (2026-10-29): a run keeps the text messages aside, a whole run
+    // too, with the inputs each one starts and ends on, and finish() stands
+    // them back on those inputs wherever the run left them in the results.
+    struct InputKey {
+        uint32_t frame = 0;
+        bool player2 = false;
+        bool release = false;
+    };
+    struct MessageAnchor {
+        bool valid = false;
+        InputKey first, last;
+    };
+    std::vector<MessageAnchor> m_keptMessageAnchors;
+    std::vector<MessageAnchor> anchorMessages() const;
+    void putBackMessages();
+    int resultIndexFor(InputKey const& key) const;
 
     bool inProbeRange(size_t index) const;
     void mergeKept();

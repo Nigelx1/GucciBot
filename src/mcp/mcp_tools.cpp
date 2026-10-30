@@ -727,6 +727,10 @@ namespace gucci::mcp {
                 schema,
                 [](matjson::Value const& a) {
                     requireFreeRun();
+                    // As the menu: a click on a saved macro does nothing while
+                    // recording (the recording would be lost).
+                    if (GucciEngine::get()->isRecording())
+                        throw ToolError("stop recording first");
                     auto const want = argStr(a, "name");
                     if (want.empty())
                         throw ToolError("name is required");
@@ -744,6 +748,10 @@ namespace gucci::mcp {
                         throw ToolError("no macro called " + want);
 
                     GucciEngine::get()->replay.load(found);
+                    // The name too, as the menu's load does: the Macro page,
+                    // Save and Calculate's results file go by it, and kept
+                    // naming the macro loaded before.
+                    GucciEngine::get()->replayName = want;
 
                     auto out = obj();
                     out["loaded"] = found.filename().string();
@@ -1595,19 +1603,17 @@ namespace gucci::mcp {
             mode["enum"] = std::vector<std::string>{"accuracy", "performance"};
             mode["description"] = "leave out to only read it";
             props["mode"] = mode;
-            auto save = obj();
-            save["type"] = "boolean";
-            save["description"] = "also save it as the user's setting (default false: this session only)";
-            props["save"] = save;
             schema["type"] = "object";
             schema["properties"] = props;
+            // GucciBot (2026-10-29): no "save" any more. It stored the mode under
+            // a key nothing loads: GucciBot always starts in Accuracy.
             server.addTool({
                 "gucci_lock_delta",
                 "Read or switch Lock Delta's mode. Accuracy drives GD one physics step "
                 "per update, as recording always does; Performance hands GD several "
                 "steps in one update during playback, and GD's own sub-steps do not "
-                "always come out the same as single steps. By default a switch is for "
-                "this session only and the saved setting is left alone.",
+                "always come out the same as single steps. A switch lasts until the "
+                "game restarts or a preset loads: GucciBot always starts in Accuracy.",
                 schema,
                 [](matjson::Value const& a) {
                     auto* gb = GucciEngine::get();
@@ -1617,14 +1623,10 @@ namespace gucci::mcp {
                             throw ToolError("mode must be accuracy or performance");
                         gb->updater.m_lockDeltaMode = m == "accuracy" ? GucciUpdater::LockDeltaMode::Accuracy
                                                                       : GucciUpdater::LockDeltaMode::Performance;
-                        if (argBool(a, "save", false))
-                            Mod::get()->setSavedValue("updater_lockDeltaMode", (int)gb->updater.m_lockDeltaMode);
                     }
                     auto out = obj();
                     out["mode"] = gb->updater.m_lockDeltaMode == GucciUpdater::LockDeltaMode::Accuracy ? "accuracy"
                                                                                                         : "performance";
-                    out["saved"] = Mod::get()->getSavedValue<int>("updater_lockDeltaMode", 1) == 1 ? "accuracy"
-                                                                                                    : "performance";
                     out["lock_delta_on"] = gb->updater.m_lockDelta;
                     return out;
                 },

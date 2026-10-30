@@ -1190,10 +1190,12 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
     m_manualKept.clear();
     for (auto const& mk : m_results)
         if (mk.manual) m_manualKept.push_back(mk);
-    if (partial) {
+    if (partial)
         kept = m_results;
-        keptMessages = m_messages;
-    }
+    // GucciBot (2026-10-29): so do the text messages, a whole run's too (it
+    // cleared them, typed ones were lost), each on the inputs it stood on.
+    keptMessages = m_messages;
+    auto anchors = this->anchorMessages();
     auto const restore = [&] {
         m_results = std::move(kept);
         m_messages = std::move(keptMessages);
@@ -1218,7 +1220,8 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
     m_dispatchLegArmed = false;
 
     if (!this->collectSamples()) {
-        if (partial) restore();
+        // (A whole run's results were cleared already; its messages come back.)
+        restore();
         report.message = "The macro has no clicks to measure.";
         return report;
     }
@@ -1245,6 +1248,7 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
     m_probeTo = to;
     m_keptResults = std::move(kept);
     m_keptMessages = std::move(keptMessages);
+    m_keptMessageAnchors = std::move(anchors);
 
     FWLOG(
         "[fw][start] level=\"{}\" id={} replay=\"{}\" tps={:.0f} macroTps={:.0f} "
@@ -1327,7 +1331,7 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
     logPlayerState("capture-start", pl->m_player1);
 
     report.ok = true;
-    report.message = fmt::format("Analysing {} inputs.", inRange);
+    report.message = fmt::format("Analyzing {} inputs.", inRange);
     return report;
 }
 
@@ -1766,7 +1770,9 @@ void FrameWindowAnalyzer::checkCaptureAgainstTrail(PlayLayer* pl,
 }
 
 void FrameWindowAnalyzer::captureStateBytes(PlayLayer* pl) {
-    if (!m_statePlayerDiff->inner() || !pl || !pl->m_player1) {
+    // GucciBot (2026-10-29): its switch shows under Verbose log, and only
+    // counts while that is on (Player state diff stayed on, out of sight).
+    if (!m_verbose->inner() || !m_statePlayerDiff->inner() || !pl || !pl->m_player1) {
         m_snapP1.clear();
         return;
     }
@@ -3777,13 +3783,8 @@ void FrameWindowAnalyzer::mergeKept() {
                          return a.frame < b.frame;  
                      });
 
-    m_messages = std::move(m_keptMessages);
-    int const last = std::max(0, static_cast<int>(m_results.size()) - 1);
-    for (auto& msg : m_messages)
-        msg.startIndex = std::clamp(msg.startIndex, 0, last);
-
+    // (The messages come back in putBackMessages, after the typed windows.)
     m_keptResults.clear();
-    m_keptMessages.clear();
     m_partial = false;
     m_probeFrom = 0;
     m_probeTo = UINT32_MAX;
@@ -3949,6 +3950,7 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
 
     if (m_partial) this->mergeKept();
     this->reapplyManual();
+    this->putBackMessages();
 
     // Written straight to the file, not through FWLOG. FWLOG is gated on
     // the verbose toggle, and this one line is the summary of the whole run --
@@ -6976,7 +6978,7 @@ template <class S> bool secondHalfOf(S const& gs, long) { return gs.m_unkBool11;
 }  // namespace
 
 void FrameWindowAnalyzer::spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
-                                      FrameWindowTier const* tier) {
+                                      FrameWindowTier const* tier, bool redraw) {
     auto* container = this->markerContainer(pl);
     if (!container) return;
 
@@ -7089,8 +7091,9 @@ void FrameWindowAnalyzer::spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
         node->addChild(label);
 
         // The band's pulse as the marker appears: grow to the pulse size,
-        // hold, settle back -- on the marker, the label or both.
-        if (tier && !mk.desynced && (tier->pulseMarker || tier->pulseText)) {
+        // hold, settle back -- on the marker, the label or both. (Not when
+        // it is put back after a redraw: it pulsed when it appeared.)
+        if (tier && !mk.desynced && !redraw && (tier->pulseMarker || tier->pulseText)) {
             auto const pulse = [&](CCNode* n) {
                 float const base = n->getScale();
                 n->runAction(CCSequence::create(
@@ -7132,7 +7135,9 @@ void FrameWindowAnalyzer::spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
     }
     if (at.x != 0.f || at.y != 0.f) {
         place(at);
-        this->noteFlipMarker(pl, mk);
+        // (A marker put back mid-flip would slide in from where the player
+        // is now, not from where the click was.)
+        if (!redraw) this->noteFlipMarker(pl, mk);
     }
     char const* twinFrom = "";
     auto const twin = this->dualTwin(pl, mk, &twinFrom);
@@ -7662,12 +7667,42 @@ void FrameWindowAnalyzer::recountUpTo(uint32_t frame) {
     for (size_t i = 0; i < m_results.size(); i++) {
         auto const& mk = m_results[i];
         if (mk.frame > frame) continue;
-        if (mk.desynced) continue;
+        // GucciBot (2026-10-29): the marks the live loop (updateDisplay)
+        // passes over, it skips here too: the legend counted unbounded and
+        // hidden ones after a respawn, a backward seek or a look change.
+        if (mk.desynced || mk.unbounded || mk.hidden) continue;
         if (auto const* tier = this->displayTierFor(mk)) {
             m_hudCounts[tier->id]++;
             m_timingMark = static_cast<int>(i);
         }
     }
+}
+
+// GucciBot (2026-10-29): the display was rebuilt mid-level (a look change, an
+// edit to the windows, playback switched on), which wiped the markers the
+// player had passed, and nothing drew them again. The ones from the last few
+// seconds go back, the way the player left them: no sound and no HUD flash
+// (recountUpTo has counted them), with the text messages. Older ones are off
+// the screen, and cullOffscreen drops any that are. At the level's start
+// there is nothing to put back.
+void FrameWindowAnalyzer::redrawPassed(PlayLayer* pl, uint32_t frame) {
+    double const tps = Bot::get()->updater().m_tps;
+    uint32_t const back = static_cast<uint32_t>(4.0 * (tps > 0.0 ? tps : 240.0));
+    uint32_t const from = frame > back ? frame - back : 0;
+    for (auto const& mk : m_results) {
+        if (mk.frame < from || mk.frame > frame) continue;
+        // The live loop's rules (updateDisplay).
+        if (mk.unbounded || mk.hidden) continue;
+        if (mk.desynced && !m_showDesynced->inner()) continue;
+        auto const* tier = mk.desynced ? nullptr : this->displayTierFor(mk);
+        if (!mk.desynced && !tier) continue;
+        int& lastSpawn = movesPlayer2(pl, mk.player2) ? m_lastSpawn2P : m_lastSpawn1P;
+        if (static_cast<int>(mk.frame) == lastSpawn) continue;
+        lastSpawn = static_cast<int>(mk.frame);
+        this->spawnMarker(pl, mk, tier, true);
+    }
+    this->spawnMessages(pl, frame);
+    this->cullOffscreen(pl);
 }
 
 int FrameWindowAnalyzer::displayWindow(FrameWindowMark const& mk) const {
@@ -7697,6 +7732,7 @@ void FrameWindowAnalyzer::updateDisplay(PlayLayer* pl) {
         m_haveLastFrame = true;
         m_lastFrame = frame;
         this->recountUpTo(frame);
+        if (markers) this->redrawPassed(pl, frame);
         if (hud) {
             this->rebuildHud(pl);
             this->refreshHudCounts(pl);
@@ -8549,6 +8585,62 @@ void FrameWindowAnalyzer::reapplyManual() {
     }
     m_manualKept.clear();
     if (changed) this->markEdited();
+}
+
+// GucciBot (2026-10-29): the inputs each message stands on, as a run starts.
+// A message holds a place in the results (startIndex, span), and a run can
+// measure more or fewer inputs than were there, so the place alone could land
+// it on other inputs afterwards.
+std::vector<FrameWindowAnalyzer::MessageAnchor> FrameWindowAnalyzer::anchorMessages() const {
+    std::vector<MessageAnchor> out;
+    int const count = static_cast<int>(m_results.size());
+    auto const key = [&](int i) {
+        auto const& mk = m_results[static_cast<size_t>(i)];
+        return InputKey{mk.frame, mk.player2, mk.release};
+    };
+    for (auto const& msg : m_messages) {
+        MessageAnchor a;
+        if (count > 0) {
+            int const first = std::clamp(msg.startIndex, 0, count - 1);
+            int const last = std::clamp(first + std::max(1, msg.span) - 1, first, count - 1);
+            a = {true, key(first), key(last)};
+        }
+        out.push_back(a);
+    }
+    return out;
+}
+
+// The kept messages, back over the results the run left, on the inputs they
+// stood on (or the next measured one, when that input wasn't measured).
+void FrameWindowAnalyzer::putBackMessages() {
+    m_messages = std::move(m_keptMessages);
+    m_keptMessages.clear();
+    auto const anchors = std::move(m_keptMessageAnchors);
+    m_keptMessageAnchors.clear();
+    int const last = std::max(0, static_cast<int>(m_results.size()) - 1);
+    for (size_t i = 0; i < m_messages.size(); i++) {
+        auto& msg = m_messages[i];
+        if (i < anchors.size() && anchors[i].valid && !m_results.empty()) {
+            int const from = this->resultIndexFor(anchors[i].first);
+            int const to = this->resultIndexFor(anchors[i].last);
+            msg.startIndex = from;
+            msg.span = std::max(1, to - from + 1);
+        }
+        msg.startIndex = std::clamp(msg.startIndex, 0, last);
+    }
+}
+
+// That input's result, or the first one after it (the last one, when none
+// is). The results are in frame order.
+int FrameWindowAnalyzer::resultIndexFor(InputKey const& key) const {
+    auto const at = std::lower_bound(
+        m_results.begin(), m_results.end(), key.frame,
+        [](FrameWindowMark const& m, uint32_t f) { return m.frame < f; });
+    for (auto it = at; it != m_results.end() && it->frame == key.frame; ++it)
+        if (it->player2 == key.player2 && it->release == key.release)
+            return static_cast<int>(it - m_results.begin());
+    int const after = static_cast<int>(at - m_results.begin());
+    return std::min(after, std::max(0, static_cast<int>(m_results.size()) - 1));
 }
 
 FrameWindowAnalyzer::Report FrameWindowAnalyzer::testPlayhead(PlayLayer* pl,

@@ -43,9 +43,11 @@ namespace gucci::ui::pages {
         FrameWindowAnalyzer& analyzer() { return ::Bot::get()->frameWindow(); }
 
         // What changed this frame. Settings are saved once at the end of the
-        // page; a change to how windows look also redraws the HUD and markers
-        // (otherwise the HUD keeps its old bands until the next attempt), and
-        // a change to an L* input makes the solved number stale.
+        // page; a change to how windows look also rebuilds the HUD (otherwise
+        // it keeps its old bands until the next attempt) and draws the
+        // markers of the last few seconds again in the new look
+        // (FrameWindowAnalyzer::redrawPassed), and a change to an L* input
+        // makes the solved number stale.
         bool g_changed = false;
         bool g_look = false;
         bool g_lstar = false;
@@ -186,9 +188,11 @@ namespace gucci::ui::pages {
                 // was only written to the log.
                 if (auto const& conflicts = gb->analyzerConflicts(); !conflicts.empty())
                     kit::Note(conflicts.c_str(), Tone::Warn);
-                static bool s_mute = Mod::get()->getSavedValue<bool>("calc_mute", false);
-                if (kit::SwitchRow("Mute while it runs", "Silences the music and sounds until it finishes", &s_mute))
-                    Mod::get()->setSavedValue("calc_mute", s_mute);
+                // Read from the saved value every time, so Reset (confirms())
+                // turns it off here too.
+                bool mute = Mod::get()->getSavedValue<bool>("calc_mute", false);
+                if (kit::SwitchRow("Mute while it runs", "Silences the music and sounds until it finishes", &mute))
+                    Mod::get()->setSavedValue("calc_mute", mute);
             }
 
             if (!fw.results().empty())
@@ -383,13 +387,135 @@ namespace gucci::ui::pages {
                            &FW::cbfReadoutThreshold, "%d frames", true);
                     kit::FeatureEnd();
                 }
-                flag("Tick-quantised ground",
+                flag("Tick-quantized ground",
                      "Only split a tick if the player was already on the ground going into it, like real CBF. Off "
                      "lets every tick split, which CBF doesn't do",
                      &FW::cbfTickGround);
                 kit::FeatureEnd();
             }
             kit::EndCard();
+        }
+
+        // GucciBot (2026-10-29, Nigel's decision 9): anticroom's text in the
+        // level. It was drawn, saved and loaded with the windows, but nothing
+        // could write any. A message stands above an input (centered over the
+        // inputs it spans), placed with the markers. Messages are results:
+        // kept with the macro as a typed window is, and through a run.
+        void messagesSection() {
+            auto* gb = GucciEngine::get();
+            auto& fw = analyzer();
+            auto& messages = fw.messages();
+            auto const& results = fw.results();
+
+            kit::Section("Text in the level");
+            kit::Hint("Words drawn above an input, with the markers, and saved with the macro's windows. <cr>red</c> "
+                      "colors part of it: r g b y o p l a d j s c, or a color like <c#ff8800>.");
+            if (fw.running()) {
+                kit::Hint("Not while Calculate runs.");
+                return;
+            }
+            if (results.empty()) {
+                kit::Hint("It stands over measured inputs: Calculate first.");
+                return;
+            }
+            if (!S().showMarkers)
+                kit::Note("Shown only while Markers is on.", Tone::Warn);
+
+            int const count = static_cast<int>(results.size());
+            // The measured input the playhead has reached, in a level.
+            int here = -1;
+            if (PlayLayer::get()) {
+                uint32_t const now = gb->updater.getFrame();
+                for (int k = 0; k < count && results[static_cast<size_t>(k)].frame <= now; k++)
+                    here = k;
+            }
+            // Which row of the Every input table a measured input is.
+            auto const inputs = fw.allInputs(true);
+            auto const describe = [&](int mark) {
+                auto const& mk = results[static_cast<size_t>(mark)];
+                int number = 0;
+                for (auto const& in : inputs)
+                    if (in.mark == mark) {
+                        number = in.number;
+                        break;
+                    }
+                std::string const kind = fmt::format("{}{}", mk.player2 ? "P2 " : "", mk.release ? "release" : "press");
+                return number > 0 ? fmt::format("Measured input {} of {}: #{} in the table ({}), frame {}", mark + 1,
+                                                count, number, kind, mk.frame)
+                                  : fmt::format("Measured input {} of {}: {} at frame {}", mark + 1, count, kind,
+                                                mk.frame);
+            };
+
+            bool edited = false;  // redraw it in the level
+            bool save = false;    // and keep it with the macro
+            int removeAt = -1;
+            for (size_t i = 0; i < messages.size(); i++) {
+                auto& m = messages[i];
+                ImGui::PushID(static_cast<int>(i));
+                kit::Divider();
+                kit::RowBegin("Text", "The switch shows or hides it");
+                if (kit::Switch("on", &m.enabled))
+                    edited = save = true;
+                ImGui::SameLine();
+                if (kit::InputText("text", &m.text, "Hello <cg>there</c>"))
+                    edited = save = true;
+                kit::RowEnd();
+
+                m.startIndex = std::clamp(m.startIndex, 0, count - 1);
+                int first = m.startIndex + 1;
+                kit::RowBegin("Over input", describe(m.startIndex).c_str());
+                if (kit::InputInt("first", &first)) {
+                    m.startIndex = std::clamp(first, 1, count) - 1;
+                    edited = save = true;
+                }
+                kit::RowEnd();
+                int span = std::max(1, m.span);
+                kit::RowBegin("Inputs it spans", "It stands centered over them");
+                if (kit::InputInt("span", &span)) {
+                    m.span = std::clamp(span, 1, count - m.startIndex);
+                    edited = save = true;
+                }
+                kit::RowEnd();
+                // Sliders redraw it as they move and save when let go.
+                kit::RowBegin("Size", nullptr);
+                edited |= kit::SliderFloat("size", &m.scale, 0.1f, 2.f, "%.2fx");
+                save |= ImGui::IsItemDeactivatedAfterEdit();
+                kit::RowEnd();
+                kit::RowBegin("Height", "Above the inputs, in level units");
+                edited |= kit::SliderFloat("height", &m.offsetY, -150.f, 300.f, "%.0f");
+                save |= ImGui::IsItemDeactivatedAfterEdit();
+                kit::RowEnd();
+
+                ImGui::BeginDisabled(here < 0 || here == m.startIndex);
+                if (kit::Button("Move to the playhead")) {
+                    m.startIndex = here;
+                    m.span = std::clamp(m.span, 1, count - here);
+                    edited = save = true;
+                }
+                ImGui::EndDisabled();
+                ImGui::SameLine();
+                if (kit::Button("Remove", Tone::Bad))
+                    removeAt = static_cast<int>(i);
+                ImGui::PopID();
+            }
+            if (removeAt >= 0) {
+                messages.erase(messages.begin() + removeAt);
+                edited = save = true;
+            }
+
+            kit::Gap(0.3f);
+            if (kit::Button("Add text", Tone::Accent)) {
+                FrameWindowMessage m;
+                m.startIndex = std::max(0, here);
+                messages.push_back(m);
+                edited = save = true;
+            }
+            kit::Hint("A new one goes over the input the playhead has reached (the first, outside a level).");
+
+            if (edited)
+                fw.markEdited();
+            if (save)
+                gb->saveAcFrameWindowResults();
         }
 
         void overlayCard() {
@@ -458,6 +584,8 @@ namespace gucci::ui::pages {
                     slider("Largest radius", nullptr, &FW::circleSkinMaxRadius, "%.0f", true);
                     kit::FeatureEnd();
                 }
+
+                messagesSection();
             }
 
             kit::Section("Sound");
@@ -565,8 +693,8 @@ namespace gucci::ui::pages {
             auto& tiers = S().tiers;
             kit::BeginCard("Bands", "Colors, labels, shapes, images, pulses and sounds by window size. Hidden bands draw no markers.");
             if (GucciEngine::get()->fwDefaultLook)
-                kit::Hint("Default Look is on, so the level uses NaN GD's colors and sounds. These bands are kept, and "
-                          "still decide which inputs L* and Copy info count.");
+                kit::Hint("Default Look is on, so the level uses NaN GD's colors and legend, with the Brrr or his "
+                          "bells. These bands are kept, and still decide which inputs L* and Copy info count.");
 
             int removeAt = -1;
             int moveFrom = -1, moveTo = -1;
@@ -1103,14 +1231,14 @@ namespace gucci::ui::pages {
                             "Give the analyzer a large part of every frame. The game drops to a few FPS while "
                             "counting, but finishes several times faster",
                             &FW::turbo)) {
-                    slider("Turbo budget", "Milliseconds spent analysing per frame", &FW::turboBudgetMs, "%d ms");
+                    slider("Turbo budget", "Milliseconds spent analyzing per frame", &FW::turboBudgetMs, "%d ms");
                     kit::FeatureEnd();
                 }
                 if (feature("Adaptive budget",
                             "Spend a share of each frame instead of a fixed amount, so levels that already run "
                             "slowly count faster",
                             &FW::adaptiveBudget)) {
-                    slider("Budget share", "How much of the time since the last frame to spend analysing",
+                    slider("Budget share", "How much of the time since the last frame to spend analyzing",
                            &FW::budgetSharePercent, "%d%%");
                     slider("Max budget", "Cap, so a long stall can't turn into one long freeze", &FW::maxBudgetMs,
                            "%d ms");
@@ -1118,11 +1246,11 @@ namespace gucci::ui::pages {
                 }
                 slider("Frame budget",
                        s.adaptiveBudget ? "The least the adaptive budget spends per frame"
-                                        : "Milliseconds per frame spent analysing. Higher finishes sooner but is "
+                                        : "Milliseconds per frame spent analyzing. Higher finishes sooner but is "
                                           "choppier",
                        &FW::budgetMs, "%d ms");
                 slider("Tick batch",
-                       "Physics ticks run per game update while analysing. The ticks are the same; this only skips "
+                       "Physics ticks run per game update while analyzing. The ticks are the same; this only skips "
                        "the scheduler and effects between them",
                        &FW::stepBatch, "%d");
                 slider("Time cap",
@@ -1219,11 +1347,13 @@ namespace gucci::ui::pages {
                              "are kept.",
                              "Reset") == 1) {
                 fwstore::resetAll();
-                // Default Look lives on GucciEngine, not in the analyzer's settings.
+                // Default Look lives on GucciEngine, not in the analyzer's
+                // settings, and Mute while it runs is a saved value of its own.
                 auto* gb = GucciEngine::get();
                 gb->fwDefaultLook = gb->fwDefaultLookBells = false;
                 Mod::get()->setSavedValue("fw_default_look", false);
                 Mod::get()->setSavedValue("fw_default_look_bells", false);
+                Mod::get()->setSavedValue("calc_mute", false);
                 g_openBands.clear();
                 g_look = true;
             }

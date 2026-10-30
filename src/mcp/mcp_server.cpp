@@ -217,7 +217,9 @@ namespace gucci::mcp {
             log::error("[GucciBot] MCP: could not bind 127.0.0.1:{} (WSA error {})", m_port, e);
             mcpFileLog(fmt::format(
                 "[mcp] could not bind 127.0.0.1:{} -- WSA error {}{}", m_port, e,
-                e == WSAEADDRINUSE ? " (port already in use -- pick another in Settings)" : ""));
+                e == WSAEADDRINUSE ? " (port already in use: close the program holding it, then switch Assistant "
+                                     "Access off and on in Settings)"
+                                   : ""));
             closesocket(listener);
             m_bindState = 2;
             m_running = false;
