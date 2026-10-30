@@ -10,7 +10,7 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 ## 2. Minor features and bugs (next, starting with the Mac crash log)
 
 ### Click Indicators (Nigel, 2026-10-19: first, before the rest of step 2)
-- [ ] Its own feature, not the trainers' click bar, with every option of Bogdaner09's mod (badges, player square and line, draining holds, taps and holds, player 2 colours, timing offset, the rhythm lane, scoring): built -em, untested
+- [ ] Its own feature, not the trainers' click bar, with every option of Bogdaner09's mod (badges, player square and line, draining holds, taps and holds, player 2 colors, timing offset, the rhythm lane, scoring): built -em, untested
 
 ### Playback bugs
 - [ ] Flip 2-Player Controls (found while fixing #27): GucciBot pressed or read the wrong player in places with that option on (autoclicker, auto flip on death, Mirror Inputs, the practice restore, MCP clicks, the pathfinder, CPS, Survival Indicator, Click Indicators, frame-window markers). GD's handleButton flips a button side only in a classic 2-player level (read from the 2.2081 binary), and -ho follows that everywhere; with the option off nothing changed. Untested in-game: a 2-player level with the option on (autoclicker on player 1 only, Mirror Inputs, a practice respawn while holding), and a 2-player platformer
@@ -24,7 +24,7 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 ### Switches that do nothing
 - [ ] Force Platformer (the code behind it is gone and needs writing): built -ej, untested; safe mode counts it as a cheat
 - [ ] No Mirror: Only Recording (needs a switch and saving): built -ej, untested
-- [x] Render colour fix: the switch is gone (-ej). Nothing read it, in Silicate either, and the fix it names (BT.709, limited range) is always on
+- [x] Render color fix: the switch is gone (-ej). Nothing read it, in Silicate either, and the fix it names (BT.709, limited range) is always on
 - [ ] Instant Respawn (doesn't actually respawn instantly): built -ej, untested
 - [ ] Show Macro Path, plus the JMF Trainer reveal mode that uses it: built -ej (Hacks > Visual), untested
 - [ ] Custom respawn delay (no control for it): built -ej (Auto retry > Respawn delay), untested
@@ -49,10 +49,12 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 - [ ] The result stays visible after a run: built -el, untested
 - [ ] Conflicting-mod warning in the menu (it's only logged now): built -el, untested
 - [ ] An in-level progress box with Cancel: built -el, untested
-- [ ] Start-position warning: built -el (set when a macro recorded from a start position loads), untested
+- [ ] Start-position warning: built -el (set when a macro recorded from a start position loads), but nothing wrote the flag it reads until 2026-10-30-a (d69501c: a run started from a start position is flagged when it's saved, and a re-save keeps it); untested
 - [ ] Reorder bands, and Brrr/Bells buttons for band sounds: built -el, untested; a Sort by window button built -hl, untested
-- [ ] Mute during Calculate: built -el (Calculate page switch), untested
+- [ ] Mute during Calculate: built -el (Calculate page switch), untested; Reset all Calculate settings turns it off too since 2026-10-30-a
 - [ ] Per-band images and pulse (the site advertises them): built -ew (a band's own image in place of its shape; a pulse on the marker, the label or both, with fade-in, hold and fade-out), untested
+- [ ] Default Look (Nigel's 1.7 ask): the overlay drawn like NaN GD's counter (a plain ring per input in his colors, the number on its left, his 9-10 / 7-8 / 5-6 / 4 / 3 / 2 / 1 legend, the Brrr or his bells) instead of your bands, which stay as they are and still decide L* and Copy info: built 2026-10-27-d (Calculate > Overlay), untested. A 1.7 choice saved as on comes back on: Nigel's own save has Default Look and Bells on. Since 2026-10-30-a a look change mid-level redraws the markers of the last four seconds (bd86b27), and the Bands card says the Brrr plays unless Bells is on (512f521); about.md and the site describe it
+- [ ] Text in the level (Nigel's decision 9, 2026-10-28): anticroom's in-level text messages were drawn, saved and loaded but nothing could make one. Built 2026-10-30-a (23f4276, Calculate > Overlay > Text in the level: text with GD's color tags, the input it stands over, how many it spans, size, height, on or off), and a run keeps them (d26c3fb); untested
 
 ### Slipped through: in docs/FEATURE_AUDIT.md, never carried onto this list (re-checked row by row, 2026-10-21)
 - [ ] Manual Frame Windows: the table of every input with a window you can type, marked auto or manual, with Clear (Juice's idea; the old menu had it). The suggestions go in it: built -fe (Calculate > Windows by hand > Every input); Nigel checked the menu, 2026-10-21
@@ -61,9 +63,9 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 - [ ] A color for the band pulse (the old pulse had one)
 - [ ] Legend groups: several bands counted on one legend row
 - [ ] Ring boldness: line thickness of the plain ring
-- [ ] The CBF placed / on-edge counter: counted per attempt, shown nowhere
+- [ ] The CBF placed / on-edge counter: counted per attempt, shown nowhere. Built 2026-10-30-a (3569d28): while recording with Sub-tick clicks on, Macro > Recording and playback shows "This attempt: N placed in the tick, M on the edge", starting over at each respawn; untested
 - [ ] Settings > Diagnostics: the startup self-check's results
-- [ ] The Log Frame Increments switch
+- [ ] The Log Frame Increments switch: since 2026-10-30-a (7af8f56) it loads from a saved key, debug_tick_logs (off unless set by hand: frame increments to guccibot_frameinc.log, the per-input lines to guccibot_slope.log); still no switch in the menu
 - [ ] HUD branding overlay: what it showed is unknown; waiting on Nigel's description
 - [ ] Ask Nigel: branch playback (View / Go) for the suggestion's alignments; Juice's numbers on the in-level markers (clashes with "markers stay strict")
 
@@ -74,16 +76,18 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 - [ ] Pixel format choice: built -em, untested
 - [ ] An in-render HUD: built -er as frames and seconds on the Render card while it renders (an in-level overlay could end up in the video), untested
 - [ ] Nigel's test of the FLAC fix and "Start from the beginning" (build -du)
+- [ ] Intro card: every line editable (Render > Intro card; a blank field hides that line), and a long level name shrunk so it clears the legend: built 2026-10-27-b, untested
 
 ### The rest
 - [ ] Status bar: what the bot is doing (recording, playing, calculating, pathfinding, rendering), plus frame, TPS, speed and inputs: built -es (under every page title), untested
-- [ ] Update checker, tried again (removed in 1.7 because it crashed the game on launch; this time it waits until the game is fully up): built -es with a crash guard (a crash mid-check switches it off for the next launch), untested; not run on launch here (GD was closed)
+- [ ] Update checker, tried again (removed in 1.7 because it crashed the game on launch; this time it waits until the game is fully up): built -es with a crash guard (a check that never finishes switches it off for the next launch). It has run in Nigel's game since (the 2026-10-28 sweep counted 40 launches from 10-21 to 10-23, all "up to date"; the popup for a newer release hasn't shown yet), but the guard switched it off by mistake on 10-23, and it is still off in his save. The guard's flag goes to disk before a check; when the reply is back it comes down in memory but isn't saved then, so a crash or a killed game later in the session can leave it up on disk for the next launch. Fix waiting: one line in update_check.cpp (docs/POLISH_ROUND.md item 43); then switch Settings > Check for updates back on to test it
 - [ ] Trainer video import for the normal Trainer, with a file picker that can't crash: built -et (the Trainer page's own Video Mode card; one Video Mode at a time), untested
 - [ ] Eclipse speedhack override: parked (Nigel, 2026-10-20: GucciBot overriding other mod menus' speedhacks, "too many moving parts"; maybe later)
 - [ ] Moving wave spam (#25): goes with the AI pathfinder (Nigel, 2026-10-20)
 - [ ] CPS on the HUD (#28): built -ew (CPS and Max CPS, ported from Silicate), untested; Nigel keeps the speedhack as it is
 - [ ] Converter: GDR2 macros reading as all player 2 (#15). The reader matches libGDR's own; needs the reporter's file
 - [ ] Bug reporters' follow-ups: #20 Android practice-death crash (likely the same bug as the Mac one, fixed in -ei; needs a phone test); #23 start positions and checkpoints; #11, #13 and the -103 error; macros ignoring inputs (#14, #8, #18); logs from the Calculate reports
+- [ ] Normal playback jammed on a respawn or step back onto a click's frame (found by the polish sweep, item 121; maybe part of the macros ignoring inputs above): playback looks inputs up a frame ahead, so a practice respawn at a checkpoint on a click's frame, or a Backwards stepping step back onto one, ended the macro there. Calculate had the right rule. Fixed 2026-10-30-a (f58ab8d), untested: play a macro in practice mode and respawn at a checkpoint placed on a click's frame, and step back onto one during playback
 - [x] about.md, the README and the site match what ships: -fa (acad95e) and the site (aaa4a8b)
 
 ## 3. Calculate
@@ -99,7 +103,7 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
   - The Leg trail (Advanced > While it runs): each test run drawn in the level
   - Import: a dated copy in replays/imported, the picker opens there, a file already imported is selected; Android's permission note
   - Text boxes let go of the keyboard after a click on the game; settings reach the disk a moment after they change
-- [ ] antics-counter round 2: built -hn (2026-10-23), every part behind a switch that starts off, so counts don't change until it's on; needs an A/B test by Nigel or Juice on the same macros (switch off, then on). 2-player fixes (Calculate > Advanced > Experimental: order-independent dispatch, player-aware CBF splits, the setup sweep and entry offset per player, a test runs to the same player's next input, imported 1-player double-flag clicks counted once); Faster sub-tick search (Sub-tick card: seeded from the whole-frame result, about a quarter of the test runs; a gap smaller than a frame inside a window can come out different); Dependent pair search reworked (only tight inputs right after another, in checkpoint order, measured the way Calculate measures). Each part reviewed alone, then merged and reviewed together; the switch-on fixes from that are in progress. Nigel's call: should ~N show on markers or only in the frame editor (markers stay strict)?
+- [ ] antics-counter round 2: built -hn (2026-10-23), every part behind a switch that starts off, so counts don't change until it's on; needs an A/B test by Nigel or Juice on the same macros (switch off, then on). 2-player fixes (Calculate > Advanced > Experimental: order-independent dispatch, player-aware CBF splits, the setup sweep and entry offset per player, a test runs to the same player's next input, imported 1-player double-flag clicks counted once); Faster sub-tick search (Sub-tick card: seeded from the whole-frame result, about a quarter of the test runs; a gap smaller than a frame inside a window can come out different); Dependent pair search reworked (only tight inputs right after another, in checkpoint order, measured the way Calculate measures). Each part reviewed alone, then merged and reviewed together; the fixes that review found landed in -hq (2026-10-23): Dependent pair search's rescue, Retime and Buffer tests follow the count's own rules, a click an import stores under both player flags keeps its halves in order, and the Tight threshold shows for Entry sweep too. Nigel's call: should ~N show on markers or only in the frame editor (markers stay strict)?
 - [ ] The strict count, plus "my suggestion is x frames" using Juice's Alignment-Independent method (credited), flagged in the frame editor: built -ex, untested (a pass after the strict count, for strict windows of 2 or fewer right after another input; on by default, Calculate page > Suggestions for suspicious clicks)
 - [ ] Speed: progress and a time cap (resetting to checkpoints is 87% of the time): built -ez (a time cap that keeps what it measured, and time so far and to go in the level), untested; the restores themselves aren't faster yet
 - [ ] Markers in the ground (#26; the fix in build -dt is untested)
@@ -143,16 +147,25 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 - [ ] A VirusTotal report
 - [ ] Replies to the rest of the GitHub issues (Claude drafts, Nigel posts)
 
-## 8. Polish round
+## 8. Polish round (in progress)
 
+The 2026-10-28 sweep checked everything GucciBot advertises against the code. Its 134 findings, Nigel's ten decisions and the fix for each are in docs/POLISH_ROUND.md, ticked there as they land.
+
+- [ ] The sweep's fixes: the code landed as build 2026-10-30-a (454d4bf, three branches merged; all five offline test suites pass), and README, about.md, this list, FEATURE_AUDIT.md and the site followed on 2026-10-30. 128 of the 134 are ticked. None of it has been checked in the game yet. Two need Nigel's eyes first:
+  - No death flash (decision 7, item 115): it now hides the bright circles GD's death effect adds (the shattered icon stays) and logs "[GucciBot] No death flash: the death added [...]; N hidden". If the flash he means is something else, that line names what the death added
+  - Click sounds go by the player a click moves, not its button side (item 114), which reverses a26e568: with Flip 2-Player Controls on in a two-player level each player plays their own pack, and in a one-player level player 2's keys play player 1's pack. Nigel to confirm he wants that
+  - Then the rest of the batch: Hide percentage; Block inputs during playback (on by default; off, your clicks reach the game); one Audio pitch follows speed switch (Hacks > Engine) and its key at a speed other than 1x; key toggles kept after a restart; a setting saved under its old key staying off; the Survival Indicator counted by auto safe mode; Only while holding with the mouse, touch and player 2 (and once on a Mac and Android); Compact Mode's new controls; BrrrBot's snow; Text in the level; the Video settings window over Video Mode; the trainer ghosts only in their own level, the best ghost lining up and Reset stats clearing it; the Swing calibration row; Separate audio tracks (track 1 keeps the music and sound effects); renders back to back; a render with Codec blank on a Ryzen + GeForce PC; BIG BRRRR switching itself off when its track can't play; non-ASCII file names (a Video Mode video, a render folder); deleting a practice checkpoint and stepping back onto its frame; a practice respawn onto a click's frame during playback; the start-position warning; autosave with a custom theme and with no name; a preset name with ? or :; Geode's log without per-tick lines; Macro Buffing's spider snaps; "Midhooks: 12/12" in the launch log; a 1.x trainer macro; a death right after a Calculate run; Scale with the tick rate at 1000 TPS; the sub-tick count; and, on iOS, the Keybinds note (CI compiles it first)
+- [ ] Still open from the sweep: the Assistant Access card's hint still says it only reads and steps the game (item 14) and Macro path's hints still say "whole path" and "In a trainer" (item 32), both in-game text that needs a code edit; the update checker's one-line fix (item 43, see the Update checker line in step 2); a message when Hacks > Presets refuses a name (item 94); the ttrcheck re-run over the whole tree now that the pre-strip backup is off master (item 120); CLAUDE.md section 6 still calls the legacy BRR reader dropped, though -eu rebuilt it (item 131)
+- [ ] Nigel's calls from the round: "Scale with the tick rate" (Hacks > Frame pacing > Fixed) ships off, while Silicate defaults it on; Macro path's "Only up to your best" is on by default, so the path stops a little past your best until it's switched off (or default it off, item 32); the site's Maintain gravity wording (item 59)
 - [ ] A feature-by-feature test of the rebuild and the new menu
-- [ ] Cosmetics: the Mega Hack-style skin, the animated backdrop, BrrrBot's snow, the old title bar and fades, a menu opacity slider
+- [ ] JMF page: the old look hid GucciBot's own branding. Now only the colors change, and the theme's name, subtitle, brand tag and page quote still show. Hide them while it's the page, or leave them (Nigel's call)
+- [ ] Cosmetics: the Mega Hack-style skin, the animated backdrop, the old title bar and fades, a menu opacity slider. BrrrBot's snow is built (2026-10-30-a, 4d7df3e: about 60 flakes behind the menu's cards while Settings > Look > Animations is on, never on the JMF page, and a Snow switch for custom themes), untested
 - [ ] Click sounds' background noise: built -fa (a pack's noise track loops under the clicks), untested
 
 ## Release
 Target: 2.0 by Thanksgiving, Thursday 2026-11-26 (Nigel, 2026-10-23). Checkpoint 2026-11-15: if the pathfinder hasn't reached the bar by then, Nigel decides between shipping it marked experimental or holding 2.0.
 
-- [ ] The new GD version: Geode support, or the standalone copy
+- [ ] The new GD version: Geode's support for it (the standalone copy was dropped 2026-10-23). If Geode isn't ready by 11-26, does 2.0 ship for 2.2081 or wait? Nigel's call
 - [ ] The trailer ships with 2.0
 - [ ] Release day: version bump, about.md/README/site/changelog, tag v2.0.0, the GitHub package as Latest, the site's Download link
 
