@@ -523,7 +523,10 @@ namespace gucci::ui::kit {
         bool const flipped = Switch("##on", enabled);
         if (keyCode) {
             ImGui::SameLine(0.f, 12.f);
-            Key("##key", keyCode);
+            // A right-click unbind is saved now, not when the menu closes (a
+            // new key is saved as it is captured).
+            if (Key("##key", keyCode))
+                saveSettings();
         }
         RowEnd();
         if (changed)

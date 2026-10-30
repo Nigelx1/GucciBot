@@ -2197,8 +2197,11 @@ namespace gucci::ui {
 
             // The theme is picked on the Themes page (this card had a second
             // picker for it).
+            // Saved as they change, as everything else here is: they were only
+            // saved when the menu closed, so a crash before that lost them.
             kit::BeginCard("Look", nullptr);
-            kit::SliderRow("Text size", nullptr, &look().textScale, 0.8f, 1.4f, "%.2fx");
+            if (kit::SliderRow("Text size", nullptr, &look().textScale, 0.8f, 1.4f, "%.2fx"))
+                saveSettings();
 #if defined(GEODE_IS_MOBILE)
             {
                 // Applied when the finger lifts: the slider grows and shrinks
@@ -2215,9 +2218,11 @@ namespace gucci::ui {
                 kit::RowEnd();
             }
 #endif
-            kit::SwitchRow("Cycle the accent color", nullptr, &look().accentCycle);
-            kit::SwitchRow("Animations", "Switches slide, the JMF page's sky turns, BrrrBot's snow falls",
-                           &look().effects);
+            if (kit::SwitchRow("Cycle the accent color", nullptr, &look().accentCycle))
+                saveSettings();
+            if (kit::SwitchRow("Animations", "Switches slide, the JMF page's sky turns, BrrrBot's snow falls",
+                               &look().effects))
+                saveSettings();
             bool compact = g_compact;
             if (kit::SwitchRow("Compact mode", "A small quick-controls window instead of this one", &compact))
                 setCompactMode(compact);
