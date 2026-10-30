@@ -553,31 +553,4 @@ namespace gucci {
         return f;
     }
 
-    GBR6File GBR6File::fromLegacy(const std::string& name,
-                                  float tps,
-                                  const std::vector<std::pair<uint32_t, bool>>& p1FramePressed,
-                                  const std::vector<std::pair<uint32_t, bool>>& p2FramePressed) {
-        auto toInputs = [](const std::vector<std::pair<uint32_t, bool>>& src, bool p2) {
-            std::vector<GBR6Input> out;
-            for (auto& [frame, pressed] : src) {
-                GBR6Input inp;
-                inp.frame = frame;
-                inp.button = 1;
-                inp.pressed = pressed;
-                inp.player2 = p2;
-                out.push_back(inp);
-            }
-            return out;
-        };
-
-        GBR6Header hdr;
-        hdr.name = name;
-        hdr.tps = tps;
-        hdr.timestamp = std::chrono::duration_cast<std::chrono::seconds>(
-                            std::chrono::system_clock::now().time_since_epoch())
-                            .count();
-
-        return fromInputs(hdr, toInputs(p1FramePressed, false), toInputs(p2FramePressed, true));
-    }
-
 } // namespace gucci

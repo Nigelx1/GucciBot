@@ -433,7 +433,6 @@ namespace gucci {
         void load(const std::filesystem::path& path);
         std::filesystem::path getCurrentPath() const;
         void backupExisting(const std::filesystem::path& path);
-        void createBackup();
     };
 
     class GucciUpdater {

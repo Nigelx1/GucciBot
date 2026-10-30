@@ -662,10 +662,6 @@ namespace gucci {
         }
     }
 
-    void GucciReplaySystem::createBackup() {
-        backupExisting(getCurrentPath());
-    }
-
     // Juice's file-organization ask: .fw/.path/.trainer sidecars used to sit
     // directly next to every macro in replays/ (macro.brrr, macro.brrr.fw,
     // macro.brrr.path, macro.brrr.trainer, times every macro you've ever
@@ -868,32 +864,30 @@ namespace gucci {
             out.clickBarTps = tps;
         } else if (bytes.size() >= 4 && bytes[0] == 'B' && bytes[1] == 'R' && bytes[2] == 'R' &&
                    bytes[3] == '\0') {
-            auto* legacy = BRRMacro::deserialize(bytes);
-            if (!legacy)
+            // GucciBot 1.x's old .brrr, through the macro converter's reader
+            // (readBrr). The macro list converts these, but a trainer macro
+            // picked in 1.x can still name one.
+            auto const read = convert::read(bytes, geode::utils::string::pathToString(path.filename()));
+            if (!read.ok() || read.macro.inputs.empty())
                 return;
-            if (legacy->inputs.empty()) {
-                delete legacy;
-                return;
-            }
 
-            double tps = legacy->framerate > 0.0 ? legacy->framerate : 240.0;
-            out.levelName = legacy->levelName;
-            out.levelId = legacy->levelId;
-            std::unordered_map<int, uint32_t> openPress;
-            for (auto& inp : legacy->inputs) {
-                int key = (int)inp.actionType * 2 + (inp.isPlayer2() ? 1 : 0);
-                if (inp.isPressed()) {
-                    openPress[key] = (uint32_t)inp.tick;
+            double tps = read.macro.tps > 0.0 ? read.macro.tps : 240.0;
+            out.levelName = read.macro.levelName;
+            out.levelId = static_cast<int32_t>(read.macro.levelId);
+            std::unordered_map<int, int64_t> openPress;
+            for (auto const& inp : read.macro.inputs) {
+                int key = (int)inp.button * 2 + (inp.player2 ? 1 : 0);
+                if (inp.down) {
+                    openPress[key] = inp.frame;
                 } else {
                     auto it = openPress.find(key);
                     if (it != openPress.end()) {
-                        out.clickIntervalsSec.push_back({it->second / tps, (double)inp.tick / tps});
+                        out.clickIntervalsSec.push_back({it->second / tps, (double)inp.frame / tps});
                         openPress.erase(it);
                     }
                 }
             }
             out.clickBarTps = tps;
-            delete legacy;
         } else {
             return;
         }
@@ -1329,33 +1323,8 @@ namespace gucci {
             return;
         }
 
-        auto* legacy = BRRMacro::loadFromDisk(path.stem().string());
-        if (legacy && !legacy->inputs.empty()) {
-            m_actionAtom.clear();
-            m_inputIndex = 0;
-            for (auto& inp : legacy->inputs) {
-                gb::ActionType t = gb::ActionType::Jump;
-                if (inp.actionType == 2)
-                    t = gb::ActionType::Left;
-                if (inp.actionType == 3)
-                    t = gb::ActionType::Right;
-                m_actionAtom.addAction(
-                    static_cast<uint32_t>(inp.tick), t, inp.isPressed(), inp.isPlayer2());
-            }
-            gb->updater.setTps(legacy->framerate);
-            m_initialTPS = legacy->framerate;
-            gb->setMode(GucciEngine::Mode::Playing);
-            log::info("[GucciBot] Loaded legacy BRR: {} inputs", m_actionAtom.length());
-            loadFwMarks(path);
-            loadAcResults(path);
-            gb->fwWindowsForgotten = false;
-            m_pathSamples.clear();
-            m_trainerBestX = 0.f;
-            buildClickIntervals(gb->updater.m_tps);
-            delete legacy;
-            return;
-        }
-        delete legacy;
+        // Only GBR6 loads here. GucciBot 1.x's old .brrr and other bots'
+        // macros are converted to GBR6 first (Saved macros, macro_convert).
         log::error("[GucciBot] Unknown format: {}", path.string());
     }
 

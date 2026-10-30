@@ -129,12 +129,6 @@ namespace gucci {
 
         static GBR6File
         fromInputs(GBR6Header hdr, std::vector<GBR6Input> p1, std::vector<GBR6Input> p2 = {});
-
-        static GBR6File
-        fromLegacy(const std::string& name,
-                   float tps,
-                   const std::vector<std::pair<uint32_t, bool>>& p1FramePressed,
-                   const std::vector<std::pair<uint32_t, bool>>& p2FramePressed = {});
     };
 
 } // namespace gucci
