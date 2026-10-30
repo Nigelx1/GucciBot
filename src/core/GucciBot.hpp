@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-28-a (Macros: an autoclicker run longer than 65,535 clicks no longer gets cut short on save, which made every later input land early)"
+    "2026-10-29-a (Credits: chagh opted out, off the Credits page)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
