@@ -566,19 +566,6 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
                 return;
         }
 
-        if (gb->fwSampling && action.m_holding) {
-            auto* sp = action.m_player2 ? m_player2 : m_player1;
-            if (sp)
-                gb->fwClickSamples.push_back({action.m_frame,
-                                              sp->m_position.x,
-                                              sp->m_position.y,
-                                              action.m_player2,
-                                              false,
-                                              false,
-                                              false,
-                                              action.m_type});
-        }
-
         // GucciBot's tier sounds were driven from here off its own fwMarks.
         // anticroom's analyzer plays its tier sounds itself, from its render
         // path, so there is nothing to drive from the action dispatch now.

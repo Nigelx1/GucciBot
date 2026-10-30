@@ -937,39 +937,10 @@ static void tickSettledWork() {
                 gb->replay.m_pathSamplesDirty = false;
             }
         }
-
-        if (gb->fwAnalyzing && gb->fwState == GucciEngine::FwState::Capturing) {
-            auto& samples = gb->replay.m_pathSamples;
-            uint32_t frame = upd.getFrame();
-            if (frame < samples.size()) {
-                auto* plr = PlayLayer::get();
-                auto const& s = samples[frame];
-                if (plr && plr->m_player1) {
-                    auto* p1 = plr->m_player1;
-                    p1->setPosition({s.p1x, s.p1y});
-                    p1->m_playerSpeed = s.p1XVel;
-                    p1->m_yVelocity = s.p1YVel;
-                    p1->setRotation(s.p1Rot);
-                    p1->m_isOnGround = s.p1OnGround;
-                    p1->m_isUpsideDown = s.p1UpsideDown;
-                    p1->m_isDashing = s.p1Dashing;
-                }
-                if (s.hasP2 && plr && plr->m_player2) {
-                    auto* p2 = plr->m_player2;
-                    p2->setPosition({s.p2x, s.p2y});
-                    p2->m_playerSpeed = s.p2XVel;
-                    p2->m_yVelocity = s.p2YVel;
-                    p2->setRotation(s.p2Rot);
-                    p2->m_isOnGround = s.p2OnGround;
-                    p2->m_isUpsideDown = s.p2UpsideDown;
-                    p2->m_isDashing = s.p2Dashing;
-                }
-            }
-        }
     }
 
     if (gb->isPlaying()) {
-        bool logIt = !gb->fwAnalyzing || (gb->fwState == GucciEngine::FwState::Capturing);
+        bool logIt = !gb->fwAnalyzing;
         if (logIt) {
             auto* plr = PlayLayer::get();
             if (plr && plr->m_player1) {

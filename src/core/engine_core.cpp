@@ -1369,18 +1369,10 @@ namespace gucci {
         // here from their own thread.
         if (m != prev && m != Mode::Idle)
             Loader::get()->queueInMainThread([] { setupcheck::toastIfNeeded(); });
-        if (m == Mode::Recording) {
-            fwEnabledLive = false;
-            fwLegendEnabled = false;
-            Mod::get()->setSavedValue("fw_live", false);
-            Mod::get()->setSavedValue("fw_legend", false);
-        }
         if (m == Mode::Playing) {
             if (prev != Mode::Playing)
                 userTpsSaved = updater.m_tps;
             replay.m_inputIndex = 0;
-            fwClickSamples.clear();
-            fwSampling = true;
             // Diagnostic for the "calculated correctly, failed on playback" bug
             // -- confirms what's actually in the atom the instant playback
             // starts, before blaming timing/consumption logic further.
@@ -1397,7 +1389,6 @@ namespace gucci {
                 updater.setTps(userTpsSaved);
                 userTpsSaved = 0.0;
             }
-            fwSampling = false;
         }
     }
 
