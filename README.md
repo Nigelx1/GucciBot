@@ -4,7 +4,7 @@
 
 It's Gucci. GucciBot is a Geometry Dash macro bot (a [Geode](https://geode-sdk.org/) mod) that records your inputs frame-perfectly and plays them back exactly, built on top of [Silicate](https://git.puppy.lgbt/silicate/silicate)'s physics engine. Think of it as a very expensive, very icy ghost of your best run — except the ghost never drops a frame, never has an off day, and definitely never forgets its jewelry. So icy.
 
-GucciBot is public now — grab a build from [Releases](https://github.com/Nigelx1/GucciBot/releases/latest), drop it in your Geode mods folder, and you're in. It's not on the in-game Geode mod index (long story, not going into it here), so a manual install is the only way to get it for now.
+GucciBot is public now — grab the newest 2.0.0-beta pre-release from [Releases](https://github.com/Nigelx1/GucciBot/releases) (that's the build this README describes, and the only one for macOS, iOS and Android; the release GitHub marks Latest is 1.8, the older Windows-only stable), drop it in your Geode mods folder, and you're in. It's not on the in-game Geode mod index (long story, not going into it here), so a manual install is the only way to get it for now.
 
 **Don't run ToastyReplay Lite or Silicate enabled at the same time** — GucciBot can't run live alongside either one (ToastyReplay Lite crashed macro playback; Silicate patches the same spots in the game GucciBot does), so GucciBot stands down until the other one is turned off or uninstalled.
 
@@ -29,7 +29,7 @@ GucciBot is public now — grab a build from [Releases](https://github.com/Nigel
 
 ## What it actually does
 
-- Records inputs at frame-perfect precision and plays them back the same way, every time.
+- Records inputs at frame-perfect precision and plays them back the same way, every time. While a macro plays, your own clicks are blocked, as in Silicate (**Block inputs during playback**, on by default).
 - Full checkpoint/practice-fix system ported from Silicate, so restores actually behave like they should instead of leaving hazards in whatever state GD's own native restore felt like that day.
 - A frame-window analyzer ("Calculate") that measures, per click, how many frames you actually had to work with — it runs on anticroom's Silicate analyzer. The whole frame-window trend started with NaN GD, and the L* precision number GucciBot puts on a macro comes from his formula, published at [nandl.pages.dev](https://nandl.pages.dev/#formula). He's careful to say frame windows alone don't determine difficulty, and GucciBot says the same.
 - In-engine video rendering straight to a file, no external recorder needed.
@@ -40,44 +40,45 @@ GucciBot is public now — grab a build from [Releases](https://github.com/Nigel
 
 - 2 bytes per input — matches yBot-sized files for regular human gameplay.
 - Tap encoding: a wave/ship press+release pair stores as one entry instead of two.
-- Autoclicker delta compression: an autoclicker macro of *any* length — octillions of clicks, if you're feeling brave — stores in 4 bytes flat. It stores the pattern's description, not its output.
+- Autoclicker delta compression: a steady autoclicker run on jump (hold and release each 1–15 ticks, 8 clicks or more) stores as 4-byte entries of up to 65,535 clicks each — the pattern's description, not its output. **Swift clicks**, **Clicks per hold** above 1 and the **Black orb UFO loop** are stored click by click.
 - Other bots' macros convert in one click: drop them in the replays folder (or **Import a macro**) and Saved macros lists them under *From other bots*. 27 formats read, among them GDR and GDR2, Silicate .slc, TcBot, ToastyReplay .ttr3, yBot, xdBot, Mega Hack, Echo and GucciBot 1.x's old .brrr, and 21 written back out with **Export as**. The full list is in [about.md](about.md#other-bots-macros).
 
 ## Practice & analysis
 
 - Macro diff viewer — put two replays side by side, frame by frame.
-- Calculate — per-click timing windows measured against the real game engine, not a guess. It runs on anticroom's Silicate analyzer: Time-Based and Recovery Range, sub-tick measurement finer than a single frame, color bands with their own marker shapes, images, pulses and sounds, and an in-level legend. Tight clicks right after another input also get Juice's Alignment-Independent count: "my suggestion is x frames", in the Windows by hand table where every input's window can be typed in, and flagged in the Frame Editor. A time cap stops a long run and keeps what it measured.
+- Calculate — per-click timing windows measured against the real game engine, not a guess. It runs on anticroom's Silicate analyzer: Time-Based and Recovery Range, sub-tick measurement finer than a single frame, color bands with their own marker shapes, images, pulses and sounds, and an in-level legend, or **Default Look**, drawn like the counter in NaN GD's videos. You can put your own text in the level too, over any measured input. Tight clicks right after another input also get Juice's Alignment-Independent count: "my suggestion is x frames", in the Windows by hand table where every input's window can be typed in, and flagged in the Frame Editor. A time cap stops a long run and keeps what it measured.
 - Mid-macro TPS changes, noclip accuracy readout, macro trim/merge/surgery.
-- Bot settings presets, a metadata editor, autosave on a timer or at level end.
+- Bot settings presets, a metadata editor, autosave at level end (on by default) or on a timer, for any macro that has a name.
 
 ## Autoclicker
 
 - Fully independent Hold Ticks / Release Ticks / Clicks Per Hold per player — no shared setting forced onto both, matching Silicate's own model.
-- One-shot "Sync Player 2 to Player 1" copy, not a permanent link.
-- Only While Holding — auto-clicks only while you're actually holding the jump input.
+- One-shot **Copy to Player 2** (the *Same as Player 1* row), not a permanent link.
+- Only While Holding — auto-clicks only while you're actually holding the jump input: a key, a click or a touch, for player 1 or player 2.
 
 ## Trainers
 
 Two flavors of the same toolset: one permanently pointed at the level "Jupiter My Favourite," one pointed at whatever macro you feel like practicing against.
 
 - **Click Trainer** — a scrolling rhythm bar with a fixed center line; your own presses/releases render live next to the macro's, so you can see exactly how early or late you actually were.
-- **Ghosts** — the macro's ghost and your own best-attempt ghost, both live in the world, scrubbable.
+- **Ghosts** — the macro's ghost and your own best-attempt ghost, both live in the trainer's own level, scrubbable. On the Jupiter tab the macro's ghost needs one bot run first: its built-in macro is inputs only.
 - **Segments** — name the hard parts, loop just those, get auto-suggested splits from click density.
 - **Stats** — attempts, session best, a death-position heatmap for when you want to know exactly where the level is bullying you.
 - Synced music, because grinding a segment in silence is a crime. Trap music, ideally.
-- **Video Mode** on both: the Jupiter tab plays its built-in showcase video, the Trainer tab plays any video you pick, riding the click bar's clock.
+- **Video Mode** on both: the Jupiter tab plays its built-in showcase video, the Trainer tab plays any video you pick, riding the click bar's clock. Its opacity, sync offset and Alignment Tool sit in a small **Video settings** window over the video.
 - **Click Indicators** — the macro's clicks coming at you over the level, with every option of Bogdaner09's free mod, scored Perfect / OK / Miss. Counts as a cheat, since it takes the memory out of memory levels.
 
 ## Rendering
 
-- Full gameplay capture to video via FFmpeg — resolution, FPS, bitrate, codec, hardware encoders auto-detected per GPU vendor.
+- Full gameplay capture to video via FFmpeg — resolution, FPS, bitrate, codec, hardware encoders auto-detected per GPU vendor (and libx264 if the one it picks won't open).
+- anticroom's intro card before the level, with every line yours to edit.
 - Optional 4-track audio output (combined, music, SFX, and frame-window cues each isolated) instead of one flattened track.
 - Frame-window markers and cues bake right into the output video.
 - Runs on FFmpeg 8.0.1 (GPL v3), bundled in the package; where those DLLs come from and their source: [guccibot-build-files](https://github.com/Nigelx1/guccibot-build-files).
 
 ## Themes
 
-The full current roster. Pick one, or build your own — Settings → Theme has a full **Create Your Own Theme** editor (colors, identity, quotes, your own Big Brrr track) for exactly this occasion.
+The full current roster. Pick one on the **Themes** page, or build your own there: **New custom theme** opens a full editor (colors, identity, quotes, your own BIG BRRRR track) for exactly this occasion.
 
 | Theme | Extension | Colors |
 |---|---|---|
@@ -95,7 +96,7 @@ The full current roster. Pick one, or build your own — Settings → Theme has 
 | GrizzleyBot | `.grizzley` | Charcoal + True Red |
 | **Red Kingdom** | `.redkingdom` | Blood red that *pulses*, because a static color wasn't intense enough |
 | LemonadeBot | `.lemonade` | Bright Yellow + Warm Black |
-| BrrrBot | `.icebrrr` | Icy Blue + Silver, with an actual blizzard overlaid on the whole panel |
+| BrrrBot | `.icebrrr` | Icy Blue + Navy, with live snow falling behind the panel |
 | WakaBot | `.waka` | Grove Green + Black |
 | YoungstaBot | `.youngsta` | Black + Red (223) |
 | KnockerzBot | `.knockerz` | Teal + Black |
@@ -103,7 +104,7 @@ The full current roster. Pick one, or build your own — Settings → Theme has 
 
 GucciBot's own color is gold, for the record. Yellow everything this time, you know what I'm talking about? Yellow rims. Yellow big booty yellowbones, ha. Yellow Lambs, yellow MPs, yellow watch. Yellow charm ring, chain. Yellow living room set.
 
-Also in Settings: **BIG BRRRR**, a core feature of this mod, and **Bass Shake**, which makes the whole menu react to the track's actual bass in real time. You'll know it when you feel it.
+Also in Settings: **BIG BRRRR**, a core feature of this mod, with **Shake** and **Flicker** to make the whole menu react to the track's actual bass in real time. You'll know it when you feel it.
 
 ## Building it
 
@@ -119,7 +120,7 @@ Also in Settings: **BIG BRRRR**, a core feature of this mod, and **Bass Shake**,
 
 ## Status
 
-**1.8** is the stable release. **2.0** is in beta, at **2.0.0-beta.5**, with work since then on `master` (every push builds the universal package): GucciBot's engine reconciled against Silicate's function by function. Calculate, playback, practice-mode recording and the Pathfinder (Absense's, ported in) were confirmed in-game on beta.2. Beta.3 rebuilt the menu and every feature that came from ToastyReplay from scratch, and added macOS, iOS and Android. Beta.4's additions (auto safe mode, the setup check, the Disable bot switch, the phone menu, the Mac menu key) were tried in-game before release, and the Android build has run on a phone. Beta.5's (the in-game macro converter, Manual Frame Windows, Calculate's suggestions, the AI pathfinder's first steps) went out before a full in-game test. Most of beta.3's rebuilt features still haven't had a feature-by-feature human test, and every fix still waiting on one says so in its own commit message. If you want something that's been tested by an actual human, use 1.8.
+**1.8** is the stable release. **2.0** is in beta, at **2.0.0-beta.5**, with work since then on `master` (every push builds the universal package): GucciBot's engine reconciled against Silicate's function by function. Calculate, playback, practice-mode recording and the Pathfinder (Absense's, ported in) were confirmed in-game on beta.2. Beta.3 rebuilt the menu and every feature that came from ToastyReplay from scratch, and added macOS, iOS and Android. Beta.4's additions (auto safe mode, the setup check, the Disable bot switch, the phone menu, the Mac menu key) were tried in-game before release, and the Android build has run on a phone. Beta.5's (the in-game macro converter, Manual Frame Windows, Calculate's suggestions, the AI pathfinder's first steps) went out before a full in-game test. Since beta.5, a polish round checked what this README, about.md and the site advertise against the code; its fixes are in build 2026-10-30-a ([docs/POLISH_ROUND.md](docs/POLISH_ROUND.md) ticks each one) and haven't had their in-game test yet. Most of beta.3's rebuilt features still haven't had a feature-by-feature human test, and every fix still waiting on one says so in its own commit message. If you want something that's been tested by an actual human, use 1.8.
 
 ## Contact
 
