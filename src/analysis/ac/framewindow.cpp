@@ -1190,10 +1190,12 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
     m_manualKept.clear();
     for (auto const& mk : m_results)
         if (mk.manual) m_manualKept.push_back(mk);
-    if (partial) {
+    if (partial)
         kept = m_results;
-        keptMessages = m_messages;
-    }
+    // GucciBot (2026-10-29): so do the text messages, a whole run's too (it
+    // cleared them, typed ones were lost), each on the inputs it stood on.
+    keptMessages = m_messages;
+    auto anchors = this->anchorMessages();
     auto const restore = [&] {
         m_results = std::move(kept);
         m_messages = std::move(keptMessages);
@@ -1218,7 +1220,8 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
     m_dispatchLegArmed = false;
 
     if (!this->collectSamples()) {
-        if (partial) restore();
+        // (A whole run's results were cleared already; its messages come back.)
+        restore();
         report.message = "The macro has no clicks to measure.";
         return report;
     }
@@ -1245,6 +1248,7 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
     m_probeTo = to;
     m_keptResults = std::move(kept);
     m_keptMessages = std::move(keptMessages);
+    m_keptMessageAnchors = std::move(anchors);
 
     FWLOG(
         "[fw][start] level=\"{}\" id={} replay=\"{}\" tps={:.0f} macroTps={:.0f} "
@@ -3777,13 +3781,8 @@ void FrameWindowAnalyzer::mergeKept() {
                          return a.frame < b.frame;  
                      });
 
-    m_messages = std::move(m_keptMessages);
-    int const last = std::max(0, static_cast<int>(m_results.size()) - 1);
-    for (auto& msg : m_messages)
-        msg.startIndex = std::clamp(msg.startIndex, 0, last);
-
+    // (The messages come back in putBackMessages, after the typed windows.)
     m_keptResults.clear();
-    m_keptMessages.clear();
     m_partial = false;
     m_probeFrom = 0;
     m_probeTo = UINT32_MAX;
@@ -3949,6 +3948,7 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
 
     if (m_partial) this->mergeKept();
     this->reapplyManual();
+    this->putBackMessages();
 
     // Written straight to the file, not through FWLOG. FWLOG is gated on
     // the verbose toggle, and this one line is the summary of the whole run --
@@ -8549,6 +8549,62 @@ void FrameWindowAnalyzer::reapplyManual() {
     }
     m_manualKept.clear();
     if (changed) this->markEdited();
+}
+
+// GucciBot (2026-10-29): the inputs each message stands on, as a run starts.
+// A message holds a place in the results (startIndex, span), and a run can
+// measure more or fewer inputs than were there, so the place alone could land
+// it on other inputs afterwards.
+std::vector<FrameWindowAnalyzer::MessageAnchor> FrameWindowAnalyzer::anchorMessages() const {
+    std::vector<MessageAnchor> out;
+    int const count = static_cast<int>(m_results.size());
+    auto const key = [&](int i) {
+        auto const& mk = m_results[static_cast<size_t>(i)];
+        return InputKey{mk.frame, mk.player2, mk.release};
+    };
+    for (auto const& msg : m_messages) {
+        MessageAnchor a;
+        if (count > 0) {
+            int const first = std::clamp(msg.startIndex, 0, count - 1);
+            int const last = std::clamp(first + std::max(1, msg.span) - 1, first, count - 1);
+            a = {true, key(first), key(last)};
+        }
+        out.push_back(a);
+    }
+    return out;
+}
+
+// The kept messages, back over the results the run left, on the inputs they
+// stood on (or the next measured one, when that input wasn't measured).
+void FrameWindowAnalyzer::putBackMessages() {
+    m_messages = std::move(m_keptMessages);
+    m_keptMessages.clear();
+    auto const anchors = std::move(m_keptMessageAnchors);
+    m_keptMessageAnchors.clear();
+    int const last = std::max(0, static_cast<int>(m_results.size()) - 1);
+    for (size_t i = 0; i < m_messages.size(); i++) {
+        auto& msg = m_messages[i];
+        if (i < anchors.size() && anchors[i].valid && !m_results.empty()) {
+            int const from = this->resultIndexFor(anchors[i].first);
+            int const to = this->resultIndexFor(anchors[i].last);
+            msg.startIndex = from;
+            msg.span = std::max(1, to - from + 1);
+        }
+        msg.startIndex = std::clamp(msg.startIndex, 0, last);
+    }
+}
+
+// That input's result, or the first one after it (the last one, when none
+// is). The results are in frame order.
+int FrameWindowAnalyzer::resultIndexFor(InputKey const& key) const {
+    auto const at = std::lower_bound(
+        m_results.begin(), m_results.end(), key.frame,
+        [](FrameWindowMark const& m, uint32_t f) { return m.frame < f; });
+    for (auto it = at; it != m_results.end() && it->frame == key.frame; ++it)
+        if (it->player2 == key.player2 && it->release == key.release)
+            return static_cast<int>(it - m_results.begin());
+    int const after = static_cast<int>(at - m_results.begin());
+    return std::min(after, std::max(0, static_cast<int>(m_results.size()) - 1));
 }
 
 FrameWindowAnalyzer::Report FrameWindowAnalyzer::testPlayhead(PlayLayer* pl,

@@ -849,6 +849,22 @@ class FrameWindowAnalyzer {
     std::vector<FrameWindowMark> m_manualKept;
     void reapplyManual();
     std::vector<FrameWindowMessage> m_keptMessages;
+    // GucciBot (2026-10-29): a run keeps the text messages aside, a whole run
+    // too, with the inputs each one starts and ends on, and finish() stands
+    // them back on those inputs wherever the run left them in the results.
+    struct InputKey {
+        uint32_t frame = 0;
+        bool player2 = false;
+        bool release = false;
+    };
+    struct MessageAnchor {
+        bool valid = false;
+        InputKey first, last;
+    };
+    std::vector<MessageAnchor> m_keptMessageAnchors;
+    std::vector<MessageAnchor> anchorMessages() const;
+    void putBackMessages();
+    int resultIndexFor(InputKey const& key) const;
 
     bool inProbeRange(size_t index) const;
     void mergeKept();
