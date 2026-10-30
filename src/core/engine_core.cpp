@@ -3011,7 +3011,7 @@ namespace gucci {
         static constexpr const char* kCbf = "syzzi.click_between_frames";
         static constexpr std::pair<const char*, const char*> kKnown[] = {
             {kCbf,
-             "splits the physics step, which GucciBot 1.8 also does itself"},
+             "splits the physics step, which GucciBot also does itself"},
             {"toastexgd.its-all-frame-perfects",
              "hooks the same checkpoint and reset path the analyzer drives"},
             {"c0nscious.frame_window", "is another frame-window analyzer"},
