@@ -7665,7 +7665,10 @@ void FrameWindowAnalyzer::recountUpTo(uint32_t frame) {
     for (size_t i = 0; i < m_results.size(); i++) {
         auto const& mk = m_results[i];
         if (mk.frame > frame) continue;
-        if (mk.desynced) continue;
+        // GucciBot (2026-10-29): the marks the live loop (updateDisplay)
+        // passes over, it skips here too: the legend counted unbounded and
+        // hidden ones after a respawn, a backward seek or a look change.
+        if (mk.desynced || mk.unbounded || mk.hidden) continue;
         if (auto const* tier = this->displayTierFor(mk)) {
             m_hudCounts[tier->id]++;
             m_timingMark = static_cast<int>(i);
