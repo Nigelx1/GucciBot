@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-30-b (Polish round finished: the update checker keeps itself on, presets refuse names they cannot save, and the last wrong hints)"
+    "2026-10-30-c (JMF page: the theme name, subtitle, brand tag and page quote stay off it)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
