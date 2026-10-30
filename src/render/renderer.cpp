@@ -306,7 +306,6 @@ namespace gucci {
                 .unwrapOr(3.f);
         m_settings.m_fadeInTime = mod->getSavedValue<double>("render_fade_in", 1.5);
         m_settings.m_fadeOutTime = mod->getSavedValue<double>("render_fade_out", 1.5);
-        m_settings.m_colorFix = mod->getSavedValue<bool>("render_color_fix", true);
         m_settings.m_audioCodec = mod->getSavedValue<std::string>("render_audio_codec", "aac");
         m_settings.m_musicVolume = mod->getSavedValue<double>("render_music_volume", 1.0);
         m_settings.m_sfxVolume = mod->getSavedValue<double>("render_sfx_volume", 1.0);
@@ -338,7 +337,6 @@ namespace gucci {
             return geode::Err("Not in a level");
 
         loadSettingsFromGeode();
-        m_seenFrames = 0;
 
         FMODAudioEngine::get()->m_system->getSoftwareFormat(&m_sampleRate, nullptr, &m_channels);
 
@@ -1097,9 +1095,7 @@ namespace gucci {
         if (!this->isRecording())
             return;
 
-        bool started = pl->m_started || (m_settings.m_firstAttemptPause && m_seenFrames >= 2);
-        m_seenFrames++;
-        if (pl->m_isPaused || !started)
+        if (pl->m_isPaused || !pl->m_started)
             return;
 
         // Intro frames used update indices too (they are the start of the

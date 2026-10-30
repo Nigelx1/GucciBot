@@ -1180,8 +1180,7 @@ class $modify(GB7CCDirector, CCDirector) {
         auto* sl = SLRenderer::get();
         if (sl->m_shouldStart)
             sl->startIfQueued();
-        if (pl && sl->isRecording() && !pl->m_isPaused &&
-            (pl->m_started || sl->m_settings.m_firstAttemptPause)) {
+        if (pl && sl->isRecording() && !pl->m_isPaused && pl->m_started) {
             float dt = sl->getDt();
             // Backpressure, as Silicate does it: if every slot in the readback
             // ring is still waiting on the encoder, don't advance the game this

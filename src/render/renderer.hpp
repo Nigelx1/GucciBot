@@ -35,8 +35,6 @@ namespace gucci {
         // the start and out at the end, and attenuates the audio with it.
         double m_fadeInTime = 1.5;
         double m_fadeOutTime = 1.5;
-        bool m_colorFix = true;
-        bool m_firstAttemptPause = false;
 
         std::string m_outputPath = "output";
         std::string m_extension = "mp4";
@@ -305,7 +303,6 @@ namespace gucci {
         bool m_recording = false;
 
         int m_frameCount = 0;
-        int m_seenFrames = 0;
         int m_updateIndex = 0;
         float m_endTime = 0;
 
