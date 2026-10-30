@@ -402,6 +402,31 @@ namespace gucci::ui {
             }
         }
 
+        // The loaded macro to the replays folder, under its name and the
+        // theme's extension: the Macro page's Save and Compact Mode's. With
+        // "Back up a macro before overwriting it" on, the file it replaces is
+        // backed up first (Compact Mode's Save skipped that).
+        void saveLoadedMacro() {
+            auto* gb = GucciEngine::get();
+            std::error_code ec;
+            std::filesystem::create_directories(replaysDir(), ec);
+            auto const path = replaysDir() / (gb->replayName + macroExtension());
+            if (gb->replayBackupsEnabled)
+                gb->replay.backupExisting(path);
+            gb->replay.save(path);
+            gb->reloadMacroList();
+        }
+
+        // Calculate from the Macro page or Compact Mode. Why a run didn't
+        // start is on the Calculate page, which may not be open: it's said
+        // where you are too.
+        void startCalculate() {
+            auto* gb = GucciEngine::get();
+            gb->analyzeFrameWindows();
+            if (!gb->fwAcOk && !gb->fwAcReport.empty())
+                Notification::create("Calculate: " + gb->fwAcReport, NotificationIcon::Warning, 4.f)->show();
+        }
+
         std::string g_rowNote;  // what the last row action said, when it failed
         bool g_rowNoteOk = false;  // ...or what it did, when that's worth saying
 
@@ -1101,6 +1126,33 @@ namespace gucci::ui {
             return act;
         }
 
+        // Pause, Step back and Step forward, with a level open: the Frame
+        // stepper card's buttons, and Compact Mode's (there the steps are < and
+        // >, so the three fit on one line). Step back needs Backwards stepping.
+        void stepButtons(bool compact) {
+            auto& upd = GucciEngine::get()->updater;
+            float const arrow = compact ? ImGui::GetFrameHeight() : 0.f;
+            float const pauseW = compact ? kit::Avail() - 2.f * (arrow + ImGui::GetStyle().ItemSpacing.x) : 0.f;
+            if (kit::Button(upd.m_paused ? "Resume" : "Pause", Tone::Accent, pauseW))
+                upd.togglePaused();
+            ImGui::SameLine();
+            ImGui::BeginDisabled(!upd.m_paused || !upd.m_backwardsStepping);
+            if (kit::Button(compact ? "<" : "Step back", Tone::Plain, arrow))
+                (void)upd.userStepBack();
+            ImGui::EndDisabled();
+            if (compact && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                ImGui::SetTooltip(upd.m_backwardsStepping
+                                      ? "Step back one tick"
+                                      : "Step back one tick: needs Backwards stepping (Macro > Frame stepper)");
+            ImGui::SameLine();
+            ImGui::BeginDisabled(!upd.m_paused);
+            if (kit::Button(compact ? ">" : "Step forward", Tone::Plain, arrow))
+                upd.userStepForward();
+            ImGui::EndDisabled();
+            if (compact && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                ImGui::SetTooltip("Step forward one tick");
+        }
+
         // Pause, step and step back from the menu as well as by key, with
         // backwards stepping (it was on Hacks > Engine) right where it is used.
         void frameStepperCard() {
@@ -1108,18 +1160,7 @@ namespace gucci::ui {
             auto& upd = gb->updater;
             kit::BeginCard("Frame stepper", "Pause and move one tick at a time. The keys are in Settings > Keybinds.");
             if (PlayLayer::get()) {
-                if (kit::Button(upd.m_paused ? "Resume" : "Pause", Tone::Accent))
-                    upd.togglePaused();
-                ImGui::SameLine();
-                ImGui::BeginDisabled(!upd.m_paused || !upd.m_backwardsStepping);
-                if (kit::Button("Step back"))
-                    (void)upd.userStepBack();
-                ImGui::EndDisabled();
-                ImGui::SameLine();
-                ImGui::BeginDisabled(!upd.m_paused);
-                if (kit::Button("Step forward"))
-                    upd.userStepForward();
-                ImGui::EndDisabled();
+                stepButtons(false);
             } else {
                 kit::Hint("Open a level to step through it.");
             }
@@ -1132,6 +1173,39 @@ namespace gucci::ui {
                 }
             }
             kit::EndCard();
+        }
+
+        // Tick rate and Game speed: the Speed card's rows, and Compact Mode's
+        // (without the hints there).
+        void speedRows(bool hints) {
+            auto* gb = GucciEngine::get();
+            float tps = static_cast<float>(gb->updater.m_tps);
+#if GB_NATIVE_ENGINE
+            kit::RowBegin("Tick rate", hints ? "Physics ticks per second" : nullptr);
+            if (kit::InputFloat("tps", &tps, 1.f, "%.0f") && tps >= 1.f) {
+#else
+            // Only a rate GD can run here is taken (core/portable_tps.hpp), so
+            // a half-typed one ("4" on the way to 480) is passed over.
+            kit::RowBegin("Tick rate", hints ? "Physics ticks per second: 240, or 162 and up on this platform" : nullptr);
+            if (kit::InputFloat("tps", &tps, 1.f, "%.0f") && gucci::portable_tps::runnable(tps)) {
+#endif
+                gb->updater.setTps(tps);
+                Mod::get()->setSavedValue<double>("eng_tick_rate", tps);
+                // Typed while recording, the change goes into the macro, so
+                // playback switches rate on the same tick.
+                if (gb->isRecording())
+                    gb->recordTpsChange(tps);
+            }
+            kit::RowEnd();
+            // Typed, not a slider: any speed, exactly (a slider was the only
+            // way in, between 0.05x and 2x).
+            float speed = static_cast<float>(gb->updater.m_speedhack);
+            kit::RowBegin("Game speed", hints ? "Type it, e.g. 0.5 or 3 (1 is normal)" : nullptr);
+            if (kit::InputFloat("speed", &speed, 0.05f, "%.2f") && speed >= 0.01f && speed <= 20.f) {
+                gb->updater.m_speedhack = speed;
+                Mod::get()->setSavedValue<double>("eng_speed", speed);
+            }
+            kit::RowEnd();
         }
 
         void pageMacro() {
@@ -1181,21 +1255,14 @@ namespace gucci::ui {
             kit::RowBegin("File", nullptr);
             bool const canSave = !actions.empty() && !gb->replayName.empty();
             ImGui::BeginDisabled(!canSave);
-            if (kit::Button("Save", Tone::Accent)) {
-                std::error_code ec;
-                std::filesystem::create_directories(replaysDir(), ec);
-                auto path = replaysDir() / (gb->replayName + macroExtension());
-                if (gb->replayBackupsEnabled)
-                    gb->replay.backupExisting(path);
-                gb->replay.save(path);
-                gb->reloadMacroList();
-            }
+            if (kit::Button("Save", Tone::Accent))
+                saveLoadedMacro();
             ImGui::EndDisabled();
             ImGui::SameLine();
             bool const canCalc = PlayLayer::get() && !actions.empty();
             ImGui::BeginDisabled(!canCalc);
             if (kit::Button("Calculate"))
-                gb->analyzeFrameWindows();
+                startCalculate();
             ImGui::EndDisabled();
             kit::RowEnd();
             kit::Hint(fmt::format("{} actions  |  {:.0f} TPS{}", actions.size(), gb->updater.m_tps,
@@ -1211,33 +1278,7 @@ namespace gucci::ui {
             frameStepperCard();
 
             kit::BeginCard("Speed", nullptr);
-            float tps = static_cast<float>(gb->updater.m_tps);
-#if GB_NATIVE_ENGINE
-            kit::RowBegin("Tick rate", "Physics ticks per second");
-            if (kit::InputFloat("tps", &tps, 1.f, "%.0f") && tps >= 1.f) {
-#else
-            // Only a rate GD can run here is taken (core/portable_tps.hpp), so
-            // a half-typed one ("4" on the way to 480) is passed over.
-            kit::RowBegin("Tick rate", "Physics ticks per second: 240, or 162 and up on this platform");
-            if (kit::InputFloat("tps", &tps, 1.f, "%.0f") && gucci::portable_tps::runnable(tps)) {
-#endif
-                gb->updater.setTps(tps);
-                Mod::get()->setSavedValue<double>("eng_tick_rate", tps);
-                // Typed while recording, the change goes into the macro, so
-                // playback switches rate on the same tick.
-                if (gb->isRecording())
-                    gb->recordTpsChange(tps);
-            }
-            kit::RowEnd();
-            // Typed, not a slider: any speed, exactly (a slider was the only
-            // way in, between 0.05x and 2x).
-            float speed = static_cast<float>(gb->updater.m_speedhack);
-            kit::RowBegin("Game speed", "Type it, e.g. 0.5 or 3 (1 is normal)");
-            if (kit::InputFloat("speed", &speed, 0.05f, "%.2f") && speed >= 0.01f && speed <= 20.f) {
-                gb->updater.m_speedhack = speed;
-                Mod::get()->setSavedValue<double>("eng_speed", speed);
-            }
-            kit::RowEnd();
+            speedRows(true);
             kit::EndCard();
 
             kit::BeginCard("Playback", nullptr);
@@ -2464,6 +2505,9 @@ namespace gucci::ui {
                 setOpen(false);
         }
 
+        // The quick controls while you play: the mode, a saved macro to load,
+        // its name, Save and Calculate, the tick rate and speed, and frame
+        // stepping in a level. Everything acts as it does in the full menu.
         void drawCompact() {
             auto* gb = GucciEngine::get();
             ImGui::SetNextWindowPos(ImVec2(12.f, 60.f), ImGuiCond_FirstUseEver);
@@ -2476,17 +2520,31 @@ namespace gucci::ui {
                     gb->setMode(mode == 1 ? GucciEngine::Mode::Recording
                                 : mode == 2 ? GucciEngine::Mode::Playing
                                             : GucciEngine::Mode::Idle);
-                kit::InputText("name", &gb->replayName, "macro name");
-                bool const canSave = !gb->replay.m_actionAtom.empty() && !gb->replayName.empty();
-                ImGui::BeginDisabled(!canSave);
-                if (kit::Button("Save", Tone::Accent, -1.f)) {
-                    auto dir = replaysDir();
-                    std::error_code ec;
-                    std::filesystem::create_directories(dir, ec);
-                    gb->replay.save(dir / (gb->replayName + macroExtension()));
-                    gb->reloadMacroList();
+                // A saved macro, loaded as a click in the Saved macros list
+                // loads it (not while recording).
+                auto const& saved = gb->storedMacros;
+                int pick = static_cast<int>(std::find(saved.begin(), saved.end(), gb->replayName) - saved.begin());
+                ImGui::BeginDisabled(gb->isRecording());
+                if (kit::Dropdown("macro", &pick, saved, saved.empty() ? "No saved macros" : "Load a saved macro")) {
+                    std::string const name = saved[static_cast<size_t>(pick)];
+                    loadMacroByName(name);
                 }
                 ImGui::EndDisabled();
+                kit::InputText("name", &gb->replayName, "macro name");
+                float const half = (kit::Avail() - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+                bool const canSave = !gb->replay.m_actionAtom.empty() && !gb->replayName.empty();
+                ImGui::BeginDisabled(!canSave);
+                if (kit::Button("Save", Tone::Accent, half))
+                    saveLoadedMacro();
+                ImGui::EndDisabled();
+                ImGui::SameLine();
+                ImGui::BeginDisabled(!PlayLayer::get() || gb->replay.m_actionAtom.empty());
+                if (kit::Button("Calculate", Tone::Plain, -1.f))
+                    startCalculate();
+                ImGui::EndDisabled();
+                speedRows(false);
+                if (PlayLayer::get())
+                    stepButtons(true);
                 if (kit::Button("Full menu", Tone::Plain, -1.f))
                     setCompactMode(false);
             }

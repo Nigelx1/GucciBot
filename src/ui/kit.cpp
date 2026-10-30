@@ -310,12 +310,21 @@ namespace gucci::ui::kit {
         return changed;
     }
 
-    bool Dropdown(const char* id, int* index, const std::vector<std::string>& options) {
+    bool Dropdown(const char* id, int* index, const std::vector<std::string>& options, const char* placeholder) {
         ImGui::PushID(id);
         ImGui::SetNextItemWidth(Avail());
         bool const valid = *index >= 0 && *index < static_cast<int>(options.size());
         bool changed = false;
-        if (ImGui::BeginCombo("##pick", valid ? options[static_cast<size_t>(*index)].c_str() : "")) {
+        // The preview is drawn inside BeginCombo, so the muted color is only
+        // for it (ImGui allows a push before a Begin popped inside it).
+        bool const hinting = !valid && placeholder;
+        if (hinting)
+            ImGui::PushStyleColor(ImGuiCol_Text, look().pal.muted);
+        bool const open = ImGui::BeginCombo(
+            "##pick", valid ? options[static_cast<size_t>(*index)].c_str() : (placeholder ? placeholder : ""));
+        if (hinting)
+            ImGui::PopStyleColor();
+        if (open) {
             for (int i = 0; i < static_cast<int>(options.size()); ++i) {
                 bool const selected = i == *index;
                 if (ImGui::Selectable(options[static_cast<size_t>(i)].c_str(), selected) && !selected) {
