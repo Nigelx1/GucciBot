@@ -2225,7 +2225,6 @@ namespace gucci::ui {
                                "scam; ours are built around his."},
                 {"GWDdoS", "Optimization help, and the cleanup that got the repo public-ready; also built Astral."},
                 {"ToastexGD", "Built ToastyReplay, the project GucciBot started as."},
-                {"chagh", "Pointed the converter to TcBot's format library (tcm-rs)."},
                 {"C0nscious", "Implemented NaN GD's L* formula as Frame Window Counter (MIT)."},
                 {"Gucci Mane", "He's the truth. Brrr."},
             };

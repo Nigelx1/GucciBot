@@ -207,7 +207,6 @@ Real click-timing feedback, and a synced video-review overlay on both trainers:
 - **Bogdaner09** — when a paid click-indicator mod turned out to be an exit scam, he's the one who started making the same thing free and open source ([github.com/Bogdaner09/mod](https://github.com/Bogdaner09/mod)), and GucciBot's Click Indicators are built around his. Vibecoded by his own admission, so credit's probably owed to whichever model wrote that too
 - **GWDdoS** — optimization help, and the codebase cleanup that got this repo public-ready; also built Astral
 - **ToastexGD** — built ToastyReplay, the project GucciBot actually started as and the reason there is a GucciBot at all. His renderer and FFmpeg pipeline carried this mod for most of its life; rendering now runs on Silicate's
-- **chagh** — makes TcBot, and pointed the converter to TcBot's own MIT-licensed format library, [tcm-rs](https://github.com/tcbot-gd/tcm-rs)
 - **C0nscious** — implemented NaN GD's L* precision formula in C++ as [Frame Window Counter](https://github.com/hyper-5/frame-window-counter) (MIT), a mod named after NaN's video series; that implementation is the code that reached GucciBot
 - **Gucci Mane** — he's the truth. Brrr.
 
