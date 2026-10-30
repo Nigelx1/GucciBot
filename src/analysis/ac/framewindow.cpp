@@ -1331,7 +1331,7 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
     logPlayerState("capture-start", pl->m_player1);
 
     report.ok = true;
-    report.message = fmt::format("Analysing {} inputs.", inRange);
+    report.message = fmt::format("Analyzing {} inputs.", inRange);
     return report;
 }
 

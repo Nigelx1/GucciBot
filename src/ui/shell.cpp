@@ -2738,7 +2738,7 @@ namespace gucci::ui {
                                                  ? " The windows saved before this run are kept."
                                                  : "";
                     // The run's own last word stays on the Calculate page; the
-                    // start message ("Analysing N inputs.") used to.
+                    // start message ("Analyzing N inputs.") used to.
                     if (!analyzer.status().empty()) {
                         gbe->fwAcReport = analyzer.status() + kept;
                         gbe->fwAcOk = analyzer.lastRunOk();

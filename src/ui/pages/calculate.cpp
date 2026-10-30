@@ -387,7 +387,7 @@ namespace gucci::ui::pages {
                            &FW::cbfReadoutThreshold, "%d frames", true);
                     kit::FeatureEnd();
                 }
-                flag("Tick-quantised ground",
+                flag("Tick-quantized ground",
                      "Only split a tick if the player was already on the ground going into it, like real CBF. Off "
                      "lets every tick split, which CBF doesn't do",
                      &FW::cbfTickGround);
@@ -1231,14 +1231,14 @@ namespace gucci::ui::pages {
                             "Give the analyzer a large part of every frame. The game drops to a few FPS while "
                             "counting, but finishes several times faster",
                             &FW::turbo)) {
-                    slider("Turbo budget", "Milliseconds spent analysing per frame", &FW::turboBudgetMs, "%d ms");
+                    slider("Turbo budget", "Milliseconds spent analyzing per frame", &FW::turboBudgetMs, "%d ms");
                     kit::FeatureEnd();
                 }
                 if (feature("Adaptive budget",
                             "Spend a share of each frame instead of a fixed amount, so levels that already run "
                             "slowly count faster",
                             &FW::adaptiveBudget)) {
-                    slider("Budget share", "How much of the time since the last frame to spend analysing",
+                    slider("Budget share", "How much of the time since the last frame to spend analyzing",
                            &FW::budgetSharePercent, "%d%%");
                     slider("Max budget", "Cap, so a long stall can't turn into one long freeze", &FW::maxBudgetMs,
                            "%d ms");
@@ -1246,11 +1246,11 @@ namespace gucci::ui::pages {
                 }
                 slider("Frame budget",
                        s.adaptiveBudget ? "The least the adaptive budget spends per frame"
-                                        : "Milliseconds per frame spent analysing. Higher finishes sooner but is "
+                                        : "Milliseconds per frame spent analyzing. Higher finishes sooner but is "
                                           "choppier",
                        &FW::budgetMs, "%d ms");
                 slider("Tick batch",
-                       "Physics ticks run per game update while analysing. The ticks are the same; this only skips "
+                       "Physics ticks run per game update while analyzing. The ticks are the same; this only skips "
                        "the scheduler and effects between them",
                        &FW::stepBatch, "%d");
                 slider("Time cap",
