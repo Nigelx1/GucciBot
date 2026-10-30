@@ -1117,7 +1117,9 @@ namespace gucci {
         std::unordered_map<std::string, std::unordered_set<std::string>> customThemeMacrosByExt;
 
         std::vector<BotSettingsPreset> settingsPresets;
-        void saveBotSettingsPreset(const std::string& name);
+        // False when it couldn't be saved (a name a file can't have, or the
+        // file couldn't be written); the list only holds presets on disk.
+        bool saveBotSettingsPreset(const std::string& name);
         bool loadBotSettingsPreset(const std::string& name);
         void deleteBotSettingsPreset(const std::string& name);
 

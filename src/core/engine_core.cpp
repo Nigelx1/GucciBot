@@ -2457,8 +2457,28 @@ namespace gucci {
         flag("autosaveAtLevelEnd", p.autosaveAtLevelEnd);
     }
 
-    void GucciEngine::saveBotSettingsPreset(const std::string& name) {
+    // The file first, and the list only once it's written. A preset whose
+    // file couldn't be written went into the list anyway and was gone after
+    // a restart: a name with \ / * ? " < > | in it, or a ':', which Windows
+    // takes as a hidden stream of another file (written, but never found
+    // again). The same characters the render presets refuse.
+    bool GucciEngine::saveBotSettingsPreset(const std::string& name) {
+        if (name.empty() || name.find_first_of("\\/:*?\"<>|") != std::string::npos) {
+            log::warn("[GucciBot] Couldn't save preset \"{}\": a file can't have that name", name);
+            return false;
+        }
         BotSettingsPreset p = capturePreset(*this, name);
+        auto dir = getPresetsDir();
+        std::error_code ec;
+        fs::create_directories(dir, ec);
+        std::ofstream f(dir / (name + ".json"));
+        f << presetToJson(p).dump();
+        f.close();
+        if (!f) {
+            log::warn("[GucciBot] Couldn't save preset \"{}\"", name);
+            return false;
+        }
+
         auto it = std::find_if(settingsPresets.begin(), settingsPresets.end(), [&](auto& x) {
             return x.name == name;
         });
@@ -2466,11 +2486,7 @@ namespace gucci {
             *it = p;
         else
             settingsPresets.push_back(p);
-
-        auto dir = getPresetsDir();
-        fs::create_directories(dir);
-        std::ofstream f(dir / (name + ".json"));
-        f << presetToJson(p).dump();
+        return true;
     }
 
     bool GucciEngine::loadBotSettingsPreset(const std::string& name) {
