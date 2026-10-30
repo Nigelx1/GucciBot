@@ -77,7 +77,7 @@ namespace gucci::ui {
             {"key_replay_toggle", "Start / stop playback", &Keys::onReplayToggle},
             {"key_noclip", "Noclip", &Keys::onNoclip},
             {"key_safe_mode", "Safe mode", &Keys::onSafeMode},
-            {"key_audio_pitch", "Audio pitch with speed", &Keys::onAudioPitch},
+            {"key_audio_pitch", "Audio pitch follows speed", &Keys::onAudioPitch},
             {"key_rng_lock", "RNG lock", &Keys::onRngLock},
             {"key_layout_mode", "Layout mode", &Keys::onLayoutMode},
             {"key_no_mirror", "No mirror effect", &Keys::onNoMirror},
@@ -1450,7 +1450,6 @@ namespace gucci::ui {
             engineSwitch("Hide attempts", nullptr, &gb->hackHideAttempts, "hack_hide_attempts");
             engineSwitch("Hide percentage", nullptr, &gb->hackHidePercentage, "hack_hide_percentage");
             engineSwitch("No death flash", nullptr, &gb->hackNoSpikeFlash, "hack_no_flash");
-            engineSwitch("Audio pitch follows speed", nullptr, &gb->audioPitchEnabled, "hack_audio_pitch");
             engineSwitch("Practice range", "Shows the loaded macro's clicks near you in the level. Counts as a cheat",
                          &gb->practiceRangeEnabled,
                          "practice_range");
@@ -1478,7 +1477,8 @@ namespace gucci::ui {
             kit::BeginCard("Engine", nullptr);
             engineSwitch("Lock delta", "Fixed physics step per tick", &upd.m_lockDelta, "feat_lock_delta");
             engineSwitch("Auto flip on death", nullptr, &upd.m_autoFlipOnDeath, "feat_auto_flip");
-            engineSwitch("Speedhack audio", nullptr, &upd.m_speedhackAudio, "feat_speedhack_audio");
+            engineSwitch("Audio pitch follows speed", "Music and sounds play faster or slower with the game speed",
+                         &upd.m_speedhackAudio, "feat_audio_pitch");
             engineSwitch("Scroll speed fix", nullptr, &upd.m_ssbFix, "feat_scroll_speed_fix");
             engineSwitch("High TPS precision", "Scales GD's velocity rounding with the tick rate. Changes physics",
                          &upd.m_highTpsPrecision, "updater_highTpsPrecision");

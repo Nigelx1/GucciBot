@@ -63,7 +63,10 @@ namespace {
         });
         used |= fire(keys.onLayoutMode, k, [&] { gb->layoutMode = !gb->layoutMode; });
         used |= fire(keys.onNoMirror, k, [&] { gb->noMirrorEffect = !gb->noMirrorEffect; });
-        used |= fire(keys.onAudioPitch, k, [&] { gb->audioPitchEnabled = !gb->audioPitchEnabled; });
+        used |= fire(keys.onAudioPitch, k, [&] {
+            gb->updater.m_speedhackAudio = !gb->updater.m_speedhackAudio;
+            Mod::get()->setSavedValue<bool>("feat_audio_pitch", gb->updater.m_speedhackAudio);
+        });
         used |= fire(keys.onRngLock, k, [&] { gb->rngLocked = !gb->rngLocked; });
         used |= fire(keys.onAutoclicker, k, [&] {
             auto* ac = Autoclicker::get();

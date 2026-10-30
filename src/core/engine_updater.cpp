@@ -598,6 +598,11 @@ void GucciUpdater::backwardsStep(int n) {
     gb->practiceFix.m_loadCheckpoint = false;
 }
 
+// The only thing that sets the game's audio pitch, once a drawn frame
+// (drawScene, below), as Silicate does. Hacks > Engine's "Audio pitch follows
+// speed" is m_speedhackAudio. A second switch used to set the same pitch from
+// an FMODAudioEngine::update hook, but it never put the pitch back when it was
+// off, so either switch alone did nothing; the two were merged 2026-10-29.
 void GucciUpdater::updateAudioSpeedhack() {
     FMOD::ChannelGroup* master;
     FMODAudioEngine::get()->m_system->getMasterChannelGroup(&master);
