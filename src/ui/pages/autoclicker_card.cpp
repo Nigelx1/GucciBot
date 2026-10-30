@@ -106,7 +106,7 @@ namespace gucci::ui::pages {
         if (kit::FeatureBegin("On", "While recording, its clicks go into the macro", &ac->enabled, key,
                               &changed)) {
             statusRow(*ac);
-            changed |= kit::SwitchRow("Only while holding", "Clicks only while you hold Space, W or Up",
+            changed |= kit::SwitchRow("Only while holding", "Clicks only while you hold jump yourself",
                                       &ac->onlyWhileHolding);
             changed |= playerFeature("p1", "Player 1", nullptr, ac->p1);
             changed |= playerFeature(

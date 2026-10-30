@@ -69,7 +69,8 @@ namespace gucci::ui::pages {
             auto* gb = GucciEngine::get();
             kit::BeginCard("Survival Indicator",
                            "Whether clicking right now survives what is coming. A copy of the player is run ahead "
-                           "of it twice every tick: once clicking, once doing nothing.");
+                           "of it twice every tick: once clicking, once doing nothing. Safe mode counts it as a "
+                           "cheat.");
 
             bool flipped = false;
             if (kit::FeatureBegin("Survival indicator",
