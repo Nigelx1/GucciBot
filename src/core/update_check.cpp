@@ -53,8 +53,12 @@ namespace gucci::updates {
         }
 
         void onReleases(web::WebResponse res) {
-            // Back safely: the guard set in checkOnce comes down.
+            // Back safely: the guard set in checkOnce comes down, and on disk
+            // right away. Left to the save at exit, a crash later in the
+            // session left it up and the next launch switched the checker off
+            // by mistake (2026-10-23, polish item 43).
             Mod::get()->setSavedValue("update_check_inflight", false);
+            (void)Mod::get()->saveData();
             if (!res.ok()) {
                 log::info("[GucciBot] update check: HTTP {}", res.code());
                 return;
