@@ -33,6 +33,11 @@ using namespace geode::prelude;
 using namespace gucci;
 
 class $modify(GB7PlayLayer, PlayLayer) {
+    struct Fields {
+        // Hide percentage took GD's percentage label down, so switching it
+        // off puts the label back (and only then: GD's own option decides).
+        bool m_hidPercent = false;
+    };
 
     CheckpointObject* markCheckpoint() {
         if (!GucciEngine::get()->enabled)
@@ -626,6 +631,19 @@ class $modify(GB7PlayLayer, PlayLayer) {
         auto* gb = GucciEngine::get();
         if (gb->hackHideAttempts && m_attemptLabel)
             m_attemptLabel->setVisible(false);
+        // Hacks > Visual > Hide percentage: GD's percentage label, next to the
+        // progress bar.
+        if (m_percentageLabel) {
+            if (gb->hackHidePercentage) {
+                if (m_percentageLabel->isVisible()) {
+                    m_percentageLabel->setVisible(false);
+                    m_fields->m_hidPercent = true;
+                }
+            } else if (m_fields->m_hidPercent) {
+                m_fields->m_hidPercent = false;
+                m_percentageLabel->setVisible(true);
+            }
+        }
         // The AI pathfinder's level map: its ghost run, a slice a frame, and the
         // drawing over the level when it is switched on.
         absense::route::tickGhost(this);
