@@ -80,11 +80,17 @@ namespace gucci {
     }
 
     void BigBrrrManager::setEnabled(bool on) {
-        if (on)
-            start();
-        else
-            stop();
+        // The flag first: start() switches it back off when no track can be
+        // found or opened, and setting it after used to undo that, leaving
+        // the switch on over silence.
         enabled = on;
+        if (!on) {
+            stop();
+            return;
+        }
+        start();
+        if (!channel)
+            enabled = false;  // opened, but FMOD wouldn't play it
     }
 
     void BigBrrrManager::start() {
