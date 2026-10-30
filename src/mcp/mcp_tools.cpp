@@ -1595,19 +1595,17 @@ namespace gucci::mcp {
             mode["enum"] = std::vector<std::string>{"accuracy", "performance"};
             mode["description"] = "leave out to only read it";
             props["mode"] = mode;
-            auto save = obj();
-            save["type"] = "boolean";
-            save["description"] = "also save it as the user's setting (default false: this session only)";
-            props["save"] = save;
             schema["type"] = "object";
             schema["properties"] = props;
+            // GucciBot (2026-10-29): no "save" any more. It stored the mode under
+            // a key nothing loads: GucciBot always starts in Accuracy.
             server.addTool({
                 "gucci_lock_delta",
                 "Read or switch Lock Delta's mode. Accuracy drives GD one physics step "
                 "per update, as recording always does; Performance hands GD several "
                 "steps in one update during playback, and GD's own sub-steps do not "
-                "always come out the same as single steps. By default a switch is for "
-                "this session only and the saved setting is left alone.",
+                "always come out the same as single steps. A switch lasts until the "
+                "game restarts or a preset loads: GucciBot always starts in Accuracy.",
                 schema,
                 [](matjson::Value const& a) {
                     auto* gb = GucciEngine::get();
@@ -1617,14 +1615,10 @@ namespace gucci::mcp {
                             throw ToolError("mode must be accuracy or performance");
                         gb->updater.m_lockDeltaMode = m == "accuracy" ? GucciUpdater::LockDeltaMode::Accuracy
                                                                       : GucciUpdater::LockDeltaMode::Performance;
-                        if (argBool(a, "save", false))
-                            Mod::get()->setSavedValue("updater_lockDeltaMode", (int)gb->updater.m_lockDeltaMode);
                     }
                     auto out = obj();
                     out["mode"] = gb->updater.m_lockDeltaMode == GucciUpdater::LockDeltaMode::Accuracy ? "accuracy"
                                                                                                         : "performance";
-                    out["saved"] = Mod::get()->getSavedValue<int>("updater_lockDeltaMode", 1) == 1 ? "accuracy"
-                                                                                                    : "performance";
                     out["lock_delta_on"] = gb->updater.m_lockDelta;
                     return out;
                 },

@@ -2513,7 +2513,6 @@ namespace gucci {
         mod->setSavedValue<float>("eng_tick_rate", static_cast<float>(updater.m_tps));
         mod->setSavedValue<float>("eng_speed", static_cast<float>(p.speedhack));
         mod->setSavedValue<bool>("feat_lock_delta", p.lockDelta);
-        mod->setSavedValue<int>("updater_lockDeltaMode", static_cast<int>(updater.m_lockDeltaMode));
         mod->setSavedValue<bool>("feat_backwards_step", p.backwardsStepping);
         mod->setSavedValue<int>("feat_back_step_count", static_cast<int>(p.maxBackstepFrames));
         mod->setSavedValue<bool>("feat_scroll_speed_fix", p.ssbFix);
