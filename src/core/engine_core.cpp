@@ -531,6 +531,9 @@ namespace gucci {
                 m_inputIndex = m_actionAtom.length();
                 if (m_pathSamples.size() > (size_t)respawnFrame + 1)
                     m_pathSamples.resize((size_t)respawnFrame + 1);
+                // A drop of game time after the checkpoint was cut with it.
+                if (gb->updater.m_droppedTimeFrame > respawnFrame)
+                    gb->updater.m_droppedTimeFrame = UINT32_MAX;
                 if (before != after)
                     log::info("[GucciBot] Recording: died@{}, respawn@{} (checkpoint) "
                               "— deleted {} stale input(s) after checkpoint (kept {})",
@@ -551,6 +554,7 @@ namespace gucci {
                 // start position; Save marks the file with which.
                 auto* pl = PlayLayer::get();
                 m_recordedFromStartPos = pl && pl->m_startPosObject;
+                gb->updater.m_droppedTimeFrame = UINT32_MAX;
                 // GucciBot (2026-10-23): the clicks these windows were
                 // measured on are gone: drop them from memory, or Save writes
                 // them next to this new recording. The old macro's sidecar on
@@ -1248,6 +1252,8 @@ namespace gucci {
         }
 
         auto* gb = GucciEngine::get();
+        // Whatever the last recording dropped isn't this macro's.
+        gb->updater.m_droppedTimeFrame = UINT32_MAX;
 
         char magic[4] = {};
         {
@@ -1364,6 +1370,10 @@ namespace gucci {
         // here from their own thread.
         if (m != prev && m != Mode::Idle)
             Loader::get()->queueInMainThread([] { setupcheck::toastIfNeeded(); });
+        // A recording starting has dropped no game time yet (see
+        // GucciUpdater::noteDroppedTime).
+        if (m == Mode::Recording && prev != Mode::Recording)
+            updater.m_droppedTimeFrame = UINT32_MAX;
         if (m == Mode::Playing) {
             if (prev != Mode::Playing)
                 userTpsSaved = updater.m_tps;

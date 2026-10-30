@@ -123,6 +123,17 @@ bool GucciUpdater::useFastLockDelta() const {
            gb->isPlaying() && !SLRenderer::get()->isRecording();
 }
 
+// The first frame a recording dropped game time at, kept for Calculate
+// (m_droppedTimeFrame): a later drop doesn't move it, so a checkpoint respawn
+// that cuts a later one can't hide an earlier one still in the macro. Not for
+// Absense's pathfinder, which records while it drives and lets go of wall
+// clock on purpose (see the realtime cap below): no player was playing.
+void GucciUpdater::noteDroppedTime() {
+    if (GucciEngine::get()->isRecording() && !::Bot::get()->pathfinder().drivesGame() &&
+        m_droppedTimeFrame == UINT32_MAX)
+        m_droppedTimeFrame = this->getFrame();
+}
+
 void GucciUpdater::calculateSteps(float dt, float targetDt) {
     // Absense's pathfinder thinks, and puts earlier states back, while the
     // frame stands still (drawScene). cocos measures this frame's delta after
@@ -152,6 +163,7 @@ void GucciUpdater::calculateSteps(float dt, float targetDt) {
             "not replay -- the run skipped time a clean replay does not",
             dt - MAX_FRAME_DELTA, this->getFrame(), dt, MAX_FRAME_DELTA);
         dt = MAX_FRAME_DELTA;
+        this->noteDroppedTime();
     }
 
     int steps = (int)std::floor(dt / wantedDt);
@@ -211,6 +223,7 @@ void GucciUpdater::calculateSteps(float dt, float targetDt) {
                     m_tpsOverflow - MAX_CARRIED_OVERFLOW, this->getFrame(),
                     MAX_CARRIED_OVERFLOW);
                 m_tpsOverflow = MAX_CARRIED_OVERFLOW;
+                this->noteDroppedTime();
             }
         }
     }

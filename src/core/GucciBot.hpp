@@ -491,17 +491,17 @@ namespace gucci {
         bool m_stepOnce_ = false;
         bool m_onlyRefresh = false;
 
-        // Wanted by anticroom's frame-window analyzer. Declared here so the
-        // port compiles and reads/writes real state; NEITHER IS HONOURED BY
-        // THE UPDATE LOOP YET -- wiring them is phase 2 of the port, and until
-        // then the analyzer runs one step per frame like the existing one.
-        // m_analysisBatch: how many physics steps to run per drawn frame while
-        // analysing, so a long sweep doesn't take real-time minutes.
-        // m_droppedTimeFrame: the frame at which the loop last had to drop
-        // accumulated time; the analyzer warns on it because a drop there
-        // means the run it just measured isn't trustworthy.
+        // Used by anticroom's analyzer. m_analysisBatch: how many physics
+        // steps Calculate runs in one update (runUpdates; GD runs them through
+        // the step-count midhooks on Windows, getModifiedDelta elsewhere).
+        // m_droppedTimeFrame: the first frame where calculateSteps dropped
+        // game time while recording (noteDroppedTime), UINT32_MAX for none.
+        // Cleared when a recording starts over, when a respawn cuts the
+        // macro back past it, and when a macro loads. Calculate warns on it,
+        // because a macro recorded through a drop may not replay.
         uint32_t m_analysisBatch = 0;
         uint32_t m_droppedTimeFrame = UINT32_MAX;
+        void noteDroppedTime();
 
         bool m_backwardsStepping = false;
         bool m_ssbFix = true;
