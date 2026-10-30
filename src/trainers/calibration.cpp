@@ -36,6 +36,8 @@ const char* CalibrationService::gamemodeName(int index) {
         return "Robot";
     case GM_Spider:
         return "Spider";
+    case GM_Swing:
+        return "Swing";
     default:
         return "?";
     }
@@ -56,6 +58,9 @@ int CalibrationService::gamemodeIndexFor(PlayerObject* player) {
         return GM_Robot;
     if (player->m_isSpider)
         return GM_Spider;
+    // The swing used to fall through to the cube's reaction time and cue.
+    if (player->m_isSwing)
+        return GM_Swing;
     return GM_Cube;
 }
 
