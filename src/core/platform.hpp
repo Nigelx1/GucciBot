@@ -5,11 +5,11 @@
 // GucciBot's engine is a port of Silicate, which is Windows-only: its tick
 // loop, TPS bypass and per-tick bookkeeping run on SafetyHook midhooks and byte
 // patches placed at fixed addresses in the Windows build of GD, and a few
-// subsystems call Windows APIs directly (Assistant Access's sockets, the
-// renderer loading FFmpeg, sub-tick CBF recording's raw input). None of that
-// exists on macOS, iOS or Android, so it is compiled out there, and the engine
-// stands down on those platforms until a portable tick path replaces it
-// (multiplatform branch, started 2026-10-04).
+// subsystems call Windows APIs directly (the renderer loading FFmpeg, sub-tick
+// CBF recording's raw input). Those parts are compiled out on macOS, iOS and
+// Android or have a fallback there (Assistant Access uses BSD sockets), and off
+// Windows the engine ticks through GJBaseGameLayer::processCommands instead of
+// midhooks (GBPortableTick, engine_updater.cpp).
 //
 // GB_NATIVE_ENGINE: the Windows engine (midhooks, patches, raw addresses).
 // GB_DESKTOP_GL: desktop OpenGL (pixel buffers for the renderer and Video Mode),

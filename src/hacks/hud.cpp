@@ -159,7 +159,10 @@ namespace gucci::hud {
             // loop in engine_updater.cpp skips the limit then).
             if (upd.m_realTime)
                 return "Tick limit: none (Real Time)";
-            return fmt::format("Tick limit: {} per frame{}", upd.m_stepLimit,
+            // Fixed pacing's cap is multiplied when it scales with the tick
+            // rate (GucciUpdater::visualUpdateFactor).
+            return fmt::format("Tick limit: {} per frame{}",
+                               upd.m_stepLimit * static_cast<uint32_t>(upd.visualUpdateFactor()),
                                upd.m_dynamicUpr ? " (dynamic)" : "");
         }
 

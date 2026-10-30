@@ -511,8 +511,8 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         // Tell anticroom's analyzer the moment a press is actually applied,
         // and in what state the player was when it landed -- notably whether
         // the input could be split within the tick or had to be buffered,
-        // which is what his cube CBF investigation hangs on. Inert unless his
-        // analyzer is running, which GucciBot's own Calculate never makes it.
+        // which is what his cube CBF investigation hangs on. Inert unless
+        // Calculate (his analyzer) is running.
         // Placed exactly where Silicate places it: after the button filter,
         // before the input is handed onward.
         if (auto& acfw = ::Bot::get()->frameWindow(); acfw.running()) {
@@ -564,19 +564,6 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
             bool const splits = offset > 0.0 || ::Bot::get()->frameWindow().armsTicks();
             if (splits && eng->capture(action.m_frame, button, action.m_holding, flipped2))
                 return;
-        }
-
-        if (gb->fwSampling && action.m_holding) {
-            auto* sp = action.m_player2 ? m_player2 : m_player1;
-            if (sp)
-                gb->fwClickSamples.push_back({action.m_frame,
-                                              sp->m_position.x,
-                                              sp->m_position.y,
-                                              action.m_player2,
-                                              false,
-                                              false,
-                                              false,
-                                              action.m_type});
         }
 
         // GucciBot's tier sounds were driven from here off its own fwMarks.
@@ -837,15 +824,21 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
                 // whether getNextInput was even matching anything. Logging both
                 // branches (tagged separately) until this is actually diagnosed
                 // with real data instead of another guess.
-                log::info("[{}] f={} lookupFrame={} inputFrame={} idx={}/{} hold={} p2={}",
-                          gb->fwAnalyzing ? "CAP-IN" : "PLAY-IN",
-                          frame,
-                          lookupFrame,
-                          input->m_frame,
-                          gb->replay.m_inputIndex,
-                          gb->replay.m_actionAtom.m_actions.size(),
-                          input->m_holding ? 1 : 0,
-                          input->m_player2 ? 1 : 0);
+                //
+                // In the slope log, with the tick diagnostics on (Updater's
+                // m_logFrameIncrements, saved as debug_tick_logs): one line
+                // per input went into Geode's log on every playback and every
+                // Calculate test.
+                if (gb->updater.m_logFrameIncrements)
+                    gucci::slopediag::log(fmt::format("[{}] f={} lookupFrame={} inputFrame={} idx={}/{} hold={} p2={}",
+                                                      gb->fwAnalyzing ? "CAP-IN" : "PLAY-IN",
+                                                      frame,
+                                                      lookupFrame,
+                                                      input->m_frame,
+                                                      gb->replay.m_inputIndex,
+                                                      gb->replay.m_actionAtom.m_actions.size(),
+                                                      input->m_holding ? 1 : 0,
+                                                      input->m_player2 ? 1 : 0));
                 processReplayAction(input.value());
             }
         }

@@ -35,7 +35,6 @@ namespace FMOD {
 namespace gucci {
 
     void logFrameIncrement(const char* callSite, uint32_t frame, PlayerObject* p = nullptr);
-    void logCalcDeathTrace(const std::string& line);
     // Writes into anticroom's analyzer log (guccibot_fw.log) from engine-side
     // code, so a run's diagnostics all land in one file in one order instead
     // of being split across two logs that have to be interleaved by hand.
@@ -294,6 +293,11 @@ namespace gucci {
         // Used to warn when a macro recorded at one rate is played back at
         // another, which silently changes what every frame window means.
         double m_initialTPS = 240.0;
+        // Whether the macro's run began at a start position: taken at each
+        // full restart while recording, read from the file on load, and
+        // saved as GBR6_FROM_START_POS, which is what the Macro card's
+        // start-position warning reads.
+        bool m_recordedFromStartPos = false;
         void buildClickIntervals(double tps);
 
         float m_trainerBestX = 0.f;
@@ -302,7 +306,10 @@ namespace gucci {
         bool m_mirrorInputs = false;
         bool m_mirrorInverted = false;
         bool m_maintainGravity = false;
-        bool m_ignoreInputs = false;
+        // Silicate's "Ignore inputs": while a macro plays, the player's own
+        // presses are dropped (processQueuedButtons) and only the macro's
+        // reach the game. On by default, as in Silicate (Nigel, 2026-10-28).
+        bool m_ignoreInputs = true;
         // anticroom's SCBF (replay/scbf_input.hpp). CBF Recording places each
         // live press at the point in the tick it really arrived; Tick
         // Splitting is his on/off for actually splitting the tick -- off
@@ -426,7 +433,6 @@ namespace gucci {
         void load(const std::filesystem::path& path);
         std::filesystem::path getCurrentPath() const;
         void backupExisting(const std::filesystem::path& path);
-        void createBackup();
     };
 
     class GucciUpdater {
@@ -465,13 +471,26 @@ namespace gucci {
         bool m_dynamicUpr = false;
         double m_fpsTarget = 60.0;
         uint32_t m_stepLimit = 10;
+        // Silicate's Use Visual Updates: "Scale with the tick rate" under
+        // Hacks > Frame pacing > Fixed (updater_visual_updates). Fixed
+        // pacing's cap is multiplied by the tick rate over GD's FPS cap, so it
+        // keeps up with a high tick rate. Silicate defaults it on; off here
+        // keeps GucciBot's pacing as it was. Nothing could switch it on until
+        // 2026-10-30.
         bool m_useVisualUpdates = false;
+        // What Fixed pacing's cap is multiplied by: 1 unless m_useVisualUpdates
+        // is on. calculateSteps applies it, and the HUD's tick limit shows it.
+        int visualUpdateFactor() const;
 
         uint32_t m_frame = 0;
         uint64_t m_frameOnLastAttempt = 0;
         int totalStepCount = 1;
         int estimatedStepCount = 1;
         float m_lastTfp = 0.f;
+        // Tick diagnostics, off by default: every frame-counter change in
+        // guccibot_frameinc.log, and every input playback hands over in
+        // guccibot_slope.log. Saved as debug_tick_logs, with no menu row:
+        // for a session chasing a desync.
         bool m_logFrameIncrements = false;
 
         bool m_lockDelta = true;
@@ -480,17 +499,17 @@ namespace gucci {
         bool m_stepOnce_ = false;
         bool m_onlyRefresh = false;
 
-        // Wanted by anticroom's frame-window analyzer. Declared here so the
-        // port compiles and reads/writes real state; NEITHER IS HONOURED BY
-        // THE UPDATE LOOP YET -- wiring them is phase 2 of the port, and until
-        // then the analyzer runs one step per frame like the existing one.
-        // m_analysisBatch: how many physics steps to run per drawn frame while
-        // analysing, so a long sweep doesn't take real-time minutes.
-        // m_droppedTimeFrame: the frame at which the loop last had to drop
-        // accumulated time; the analyzer warns on it because a drop there
-        // means the run it just measured isn't trustworthy.
+        // Used by anticroom's analyzer. m_analysisBatch: how many physics
+        // steps Calculate runs in one update (runUpdates; GD runs them through
+        // the step-count midhooks on Windows, getModifiedDelta elsewhere).
+        // m_droppedTimeFrame: the first frame where calculateSteps dropped
+        // game time while recording (noteDroppedTime), UINT32_MAX for none.
+        // Cleared when a recording starts over, when a respawn cuts the
+        // macro back past it, and when a macro loads. Calculate warns on it,
+        // because a macro recorded through a drop may not replay.
         uint32_t m_analysisBatch = 0;
         uint32_t m_droppedTimeFrame = UINT32_MAX;
+        void noteDroppedTime();
 
         bool m_backwardsStepping = false;
         bool m_ssbFix = true;
@@ -958,32 +977,6 @@ namespace gucci {
         bool rngLocked = false;
         bool protectedMode = false;
 
-        bool fwEnabledLive = false;
-        bool fwLegendEnabled = false;
-        float fwLegendScale = 1.f;
-        float fwRingBoldness = 2.2f;
-
-        // Juice's ask (2026-09-02): once an Alignment-Independent run has
-        // results, let the in-level marker overlay show THOSE numbers
-        // instead of Time-Based/Recovery Range's, toggleable so both stay
-        // available if a Time-Based run has also been done. Purely a
-        // display switch -- doesn't change what either method measures or
-        // touch fwMarks/fwAiResults themselves.
-        bool fwOverlayShowAlignmentIndependent = false;
-
-        // Juice's "circle skin" ask (osu!mania reference: image0.jpg) --
-        // an alternate marker style for the frame-window overlay. A small
-        // fixed-size filled dot marks the macro's exact click timing (the
-        // "note"); a separate unfilled ring around it grows with how
-        // lenient that click's window is, so a wide-open input reads as an
-        // obviously bigger halo at a glance instead of a same-size marker
-        // with a different number next to it. Purely additive rendering --
-        // doesn't touch fwMarks/analysis at all, default off.
-        bool fwCircleSkinEnabled = false;
-        float fwCircleSkinDotRadius = 5.f;
-        float fwCircleSkinRadiusPerFrame = 2.2f;
-        float fwCircleSkinMaxRadius = 60.f;
-
         // Nigel's ask (2026-09-13): the tier/shape/circle-skin system is
         // Juice's, and he doesn't use it. This is a hard override that makes
         // the overlay look like the frame-window counter in NaN's videos --
@@ -993,8 +986,10 @@ namespace gucci {
         // about those settings is lost, they just stop being consulted.
         bool fwDefaultLook = false;
         // Sub-option: the per-window bundled tier sounds (fw_1.wav ...
-        // fw_9_12.wav, seeded into fw_assets on first run) instead of
-        // GucciBot's own "Brrr". Those are what this style normally uses;
+        // fw_9_12.wav, bundled in resources: FrameWindowSound looks in the
+        // config folder, then resources, and main.cpp also copies them into
+        // <save>/fw_assets for older saved bands) instead of GucciBot's own
+        // "Brrr". Those are what this style normally uses;
         // the Brrr is a GucciBot thing, so it stays the default.
         bool fwDefaultLookBells = false;
 
@@ -1028,7 +1023,6 @@ namespace gucci {
         }
 
         bool practiceRangeEnabled = false;
-        int fwMaxWindow = 25;
         struct FrameWindowMark {
             // Unknown until something measures where the click happened. A
             // mark created without a position -- a manual entry on a macro
@@ -1051,96 +1045,21 @@ namespace gucci {
             }
         };
         std::vector<FrameWindowMark> fwMarks;
-        bool fwHasData = false;
-        bool fwTestShipReleases = true;
-        bool fwOrbAwareReleaseSkip = true;
-        struct FwClickSample {
-            uint32_t frame;
-            float x;
-            float y;
-            bool player2;
-            bool release;
-            bool orbDash = false;
-            bool orbNonDash = false;
-            gb::ActionType type = gb::ActionType::Jump;
-        };
-        std::vector<FwClickSample> fwClickSamples;
-        bool fwSampling = false;
-        int fwSweepRange = 12;
-        int fwMaxFramesMeasured = 240;
-        int fwSimSpeed = 1;
-        int fwSlackWindow = 3;
-        bool fwFullRangeSweep = false;
         bool fwAnalyzing = false;
         bool fwProbeDied = false;
         float fwSavedMusicVolume = 0.f;
         float fwSavedEffectsVolume = 0.f;
         bool fwMusicMuted = false;
 
-        enum class FwState {
-            Idle,
-            Capturing,
-            Probing,
-            DebugPause,
-            Finishing,
-            // Alignment-Independent method states -- entered from Capturing
-            // instead of Probing when fwUseAlignmentIndependent is set. See
-            // the "Alignment-Independent frame-window method" block below.
-            AiBuildPred,
-            AiSweepX,
-            AiContinuation
-        };
+        // Only the Classic Pathfinder still sets this (to Idle), and nothing
+        // reads it: the states it had belonged to GucciBot's 1.x analyzer,
+        // removed in 1.8.
+        enum class FwState { Idle };
         FwState fwState = FwState::Idle;
         bool fwCkptCreatedThisFrame = false;
-        size_t fwProbeClick = 0;
-        int fwProbeShift = 0;
-        int fwProbeFrame = 0;
-        int fwProbeHorizon = 16;
-        float fwProbeNextX = 0.f, fwProbeNextY = 0.f;
-        bool fwPositionCheckEnabled = false;
-        float fwPositionSlack = 50.f;
-        int fwProbeValidCount = 0;
-        bool fwUseRecoveryRangeAlgorithm = false;
-        int fwRecoveryRange = 4;
-        enum class FwProbeSubPhase { Reaching, RecoveryCandidate };
-        bool fwDebugMode = false;
-        int fwDebugSlowdown = 30;
-        bool fwDelayMarkerCapture = false;
-        struct FwDebugMark {
-            float x = 0.f, y = 0.f;
-            bool survived = false;
-            uint32_t macroFrame = 0;
-            uint32_t testedFrame = 0;
-            int inputNumber = 0;
-            bool isRelease = false;
-            bool player2 = false;
-            size_t clickIndex = 0;
-        };
-        std::vector<FwDebugMark> fwDebugMarks;
-        void debugPauseOrContinue(bool survived);
-        void debugTeleportToMark(size_t markIndex);
-        void fwTick();
-        // Calculate's capture-pass checkpoints MUST be taken from here, not
-        // from fwTick(). See the definition's comment in engine_core.cpp --
-        // capturing from fwTick() files a position under a frame label one
-        // ahead of it, which is the checkpoint X-drift bug.
-        void fwServiceSettledCapture();
-        void beginProbeRun();
-        void beginOrSkipProbeClick();
-        void beginShiftTest();
-        void advanceOffsetSweep(bool survived);
-        void beginShiftTestRecovery();
-        void beginProbeRunReach();
-        void beginRecoveryCandidate();
-        void advanceRecoverySweep(bool survived);
-        bool fwHasManualMarkAt(uint32_t frame, bool player2) const;
-        void finishProbeClick();
-        void fwFinishAnalysis();
         void cancelAnalysis();
         void muteAnalysisMusic();
         void unmuteAnalysisMusic();
-        void computeProbeHorizon();
-        void saveFwMarksNow();
         // Writes the analyzer's results next to the current macro.
         void saveAcFrameWindowResults();
         // What a Calculate run that just stopped leaves next to the macro (the
@@ -1155,35 +1074,11 @@ namespace gucci {
         // are not the windows of the file that name points at (it still names
         // the old macro), so they are kept in memory only.
         bool fwWindowsForgotten = false;
-        std::vector<StoredFrame> fwCapStack;
         void analyzeFrameWindows();
 
-        // ---- Alignment-Independent frame-window method (Juice's spec,
-        // GD_alignment_independent_frame_window_spec.txt, 2026-09-01) ----
-        // Separate, independently-selectable method -- does not replace or
-        // modify Time-Based/Recovery Range above (spec's own hard
-        // requirement). Reuses the SAME capture pass (fwCapStack) as the
-        // existing method, since that capture already gives the p=0/nominal
-        // predecessor checkpoint for free; only the post-capture sweep is
-        // new. V1 scope deliberately, per the spec's own "Performance
-        // Strategy" section: correctness first. NOT implemented yet, on
-        // purpose, pending a confirmed-correct V1 and Nigel/Juice's say-so:
-        // predecessor-state caching beyond the free p=0 reuse, adaptive Z,
-        // result caching, checkpointing for long macros, and (the big one)
-        // parallel workers -- this analyzer drives ONE live PlayLayer via
-        // checkpoint restore, so "parallel" would need multiple simulator
-        // instances that don't exist here, not a thread pool bolted on.
-        // Continuation depth is capped at 0 or 1 (not arbitrary N) for the
-        // same reason. Ask before adding any of these.
-        bool fwUseAlignmentIndependent = false;
-
-        // Selects anticroom's analyzer (src/analysis/ac/) instead of
-        // GucciBot's own for a Calculate run. Off by default: while it is off,
-        // his analyzer never starts, every gate that asks whether it is
-        // running answers no, and Calculate behaves exactly as it always has.
-        // It is an ADDITIONAL algorithm rather than a replacement so that
-        // Alignment-Independent -- Juice's, which his port predates and does
-        // not have -- survives, and so the two can be compared on one macro.
+        // Calculate's last message for its page, shown under its buttons
+        // while it isn't running: from a run starting, stopping or finishing,
+        // or from Copy info. With fwAcOk false it shows as a warning.
         std::string fwAcReport;
         bool fwAcOk = false;
 
@@ -1201,132 +1096,6 @@ namespace gucci {
         bool inputModsSynced = false;
         void syncInputMods();
         const std::string& analyzerConflicts();
-        int fwAiZ = 3;
-        int fwAiContinuationDepth = 1; // 0 or 1 only in V1
-        float fwAiClusterRatio = 1.15f;
-        float fwAiDominantThreshold = 0.5f;
-
-        enum class FwAiStatus { Dead, MissedTarget, Partial, Viable, DeadEnd };
-
-        struct FwAiInputResult {
-            uint32_t frame = 0;
-            bool player2 = false;
-            bool isRelease = false;
-            float x = 0.f, y = 0.f;
-            float percent = 0.f;
-            int macroWindow = 0;           // this click's Time-Based/Recovery result, for comparison
-            bool hasMacroMatch = false;    // false = Time-Based/Recovery hasn't measured this click at all (not "measured as 0")
-            int representativeWindow = -1; // -1 = no dominant cluster, fell back to macroWindow
-            int observedMin = 0, observedMax = 0;
-            int validAlignments = 0, totalAlignments = 0;
-            int dominantSupport = 0;
-            float dominantPercent = 0.f;
-            float sensitivity = 0.f;
-            std::vector<int> perAlignmentShift;  // raw data, index-aligned with the next vector
-            std::vector<int> perAlignmentWindow; // -- never discarded after picking the representative
-        };
-        std::vector<FwAiInputResult> fwAiResults;
-
-        // -- live pipeline state, meaningful only while fwState is one of
-        // the Ai* states below --
-        size_t fwAiClickIdx = 0;
-        int fwAiPredMaxNeg = 0, fwAiPredMaxPos = 0;
-        std::vector<int> fwAiValidPredShifts;
-        int fwAiXShift = 0;
-        int fwAiXMaxNeg = 0, fwAiXMaxPos = 0;
-        bool fwAiXNegContiguous = true, fwAiXPosContiguous = true;
-        int fwAiXLow = 0, fwAiXHigh = 0;   // contiguous span -- logging only, NOT the reported window (see fwAiXValidCount)
-        int fwAiXValidCount = 0;           // the actual per-alignment window: a raw count, matching fwProbeValidCount
-        // All three Ai* probe legs (AiBuildPred/AiSweepX/AiContinuation) use
-        // RELATIVE tick counting from their own restore point, same as the
-        // legacy method's fwProbeFrame/fwProbeHorizon -- deliberately NOT
-        // absolute-frame comparison, since a checkpoint restore's first tick
-        // isn't guaranteed to already show updater.getFrame() caught up to
-        // the checkpoint's own recorded frame (the legacy Probing state
-        // never relies on that equivalence either; matching it here rather
-        // than assuming otherwise).
-        uint32_t fwAiProbeFrame = 0;
-
-        // Juice's ask (2026-09-02): let him pick a specific tested (predecessor
-        // alignment, X shift) branch and watch it actually play out, at
-        // regular speed, to see what it tested and where it died -- this is
-        // also spec section 25's "Debug/Exhaustive mode" requirement, which
-        // V1 shipped without. Reuses the SAME fwDebugMode toggle as the
-        // legacy method's debug marks, populated separately here. Each
-        // branch stores its own predecessor checkpoint directly (not just an
-        // index) so "Go" can restore it without re-deriving anything.
-        struct FwAiDebugBranch {
-            size_t clickIdx = 0;
-            int predShift = 0;
-            int xShift = 0;
-            FwAiStatus status = FwAiStatus::Dead;
-            float x = 0.f, y = 0.f;
-            StoredFrame predCkpt;
-        };
-        void debugTeleportToAiBranch(size_t idx);
-
-        // Nigel's ask (2026-09-02): a marker showing where the icon actually
-        // starts from for each predecessor alignment that passed as valid --
-        // i.e. the position baked into that alignment's own checkpoint,
-        // where every one of its X-shift tests restores from. Directly
-        // answers Juice's earlier "i dont understand what the predecessor
-        // phase is measuring" -- this makes it visible. Unlike the pass/
-        // fail circles (fwDebugMarks, reset per-alignment), these
-        // accumulate for the WHOLE CLICK so the spread across every valid
-        // alignment is visible at once, clearing only when moving to a new
-        // click. Read directly off the stored checkpoint's baked-in
-        // position -- no extra simulation needed.
-        struct FwAiStartMark {
-            float x = 0.f, y = 0.f;
-            int predShift = 0;
-        };
-        void fwAiRecordAlignmentStartMark();
-
-        void fwAiBeginClick();
-        void fwAiBeginPredShift();
-        void fwAiConcludePredShift(bool diedBeforeTarget);
-        void fwAiBeginAlignSweep();
-        void fwAiBeginXShift();
-        void fwAiConcludeXShift(FwAiStatus status);
-        void fwAiBeginContinuationCandidate();
-        void fwAiAdvanceXSweep(bool viable);
-        void fwAiFinishAlignment();
-        void fwAiFinishClick();
-        void fwAiFinishAnalysis();
-        int fwAiNominalFirstOffset(int stepIdx) const;
-
-        enum class FwMarkerShape { Circle = 0, Star = 1, Spiral = 2, Polygon = 3 };
-        enum class FwFillStyle { Inverted = 0, Normal = 1 };
-
-        struct FrameWindowTier {
-            int lo = 1;
-            int hi = 3;
-            char imageFile[96] = "";
-            char soundFile[96] = "";
-            float r = 1.f, g = 0.2f, b = 0.2f;
-            FwMarkerShape shape = FwMarkerShape::Circle;
-            int polygonSides = 5;
-            float polygonCornerRadius = 0.f;
-            FwFillStyle fillStyle = FwFillStyle::Inverted;
-            bool noBorder = false;
-            float strokeSize = 2.2f;
-            float volume = 1.f;
-            float sizeScale = 1.f;
-            bool markerPulseEnabled = false;
-            float markerPulseColor[3] = {1.f, 1.f, 1.f};
-            float markerPulseFadeIn = 0.1f, markerPulseHold = 0.3f, markerPulseFadeOut = 0.5f;
-            bool textPulseEnabled = false;
-            float textPulseColor[3] = {1.f, 1.f, 1.f};
-            float textPulseFadeIn = 0.1f, textPulseHold = 0.3f, textPulseFadeOut = 0.5f;
-            char legendGroup[32] = "";
-        };
-        std::vector<FrameWindowTier> fwTiers;
-        FrameWindowTier* fwTierFor(int window) {
-            for (auto& t : fwTiers)
-                if (window >= t.lo && window <= t.hi)
-                    return &t;
-            return nullptr;
-        }
 
         bool autosaveAtLevelEnd = false;
         bool autosaveAtInterval = false;
@@ -1360,7 +1129,9 @@ namespace gucci {
         std::unordered_map<std::string, std::unordered_set<std::string>> customThemeMacrosByExt;
 
         std::vector<BotSettingsPreset> settingsPresets;
-        void saveBotSettingsPreset(const std::string& name);
+        // False when it couldn't be saved (a name a file can't have, or the
+        // file couldn't be written); the list only holds presets on disk.
+        bool saveBotSettingsPreset(const std::string& name);
         bool loadBotSettingsPreset(const std::string& name);
         void deleteBotSettingsPreset(const std::string& name);
 

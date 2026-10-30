@@ -26,6 +26,7 @@
 #include "mcp/mcp_server.hpp"
 #include "render/intro.hpp"
 #include "render/renderer.hpp"
+#include "replay/scbf_input.hpp"
 #include "trainers/videomode.hpp"
 #include "trainers/click_indicators.hpp"
 #include "tools/macro_check.hpp"
@@ -1241,6 +1242,8 @@ namespace gucci::ui {
             kit::EndCard();
 
             kit::BeginCard("Playback", nullptr);
+            engineSwitch("Block inputs during playback", "Only the macro presses buttons", &gb->replay.m_ignoreInputs,
+                         "replay_block_inputs");
             engineSwitch("Mirror inputs", "Two-player levels: each player's press also presses for the other",
                          &gb->replay.m_mirrorInputs, "feat_mirror_inputs");
             if (gb->replay.m_mirrorInputs)
@@ -1249,8 +1252,16 @@ namespace gucci::ui {
             engineSwitch("Maintain gravity", nullptr, &gb->replay.m_maintainGravity, "feat_maintain_gravity");
             engineSwitch("Sub-tick clicks (CBF recording)", "Records each click where inside the tick you pressed it",
                          &gb->replay.m_scbfRecording, "scbf_recording");
-            if (gb->replay.m_scbfRecording)
+            if (gb->replay.m_scbfRecording) {
                 engineSwitch("Split the tick at each click", nullptr, &gb->replay.m_scbfTickSplit, "scbf_tick_split");
+                // anticroom's count, which starts over at each respawn
+                // (replay/scbf_input.hpp). Maintain gravity records its own
+                // inputs, so the recorder sees none while it's on.
+                if (auto const& live = scbf::LiveRecorder::get(); live.recording() && !gb->replay.m_maintainGravity)
+                    kit::Hint(fmt::format("This attempt: {} placed in the tick, {} on the edge{}", live.placed(),
+                                          live.aligned(), live.splitting() ? "" : " (splitting is off)")
+                                  .c_str());
+            }
             kit::EndCard();
 
             kit::BeginCard("Saving", nullptr);
@@ -1507,6 +1518,11 @@ namespace gucci::ui {
                     upd.m_maxUPR = static_cast<uint32_t>(upr);
                     Mod::get()->setSavedValue<int>("updater_max_upr", upr);
                 }
+                // Silicate's Use Visual Updates (GucciUpdater::visualUpdateFactor).
+                engineSwitch("Scale with the tick rate",
+                             "Multiplies the limit above by the tick rate over GD's FPS cap: x4 at 240 TPS and "
+                             "60 FPS",
+                             &upd.m_useVisualUpdates, "updater_visual_updates");
             } else if (pacing == 2) {
                 float fps = static_cast<float>(upd.m_fpsTarget);
                 if (kit::SliderRow("Target FPS", "Measures how long a tick takes and aims for this frame rate", &fps, 30.f,

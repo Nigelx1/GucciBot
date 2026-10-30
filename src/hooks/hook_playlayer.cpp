@@ -126,7 +126,20 @@ class $modify(GB7PlayLayer, PlayLayer) {
         if (pf.m_savedCheckpoints.empty())
             return;
         auto& cp = pf.m_savedCheckpoints.back();
-        auto* obj = cp.m_checkpoint->m_physicalCheckpointObject;
+        auto* gone = cp.m_checkpoint;
+        if (!gone) {
+            pf.m_savedCheckpoints.pop_back();
+            return;
+        }
+        // saveCurrent also filed this checkpoint in the backstep store, as an
+        // entry that doesn't own it. The release below frees the object, so
+        // that entry goes too: left in, a step back onto it handed GD a freed
+        // checkpoint. The store keeps a one-tick gap there, which only means
+        // one step back moves two ticks at that spot.
+        std::erase_if(pf.m_storedFrames, [gone](StoredFrame const& f) {
+            return !f.owned && f.state.m_checkpoint == gone;
+        });
+        auto* obj = gone->m_physicalCheckpointObject;
         removeObjectFromSection(obj);
         if (obj->m_glowSprite) {
             obj->m_glowSprite->removeMeAndCleanup();
@@ -134,7 +147,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
         }
         obj->removeMeAndCleanup();
 
-        cp.m_checkpoint->release();
+        gone->release();
         pf.m_savedCheckpoints.pop_back();
     }
 
@@ -762,40 +775,6 @@ class $modify(GB7PlayLayer, PlayLayer) {
             return;
         }
 
-        if (gb->fwAnalyzing) {
-            if (obj != m_anticheatSpike) {
-                gb->fwProbeDied = true;
-                float xp = player ? player->m_position.x : -1.f;
-                float pct = m_levelLength > 0.f ? xp / m_levelLength * 100.f : -1.f;
-                log::info("[CAP-DIE] f={} x={:.1f} pct={:.1f}", upd.getFrame(), xp, pct);
-                bool aiState = gb->fwState == GucciEngine::FwState::AiBuildPred ||
-                               gb->fwState == GucciEngine::FwState::AiSweepX ||
-                               gb->fwState == GucciEngine::FwState::AiContinuation;
-                if (aiState) {
-                    logCalcDeathTrace(fmt::format(
-                        "[AI-DIE] click={} predShift={:+d} xShift={:+d} probeFrame={} f={} "
-                        "x={:.1f} pct={:.1f}",
-                        gb->fwAiClickIdx,
-                        gb->fwAiValidPredShifts.empty() ? 0 : gb->fwAiValidPredShifts.back(),
-                        gb->fwAiXShift,
-                        gb->fwAiProbeFrame,
-                        upd.getFrame(),
-                        xp,
-                        pct));
-                } else {
-                    logCalcDeathTrace(fmt::format(
-                        "[DIE] click={} shift={:+d} probeFrame={} f={} x={:.1f} pct={:.1f}",
-                        gb->fwProbeClick,
-                        gb->fwProbeShift,
-                        gb->fwProbeFrame,
-                        upd.getFrame(),
-                        xp,
-                        pct));
-                }
-            }
-            return;
-        }
-
         // Noclip accuracy counts the tick (hacks/noclip_accuracy.hpp); a hit
         // that would take the attempt under its "die below" line is not
         // blocked, and the death goes ahead as if noclip were off.
@@ -901,7 +880,9 @@ class $modify(GB7PlayLayer, PlayLayer) {
         }
         if (!gb->autosaveAtLevelEnd)
             return;
-        if (!gb->isRecording() || gb->replay.m_actionAtom.empty())
+        // A macro with no name isn't saved until it gets one: it would be
+        // written as a file named only by its extension.
+        if (!gb->isRecording() || gb->replay.m_actionAtom.empty() || gb->replayName.empty())
             return;
         auto path = gb->replay.getCurrentPath();
         if (gb->replayBackupsEnabled)

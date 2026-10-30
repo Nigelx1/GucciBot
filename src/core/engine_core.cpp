@@ -531,6 +531,9 @@ namespace gucci {
                 m_inputIndex = m_actionAtom.length();
                 if (m_pathSamples.size() > (size_t)respawnFrame + 1)
                     m_pathSamples.resize((size_t)respawnFrame + 1);
+                // A drop of game time after the checkpoint was cut with it.
+                if (gb->updater.m_droppedTimeFrame > respawnFrame)
+                    gb->updater.m_droppedTimeFrame = UINT32_MAX;
                 if (before != after)
                     log::info("[GucciBot] Recording: died@{}, respawn@{} (checkpoint) "
                               "— deleted {} stale input(s) after checkpoint (kept {})",
@@ -547,6 +550,11 @@ namespace gucci {
             } else {
                 m_actionAtom.m_actions.clear();
                 m_pathSamples.clear();
+                // The run starts over here, from the level's start or from a
+                // start position; Save marks the file with which.
+                auto* pl = PlayLayer::get();
+                m_recordedFromStartPos = pl && pl->m_startPosObject;
+                gb->updater.m_droppedTimeFrame = UINT32_MAX;
                 // GucciBot (2026-10-23): the clicks these windows were
                 // measured on are gone: drop them from memory, or Save writes
                 // them next to this new recording. The old macro's sidecar on
@@ -585,16 +593,20 @@ namespace gucci {
             // frame IS an input frame. That is why spam sections measured
             // nothing while sparse ones were fine.
             //
-            // Scoped to the analyzer for now: normal playback has the same
-            // latent bug, but changing respawn behaviour for every macro needs
-            // its own change and its own test.
+            // Normal playback had the same jam (a respawn or a step back onto
+            // a click's frame ended the macro there) while this rule covered
+            // the analyzer only. It now holds wherever playback looks a frame
+            // ahead, which is every run but the Classic Pathfinder's: that one
+            // looks inputs up on the frame itself (processQueuedButtons'
+            // lookupFrame), so an action on the respawn frame is still to come
+            // and the index starts on it, as it always did there.
             //
             // GucciBot (2026-10-23): with Calculate's 2-player fixes, the same
             // rule in the dispatch order (see m_dispatchOrder).
             if (this->dispatchByOrder()) {
                 this->seatDispatchOrder(respawnFrame);
             } else {
-                bool const exclusive = GucciEngine::get()->analyzerOwnsRun();
+                bool const exclusive = !(gb->fwAnalyzing && !gb->analyzerOwnsRun());
                 m_inputIndex = static_cast<size_t>(std::distance(
                     m_actionAtom.m_actions.begin(),
                     std::find_if(m_actionAtom.m_actions.begin(),
@@ -617,7 +629,9 @@ namespace gucci {
             if (fs::exists(candidate, ec))
                 return candidate;
         }
-        return dir / (gb->replayName + ".brrr");
+        // Not saved yet: the name the menu's Save uses (the theme's
+        // extension), so an autosave and the sidecars don't end up as .brrr.
+        return dir / (gb->replayName + ui::macroExtension());
     }
 
     static fs::path sidecarPath(const fs::path& macroPath, const char* ext);
@@ -646,10 +660,6 @@ namespace gucci {
             else
                 fs::remove(to, sideEc);
         }
-    }
-
-    void GucciReplaySystem::createBackup() {
-        backupExisting(getCurrentPath());
     }
 
     // Juice's file-organization ask: .fw/.path/.trainer sidecars used to sit
@@ -854,32 +864,30 @@ namespace gucci {
             out.clickBarTps = tps;
         } else if (bytes.size() >= 4 && bytes[0] == 'B' && bytes[1] == 'R' && bytes[2] == 'R' &&
                    bytes[3] == '\0') {
-            auto* legacy = BRRMacro::deserialize(bytes);
-            if (!legacy)
+            // GucciBot 1.x's old .brrr, through the macro converter's reader
+            // (readBrr). The macro list converts these, but a trainer macro
+            // picked in 1.x can still name one.
+            auto const read = convert::read(bytes, geode::utils::string::pathToString(path.filename()));
+            if (!read.ok() || read.macro.inputs.empty())
                 return;
-            if (legacy->inputs.empty()) {
-                delete legacy;
-                return;
-            }
 
-            double tps = legacy->framerate > 0.0 ? legacy->framerate : 240.0;
-            out.levelName = legacy->levelName;
-            out.levelId = legacy->levelId;
-            std::unordered_map<int, uint32_t> openPress;
-            for (auto& inp : legacy->inputs) {
-                int key = (int)inp.actionType * 2 + (inp.isPlayer2() ? 1 : 0);
-                if (inp.isPressed()) {
-                    openPress[key] = (uint32_t)inp.tick;
+            double tps = read.macro.tps > 0.0 ? read.macro.tps : 240.0;
+            out.levelName = read.macro.levelName;
+            out.levelId = static_cast<int32_t>(read.macro.levelId);
+            std::unordered_map<int, int64_t> openPress;
+            for (auto const& inp : read.macro.inputs) {
+                int key = (int)inp.button * 2 + (inp.player2 ? 1 : 0);
+                if (inp.down) {
+                    openPress[key] = inp.frame;
                 } else {
                     auto it = openPress.find(key);
                     if (it != openPress.end()) {
-                        out.clickIntervalsSec.push_back({it->second / tps, (double)inp.tick / tps});
+                        out.clickIntervalsSec.push_back({it->second / tps, (double)inp.frame / tps});
                         openPress.erase(it);
                     }
                 }
             }
             out.clickBarTps = tps;
-            delete legacy;
         } else {
             return;
         }
@@ -1072,7 +1080,6 @@ namespace gucci {
     static void loadFwMarks(const fs::path& macroPath) {
         auto* gb = GucciEngine::get();
         gb->fwMarks.clear();
-        gb->fwHasData = false;
         auto sc = fwSidecarPath(macroPath);
         if (!fs::exists(sc))
             return;
@@ -1110,21 +1117,8 @@ namespace gucci {
                 break;
             gb->fwMarks.push_back({x, y, (int)w, p2 != 0, fr, pct, man != 0, rel != 0});
         }
-        gb->fwHasData = !gb->fwMarks.empty();
         log::info("[GucciBot] Frame-window: loaded {} persisted mark(s) from sidecar",
                   gb->fwMarks.size());
-    }
-
-    void GucciEngine::saveFwMarksNow() {
-        saveFwMarks(replay.getCurrentPath());
-        saveAcResults(replay.getCurrentPath());
-    }
-
-    bool GucciEngine::fwHasManualMarkAt(uint32_t frame, bool player2) const {
-        for (auto const& mk : fwMarks)
-            if (mk.manual && mk.frame == frame && mk.player2 == player2)
-                return true;
-        return false;
     }
 
     void GucciReplaySystem::save(const fs::path& path, bool noOverwrite) {
@@ -1161,6 +1155,8 @@ namespace gucci {
         }
         hdr.name = m_replayName;
         hdr.rngSeed = m_startingSeed;
+        if (m_recordedFromStartPos)
+            hdr.flags |= GBR6_FROM_START_POS;
         hdr.timestamp = std::chrono::duration_cast<std::chrono::seconds>(
                             std::chrono::system_clock::now().time_since_epoch())
                             .count();
@@ -1250,6 +1246,8 @@ namespace gucci {
         }
 
         auto* gb = GucciEngine::get();
+        // Whatever the last recording dropped isn't this macro's.
+        gb->updater.m_droppedTimeFrame = UINT32_MAX;
 
         char magic[4] = {};
         {
@@ -1274,9 +1272,10 @@ namespace gucci {
             m_startingSeed = f.header.rngSeed;
             m_replayName = f.header.name;
             gb->loadedMacroLevelName = f.header.levelName;
-            // Shown on the Macro card (nothing ever set it): a macro recorded
-            // from a start position only plays, and measures, from that one.
-            gb->startPosWarning = f.header.fromStartPos()
+            // Shown on the Macro card: a macro recorded from a start position
+            // only plays, and measures, from that one. Kept for a re-save.
+            m_recordedFromStartPos = f.header.fromStartPos();
+            gb->startPosWarning = m_recordedFromStartPos
                                       ? "Recorded from a start position: play it, and Calculate it, from that "
                                         "same start position."
                                       : "";
@@ -1324,38 +1323,13 @@ namespace gucci {
             return;
         }
 
-        auto* legacy = BRRMacro::loadFromDisk(path.stem().string());
-        if (legacy && !legacy->inputs.empty()) {
-            m_actionAtom.clear();
-            m_inputIndex = 0;
-            for (auto& inp : legacy->inputs) {
-                gb::ActionType t = gb::ActionType::Jump;
-                if (inp.actionType == 2)
-                    t = gb::ActionType::Left;
-                if (inp.actionType == 3)
-                    t = gb::ActionType::Right;
-                m_actionAtom.addAction(
-                    static_cast<uint32_t>(inp.tick), t, inp.isPressed(), inp.isPlayer2());
-            }
-            gb->updater.setTps(legacy->framerate);
-            m_initialTPS = legacy->framerate;
-            gb->setMode(GucciEngine::Mode::Playing);
-            log::info("[GucciBot] Loaded legacy BRR: {} inputs", m_actionAtom.length());
-            loadFwMarks(path);
-            loadAcResults(path);
-            gb->fwWindowsForgotten = false;
-            m_pathSamples.clear();
-            m_trainerBestX = 0.f;
-            buildClickIntervals(gb->updater.m_tps);
-            delete legacy;
-            return;
-        }
-        delete legacy;
+        // Only GBR6 loads here. GucciBot 1.x's old .brrr and other bots'
+        // macros are converted to GBR6 first (Saved macros, macro_convert).
         log::error("[GucciBot] Unknown format: {}", path.string());
     }
 
     void GucciEngine::setMode(Mode m) {
-        if (fwAnalyzing && m != Mode::Playing && fwState != FwState::Finishing) {
+        if (fwAnalyzing && m != Mode::Playing) {
             cancelAnalysis();
         }
         Mode prev = mode;
@@ -1365,18 +1339,14 @@ namespace gucci {
         // here from their own thread.
         if (m != prev && m != Mode::Idle)
             Loader::get()->queueInMainThread([] { setupcheck::toastIfNeeded(); });
-        if (m == Mode::Recording) {
-            fwEnabledLive = false;
-            fwLegendEnabled = false;
-            Mod::get()->setSavedValue("fw_live", false);
-            Mod::get()->setSavedValue("fw_legend", false);
-        }
+        // A recording starting has dropped no game time yet (see
+        // GucciUpdater::noteDroppedTime).
+        if (m == Mode::Recording && prev != Mode::Recording)
+            updater.m_droppedTimeFrame = UINT32_MAX;
         if (m == Mode::Playing) {
             if (prev != Mode::Playing)
                 userTpsSaved = updater.m_tps;
             replay.m_inputIndex = 0;
-            fwClickSamples.clear();
-            fwSampling = true;
             // Diagnostic for the "calculated correctly, failed on playback" bug
             // -- confirms what's actually in the atom the instant playback
             // starts, before blaming timing/consumption logic further.
@@ -1393,7 +1363,6 @@ namespace gucci {
                 updater.setTps(userTpsSaved);
                 userTpsSaved = 0.0;
             }
-            fwSampling = false;
         }
     }
 
@@ -1573,7 +1542,8 @@ namespace gucci {
             autosaveIntervalSec = 1.0;
         if (replay.m_autosaveJobId == 0) {
             replay.m_autosaveJobId = scheduler.schedule(autosaveIntervalSec, [this] {
-                if (autosaveAtInterval && isRecording() && !replay.m_actionAtom.empty()) {
+                // Not without a name, as at the level's end (hook_playlayer.cpp).
+                if (autosaveAtInterval && isRecording() && !replay.m_actionAtom.empty() && !replayName.empty()) {
                     auto path = replay.getCurrentPath();
                     if (replayBackupsEnabled)
                         replay.backupExisting(path);
@@ -2466,8 +2436,28 @@ namespace gucci {
         flag("autosaveAtLevelEnd", p.autosaveAtLevelEnd);
     }
 
-    void GucciEngine::saveBotSettingsPreset(const std::string& name) {
+    // The file first, and the list only once it's written. A preset whose
+    // file couldn't be written went into the list anyway and was gone after
+    // a restart: a name with \ / * ? " < > | in it, or a ':', which Windows
+    // takes as a hidden stream of another file (written, but never found
+    // again). The same characters the render presets refuse.
+    bool GucciEngine::saveBotSettingsPreset(const std::string& name) {
+        if (name.empty() || name.find_first_of("\\/:*?\"<>|") != std::string::npos) {
+            log::warn("[GucciBot] Couldn't save preset \"{}\": a file can't have that name", name);
+            return false;
+        }
         BotSettingsPreset p = capturePreset(*this, name);
+        auto dir = getPresetsDir();
+        std::error_code ec;
+        fs::create_directories(dir, ec);
+        std::ofstream f(dir / (name + ".json"));
+        f << presetToJson(p).dump();
+        f.close();
+        if (!f) {
+            log::warn("[GucciBot] Couldn't save preset \"{}\"", name);
+            return false;
+        }
+
         auto it = std::find_if(settingsPresets.begin(), settingsPresets.end(), [&](auto& x) {
             return x.name == name;
         });
@@ -2475,11 +2465,7 @@ namespace gucci {
             *it = p;
         else
             settingsPresets.push_back(p);
-
-        auto dir = getPresetsDir();
-        fs::create_directories(dir);
-        std::ofstream f(dir / (name + ".json"));
-        f << presetToJson(p).dump();
+        return true;
     }
 
     bool GucciEngine::loadBotSettingsPreset(const std::string& name) {
@@ -2591,15 +2577,23 @@ namespace gucci {
     // separate question and a separate change.)
     void GucciEngine::loadEngineSettings() {
         auto* mod = Mod::get();
+        // A value found only under its old key is copied to the new one.
+        // Geode's setSavedValue writes nothing when the value equals what the
+        // key already reads as, and a missing key reads as false or 0: with
+        // only the old key on, switching the setting off never reached the
+        // save, and the old key turned it back on at the next launch.
         auto pick = [mod](auto def, const char* key, const char* legacy) {
             using T = decltype(def);
-            if (!mod->hasSavedValue(key) && legacy && mod->hasSavedValue(legacy))
-                return mod->getSavedValue<T>(legacy, def);
+            if (!mod->hasSavedValue(key) && legacy && mod->hasSavedValue(legacy)) {
+                T const v = mod->getSavedValue<T>(legacy, def);
+                mod->getSaveContainer()[key] = matjson::Value(v);
+                return v;
+            }
             return mod->getSavedValue<T>(key, def);
         };
 
-        // Timing. Written as float by the GUI, so read as float -- asking for a
-        // double back out of a float slot returns the default instead.
+        // Timing. Saved values are JSON numbers, so float and double read back
+        // the same.
         updater.m_tps = pick(240.f, "eng_tick_rate", "updater_tps");
 #if !GB_NATIVE_ENGINE
         updater.setTps(updater.m_tps);  // 240 if GD can't run it here (core/portable_tps.hpp)
@@ -2617,8 +2611,11 @@ namespace gucci {
         // defaults.
         updater.m_realTime = pick(false, "updater_real_time", nullptr);
         updater.m_maxUPR = (uint32_t)std::max(1, pick(10, "updater_max_upr", nullptr));
+        // Silicate's use_visual_updates ("Scale with the tick rate").
+        updater.m_useVisualUpdates = pick(false, "updater_visual_updates", nullptr);
         updater.m_dynamicUpr = pick(false, "updater_dynamic_upr", nullptr);
         updater.m_fpsTarget = std::max(1.0, pick(60.0, "updater_fps_target", nullptr));
+        updater.m_logFrameIncrements = pick(false, "debug_tick_logs", nullptr);
 
         // Playback features.
         updater.m_ssbFix = pick(false, "feat_scroll_speed_fix", "updater_ssbFix");
@@ -2634,6 +2631,7 @@ namespace gucci {
         replay.m_mirrorInputs = pick(false, "feat_mirror_inputs", "replay_mirrorInputs");
         replay.m_mirrorInverted = pick(false, "feat_mirror_inverted", nullptr);
         replay.m_maintainGravity = pick(false, "feat_maintain_gravity", "replay_maintainGravity");
+        replay.m_ignoreInputs = pick(true, "replay_block_inputs", nullptr);
         replay.m_scbfRecording = pick(false, "scbf_recording", nullptr);
         replay.m_scbfTickSplit = pick(true, "scbf_tick_split", nullptr);
         replay.m_subtickPreview = pick(false, "scbf_subtick_preview", nullptr);
@@ -2780,9 +2778,13 @@ namespace gucci {
         log::info("[GucciBot] " MOD_VERSION " initialized — {} macros", storedMacros.size());
 
         // Standing down, or switched off, no midhooks or patches went in on
-        // purpose (util_midhook, engine_updater.cpp): expect none.
+        // purpose (util_midhook, engine_updater.cpp): expect none. Otherwise
+        // 12 midhooks: 5 in engine_updater.cpp, 6 in hook_gjbasegamelayer.cpp
+        // and 1 in hook_playerobject.cpp. A literal, not midhookSites().size():
+        // a site registers itself as it's placed, so one whose $execute never
+        // ran would shrink both counts and still pass.
         bool const noEngineCode = standingDown || botswitch::takenOut() || !GB_NATIVE_ENGINE;
-        gbcheck::run(noEngineCode ? 0 : 5, noEngineCode ? 0 : 4, GBR6_VERSION, BRR_FORMAT_VERSION,
+        gbcheck::run(noEngineCode ? 0 : 12, noEngineCode ? 0 : 4, GBR6_VERSION, BRR_FORMAT_VERSION,
                      MOD_VERSION);
     }
 
@@ -2896,7 +2898,6 @@ namespace gucci {
             return;
         ::Bot::get()->frameWindow().clear();
         fwMarks.clear();
-        fwHasData = false;
         fwWindowsForgotten = true;
     }
 

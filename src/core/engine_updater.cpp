@@ -42,11 +42,12 @@ static void slopeLog(const std::string& line) {
         g_slopeLog.open(path, std::ios::out | std::ios::trunc);
         log::info("[SLOPE] log file at: {}", path.string());
     }
+    // The file only: during playback and rendering this runs every tick,
+    // and copying each line into Geode's log flooded it.
     if (g_slopeLog.is_open()) {
         g_slopeLog << line << '\n';
         g_slopeLog.flush();
     }
-    log::info("[SLOPE] {}", line);
 }
 
 // Congregation slope diagnostic. Under the analyzer's capture GD's
@@ -79,19 +80,6 @@ void gucci::logFrameIncrement(const char* callSite, uint32_t frame, PlayerObject
         }
         g_frameIncLog << '\n';
         g_frameIncLog.flush();
-    }
-}
-
-static std::ofstream g_calcDeathLog;
-void gucci::logCalcDeathTrace(const std::string& line) {
-    if (!g_calcDeathLog.is_open()) {
-        auto path = Mod::get()->getSaveDir() / "guccibot_calcdeath.log";
-        g_calcDeathLog.open(path, std::ios::out | std::ios::trunc);
-        log::info("[CALCDEATH] log file at: {}", path.string());
-    }
-    if (g_calcDeathLog.is_open()) {
-        g_calcDeathLog << line << '\n';
-        g_calcDeathLog.flush();
     }
 }
 
@@ -135,6 +123,29 @@ bool GucciUpdater::useFastLockDelta() const {
            gb->isPlaying() && !SLRenderer::get()->isRecording();
 }
 
+// The first frame a recording dropped game time at, kept for Calculate
+// (m_droppedTimeFrame): a later drop doesn't move it, so a checkpoint respawn
+// that cuts a later one can't hide an earlier one still in the macro. Not for
+// Absense's pathfinder, which records while it drives and lets go of wall
+// clock on purpose (see the realtime cap below): no player was playing.
+void GucciUpdater::noteDroppedTime() {
+    if (GucciEngine::get()->isRecording() && !::Bot::get()->pathfinder().drivesGame() &&
+        m_droppedTimeFrame == UINT32_MAX)
+        m_droppedTimeFrame = this->getFrame();
+}
+
+// Silicate's "how many steps can we take in one VISUAL frame": the tick rate
+// over GD's FPS cap (240 when it isn't set), at least 1. Dynamic pacing
+// measures its own cap, so it is never multiplied.
+int GucciUpdater::visualUpdateFactor() const {
+    if (!m_useVisualUpdates || m_dynamicUpr)
+        return 1;
+    float fps = GameManager::get()->m_customFPSTarget;
+    if (fps <= 10.0f)
+        fps = 240.0f;
+    return std::max(1, (int)m_tps / (int)fps);
+}
+
 void GucciUpdater::calculateSteps(float dt, float targetDt) {
     // Absense's pathfinder thinks, and puts earlier states back, while the
     // frame stands still (drawScene). cocos measures this frame's delta after
@@ -164,6 +175,7 @@ void GucciUpdater::calculateSteps(float dt, float targetDt) {
             "not replay -- the run skipped time a clean replay does not",
             dt - MAX_FRAME_DELTA, this->getFrame(), dt, MAX_FRAME_DELTA);
         dt = MAX_FRAME_DELTA;
+        this->noteDroppedTime();
     }
 
     int steps = (int)std::floor(dt / wantedDt);
@@ -176,13 +188,7 @@ void GucciUpdater::calculateSteps(float dt, float targetDt) {
     if (m_respawnTimer > 0)
         m_tpsOverflow = 0.0;
 
-    if (m_useVisualUpdates && !m_dynamicUpr) {
-        float fps = GameManager::get()->m_customFPSTarget;
-        if (fps <= 10.0f)
-            fps = 240.0f;
-        int modifier = (int)m_tps / (int)fps;
-        stepLimit *= std::max(1, modifier);
-    }
+    stepLimit *= this->visualUpdateFactor();
 
     // Was gb->renderer.recording -- the legacy TTR renderer, which has been
     // unreachable since SLRenderer took over, so this read false forever and
@@ -223,6 +229,7 @@ void GucciUpdater::calculateSteps(float dt, float targetDt) {
                     m_tpsOverflow - MAX_CARRIED_OVERFLOW, this->getFrame(),
                     MAX_CARRIED_OVERFLOW);
                 m_tpsOverflow = MAX_CARRIED_OVERFLOW;
+                this->noteDroppedTime();
             }
         }
     }
@@ -937,64 +944,10 @@ static void tickSettledWork() {
                 gb->replay.m_pathSamplesDirty = false;
             }
         }
-
-        if (gb->fwAnalyzing && gb->fwState == GucciEngine::FwState::Capturing) {
-            auto& samples = gb->replay.m_pathSamples;
-            uint32_t frame = upd.getFrame();
-            if (frame < samples.size()) {
-                auto* plr = PlayLayer::get();
-                auto const& s = samples[frame];
-                if (plr && plr->m_player1) {
-                    auto* p1 = plr->m_player1;
-                    p1->setPosition({s.p1x, s.p1y});
-                    p1->m_playerSpeed = s.p1XVel;
-                    p1->m_yVelocity = s.p1YVel;
-                    p1->setRotation(s.p1Rot);
-                    p1->m_isOnGround = s.p1OnGround;
-                    p1->m_isUpsideDown = s.p1UpsideDown;
-                    p1->m_isDashing = s.p1Dashing;
-                }
-                if (s.hasP2 && plr && plr->m_player2) {
-                    auto* p2 = plr->m_player2;
-                    p2->setPosition({s.p2x, s.p2y});
-                    p2->m_playerSpeed = s.p2XVel;
-                    p2->m_yVelocity = s.p2YVel;
-                    p2->setRotation(s.p2Rot);
-                    p2->m_isOnGround = s.p2OnGround;
-                    p2->m_isUpsideDown = s.p2UpsideDown;
-                    p2->m_isDashing = s.p2Dashing;
-                }
-            }
-        }
     }
 
-    if (gb->isPlaying()) {
-        bool logIt = !gb->fwAnalyzing || (gb->fwState == GucciEngine::FwState::Capturing);
-        if (logIt) {
-            auto* plr = PlayLayer::get();
-            if (plr && plr->m_player1) {
-                auto* p = plr->m_player1;
-                bool hold = false;
-                if (plr->m_uiLayer)
-                    hold = plr->m_uiLayer->m_p1Jumping || plr->m_uiLayer->m_p1TouchId != -1;
-                log::info("[DIAG] {} f={} x={:.3f} y={:.3f} xs={:.3f} ys={:.3f} rot={:.3f} g={} "
-                          "flip={} hold={} est={} ovf={:.4f} rs={}",
-                          gb->fwAnalyzing ? "CALC" : "PLAY",
-                          upd.getFrame(),
-                          (double)p->m_position.x,
-                          (double)p->m_position.y,
-                          (double)p->m_playerSpeed,
-                          (double)p->m_yVelocity,
-                          (double)p->getRotation(),
-                          p->m_isOnGround ? 1 : 0,
-                          p->m_isUpsideDown ? 1 : 0,
-                          hold ? 1 : 0,
-                          upd.estimatedStepCount,
-                          (double)upd.m_tpsOverflow,
-                          upd.m_respawnTimer);
-            }
-        }
-    }
+    // A per-tick [DIAG] line used to go to Geode's log here during playback.
+    // The slope log's per-tick line below has every field it had, so it went.
 
     // fwCkptCreatedThisFrame stays: Pathfinder sets it, it is not analyzer
     // state. The fwTick() call that used to follow is gone with GucciBot's
