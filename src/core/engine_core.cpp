@@ -2807,9 +2807,13 @@ namespace gucci {
         log::info("[GucciBot] " MOD_VERSION " initialized — {} macros", storedMacros.size());
 
         // Standing down, or switched off, no midhooks or patches went in on
-        // purpose (util_midhook, engine_updater.cpp): expect none.
+        // purpose (util_midhook, engine_updater.cpp): expect none. Otherwise
+        // 12 midhooks: 5 in engine_updater.cpp, 6 in hook_gjbasegamelayer.cpp
+        // and 1 in hook_playerobject.cpp. A literal, not midhookSites().size():
+        // a site registers itself as it's placed, so one whose $execute never
+        // ran would shrink both counts and still pass.
         bool const noEngineCode = standingDown || botswitch::takenOut() || !GB_NATIVE_ENGINE;
-        gbcheck::run(noEngineCode ? 0 : 5, noEngineCode ? 0 : 4, GBR6_VERSION, BRR_FORMAT_VERSION,
+        gbcheck::run(noEngineCode ? 0 : 12, noEngineCode ? 0 : 4, GBR6_VERSION, BRR_FORMAT_VERSION,
                      MOD_VERSION);
     }
 
