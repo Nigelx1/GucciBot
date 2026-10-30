@@ -511,8 +511,8 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         // Tell anticroom's analyzer the moment a press is actually applied,
         // and in what state the player was when it landed -- notably whether
         // the input could be split within the tick or had to be buffered,
-        // which is what his cube CBF investigation hangs on. Inert unless his
-        // analyzer is running, which GucciBot's own Calculate never makes it.
+        // which is what his cube CBF investigation hangs on. Inert unless
+        // Calculate (his analyzer) is running.
         // Placed exactly where Silicate places it: after the button filter,
         // before the input is handed onward.
         if (auto& acfw = ::Bot::get()->frameWindow(); acfw.running()) {

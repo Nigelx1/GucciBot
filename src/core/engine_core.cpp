@@ -2592,8 +2592,8 @@ namespace gucci {
             return mod->getSavedValue<T>(key, def);
         };
 
-        // Timing. Written as float by the GUI, so read as float -- asking for a
-        // double back out of a float slot returns the default instead.
+        // Timing. Saved values are JSON numbers, so float and double read back
+        // the same.
         updater.m_tps = pick(240.f, "eng_tick_rate", "updater_tps");
 #if !GB_NATIVE_ENGINE
         updater.setTps(updater.m_tps);  // 240 if GD can't run it here (core/portable_tps.hpp)
