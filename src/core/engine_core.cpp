@@ -585,16 +585,20 @@ namespace gucci {
             // frame IS an input frame. That is why spam sections measured
             // nothing while sparse ones were fine.
             //
-            // Scoped to the analyzer for now: normal playback has the same
-            // latent bug, but changing respawn behaviour for every macro needs
-            // its own change and its own test.
+            // Normal playback had the same jam (a respawn or a step back onto
+            // a click's frame ended the macro there) while this rule covered
+            // the analyzer only. It now holds wherever playback looks a frame
+            // ahead, which is every run but the Classic Pathfinder's: that one
+            // looks inputs up on the frame itself (processQueuedButtons'
+            // lookupFrame), so an action on the respawn frame is still to come
+            // and the index starts on it, as it always did there.
             //
             // GucciBot (2026-10-23): with Calculate's 2-player fixes, the same
             // rule in the dispatch order (see m_dispatchOrder).
             if (this->dispatchByOrder()) {
                 this->seatDispatchOrder(respawnFrame);
             } else {
-                bool const exclusive = GucciEngine::get()->analyzerOwnsRun();
+                bool const exclusive = !(gb->fwAnalyzing && !gb->analyzerOwnsRun());
                 m_inputIndex = static_cast<size_t>(std::distance(
                     m_actionAtom.m_actions.begin(),
                     std::find_if(m_actionAtom.m_actions.begin(),
