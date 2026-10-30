@@ -1281,13 +1281,17 @@ namespace gucci::ui {
             speedRows(true);
             kit::EndCard();
 
-            kit::BeginCard("Playback", nullptr);
-            engineSwitch("Mirror inputs", "Two-player levels: each player's press also presses for the other",
+            kit::BeginCard("Recording and playback", nullptr);
+            engineSwitch("Mirror inputs", "While recording, in two-player levels: each player's press also presses for "
+                                          "the other",
                          &gb->replay.m_mirrorInputs, "feat_mirror_inputs");
             if (gb->replay.m_mirrorInputs)
                 engineSwitch("Mirror inverted", "The other player gets the opposite", &gb->replay.m_mirrorInverted,
                              "feat_mirror_inverted");
-            engineSwitch("Maintain gravity", nullptr, &gb->replay.m_maintainGravity, "feat_maintain_gravity");
+            engineSwitch("Maintain gravity",
+                         "While recording: while Player 1 is upside down, a hold records as a release and a release "
+                         "as a hold",
+                         &gb->replay.m_maintainGravity, "feat_maintain_gravity");
             engineSwitch("Sub-tick clicks (CBF recording)", "Records each click where inside the tick you pressed it",
                          &gb->replay.m_scbfRecording, "scbf_recording");
             if (gb->replay.m_scbfRecording) {
