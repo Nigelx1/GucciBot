@@ -1,6 +1,6 @@
 // GBR6 sub-tick section round trip (SCBF offsets, 2026-09-27), the TPS
-// section (Macro Tools, 2026-10-03) and the encoder keeping each input's
-// button. Run by
+// section (Macro Tools, 2026-10-03), the encoder keeping each input's
+// button, and autoclick runs past 65,535 clicks (2026-10-28). Run by
 // run_tests.bat, outside the game. Built /O2 /MD like the mod: with cl's
 // defaults (static CRT, no optimisation) this toolchain fast-fails inside the
 // very first vector::insert in serialize(), which the mod runs on every save.
@@ -170,6 +170,44 @@ int main() {
             same = g->p1Inputs[i].frame == p1[i].frame && g->p1Inputs[i].button == p1[i].button &&
                    g->p1Inputs[i].pressed == p1[i].pressed;
         CHECK(same);
+    }
+    // Autoclick runs on jump, followed by a press 50 frames after the run's
+    // last release and its release 5 frames later. A Type C entry stores its
+    // count in 16 bits, and a run past 65,535 clicks used to be cut short on
+    // save, with every later input landing early (polish sweep 2026-10-28,
+    // af3fbc0). Now a long run goes on in further entries: every frame must
+    // come back, and the run must still be stored as entries, not click by
+    // click (a few bytes, where 70,000 taps would take 140,000).
+    {
+        struct Run {
+            uint32_t cycles, hold, rel;
+        };
+        Run const runs[] = {{20, 2, 3}, {65535, 1, 1}, {65536, 1, 1}, {70000, 1, 1}, {140000, 1, 1}};
+        for (auto const& run : runs) {
+            GBR6Header hdr;
+            hdr.tps = 240.f;
+            std::vector<GBR6Input> p1;
+            uint32_t f = 7;
+            for (uint32_t c = 0; c < run.cycles; c++) {
+                p1.push_back({f, 1, true});
+                p1.push_back({f + run.hold, 1, false});
+                f += run.hold + run.rel;
+            }
+            uint32_t const lastRelease = p1.back().frame;
+            p1.push_back({lastRelease + 50, 1, true});
+            p1.push_back({lastRelease + 55, 1, false});
+            auto bytes = GBR6File::fromInputs(hdr, p1).serialize();
+            CHECK(bytes.size() < 1024);
+            auto g = GBR6File::deserialize(bytes.data(), bytes.size());
+            bool same = g.has_value() && g->p1Inputs.size() == p1.size();
+            for (size_t i = 0; same && i < p1.size(); ++i)
+                same = g->p1Inputs[i].frame == p1[i].frame && g->p1Inputs[i].button == p1[i].button &&
+                       g->p1Inputs[i].pressed == p1[i].pressed;
+            if (!same)
+                std::printf("  autoclick run of %u clicks (hold %u, release %u) did not round-trip\n",
+                            run.cycles, run.hold, run.rel);
+            CHECK(same);
+        }
     }
     std::printf(fails ? "gbr6 sub-tick: %d FAILED\n" : "gbr6 sub-tick: all passed\n", fails);
     return fails ? 1 : 0;
