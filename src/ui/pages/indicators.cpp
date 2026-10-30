@@ -169,7 +169,9 @@ namespace gucci::ui::pages {
                            "Your clicks held against what the indicator showed when they came. Only clicks with "
                            "something at stake count: an unsafe click, or a safe one that doing nothing would "
                            "have died without.");
-            changed |= kit::SwitchRow("Show in the level", "Accuracy: N%  Streak: N (Best: N), at the top of the screen",
+            changed |= kit::SwitchRow("Show in the level",
+                                      "Accuracy: N%  Streak: N (Best: N), at the top of the screen. Needs the "
+                                      "Survival Indicator on; hidden while a macro plays",
                                       &gb->accuracyHudEnabled);
 
             std::string const acc =
