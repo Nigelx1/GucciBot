@@ -2869,6 +2869,10 @@ $on_mod(Loaded) {
             gucci::ui::look().loadFonts();
             gucci::ui::themes::loadCustoms();
             gucci::ui::loadSettings();
+            // The macro list was first read at launch (GucciEngine::initialize),
+            // before the custom themes above were known, so macros saved with a
+            // custom theme's extension were missing from it until a Refresh.
+            gucci::GucciEngine::get()->reloadMacroList();
             if (Mod::get()->getSavedValue<bool>("assistant_access", false)) {
                 // Switched off (core/bot_switch.hpp): it starts when GucciBot does.
                 if (gucci::botswitch::wanted())
