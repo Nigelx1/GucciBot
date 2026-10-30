@@ -9,6 +9,8 @@ namespace gucci {
 
         void renderTrainerGhost(PlayLayer* pl);
         void notifyTrainerAttemptEnded();
+        // Forgets the best attempt's ghost (trainers::resetStats).
+        void resetBestGhost();
 
         void syncTrainerClickBarMusic(bool active, bool paused, double posSec);
         void stopTrainerClickBarMusic();
