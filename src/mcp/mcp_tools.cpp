@@ -727,6 +727,10 @@ namespace gucci::mcp {
                 schema,
                 [](matjson::Value const& a) {
                     requireFreeRun();
+                    // As the menu: a click on a saved macro does nothing while
+                    // recording (the recording would be lost).
+                    if (GucciEngine::get()->isRecording())
+                        throw ToolError("stop recording first");
                     auto const want = argStr(a, "name");
                     if (want.empty())
                         throw ToolError("name is required");
@@ -744,6 +748,10 @@ namespace gucci::mcp {
                         throw ToolError("no macro called " + want);
 
                     GucciEngine::get()->replay.load(found);
+                    // The name too, as the menu's load does: the Macro page,
+                    // Save and Calculate's results file go by it, and kept
+                    // naming the macro loaded before.
+                    GucciEngine::get()->replayName = want;
 
                     auto out = obj();
                     out["loaded"] = found.filename().string();
