@@ -43,7 +43,7 @@ namespace gucci::ui::themes {
         std::string title;      // the menu's heading (the three ToosiiBot themes share one)
         std::string extension;  // dot-prefixed
         std::string subtitle;
-        std::string brand;      // the short tag on the status line ("Brrr.")
+        std::string brand;      // the short tag at the bottom of the sidebar, above Close ("Brrr.")
         std::string badge;      // the credits page badge ("Concept | Vision | Brrr")
         std::array<Quote, kSlotCount> quotes;
 

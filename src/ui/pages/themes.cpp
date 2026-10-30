@@ -375,9 +375,12 @@ namespace gucci::ui::pages {
 
             kit::BeginCard("Words", nullptr);
             textRow("Subtitle", "Under the menu's heading", &d.subtitle);
-            textRow("Brand", "The short tag on the status line", &d.brand, "Brrr.");
+            textRow("Brand", "The short tag at the bottom of the sidebar, above Close", &d.brand, "Brrr.");
             textRow("Badge", "The Credits page badge", &d.badge);
-            const char* const slotNames[th::kSlotCount] = {"Replay quote", "Tools quote", "Credits quote"};
+            // Named by number: the pages take turns with them (shell.cpp
+            // drawMain), so a name per page would go stale.
+            const char* const slotNames[th::kSlotCount] = {"Quote 1", "Quote 2", "Quote 3"};
+            kit::Hint("The pages take turns with these three, under each page's title.");
             for (int s = 0; s < th::kSlotCount; ++s) {
                 ImGui::PushID(s);
                 th::Quote& q = d.quotes[static_cast<size_t>(s)];
