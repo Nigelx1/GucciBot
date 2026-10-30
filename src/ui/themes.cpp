@@ -377,7 +377,9 @@ namespace gucci::ui::themes {
             {"dropOffsetSec", &Theme::dropOffsetSec},
         };
 
-        // "hasAudio" is the old key; "pulse" is new (older files lack it).
+        // "hasAudio" is the old key; "pulse" and "snow" are newer (older files
+        // lack them). Without "snow" saved, a theme started from BrrrBot lost
+        // its snow when it was saved.
         struct FlagKey {
             const char* key;
             bool Theme::*field;
@@ -385,6 +387,7 @@ namespace gucci::ui::themes {
         const FlagKey kFlagKeys[] = {
             {"hasAudio", &Theme::hasTrack},
             {"pulse", &Theme::pulse},
+            {"snow", &Theme::snow},
         };
 
         // Quote keys are "quote" + slot + "Text" / "Attr".

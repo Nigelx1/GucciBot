@@ -2201,7 +2201,8 @@ namespace gucci::ui {
             }
 #endif
             kit::SwitchRow("Cycle the accent color", nullptr, &look().accentCycle);
-            kit::SwitchRow("Animations", nullptr, &look().effects);
+            kit::SwitchRow("Animations", "Switches slide, the JMF page's sky turns, BrrrBot's snow falls",
+                           &look().effects);
             bool compact = g_compact;
             if (kit::SwitchRow("Compact mode", "A small quick-controls window instead of this one", &compact))
                 setCompactMode(compact);
@@ -2350,6 +2351,40 @@ namespace gucci::ui {
             ImGui::PopStyleColor();
         }
 
+        // The theme's falling snow (BrrrBot's), drawn under the whole window
+        // the way a page's backdrop is, so the cards stand in front of it.
+        // Only while the Look's animations are on. Each flake's place comes
+        // from the clock, so nothing is kept between frames, and a resized
+        // window just spreads them out.
+        void drawSnow() {
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            ImVec2 const a = ImGui::GetWindowPos();
+            ImVec2 const size = ImGui::GetWindowSize();
+            dl->PushClipRect(a, ImVec2(a.x + size.x, a.y + size.y), true);
+            double const t = ImGui::GetTime();
+            constexpr int kFlakes = 60;
+            for (int i = 0; i < kFlakes; ++i) {
+                // Fixed for each flake, from its number: where it starts, its
+                // sway, and how near it is (nearer is bigger, brighter, faster).
+                auto const rnd = [i](uint32_t salt) {
+                    uint32_t h = static_cast<uint32_t>(i + 1) * 2654435761u ^ salt * 0x9E3779B9u;
+                    h ^= h >> 15;
+                    h *= 0x2C1B3C6Du;
+                    h ^= h >> 12;
+                    return static_cast<float>(h & 0xFFFFu) / 65535.f;
+                };
+                float const close = rnd(1);  // 0 far .. 1 near
+                float const r = 1.f + 1.8f * close;
+                double const fall = 14.0 + 34.0 * close;  // units a second
+                double const span = size.y + 2.f * r;
+                float const y = static_cast<float>(std::fmod(rnd(2) * span + t * fall, span)) - r;
+                float const sway = (4.f + 6.f * close) * static_cast<float>(std::sin(t * (0.5 + rnd(3)) + rnd(4) * 6.2831853));
+                float const x = std::fmod(rnd(5) * size.x + sway + size.x, size.x);
+                dl->AddCircleFilled(ImVec2(a.x + x, a.y + y), r, u32(ImVec4(1.f, 1.f, 1.f, 0.25f + 0.45f * close)), 8);
+            }
+            dl->PopClipRect();
+        }
+
         void drawMain() {
             PageLook const pageLook(kPages[g_page].draw == pages::jupiterTrainer);
             auto const& pal = look().pal;
@@ -2386,6 +2421,8 @@ namespace gucci::ui {
             }
             if (kPages[g_page].backdrop)
                 kPages[g_page].backdrop();
+            else if (themes::active().snow && look().effects)
+                drawSnow();
             ImVec2 offset{0.f, 0.f};
             if (brrr->enabled) {
                 double const t = ImGui::GetTime();

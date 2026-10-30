@@ -370,6 +370,7 @@ namespace gucci::ui::pages {
             kit::SliderRow("Corner radius", nullptr, &d.radius, 0.f, 14.f, "%.0f px");
             kit::SliderRow("Opacity", "How solid the window is", &d.opacity, 0.3f, 1.f, "%.2f");
             kit::SwitchRow("Pulse", "The accent color breathes", &d.pulse);
+            kit::SwitchRow("Snow", "Snow falls behind the cards while Animations is on (Settings > Look)", &d.snow);
             kit::EndCard();
 
             kit::BeginCard("Words", nullptr);

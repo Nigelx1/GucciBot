@@ -55,7 +55,7 @@ namespace gucci::ui::themes {
         float radius = 5.f;
         float opacity = 0.96f;
         bool pulse = false;  // the accent breathes (Red Kingdom)
-        bool snow = false;   // the theme's look includes falling snow (BrrrBot); nothing draws it yet
+        bool snow = false;   // snow falls behind the menu's cards (BrrrBot), while the Look's animations are on
 
         // BIG BRRRR
         double bpm = 140.0;
