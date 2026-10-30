@@ -547,6 +547,10 @@ namespace gucci {
             } else {
                 m_actionAtom.m_actions.clear();
                 m_pathSamples.clear();
+                // The run starts over here, from the level's start or from a
+                // start position; Save marks the file with which.
+                auto* pl = PlayLayer::get();
+                m_recordedFromStartPos = pl && pl->m_startPosObject;
                 // GucciBot (2026-10-23): the clicks these windows were
                 // measured on are gone: drop them from memory, or Save writes
                 // them next to this new recording. The old macro's sidecar on
@@ -1151,6 +1155,8 @@ namespace gucci {
         }
         hdr.name = m_replayName;
         hdr.rngSeed = m_startingSeed;
+        if (m_recordedFromStartPos)
+            hdr.flags |= GBR6_FROM_START_POS;
         hdr.timestamp = std::chrono::duration_cast<std::chrono::seconds>(
                             std::chrono::system_clock::now().time_since_epoch())
                             .count();
@@ -1264,9 +1270,10 @@ namespace gucci {
             m_startingSeed = f.header.rngSeed;
             m_replayName = f.header.name;
             gb->loadedMacroLevelName = f.header.levelName;
-            // Shown on the Macro card (nothing ever set it): a macro recorded
-            // from a start position only plays, and measures, from that one.
-            gb->startPosWarning = f.header.fromStartPos()
+            // Shown on the Macro card: a macro recorded from a start position
+            // only plays, and measures, from that one. Kept for a re-save.
+            m_recordedFromStartPos = f.header.fromStartPos();
+            gb->startPosWarning = m_recordedFromStartPos
                                       ? "Recorded from a start position: play it, and Calculate it, from that "
                                         "same start position."
                                       : "";

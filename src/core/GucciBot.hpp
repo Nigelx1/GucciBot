@@ -293,6 +293,11 @@ namespace gucci {
         // Used to warn when a macro recorded at one rate is played back at
         // another, which silently changes what every frame window means.
         double m_initialTPS = 240.0;
+        // Whether the macro's run began at a start position: taken at each
+        // full restart while recording, read from the file on load, and
+        // saved as GBR6_FROM_START_POS, which is what the Macro card's
+        // start-position warning reads.
+        bool m_recordedFromStartPos = false;
         void buildClickIntervals(double tps);
 
         float m_trainerBestX = 0.f;
