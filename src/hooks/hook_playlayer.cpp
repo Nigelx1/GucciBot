@@ -126,7 +126,20 @@ class $modify(GB7PlayLayer, PlayLayer) {
         if (pf.m_savedCheckpoints.empty())
             return;
         auto& cp = pf.m_savedCheckpoints.back();
-        auto* obj = cp.m_checkpoint->m_physicalCheckpointObject;
+        auto* gone = cp.m_checkpoint;
+        if (!gone) {
+            pf.m_savedCheckpoints.pop_back();
+            return;
+        }
+        // saveCurrent also filed this checkpoint in the backstep store, as an
+        // entry that doesn't own it. The release below frees the object, so
+        // that entry goes too: left in, a step back onto it handed GD a freed
+        // checkpoint. The store keeps a one-tick gap there, which only means
+        // one step back moves two ticks at that spot.
+        std::erase_if(pf.m_storedFrames, [gone](StoredFrame const& f) {
+            return !f.owned && f.state.m_checkpoint == gone;
+        });
+        auto* obj = gone->m_physicalCheckpointObject;
         removeObjectFromSection(obj);
         if (obj->m_glowSprite) {
             obj->m_glowSprite->removeMeAndCleanup();
@@ -134,7 +147,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
         }
         obj->removeMeAndCleanup();
 
-        cp.m_checkpoint->release();
+        gone->release();
         pf.m_savedCheckpoints.pop_back();
     }
 
