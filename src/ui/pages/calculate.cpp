@@ -691,8 +691,8 @@ namespace gucci::ui::pages {
             auto& tiers = S().tiers;
             kit::BeginCard("Bands", "Colors, labels, shapes, images, pulses and sounds by window size. Hidden bands draw no markers.");
             if (GucciEngine::get()->fwDefaultLook)
-                kit::Hint("Default Look is on, so the level uses NaN GD's colors and sounds. These bands are kept, and "
-                          "still decide which inputs L* and Copy info count.");
+                kit::Hint("Default Look is on, so the level uses NaN GD's colors and legend, with the Brrr or his "
+                          "bells. These bands are kept, and still decide which inputs L* and Copy info count.");
 
             int removeAt = -1;
             int moveFrom = -1, moveTo = -1;
