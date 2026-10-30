@@ -1290,8 +1290,18 @@ namespace gucci::ui {
             engineSwitch("Maintain gravity", nullptr, &gb->replay.m_maintainGravity, "feat_maintain_gravity");
             engineSwitch("Sub-tick clicks (CBF recording)", "Records each click where inside the tick you pressed it",
                          &gb->replay.m_scbfRecording, "scbf_recording");
-            if (gb->replay.m_scbfRecording)
+            if (gb->replay.m_scbfRecording) {
                 engineSwitch("Split the tick at each click", nullptr, &gb->replay.m_scbfTickSplit, "scbf_tick_split");
+                // Either of these records on whole ticks instead, silently.
+                if (gb->updater.inputFpsActive())
+                    kit::Note("Input FPS (Hacks > Engine) is set, so clicks record on whole input ticks: sub-tick "
+                              "recording is off.",
+                              Tone::Warn);
+                else if (gb->replay.m_maintainGravity)
+                    kit::Note("Maintain gravity records its own inputs on whole ticks: sub-tick recording is off while "
+                              "it's on.",
+                              Tone::Warn);
+            }
             kit::EndCard();
 
             kit::BeginCard("Saving", nullptr);
@@ -1525,7 +1535,8 @@ namespace gucci::ui {
                          &upd.m_highTpsPrecision, "updater_highTpsPrecision");
             engineSwitch("Prevent death", "Steps back instead of dying", &upd.m_preventDeath, "feat_prevent_death");
             float inputFps = static_cast<float>(upd.m_inputFps);
-            kit::RowBegin("Input FPS", "Clicks land only on this many ticks a second. 0: every tick");
+            kit::RowBegin("Input FPS", "While recording, clicks land only on this many ticks a second (sub-tick "
+                                       "recording is off then). 0, or the tick rate and up: every tick");
             if (kit::InputFloat("inputfps", &inputFps, 0.f, "%.0f") && inputFps >= 0.f) {
                 upd.m_inputFps = inputFps;
                 Mod::get()->setSavedValue<double>("feat_input_fps", upd.m_inputFps);
