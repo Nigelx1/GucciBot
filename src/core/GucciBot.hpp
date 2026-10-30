@@ -302,7 +302,10 @@ namespace gucci {
         bool m_mirrorInputs = false;
         bool m_mirrorInverted = false;
         bool m_maintainGravity = false;
-        bool m_ignoreInputs = false;
+        // Silicate's "Ignore inputs": while a macro plays, the player's own
+        // presses are dropped (processQueuedButtons) and only the macro's
+        // reach the game. On by default, as in Silicate (Nigel, 2026-10-28).
+        bool m_ignoreInputs = true;
         // anticroom's SCBF (replay/scbf_input.hpp). CBF Recording places each
         // live press at the point in the tick it really arrived; Tick
         // Splitting is his on/off for actually splitting the tick -- off

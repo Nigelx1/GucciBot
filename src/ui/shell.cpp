@@ -1241,6 +1241,8 @@ namespace gucci::ui {
             kit::EndCard();
 
             kit::BeginCard("Playback", nullptr);
+            engineSwitch("Block inputs during playback", "Only the macro presses buttons", &gb->replay.m_ignoreInputs,
+                         "replay_block_inputs");
             engineSwitch("Mirror inputs", "Two-player levels: each player's press also presses for the other",
                          &gb->replay.m_mirrorInputs, "feat_mirror_inputs");
             if (gb->replay.m_mirrorInputs)

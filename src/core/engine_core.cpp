@@ -2638,6 +2638,7 @@ namespace gucci {
         replay.m_mirrorInputs = pick(false, "feat_mirror_inputs", "replay_mirrorInputs");
         replay.m_mirrorInverted = pick(false, "feat_mirror_inverted", nullptr);
         replay.m_maintainGravity = pick(false, "feat_maintain_gravity", "replay_maintainGravity");
+        replay.m_ignoreInputs = pick(true, "replay_block_inputs", nullptr);
         replay.m_scbfRecording = pick(false, "scbf_recording", nullptr);
         replay.m_scbfTickSplit = pick(true, "scbf_tick_split", nullptr);
         replay.m_subtickPreview = pick(false, "scbf_subtick_preview", nullptr);
