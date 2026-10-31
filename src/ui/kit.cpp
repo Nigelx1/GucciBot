@@ -415,7 +415,9 @@ namespace gucci::ui::kit {
             case Tone::Good:
             case Tone::Warn:
             case Tone::Bad:
-                base = mix(pal.raised, look().tone(tone), 0.38f);
+                // A tint of the tone, lighter on a light theme, where the text
+                // over it is dark.
+                base = mix(pal.raised, look().tone(tone), pal.light ? 0.20f : 0.38f);
                 break;
             case Tone::Muted:
                 text = pal.muted;
