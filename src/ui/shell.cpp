@@ -1481,7 +1481,16 @@ namespace gucci::ui {
             if (gb->noclipEnabled)
                 engineSwitch("Flash on a blocked death", "Tints the player when noclip saves you", &gb->noclipDeathFlash,
                              "hack_noclip_flash");
-            engineSwitch("Safe mode", "No progress or stats are saved", &gb->protectedMode, "hack_safe_mode");
+            if (safemode::forced()) {
+                // A test run forced it on for this launch (hacks/safemode.hpp):
+                // shown on, and the switch is left alone - it's the user's.
+                bool on = true;
+                ImGui::BeginDisabled();
+                kit::SwitchRow("Safe mode", "On for this launch (a test run turned it on)", &on);
+                ImGui::EndDisabled();
+            } else {
+                engineSwitch("Safe mode", "No progress or stats are saved", &gb->protectedMode, "hack_safe_mode");
+            }
             engineSwitch("Instant respawn", "Respawn the moment you die", &gb->hackRespawnInstant,
                          "hack_respawn_instant");
             engineSwitch("Auto retry", "Respawn after your own delay instead of GD's", &gb->hackAutoRetry,
@@ -2194,6 +2203,10 @@ namespace gucci::ui {
             // Auto safe mode and the cheat dot (hacks/safemode.hpp), dihmaster500's ask.
             kit::BeginCard("Safe mode", "While a cheat is on, a run doesn't count: no completion, no new best, "
                                         "nothing sent to the servers.");
+            if (safemode::forced())
+                kit::Note("A test run turned safe mode on for this launch: no run counts, cheat or not, until the "
+                          "game is next started normally.",
+                          Tone::Warn);
             bool safe = safemode::autoSafeMode();
             if (kit::SwitchRow("Auto safe mode", "Off, a red dot shows in the top-left corner while a cheat is on",
                                &safe))
@@ -2400,6 +2413,12 @@ namespace gucci::ui {
                 tone = Tone::Good;
             }
             kit::Chip(what, tone);
+            // Safe mode forced on by a test run (hacks/safemode.hpp), where its
+            // screenshots show it.
+            if (safemode::forced()) {
+                ImGui::SameLine();
+                kit::Chip("SAFE", Tone::Good);
+            }
             ImGui::SameLine();
             UseFont f(Font::Small);
             ImGui::PushStyleColor(ImGuiCol_Text, look().pal.muted);

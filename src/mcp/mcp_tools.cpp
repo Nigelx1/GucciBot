@@ -225,9 +225,10 @@ namespace gucci::mcp {
             "gucci_get_state",
             "Everything about what GucciBot and the game are doing right now: "
             "build, mode, frame, level, player position, who owns the run, and "
-            "safe_mode (switch: Hacks > Safe mode; auto: auto safe mode; "
-            "bot_runs_count: false when a macro, Calculate or pathfinder run "
-            "can't save progress or stats).",
+            "safe_mode (switch: Hacks > Safe mode; forced: on for this launch for "
+            "a test run, by GUCCIBOT_FORCE_SAFE_MODE or gucci_force_safe_mode; "
+            "auto: auto safe mode; bot_runs_count: false when a macro, Calculate "
+            "or pathfinder run can't save progress or stats).",
             obj(),
             [](matjson::Value const&) {
                 auto* gb = GucciEngine::get();
@@ -246,8 +247,10 @@ namespace gucci::mcp {
                     // on (they play on the owner's real account).
                     auto sm = obj();
                     sm["switch"] = gb->protectedMode;
+                    sm["forced"] = safemode::forced();
                     sm["auto"] = safemode::autoSafeMode();
-                    sm["bot_runs_count"] = !gb->protectedMode && !safemode::autoSafeMode();
+                    sm["bot_runs_count"] =
+                        !gb->protectedMode && !safemode::forced() && !safemode::autoSafeMode();
                     out["safe_mode"] = sm;
                 }
 
@@ -285,6 +288,25 @@ namespace gucci::mcp {
                         out["player1"] = p;
                     }
                 }
+                return out;
+            },
+        });
+
+        // GucciBot (2026-10-31): for a test run on a game started without
+        // GUCCIBOT_FORCE_SAFE_MODE (hacks/safemode.hpp). Never refuses: making
+        // a run count for less is safe whoever owns it.
+        server.addTool({
+            "gucci_force_safe_mode",
+            "Turn safe mode on until the game closes, whatever the Safe mode switch "
+            "says: no run counts, cheat or not. Never saved, and it has no off. "
+            "tools/assist.py's launch() starts the game with "
+            "GUCCIBOT_FORCE_SAFE_MODE=1 instead, which does the same from the first "
+            "frame.",
+            schemaOf({}),
+            [](matjson::Value const&) {
+                safemode::forceForSession();
+                auto out = obj();
+                out["forced"] = safemode::forced();
                 return out;
             },
         });
