@@ -1,6 +1,7 @@
 #include <Geode/Geode.hpp>
 #include <Geode/modify/CCEGLView.hpp>
 
+#include "mcp/screenshot.hpp"
 #include "render/renderer.hpp"
 
 using namespace geode::prelude;
@@ -20,6 +21,12 @@ using namespace gucci;
 // at the end. When no render is running they pass through untouched.
 #ifdef GEODE_IS_WINDOWS // rendering and GLFW are Windows-only (core/platform.hpp)
 struct GB7CCEGLView : Modify<GB7CCEGLView, CCEGLView> {
+    // swapBuffers after every other hook that draws before the swap
+    // (imgui-cocos draws the menu in its own, early).
+    static void onModify(auto& self) {
+        (void)self.setHookPriority("cocos2d::CCEGLView::swapBuffers", Priority::VeryLate);
+    }
+
     void setFrameSize(float width, float height) {
         if (SLRenderer::get()->handleFrameSizeChange(width, height))
             return;
@@ -36,6 +43,14 @@ struct GB7CCEGLView : Modify<GB7CCEGLView, CCEGLView> {
         if (SLRenderer::get()->handleWindowSizeChange())
             return;
         CCEGLView::onGLFWWindowSizeFunCallback(window, width, height);
+    }
+
+    // gucci_screenshot (2026-10-31, mcp/screenshot.hpp): a shot Assistant
+    // Access asked for is taken here, from the finished frame just before it's
+    // shown. Every swap comes through, the render's and Calculate's own too.
+    void swapBuffers() {
+        mcp::shot::onSwap();
+        CCEGLView::swapBuffers();
     }
 };
 #endif

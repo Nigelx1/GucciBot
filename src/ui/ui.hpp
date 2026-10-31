@@ -93,4 +93,36 @@ namespace gucci::ui {
     // Write every setting the interface registers to the mod's saved values.
     void saveSettings();
 
+    // ---- the menu driven by Assistant Access (gucci_menu, for screenshots)
+
+    // The sidebar's pages, in its order, and the one showing.
+    std::vector<std::string> pageTitles();
+    std::string pageTitle();
+    // Shows the sidebar's page with this title (exactly, else ignoring case).
+    // False when the sidebar has none.
+    bool setPageByTitle(const std::string& title);
+
+    // A test's look: a theme by name (built-in or custom; exactly, else
+    // ignoring case) and the Animations switch. Never saved: while one is on,
+    // saveSettings keeps the user's own choice. setTestTheme("") ends both and
+    // puts the user's own back, and so does a restart; the user picking a
+    // theme, or flipping Animations, ends that one and saves theirs. False,
+    // and nothing changes, when no theme has that name.
+    bool setTestTheme(const std::string& name);
+    void setTestEffects(bool on);
+
+    struct MenuState {
+        bool open = false;
+        bool compact = false;              // Compact mode: its small window shows instead of the pages
+        std::string page;                  // the page showing
+        std::vector<std::string> pages;    // pageTitles()
+        int themeId = 0;                   // as activeThemeId()
+        std::string themeName;             // as the sidebar shows it
+        bool testTheme = false;            // the theme is setTestTheme's
+        std::vector<std::string> themes;   // every theme's name: the built-ins by id, then the user's
+        bool effects = true;               // Animations
+        bool testEffects = false;          // set by setTestEffects
+    };
+    MenuState menuState();
+
 } // namespace gucci::ui

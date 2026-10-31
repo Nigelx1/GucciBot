@@ -19,10 +19,21 @@
 // A cheat: a macro, Calculate or the pathfinder playing; noclip; speedhack;
 // physics at a TPS other than 240; the autoclicker; Prevent Death; frame
 // advance (the engine's pause). One at any point taints the whole attempt.
+//
+// Forced safe mode (2026-10-31) is the switch's effect for one launch, for
+// Claude's test runs over Assistant Access, which play on the owner's real
+// account: on while the game was started with GUCCIBOT_FORCE_SAFE_MODE set
+// (tools/assist.py does that), or once the gucci_force_safe_mode tool has
+// turned it on. It only turns on, and it is never saved: the switch, the
+// hotkey and the saved choice stay the user's, and the next normal launch is
+// back to them. The red dot stays hidden while it is on.
 
 #include <string>
 
 namespace gucci::safemode {
+
+    bool forced();
+    void forceForSession();
 
     bool autoSafeMode();
     void setAutoSafeMode(bool on);

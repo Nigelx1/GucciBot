@@ -5,6 +5,7 @@
 #include "absense/glue.hpp"
 #include "analysis/pathfinder.hpp"
 #include "hacks/autoclicker.hpp"
+#include "mcp/mcp_server.hpp"
 #include "trainers/click_indicators.hpp"
 #include "trainers/trainer_core.hpp"
 
@@ -19,7 +20,9 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <span>
+#include <string_view>
 
 using namespace geode::prelude;
 
@@ -100,7 +103,30 @@ namespace gucci::safemode {
         // A cheat was on at some point in this attempt (reset with the level).
         bool g_tainted = false;
 
+        // Forced by the gucci_force_safe_mode tool: until the game closes.
+        bool g_forcedByTool = false;
+
+        // The environment the game was started with, read once.
+        bool forcedByEnvironment() {
+            static bool const s_on = [] {
+                char const* value = std::getenv("GUCCIBOT_FORCE_SAFE_MODE");
+                return value && *value && std::string_view(value) != "0";
+            }();
+            return s_on;
+        }
+
     } // namespace
+
+    bool forced() {
+        return forcedByEnvironment() || g_forcedByTool;
+    }
+
+    void forceForSession() {
+        if (forced())
+            return;
+        g_forcedByTool = true;
+        mcp::mcpFileLog("[safe mode] forced on for this launch (gucci_force_safe_mode)");
+    }
 
     bool autoSafeMode() {
         return st().safe;
@@ -213,8 +239,9 @@ namespace {
     // old menu only saved it), and it wasn't saved either, so it was off again
     // at every launch. Silicate's SafeMode.cpp is the full version; the stats,
     // achievements and attempt counts it also keeps are at the end of this file.
+    // A test run's forced safe mode (safemode.hpp) counts as the switch.
     bool shielded() {
-        if (GucciEngine::get()->protectedMode)
+        if (GucciEngine::get()->protectedMode || safemode::forced())
             return true;
         return safemode::autoSafeMode() && (safemode::g_tainted || safemode::cheatingNow());
     }
@@ -267,7 +294,7 @@ class $modify(GB7SafeModePlayLayer, PlayLayer) {
         // (Red: a cheat with nothing keeping the run from counting.)
         if (auto* red = m_fields->red)
             red->setVisible(cheated && !safemode::autoSafeMode() && !GucciEngine::get()->protectedMode &&
-                            !safemode::dotHidden());
+                            !safemode::forced() && !safemode::dotHidden());
         if (auto* green = m_fields->green)
             green->setVisible(!cheated && safemode::greenDot());
     }
@@ -399,3 +426,10 @@ class $modify(GB7SafeModeAchievements, GameManager) {
         GameManager::reportAchievementWithID(key, percent, dontNotify);
     }
 };
+
+// A launch the environment forces says so once, in Assistant Access's log, so
+// a test run's log shows it was shielded from the first frame.
+$on_mod(Loaded) {
+    if (safemode::forced())
+        mcp::mcpFileLog("[safe mode] forced on for this launch (GUCCIBOT_FORCE_SAFE_MODE is set)");
+}
