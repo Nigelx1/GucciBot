@@ -2467,6 +2467,7 @@ namespace gucci::ui {
             switch (themes::active().scene) {
                 case themes::Scene::Jupiter: return pages::jupiterBackdrop;
                 case themes::Scene::Solar: return pages::solarBackdrop;
+                case themes::Scene::Garden: return pages::gardenBackdrop;
                 default: return nullptr;
             }
         }
@@ -2540,7 +2541,7 @@ namespace gucci::ui {
             }
 
             // Sidebar
-            ImGui::BeginChild("##side", ImVec2(150.f, 0.f), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar);
+            ImGui::BeginChild("##side", ImVec2(pages::kSidebarWidth, 0.f), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar);
             // The JMF page is JMF's own: the theme's name, subtitle, brand tag
             // and page quote stay off it (Nigel, 2026-10-30; polish item 45).
             // Keyed on the page, not on its look: JupiterBot wears that look on

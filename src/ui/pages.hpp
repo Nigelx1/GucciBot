@@ -6,6 +6,10 @@
 
 namespace gucci::ui::pages {
 
+    // The menu's sidebar width (shell.cpp drawMain); RondoBot's gold line runs
+    // down its inner edge.
+    inline constexpr float kSidebarWidth = 150.f;
+
     // Sidebar pages
     void themes();       // pages/themes.cpp: theme picker + custom theme editor
     void clickSounds();  // pages/clicksounds.cpp
@@ -20,6 +24,7 @@ namespace gucci::ui::pages {
     void jupiterLookApply(); // ... the same colours written over the style, for JupiterBot (after look().refresh())
     void solarBackdrop();    // pages/solar_backdrop.cpp: SolarBot's scene, Janet rising behind the menu
     void solarLookApply();   // ... her gems' blue in the checks and slider grabs (after look().refresh())
+    void gardenBackdrop();   // pages/garden_backdrop.cpp: RondoBot's scene, the Garden's parquet behind the menu
     void jupiterVideoOverlay();  // Video Mode: the JMF click bar over the video, in place of the menu
     void trainerVideoOverlay();  // ... the Trainer's, over the video you picked
     void anyTrainer();      // pages/trainer_pages.cpp: Trainer (any saved macro)
