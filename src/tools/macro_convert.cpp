@@ -2524,7 +2524,7 @@ namespace gucci::convert {
     bool looksImportable(std::string_view fileName) {
         static constexpr std::string_view exts[] = {".gdr", ".gdr2", ".json", ".slc", ".scbf1", ".tcm", ".ttr3", ".ybot",
                                                     ".xd", ".mhr", ".echo", ".replay", ".zbf", ".kd", ".rush",
-                                                    ".freplay", ".xbot", ".url", ".txt", ".brrr"};
+                                                    ".freplay", ".xbot", ".url", ".txt", ".brrr", ".gbot"};
         for (auto e : exts)
             if (endsWith(fileName, e))
                 return true;

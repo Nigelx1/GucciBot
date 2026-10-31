@@ -420,6 +420,13 @@ namespace gucci::ui {
             return Mod::get()->getSaveDir() / "replays";
         }
 
+        // The extension a converted or copied-in macro gets, and the one
+        // "Convert to" offers: the plain .brrr, or while disguised the theme's
+        // own (GBot's .gbot), so nothing made then says Brrr.
+        std::string plainMacroExtension() {
+            return disguised() ? macroExtension() : std::string(".brrr");
+        }
+
         void loadMacroByName(std::string const& name) {
             auto* gb = GucciEngine::get();
             std::error_code ec;
@@ -618,12 +625,13 @@ namespace gucci::ui {
             }
             std::string const name = freeMacroName(stem);
             m.name = name;
-            auto const target = dir / (name + ".brrr");
+            std::string const ext = plainMacroExtension();
+            auto const target = dir / (name + ext);
             if (!writeAll(target, convert::toGucciBot(m))) {
                 std::filesystem::remove(target, ec);
                 if (!aside.empty())
                     std::filesystem::rename(aside, src, ec);
-                return {false, fmt::format("Couldn't save {}.brrr.", name)};
+                return {false, fmt::format("Couldn't save {}{}.", name, ext)};
             }
             std::string moveNote;
             if (inReplays && !oldBrrr) {
@@ -757,9 +765,9 @@ namespace gucci::ui {
                 return {false, fmt::format("{}: {}", fname, err)};
             auto const known = knownMacroExtensions();
             // A name or extension Windows can't spell comes in plain (spelledAs).
-            std::string ext = spelledAs(src.extension()).value_or(".brrr");
+            std::string ext = spelledAs(src.extension()).value_or(plainMacroExtension());
             if (std::find(known.begin(), known.end(), ext) == known.end())
-                ext = ".brrr";
+                ext = plainMacroExtension();
             auto const spelledStem = spelledAs(src.stem());
             std::string const name = freeMacroName(spelledStem.value_or("Imported macro"));
             auto const target = replaysDir() / (name + ext);
@@ -978,7 +986,7 @@ namespace gucci::ui {
             options.filters.push_back({"Macros",
                                        {"*.gdr", "*.gdr2", "*.json", "*.slc", "*.scbf1", "*.tcm", "*.ttr3", "*.ybot", "*.xd",
                                         "*.mhr", "*.echo", "*.replay", "*.zbf", "*.kd", "*.rush", "*.freplay", "*.xbot",
-                                        "*.url", "*.txt", "*.brrr"}});
+                                        "*.url", "*.txt", "*.brrr", "*.gbot"}});
             geode::utils::file::PickResult result =
                 co_await geode::utils::file::pick(geode::utils::file::PickMode::OpenFile, options);
             // Windows fails the whole pick, before the dialog shows, when it
@@ -1118,8 +1126,10 @@ namespace gucci::ui {
                 };
             if (!canCalc && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
                 ImGui::SetTooltip("Open a level first");
-            if (!ext.empty() && ext != ".brrr" && ImGui::MenuItem("Convert to .brrr"))
-                act = [who] { g_rowNote = GucciEngine::get()->moveMacro(who, who, ".brrr"); };
+            // To the plain extension: .brrr, or GBot's own while disguised.
+            std::string const plainExt = plainMacroExtension();
+            if (!ext.empty() && ext != plainExt && ImGui::MenuItem(fmt::format("Convert to {}", plainExt).c_str()))
+                act = [who, plainExt] { g_rowNote = GucciEngine::get()->moveMacro(who, who, plainExt); };
             if (ImGui::BeginMenu("Export as")) {
                 for (auto const& f : convert::formats()) {
                     if (!f.canWrite)
@@ -1456,8 +1466,10 @@ namespace gucci::ui {
                 auto const extIt = gb->storedMacroExts.find(name);
                 std::string const ext = extIt == gb->storedMacroExts.end() ? std::string() : extIt->second;
                 // The theme it was saved under, unless that's the plain .brrr.
-                themes::Theme const* tagTheme = ext == ".brrr" ? nullptr : themeForExtension(ext);
-                std::string const tag = tagTheme ? tagTheme->name : (ext.empty() || ext == ".brrr" ? "" : ext);
+                // None while disguised (GBot): the tags name the themes.
+                bool const tagged = !disguised() && !ext.empty() && ext != ".brrr";
+                themes::Theme const* tagTheme = tagged ? themeForExtension(ext) : nullptr;
+                std::string const tag = !tagged ? std::string() : tagTheme ? tagTheme->name : ext;
                 auto const& style = ImGui::GetStyle();
                 float const moreW = ImGui::CalcTextSize("...").x + style.FramePadding.x * 2.f;
                 float const tagW = tag.empty() ? 0.f : ImGui::CalcTextSize(tag.c_str()).x + style.ItemSpacing.x;
