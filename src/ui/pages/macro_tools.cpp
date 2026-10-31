@@ -7,6 +7,7 @@
 
 #include "ui/kit.hpp"
 #include "ui/look.hpp"
+#include "ui/ui.hpp"
 
 #include "core/GucciBot.hpp"
 #include "tools/edit_core.hpp"
@@ -431,8 +432,9 @@ namespace gucci::ui::pages {
         void tpsSection(EditState& s) {
             auto& m = *s.macro;
             kit::Section("TPS changes");
-            kit::Hint("From a change's frame on, the macro plays at its rate. Inputs keep their frame numbers. A "
-                      "GucciBot from before 2.0 plays the whole macro at the starting TPS.");
+            kit::Hint(branded("From a change's frame on, the macro plays at its rate. Inputs keep their frame numbers. A "
+                              "GucciBot from before 2.0 plays the whole macro at the starting TPS.")
+                          .c_str());
 
             auto const changes = mo::tpsChanges(m);
             if (changes.empty())

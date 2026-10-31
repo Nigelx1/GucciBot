@@ -9,6 +9,7 @@
 
 #include "ui/kit.hpp"
 #include "ui/look.hpp"
+#include "ui/ui.hpp"
 
 #include "core/GucciBot.hpp"
 #include "trainers/trainer_core.hpp"
@@ -140,9 +141,11 @@ namespace gucci::ui::pages {
             return m > 0 ? fmt::format("{}:{:05.2f}", m, s) : fmt::format("{:.2f}s", s);
         }
 
+        // Branded here, where it shows (GBot while disguised): two messages
+        // name GucciBot, one from trainers/trainer_core.
         void message(Message const& m) {
             if (!m.text.empty())
-                kit::Note(m.text.c_str(), m.tone);
+                kit::Note(branded(m.text).c_str(), m.tone);
         }
 
         int growString(ImGuiInputTextCallbackData* data) {

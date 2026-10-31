@@ -510,8 +510,13 @@ namespace gucci::ui {
         }
 
         // Where a macro goes when it can't be picked: the replays folder
-        // needs no permission, and lists it with a Convert button.
+        // needs no permission, and lists it with a Convert button. While
+        // disguised the path isn't printed (it holds the mod's id,
+        // nigelx1.guccibot): Open folder goes there.
         std::string replaysFolderHint() {
+            if (disguised())
+                return "Copy it into the replays folder instead (Saved macros > Open folder) and it will show below "
+                       "with a Convert button.";
             return fmt::format("Copy it into GucciBot's replays folder instead ({}) and it will show below with a "
                                "Convert button.",
                                geode::utils::string::pathToString(replaysDir()));
@@ -1031,10 +1036,11 @@ namespace gucci::ui {
                 }
             }
             kit::Section("From other bots");
-            kit::Hint("GDR, Silicate, TcBot, ToastyReplay, yBot, xdBot, Mega Hack, Echo and more, and GucciBot 1.x's old .brrr. Drop "
-                      "them in the replays folder, or import one (or a GucciBot macro) from anywhere: the original "
-                      "stays where it was, a copy dated the day it first came in is kept in replays/imported, and "
-                      "importing it again selects the macro it became.");
+            kit::Hint(branded("GDR, Silicate, TcBot, ToastyReplay, yBot, xdBot, Mega Hack, Echo and more, and GucciBot 1.x's old .brrr. Drop "
+                              "them in the replays folder, or import one (or a GucciBot macro) from anywhere: the original "
+                              "stays where it was, a copy dated the day it first came in is kept in replays/imported, and "
+                              "importing it again selects the macro it became.")
+                          .c_str());
             ImGui::BeginDisabled(s_macroPickPending || gb->isRecording());
             if (kit::Button(s_macroPickPending ? "Choosing..." : "Import a macro")) {
                 s_macroPickPending = true;
@@ -1079,7 +1085,8 @@ namespace gucci::ui {
                 ImGui::SameLine();
                 ImGui::TextUnformatted(n.c_str());
                 ImGui::SameLine();
-                ImGui::TextDisabled("%s", it->second.c_str());
+                // Kept as found and branded as shown, so a theme change shows.
+                ImGui::TextDisabled("%s", branded(it->second).c_str());
                 ImGui::PopID();
             }
             if (!convertNow.empty())
@@ -1478,8 +1485,10 @@ namespace gucci::ui {
             if (afterList)
                 afterList();
             foreignMacrosSection();
+            // Branded here, where it shows: the converter's messages
+            // (tools/macro_convert) name GucciBot and can't call into ui/.
             if (!g_rowNote.empty())
-                kit::Note(g_rowNote.c_str(), g_rowNoteOk ? Tone::Good : Tone::Warn);
+                kit::Note(branded(g_rowNote).c_str(), g_rowNoteOk ? Tone::Good : Tone::Warn);
             kit::EndCard();
         }
 
@@ -1729,8 +1738,8 @@ namespace gucci::ui {
             kit::BeginCard("Pathfinder", "Finds a way through the level on its own.");
             int engine = absense::classicSelected() ? 1 : 0;
             const char* engines[] = {"Absense", "Classic"};
-            if (kit::ChoiceRow("Engine", "Absense: Absent's planner, the default. Classic: GucciBot's own search", &engine,
-                               engines, 2))
+            if (kit::ChoiceRow("Engine", branded("Absense: Absent's planner, the default. Classic: GucciBot's own search").c_str(),
+                               &engine, engines, 2))
                 absense::selectClassic(engine == 1);
             if (engine == 1) {
                 classicPathfinder();
@@ -2199,19 +2208,21 @@ namespace gucci::ui {
 
         void pageSettings() {
             // The master switch (core/bot_switch.hpp), asked for by dihmaster500.
-            kit::BeginCard("GucciBot", "Done botting? Switch it off: it leaves the game until you switch it back on, "
-                                       "no restart needed.");
+            kit::BeginCard(brandName(), "Done botting? Switch it off: it leaves the game until you switch it back on, "
+                                        "no restart needed.");
             bool botOn = botswitch::wanted();
-            if (kit::SwitchRow("GucciBot", "Off, the game runs as if GucciBot weren't installed", &botOn))
+            if (kit::SwitchRow(brandName(), branded("Off, the game runs as if GucciBot weren't installed").c_str(),
+                               &botOn))
                 botswitch::request(botOn);
             if (auto const* why = botswitch::waitingFor())
-                kit::Hint(why);
+                kit::Hint(branded(why).c_str());
             // The update checker (core/update_check.cpp): once a launch, from
             // GitHub's releases, when the main menu first shows.
             {
                 auto* mod = Mod::get();
                 bool check = mod->getSavedValue<bool>("update_check", true);
-                if (kit::SwitchRow("Check for updates", "Once a launch, says when a newer GucciBot is out", &check))
+                if (kit::SwitchRow("Check for updates", branded("Once a launch, says when a newer GucciBot is out").c_str(),
+                                   &check))
                     mod->setSavedValue("update_check", check);
                 if (check) {
                     bool pre = mod->getSavedValue<bool>("update_prereleases", false);
@@ -2290,7 +2301,8 @@ namespace gucci::ui {
             // The bindings have no keyboard dispatcher to hook on iOS
             // (hacks/keybinds.cpp), so a key set here would never fire.
             kit::BeginCard("Keybinds", nullptr);
-            kit::Note("Keys don't reach GucciBot on iOS: open the menu from the pause menu's GucciBot button.",
+            kit::Note(branded("Keys don't reach GucciBot on iOS: open the menu from the pause menu's GucciBot button.")
+                          .c_str(),
                       Tone::Muted);
 #else
             kit::BeginCard("Keybinds", "Click a key, then press the new one. Right-click unbinds.");

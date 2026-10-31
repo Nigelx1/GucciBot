@@ -168,7 +168,8 @@ namespace gucci::ui::pages {
             if (!got.path)
                 return;
             if (lowerAscii(geode::utils::string::pathToString(got.path->extension())) != ".mp3") {
-                ed.trackNote = "BIG BRRRR plays .mp3 files. Pick one of those.";
+                ed.trackNote = disguised() ? "Tracks are .mp3 files. Pick one of those."
+                                           : "BIG BRRRR plays .mp3 files. Pick one of those.";
                 return;
             }
             std::error_code ec;
@@ -221,6 +222,16 @@ namespace gucci::ui::pages {
             to.quotes = from.quotes;
         }
 
+        // A new theme's starting look and words. While disguised (GBot) its
+        // brand tag starts empty instead of "Brrr.": the menu wears the draft
+        // as it is edited.
+        Theme starter() {
+            Theme t = th::starterCustom();
+            if (disguised())
+                t.brand.clear();
+            return t;
+        }
+
         void openEditor(const Theme* existing) {
             s_editor = Editor{};
             s_editor.open = true;
@@ -229,7 +240,7 @@ namespace gucci::ui::pages {
                 s_editor.draft = *existing;
                 s_editor.previousName = existing->name;
             } else {
-                s_editor.draft = th::starterCustom();
+                s_editor.draft = starter();
                 freshIdentity(s_editor.draft);
             }
             s_editor.extensionText = s_editor.draft.extension;
@@ -244,7 +255,8 @@ namespace gucci::ui::pages {
             if (text.empty())
                 return;
             UseFont f(Font::Small);
-            kit::Paragraph(text.c_str(), Tone::Bad);
+            // extensionProblem can name GucciBot (GBot while disguised).
+            kit::Paragraph(branded(text).c_str(), Tone::Bad);
         }
 
         void textRow(const char* label, const char* hint, std::string* value, const char* placeholder = nullptr) {
@@ -309,7 +321,7 @@ namespace gucci::ui::pages {
                     act = top;
                 if (!ed.error.empty()) {
                     kit::Gap(0.25f);
-                    kit::Note(ed.error.c_str(), Tone::Bad);
+                    kit::Note(branded(ed.error).c_str(), Tone::Bad);
                 }
                 kit::EndCard();
             }
@@ -320,7 +332,8 @@ namespace gucci::ui::pages {
                 auto const& customs = th::customs();
                 std::vector<std::string> names;
                 names.reserve(1 + builtins.size() + customs.size());
-                names.emplace_back("Starter (GucciBot's look)");
+                // It is GucciBot's look, which GBot's isn't: plain while disguised.
+                names.emplace_back(disguised() ? "Starter" : "Starter (GucciBot's look)");
                 for (auto const& t : builtins)
                     names.push_back(t.name);
                 for (auto const& t : customs)
@@ -330,7 +343,7 @@ namespace gucci::ui::pages {
                 if (kit::Dropdown("start", &choice, names) && choice != ed.startFrom) {
                     size_t const index = static_cast<size_t>(choice);
                     if (index == 0)
-                        copyLookAndWords(d, th::starterCustom());
+                        copyLookAndWords(d, starter());
                     else if (index - 1 < builtins.size())
                         copyLookAndWords(d, builtins[index - 1]);
                     else if (index - 1 - builtins.size() < customs.size())
@@ -373,9 +386,13 @@ namespace gucci::ui::pages {
             kit::SwitchRow("Snow", "Snow falls behind the cards while Animations is on (Settings > Look)", &d.snow);
             kit::EndCard();
 
+            // While disguised (GBot) the examples and the track card don't say
+            // Brrr or Gucci.
+            bool const plain = disguised();
             kit::BeginCard("Words", nullptr);
             textRow("Subtitle", "Under the menu's heading", &d.subtitle);
-            textRow("Brand", "The short tag at the bottom of the sidebar, above Close", &d.brand, "Brrr.");
+            textRow("Brand", "The short tag at the bottom of the sidebar, above Close", &d.brand,
+                    plain ? nullptr : "Brrr.");
             textRow("Badge", "The Credits page badge", &d.badge);
             // Named by number: the pages take turns with them (shell.cpp
             // drawMain), so a name per page would go stale.
@@ -386,23 +403,27 @@ namespace gucci::ui::pages {
                 th::Quote& q = d.quotes[static_cast<size_t>(s)];
                 kit::Section(slotNames[s]);
                 textRow("Quote", "With its quotation marks", &q.text);
-                textRow("By", "Who said it; may be empty", &q.by, "-- Gucci Mane, probably");
+                textRow("By", "Who said it; may be empty", &q.by, plain ? "-- someone, probably" : "-- Gucci Mane, probably");
                 kit::Quote(q.text.c_str(), q.by.c_str());
                 ImGui::PopID();
             }
             kit::EndCard();
 
-            kit::BeginCard("BIG BRRRR", "The drop this theme plays. Without a track of its own it plays GucciBot's.");
+            if (plain)
+                kit::BeginCard("Music", "The drop this theme plays. Without a track of its own it plays the default one.");
+            else
+                kit::BeginCard("BIG BRRRR", "The drop this theme plays. Without a track of its own it plays GucciBot's.");
             {
                 std::string status;
                 if (!ed.track.copyFrom.empty())
                     status = fileName(ed.track.copyFrom) + ", copied in when you save";
                 else if (ed.track.remove)
-                    status = "Removed when you save; GucciBot's drop plays instead";
+                    status = plain ? "Removed when you save; the default drop plays instead"
+                                   : "Removed when you save; GucciBot's drop plays instead";
                 else if (d.hasTrack)
                     status = "It has its own .mp3";
                 else
-                    status = "None of its own: GucciBot's drop plays";
+                    status = plain ? "None of its own: the default drop plays" : "None of its own: GucciBot's drop plays";
                 bool const busy = picking();
                 bool const hasOne = !ed.track.copyFrom.empty() || (d.hasTrack && !ed.track.remove);
                 kit::RowBegin("Track", status.c_str());
@@ -598,7 +619,7 @@ namespace gucci::ui::pages {
             }
             kit::EndCard();
 
-            kit::BeginCard("Your themes", "Kept in the customthemes folder in GucciBot's save folder.");
+            kit::BeginCard("Your themes", branded("Kept in the customthemes folder in GucciBot's save folder.").c_str());
             if (customs.empty())
                 kit::Hint("None yet.");
             {
@@ -677,8 +698,12 @@ namespace gucci::ui::pages {
             std::string message;
             if (const Theme* t = th::findCustom(s_deleteName)) {
                 bool const inUse = th::activeId() == kCustomThemeId && th::activeCustomName() == t->name;
+                // A custom theme in use means GBot isn't, so only the track
+                // has a disguise to wear.
                 message = fmt::format("{} will be deleted{}. This can't be undone.{}", t->name,
-                                      t->hasTrack ? ", along with its own BIG BRRRR track" : "",
+                                      !t->hasTrack  ? ""
+                                      : disguised() ? ", along with its own track"
+                                                    : ", along with its own BIG BRRRR track",
                                       inUse ? " It's the theme in use, so the menu goes back to GucciBot." : "");
             } else {
                 message = "That theme is already gone.";

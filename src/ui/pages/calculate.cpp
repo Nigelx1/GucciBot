@@ -19,6 +19,7 @@
 #include "ui/pages.hpp"
 #include "ui/kit.hpp"
 #include "ui/look.hpp"
+#include "ui/ui.hpp"
 
 #include "analysis/ac/framewindow.hpp"
 #include "analysis/ac/fw_settings_store.hpp"
@@ -187,7 +188,7 @@ namespace gucci::ui::pages {
                 // Mods that step frames themselves throw the numbers off; this
                 // was only written to the log.
                 if (auto const& conflicts = gb->analyzerConflicts(); !conflicts.empty())
-                    kit::Note(conflicts.c_str(), Tone::Warn);
+                    kit::Note(branded(conflicts).c_str(), Tone::Warn);
                 // Read from the saved value every time, so Reset (confirms())
                 // turns it off here too.
                 bool mute = Mod::get()->getSavedValue<bool>("calc_mute", false);
