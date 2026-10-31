@@ -2265,7 +2265,14 @@ namespace gucci::ui {
             kit::EndCard();
 
             // The theme is picked on the Themes page (this card had a second
-            // picker for it).
+            // picker for it), or here while disguised: GBot takes the Themes
+            // page out of the sidebar. Its cards go between these, never inside
+            // one, under an id of their own: the editor has a "Look" card too.
+            if (disguised()) {
+                ImGui::PushID("themes");
+                pages::themes();
+                ImGui::PopID();
+            }
             // Saved as they change, as everything else here is: they were only
             // saved when the menu closed, so a crash before that lost them.
             kit::BeginCard("Look", nullptr);
@@ -2386,6 +2393,7 @@ namespace gucci::ui {
             const char* title;
             void (*draw)();
             void (*backdrop)() = nullptr;  // drawn first, under the whole window (sidebar included)
+            bool (*hidden)() = nullptr;    // out of the sidebar while this says so
         };
 
         // The JMF Trainer's colours over the whole menu while it is the page.
@@ -2410,11 +2418,26 @@ namespace gucci::ui {
             {"Pathfinder", pagePathfinder},
             {"Render", pageRender},
             {"Click sounds", pages::clickSounds},
-            {"Themes", pages::themes},
+            // While disguised (GBot) its picker is on Settings instead.
+            {"Themes", pages::themes, nullptr, disguised},
             {"Settings", pageSettings},
             {"Credits", pageCredits},
         };
         constexpr int kPageCount = static_cast<int>(sizeof(kPages) / sizeof(kPages[0]));
+
+        // The page can't be one the sidebar hides (Themes, while disguised):
+        // picking GBot there leaves it on Themes, so it goes to Settings,
+        // where the picker is then. Found by its draw function, not its place.
+        void leaveHiddenPage() {
+            if (!kPages[g_page].hidden || !kPages[g_page].hidden())
+                return;
+            for (int i = 0; i < kPageCount; ++i)
+                if (kPages[i].draw == pageSettings) {
+                    g_page = i;
+                    return;
+                }
+            g_page = 0;
+        }
 
         // ------------------------------------------------------------ windows
 
@@ -2583,6 +2606,8 @@ namespace gucci::ui {
             constexpr float kRowH = 26.f;
 #endif
             for (int i = 0; i < kPageCount; ++i) {
+                if (kPages[i].hidden && kPages[i].hidden())
+                    continue;
                 bool const selected = g_page == i;
                 ImVec2 const a = ImGui::GetCursorScreenPos();
                 if (ImGui::Selectable(kPages[i].title, selected, ImGuiSelectableFlags_None, ImVec2(0.f, kRowH)))
@@ -2933,10 +2958,13 @@ namespace gucci::ui {
             }
             if (!g_open)
                 return;
-            if (g_compact)
+            if (g_compact) {
                 drawCompact();
-            else
+            } else {
+                // Before drawMain reads the page (its look, its title).
+                leaveHiddenPage();
                 drawMain();
+            }
         }
 
     } // namespace
