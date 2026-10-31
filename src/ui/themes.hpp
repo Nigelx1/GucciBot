@@ -119,6 +119,12 @@ namespace gucci::ui::themes {
     // BPM and offset), or the custom track's full path as UTF-8.
     ThemeAudio audio(const Theme& theme);
 
+    // The built-ins after the first twenty, by saved id (themes.cpp kPaints).
+    inline constexpr int kRondoTheme = 20;
+    inline constexpr int kSolarTheme = 21;
+    inline constexpr int kJupiterTheme = 22;
+    inline constexpr int kGBotTheme = 23;
+
     const Theme& active();
     int activeId();
     const std::string& activeCustomName();
