@@ -2363,9 +2363,12 @@ namespace gucci::ui {
 #endif
             if (kit::SwitchRow("Cycle the accent color", nullptr, &look().accentCycle))
                 saveSettings();
+            // While disguised (GBot) it names no themes: the others' names are
+            // the mod's own.
             if (kit::SwitchRow("Animations",
-                               "Switches slide, the JMF sky and JupiterBot's turn, SolarBot's Janet glows, BrrrBot's "
-                               "snow falls",
+                               disguised() ? "Switches slide and the menu's backdrops move"
+                                           : "Switches slide, the JMF sky and JupiterBot's turn, SolarBot's Janet "
+                                             "glows, BrrrBot's snow falls",
                                &look().effects))
                 saveSettings();
             bool compact = g_compact;
