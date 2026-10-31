@@ -45,6 +45,7 @@ namespace gucci::ui::themes {
         enum VoiceId {
             vGucci, vToosii, vJa, vGiddey, vBam, vSexyy, vJuice, vButler, vSaweetie, vMaybach,
             vRomo, vGrizzley, vRedKingdom, vLemonade, vBrrr, vWaka, vYoungsta, vKnockerz,
+            vRondo, vSolar, vJupiter, vGBot,
         };
 
         const Voice kVoices[] = {
@@ -198,7 +199,47 @@ namespace gucci::ui::themes {
                 .credits = {"\"Two step in, frame perfect out.\"", "-- Gucci Mane"},
                 .bpm = 90.0, .drop = 21.0 + 17.0 / 30.0, .track = "big_brrr_knockerz.mp3",
             },
+            // Nigel's 2026-10-31 four. SolarBot, JupiterBot and GBot have no
+            // BIG BRRRR (Paint::noBrrr), so no track. GBot says nothing at all:
+            // only its name and the version show.
+            /* vRondo */ {
+                .title = "RondoBot", .ext = ".rondo",
+                .subtitle = "Playoff Rondo. Every frame's an assist.", .brand = "Booked.",
+                .badge = "Point God | 2x Champ | $700 Bond",
+                .replay = {"\"I saw that input three frames before it happened.\"", "-- Rajon Rondo, probably"},
+                .tools = {"\"Reckless driving? Nah, that's just my speedhack.\"", "-- Rajon Rondo, at the traffic stop"},
+                .credits = {"\"Frame perfect. License and registration?\"", "-- the officer, on bodycam"},
+                .bpm = kStockBpm, .drop = kStockDrop, .track = kStockTrack,
+            },
+            /* vSolar */ {
+                .title = "SolarBot", .ext = ".solar",
+                .subtitle = "Watched over by Janet. Frame perfect.", .brand = "Flare.",
+                .badge = "Linear | Rynoxious | Janet",
+                .replay = {"\"I watched every frame. I'm the sun. I see everything.\"", "-- Janet, probably"},
+                .tools = {"\"Speedhack? My light takes eight minutes to get to you. I'm patient.\"", "-- Janet"},
+                .credits = {"\"Every frame gets its moment in the sun.\"", "-- Janet"},
+                .bpm = kStockBpm, .drop = 0.0, .track = "",
+            },
+            /* vJupiter */ {
+                .title = "JupiterBot", .ext = ".jupiter",
+                // The level's own spelling.
+                .subtitle = "Jupiter My Favourite. Frame perfect.", .brand = "Orbit.",
+                .badge = "Akunakunn | Tokyo Nights | Gas Giant",
+                .replay = {"\"Every replay stays in orbit. Nothing gets away.\"", "-- Jupiter, probably"},
+                .tools = {"\"Speedhack? I spin once every ten hours and still keep up.\"", "-- Jupiter"},
+                .credits = {"\"Biggest planet in the sky. Still frame perfect.\"", "-- Jupiter"},
+                .bpm = kStockBpm, .drop = 0.0, .track = "",
+            },
+            /* vGBot */ {
+                .title = "GBot", .ext = ".gbot",
+                .subtitle = "", .brand = "", .badge = "",
+                .replay = {"", ""},
+                .tools = {"", ""},
+                .credits = {"", ""},
+                .bpm = kStockBpm, .drop = 0.0, .track = "",
+            },
         };
+        static_assert(sizeof(kVoices) / sizeof(kVoices[0]) == vGBot + 1, "a voice for every VoiceId, in its order");
 
         using Rgb = std::array<float, 3>;
 
@@ -263,6 +304,23 @@ namespace gucci::ui::themes {
              {0.070f, 0.020f, 0.020f}, {0.980f, 0.960f, 0.960f}, {0.620f, 0.320f, 0.320f}, 5.f, 0.96f},
             {"KnockerzBot", vKnockerz, {0.070f, 0.780f, 0.720f}, {0.014f, 0.058f, 0.056f}, 0.96f,
              {0.027f, 0.098f, 0.093f}, {0.938f, 0.984f, 0.978f}, {0.420f, 0.600f, 0.580f}, 5.f, 0.96f},
+            // Nigel's 2026-10-31 four. RondoBot: Celtics green on white, the
+            // Garden's parquet for cards (its gold is in the backdrop).
+            // SolarBot: Solar Flare's sun-baked oranges, square and solid, the
+            // accent breathing. JupiterBot: the JMF page's own colors. GBot:
+            // plain and generic on purpose, an ordinary bot menu.
+            {"RondoBot", vRondo, {0.000f, 0.478f, 0.200f}, {1.000f, 1.000f, 1.000f}, 0.97f,
+             {0.937f, 0.890f, 0.800f}, {0.000f, 0.392f, 0.165f}, {0.373f, 0.471f, 0.408f}, 5.f, 0.97f, false, false,
+             Scene::Garden},
+            {"SolarBot", vSolar, {1.000f, 0.769f, 0.000f}, {0.604f, 0.239f, 0.000f}, 1.f,
+             {0.420f, 0.165f, 0.000f}, {1.000f, 0.902f, 0.502f}, {0.941f, 0.690f, 0.376f}, 0.f, 1.f, true, false,
+             Scene::Solar, true},
+            {"JupiterBot", vJupiter, {0.988f, 0.961f, 0.314f}, {0.027f, 0.016f, 0.247f}, 0.96f,
+             {0.051f, 0.027f, 0.408f}, {0.957f, 0.949f, 1.000f}, {0.714f, 0.690f, 0.910f}, 5.f, 0.96f, false, false,
+             Scene::Jupiter, true},
+            {"GBot", vGBot, {0.357f, 0.506f, 0.667f}, {0.118f, 0.122f, 0.133f}, 0.96f,
+             {0.165f, 0.173f, 0.188f}, {0.890f, 0.898f, 0.910f}, {0.557f, 0.580f, 0.612f}, 3.f, 0.96f, false, false,
+             Scene::None, true},
         };
 
         ImVec4 opaque(const Rgb& c) {

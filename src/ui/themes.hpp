@@ -1,6 +1,6 @@
 #pragma once
 
-// Themes: GucciBot's twenty built-in rapper themes and the user's own.
+// Themes: GucciBot's twenty-four built-in themes and the user's own.
 //
 // A theme is a look (five colours, corner radius, window opacity, an accent
 // that can pulse), words (the name, the heading the menu shows, a subtitle, a
@@ -8,7 +8,8 @@
 // extension macros save with, and the BIG BRRRR drop it plays.
 //
 // Built-in ids are the numbers persisted as "active_theme": 0..19 in the old
-// menu's order, so a saved choice keeps meaning the same theme. Every custom
+// menu's order, then 20..23 for the four added on 2026-10-31 (kRondoTheme and
+// on, below), so a saved choice keeps meaning the same theme. Every custom
 // theme is kCustomThemeId and is told apart by its name, persisted as
 // "active_custom_theme". Custom themes are JSON files in customThemesDir()
 // named <extension>.json (no dot), with their own track beside them as
