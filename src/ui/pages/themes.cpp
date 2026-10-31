@@ -403,16 +403,19 @@ namespace gucci::ui::pages {
                 th::Quote& q = d.quotes[static_cast<size_t>(s)];
                 kit::Section(slotNames[s]);
                 textRow("Quote", "With its quotation marks", &q.text);
-                textRow("By", "Who said it; may be empty", &q.by, plain ? "-- someone, probably" : "-- Gucci Mane, probably");
+                textRow("By", "Who said it; may be empty", &q.by,
+                        plain ? "-- someone, probably" : "-- Gucci Mane, probably");
                 kit::Quote(q.text.c_str(), q.by.c_str());
                 ImGui::PopID();
             }
             kit::EndCard();
 
             if (plain)
-                kit::BeginCard("Music", "The drop this theme plays. Without a track of its own it plays the default one.");
+                kit::BeginCard("Music",
+                               "The drop this theme plays. Without a track of its own it plays the default one.");
             else
-                kit::BeginCard("BIG BRRRR", "The drop this theme plays. Without a track of its own it plays GucciBot's.");
+                kit::BeginCard("BIG BRRRR",
+                               "The drop this theme plays. Without a track of its own it plays GucciBot's.");
             {
                 std::string status;
                 if (!ed.track.copyFrom.empty())
@@ -423,7 +426,8 @@ namespace gucci::ui::pages {
                 else if (d.hasTrack)
                     status = "It has its own .mp3";
                 else
-                    status = plain ? "None of its own: the default drop plays" : "None of its own: GucciBot's drop plays";
+                    status = plain ? "None of its own: the default drop plays"
+                                   : "None of its own: GucciBot's drop plays";
                 bool const busy = picking();
                 bool const hasOne = !ed.track.copyFrom.empty() || (d.hasTrack && !ed.track.remove);
                 kit::RowBegin("Track", status.c_str());
@@ -619,7 +623,8 @@ namespace gucci::ui::pages {
             }
             kit::EndCard();
 
-            kit::BeginCard("Your themes", branded("Kept in the customthemes folder in GucciBot's save folder.").c_str());
+            kit::BeginCard("Your themes",
+                           branded("Kept in the customthemes folder in GucciBot's save folder.").c_str());
             if (customs.empty())
                 kit::Hint("None yet.");
             {

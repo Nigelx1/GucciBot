@@ -432,8 +432,8 @@ namespace gucci::ui::pages {
         void tpsSection(EditState& s) {
             auto& m = *s.macro;
             kit::Section("TPS changes");
-            kit::Hint(branded("From a change's frame on, the macro plays at its rate. Inputs keep their frame numbers. A "
-                              "GucciBot from before 2.0 plays the whole macro at the starting TPS.")
+            kit::Hint(branded("From a change's frame on, the macro plays at its rate. Inputs keep their frame "
+                              "numbers. A GucciBot from before 2.0 plays the whole macro at the starting TPS.")
                           .c_str());
 
             auto const changes = mo::tpsChanges(m);

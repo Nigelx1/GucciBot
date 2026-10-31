@@ -1044,10 +1044,11 @@ namespace gucci::ui {
                 }
             }
             kit::Section("From other bots");
-            kit::Hint(branded("GDR, Silicate, TcBot, ToastyReplay, yBot, xdBot, Mega Hack, Echo and more, and GucciBot 1.x's old .brrr. Drop "
-                              "them in the replays folder, or import one (or a GucciBot macro) from anywhere: the original "
-                              "stays where it was, a copy dated the day it first came in is kept in replays/imported, and "
-                              "importing it again selects the macro it became.")
+            kit::Hint(branded("GDR, Silicate, TcBot, ToastyReplay, yBot, xdBot, Mega Hack, Echo and more, and "
+                              "GucciBot 1.x's old .brrr. Drop them in the replays folder, or import one (or a "
+                              "GucciBot macro) from anywhere: the original stays where it was, a copy dated the day "
+                              "it first came in is kept in replays/imported, and importing it again selects the "
+                              "macro it became.")
                           .c_str());
             ImGui::BeginDisabled(s_macroPickPending || gb->isRecording());
             if (kit::Button(s_macroPickPending ? "Choosing..." : "Import a macro")) {
@@ -1750,8 +1751,9 @@ namespace gucci::ui {
             kit::BeginCard("Pathfinder", "Finds a way through the level on its own.");
             int engine = absense::classicSelected() ? 1 : 0;
             const char* engines[] = {"Absense", "Classic"};
-            if (kit::ChoiceRow("Engine", branded("Absense: Absent's planner, the default. Classic: GucciBot's own search").c_str(),
-                               &engine, engines, 2))
+            std::string const engineHint =
+                branded("Absense: Absent's planner, the default. Classic: GucciBot's own search");
+            if (kit::ChoiceRow("Engine", engineHint.c_str(), &engine, engines, 2))
                 absense::selectClassic(engine == 1);
             if (engine == 1) {
                 classicPathfinder();
@@ -2233,8 +2235,8 @@ namespace gucci::ui {
             {
                 auto* mod = Mod::get();
                 bool check = mod->getSavedValue<bool>("update_check", true);
-                if (kit::SwitchRow("Check for updates", branded("Once a launch, says when a newer GucciBot is out").c_str(),
-                                   &check))
+                if (kit::SwitchRow("Check for updates",
+                                   branded("Once a launch, says when a newer GucciBot is out").c_str(), &check))
                     mod->setSavedValue("update_check", check);
                 if (check) {
                     bool pre = mod->getSavedValue<bool>("update_prereleases", false);
