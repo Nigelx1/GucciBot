@@ -1431,8 +1431,14 @@ namespace gucci::ui {
                 ImGui::OpenPopupOnItemClick("##rowmenu", ImGuiPopupFlags_MouseButtonRight);
                 if (!tag.empty()) {
                     ImGui::SameLine();
-                    ImGui::TextColored(tagTheme ? tagTheme->accent : ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled),
-                                       "%s", tag.c_str());
+                    // In the tagged theme's accent where that reads on the
+                    // list (a frame), else in the text colour: LemonadeBot's
+                    // yellow is lost on a light theme, RondoBot's green on a
+                    // dark one.
+                    ImVec4 tagColor = tagTheme ? tagTheme->accent : ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled);
+                    if (tagTheme && contrast(tagColor, ImGui::GetStyleColorVec4(ImGuiCol_FrameBg)) < 3.f)
+                        tagColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+                    ImGui::TextColored(tagColor, "%s", tag.c_str());
                 }
                 ImGui::SameLine();
                 if (ImGui::SmallButton("..."))

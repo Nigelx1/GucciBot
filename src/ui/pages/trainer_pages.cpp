@@ -259,14 +259,15 @@ namespace gucci::ui::pages {
                 dl->AddLine(ImVec2(xa, laneTop - 2.f), ImVec2(xa, laneMid - 2.f), u32(edge), 2.5f);
             }
 
-            // The player's own.
-            ImU32 const white = IM_COL32(255, 255, 255, 235);
+            // The player's own: white, or the ink colour on a light theme,
+            // where white wouldn't show.
+            ImU32 const mine = pal.light ? u32(pal.ink, 0.92f) : IM_COL32(255, 255, 255, 235);
             for (double t : s.myPresses)
                 if (t >= left && t <= right)
-                    dl->AddLine(ImVec2(x(t), laneMid), ImVec2(x(t), laneBot), white, 2.f);
+                    dl->AddLine(ImVec2(x(t), laneMid), ImVec2(x(t), laneBot), mine, 2.f);
             for (double t : s.myReleases)
                 if (t >= left && t <= right)
-                    dl->AddLine(ImVec2(x(t), (laneMid + laneBot) * 0.5f), ImVec2(x(t), laneBot), white, 1.f);
+                    dl->AddLine(ImVec2(x(t), (laneMid + laneBot) * 0.5f), ImVec2(x(t), laneBot), mine, 1.f);
 
             // The fixed centre line.
             float const cx = p0.x + w * 0.5f;
@@ -857,6 +858,7 @@ namespace gucci::ui::pages {
         {
             {
                 Palette& p = look().pal;
+                setLight(p, false);  // JMF's indigo is dark under a light theme too
                 p.accent = kJmfYellow;
                 p.onAccent = ImVec4(0.06f, 0.03f, 0.25f, 1.f);
                 p.surface = kJmfCard;
