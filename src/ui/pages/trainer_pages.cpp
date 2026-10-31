@@ -259,14 +259,15 @@ namespace gucci::ui::pages {
                 dl->AddLine(ImVec2(xa, laneTop - 2.f), ImVec2(xa, laneMid - 2.f), u32(edge), 2.5f);
             }
 
-            // The player's own.
-            ImU32 const white = IM_COL32(255, 255, 255, 235);
+            // The player's own: white, or the ink colour on a light theme,
+            // where white wouldn't show.
+            ImU32 const mine = pal.light ? u32(pal.ink, 0.92f) : IM_COL32(255, 255, 255, 235);
             for (double t : s.myPresses)
                 if (t >= left && t <= right)
-                    dl->AddLine(ImVec2(x(t), laneMid), ImVec2(x(t), laneBot), white, 2.f);
+                    dl->AddLine(ImVec2(x(t), laneMid), ImVec2(x(t), laneBot), mine, 2.f);
             for (double t : s.myReleases)
                 if (t >= left && t <= right)
-                    dl->AddLine(ImVec2(x(t), (laneMid + laneBot) * 0.5f), ImVec2(x(t), laneBot), white, 1.f);
+                    dl->AddLine(ImVec2(x(t), (laneMid + laneBot) * 0.5f), ImVec2(x(t), laneBot), mine, 1.f);
 
             // The fixed centre line.
             float const cx = p0.x + w * 0.5f;
@@ -843,6 +844,47 @@ namespace gucci::ui::pages {
 
         Palette g_jmfSaved;
         int g_jmfPushed = 0;
+
+        // The JMF look: the palette the kit reads (look().pal), and through
+        // `set(slot, colour)` the style colours ImGui's own widgets and the
+        // window read, the window's sky at `opacity`. jupiterLookPush pushes
+        // them for the JMF page; jupiterLookApply writes them over refresh()'s
+        // for JupiterBot.
+        template <class Set>
+        void jmfLook(Palette& p, float opacity, Set&& set) {
+            auto alpha = [](ImVec4 v, float a) { return ImVec4(v.x, v.y, v.z, a); };
+            setLight(p, false);  // JMF's indigo is dark under a light theme too
+            p.accent = kJmfYellow;
+            p.onAccent = ImVec4(0.06f, 0.03f, 0.25f, 1.f);
+            p.surface = kJmfCard;
+            p.raised = kJmfRaised;
+            p.ink = ImVec4(0.957f, 0.949f, 1.f, 1.f);
+            p.muted = kJmfLavender;
+            p.line = alpha(kJmfYellow, 0.22f);
+            set(ImGuiCol_Text, p.ink);
+            set(ImGuiCol_TextDisabled, p.muted);
+            set(ImGuiCol_Border, p.line);
+            set(ImGuiCol_FrameBg, kJmfRaised);
+            set(ImGuiCol_FrameBgHovered, ImVec4(0.11f, 0.06f, 0.60f, 1.f));
+            set(ImGuiCol_FrameBgActive, ImVec4(0.13f, 0.08f, 0.66f, 1.f));
+            set(ImGuiCol_Button, kJmfRaised);
+            set(ImGuiCol_ButtonHovered, ImVec4(0.11f, 0.06f, 0.60f, 1.f));
+            set(ImGuiCol_ButtonActive, alpha(kJmfYellow, 0.55f));
+            set(ImGuiCol_Header, alpha(kJmfYellow, 0.22f));
+            set(ImGuiCol_HeaderHovered, alpha(kJmfYellow, 0.30f));
+            set(ImGuiCol_HeaderActive, alpha(kJmfYellow, 0.40f));
+            set(ImGuiCol_CheckMark, kJmfYellow);
+            set(ImGuiCol_SliderGrab, kJmfYellow);
+            set(ImGuiCol_SliderGrabActive, kJmfYellow);
+            set(ImGuiCol_ScrollbarGrab, alpha(kJmfLavender, 0.35f));
+            set(ImGuiCol_PlotHistogram, kJmfYellow);
+            set(ImGuiCol_WindowBg, alpha(kJmfSky, opacity));
+            set(ImGuiCol_PopupBg, kJmfCard);
+            set(ImGuiCol_Tab, kJmfRaised);
+            set(ImGuiCol_TabHovered, alpha(kJmfYellow, 0.35f));
+            set(ImGuiCol_TabActive, alpha(kJmfYellow, 0.45f));
+            p.backdrop = alpha(kJmfSky, opacity);
+        }
     }
 
     // The JMF colours over the whole menu while the JMF Trainer is the page
@@ -854,46 +896,19 @@ namespace gucci::ui::pages {
         if (g_jmfPushed > 0)
             return;
         g_jmfSaved = look().pal;
-        {
-            {
-                Palette& p = look().pal;
-                p.accent = kJmfYellow;
-                p.onAccent = ImVec4(0.06f, 0.03f, 0.25f, 1.f);
-                p.surface = kJmfCard;
-                p.raised = kJmfRaised;
-                p.ink = ImVec4(0.957f, 0.949f, 1.f, 1.f);
-                p.muted = kJmfLavender;
-                p.line = ImVec4(kJmfYellow.x, kJmfYellow.y, kJmfYellow.z, 0.22f);
-                auto push = [&](ImGuiCol c, ImVec4 v) {
-                    ImGui::PushStyleColor(c, v);
-                    ++g_jmfPushed;
-                };
-                auto alpha = [](ImVec4 v, float a) { return ImVec4(v.x, v.y, v.z, a); };
-                push(ImGuiCol_Text, p.ink);
-                push(ImGuiCol_TextDisabled, p.muted);
-                push(ImGuiCol_Border, p.line);
-                push(ImGuiCol_FrameBg, kJmfRaised);
-                push(ImGuiCol_FrameBgHovered, ImVec4(0.11f, 0.06f, 0.60f, 1.f));
-                push(ImGuiCol_FrameBgActive, ImVec4(0.13f, 0.08f, 0.66f, 1.f));
-                push(ImGuiCol_Button, kJmfRaised);
-                push(ImGuiCol_ButtonHovered, ImVec4(0.11f, 0.06f, 0.60f, 1.f));
-                push(ImGuiCol_ButtonActive, alpha(kJmfYellow, 0.55f));
-                push(ImGuiCol_Header, alpha(kJmfYellow, 0.22f));
-                push(ImGuiCol_HeaderHovered, alpha(kJmfYellow, 0.30f));
-                push(ImGuiCol_HeaderActive, alpha(kJmfYellow, 0.40f));
-                push(ImGuiCol_CheckMark, kJmfYellow);
-                push(ImGuiCol_SliderGrab, kJmfYellow);
-                push(ImGuiCol_SliderGrabActive, kJmfYellow);
-                push(ImGuiCol_ScrollbarGrab, alpha(kJmfLavender, 0.35f));
-                push(ImGuiCol_PlotHistogram, kJmfYellow);
-                push(ImGuiCol_WindowBg, alpha(kJmfSky, g_jmfSaved.opacity));
-                push(ImGuiCol_PopupBg, kJmfCard);
-                push(ImGuiCol_Tab, kJmfRaised);
-                push(ImGuiCol_TabHovered, alpha(kJmfYellow, 0.35f));
-                push(ImGuiCol_TabActive, alpha(kJmfYellow, 0.45f));
-                p.backdrop = alpha(kJmfSky, g_jmfSaved.opacity);
-            }
-        }
+        jmfLook(look().pal, g_jmfSaved.opacity, [](ImGuiCol c, ImVec4 v) {
+            ImGui::PushStyleColor(c, v);
+            ++g_jmfPushed;
+        });
+    }
+
+    // JupiterBot: the same look on every window, written straight over the
+    // style rather than pushed, after refresh() has worked the theme's out.
+    // refresh() rewrites every one of these slots each frame, so switching
+    // away leaves nothing behind, and the JMF page's push on top of it is the
+    // same colours again.
+    void jupiterLookApply() {
+        jmfLook(look().pal, look().pal.opacity, [](ImGuiCol c, ImVec4 v) { ImGui::GetStyle().Colors[c] = v; });
     }
 
     void jupiterLookPop() {
@@ -910,7 +925,8 @@ namespace gucci::ui::pages {
         ImVec2 const size = ImGui::GetWindowSize();
         ImVec2 const b(a.x + size.x, a.y + size.y);
         dl->PushClipRect(a, b, true);
-        dl->AddRectFilled(a, b, ImGui::ColorConvertFloat4ToU32(kJmfSky), look().pal.radius);
+        // Rounded as the window is (radius + 4), so the corners match.
+        dl->AddRectFilled(a, b, ImGui::ColorConvertFloat4ToU32(kJmfSky), ImGui::GetStyle().WindowRounding);
         // Scattered over the whole page, as the level's skies scatter them
         // (positions and turns from the site's 400 x 500 sky).
         struct Mark {

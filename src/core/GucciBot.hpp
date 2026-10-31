@@ -1124,6 +1124,10 @@ namespace gucci {
         std::unordered_set<std::string> wakaMacros;
         std::unordered_set<std::string> youngstaMacros;
         std::unordered_set<std::string> knockerzMacros;
+        std::unordered_set<std::string> rondoMacros;
+        std::unordered_set<std::string> solarMacros;
+        std::unordered_set<std::string> jupiterMacros;
+        std::unordered_set<std::string> gbotMacros;
         std::unordered_map<std::string, std::unordered_set<std::string>> customThemeMacrosByExt;
 
         std::vector<BotSettingsPreset> settingsPresets;

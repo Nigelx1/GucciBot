@@ -23,6 +23,10 @@ namespace gucci::ui {
         ImVec4 good, warn, bad;
         float radius = 6.f;
         float opacity = 0.96f;
+        // The theme is light (RondoBot's white): a hover or press darkens
+        // instead of lifting (shade()), and good/warn/bad are deeper ones that
+        // read on white. Set with setLight().
+        bool light = false;
     };
 
     class Look {
@@ -48,7 +52,8 @@ namespace gucci::ui {
         float textScale = 1.f;
         bool accentCycle = false;   // slowly cycle the accent's hue
         float accentCycleRate = 0.5f;
-        bool effects = true;        // small animations, and a snowy theme's falling snow (BrrrBot's)
+        bool effects = true;        // small animations, and the themes' moving backdrops (BrrrBot's snow,
+                                    // the JMF sky, SolarBot's Janet)
         float menuScale = 1.f;      // Android and iOS: bigger or smaller than deviceScale picks
 
     private:
@@ -63,6 +68,17 @@ namespace gucci::ui {
     ImVec4 mix(const ImVec4& a, const ImVec4& b, float t);
     // Relative luminance, for picking readable text on a colour.
     float luminance(const ImVec4& c);
+    // How well one colour reads on another, as the WCAG ratio: 1 (the same)
+    // to 21 (black on white). Text wants 4.5, a short tag 3.
+    float contrast(const ImVec4& a, const ImVec4& b);
+
+    // Lights a palette for a dark or a light background: Palette::light and
+    // the good/warn/bad that read on it. refresh() picks from the theme; the
+    // JMF page's look, always dark, sets dark back.
+    void setLight(Palette& p, bool light);
+    // A colour moved by `amount` the way a hover or a press moves it: lighter
+    // on a dark palette, darker on a light one (look().pal.light).
+    ImVec4 shade(const ImVec4& c, float amount);
 
     // Pushes a font for the lifetime of the scope (no-op when it failed to load).
     class UseFont {

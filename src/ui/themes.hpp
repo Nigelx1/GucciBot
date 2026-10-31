@@ -1,6 +1,6 @@
 #pragma once
 
-// Themes: GucciBot's twenty built-in rapper themes and the user's own.
+// Themes: GucciBot's twenty-four built-in themes and the user's own.
 //
 // A theme is a look (five colours, corner radius, window opacity, an accent
 // that can pulse), words (the name, the heading the menu shows, a subtitle, a
@@ -8,7 +8,8 @@
 // extension macros save with, and the BIG BRRRR drop it plays.
 //
 // Built-in ids are the numbers persisted as "active_theme": 0..19 in the old
-// menu's order, so a saved choice keeps meaning the same theme. Every custom
+// menu's order, then 20..23 for the four added on 2026-10-31 (kRondoTheme and
+// on, below), so a saved choice keeps meaning the same theme. Every custom
 // theme is kCustomThemeId and is told apart by its name, persisted as
 // "active_custom_theme". Custom themes are JSON files in customThemesDir()
 // named <extension>.json (no dot), with their own track beside them as
@@ -37,6 +38,13 @@ namespace gucci::ui::themes {
         std::string by;    // "-- Gucci Mane, probably"; may be empty
     };
 
+    // A built-in's picture behind the menu, and anything it wears over the
+    // colors refresh() works out (ui/shell.cpp drawMain and frame):
+    // JupiterBot has the JMF page's look on every window and its sky behind
+    // every page, SolarBot has Janet rising in the corner, RondoBot the
+    // Garden's parquet. Custom themes never get or copy one.
+    enum class Scene : unsigned char { None, Jupiter, Solar, Garden };
+
     struct Theme {
         int id = 0;
         std::string name;       // unique; what the picker lists
@@ -56,12 +64,14 @@ namespace gucci::ui::themes {
         float opacity = 0.96f;
         bool pulse = false;  // the accent breathes (Red Kingdom)
         bool snow = false;   // snow falls behind the menu's cards (BrrrBot), while the Look's animations are on
+        Scene scene = Scene::None;  // built-in only
 
         // BIG BRRRR
         double bpm = 140.0;
         double dropOffsetSec = 0.0;  // where in the track playback starts, in seconds
         std::string track;           // built-in: the bundled resource file it plays
         bool hasTrack = false;       // custom: its own <extension>_brrr.mp3 is in the folder
+        bool noBrrr = false;         // built-in only: it has no BIG BRRRR at all (SolarBot, JupiterBot, GBot)
 
         bool custom = false;
         std::filesystem::path file;  // custom: the JSON it was loaded from
@@ -116,8 +126,15 @@ namespace gucci::ui::themes {
 
     // The BIG BRRRR drop a theme plays. `file` is a resource file name for a
     // built-in (and for a custom theme without a track: GucciBot's own, at its
-    // BPM and offset), or the custom track's full path as UTF-8.
+    // BPM and offset), or the custom track's full path as UTF-8; empty for a
+    // theme with no BIG BRRRR (noBrrr).
     ThemeAudio audio(const Theme& theme);
+
+    // The built-ins after the first twenty, by saved id (themes.cpp kPaints).
+    inline constexpr int kRondoTheme = 20;
+    inline constexpr int kSolarTheme = 21;
+    inline constexpr int kJupiterTheme = 22;
+    inline constexpr int kGBotTheme = 23;
 
     const Theme& active();
     int activeId();

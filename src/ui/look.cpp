@@ -57,6 +57,35 @@ namespace gucci::ui {
         return 0.2126f * c.x + 0.7152f * c.y + 0.0722f * c.z;
     }
 
+    float contrast(const ImVec4& a, const ImVec4& b) {
+        // WCAG's luminance is of linear light, not of the stored (gamma
+        // encoded) values luminance() above weighs.
+        auto const lum = [](const ImVec4& c) {
+            auto const lin = [](float v) {
+                v = std::clamp(v, 0.f, 1.f);
+                return v <= 0.04045f ? v / 12.92f : std::pow((v + 0.055f) / 1.055f, 2.4f);
+            };
+            return 0.2126f * lin(c.x) + 0.7152f * lin(c.y) + 0.0722f * lin(c.z);
+        };
+        float const la = lum(a);
+        float const lb = lum(b);
+        return (std::max(la, lb) + 0.05f) / (std::min(la, lb) + 0.05f);
+    }
+
+    void setLight(Palette& p, bool light) {
+        p.light = light;
+        if (light) {
+            // At least 4.5:1 on white and on RondoBot's tan cards.
+            p.good = ImVec4(0.086f, 0.416f, 0.180f, 1.f);  // #166A2E
+            p.warn = ImVec4(0.549f, 0.310f, 0.000f, 1.f);  // #8C4F00
+            p.bad = ImVec4(0.706f, 0.137f, 0.094f, 1.f);   // #B42318
+        } else {
+            p.good = ImVec4(0.36f, 0.80f, 0.47f, 1.f);
+            p.warn = ImVec4(0.96f, 0.72f, 0.27f, 1.f);
+            p.bad = ImVec4(0.92f, 0.36f, 0.36f, 1.f);
+        }
+    }
+
     UseFont::UseFont(Font f) {
         if (ImFont* font = look().font(f)) {
             ImGui::PushFont(font);
@@ -169,17 +198,32 @@ namespace gucci::ui {
         ImVec4 lift(const ImVec4& c, float amount) {
             return ImVec4(std::min(1.f, c.x + amount), std::min(1.f, c.y + amount), std::min(1.f, c.z + amount), c.w);
         }
+
+        ImVec4 darken(const ImVec4& c, float amount) {
+            return ImVec4(std::max(0.f, c.x - amount), std::max(0.f, c.y - amount), std::max(0.f, c.z - amount), c.w);
+        }
     } // namespace
+
+    ImVec4 shade(const ImVec4& c, float amount) {
+        return look().pal.light ? darken(c, amount) : lift(c, amount);
+    }
 
     void Look::refresh() {
         auto const& theme = themes::active();
         float const t = static_cast<float>(ImGui::GetTime());
 
+        // A light theme (RondoBot's white) is lit the other way: what lifts on
+        // a dark theme (the raised controls, a hover, a press, the pulse)
+        // darkens on a light one, which near white would otherwise clamp to
+        // nothing. Dark themes come out exactly as before.
+        setLight(pal, luminance(theme.background) > 0.5f);
+
         ImVec4 accent = theme.accent;
         if (theme.pulse) {
-            // A slow breath between the colour and a brighter version of it.
+            // A slow breath between the colour and a brighter version of it
+            // (a deeper one on a light theme).
             float const breath = 0.5f + 0.5f * std::sin(t * 2.2f);
-            accent = mix(accent, lift(accent, 0.25f), breath);
+            accent = mix(accent, shade(accent, 0.25f), breath);
         }
         if (accentCycle)
             accent = rotateHue(accent, t * 0.08f * std::clamp(accentCycleRate, 0.05f, 4.f));
@@ -190,13 +234,10 @@ namespace gucci::ui {
         pal.opacity = std::clamp(theme.opacity, 0.3f, 1.f);
         pal.backdrop = withAlpha(theme.background, pal.opacity);
         pal.surface = withAlpha(theme.card, 1.f);
-        pal.raised = withAlpha(lift(theme.card, 0.055f), 1.f);
+        pal.raised = withAlpha(shade(theme.card, 0.055f), 1.f);
         pal.ink = withAlpha(theme.text, 1.f);
         pal.muted = withAlpha(theme.textMuted, 1.f);
         pal.line = withAlpha(mix(theme.card, theme.text, 0.14f), 1.f);
-        pal.good = ImVec4(0.36f, 0.80f, 0.47f, 1.f);
-        pal.warn = ImVec4(0.96f, 0.72f, 0.27f, 1.f);
-        pal.bad = ImVec4(0.92f, 0.36f, 0.36f, 1.f);
         pal.radius = std::clamp(theme.radius, 0.f, 14.f);
 
         ImGuiStyle& s = ImGui::GetStyle();
@@ -225,12 +266,12 @@ namespace gucci::ui {
         c[ImGuiCol_TextDisabled] = pal.muted;
         c[ImGuiCol_WindowBg] = pal.backdrop;
         c[ImGuiCol_ChildBg] = withAlpha(pal.surface, 0.f);
-        c[ImGuiCol_PopupBg] = withAlpha(lift(theme.background, 0.03f), 0.98f);
+        c[ImGuiCol_PopupBg] = withAlpha(shade(theme.background, 0.03f), 0.98f);
         c[ImGuiCol_Border] = pal.line;
         c[ImGuiCol_BorderShadow] = ImVec4(0, 0, 0, 0);
         c[ImGuiCol_FrameBg] = pal.raised;
-        c[ImGuiCol_FrameBgHovered] = lift(pal.raised, 0.04f);
-        c[ImGuiCol_FrameBgActive] = lift(pal.raised, 0.07f);
+        c[ImGuiCol_FrameBgHovered] = shade(pal.raised, 0.04f);
+        c[ImGuiCol_FrameBgActive] = shade(pal.raised, 0.07f);
         c[ImGuiCol_TitleBg] = pal.backdrop;
         c[ImGuiCol_TitleBgActive] = pal.backdrop;
         c[ImGuiCol_TitleBgCollapsed] = pal.backdrop;
@@ -241,9 +282,9 @@ namespace gucci::ui {
         c[ImGuiCol_ScrollbarGrabActive] = withAlpha(pal.accent, 0.8f);
         c[ImGuiCol_CheckMark] = pal.accent;
         c[ImGuiCol_SliderGrab] = pal.accent;
-        c[ImGuiCol_SliderGrabActive] = lift(pal.accent, 0.1f);
+        c[ImGuiCol_SliderGrabActive] = shade(pal.accent, 0.1f);
         c[ImGuiCol_Button] = pal.raised;
-        c[ImGuiCol_ButtonHovered] = lift(pal.raised, 0.05f);
+        c[ImGuiCol_ButtonHovered] = shade(pal.raised, 0.05f);
         c[ImGuiCol_ButtonActive] = withAlpha(pal.accent, 0.55f);
         c[ImGuiCol_Header] = withAlpha(pal.accent, 0.22f);
         c[ImGuiCol_HeaderHovered] = withAlpha(pal.accent, 0.30f);
@@ -262,6 +303,13 @@ namespace gucci::ui {
         c[ImGuiCol_TextSelectedBg] = withAlpha(pal.accent, 0.35f);
         c[ImGuiCol_NavHighlight] = pal.accent;
         c[ImGuiCol_ModalWindowDimBg] = ImVec4(0.f, 0.f, 0.f, 0.45f);
+        // Tables (Calculate's) in the theme's colours rather than ImGui's dark
+        // grey, which a light theme can't read: the header a step towards the
+        // text, the stripes a breath of it.
+        c[ImGuiCol_TableHeaderBg] = withAlpha(mix(pal.surface, pal.ink, 0.10f), 1.f);
+        c[ImGuiCol_TableBorderStrong] = pal.line;
+        c[ImGuiCol_TableBorderLight] = withAlpha(pal.line, 0.6f);
+        c[ImGuiCol_TableRowBgAlt] = withAlpha(pal.ink, 0.05f);
 
 #if defined(GEODE_IS_MOBILE)
         // Fingers, not a pointer: taller controls, more room between rows, a

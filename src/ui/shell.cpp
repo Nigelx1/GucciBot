@@ -1465,8 +1465,14 @@ namespace gucci::ui {
                 ImGui::OpenPopupOnItemClick("##rowmenu", ImGuiPopupFlags_MouseButtonRight);
                 if (!tag.empty()) {
                     ImGui::SameLine();
-                    ImGui::TextColored(tagTheme ? tagTheme->accent : ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled),
-                                       "%s", tag.c_str());
+                    // In the tagged theme's accent where that reads on the
+                    // list (a frame), else in the text colour: LemonadeBot's
+                    // yellow is lost on a light theme, RondoBot's green on a
+                    // dark one.
+                    ImVec4 tagColor = tagTheme ? tagTheme->accent : ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled);
+                    if (tagTheme && contrast(tagColor, ImGui::GetStyleColorVec4(ImGuiCol_FrameBg)) < 3.f)
+                        tagColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+                    ImGui::TextColored(tagColor, "%s", tag.c_str());
                 }
                 ImGui::SameLine();
                 if (ImGui::SmallButton("..."))
@@ -2295,7 +2301,9 @@ namespace gucci::ui {
 #endif
             if (kit::SwitchRow("Cycle the accent color", nullptr, &look().accentCycle))
                 saveSettings();
-            if (kit::SwitchRow("Animations", "Switches slide, the JMF page's sky turns, BrrrBot's snow falls",
+            if (kit::SwitchRow("Animations",
+                               "Switches slide, the JMF sky and JupiterBot's turn, SolarBot's Janet glows, BrrrBot's "
+                               "snow falls",
                                &look().effects))
                 saveSettings();
             bool compact = g_compact;
@@ -2333,20 +2341,25 @@ namespace gucci::ui {
             kit::EndCard();
 
             kit::BeginCard("BIG BRRRR", "You'll know it when you see it.");
-            auto* brrr = BigBrrrManager::get();
-            bool brrrOn = brrr->enabled;
-            if (kit::SwitchRow("BIG BRRRR", nullptr, &brrrOn))
-                brrr->setEnabled(brrrOn);
-            // GucciBot (2026-10-23): Shake and Flicker are saved (they reset at
-            // every launch); the switch itself stays per launch, as it starts
-            // the music.
-            if (kit::SwitchRow("Shake", "The menu shakes with the bass", &brrr->shakeEnabled))
-                saveEngineSwitch("brrr_shake", brrr->shakeEnabled);
-            if (kit::SliderRow("Flicker", "How hard the menu flickers with the bass", &brrr->flickerIntensity, 0.f,
-                               1.f, "%.2f"))
-                saveFloat("brrr_flicker", brrr->flickerIntensity);
-            if (kit::Button("Open the BIG BRRRR folder"))
-                brrr->openBrrrFolder();
+            if (themes::active().noBrrr) {
+                // No controls: it can't play here (brrrFollowsTheme).
+                kit::Note(fmt::format("{} has no BIG BRRRR.", themes::active().name).c_str(), Tone::Muted);
+            } else {
+                auto* brrr = BigBrrrManager::get();
+                bool brrrOn = brrr->enabled;
+                if (kit::SwitchRow("BIG BRRRR", nullptr, &brrrOn))
+                    brrr->setEnabled(brrrOn);
+                // GucciBot (2026-10-23): Shake and Flicker are saved (they reset at
+                // every launch); the switch itself stays per launch, as it starts
+                // the music.
+                if (kit::SwitchRow("Shake", "The menu shakes with the bass", &brrr->shakeEnabled))
+                    saveEngineSwitch("brrr_shake", brrr->shakeEnabled);
+                if (kit::SliderRow("Flicker", "How hard the menu flickers with the bass", &brrr->flickerIntensity,
+                                   0.f, 1.f, "%.2f"))
+                    saveFloat("brrr_flicker", brrr->flickerIntensity);
+                if (kit::Button("Open the BIG BRRRR folder"))
+                    brrr->openBrrrFolder();
+            }
             kit::EndCard();
         }
 
@@ -2496,6 +2509,45 @@ namespace gucci::ui {
             dl->PopClipRect();
         }
 
+        // The theme's scene (themes.hpp): what it wears over the colours
+        // refresh() worked out, on every window the shell draws, so after each
+        // refresh(). Applied, never borrowed through pages::jupiterTrainer(),
+        // which would count the JMF page as open and run its clock and music.
+        void sceneLook() {
+            switch (themes::active().scene) {
+                case themes::Scene::Jupiter: pages::jupiterLookApply(); break;
+                case themes::Scene::Solar: pages::solarLookApply(); break;
+                default: break;
+            }
+        }
+
+        // A theme with no BIG BRRRR (SolarBot's, JupiterBot's, GBot's) stops a
+        // drop that's playing, however it was picked, and the next theme with
+        // one starts it again: the switch stays the user's.
+        bool g_brrrHeld = false;
+        void brrrFollowsTheme() {
+            auto* brrr = BigBrrrManager::get();
+            if (themes::active().noBrrr) {
+                if (brrr->enabled) {
+                    brrr->setEnabled(false);
+                    g_brrrHeld = true;
+                }
+            } else if (std::exchange(g_brrrHeld, false)) {
+                brrr->setEnabled(true);
+            }
+        }
+
+        // ... and its picture behind the menu's pages.
+        using Backdrop = void (*)();
+        Backdrop sceneBackdrop() {
+            switch (themes::active().scene) {
+                case themes::Scene::Jupiter: return pages::jupiterBackdrop;
+                case themes::Scene::Solar: return pages::solarBackdrop;
+                case themes::Scene::Garden: return pages::gardenBackdrop;
+                default: return nullptr;
+            }
+        }
+
         void drawMain() {
             PageLook const pageLook(kPages[g_page].draw == pages::jupiterTrainer);
             auto const& pal = look().pal;
@@ -2530,8 +2582,10 @@ namespace gucci::ui {
                 ImGui::PopStyleVar();
                 return;
             }
-            if (kPages[g_page].backdrop)
-                kPages[g_page].backdrop();
+            // Behind the pages: the page's own picture (the JMF sky), else the
+            // theme's scene, else its snow.
+            if (Backdrop const backdrop = kPages[g_page].backdrop ? kPages[g_page].backdrop : sceneBackdrop())
+                backdrop();
             else if (themes::active().snow && look().effects)
                 drawSnow();
             ImVec2 offset{0.f, 0.f};
@@ -2563,10 +2617,14 @@ namespace gucci::ui {
             }
 
             // Sidebar
-            ImGui::BeginChild("##side", ImVec2(150.f, 0.f), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar);
+            ImGui::BeginChild("##side", ImVec2(pages::kSidebarWidth, 0.f), ImGuiChildFlags_None,
+                              ImGuiWindowFlags_NoScrollbar);
             // The JMF page is JMF's own: the theme's name, subtitle, brand tag
             // and page quote stay off it (Nigel, 2026-10-30; polish item 45).
-            bool const themeWords = !pageLook.on;
+            // Keyed on the page, not on its look: JupiterBot wears that look on
+            // every page, and its words show on all the others.
+            bool const jmfPage = kPages[g_page].draw == pages::jupiterTrainer;
+            bool const themeWords = !jmfPage;
             if (themeWords) {
                 UseFont f(Font::Title);
                 ImGui::PushStyleColor(ImGuiCol_Text, pal.accent);
@@ -2637,7 +2695,7 @@ namespace gucci::ui {
             // here the pages take turns with them.
             {
                 auto const& q = themes::quote(themes::active(), static_cast<themes::Slot>(g_page % themes::kSlotCount));
-                if (!pageLook.on && !q.text.empty()) {
+                if (themeWords && !q.text.empty()) {
                     UseFont f(Font::Small);
                     ImGui::PushStyleColor(ImGuiCol_Text, pal.muted);
                     std::string const line = q.by.empty() ? q.text : q.text + "  " + q.by;
@@ -2832,6 +2890,7 @@ namespace gucci::ui {
 #endif
             if (botswitch::takenOut()) {
                 look().refresh();
+                sceneLook();
                 if (g_open)
                     drawSwitchedOff();
                 return;
@@ -2882,6 +2941,8 @@ namespace gucci::ui {
             }
 
             look().refresh();
+            sceneLook();
+            brrrFollowsTheme();
             // Every frame, menu open or not: it starts and stops Video Mode's
             // decoder as well as drawing it (trainers/videomode.hpp).
             videomode::drawOverlay();

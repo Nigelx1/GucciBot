@@ -51,10 +51,6 @@ namespace gucci::ui::kit {
             return 0;
         }
 
-        ImVec4 lift(const ImVec4& c, float amount) {
-            return ImVec4(std::min(1.f, c.x + amount), std::min(1.f, c.y + amount), std::min(1.f, c.z + amount), c.w);
-        }
-
     } // namespace
 
     // ---- layout
@@ -247,15 +243,21 @@ namespace gucci::ui::kit {
         auto const& pal = look().pal;
         ImVec2 const a(p.x, p.y + (frame - h) * 0.5f);
         ImVec2 const b(a.x + w, a.y + h);
-        ImVec4 track = mix(mix(pal.raised, pal.line, 0.7f), pal.accent, t);
+        // Off, a track the white knob stands out on: a step past the controls
+        // on a dark theme; on a light one that step is pale too, so the muted
+        // text's colour instead.
+        ImVec4 const off = pal.light ? mix(pal.raised, pal.muted, 0.55f) : mix(pal.raised, pal.line, 0.7f);
+        ImVec4 track = mix(off, pal.accent, t);
         if (hovered)
-            track = lift(track, 0.05f);
+            track = shade(track, 0.05f);
         auto* dl = ImGui::GetWindowDrawList();
         dl->AddRectFilled(a, b, u32(track), h * 0.5f);
         float const r = h * 0.5f - 2.5f;
         ImVec2 const knob(a.x + h * 0.5f + t * (w - h), a.y + h * 0.5f);
         dl->AddCircleFilled(ImVec2(knob.x, knob.y + 0.8f), r, u32(ImVec4(0.f, 0.f, 0.f, 0.25f)));
         dl->AddCircleFilled(knob, r, u32(ImVec4(0.97f, 0.97f, 0.96f, 1.f)));
+        if (pal.light)  // the knob's edge, so it keeps its shape over a pale accent too
+            dl->AddCircle(knob, r, u32(pal.ink, 0.25f), 0, 1.f);
         return clicked;
     }
 
@@ -288,7 +290,7 @@ namespace gucci::ui::kit {
             if (selected)
                 dl->AddRectFilled(in0, in1, u32(pal.accent), rounding);
             else if (hovered)
-                dl->AddRectFilled(in0, in1, u32(lift(pal.raised, 0.06f)), rounding);
+                dl->AddRectFilled(in0, in1, u32(shade(pal.raised, 0.06f)), rounding);
             ImVec2 const textSize = ImGui::CalcTextSize(options[i]);
             ImVec2 const at(a.x + std::max(4.f, (segment - textSize.x) * 0.5f), a.y + (frame - textSize.y) * 0.5f);
             dl->PushClipRect(in0, in1, true);
@@ -413,7 +415,9 @@ namespace gucci::ui::kit {
             case Tone::Good:
             case Tone::Warn:
             case Tone::Bad:
-                base = mix(pal.raised, look().tone(tone), 0.38f);
+                // A tint of the tone, lighter on a light theme, where the text
+                // over it is dark.
+                base = mix(pal.raised, look().tone(tone), pal.light ? 0.20f : 0.38f);
                 break;
             case Tone::Muted:
                 text = pal.muted;
@@ -422,8 +426,8 @@ namespace gucci::ui::kit {
                 break;
         }
         ImGui::PushStyleColor(ImGuiCol_Button, base);
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, lift(base, 0.06f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, lift(base, 0.12f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, shade(base, 0.06f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, shade(base, 0.12f));
         ImGui::PushStyleColor(ImGuiCol_Text, text);
         bool const pressed = ImGui::Button(label, ImVec2(width < 0.f ? Avail() : width, 0.f));
         ImGui::PopStyleColor(4);
