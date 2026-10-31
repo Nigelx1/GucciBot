@@ -19,17 +19,18 @@ URL = "http://127.0.0.1:8790/"
 _id = 0
 
 
-def call(name, **args):
+def call(tool, /, **args):
+    # `tool` is positional-only: gucci_load_macro's own argument is `name`.
     global _id
     _id += 1
     body = json.dumps({"jsonrpc": "2.0", "id": _id, "method": "tools/call",
-                       "params": {"name": name, "arguments": args}}).encode()
+                       "params": {"name": tool, "arguments": args}}).encode()
     req = urllib.request.Request(URL, body, {"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=20) as r:
         res = json.loads(r.read())["result"]
     text = res["content"][0]["text"]
     if res.get("isError"):
-        raise RuntimeError(f"{name}: {text}")
+        raise RuntimeError(f"{tool}: {text}")
     return json.loads(text)
 
 
