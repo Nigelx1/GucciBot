@@ -799,6 +799,10 @@ namespace gucci::ui::themes {
 
     ThemeAudio audio(const Theme& theme) {
         ThemeAudio out;
+        // No BIG BRRRR at all: no track, which BigBrrrManager::start() takes
+        // as nothing to play.
+        if (theme.noBrrr)
+            return out;
         if (theme.custom && !theme.hasTrack) {
             out.bpm = kStockBpm;
             out.dropOffsetSec = kStockDrop;

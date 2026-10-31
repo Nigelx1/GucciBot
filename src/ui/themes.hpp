@@ -126,7 +126,8 @@ namespace gucci::ui::themes {
 
     // The BIG BRRRR drop a theme plays. `file` is a resource file name for a
     // built-in (and for a custom theme without a track: GucciBot's own, at its
-    // BPM and offset), or the custom track's full path as UTF-8.
+    // BPM and offset), or the custom track's full path as UTF-8; empty for a
+    // theme with no BIG BRRRR (noBrrr).
     ThemeAudio audio(const Theme& theme);
 
     // The built-ins after the first twenty, by saved id (themes.cpp kPaints).

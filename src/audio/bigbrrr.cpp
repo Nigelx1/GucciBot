@@ -97,6 +97,13 @@ namespace gucci {
 
     void BigBrrrManager::start() {
         stop();
+        // A theme with no BIG BRRRR (SolarBot, JupiterBot, GBot) has no track
+        // (ui.hpp) and plays nothing, not even a file in the brrr folder,
+        // which otherwise wins over every theme's.
+        if (ui::activeThemeAudio().file.empty()) {
+            enabled = false;
+            return;
+        }
         auto path = findFirstAudioFile(getBrrrDir());
         if (path.empty()) {
             std::error_code ec;

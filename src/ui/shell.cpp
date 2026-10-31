@@ -2292,20 +2292,25 @@ namespace gucci::ui {
             kit::EndCard();
 
             kit::BeginCard("BIG BRRRR", "You'll know it when you see it.");
-            auto* brrr = BigBrrrManager::get();
-            bool brrrOn = brrr->enabled;
-            if (kit::SwitchRow("BIG BRRRR", nullptr, &brrrOn))
-                brrr->setEnabled(brrrOn);
-            // GucciBot (2026-10-23): Shake and Flicker are saved (they reset at
-            // every launch); the switch itself stays per launch, as it starts
-            // the music.
-            if (kit::SwitchRow("Shake", "The menu shakes with the bass", &brrr->shakeEnabled))
-                saveEngineSwitch("brrr_shake", brrr->shakeEnabled);
-            if (kit::SliderRow("Flicker", "How hard the menu flickers with the bass", &brrr->flickerIntensity, 0.f,
-                               1.f, "%.2f"))
-                saveFloat("brrr_flicker", brrr->flickerIntensity);
-            if (kit::Button("Open the BIG BRRRR folder"))
-                brrr->openBrrrFolder();
+            if (themes::active().noBrrr) {
+                // No controls: it can't play here (brrrFollowsTheme).
+                kit::Note(fmt::format("{} has no BIG BRRRR.", themes::active().name).c_str(), Tone::Muted);
+            } else {
+                auto* brrr = BigBrrrManager::get();
+                bool brrrOn = brrr->enabled;
+                if (kit::SwitchRow("BIG BRRRR", nullptr, &brrrOn))
+                    brrr->setEnabled(brrrOn);
+                // GucciBot (2026-10-23): Shake and Flicker are saved (they reset at
+                // every launch); the switch itself stays per launch, as it starts
+                // the music.
+                if (kit::SwitchRow("Shake", "The menu shakes with the bass", &brrr->shakeEnabled))
+                    saveEngineSwitch("brrr_shake", brrr->shakeEnabled);
+                if (kit::SliderRow("Flicker", "How hard the menu flickers with the bass", &brrr->flickerIntensity,
+                                   0.f, 1.f, "%.2f"))
+                    saveFloat("brrr_flicker", brrr->flickerIntensity);
+                if (kit::Button("Open the BIG BRRRR folder"))
+                    brrr->openBrrrFolder();
+            }
             kit::EndCard();
         }
 
@@ -2458,6 +2463,22 @@ namespace gucci::ui {
                 case themes::Scene::Jupiter: pages::jupiterLookApply(); break;
                 case themes::Scene::Solar: pages::solarLookApply(); break;
                 default: break;
+            }
+        }
+
+        // A theme with no BIG BRRRR (SolarBot's, JupiterBot's, GBot's) stops a
+        // drop that's playing, however it was picked, and the next theme with
+        // one starts it again: the switch stays the user's.
+        bool g_brrrHeld = false;
+        void brrrFollowsTheme() {
+            auto* brrr = BigBrrrManager::get();
+            if (themes::active().noBrrr) {
+                if (brrr->enabled) {
+                    brrr->setEnabled(false);
+                    g_brrrHeld = true;
+                }
+            } else if (std::exchange(g_brrrHeld, false)) {
+                brrr->setEnabled(true);
             }
         }
 
@@ -2865,6 +2886,7 @@ namespace gucci::ui {
 
             look().refresh();
             sceneLook();
+            brrrFollowsTheme();
             // Every frame, menu open or not: it starts and stops Video Mode's
             // decoder as well as drawing it (trainers/videomode.hpp).
             videomode::drawOverlay();
