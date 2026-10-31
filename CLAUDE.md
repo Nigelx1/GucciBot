@@ -44,6 +44,7 @@ A **Geometry Dash macro bot**, distributed as the Geode mod `nigelx1.guccibot` (
 - **`GB_BUILD_LABEL`** is at the top of `src/core/GucciBot.hpp`: line 3 is `#define GB_BUILD_LABEL \`, line 4 the string. Scheme: `YYYY-MM-DD-x` then `-aa`, `-ab`... within a day, plus a plain-English description of what changed. Edit it by finding the line that ends in a backslash, never by searching for the label's closing text (a bad scan once deleted ~300 lines of this header). No `"` or `\` in the text.
 - **In-game logs** live in `%LOCALAPPDATA%\GeometryDash\geode\mods\nigelx1.guccibot\` (`guccibot_slope.log`, `guccibot_fw.log`, ...). Read them yourself instead of asking Nigel to paste.
 - **Assistant Access** (Settings tab) is an MCP server on `127.0.0.1:8790`, off by default: a session can read game and player state, step the game and run Calculate or Pathfinder live.
+- **`tools/assist.py`** is the client for unattended in-game tests (2026-10-31). `launch()` starts GD with `GUCCIBOT_FORCE_SAFE_MODE=1`: safe mode on for that launch only, never saved (`gucci_force_safe_mode` does the same mid-launch; check with `ensure_safe()`). `menu()` drives `gucci_menu` (open, page, a test theme or Animations that's never saved). `shot()` saves a `gucci_screenshot` PNG under the save dir's `screenshots\` for the Read tool (Windows only). `close()` closes only a game it started. Steam must already be running: never start it.
 
 ---
 
@@ -78,9 +79,11 @@ src/absense/    Absense's pathfinder, ported whole: pathfinder/, trajectory/ (it
                 compat/ (Silicate names -> GucciBot), glue.hpp (the only header GUI/MCP include),
                 judge.* (play a script for real, catch the death, put the game back)
 src/mcp/        Assistant Access server and tools (incl. restart_game/open_level/quit_level,
-                tick_probe, sim_vs_real: a session can rebuild and test without Nigel)
+                tick_probe, sim_vs_real: a session can rebuild and test without Nigel;
+                screenshot, menu, force_safe_mode: it can look at the game too)
 src/tools/      pure, testable cores (edit_core, macro_check), Replace All, self-check
-tools/          offline test programs run by run_tests.bat
+tools/          offline test programs run by run_tests.bat; assist.py (the Assistant Access
+                client for in-game tests), calc_check.py
 ENGINE_AUDIT.md the 2026-09-26/27 audit against Silicate: every finding and how it closed
 ```
 
