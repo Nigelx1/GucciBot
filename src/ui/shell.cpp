@@ -128,16 +128,44 @@ namespace gucci::ui {
             Mod::get()->setSavedValue<double>(key, value);
         }
 
-        void loadSettings() {
+        // gucci_menu's test look (ui.hpp, setTestTheme): what it put on, so
+        // saveSettings can tell it from the user's own choice.
+        struct TestLook {
+            bool theme = false;
+            int themeId = 0;
+            std::string themeCustom;
+            bool effects = false;
+            bool effectsOn = true;
+        };
+        TestLook g_test;
+
+        // A test look ends where the user changes it - picking a theme,
+        // flipping Animations - and theirs is saved from then on.
+        void lapseTestLook() {
+            if (g_test.theme &&
+                (themes::activeId() != g_test.themeId || themes::activeCustomName() != g_test.themeCustom))
+                g_test.theme = false;
+            if (g_test.effects && look().effects != g_test.effectsOn)
+                g_test.effects = false;
+        }
+
+        // The user's own theme, as saved. (Also what ends a test's theme.)
+        void applySavedTheme() {
             auto* mod = Mod::get();
-            for (auto const& slot : kKeySlots)
-                g_keys.*(slot.field) = static_cast<int>(mod->getSavedValue<int64_t>(slot.saveKey, g_keys.*(slot.field)));
             int const themeId = static_cast<int>(mod->getSavedValue<int64_t>("active_theme", 0));
             std::string const custom = mod->getSavedValue<std::string>("active_custom_theme", "");
             if (themeId == kCustomThemeId && !custom.empty())
                 themes::setActiveCustom(custom);
             else
                 themes::setActive(themes::builtin(themeId) ? themeId : 0);
+            g_test.theme = false;
+        }
+
+        void loadSettings() {
+            auto* mod = Mod::get();
+            for (auto const& slot : kKeySlots)
+                g_keys.*(slot.field) = static_cast<int>(mod->getSavedValue<int64_t>(slot.saveKey, g_keys.*(slot.field)));
+            applySavedTheme();
             g_compact = mod->getSavedValue<bool>("ui_compact_mode", false);
             look().textScale = static_cast<float>(mod->getSavedValue<double>("ui_text_scale", 1.0));
             look().effects = mod->getSavedValue<bool>("ui_effects", true);
@@ -202,11 +230,17 @@ namespace gucci::ui {
         auto* mod = Mod::get();
         for (auto const& slot : kKeySlots)
             mod->setSavedValue<int64_t>(slot.saveKey, g_keys.*(slot.field));
-        mod->setSavedValue<int64_t>("active_theme", themes::activeId());
-        mod->setSavedValue("active_custom_theme", themes::activeCustomName());
+        // A test's theme and Animations (gucci_menu) are never saved: the
+        // user's own choice stays.
+        lapseTestLook();
+        if (!g_test.theme) {
+            mod->setSavedValue<int64_t>("active_theme", themes::activeId());
+            mod->setSavedValue("active_custom_theme", themes::activeCustomName());
+        }
         mod->setSavedValue("ui_compact_mode", g_compact);
         mod->setSavedValue<double>("ui_text_scale", look().textScale);
-        mod->setSavedValue("ui_effects", look().effects);
+        if (!g_test.effects)
+            mod->setSavedValue("ui_effects", look().effects);
         mod->setSavedValue("theme_glow_cycle", look().accentCycle);
 #if defined(GEODE_IS_MOBILE)
         mod->setSavedValue<double>("ui_menu_scale", look().menuScale);
@@ -2932,6 +2966,109 @@ namespace gucci::ui {
             mcp::registerTools(*server);
         if (!server->running() && !server->start(kAssistantPort))
             g_assistantAccessFailed = true;
+    }
+
+    // ------------------------------------------------- gucci_menu (Assistant Access)
+
+    namespace {
+        // A page the sidebar lists: not one the theme hides (Page::hidden, the
+        // GBot disguise's). A template so it reads that field only where Page
+        // has it.
+        template <class P>
+        bool pageShown(const P& page) {
+            if constexpr (requires { page.hidden; })
+                return !(page.hidden && page.hidden());
+            else
+                return true;
+        }
+
+        bool sameName(std::string_view a, std::string_view b, bool exact) {
+            if (exact)
+                return a == b;
+            return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin(), [](char x, char y) {
+                       return std::tolower(static_cast<unsigned char>(x)) == std::tolower(static_cast<unsigned char>(y));
+                   });
+        }
+    } // namespace
+
+    std::vector<std::string> pageTitles() {
+        std::vector<std::string> out;
+        for (auto const& page : kPages)
+            if (pageShown(page))
+                out.emplace_back(page.title);
+        return out;
+    }
+
+    std::string pageTitle() {
+        return kPages[g_page].title;
+    }
+
+    bool setPageByTitle(const std::string& title) {
+        for (bool const exact : {true, false})
+            for (int i = 0; i < kPageCount; ++i)
+                if (pageShown(kPages[i]) && sameName(kPages[i].title, title, exact)) {
+                    g_page = i;
+                    return true;
+                }
+        return false;
+    }
+
+    bool setTestTheme(const std::string& name) {
+        if (name.empty()) {
+            bool const theme = g_test.theme;
+            bool const effects = g_test.effects;
+            g_test = {};
+            if (theme)
+                applySavedTheme();
+            if (effects)
+                look().effects = Mod::get()->getSavedValue<bool>("ui_effects", true);
+            return true;
+        }
+        // Built-ins first, as a macro's theme tag picks them.
+        for (bool const exact : {true, false}) {
+            for (auto const& t : themes::builtins())
+                if (sameName(t.name, name, exact)) {
+                    themes::setActive(t.id);
+                    g_test.theme = true;
+                    g_test.themeId = t.id;
+                    g_test.themeCustom.clear();
+                    return true;
+                }
+            for (auto const& t : themes::customs())
+                if (sameName(t.name, name, exact)) {
+                    themes::setActiveCustom(t.name);
+                    g_test.theme = true;
+                    g_test.themeId = kCustomThemeId;
+                    g_test.themeCustom = t.name;
+                    return true;
+                }
+        }
+        return false;
+    }
+
+    void setTestEffects(bool on) {
+        g_test.effects = true;
+        g_test.effectsOn = on;
+        look().effects = on;
+    }
+
+    MenuState menuState() {
+        lapseTestLook();
+        MenuState s;
+        s.open = g_open;
+        s.compact = g_compact;
+        s.page = pageTitle();
+        s.pages = pageTitles();
+        s.themeId = themes::activeId();
+        s.themeName = themes::active().name;
+        s.testTheme = g_test.theme;
+        for (auto const& t : themes::builtins())
+            s.themes.push_back(t.name);
+        for (auto const& t : themes::customs())
+            s.themes.push_back(t.name);
+        s.effects = look().effects;
+        s.testEffects = g_test.effects;
+        return s;
     }
 
 } // namespace gucci::ui

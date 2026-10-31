@@ -25,6 +25,7 @@
 #include "core/GucciBot.hpp"
 #include "hacks/safemode.hpp"
 #include "render/renderer.hpp"
+#include "ui/ui.hpp"
 
 #include <Geode/Geode.hpp>
 
@@ -520,6 +521,80 @@ namespace gucci::mcp {
                 (void)a;
                 throw ToolError("Windows only for now");
 #endif
+            },
+        });
+
+        // GucciBot (2026-10-31): the menu set up for a screenshot. Its theme
+        // and Animations are a test's, never saved (ui.hpp, setTestTheme).
+        server.addTool({
+            "gucci_menu",
+            "Set the menu up for a screenshot (gucci_screenshot). Every argument is "
+            "optional: `open` shows or hides it; `page` shows a page by its title in "
+            "the sidebar (Settings, JMF Trainer...); `theme` puts on a theme by name, "
+            "built-in or custom, as a test that is never saved: theme \"\" puts the "
+            "user's own theme and Animations back, and so does a restart; `effects` "
+            "sets the Animations switch the same way (off holds the moving backdrops "
+            "still, so shots compare). Returns open, page, pages (the sidebar's, in "
+            "order), theme {id, name, custom}, themes (every name), effects, test "
+            "{theme, effects} and compact (with Compact mode on, its small window "
+            "shows instead of the pages).",
+            schemaOf({{"open", "boolean", "show (true) or hide (false) the menu"},
+                      {"page", "string", "a page's title as the sidebar shows it"},
+                      {"theme", "string", "a theme's name, built-in or custom; \"\" puts the user's own back"},
+                      {"effects", "boolean", "the Animations switch, for this test only"}}),
+            [](matjson::Value const& a) {
+                auto list = [](std::vector<std::string> const& names) {
+                    std::string out;
+                    for (auto const& n : names)
+                        out += (out.empty() ? "" : ", ") + n;
+                    return out;
+                };
+                // Every argument's type first, so a wrong one changes nothing.
+                for (char const* key : {"open", "effects"})
+                    if (a.contains(key) && !a[key].isBool())
+                        throw ToolError(std::string(key) + " is true or false");
+                for (char const* key : {"page", "theme"})
+                    if (a.contains(key) && !a[key].isString())
+                        throw ToolError(std::string(key) + " is a name (a string)");
+                // As the menu key: the menu stays shut while GucciBot stands down.
+                if (argBool(a, "open", false) && GucciEngine::get()->standingDown)
+                    throw ToolError("GucciBot is standing down (another bot is enabled), so its menu stays shut");
+
+                if (a.contains("theme")) {
+                    auto const name = argStr(a, "theme");
+                    if (!ui::setTestTheme(name))
+                        throw ToolError("no theme called \"" + name + "\". Themes: " + list(ui::menuState().themes));
+                }
+                if (a.contains("effects"))
+                    ui::setTestEffects(argBool(a, "effects", true));
+                // After the theme: one can take a page out of the sidebar.
+                if (a.contains("page")) {
+                    auto const title = argStr(a, "page");
+                    if (!ui::setPageByTitle(title))
+                        throw ToolError("no page called \"" + title + "\" in the sidebar. Pages: " +
+                                        list(ui::pageTitles()));
+                }
+                if (a.contains("open"))
+                    ui::setOpen(argBool(a, "open", true));
+
+                auto const s = ui::menuState();
+                auto out = obj();
+                out["open"] = s.open;
+                out["page"] = s.page;
+                out["pages"] = s.pages;
+                auto theme = obj();
+                theme["id"] = (int64_t)s.themeId;
+                theme["name"] = s.themeName;
+                theme["custom"] = s.themeId == ui::kCustomThemeId;
+                out["theme"] = theme;
+                out["themes"] = s.themes;
+                out["effects"] = s.effects;
+                auto test = obj();
+                test["theme"] = s.testTheme;
+                test["effects"] = s.testEffects;
+                out["test"] = test;
+                out["compact"] = s.compact;
+                return out;
             },
         });
 
