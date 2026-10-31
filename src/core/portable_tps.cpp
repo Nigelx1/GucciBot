@@ -9,6 +9,7 @@
 
 #include "core/GucciBot.hpp"
 #include "core/portable_tps.hpp"
+#include "ui/ui.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/modify/GJBaseGameLayer.hpp>
@@ -75,8 +76,8 @@ class $modify(GBPortableTpsCheck, GJBaseGameLayer) {
         log::error("[GucciBot] GD ran {} physics steps for one tick at {:.0f} TPS (frame {}): "
                    "frame numbers here will not match Windows. Please report this.",
                    steps, upd.m_tps, upd.getFrame());
-        std::string msg = fmt::format("GucciBot: {} steps in one tick at {:.0f} TPS, please report",
-                                      steps, upd.m_tps);
+        std::string msg = gucci::ui::branded(
+            fmt::format("GucciBot: {} steps in one tick at {:.0f} TPS, please report", steps, upd.m_tps));
         geode::queueInMainThread([msg] {
             geode::Notification::create(msg, geode::NotificationIcon::Error)->show();
         });

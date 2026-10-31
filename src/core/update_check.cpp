@@ -13,6 +13,7 @@
 // waits for the main menu: a popup there could cost an attempt.
 
 #include "core/GucciBot.hpp"
+#include "ui/ui.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/modify/MenuLayer.hpp>
@@ -120,8 +121,8 @@ namespace gucci::updates {
             mod->setSavedValue("update_check", false);
             (void)mod->saveData();
             log::warn("[GucciBot] update check: the last one never finished; switched off");
-            Notification::create("GucciBot's update check didn't finish last time, so it's off now "
-                                 "(Settings > Check for updates).",
+            Notification::create(ui::branded("GucciBot's update check didn't finish last time, so it's off now "
+                                             "(Settings > Check for updates)."),
                                  NotificationIcon::Warning, 6.f)
                 ->show();
             return;

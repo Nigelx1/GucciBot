@@ -16,7 +16,9 @@ class $modify(GBPauseButton, PauseLayer) {
     void customSetup() {
         PauseLayer::customSetup();
         auto const win = CCDirector::sharedDirector()->getWinSize();
-        auto* sprite = ButtonSprite::create("GucciBot");
+        // Made again for every pause, so it follows the theme (GBot's name
+        // while disguised) from the next one.
+        auto* sprite = ButtonSprite::create(gucci::ui::brandName());
         sprite->setScale(0.7f);
         auto* button = CCMenuItemSpriteExtra::create(sprite, this, menu_selector(GBPauseButton::onGucciBot));
         button->setID("open-menu"_spr);

@@ -2526,14 +2526,16 @@ namespace gucci {
     }
 
     // A popup rather than a Notification: the toast widget doesn't wrap, and
-    // this is a paragraph (Nigel caught it cut off, 2026-09-06).
+    // this is a paragraph (Nigel caught it cut off, 2026-09-06). Said as GBot
+    // while disguised: at launch that's the saved theme (ui::disguised), as
+    // this comes before the menu has loaded its settings.
     void GucciEngine::showStandDownNotification() {
         auto const* bot = standDownBot();
         if (!bot)
             return;
         createQuickPopup(
-            "GucciBot Is Standing Down",
-            fmt::format("<co>{}</c> is <cr>enabled</c>, {}", bot->name, bot->message),
+            ui::branded("GucciBot Is Standing Down").c_str(),
+            ui::branded(fmt::format("<co>{}</c> is <cr>enabled</c>, {}", bot->name, bot->message)),
             "Got It", nullptr,
             [](auto, bool) {});
     }

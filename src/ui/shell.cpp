@@ -2641,7 +2641,9 @@ namespace gucci::ui {
             ImGui::SetNextWindowPos(ImVec2(12.f, 60.f), ImGuiCond_FirstUseEver);
             ImGui::SetNextWindowSize(ImVec2(260.f, 0.f), ImGuiCond_Always);
             bool open = true;
-            if (ImGui::Begin("GucciBot##compact", &open, ImGuiWindowFlags_NoCollapse)) {
+            // The title bar shows the name (GBot's while disguised); after
+            // "###" the id stays the same, so a new name isn't a new window.
+            if (ImGui::Begin(fmt::format("{}###compact", brandName()).c_str(), &open, ImGuiWindowFlags_NoCollapse)) {
                 int mode = gb->isRecording() ? 1 : gb->isPlaying() ? 2 : 0;
                 const char* modes[] = {"Off", "Rec", "Play"};
                 if (kit::Choice("mode", &mode, modes, 3))
@@ -2779,13 +2781,14 @@ namespace gucci::ui {
                                     ImVec2(0.5f, 0.5f));
             ImGui::SetNextWindowSize(ImVec2(360.f, 0.f), ImGuiCond_Always);
             bool open = true;  // closed through setOpen, as the main window is
-            if (ImGui::Begin("GucciBot##switchedoff", &open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize)) {
-                kit::BeginCard("GucciBot", "Switched off: out of the game until you switch it back on.");
+            if (ImGui::Begin(fmt::format("{}###switchedoff", brandName()).c_str(), &open,
+                             ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize)) {
+                kit::BeginCard(brandName(), "Switched off: out of the game until you switch it back on.");
                 bool on = botswitch::wanted();
-                if (kit::SwitchRow("GucciBot", "On puts everything back, no restart needed", &on))
+                if (kit::SwitchRow(brandName(), "On puts everything back, no restart needed", &on))
                     botswitch::request(on);
                 if (auto const* why = botswitch::waitingFor())
-                    kit::Hint(why);
+                    kit::Hint(branded(why).c_str());
                 kit::EndCard();
             }
             ImGui::End();
