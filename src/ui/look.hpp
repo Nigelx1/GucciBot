@@ -52,7 +52,7 @@ namespace gucci::ui {
         float textScale = 1.f;
         bool accentCycle = false;   // slowly cycle the accent's hue
         float accentCycleRate = 0.5f;
-        bool effects = true;        // small animations, and a snowy theme's falling snow (BrrrBot's)
+        bool effects = true;        // small animations, and the themes' moving backdrops (BrrrBot's snow, the JMF sky, SolarBot's Janet)
         float menuScale = 1.f;      // Android and iOS: bigger or smaller than deviceScale picks
 
     private:

@@ -1427,6 +1427,10 @@ namespace gucci {
         wakaMacros.clear();
         youngstaMacros.clear();
         knockerzMacros.clear();
+        rondoMacros.clear();
+        solarMacros.clear();
+        jupiterMacros.clear();
+        gbotMacros.clear();
         customThemeMacrosByExt.clear();
 
         // GucciBot (2026-10-23): nothing in here may throw. It runs at launch
@@ -1510,6 +1514,14 @@ namespace gucci {
                     youngstaMacros.insert(stem);
                 if (ext == ".knockerz")
                     knockerzMacros.insert(stem);
+                if (ext == ".rondo")
+                    rondoMacros.insert(stem);
+                if (ext == ".solar")
+                    solarMacros.insert(stem);
+                if (ext == ".jupiter")
+                    jupiterMacros.insert(stem);
+                if (ext == ".gbot")
+                    gbotMacros.insert(stem);
                 if (!ext.empty()) {
                     std::string bare = ext.substr(1);
                     // This isBuiltin list is a SIXTH copy of the same set
@@ -1524,7 +1536,8 @@ namespace gucci {
                                      ext == ".juice" || ext == ".butler" || ext == ".saweetie" ||
                                      ext == ".maybach" || ext == ".romo" || ext == ".grizzley" ||
                                      ext == ".redkingdom" || ext == ".lemonade" || ext == ".icebrrr" ||
-                                     ext == ".waka" || ext == ".youngsta" || ext == ".knockerz";
+                                     ext == ".waka" || ext == ".youngsta" || ext == ".knockerz" ||
+                                     ext == ".rondo" || ext == ".solar" || ext == ".jupiter" || ext == ".gbot";
                     if (!isBuiltin)
                         customThemeMacrosByExt[bare].insert(stem);
                 }

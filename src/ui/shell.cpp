@@ -2254,7 +2254,9 @@ namespace gucci::ui {
 #endif
             if (kit::SwitchRow("Cycle the accent color", nullptr, &look().accentCycle))
                 saveSettings();
-            if (kit::SwitchRow("Animations", "Switches slide, the JMF page's sky turns, BrrrBot's snow falls",
+            if (kit::SwitchRow("Animations",
+                               "Switches slide, the JMF sky and JupiterBot's turn, SolarBot's Janet glows, BrrrBot's "
+                               "snow falls",
                                &look().effects))
                 saveSettings();
             bool compact = g_compact;
