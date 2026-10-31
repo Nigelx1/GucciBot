@@ -18,6 +18,7 @@
 #include "analysis/ac/lstar.hpp"
 #include "analysis/pathfinder.hpp"
 #include "absense/glue.hpp"
+#include "mcp/screenshot.hpp"
 #include "mcp/tickprobe.hpp"
 #include "analysis/trajectory.hpp"
 #include "tools/macro_check.hpp"
@@ -462,6 +463,65 @@ namespace gucci::mcp {
                 },
             });
         }
+
+        // GucciBot (2026-10-31): the window as a PNG (mcp/screenshot.hpp), so
+        // a session can see the menu and the level for itself.
+        server.addTool({
+            "gucci_screenshot",
+            "Save what the game window shows (the level, the menu, other mods' "
+            "overlays) as a PNG: screenshots/<name>.png in GucciBot's save folder. "
+            "It's taken `frames` frames from now (default 3: a window that has just "
+            "opened is hidden for its first frame), so this returns {pending: true, "
+            "path} at once; then call it with status: true until done is true "
+            "(done, ok, error, path, width, height, ms). A minimized game draws "
+            "nothing, so its shot waits. Windows only for now.",
+            schemaOf({{"name", "string", "the file's name: 1 to 64 letters, digits, - or _, no extension"},
+                      {"frames", "integer", "frames from now, 1 to 30 (default 3)"},
+                      {"status", "boolean", "true: how the last shot went, instead of taking one"}}),
+            [](matjson::Value const& a) -> matjson::Value {
+#ifdef GEODE_IS_WINDOWS
+                auto out = obj();
+                if (argBool(a, "status", false)) {
+                    auto const s = shot::status();
+                    out["done"] = s.done;
+                    out["ok"] = s.ok;
+                    out["error"] = s.asked ? s.error : std::string("no screenshot asked for this launch");
+                    out["pending"] = s.pending;
+                    out["frames_left"] = (int64_t)s.framesLeft;
+                    out["path"] = geode::utils::string::pathToString(s.path);
+                    out["width"] = (int64_t)s.width;
+                    out["height"] = (int64_t)s.height;
+                    out["ms"] = s.ms;
+                    return out;
+                }
+                // A bare name, as gucci_read_log's: nothing outside the folder.
+                auto const name = argStr(a, "name");
+                bool bare = !name.empty() && name.size() <= 64;
+                for (char const c : name)
+                    bare = bare && ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+                                    c == '-' || c == '_');
+                if (!bare)
+                    throw ToolError("name must be 1 to 64 letters, digits, - or _ (no path, no extension)");
+                int64_t const frames = argInt(a, "frames", 3);
+                if (frames < 1 || frames > 30)
+                    throw ToolError("frames is 1 to 30");
+
+                auto const dir = Mod::get()->getSaveDir() / "screenshots";
+                std::error_code ec;
+                fs::create_directories(dir, ec);
+                if (ec)
+                    throw ToolError("couldn't make the screenshots folder: " + ec.message());
+                auto const path = dir / (name + ".png");
+                shot::request(path, (int)frames);
+                out["pending"] = true;
+                out["path"] = geode::utils::string::pathToString(path);
+                return out;
+#else
+                (void)a;
+                throw ToolError("Windows only for now");
+#endif
+            },
+        });
 
         // --- the analyzer --------------------------------------------------
 
