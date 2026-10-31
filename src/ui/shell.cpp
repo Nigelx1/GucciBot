@@ -3207,6 +3207,9 @@ namespace gucci::ui {
 
     MenuState menuState() {
         lapseTestLook();
+        // A test theme that hides the page showing (GBot hides Themes) moves
+        // it at the next frame; said now as where it will be.
+        leaveHiddenPage();
         MenuState s;
         s.open = g_open;
         s.compact = g_compact;
