@@ -184,7 +184,7 @@ Real click-timing feedback, and a synced video-review overlay on both trainers:
 | YoungstaBot | `.youngsta` | Black + Red (223) |
 | KnockerzBot | `.knockerz` | Teal + Black |
 | RondoBot | `.rondo` | Celtics Green + White, on the TD Garden's parquet with a gold trim |
-| SolarBot | `.solar` | Sun Yellow + Deep Orange, with Janet (Solar Flare's sun) rising in the corner and blue gems around her |
+| SolarBot | `.solar` | Sun Yellow + Deep Orange, with Janet (Solar Flare's sun) rising in the corner and blue gems here and there |
 | JupiterBot | `.jupiter` | JMF Yellow + Night Blue: the JMF Trainer's look and sky on every page |
 | GBot | `.gbot` | A plain look with a plain name - no Gucci anywhere on screen |
 
