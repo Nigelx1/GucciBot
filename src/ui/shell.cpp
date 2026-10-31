@@ -2454,16 +2454,21 @@ namespace gucci::ui {
         // refresh(). Applied, never borrowed through pages::jupiterTrainer(),
         // which would count the JMF page as open and run its clock and music.
         void sceneLook() {
-            if (themes::active().scene == themes::Scene::Jupiter)
-                pages::jupiterLookApply();
+            switch (themes::active().scene) {
+                case themes::Scene::Jupiter: pages::jupiterLookApply(); break;
+                case themes::Scene::Solar: pages::solarLookApply(); break;
+                default: break;
+            }
         }
 
         // ... and its picture behind the menu's pages.
         using Backdrop = void (*)();
         Backdrop sceneBackdrop() {
-            if (themes::active().scene == themes::Scene::Jupiter)
-                return pages::jupiterBackdrop;
-            return nullptr;
+            switch (themes::active().scene) {
+                case themes::Scene::Jupiter: return pages::jupiterBackdrop;
+                case themes::Scene::Solar: return pages::solarBackdrop;
+                default: return nullptr;
+            }
         }
 
         void drawMain() {

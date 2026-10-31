@@ -18,6 +18,8 @@ namespace gucci::ui::pages {
     void jupiterLookPush(); // ... its colours over the whole menu (the shell, around the window)
     void jupiterLookPop();
     void jupiterLookApply(); // ... the same colours written over the style, for JupiterBot (after look().refresh())
+    void solarBackdrop();    // pages/solar_backdrop.cpp: SolarBot's scene, Janet rising behind the menu
+    void solarLookApply();   // ... her gems' blue in the checks and slider grabs (after look().refresh())
     void jupiterVideoOverlay();  // Video Mode: the JMF click bar over the video, in place of the menu
     void trainerVideoOverlay();  // ... the Trainer's, over the video you picked
     void anyTrainer();      // pages/trainer_pages.cpp: Trainer (any saved macro)
