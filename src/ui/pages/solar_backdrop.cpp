@@ -86,9 +86,12 @@ namespace gucci::ui::pages {
         void face(ImDrawList* dl, ImVec2 at, float u, float tilt, ImU32 ink, float width) {
             ImVec2 const ex(std::cos(tilt), std::sin(tilt));   // her right
             ImVec2 const ey(-std::sin(tilt), std::cos(tilt));  // her down
-            auto const p = [&](float x, float y) { return ImVec2(at.x + ex.x * x + ey.x * y, at.y + ex.y * x + ey.y * y); };
+            auto const p = [&](float x, float y) {
+                return ImVec2(at.x + ex.x * x + ey.x * y, at.y + ex.y * x + ey.y * y);
+            };
             for (float side : {-1.f, 1.f}) {
-                dl->PathArcTo(p(side * 0.62f * u, -0.30f * u), 0.26f * u, kPi + tilt + 0.35f, 2.f * kPi + tilt - 0.35f, 12);
+                dl->PathArcTo(p(side * 0.62f * u, -0.30f * u), 0.26f * u, kPi + tilt + 0.35f,
+                              2.f * kPi + tilt - 0.35f, 12);
                 dl->PathStroke(ink, 0, width);
             }
             dl->PathArcTo(p(0.f, 0.02f * u), 0.50f * u, tilt + 0.62f, kPi + tilt - 0.62f, 16);
@@ -196,8 +199,9 @@ namespace gucci::ui::pages {
 
         // Janet's own glow, breathing: soft rings just outside her rim.
         for (int k = 5; k >= 1; --k) {
-            float const spread = R * (1.f + (0.032f + 0.012f * breath) * static_cast<float>(k));
-            dl->AddCircleFilled(c, spread, col(kSunGlow, (0.05f + 0.035f * breath) * (1.f - 0.12f * static_cast<float>(k))), 96);
+            float const ring = static_cast<float>(k);
+            float const spread = R * (1.f + (0.032f + 0.012f * breath) * ring);
+            dl->AddCircleFilled(c, spread, col(kSunGlow, (0.05f + 0.035f * breath) * (1.f - 0.12f * ring)), 96);
         }
         // Her body: layered discs, deep orange at the edge to bright yellow
         // inside, close enough that they blend.
