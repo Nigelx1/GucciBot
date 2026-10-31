@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-30-c (JMF page: the theme name, subtitle, brand tag and page quote stay off it)"
+    "2026-10-31-a (four new themes - RondoBot, SolarBot, JupiterBot, GBot - and Assistant Access screenshots and forced safe mode)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
