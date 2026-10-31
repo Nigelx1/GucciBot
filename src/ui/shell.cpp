@@ -63,6 +63,9 @@ namespace gucci::ui {
         int* g_captureTarget = nullptr;
         int* g_justCaptured = nullptr;
         bool g_menuClosed = false;  // let go of the keyboard next frame (setOpen)
+        // loadSettings has run, so themes::activeId() is the theme picked
+        // (disguised() reads the saved choice until then).
+        bool g_settingsLoaded = false;
 
         struct KeySlot {
             const char* saveKey;
@@ -154,6 +157,7 @@ namespace gucci::ui {
             brrr->shakeEnabled = mod->getSavedValue<bool>("brrr_shake", brrr->shakeEnabled);
             brrr->flickerIntensity = std::clamp(
                 static_cast<float>(mod->getSavedValue<double>("brrr_flicker", brrr->flickerIntensity)), 0.f, 1.f);
+            g_settingsLoaded = true;
         }
 
         void saveEngineSwitch(const char* key, bool value) {
@@ -324,6 +328,32 @@ namespace gucci::ui {
 
     int activeThemeId() {
         return themes::activeId();
+    }
+
+    bool disguised() {
+        // The stand-down popup (GucciEngine::initialize) and the setup check's
+        // launch popup can come before loadSettings, which runs at ImGui's
+        // setup: until then the theme in use is still the default, and the
+        // saved choice says what it will be. Picking a theme saves it at once
+        // (pages/themes.cpp), so that is never stale. Read without a default,
+        // which would write one: a missing key reads as 0, GucciBot.
+        int const id = g_settingsLoaded ? themes::activeId()
+                                        : static_cast<int>(Mod::get()->getSavedValue<int64_t>("active_theme"));
+        return id == themes::kGBotTheme;
+    }
+
+    const char* brandName() {
+        return disguised() ? "GBot" : "GucciBot";
+    }
+
+    std::string branded(std::string text) {
+        if (!disguised())
+            return text;
+        constexpr std::string_view kName = "GucciBot";
+        constexpr std::string_view kDisguise = "GBot";
+        for (size_t at = text.find(kName); at != std::string::npos; at = text.find(kName, at + kDisguise.size()))
+            text.replace(at, kName.size(), kDisguise);
+        return text;
     }
 
     std::string macroExtension() {
