@@ -215,6 +215,8 @@ namespace gucci::ui::themes {
             float opacity;
             bool pulse = false;
             bool snow = false;
+            Scene scene = Scene::None;
+            bool noBrrr = false;
         };
 
         // In id order: the index is the number saved as "active_theme".
@@ -290,6 +292,8 @@ namespace gucci::ui::themes {
             t.opacity = p.opacity;
             t.pulse = p.pulse;
             t.snow = p.snow;
+            t.scene = p.scene;
+            t.noBrrr = p.noBrrr;
             t.bpm = v.bpm;
             t.dropOffsetSec = v.drop;
             t.track = v.track;
@@ -786,6 +790,11 @@ namespace gucci::ui::themes {
         shown.dropOffsetSec = base.dropOffsetSec;
         shown.track = base.track;
         shown.hasTrack = base.hasTrack;
+        // Whether there's a drop at all is the chosen theme's too. The scene
+        // isn't kept: a draft is a custom theme, which never has one, so a
+        // draft edited under JupiterBot shows its own colors, not the JMF
+        // ones over them.
+        shown.noBrrr = base.noBrrr;
         shown.file = base.file;
         s_preview = std::move(shown);
         s_previewFrame = ImGui::GetFrameCount();

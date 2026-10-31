@@ -37,6 +37,13 @@ namespace gucci::ui::themes {
         std::string by;    // "-- Gucci Mane, probably"; may be empty
     };
 
+    // A built-in's picture behind the menu, and anything it wears over the
+    // colors refresh() works out (ui/shell.cpp drawMain and frame):
+    // JupiterBot has the JMF page's look on every window and its sky behind
+    // every page, SolarBot has Janet rising in the corner, RondoBot the
+    // Garden's parquet. Custom themes never get or copy one.
+    enum class Scene : unsigned char { None, Jupiter, Solar, Garden };
+
     struct Theme {
         int id = 0;
         std::string name;       // unique; what the picker lists
@@ -56,12 +63,14 @@ namespace gucci::ui::themes {
         float opacity = 0.96f;
         bool pulse = false;  // the accent breathes (Red Kingdom)
         bool snow = false;   // snow falls behind the menu's cards (BrrrBot), while the Look's animations are on
+        Scene scene = Scene::None;  // built-in only
 
         // BIG BRRRR
         double bpm = 140.0;
         double dropOffsetSec = 0.0;  // where in the track playback starts, in seconds
         std::string track;           // built-in: the bundled resource file it plays
         bool hasTrack = false;       // custom: its own <extension>_brrr.mp3 is in the folder
+        bool noBrrr = false;         // built-in only: it has no BIG BRRRR at all (SolarBot, JupiterBot, GBot)
 
         bool custom = false;
         std::filesystem::path file;  // custom: the JSON it was loaded from

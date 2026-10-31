@@ -204,7 +204,8 @@ namespace gucci::ui::pages {
         }
 
         // "Start from": another theme's look and words, keeping the draft's own
-        // name, extension and BIG BRRRR settings.
+        // name, extension and BIG BRRRR settings. Never a built-in's scene or
+        // its lack of a BIG BRRRR: those stay the built-in's own (themes.hpp).
         void copyLookAndWords(Theme& to, const Theme& from) {
             to.accent = from.accent;
             to.background = from.background;
