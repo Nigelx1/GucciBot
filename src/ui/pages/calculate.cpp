@@ -540,7 +540,10 @@ namespace gucci::ui::pages {
                                       "legend. Your bands, shapes, images, pulses and Circle skin are kept, just not used "
                                       "while it's on",
                                       &gb->fwDefaultLook, nullptr, &lookFlipped)) {
-                    if (kit::SwitchRow("Bells", "Each window's own bell instead of the Brrr", &gb->fwDefaultLookBells))
+                    if (kit::SwitchRow("Bells",
+                                       disguised() ? "Each window's own bell instead of the Default sound"
+                                                   : "Each window's own bell instead of the Brrr",
+                                       &gb->fwDefaultLookBells))
                         Mod::get()->setSavedValue("fw_default_look_bells", gb->fwDefaultLookBells);
                     kit::FeatureEnd();
                 }
@@ -694,8 +697,12 @@ namespace gucci::ui::pages {
             auto& tiers = S().tiers;
             kit::BeginCard("Bands", "Colors, labels, shapes, images, pulses and sounds by window size. Hidden bands draw no markers.");
             if (GucciEngine::get()->fwDefaultLook)
-                kit::Hint("Default Look is on, so the level uses NaN GD's colors and legend, with the Brrr or his "
-                          "bells. These bands are kept, and still decide which inputs L* and Copy info count.");
+                kit::Hint(disguised() ? "Default Look is on, so the level uses NaN GD's colors and legend, with the "
+                                        "Default sound or his bells. These bands are kept, and still decide which "
+                                        "inputs L* and Copy info count."
+                                      : "Default Look is on, so the level uses NaN GD's colors and legend, with the "
+                                        "Brrr or his bells. These bands are kept, and still decide which inputs L* "
+                                        "and Copy info count.");
 
             int removeAt = -1;
             int moveFrom = -1, moveTo = -1;
@@ -753,8 +760,9 @@ namespace gucci::ui::pages {
             }
 
             // Every band's sound in one press: the Brrr, or the Bells (what an
-            // empty sound plays).
-            if (kit::Button("All Brrr")) {
+            // empty sound plays). While disguised (GBot) the Brrr is called
+            // Default; the file is the same.
+            if (kit::Button(disguised() ? "All Default" : "All Brrr")) {
                 for (auto& t : tiers)
                     t.audioPath = "fw_default.mp3";
                 g_changed = true;

@@ -2345,6 +2345,11 @@ namespace gucci::ui {
                 kit::Note("It could not start: something else is using port 8790. guccibot_mcp.log has the details.",
                           Tone::Warn);
             kit::EndCard();
+            // GBot (the disguise) has no BIG BRRRR and doesn't mention it: the
+            // card, the last one here, isn't drawn. Its saved switches are
+            // untouched, so it's back with any other theme.
+            if (disguised())
+                return;
 
             kit::BeginCard("BIG BRRRR", "You'll know it when you see it.");
             auto* brrr = BigBrrrManager::get();
