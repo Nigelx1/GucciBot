@@ -88,6 +88,23 @@ namespace gucci::ui {
     };
     ThemeAudio activeThemeAudio();
 
+    // ---- the GBot disguise
+    //
+    // GBot is a plain look with a plain name (Nigel, 2026-10-31): while it is
+    // the theme in use, nothing on screen says GucciBot. Text that names the
+    // mod goes through these where it is shown. Saved values, file contents,
+    // log file names and the Credits page keep the real name.
+
+    // GBot is the theme in use. Until the menu has loaded its settings (a
+    // popup at launch can come first) the saved choice decides.
+    bool disguised();
+    // "GBot" while disguised, otherwise "GucciBot".
+    const char* brandName();
+    // `text` with every "GucciBot" in it said as brandName(). A temporary:
+    // kit::Hint(branded(x).c_str()) is fine, a c_str() kept past the
+    // statement is not.
+    std::string branded(std::string text);
+
     // ---- settings
 
     // Write every setting the interface registers to the mod's saved values.

@@ -19,6 +19,7 @@
 #include "ui/pages.hpp"
 #include "ui/kit.hpp"
 #include "ui/look.hpp"
+#include "ui/ui.hpp"
 
 #include "analysis/ac/framewindow.hpp"
 #include "analysis/ac/fw_settings_store.hpp"
@@ -187,7 +188,7 @@ namespace gucci::ui::pages {
                 // Mods that step frames themselves throw the numbers off; this
                 // was only written to the log.
                 if (auto const& conflicts = gb->analyzerConflicts(); !conflicts.empty())
-                    kit::Note(conflicts.c_str(), Tone::Warn);
+                    kit::Note(branded(conflicts).c_str(), Tone::Warn);
                 // Read from the saved value every time, so Reset (confirms())
                 // turns it off here too.
                 bool mute = Mod::get()->getSavedValue<bool>("calc_mute", false);
@@ -539,7 +540,10 @@ namespace gucci::ui::pages {
                                       "legend. Your bands, shapes, images, pulses and Circle skin are kept, just not used "
                                       "while it's on",
                                       &gb->fwDefaultLook, nullptr, &lookFlipped)) {
-                    if (kit::SwitchRow("Bells", "Each window's own bell instead of the Brrr", &gb->fwDefaultLookBells))
+                    if (kit::SwitchRow("Bells",
+                                       disguised() ? "Each window's own bell instead of the Default sound"
+                                                   : "Each window's own bell instead of the Brrr",
+                                       &gb->fwDefaultLookBells))
                         Mod::get()->setSavedValue("fw_default_look_bells", gb->fwDefaultLookBells);
                     kit::FeatureEnd();
                 }
@@ -693,8 +697,12 @@ namespace gucci::ui::pages {
             auto& tiers = S().tiers;
             kit::BeginCard("Bands", "Colors, labels, shapes, images, pulses and sounds by window size. Hidden bands draw no markers.");
             if (GucciEngine::get()->fwDefaultLook)
-                kit::Hint("Default Look is on, so the level uses NaN GD's colors and legend, with the Brrr or his "
-                          "bells. These bands are kept, and still decide which inputs L* and Copy info count.");
+                kit::Hint(disguised() ? "Default Look is on, so the level uses NaN GD's colors and legend, with the "
+                                        "Default sound or his bells. These bands are kept, and still decide which "
+                                        "inputs L* and Copy info count."
+                                      : "Default Look is on, so the level uses NaN GD's colors and legend, with the "
+                                        "Brrr or his bells. These bands are kept, and still decide which inputs L* "
+                                        "and Copy info count.");
 
             int removeAt = -1;
             int moveFrom = -1, moveTo = -1;
@@ -752,8 +760,9 @@ namespace gucci::ui::pages {
             }
 
             // Every band's sound in one press: the Brrr, or the Bells (what an
-            // empty sound plays).
-            if (kit::Button("All Brrr")) {
+            // empty sound plays). While disguised (GBot) the Brrr is called
+            // Default; the file is the same.
+            if (kit::Button(disguised() ? "All Default" : "All Brrr")) {
                 for (auto& t : tiers)
                     t.audioPath = "fw_default.mp3";
                 g_changed = true;

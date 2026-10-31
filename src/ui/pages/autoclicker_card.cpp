@@ -83,7 +83,7 @@ namespace gucci::ui::pages {
         void statusRow(Autoclicker const& ac) {
             kit::RowBegin("Status", nullptr);
             if (const char* why = ac.waitingFor()) {
-                std::string text = why;
+                std::string text = branded(why);
                 text[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(text[0])));
                 kit::Chip(text.c_str(), Tone::Accent);
             } else {

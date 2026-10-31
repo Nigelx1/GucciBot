@@ -5,6 +5,7 @@
 
 #include "ui/pages.hpp"
 #include "ui/kit.hpp"
+#include "ui/ui.hpp"
 
 #include "core/GucciBot.hpp"
 #include "hacks/hud.hpp"
@@ -13,6 +14,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <string>
 
 namespace gucci::ui::pages {
 
@@ -37,7 +39,9 @@ namespace gucci::ui::pages {
             for (auto const& r : hud::kReadouts) {
                 if (r.group != group)
                     continue;
-                if (kit::SwitchRow(r.label, r.hint, &(cfg.*r.field)))
+                // Two hints name GucciBot's frame (GBot's while disguised).
+                std::string const hint = r.hint ? branded(r.hint) : std::string();
+                if (kit::SwitchRow(r.label, r.hint ? hint.c_str() : nullptr, &(cfg.*r.field)))
                     mod->setSavedValue<bool>(r.key, cfg.*r.field);
             }
         }

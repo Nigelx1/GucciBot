@@ -13,6 +13,7 @@
 // waits for the main menu: a popup there could cost an attempt.
 
 #include "core/GucciBot.hpp"
+#include "ui/ui.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/modify/MenuLayer.hpp>
@@ -43,9 +44,13 @@ namespace gucci::updates {
                 return;
             News const n = *g_news;
             g_news.reset();
-            createQuickPopup("GucciBot Update",
-                             fmt::format("<cy>GucciBot {}</c> is out. You have {}.", n.version,
-                                         Mod::get()->getVersion().toVString()),
+            // While disguised (GBot) it doesn't name the mod. Get It still
+            // goes to the releases page.
+            bool const plain = ui::disguised();
+            std::string const mine = Mod::get()->getVersion().toVString();
+            createQuickPopup(plain ? "Update available" : "GucciBot Update",
+                             plain ? fmt::format("<cy>{}</c> is out. You have {}.", n.version, mine)
+                                   : fmt::format("<cy>GucciBot {}</c> is out. You have {}.", n.version, mine),
                              "Later", "Get It", [url = n.url](auto, bool get) {
                                  if (get)
                                      web::openLinkInBrowser(url);
@@ -120,8 +125,8 @@ namespace gucci::updates {
             mod->setSavedValue("update_check", false);
             (void)mod->saveData();
             log::warn("[GucciBot] update check: the last one never finished; switched off");
-            Notification::create("GucciBot's update check didn't finish last time, so it's off now "
-                                 "(Settings > Check for updates).",
+            Notification::create(ui::branded("GucciBot's update check didn't finish last time, so it's off now "
+                                             "(Settings > Check for updates)."),
                                  NotificationIcon::Warning, 6.f)
                 ->show();
             return;

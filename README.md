@@ -100,7 +100,13 @@ The full current roster. Pick one on the **Themes** page, or build your own ther
 | WakaBot | `.waka` | Grove Green + Black |
 | YoungstaBot | `.youngsta` | Black + Red (223) |
 | KnockerzBot | `.knockerz` | Teal + Black |
+| RondoBot | `.rondo` | Celtics Green + White, on the TD Garden's parquet with a gold trim |
+| SolarBot | `.solar` | Sun Yellow + Deep Orange, with Janet (Solar Flare's sun) rising in the corner and blue gems around her |
+| JupiterBot | `.jupiter` | JMF Yellow + Night Blue: the JMF Trainer's look and sky on every page |
+| GBot | `.gbot` | A plain look with a plain name - no Gucci anywhere on screen |
 | *Yours* | — | Whatever you want. That's the point. |
+
+SolarBot, JupiterBot and GBot have no BIG BRRRR; it comes back with any other theme, as you left it. While GBot is on, the menu's own windows, popups and hints say GBot instead of GucciBot, the Themes page moves into Settings, the BIG BRRRR card and the macro list's theme tags are hidden, and new macros save as `.gbot`. The Credits page and Geode's mod list still name GucciBot.
 
 GucciBot's own color is gold, for the record. Yellow everything this time, you know what I'm talking about? Yellow rims. Yellow big booty yellowbones, ha. Yellow Lambs, yellow MPs, yellow watch. Yellow charm ring, chain. Yellow living room set.
 

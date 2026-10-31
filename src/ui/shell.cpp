@@ -63,6 +63,9 @@ namespace gucci::ui {
         int* g_captureTarget = nullptr;
         int* g_justCaptured = nullptr;
         bool g_menuClosed = false;  // let go of the keyboard next frame (setOpen)
+        // loadSettings has run, so themes::activeId() is the theme picked
+        // (disguised() reads the saved choice until then).
+        bool g_settingsLoaded = false;
 
         struct KeySlot {
             const char* saveKey;
@@ -182,6 +185,7 @@ namespace gucci::ui {
             brrr->shakeEnabled = mod->getSavedValue<bool>("brrr_shake", brrr->shakeEnabled);
             brrr->flickerIntensity = std::clamp(
                 static_cast<float>(mod->getSavedValue<double>("brrr_flicker", brrr->flickerIntensity)), 0.f, 1.f);
+            g_settingsLoaded = true;
         }
 
         void saveEngineSwitch(const char* key, bool value) {
@@ -360,6 +364,32 @@ namespace gucci::ui {
         return themes::activeId();
     }
 
+    bool disguised() {
+        // The stand-down popup (GucciEngine::initialize) and the setup check's
+        // launch popup can come before loadSettings, which runs at ImGui's
+        // setup: until then the theme in use is still the default, and the
+        // saved choice says what it will be. Picking a theme saves it at once
+        // (pages/themes.cpp), so that is never stale. Read without a default,
+        // which would write one: a missing key reads as 0, GucciBot.
+        int const id = g_settingsLoaded ? themes::activeId()
+                                        : static_cast<int>(Mod::get()->getSavedValue<int64_t>("active_theme"));
+        return id == themes::kGBotTheme;
+    }
+
+    const char* brandName() {
+        return disguised() ? "GBot" : "GucciBot";
+    }
+
+    std::string branded(std::string text) {
+        if (!disguised())
+            return text;
+        constexpr std::string_view kName = "GucciBot";
+        constexpr std::string_view kDisguise = "GBot";
+        for (size_t at = text.find(kName); at != std::string::npos; at = text.find(kName, at + kDisguise.size()))
+            text.replace(at, kName.size(), kDisguise);
+        return text;
+    }
+
     std::string macroExtension() {
         return themes::active().extension;
     }
@@ -422,6 +452,13 @@ namespace gucci::ui {
 
         std::filesystem::path replaysDir() {
             return Mod::get()->getSaveDir() / "replays";
+        }
+
+        // The extension a converted or copied-in macro gets, and the one
+        // "Convert to" offers: the plain .brrr, or while disguised the theme's
+        // own (GBot's .gbot), so nothing made then says Brrr.
+        std::string plainMacroExtension() {
+            return disguised() ? macroExtension() : std::string(".brrr");
         }
 
         void loadMacroByName(std::string const& name) {
@@ -514,8 +551,13 @@ namespace gucci::ui {
         }
 
         // Where a macro goes when it can't be picked: the replays folder
-        // needs no permission, and lists it with a Convert button.
+        // needs no permission, and lists it with a Convert button. While
+        // disguised the path isn't printed (it holds the mod's id,
+        // nigelx1.guccibot): Open folder goes there.
         std::string replaysFolderHint() {
+            if (disguised())
+                return "Copy it into the replays folder instead (Saved macros > Open folder) and it will show below "
+                       "with a Convert button.";
             return fmt::format("Copy it into GucciBot's replays folder instead ({}) and it will show below with a "
                                "Convert button.",
                                geode::utils::string::pathToString(replaysDir()));
@@ -617,12 +659,13 @@ namespace gucci::ui {
             }
             std::string const name = freeMacroName(stem);
             m.name = name;
-            auto const target = dir / (name + ".brrr");
+            std::string const ext = plainMacroExtension();
+            auto const target = dir / (name + ext);
             if (!writeAll(target, convert::toGucciBot(m))) {
                 std::filesystem::remove(target, ec);
                 if (!aside.empty())
                     std::filesystem::rename(aside, src, ec);
-                return {false, fmt::format("Couldn't save {}.brrr.", name)};
+                return {false, fmt::format("Couldn't save {}{}.", name, ext)};
             }
             std::string moveNote;
             if (inReplays && !oldBrrr) {
@@ -756,9 +799,9 @@ namespace gucci::ui {
                 return {false, fmt::format("{}: {}", fname, err)};
             auto const known = knownMacroExtensions();
             // A name or extension Windows can't spell comes in plain (spelledAs).
-            std::string ext = spelledAs(src.extension()).value_or(".brrr");
+            std::string ext = spelledAs(src.extension()).value_or(plainMacroExtension());
             if (std::find(known.begin(), known.end(), ext) == known.end())
-                ext = ".brrr";
+                ext = plainMacroExtension();
             auto const spelledStem = spelledAs(src.stem());
             std::string const name = freeMacroName(spelledStem.value_or("Imported macro"));
             auto const target = replaysDir() / (name + ext);
@@ -977,7 +1020,7 @@ namespace gucci::ui {
             options.filters.push_back({"Macros",
                                        {"*.gdr", "*.gdr2", "*.json", "*.slc", "*.scbf1", "*.tcm", "*.ttr3", "*.ybot", "*.xd",
                                         "*.mhr", "*.echo", "*.replay", "*.zbf", "*.kd", "*.rush", "*.freplay", "*.xbot",
-                                        "*.url", "*.txt", "*.brrr"}});
+                                        "*.url", "*.txt", "*.brrr", "*.gbot"}});
             geode::utils::file::PickResult result =
                 co_await geode::utils::file::pick(geode::utils::file::PickMode::OpenFile, options);
             // Windows fails the whole pick, before the dialog shows, when it
@@ -1035,10 +1078,12 @@ namespace gucci::ui {
                 }
             }
             kit::Section("From other bots");
-            kit::Hint("GDR, Silicate, TcBot, ToastyReplay, yBot, xdBot, Mega Hack, Echo and more, and GucciBot 1.x's old .brrr. Drop "
-                      "them in the replays folder, or import one (or a GucciBot macro) from anywhere: the original "
-                      "stays where it was, a copy dated the day it first came in is kept in replays/imported, and "
-                      "importing it again selects the macro it became.");
+            kit::Hint(branded("GDR, Silicate, TcBot, ToastyReplay, yBot, xdBot, Mega Hack, Echo and more, and "
+                              "GucciBot 1.x's old .brrr. Drop them in the replays folder, or import one (or a "
+                              "GucciBot macro) from anywhere: the original stays where it was, a copy dated the day "
+                              "it first came in is kept in replays/imported, and importing it again selects the "
+                              "macro it became.")
+                          .c_str());
             ImGui::BeginDisabled(s_macroPickPending || gb->isRecording());
             if (kit::Button(s_macroPickPending ? "Choosing..." : "Import a macro")) {
                 s_macroPickPending = true;
@@ -1083,7 +1128,8 @@ namespace gucci::ui {
                 ImGui::SameLine();
                 ImGui::TextUnformatted(n.c_str());
                 ImGui::SameLine();
-                ImGui::TextDisabled("%s", it->second.c_str());
+                // Kept as found and branded as shown, so a theme change shows.
+                ImGui::TextDisabled("%s", branded(it->second).c_str());
                 ImGui::PopID();
             }
             if (!convertNow.empty())
@@ -1115,8 +1161,10 @@ namespace gucci::ui {
                 };
             if (!canCalc && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
                 ImGui::SetTooltip("Open a level first");
-            if (!ext.empty() && ext != ".brrr" && ImGui::MenuItem("Convert to .brrr"))
-                act = [who] { g_rowNote = GucciEngine::get()->moveMacro(who, who, ".brrr"); };
+            // To the plain extension: .brrr, or GBot's own while disguised.
+            std::string const plainExt = plainMacroExtension();
+            if (!ext.empty() && ext != plainExt && ImGui::MenuItem(fmt::format("Convert to {}", plainExt).c_str()))
+                act = [who, plainExt] { g_rowNote = GucciEngine::get()->moveMacro(who, who, plainExt); };
             if (ImGui::BeginMenu("Export as")) {
                 for (auto const& f : convert::formats()) {
                     if (!f.canWrite)
@@ -1453,8 +1501,10 @@ namespace gucci::ui {
                 auto const extIt = gb->storedMacroExts.find(name);
                 std::string const ext = extIt == gb->storedMacroExts.end() ? std::string() : extIt->second;
                 // The theme it was saved under, unless that's the plain .brrr.
-                themes::Theme const* tagTheme = ext == ".brrr" ? nullptr : themeForExtension(ext);
-                std::string const tag = tagTheme ? tagTheme->name : (ext.empty() || ext == ".brrr" ? "" : ext);
+                // None while disguised (GBot): the tags name the themes.
+                bool const tagged = !disguised() && !ext.empty() && ext != ".brrr";
+                themes::Theme const* tagTheme = tagged ? themeForExtension(ext) : nullptr;
+                std::string const tag = !tagged ? std::string() : tagTheme ? tagTheme->name : ext;
                 auto const& style = ImGui::GetStyle();
                 float const moreW = ImGui::CalcTextSize("...").x + style.FramePadding.x * 2.f;
                 float const tagW = tag.empty() ? 0.f : ImGui::CalcTextSize(tag.c_str()).x + style.ItemSpacing.x;
@@ -1488,8 +1538,10 @@ namespace gucci::ui {
             if (afterList)
                 afterList();
             foreignMacrosSection();
+            // Branded here, where it shows: the converter's messages
+            // (tools/macro_convert) name GucciBot and can't call into ui/.
             if (!g_rowNote.empty())
-                kit::Note(g_rowNote.c_str(), g_rowNoteOk ? Tone::Good : Tone::Warn);
+                kit::Note(branded(g_rowNote).c_str(), g_rowNoteOk ? Tone::Good : Tone::Warn);
             kit::EndCard();
         }
 
@@ -1748,8 +1800,9 @@ namespace gucci::ui {
             kit::BeginCard("Pathfinder", "Finds a way through the level on its own.");
             int engine = absense::classicSelected() ? 1 : 0;
             const char* engines[] = {"Absense", "Classic"};
-            if (kit::ChoiceRow("Engine", "Absense: Absent's planner, the default. Classic: GucciBot's own search", &engine,
-                               engines, 2))
+            std::string const engineHint =
+                branded("Absense: Absent's planner, the default. Classic: GucciBot's own search");
+            if (kit::ChoiceRow("Engine", engineHint.c_str(), &engine, engines, 2))
                 absense::selectClassic(engine == 1);
             if (engine == 1) {
                 classicPathfinder();
@@ -2218,19 +2271,21 @@ namespace gucci::ui {
 
         void pageSettings() {
             // The master switch (core/bot_switch.hpp), asked for by dihmaster500.
-            kit::BeginCard("GucciBot", "Done botting? Switch it off: it leaves the game until you switch it back on, "
-                                       "no restart needed.");
+            kit::BeginCard(brandName(), "Done botting? Switch it off: it leaves the game until you switch it back on, "
+                                        "no restart needed.");
             bool botOn = botswitch::wanted();
-            if (kit::SwitchRow("GucciBot", "Off, the game runs as if GucciBot weren't installed", &botOn))
+            if (kit::SwitchRow(brandName(), branded("Off, the game runs as if GucciBot weren't installed").c_str(),
+                               &botOn))
                 botswitch::request(botOn);
             if (auto const* why = botswitch::waitingFor())
-                kit::Hint(why);
+                kit::Hint(branded(why).c_str());
             // The update checker (core/update_check.cpp): once a launch, from
             // GitHub's releases, when the main menu first shows.
             {
                 auto* mod = Mod::get();
                 bool check = mod->getSavedValue<bool>("update_check", true);
-                if (kit::SwitchRow("Check for updates", "Once a launch, says when a newer GucciBot is out", &check))
+                if (kit::SwitchRow("Check for updates",
+                                   branded("Once a launch, says when a newer GucciBot is out").c_str(), &check))
                     mod->setSavedValue("update_check", check);
                 if (check) {
                     bool pre = mod->getSavedValue<bool>("update_prereleases", false);
@@ -2277,7 +2332,14 @@ namespace gucci::ui {
             kit::EndCard();
 
             // The theme is picked on the Themes page (this card had a second
-            // picker for it).
+            // picker for it), or here while disguised: GBot takes the Themes
+            // page out of the sidebar. Its cards go between these, never inside
+            // one, under an id of their own: the editor has a "Look" card too.
+            if (disguised()) {
+                ImGui::PushID("themes");
+                pages::themes();
+                ImGui::PopID();
+            }
             // Saved as they change, as everything else here is: they were only
             // saved when the menu closed, so a crash before that lost them.
             kit::BeginCard("Look", nullptr);
@@ -2315,7 +2377,8 @@ namespace gucci::ui {
             // The bindings have no keyboard dispatcher to hook on iOS
             // (hacks/keybinds.cpp), so a key set here would never fire.
             kit::BeginCard("Keybinds", nullptr);
-            kit::Note("Keys don't reach GucciBot on iOS: open the menu from the pause menu's GucciBot button.",
+            kit::Note(branded("Keys don't reach GucciBot on iOS: open the menu from the pause menu's GucciBot button.")
+                          .c_str(),
                       Tone::Muted);
 #else
             kit::BeginCard("Keybinds", "Click a key, then press the new one. Right-click unbinds.");
@@ -2339,6 +2402,11 @@ namespace gucci::ui {
                 kit::Note("It could not start: something else is using port 8790. guccibot_mcp.log has the details.",
                           Tone::Warn);
             kit::EndCard();
+            // GBot (the disguise) has no BIG BRRRR and doesn't mention it: the
+            // card, the last one here, isn't drawn. Its saved switches are
+            // untouched, so it's back with any other theme.
+            if (disguised())
+                return;
 
             kit::BeginCard("BIG BRRRR", "You'll know it when you see it.");
             if (themes::active().noBrrr) {
@@ -2404,6 +2472,7 @@ namespace gucci::ui {
             const char* title;
             void (*draw)();
             void (*backdrop)() = nullptr;  // drawn first, under the whole window (sidebar included)
+            bool (*hidden)() = nullptr;    // out of the sidebar while this says so
         };
 
         // The JMF Trainer's colours over the whole menu while it is the page.
@@ -2428,11 +2497,26 @@ namespace gucci::ui {
             {"Pathfinder", pagePathfinder},
             {"Render", pageRender},
             {"Click sounds", pages::clickSounds},
-            {"Themes", pages::themes},
+            // While disguised (GBot) its picker is on Settings instead.
+            {"Themes", pages::themes, nullptr, disguised},
             {"Settings", pageSettings},
             {"Credits", pageCredits},
         };
         constexpr int kPageCount = static_cast<int>(sizeof(kPages) / sizeof(kPages[0]));
+
+        // The page can't be one the sidebar hides (Themes, while disguised):
+        // picking GBot there leaves it on Themes, so it goes to Settings,
+        // where the picker is then. Found by its draw function, not its place.
+        void leaveHiddenPage() {
+            if (!kPages[g_page].hidden || !kPages[g_page].hidden())
+                return;
+            for (int i = 0; i < kPageCount; ++i)
+                if (kPages[i].draw == pageSettings) {
+                    g_page = i;
+                    return;
+                }
+            g_page = 0;
+        }
 
         // ------------------------------------------------------------ windows
 
@@ -2652,6 +2736,8 @@ namespace gucci::ui {
             constexpr float kRowH = 26.f;
 #endif
             for (int i = 0; i < kPageCount; ++i) {
+                if (kPages[i].hidden && kPages[i].hidden())
+                    continue;
                 bool const selected = g_page == i;
                 ImVec2 const a = ImGui::GetCursorScreenPos();
                 if (ImGui::Selectable(kPages[i].title, selected, ImGuiSelectableFlags_None, ImVec2(0.f, kRowH)))
@@ -2722,7 +2808,9 @@ namespace gucci::ui {
             ImGui::SetNextWindowPos(ImVec2(12.f, 60.f), ImGuiCond_FirstUseEver);
             ImGui::SetNextWindowSize(ImVec2(260.f, 0.f), ImGuiCond_Always);
             bool open = true;
-            if (ImGui::Begin("GucciBot##compact", &open, ImGuiWindowFlags_NoCollapse)) {
+            // The title bar shows the name (GBot's while disguised); after
+            // "###" the id stays the same, so a new name isn't a new window.
+            if (ImGui::Begin(fmt::format("{}###compact", brandName()).c_str(), &open, ImGuiWindowFlags_NoCollapse)) {
                 int mode = gb->isRecording() ? 1 : gb->isPlaying() ? 2 : 0;
                 const char* modes[] = {"Off", "Rec", "Play"};
                 if (kit::Choice("mode", &mode, modes, 3))
@@ -2860,13 +2948,14 @@ namespace gucci::ui {
                                     ImVec2(0.5f, 0.5f));
             ImGui::SetNextWindowSize(ImVec2(360.f, 0.f), ImGuiCond_Always);
             bool open = true;  // closed through setOpen, as the main window is
-            if (ImGui::Begin("GucciBot##switchedoff", &open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize)) {
-                kit::BeginCard("GucciBot", "Switched off: out of the game until you switch it back on.");
+            if (ImGui::Begin(fmt::format("{}###switchedoff", brandName()).c_str(), &open,
+                             ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize)) {
+                kit::BeginCard(brandName(), "Switched off: out of the game until you switch it back on.");
                 bool on = botswitch::wanted();
-                if (kit::SwitchRow("GucciBot", "On puts everything back, no restart needed", &on))
+                if (kit::SwitchRow(brandName(), "On puts everything back, no restart needed", &on))
                     botswitch::request(on);
                 if (auto const* why = botswitch::waitingFor())
-                    kit::Hint(why);
+                    kit::Hint(branded(why).c_str());
                 kit::EndCard();
             }
             ImGui::End();
@@ -3002,10 +3091,13 @@ namespace gucci::ui {
             }
             if (!g_open)
                 return;
-            if (g_compact)
+            if (g_compact) {
                 drawCompact();
-            else
+            } else {
+                // Before drawMain reads the page (its look, its title).
+                leaveHiddenPage();
                 drawMain();
+            }
         }
 
     } // namespace

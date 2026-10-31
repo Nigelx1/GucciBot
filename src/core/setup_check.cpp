@@ -2,6 +2,7 @@
 
 #include "core/GucciBot.hpp"
 #include "core/bot_switch.hpp"
+#include "ui/ui.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/loader/Hook.hpp>
@@ -256,6 +257,12 @@ namespace gucci::setupcheck {
                                    "list and restart the game.",
                                    ""});
             }
+            // Said as GBot while disguised (ui::branded). current() works the
+            // list out again every second, so a new theme shows within one.
+            for (auto& p : out) {
+                p.what = ui::branded(std::move(p.what));
+                p.fix = ui::branded(std::move(p.fix));
+            }
             return out;
         }
 
@@ -335,7 +342,7 @@ namespace gucci::setupcheck {
         if (problems.empty())
             return;
 
-        std::string body = "These can break GucciBot's recording and playback:";
+        std::string body = ui::branded("These can break GucciBot's recording and playback:");
         for (auto const& p : problems)
             body += fmt::format("\n\n<cy>{}</c>. {}", p.what, p.fix);
         // Queued with Geode's popup manager, not shown here: this runs inside

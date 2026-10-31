@@ -88,6 +88,7 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 - [ ] Converter: GDR2 macros reading as all player 2 (#15). The reader matches libGDR's own; needs the reporter's file
 - [ ] Bug reporters' follow-ups: #20 Android practice-death crash (likely the same bug as the Mac one, fixed in -ei; needs a phone test); #23 start positions and checkpoints; #11, #13 and the -103 error; macros ignoring inputs (#14, #8, #18); logs from the Calculate reports
 - [ ] Normal playback jammed on a respawn or step back onto a click's frame (found by the polish sweep, item 121; maybe part of the macros ignoring inputs above): playback looks inputs up a frame ahead, so a practice respawn at a checkpoint on a click's frame, or a Backwards stepping step back onto one, ended the macro there. Calculate had the right rule. Fixed 2026-10-30-a (f58ab8d), untested: play a macro in practice mode and respawn at a checkpoint placed on a click's frame, and step back onto one during playback
+- [ ] Four new themes: RondoBot, SolarBot, JupiterBot and the GBot disguise (Nigel, 2026-10-31)
 - [x] about.md, the README and the site match what ships: -fa (acad95e) and the site (aaa4a8b)
 
 ## 3. Calculate
