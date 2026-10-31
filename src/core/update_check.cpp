@@ -44,9 +44,13 @@ namespace gucci::updates {
                 return;
             News const n = *g_news;
             g_news.reset();
-            createQuickPopup("GucciBot Update",
-                             fmt::format("<cy>GucciBot {}</c> is out. You have {}.", n.version,
-                                         Mod::get()->getVersion().toVString()),
+            // While disguised (GBot) it doesn't name the mod. Get It still
+            // goes to the releases page.
+            bool const plain = ui::disguised();
+            std::string const mine = Mod::get()->getVersion().toVString();
+            createQuickPopup(plain ? "Update available" : "GucciBot Update",
+                             plain ? fmt::format("<cy>{}</c> is out. You have {}.", n.version, mine)
+                                   : fmt::format("<cy>GucciBot {}</c> is out. You have {}.", n.version, mine),
                              "Later", "Get It", [url = n.url](auto, bool get) {
                                  if (get)
                                      web::openLinkInBrowser(url);
