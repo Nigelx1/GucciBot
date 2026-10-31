@@ -2449,6 +2449,23 @@ namespace gucci::ui {
             dl->PopClipRect();
         }
 
+        // The theme's scene (themes.hpp): what it wears over the colours
+        // refresh() worked out, on every window the shell draws, so after each
+        // refresh(). Applied, never borrowed through pages::jupiterTrainer(),
+        // which would count the JMF page as open and run its clock and music.
+        void sceneLook() {
+            if (themes::active().scene == themes::Scene::Jupiter)
+                pages::jupiterLookApply();
+        }
+
+        // ... and its picture behind the menu's pages.
+        using Backdrop = void (*)();
+        Backdrop sceneBackdrop() {
+            if (themes::active().scene == themes::Scene::Jupiter)
+                return pages::jupiterBackdrop;
+            return nullptr;
+        }
+
         void drawMain() {
             PageLook const pageLook(kPages[g_page].draw == pages::jupiterTrainer);
             auto const& pal = look().pal;
@@ -2483,8 +2500,10 @@ namespace gucci::ui {
                 ImGui::PopStyleVar();
                 return;
             }
-            if (kPages[g_page].backdrop)
-                kPages[g_page].backdrop();
+            // Behind the pages: the page's own picture (the JMF sky), else the
+            // theme's scene, else its snow.
+            if (Backdrop const backdrop = kPages[g_page].backdrop ? kPages[g_page].backdrop : sceneBackdrop())
+                backdrop();
             else if (themes::active().snow && look().effects)
                 drawSnow();
             ImVec2 offset{0.f, 0.f};
@@ -2519,7 +2538,10 @@ namespace gucci::ui {
             ImGui::BeginChild("##side", ImVec2(150.f, 0.f), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar);
             // The JMF page is JMF's own: the theme's name, subtitle, brand tag
             // and page quote stay off it (Nigel, 2026-10-30; polish item 45).
-            bool const themeWords = !pageLook.on;
+            // Keyed on the page, not on its look: JupiterBot wears that look on
+            // every page, and its words show on all the others.
+            bool const jmfPage = kPages[g_page].draw == pages::jupiterTrainer;
+            bool const themeWords = !jmfPage;
             if (themeWords) {
                 UseFont f(Font::Title);
                 ImGui::PushStyleColor(ImGuiCol_Text, pal.accent);
@@ -2590,7 +2612,7 @@ namespace gucci::ui {
             // here the pages take turns with them.
             {
                 auto const& q = themes::quote(themes::active(), static_cast<themes::Slot>(g_page % themes::kSlotCount));
-                if (!pageLook.on && !q.text.empty()) {
+                if (themeWords && !q.text.empty()) {
                     UseFont f(Font::Small);
                     ImGui::PushStyleColor(ImGuiCol_Text, pal.muted);
                     std::string const line = q.by.empty() ? q.text : q.text + "  " + q.by;
@@ -2785,6 +2807,7 @@ namespace gucci::ui {
 #endif
             if (botswitch::takenOut()) {
                 look().refresh();
+                sceneLook();
                 if (g_open)
                     drawSwitchedOff();
                 return;
@@ -2835,6 +2858,7 @@ namespace gucci::ui {
             }
 
             look().refresh();
+            sceneLook();
             // Every frame, menu open or not: it starts and stops Video Mode's
             // decoder as well as drawing it (trainers/videomode.hpp).
             videomode::drawOverlay();

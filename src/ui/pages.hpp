@@ -17,6 +17,7 @@ namespace gucci::ui::pages {
     void jupiterBackdrop(); // ... its sky, drawn under the whole menu window
     void jupiterLookPush(); // ... its colours over the whole menu (the shell, around the window)
     void jupiterLookPop();
+    void jupiterLookApply(); // ... the same colours written over the style, for JupiterBot (after look().refresh())
     void jupiterVideoOverlay();  // Video Mode: the JMF click bar over the video, in place of the menu
     void trainerVideoOverlay();  // ... the Trainer's, over the video you picked
     void anyTrainer();      // pages/trainer_pages.cpp: Trainer (any saved macro)
