@@ -1,4 +1,7 @@
 build/
+# A build that never installs into the game (-DGEODE_DONT_INSTALL_MODS=ON), for
+# building while Geometry Dash is open.
+build-noinstall/
 *.geode
 # Was tracked at the repo root for a while (2026-08-26 through -27) so Juice
 # could pull the latest build straight from GitHub without a Discord upload.
