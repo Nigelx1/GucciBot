@@ -942,8 +942,8 @@ class Trajectory {
     // until useStart(nullptr); objects ahead of it that the real player
     // has activated since are treated as untouched meanwhile. (With the
     // Pathfinder's exact start flags on, the objects are set as the start
-    // recorded them instead - see useStartExact.)
-    struct SimStart;
+    // recorded them instead - see useStartExact.) SimStart itself is declared
+    // once, with the class's public types above.
     std::shared_ptr<SimStart> captureStart(GJBaseGameLayer* pl, bool p1);
     void useStart(std::shared_ptr<SimStart> start);
     // GucciBot (2026-10-23): how an object's flags came out with exact start
