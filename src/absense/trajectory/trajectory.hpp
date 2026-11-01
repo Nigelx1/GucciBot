@@ -348,6 +348,12 @@ class Trajectory {
         // the answer is the calmest (fewest fast changes, fewest changes, then
         // the most room), the others in different 15-unit heights.
         int collectTicks = 4;
+        // GucciBot (BLOODBATH2.md, 2026-11-01): with no band (lo > hi), a share
+        // of the cap for each `cellY` units of height and each way of going (up
+        // or down) of a copy that flies on presses (UFO, swing): the arc a
+        // press starts is its phase, and which phase gets through can show
+        // hundreds of ticks later. 0: no shares (the ranking alone, as before).
+        float cellY = 0.0f;
         // A way in counts only if this object fired on the way (a route
         // option's USE), or only if this one did not (its SKIP).
         EnhancedGameObject* fireObject = nullptr;
@@ -364,6 +370,12 @@ class Trajectory {
         int ticks = 0;
         uint64_t steps = 0;      // simulated ticks in all
         int peakFrontier = 0;
+        // GucciBot (BLOODBATH2.md): the most classes a capped tick shared the
+        // cap between (LegState::classOf), and whether the search ended with
+        // nothing left alive - not because its steps, time or ticks ran out,
+        // or its ways in were collected.
+        int peakClasses = 0;
+        bool emptied = false;
         int exitsElsewhere = 0;  // states that passed the gate's x outside the band
         std::vector<TickInput> witness;               // Found: one input a tick from the start
         std::vector<std::pair<float, float>> path;    // ... and where it took the player

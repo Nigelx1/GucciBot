@@ -100,6 +100,11 @@ constexpr double kDriveLegSafetyMs = 6000.0;
 // is (see beginRescueLeg): two blocks, so a way in has got clear of what killed
 // the player there, not just up to it.
 constexpr float kRescuePast = 60.0f;
+// GucciBot (BLOODBATH2.md, 2026-11-01): a rescue leg's height share for a copy
+// that flies on presses (Trajectory::LegGoal::cellY): every 10 units of height
+// and each way of going keep a share of its cap, so the phase of a UFO's arcs
+// set up hundreds of ticks before a wall survives the cut.
+constexpr float kLegCellY = 10.0f;
 // Nigel (2026-10-22, answer 3 in docs/ROUTE_ENGINE_PLAN.md): five minutes on
 // one spot - the best tick not moving on - and the run stops and says where.
 constexpr double kStuckSeconds = 300.0;
@@ -2794,6 +2799,7 @@ bool AbsensePathfinder::beginRescueLeg(Decision& d) {
         goal.dotsEvery = 0;
         goal.witnesses = 3;
         goal.calmTicks = 0;
+        goal.cellY = kLegCellY;  // a UFO's or swing's phases keep a share of the cap
         if (traj->beginLeg(pl, goal, refused)) {
             d.rescueLeg = true;
             return true;

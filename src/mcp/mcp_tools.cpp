@@ -1528,15 +1528,21 @@ namespace gucci::mcp {
             "as a script gucci_abs_simulate can play: h hold, r release, p press, t a tap inside the "
             "tick), impossible (exact and nothing dropped: every move it offers was "
             "tried, close to a proof), not_found (similar states merged: not a proof), or "
-            "out_of_budget, and draws it over the level. The game waits while it runs; "
-            "nothing in the real game changes.",
+            "out_of_budget, and draws it over the level. `classes` is the most classes that "
+            "shared the cap on one tick, `emptied` whether it ended with everything dead (with "
+            "out_of_budget: some had been dropped for room) rather than out of steps, time or "
+            "ticks. The game waits while it runs; nothing in the real game changes.",
             schemaOf({{"gate_x", "integer", "the gate's x (default: the next gate of the planned route)"},
                       {"lo", "integer", "bottom of the band (default: the route's option there)"},
                       {"hi", "integer", "top of the band (default: the route's option there; lo > hi = any height)"},
                       {"max_ticks", "integer", "default 2400"},
                       {"cap", "integer", "states kept a tick (default 192, max 1024)"},
                       {"exact", "boolean", "merge only identical states, for a proof (default false)"},
-                      {"max_ms", "integer", "wall clock limit (default 3000, max 8000: the server waits 10 s)"}}),
+                      {"max_ms", "integer", "wall clock limit (default 3000, max 8000: the server waits 10 s)"},
+                      {"cell", "integer",
+                       "any height only: a UFO or swing keeps a share of the cap for each this many units of "
+                       "height and each way of going (default 10, what the pathfinder's rescue legs use; 0: "
+                       "the ranking alone, as before)"}}),
             [](matjson::Value const& a) {
                 requireFreeRun();
                 requireLevel();
@@ -1545,7 +1551,8 @@ namespace gucci::mcp {
                                              (float)argInt(a, "hi", 0),
                                              (int)std::clamp<int64_t>(argInt(a, "max_ticks", 2400), 1, 20000),
                                              (int)std::clamp<int64_t>(argInt(a, "cap", 192), 1, 1024), exact,
-                                             (double)std::clamp<int64_t>(argInt(a, "max_ms", 3000), 100, 8000));
+                                             (double)std::clamp<int64_t>(argInt(a, "max_ms", 3000), 100, 8000),
+                                             (float)std::clamp<int64_t>(argInt(a, "cell", 10), 0, 10000));
                 if (out.contains("error"))
                     throw ToolError(out["error"].asString().unwrapOr("failed"));
                 return out;

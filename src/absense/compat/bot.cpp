@@ -775,7 +775,7 @@ matjson::Value absense::routePlan(float fromX, float fromY, int limit) {
 }
 
 matjson::Value absense::routeLeg(float gateX, float lo, float hi, int maxTicks, int frontierCap, bool exact,
-                                 double maxMs) {
+                                 double maxMs, float cellY) {
     auto out = matjson::Value::object();
     auto* pl = PlayLayer::get();
     auto* bot = Bot::get();
@@ -827,6 +827,7 @@ matjson::Value absense::routeLeg(float gateX, float lo, float hi, int maxTicks, 
     goal.frontierCap = frontierCap;
     goal.exact = exact;
     goal.maxMs = maxMs;
+    goal.cellY = std::max(0.0f, cellY);
     auto const leg = t->sweepLeg(pl, goal);
     if (leg.error) {
         out["error"] = std::string(leg.error);
@@ -844,6 +845,11 @@ matjson::Value absense::routeLeg(float gateX, float lo, float hi, int maxTicks, 
     out["simulated_ticks"] = (int64_t)leg.steps;
     out["peak_states"] = (int64_t)leg.peakFrontier;
     out["states_dropped_for_room"] = leg.capped;
+    // GucciBot (BLOODBATH2.md): how many classes shared the cap at most (a
+    // flying copy's height cells among them, with `cell`), and whether it
+    // ended with everything dead rather than out of steps, time or ticks.
+    out["classes"] = (int64_t)leg.peakClasses;
+    out["emptied"] = leg.emptied;
     out["exact"] = exact;
     out["passed_outside_the_band"] = (int64_t)leg.exitsElsewhere;
     out["ms"] = leg.ms;

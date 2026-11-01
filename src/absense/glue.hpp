@@ -124,7 +124,12 @@ namespace absense {
     // x `gateX` inside the band lo..hi (gateX <= 0: the next gate of the
     // planned route ahead). Found (with the way as a script), impossible, or
     // out of budget; drawn over the level. The game waits while it runs.
-    matjson::Value routeLeg(float gateX, float lo, float hi, int maxTicks, int frontierCap, bool exact, double maxMs);
+    // `cellY` (any height only, lo > hi): a UFO's or swing's share of the
+    // cap per that many units of height and way of going (Trajectory::
+    // LegGoal::cellY); 10 is what the pathfinder's rescue legs use
+    // (pathfinder.cpp kLegCellY), 0 the ranking alone.
+    matjson::Value routeLeg(float gateX, float lo, float hi, int maxTicks, int frontierCap, bool exact, double maxMs,
+                            float cellY = 10.0f);
 
     // Pathfinder page > Follow the planned route (AI), saved with the mod: 0
     // off (the pathfinder as it was), 1 route ideas (step R4: each decision

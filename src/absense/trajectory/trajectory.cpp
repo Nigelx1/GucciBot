@@ -4571,13 +4571,33 @@ struct Trajectory::LegState {
     }
     // The class a state keeps a share of a capped frontier for: gravity, kind,
     // size, and the goal object fired - so both sides of an orb survive.
+    // Bits 0-2 and, for the kind, 3-9; a flying copy's phase takes 10-29.
     int classOf(Trajectory* t) const {
         PlayerObject* p = s.players[0];
-        return (int)p->m_isUpsideDown | (int)(p->m_vehicleSize < 0.8f) << 1 |
-               (int)(goal.fireObject && t->copyFired(p, goal.fireObject)) << 2 |
-               ((int)p->m_isShip | (int)p->m_isBird << 1 | (int)p->m_isBall << 2 | (int)p->m_isDart << 3 |
-                (int)p->m_isRobot << 4 | (int)p->m_isSpider << 5 | (int)p->m_isSwing << 6)
-                   << 3;
+        int c = (int)p->m_isUpsideDown | (int)(p->m_vehicleSize < 0.8f) << 1 |
+                (int)(goal.fireObject && t->copyFired(p, goal.fireObject)) << 2 |
+                ((int)p->m_isShip | (int)p->m_isBird << 1 | (int)p->m_isBall << 2 | (int)p->m_isDart << 3 |
+                 (int)p->m_isRobot << 4 | (int)p->m_isSpider << 5 | (int)p->m_isSwing << 6)
+                    << 3;
+        // GucciBot (BLOODBATH2.md, 2026-11-01): with no band every state
+        // scores 0, and the cap kept the fewest input changes, then the latest -
+        // in a UFO the lineages that flapped least and last. Bloodbath's way
+        // flaps right at the portal and lines its later flaps up from there;
+        // that lineage was the first of its kind cut, and every leg from before
+        // the portal died at the hanging thorn (2026-11-01: six ran to tick
+        // 8676, everything dead, some dropped for room; ToE2 from 3700 the same
+        // at caps 48, 96 and 192). A copy that flies on presses keeps a share
+        // for each cellY units of height and each way it is going: one for
+        // every phase of its arc. With cellY 0, a band, or any other kind, the
+        // class is what it always was.
+        if (anyBand && goal.cellY > 0.0f && (p->m_isBird || p->m_isSwing)) {
+            // Bit 10 rising, 11-29 the height cell: clamped to 19 bits before
+            // the cast, so it stays under the sign bit (a NaN height is cell 0).
+            const float at = std::floor(p->getPositionY() / goal.cellY);
+            const int cell = at > 0.0f ? (int)std::min(at, (float)((1 << 19) - 1)) : 0;
+            c |= (int)(p->m_yVelocity > 0.0) << 10 | cell << 11;
+        }
+        return c;
     }
     float bandDistance(float y) const {
         if (anyBand) return 0.0f;
@@ -4879,6 +4899,7 @@ bool Trajectory::stepLeg(std::chrono::steady_clock::time_point until) {
             std::vector<int> classes;
             for (size_t k : alive)
                 if (std::find(classes.begin(), classes.end(), nx[k].cls) == classes.end()) classes.push_back(nx[k].cls);
+            out.peakClasses = std::max(out.peakClasses, (int)classes.size());
             const size_t share = std::max<size_t>(1, (size_t)goal.frontierCap / std::max<size_t>(1, classes.size()));
             std::vector<char> taken(alive.size(), 0);
             for (int cls : classes) {
@@ -4909,6 +4930,7 @@ bool Trajectory::stepLeg(std::chrono::steady_clock::time_point until) {
 
     if (finished) {
         L->over = true;
+        out.emptied = L->frontier.empty();  // everything died (not out of steps, time or ticks)
         if (!L->crossings.empty()) {
             // The calmest way in, then the most room; ties keep the order found.
             auto& cr = L->crossings;
