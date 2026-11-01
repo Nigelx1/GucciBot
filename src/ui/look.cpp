@@ -222,8 +222,9 @@ namespace gucci::ui {
         // a dark theme (the raised controls, a hover, a press, the pulse)
         // darkens on a light one, which near white would otherwise clamp to
         // nothing. Dark themes come out as before, bar Calculate's table
-        // (below), which every theme colours now.
-        setLight(pal, luminance(theme.background) > 0.5f);
+        // (below), which every theme colours now. Light takes dark text too:
+        // a custom theme's mid grey under white text stays lit dark.
+        setLight(pal, luminance(theme.background) > 0.5f && luminance(theme.text) < luminance(theme.background));
 
         ImVec4 accent = theme.accent;
         if (theme.pulse) {
