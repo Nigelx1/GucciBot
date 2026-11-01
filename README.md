@@ -2,83 +2,60 @@
 
 > Frame perfect. Ice cold. Brrr Brrr Brrr.
 
-It's Gucci. GucciBot is a Geometry Dash macro bot (a [Geode](https://geode-sdk.org/) mod) that records your inputs frame-perfectly and plays them back exactly, built on top of [Silicate](https://git.puppy.lgbt/silicate/silicate)'s physics engine. Think of it as a very expensive, very icy ghost of your best run — except the ghost never drops a frame, never has an off day, and definitely never forgets its jewelry. So icy.
+It's Gucci. GucciBot is a Geometry Dash macro bot (a [Geode](https://geode-sdk.org/) mod) that records your inputs frame-perfectly and plays them back exactly, built on top of [Silicate](https://git.puppy.lgbt/silicate/silicate)'s physics engine. It also measures how many frames you had for every click, finds its own way through a level, renders straight to video and trains you on the hard parts. Think of it as a very expensive, very icy ghost of your best run — except the ghost never drops a frame, never has an off day, and definitely never forgets its jewelry. So icy.
 
-GucciBot is public now — grab the newest 2.0.0-beta pre-release from [Releases](https://github.com/Nigelx1/GucciBot/releases) (that's the build this README describes, and the only one for macOS, iOS and Android; the release GitHub marks Latest is 1.8, the older Windows-only stable), drop it in your Geode mods folder, and you're in. It's not on the in-game Geode mod index (long story, not going into it here), so a manual install is the only way to get it for now.
+**[guccibot.net](https://guccibot.net)** · [Download](https://github.com/Nigelx1/GucciBot/releases/latest) · [Discord](https://discord.gg/m95NUPdbpJ)
 
-**Don't run ToastyReplay Lite or Silicate enabled at the same time** — GucciBot can't run live alongside either one (ToastyReplay Lite crashed macro playback; Silicate patches the same spots in the game GucciBot does), so GucciBot stands down until the other one is turned off or uninstalled.
+## Get it
 
-**Runs on Windows, and since 2.0.0-beta.3 on macOS, iOS and Android too** — experimental there: it has been played on an Android phone, but the rest has had little testing. What still needs Windows is listed under [Platforms in about.md](about.md#platforms).
+You need Geometry Dash 2.2081 and Geode 5.10.1 or a later 5.x. One `.geode` file covers Windows, macOS, iOS and Android (32 and 64-bit), and it's about 250 MB, since the renderer, the music and the JMF Trainer's video ride along. The newest release is **2.0.0-beta.5**.
 
----
+1. Download `nigelx1.guccibot.geode` from the [latest release](https://github.com/Nigelx1/GucciBot/releases/latest).
+2. In the game, open Geode's mod list, press the gear for Geode's settings, press **Install From File** and pick the file. (Or put the file in Geode's mods folder yourself: **Open Mods Folder** is in the same place.)
+3. Restart the game.
+4. Open GucciBot:
+   - **Windows:** press **Left Alt**. You can change the key in Settings > Keybinds.
+   - **Mac:** press **Option**, or the **GucciBot** button in a level's pause menu.
+   - **iPhone, iPad and Android:** pause a level and press **GucciBot** in the bottom-right corner of the pause menu.
 
-## Table of Contents
+**Turn off ToastyReplay Lite and Silicate first.** GucciBot can't run live alongside either one (ToastyReplay Lite crashed macro playback; Silicate patches the same spots in the game GucciBot does), so while either is enabled GucciBot stands down and says why. Turn the other one off or uninstall it, restart, and you're in.
 
-- [What it actually does](#what-it-actually-does)
-- [GBR6 — the hypercompressed format](#gbr6--the-hypercompressed-format)
-- [Practice & analysis](#practice--analysis)
-- [Autoclicker](#autoclicker)
-- [Trainers](#trainers)
-- [Rendering](#rendering)
-- [Themes](#themes)
-- [Building it](#building-it)
-- [Status](#status)
-- [Contact](#contact)
-- [Credits](#credits)
-- [License](#license)
+Windows is home, and gets the most testing. macOS, iOS and Android are newer: the Android build has run on a phone, the rest has had little testing, and the Pathfinder, rendering and Video Mode still need Windows ([the full list](about.md#platforms)). The Mac build in beta.5 runs on Apple silicon only; Intel Macs come with the next release.
 
-## What it actually does
+Stuck, or got a question? Ask in [the Discord](https://discord.gg/m95NUPdbpJ). Found a bug? [Open an issue](https://github.com/Nigelx1/GucciBot/issues/new/choose).
 
-- Records inputs at frame-perfect precision and plays them back the same way, every time. While a macro plays, your own clicks are blocked, as in Silicate (**Block inputs during playback**, on by default).
-- Full checkpoint/practice-fix system ported from Silicate, so restores actually behave like they should instead of leaving hazards in whatever state GD's own native restore felt like that day.
-- A frame-window analyzer ("Calculate") that measures, per click, how many frames you actually had to work with — it runs on anticroom's Silicate analyzer. The whole frame-window trend started with NaN GD, and the L* precision number GucciBot puts on a macro comes from his formula, published at [nandl.pages.dev](https://nandl.pages.dev/#formula). He's careful to say frame windows alone don't determine difficulty, and GucciBot says the same.
-- In-engine video rendering straight to a file, no external recorder needed.
-- Auto safe mode, on by default: an attempt with a cheat on doesn't count. Plus a setup check that warns about the settings that break the engine.
-- A whole closet of themes, because if the bot's going to carry you through a level it should at least look like money doing it.
+## What it does
 
-## GBR6 — the hypercompressed format
+- **Records and plays back, frame-perfect.** The engine is a port of Silicate's, reconciled function by function. Practice checkpoints are captured whole, so a macro recorded through respawns plays back exactly like one recorded straight through, and a level with random triggers replays the same way every time. Frame advance, backwards stepping, intentional deaths, mirror inputs and RNG lock come with it.
+- **GBR6, the hypercompressed macro format.** 2 bytes an input (yBot-sized files for human gameplay), a wave or ship tap stored as one entry, and a steady autoclicker run stored as its pattern instead of click by click.
+- **Other bots' macros, in the game.** 27 formats read, among them GDR and GDR2, Silicate .slc, TcBot, ToastyReplay .ttr3, yBot, xdBot, Mega Hack, Echo and GucciBot 1.x's old .brrr, and 21 written back out with **Export as**. Drop one in the replays folder and it converts in one press; the original is kept. The full list is in [about.md](about.md#other-bots-macros).
+- **Calculate, the frame-window analyzer.** For every click, how many frames you actually had, measured against the real game engine, not a guess. It runs on anticroom's Silicate analyzer: Time-Based and Recovery Range, windows finer than a single frame, color bands with their own marker shapes, images, pulses and sounds, and an in-level legend. **Windows by hand** lets you type any input's window yourself, and a tight click right after another input also gets Juice's Alignment-Independent count, "my suggestion is x frames", flagged in the Frame Editor. The whole frame-window trend started with NaN GD, and the L* precision number GucciBot puts on a macro comes from his formula, published at [nandl.pages.dev](https://nandl.pages.dev/#formula). He's careful to say frame windows alone don't determine difficulty, and GucciBot says the same.
+- **Pathfinder: it makes the macro for you.** Open a level with nothing recorded and start it: it plays the level itself until it reaches the end, then saves the run as a macro named after the level. The default engine is Absent's, from Absense, ported in whole: before each input it runs copies of the player ahead through the real level, and it goes back when it hits a dead end. GucciBot's own Classic search is still there too. The AI pathfinder is the big piece still in progress for 2.0, and its first steps are in: **Show the level map** draws every gap, choice and moving part, **Show the planned route** draws its way through the whole level, and **Follow the planned route (AI)** has it take that route. Windows only.
+- **Trainers.** Nigel's Jupiter My Favourite Trainer, and a second Trainer for any macro you pick: a click bar with your own presses next to the macro's, ghosts of the macro and of your best attempt, segments to name and loop, stats with a death heatmap, synced music, and **Video Mode** to review a run against a video (Windows). Plus **Click Indicators**: the macro's clicks coming at you over the level, with every option of Bogdaner09's free mod, scored Perfect / OK / Miss.
+- **Practice tools.** The **Survival Indicator** (does clicking right now survive?), path preview, Prevent Death and Find Best Tick, noclip with an accuracy readout, hitboxes, the macro's path drawn in the level, and an autoclicker with its own hold, release and clicks per hold for each player.
+- **Macro tools.** The **Frame Editor** (drag, stretch or shorten every press, with undo), **Check Macro** (lists anything that would desync playback), a diff viewer, trim and merge, TPS changes mid-macro, bot settings presets, and autosave at level end.
+- **Rendering** (Windows). Gameplay straight to a video file, no recorder needed: a hardware encoder picked for your graphics card, anticroom's intro card, four separate audio tracks if you want them, the frame-window markers and cues baked in, fades at both ends, and presets (**Showcase** sets up 8K60 lossless in one press). It runs on FFmpeg 8.0.1 (GPL v3), bundled in the package; where those DLLs come from and their source: [guccibot-build-files](https://github.com/Nigelx1/guccibot-build-files).
+- **Auto safe mode**, on by default: while a cheat is on (a macro playing, noclip, speedhack, Click Indicators and the rest), an attempt doesn't count. No completion, no new best, nothing sent to the servers. A **setup check** warns about the settings that break the engine, and the **Disable bot** switch takes GucciBot out of the game without a restart.
+- **And the rest.** Click sounds (the built-in Clickbot pack or your own), a HUD with CPS, 19 hotkeys, **Compact Mode** to keep the bot at hand while you play, editor tools, an update check, and **Assistant Access**, an optional local server an AI assistant on your computer can read and drive the bot through (off by default).
+- **Themes.** 20 built-in ones, each saving macros under its own extension, a full editor for your own, and BIG BRRRR. The roster is [below](#themes).
 
-- 2 bytes per input — matches yBot-sized files for regular human gameplay.
-- Tap encoding: a wave/ship press+release pair stores as one entry instead of two.
-- Autoclicker delta compression: a steady autoclicker run on jump (hold and release each 1–15 ticks, 8 clicks or more) stores as 4-byte entries of up to 65,535 clicks each — the pattern's description, not its output. **Swift clicks**, **Clicks per hold** above 1 and the **Black orb UFO loop** are stored click by click.
-- Other bots' macros convert in one click: drop them in the replays folder (or **Import a macro**) and Saved macros lists them under *From other bots*. 27 formats read, among them GDR and GDR2, Silicate .slc, TcBot, ToastyReplay .ttr3, yBot, xdBot, Mega Hack, Echo and GucciBot 1.x's old .brrr, and 21 written back out with **Export as**. The full list is in [about.md](about.md#other-bots-macros).
+Every feature and setting is in [about.md](about.md), the page Geode shows for the mod, and on [guccibot.net](https://guccibot.net).
 
-## Practice & analysis
+### Coming in the next release
 
-- Macro diff viewer — put two replays side by side, frame by frame.
-- Calculate — per-click timing windows measured against the real game engine, not a guess. It runs on anticroom's Silicate analyzer: Time-Based and Recovery Range, sub-tick measurement finer than a single frame, color bands with their own marker shapes, images, pulses and sounds, and an in-level legend, or **Default Look**, drawn like the counter in NaN GD's videos. You can put your own text in the level too, over any measured input. Tight clicks right after another input also get Juice's Alignment-Independent count: "my suggestion is x frames", in the Windows by hand table where every input's window can be typed in, and flagged in the Frame Editor. A time cap stops a long run and keeps what it measured.
-- Mid-macro TPS changes, noclip accuracy readout, macro trim/merge/surgery.
-- Bot settings presets, a metadata editor, autosave at level end (on by default) or on a timer, for any macro that has a name.
+On `master` now, in the package every push builds:
 
-## Autoclicker
-
-- Fully independent Hold Ticks / Release Ticks / Clicks Per Hold per player — no shared setting forced onto both, matching Silicate's own model.
-- One-shot **Copy to Player 2** (the *Same as Player 1* row), not a permanent link.
-- Only While Holding — auto-clicks only while you're actually holding the jump input: a key, a click or a touch, for player 1 or player 2.
-
-## Trainers
-
-Two flavors of the same toolset: one permanently pointed at the level "Jupiter My Favourite," one pointed at whatever macro you feel like practicing against.
-
-- **Click Trainer** — a scrolling rhythm bar with a fixed center line; your own presses/releases render live next to the macro's, so you can see exactly how early or late you actually were.
-- **Ghosts** — the macro's ghost and your own best-attempt ghost, both live in the trainer's own level, scrubbable. On the Jupiter tab the macro's ghost needs one bot run first: its built-in macro is inputs only.
-- **Segments** — name the hard parts, loop just those, get auto-suggested splits from click density.
-- **Stats** — attempts, session best, a death-position heatmap for when you want to know exactly where the level is bullying you.
-- Synced music, because grinding a segment in silence is a crime. Trap music, ideally.
-- **Video Mode** on both: the Jupiter tab plays its built-in showcase video, the Trainer tab plays any video you pick, riding the click bar's clock. Its opacity, sync offset and Alignment Tool sit in a small **Video settings** window over the video.
-- **Click Indicators** — the macro's clicks coming at you over the level, with every option of Bogdaner09's free mod, scored Perfect / OK / Miss. Counts as a cheat, since it takes the memory out of memory levels.
-
-## Rendering
-
-- Full gameplay capture to video via FFmpeg — resolution, FPS, bitrate, codec, hardware encoders auto-detected per GPU vendor (and libx264 if the one it picks won't open).
-- anticroom's intro card before the level, with every line yours to edit.
-- Optional 4-track audio output (combined, music, SFX, and frame-window cues each isolated) instead of one flattened track.
-- Frame-window markers and cues bake right into the output video.
-- Runs on FFmpeg 8.0.1 (GPL v3), bundled in the package; where those DLLs come from and their source: [guccibot-build-files](https://github.com/Nigelx1/guccibot-build-files).
+- Four more themes: **RondoBot**, **SolarBot**, **JupiterBot** and **GBot**, a disguise.
+- Calculate's **Default Look** (drawn like the counter in NaN GD's videos), your own text in the level over any input, presets (Balanced, Accuracy, Absolute) and **Max window**.
+- A stronger Pathfinder, with **Route drives** (experimental) and a much faster simulation of busy levels.
+- **Block inputs during playback** (on by default, as in Silicate), an intro card with every line yours to edit, BrrrBot's snow, Intel Macs, and fixes: a release and a press in one tick are recorded once (beta.5 could record extra presses there), reopening a level with random triggers no longer crashes, and the Safe mode switch works.
 
 ## Themes
 
-The full current roster. Pick one on the **Themes** page, or build your own there: **New custom theme** opens a full editor (colors, identity, quotes, your own BIG BRRRR track) for exactly this occasion.
+Pick one on the **Themes** page, or build your own there: **New custom theme** opens a full editor (colors, identity, quotes, your own BIG BRRRR track) for exactly this occasion.
+
+<details>
+<summary>The full roster: 20 themes, four more coming</summary>
 
 | Theme | Extension | Colors |
 |---|---|---|
@@ -96,14 +73,14 @@ The full current roster. Pick one on the **Themes** page, or build your own ther
 | GrizzleyBot | `.grizzley` | Charcoal + True Red |
 | **Red Kingdom** | `.redkingdom` | Blood red that *pulses*, because a static color wasn't intense enough |
 | LemonadeBot | `.lemonade` | Bright Yellow + Warm Black |
-| BrrrBot | `.icebrrr` | Icy Blue + Navy, with live snow falling behind the panel |
+| BrrrBot | `.icebrrr` | Icy Blue + Navy, with live snow falling behind the panel from the next release |
 | WakaBot | `.waka` | Grove Green + Black |
 | YoungstaBot | `.youngsta` | Black + Red (223) |
 | KnockerzBot | `.knockerz` | Teal + Black |
-| RondoBot | `.rondo` | Celtics Green + White, on the TD Garden's parquet with a gold trim |
-| SolarBot | `.solar` | Sun Yellow + Deep Orange, with Janet (Solar Flare's sun) rising in the corner and blue gems here and there |
-| JupiterBot | `.jupiter` | JMF Yellow + Night Blue: the JMF Trainer's look and sky on every page |
-| GBot | `.gbot` | Charcoal + Steel Blue, to hide true greatness from da opps |
+| RondoBot *(next release)* | `.rondo` | Celtics Green + White, on the TD Garden's parquet with a gold trim |
+| SolarBot *(next release)* | `.solar` | Sun Yellow + Deep Orange, with Janet (Solar Flare's sun) rising in the corner and blue gems here and there |
+| JupiterBot *(next release)* | `.jupiter` | JMF Yellow + Night Blue: the JMF Trainer's look and sky on every page |
+| GBot *(next release)* | `.gbot` | Charcoal + Steel Blue, to hide true greatness from da opps |
 | *Yours* | — | Whatever you want. That's the point. |
 
 SolarBot, JupiterBot and GBot have no BIG BRRRR; it comes back with any other theme, as you left it. GBot moves in silence: the menu answers to GBot, the Themes picker ducks into Settings, and the JMF Trainer and Credits pages, the BIG BRRRR card and the macro list's theme tags lie low until you switch back. New macros save as `.gbot`. Geode's mod list still knows the real name, so don't let anyone scroll that far.
@@ -112,29 +89,22 @@ GucciBot's own color is gold, for the record. Yellow everything this time, you k
 
 Also in Settings: **BIG BRRRR**, a core feature of this mod, with **Shake** and **Flicker** to make the whole menu react to the track's actual bass in real time. You'll know it when you feel it.
 
-## Building it
-
-- Target: Geometry Dash 2.2081. Every push to `master` builds Windows, macOS, iOS and Android on GitHub Actions (`.github/workflows/multi-platform.yml`) into **one `.geode` with everything in it**: all five platforms and every resource. That file *is* the release: one universal build per commit.
-- The renderer's FFmpeg DLLs are too big for this repo (one is over GitHub's 100 MB limit), so they live in [guccibot-build-files](https://github.com/Nigelx1/guccibot-build-files); the build downloads them and checks their SHA-256 before packing them in.
-- `.\install_ci_build.bat` installs GitHub's build of the commit you have checked out (waiting if it's still building) and keeps a copy in `build\ci\`.
-- Requires the [Geode SDK](https://geode-sdk.org/) and its usual toolchain (CMake, Ninja, MSVC).
-- A quick local Windows build:
-  ```
-  .\build_win.bat
-  ```
-- Every build bumps `GB_BUILD_LABEL` in `src/core/GucciBot.hpp` — check it before assuming which binary is actually running. This project got burned by testing a stale build exactly once, and once was enough. Trap or die, basically.
+</details>
 
 ## Status
 
-**1.8** is the stable release. **2.0** is in beta, at **2.0.0-beta.5**, with work since then on `master` (every push builds the universal package): GucciBot's engine reconciled against Silicate's function by function. Calculate, playback, practice-mode recording and the Pathfinder (Absense's, ported in) were confirmed in-game on beta.2. Beta.3 rebuilt the menu and every feature that came from ToastyReplay from scratch, and added macOS, iOS and Android. Beta.4's additions (auto safe mode, the setup check, the Disable bot switch, the phone menu, the Mac menu key) were tried in-game before release, and the Android build has run on a phone. Beta.5's (the in-game macro converter, Manual Frame Windows, Calculate's suggestions, the AI pathfinder's first steps) went out before a full in-game test. Since beta.5, a polish round checked what this README, about.md and the site advertise against the code; its fixes are in build 2026-10-30-a ([docs/POLISH_ROUND.md](docs/POLISH_ROUND.md) ticks each one) and haven't had their in-game test yet. Most of beta.3's rebuilt features still haven't had a feature-by-feature human test, and every fix still waiting on one says so in its own commit message. If you want something that's been tested by an actual human, use 1.8.
+2.0 is in beta. **2.0.0-beta.5** is the newest release, and the work since then lands on `master`, where every push builds the full package. What's left before 2.0, mostly the AI pathfinder and a test of every feature in the game, is ticked off in [docs/ROAD_TO_2_0.md](docs/ROAD_TO_2_0.md), and anything still waiting on its in-game test says so in its commit message.
 
-## Contact
+## Help and contact
+
+How to use it, setting it up, or anything that isn't a bug: ask in the Discord server, **[Nigel's Neighborhood](https://discord.gg/m95NUPdbpJ)**.
 
 Made by one person, so all of these reach the same human.
 
 | | |
 |---|---|
 | **Email** | [nigel@guccibot.net](mailto:nigel@guccibot.net) |
+| **Discord server** | [Nigel's Neighborhood](https://discord.gg/m95NUPdbpJ) |
 | **Discord** | `jimmybutlerfan` |
 | **Phone** | 555-ICE-COLD<sup>✱</sup> |
 
@@ -145,6 +115,9 @@ There's a [contact page](https://guccibot.net/contact/) on the site with the sam
 <sub>✱ Not a real number. There has never been a 555 area code, which is doing all of the work here.</sub>
 
 ## Credits
+
+<details>
+<summary>Nigelx1, Claude, Juice, anticroom, dihmaster500, DashBlaze, Isaiah, Absent, Bogdaner09, GWDdoS, ToastexGD, C0nscious and Gucci Mane</summary>
 
 - **Nigelx1** — creator and owner of GucciBot. Every idea, every theme, every decision is his call, down to the taste that keeps this from being a folder full of ternary chains.
 - **Claude** (Anthropic) — wrote essentially the entire codebase across every session of this project, including this README. Not a euphemism, not "AI-assisted," just the actual author of the code — Nigel wants that said plainly.
@@ -160,6 +133,8 @@ There's a [contact page](https://guccibot.net/contact/) on the site with the sam
 - **C0nscious** — implemented NaN GD's L* precision formula in C++ as [Frame Window Counter](https://github.com/hyper-5/frame-window-counter) (MIT), a mod named after NaN's video series. That implementation is the code that reached GucciBot, via anticroom.
 - **Gucci Mane** — he's the truth. Brrr.
 
+</details>
+
 ## License
 
 GucciBot is free software under the **GNU General Public License v3.0** — see [LICENSE](LICENSE).
@@ -167,6 +142,20 @@ GucciBot is free software under the **GNU General Public License v3.0** — see 
 It's built on [Silicate](https://git.puppy.lgbt/silicate/silicate) by peony, which is GPL-3.0, and includes anticroom's GPL-3.0 work from his Silicate fork; C0nscious's Frame Window Counter code is MIT, and the converter's TcBot reader follows [tcm-rs](https://github.com/tcbot-gd/tcm-rs) by tcbot.pro, also MIT; both are compatible. You're free to use it, study it, share it and change it. Anything you distribute that's built from it has to stay open source under the same license.
 
 **ToastyReplay.** GucciBot started out as a fork of [ToastyReplay](https://github.com/ToastexGD/ToastyReplay) by ToastexGD, and ToastyReplay's source code was used in GucciBot up to and including 2.0.0-beta.2. That code was removed on 2026-10-02 (commit `385a5f7`); versions after 2.0.0-beta.2 contain none of it.
+
+## Building it
+
+- Target: Geometry Dash 2.2081. Every push to `master` builds Windows, macOS, iOS and Android on GitHub Actions (`.github/workflows/multi-platform.yml`) into **one `.geode` with everything in it**: all five platforms and every resource. That file *is* the release: one universal build per commit.
+- The renderer's FFmpeg DLLs are too big for this repo (one is over GitHub's 100 MB limit), so they live in [guccibot-build-files](https://github.com/Nigelx1/guccibot-build-files); the build downloads them and checks their SHA-256 before packing them in.
+- `.\install_ci_build.bat` installs GitHub's build of the commit you have checked out (waiting if it's still building) and keeps a copy in `build\ci\`.
+- Requires the [Geode SDK](https://geode-sdk.org/) and its usual toolchain (CMake, Ninja, MSVC).
+- A quick local Windows build:
+  ```
+  .\build_win.bat
+  ```
+  and the offline tests: `.\run_tests.bat`.
+- Every build bumps `GB_BUILD_LABEL` in `src/core/GucciBot.hpp` — check it before assuming which binary is actually running. This project got burned by testing a stale build exactly once, and once was enough. Trap or die, basically.
+- A clone is about 260 MB: the BIG BRRRR tracks and the JMF Trainer's video live in the repo. The plans and audits behind the work are in [docs/](docs).
 
 ---
 
