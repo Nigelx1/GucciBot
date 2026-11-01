@@ -304,13 +304,14 @@ namespace gucci::ui::themes {
              {0.070f, 0.020f, 0.020f}, {0.980f, 0.960f, 0.960f}, {0.620f, 0.320f, 0.320f}, 5.f, 0.96f},
             {"KnockerzBot", vKnockerz, {0.070f, 0.780f, 0.720f}, {0.014f, 0.058f, 0.056f}, 0.96f,
              {0.027f, 0.098f, 0.093f}, {0.938f, 0.984f, 0.978f}, {0.420f, 0.600f, 0.580f}, 5.f, 0.96f},
-            // Nigel's 2026-10-31 four. RondoBot: Celtics green on white, the
-            // Garden's parquet for cards (its gold is in the backdrop).
+            // Nigel's 2026-10-31 four. RondoBot: the Celtics' home whites,
+            // Celtics green on white, cards white too (the Garden's parquet
+            // and gold are in the backdrop); its muted green 6.9:1 on white.
             // SolarBot: Solar Flare's sun-baked oranges, square and solid, the
             // accent breathing. JupiterBot: the JMF page's own colors. GBot:
             // plain and generic on purpose, an ordinary bot menu.
             {"RondoBot", vRondo, {0.000f, 0.478f, 0.200f}, {1.000f, 1.000f, 1.000f}, 0.97f,
-             {0.937f, 0.890f, 0.800f}, {0.000f, 0.392f, 0.165f}, {0.373f, 0.471f, 0.408f}, 5.f, 0.97f, false, false,
+             {1.000f, 1.000f, 1.000f}, {0.000f, 0.392f, 0.165f}, {0.290f, 0.373f, 0.322f}, 5.f, 0.97f, false, false,
              Scene::Garden},
             {"SolarBot", vSolar, {1.000f, 0.769f, 0.000f}, {0.604f, 0.239f, 0.000f}, 1.f,
              {0.420f, 0.165f, 0.000f}, {1.000f, 0.902f, 0.502f}, {0.941f, 0.690f, 0.376f}, 0.f, 1.f, true, false,

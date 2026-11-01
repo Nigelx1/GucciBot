@@ -75,7 +75,8 @@ namespace gucci::ui {
     void setLight(Palette& p, bool light) {
         p.light = light;
         if (light) {
-            // At least 4.5:1 on white and on RondoBot's tan cards.
+            // At least 4.5:1 on white, on the controls over it and in a
+            // chip's tint of themselves (4.9:1 and up).
             p.good = ImVec4(0.086f, 0.416f, 0.180f, 1.f);  // #166A2E
             p.warn = ImVec4(0.549f, 0.310f, 0.000f, 1.f);  // #8C4F00
             p.bad = ImVec4(0.706f, 0.137f, 0.094f, 1.f);   // #B42318
@@ -209,8 +210,8 @@ namespace gucci::ui {
     }
 
     float overLevelAlpha(float dark) {
-        // 0.92 white over black keeps RondoBot's ink near 6:1 and its muted
-        // text near 4:1; at 0.6 they were 2.6:1 and under 2.3:1.
+        // 0.92 white over black keeps RondoBot's ink and muted text near
+        // 6:1; at 0.6 they were under 2.6:1.
         return look().pal.light ? 0.92f : dark;
     }
 
