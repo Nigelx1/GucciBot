@@ -4,6 +4,7 @@
 #include "core/platform.hpp"
 #include "mcp/test_settings.hpp"
 
+#include "absense/glue.hpp"
 #include "analysis/ac/fw_settings_store.hpp"
 #include "analysis/pathfinder.hpp"
 #include "audio/bigbrrr.hpp"
@@ -263,6 +264,19 @@ namespace gucci::testset {
                 }
                 v.push_back(live("calc_mute", LiveType::Bool));
                 v.push_back(engineBool("pf_hide_search", [] () -> bool& { return Pathfinder::get()->hideSearch; }));
+                // The Pathfinder page's Exact start flags and Remember
+                // solutions: a search reads both from the container when it
+                // starts (absense/compat/bot.cpp).
+                v.push_back(live("pf_exact_start_flags", LiveType::Bool));
+                v.push_back(live("pf_remember_solutions", LiveType::Bool));
+                // Follow the planned route: the route planner keeps it after
+                // its first read (route/planner.cpp, g_guidance), so it goes
+                // through the row's setter, which sets both.
+                v.push_back({"pf_route_mode", "int", Store::Field,
+                             [] { return matjson::Value(static_cast<int64_t>(absense::routeGuidance())); },
+                             [](matjson::Value const& val, bool) {
+                                 absense::setRouteGuidance(static_cast<int>(wantInt("pf_route_mode", val, 0, 2)));
+                             }});
                 // Not a setting: one more id for Calculate's conflict check.
                 v.push_back({"fwac_conflict_test_id", "text", Store::Memory,
                              [] { return matjson::Value(g_conflictTestId); },
