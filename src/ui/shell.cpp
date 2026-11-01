@@ -3001,6 +3001,9 @@ namespace gucci::ui {
             // Before any window is drawn, so a scroll lands this frame.
             touch::frame();
 #endif
+            // A test holding Animations off (gucci_menu) holds the pulse too, so
+            // its shots compare.
+            look().stillShots = g_test.effects && !g_test.effectsOn && !look().effects;
             if (botswitch::takenOut()) {
                 g_brrrHeld = false;  // brrrFollowsTheme: switched off, nothing held
                 look().refresh();

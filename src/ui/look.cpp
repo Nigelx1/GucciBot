@@ -227,7 +227,7 @@ namespace gucci::ui {
         setLight(pal, luminance(theme.background) > 0.5f && luminance(theme.text) < luminance(theme.background));
 
         ImVec4 accent = theme.accent;
-        if (theme.pulse) {
+        if (theme.pulse && !stillShots) {
             // A slow breath between the colour and a brighter version of it
             // (a deeper one on a light theme).
             float const breath = 0.5f + 0.5f * std::sin(t * 2.2f);
