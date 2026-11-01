@@ -118,6 +118,13 @@ namespace gucci::ui {
     // Shows the sidebar's page with this title (exactly, else ignoring case).
     // False when the sidebar has none.
     bool setPageByTitle(const std::string& title);
+    // gucci_menu checks what it's asked before it changes anything: whether a
+    // theme has this name (as setTestTheme looks it up), and the sidebar's
+    // titles once a test's `theme` is on ("" the user's own, nullptr the one
+    // on now; GBot's sidebar has no Themes), and whether `title` is one.
+    bool hasTheme(const std::string& name);
+    std::vector<std::string> pageTitlesWith(const std::string* theme);
+    bool listsPage(const std::string& title, const std::string* theme);
 
     // A test's look: a theme by name (built-in or custom; exactly, else
     // ignoring case) and the Animations switch. Never saved: while one is on,

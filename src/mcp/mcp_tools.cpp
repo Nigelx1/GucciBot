@@ -34,6 +34,7 @@
 #include <cstring>
 #include <deque>
 #include <filesystem>
+#include <optional>
 #include <sstream>
 #include <fstream>
 #include <chrono>
@@ -560,20 +561,32 @@ namespace gucci::mcp {
                 if (argBool(a, "open", false) && GucciEngine::get()->standingDown)
                     throw ToolError("GucciBot is standing down (another bot is enabled), so its menu stays shut");
 
+                // The theme and the page are looked up before anything changes,
+                // the page in the sidebar as it will be under the theme asked
+                // for (GBot's has no Themes), so a wrong name leaves it all as
+                // it was.
+                std::optional<std::string> themeName;
                 if (a.contains("theme")) {
-                    auto const name = argStr(a, "theme");
-                    if (!ui::setTestTheme(name))
-                        throw ToolError("no theme called \"" + name + "\". Themes: " + list(ui::menuState().themes));
+                    themeName = argStr(a, "theme");
+                    if (!themeName->empty() && !ui::hasTheme(*themeName))
+                        throw ToolError("no theme called \"" + *themeName +
+                                        "\". Themes: " + list(ui::menuState().themes));
                 }
+                std::string const* const themeAsked = themeName ? &*themeName : nullptr;
+                if (a.contains("page")) {
+                    auto const title = argStr(a, "page");
+                    if (!ui::listsPage(title, themeAsked))
+                        throw ToolError("no page called \"" + title + "\" in the sidebar. Pages: " +
+                                        list(ui::pageTitlesWith(themeAsked)));
+                }
+
+                if (themeName)
+                    ui::setTestTheme(*themeName);
                 if (a.contains("effects"))
                     ui::setTestEffects(argBool(a, "effects", true));
                 // After the theme: one can take a page out of the sidebar.
-                if (a.contains("page")) {
-                    auto const title = argStr(a, "page");
-                    if (!ui::setPageByTitle(title))
-                        throw ToolError("no page called \"" + title + "\" in the sidebar. Pages: " +
-                                        list(ui::pageTitles()));
-                }
+                if (a.contains("page"))
+                    ui::setPageByTitle(argStr(a, "page"));
                 if (a.contains("open"))
                     ui::setOpen(argBool(a, "open", true));
 

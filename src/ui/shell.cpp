@@ -3170,7 +3170,61 @@ namespace gucci::ui {
                        return std::tolower(static_cast<unsigned char>(x)) == std::tolower(static_cast<unsigned char>(y));
                    });
         }
+
+        // The theme a name puts on (setTestTheme): its id, and a custom
+        // theme's name. Built-ins first, as a macro's theme tag picks them;
+        // the exact name first, then ignoring case.
+        struct NamedTheme {
+            int id;
+            std::string custom;
+        };
+        std::optional<NamedTheme> namedTheme(const std::string& name) {
+            for (bool const exact : {true, false}) {
+                for (auto const& t : themes::builtins())
+                    if (sameName(t.name, name, exact))
+                        return NamedTheme{t.id, {}};
+                for (auto const& t : themes::customs())
+                    if (sameName(t.name, name, exact))
+                        return NamedTheme{kCustomThemeId, t.name};
+            }
+            return std::nullopt;
+        }
+
+        // Out of the sidebar once a test's `theme` is on (pageTitlesWith).
+        // The only page a theme hides is the disguise's, so that one asks
+        // whether the theme then is GBot.
+        bool hiddenWith(const Page& page, const std::string* theme) {
+            if (!page.hidden)
+                return false;
+            if (!theme || page.hidden != disguised)
+                return page.hidden();
+            if (theme->empty())  // the user's own, as applySavedTheme reads it
+                return Mod::get()->getSavedValue<int64_t>("active_theme") == themes::kGBotTheme;
+            auto const t = namedTheme(*theme);
+            return t && t->id == themes::kGBotTheme;
+        }
     } // namespace
+
+    bool hasTheme(const std::string& name) {
+        return namedTheme(name).has_value();
+    }
+
+    std::vector<std::string> pageTitlesWith(const std::string* theme) {
+        std::vector<std::string> out;
+        for (auto const& page : kPages)
+            if (!hiddenWith(page, theme))
+                out.emplace_back(page.title);
+        return out;
+    }
+
+    bool listsPage(const std::string& title, const std::string* theme) {
+        auto const titles = pageTitlesWith(theme);
+        for (bool const exact : {true, false})
+            for (auto const& t : titles)
+                if (sameName(t, title, exact))
+                    return true;
+        return false;
+    }
 
     std::vector<std::string> pageTitles() {
         std::vector<std::string> out;
@@ -3205,26 +3259,17 @@ namespace gucci::ui {
                 look().effects = Mod::get()->getSavedValue<bool>("ui_effects", true);
             return true;
         }
-        // Built-ins first, as a macro's theme tag picks them.
-        for (bool const exact : {true, false}) {
-            for (auto const& t : themes::builtins())
-                if (sameName(t.name, name, exact)) {
-                    themes::setActive(t.id);
-                    g_test.theme = true;
-                    g_test.themeId = t.id;
-                    g_test.themeCustom.clear();
-                    return true;
-                }
-            for (auto const& t : themes::customs())
-                if (sameName(t.name, name, exact)) {
-                    themes::setActiveCustom(t.name);
-                    g_test.theme = true;
-                    g_test.themeId = kCustomThemeId;
-                    g_test.themeCustom = t.name;
-                    return true;
-                }
-        }
-        return false;
+        auto const t = namedTheme(name);
+        if (!t)
+            return false;
+        if (t->id == kCustomThemeId)
+            themes::setActiveCustom(t->custom);
+        else
+            themes::setActive(t->id);
+        g_test.theme = true;
+        g_test.themeId = t->id;
+        g_test.themeCustom = t->custom;
+        return true;
     }
 
     void setTestEffects(bool on) {
