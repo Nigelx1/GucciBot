@@ -92,8 +92,9 @@ namespace gucci::ui {
     //
     // GBot is a plain look with a plain name (Nigel, 2026-10-31): while it is
     // the theme in use, nothing on screen says GucciBot. Text that names the
-    // mod goes through these where it is shown. Saved values, file contents,
-    // log file names and the Credits page keep the real name.
+    // mod goes through these where it is shown. Saved values, file contents
+    // and log file names keep the real name; the Credits page, which names
+    // it too, leaves the sidebar instead (as Themes and the JMF Trainer do).
 
     // GBot is the theme in use. Until the menu has loaded its settings (a
     // popup at launch can come first) the saved choice decides.
@@ -121,7 +122,8 @@ namespace gucci::ui {
     // gucci_menu checks what it's asked before it changes anything: whether a
     // theme has this name (as setTestTheme looks it up), and the sidebar's
     // titles once a test's `theme` is on ("" the user's own, nullptr the one
-    // on now; GBot's sidebar has no Themes), and whether `title` is one.
+    // on now; GBot's sidebar has no Themes, JMF Trainer or Credits), and
+    // whether `title` is one.
     bool hasTheme(const std::string& name);
     std::vector<std::string> pageTitlesWith(const std::string* theme);
     bool listsPage(const std::string& title, const std::string* theme);

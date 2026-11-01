@@ -2528,15 +2528,18 @@ namespace gucci::ui {
             // While disguised (GBot) its picker is on Settings instead.
             {"Themes", pages::themes, nullptr, disguised},
             {"Settings", pageSettings},
-            {"Credits", pageCredits},
+            // It names GucciBot and everyone behind it, so while disguised
+            // (GBot) it's out of the sidebar too (Nigel, 2026-11-01: "yeah
+            // hide it"). Geode's own page for the mod still has the credits.
+            {"Credits", pageCredits, nullptr, disguised},
         };
         constexpr int kPageCount = static_cast<int>(sizeof(kPages) / sizeof(kPages[0]));
 
-        // The page can't be one the sidebar hides (Themes and the JMF
-        // Trainer, while disguised): picking GBot on Themes leaves it there,
-        // so it goes to Settings, where the picker is then, and so does a
-        // test's GBot put on over the JMF page. Found by its draw function,
-        // not its place.
+        // The page can't be one the sidebar hides (Themes, the JMF Trainer
+        // and Credits, while disguised): picking GBot on Themes leaves it
+        // there, so it goes to Settings, where the picker is then, and so
+        // does a test's GBot put on over the JMF page or Credits. Found by
+        // its draw function, not its place.
         void leaveHiddenPage() {
             if (!kPages[g_page].hidden || !kPages[g_page].hidden())
                 return;
@@ -3203,8 +3206,8 @@ namespace gucci::ui {
         }
 
         // Out of the sidebar once a test's `theme` is on (pageTitlesWith).
-        // The only pages a theme hides are the disguise's (Themes and the
-        // JMF Trainer), so those ask whether the theme then is GBot.
+        // The only pages a theme hides are the disguise's (Themes, the JMF
+        // Trainer and Credits), so those ask whether the theme then is GBot.
         bool hiddenWith(const Page& page, const std::string* theme) {
             if (!page.hidden)
                 return false;
@@ -3296,9 +3299,9 @@ namespace gucci::ui {
 
     MenuState menuState() {
         lapseTestLook();
-        // A test theme that hides the page showing (GBot hides Themes and
-        // the JMF Trainer) moves it at the next frame; said now as where it
-        // will be.
+        // A test theme that hides the page showing (GBot hides Themes, the
+        // JMF Trainer and Credits) moves it at the next frame; said now as
+        // where it will be.
         leaveHiddenPage();
         MenuState s;
         s.open = g_open;
