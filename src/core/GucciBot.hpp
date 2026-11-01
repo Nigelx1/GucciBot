@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-01-a (test tools: gucci_test_set never saved, open RobTop levels, test reads)"
+    "2026-11-01-b (pathfinder: every search flies the UFO, legs play two-tick units, test tools take the pathfinder switches)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
