@@ -6,6 +6,8 @@ GucciBot is a Geometry Dash macro bot built on Silicate's physics engine, with a
 
 **Website:** [guccibot.net](https://guccibot.net)
 
+**Stuck, or got a question?** Ask in the Discord server, [Nigel's Neighborhood](https://discord.gg/m95NUPdbpJ). **Found a bug?** Open an issue on [GitHub](https://github.com/Nigelx1/GucciBot/issues) and attach the newest file from `geode/logs`.
+
 ## Requirements
 
 - Geometry Dash 2.2081 on Windows, macOS, iOS or Android, Geode 5.10.1+ (macOS, iOS and Android are experimental: see Platforms)
