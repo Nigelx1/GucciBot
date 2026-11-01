@@ -1,8 +1,10 @@
 // RondoBot's scene (Nigel, 2026-10-31): the TD Garden's parquet behind the
-// menu, faint. Squares of five planks, running across in one square and down
-// in the next, every other plank a shade darker, at low alpha over the white
-// so the text stays crisp; and a thin line of Celtics gold along the bottom
-// edge and down the sidebar's inner edge, like a court's boundary.
+// menu, a hint of floor in the sidebar and the gaps between the cards.
+// Squares of five planks, running across in one square and down in the
+// next, every other plank a shade darker, at an alpha low enough that the
+// menu still reads white (the first one washed it tan) and the text stays
+// crisp; and a thin line of Celtics gold along the bottom edge and down the
+// sidebar's inner edge, like a court's boundary.
 //
 // Drawn the way the JMF sky is (trainer_pages.cpp jupiterBackdrop): on the
 // menu window's draw list before its children, so the cards stand in front;
@@ -43,7 +45,7 @@ namespace gucci::ui::pages {
 
         // The wood's own tone, then the squares: about eleven down the
         // window's short side, never smaller than 40 units.
-        dl->AddRectFilled(a, b, col(kPlankLight, 0.16f), style.WindowRounding);
+        dl->AddRectFilled(a, b, col(kPlankLight, 0.05f), style.WindowRounding);
         float const square = std::max(40.f, std::min(size.x, size.y) / 11.f);
         float const plank = square / 5.f;
         int const columns = static_cast<int>(std::ceil(size.x / square));
@@ -53,23 +55,23 @@ namespace gucci::ui::pages {
                 ImVec2 const s0(a.x + square * static_cast<float>(i), a.y + square * static_cast<float>(j));
                 bool const across = (i + j) % 2 == 0;  // the planks run across this square, down its neighbours
                 if (!across)
-                    dl->AddRectFilled(s0, ImVec2(s0.x + square, s0.y + square), col(kPlankDark, 0.06f));
+                    dl->AddRectFilled(s0, ImVec2(s0.x + square, s0.y + square), col(kPlankDark, 0.03f));
                 for (int k : {1, 3}) {
                     float const o = plank * static_cast<float>(k);
                     ImVec2 const p0 = across ? ImVec2(s0.x, s0.y + o) : ImVec2(s0.x + o, s0.y);
                     ImVec2 const p1 = across ? ImVec2(s0.x + square, s0.y + o + plank)
                                              : ImVec2(s0.x + o + plank, s0.y + square);
-                    dl->AddRectFilled(p0, p1, col(kPlankDark, 0.08f));
+                    dl->AddRectFilled(p0, p1, col(kPlankDark, 0.045f));
                 }
             }
         }
         for (int i = 1; i < columns; ++i) {
             float const x = a.x + square * static_cast<float>(i);
-            dl->AddLine(ImVec2(x, a.y), ImVec2(x, b.y), col(kSeam, 0.13f), 1.f);
+            dl->AddLine(ImVec2(x, a.y), ImVec2(x, b.y), col(kSeam, 0.09f), 1.f);
         }
         for (int j = 1; j < rows; ++j) {
             float const y = a.y + square * static_cast<float>(j);
-            dl->AddLine(ImVec2(a.x, y), ImVec2(b.x, y), col(kSeam, 0.13f), 1.f);
+            dl->AddLine(ImVec2(a.x, y), ImVec2(b.x, y), col(kSeam, 0.09f), 1.f);
         }
 
         // Celtics gold: along the bottom edge, clear of the rounded corners,
