@@ -6,28 +6,36 @@ library only, Windows.
 
     import assist
     assist.launch()                    # refuses if GD is already running
-    assist.ensure_safe()
-    assist.menu(open=True, page="Settings", theme="SolarBot", effects=False)
-    png = assist.shot("solar_settings")  # a path; the Read tool shows it
-    assist.menu(theme="")              # the user's own theme back (never saved anyway)
-    assist.close()                     # only a game launch() started
+    try:
+        assist.ensure_safe()
+        assist.menu(open=True, page="Settings", theme="SolarBot", effects=False)
+        png = assist.shot("solar_settings")  # a path; the Read tool shows it
+        assist.menu(theme="")          # the user's own theme back (never saved anyway)
+    finally:
+        assist.close()                 # only a game launch() started
 
 Or from a shell:
 
     python tools/assist.py call gucci_get_state
     python tools/assist.py call gucci_menu open=true "page=JMF Trainer"
     python tools/assist.py shot solar_settings 3
-    python tools/assist.py launch | ours | safe | close
+    python tools/assist.py launch | restart | ours | safe | close
 
 Values after key= are read as JSON when they parse (true, 3, "x") and as
 text otherwise.
 
 The game plays on the owner's real account, so launch() starts it with
-GUCCIBOT_FORCE_SAFE_MODE=1: safe mode on for that launch only, never saved
-(hacks/safemode.hpp). Check it with ensure_safe() before any run. A restart
-through gucci_restart_game starts a new process, which ours() won't know, and
-may not keep the variable: check ensure_safe() again, and gucci_force_safe_mode
-turns it on for the rest of that launch.
+GUCCIBOT_FORCE_SAFE_MODE=1 (safe mode on for that launch only, never saved;
+hacks/safemode.hpp) and only returns once the game says safe mode is forced.
+Every call goes to that game alone (ours()): whatever else answers on the
+port may be Nigel's own game, started from Steam while a test still runs, and
+call() refuses it. call(tool, _any_game=True) asks it anyway, for a
+supervised look with tools that only read.
+
+A new build loads through restart(), not a bare gucci_restart_game: the game
+comes back as a new process, which restart() follows (checking safe mode is
+still forced) so ours() and close() know it. Close in a finally: a forced game
+left open is where Nigel might play next, and his runs wouldn't count.
 """
 import csv
 import ctypes
@@ -44,17 +52,35 @@ from ctypes import wintypes
 URL = "http://127.0.0.1:8790/"
 GD_DIR = r"C:\Program Files (x86)\Steam\steamapps\common\Geode Geometry Dash"
 GD_EXE = os.path.join(GD_DIR, "GeometryDash.exe")
+GD_NAME = os.path.basename(GD_EXE).lower()
 PID_FILE = os.path.join(os.environ.get("TEMP") or tempfile.gettempdir(), "guccibot_assist_pid.txt")
 
 _id = 0
 
 
-def call(tool, /, **args):
+def call(tool, /, _any_game=False, **args):
     """Calls one of GucciBot's tools and returns its JSON. Raises on a tool error.
+
+    Only in the game launch() started (ours()): anything else answering on
+    the port may be Nigel's own game, on his real account. `_any_game=True`
+    asks whichever game answers, for a supervised look with tools that only
+    read. gucci_restart_game goes through restart(), which follows the game
+    into its new process.
 
     `tool` is positional-only, so tools with an argument called `name`
     (gucci_load_macro, gucci_open_level, gucci_screenshot) can be given it.
     """
+    if not _any_game:
+        if tool == "gucci_restart_game":
+            raise RuntimeError("restart the game with restart(): it follows the game into its new process")
+        if not ours():
+            raise RuntimeError(f"{tool}: no game launch() started is running, and a game that answers anyway "
+                               "may be Nigel's (_any_game=True asks it, for a supervised look that only reads)")
+    return _rpc(tool, args)
+
+
+def _rpc(tool, args):
+    """One tools/call to whatever answers on the port."""
     global _id
     _id += 1
     body = json.dumps({"jsonrpc": "2.0", "id": _id, "method": "tools/call",
@@ -79,8 +105,24 @@ _k32.QueryFullProcessImageNameW.argtypes = [wintypes.HANDLE, wintypes.DWORD, win
 _k32.GetProcessTimes.argtypes = [wintypes.HANDLE] + [ctypes.POINTER(wintypes.FILETIME)] * 4
 _k32.CloseHandle.argtypes = [wintypes.HANDLE]
 
+
+class _ProcessEntry(ctypes.Structure):  # PROCESSENTRY32W
+    _fields_ = [("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD), ("th32ProcessID", wintypes.DWORD),
+                ("th32DefaultHeapID", ctypes.c_size_t), ("th32ModuleID", wintypes.DWORD),
+                ("cntThreads", wintypes.DWORD), ("th32ParentProcessID", wintypes.DWORD),
+                ("pcPriClassBase", ctypes.c_long), ("dwFlags", wintypes.DWORD),
+                ("szExeFile", wintypes.WCHAR * 260)]
+
+
+_k32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+_k32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+_k32.Process32FirstW.argtypes = [wintypes.HANDLE, ctypes.POINTER(_ProcessEntry)]
+_k32.Process32NextW.argtypes = [wintypes.HANDLE, ctypes.POINTER(_ProcessEntry)]
+
 _QUERY_LIMITED_INFORMATION = 0x1000
 _STILL_ACTIVE = 259
+_SNAPPROCESS = 0x2
+_INVALID_HANDLE = wintypes.HANDLE(-1).value
 
 
 def _process(pid):
@@ -113,8 +155,26 @@ def _running(exe):
             if len(row) > 1 and row[0].lower() == exe.lower() and row[1].isdigit()]
 
 
+def _processes():
+    """{pid: (parent pid, exe name)} of every running process."""
+    snap = _k32.CreateToolhelp32Snapshot(_SNAPPROCESS, 0)
+    if not snap or snap == _INVALID_HANDLE:
+        return {}
+    try:
+        entry = _ProcessEntry()
+        entry.dwSize = ctypes.sizeof(entry)
+        out = {}
+        more = _k32.Process32FirstW(snap, ctypes.byref(entry))
+        while more:
+            out[entry.th32ProcessID] = (entry.th32ParentProcessID, entry.szExeFile)
+            more = _k32.Process32NextW(snap, ctypes.byref(entry))
+        return out
+    finally:
+        _k32.CloseHandle(snap)
+
+
 def _recorded():
-    """(pid, creation time) launch() wrote down, or None."""
+    """(pid, creation time) launch() (or restart()) wrote down, or None."""
     try:
         with open(PID_FILE) as f:
             pid, created = f.read().split()
@@ -123,28 +183,57 @@ def _recorded():
         return None
 
 
+def _record(pid, created):
+    with open(PID_FILE, "w") as f:
+        f.write(f"{pid} {created}")
+
+
+def _alive(rec):
+    """The process (pid, creation time) is still running as the GeometryDash.exe it was."""
+    now = _process(rec[0])
+    return bool(now) and now[0].lower() == GD_NAME and now[1] == rec[1]
+
+
 def ours():
-    """True while the game launch() started is still running.
+    """True while the game launch() started (or restart() followed) is still running.
 
     The PID it recorded is alive, is GeometryDash.exe, and was started when
     it was then (so a later process given the same number doesn't count).
     """
     rec = _recorded()
-    if not rec:
-        return False
-    now = _process(rec[0])
-    return bool(now) and now[0].lower() == os.path.basename(GD_EXE).lower() and now[1] == rec[1]
+    return bool(rec) and _alive(rec)
 
 
 # ---- the game ----------------------------------------------------------------
 
 def _answers():
-    """Assistant Access is up and the game's main thread runs its tools."""
+    """Assistant Access is up in our game and its main thread runs its tools."""
     try:
         call("gucci_get_state")
         return True
     except (OSError, http.client.HTTPException, RuntimeError, ValueError, KeyError):
         return False
+
+
+def _wait_for_tools(start, timeout):
+    """Until our game's Assistant Access answers; `start` is when the wait began (time.time())."""
+    while not _answers():
+        if not ours():
+            raise RuntimeError("the game closed while starting (Steam not signed in? Geode restarting "
+                               "it for an update? Then the new one isn't launch()'s)")
+        if time.time() - start > timeout:
+            raise TimeoutError(f"Assistant Access didn't answer within {timeout} s: is it on "
+                               "(Settings > Assistant Access)?")
+        time.sleep(1.0)
+
+
+def _require_forced():
+    """Raises unless our game has safe mode forced, forcing it first if the variable didn't reach it."""
+    if call("gucci_get_state")["safe_mode"].get("forced"):
+        return
+    call("gucci_force_safe_mode")
+    if not call("gucci_get_state")["safe_mode"].get("forced"):
+        raise RuntimeError("safe mode isn't forced in the game, and gucci_force_safe_mode didn't turn it on")
 
 
 def launch(force_safe=True, timeout=180, settle=20):
@@ -153,7 +242,8 @@ def launch(force_safe=True, timeout=180, settle=20):
     Refuses if any GeometryDash.exe is running already (it may be Nigel's), or
     if Steam isn't (the game can't start without it, and starting Steam is
     Nigel's call). With force_safe, the game's environment has
-    GUCCIBOT_FORCE_SAFE_MODE=1. Waits `settle` more seconds once it answers:
+    GUCCIBOT_FORCE_SAFE_MODE=1, and launch() doesn't return before the game
+    says safe mode is forced. Waits `settle` more seconds once it answers:
     opening a level while Mega Hack is still loading crashed it once.
     Assistant Access has to be on already (it's remembered across launches).
     """
@@ -184,20 +274,46 @@ def launch(force_safe=True, timeout=180, settle=20):
     info = _process(proc.pid)
     if not info:
         raise RuntimeError("the game closed right after starting")
-    with open(PID_FILE, "w") as f:
-        f.write(f"{proc.pid} {info[1]}")
+    _record(proc.pid, info[1])
 
-    start = time.time()
-    while not _answers():
-        if not ours():
-            raise RuntimeError("the game closed while starting (Steam not signed in? Geode restarting "
-                               "it for an update? Then the new one isn't launch()'s)")
-        if time.time() - start > timeout:
-            raise TimeoutError(f"Assistant Access didn't answer within {timeout} s: is it on "
-                               "(Settings > Assistant Access)?")
-        time.sleep(1.0)
+    _wait_for_tools(time.time(), timeout)
     time.sleep(settle)
+    if force_safe:
+        _require_forced()
     return proc.pid
+
+
+def restart(timeout=180, settle=20):
+    """Restarts our game (gucci_restart_game, so a new build loads) and follows it.
+
+    Geode restarts through GeodeUpdater.exe: the old game starts it and quits,
+    and it starts the new game once the old one has closed. Only a game
+    started down that line counts. The new process keeps the old one's
+    environment, so safe mode stays forced; restart() checks that (forcing it
+    again if it didn't), records the new process for ours() and close(), and
+    waits for it as launch() does. Returns the new PID.
+    """
+    if not ours():
+        raise RuntimeError("no game launch() started is running")
+    old = _recorded()
+    _rpc("gucci_restart_game", {})
+    start = time.time()
+    line = {old[0]}  # the old game and what it starts: GeodeUpdater.exe while it runs
+    while True:
+        procs = _processes()
+        line |= {pid for pid, (parent, _) in procs.items() if parent in line}
+        if not _alive(old):
+            for pid, (parent, exe) in procs.items():
+                info = _process(pid) if exe.lower() == GD_NAME and parent in line else None
+                if info and info[1] > old[1]:
+                    _record(pid, info[1])
+                    _wait_for_tools(start, timeout)
+                    time.sleep(settle)
+                    _require_forced()
+                    return pid
+        if time.time() - start > timeout:
+            raise TimeoutError(f"the game didn't come back within {timeout} s of gucci_restart_game")
+        time.sleep(0.25)
 
 
 def ensure_safe():
@@ -271,19 +387,24 @@ def _pairs(items):
 
 
 def main(argv):
-    usage = ("usage: assist.py call TOOL [key=value...] | menu [key=value...] | shot NAME [FRAMES] | "
-             "launch [--no-safe] | ensure_safe | ours | close")
+    usage = ("usage: assist.py call [--any-game] TOOL [key=value...] | menu [key=value...] | "
+             "shot NAME [FRAMES] | launch [--no-safe] | restart | ensure_safe | ours | close")
     if not argv:
         raise SystemExit(usage)
     cmd, rest = argv[0], argv[1:]
+    any_game = cmd == "call" and rest[:1] == ["--any-game"]
+    if any_game:
+        rest = rest[1:]
     if cmd == "call" and rest:
-        result = call(rest[0], **_pairs(rest[1:]))
+        result = call(rest[0], _any_game=any_game, **_pairs(rest[1:]))
     elif cmd == "menu":
         result = menu(**_pairs(rest))
     elif cmd == "shot" and rest:
         result = shot(rest[0], int(rest[1]) if len(rest) > 1 else 3)
     elif cmd == "launch":
         result = {"pid": launch(force_safe="--no-safe" not in rest)}
+    elif cmd == "restart":
+        result = {"pid": restart()}
     elif cmd in ("ensure_safe", "safe"):
         result = ensure_safe()
     elif cmd == "ours":
