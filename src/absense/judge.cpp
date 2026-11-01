@@ -152,6 +152,13 @@ namespace absense::judge {
                 s.onGround = p->m_isOnGround;
                 s.held = jumpHeld(p);
                 s.dead = s_died;
+                // GucciBot (2026-10-24, step 3): gravity (never filled in
+                // here before), kind, size and speed, as the copies' traces
+                // have them. What the game fired is not followed here (0).
+                s.upsideDown = p->m_isUpsideDown;
+                s.mode = (int8_t)Trajectory::modeOf(p);
+                s.mini = p->m_vehicleSize != 1.0f;
+                s.speed = p->m_playerSpeed;
                 trace->push_back(s);
             }
             if (s_died || s_complete)

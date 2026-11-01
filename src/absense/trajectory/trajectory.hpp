@@ -121,6 +121,15 @@ struct TraceSample {
     bool dual = false;       // the second player was simulated too
     float x2 = 0.0f;         // its position (dual mode)
     float y2 = 0.0f;
+    // GucciBot (2026-10-24, step 3 of docs/AI_KNOWS_THE_GAME_PLAN.md): its
+    // kind (Trajectory::FakeMode numbering: 0 cube ... 7 swing), whether it
+    // is mini, its speed (m_playerSpeed), and the object it fired on this
+    // tick - an orb, pad, portal or trigger, by m_uniqueID (the first when
+    // there were several; 0 for none, and always 0 in the real game's trace).
+    int8_t mode = 0;
+    bool mini = false;
+    float speed = 0.0f;
+    int fired = 0;
 };
 
 class Trajectory {
@@ -568,6 +577,7 @@ class Trajectory {
     std::unordered_map<uintptr_t, unsigned> m_ringUsed[2];   // ring -> tick it was activated on
     uint64_t m_ringsUsed = 0;  // GucciBot: orbs the copies have used, ever (a trace's TraceSample::ring)
     uint64_t m_ringsUsedHash[2] = {0, 0};  // GucciBot (2026-10-24): see ringsUsedHash
+    int m_firedThisTick[2] = {0, 0};  // GucciBot (step 3): see firedThisTick
     Killer m_killer;
     std::shared_ptr<SimStart> m_start;  // runs begin from this instead of the real player (see useStart)
     std::vector<Phantom> m_phantoms;
@@ -1103,10 +1113,20 @@ class Trajectory {
                                  PlayerObject* player) {
         if (player == m_fakePlayer1) {
             m_activatedObjectsP1.insert((uintptr_t)object);
+            if (object && m_firedThisTick[0] == 0) m_firedThisTick[0] = object->m_uniqueID;
         } else if (player == m_fakePlayer2) {
             m_activatedObjectsP2.insert((uintptr_t)object);
+            if (object && m_firedThisTick[1] == 0) m_firedThisTick[1] = object->m_uniqueID;
         }
     }
+    // GucciBot (2026-10-24, step 3): the first object each copy fired since
+    // the last forgetFired (TraceSample::fired): run() asks after each tick.
+    int firedThisTick(const PlayerObject* copy) const {
+        if (copy == m_fakePlayer1) return m_firedThisTick[0];
+        if (copy == m_fakePlayer2) return m_firedThisTick[1];
+        return 0;
+    }
+    void forgetFired() { m_firedThisTick[0] = m_firedThisTick[1] = 0; }
 
     // Whether this copy's run has fired the object, whatever its multi-activate
     // or platformer rule (playerHasActivated applies those).

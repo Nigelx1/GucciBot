@@ -274,9 +274,24 @@ namespace {
         return inputs;
     }
 
+    // The kind's name in Trajectory::FakeMode numbering ("?" outside 0-7),
+    // in the words of the step3-brief rulebook's model::modeName - the
+    // rulebook itself isn't on master.
+    const char* kindName(int mode) {
+        static constexpr const char* kKinds[] = {"cube", "ship", "ball", "UFO", "wave", "robot", "spider", "swing"};
+        return mode >= 0 && mode < 8 ? kKinds[mode] : "?";
+    }
+
+    // GucciBot (2026-10-24, step 3): the kind, size, speed, gravity and the
+    // object fired on the tick (TraceSample's newer fields), for the lines below.
+    std::string sampleState(TraceSample const& s) {
+        return fmt::format(" {}{} s{:.2f}{}{}", kindName(s.mode), s.mini ? " mini" : "", s.speed,
+                           s.upsideDown ? " UD" : "", s.fired != 0 ? fmt::format(" fired {}", s.fired) : std::string());
+    }
+
     std::string sampleText(TraceSample const& s) {
-        return fmt::format("x={:.3f} y={:.3f} vy={:.3f}{}{}{}", s.x, s.y, s.yVel, s.held ? " H" : "",
-                           s.onGround ? " G" : "", s.dead ? " DEAD" : "");
+        return fmt::format("x={:.3f} y={:.3f} vy={:.3f}{}{}{}{}", s.x, s.y, s.yVel, s.held ? " H" : "",
+                           s.onGround ? " G" : "", s.dead ? " DEAD" : "", sampleState(s));
     }
 }  // namespace
 
@@ -412,13 +427,14 @@ matjson::Value absense::simulate(std::vector<ScriptTick> const& script, int tick
     int const step = std::max(1, every);
     for (size_t i = 0; i < trace.size(); i++) {
         auto const& s = trace[i];
-        if (s.tick % step != 0 && i + 1 != trace.size() && !s.dead)
+        // (A tick that fired something is always listed.)
+        if (s.tick % step != 0 && i + 1 != trace.size() && !s.dead && s.fired == 0)
             continue;
-        path.push(fmt::format("{} x={:.1f} y={:.1f} vy={:.2f}{}{}{}",
+        path.push(fmt::format("{} x={:.1f} y={:.1f} vy={:.2f}{}{}{}{}",
                               s.tick, s.x, s.y, s.yVel,
                               s.held ? " H" : "",
                               s.onGround ? " G" : "",
-                              s.dead ? " DEAD" : ""));
+                              s.dead ? " DEAD" : "", sampleState(s)));
     }
     out["path"] = path;
     return out;

@@ -3851,6 +3851,7 @@ RunResult Trajectory::run(GJBaseGameLayer* pl, bool p1,
     for (int i = 0; i < ticks; i++) {
         const TickInput in = inputs.empty() ? TickInput{} : inputs[std::min<size_t>((size_t)i, inputs.size() - 1)];
         const uint64_t ringsBefore = m_ringsUsed;
+        forgetFired();
         const bool dead = s.step(in);
         s.fill(result);
         if (m_traceWatch) m_traceWatch(i + 1);
@@ -3869,6 +3870,11 @@ RunResult Trajectory::run(GJBaseGameLayer* pl, bool p1,
             sample.held = s.down;
             sample.dead = dead;
             sample.ring = m_ringsUsed != ringsBefore;
+            // GucciBot (2026-10-24, step 3): kind, size, speed, what it fired.
+            sample.mode = (int8_t)modeOf(player);
+            sample.mini = player->m_vehicleSize != 1.0f;
+            sample.speed = player->m_playerSpeed;
+            sample.fired = firedThisTick(player);
             if (s.count == 2) {
                 sample.dual = true;
                 const cocos2d::CCPoint pos2 = s.players[1]->getPosition();
