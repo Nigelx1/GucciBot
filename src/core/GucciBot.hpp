@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-01-c (pathfinder: exact start flags on by default, the drift check watches plans made ahead, killers and the level map read real positions, the map follows teleport portals; test tools redraw Calculate markers)"
+    "2026-11-01-d (GBot hides the Credits page too, Animations off stops the accent pulse, gucci_sim_vs_real keeps the button held through its restore; the GBot write-up reworded)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
