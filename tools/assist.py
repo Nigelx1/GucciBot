@@ -36,17 +36,46 @@ A new build loads through restart(), not a bare gucci_restart_game: the game
 comes back as a new process, which restart() follows (checking safe mode is
 still forced) so ours() and close() know it. Close in a finally: a forced game
 left open is where Nigel might play next, and his runs wouldn't count.
+
+A test batch (the 2026-11-01 test plans) also proves it left Nigel's files
+alone:
+
+    before = assist.snapshot()         # saved.json, GD's saves, the mod's folders
+    assist.copy_macro("Clubstep 2", "zz_gbtest_cs")   # tests use copies only
+    assist.launch()
+    try:
+        assist.ensure_safe()
+        assist.test_set("test_mute", True)             # gucci_test_set, never saved
+        mark = assist.log_mark("guccibot_fw.log")
+        ...
+        lines = assist.log_since(mark, grep="[fw]")
+    finally:
+        assist.close()                 # gucci_test_set reset first
+    assist.sweep()                     # every zz_gbtest_ file, wherever it went
+    assist.check(before, assist.snapshot())   # raises SavesChanged
+
+check() fails on any change outside the allowlist, which learn() builds from a
+no-op session (launch, ensure_safe, close): GD rewrites its saves on every
+close, so only the keys a no-op session changes may change.
 """
+import base64
+import contextlib
 import csv
 import ctypes
+import fnmatch
+import gzip
+import hashlib
 import http.client
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
 import time
 import urllib.request
+import xml.etree.ElementTree as ET
+import zlib
 from ctypes import wintypes
 
 URL = "http://127.0.0.1:8790/"
@@ -387,14 +416,38 @@ def menu(**kw):
     return call("gucci_menu", **kw)
 
 
+def test_set(key=None, value=None, reset=False, list=False):
+    """gucci_test_set: one setting for this launch only, never saved (refused unless safe mode is forced).
+
+    test_set("hack_force_platformer", True); test_set(reset=True); test_set(list=True).
+    """
+    if reset:
+        return call("gucci_test_set", reset=True)
+    if list:
+        return call("gucci_test_set", list=True)
+    return call("gucci_test_set", key=key, value=value)
+
+
+# Set by close(): how its gucci_test_set reset went (None when it answered fine).
+last_reset_error = None
+
+
 def close(timeout=60):
     """Closes the game launch() started, the way its window's close button does (it saves).
 
-    Refuses for any other game. Waits for it to exit; never kills it.
+    Puts every gucci_test_set setting back first (they never reach the disk
+    anyway; this keeps the game's memory clean too). Refuses for any other
+    game. Waits for it to exit; never kills it.
     """
+    global last_reset_error
     if not ours():
         raise RuntimeError("no game launch() started is running; a game someone else started is "
                            "theirs to close")
+    last_reset_error = None
+    try:
+        call("gucci_test_set", reset=True)
+    except (OSError, http.client.HTTPException, RuntimeError, ValueError, KeyError) as e:
+        last_reset_error = str(e)  # an older build has no gucci_test_set: nothing to put back
     pid = _recorded()[0]
     subprocess.run(["powershell", "-NoProfile", "-Command",
                     f"(Get-Process -Id {pid}).CloseMainWindow() | Out-Null"],
@@ -408,6 +461,325 @@ def close(timeout=60):
         os.remove(PID_FILE)
     except OSError:
         pass
+
+
+# ---- Nigel's files: snapshots, the allowlist, test copies, logs --------------
+#
+# Only ever read, except the zz_gbtest_ files a test makes itself.
+
+GD_SAVE_DIR = os.path.join(os.environ.get("LOCALAPPDATA", ""), "GeometryDash")
+MOD_SAVE_DIR = os.path.join(GD_SAVE_DIR, "geode", "mods", MOD_ID)
+MOD_CONFIG_DIR = os.path.join(GD_SAVE_DIR, "geode", "config", MOD_ID)
+SAVED_JSON = os.path.join(MOD_SAVE_DIR, "saved.json")
+REPLAYS = os.path.join(MOD_SAVE_DIR, "replays")
+GD_SAVES = ("CCGameManager.dat", "CCGameManager2.dat", "CCLocalLevels.dat", "CCLocalLevels2.dat")
+TEST_PREFIX = "zz_gbtest_"
+# Learned from a no-op session on this PC, so it lives with the PID file, not in the repo.
+ALLOWLIST = os.path.join(os.path.dirname(PID_FILE), "guccibot_assist_allowlist.json")
+# The mod folder's files a snapshot leaves out: logs grow, shots are the test's own.
+_TREE_SKIP = ("*.log", "screenshots/*", "saved.json")
+
+
+def _sha(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def gd_decode(path):
+    """A GD save (.dat) as its XML text: XOR 11, base64, gzip. Read only."""
+    with open(path, "rb") as f:
+        raw = f.read()
+    if raw.lstrip().startswith(b"<?xml"):
+        return raw.decode("utf-8", "replace")
+    x = bytes(b ^ 11 for b in raw).rstrip(b"\x00").strip()
+    x = x.replace(b"-", b"+").replace(b"_", b"/")
+    data = base64.b64decode(x + b"=" * (-len(x) % 4))
+    try:
+        return gzip.decompress(data).decode("utf-8", "replace")
+    except (OSError, EOFError, zlib.error):
+        return zlib.decompress(data[10:], -15).decode("utf-8", "replace")
+
+
+def gd_flatten(xml_text):
+    """{key path: value} from GD's plist (<k>key</k> then <s>/<i>/<r>/<t/>/<d>...).
+
+    Paths join dict keys with '/': GLM_03/12345/k18. Values over 64 characters
+    (level strings) are kept as a hash, so a snapshot stays small.
+    """
+    root = ET.fromstring(xml_text)
+    top = root[0] if len(root) else root
+    out = {}
+
+    def walk(d, prefix):
+        children = list(d)
+        i = 0
+        while i < len(children):
+            k = children[i]
+            if k.tag != "k":
+                i += 1
+                continue
+            path = prefix + (k.text or "")
+            v = children[i + 1] if i + 1 < len(children) else None
+            i += 2
+            if v is None:
+                out[path] = None
+            elif v.tag in ("d", "dict"):
+                walk(v, path + "/")
+            elif v.tag in ("t", "true"):
+                out[path] = "true"
+            elif v.tag in ("f", "false"):
+                out[path] = "false"
+            else:
+                text = v.text or ""
+                out[path] = text if len(text) <= 64 else "sha:" + _sha(text.encode("utf-8", "replace"))[:16]
+
+    walk(top, "")
+    return out
+
+
+def _tree(base):
+    """{relative path: sha256} of every file under base (but _TREE_SKIP)."""
+    out = {}
+    if not os.path.isdir(base):
+        return out
+    for dirpath, _, files in os.walk(base):
+        for name in files:
+            full = os.path.join(dirpath, name)
+            rel = os.path.relpath(full, base).replace("\\", "/")
+            if any(fnmatch.fnmatch(rel, p) for p in _TREE_SKIP):
+                continue
+            try:
+                h = hashlib.sha256()
+                with open(full, "rb") as f:
+                    for chunk in iter(lambda: f.read(1 << 20), b""):
+                        h.update(chunk)
+                out[rel] = h.hexdigest()
+            except OSError as e:
+                out[rel] = f"unreadable: {e}"
+    return out
+
+
+def snapshot():
+    """Everything a test must leave as it was, read only: saved.json by key, GD's saves by
+    key (decoded), and every file in GucciBot's save and config folders by hash."""
+    snap = {"time": time.time(), "saved_json": None, "gd": {}, "gd_sha": {},
+            "mod_files": _tree(MOD_SAVE_DIR), "config_files": _tree(MOD_CONFIG_DIR)}
+    try:
+        with open(SAVED_JSON, encoding="utf-8") as f:
+            snap["saved_json"] = {k: json.dumps(v, sort_keys=True) for k, v in json.load(f).items()}
+    except (OSError, ValueError) as e:
+        snap["saved_json_error"] = str(e)
+    for name in GD_SAVES:
+        path = os.path.join(GD_SAVE_DIR, name)
+        if not os.path.exists(path):
+            continue
+        with open(path, "rb") as f:
+            snap["gd_sha"][name] = _sha(f.read())
+        try:
+            snap["gd"][name] = gd_flatten(gd_decode(path))
+        except (ValueError, OSError, zlib.error, ET.ParseError) as e:
+            snap["gd"][name] = None  # compared by bytes only
+            snap.setdefault("gd_errors", {})[name] = str(e)
+    return snap
+
+
+def _keydiff(a, b):
+    a, b = a or {}, b or {}
+    return sorted(k for k in set(a) | set(b) if a.get(k) != b.get(k) or (k in a) != (k in b))
+
+
+def diff(before, after):
+    """What changed between two snapshots, as lists of names:
+    {"saved_json": [keys], "gd": {file: [key paths]}, "mod_files": [...], "config_files": [...]}."""
+    out = {"saved_json": _keydiff(before.get("saved_json"), after.get("saved_json")), "gd": {},
+           "mod_files": _keydiff(before.get("mod_files"), after.get("mod_files")),
+           "config_files": _keydiff(before.get("config_files"), after.get("config_files"))}
+    for name in sorted(set(before.get("gd_sha", {})) | set(after.get("gd_sha", {}))):
+        a, b = before.get("gd", {}).get(name), after.get("gd", {}).get(name)
+        if a is not None and b is not None:
+            changed = _keydiff(a, b)
+        else:  # one side couldn't be decoded: the whole file, by bytes
+            changed = ["<bytes>"] if before.get("gd_sha", {}).get(name) != after.get("gd_sha", {}).get(name) else []
+        if changed:
+            out["gd"][name] = changed
+    return out
+
+
+def _flat(d):
+    """diff()'s result as 'area:name' strings, the allowlist's form."""
+    items = [f"saved_json:{k}" for k in d["saved_json"]]
+    items += [f"gd:{name}:{k}" for name, keys in d["gd"].items() for k in keys]
+    items += [f"mod_files:{k}" for k in d["mod_files"]]
+    items += [f"config_files:{k}" for k in d["config_files"]]
+    return items
+
+
+def load_allowlist(path=ALLOWLIST):
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return []
+
+
+def learn(before, after, path=ALLOWLIST, fresh=False):
+    """Adds what a no-op session changed (launch, ensure_safe, close: no test) to the allowlist.
+
+    Entries are 'area:name' and may hold fnmatch wildcards added by hand, e.g.
+    'gd:CCGameManager.dat:GS_value/*'. Returns the allowlist.
+    """
+    allow = [] if fresh else load_allowlist(path)
+    for item in _flat(diff(before, after)):
+        if item not in allow:
+            allow.append(item)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(sorted(allow), f, indent=1)
+    return sorted(allow)
+
+
+class SavesChanged(RuntimeError):
+    """A batch changed Nigel's files outside the allowlist; `.unexpected` lists what."""
+
+    def __init__(self, unexpected):
+        self.unexpected = unexpected
+        more = f" (+{len(unexpected) - 20} more)" if len(unexpected) > 20 else ""
+        super().__init__("changed outside the allowlist: " + ", ".join(unexpected[:20]) + more)
+
+
+def check(before, after, allow=None):
+    """Raises SavesChanged on any change outside the allowlist (default: load_allowlist()).
+
+    Fails with no allowlist at all: learn() one from a no-op session first.
+    Returns the changes it allowed.
+    """
+    if allow is None:
+        allow = load_allowlist()
+        if not allow and not os.path.exists(ALLOWLIST):
+            raise RuntimeError(f"no allowlist at {ALLOWLIST}: learn() one from a no-op session first")
+    items = _flat(diff(before, after))
+    unexpected = [i for i in items if not any(fnmatch.fnmatchcase(i, p) for p in allow)]
+    if unexpected:
+        raise SavesChanged(unexpected)
+    return items
+
+
+def _test_only(path):
+    """Raises unless the file's own name is a test's (zz_gbtest_...)."""
+    if TEST_PREFIX not in os.path.basename(path):
+        raise RuntimeError(f"not a test file: {path} (test files are named {TEST_PREFIX}...)")
+    return path
+
+
+def copy_macro(source, test_name):
+    """Copies replays/<source>.<ext> (the macro file only, no sidecars) to replays/<test_name>.<ext>.
+
+    test_name must start with zz_gbtest_. Returns the copy's path.
+    """
+    if not test_name.startswith(TEST_PREFIX):
+        raise RuntimeError(f"test copies are named {TEST_PREFIX}...: {test_name!r}")
+    found = [n for n in os.listdir(REPLAYS)
+             if os.path.isfile(os.path.join(REPLAYS, n)) and os.path.splitext(n)[0] == source
+             and not n.endswith(".bak")]
+    if len(found) != 1:
+        raise RuntimeError(f"no single macro called {source!r} in {REPLAYS}: {found}")
+    dst = _test_only(os.path.join(REPLAYS, test_name + os.path.splitext(found[0])[1]))
+    shutil.copyfile(os.path.join(REPLAYS, found[0]), dst)
+    return dst
+
+
+def test_path(*parts):
+    """A path under GucciBot's save folder for a test's own file or folder (a click pack,
+    a custom theme): the last part must start with zz_gbtest_. Makes the parent folders."""
+    path = os.path.join(MOD_SAVE_DIR, *parts)
+    if not parts[-1].startswith(TEST_PREFIX):
+        raise RuntimeError(f"test files are named {TEST_PREFIX}...: {parts[-1]!r}")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    return path
+
+
+def sweep():
+    """Deletes every test file (zz_gbtest_ in its name) wherever GucciBot puts copies:
+    replays and its sidecars, converted, imported and exports folders, click packs,
+    custom themes, renders and render presets. Returns what it removed."""
+    places = [REPLAYS] + [os.path.join(REPLAYS, d) for d in ("sidecars", "converted", "imported", "exports")]
+    places += [os.path.join(MOD_SAVE_DIR, d) for d in ("clickpacks", "customthemes", "renders", "presets")]
+    places += [os.path.join(MOD_CONFIG_DIR, "render_presets")]
+    removed = []
+    for place in places:
+        if not os.path.isdir(place):
+            continue
+        for name in os.listdir(place):
+            if TEST_PREFIX not in name:
+                continue
+            path = _test_only(os.path.join(place, name))
+            if os.path.isdir(path):
+                shutil.rmtree(path)
+            else:
+                os.remove(path)
+            removed.append(path)
+    return removed
+
+
+def log_path(name="geode"):
+    """'geode' is Geode's newest log; anything else is a bare .log name in GucciBot's save folder."""
+    if name == "geode":
+        logs = [os.path.join(GEODE_LOGS, n) for n in os.listdir(GEODE_LOGS) if n.endswith(".log")]
+        return max(logs, key=os.path.getmtime)
+    if os.path.basename(name) != name or not name.endswith(".log"):
+        raise RuntimeError(f"a bare .log name: {name!r}")
+    return os.path.join(MOD_SAVE_DIR, name)
+
+
+def log_mark(name="geode"):
+    """Where a log ends now: (path, byte offset). Read what comes after with log_since()."""
+    path = log_path(name)
+    try:
+        return path, os.path.getsize(path)
+    except OSError:
+        return path, 0
+
+
+def log_since(mark, grep=None, max_bytes=16 << 20):
+    """The lines a log gained since log_mark() (read from disk, not through the game:
+    guccibot_fw.log runs to hundreds of MB). Only lines containing `grep`, if given;
+    at most the last max_bytes. A log that shrank (a new file) is read from the start."""
+    path, offset = mark
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        return []
+    if size < offset:
+        offset = 0
+    offset = max(offset, size - max_bytes)
+    with open(path, "rb") as f:
+        f.seek(offset)
+        text = f.read(size - offset).decode("utf-8", "replace")
+    lines = text.splitlines()
+    return [ln for ln in lines if grep in ln] if grep else lines
+
+
+@contextlib.contextmanager
+def batch(macros=(), mute=True, allow=None):
+    """One test batch's frame: sweep, snapshot, copy the test macros, launch, ensure_safe,
+    mute (gucci_test_set test_mute); then always close (reset first), sweep and check().
+
+    macros: (source name, zz_gbtest_ name) pairs. Raises SavesChanged after the
+    batch if anything outside the allowlist changed.
+    """
+    sweep()
+    before = snapshot()
+    for source, test_name in macros:
+        copy_macro(source, test_name)
+    try:
+        launch()
+        ensure_safe()
+        if mute:
+            test_set("test_mute", True)
+        yield before
+    finally:
+        if ours():  # also a game launch() started and then gave up on
+            close()
+        sweep()
+    check(before, snapshot(), allow)
 
 
 # ---- command line ------------------------------------------------------------
@@ -431,7 +803,43 @@ def _pairs(items):
 
 def main(argv):
     usage = ("usage: assist.py call [--any-game] TOOL [key=value...] | menu [key=value...] | "
-             "shot NAME [FRAMES] | launch [--no-safe] | restart | ensure_safe | ours | close")
+             "shot NAME [FRAMES] | launch [--no-safe] | restart | ensure_safe | ours | close | "
+             "snapshot FILE | diff BEFORE AFTER | learn BEFORE AFTER | check BEFORE AFTER | sweep | "
+             "copy SOURCE ZZ_GBTEST_NAME | test_set KEY VALUE | test_set reset | test_set list")
+    if argv and argv[0] in ("snapshot", "diff", "learn", "check"):
+        def read(p):
+            with open(p, encoding="utf-8") as f:
+                return json.load(f)
+        if argv[0] == "snapshot" and len(argv) == 2:
+            with open(argv[1], "w", encoding="utf-8") as f:
+                json.dump(snapshot(), f)
+            print(json.dumps({"saved": argv[1]}))
+            return
+        if len(argv) != 3:
+            raise SystemExit(usage)
+        before, after = read(argv[1]), read(argv[2])
+        if argv[0] == "diff":
+            print(json.dumps(diff(before, after), indent=2))
+        elif argv[0] == "learn":
+            print(json.dumps({"allowlist": ALLOWLIST, "entries": len(learn(before, after))}))
+        else:
+            print(json.dumps({"ok": True, "allowed": check(before, after)}, indent=2))
+        return
+    if argv and argv[0] == "sweep":
+        print(json.dumps({"removed": sweep()}, indent=2))
+        return
+    if argv and argv[0] == "copy" and len(argv) == 3:
+        print(json.dumps({"copied": copy_macro(argv[1], argv[2])}))
+        return
+    if argv and argv[0] == "test_set" and len(argv) >= 2:
+        if argv[1] in ("reset", "list") and len(argv) == 2:
+            result = test_set(**{argv[1]: True})
+        elif len(argv) == 3:
+            result = test_set(argv[1], _value(argv[2]))
+        else:
+            raise SystemExit(usage)
+        print(json.dumps(result, indent=2))
+        return
     if not argv:
         raise SystemExit(usage)
     cmd, rest = argv[0], argv[1:]
