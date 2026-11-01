@@ -40,9 +40,11 @@ namespace gucci::ui::pages {
             Tone tone = Tone::Muted;
         };
 
+        // Said as shown: a load error names the mod ("It isn't a GucciBot
+        // (GBR6) macro..."), which is GBot's while disguised.
         void message(Message const& m) {
             if (!m.text.empty())
-                kit::Note(m.text.c_str(), m.tone);
+                kit::Note(branded(m.text).c_str(), m.tone);
         }
 
         // A macro picker that remembers the name, not the position, so a
