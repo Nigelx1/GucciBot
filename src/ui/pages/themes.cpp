@@ -672,15 +672,19 @@ namespace gucci::ui::pages {
             }
             kit::EndCard();
 
+            // A pick is the user's, the theme a test has on (gucci_menu)
+            // included: it ends the test's and is saved.
             if (useBuiltin >= 0) {
                 s_notice = {};
-                if (activeId != useBuiltin) {
+                bool const wasTest = gucci::ui::endTestTheme();
+                if (activeId != useBuiltin || wasTest) {
                     th::setActive(useBuiltin);
                     gucci::ui::saveSettings();
                 }
             } else if (!useCustom.empty()) {
                 s_notice = {};
-                if (activeId != kCustomThemeId || activeCustom != useCustom) {
+                bool const wasTest = gucci::ui::endTestTheme();
+                if (activeId != kCustomThemeId || activeCustom != useCustom || wasTest) {
                     th::setActiveCustom(useCustom);
                     gucci::ui::saveSettings();
                 }

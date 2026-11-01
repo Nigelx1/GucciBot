@@ -127,6 +127,10 @@ namespace gucci::ui {
     // and nothing changes, when no theme has that name.
     bool setTestTheme(const std::string& name);
     void setTestEffects(bool on);
+    // The user picked a theme (the Themes picker): a test's theme ends there,
+    // even when the pick is the one the test put on, so theirs is saved. True
+    // when a test's theme was on.
+    bool endTestTheme();
 
     struct MenuState {
         bool open = false;

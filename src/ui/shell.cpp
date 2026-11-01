@@ -3233,6 +3233,10 @@ namespace gucci::ui {
         look().effects = on;
     }
 
+    bool endTestTheme() {
+        return std::exchange(g_test.theme, false);
+    }
+
     MenuState menuState() {
         lapseTestLook();
         // A test theme that hides the page showing (GBot hides Themes) moves
