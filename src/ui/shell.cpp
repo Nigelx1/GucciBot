@@ -2510,7 +2510,9 @@ namespace gucci::ui {
             {"Hacks", pageHacks},
             {"Macro Tools", pageMacroTools},
             {"Calculate", pages::calculate},
-            {"JMF Trainer", pages::jupiterTrainer, pages::jupiterBackdrop},
+            // GucciBot's alone, and it says "Jupiter My Favourite": while
+            // disguised (GBot) it would give the mod away.
+            {"JMF Trainer", pages::jupiterTrainer, pages::jupiterBackdrop, disguised},
             {"Trainer", pages::anyTrainer},
             {"Pathfinder", pagePathfinder},
             {"Render", pageRender},
@@ -2522,9 +2524,11 @@ namespace gucci::ui {
         };
         constexpr int kPageCount = static_cast<int>(sizeof(kPages) / sizeof(kPages[0]));
 
-        // The page can't be one the sidebar hides (Themes, while disguised):
-        // picking GBot there leaves it on Themes, so it goes to Settings,
-        // where the picker is then. Found by its draw function, not its place.
+        // The page can't be one the sidebar hides (Themes and the JMF
+        // Trainer, while disguised): picking GBot on Themes leaves it there,
+        // so it goes to Settings, where the picker is then, and so does a
+        // test's GBot put on over the JMF page. Found by its draw function,
+        // not its place.
         void leaveHiddenPage() {
             if (!kPages[g_page].hidden || !kPages[g_page].hidden())
                 return;
@@ -3191,8 +3195,8 @@ namespace gucci::ui {
         }
 
         // Out of the sidebar once a test's `theme` is on (pageTitlesWith).
-        // The only page a theme hides is the disguise's, so that one asks
-        // whether the theme then is GBot.
+        // The only pages a theme hides are the disguise's (Themes and the
+        // JMF Trainer), so those ask whether the theme then is GBot.
         bool hiddenWith(const Page& page, const std::string* theme) {
             if (!page.hidden)
                 return false;
@@ -3284,8 +3288,9 @@ namespace gucci::ui {
 
     MenuState menuState() {
         lapseTestLook();
-        // A test theme that hides the page showing (GBot hides Themes) moves
-        // it at the next frame; said now as where it will be.
+        // A test theme that hides the page showing (GBot hides Themes and
+        // the JMF Trainer) moves it at the next frame; said now as where it
+        // will be.
         leaveHiddenPage();
         MenuState s;
         s.open = g_open;

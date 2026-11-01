@@ -563,8 +563,8 @@ namespace gucci::mcp {
 
                 // The theme and the page are looked up before anything changes,
                 // the page in the sidebar as it will be under the theme asked
-                // for (GBot's has no Themes), so a wrong name leaves it all as
-                // it was.
+                // for (GBot's has no Themes or JMF Trainer), so a wrong name
+                // leaves it all as it was.
                 std::optional<std::string> themeName;
                 if (a.contains("theme")) {
                     themeName = argStr(a, "theme");
