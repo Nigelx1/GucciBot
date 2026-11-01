@@ -2555,7 +2555,9 @@ namespace gucci {
     }
 
     // The update checker is back since build -es, in core/update_check.cpp,
-    // built so this can't happen again (async::TaskHolder, no coroutine).
+    // built so this can't happen again (an arc coroutine spawned on Geode's
+    // arc runtime that hands the reply to the main thread; no geode::Task and
+    // no TaskHolder, see the top of update_check.cpp).
     // The first one was removed in build 2026-09-13-b after it crashed the
     // game on launch for real users (v1.6.5 shipped with it):
     //
