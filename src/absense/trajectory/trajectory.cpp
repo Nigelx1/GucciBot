@@ -4792,6 +4792,16 @@ bool Trajectory::stepLeg(std::chrono::steady_clock::time_point until) {
             if (mayChange) {
                 const int n = alternativesFor(here, f.down, alts, f.ringHidden);
                 for (int i = 0; i < n && m < 10; i++) {
+                    // GucciBot (BLOODBATH2.md, ANOMALIES.md item 4): with no calm
+                    // gap a UFO's one-tick press is "press and keep holding" let
+                    // go on the next tick - the same input both ticks, and the
+                    // held child is always offered that let-go (any kind, held) -
+                    // so its child only took a frontier place and a step. Kept
+                    // with a gap (route drives), where the let-go may be held
+                    // back. The two-press orb unit and the spam cadences stay.
+                    if (here->m_isBird && alts[i].thenRelease && alts[i].spamPeriod == 0 &&
+                        alts[i].first.presses == 1 && L->calm <= 1)
+                        continue;
                     const int period = alts[i].spamPeriod;
                     const LegState::Move mv{alts[i].first, alts[i].thenRelease, period, period > 0 ? 1 % period : 0};
                     bool dup = false;
