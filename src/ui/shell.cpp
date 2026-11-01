@@ -44,6 +44,7 @@
 #include <map>
 #include <optional>
 #include <span>
+#include <sstream>
 #include <system_error>
 #include <Geode/utils/async.hpp>
 #include <Geode/utils/hash.hpp>
@@ -495,6 +496,38 @@ namespace gucci::ui {
             gb->reloadMacroList();
         }
 
+        // A Geode notification is one line of text, and Calculate's longer
+        // ones ran off both sides of the screen (2026-11-01, 1850 px wide).
+        // This one breaks into lines that fit 90% of the screen's width,
+        // measured with the notification's own label, less the icon beside
+        // it and the backdrop's edge (about 35 of its units).
+        void showNotice(std::string const& text, NotificationIcon icon, float seconds) {
+            auto* note = Notification::create(text, icon, seconds);
+            if (!note)
+                return;
+            auto* label =
+                geode::cocos::findFirstChildRecursive<CCLabelBMFont>(note, [](CCLabelBMFont*) { return true; });
+            float const scale = label ? label->getScale() * note->getScale() : 0.f;
+            if (scale > 0.f) {
+                float const room = (CCDirector::get()->getWinSize().width * 0.9f - 35.f * note->getScale()) / scale;
+                std::string wrapped;
+                std::string line;
+                std::istringstream words(text);
+                for (std::string word; words >> word;) {
+                    std::string const longer = line.empty() ? word : line + ' ' + word;
+                    label->setString(longer.c_str());
+                    if (!line.empty() && label->getContentSize().width > room) {
+                        wrapped += line + '\n';
+                        line = word;
+                    } else {
+                        line = longer;
+                    }
+                }
+                note->setString(wrapped + line);
+            }
+            note->show();
+        }
+
         // Calculate from the Macro page or Compact Mode. Why a run didn't
         // start is on the Calculate page, which may not be open: it's said
         // where you are too.
@@ -502,7 +535,7 @@ namespace gucci::ui {
             auto* gb = GucciEngine::get();
             gb->analyzeFrameWindows();
             if (!gb->fwAcOk && !gb->fwAcReport.empty())
-                Notification::create("Calculate: " + gb->fwAcReport, NotificationIcon::Warning, 4.f)->show();
+                showNotice("Calculate: " + gb->fwAcReport, NotificationIcon::Warning, 4.f);
         }
 
         std::string g_rowNote;  // what the last row action said, when it failed
@@ -3046,15 +3079,13 @@ namespace gucci::ui {
                         gbe->fwAcOk = analyzer.lastRunOk();
                         // Said where you are too: the in-level box goes away when
                         // the run ends, and the Calculate page may be shut (Nigel,
-                        // 2026-10-21: "i dont see a finish message").
+                        // 2026-10-21: "i dont see a finish message"). In lines
+                        // that fit the screen (showNotice).
                         std::string text = analyzer.status();
                         if (text.size() > 140)
                             text = text.substr(0, 137) + "...";
-                        Notification::create("Calculate: " + text + kept,
-                                             analyzer.lastRunOk() ? NotificationIcon::Success
-                                                                  : NotificationIcon::Warning,
-                                             6.f)
-                            ->show();
+                        showNotice("Calculate: " + text + kept,
+                                   analyzer.lastRunOk() ? NotificationIcon::Success : NotificationIcon::Warning, 6.f);
                     }
                     gbe->unmuteAnalysisMusic();
                 }
