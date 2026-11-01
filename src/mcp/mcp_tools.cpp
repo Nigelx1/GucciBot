@@ -18,7 +18,9 @@
 #include "analysis/ac/lstar.hpp"
 #include "analysis/pathfinder.hpp"
 #include "absense/glue.hpp"
+#include "audio/bigbrrr.hpp"
 #include "mcp/screenshot.hpp"
+#include "mcp/test_settings.hpp"
 #include "mcp/tickprobe.hpp"
 #include "analysis/trajectory.hpp"
 #include "tools/macro_check.hpp"
@@ -313,6 +315,45 @@ namespace gucci::mcp {
                 return out;
             },
         });
+
+        // GucciBot (2026-11-01): a test's settings, never saved
+        // (mcp/test_settings.hpp has how).
+        {
+            auto schema = schemaOf({{"key", "string", "the setting's saved key, e.g. hack_force_platformer"},
+                                    {"reset", "boolean", "true: put every setting a test changed back"},
+                                    {"list", "boolean", "true: every key it takes, its value now, and which it holds"}});
+            auto value = obj();
+            value["description"] = "the value, as the key's type: true/false, a number or text";
+            schema["properties"]["value"] = value;
+            server.addTool({
+                "gucci_test_set",
+                "Put one whitelisted setting into effect for this launch only, for a test "
+                "run: {key, value}. It goes through the setter the menu row uses (the "
+                "Tick rate row also records a TPS change while recording), and is "
+                "refused unless safe mode is forced for the launch. Never saved: every "
+                "write of saved.json puts the user's own value under each key it holds "
+                "(or leaves the key out, as it was). {reset: true} puts every one back, "
+                "in memory too; tools/assist.py's close() does that first. {list: true} "
+                "returns every key with its type and value now. Keys that were never "
+                "saved anyway: hack_rng_lock, hack_rng_seed, bigbrrr (this launch's "
+                "switch), test_mute (FMOD's master volume 0) and fwac_conflict_test_id "
+                "(one more mod id for Calculate's conflict check). A change made in "
+                "the menu to a key this holds isn't saved this launch either.",
+                schema,
+                [](matjson::Value const& a) {
+                    if (argBool(a, "list", false))
+                        return testset::list();
+                    if (argBool(a, "reset", false))
+                        return testset::reset();
+                    if (!a.contains("key") || !a.contains("value"))
+                        throw ToolError("give key and value, or reset: true, or list: true");
+                    // Not under a run that owns the game: a rate or a render
+                    // folder changing under it is a test of nothing.
+                    requireFreeRun();
+                    return testset::set(argStr(a, "key"), a["value"]);
+                },
+            });
+        }
 
         {
             auto schema = obj();

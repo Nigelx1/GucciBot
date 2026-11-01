@@ -9,6 +9,7 @@
 #include "core/setup_check.hpp"
 #include "core/standdown.hpp"
 #include "hacks/hud.hpp"
+#include "mcp/test_settings.hpp"
 #include "tools/macro_convert.hpp"
 #include "tools/selfcheck.hpp"
 
@@ -3079,6 +3080,14 @@ namespace gucci {
             if (std::string_view(id) == kCbf && !cbfLive()) continue;
             if (!out.empty()) out += "\n";
             out += fmt::format("  - {} ({})", id, why);
+        }
+        // A test's extra id (gucci_test_set fwac_conflict_test_id), looked up
+        // the same way, so the warning can be checked without a mod-list
+        // change.
+        if (auto const& testId = testset::conflictTestId();
+            !testId.empty() && Loader::get()->isModLoaded(testId)) {
+            if (!out.empty()) out += "\n";
+            out += fmt::format("  - {} (a test's extra id)", testId);
         }
         if (!out.empty())
             fwAcConflicts = fmt::format(

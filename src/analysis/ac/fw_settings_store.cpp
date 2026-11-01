@@ -436,6 +436,107 @@ namespace gucci::fwstore {
         save();
     }
 
+    // gucci_test_set: one field by its key, through the same tables load()
+    // and save() walk, so a test can't set a field to what load() wouldn't
+    // accept. Only the key's own saved value is written.
+    std::string setOne(std::string const& key, matjson::Value const& value) {
+        auto* mod = Mod::get();
+        auto& fw = SLSettings::get()->frameWindow;
+        auto number = [&](double lo, double hi, double& out) -> std::string {
+            if (!value.isNumber())
+                return key + " is a number";
+            out = value.asDouble().unwrapOr(0.0);
+            if (out < lo || out > hi)
+                return fmt::format("{} is {} to {}", key, lo, hi);
+            return "";
+        };
+        for (auto const& f : kFlags) {
+            if (key != f.key)
+                continue;
+            if (!value.isBool())
+                return key + " is true or false";
+            fw.*f.member = value.asBool().unwrapOr(false);
+            mod->setSavedValue<bool>(f.key, fw.*f.member);
+            return "";
+        }
+        double d = 0.0;
+        for (auto const& f : kInts) {
+            if (key != f.key)
+                continue;
+            if (auto err = number(f.lo, f.hi, d); !err.empty())
+                return err;
+            if (d != std::floor(d))
+                return key + " is a whole number";
+            fw.*f.member = static_cast<int>(d);
+            mod->setSavedValue<int64_t>(f.key, fw.*f.member);
+            return "";
+        }
+        for (auto const& f : kInt64s) {
+            if (key != f.key)
+                continue;
+            if (auto err = number(static_cast<double>(f.lo), static_cast<double>(f.hi), d); !err.empty())
+                return err;
+            if (d != std::floor(d))
+                return key + " is a whole number";
+            fw.*f.member = static_cast<int64_t>(d);
+            mod->setSavedValue<int64_t>(f.key, fw.*f.member);
+            return "";
+        }
+        for (auto const& f : kDoubles) {
+            if (key != f.key)
+                continue;
+            if (auto err = number(f.lo, f.hi, d); !err.empty())
+                return err;
+            fw.*f.member = d;
+            mod->setSavedValue<double>(f.key, fw.*f.member);
+            return "";
+        }
+        for (auto const& f : kFloats) {
+            if (key != f.key)
+                continue;
+            if (auto err = number(f.lo, f.hi, d); !err.empty())
+                return err;
+            fw.*f.member = static_cast<float>(d);
+            mod->setSavedValue<double>(f.key, fw.*f.member);
+            return "";
+        }
+        if (key == kTiersKey) {
+            if (!value.isString())
+                return key + " is the bands' JSON text, as saved.json holds it";
+            std::vector<FrameWindowTier> tiers;
+            if (!loadTiers(value.asString().unwrapOr(""), tiers))
+                return key + ": those bands could not be read";
+            for (auto& t : tiers)
+                clampTier(t);
+            fw.tiers = std::move(tiers);
+            mod->setSavedValue<std::string>(kTiersKey, dumpTiers(fw.tiers));
+            return "";
+        }
+        return key + " is not a Calculate setting";
+    }
+
+    matjson::Value getOne(std::string const& key) {
+        auto const& fw = SLSettings::get()->frameWindow;
+        for (auto const& f : kFlags)
+            if (key == f.key)
+                return fw.*f.member;
+        for (auto const& f : kInts)
+            if (key == f.key)
+                return static_cast<int64_t>(fw.*f.member);
+        for (auto const& f : kInt64s)
+            if (key == f.key)
+                return fw.*f.member;
+        for (auto const& f : kDoubles)
+            if (key == f.key)
+                return fw.*f.member;
+        for (auto const& f : kFloats)
+            if (key == f.key)
+                return static_cast<double>(fw.*f.member);
+        if (key == kTiersKey)
+            return dumpTiers(fw.tiers);
+        return nullptr;
+    }
+
 } // namespace gucci::fwstore
 
 $on_mod(Loaded) {

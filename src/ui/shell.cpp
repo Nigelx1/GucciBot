@@ -24,6 +24,7 @@
 #include "core/bot_switch.hpp"
 #include "hacks/autoclicker.hpp"
 #include "mcp/mcp_server.hpp"
+#include "mcp/test_settings.hpp"
 #include "render/intro.hpp"
 #include "render/renderer.hpp"
 #include "replay/scbf_input.hpp"
@@ -224,8 +225,13 @@ namespace gucci::ui {
             }
             if (saved == *s_written || (!now && t - s_changedAt < std::chrono::seconds(2)))
                 return;
+            // A test's settings (gucci_test_set, mcp/test_settings.hpp) go to
+            // the disk as the user's own values, and stay in effect here.
+            bool const shielded = testset::shieldForWrite();
             if (auto res = mod->saveData(); !res)
                 log::warn("[GucciBot] couldn't write the saved settings: {}", res.unwrapErr());
+            if (shielded)
+                testset::unshieldAfterWrite();
             s_written = saved;
         }
     } // namespace

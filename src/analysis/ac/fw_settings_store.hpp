@@ -20,7 +20,10 @@
 
 #include "analysis/ac/shim.hpp"
 
+#include <matjson.hpp>
+
 #include <cstdint>
+#include <string>
 
 namespace gucci::fwstore {
 
@@ -69,5 +72,13 @@ namespace gucci::fwstore {
     // Largest window a band edge may be set to (the smallest is 0). Edges
     // can be decimals since 2026-10-23, kept to 4 places.
     inline constexpr int kBandWindowMax = 999;
+
+    // gucci_test_set (mcp/test_settings.cpp): one stored field by its saved
+    // key, as the page's row sets it - into SLSettings, clamped as load()
+    // clamps it, and written under its key. "fwac_tiers" takes the bands as
+    // the JSON text they are saved as. setOne returns an error to show, or ""
+    // when it was set; getOne returns null for a key that isn't stored here.
+    std::string setOne(std::string const& key, matjson::Value const& value);
+    matjson::Value getOne(std::string const& key);
 
 } // namespace gucci::fwstore
