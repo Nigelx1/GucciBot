@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-31-c (RondoBot white, Janet in view, GBot hides the JMF Trainer page)"
+    "2026-11-01-a (test tools: gucci_test_set never saved, open RobTop levels, test reads)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
