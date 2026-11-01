@@ -588,8 +588,9 @@ class Trajectory {
     std::vector<ClearedFlag> m_clearedFlags;
     GJBaseGameLayer* m_clearedFor = nullptr;  // the layer those objects belong to
 
-    // GucciBot (2026-10-23): the Pathfinder's "exact start flags" test switch
-    // (PathfinderSettings::exactStartFlags, off by default; see useStart).
+    // GucciBot (2026-10-23): the Pathfinder's "exact start flags", first a
+    // test switch, on by default since 2026-11-01
+    // (PathfinderSettings::exactStartFlags; see useStart).
     // recordStartFlags brings the log of the objects' flags up to date at
     // every kept start and notes the start's place in it; useStartExact puts
     // the flags of a start's tick back on the objects from it.

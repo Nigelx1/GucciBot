@@ -283,8 +283,15 @@ namespace gucci::testset {
                 v.push_back(engineBool("pf_hide_search", [] () -> bool& { return Pathfinder::get()->hideSearch; }));
                 // The Pathfinder page's Exact start flags and Remember
                 // solutions: a search reads both from the container when it
-                // starts (absense/compat/bot.cpp).
-                v.push_back(live("pf_exact_start_flags", LiveType::Bool));
+                // starts (absense/compat/bot.cpp). Exact start flags go
+                // through the row's own getter and setter: on by default, a
+                // missing key reads as on, and an off is written outright
+                // (setSavedValue would skip it on a missing key).
+                v.push_back({"pf_exact_start_flags2", "bool", Store::Live,
+                             [] { return matjson::Value(absense::exactStartFlags()); },
+                             [](matjson::Value const& val, bool) {
+                                 absense::setExactStartFlags(wantBool("pf_exact_start_flags2", val));
+                             }});
                 v.push_back(live("pf_remember_solutions", LiveType::Bool));
                 // Follow the planned route: the route planner keeps it after
                 // its first read (route/planner.cpp, g_guidance), so it goes

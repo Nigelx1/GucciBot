@@ -35,8 +35,9 @@ namespace absense {
     // The Pathfinder tab's "start from the beginning" switch (saved).
     bool startFromBeginning();
     void setStartFromBeginning(bool on);
-    // The Pathfinder tab's "exact start flags" test switch (saved, off by
-    // default): a search takes it when it starts and keeps it to the end (see
+    // The Pathfinder tab's "Exact start flags" switch (saved, under
+    // pf_exact_start_flags2; on by default since 2026-11-01): a search takes it
+    // when it starts and keeps it to the end (see
     // PathfinderSettings::exactStartFlags).
     bool exactStartFlags();
     void setExactStartFlags(bool on);

@@ -182,12 +182,26 @@ void absense::setStartFromBeginning(bool on) {
     geode::Mod::get()->setSavedValue("pf_start_from_zero", on);
 }
 
+// GucciBot (2026-11-01): Exact start flags, on by default since build -c.
+// The A/B on build -b, truly cold: The Nightmare passes only with them on;
+// ToE2, Clubstep and Deadlocked pass with them on; Bloodbath parted from the
+// game 142 times without them and once with them. Saved under a new key: the
+// old one (pf_exact_start_flags) holds the off the test switch was saved
+// with, and nothing reads it now.
+static constexpr const char* kExactStartFlagsKey = "pf_exact_start_flags2";
+
 bool absense::exactStartFlags() {
-    return geode::Mod::get()->getSavedValue<bool>("pf_exact_start_flags", false);
+    // A missing key is on. Read without getSavedValue's default, which would
+    // write the key into the save on a mere look.
+    auto const& saved = geode::Mod::get()->getSaveContainerConst();
+    return !saved.contains(kExactStartFlagsKey) || saved[kExactStartFlagsKey].asBool().unwrapOr(true);
 }
 
 void absense::setExactStartFlags(bool on) {
-    geode::Mod::get()->setSavedValue("pf_exact_start_flags", on);
+    // Written outright: Geode's setSavedValue writes nothing when the value
+    // equals what the key reads as, and to it a missing key reads as off - so
+    // switching this off before it was ever saved would not stick.
+    geode::Mod::get()->getSaveContainer()[kExactStartFlagsKey] = on;
 }
 
 bool absense::rememberSolutions() {

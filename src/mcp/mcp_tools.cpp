@@ -816,10 +816,10 @@ namespace gucci::mcp {
             auto exactFlags = obj();
             exactFlags["type"] = "boolean";
             exactFlags["description"] =
-                "Absense's engine: turn the Pathfinder tab's \"Exact start flags (test)\" switch on or off before "
-                "starting (saved, as the tab's switch is; default: leave it as it is). A search takes it when it "
-                "starts: a run from an earlier tick then sees each portal, orb, pad and trigger used or not as the "
-                "game had it at that tick.";
+                "Absense's engine: turn the Pathfinder tab's \"Exact start flags\" switch (on by default) on or off "
+                "before starting (saved, as the tab's switch is; default: leave it as it is). A search takes it when "
+                "it starts: on, a run from an earlier tick sees each portal, orb, pad and trigger used or not as the "
+                "game had it at that tick; off, everything ahead of the player there counts as unused.";
             props["exact_start_flags"] = exactFlags;
             auto remember = obj();
             remember["type"] = "boolean";

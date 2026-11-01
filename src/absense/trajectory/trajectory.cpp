@@ -1354,8 +1354,8 @@ struct Trajectory::SimStart {
     // the old path (MovingObjects), unless its first run comes while the game
     // still stands at its tick (see Sim::begin).
     std::shared_ptr<world::WorldStart> world;
-    // GucciBot (2026-10-23): exact start flags (off by default; see
-    // recordStartFlags). Where this start stands in the log of the objects'
+    // GucciBot (2026-10-23): exact start flags (on by default since
+    // 2026-11-01; see recordStartFlags). Where this start stands in the log of the objects'
     // flags: which log (0: none - kept while the switch was off) and how many
     // changes it held when the start was kept. `carried`: made by
     // advanceStart - it stands where the plan being played takes the game,
@@ -1436,7 +1436,7 @@ std::shared_ptr<Trajectory::SimStart> Trajectory::captureStart(GJBaseGameLayer* 
         s->held2 = it != o->m_holdingButtons.end() && it->second;
         s->flying2 = o->m_isShip || o->m_isBird || o->m_isDart || o->m_isSwing;
     }
-    // GucciBot (2026-10-23): exact start flags (off by default).
+    // GucciBot (2026-10-23): exact start flags (on by default since 2026-11-01).
     if (SLSettings::get()->pathfinder.exactStartFlags) recordStartFlags(pl, *s);
     return s;
 }
@@ -1641,9 +1641,9 @@ std::string Trajectory::usedAhead(GJBaseGameLayer* pl, int max) const {
     return out;
 }
 
-// ---- GucciBot (2026-10-23): the Pathfinder's "exact start flags", a test
-// switch for The Nightmare's 75% stall (PathfinderSettings::exactStartFlags,
-// off by default). Nothing below runs while it is off.
+// ---- GucciBot (2026-10-23): the Pathfinder's "exact start flags", first a
+// test switch for The Nightmare's 75% stall, on by default since 2026-11-01
+// (PathfinderSettings::exactStartFlags). Nothing below runs while it is off.
 
 static uint8_t flagBits(const EnhancedGameObject* e) {
     return (uint8_t)((e->m_activatedByPlayer1 ? 1 : 0) | (e->m_activatedByPlayer2 ? 2 : 0));
@@ -1996,8 +1996,8 @@ void Trajectory::useStart(std::shared_ptr<SimStart> start) {
     if (!m_start) return;
     if (!pl || !pl->m_objects) return;
     m_clearedFor = pl;
-    // GucciBot (2026-10-23): the Pathfinder's exact start flags (off by
-    // default) set the objects to what they had at the start's tick (its
+    // GucciBot (2026-10-23): the Pathfinder's exact start flags (on by
+    // default since 2026-11-01) set the objects to what they had at the start's tick (its
     // place in the log of their flags) instead of the loop below, which is
     // left exactly as it was.
     if (SLSettings::get()->pathfinder.exactStartFlags) {

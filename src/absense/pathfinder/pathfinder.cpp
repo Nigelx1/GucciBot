@@ -488,9 +488,9 @@ bool AbsensePathfinder::start() {
     // remembered solutions into runs counted as cold).
     SLSettings::get()->pathfinder.learn = absense::rememberSolutions();
     if (SLSettings::get()->pathfinder.learn) absense::memory::Store::get().open(pl);
-    // GucciBot (2026-10-23): the "exact start flags" test switch (Pathfinder
-    // page, off by default), taken now - before the first kept start - and
-    // kept for the whole run (PathfinderSettings::exactStartFlags).
+    // GucciBot (2026-10-23): the Pathfinder page's "exact start flags" switch
+    // (on by default since 2026-11-01), taken now - before the first kept
+    // start - and kept for the whole run (PathfinderSettings::exactStartFlags).
     SLSettings::get()->pathfinder.exactStartFlags = absense::exactStartFlags();
     bot->trajectory().resetExactFlagStats();
     keepAnchor();
@@ -672,7 +672,7 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
         (unsigned long long)m_stats.spikeSettles, (unsigned long long)m_stats.backtracks,
         (unsigned long long)m_stats.spikeMet, (unsigned long long)m_stats.spikePasses);
     if (SLSettings::get()->pathfinder.exactStartFlags) {
-        // GucciBot (2026-10-23): what the exact start flags test switch did:
+        // GucciBot (2026-10-23): what exact start flags did:
         // the counts, the lines logged of each kind against its budget (a kind
         // whose lines ran out has more than its lines show), and the last few
         // objects of each kind, logged or not (devlog: log() stops at 511
