@@ -208,6 +208,12 @@ namespace gucci::ui {
         return look().pal.light ? darken(c, amount) : lift(c, amount);
     }
 
+    float overLevelAlpha(float dark) {
+        // 0.92 white over black keeps RondoBot's ink near 6:1 and its muted
+        // text near 4:1; at 0.6 they were 2.6:1 and under 2.3:1.
+        return look().pal.light ? 0.92f : dark;
+    }
+
     void Look::refresh() {
         auto const& theme = themes::active();
         float const t = static_cast<float>(ImGui::GetTime());

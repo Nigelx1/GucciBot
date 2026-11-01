@@ -2886,7 +2886,7 @@ namespace gucci::ui {
                                               ImGuiWindowFlags_NoNav;
             if (!pf->hideSearch) {
                 ImGui::SetNextWindowPos(ImVec2(10.f, 10.f), ImGuiCond_Always);
-                ImGui::SetNextWindowBgAlpha(0.6f);
+                ImGui::SetNextWindowBgAlpha(overLevelAlpha(0.6f));
                 if (ImGui::Begin("##classicPathfinderBox", nullptr, boxFlags | ImGuiWindowFlags_NoInputs)) {
                     UseFont f(Font::Small);
                     ImGui::Text("Pathfinder: %s  |  %d runs  |  best %.1f%%", pf->stage.c_str(), pf->runs, pf->bestPct);
@@ -2916,7 +2916,7 @@ namespace gucci::ui {
             // not (they were only on the Calculate page).
             if (auto& fw = ::Bot::get()->frameWindow(); fw.running() && PlayLayer::get()) {
                 ImGui::SetNextWindowPos(ImVec2(10.f, 10.f), ImGuiCond_Always);
-                ImGui::SetNextWindowBgAlpha(0.7f);
+                ImGui::SetNextWindowBgAlpha(overLevelAlpha(0.7f));
                 ImGuiWindowFlags const flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
                                                ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
                                                ImGuiWindowFlags_NoNav;
@@ -2953,7 +2953,7 @@ namespace gucci::ui {
             if (!s.running || !PlayLayer::get())
                 return;
             ImGui::SetNextWindowPos(ImVec2(10.f, 10.f), ImGuiCond_Always);
-            ImGui::SetNextWindowBgAlpha(0.6f);
+            ImGui::SetNextWindowBgAlpha(overLevelAlpha(0.6f));
             ImGuiWindowFlags const flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
                                            ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoSavedSettings |
                                            ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;

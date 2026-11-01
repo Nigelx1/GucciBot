@@ -997,7 +997,7 @@ namespace gucci::ui::pages {
             ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y - 20.f), ImGuiCond_Always,
                                     ImVec2(0.5f, 1.f));
             ImGui::SetNextWindowSizeConstraints(ImVec2(w, 0.f), ImVec2(w, FLT_MAX));
-            ImGui::SetNextWindowBgAlpha(0.6f);
+            ImGui::SetNextWindowBgAlpha(overLevelAlpha(0.6f));
             if (ImGui::Begin(k == Kind::Jupiter ? "##jmfvideobar" : "##trainervideobar", nullptr,
                              ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
                                  ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |

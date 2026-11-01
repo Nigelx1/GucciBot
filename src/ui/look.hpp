@@ -79,6 +79,10 @@ namespace gucci::ui {
     // A colour moved by `amount` the way a hover or a press moves it: lighter
     // on a dark palette, darker on a light one (look().pal.light).
     ImVec4 shade(const ImVec4& c, float amount);
+    // How opaque a box over the level is (Calculate's, the pathfinders',
+    // Video Mode's bar): `dark` on a dark theme, near opaque on a light one,
+    // whose dark text would sit on a grey veil over a dark level.
+    float overLevelAlpha(float dark);
 
     // Pushes a font for the lifetime of the scope (no-op when it failed to load).
     class UseFont {
