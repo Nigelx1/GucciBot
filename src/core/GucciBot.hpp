@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-10-31-b (the theme review's fixes: older themes' tags as before, RondoBot's boxes over the level, SolarBot's chips and red, GBot wording, JupiterBot's accent cycle, forced safe mode notices, assist.py drives only its own game)"
+    "2026-10-31-c (RondoBot white, Janet in view, GBot hides the JMF Trainer page)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
