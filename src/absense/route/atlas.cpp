@@ -939,8 +939,15 @@ std::string describe(Gate const& g, Option const& o) {
                                   *g.what ? g.what : gateKindName(g.kind), g.x);
     if (o.teleports) {
         const Opening to = afterOption(o);
-        out += o.keepsOffset ? fmt::format(", comes out {:.0f} higher", o.teleportDy)
-                             : fmt::format(", comes out at y {:.0f}", (to.lo + to.hi) * 0.5f);
+        // A Save-offset portal's exit can be lower than its entrance: the
+        // size, and higher or lower by its sign (it said "-240 higher").
+        const float dy = o.teleportDy;
+        if (!o.keepsOffset)
+            out += fmt::format(", comes out at y {:.0f}", (to.lo + to.hi) * 0.5f);
+        else if (std::fabs(dy) < 0.5f)
+            out += ", comes out at the same height";
+        else
+            out += fmt::format(", comes out {:.0f} {}", std::fabs(dy), dy > 0.0f ? "higher" : "lower");
     }
     if (o.flipsGravity) out += ", flips gravity";
     else if (o.gravityAfter == 0) out += ", gravity normal after";
