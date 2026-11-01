@@ -54,6 +54,11 @@ GD_DIR = r"C:\Program Files (x86)\Steam\steamapps\common\Geode Geometry Dash"
 GD_EXE = os.path.join(GD_DIR, "GeometryDash.exe")
 GD_NAME = os.path.basename(GD_EXE).lower()
 PID_FILE = os.path.join(os.environ.get("TEMP") or tempfile.gettempdir(), "guccibot_assist_pid.txt")
+# Geode's own records, only ever read: its mod list (which mods load) and its logs.
+GEODE_MOD_LIST = os.path.join(os.environ.get("LOCALAPPDATA", ""), "GeometryDash", "geode", "mods",
+                              "geode.loader", "saved.json")
+GEODE_LOGS = os.path.join(GD_DIR, "geode", "logs")
+MOD_ID = "nigelx1.guccibot"
 
 _id = 0
 
@@ -215,6 +220,30 @@ def _answers():
         return False
 
 
+def _switched_off():
+    """GucciBot is switched off in Geode's mod list, so the game would start without it."""
+    try:
+        with open(GEODE_MOD_LIST, encoding="utf-8") as f:
+            return json.load(f).get(f"should-load-{MOD_ID}") is False
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+def _why_silent(since):
+    """Why Assistant Access hasn't answered in a game started at `since` (time.time())."""
+    try:
+        logs = [os.path.join(GEODE_LOGS, n) for n in os.listdir(GEODE_LOGS) if n.endswith(".log")]
+        newest = max(logs, key=os.path.getmtime)
+        if os.path.getmtime(newest) >= since:
+            with open(newest, encoding="utf-8", errors="replace") as f:
+                if "[GucciBot] BUILD:" not in f.read():
+                    return (f"GucciBot didn't load in this launch (no '[GucciBot] BUILD:' line in "
+                            f"{os.path.basename(newest)}): switched off in Geode, or it failed to load")
+    except (OSError, ValueError):
+        pass
+    return "is it on (Settings > Assistant Access)?"
+
+
 def _wait_for_tools(start, timeout):
     """Until our game's Assistant Access answers; `start` is when the wait began (time.time())."""
     while not _answers():
@@ -222,8 +251,7 @@ def _wait_for_tools(start, timeout):
             raise RuntimeError("the game closed while starting (Steam not signed in? Geode restarting "
                                "it for an update? Then the new one isn't launch()'s)")
         if time.time() - start > timeout:
-            raise TimeoutError(f"Assistant Access didn't answer within {timeout} s: is it on "
-                               "(Settings > Assistant Access)?")
+            raise TimeoutError(f"Assistant Access didn't answer within {timeout} s: {_why_silent(start)}")
         time.sleep(1.0)
 
 
@@ -239,9 +267,11 @@ def _require_forced():
 def launch(force_safe=True, timeout=180, settle=20):
     """Starts Geometry Dash (the Geode copy) and waits until Assistant Access answers.
 
-    Refuses if any GeometryDash.exe is running already (it may be Nigel's), or
-    if Steam isn't (the game can't start without it, and starting Steam is
-    Nigel's call). With force_safe, the game's environment has
+    Refuses if any GeometryDash.exe is running already (it may be Nigel's), if
+    Steam isn't (the game can't start without it, and starting Steam is
+    Nigel's call), or if GucciBot is switched off in Geode's mod list (which
+    only Nigel changes). Raises if the game closes or restarts before it has
+    settled. With force_safe, the game's environment has
     GUCCIBOT_FORCE_SAFE_MODE=1, and launch() doesn't return before the game
     says safe mode is forced. Waits `settle` more seconds once it answers:
     opening a level while Mega Hack is still loading crashed it once.
@@ -255,6 +285,9 @@ def launch(force_safe=True, timeout=180, settle=20):
                            "Steam is Nigel's call.")
     if not os.path.exists(GD_EXE):
         raise RuntimeError(f"no game at {GD_EXE}")
+    if _switched_off():
+        raise RuntimeError("GucciBot is switched off in Geode's mod list (geode.loader/saved.json), so the "
+                           "game would start without it. Switching it on is Nigel's call.")
 
     env = dict(os.environ)
     if force_safe:
@@ -277,7 +310,17 @@ def launch(force_safe=True, timeout=180, settle=20):
     _record(proc.pid, info[1])
 
     _wait_for_tools(time.time(), timeout)
-    time.sleep(settle)
+    # Still the game it started, still answering, once settled: one that
+    # closed or restarted meanwhile (a restart from inside it, an update)
+    # isn't launch()'s, and whatever runs now is left alone.
+    end = time.time() + settle
+    while time.time() < end and ours():
+        time.sleep(0.5)
+    if not ours() or not _answers():
+        now = _running(os.path.basename(GD_EXE))
+        raise RuntimeError("the game closed or restarted while settling" +
+                           (f"; the Geometry Dash running now (PID {', '.join(map(str, now))}) isn't one "
+                            "launch() started, so leave it alone" if now else ""))
     if force_safe:
         _require_forced()
     return proc.pid
