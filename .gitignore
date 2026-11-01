@@ -29,3 +29,9 @@ resources/ffmpeg_libs/avfilter-11.dll
 
 # Pre-strip source snapshot (2026-07-05): ToastyReplay-era code, kept local only (Nigel, 2026-10-28)
 src_backup_pre_strip_2026-07-05/
+
+# Local only (Nigel, 2026-11-01): the handoff doc for Claude Code sessions and
+# Claude Code's own local permission settings. They stay on disk and in the
+# history; they just aren't published with the repo anymore.
+/CLAUDE.md
+/.claude/settings.local.json
