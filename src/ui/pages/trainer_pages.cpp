@@ -854,18 +854,21 @@ namespace gucci::ui::pages {
         // `set(slot, colour)` the style colours ImGui's own widgets and the
         // window read, the window's sky at `opacity`. jupiterLookPush pushes
         // them for the JMF page; jupiterLookApply writes them over refresh()'s
-        // for JupiterBot.
+        // for JupiterBot. The yellow parts are `accent`: the JMF page's own
+        // yellow, or JupiterBot's as refresh() worked it out (the same yellow,
+        // turning with Cycle the accent color).
         template <class Set>
-        void jmfLook(Palette& p, float opacity, Set&& set) {
+        void jmfLook(Palette& p, float opacity, ImVec4 const& accent, Set&& set) {
             auto alpha = [](ImVec4 v, float a) { return ImVec4(v.x, v.y, v.z, a); };
             setLight(p, false);  // JMF's indigo is dark under a light theme too
-            p.accent = kJmfYellow;
-            p.onAccent = ImVec4(0.06f, 0.03f, 0.25f, 1.f);
+            p.accent = accent;
+            p.onAccent =
+                luminance(accent) > 0.55f ? ImVec4(0.06f, 0.03f, 0.25f, 1.f) : ImVec4(0.97f, 0.97f, 0.97f, 1.f);
             p.surface = kJmfCard;
             p.raised = kJmfRaised;
             p.ink = ImVec4(0.957f, 0.949f, 1.f, 1.f);
             p.muted = kJmfLavender;
-            p.line = alpha(kJmfYellow, 0.22f);
+            p.line = alpha(accent, 0.22f);
             set(ImGuiCol_Text, p.ink);
             set(ImGuiCol_TextDisabled, p.muted);
             set(ImGuiCol_Border, p.line);
@@ -874,20 +877,20 @@ namespace gucci::ui::pages {
             set(ImGuiCol_FrameBgActive, ImVec4(0.13f, 0.08f, 0.66f, 1.f));
             set(ImGuiCol_Button, kJmfRaised);
             set(ImGuiCol_ButtonHovered, ImVec4(0.11f, 0.06f, 0.60f, 1.f));
-            set(ImGuiCol_ButtonActive, alpha(kJmfYellow, 0.55f));
-            set(ImGuiCol_Header, alpha(kJmfYellow, 0.22f));
-            set(ImGuiCol_HeaderHovered, alpha(kJmfYellow, 0.30f));
-            set(ImGuiCol_HeaderActive, alpha(kJmfYellow, 0.40f));
-            set(ImGuiCol_CheckMark, kJmfYellow);
-            set(ImGuiCol_SliderGrab, kJmfYellow);
-            set(ImGuiCol_SliderGrabActive, kJmfYellow);
+            set(ImGuiCol_ButtonActive, alpha(accent, 0.55f));
+            set(ImGuiCol_Header, alpha(accent, 0.22f));
+            set(ImGuiCol_HeaderHovered, alpha(accent, 0.30f));
+            set(ImGuiCol_HeaderActive, alpha(accent, 0.40f));
+            set(ImGuiCol_CheckMark, accent);
+            set(ImGuiCol_SliderGrab, accent);
+            set(ImGuiCol_SliderGrabActive, accent);
             set(ImGuiCol_ScrollbarGrab, alpha(kJmfLavender, 0.35f));
-            set(ImGuiCol_PlotHistogram, kJmfYellow);
+            set(ImGuiCol_PlotHistogram, accent);
             set(ImGuiCol_WindowBg, alpha(kJmfSky, opacity));
             set(ImGuiCol_PopupBg, kJmfCard);
             set(ImGuiCol_Tab, kJmfRaised);
-            set(ImGuiCol_TabHovered, alpha(kJmfYellow, 0.35f));
-            set(ImGuiCol_TabActive, alpha(kJmfYellow, 0.45f));
+            set(ImGuiCol_TabHovered, alpha(accent, 0.35f));
+            set(ImGuiCol_TabActive, alpha(accent, 0.45f));
             p.backdrop = alpha(kJmfSky, opacity);
         }
     }
@@ -901,7 +904,7 @@ namespace gucci::ui::pages {
         if (g_jmfPushed > 0)
             return;
         g_jmfSaved = look().pal;
-        jmfLook(look().pal, g_jmfSaved.opacity, [](ImGuiCol c, ImVec4 v) {
+        jmfLook(look().pal, g_jmfSaved.opacity, kJmfYellow, [](ImGuiCol c, ImVec4 v) {
             ImGui::PushStyleColor(c, v);
             ++g_jmfPushed;
         });
@@ -911,9 +914,12 @@ namespace gucci::ui::pages {
     // style rather than pushed, after refresh() has worked the theme's out.
     // refresh() rewrites every one of these slots each frame, so switching
     // away leaves nothing behind, and the JMF page's push on top of it is the
-    // same colours again.
+    // same colours again. Its yellow is refresh()'s accent, so Cycle the
+    // accent color turns it (on the JMF page itself it stays the level's).
     void jupiterLookApply() {
-        jmfLook(look().pal, look().pal.opacity, [](ImGuiCol c, ImVec4 v) { ImGui::GetStyle().Colors[c] = v; });
+        ImVec4 const accent = look().pal.accent;  // copied: jmfLook writes pal.accent
+        jmfLook(look().pal, look().pal.opacity, accent,
+                [](ImGuiCol c, ImVec4 v) { ImGui::GetStyle().Colors[c] = v; });
     }
 
     void jupiterLookPop() {
