@@ -3418,8 +3418,23 @@ static int alternativesFor(PlayerObject* p, bool down, Alternative out[8], bool 
     const int nc = (spamsOrbs(p) && (ringHidden || (onRing && onMultiActivateRing(p)))) ? orbSpamCadences(cadences) : 0;
     for (int i = 0; i < nc; i++) out[n++] = {TickInput{2, true}, true, cadences[i]};
     if (p->m_isBird) {
-        // The UFO flaps once per press.
-        out[n++] = {TickInput{1, false}};
+        // GucciBot (2026-11-01): the UFO flaps once per press, on a press GD
+        // still holds when it moves the player (updateJump: m_stateRingJump &&
+        // m_jumpBuffered - Silicate's copy of it, physics/player.cpp 610; the
+        // copies run GD's own). A press let go inside the tick ({1,false}) is
+        // released before that and never flapped: every leg that began in a
+        // UFO kept two states a tick (4n-2 steps; ToE2 18%, Bloodbath's UFO,
+        // 2026-10-23 logs). A one-tick press, a kept press, and from a held
+        // button a let-go and a fresh press that keeps the hold (another flap).
+        // No same-tick tap unless the game shows it does something
+        // (docs/AI_KNOWS_THE_GAME_PLAN.md 2.9).
+        if (!down) {
+            out[n++] = {TickInput{1, true}, true};  // one-tick press: down through the update, let go next tick
+            out[n++] = {TickInput{1, true}};        // press and keep holding
+        } else {
+            out[n++] = {TickInput{0, false}};       // let go
+            out[n++] = {TickInput{1, true}};        // release and press inside the tick, still held: a flap
+        }
         if (onRing) out[n++] = {TickInput{2, true}, true};
         return n;
     }
