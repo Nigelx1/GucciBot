@@ -5,6 +5,7 @@
 #include "mcp/test_settings.hpp"
 
 #include "absense/glue.hpp"
+#include "analysis/ac/framewindow.hpp"
 #include "analysis/ac/fw_settings_store.hpp"
 #include "analysis/pathfinder.hpp"
 #include "audio/bigbrrr.hpp"
@@ -248,7 +249,23 @@ namespace gucci::testset {
                 v.push_back(engineBool("autoclicker_p2_enabled", [ac]() -> bool& { return ac()->p2.enabled; }));
 
                 // Calculate and the pathfinder.
-                v.push_back(engineBool("fw_default_look", [e]() -> bool& { return e()->fwDefaultLook; }));
+                // The Default Look row: the switch, its saved value, and when
+                // it flips the markers drawn again in the new look, as the
+                // Calculate page does (pages/calculate.cpp, g_look) - never
+                // mid-run: the analyzer owns the screen then and redraws
+                // everything when it finishes. reset() putting the user's look
+                // back redraws too.
+                v.push_back({"fw_default_look", "bool", Store::Field,
+                             [] { return matjson::Value(gb()->fwDefaultLook); },
+                             [](matjson::Value const& val, bool) {
+                                 bool const on = wantBool("fw_default_look", val);
+                                 bool const flipped = on != gb()->fwDefaultLook;
+                                 gb()->fwDefaultLook = on;
+                                 Mod::get()->setSavedValue("fw_default_look", on);
+                                 auto& fw = ::Bot::get()->frameWindow();
+                                 if (flipped && !fw.running())
+                                     fw.clearDisplay();
+                             }});
                 v.push_back(engineBool("fw_default_look_bells", [e]() -> bool& { return e()->fwDefaultLookBells; }));
                 for (char const* fw : {"fwac_tiers", "fwac_time_cap", "fwac_max_window", "fwac_sweep_range",
                                        "fwac_algorithm", "fwac_recovery_range", "fwac_check_past_next", "fwac_suggest",
