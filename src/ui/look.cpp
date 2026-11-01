@@ -87,6 +87,58 @@ namespace gucci::ui {
         }
     }
 
+    void setHit(Palette& p, const ImVec4* accents, int count) {
+        // Nigel's pick (2026-11-01): an answered press turned from the accent
+        // to good, and on RondoBot the two greens are 1.22:1 (WakaBot's
+        // 1.10:1), so a hit could not be seen. Two colors under 1.25:1 can
+        // only be told apart by hue: that is the step the 2026-10-31 theme
+        // review found too faint for a card's edge to show (refresh(),
+        // pal.line), and hue fails where the two are both green, and for a
+        // color-blind player. WCAG's own 3:1 for marks can't be the bar: no
+        // built-in theme's good is 3:1 from its accent (2.76:1 at most), and
+        // nothing is 3:1 from both RondoBot's green and its white (2.26:1 at
+        // best). Higher than about 1.27:1 would take the yellow themes
+        // (SolarBot, LSU, LemonadeBot), where green differs from the accent
+        // by hue and gold or white would be closer to it.
+        constexpr float kTellApart = 1.25f;
+        ImVec4 const gold{0.788f, 0.659f, 0.298f, 1.f};  // #C9A84C, GucciBot's own
+        ImVec4 const white{1.f, 1.f, 1.f, 1.f};
+        if (!accents || count <= 0) {
+            accents = &p.accent;
+            count = 1;
+        }
+        // The click bar's own background: its raised tint at 55% over a card
+        // (pages/trainer_pages.cpp drawBar).
+        ImVec4 const behind = mix(p.surface, p.raised, 0.55f);
+        auto const apart = [&](ImVec4 const& c) {
+            float worst = contrast(c, behind);
+            for (int i = 0; i < count; ++i)
+                worst = std::min(worst, contrast(c, accents[i]));
+            return worst;
+        };
+        struct Pick {
+            ImVec4 color;
+            const char* name;
+        };
+        Pick const picks[] = {{p.good, "green"}, {gold, "gold"}, {white, "white"}};
+        int chosen = -1;
+        int most = 0;
+        float mostApart = -1.f;
+        for (int i = 0; i < 3 && chosen < 0; ++i) {
+            float const a = apart(picks[i].color);
+            if (a >= kTellApart)
+                chosen = i;
+            else if (a > mostApart) {
+                most = i;
+                mostApart = a;
+            }
+        }
+        if (chosen < 0)
+            chosen = most;
+        p.hit = picks[chosen].color;
+        p.hitName = picks[chosen].name;
+    }
+
     UseFont::UseFont(Font f) {
         if (ImFont* font = look().font(f)) {
             ImGui::PushFont(font);
@@ -228,18 +280,20 @@ namespace gucci::ui {
         setLight(pal, luminance(theme.background) > 0.5f && luminance(theme.text) < luminance(theme.background));
 
         ImVec4 accent = theme.accent;
+        bool const breathes = theme.pulse && effects;
+        float const turns = t * 0.08f * std::clamp(accentCycleRate, 0.05f, 4.f);  // the cycle's
         // With Settings > Look > Animations off it holds the theme's own
         // color, as the backdrops hold still (Nigel, 2026-11-01: "make it
         // stop"). A test's still shots (gucci_menu, effects false) turn the
         // switch off for the test, so they hold it too.
-        if (theme.pulse && effects) {
+        if (breathes) {
             // A slow breath between the colour and a brighter version of it
             // (a deeper one on a light theme).
             float const breath = 0.5f + 0.5f * std::sin(t * 2.2f);
             accent = mix(accent, shade(accent, 0.25f), breath);
         }
         if (accentCycle)
-            accent = rotateHue(accent, t * 0.08f * std::clamp(accentCycleRate, 0.05f, 4.f));
+            accent = rotateHue(accent, turns);
         accent.w = 1.f;
 
         pal.accent = accent;
@@ -257,6 +311,21 @@ namespace gucci::ui {
         // take 24% (1.48:1, RondoBot's light green-grey).
         pal.line = withAlpha(mix(theme.card, theme.text, pal.light ? 0.24f : 0.14f), 1.f);
         pal.radius = std::clamp(theme.radius, 0.f, 14.f);
+        // An answered mark's color (setHit), judged against the accent at
+        // every quarter of its breath, so it doesn't flip as the accent pulses.
+        if (breathes) {
+            ImVec4 breath[5];
+            for (int i = 0; i < 5; ++i) {
+                ImVec4 a = mix(theme.accent, shade(theme.accent, 0.25f), 0.25f * (float)i);
+                if (accentCycle)
+                    a = rotateHue(a, turns);
+                a.w = 1.f;
+                breath[i] = a;
+            }
+            setHit(pal, breath, 5);
+        } else {
+            setHit(pal);
+        }
 
         ImGuiStyle& s = ImGui::GetStyle();
         s.WindowPadding = ImVec2(14.f, 12.f);

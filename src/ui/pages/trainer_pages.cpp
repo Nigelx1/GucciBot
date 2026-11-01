@@ -166,9 +166,11 @@ namespace gucci::ui::pages {
 
         // A strip of macro time centred on the clock. The macro's clicks run
         // through the top lane (press to release; a press the player has
-        // answered turns green), the player's own through the bottom (presses
-        // full height, releases half), segments shade the background, and the
-        // centre line stays put while everything scrolls past it.
+        // answered turns the palette's hit color: green, or gold or white
+        // where green is too close to the accent, look.cpp setHit), the
+        // player's own through the bottom (presses full height, releases
+        // half), segments shade the background, and the centre line stays put
+        // while everything scrolls past it.
         void drawBar(Kind k) {
             auto s = tr::state(k);
             auto& ps = page(k);
@@ -258,7 +260,7 @@ namespace gucci::ui::pages {
                     continue;
                 float const xa = x(a), xb = std::max(x(b), x(a) + 2.f);
                 dl->AddRectFilled(ImVec2(xa, laneTop), ImVec2(xb, laneMid - 4.f), u32(pal.accent, 0.45f), 3.f);
-                ImVec4 const edge = haveAnswers && answered[i] ? pal.good : pal.accent;
+                ImVec4 const edge = haveAnswers && answered[i] ? pal.hit : pal.accent;
                 dl->AddLine(ImVec2(xa, laneTop - 2.f), ImVec2(xa, laneMid - 2.f), u32(edge), 2.5f);
             }
 
@@ -291,11 +293,13 @@ namespace gucci::ui::pages {
             auto s = tr::state(k);
             bool const following = tr::followsLevel(k);
 
-            // Your presses are white, or the ink colour on a light theme (drawBar).
+            // Your presses are white, or the ink color on a light theme; a
+            // macro press you answer takes the palette's hit color (drawBar).
             std::string const caption = fmt::format(
                 "The macro's clicks scroll past a fixed center line at real speed. Tap space, up or W along with "
-                "it, or play the level: every press and release you make shows up as a {} line under the macro's.",
-                look().pal.light ? "dark" : "white");
+                "it, or play the level: every press and release you make shows up as a {} line under the macro's, "
+                "and each of its presses you answer turns {}.",
+                look().pal.light ? "dark" : "white", look().pal.hitName);
             kit::BeginCard("Click Trainer", caption.c_str());
             if (kit::SwitchRow("Click bar", "Off stops its clock and stops listening for your keys", &s.barEnabled))
                 tr::saveSettings(k);
@@ -869,6 +873,7 @@ namespace gucci::ui::pages {
             p.ink = ImVec4(0.957f, 0.949f, 1.f, 1.f);
             p.muted = kJmfLavender;
             p.line = alpha(accent, 0.22f);
+            setHit(p);  // against the JMF accent and cards, not the theme's
             set(ImGuiCol_Text, p.ink);
             set(ImGuiCol_TextDisabled, p.muted);
             set(ImGuiCol_Border, p.line);

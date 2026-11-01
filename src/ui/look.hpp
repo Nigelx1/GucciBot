@@ -21,6 +21,12 @@ namespace gucci::ui {
         ImVec4 muted;      // secondary text
         ImVec4 line;       // borders and dividers
         ImVec4 good, warn, bad;
+        // A mark answered among marks in the accent (the Trainer's click
+        // bar: a macro press you answered). Good, unless good is too close
+        // to the accent to tell apart; then gold, or white (setHit).
+        // `hitName` names it for the words that do.
+        ImVec4 hit;
+        const char* hitName = "green";
         float radius = 6.f;
         float opacity = 0.96f;
         // The theme is light (RondoBot's white): a hover or press darkens
@@ -76,6 +82,16 @@ namespace gucci::ui {
     // the good/warn/bad that read on it. refresh() picks from the theme; the
     // JMF page's look, always dark, sets dark back.
     void setLight(Palette& p, bool light);
+    // Works out Palette::hit and hitName from the palette's good, accent,
+    // surface and raised: the first of good, gold and white that stands
+    // apart from the accent and from the click bar's background (a raised
+    // tint over a card) by 1.25:1 or more, the WCAG ratio, or, when none
+    // does, the one that stands apart the most. By contrast, never by theme
+    // name, so a custom theme goes through it too. With `accents`, the
+    // accent is judged at each of them (refresh() passes its breath, so the
+    // choice holds still while it pulses). refresh() calls it; a look that
+    // changes the accent or the cards afterwards (the JMF look) calls it again.
+    void setHit(Palette& p, const ImVec4* accents = nullptr, int count = 0);
     // A colour moved by `amount` the way a hover or a press moves it: lighter
     // on a dark palette, darker on a light one (look().pal.light).
     ImVec4 shade(const ImVec4& c, float amount);
