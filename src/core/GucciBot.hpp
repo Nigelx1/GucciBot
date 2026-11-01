@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-01-b (pathfinder: every search flies the UFO, legs play two-tick units, test tools take the pathfinder switches)"
+    "2026-11-01-c (pathfinder: exact start flags on by default, the drift check watches plans made ahead, killers and the level map read real positions, the map follows teleport portals; test tools redraw Calculate markers)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
