@@ -2,11 +2,11 @@
 
 **Written:** 2026-10-13, for GucciBot 2.0. **Status:** a plan; nothing here is built yet.
 
-**Superseded 2026-10-24** by [docs/AI_KNOWS_THE_GAME_PLAN.md](docs/AI_KNOWS_THE_GAME_PLAN.md): an AI that knows what the game is (Nigel: "rather than patching one thing at a time"). The route map and planner described here (built through step 5) stay as parts of it.
+**Superseded 2026-10-24** by [docs/AI_KNOWS_THE_GAME_PLAN.md](AI_KNOWS_THE_GAME_PLAN.md): an AI that knows what the game is (Nigel: "rather than patching one thing at a time"). The route map and planner described here (built through step 5) stay as parts of it.
 
 **The idea (Nigel):** "the AI plays through the level with knowledge and context of the whole level". It makes the decisions; GD's physics makes the path from those decisions.
 
-**The detail behind this plan** is in [docs/AI_PATHFINDER_RESEARCH.md](docs/AI_PATHFINDER_RESEARCH.md): the Bloodbath evidence and two full designs. Earlier versions of this plan are in git history.
+**The detail behind this plan** is in [docs/AI_PATHFINDER_RESEARCH.md](AI_PATHFINDER_RESEARCH.md): the Bloodbath evidence and two full designs. Earlier versions of this plan are in git history.
 
 ---
 
@@ -89,7 +89,7 @@ Not sure until R0. Probably a few weeks, paced by usage.
 
 # Part 2: Technical design (for whoever builds it)
 
-The full design is in [docs/AI_PATHFINDER_RESEARCH.md](docs/AI_PATHFINDER_RESEARCH.md) §2 (Design A, chosen). The trained option is §3. The Bloodbath evidence and the cheapest tests are §1. The essentials:
+The full design is in [docs/AI_PATHFINDER_RESEARCH.md](AI_PATHFINDER_RESEARCH.md) §2 (Design A, chosen). The trained option is §3. The Bloodbath evidence and the cheapest tests are §1. The essentials:
 
 - **The atlas (R1):** built once per level from `classify()` boxes (`src/absense/gpu/client.cpp`), portals, orbs, pads and mode/speed/size sections. It contains:
   - **gates:** columns where the free space splits or an interaction happens;
