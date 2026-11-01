@@ -1734,11 +1734,15 @@ namespace gucci::ui {
                     upd.m_maxUPR = static_cast<uint32_t>(upr);
                     Mod::get()->setSavedValue<int>("updater_max_upr", upr);
                 }
-                // Silicate's Use Visual Updates (GucciUpdater::visualUpdateFactor).
-                engineSwitch("Scale with the tick rate",
-                             "Multiplies the limit above by the tick rate over GD's FPS cap: x4 at 240 TPS and "
-                             "60 FPS",
-                             &upd.m_useVisualUpdates, "updater_visual_updates");
+                // Silicate's Use Visual Updates (GucciUpdater::visualUpdateFactor),
+                // on by default since 2026-11-01 (GitHub issue #30). Saved
+                // through its own setter: a missing key is on, so an off is
+                // written outright (GucciUpdater::saveVisualUpdates).
+                if (kit::SwitchRow("Scale with the tick rate",
+                                   "On by default. Multiplies the limit above by the tick rate over GD's FPS cap (x4 "
+                                   "at 240 TPS and 60 FPS), so the limit doesn't slow down a high tick rate",
+                                   &upd.m_useVisualUpdates))
+                    GucciUpdater::saveVisualUpdates(upd.m_useVisualUpdates);
             } else if (pacing == 2) {
                 float fps = static_cast<float>(upd.m_fpsTarget);
                 if (kit::SliderRow("Target FPS", "Measures how long a tick takes and aims for this frame rate", &fps, 30.f,

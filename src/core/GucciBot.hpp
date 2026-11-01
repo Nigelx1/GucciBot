@@ -471,15 +471,22 @@ namespace gucci {
         double m_fpsTarget = 60.0;
         uint32_t m_stepLimit = 10;
         // Silicate's Use Visual Updates: "Scale with the tick rate" under
-        // Hacks > Frame pacing > Fixed (updater_visual_updates). Fixed
-        // pacing's cap is multiplied by the tick rate over GD's FPS cap, so it
-        // keeps up with a high tick rate. Silicate defaults it on; off here
-        // keeps GucciBot's pacing as it was. Nothing could switch it on until
-        // 2026-10-30.
-        bool m_useVisualUpdates = false;
+        // Hacks > Frame pacing > Fixed. Fixed pacing's cap is multiplied by
+        // the tick rate over GD's FPS cap, so it keeps up with a high tick
+        // rate. Nothing could switch it on until 2026-10-30; on by default
+        // since 2026-11-01, as in Silicate (Nigel's call, GitHub issue #30:
+        // 1,000 TPS ran at 60% speed on a 60 FPS phone under the plain cap of
+        // 10). Saved under updater_visual_updates2 (savedVisualUpdates).
+        bool m_useVisualUpdates = true;
         // What Fixed pacing's cap is multiplied by: 1 unless m_useVisualUpdates
         // is on. calculateSteps applies it, and the HUD's tick limit shows it.
         int visualUpdateFactor() const;
+        // The switch as saved, and saving it. A missing key is on, and is
+        // read without writing anything into the save. The old key
+        // (updater_visual_updates) holds the off the switch was saved with
+        // while it started off, so nothing reads it.
+        static bool savedVisualUpdates();
+        static void saveVisualUpdates(bool on);
 
         uint32_t m_frame = 0;
         uint64_t m_frameOnLastAttempt = 0;

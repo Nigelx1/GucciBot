@@ -230,8 +230,16 @@ namespace gucci::testset {
                                  gb()->updater.m_maxUPR = static_cast<uint32_t>(upr);
                                  Mod::get()->setSavedValue<int>("updater_max_upr", upr);
                              }});
-                v.push_back(engineBool("updater_visual_updates",
-                                       [e]() -> bool& { return e()->updater.m_useVisualUpdates; }));
+                // Scale with the tick rate: on by default under its own key,
+                // through the row's setter (a missing key is on, so an off is
+                // written outright; GucciUpdater::saveVisualUpdates).
+                v.push_back({"updater_visual_updates2", "bool", Store::Field,
+                             [] { return matjson::Value(gb()->updater.m_useVisualUpdates); },
+                             [](matjson::Value const& val, bool) {
+                                 bool const on = wantBool("updater_visual_updates2", val);
+                                 gb()->updater.m_useVisualUpdates = on;
+                                 GucciUpdater::saveVisualUpdates(on);
+                             }});
                 v.push_back(engineBool("replay_block_inputs", [e]() -> bool& { return e()->replay.m_ignoreInputs; }));
                 v.push_back(engineBool("feat_autosave_end", [e]() -> bool& { return e()->autosaveAtLevelEnd; }));
 

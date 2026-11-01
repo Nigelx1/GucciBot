@@ -146,6 +146,22 @@ int GucciUpdater::visualUpdateFactor() const {
     return std::max(1, (int)m_tps / (int)fps);
 }
 
+// "Scale with the tick rate", on by default since 2026-11-01 under a new key
+// (see m_useVisualUpdates). Read without getSavedValue's default, which would
+// write the key into the save on a mere look; written outright, since Geode's
+// setSavedValue writes nothing when the value equals what the key reads as,
+// and to it a missing key reads as off - so an off would never stick.
+static constexpr const char* kVisualUpdatesKey = "updater_visual_updates2";
+
+bool GucciUpdater::savedVisualUpdates() {
+    auto const& saved = Mod::get()->getSaveContainerConst();
+    return !saved.contains(kVisualUpdatesKey) || saved[kVisualUpdatesKey].asBool().unwrapOr(true);
+}
+
+void GucciUpdater::saveVisualUpdates(bool on) {
+    Mod::get()->getSaveContainer()[kVisualUpdatesKey] = on;
+}
+
 void GucciUpdater::calculateSteps(float dt, float targetDt) {
     // Absense's pathfinder thinks, and puts earlier states back, while the
     // frame stands still (drawScene). cocos measures this frame's delta after
