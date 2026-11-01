@@ -291,10 +291,12 @@ namespace gucci::ui::pages {
             auto s = tr::state(k);
             bool const following = tr::followsLevel(k);
 
-            kit::BeginCard("Click Trainer",
-                           "The macro's clicks scroll past a fixed center line at real speed. Tap space, up or W "
-                           "along with it, or play the level: every press and release you make shows up as a white "
-                           "line under the macro's.");
+            // Your presses are white, or the ink colour on a light theme (drawBar).
+            std::string const caption = fmt::format(
+                "The macro's clicks scroll past a fixed center line at real speed. Tap space, up or W along with "
+                "it, or play the level: every press and release you make shows up as a {} line under the macro's.",
+                look().pal.light ? "dark" : "white");
+            kit::BeginCard("Click Trainer", caption.c_str());
             if (kit::SwitchRow("Click bar", "Off stops its clock and stops listening for your keys", &s.barEnabled))
                 tr::saveSettings(k);
             if (!s.barEnabled) {
