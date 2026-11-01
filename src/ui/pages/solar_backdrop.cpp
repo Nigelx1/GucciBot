@@ -1,8 +1,9 @@
 // SolarBot's scene (Nigel, 2026-10-31): Solar Flare behind the menu. Janet,
-// the level's smiling sun, rises from the bottom-right corner with her face
-// turned into the menu; thin gold flares fan out from her with sparks along
-// them, a few gold sun gears turn, and the level's blue shows here and there
-// as cyan gems in gold frames, and in the menu's checks and slider grabs.
+// the level's smiling sun, looks in from the top-right corner, her face
+// turned down into the menu; thin gold flares fan out from her with sparks
+// along them, a few gold sun gears turn, and the level's blue shows here and
+// there as cyan gems in gold frames, and in the menu's checks and slider
+// grabs.
 //
 // Drawn the way the JMF sky is (trainer_pages.cpp jupiterBackdrop): on the
 // menu window's draw list before its children, so the cards stand in front
@@ -83,7 +84,7 @@ namespace gucci::ui::pages {
         }
 
         // Janet's face: two closed, smiling eyes and a small smile under them,
-        // `u` across, leaning by `tilt` (radians) so she looks up into the menu.
+        // `u` across, leaning by `tilt` (radians) towards where she looks.
         void face(ImDrawList* dl, ImVec2 at, float u, float tilt, ImU32 ink, float width) {
             ImVec2 const ex(std::cos(tilt), std::sin(tilt));   // her right
             ImVec2 const ey(-std::sin(tilt), std::cos(tilt));  // her down
@@ -100,7 +101,8 @@ namespace gucci::ui::pages {
         }
 
         // Where the marks go, in a 720 x 500 menu (its first size), stretched
-        // with the window. Kept off Janet's corner, which covers it.
+        // with the window. Placed when Janet was in the bottom-right corner;
+        // the gem at (630, 54) sits behind her now.
         struct Mark {
             float x, y, size;
         };
@@ -141,10 +143,18 @@ namespace gucci::ui::pages {
         float const t = look().effects ? static_cast<float>(ImGui::GetTime()) : 0.f;
         auto const at = [&](Mark const& m) { return ImVec2(a.x + m.x / 720.f * size.x, a.y + m.y / 500.f * size.y); };
 
-        // Janet: her centre just inside the bottom-right corner, so a little
-        // more than her top-left quarter shows.
-        float const R = std::max(70.f, std::min(size.x, size.y) * 0.42f);
-        ImVec2 const c(b.x - R * 0.10f, b.y - R * 0.06f);
+        // Janet: her centre just past the top-right corner, so only her
+        // lower-left part shows, in the page's header right of its title and
+        // quote and above the first card. In the bottom-right corner the
+        // opaque cards covered her (Nigel's 2026-10-31 shots). Sized in
+        // units, not stretched with the window, as the header isn't: at the
+        // menu's first size (720 wide) her rim is 60 units clear of the
+        // longest quote (321 units, ending at x 493), and a narrower window
+        // shrinks her so she backs off it too. Her right side may go behind
+        // the page's scroll bar.
+        float const scale = std::clamp((size.x - 500.f) / 220.f, 0.45f, 1.f);
+        float const R = 200.f * scale;
+        ImVec2 const c(b.x + 15.f * scale, a.y - 40.f * scale);
         float const breath = 0.5f + 0.5f * std::sin(t * 0.8f);  // her glow, slowly
 
         // Her warmth over the window: wide, faint rings, many enough that
@@ -215,9 +225,10 @@ namespace gucci::ui::pages {
             dl->AddCircleFilled(c, R * (1.f - 0.64f * f), col(mix(kSunEdge, kSunCore, f), 1.f), 96);
         }
         dl->AddCircle(c, R, col(kGold, 0.95f), 128, std::max(2.f, R * 0.012f));
-        // Her face, looking up into the menu.
-        ImVec2 const faceAt = along(c, kPi + 0.68f, R * 0.50f);
-        face(dl, faceAt, R * 0.18f, -0.30f, col(kFace, 0.92f), std::max(2.f, R * 0.018f));
+        // Her face on the part that shows, left of the scroll bar and above
+        // the cards, looking down and left into the menu.
+        ImVec2 const faceAt(b.x - 84.f * scale, a.y + 48.f * scale);
+        face(dl, faceAt, 28.f * scale, 0.40f, col(kFace, 0.92f), std::max(2.f, R * 0.018f));
 
         dl->PopClipRect();
         if (style.WindowBorderSize > 0.f)

@@ -41,7 +41,7 @@ namespace gucci::ui::themes {
     // A built-in's picture behind the menu, and anything it wears over the
     // colors refresh() works out (ui/shell.cpp drawMain and frame):
     // JupiterBot has the JMF page's look on every window and its sky behind
-    // every page, SolarBot has Janet rising in the corner, RondoBot the
+    // every page, SolarBot has Janet looking in from a corner, RondoBot the
     // Garden's parquet. Custom themes never get or copy one.
     enum class Scene : unsigned char { None, Jupiter, Solar, Garden };
 
