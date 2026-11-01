@@ -1528,9 +1528,14 @@ namespace gucci::ui {
                     // In the tagged theme's accent where that reads on the
                     // list (a frame), else in the text colour: LemonadeBot's
                     // yellow is lost on a light theme, RondoBot's green on a
-                    // dark one.
+                    // dark one, a red on SolarBot's orange. Between themes
+                    // the list had before the 2026-10-31 four (built in or
+                    // the user's own) on a dark menu, a tag keeps its accent
+                    // as it always has, so those looks don't change.
                     ImVec4 tagColor = tagTheme ? tagTheme->accent : ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled);
-                    if (tagTheme && contrast(tagColor, ImGui::GetStyleColorVec4(ImGuiCol_FrameBg)) < 3.f)
+                    auto const older = [](themes::Theme const& t) { return t.custom || t.id < themes::kRondoTheme; };
+                    bool const asBefore = tagTheme && !look().pal.light && older(*tagTheme) && older(themes::active());
+                    if (tagTheme && !asBefore && contrast(tagColor, ImGui::GetStyleColorVec4(ImGuiCol_FrameBg)) < 3.f)
                         tagColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
                     ImGui::TextColored(tagColor, "%s", tag.c_str());
                 }
