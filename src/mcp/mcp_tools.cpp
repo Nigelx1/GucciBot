@@ -1719,17 +1719,46 @@ namespace gucci::mcp {
 
         server.addTool({
             "gucci_open_level",
-            "Open one of your own (local, created) levels by its exact name, or "
-            "an online level by its `id`, from anywhere outside a level. An online "
-            "level not downloaded yet is downloaded first, the way clicking it in the "
-            "game does: the reply is then {downloading: true}; call again until it "
-            "opens. For Assistant Access sessions that restart the game or test the "
-            "pathfinder on a list of levels.",
+            "Open one of your own (local, created) levels by its exact name, "
+            "an online level by its `id`, or one of RobTop's levels by `main` "
+            "(1 Stereo Madness to 22 Dash, nothing downloaded; a level the "
+            "level-select screen shows locked is refused), from anywhere outside a "
+            "level. An online level not downloaded yet is downloaded first, the way "
+            "clicking it in the game does: the reply is then {downloading: true}; "
+            "call again until it opens. For Assistant Access sessions that restart "
+            "the game or test the pathfinder on a list of levels.",
             schemaOf({{"name", "string", "a local level's name, exactly"},
-                      {"id", "integer", "an online level's ID (instead of name)"}}),
+                      {"id", "integer", "an online level's ID (instead of name)"},
+                      {"main", "integer", "one of RobTop's levels, 1 to 22 (instead of name)"}}),
             [](matjson::Value const& a) {
                 if (PlayLayer::get() || LevelEditorLayer::get())
                     throw ToolError("leave the level (or the editor) first");
+                // GucciBot (2026-11-01): RobTop's levels, as the level-select
+                // screen opens them (LevelPage): GD builds them from its own
+                // files, so nothing is downloaded. Clubstep, Theory of
+                // Everything 2 and Deadlocked are locked until the account has
+                // their secret coins (the level's required coins against stat
+                // 8, the secret coins collected).
+                if (a.contains("main")) {
+                    int64_t const id = argInt(a, "main", 0);
+                    if (id < 1 || id > 22)
+                        throw ToolError("main is 1 to 22 (Stereo Madness to Dash)");
+                    auto* glm = GameLevelManager::get();
+                    auto* level = glm ? glm->getMainLevel((int)id, false) : nullptr;
+                    if (!level)
+                        throw ToolError(fmt::format("GD has no main level {}", id));
+                    auto* stats = GameStatsManager::sharedState();
+                    int const coins = stats ? stats->getStat("8") : 0;
+                    if (level->m_requiredCoins > coins)
+                        throw ToolError(fmt::format("{} is locked: it needs {} secret coins and this account has {}",
+                                                    std::string(level->m_levelName), level->m_requiredCoins, coins));
+                    auto* scene = PlayLayer::scene(level, false, false);
+                    CCDirector::sharedDirector()->replaceScene(CCTransitionFade::create(0.5f, scene));
+                    auto out = obj();
+                    out["main"] = id;
+                    out["opening"] = std::string(level->m_levelName);
+                    return out;
+                }
                 if (int const id = (int)argInt(a, "id", 0); id > 0) {
                     auto* glm = GameLevelManager::get();
                     auto* level = glm ? glm->getSavedLevel(id) : nullptr;
