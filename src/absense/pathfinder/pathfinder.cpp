@@ -2815,11 +2815,15 @@ bool AbsensePathfinder::beginRescueLeg(Decision& d) {
 // and drive leg lines (docs/AI_KNOWS_THE_GAME_PLAN.md step 0): the most live
 // states it carried on one tick, whether any were dropped for room (the cap:
 // an empty end is then no proof), and how often its calm gap was relaxed. A
-// UFO leg stuck at 2 live states is a leg that cannot fly.
+// UFO leg stuck at 2 live states is a leg that cannot fly. GucciBot
+// (BLOODBATH2.md): and, when the cap was shared, between how many classes at
+// most (gravity, kind, size, the goal object, a flying copy's height cell).
 static std::string legStats(const Trajectory::Leg& leg) {
-    return fmt::format("peak {} live state{}, {}, calm gap relaxed {} time{}", leg.peakFrontier,
-                       leg.peakFrontier == 1 ? "" : "s", leg.capped ? "some dropped for room" : "none dropped for room",
-                       leg.relaxed, leg.relaxed == 1 ? "" : "s");
+    return fmt::format("peak {} live state{}, {}{}, calm gap relaxed {} time{}", leg.peakFrontier,
+                       leg.peakFrontier == 1 ? "" : "s",
+                       leg.peakClasses > 1 ? fmt::format("{} classes kept apart, ", leg.peakClasses) : std::string(),
+                       leg.capped ? "some dropped for room" : "none dropped for room", leg.relaxed,
+                       leg.relaxed == 1 ? "" : "s");
 }
 
 // What a rescue leg came back with: each way in an idea of its own - the way,
@@ -2838,9 +2842,14 @@ void AbsensePathfinder::takeRescueLeg(Decision& d, const Trajectory::Leg& leg) {
     }
     const std::string stats = legStats(leg);
     if (leg.outcome != Trajectory::Leg::Outcome::Found || leg.witness.empty()) {
+        // GucciBot (BLOODBATH2.md, ANOMALIES item 1 fix 3): "out of room or
+        // steps" was two endings - everything died after the cap had dropped
+        // some (the dropped might have got there), or the steps or the
+        // horizon ran out with states still alive.
         const char* why = leg.outcome == Trajectory::Leg::Outcome::Impossible ? "impossible"
                           : leg.outcome == Trajectory::Leg::Outcome::NotFound ? "nothing alive gets there"
-                                                                              : "out of room or steps";
+                          : leg.emptied ? "everything died; some had been dropped for room"
+                                        : "out of steps or ticks";
         log("tick %llu: rescue leg to x %.0f (%llu before the dead end): not found (%s) after %d ticks, %llu steps, "
             "%.0f ms; %s",
             tick, d.rescueX, before, why, leg.ticks, (unsigned long long)leg.steps, leg.ms, stats.c_str());
@@ -2955,7 +2964,8 @@ void AbsensePathfinder::takeDriveLeg(Decision& d, const Trajectory::Leg& leg) {
     if (o.free) absense::route::noteLeg(o.x, o.gapLo, found);
     if (!found) {
         o.result = leg.outcome == Trajectory::Leg::Outcome::OutOfBudget
-                       ? fmt::format("out of room after {} ticks", leg.ticks)
+                       ? (leg.emptied ? fmt::format("everything died after {} ticks, some dropped for room", leg.ticks)
+                                      : fmt::format("out of steps or ticks after {} ticks", leg.ticks))
                    : leg.outcome == Trajectory::Leg::Outcome::Impossible ? std::string("impossible")
                                                                          : std::string("no way in");
         return;
