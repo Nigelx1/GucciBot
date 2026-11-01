@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-01-e (the Trainer bar turns an answered press gold or white where green cannot be told from the accent, a Save-offset teleport that drops says lower, UFO and swing rescue legs keep a share of their cap for every phase of the arc and skip a duplicate one-tick press, leg lines say how a leg ended, the macOS build runs on Intel Macs too)"
+    "2026-11-01-f (Calculate's notifications break into lines that fit the screen, its start message counts the inputs the way its report adds them up; the update checker's comment and the polish round's docs caught up)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
