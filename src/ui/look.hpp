@@ -52,12 +52,8 @@ namespace gucci::ui {
         float textScale = 1.f;
         bool accentCycle = false;   // slowly cycle the accent's hue
         float accentCycleRate = 0.5f;
-        bool effects = true;        // small animations, and the themes' moving backdrops (BrrrBot's snow,
-                                    // the JMF sky, SolarBot's Janet)
-        // A test's still shots (gucci_menu, effects off) hold the accent's
-        // pulse still as well, which the Animations switch alone leaves
-        // breathing (Red Kingdom's always has). Set by the shell each frame.
-        bool stillShots = false;
+        bool effects = true;        // small animations, a theme's pulsing accent (Red Kingdom's, SolarBot's)
+                                    // and the moving backdrops (BrrrBot's snow, the JMF sky, SolarBot's Janet)
         float menuScale = 1.f;      // Android and iOS: bigger or smaller than deviceScale picks
 
     private:

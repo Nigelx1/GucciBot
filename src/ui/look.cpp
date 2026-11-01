@@ -228,7 +228,11 @@ namespace gucci::ui {
         setLight(pal, luminance(theme.background) > 0.5f && luminance(theme.text) < luminance(theme.background));
 
         ImVec4 accent = theme.accent;
-        if (theme.pulse && !stillShots) {
+        // With Settings > Look > Animations off it holds the theme's own
+        // color, as the backdrops hold still (Nigel, 2026-11-01: "make it
+        // stop"). A test's still shots (gucci_menu, effects false) turn the
+        // switch off for the test, so they hold it too.
+        if (theme.pulse && effects) {
             // A slow breath between the colour and a brighter version of it
             // (a deeper one on a light theme).
             float const breath = 0.5f + 0.5f * std::sin(t * 2.2f);

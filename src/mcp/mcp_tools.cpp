@@ -618,7 +618,7 @@ namespace gucci::mcp {
             "built-in or custom, as a test that is never saved: theme \"\" puts the "
             "user's own theme and Animations back, and so does a restart; `effects` "
             "sets the Animations switch the same way (off holds the moving backdrops "
-            "still, so shots compare). Returns open, page, pages (the sidebar's, in "
+            "and a pulsing accent still, so shots compare). Returns open, page, pages (the sidebar's, in "
             "order), theme {id, name, custom}, themes (every name), effects, test "
             "{theme, effects} and compact (with Compact mode on, its small window "
             "shows instead of the pages).",
