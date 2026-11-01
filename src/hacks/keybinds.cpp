@@ -1,6 +1,7 @@
 #include "core/GucciBot.hpp"
 #include "core/bot_switch.hpp"
 #include "hacks/autoclicker.hpp"
+#include "hacks/safemode.hpp"
 #include "trainers/trainer_core.hpp"
 #include "ui/ui.hpp"
 
@@ -82,7 +83,19 @@ namespace {
         used |= fire(keys.onAutoFlip, k, [&] { flipSaved(gb->updater.m_autoFlipOnDeath, "feat_auto_flip"); });
         used |= fire(keys.onPreventDeath, k, [&] { flipSaved(gb->updater.m_preventDeath, "feat_prevent_death"); });
         used |= fire(keys.onMirrorInputs, k, [&] { flipSaved(gb->replay.m_mirrorInputs, "feat_mirror_inputs"); });
-        used |= fire(keys.onSafeMode, k, [&] { flipSaved(gb->protectedMode, "hack_safe_mode"); });
+        used |= fire(keys.onSafeMode, k, [&] {
+            flipSaved(gb->protectedMode, "hack_safe_mode");
+            // Forced on for this launch (a test run, hacks/safemode.hpp): the
+            // key still flips the user's own switch but not what's in force,
+            // so it says so instead of flipping in silence.
+            if (safemode::forced())
+                Notification::create(gb->protectedMode
+                                         ? "Safe mode switch on. Safe mode is on for this launch anyway."
+                                         : "Safe mode switch off, but safe mode stays on for this launch "
+                                           "(a test run turned it on).",
+                                     NotificationIcon::Info)
+                    ->show();
+        });
         used |= fire(keys.onCompactMode, k, [&] { ui::setCompactMode(!ui::compactMode()); });
         return used;
     }

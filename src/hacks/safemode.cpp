@@ -277,6 +277,16 @@ class $modify(GB7SafeModePlayLayer, PlayLayer) {
         };
         m_fields->red = make(ccc4f(1.f, 0.16f, 0.16f, 1.f), "cheat-dot"_spr);
         m_fields->green = make(ccc4f(0.2f, 0.85f, 0.35f, 1.f), "clean-dot"_spr);
+        // A test run's forced safe mode says so where someone plays: no dot
+        // shows it (the red one is hidden while forced), and a game a test
+        // left open may be the owner's next session. Next frame, once the
+        // level is up.
+        if (safemode::forced())
+            Loader::get()->queueInMainThread([] {
+                Notification::create("Safe mode is on for this launch: runs here don't count.",
+                                     NotificationIcon::Info, 4.f)
+                    ->show();
+            });
         return true;
     }
 
