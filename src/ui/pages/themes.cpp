@@ -256,8 +256,9 @@ namespace gucci::ui::pages {
             if (text.empty())
                 return;
             UseFont f(Font::Small);
-            // extensionProblem can name GucciBot (GBot while disguised).
-            kit::Paragraph(branded(text).c_str(), Tone::Bad);
+            // Not branded: the problems name themes (GucciBot's own .brrr is
+            // the GucciBot theme's under GBot too) and never the mod.
+            kit::Paragraph(text.c_str(), Tone::Bad);
         }
 
         void textRow(const char* label, const char* hint, std::string* value, const char* placeholder = nullptr) {
@@ -322,7 +323,7 @@ namespace gucci::ui::pages {
                     act = top;
                 if (!ed.error.empty()) {
                     kit::Gap(0.25f);
-                    kit::Note(branded(ed.error).c_str(), Tone::Bad);
+                    kit::Note(ed.error.c_str(), Tone::Bad);
                 }
                 kit::EndCard();
             }

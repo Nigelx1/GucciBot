@@ -672,7 +672,7 @@ namespace gucci::ui::themes {
                 return fmt::format("{} is {}'s. Macros saved with it would mix with that theme's.", extension, t.name);
         for (auto taken : kTaken)
             if (taken == extension)
-                return fmt::format("GucciBot already uses {} files for something else.", extension);
+                return fmt::format("{} files are already used for something else here.", extension);
         for (auto const& t : customs())
             if (t.name != self && t.extension == extension)
                 return fmt::format("Your theme {} already saves macros as {}.", t.name, extension);
