@@ -11,6 +11,16 @@
   "name": "GucciBot",
   "developer": "Nigelx1",
   "description": "Silicate engine, GBR6 hypercompression, and a full Jupiter My Favourite practice trainer. Frame perfect. Ice cold. Brrr.",
+  "repository": "https://github.com/Nigelx1/GucciBot",
+  "links": {
+    "homepage": "https://guccibot.net",
+    "community": "https://discord.gg/m95NUPdbpJ",
+    "source": "https://github.com/Nigelx1/GucciBot"
+  },
+  "issues": {
+    "info": "Open an issue on GitHub and attach the newest file from geode/logs (for a crash, the newest from geode/crashlogs too). Questions and help go to the Discord server, Nigel's Neighborhood.",
+    "url": "https://github.com/Nigelx1/GucciBot/issues"
+  },
   "resources": {
     "files": [
       "resources/*.ttf",
