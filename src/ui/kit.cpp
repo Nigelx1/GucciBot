@@ -154,13 +154,25 @@ namespace gucci::ui::kit {
 
     void Chip(const char* text, Tone tone) {
         UseFont f(Font::Small);
+        auto const& pal = look().pal;
         ImVec4 const c = look().tone(tone);
         ImVec2 const pad(7.f, 2.f);
         ImVec2 const textSize = ImGui::CalcTextSize(text);
         ImVec2 const size(textSize.x + pad.x * 2.f, textSize.y + pad.y * 2.f);
         ImVec2 const a = ImGui::GetCursorScreenPos();
+        ImVec2 const b(a.x + size.x, a.y + size.y);
         auto* dl = ImGui::GetWindowDrawList();
-        dl->AddRectFilled(a, ImVec2(a.x + size.x, a.y + size.y), u32(withAlpha(c, 0.17f)), size.y * 0.5f);
+        // A dark theme whose cards are darker than its backdrop (SolarBot's
+        // brown on orange): a tint of the tone over that orange can't be read
+        // (no pastel reaches 3:1 on it), so the chip is a card-coloured pill
+        // in the tone's outline, where the tones read at 4.5:1 and up. Every
+        // other theme's cards are lighter than its backdrop and keep the tint.
+        if (!pal.light && luminance(pal.surface) < luminance(pal.backdrop)) {
+            dl->AddRectFilled(a, b, u32(pal.surface), size.y * 0.5f);
+            dl->AddRect(a, b, u32(withAlpha(c, 0.6f)), size.y * 0.5f);
+        } else {
+            dl->AddRectFilled(a, b, u32(withAlpha(c, 0.17f)), size.y * 0.5f);
+        }
         dl->AddText(ImVec2(a.x + pad.x, a.y + pad.y), u32(c), text);
         ImGui::Dummy(size);
     }

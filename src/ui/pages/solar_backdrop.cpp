@@ -36,6 +36,7 @@ namespace gucci::ui::pages {
         ImVec4 const kSunCore{1.000f, 0.882f, 0.302f, 1.f};   // #FFE14D, her middle
         ImVec4 const kSunGlow{1.000f, 0.851f, 0.239f, 1.f};   // #FFD93D, the light round her
         ImVec4 const kFace{0.239f, 0.098f, 0.000f, 1.f};      // #3D1900, her eyes and smile
+        ImVec4 const kBad{0.973f, 0.541f, 0.502f, 1.f};       // #F88A80, a red that reads on her cards
 
         ImU32 col(ImVec4 const& c, float alpha) {
             return ImGui::ColorConvertFloat4ToU32(ImVec4(c.x, c.y, c.z, std::clamp(alpha, 0.f, 1.f)));
@@ -114,8 +115,11 @@ namespace gucci::ui::pages {
     } // namespace
 
     // Her gems' blue in the menu's own widgets (after look().refresh(), as
-    // JupiterBot's look is).
+    // JupiterBot's look is). And a lighter red for errors: the dark themes'
+    // reads 3.2:1 on SolarBot's brown cards, this one 4.6:1 (a Bad button's
+    // label over it still 4:1). Good and Warn read as they are.
     void solarLookApply() {
+        look().pal.bad = kBad;
         ImVec4* c = ImGui::GetStyle().Colors;
         c[ImGuiCol_CheckMark] = kCyan;
         c[ImGuiCol_SliderGrab] = kCyan;
