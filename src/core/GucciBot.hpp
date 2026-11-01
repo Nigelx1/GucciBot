@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-01-d (GBot hides the Credits page too, Animations off stops the accent pulse, gucci_sim_vs_real keeps the button held through its restore; the GBot write-up reworded)"
+    "2026-11-01-e (the Trainer bar turns an answered press gold or white where green cannot be told from the accent, a Save-offset teleport that drops says lower, UFO and swing rescue legs keep a share of their cap for every phase of the arc and skip a duplicate one-tick press, leg lines say how a leg ended, the macOS build runs on Intel Macs too)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
