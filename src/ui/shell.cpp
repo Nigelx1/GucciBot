@@ -622,6 +622,15 @@ namespace gucci::ui {
             return name;
         }
 
+        // A format's name as the menu says it. While disguised GucciBot 1.x's
+        // old .brrr is just an old 1.x macro: GBot never had a 1.x, and
+        // nothing on screen says Brrr.
+        std::string formatLabel(convert::Format const& f) {
+            if (disguised() && f.id == "brr")
+                return "Old 1.x macro";
+            return branded(std::string(f.name));
+        }
+
         // Another format's macro (the bytes of `src`), saved as a GucciBot one
         // in replays/ and named after `src`. One that was in the replays
         // folder moves to replays/converted (an old 1.x .brrr to
@@ -675,8 +684,8 @@ namespace gucci::ui {
                     moveNote = fmt::format("\nThe original stayed in the replays folder ({}).", ec.message());
             }
             GucciEngine::get()->reloadMacroList();
-            std::string msg = fmt::format("{} ({}) is now \"{}\": {} inputs at {} TPS.", fname, res.format->name, name,
-                                          m.inputs.size(), m.tps);
+            std::string msg = fmt::format("{} ({}) is now \"{}\": {} inputs at {} TPS.", fname,
+                                          formatLabel(*res.format), name, m.inputs.size(), m.tps);
             for (auto const& n : m.notes)
                 msg += "\n" + n;
             msg += moveNote;
@@ -1078,11 +1087,12 @@ namespace gucci::ui {
                 }
             }
             kit::Section("From other bots");
-            kit::Hint(branded("GDR, Silicate, TcBot, ToastyReplay, yBot, xdBot, Mega Hack, Echo and more, and "
-                              "GucciBot 1.x's old .brrr. Drop them in the replays folder, or import one (or a "
-                              "GucciBot macro) from anywhere: the original stays where it was, a copy dated the day "
-                              "it first came in is kept in replays/imported, and importing it again selects the "
-                              "macro it became.")
+            kit::Hint(branded(fmt::format("GDR, Silicate, TcBot, ToastyReplay, yBot, xdBot, Mega Hack, Echo and more, "
+                                          "and {}. Drop them in the replays folder, or import one (or a GucciBot "
+                                          "macro) from anywhere: the original stays where it was, a copy dated the "
+                                          "day it first came in is kept in replays/imported, and importing it again "
+                                          "selects the macro it became.",
+                                          disguised() ? "old 1.x macros" : "GucciBot 1.x's old .brrr"))
                           .c_str());
             ImGui::BeginDisabled(s_macroPickPending || gb->isRecording());
             if (kit::Button(s_macroPickPending ? "Choosing..." : "Import a macro")) {
@@ -1111,16 +1121,14 @@ namespace gucci::ui {
             kit::RowBegin("Shift frames", "If a converted macro dies early, try one frame either way");
             ImGui::SliderInt("##convertshift", &g_convertShift, -3, 3, g_convertShift == 0 ? "as saved" : "%+d");
             kit::RowEnd();
-            static std::map<std::string, std::string> s_formatOf;
+            // Each file's format, found once (nullptr: none).
+            static std::map<std::string, convert::Format const*> s_formatOf;
             std::string convertNow;
             for (auto const& n : gb->foreignMacros) {
                 ImGui::PushID(n.c_str());
                 auto it = s_formatOf.find(n);
-                if (it == s_formatOf.end()) {
-                    auto const* f = convert::detect(readAll(replaysDir() / n), n);
-                    it = s_formatOf.emplace(n, f ? std::string(f->name) : std::string("not a format GucciBot knows"))
-                             .first;
-                }
+                if (it == s_formatOf.end())
+                    it = s_formatOf.emplace(n, convert::detect(readAll(replaysDir() / n), n)).first;
                 ImGui::BeginDisabled(gb->isRecording());
                 if (ImGui::SmallButton("Convert"))
                     convertNow = n;
@@ -1128,8 +1136,10 @@ namespace gucci::ui {
                 ImGui::SameLine();
                 ImGui::TextUnformatted(n.c_str());
                 ImGui::SameLine();
-                // Kept as found and branded as shown, so a theme change shows.
-                ImGui::TextDisabled("%s", branded(it->second).c_str());
+                // Named as shown, so a theme change shows.
+                std::string const label =
+                    it->second ? formatLabel(*it->second) : branded("not a format GucciBot knows");
+                ImGui::TextDisabled("%s", label.c_str());
                 ImGui::PopID();
             }
             if (!convertNow.empty())
