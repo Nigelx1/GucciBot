@@ -246,7 +246,12 @@ namespace gucci::ui {
         pal.raised = withAlpha(shade(theme.card, 0.055f), 1.f);
         pal.ink = withAlpha(theme.text, 1.f);
         pal.muted = withAlpha(theme.textMuted, 1.f);
-        pal.line = withAlpha(mix(theme.card, theme.text, 0.14f), 1.f);
+        // Borders and dividers: a step from the card towards the text, 14%
+        // of the way on a dark theme (GucciBot's line is 1.43:1 on its
+        // card). The same step on a white card is 1.25:1, too faint to keep
+        // a white card's edge on a near-white window, so a light theme's
+        // take 24% (1.48:1, RondoBot's light green-grey).
+        pal.line = withAlpha(mix(theme.card, theme.text, pal.light ? 0.24f : 0.14f), 1.f);
         pal.radius = std::clamp(theme.radius, 0.f, 14.f);
 
         ImGuiStyle& s = ImGui::GetStyle();
