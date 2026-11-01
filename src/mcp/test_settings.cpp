@@ -29,6 +29,7 @@
 #include <limits>
 #include <map>
 #include <optional>
+#include <string_view>
 #include <vector>
 
 using namespace geode::prelude;
@@ -272,11 +273,22 @@ namespace gucci::testset {
                                        "fwac_leg_trail", "fwac_fast_subtick", "fwac_dependent_search",
                                        "fwac_show_markers"}) {
                     auto const t = fwstore::getOne(fw);
+                    // The Markers row and the bands change how the windows
+                    // look: on the Calculate page (pages/calculate.cpp,
+                    // g_look) a change there draws the markers again, never
+                    // mid-run, as fw_default_look does above. reset() putting
+                    // the user's value back goes through here too.
+                    std::string_view const name = fw;
+                    bool const look = name == "fwac_tiers" || name == "fwac_show_markers";
                     v.push_back({fw, t.isBool() ? "bool" : t.isString() ? "text" : "int", Store::Field,
                                  [fw] { return fwstore::getOne(fw); },
-                                 [fw](matjson::Value const& val, bool) {
+                                 [fw, look](matjson::Value const& val, bool) {
+                                     matjson::Value const before = look ? fwstore::getOne(fw) : matjson::Value();
                                      if (auto err = fwstore::setOne(fw, val); !err.empty())
                                          throw ToolError(err);
+                                     auto& analyzer = ::Bot::get()->frameWindow();
+                                     if (look && !(fwstore::getOne(fw) == before) && !analyzer.running())
+                                         analyzer.clearDisplay();
                                  }});
                 }
                 v.push_back(live("calc_mute", LiveType::Bool));
