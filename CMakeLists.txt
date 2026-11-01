@@ -1,6 +1,15 @@
 cmake_minimum_required(VERSION 3.25)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# Both Mac architectures, as Geode's mod template does, so an Intel Mac can
+# load the macOS binary (CI's was arm64 only). It has to be set before
+# project(): the SDK's own default comes after the mod's target exists, too
+# late. iOS is arm64. Windows and Android ignore it.
+if ("${CMAKE_SYSTEM_NAME}" STREQUAL "iOS" OR IOS)
+    set(CMAKE_OSX_ARCHITECTURES "arm64")
+else()
+    set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64")
+endif()
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 
 project(GucciBot VERSION 2.0.0 LANGUAGES CXX)
