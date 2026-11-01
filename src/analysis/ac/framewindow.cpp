@@ -1225,6 +1225,21 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
         report.message = "The macro has no clicks to measure.";
         return report;
     }
+    // GucciBot (2026-11-01): the start message counts the inputs the way the
+    // report adds them up (measured, not measured, filtered out), so before
+    // any release is left out. Counted after the fold below, it said
+    // "Analyzing 1301 inputs." on Clubstep 2 to a report of 1027: 613
+    // releases on their own click's tick were folded into those clicks
+    // already, and 274 that can't matter in their game mode went after the
+    // capture pass, which is what sees the mode (applyOrbAwareSkip).
+    auto const asked = [&](Sample const& s) {
+        return !partial || (s.frame >= from && s.frame <= to);
+    };
+    size_t const askedCount =
+        std::count_if(m_samples.begin(), m_samples.end(), asked);
+    bool const askedRelease =
+        std::any_of(m_samples.begin(), m_samples.end(),
+                    [&](Sample const& s) { return s.release && asked(s); });
     this->foldSwiftClicks();
 
     size_t inRange = m_samples.size();
@@ -1331,7 +1346,11 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
     logPlayerState("capture-start", pl->m_player1);
 
     report.ok = true;
-    report.message = fmt::format("Analyzing {} inputs.", inRange);
+    report.message = fmt::format("Analyzing {} inputs.", askedCount);
+    if (askedRelease)
+        report.message +=
+            " Releases that can't matter are left out, so fewer may be "
+            "measured.";
     return report;
 }
 
