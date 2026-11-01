@@ -121,6 +121,10 @@ namespace gucci::safemode {
         return forcedByEnvironment() || g_forcedByTool;
     }
 
+    bool tainted() {
+        return g_tainted;
+    }
+
     void forceForSession() {
         if (forced())
             return;

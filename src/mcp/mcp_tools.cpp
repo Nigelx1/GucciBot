@@ -233,7 +233,12 @@ namespace gucci::mcp {
             "safe_mode (switch: Hacks > Safe mode; forced: on for this launch for "
             "a test run, by GUCCIBOT_FORCE_SAFE_MODE or gucci_force_safe_mode; "
             "auto: auto safe mode; bot_runs_count: false when a macro, Calculate "
-            "or pathfinder run can't save progress or stats).",
+            "or pathfinder run can't save progress or stats; cheating_now: "
+            "something on right now counts as a cheat; tainted: this attempt had "
+            "one on). Also level.completed (the level's end reached this "
+            "attempt), audio (BIG BRRRR enabled/playing/track/holds_game_audio, "
+            "FMOD's master volume and pitch, the game's music and sfx volumes, "
+            "test_mute) and test_settings (the keys gucci_test_set holds).",
             obj(),
             [](matjson::Value const&) {
                 auto* gb = GucciEngine::get();
@@ -256,8 +261,37 @@ namespace gucci::mcp {
                     sm["auto"] = safemode::autoSafeMode();
                     sm["bot_runs_count"] =
                         !gb->protectedMode && !safemode::forced() && !safemode::autoSafeMode();
+                    sm["cheating_now"] = safemode::cheatingNow();
+                    sm["tainted"] = safemode::tainted();
                     out["safe_mode"] = sm;
                 }
+                {
+                    // GucciBot (2026-11-01): what's making sound, for the test
+                    // batches that mute the game (gucci_test_set test_mute).
+                    auto audio = obj();
+                    auto* brrr = BigBrrrManager::get();
+                    auto big = obj();
+                    big["enabled"] = brrr->enabled;
+                    big["playing"] = brrr->playing();
+                    big["track"] = brrr->trackFile();
+                    big["holds_game_audio"] = brrr->holdsGameAudio();
+                    audio["bigbrrr"] = big;
+                    if (auto* fmod = FMODAudioEngine::sharedEngine()) {
+                        FMOD::ChannelGroup* master = nullptr;
+                        if (fmod->m_system && fmod->m_system->getMasterChannelGroup(&master) == FMOD_OK && master) {
+                            float volume = 0.f, pitch = 0.f;
+                            master->getVolume(&volume);
+                            master->getPitch(&pitch);
+                            audio["master_volume"] = (double)volume;
+                            audio["master_pitch"] = (double)pitch;
+                        }
+                        audio["music_volume"] = (double)fmod->getBackgroundMusicVolume();
+                        audio["sfx_volume"] = (double)fmod->getEffectsVolume();
+                    }
+                    audio["test_mute"] = testset::muted();
+                    out["audio"] = audio;
+                }
+                out["test_settings"] = testset::heldKeys();
 
                 auto owner = runOwner();
                 out["run_owner"] = owner.empty() ? "none" : owner;
@@ -277,6 +311,7 @@ namespace gucci::mcp {
                     }
                     lvl["length_x"] = (double)gb->m_levelLength;
                     lvl["practice"] = pl->m_isPracticeMode;
+                    lvl["completed"] = pl->m_hasCompletedLevel;
                     out["level"] = lvl;
 
                     if (pl->m_player1) {
@@ -1060,7 +1095,10 @@ namespace gucci::mcp {
         server.addTool({
             "gucci_level_info",
             "The open level: name, id, length, object count, platformer / "
-            "two-player / dual, time warp, practice mode.",
+            "two-player / dual, time warp, practice mode, and the level's saved "
+            "stats as GD holds them now (attempts, jumps, normal_percent, "
+            "practice_percent), so a test can check a run under safe mode left "
+            "them alone.",
             obj(),
             [](matjson::Value const&) {
                 auto* pl = requireLevel();
@@ -1069,6 +1107,10 @@ namespace gucci::mcp {
                 if (pl->m_level) {
                     out["name"] = std::string(pl->m_level->m_levelName);
                     out["id"] = (int64_t)pl->m_level->m_levelID.value();
+                    out["attempts"] = (int64_t)pl->m_level->m_attempts.value();
+                    out["jumps"] = (int64_t)pl->m_level->m_jumps.value();
+                    out["normal_percent"] = (int64_t)pl->m_level->m_normalPercent.value();
+                    out["practice_percent"] = (int64_t)pl->m_level->m_practicePercent;
                 }
                 out["length_x"] = (double)gb->m_levelLength;
                 out["objects"] = (int64_t)(pl->m_objects ? pl->m_objects->count() : 0);

@@ -50,5 +50,8 @@ namespace gucci::safemode {
     void setGreenDot(bool on);
 
     bool cheatingNow();
+    // This attempt has had something on that counts as cheating (auto safe
+    // mode keeps it from counting). For Assistant Access's get_state.
+    bool tainted();
 
 } // namespace gucci::safemode

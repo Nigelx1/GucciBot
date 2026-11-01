@@ -29,7 +29,18 @@ namespace gucci {
             return rawBassLevel.load();
         }
 
+        // For Assistant Access's get_state: whether FMOD is playing the track,
+        // which file it is, and whether it holds the game's music muted.
+        bool playing() const;
+        std::string const& trackFile() const {
+            return track;
+        }
+        bool holdsGameAudio() const {
+            return audioMuteHeld;
+        }
+
     private:
+        std::string track;  // the file start() opened, "" when none
         FMOD::Sound* sound = nullptr;
         FMOD::Channel* channel = nullptr;
         FMOD::DSP* bassDsp = nullptr;

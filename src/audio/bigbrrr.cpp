@@ -114,10 +114,10 @@ namespace gucci {
             }
             if (path.empty()) {
                 // The active theme's own track, as its Themes page shows it.
-                std::string track = ui::activeThemeAudio().file;
-                if (track.empty())
-                    track = "big_brrr.mp3";
-                auto bundled = Mod::get()->getResourcesDir() / track;
+                std::string themeTrack = ui::activeThemeAudio().file;
+                if (themeTrack.empty())
+                    themeTrack = "big_brrr.mp3";
+                auto bundled = Mod::get()->getResourcesDir() / themeTrack;
                 if (std::filesystem::exists(bundled, ec))
                     path = bundled;
             }
@@ -146,6 +146,7 @@ namespace gucci {
         sound->setMode(FMOD_LOOP_NORMAL);
         system->playSound(sound, nullptr, false, &channel);
         if (channel) {
+            track = geode::utils::string::pathToString(path.filename());
             channel->setVolume(1.f);
             channel->setPosition((unsigned int)(kStartOffsetSec() * 1000.0), FMOD_TIMEUNIT_MS);
             GameAudioMute::acquire();
@@ -185,6 +186,12 @@ namespace gucci {
             GameAudioMute::release();
             audioMuteHeld = false;
         }
+        track.clear();
+    }
+
+    bool BigBrrrManager::playing() const {
+        bool on = false;
+        return channel && channel->isPlaying(&on) == FMOD_OK && on;
     }
 
 } // namespace gucci
