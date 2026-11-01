@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-01-f (Calculate's notifications break into lines that fit the screen, its start message counts the inputs the way its report adds them up; the update checker's comment and the polish round's docs caught up)"
+    "2026-11-01-g (Geode's page for the mod gets buttons for the site, the Discord and the source, and its issue link goes to GitHub issues; about.md says where to ask and where bugs go; the README gets a Get it section, the planning docs move into docs, and CLAUDE.md is local-only)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
