@@ -2620,9 +2620,15 @@ namespace gucci::ui {
 
         // A theme with no BIG BRRRR (SolarBot's, JupiterBot's, GBot's) stops a
         // drop that's playing, however it was picked, and the next theme with
-        // one starts it again: the switch stays the user's.
+        // one starts it again: the switch stays the user's. Switching the bot
+        // off stops BIG BRRRR for good (botswitch's stopEverything), so it
+        // ends a hold too: the drop doesn't come back after.
         bool g_brrrHeld = false;
         void brrrFollowsTheme() {
+            if (!botswitch::wanted()) {
+                g_brrrHeld = false;
+                return;
+            }
             auto* brrr = BigBrrrManager::get();
             if (themes::active().noBrrr) {
                 if (brrr->enabled) {
@@ -2991,6 +2997,7 @@ namespace gucci::ui {
             touch::frame();
 #endif
             if (botswitch::takenOut()) {
+                g_brrrHeld = false;  // brrrFollowsTheme: switched off, nothing held
                 look().refresh();
                 sceneLook();
                 if (g_open)
