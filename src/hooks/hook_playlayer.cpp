@@ -469,6 +469,14 @@ class $modify(GB7PlayLayer, PlayLayer) {
         auto& upd = gb->updater;
 
         m_queuedButtons.clear();
+        // GucciBot (2026-11-01): the judge (gucci_sim_vs_real) putting the
+        // game back to the state it saved, which already holds the button as
+        // it was (SavedPlayerCheckpoint keeps m_holdingButtons and the
+        // buffered press). The judge runs idle, so this synced the button to
+        // the mouse below and let go of it: every script after the first at a
+        // spot started with the button up. Nothing else calls judge::run.
+        if (absense::judge::active())
+            return;
 
         if (gb->isPlaying()) {
             if (gb->practiceFix.m_savedCheckpoints.empty()) {
