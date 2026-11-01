@@ -221,7 +221,8 @@ namespace gucci::ui {
         // A light theme (RondoBot's white) is lit the other way: what lifts on
         // a dark theme (the raised controls, a hover, a press, the pulse)
         // darkens on a light one, which near white would otherwise clamp to
-        // nothing. Dark themes come out exactly as before.
+        // nothing. Dark themes come out as before, bar Calculate's table
+        // (below), which every theme colours now.
         setLight(pal, luminance(theme.background) > 0.5f);
 
         ImVec4 accent = theme.accent;
@@ -311,7 +312,8 @@ namespace gucci::ui {
         c[ImGuiCol_ModalWindowDimBg] = ImVec4(0.f, 0.f, 0.f, 0.45f);
         // Tables (Calculate's) in the theme's colours rather than ImGui's dark
         // grey, which a light theme can't read: the header a step towards the
-        // text, the stripes a breath of it.
+        // text, the stripes a breath of it. On every theme (the 2026-10-31
+        // spec), so a dark theme's header is a tint of it now, not grey.
         c[ImGuiCol_TableHeaderBg] = withAlpha(mix(pal.surface, pal.ink, 0.10f), 1.f);
         c[ImGuiCol_TableBorderStrong] = pal.line;
         c[ImGuiCol_TableBorderLight] = withAlpha(pal.line, 0.6f);
