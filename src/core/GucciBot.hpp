@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-01-h (Record while a macro plays carries on from there, GitHub issue 32; Scale with the tick rate is on by default, issue 30; the setup check names a second GucciBot file in the mods folder, issue 31; resuming a recording keeps the input playback just played and the tick rate the game runs at; SolarBot's Janet keeps her eyes open and her smile gets its corner lines; text fixes for the Click Trainer caption and route legs; on macOS, iOS and Android random teleports are seeded, checkpoints place through the key's own hook, and High TPS precision is greyed out as Windows only; the pathfinder writes back what the real game moved a section cell at a time on levels with rows, with a check to prove it, and gucci_level_census says what a level asks of the World; Assistant Access reads the menu as text, GD's screens and events, and Calculate's range and progress, and takes screenshot bursts and whole-page shots)"
+    "2026-11-02-a (JupiterBot and the JMF Trainer wear Nigel's pick B, the star chart at night, drawn from new images: a moon dial whose rings turn two ways, scribbled stars and twinkles, rising specks, a skyline with lit windows that flicker; the JMF look's colours with no faded yellow, the page you're on lit like a window)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
