@@ -20,6 +20,7 @@
 #include "absense/glue.hpp"
 #include "audio/bigbrrr.hpp"
 #include "audio/clicks.hpp"
+#include "mcp/scene.hpp"
 #include "mcp/screenshot.hpp"
 #include "mcp/test_settings.hpp"
 #include "mcp/tickprobe.hpp"
@@ -871,6 +872,57 @@ namespace gucci::mcp {
             },
         });
 
+        // GucciBot (2026-11-01): GD's own screens as data (mcp/scene.hpp).
+        {
+            auto schema = schemaOf({{"root", "string", "all (default: the scene, then Geode's overlay), scene, "
+                                                       "overlay, ui (the level's UI layer) or id:<node id>"},
+                                    {"depth", "integer", "how deep to walk (default 14)"},
+                                    {"max", "integer", "most nodes listed (default 1500, max 5000)"},
+                                    {"visible_only", "boolean", "only nodes drawn on screen (default true)"},
+                                    {"objects", "boolean", "walk the level's objects too (default false: counted)"},
+                                    {"format", "string", "text (default: one line a node) or json"}});
+            auto find = obj();
+            find["type"] = "object";
+            find["description"] =
+                "{id, class, text}: only the nodes that match all that are given (a part of each, ignoring "
+                "case), each with every text under it, e.g. {id: \"nigelx1.guccibot/\"}";
+            schema["properties"]["find"] = find;
+            server.addTool({
+                "gucci_scene",
+                "GD's screen as data: the cocos node tree with each node's class, ID, "
+                "text (labels, text boxes), box on screen (cocos units, y up from the "
+                "bottom; win is the screen, px_per_unit turns units into pixels), "
+                "shown (drawn and on screen), opacity, colour, scale, a menu item's "
+                "enabled and a draw node's vertices (Calculate's markers, ghosts, the "
+                "macro path). Also gd (in a level: GD's percentage and attempts "
+                "labels and progress bar, from PlayLayer itself), popups (alerts and "
+                "Geode popups: title, body, buttons) and notifications (text, box, "
+                "offscreen). Other mods' nodes show the same way. The level's "
+                "objects are counted, not listed, unless objects is true. Only reads.",
+                schema,
+                [](matjson::Value const& a) {
+                    scene::Options o;
+                    o.root = argStr(a, "root", "all");
+                    o.depth = (int)std::clamp<int64_t>(argInt(a, "depth", 14), 1, 64);
+                    o.max = (int)std::clamp<int64_t>(argInt(a, "max", 1500), 1, 5000);
+                    o.visibleOnly = argBool(a, "visible_only", true);
+                    o.objects = argBool(a, "objects", false);
+                    if (a.contains("find")) {
+                        auto const& f = a["find"];
+                        if (!f.isObject())
+                            throw ToolError("find is an object: {id, class, text}");
+                        o.findId = argStr(f, "id");
+                        o.findClass = argStr(f, "class");
+                        o.findText = argStr(f, "text");
+                    }
+                    auto const format = argStr(a, "format", "text");
+                    if (format != "text" && format != "json")
+                        throw ToolError("format is text or json");
+                    return scene::walk(o, format == "text");
+                },
+            });
+        }
+
         // --- the analyzer --------------------------------------------------
 
         {
@@ -1399,7 +1451,9 @@ namespace gucci::mcp {
             "start_positions: start position objects (id 31) in the level's "
             "object list; mirror {flipped: the level is mirrored as the game "
             "counts it, camera_flip: GD's m_cameraFlip, how the picture is drawn "
-            "(No Mirror leaves it as it was), flipping: GD's m_levelFlipping}.",
+            "(No Mirror leaves it as it was), flipping: GD's m_levelFlipping}; "
+            "gd_labels: GD's percentage and attempts labels {exists, shown, "
+            "text, box} and progress_bar {exists, shown}, as drawn now.",
             obj(),
             [](matjson::Value const&) {
                 auto* pl = requireLevel();
@@ -1425,6 +1479,9 @@ namespace gucci::mcp {
                         mirror["flipping"] = (double)*f;
                     out["mirror"] = mirror;
                 }
+                // GD's percentage and attempt labels and its progress bar, as
+                // drawn (Hide percentage / Hide attempts hide them).
+                out["gd_labels"] = scene::gdLabels(pl);
                 if (pl->m_level) {
                     out["name"] = std::string(pl->m_level->m_levelName);
                     out["id"] = (int64_t)pl->m_level->m_levelID.value();
