@@ -127,7 +127,8 @@ namespace absense {
     // `cellY` (any height only, lo > hi): a UFO's or swing's share of the
     // cap per that many units of height and way of going (Trajectory::
     // LegGoal::cellY); 10 is what the pathfinder's rescue legs use
-    // (pathfinder.cpp kLegCellY), 0 the ranking alone.
+    // (pathfinder.cpp kLegCellY), 0 the ranking alone (the duplicate
+    // one-tick UFO press is left out either way).
     matjson::Value routeLeg(float gateX, float lo, float hi, int maxTicks, int frontierCap, bool exact, double maxMs,
                             float cellY = 10.0f);
 

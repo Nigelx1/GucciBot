@@ -1555,7 +1555,8 @@ namespace gucci::mcp {
                       {"cell", "integer",
                        "any height only: a UFO or swing keeps a share of the cap for each this many units of "
                        "height and each way of going (default 10, what the pathfinder's rescue legs use; 0: "
-                       "the ranking alone, as before)"}}),
+                       "no height shares, the ranking alone. Either way a UFO's one-tick press is left out "
+                       "where a held press plays the same, so 0 is not the search from before build -e)"}}),
             [](matjson::Value const& a) {
                 requireFreeRun();
                 requireLevel();

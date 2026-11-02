@@ -352,7 +352,9 @@ class Trajectory {
         // of the cap for each `cellY` units of height and each way of going (up
         // or down) of a copy that flies on presses (UFO, swing): the arc a
         // press starts is its phase, and which phase gets through can show
-        // hundreds of ticks later. 0: no shares (the ranking alone, as before).
+        // hundreds of ticks later. 0: no shares, the ranking alone. (The
+        // one-tick UFO press a held press duplicates is left out either way,
+        // in stepLeg, so 0 is not the search from before these shares.)
         float cellY = 0.0f;
         // A way in counts only if this object fired on the way (a route
         // option's USE), or only if this one did not (its SKIP).
