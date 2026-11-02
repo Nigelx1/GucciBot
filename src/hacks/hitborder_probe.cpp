@@ -3,7 +3,10 @@
 // What GD's pass does to the copy is seen at the functions GD itself calls,
 // each only for the copy and only while the probe runs:
 //   - PlayLayer::destroyPlayer: killed, and by what (first in line, before
-//     anything that would swallow the death);
+//     anything that would swallow the death). A block's inner box, a slope's
+//     leg and a slope's line kill with no object (destroyPlayer(player,
+//     nullptr), 0x3937f2 and 0x39021e), so a death without one is put down
+//     to the object whose collision call is running;
 //   - PlayerObject::collidedWithObject / collidedWithObjectInternal: a
 //     block, or a slope's 1-unit leg, passed GD's touch test (the outer box);
 //   - PlayerObject::collidedWithSlopeInternal: a slope's line snapped the
@@ -70,6 +73,13 @@ namespace gucci {
             bool upsideDown = false;
             float size = 1.0f;
             std::vector<Event> events;
+            // The object whose collision call (collidedWithObject(Internal),
+            // collidedWithSlopeInternal) is running for the copy: a death
+            // with no object in it is that object's.
+            GameObject* current = nullptr;
+            // Killed, with no object and outside any object's call: the
+            // ground, the ceiling, the edge of the level.
+            bool diedOfNothing = false;
 
             bool atStart(PlayerObject* p) const {
                 CCPoint const pos = p->getPosition();
@@ -81,12 +91,47 @@ namespace gucci {
                 if (on && p == copy && object)
                     events.push_back({object, ev, atStart(p)});
             }
+
+            void noteDeath(PlayerObject* p, GameObject* object) {
+                if (!on || p != copy)
+                    return;
+                if (GameObject* by = object ? object : current)
+                    events.push_back({by, Ev::Dead, atStart(p)});
+                else if (atStart(p))
+                    diedOfNothing = true;
+            }
+
+            void clear() {
+                events.clear();
+                current = nullptr;
+                diedOfNothing = false;
+            }
         };
 
         Observer& observer() {
             static Observer o;
             return o;
         }
+
+        // The object a collision call is about, for the copy, while it runs.
+        struct InCall {
+            Observer& o;
+            GameObject* was = nullptr;
+            bool mine = false;
+            InCall(PlayerObject* p, GameObject* object) : o(observer()) {
+                mine = o.on && p == o.copy;
+                if (mine) {
+                    was = o.current;
+                    o.current = object;
+                }
+            }
+            ~InCall() {
+                if (mine)
+                    o.current = was;
+            }
+            InCall(InCall const&) = delete;
+            InCall& operator=(InCall const&) = delete;
+        };
 
         // ---------------------------------------------------------------- kinds
 
@@ -468,14 +513,14 @@ namespace gucci {
                 o.mode = Trajectory::modeOf(copy);
                 o.upsideDown = copy->m_isUpsideDown;
                 o.size = copy->m_vehicleSize;
-                o.events.clear();
+                o.clear();
                 o.on = true;
                 struct Off {
                     ~Off() {
                         Observer& ob = observer();
                         ob.on = false;
                         ob.copy = nullptr;
-                        ob.events.clear();
+                        ob.clear();
                     }
                 } off;
 
@@ -570,7 +615,7 @@ namespace gucci {
                                 hb::regionAt(shapes, p, &quiet);
 
                             // One pass, the copy standing at p.
-                            o.events.clear();
+                            o.clear();
                             o.at = CCPoint(static_cast<float>(p.x), static_cast<float>(p.y));
                             passAt(o.at);
                             ++passes;
@@ -600,9 +645,13 @@ namespace gucci {
 
                             // A sign from the object, with the copy where it
                             // was put, is an answer; no sign is one only when
-                            // nothing moved the copy first (and, for a hazard,
-                            // no other hazard killed it first: GD may stop at
-                            // the first).
+                            // nothing moved the copy first, the pass went on
+                            // to the objects at all (a death with no object
+                            // outside an object's call, the edge of the level,
+                            // ends it before them: 0x214189), and, for a
+                            // hazard, no other hazard killed it first (the
+                            // first hazard to hit ends the pass, 0x214950;
+                            // a block's or a slope's death doesn't).
                             Verdict v = Verdict::Agree;
                             const char* whyNot = nullptr;
                             if (got != hb::Region::None) {
@@ -610,6 +659,9 @@ namespace gucci {
                             } else if (displaced) {
                                 v = Verdict::Inconclusive;
                                 whyNot = "the pass moved the copy, or changed it, before this object gave any sign";
+                            } else if (o.diedOfNothing) {
+                                v = Verdict::Inconclusive;
+                                whyNot = "the copy died of no object (the edge of the level) before any object was tested";
                             } else if (read.type == HitborderRead::Type::Hazard && otherHazard) {
                                 v = Verdict::Inconclusive;
                                 whyNot = "another hazard killed the copy first";
@@ -742,7 +794,9 @@ namespace gucci {
         notes.push(std::string(
             "drawn is what Hitborders shows at the point (deadly, touch, special or nothing); gd is what GD's pass did "
             "because of that object: killed the copy, touched it (a block's or a slope leg's touch test, a slope's "
-            "line snapping it), or found it touching (orbs, pads, portals, triggers)."));
+            "line snapping it), or found it touching (orbs, pads, portals, triggers). GD names no object when a "
+            "block, a slope's leg or a slope's line kills; that death is put down to the object whose collision call "
+            "it came from."));
         notes.push(std::string(
             "Orbs, pads, portals and triggers: the copy's pass runs Absense's port of collisionCheckObjects (GD's own "
             "would fire real objects); its overlap test is GD's. They are kept from acting, so one never changes the "
@@ -770,20 +824,32 @@ class $modify(GBHitborderProbeDeathHook, PlayLayer) {
     }
 
     void destroyPlayer(PlayerObject* player, GameObject* object) {
-        gucci::observer().note(player, object, gucci::Ev::Dead);
+        gucci::observer().noteDeath(player, object);
         PlayLayer::destroyPlayer(player, object);
     }
 };
 
 class $modify(GBHitborderProbePlayerHook, PlayerObject) {
+    // A block's touch test passed (a slope's 1-unit legs come here too, with
+    // the slope as the object); a death inside is this object's.
     bool collidedWithObject(float dt, GameObject* object, cocos2d::CCRect rect, bool skipCheck) {
         gucci::observer().note(this, object, gucci::Ev::Touch);
+        gucci::InCall call(this, object);
         return PlayerObject::collidedWithObject(dt, object, rect, skipCheck);
     }
 
     bool collidedWithObjectInternal(float dt, GameObject* object, cocos2d::CCRect rect, bool skipCheck) {
         gucci::observer().note(this, object, gucci::Ev::Touch);
+        gucci::InCall call(this, object);
         return PlayerObject::collidedWithObjectInternal(dt, object, rect, skipCheck);
+    }
+
+    // Rotated gameplay's own test: not read for the regions, but a death in
+    // it is still this object's, not the ground's.
+    bool handleRotatedCollisionInternal(float dt, GameObject* object, cocos2d::CCRect rect, bool skipCheck,
+                                        bool skipPre, bool slope) {
+        gucci::InCall call(this, object);
+        return PlayerObject::handleRotatedCollisionInternal(dt, object, rect, skipCheck, skipPre, slope);
     }
 
     // A slope's line: a hit snaps the copy onto it (or under it) and puts it
@@ -792,6 +858,7 @@ class $modify(GBHitborderProbePlayerHook, PlayerObject) {
         auto& o = gucci::observer();
         if (!o.on || this != o.copy || !object)
             return PlayerObject::collidedWithSlopeInternal(dt, object, forced);
+        gucci::InCall call(this, object);
         bool const atStart = o.atStart(this);
         CCPoint const before = this->getPosition();
         bool const onBefore = m_isOnSlope;
