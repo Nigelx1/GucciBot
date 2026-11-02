@@ -501,6 +501,42 @@ namespace gucci::ui::probe {
             return matchRank(key, filter) >= 0;
         }
 
+        // A window filter naming a window inside another (the menu's "page"
+        // or "list", or a child by its ImGui name) stands for the window it
+        // is in: the text and the elements are kept by top-level window
+        // (keyOf). Matched as given, window "page" matched none of them, and
+        // the answer said the menu was shut while it was open.
+        std::string topFilter(std::string const& filter) {
+            if (filter.empty() || filter == "all" || filter == "overlays" || filter == "popups")
+                return filter;
+            for (auto const& w : g_cap.windows) {
+                if (w.root.empty())
+                    continue;
+                for (std::string const* have : {&w.key, &w.role, &w.name}) {
+                    int const rank = matchRank(*have, filter);
+                    if (rank == 0 || rank == 1)
+                        return w.root;
+                }
+            }
+            return filter;
+        }
+
+        // The query with its window filters said by top-level window.
+        Query topQuery(Query const& q) {
+            Query out = q;
+            out.window = topFilter(q.window);
+            out.findWindow = topFilter(q.findWindow);
+            return out;
+        }
+
+        std::string_view trimmed(std::string_view s) {
+            while (!s.empty() && s.front() == ' ')
+                s.remove_prefix(1);
+            while (!s.empty() && s.back() == ' ')
+                s.remove_suffix(1);
+            return s;
+        }
+
         bool matches(Element const& e, Query const& q) {
             if (q.findId)
                 return e.id == *q.findId || std::find(e.ids.begin(), e.ids.end(), *q.findId) != e.ids.end();
@@ -679,11 +715,17 @@ namespace gucci::ui::probe {
                 if (end == std::string::npos)
                     end = text.size();
                 std::string_view const line(text.data() + start, end - start);
-                if (line.starts_with("## ")) {
-                    std::string_view name = line.substr(3);
+                if (std::string_view const head = trimmed(line); head.starts_with("## ")) {
+                    std::string_view name = head.substr(3);
                     if (auto const cut = name.find("  ("); cut != std::string_view::npos)
                         name = name.substr(0, cut);
-                    in = matchRank(std::string(name), title) >= 0 && matchRank(std::string(name), title) <= 1;
+                    // ImGui logs a space between the "## " decoration and the
+                    // title (LogRenderedText indents an item that isn't the
+                    // line's first by one), so the heading reads "##  Title".
+                    // Untrimmed, every title was only a part match, and no
+                    // card's text ever came back.
+                    int const rank = matchRank(std::string(trimmed(name)), title);
+                    in = rank == 0 || rank == 1;
                 }
                 if (in)
                     out.append(line).append("\n");
@@ -709,6 +751,28 @@ namespace gucci::ui::probe {
                 pos = nl + 1;
             }
             return text;
+        }
+
+        // Something is drawn, but the filters left none of it: what is there,
+        // instead of an answer saying the menu is shut.
+        std::string nothingMatches(Query const& q, Query const& qt) {
+            std::string out = "(nothing drawn matches";
+            if (!q.window.empty() && q.window != "all")
+                out += " window=" + q.window;
+            if (!q.card.empty())
+                out += " card=" + q.card;
+            std::string drawn;
+            for (auto const& [key, text] : g_cap.text)
+                drawn += (drawn.empty() ? "" : ", ") + key;
+            out += ". Drawn: " + drawn;
+            if (!q.card.empty()) {
+                std::string cards;
+                for (auto const& e : g_cap.elements)
+                    if (e.kind == "card" && !e.label.empty() && windowWanted(qt.window, e.win))
+                        cards += (cards.empty() ? "" : ", ") + e.label;
+                out += cards.empty() ? std::string("; no cards there") : "; its cards: " + cards;
+            }
+            return out + ")\n";
         }
 
         Win const* windowByKey(std::string const& key) {
@@ -740,11 +804,13 @@ namespace gucci::ui::probe {
         out["imgui_frame"] = (int64_t)g_cap.imguiFrame;
         out["display"] = std::vector<double>{std::round(g_cap.display.x), std::round(g_cap.display.y)};
         auto const all = merged();
+        // The filters by top-level window, as the text and elements are kept.
+        Query const qt = topQuery(q);
 
-        // The windows.
+        // The windows: the one named, and everything in its top-level window.
         auto windows = matjson::Value::array();
         for (auto const& w : g_cap.windows) {
-            if (!windowWanted(q.window, w.root.empty() ? w.key : w.root))
+            if (!windowWanted(q.window, w.key) && !windowWanted(qt.window, w.root.empty() ? w.key : w.root))
                 continue;
             auto j = matjson::Value::object();
             j["name"] = w.name;
@@ -764,10 +830,10 @@ namespace gucci::ui::probe {
         // The elements: the ones found, or a window's (or a card's).
         std::vector<Element const*> picked;
         if (q.finding) {
-            picked = findIn(all, q);
+            picked = findIn(all, qt);
         } else {
             for (auto const& e : all)
-                if (windowWanted(q.window, e.win) && (q.card.empty() || matchRank(e.card, q.card) >= 0) &&
+                if (windowWanted(qt.window, e.win) && (q.card.empty() || matchRank(e.card, q.card) >= 0) &&
                     (!q.visibleOnly || e.visible))
                     picked.push_back(&e);
         }
@@ -808,7 +874,7 @@ namespace gucci::ui::probe {
                     outline = "(nothing matches)\n";
             } else {
                 for (auto const& [key, text] : g_cap.text) {
-                    if (!windowWanted(q.window, key))
+                    if (!windowWanted(qt.window, key))
                         continue;
                     std::string body = q.card.empty() ? text : cardText(text, q.card);
                     if (body.empty())
@@ -821,7 +887,8 @@ namespace gucci::ui::probe {
                     outline += capLines(body, q.maxLines, &cutLines) + "\n";
                 }
                 if (outline.empty())
-                    outline = "(nothing drawn: the menu is shut and nothing is over the level)\n";
+                    outline = g_cap.text.empty() ? "(nothing drawn: the menu is shut and nothing is over the level)\n"
+                                                 : nothingMatches(q, qt);
             }
             out["outline"] = outline;
             out["matches"] = (int64_t)picked.size();
@@ -832,7 +899,7 @@ namespace gucci::ui::probe {
             out["elements"] = elements;
             auto text = matjson::Value::object();
             for (auto const& [key, body] : g_cap.text)
-                if (windowWanted(q.window, key)) {
+                if (windowWanted(qt.window, key)) {
                     std::string t = q.card.empty() ? body : cardText(body, q.card);
                     if (!t.empty())
                         text[key] = capLines(t, q.maxLines, &cutLines);
@@ -840,7 +907,7 @@ namespace gucci::ui::probe {
             out["text"] = text;
         }
         if (q.lint)
-            out["lint"] = lintJson(all, q);
+            out["lint"] = lintJson(all, qt);
         auto trunc = matjson::Value::object();
         trunc["elements"] = (int64_t)truncated;
         trunc["lines"] = (int64_t)cutLines;
@@ -875,7 +942,7 @@ namespace gucci::ui::probe {
     std::vector<Hit> find(Query const& q) {
         std::vector<Hit> out;
         auto const all = merged();
-        for (auto const* e : findIn(all, q)) {
+        for (auto const* e : findIn(all, topQuery(q))) {
             Hit h;
             h.n = (int)(e - all.data());
             h.path = pathOf(*e);
