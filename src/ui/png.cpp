@@ -401,4 +401,70 @@ namespace gucci::ui::png {
         return true;
     }
 
+    void halve(Pixels& px) {
+        if (px.width <= 0 || px.height <= 0 || px.rgba.size() < static_cast<size_t>(px.width) * px.height * 4)
+            return;
+        int const w = std::max(1, px.width / 2);
+        int const h = std::max(1, px.height / 2);
+        std::vector<uint8_t> out(static_cast<size_t>(w) * h * 4);
+        for (int y = 0; y < h; ++y)
+            for (int x = 0; x < w; ++x) {
+                uint32_t weighted[3] = {}, plain[3] = {}, alpha = 0;
+                for (int dy = 0; dy < 2; ++dy)
+                    for (int dx = 0; dx < 2; ++dx) {
+                        int const sx = std::min(px.width - 1, 2 * x + dx);
+                        int const sy = std::min(px.height - 1, 2 * y + dy);
+                        uint8_t const* p = &px.rgba[(static_cast<size_t>(sy) * px.width + sx) * 4];
+                        for (int c = 0; c < 3; ++c) {
+                            weighted[c] += uint32_t(p[c]) * p[3];
+                            plain[c] += p[c];
+                        }
+                        alpha += p[3];
+                    }
+                uint8_t* o = &out[(static_cast<size_t>(y) * w + x) * 4];
+                // All four clear: their own colors, averaged, so a white
+                // silhouette's clear surround stays white.
+                for (int c = 0; c < 3; ++c)
+                    o[c] = static_cast<uint8_t>(alpha ? (weighted[c] + alpha / 2) / alpha : (plain[c] + 2) / 4);
+                o[3] = static_cast<uint8_t>((alpha + 2) / 4);
+            }
+        px.width = w;
+        px.height = h;
+        px.rgba = std::move(out);
+    }
+
+    int halvings(int side, int size) {
+        int count = 0;
+        if (size > 0)
+            for (; side / 2 >= size; side /= 2)
+                ++count;
+        return count;
+    }
+
+    void fit(Pixels& px, int size) {
+        for (int n = halvings(std::max(px.width, px.height), size); n > 0; --n)
+            halve(px);
+    }
+
+    bool drawnBounds(Pixels const& px, int& left, int& top, int& right, int& bottom) {
+        int x0 = px.width, y0 = px.height, x1 = 0, y1 = 0;
+        if (px.rgba.size() < static_cast<size_t>(px.width) * px.height * 4)
+            return false;
+        for (int y = 0; y < px.height; ++y)
+            for (int x = 0; x < px.width; ++x)
+                if (px.rgba[(static_cast<size_t>(y) * px.width + x) * 4 + 3]) {
+                    x0 = std::min(x0, x);
+                    y0 = std::min(y0, y);
+                    x1 = std::max(x1, x + 1);
+                    y1 = std::max(y1, y + 1);
+                }
+        if (x1 <= x0 || y1 <= y0)
+            return false;
+        left = x0;
+        top = y0;
+        right = x1;
+        bottom = y1;
+        return true;
+    }
+
 } // namespace gucci::ui::png

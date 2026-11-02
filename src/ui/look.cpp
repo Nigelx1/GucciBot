@@ -263,6 +263,10 @@ namespace gucci::ui {
         return look().pal.light ? darken(c, amount) : lift(c, amount);
     }
 
+    ImVec4 outline(const Palette& p) {
+        return p.cardEdge.on ? p.cardEdge.outer : p.line;
+    }
+
     float overLevelAlpha(float dark) {
         // 0.92 white over black keeps RondoBot's ink and muted text near
         // 6:1; at 0.6 they were under 2.6:1.

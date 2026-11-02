@@ -16,6 +16,11 @@
 //    them) decode at the sizes their table (src/ui/pages/solar_art.hpp) says,
 //    each of Janet's is the size of its box, the sky is opaque, and every part
 //    the tables name has art in it and is on the sheet.
+// 4. GucciBot's mark (src/ui/brand.cpp): the pictures in resources/brand
+//    decode at their sizes, the cone's silhouette is one color with a clear
+//    margin round it, and what ui/art does to a picture before it's a texture
+//    (png::halve, fit, drawnBounds) does what it says, on small made-up
+//    pictures and on the silhouette made ready for the sidebar.
 
 #include "ui/pages/jupiter_art.hpp"
 #include "ui/pages/solar_art.hpp"
@@ -213,6 +218,143 @@ namespace {
         }
     }
 
+    // A picture from its pixels, RGBA, row by row.
+    png::Pixels picture(int w, int h, std::vector<uint8_t> rgba) {
+        png::Pixels px;
+        px.width = w;
+        px.height = h;
+        px.rgba = std::move(rgba);
+        return px;
+    }
+
+    bool samePixels(png::Pixels const& px, int w, int h, std::vector<uint8_t> const& rgba) {
+        return px.width == w && px.height == h && px.rgba == rgba;
+    }
+
+    // What ui/art does to a picture before it's a texture.
+    void checkPictureWork() {
+        // Halving: an opaque red pixel among three clear ones keeps its red
+        // (the clear ones' black doesn't bleed in) at a quarter of its alpha.
+        {
+            png::Pixels px = picture(2, 2, {255, 0, 0, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0});
+            png::halve(px);
+            if (!samePixels(px, 1, 1, {255, 0, 0, 64}))
+                fail("halve: a red pixel among clear black ones isn't red at a quarter alpha");
+        }
+        // Four clear white pixels stay white (a silhouette's surround).
+        {
+            png::Pixels px = picture(2, 2, std::vector<uint8_t>{255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0,
+                                                                255, 255, 255, 0});
+            png::halve(px);
+            if (!samePixels(px, 1, 1, {255, 255, 255, 0}))
+                fail("halve: clear white pixels don't stay clear white");
+        }
+        // Colors weighted by alpha: white at 255 and black at 85 (and two
+        // clear pixels) make a gray three quarters of the way to white, at
+        // alpha (255 + 85) / 4.
+        {
+            png::Pixels px = picture(2, 2, {255, 255, 255, 255, 0, 0, 0, 85, 0, 0, 0, 0, 0, 0, 0, 0});
+            png::halve(px);
+            if (!samePixels(px, 1, 1, {191, 191, 191, 85}))
+                fail("halve: colors aren't weighted by their alpha");
+        }
+        // An odd last row and column are left out; a side of 1 stays 1.
+        {
+            std::vector<uint8_t> rgba;
+            for (int i = 0; i < 9; ++i)
+                rgba.insert(rgba.end(), {static_cast<uint8_t>(i < 5 && i != 2 ? 200 : 0), 0, 0, 255});
+            png::Pixels px = picture(3, 3, rgba);
+            png::halve(px);
+            // Pixels 0, 1, 3 and 4 are 200; 2, 5, 6, 7 and 8 are left out.
+            if (!samePixels(px, 1, 1, {200, 0, 0, 255}))
+                fail("halve: a 3 x 3 picture isn't its top-left 2 x 2, averaged");
+            png::Pixels thin = picture(1, 4, {0, 0, 0, 255, 0, 0, 0, 255, 100, 100, 100, 255, 100, 100, 100, 255});
+            png::halve(thin);
+            if (!samePixels(thin, 1, 2, {0, 0, 0, 255, 100, 100, 100, 255}))
+                fail("halve: a picture 1 pixel wide doesn't stay 1 wide");
+        }
+        // How often fit() halves: while the longer side stays at least the size.
+        struct Count {
+            int side, size, halvings;
+        };
+        for (Count const& c : {Count{256, 26, 3}, Count{256, 32, 3}, Count{256, 33, 2}, Count{256, 128, 1},
+                               Count{256, 129, 0}, Count{256, 0, 0}, Count{256, -5, 0}, Count{336, 50, 2}}) {
+            if (png::halvings(c.side, c.size) != c.halvings)
+                fail("halvings(" + std::to_string(c.side) + ", " + std::to_string(c.size) + ") isn't " +
+                     std::to_string(c.halvings));
+        }
+        {
+            png::Pixels px = picture(8, 4, std::vector<uint8_t>(8 * 4 * 4, 255));
+            png::fit(px, 2);
+            if (px.width != 2 || px.height != 1)
+                fail("fit: an 8 x 4 picture fitted to 2 isn't 2 x 1");
+        }
+        // The drawn part: the pixels that aren't fully clear.
+        {
+            std::vector<uint8_t> rgba(5 * 4 * 4, 0);
+            rgba[(1 * 5 + 2) * 4 + 3] = 1;  // (2, 1)
+            rgba[(2 * 5 + 3) * 4 + 3] = 9;  // (3, 2)
+            png::Pixels px = picture(5, 4, rgba);
+            int l = -1, t = -1, r = -1, b = -1;
+            if (!png::drawnBounds(px, l, t, r, b) || l != 2 || t != 1 || r != 4 || b != 3)
+                fail("drawnBounds: two faint pixels at (2, 1) and (3, 2) aren't bounded by (2, 1) to (4, 3)");
+            png::Pixels clear = picture(3, 3, std::vector<uint8_t>(3 * 3 * 4, 0));
+            if (png::drawnBounds(clear, l, t, r, b))
+                fail("drawnBounds: a clear picture has something drawn in it");
+        }
+    }
+
+    // GucciBot's mark, as resources/brand has it.
+    void checkBrand() {
+        std::string const dir = "resources/brand/";
+        struct File {
+            char const* name;
+            int w, h;
+        };
+        File const silhouette{"cone_silhouette_256.png", 256, 256};
+        File const pause{"pause_button_256.png", 256, 256};
+        png::Pixels sil, button;
+        if (load(dir, silhouette, sil)) {
+            // One color, white, wherever anything is drawn: drawn with a tint
+            // it's that color (and ui/art makes it a mask anyway).
+            size_t colored = 0;
+            for (size_t i = 0; i + 3 < sil.rgba.size(); i += 4)
+                if (sil.rgba[i + 3] && (sil.rgba[i] != 255 || sil.rgba[i + 1] != 255 || sil.rgba[i + 2] != 255))
+                    ++colored;
+            if (colored)
+                fail(dir + silhouette.name + ": " + std::to_string(colored) + " drawn pixel(s) aren't white");
+            hasArt(sil, 0, 0, (float)sil.width, (float)sil.height, dir + silhouette.name);
+            // A clear margin all round, and the cone taller than it's wide:
+            // the sidebar draws its drawn part, beside the theme's name.
+            int l = 0, t = 0, r = 0, b = 0;
+            if (!png::drawnBounds(sil, l, t, r, b))
+                fail(dir + silhouette.name + ": nothing drawn in it");
+            else if (l == 0 || t == 0 || r == sil.width || b == sil.height || (r - l) >= (b - t))
+                fail(dir + silhouette.name + ": the cone touches the edge or is wider than it's tall");
+            // Made ready for the sidebar at 24 units on a computer (26 pixels
+            // for the whole picture): halved to 32, still with solid pixels
+            // in the cone and every pixel white.
+            png::Pixels sidebar = sil;
+            for (size_t i = 0; i + 3 < sidebar.rgba.size(); i += 4)
+                sidebar.rgba[i] = sidebar.rgba[i + 1] = sidebar.rgba[i + 2] = 255;
+            png::fit(sidebar, 26);
+            if (sidebar.width != 32 || sidebar.height != 32)
+                fail("the silhouette fitted to 26 isn't 32 x 32");
+            else
+                hasArt(sidebar, 0, 0, 32, 32, "the silhouette at 32 x 32", 255);
+        }
+        if (load(dir, pause, button)) {
+            // The whole logo: opaque in the middle, clear in the rounded corners.
+            int lo = 0, hi = 0;
+            alphaRange(button, 120, 120, 136, 136, lo, hi);
+            if (lo != 255)
+                fail(dir + pause.name + ": its middle isn't opaque");
+            alphaRange(button, 0, 0, 1, 1, lo, hi);
+            if (hi != 0)
+                fail(dir + pause.name + ": its corner isn't clear");
+        }
+    }
+
     // One picture against Pillow's decode: its pixels in expected.rgba (from
     // `offset`), or only their hash for the big packaged ones. A packaged one
     // that differs is written to build\ for a closer look.
@@ -276,6 +418,8 @@ int main() {
     checkArt(std::string(kData) + "packaged/");
     checkSolar("resources/solar/");
     checkSolar(std::string(kData) + "packaged/");
+    checkPictureWork();
+    checkBrand();
 
     // Every picture in the manifest.
     std::vector<uint8_t> const expected = readFile(std::string(kData) + "expected.rgba");

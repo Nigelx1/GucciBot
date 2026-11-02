@@ -14,7 +14,7 @@ namespace gucci::ui::art {
         release();
     }
 
-    bool Texture::load(std::string_view file, std::string& error) {
+    bool Texture::load(std::string_view file, std::string& error, LoadOptions const& options) {
         release();
         auto const path = Mod::get()->getResourcesDir() / std::string(file);
         auto bytes = geode::utils::file::readBinary(path);
@@ -28,6 +28,17 @@ namespace gucci::ui::art {
             error = fmt::format("{}: {}", file, error);
             return false;
         }
+        // What's drawn, measured on the picture as it is: halving would
+        // round it to the smaller picture's pixels.
+        int const sourceWidth = px.width, sourceHeight = px.height;
+        ImVec4 drawn{0.f, 0.f, 1.f, 1.f};
+        if (int l = 0, t = 0, r = 0, b = 0; png::drawnBounds(px, l, t, r, b))
+            drawn = ImVec4(static_cast<float>(l) / px.width, static_cast<float>(t) / px.height,
+                           static_cast<float>(r) / px.width, static_cast<float>(b) / px.height);
+        if (options.mask)
+            for (size_t i = 0; i + 3 < px.rgba.size(); i += 4)
+                px.rgba[i] = px.rgba[i + 1] = px.rgba[i + 2] = 255;
+        png::fit(px, options.fit);
 
         // The upload reads the pixels straight from memory: nothing bound
         // for unpacking (Video Mode puts its binding back, but be sure), no
@@ -65,6 +76,9 @@ namespace gucci::ui::art {
         m_texture = texture;
         m_width = px.width;
         m_height = px.height;
+        m_sourceWidth = sourceWidth;
+        m_sourceHeight = sourceHeight;
+        m_drawn = drawn;
 #if defined(GEODE_IS_ANDROID)
         m_keep = std::move(px.rgba);
 #endif
@@ -77,6 +91,8 @@ namespace gucci::ui::art {
             m_texture = nullptr;
         }
         m_width = m_height = 0;
+        m_sourceWidth = m_sourceHeight = 0;
+        m_drawn = ImVec4(0.f, 0.f, 1.f, 1.f);
         std::vector<uint8_t>().swap(m_keep);
     }
 

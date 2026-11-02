@@ -8,6 +8,7 @@
 #include "core/setup_check.hpp"
 #include "hacks/safemode.hpp"
 #include "ui/ui.hpp"
+#include "ui/brand.hpp"
 #include "ui/kit.hpp"
 #include "ui/look.hpp"
 #include "ui/pages.hpp"
@@ -2744,6 +2745,48 @@ namespace gucci::ui {
             }
         }
 
+        // The theme's name at the top of the sidebar, after GucciBot's mark:
+        // the iced cone's silhouette in the colour the cards are outlined in
+        // (Nigel, 2026-11-01: "as a silhouette with like the same color as
+        // the option outline boxes"), a quarter taller than the name's line.
+        // The row is the mark's height with the name centred on it: centred
+        // on the name's own line instead, the cherry would poke out above the
+        // sidebar and be cut off. Not while disguised: GBot shows nothing of
+        // GucciBot's. A name too long for the room left beside the mark is
+        // drawn a little smaller (three quarters at least) rather than cut
+        // off; of the built-ins only the two longer ToosiiBot names, by 3 and
+        // 5%.
+        void sidebarName(const Palette& pal) {
+            UseFont f(Font::Title);
+            const char* name = themes::active().name.c_str();
+            float const lineH = ImGui::GetTextLineHeight();
+            float const rowY = ImGui::GetCursorPosY();
+            ImVec2 const at = ImGui::GetCursorScreenPos();
+            float indent = 0.f, rowH = lineH;
+            if (!disguised()) {
+                float const markH = std::round(lineH * 1.25f);
+                float const markW = brand::drawMark(ImGui::GetWindowDrawList(), ImVec2(std::round(at.x), std::round(at.y)),
+                                                    markH, u32(outline(pal)));
+                if (markW > 0.f) {
+                    indent = std::round(markW + lineH * 0.32f);
+                    rowH = markH;
+                }
+            }
+            float const room = ImGui::GetContentRegionAvail().x - indent;
+            float const wide = ImGui::CalcTextSize(name).x;
+            float const shrink = indent > 0.f && wide > room ? std::max(0.75f, room / wide) : 1.f;
+            ImGui::SetCursorScreenPos(ImVec2(at.x + indent, std::round(at.y + (rowH - lineH * shrink) * 0.5f)));
+            if (shrink < 1.f)
+                ImGui::SetWindowFontScale(shrink);
+            ImGui::PushStyleColor(ImGuiCol_Text, pal.accent);
+            ImGui::TextUnformatted(name);
+            ImGui::PopStyleColor();
+            if (shrink < 1.f)
+                ImGui::SetWindowFontScale(1.f);
+            // What follows starts under the whole row, as under a line.
+            ImGui::SetCursorPosY(rowY + rowH + ImGui::GetStyle().ItemSpacing.y);
+        }
+
         // ... and its picture behind the menu's pages.
         using Backdrop = void (*)();
         Backdrop sceneBackdrop() {
@@ -2832,12 +2875,8 @@ namespace gucci::ui {
             // every page, and its words show on all the others.
             bool const jmfPage = kPages[g_page].draw == pages::jupiterTrainer;
             bool const themeWords = !jmfPage;
-            if (themeWords) {
-                UseFont f(Font::Title);
-                ImGui::PushStyleColor(ImGuiCol_Text, pal.accent);
-                ImGui::TextUnformatted(themes::active().name.c_str());
-                ImGui::PopStyleColor();
-            }
+            if (themeWords)
+                sidebarName(pal);
             {
                 UseFont f(Font::Small);
                 ImGui::PushStyleColor(ImGuiCol_Text, pal.muted);

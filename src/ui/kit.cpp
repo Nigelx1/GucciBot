@@ -66,7 +66,7 @@ namespace gucci::ui::kit {
         auto const& pal = look().pal;
         ImGui::PushID(title ? title : "card");
         ImGui::PushStyleColor(ImGuiCol_ChildBg, pal.surface);
-        ImGui::PushStyleColor(ImGuiCol_Border, pal.cardEdge.on ? pal.cardEdge.outer : pal.line);
+        ImGui::PushStyleColor(ImGuiCol_Border, outline(pal));
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.f, 11.f));
         ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, pal.radius + 3.f);
         ImGui::BeginChild("##card", ImVec2(0.f, 0.f),
