@@ -2016,7 +2016,10 @@ namespace gucci::mcp {
             auto props = obj();
             auto name = obj();
             name["type"] = "string";
-            name["description"] = "macro name as gucci_list_macros reports it (no extension)";
+            name["description"] =
+                "the macro's name as gucci_list_macros reports it (no extension), or its exact file name with the "
+                "extension. Several files with that name: the newest GucciBot macro of them is loaded, and the "
+                "answer says which";
             props["name"] = name;
             schema["type"] = "object";
             schema["properties"] = props;
@@ -2024,7 +2027,9 @@ namespace gucci::mcp {
 
             server.addTool({
                 "gucci_load_macro",
-                "Load a macro from the replays folder.",
+                "Load a macro from the replays folder, by its name or its exact file name. When several files share "
+                "the name (another theme's extension, another bot's file), the newest GucciBot macro (GBR6) of them "
+                "is loaded and the answer's note names it and the others.",
                 schema,
                 [](matjson::Value const& a) {
                     requireFreeRun();
@@ -2035,28 +2040,76 @@ namespace gucci::mcp {
                     auto const want = argStr(a, "name");
                     if (want.empty())
                         throw ToolError("name is required");
+                    if (want.find_first_of("/\\") != std::string::npos)
+                        throw ToolError("name is a macro in the replays folder, not a path");
 
-                    auto dir = GucciEngine::get()->getReplayDir();
+                    // GucciBot (2026-11-02): an exact file name works too, and
+                    // of several files with one name the newest is taken - it
+                    // took whichever the folder listed first, and a name with
+                    // its extension found nothing. Only GBR6 counts: load()
+                    // turns anything else down and keeps the macro before,
+                    // which this answered as loaded.
+                    auto const dir = GucciEngine::get()->getReplayDir();
+                    auto const utf8 = [](fs::path const& p) { return geode::utils::string::pathToString(p); };
+                    auto const isGbr6 = [](fs::path const& p) {
+                        std::ifstream f(p, std::ios::binary);
+                        char magic[4] = {};
+                        return static_cast<bool>(f.read(magic, 4)) && std::memcmp(magic, "GBR6", 4) == 0;
+                    };
                     std::error_code ec;
-                    fs::path found;
-                    for (auto const& it : fs::directory_iterator(dir, ec)) {
-                        if (it.is_regular_file(ec) && it.path().stem().string() == want) {
-                            found = it.path();
-                            break;
-                        }
+                    std::vector<fs::path> named;
+                    if (fs::path const exact = dir / fs::path(std::u8string(want.begin(), want.end()));
+                        fs::is_regular_file(exact, ec)) {
+                        named.push_back(exact);
+                    } else {
+                        for (auto const& it : fs::directory_iterator(dir, ec))
+                            if (it.is_regular_file(ec) && utf8(it.path().stem()) == want)
+                                named.push_back(it.path());
                     }
-                    if (found.empty())
+                    if (named.empty())
                         throw ToolError("no macro called " + want);
 
-                    GucciEngine::get()->replay.load(found);
+                    struct Candidate {
+                        fs::path path;
+                        bool gbr6 = false;
+                        fs::file_time_type written{};
+                    };
+                    std::vector<Candidate> files;
+                    for (auto const& p : named)
+                        files.push_back({p, isGbr6(p), fs::last_write_time(p, ec)});
+                    // GucciBot's macros first, the newest of them first.
+                    std::stable_sort(files.begin(), files.end(), [](Candidate const& x, Candidate const& y) {
+                        if (x.gbr6 != y.gbr6)
+                            return x.gbr6;
+                        return x.written > y.written;
+                    });
+                    auto const& chosen = files.front();
+                    if (!chosen.gbr6) {
+                        std::string list;
+                        for (auto const& f : files)
+                            list += (list.empty() ? "" : ", ") + utf8(f.path.filename());
+                        throw ToolError(list + (files.size() == 1 ? " isn't" : " aren't") +
+                                        " a GucciBot macro (GBR6): convert it in Saved macros on the Macro page first");
+                    }
+
+                    GucciEngine::get()->replay.load(chosen.path);
                     // The name too, as the menu's load does: the Macro page,
                     // Save and Calculate's results file go by it, and kept
                     // naming the macro loaded before.
-                    GucciEngine::get()->replayName = want;
+                    GucciEngine::get()->replayName = utf8(chosen.path.stem());
 
                     auto out = obj();
-                    out["loaded"] = found.filename().string();
+                    out["loaded"] = utf8(chosen.path.filename());
                     out["actions"] = (int64_t)GucciEngine::get()->replay.m_actionAtom.length();
+                    if (files.size() > 1) {
+                        std::string others;
+                        for (size_t i = 1; i < files.size(); ++i)
+                            others += (others.empty() ? "" : ", ") + utf8(files[i].path.filename()) +
+                                      (files[i].gbr6 ? " (older)" : " (not a GucciBot macro)");
+                        out["note"] = fmt::format("{} files are named {}: loaded {}, the newest GucciBot macro of "
+                                                  "them; also {}",
+                                                  files.size(), want, utf8(chosen.path.filename()), others);
+                    }
                     return out;
                 },
             });
