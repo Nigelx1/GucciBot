@@ -95,11 +95,13 @@ namespace gucci::ui {
         // review found too faint for a card's edge to show (refresh(),
         // pal.line), and hue fails where the two are both green, and for a
         // color-blind player. WCAG's own 3:1 for marks can't be the bar: no
-        // built-in theme's good is 3:1 from its accent (2.76:1 at most), and
-        // nothing is 3:1 from both RondoBot's green and its white (2.26:1 at
-        // best). Higher than about 1.27:1 would take the yellow themes
-        // (SolarBot, LSU, LemonadeBot), where green differs from the accent
-        // by hue and gold or white would be closer to it.
+        // built-in theme's good is 3:1 from its accent (2.76:1 at most). On
+        // RondoBot nothing lighter than its green is 3:1 from both that green
+        // and its white bar (2.27:1 at best); only near-black is (black,
+        // 3.83:1), and of the three picks below gold stands apart most
+        // (2.14:1). A bar above about 1.27:1 would switch themes whose green
+        // already stands apart by hue: SolarBot first (1.27:1), then BrrrBot
+        // (1.31:1), LSU (1.37:1) and LemonadeBot (1.45:1).
         constexpr float kTellApart = 1.25f;
         ImVec4 const gold{0.788f, 0.659f, 0.298f, 1.f};  // #C9A84C, GucciBot's own
         ImVec4 const white{1.f, 1.f, 1.f, 1.f};
