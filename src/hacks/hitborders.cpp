@@ -1297,6 +1297,58 @@ namespace gucci {
         return out;
     }
 
+    // ---------------------------------------------------------------- for the accuracy probe
+
+    namespace {
+        ObjectRead::Type readType(HitborderRead::Type t) {
+            switch (t) {
+            case HitborderRead::Type::Hazard: return ObjectRead::Type::Hazard;
+            case HitborderRead::Type::Special: return ObjectRead::Type::Special;
+            case HitborderRead::Type::Block: return ObjectRead::Type::Block;
+            case HitborderRead::Type::Slope: return ObjectRead::Type::Slope;
+            }
+            return ObjectRead::Type::Hazard;
+        }
+
+        HitborderRead::Type probeType(ObjectRead::Type t) {
+            switch (t) {
+            case ObjectRead::Type::Hazard: return HitborderRead::Type::Hazard;
+            case ObjectRead::Type::Special: return HitborderRead::Type::Special;
+            case ObjectRead::Type::Block: return HitborderRead::Type::Block;
+            case ObjectRead::Type::Slope: return HitborderRead::Type::Slope;
+            }
+            return HitborderRead::Type::Hazard;
+        }
+    } // namespace
+
+    hb::Player hitborderReadPlayer(PlayerObject* p) {
+        return readPlayer(p);
+    }
+
+    bool hitborderReadObject(GJBaseGameLayer* pl, GameObject* object, HitborderRead& out) {
+        if (!pl || !object || !pl->m_player1)
+            return false;
+        PlayerObject* p2 = pl->m_gameState.m_isDualMode ? pl->m_player2 : nullptr;
+        ObjectRead read;
+        if (!readObject(pl, ::Bot::get()->trajectory(), pl->m_player1, p2, object, read))
+            return false;
+        out.type = probeType(read.type);
+        out.collider = read.collider;
+        out.block = read.block;
+        out.slope = read.slope;
+        return true;
+    }
+
+    void hitborderRegions(HitborderRead const& r, hb::Player const& p, hb::Options const& opt,
+                          std::vector<hb::Shape>& out) {
+        ObjectRead read;
+        read.type = readType(r.type);
+        read.collider = r.collider;
+        read.block = r.block;
+        read.slope = r.slope;
+        regionsFor(read, p, opt, everyKind(true), out);
+    }
+
 } // namespace gucci
 
 // ---------------------------------------------------------------- hooks

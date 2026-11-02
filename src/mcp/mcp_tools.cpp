@@ -28,6 +28,7 @@
 #include "analysis/trajectory.hpp"
 #include "tools/macro_check.hpp"
 #include "core/GucciBot.hpp"
+#include "hacks/hitborder_probe.hpp"
 #include "hacks/hitborders.hpp"
 #include "hacks/safemode.hpp"
 #include "render/renderer.hpp"
@@ -39,6 +40,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cstring>
 #include <deque>
 #include <filesystem>
@@ -2239,6 +2241,97 @@ namespace gucci::mcp {
                     notes.push(n);
                 out["notes"] = notes;
                 out["shown"] = overlay->settings.show;
+                return out;
+            },
+        });
+
+        server.addTool({
+            "gucci_hitborder_probe",
+            "Hitborders checked against GD itself, with nobody playing. For every object near "
+            "player 1 (or between x_from and x_to), each edge Hitborders draws (every kind on, blocks "
+            "Exact) is sampled a hair inside and a hair outside (eps), and at each point a hidden copy "
+            "of the player, put back to the same state first (at rest, no grace timer, nothing held), "
+            "runs GD's own collision pass once: did that object kill the copy, touch it (a block, a "
+            "slope) or find it touching (an orb, pad, portal or trigger, which are kept from acting)? "
+            "That is held against what is drawn there. Reported per object kind and per edge "
+            "(\"deadly/touch top\": drawn inside / outside, which way it faces): agree, mismatch (each "
+            "listed with the point), inconclusive (the pass moved the copy before the object gave any "
+            "sign: the ground, a landing, a slope), and totals. The player: mode, mini and upside_down "
+            "default to player 1's own, rotation to 0. Copies only: the real game is put back and "
+            "nothing is saved. Refused while a render, Calculate or a pathfinder owns the run.",
+            schemaOf({{"mode", "string", "cube, ship, ball, ufo, wave, robot, spider or swing (default: player 1's)"},
+                      {"mini", "boolean", "mini or not (default: player 1's)"},
+                      {"upside_down", "boolean", "gravity flipped (default: player 1's)"},
+                      {"rotation", "number", "the icon's rotation in degrees; only rotated objects' tests use it (default 0)"},
+                      {"radius", "number", "objects whose rect or circle comes within this many units of player 1 (default 90)"},
+                      {"x_from", "number", "with x_to: the objects reaching into this range of x instead"},
+                      {"x_to", "number", "see x_from"},
+                      {"y_from", "number", "with y_to (and x_from/x_to): only those reaching into this range of y"},
+                      {"y_to", "number", "see y_from"},
+                      {"uid", "integer", "only this object, by unique id (anywhere in the level unless x_from/x_to)"},
+                      {"kinds", "string",
+                       "comma-separated: spikes, saws, blocks, slopes (hazard slopes too), hazard_slopes, orbs, pads, "
+                       "portals, other (default all)"},
+                      {"eps", "number", "how far either side of an edge, in level units (default 0.01)"},
+                      {"per_edge", "integer", "points along each straight edge (default 3, 1 to 9; a circle's chord gets one)"},
+                      {"max_points", "integer", "collision passes at most, two a point (default 8000, max 40000)"},
+                      {"max_list", "integer", "mismatches listed (default 40, max 400)"},
+                      {"max_ms", "integer", "wall clock limit in ms (default 4000, max 8000: the server waits 10 s)"},
+                      {"dt", "number", "the pass's dt in GD's sixtieths (default: one tick at the level's rate)"}}),
+            [](matjson::Value const& a) {
+                requireFreeRun();
+                requireLevel();
+                auto num = [&](char const* key, double def) {
+                    return a.contains(key) ? a[key].asDouble().unwrapOr(def) : def;
+                };
+                HitborderProbeArgs args;
+                if (a.contains("mode")) {
+                    static constexpr std::array<std::pair<char const*, int>, 11> kModes = {{
+                        {"cube", 0}, {"ship", 1}, {"ball", 2}, {"ufo", 3}, {"bird", 3}, {"wave", 4},
+                        {"dart", 4}, {"robot", 5}, {"spider", 6}, {"swing", 7}, {"swingcopter", 7},
+                    }};
+                    std::string mode = argStr(a, "mode");
+                    std::transform(mode.begin(), mode.end(), mode.begin(),
+                                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                    auto it = std::find_if(kModes.begin(), kModes.end(), [&](auto const& m) { return mode == m.first; });
+                    if (it == kModes.end())
+                        throw ToolError("mode is cube, ship, ball, ufo, wave, robot, spider or swing");
+                    args.mode = it->second;
+                }
+                if (a.contains("mini"))
+                    args.mini = argBool(a, "mini", false) ? 1 : 0;
+                if (a.contains("upside_down"))
+                    args.upsideDown = argBool(a, "upside_down", false) ? 1 : 0;
+                args.rotation = static_cast<float>(num("rotation", 0.0));
+                args.dt = static_cast<float>(num("dt", -1.0));
+                args.radius = static_cast<float>(std::clamp(num("radius", 90.0), 1.0, 5000.0));
+                if (a.contains("x_from") || a.contains("x_to")) {
+                    args.xFrom = static_cast<float>(num("x_from", 0.0));
+                    args.xTo = static_cast<float>(num("x_to", 0.0));
+                    if (!(args.xFrom < args.xTo))
+                        throw ToolError("x_from must be below x_to");
+                    if (a.contains("y_from") || a.contains("y_to")) {
+                        args.yFrom = static_cast<float>(num("y_from", 0.0));
+                        args.yTo = static_cast<float>(num("y_to", 0.0));
+                        if (!(args.yFrom < args.yTo))
+                            throw ToolError("y_from must be below y_to");
+                    }
+                }
+                args.uid = static_cast<int>(argInt(a, "uid", 0));
+                if (a.contains("kinds")) {
+                    std::string bad;
+                    if (!hitborderProbeKinds(argStr(a, "kinds"), args.kinds, bad))
+                        throw ToolError("unknown kind \"" + bad +
+                                        "\": spikes, saws, blocks, slopes, hazard_slopes, orbs, pads, portals, other");
+                }
+                args.eps = std::clamp(num("eps", 0.01), 0.001, 1.0);
+                args.perEdge = static_cast<int>(std::clamp<int64_t>(argInt(a, "per_edge", 3), 1, 9));
+                args.maxPoints = static_cast<int>(std::clamp<int64_t>(argInt(a, "max_points", 8000), 1, 40000));
+                args.maxList = static_cast<int>(std::clamp<int64_t>(argInt(a, "max_list", 40), 0, 400));
+                args.maxMs = static_cast<double>(std::clamp<int64_t>(argInt(a, "max_ms", 4000), 100, 8000));
+                auto out = hitborderProbe(args);
+                if (out.contains("error"))
+                    throw ToolError(out["error"].asString().unwrapOr("failed"));
                 return out;
             },
         });

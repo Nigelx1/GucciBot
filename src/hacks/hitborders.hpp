@@ -19,9 +19,12 @@
 
 #include <Geode/Geode.hpp>
 
+#include "tools/hitborder_geom.hpp"
+
 #include <cstdint>
 #include <deque>
 #include <string>
+#include <vector>
 
 namespace gucci {
 
@@ -116,5 +119,25 @@ namespace gucci {
         HitborderOverlay();
         bool shownFor(GJBaseGameLayer* layer, PlayerObject* p1, PlayerObject* p2) const;
     };
+
+    // The overlay's own reading of the level, for the accuracy probe
+    // (hacks/hitborder_probe.cpp, gucci_hitborder_probe), so what it tests is
+    // exactly what is drawn.
+    struct HitborderRead {
+        enum class Type : uint8_t { Hazard, Special, Block, Slope };
+        Type type = Type::Hazard;
+        hitborder::Collider collider;  // a hazard's, or an orb's, pad's, portal's or trigger's
+        hitborder::Block block;
+        hitborder::Slope slope;
+    };
+    // A player as paint() reads one: as the next collision pass will test it.
+    hitborder::Player hitborderReadPlayer(PlayerObject* p);
+    // An object as paint() reads it; false for one GD's collision pass skips
+    // or the overlay doesn't draw (spent, a trigger nothing touches, a player).
+    bool hitborderReadObject(GJBaseGameLayer* pl, GameObject* object, HitborderRead& out);
+    // Its regions for `p`, every kind on (blocks Exact when opt.core), as the
+    // audit and gucci_hitborders have them.
+    void hitborderRegions(HitborderRead const& read, hitborder::Player const& p, hitborder::Options const& opt,
+                          std::vector<hitborder::Shape>& out);
 
 } // namespace gucci
