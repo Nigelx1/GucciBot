@@ -30,8 +30,11 @@ Every variant the writer made is also checked against its own samples, so a
 mistake in the writer stops the script instead of becoming a wrong reference.
 
 Usage, from the repo root:
-  python -I tools/make_png_tests.py [path to an installed nigelx1.guccibot.geode]
-Without a .geode (the installed one is looked for), packaged/ stays as it is.
+  python -I tools/make_png_tests.py [a .geode from GitHub's build]
+With a .geode (THE build: build\\ci\\nigelx1.guccibot.geode after install_ci_build.bat,
+or the one installed from it), packaged/ is taken from it again. A local
+build_win.bat package keeps the pictures as they are, so it's refused: it would
+take the palettes out of the test. Without one, packaged/ stays as it is.
 """
 
 import io
@@ -45,8 +48,7 @@ import numpy as np
 from PIL import Image
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "testdata", "png")
-DEFAULT_GEODE = (r"C:\Program Files (x86)\Steam\steamapps\common\Geode Geometry Dash"
-                 r"\geode\mods\nigelx1.guccibot.geode")
+ART = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "resources", "jupiter")
 SIGNATURE = b"\x89PNG\r\n\x1a\n"
 ADAM7 = [(0, 0, 8, 8), (4, 0, 8, 8), (0, 4, 4, 8), (2, 0, 4, 4), (0, 2, 2, 4), (1, 0, 2, 2), (0, 1, 1, 2)]
 CHANNELS = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}
@@ -419,19 +421,28 @@ def refusals(out):
 
 
 def packaged(out, geode):
-    """The art as the packager stores it, from an installed .geode."""
+    """The art as the packager stores it, from a .geode GitHub built."""
     folder = os.path.join(ROOT, "packaged")
-    if geode and os.path.exists(geode):
+    if geode:
         with zipfile.ZipFile(geode) as z:
             names = [n for n in z.namelist()
                      if n.startswith("resources/nigelx1.guccibot/jupiter_") and n.endswith(".png")]
             assert names, "no JupiterBot art in " + geode
-            for n in names:
-                with open(os.path.join(folder, os.path.basename(n)), "wb") as f:
-                    f.write(z.read(n))
-        print("packaged/: from", geode)
+            pictures = {os.path.basename(n): z.read(n) for n in names}
+        resaved = []
+        for name, data in pictures.items():
+            source = os.path.join(ART, name)
+            if not os.path.exists(source) or open(source, "rb").read() != data:
+                resaved.append(name)
+        if not resaved:
+            sys.exit("%s holds the art exactly as resources/jupiter has it (a local build_win.bat package?): "
+                     "give GitHub's build, which re-saves it" % geode)
+        for name, data in pictures.items():
+            with open(os.path.join(folder, name), "wb") as f:
+                f.write(data)
+        print("packaged/: from", geode, "(re-saved by the packager: %s)" % ", ".join(sorted(resaved)))
     else:
-        print("packaged/: kept (no .geode at %s)" % geode)
+        print("packaged/: kept")
     for name in sorted(os.listdir(folder)):
         with open(os.path.join(folder, name), "rb") as f:
             data = f.read()
@@ -444,11 +455,11 @@ def packaged(out, geode):
 def main():
     for sub in ("packaged", "variants", "bad"):
         os.makedirs(os.path.join(ROOT, sub), exist_ok=True)
+    out = Set()
+    packaged(out, sys.argv[1] if len(sys.argv) > 1 else None)  # first: it may refuse, leaving everything as it was
     for sub in ("variants", "bad"):
         for name in os.listdir(os.path.join(ROOT, sub)):
             os.remove(os.path.join(ROOT, sub, name))
-    out = Set()
-    packaged(out, sys.argv[1] if len(sys.argv) > 1 else DEFAULT_GEODE)
     variants(out)
     refusals(out)
     with open(os.path.join(ROOT, "expected.rgba"), "wb") as f:
