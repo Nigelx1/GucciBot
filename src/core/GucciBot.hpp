@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-02-g (Hitborders after the probe's first run in the game: a block's red core stops where GD lands or snaps the player first, for mini modes, the spider and slope legs; circles drawn around GD's circle so a legacy saw's hearts never show a gap GD doesn't have; the probe counts the deaths GD names no object for and leaves out points outside the floor and ceiling a mode has)"
+    "2026-11-02-h (Hitborders: slopes lose their new, not checked in the game yet mark, after the probe found every slope edge it tried agreeing with GD in the game; the probe lists every sign a pass gave, and how the copy ended, for each mismatch)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
