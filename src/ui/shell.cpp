@@ -3154,6 +3154,9 @@ namespace gucci::ui {
             look().refresh();
             sceneLook();
             brrrFollowsTheme();
+            // The JMF sky's pictures stay loaded while JupiterBot wears them,
+            // and otherwise go once the JMF page has been left a while.
+            pages::jupiterArtIdle(themes::active().scene == themes::Scene::Jupiter);
             // Every frame, menu open or not: it starts and stops Video Mode's
             // decoder as well as drawing it (trainers/videomode.hpp).
             videomode::drawOverlay();

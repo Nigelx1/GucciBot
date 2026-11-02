@@ -18,8 +18,11 @@ namespace gucci::ui::pages {
     void macroTools();   // pages/macro_tools.cpp: Macro Tools (diff, trim, merge, metadata, TPS changes)
     void editorTools();  // pages/editor_tools.cpp: Replace All and Macro Buffing (level editor)
     void jupiterTrainer();  // pages/trainer_pages.cpp: Nigel's Jupiter My Favourite Trainer
-    void jupiterBackdrop(); // ... its sky, drawn under the whole menu window
-    void jupiterLookPush(); // ... its colours over the whole menu (the shell, around the window)
+    void jupiterBackdrop(); // pages/jupiter_backdrop.cpp: its sky (and JupiterBot's), drawn under the whole menu window
+    // ... once a frame: its pictures' textures go a few seconds after it was
+    // last drawn, unless `keep` (JupiterBot, which shows it on every page).
+    void jupiterArtIdle(bool keep);
+    void jupiterLookPush(); // pages/trainer_pages.cpp: its colours over the whole menu (the shell, around the window)
     void jupiterLookPop();
     void jupiterLookApply(); // ... the same colours written over the style, for JupiterBot (after look().refresh())
     void solarBackdrop();    // pages/solar_backdrop.cpp: SolarBot's scene, Janet rising behind the menu
