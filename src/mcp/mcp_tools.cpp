@@ -1444,6 +1444,46 @@ namespace gucci::mcp {
             },
         });
 
+        // GucciBot (2026-11-01): H0 of the heavy three (LIMBO, ORBIT,
+        // Heliopolis), before anything is recorded: what the World can't see
+        // in a level, and what the real game costs a tick there.
+        server.addTool({
+            "gucci_level_census",
+            "What the open level asks of Absense's World, read-only. kinds: every trigger "
+            "kind present (the ones the World doesn't run first): count, how they fire "
+            "(walk, spawn, touch), their x range, the groups they name and the collidable "
+            "objects in those groups (hazards; solids: blocks, slopes, breakables; specials: "
+            "portals, pads, orbs, teleports; modifiers: triggers and speed portals). "
+            "unmodelled: the groups a kind the World doesn't run names, their objects binned "
+            "by x. route_dependent, special_objects, live_now (what's running in the game "
+            "now), the section factors and the pending write-back path a run from here takes. "
+            "With real_ticks > 0, that many no-input ticks are also played for real through "
+            "the judge (deaths noted, not died; the game is put back) for real_cost, the "
+            "game's microseconds a tick: only with safe mode forced and nothing else owning "
+            "the run. Logged as \"[AbsPF] census\".",
+            schemaOf({{"real_ticks", "integer", "no-input ticks to play for real (default 0, max 3000; stops after 6 s)"},
+                      {"bin", "integer", "x width of the unmodelled bins (default 1000)"},
+                      {"top", "integer", "most entries in kinds and real_cost.deaths (default 20)"}}),
+            [](matjson::Value const& a) {
+                requireLevel();
+                int const realTicks = (int)std::clamp<int64_t>(argInt(a, "real_ticks", 0), 0, 3000);
+                int const bin = (int)std::clamp<int64_t>(argInt(a, "bin", 1000), 100, 100000);
+                int const top = (int)std::clamp<int64_t>(argInt(a, "top", 20), 1, 500);
+                // The static part is a read; playing the real game drives it.
+                if (realTicks > 0) {
+                    requireFreeRun();
+                    if (!safemode::forced())
+                        throw ToolError("refused: real_ticks plays the real game, and safe mode isn't forced for "
+                                        "this launch (tools/assist.py's launch() forces it, or "
+                                        "gucci_force_safe_mode)");
+                }
+                auto out = absense::levelCensus(realTicks, (float)bin, top);
+                if (out.contains("error"))
+                    throw ToolError(out["error"].asString().unwrapOr("failed"));
+                return out;
+            },
+        });
+
         server.addTool({
             "gucci_route_atlas",
             "Step R1 of AI_PATHFINDER_PLAN.md: the route planner's map of the level being "

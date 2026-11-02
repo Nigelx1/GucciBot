@@ -11,10 +11,14 @@
 #include "absense/route/atlas.hpp"
 #include "absense/route/planner.hpp"
 
+#include "absense/world/census.hpp"
 #include "absense/world/world.hpp"
 
 #include <Geode/loader/Mod.hpp>
 #include <fmt/format.h>
+
+#include <algorithm>
+#include <chrono>
 
 TrajectoryManager& Bot::trajectory() {
     static TrajectoryManager inst;
@@ -598,6 +602,286 @@ matjson::Value absense::runProfile() {
     const double calls = (double)std::max<uint64_t>(1, cp.calls);
     for (int k = 0; k < 12; k++) capture[kCapture[k]] = cp.parts[k] / calls;
     out["us_a_capture"] = capture;
+    return out;
+}
+
+namespace {
+    matjson::Value rangeJson(bool have, float lo, float hi) {
+        auto a = matjson::Value::array();
+        if (have) {
+            a.push((double)lo);
+            a.push((double)hi);
+        }
+        return a;
+    }
+
+    matjson::Value classesJson(world::CensusClasses const& c) {
+        auto o = matjson::Value::object();
+        o["collidable"] = (int64_t)c.collidable;
+        o["hazards"] = (int64_t)c.hazards;
+        o["solids"] = (int64_t)c.solids;
+        o["specials"] = (int64_t)c.specials;
+        o["modifiers"] = (int64_t)c.modifiers;
+        o["extended"] = (int64_t)c.extended;
+        return o;
+    }
+
+    const char* tierName(world::Tier t) {
+        return t == world::Tier::A ? "A" : t == world::Tier::B ? "B" : "C";
+    }
+}  // namespace
+
+matjson::Value absense::levelCensus(int realTicks, float binWidth, int top) {
+    using Clock = std::chrono::steady_clock;
+    auto const started = Clock::now();
+    auto out = matjson::Value::object();
+    auto* pl = PlayLayer::get();
+    auto* bot = Bot::get();
+    if (!pl || !pl->m_player1) {
+        out["error"] = "not in a level";
+        return out;
+    }
+    top = std::max(1, top);
+    // The World checks its offsets against the level when the simulation is
+    // made (the first thing that simulates in a level makes it), and the
+    // level's first read runs the check of what was read: either can turn the
+    // World off, and then nothing here reads the level through it.
+    if (!bot->trajectory().exists())
+        bot->trajectory().init();
+    std::shared_ptr<const world::WorldDef> def;
+    if (!world::World::disabled)
+        def = world::WorldDef::get(pl);
+    bool const on = def && !world::World::disabled;
+    std::string const offReason = on ? std::string()
+                                     : std::string(world::World::disabled && world::World::disabledReason
+                                                       ? world::World::disabledReason
+                                                       : "the level is still loading");
+    world::Census c;
+    if (on)
+        c = world::takeCensus(pl, def, binWidth);
+
+    std::string const name = pl->m_level ? std::string(pl->m_level->m_levelName) : std::string();
+    int64_t const id = pl->m_level ? (int64_t)pl->m_level->m_levelID.value() : 0;
+    int64_t const objects = pl->m_objects ? (int64_t)pl->m_objects->count() : 0;
+    {
+        auto level = matjson::Value::object();
+        level["name"] = name;
+        level["id"] = id;
+        level["objects"] = objects;
+        level["length_x"] = (double)gucci::GucciEngine::get()->m_levelLength;
+        level["platformer"] = pl->m_isPlatformer;
+        level["two_player"] = pl->m_levelSettings && pl->m_levelSettings->m_twoPlayerMode;
+        level["dual_now"] = pl->m_gameState.m_isDualMode;
+        level["practice"] = pl->m_isPracticeMode;
+        if (on) {
+            level["y_collidable"] = rangeJson(c.haveCollidable, c.yCollidable[0], c.yCollidable[1]);
+            level["y_all"] = rangeJson(c.haveAll, c.yAll[0], c.yAll[1]);
+        }
+        out["level"] = level;
+    }
+    {
+        auto w = matjson::Value::object();
+        w["on"] = on;
+        w["off_reason"] = offReason;
+        if (on) {
+            w["triggers"] = (int64_t)c.triggers;
+            w["spawn_channels"] = (int64_t)c.spawnChannels;
+            w["stray_members"] = (int64_t)c.strayMembers;
+            w["section_factor_x"] = (double)c.factorX;
+            w["section_factor_y"] = (double)c.factorY;
+            w["columns"] = (int64_t)c.columns;
+            w["rows_max"] = (int64_t)c.rowsMax;
+            w["writable"] = (int64_t)c.writable;
+            w["writable_extended"] = (int64_t)c.writableExtended;
+            w["pending_path"] = std::string(c.pendingPath);
+            w["tier_de_checked"] = c.tierDEChecked;
+            w["targets_objects_by_key"] = c.targetsObjectsByKey;
+        }
+        out["world"] = w;
+    }
+    if (on) {
+        auto kinds = matjson::Value::array();
+        for (size_t i = 0; i < c.kinds.size() && (int)i < top; i++) {
+            auto const& k = c.kinds[i];
+            auto e = matjson::Value::object();
+            e["kind"] = std::string(world::kindName(k.kind));
+            e["ids"] = k.ids;
+            e["shipped"] = k.shipped;
+            e["tier"] = std::string(tierName(k.tier));
+            e["count"] = (int64_t)k.count;
+            auto fires = matjson::Value::object();
+            fires["walk"] = (int64_t)k.walk;
+            fires["spawn"] = (int64_t)k.spawn;
+            fires["touch"] = (int64_t)k.touch;
+            e["fires"] = fires;
+            e["x"] = rangeJson(true, k.xLo, k.xHi);
+            e["groups"] = (int64_t)k.groups;
+            e["reach"] = classesJson(k.reach);
+            e["reach_x"] = rangeJson(k.reach.collidable > 0, k.reachLo, k.reachHi);
+            kinds.push(e);
+        }
+        out["kinds"] = kinds;
+        out["kinds_present"] = (int64_t)c.kinds.size();
+
+        auto um = classesJson(c.unmodelled);
+        um["groups"] = (int64_t)c.unmodelledGroups;
+        um["reaches_any_object"] = (int64_t)c.reachesAnyObject;
+        um["bin"] = (double)binWidth;
+        auto byX = matjson::Value::array();
+        for (auto const& b : c.unmodelledByX) {
+            auto e = matjson::Value::object();
+            e["x"] = (double)b.x;
+            e["hazards"] = (int64_t)b.hazards;
+            e["solids"] = (int64_t)b.solids;
+            e["specials"] = (int64_t)b.specials;
+            byX.push(e);
+        }
+        um["by_x"] = byX;
+        out["unmodelled"] = um;
+
+        auto rd = matjson::Value::object();
+        rd["move_lock_player"] = (int64_t)c.moveLockPlayer;
+        rd["move_lock_camera"] = (int64_t)c.moveLockCamera;
+        rd["dynamic"] = (int64_t)c.dynamicMoves;
+        rd["dynamic_rotates"] = (int64_t)c.dynamicRotates;
+        rd["follow_player_y"] = (int64_t)c.followPlayerY;
+        rd["touch"] = (int64_t)c.touch;
+        rd["toggle_orbs"] = (int64_t)c.toggleOrbs;
+        rd["toggle_blocks"] = (int64_t)c.toggleBlocks;
+        rd["collision"] = (int64_t)c.collision;
+        rd["collision_blocks"] = (int64_t)c.collisionBlocks;
+        rd["items"] = (int64_t)c.items;
+        rd["reset"] = (int64_t)c.reset;
+        rd["random"] = (int64_t)c.random;
+        auto randomX = matjson::Value::array();
+        for (float x : c.randomX) randomX.push((double)x);
+        rd["random_x"] = randomX;
+        out["route_dependent"] = rd;
+
+        auto sp = matjson::Value::object();
+        sp["dual"] = (int64_t)c.dual;
+        sp["solo"] = (int64_t)c.solo;
+        sp["teleports"] = (int64_t)c.teleports;
+        sp["mirrors"] = (int64_t)c.mirrors;
+        sp["gravity_portals"] = (int64_t)c.gravityPortals;
+        sp["rotate_gameplay"] = (int64_t)c.rotateGameplay;
+        sp["reverse"] = (int64_t)c.reverse;
+        sp["gravity_triggers"] = (int64_t)c.gravityTriggers;
+        sp["speed_portals"] = (int64_t)c.speedPortals;
+        auto cam = matjson::Value::object();
+        cam["zoom"] = (int64_t)c.cameraZoom;
+        cam["static"] = (int64_t)c.cameraStatic;
+        cam["offset"] = (int64_t)c.cameraOffset;
+        cam["edge"] = (int64_t)c.cameraEdge;
+        cam["mode"] = (int64_t)c.cameraMode;
+        cam["gameplay_offset"] = (int64_t)c.gameplayOffset;
+        sp["camera"] = cam;
+        out["special_objects"] = sp;
+
+        auto live = matjson::Value::object();
+        live["frame"] = (int64_t)bot->updater().getFrame();
+        auto cmds = matjson::Value::object();
+        static constexpr const char* kCommand[6] = {"move", "rotate", "follow", "follow_player_y", "transform",
+                                                    "keyframe"};
+        for (int k = 0; k < 6; k++) cmds[kCommand[k]] = (int64_t)c.commands[k];
+        live["commands"] = cmds;
+        live["spawns"] = (int64_t)c.spawns;
+        live["timers"] = (int64_t)c.timers;
+        auto area = matjson::Value::object();
+        area["move"] = (int64_t)c.areaMove;
+        area["rotate"] = (int64_t)c.areaRotate;
+        area["scale"] = (int64_t)c.areaScale;
+        live["area_effects"] = area;
+        auto dyn = matjson::Value::object();
+        dyn["move"] = (int64_t)c.dynamicMoveNow;
+        dyn["rotate"] = (int64_t)c.dynamicRotateNow;
+        live["dynamic"] = dyn;
+        live["advanced_follows"] = (int64_t)c.advancedFollows;
+        live["area_objects_to_reset"] = (int64_t)c.areaObjectsToReset;
+        live["uncertain_groups"] = (int64_t)c.uncertainGroups;
+        live["uncertain_any"] = c.uncertainAny;
+        out["live_now"] = live;
+    }
+
+    // The real game's cost per tick: no input (the button up), deaths noted
+    // and carried on through, the game put back. After everything above, so
+    // what was read is the game as the caller found it. Capped at 6 s: the
+    // server gives a tool 10 (mcp_server.cpp).
+    std::string realText = "not sampled";
+    {
+        auto real = matjson::Value::object();
+        if (realTicks <= 0) {
+            real["skipped"] = "real_ticks is 0";
+        } else {
+            std::vector<float> us;
+            us.reserve((size_t)realTicks);
+            judge::Options opt;
+            opt.throughDeaths = true;
+            opt.tickUs = &us;
+            opt.maxMs = 6000.0;
+            std::vector<TickInput> const inputs{TickInput{0, false}};
+            auto const r = judge::run(inputs, realTicks, nullptr, opt);
+            if (!r.ran) {
+                real["error"] = r.error;
+                realText = "not sampled (" + r.error + ")";
+            } else {
+                std::vector<float> sorted = us;
+                std::sort(sorted.begin(), sorted.end());
+                double sum = 0.0;
+                for (float v : sorted) sum += v;
+                size_t const m = sorted.size();
+                double const mean = m ? sum / (double)m : 0.0;
+                auto tick = matjson::Value::object();
+                tick["mean"] = mean;
+                tick["p50"] = m ? (double)sorted[m / 2] : 0.0;
+                tick["p95"] = m ? (double)sorted[std::min(m - 1, m * 95 / 100)] : 0.0;
+                tick["max"] = m ? (double)sorted.back() : 0.0;
+                real["ticks"] = (int64_t)m;
+                real["us_a_tick"] = tick;
+                real["deaths_noted"] = (int64_t)r.deaths.size();
+                real["stopped_by_clock"] = r.stoppedByClock;
+                real["complete"] = r.complete;
+                auto deaths = matjson::Value::array();
+                for (size_t i = 0; i < r.deaths.size() && (int)i < top; i++) {
+                    auto const& d = r.deaths[i];
+                    auto e = matjson::Value::object();
+                    e["tick"] = (int64_t)d.tick;
+                    e["uid"] = (int64_t)d.uid;
+                    e["id"] = (int64_t)d.id;
+                    e["type"] = (int64_t)d.type;
+                    e["x"] = (double)d.x;
+                    e["y"] = (double)d.y;
+                    deaths.push(e);
+                }
+                real["deaths"] = deaths;
+                real["put_back"] = fmt::format("frame {} (started {}), x {:.3f} (started {:.3f})", r.frameAfter,
+                                               r.startFrame, r.xAfter, r.xBefore);
+                realText = fmt::format("{:.0f} us a tick over {} ticks{}", mean, m,
+                                       r.stoppedByClock ? " (stopped by the clock)" : "");
+            }
+        }
+        out["real_cost"] = real;
+    }
+    out["ms"] = std::chrono::duration<double, std::milli>(Clock::now() - started).count();
+
+    // One line for the harness to grep.
+    if (on) {
+        std::string notRun;
+        for (auto const& k : c.kinds) {
+            if (k.shipped) continue;
+            notRun += fmt::format("{}{} {} ({} hazards, {} solids, {} specials)", notRun.empty() ? "" : ", ",
+                                  world::kindName(k.kind), k.count, k.reach.hazards, k.reach.solids,
+                                  k.reach.specials);
+        }
+        geode::log::info("[AbsPF] census: {} ({}): {} objects, factors x {} y {} ({}), {} triggers; not run: {}; "
+                         "unmodelled collidable {} ({}/{}/{}); real {}",
+                         name, id, objects, c.factorX, c.factorY, c.pendingPath, c.triggers,
+                         notRun.empty() ? std::string("nothing") : notRun, c.unmodelled.collidable,
+                         c.unmodelled.hazards, c.unmodelled.solids, c.unmodelled.specials, realText);
+    } else {
+        geode::log::info("[AbsPF] census: {} ({}): {} objects, the World is off ({}); real {}", name, id, objects,
+                         offReason, realText);
+    }
     return out;
 }
 

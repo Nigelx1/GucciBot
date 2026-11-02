@@ -104,6 +104,15 @@ namespace absense {
     void profileRuns(bool on);
     matjson::Value runProfile();
 
+    // GucciBot (2026-11-01, H0 of the heavy three, gucci_level_census): what
+    // the open level asks of the World (world/census.hpp), with the
+    // unmodelled objects binned `binWidth` units of x wide and at most `top`
+    // entries in the lists; also logged as "[AbsPF] census". With realTicks
+    // above 0, that many no-input ticks are played for real through the
+    // judge (deaths noted, not died; the game put back) for the real game's
+    // cost per tick: the caller has made sure nothing else owns the run.
+    matjson::Value levelCensus(int realTicks, float binWidth, int top);
+
     // Step R1 of AI_PATHFINDER_PLAN.md: the route planner's map of the whole
     // level (absense/route/atlas.hpp), drawn over it when shown.
     bool levelMapShown();
