@@ -15,8 +15,8 @@ You need Geometry Dash 2.2081 and Geode 5.10.1 or a later 5.x. One `.geode` file
 3. Restart the game.
 4. Open GucciBot:
    - **Windows:** press **Left Alt**. You can change the key in Settings > Keybinds.
-   - **Mac:** press **Option**, or the **GucciBot** button in a level's pause menu.
-   - **iPhone, iPad and Android:** pause a level and press **GucciBot** in the bottom-right corner of the pause menu.
+   - **Mac:** press **Option**, or the **GucciBot** logo in a level's pause menu.
+   - **iPhone, iPad and Android:** pause a level and press the **GucciBot** logo (the iced cone) in the bottom-right corner of the pause menu.
 
 **Turn off ToastyReplay Lite and Silicate first.** GucciBot can't run live alongside either one (ToastyReplay Lite crashed macro playback; Silicate patches the same spots in the game GucciBot does), so while either is enabled GucciBot stands down and says why. Turn the other one off or uninstall it, restart, and you're in.
 

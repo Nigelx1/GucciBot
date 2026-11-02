@@ -77,6 +77,13 @@ namespace gucci::ui::art {
         // For ImGui: asked each time, so a texture cocos remade (a phone's
         // GL context coming back) is the one drawn.
         ImTextureID id() const;
+        // For a cocos sprite (CCSprite::createWithTexture), which holds on to
+        // it. Keep this Texture loaded for as long as such a sprite may show:
+        // on Android cocos may upload the texture again from the pixels this
+        // keeps. Straight alpha, which a sprite blends right on its own.
+        cocos2d::CCTexture2D* texture() const {
+            return m_texture;
+        }
 
     private:
         cocos2d::CCTexture2D* m_texture = nullptr;

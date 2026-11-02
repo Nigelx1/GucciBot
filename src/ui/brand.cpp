@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <string>
+#include <vector>
 
 namespace gucci::ui::brand {
 
@@ -32,7 +33,67 @@ namespace gucci::ui::brand {
             return *m;
         }
 
+        // The whole logo with its rounded corners clear, 256 x 256.
+        constexpr char const* kPauseLogo = "pause_button_256.png";
+
+        // The pause button's logo: a texture for each time it's been halved
+        // (png::fit) for the size it's drawn at, nine at most for 256 pixels.
+        // Kept for the whole run, never let go: a pause menu's sprite holds
+        // its texture, and on Android cocos may upload it again from the
+        // pixels art::Texture keeps.
+        struct PauseLogo {
+            int halvings = 0;
+            art::Texture tex;
+        };
+        std::vector<PauseLogo*>& pauseLogos() {
+            static auto* logos = new std::vector<PauseLogo*>();
+            return *logos;
+        }
+        int g_pauseSource = 0;       // the picture's longer side, once it has loaded
+        bool g_pauseFailed = false;  // it couldn't load: the plain button for the rest of the run
+
     } // namespace
+
+    cocos2d::CCSprite* pauseSprite(float points) {
+        using namespace cocos2d;
+        if (points <= 0.f || g_pauseFailed)
+            return nullptr;
+        // The pixels it's drawn across: the screen's for that many points (a
+        // Mac's Retina ones too), or GD's own art's at its texture quality
+        // (1, 2 or 4 a point) where that's more.
+        auto* director = CCDirector::sharedDirector();
+        float perPoint = director->getContentScaleFactor();
+        if (auto* view = director->getOpenGLView(); view && director->getWinSize().height > 0.f)
+            perPoint = std::max(perPoint, view->getFrameSize().height * geode::utils::getDisplayFactor() /
+                                              director->getWinSize().height);
+        int const need = static_cast<int>(std::ceil(points * perPoint));
+        PauseLogo* logo = nullptr;
+        if (g_pauseSource > 0)
+            for (PauseLogo* made : pauseLogos())
+                if (made->halvings == png::halvings(g_pauseSource, need))
+                    logo = made;
+        if (!logo) {
+            auto* made = new PauseLogo();
+            std::string error;
+            if (!made->tex.load(kPauseLogo, error, {.fit = need})) {
+                geode::log::error("[GucciBot] The pause button's logo: {}", error);
+                delete made;  // nothing was made, so nothing for cocos to let go
+                g_pauseFailed = true;
+                return nullptr;
+            }
+            g_pauseSource = std::max(made->tex.sourceWidth(), made->tex.sourceHeight());
+            made->halvings = png::halvings(g_pauseSource, need);
+            pauseLogos().push_back(made);
+            logo = made;
+        }
+        auto* sprite = CCSprite::createWithTexture(logo->tex.texture());
+        if (!sprite)
+            return nullptr;
+        float const side = std::max(sprite->getContentSize().width, sprite->getContentSize().height);
+        if (side > 0.f)
+            sprite->setScale(points / side);
+        return sprite;
+    }
 
     float drawMark(ImDrawList* dl, ImVec2 at, float height, ImU32 tint) {
         Mark& m = mark();
