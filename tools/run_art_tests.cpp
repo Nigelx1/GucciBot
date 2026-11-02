@@ -11,8 +11,13 @@
 //    (tools/testdata/png/manifest.txt: every color type, bit depth and
 //    interlace, with and without tRNS) decodes to what Pillow decodes it to,
 //    pixel for pixel, and every broken file is refused for the right reason.
+// 3. SolarBot's art: the pictures in resources/solar (as tools/solar_art.py
+//    writes them) decode at the sizes their table (src/ui/pages/solar_art.hpp)
+//    says, each of Janet's is the size of its box, the sky is opaque, and every
+//    part the tables name has art in it and is on the sheet.
 
 #include "ui/pages/jupiter_art.hpp"
+#include "ui/pages/solar_art.hpp"
 #include "ui/png.hpp"
 
 #include <algorithm>
@@ -26,6 +31,7 @@
 #include <vector>
 
 namespace ja = gucci::ui::pages::jupiter_art;
+namespace sa = gucci::ui::pages::solar_art;
 namespace png = gucci::ui::png;
 
 namespace {
@@ -51,7 +57,8 @@ namespace {
         return h;
     }
 
-    bool load(std::string const& dir, ja::File const& file, png::Pixels& px) {
+    template <class File>
+    bool load(std::string const& dir, File const& file, png::Pixels& px) {
         std::string const path = dir + file.name;
         std::vector<uint8_t> const bytes = readFile(path);
         std::string error;
@@ -83,10 +90,11 @@ namespace {
             }
     }
 
-    void hasArt(png::Pixels const& px, float u0, float v0, float u1, float v1, std::string const& what) {
+    // Something in the rect at least `least` opaque (a glow never is opaque).
+    void hasArt(png::Pixels const& px, float u0, float v0, float u1, float v1, std::string const& what, int least = 250) {
         int lo = 0, hi = 0;
         alphaRange(px, u0, v0, u1, v1, lo, hi);
-        if (hi < 250)
+        if (hi < least)
             fail(what + ": nothing drawn in its rect");
     }
 
@@ -126,6 +134,81 @@ namespace {
             for (auto const& star : ja::kStars)
                 if (star.sprite < 0 || star.sprite >= (int)std::size(ja::kSpriteRects))
                     fail("a star names a sprite that isn't there");
+        }
+    }
+
+    // SolarBot's art on one copy of it.
+    void checkSolar(std::string const& dir) {
+        png::Pixels sky, glow, disc, flames, top, sprites;
+        if (load(dir, sa::kSky, sky)) {
+            int lo = 0, hi = 0;
+            alphaRange(sky, 0, 0, (float)sky.width, (float)sky.height, lo, hi);
+            if (lo != 255)
+                fail(dir + ": the sky has see-through pixels");
+            if (sky.width != sa::kDesignW * sa::kPx || sky.height != sa::kDesignH * sa::kPx)
+                fail(dir + ": the sky isn't the first-size menu");
+        }
+        // Each of Janet's pictures covers its box round her centre.
+        // Her glow and her flames are see-through all over (at most 69% and
+        // 73%).
+        struct Hers {
+            sa::File file;
+            float const* box;
+            float px;
+            png::Pixels* pixels;
+            char const* what;
+            int least;
+        };
+        Hers const hers[] = {{sa::kGlow, sa::kGlowBox, sa::kGlowPx, &glow, "her glow", 150},
+                             {sa::kDisc, sa::kDiscBox, sa::kPx, &disc, "her disc", 250},
+                             {sa::kFlames, sa::kFlameBox, sa::kPx, &flames, "her flames", 150},
+                             {sa::kTop, sa::kTopBox, sa::kPx, &top, "her limb and face", 250}};
+        for (auto const& her : hers) {
+            if (!load(dir, her.file, *her.pixels))
+                continue;
+            hasArt(*her.pixels, 0, 0, (float)her.pixels->width, (float)her.pixels->height, dir + ": " + her.what,
+                   her.least);
+            if ((her.box[2] - her.box[0]) * her.px != her.file.w || (her.box[3] - her.box[1]) * her.px != her.file.h)
+                fail(std::string(her.what) + ": the picture isn't the size of its box");
+        }
+        if (sa::kFlameBox[3] - sa::kFlameBox[1] != 2.f * sa::kJanetR)
+            fail("her flames' tile isn't 2R tall, which its wrap needs");
+        if (load(dir, sa::kSprites, sprites)) {
+            int const count = (int)std::size(sa::kSpriteRects);
+            int i = 0;
+            for (auto const& s : sa::kSpriteRects) {
+                // The kite's glint is a 32% glow.
+                hasArt(sprites, s.u0, s.v0, s.u1, s.v1, dir + ": SolarBot sprite " + std::to_string(i),
+                       i == sa::kKiteGlint ? 60 : 250);
+                if (s.u1 > sprites.width || s.v1 > sprites.height)
+                    fail("SolarBot sprite " + std::to_string(i) + " runs off the sheet");
+                ++i;
+            }
+            std::vector<int> named = {sa::kSparkleSprite, sa::kBokehSprite,  sa::kTwinkleSprite, sa::kMedallionBody,
+                                      sa::kMedallionOuter, sa::kMedallionInner, sa::kKiteBody,     sa::kKiteGlint,
+                                      sa::kCoronaTop,     sa::kCoronaBottom,   sa::kMedallion.sprite, sa::kKite.sprite};
+            for (auto const& p : sa::kPlanets)
+                named.push_back(p.sprite);
+            for (auto const& c : sa::kConstellations)
+                named.push_back(c.sprite);
+            for (int n : named)
+                if (n < 0 || n >= count)
+                    fail("a SolarBot table names a sprite that isn't there");
+            for (int band : {sa::kCoronaTop, sa::kCoronaBottom}) {
+                auto const& s = sa::kSpriteRects[band];
+                if ((s.u1 - s.u0) / sa::kPx != sa::kCoronaPeriod || (s.v1 - s.v0) / sa::kPx != sa::kCoronaHeight)
+                    fail("a corona band's tile isn't one period wide and the band's height");
+                int lo = 0, hi = 0;
+                alphaRange(sprites, s.u0, s.v0, s.u1, s.v1, lo, hi);
+                // Its black edge reaches the window's: opaque at that side.
+                float const edgeV = band == sa::kCoronaTop ? s.v0 : s.v1 - 1.f;
+                alphaRange(sprites, s.u0, edgeV, s.u1, edgeV + 1.f, lo, hi);
+                if (lo != 255)
+                    fail("a corona band's edge row isn't opaque");
+            }
+            for (auto const& sp : sa::kSparkles)
+                if (sp.constellation < 0 || sp.constellation >= (int)std::size(sa::kConstellations))
+                    fail("a sparkle names a constellation that isn't there");
         }
     }
 
@@ -190,6 +273,7 @@ namespace {
 int main() {
     checkArt("resources/jupiter/");
     checkArt(std::string(kData) + "packaged/");
+    checkSolar("resources/solar/");
 
     // Every picture in the manifest.
     std::vector<uint8_t> const expected = readFile(std::string(kData) + "expected.rgba");
@@ -254,6 +338,19 @@ int main() {
         }
         double const ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
         std::printf("art: the six layers as packaged decode in %.1f ms\n", ms);
+    }
+    {
+        std::vector<std::vector<uint8_t>> files;
+        for (sa::File const& f : {sa::kSky, sa::kGlow, sa::kDisc, sa::kFlames, sa::kTop, sa::kSprites})
+            files.push_back(readFile(std::string("resources/solar/") + f.name));
+        auto const start = std::chrono::steady_clock::now();
+        for (auto const& bytes : files) {
+            png::Pixels px;
+            std::string error;
+            png::decode(bytes.data(), bytes.size(), px, error);
+        }
+        double const ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+        std::printf("art: SolarBot's six layers decode in %.1f ms\n", ms);
     }
 
     if (g_failed) {

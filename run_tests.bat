@@ -45,6 +45,7 @@ build\run_convert_tests.exe || exit /b 1
 
 REM JupiterBot's art read the way the mod reads it (src/ui/png), as in resources/jupiter and as the
 REM packager stores it in the .geode, against the tables that place it (src/ui/pages/jupiter_art.hpp);
+REM SolarBot's, as in resources/solar, against its own (src/ui/pages/solar_art.hpp);
 REM and the reader against Pillow on every kind of PNG (tools/testdata/png, from
 REM tools/make_png_tests.py). zlib as above.
 cl /nologo /std:c++20 /EHsc /O2 /MD /I src /I build\_deps\zlib-src /I build\_deps\zlib-build ^
