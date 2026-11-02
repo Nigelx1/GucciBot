@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-02-d (Hitborders, the accurate gaps: every hitbox grown by your own from GD's real collision tests for your mode, size and gravity - red where your center dies, blue where your box touches something solid with a red core where the small inner box kills, green orbs, pads and portals, the floor and ceiling - plus your dot, path and clicks and one merged outline; a card under Hitboxes on the Macro page and a keybind)"
+    "2026-11-02-e (The iced cone logo: it replaces the photo as the mod's logo in Geode's list, its silhouette sits before the theme's name at the top of the sidebar in the color the cards are outlined in, the phone and Mac pause button shows the logo instead of the word, and under GBot Geode's mod list shows GBot's own plain logo; the README opens with the logo's header)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
