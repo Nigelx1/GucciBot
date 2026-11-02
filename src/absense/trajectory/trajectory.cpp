@@ -4940,7 +4940,11 @@ bool Trajectory::stepLeg(std::chrono::steady_clock::time_point until) {
 
     if (finished) {
         L->over = true;
-        out.emptied = L->frontier.empty();  // everything died (not out of steps, time or ticks)
+        // Everything died (not out of steps, time or ticks). Not a leg whose
+        // states all crossed the gate: they leave the frontier as they cross
+        // (on an any-height leg usually all on the same tick), so it ended
+        // empty too.
+        out.emptied = L->frontier.empty() && L->crossings.empty();
         if (!L->crossings.empty()) {
             // The calmest way in, then the most room; ties keep the order found.
             auto& cr = L->crossings;
