@@ -293,12 +293,14 @@ namespace gucci::ui::pages {
             auto s = tr::state(k);
             bool const following = tr::followsLevel(k);
 
-            // Your presses are white, or the ink color on a light theme; a
-            // macro press you answer takes the palette's hit color (drawBar).
+            // Your presses are white, or the ink color on a light theme; the
+            // line at the start of a macro press you answer takes the
+            // palette's hit color (drawBar). Only that line: the press's block
+            // stays in the accent.
             std::string const caption = fmt::format(
                 "The macro's clicks scroll past a fixed center line at real speed. Tap space, up or W along with "
                 "it, or play the level: every press and release you make shows up as a {} line under the macro's, "
-                "and each of its presses you answer turns {}.",
+                "and each of its presses you answer gets a {} line at its start.",
                 look().pal.light ? "dark" : "white", look().pal.hitName);
             kit::BeginCard("Click Trainer", caption.c_str());
             if (kit::SwitchRow("Click bar", "Off stops its clock and stops listening for your keys", &s.barEnabled))
