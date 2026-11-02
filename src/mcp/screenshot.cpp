@@ -7,10 +7,13 @@
 #ifdef GEODE_IS_WINDOWS
 
 #include <Geode/cocos/platform/win32/CCGL.h>
+#include <imgui.h>
 
 #include <zlib.h>
 
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <exception>
 #include <mutex>
@@ -33,6 +36,7 @@ namespace gucci::mcp::shot {
             int framesLeft = 0;
             uint64_t id = 0;  // counts asks, so a late result can't land on a newer one
             Clock::time_point at;
+            Crop crop;
         };
         Ask g_ask;
 
@@ -44,20 +48,6 @@ namespace gucci::mcp::shot {
         // One file written at a time: writeBinarySafe goes through <path>.tmp,
         // which two shots with the same name would share.
         std::mutex g_writeMutex;
-
-        // The window's framebuffer in pixels, asked of the OS as the renderer
-        // does (renderer.cpp's getWindowFramebufferSize): while a render runs,
-        // cocos's view size is the render's, and DPI scaling changes it too.
-        bool windowSize(int& width, int& height) {
-            HDC const dc = wglGetCurrentDC();
-            HWND const window = dc ? WindowFromDC(dc) : nullptr;
-            RECT rect{};
-            if (!window || !GetClientRect(window, &rect))
-                return false;
-            width = rect.right - rect.left;
-            height = rect.bottom - rect.top;
-            return width > 0 && height > 0;
-        }
 
         void put32(std::vector<uint8_t>& out, uint32_t v) {
             uint8_t const be[4] = {uint8_t(v >> 24), uint8_t(v >> 16), uint8_t(v >> 8), uint8_t(v)};
@@ -134,11 +124,26 @@ namespace gucci::mcp::shot {
 
     } // namespace
 
-    void request(std::filesystem::path path, int frames) {
+    // The window's framebuffer in pixels, asked of the OS as the renderer
+    // does (renderer.cpp's getWindowFramebufferSize): while a render runs,
+    // cocos's view size is the render's, and DPI scaling changes it too.
+    bool windowPixels(int& width, int& height) {
+        HDC const dc = wglGetCurrentDC();
+        HWND const window = dc ? WindowFromDC(dc) : nullptr;
+        RECT rect{};
+        if (!window || !GetClientRect(window, &rect))
+            return false;
+        width = rect.right - rect.left;
+        height = rect.bottom - rect.top;
+        return width > 0 && height > 0;
+    }
+
+    void request(std::filesystem::path path, int frames, Crop crop) {
         g_ask.armed = true;
         g_ask.framesLeft = frames;
         g_ask.id++;
         g_ask.at = Clock::now();
+        g_ask.crop = crop;
         std::lock_guard lock(g_statusMutex);
         g_statusId = g_ask.id;
         g_status = Status{};
@@ -163,9 +168,9 @@ namespace gucci::mcp::shot {
             return;
         // Nothing to read while the window has no size (minimized): the shot,
         // and its count of frames, wait.
-        int width = 0;
-        int height = 0;
-        if (!windowSize(width, height))
+        int windowW = 0;
+        int windowH = 0;
+        if (!windowPixels(windowW, windowH))
             return;
         if (--g_ask.framesLeft > 0)
             return;
@@ -177,6 +182,31 @@ namespace gucci::mcp::shot {
         {
             std::lock_guard lock(g_statusMutex);
             path = g_status.path;
+        }
+        // GucciBot (2026-11-01): the part asked for, in the window's pixels
+        // from its top left. ImGui's pixels are the window's on this PC
+        // normally; they're scaled if they differ.
+        int left = 0, top = 0, width = windowW, height = windowH;
+        if (g_ask.crop.kind == Crop::Kind::Rect) {
+            float sx = 1.f, sy = 1.f;
+            if (ImGui::GetCurrentContext()) {
+                auto const display = ImGui::GetIO().DisplaySize;
+                if (display.x > 0.f && display.y > 0.f) {
+                    sx = static_cast<float>(windowW) / display.x;
+                    sy = static_cast<float>(windowH) / display.y;
+                }
+            }
+            auto const& c = g_ask.crop;
+            left = std::clamp(static_cast<int>(std::floor(c.x * sx)), 0, windowW);
+            top = std::clamp(static_cast<int>(std::floor(c.y * sy)), 0, windowH);
+            int const right = std::clamp(static_cast<int>(std::ceil((c.x + c.w) * sx)), 0, windowW);
+            int const bottom = std::clamp(static_cast<int>(std::ceil((c.y + c.h) * sy)), 0, windowH);
+            width = right - left;
+            height = bottom - top;
+            if (width < 1 || height < 1) {
+                finish(id, "the crop is outside the window", at);
+                return;
+            }
         }
         // This is inside the swap: nothing may throw out of it.
         std::vector<uint8_t> pixels;
@@ -213,7 +243,8 @@ namespace gucci::mcp::shot {
         glPixelStorei(GL_PACK_SKIP_PIXELS, 0);
         glReadBuffer(GL_BACK);
 
-        glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+        // GL counts rows from the bottom.
+        glReadPixels(left, windowH - (top + height), width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
         GLenum const error = glGetError();
 
         glReadBuffer(static_cast<GLenum>(readBuffer));

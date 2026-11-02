@@ -899,6 +899,43 @@ namespace gucci::ui::probe {
         return true;
     }
 
+    std::optional<WindowInfo> live(std::string const& key) {
+        if (!GImGui)
+            return std::nullopt;
+        ImGuiWindow* found = nullptr;
+        for (ImGuiWindow* w : GImGui->Windows) {
+            if (!w || !(w->Active || w->WasActive) || w->IsFallbackWindow)
+                continue;
+            std::string_view const name = w->Name ? w->Name : "";
+            bool const child = (w->Flags & ImGuiWindowFlags_ChildWindow) != 0;
+            bool hit = false;
+            if (key == "menu")
+                hit = !child && name == "GucciBot##menu";
+            else if (key == "page")
+                hit = child && name.starts_with("GucciBot##menu/") && name.find("/##page_") != std::string_view::npos;
+            else if (key == "macros")
+                hit = child && name.find("/##macros_") != std::string_view::npos;
+            else if (key == "compact")
+                hit = !child && name.ends_with("###compact");
+            else
+                hit = name == key;
+            if (hit) {
+                found = w;
+                break;
+            }
+        }
+        if (!found)
+            return std::nullopt;
+        WindowInfo info;
+        info.name = found->Name;
+        info.key = key;
+        info.rect = ImVec4(found->Pos.x, found->Pos.y, found->Size.x, found->Size.y);
+        info.scrollY = found->Scroll.y;
+        info.scrollMaxY = found->ScrollMax.y;
+        info.viewH = found->InnerRect.GetHeight();
+        return info;
+    }
+
     // ---- the shell
 
     FrameGuard::FrameGuard() {

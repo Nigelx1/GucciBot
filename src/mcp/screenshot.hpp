@@ -21,9 +21,21 @@
 
 namespace gucci::mcp::shot {
 
+    // GucciBot (2026-11-01): a part of the window. Rect: x, y, w, h in
+    // ImGui's pixels (its display, from the top left), cut to the window.
+    struct Crop {
+        enum class Kind { Window, Rect };
+        Kind kind = Kind::Window;
+        float x = 0.f, y = 0.f, w = 0.f, h = 0.f;
+    };
+
     // A new ask replaces one still waiting for its frame. The folder must
     // exist already.
-    void request(std::filesystem::path path, int frames);
+    void request(std::filesystem::path path, int frames, Crop crop = {});
+
+    // The window's size in pixels, as a shot reads it (false: minimized, or
+    // no window).
+    bool windowPixels(int& width, int& height);
 
     // The last ask and how it went.
     struct Status {

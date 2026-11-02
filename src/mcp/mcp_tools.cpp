@@ -211,6 +211,25 @@ namespace gucci::mcp {
             return std::nullopt;
         }
 
+        // A file name a tool may write in the screenshots folder: 1 to 64
+        // letters, digits, - or _ (no path, no extension).
+        bool bareName(std::string const& name) {
+            bool bare = !name.empty() && name.size() <= 64;
+            for (char const c : name)
+                bare = bare && ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+                                c == '-' || c == '_');
+            return bare;
+        }
+
+        fs::path screenshotsDir() {
+            auto const dir = Mod::get()->getSaveDir() / "screenshots";
+            std::error_code ec;
+            fs::create_directories(dir, ec);
+            if (ec)
+                throw ToolError("couldn't make the screenshots folder: " + ec.message());
+            return dir;
+        }
+
         // gucci_ui's arguments (and a find for gucci_ui_view) as the menu
         // probe's query (ui/probe.hpp).
         ui::probe::Query uiQuery(matjson::Value const& a) {
@@ -1004,6 +1023,256 @@ namespace gucci::mcp {
                                     return out;
                                 },
                                 {}, 120};
+                },
+            });
+        }
+
+        // GucciBot (2026-11-01): the menu scrolled, and a whole page in shots.
+        // Where things are comes from a capture of the menu (ui/probe.hpp);
+        // the scroll is ImGui's own, which nothing saves (the menu keeps no
+        // .ini). It runs over several frames (Defer).
+        {
+            auto schema = schemaOf(
+                {{"to", "string", "top, bottom, card (with card) or element (with find)"},
+                 {"card", "string", "to card: the card's title; it's scrolled to the top of the view"},
+                 {"y", "number", "scroll to this height (ImGui's pixels from the top)"},
+                 {"by", "number", "scroll by this much (down is more)"},
+                 {"window", "string",
+                  "what scrolls: page (default: the menu's page), macros (the Saved macros list) or a window's name"},
+                 {"shots", "string",
+                  "a name: shots of the whole window top to bottom, <name>_000.png..., with a manifest <name>.json; "
+                  "scrolled back after (Windows only)"},
+                 {"overlap", "number", "shots: how much each overlaps the one before, 0 to 0.5 (default 0.1)"},
+                 {"crop", "string", "shots: the window itself (default) or menu (the whole menu window)"}});
+            auto find = obj();
+            find["type"] = "object";
+            find["description"] = "to element: one element, as gucci_ui's find ({card, row, label, kind, context, id, "
+                                  "index...}); it's scrolled to the middle of the view";
+            schema["properties"]["find"] = find;
+            server.addTool({
+                "gucci_ui_view",
+                "Scroll one of the menu's windows (the page by default) and say what's "
+                "in view after: {window, scroll_y, scroll_max_y, view_h, visible_cards}. "
+                "to top/bottom, to card (its title at the top of the view), to element "
+                "(a find, in the middle of the view), y or by. With shots: shots of the "
+                "whole window, scrolled from the top to the bottom a view at a time "
+                "(each overlapping the last by `overlap`), then scrolled back where it "
+                "was; it answers {files [{path, scroll_y, rect, width, height}], "
+                "manifest, content_h, view_h...} once every file is written, and "
+                "tools/assist.py's page_sheet()/stitch() put them together. A view "
+                "only: nothing is saved, and it works during a run.",
+                schema,
+                [](matjson::Value const& a) -> matjson::Value {
+                    struct View {
+                        enum class Stage { Look, Settle, Report, Shot, ShotWait };
+                        Stage stage = Stage::Look;
+                        std::string key = "page";
+                        std::string to;
+                        std::string card;
+                        std::optional<double> y;
+                        std::optional<double> by;
+                        ui::probe::Query find;
+                        std::string shots;
+                        double overlap = 0.1;
+                        bool cropMenu = false;
+                        std::string name;  // the ImGui window that scrolls
+                        float original = 0.f;
+                        float step = 0.f;
+                        int wait = 0;
+                        int index = 0;
+                        fs::path dir;
+                        fs::path path;
+                        float shotScroll = 0.f;
+                        ImVec4 shotRect{};
+                        matjson::Value files = matjson::Value::array();
+                    };
+                    auto st = std::make_shared<View>();
+                    st->key = argStr(a, "window", "page");
+                    st->to = argStr(a, "to");
+                    st->card = argStr(a, "card");
+                    if (a.contains("y"))
+                        st->y = a["y"].asDouble().unwrapOr(0.0);
+                    if (a.contains("by"))
+                        st->by = a["by"].asDouble().unwrapOr(0.0);
+                    st->shots = argStr(a, "shots");
+                    st->overlap = std::clamp(a.contains("overlap") ? a["overlap"].asDouble().unwrapOr(0.1) : 0.1, 0.0, 0.5);
+                    auto const crop = argStr(a, "crop", "page");
+                    if (crop != "page" && crop != "menu")
+                        throw ToolError("crop is page (the window itself) or menu");
+                    st->cropMenu = crop == "menu";
+                    if (!st->to.empty() && st->to != "top" && st->to != "bottom" && st->to != "card" &&
+                        st->to != "element")
+                        throw ToolError("to is top, bottom, card or element");
+                    if (st->to == "card" && st->card.empty())
+                        throw ToolError("to card needs card: the card's title");
+                    if (st->to == "element") {
+                        if (!a.contains("find"))
+                            throw ToolError("to element needs find: {card, row, label, kind, context, id, index}");
+                        auto q = obj();
+                        q["find"] = a["find"];
+                        st->find = uiQuery(q);
+                    }
+                    if (!st->shots.empty()) {
+#ifdef GEODE_IS_WINDOWS
+                        if (!bareName(st->shots))
+                            throw ToolError("shots is a name: 1 to 64 letters, digits, - or _");
+                        st->dir = screenshotsDir();
+#else
+                        throw ToolError("shots are Windows only for now");
+#endif
+                    } else if (st->to.empty() && !st->y && !st->by) {
+                        throw ToolError("say where: to (top, bottom, card, element), y, by, or shots");
+                    }
+                    ui::probe::request();
+
+                    auto poll = [st]() -> std::optional<matjson::Value> {
+                        using Stage = View::Stage;
+                        switch (st->stage) {
+                            case Stage::Look: {
+                                if (!ui::probe::ready())
+                                    return std::nullopt;
+                                auto const w = ui::probe::window(st->key);
+                                if (!w)
+                                    throw ToolError("no window \"" + st->key +
+                                                    "\" was drawn (is the menu open on a page? gucci_ui lists the "
+                                                    "windows)");
+                                st->name = w->name;
+                                st->original = w->scrollY;
+                                float target = w->scrollY;
+                                if (!st->shots.empty()) {
+                                    st->step = std::max(8.f, w->viewH * (1.f - static_cast<float>(st->overlap)));
+                                    ui::probe::scrollTo(st->name, 0.f);
+                                    st->wait = 2;
+                                    st->stage = Stage::Shot;
+                                    return std::nullopt;
+                                }
+                                if (st->to == "top")
+                                    target = 0.f;
+                                else if (st->to == "bottom")
+                                    target = w->scrollMaxY;
+                                else if (st->to == "card") {
+                                    auto const r = ui::probe::cardRect(st->card);
+                                    if (!r)
+                                        throw ToolError("no card called \"" + st->card + "\" on this page");
+                                    target = w->scrollY + (r->y - w->rect.y) - 6.f;
+                                } else if (st->to == "element") {
+                                    auto const hits = ui::probe::find(st->find);
+                                    if (hits.empty())
+                                        throw ToolError("nothing matches find");
+                                    if (hits.size() > 1) {
+                                        std::string list;
+                                        for (size_t i = 0; i < hits.size() && i < 10; ++i)
+                                            list += fmt::format("\n[{}] {}", hits[i].n, hits[i].path);
+                                        throw ToolError(fmt::format("{} elements match find (add index, or more of "
+                                                                    "the path):{}",
+                                                                    hits.size(), list));
+                                    }
+                                    // rect is x, y, width, height: its middle to the view's.
+                                    auto const& r = hits[0].rect;
+                                    target = w->scrollY + (r.y - w->rect.y) - (w->viewH - r.w) * 0.5f;
+                                }
+                                if (st->y)
+                                    target = static_cast<float>(*st->y);
+                                if (st->by)
+                                    target = w->scrollY + static_cast<float>(*st->by);
+                                ui::probe::scrollTo(st->name, std::max(0.f, target));
+                                st->wait = 2;
+                                st->stage = Stage::Settle;
+                                return std::nullopt;
+                            }
+                            case Stage::Settle:
+                                if (--st->wait > 0)
+                                    return std::nullopt;
+                                ui::probe::request();
+                                st->stage = Stage::Report;
+                                return std::nullopt;
+                            case Stage::Report: {
+                                if (!ui::probe::ready())
+                                    return std::nullopt;
+                                auto out = obj();
+                                auto const w = ui::probe::window(st->key);
+                                out["window"] = st->name;
+                                out["from"] = std::round(st->original);
+                                if (w) {
+                                    out["scroll_y"] = std::round(w->scrollY);
+                                    out["scroll_max_y"] = std::round(w->scrollMaxY);
+                                    out["view_h"] = std::round(w->viewH);
+                                }
+                                out["visible_cards"] = ui::probe::visibleCards();
+                                return out;
+                            }
+#ifdef GEODE_IS_WINDOWS
+                            case Stage::Shot: {
+                                if (--st->wait > 0)
+                                    return std::nullopt;
+                                auto const w = ui::probe::live(st->name);
+                                auto const area = st->cropMenu ? ui::probe::live("menu") : w;
+                                if (!w || !area)
+                                    throw ToolError("the window closed while its shots were being taken");
+                                st->shotScroll = w->scrollY;
+                                st->shotRect = area->rect;
+                                st->path = st->dir / fmt::format("{}_{:03}.png", st->shots, st->index);
+                                shot::Crop c;
+                                c.kind = shot::Crop::Kind::Rect;
+                                c.x = area->rect.x;
+                                c.y = area->rect.y;
+                                c.w = area->rect.z;
+                                c.h = area->rect.w;
+                                shot::request(st->path, 1, c);
+                                st->stage = Stage::ShotWait;
+                                return std::nullopt;
+                            }
+                            case Stage::ShotWait: {
+                                auto const s = shot::status();
+                                if (s.path != st->path)
+                                    throw ToolError("another screenshot was asked for meanwhile");
+                                if (!s.done)
+                                    return std::nullopt;
+                                if (!s.ok)
+                                    throw ToolError("a shot failed: " + s.error);
+                                auto f = obj();
+                                f["path"] = geode::utils::string::pathToString(st->path);
+                                f["scroll_y"] = std::round(st->shotScroll);
+                                f["rect"] = std::vector<double>{st->shotRect.x, st->shotRect.y, st->shotRect.z,
+                                                                st->shotRect.w};
+                                f["width"] = (int64_t)s.width;
+                                f["height"] = (int64_t)s.height;
+                                st->files.push(f);
+                                st->index++;
+                                auto const w = ui::probe::live(st->name);
+                                float const max = w ? w->scrollMaxY : 0.f;
+                                if (!w || st->shotScroll + 0.5f >= max || st->index >= 40) {
+                                    ui::probe::scrollTo(st->name, st->original);
+                                    auto out = obj();
+                                    out["name"] = st->shots;
+                                    out["window"] = st->name;
+                                    out["files"] = st->files;
+                                    out["view_h"] = w ? std::round(w->viewH) : 0.f;
+                                    out["scroll_max_y"] = std::round(max);
+                                    out["content_h"] = std::round(max + (w ? w->viewH : 0.f));
+                                    out["overlap"] = st->overlap;
+                                    auto const manifest = st->dir / (st->shots + ".json");
+                                    if (auto r = geode::utils::file::writeString(manifest, out.dump()); !r)
+                                        throw ToolError("couldn't write the manifest: " + r.unwrapErr());
+                                    out["manifest"] = geode::utils::string::pathToString(manifest);
+                                    return out;
+                                }
+                                ui::probe::scrollTo(st->name, st->shotScroll + st->step);
+                                st->wait = 2;
+                                st->stage = Stage::Shot;
+                                return std::nullopt;
+                            }
+#endif
+                            default:
+                                throw ToolError("internal error: unknown stage");
+                        }
+                    };
+                    // A page left scrolled for shots goes back where it was.
+                    auto cancel = [st] {
+                        if (!st->shots.empty() && !st->name.empty())
+                            ui::probe::scrollTo(st->name, st->original);
+                    };
+                    throw Defer{poll, cancel, 900};
                 },
             });
         }

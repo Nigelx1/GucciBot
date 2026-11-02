@@ -103,6 +103,10 @@ namespace gucci::ui::probe {
     // window's next Begin. False when no window has that name.
     bool scrollTo(std::string const& windowName, float y);
 
+    // A window as ImGui has it now (drawn last frame), whether or not a
+    // capture saw it: by key ("menu", "page", "compact", "macros") or name.
+    std::optional<WindowInfo> live(std::string const& key);
+
     // ---- the shell (ui/shell.cpp)
 
     // Around the shell's frame(): the capture starts and ends with it, so
