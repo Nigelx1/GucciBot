@@ -334,8 +334,11 @@ namespace gucci::mcp::scene {
             auto e = obj();
             e["exists"] = l != nullptr;
             if (l) {
+                // Shown: drawn, and on the screen at all (the attempts label
+                // scrolls off with the level); offscreen: a part of it is off.
                 Box const box = boxOf(l, false);
-                e["shown"] = drawn(l) && !offscreen(box) && box.w > 0.f;
+                e["shown"] = drawn(l) && onScreen(box) && box.w > 0.f;
+                e["offscreen"] = offscreen(box);
                 e["text"] = std::string(l->getString() ? l->getString() : "");
                 e["box"] = boxJson(box);
             } else {
