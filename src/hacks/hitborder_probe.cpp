@@ -717,6 +717,31 @@ namespace gucci {
                                 m["gd"] = std::string(regionWord(got));
                                 if (displaced)
                                     m["moved_to"] = point(end.x, end.y);
+                                // Everything else the pass did, to look into: the
+                                // signs every object gave, in order (the first
+                                // 12), and how the copy ended.
+                                auto signs = matjson::Value::array();
+                                for (auto const& e : o.events) {
+                                    if (signs.size() >= 12)
+                                        break;
+                                    auto sign = matjson::Value::object();
+                                    sign["uid"] = e.object->m_uniqueID;
+                                    sign["object_id"] = e.object->m_objectID;
+                                    sign["sign"] = std::string(e.ev == Ev::Dead    ? "killed"
+                                                               : e.ev == Ev::Touch ? "touched"
+                                                                                   : "special");
+                                    sign["copy_still"] = e.atStart;
+                                    signs.push(sign);
+                                }
+                                m["pass_signs"] = signs;
+                                if (o.diedOfNothing)
+                                    m["died_of_nothing"] = true;
+                                auto after = matjson::Value::object();
+                                after["at"] = point(end.x, end.y);
+                                after["y_velocity"] = round3(copy->m_yVelocity);
+                                after["on_ground"] = copy->m_isOnGround;
+                                after["on_ground_2"] = copy->m_isOnGround2;
+                                m["copy_after"] = after;
                                 mismatches.push(m);
                             } else if (v == Verdict::Inconclusive && inconclusive.size() < 10) {
                                 auto m = matjson::Value::object();
