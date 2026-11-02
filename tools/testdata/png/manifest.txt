@@ -7,6 +7,12 @@ packaged/jupiter_dial_ccw.png 612 612 - 314e137153bb672c
 packaged/jupiter_dial_cw.png 484 484 - 2f9b44cdb133bc73
 packaged/jupiter_sky.png 1440 1000 - bfe244d862882691
 packaged/jupiter_sprites.png 512 238 - 5b67c4373fcb6062
+packaged/solar_disc.png 376 320 - 54be8ec458dc145c
+packaged/solar_flames.png 352 536 - 8186e045307ff696
+packaged/solar_glow.png 168 154 - 565ab97413e71f5e
+packaged/solar_sky.png 1440 1000 - 9331e74ce53644e6
+packaged/solar_sprites.png 512 532 - 0075da1b7862461c
+packaged/solar_top.png 352 296 - 0a9632fd12327c2e
 variants/c0_d1_plain.png 13 11 0 1150c7dc9f5ae1d0
 variants/c0_d1_adam7.png 21 19 572 4573a464315a9d09
 variants/c0_d2_plain.png 13 11 2168 9c5f299f2f23776b

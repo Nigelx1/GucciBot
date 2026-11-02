@@ -12,9 +12,10 @@
 //    interlace, with and without tRNS) decodes to what Pillow decodes it to,
 //    pixel for pixel, and every broken file is refused for the right reason.
 // 3. SolarBot's art: the pictures in resources/solar (as tools/solar_art.py
-//    writes them) decode at the sizes their table (src/ui/pages/solar_art.hpp)
-//    says, each of Janet's is the size of its box, the sky is opaque, and every
-//    part the tables name has art in it and is on the sheet.
+//    writes them) and in tools/testdata/png/packaged (as the packager stores
+//    them) decode at the sizes their table (src/ui/pages/solar_art.hpp) says,
+//    each of Janet's is the size of its box, the sky is opaque, and every part
+//    the tables name has art in it and is on the sheet.
 
 #include "ui/pages/jupiter_art.hpp"
 #include "ui/pages/solar_art.hpp"
@@ -274,6 +275,7 @@ int main() {
     checkArt("resources/jupiter/");
     checkArt(std::string(kData) + "packaged/");
     checkSolar("resources/solar/");
+    checkSolar(std::string(kData) + "packaged/");
 
     // Every picture in the manifest.
     std::vector<uint8_t> const expected = readFile(std::string(kData) + "expected.rgba");
@@ -342,7 +344,7 @@ int main() {
     {
         std::vector<std::vector<uint8_t>> files;
         for (sa::File const& f : {sa::kSky, sa::kGlow, sa::kDisc, sa::kFlames, sa::kTop, sa::kSprites})
-            files.push_back(readFile(std::string("resources/solar/") + f.name));
+            files.push_back(readFile(std::string(kData) + "packaged/" + f.name));
         auto const start = std::chrono::steady_clock::now();
         for (auto const& bytes : files) {
             png::Pixels px;
@@ -350,7 +352,7 @@ int main() {
             png::decode(bytes.data(), bytes.size(), px, error);
         }
         double const ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
-        std::printf("art: SolarBot's six layers decode in %.1f ms\n", ms);
+        std::printf("art: SolarBot's six layers as packaged decode in %.1f ms\n", ms);
     }
 
     if (g_failed) {

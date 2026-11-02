@@ -2,10 +2,10 @@
 tools/run_art_tests.cpp checks (run_tests.bat).
 
 Writes tools/testdata/png/:
-  packaged/       the JupiterBot art exactly as Geode's packager stores it in
-                  the .geode. It re-saves pictures with few colors as palettes
-                  of 4- or 8-bit indexes with a tRNS chunk, which build
-                  2026-11-02-a's reader refused, so the art never showed.
+  packaged/       the JupiterBot and SolarBot art exactly as Geode's packager
+                  stores it in the .geode. It re-saves pictures with few colors
+                  as palettes of 4- or 8-bit indexes with a tRNS chunk, which
+                  build 2026-11-02-a's reader refused, so the art never showed.
   variants/       small pictures of every color type, bit depth and interlace
                   PNG has, with and without tRNS. Pillow saves the kinds it can
                   (pil_*); a small writer here saves the rest (Adam7, 2- and
@@ -48,7 +48,9 @@ import numpy as np
 from PIL import Image
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "testdata", "png")
-ART = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "resources", "jupiter")
+# Each theme's art: the name its files start with, and the folder that holds them.
+RESOURCES = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "resources")
+ART = {"jupiter_": os.path.join(RESOURCES, "jupiter"), "solar_": os.path.join(RESOURCES, "solar")}
 SIGNATURE = b"\x89PNG\r\n\x1a\n"
 ADAM7 = [(0, 0, 8, 8), (4, 0, 8, 8), (0, 4, 4, 8), (2, 0, 4, 4), (0, 2, 2, 4), (1, 0, 2, 2), (0, 1, 1, 2)]
 CHANNELS = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}
@@ -425,17 +427,19 @@ def packaged(out, geode):
     folder = os.path.join(ROOT, "packaged")
     if geode:
         with zipfile.ZipFile(geode) as z:
-            names = [n for n in z.namelist()
-                     if n.startswith("resources/nigelx1.guccibot/jupiter_") and n.endswith(".png")]
-            assert names, "no JupiterBot art in " + geode
-            pictures = {os.path.basename(n): z.read(n) for n in names}
+            pictures = {}
+            for prefix in ART:
+                names = [n for n in z.namelist()
+                         if n.startswith("resources/nigelx1.guccibot/" + prefix) and n.endswith(".png")]
+                assert names, "no %s art in %s" % (prefix, geode)
+                pictures.update({os.path.basename(n): z.read(n) for n in names})
         resaved = []
         for name, data in pictures.items():
-            source = os.path.join(ART, name)
+            source = os.path.join(next(d for pre, d in ART.items() if name.startswith(pre)), name)
             if not os.path.exists(source) or open(source, "rb").read() != data:
                 resaved.append(name)
         if not resaved:
-            sys.exit("%s holds the art exactly as resources/jupiter has it (a local build_win.bat package?): "
+            sys.exit("%s holds the art exactly as resources/ has it (a local build_win.bat package?): "
                      "give GitHub's build, which re-saves it" % geode)
         for name, data in pictures.items():
             with open(os.path.join(folder, name), "wb") as f:
