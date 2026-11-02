@@ -38,6 +38,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <map>
 #include <string>
 #include <unordered_set>
@@ -540,6 +541,27 @@ namespace gucci {
                 player["going_left"] = hp.goingLeft;
                 player["sideways"] = hp.sideways;
 
+                // Where GD keeps a player of this kind here (checkCollisions
+                // 0x21395f-0x214162, as the overlay's ground reads it): above
+                // the floor and, in a corridor (ship, UFO, wave, swing, ball,
+                // spider, or dual, unless the camera is free), below the
+                // ceiling. A point outside is somewhere this kind of player
+                // can't be at this x: where the level isn't in a flying mode,
+                // its corridor is collapsed and holds no point at all. The
+                // pass snaps or skips such a copy before the objects have a
+                // say, so an object's silence there means nothing.
+                bool const corridor = !pl->m_gameState.m_isFreeMode &&
+                                      (copy->m_isShip || copy->m_isBird || copy->m_isDart || copy->m_isSwing ||
+                                       copy->m_isBall || copy->m_isSpider || pl->m_gameState.m_isDualMode);
+                float const g = copy->m_unkAngle1 * copy->m_vehicleSize * 0.5f;
+                double const floorY = corridor ? pl->getMinPortalY() + g : 90.0 + g;
+                double const ceilingY = corridor ? static_cast<double>(pl->getMaxPortalY() - g)
+                                                 : std::numeric_limits<double>::infinity();
+                player["floor_y"] = round3(floorY);
+                if (corridor)
+                    player["ceiling_y"] = round3(ceilingY);
+                auto outsideCorridor = [&](hb::Vec2 at) { return at.y < floorY - 1e-3 || at.y > ceilingY + 1e-3; };
+
                 std::unordered_set<GameObject*> seen;
                 forEachObjectIn(pl, scanFrom, scanTo, [&](GameObject* object) {
                     if (truncated || !seen.insert(object).second)
@@ -662,6 +684,9 @@ namespace gucci {
                             } else if (o.diedOfNothing) {
                                 v = Verdict::Inconclusive;
                                 whyNot = "the copy died of no object (the edge of the level) before any object was tested";
+                            } else if (outsideCorridor(p)) {
+                                v = Verdict::Inconclusive;
+                                whyNot = "outside the floor and ceiling GD keeps this kind of player in here";
                             } else if (read.type == HitborderRead::Type::Hazard && otherHazard) {
                                 v = Verdict::Inconclusive;
                                 whyNot = "another hazard killed the copy first";
@@ -804,6 +829,9 @@ namespace gucci {
         notes.push(std::string(
             "quiet: a cube, robot or spider less than 2 units into a slope over its head; GD shows no sign of the "
             "touch there, so only 'nothing kills' is checked."));
+        notes.push(std::string(
+            "A point outside player.floor_y .. player.ceiling_y (where GD keeps this kind of player at this x; a flying "
+            "mode's corridor where the level is a cube part is collapsed) is inconclusive unless the object gave a sign."));
         notes.push(std::string("Not probed: the ground and the ceiling, and player 2's own borders in dual."));
         out["notes"] = notes;
         return out;

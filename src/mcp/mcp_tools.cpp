@@ -2256,7 +2256,8 @@ namespace gucci::mcp {
             "That is held against what is drawn there. Reported per object kind and per edge "
             "(\"deadly/touch top\": drawn inside / outside, which way it faces): agree, mismatch (each "
             "listed with the point), inconclusive (the pass moved the copy before the object gave any "
-            "sign: the ground, a landing, a slope), and totals. The player: mode, mini and upside_down "
+            "sign: the ground, a landing, a slope; or the point is outside the floor and ceiling GD keeps "
+            "that kind of player in there, player.floor_y and ceiling_y), and totals. The player: mode, mini and upside_down "
             "default to player 1's own, rotation to 0. Copies only: the real game is put back and "
             "nothing is saved. Refused while a render, Calculate or a pathfinder owns the run.",
             schemaOf({{"mode", "string", "cube, ship, ball, ufo, wave, robot, spider or swing (default: player 1's)"},
