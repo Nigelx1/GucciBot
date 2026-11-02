@@ -18,6 +18,7 @@
 #include "absense/judge.hpp"
 #include "hacks/cps.hpp"
 #include "hacks/hitboxes.hpp"
+#include "hacks/hitborders.hpp"
 #include "hacks/noclip_accuracy.hpp"
 #include "trainers/jupiterghost.hpp"
 #include "trainers/trainerghost.hpp"
@@ -668,6 +669,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
         cps::clear();
 
         HitboxOverlay::get()->clearTrail();
+        HitborderOverlay::get()->clearPath();
         // Only the attempt that gets through should shape a generated trail,
         // so each reset starts it again. Calculate and its walk-back save and
         // restore the trail around their own resets.
@@ -1013,6 +1015,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
             dt = CCDirector::get()->getDeltaTime();
         PlayLayer::updateVisibility(dt);
         HitboxOverlay::get()->draw(this);
+        HitborderOverlay::get()->draw(this);
     }
 
     void addObject(GameObject* obj) {
