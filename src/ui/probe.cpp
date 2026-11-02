@@ -102,6 +102,7 @@ namespace gucci::ui::probe {
         Ctx g_ctx;
         int g_featureDepth = 0;
         int g_textDepth = 0;
+        int g_quiet = 0;  // Quiet guards open: the log is off on purpose
         bool g_logOwned = false;
         void (*g_setClipboard)(ImGuiContext*, const char*) = nullptr;
 
@@ -194,7 +195,9 @@ namespace gucci::ui::probe {
         // logged to the clipboard function, which is this probe's own for
         // the capture frame.
         void ensureLog() {
-            if (!g_on || !g_logOwned)
+            // Not while a Quiet holds it off: started again there, the
+            // log would take what Quiet keeps out.
+            if (!g_on || !g_logOwned || g_quiet > 0)
                 return;
             ImGuiContext& ctx = *GImGui;
             if (ctx.LogEnabled || !ctx.CurrentWindow)
@@ -304,6 +307,7 @@ namespace gucci::ui::probe {
             g_ctx.clear();
             g_featureDepth = 0;
             g_textDepth = 0;
+            g_quiet = 0;
             ImGuiContext& ctx = *GImGui;
             g_cap.imguiFrame = ctx.FrameCount;
             g_cap.display = ctx.IO.DisplaySize;
@@ -1101,10 +1105,12 @@ namespace gucci::ui::probe {
         if (!GImGui->LogEnabled)
             return;
         active = true;
+        g_quiet++;
         GImGui->LogEnabled = false;
     }
 
     void Quiet::close() {
+        g_quiet = std::max(0, g_quiet - 1);
         if (g_on)
             GImGui->LogEnabled = true;
     }
@@ -1311,6 +1317,8 @@ void ImGuiTestEngineHook_ItemInfo(ImGuiContext* ctx, ImGuiID id, const char* lab
 
 void ImGuiTestEngineHook_Log(ImGuiContext*, const char*, ...) {}
 
+// Only ImGui's own debug windows ask (never shown here), and one prints the
+// answer straight into a "%s": "", never null.
 const char* ImGuiTestEngine_FindItemDebugLabel(ImGuiContext*, ImGuiID) {
-    return nullptr;
+    return "";
 }
