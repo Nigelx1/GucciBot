@@ -57,6 +57,19 @@ alone:
 check() fails on any change outside the allowlist, which learn() builds from a
 no-op session (launch, ensure_safe, close): GD rewrites its saves on every
 close, so only the keys a no-op session changes may change.
+
+Seeing without reading pictures (builds from 2026-11-01), all reads:
+
+    print(assist.ui_text(page="Macro"))           # the menu as an outline, scrolled-away cards too
+    rows = assist.ui_find("Macro > Saved macros > zz_gbtest_cs")
+    print(assist.scene(find={"id": "nigelx1.guccibot/"})["lines"])  # GD's cocos tree
+    assist.events()                               # start the cursor
+    ...
+    ev = assist.wait_event("notification", "Calculate:", timeout=90)
+    m = assist.page_shots("hacks", page="Hacks")  # a whole page, slice by slice
+    assist.page_sheet(m)                          # one image to read; stitch(m) one tall one
+    b = assist.burst("death", count=6, trigger="death", crop="player")
+    assist.sheet(b)                               # the burst side by side; apng(b, path) a clip
 """
 import base64
 import contextlib
@@ -67,8 +80,10 @@ import gzip
 import hashlib
 import http.client
 import json
+import math
 import os
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -398,8 +413,17 @@ def ensure_safe():
 
 
 def shot(name, frames=3, timeout=10):
-    """A screenshot of the game window; returns the PNG's path once it's on disk."""
-    path = call("gucci_screenshot", name=name, frames=frames)["path"]
+    """A screenshot of the game window; returns the PNG's path once it's on disk.
+
+    Builds with calls that span frames answer once it's written (wait=True);
+    an older build answers at once, and this polls its status as before.
+    """
+    res = call("gucci_screenshot", name=name, frames=frames, wait=True)
+    if res.get("done"):
+        if not res.get("ok"):
+            raise RuntimeError(f"screenshot {name}: {res.get('error')}")
+        return res["path"]
+    path = res["path"]
     start = time.time()
     while time.time() - start < timeout:
         s = call("gucci_screenshot", status=True)
@@ -782,6 +806,365 @@ def batch(macros=(), mute=True, allow=None):
     check(before, snapshot(), allow)
 
 
+# ---- seeing: the menu, GD's screens, events, bursts --------------------------
+#
+# All of these only read, and work while a run owns the game. The menu's
+# text (gucci_ui) and the cocos scene (gucci_scene) are data, read far more
+# cheaply than a screenshot; shots stay for what only a picture shows.
+
+SCREENSHOTS = os.path.join(MOD_SAVE_DIR, "screenshots")
+
+
+def ui(**kw):
+    """gucci_ui: the menu (and its other windows) as an outline (format="text", the
+    default) or JSON. page=/open= set the menu up first; window=, card=, find={...},
+    visible_only=, lint=, max=, max_lines=. Returns the tool's JSON; ui_text() returns
+    the outline alone."""
+    return call("gucci_ui", **kw)
+
+
+def ui_text(**kw):
+    """The menu as text, ready to read: gucci_ui's outline."""
+    kw.setdefault("format", "text")
+    return ui(**kw)["outline"]
+
+
+def _selector(path, middle="row"):
+    """A path "Macro > Saved macros > zz_gbtest_cs > ..." as (page, find): page >
+    card > (row, or context with middle="context") > label. Two parts are page >
+    card; three are page > card > label."""
+    parts = [p.strip() for p in path.split(">")]
+    if not parts or not parts[0]:
+        raise ValueError(f"an empty path: {path!r}")
+    page, find = parts[0], {}
+    if len(parts) > 1:
+        find["card"] = parts[1]
+    if len(parts) == 3:
+        find["label"] = parts[2]
+    elif len(parts) >= 4:
+        find[middle] = parts[2]
+        find["label"] = " > ".join(parts[3:])
+    return page, find
+
+
+def ui_find(selector, middle="row", **kw):
+    """The elements matching a selector: a dict ({card, row, label, kind, value,
+    context, id, index, window}) or a path string (see _selector). Returns the list
+    of elements (JSON form), each with n, path fields, rect, id, enabled, visible."""
+    if isinstance(selector, str):
+        page, find = _selector(selector, middle)
+        kw.setdefault("page", page)
+    else:
+        find = dict(selector)
+    res = ui(find=find, format="json", **kw)
+    return res["elements"]
+
+
+def view(**kw):
+    """gucci_ui_view: scroll a menu window (to="top"|"bottom"|"card"|"element",
+    card=, find=, y=, by=, window="page"), or shots="<name>" for a whole page in
+    slices with a manifest (page_sheet() and stitch() put them together)."""
+    return call("gucci_ui_view", **kw)
+
+
+def page_shots(name, window="page", overlap=0.1, crop=None, **kw):
+    """Shots of a whole page, slice by slice, scrolled back afterwards. Returns the
+    manifest (files, content_h, view_h...)."""
+    args = dict(shots=name, window=window, overlap=overlap, **kw)
+    if crop:
+        args["crop"] = crop
+    return view(**args)
+
+
+def scene(**kw):
+    """gucci_scene: GD's screen as data (root=, find={id, class, text}, depth=, max=,
+    visible_only=, objects=, format="text"|"json")."""
+    return call("gucci_scene", **kw)
+
+
+def overlays():
+    """gucci_overlays: everything over the level right now, as text and data."""
+    return call("gucci_overlays")
+
+
+_event_cursor = 0
+
+
+def events(kinds=None, since=None, limit=200, reset=False):
+    """gucci_events since the last call (the cursor is kept here; since= overrides it,
+    reset=True starts from the oldest the game holds). kinds: a list or "a,b".
+    Returns the list of events."""
+    global _event_cursor
+    if reset:
+        _event_cursor = 0
+    args = {"since": _event_cursor if since is None else since, "limit": limit}
+    if kinds:
+        args["kinds"] = kinds if isinstance(kinds, str) else list(kinds)
+    res = call("gucci_events", **args)
+    if since is None:
+        _event_cursor = res["seq"]
+    return res["events"]
+
+
+def wait_event(kind, text=None, timeout=30, poll=0.25):
+    """Waits for the next event of `kind` (whose text holds `text`, if given) after the
+    cursor events() keeps; returns it. Raises TimeoutError."""
+    end = time.time() + timeout
+    while time.time() < end:
+        for ev in events(kinds=[kind]):
+            if text is None or text in ev.get("text", ""):
+                return ev
+        time.sleep(poll)
+    raise TimeoutError(f"no {kind} event{f' with {text!r}' if text else ''} within {timeout} s")
+
+
+def burst(name, count=6, every=1, trigger="now", crop=None, scale=1, frames=None, wait=None):
+    """gucci_screenshot as a burst: `count` shots `every` frames apart, from the
+    trigger ("now", "death", "respawn", "complete", "frame:<n>"), cropped
+    ([x, y, w, h], "menu", "page", "player", "player:<half>", "card:<title>") and
+    scaled down (1, 2, 4). Returns the status once every file is written (waiting
+    in the game when it fits in about 6 s, else here, up to 120 s). A trigger only
+    fires while the game runs: unpause it (and let the player die, for "death")
+    after asking."""
+    args = {"name": name, "count": count, "every": every, "trigger": trigger, "scale": scale}
+    if crop is not None:
+        args["crop"] = crop
+    if frames is not None:
+        args["frames"] = frames
+    if wait is None:
+        wait = trigger == "now" and count * every <= 300
+    args["wait"] = wait
+    res = call("gucci_screenshot", **args)
+    start = time.time()
+    while not res.get("done"):
+        if time.time() - start > 120:
+            raise TimeoutError(f"burst {name} didn't finish within 120 s (trigger {trigger!r} not met?)")
+        time.sleep(0.2)
+        res = call("gucci_screenshot", status=True)
+    if not res.get("ok"):
+        raise RuntimeError(f"burst {name}: {res.get('error')}")
+    return res
+
+
+# ---- PNGs, standard library only: read, write, sheets, an animation ----------
+
+def read_png(path):
+    """(width, height, channels, rows) of an 8-bit RGB or RGBA PNG (not interlaced);
+    rows are bytes, top row first. Undoes all five row filters."""
+    with open(path, "rb") as f:
+        data = f.read()
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        raise ValueError(f"not a PNG: {path}")
+    pos, idat, w, h, bpp = 8, [], 0, 0, 3
+    while pos < len(data):
+        n = struct.unpack(">I", data[pos:pos + 4])[0]
+        kind = data[pos + 4:pos + 8]
+        body = data[pos + 8:pos + 8 + n]
+        if kind == b"IHDR":
+            w, h, depth, ctype, _, _, inter = struct.unpack(">IIBBBBB", body)
+            if depth != 8 or ctype not in (2, 6) or inter != 0:
+                raise ValueError(f"{path}: only 8-bit RGB/RGBA, not interlaced (got {depth}, {ctype}, {inter})")
+            bpp = 4 if ctype == 6 else 3
+        elif kind == b"IDAT":
+            idat.append(body)
+        elif kind == b"IEND":
+            break
+        pos += 12 + n
+    raw = zlib.decompress(b"".join(idat))
+    stride = w * bpp
+    rows, prev, i = [], bytearray(stride), 0
+    for _ in range(h):
+        ft = raw[i]
+        line = bytearray(raw[i + 1:i + 1 + stride])
+        i += 1 + stride
+        if ft == 1:
+            for x in range(bpp, stride):
+                line[x] = (line[x] + line[x - bpp]) & 255
+        elif ft == 2:
+            for x in range(stride):
+                line[x] = (line[x] + prev[x]) & 255
+        elif ft == 3:
+            for x in range(stride):
+                left = line[x - bpp] if x >= bpp else 0
+                line[x] = (line[x] + ((left + prev[x]) >> 1)) & 255
+        elif ft == 4:
+            for x in range(stride):
+                a = line[x - bpp] if x >= bpp else 0
+                b = prev[x]
+                c = prev[x - bpp] if x >= bpp else 0
+                p = a + b - c
+                pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                line[x] = (line[x] + (a if (pa <= pb and pa <= pc) else (b if pb <= pc else c))) & 255
+        rows.append(bytes(line))
+        prev = line
+    return w, h, bpp, rows
+
+
+def _rgb(img):
+    """read_png's result with 3 channels."""
+    w, h, bpp, rows = img
+    if bpp == 3:
+        return img
+    return w, h, 3, [bytes(b for x in range(w) for b in r[x * 4:x * 4 + 3]) for r in rows]
+
+
+def _png_chunk(kind, body):
+    return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body) & 0xFFFFFFFF)
+
+
+def write_png(path, width, height, rows, channels=3):
+    """An 8-bit RGB (or RGBA) PNG from rows of bytes, top row first. Returns path."""
+    raw = b"".join(b"\x00" + bytes(r) for r in rows)
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 2 if channels == 3 else 6, 0, 0, 0)
+    with open(path, "wb") as f:
+        f.write(b"\x89PNG\r\n\x1a\n" + _png_chunk(b"IHDR", ihdr) + _png_chunk(b"IDAT", zlib.compress(raw, 6))
+                + _png_chunk(b"IEND", b""))
+    return path
+
+
+def _canvas(width, height, color=(24, 24, 28)):
+    return [bytearray(bytes(color) * width) for _ in range(height)]
+
+
+def _paste(canvas, img, x0, y0, skip_top=0):
+    w, h, _, rows = _rgb(img)
+    for y in range(skip_top, h):
+        cy = y0 + y - skip_top
+        if 0 <= cy < len(canvas):
+            row = canvas[cy]
+            n = max(0, min(w, len(row) // 3 - x0))
+            row[x0 * 3:(x0 + n) * 3] = rows[y][:n * 3]
+
+
+def _manifest(manifest):
+    """A manifest from page_shots()/burst(), its path, or its name in screenshots/."""
+    if isinstance(manifest, dict):
+        return manifest
+    path = manifest if os.path.isabs(manifest) else os.path.join(SCREENSHOTS, manifest)
+    if not path.endswith(".json"):
+        path += ".json"
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _slices(manifest):
+    """[(image, scroll_y, overlap rows to skip)] of a page_shots() manifest."""
+    m = _manifest(manifest)
+    out, prev_end = [], None
+    for s in m["files"]:
+        img = _rgb(read_png(s["path"]))
+        rect_h = max(1.0, float(s["rect"][3]))
+        px = img[1] / rect_h  # the shot's pixels per ImGui unit
+        top = float(s["scroll_y"])
+        skip = 0 if prev_end is None else max(0, int(round((prev_end - top) * px)))
+        out.append((img, top, min(skip, img[1] - 1), px))
+        prev_end = top + rect_h
+    return out
+
+
+def stitch(manifest, out=None):
+    """A page_shots() manifest as one tall PNG (for Nigel; Claude reads page_sheet()).
+    Returns its path."""
+    m = _manifest(manifest)
+    slices = _slices(m)
+    if not slices:
+        raise ValueError("the manifest has no slices")
+    px = slices[0][3]
+    width = max(s[0][0] for s in slices)
+    height = int(math.ceil(max(top * px + img[1] for img, top, _, _ in slices)))
+    canvas = _canvas(width, height)
+    for img, top, _, _ in slices:
+        _paste(canvas, img, 0, int(round(top * px)))
+    out = out or os.path.join(SCREENSHOTS, f"{m.get('name', 'page')}_stitched.png")
+    return write_png(out, width, height, canvas)
+
+
+def page_sheet(manifest, max_side=1568, gap=6, out=None):
+    """A page_shots() manifest in columns, overlaps trimmed, so the whole page is one
+    image readable at full size (about 1568 px on its long side). Returns its path."""
+    m = _manifest(manifest)
+    slices = _slices(m)
+    if not slices:
+        raise ValueError("the manifest has no slices")
+    parts = [(img, skip) for img, _, skip, _ in slices]
+    w = max(img[0] for img, _ in parts)
+    total = sum(img[1] - skip for img, skip in parts)
+    cols = max(1, min(len(parts), int(math.ceil(total / max(1, max_side)))))
+    while cols > 1 and cols * (w + gap) > max_side * 2:
+        cols -= 1
+    per_col = int(math.ceil(total / cols))
+    columns, cur, height = [[]], 0, 0
+    for img, skip in parts:
+        h = img[1] - skip
+        if cur + h > per_col and columns[-1]:
+            columns.append([])
+            cur = 0
+        columns[-1].append((img, skip))
+        cur += h
+        height = max(height, cur)
+    width = len(columns) * (w + gap) - gap
+    canvas = _canvas(width, height)
+    for c, col in enumerate(columns):
+        y = 0
+        for img, skip in col:
+            _paste(canvas, img, c * (w + gap), y, skip)
+            y += img[1] - skip
+    out = out or os.path.join(SCREENSHOTS, f"{m.get('name', 'page')}_sheet.png")
+    return write_png(out, width, height, canvas)
+
+
+def sheet(files, cols=None, gap=6, out=None):
+    """Shots (a burst's files, or its status/manifest) side by side in a grid, in order
+    left to right, top to bottom: Claude's "clip" of a motion. Returns its path."""
+    if isinstance(files, dict):
+        files = [f["path"] if isinstance(f, dict) else f for f in files.get("files", [])]
+    imgs = [_rgb(read_png(p)) for p in files]
+    if not imgs:
+        raise ValueError("no files")
+    w = max(i[0] for i in imgs)
+    h = max(i[1] for i in imgs)
+    cols = cols or max(1, min(len(imgs), int(math.ceil(math.sqrt(len(imgs) * h / max(1, w))))))
+    rows_n = int(math.ceil(len(imgs) / cols))
+    canvas = _canvas(cols * (w + gap) - gap, rows_n * (h + gap) - gap)
+    for k, img in enumerate(imgs):
+        _paste(canvas, img, (k % cols) * (w + gap), (k // cols) * (h + gap))
+    if not out:
+        base = os.path.splitext(files[0])[0]
+        if len(base) > 4 and base[-4] == "_" and base[-3:].isdigit():  # a burst's <name>_000
+            base = base[:-4]
+        out = base + "_sheet.png"
+    return write_png(out, len(canvas[0]) // 3, len(canvas), canvas)
+
+
+def apng(files, out, fps=30):
+    """Shots as an animated PNG (any browser plays it), for Nigel: Claude can't watch
+    video and reads sheet() instead. Every frame is placed on the first one's size."""
+    if isinstance(files, dict):
+        files = [f["path"] if isinstance(f, dict) else f for f in files.get("files", [])]
+    imgs = [_rgb(read_png(p)) for p in files]
+    if not imgs:
+        raise ValueError("no files")
+    w, h = imgs[0][0], imgs[0][1]
+    png = b"\x89PNG\r\n\x1a\n" + _png_chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+    png += _png_chunk(b"acTL", struct.pack(">II", len(imgs), 0))
+    seq = 0
+    for k, img in enumerate(imgs):
+        canvas = _canvas(w, h, (0, 0, 0))
+        _paste(canvas, img, 0, 0)
+        raw = zlib.compress(b"".join(b"\x00" + bytes(r) for r in canvas), 6)
+        png += _png_chunk(b"fcTL", struct.pack(">IIIIIHHBB", seq, w, h, 0, 0, 1, max(1, int(fps)), 0, 0))
+        seq += 1
+        if k == 0:
+            png += _png_chunk(b"IDAT", raw)
+        else:
+            png += _png_chunk(b"fdAT", struct.pack(">I", seq) + raw)
+            seq += 1
+    png += _png_chunk(b"IEND", b"")
+    with open(out, "wb") as f:
+        f.write(png)
+    return out
+
+
 # ---- command line ------------------------------------------------------------
 
 def _value(text):
@@ -805,7 +1188,21 @@ def main(argv):
     usage = ("usage: assist.py call [--any-game] TOOL [key=value...] | menu [key=value...] | "
              "shot NAME [FRAMES] | launch [--no-safe] | restart | ensure_safe | ours | close | "
              "snapshot FILE | diff BEFORE AFTER | learn BEFORE AFTER | check BEFORE AFTER | sweep | "
-             "copy SOURCE ZZ_GBTEST_NAME | test_set KEY VALUE | test_set reset | test_set list")
+             "copy SOURCE ZZ_GBTEST_NAME | test_set KEY VALUE | test_set reset | test_set list | "
+             "ui [key=value...] | scene [key=value...] | events [since=N] [kinds=a,b] | overlays | "
+             "view [key=value...] | burst NAME [key=value...] | sheet MANIFEST | stitch MANIFEST")
+    if argv and argv[0] in ("sheet", "stitch") and len(argv) == 2:
+        made = page_sheet(argv[1]) if argv[0] == "sheet" else stitch(argv[1])
+        print(json.dumps({"path": made}))
+        return
+    if argv and argv[0] == "ui":
+        res = ui(**_pairs(argv[1:]))
+        print(res["outline"] if "outline" in res else json.dumps(res, indent=2))
+        return
+    if argv and argv[0] == "scene":
+        res = scene(**_pairs(argv[1:]))
+        print(res.get("lines") or json.dumps(res, indent=2))
+        return
     if argv and argv[0] in ("snapshot", "diff", "learn", "check"):
         def read(p):
             with open(p, encoding="utf-8") as f:
@@ -852,6 +1249,15 @@ def main(argv):
         result = menu(**_pairs(rest))
     elif cmd == "shot" and rest:
         result = shot(rest[0], int(rest[1]) if len(rest) > 1 else 3)
+    elif cmd == "events":
+        args = _pairs(rest)
+        result = call("gucci_events", **args)
+    elif cmd == "overlays":
+        result = overlays()
+    elif cmd == "view":
+        result = view(**_pairs(rest))
+    elif cmd == "burst" and rest:
+        result = burst(rest[0], **_pairs(rest[1:]))
     elif cmd == "launch":
         result = {"pid": launch(force_safe="--no-safe" not in rest)}
     elif cmd == "restart":
