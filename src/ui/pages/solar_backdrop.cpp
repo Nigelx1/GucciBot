@@ -83,21 +83,48 @@ namespace gucci::ui::pages {
             dl->AddCircle(c, r * 0.46f, line, 0, width);
         }
 
-        // Janet's face: two closed, smiling eyes and a small smile under them,
-        // `u` across, leaning by `tilt` (radians) towards where she looks.
+        // Janet's face, as the level draws her (Nigel, 2026-11-01: her eyes
+        // are never closed in Solar Flare): two open eyes, short upright
+        // strokes bowed a little to her right, and a smile under them with a
+        // short line across each corner, square to the curve there. `u`
+        // across, leaning by `tilt` (radians) towards where she looks.
         void face(ImDrawList* dl, ImVec2 at, float u, float tilt, ImU32 ink, float width) {
             ImVec2 const ex(std::cos(tilt), std::sin(tilt));   // her right
             ImVec2 const ey(-std::sin(tilt), std::cos(tilt));  // her down
             auto const p = [&](float x, float y) {
                 return ImVec2(at.x + ex.x * x + ey.x * y, at.y + ex.y * x + ey.y * y);
             };
+            // A stroke with round ends, as hers are.
+            auto const stroke = [&](ImVec2 const* pts, int count, float w) {
+                dl->AddPolyline(pts, count, ink, ImDrawFlags_None, w);
+                dl->AddCircleFilled(pts[0], w * 0.5f, ink, 12);
+                dl->AddCircleFilled(pts[count - 1], w * 0.5f, ink, 12);
+            };
             for (float side : {-1.f, 1.f}) {
-                dl->PathArcTo(p(side * 0.62f * u, -0.30f * u), 0.26f * u, kPi + tilt + 0.35f,
-                              2.f * kPi + tilt - 0.35f, 12);
-                dl->PathStroke(ink, 0, width);
+                constexpr int kSteps = 7;
+                ImVec2 eye[kSteps];
+                for (int k = 0; k < kSteps; ++k) {
+                    float const s = static_cast<float>(k) / static_cast<float>(kSteps - 1);  // top to bottom
+                    eye[k] = p((side * 0.36f + 0.07f * std::sin(s * kPi)) * u, (-0.70f + 0.52f * s) * u);
+                }
+                stroke(eye, kSteps, width * 1.6f);
             }
-            dl->PathArcTo(p(0.f, 0.02f * u), 0.50f * u, tilt + 0.62f, kPi + tilt - 0.62f, 16);
+            // The smile: the bottom of a circle round `mouth`, between the
+            // angles a0 and a1, and at each end a line along the radius.
+            float const mouthY = 0.02f * u;
+            float const r = 0.50f * u;
+            float const a0 = 0.62f;
+            float const a1 = kPi - 0.62f;
+            dl->PathArcTo(p(0.f, mouthY), r, tilt + a0, tilt + a1, 16);
             dl->PathStroke(ink, 0, width);
+            for (float a : {a0, a1}) {
+                float const half = 0.13f * u;
+                ImVec2 const corner[2] = {
+                    p(std::cos(a) * (r - half), mouthY + std::sin(a) * (r - half)),
+                    p(std::cos(a) * (r + half), mouthY + std::sin(a) * (r + half)),
+                };
+                stroke(corner, 2, width);
+            }
         }
 
         // Where the marks go, in a 720 x 500 menu (its first size), stretched
