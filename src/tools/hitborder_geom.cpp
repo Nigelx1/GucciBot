@@ -326,6 +326,22 @@ namespace gucci::hitborder {
         return true;
     }
 
+    double distanceToEdge(std::vector<Vec2> const& poly, Vec2 p) {
+        double best = std::numeric_limits<double>::infinity();
+        size_t const n = poly.size();
+        for (size_t i = 0; i < n; ++i) {
+            Vec2 const a = poly[i];
+            Vec2 const b = poly[(i + 1) % n];
+            double const dx = b.x - a.x;
+            double const dy = b.y - a.y;
+            double const len2 = dx * dx + dy * dy;
+            double t = len2 > 0 ? ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2 : 0.0;
+            t = std::clamp(t, 0.0, 1.0);
+            best = std::min(best, std::hypot(p.x - (a.x + dx * t), p.y - (a.y + dy * t)));
+        }
+        return best;
+    }
+
     bool covered(std::vector<Shape> const& shapes, Kind kind, Vec2 p, double eps) {
         for (auto const& s : shapes) {
             if (s.kind == kind && contains(s.poly, p, eps))

@@ -19,6 +19,10 @@
 
 #include <Geode/Geode.hpp>
 
+#include <cstdint>
+#include <deque>
+#include <string>
+
 namespace gucci {
 
     class HitborderOverlay {
@@ -77,6 +81,32 @@ namespace gucci {
         void paint(GJBaseGameLayer* layer);                       // once per drawn frame
         bool drawMerged();                                        // the borders' one-pass outline
         bool attachedTo(GJBaseGameLayer* layer) const;
+
+        // The accuracy audit, for Assistant Access (gucci_hitborders): over
+        // every collision pass of a real player, whether GD's own pass killed
+        // it, against whether its center, where the pass left it, sat in a
+        // red region the overlay draws (every kind on, blocks Exact, the
+        // icon's tilt used). Off until asked for, whether or not the borders
+        // are shown; it only reads.
+        struct Audit {
+            bool on = false;
+            uint64_t passes = 0;       // collision passes watched
+            uint64_t deaths = 0;       // ... in which GD called destroyPlayer
+            uint64_t agreed = 0;       // deaths with the center in red
+            uint64_t missed = 0;       // deaths with the center outside every red region
+            uint64_t falseAlarms = 0;  // passes lived through with the center in red
+            std::deque<std::string> notes;  // the latest disagreements, oldest first
+        };
+        Audit const& audit() const;
+        void setAudit(bool on);  // turning it on starts the counts again
+        // For the audit's hooks: around one collision pass, and GD's
+        // destroyPlayer inside it.
+        bool auditBefore(GJBaseGameLayer* layer, PlayerObject* player);
+        void auditAfter(GJBaseGameLayer* layer, PlayerObject* player);
+        void auditDeath(GJBaseGameLayer* layer, PlayerObject* player, GameObject* by);
+        // Player 1 and the regions within `radius` of it right now (every
+        // kind on, blocks Exact), for gucci_hitborders.
+        matjson::Value describe(float radius);
 
     private:
         HitborderOverlay();

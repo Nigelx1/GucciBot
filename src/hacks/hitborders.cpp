@@ -533,6 +533,70 @@ namespace gucci {
             }
         }
 
+        // ---------------------------------------------------------------- the audit's state
+
+        struct AuditRun {
+            HitborderOverlay::Audit audit;
+            PlayerObject* inPass = nullptr;  // the real player whose collision pass is running
+            hb::Player before;               // ... as the pass began
+            bool killed = false;             // GD called destroyPlayer for it in the pass
+            GameObject* killer = nullptr;
+        };
+
+        AuditRun& auditRun() {
+            static AuditRun run;
+            return run;
+        }
+
+        constexpr size_t kAuditNotes = 50;
+
+        // The audit's and describe()'s regions: every kind, blocks Exact.
+        HitborderOverlay::Settings everyKind(bool specials) {
+            HitborderOverlay::Settings s = HitborderOverlay::defaults();
+            s.hazards = s.blocks = s.slopes = s.exactBlocks = true;
+            s.specials = specials;
+            return s;
+        }
+
+        // An object's reach, generously: its rect, its circle.
+        bool withinReach(ObjectRead const& read, hb::Vec2 c, double reach) {
+            hb::Rect r;
+            switch (read.type) {
+            case ObjectRead::Type::Block: r = read.block.rect; break;
+            case ObjectRead::Type::Slope: r = read.slope.rect; break;
+            default:
+                r = read.collider.rect;
+                if (read.collider.radius > 0) {
+                    r.x0 = std::min(r.x0, read.collider.center.x - read.collider.radius);
+                    r.y0 = std::min(r.y0, read.collider.center.y - read.collider.radius);
+                    r.x1 = std::max(r.x1, read.collider.center.x + read.collider.radius);
+                    r.y1 = std::max(r.y1, read.collider.center.y + read.collider.radius);
+                }
+                break;
+            }
+            return c.x >= r.x0 - reach && c.x <= r.x1 + reach && c.y >= r.y0 - reach && c.y <= r.y1 + reach;
+        }
+
+        const char* modeWord(hb::Mode m) {
+            switch (m) {
+            case hb::Mode::Cube: return "cube";
+            case hb::Mode::Ship: return "ship";
+            case hb::Mode::Ball: return "ball";
+            case hb::Mode::Ufo: return "ufo";
+            case hb::Mode::Wave: return "wave";
+            case hb::Mode::Robot: return "robot";
+            case hb::Mode::Spider: return "spider";
+            case hb::Mode::Swing: return "swing";
+            }
+            return "?";
+        }
+
+        std::string objectWords(GameObject* o) {
+            if (!o)
+                return "no object (the ground, the ceiling or the edge of the level)";
+            return fmt::format("object {} (uid {}, type {})", o->m_objectID, o->m_uniqueID, static_cast<int>(o->m_objectType));
+        }
+
         // Whether a tick or a button press of the real players is the
         // player's own: not a pass that only refreshes, not the judge's run,
         // not after a death or the level's end.
@@ -1007,6 +1071,200 @@ namespace gucci {
         return true;
     }
 
+    // ---------------------------------------------------------------- the audit
+
+    HitborderOverlay::Audit const& HitborderOverlay::audit() const {
+        return auditRun().audit;
+    }
+
+    void HitborderOverlay::setAudit(bool on) {
+        auto& run = auditRun();
+        if (on && !run.audit.on)
+            run.audit = Audit{};
+        run.audit.on = on;
+        run.inPass = nullptr;
+    }
+
+    bool HitborderOverlay::auditBefore(GJBaseGameLayer* pl, PlayerObject* p) {
+        auto& run = auditRun();
+        if (!run.audit.on || !pl || !p || pl != PlayLayer::get() || p->m_isDead)
+            return false;
+        if (p != pl->m_player1 && p != pl->m_player2)
+            return false;
+        if (::Bot::get()->trajectory().isFakePlayer(p) || GucciEngine::get()->updater.m_onlyRefresh)
+            return false;
+        run.inPass = p;
+        run.before = readPlayer(p);
+        run.killed = false;
+        run.killer = nullptr;
+        return true;
+    }
+
+    void HitborderOverlay::auditDeath(GJBaseGameLayer* pl, PlayerObject* p, GameObject* by) {
+        auto& run = auditRun();
+        if (!run.audit.on || run.inPass != p || !pl || by == pl->m_anticheatSpike || run.killed)
+            return;
+        run.killed = true;
+        run.killer = by;
+    }
+
+    void HitborderOverlay::auditAfter(GJBaseGameLayer* pl, PlayerObject* p) {
+        auto& run = auditRun();
+        if (run.inPass != p)
+            return;
+        run.inPass = nullptr;
+        auto& a = run.audit;
+        ++a.passes;
+
+        auto& traj = ::Bot::get()->trajectory();
+        PlayerObject* p1 = pl->m_player1;
+        PlayerObject* p2 = pl->m_gameState.m_isDualMode ? pl->m_player2 : nullptr;
+        // The state the pass began with, where the pass left the center: GD
+        // tests blocks and slopes, snaps, then tests hazards from there; a
+        // landing or a head snap moves the center out of a red core, a death
+        // leaves it where it was.
+        hb::Player probe = run.before;
+        CCPoint const at = p->getPosition();
+        probe.pos = {at.x, at.y};
+        hb::Vec2 const c{at.x, at.y};
+        hb::Options opt;
+        opt.fixRadius = pl->m_levelSettings && pl->m_levelSettings->m_fixRadiusCollision;
+        opt.useTilt = true;
+        opt.core = true;
+        Settings const every = everyKind(false);
+
+        GameObject* inside = nullptr;
+        double depth = 0.0;
+        double killerGap = -1.0;
+        std::vector<hb::Shape> shapes;
+        forEachNearbyObject(pl, [&](GameObject* object) {
+            if (inside && (!run.killed || !run.killer || killerGap >= 0.0))
+                return;
+            ObjectRead read;
+            if (!readObject(pl, traj, p1, p2, object, read) || !withinReach(read, c, 80.0))
+                return;
+            shapes.clear();
+            regionsFor(read, probe, opt, every, shapes);
+            for (auto const& s : shapes) {
+                if (s.kind != hb::Kind::Lethal)
+                    continue;
+                bool const in = hb::contains(s.poly, c, 1e-6);
+                if (in && !inside) {
+                    inside = object;
+                    depth = hb::distanceToEdge(s.poly, c);
+                }
+                if (object == run.killer) {
+                    double const gap = in ? 0.0 : hb::distanceToEdge(s.poly, c);
+                    killerGap = killerGap < 0.0 ? gap : std::min(killerGap, gap);
+                }
+            }
+        });
+
+        auto note = [&](std::string text) {
+            a.notes.push_back(std::move(text));
+            while (a.notes.size() > kAuditNotes)
+                a.notes.pop_front();
+        };
+        std::string const who = fmt::format("frame {}, player {} ({}{}{})", GucciEngine::get()->updater.getFrame(),
+                                            p == pl->m_player2 && p != pl->m_player1 ? 2 : 1, modeWord(probe.mode),
+                                            probe.vehicleSize != 1.0 ? " mini" : "",
+                                            probe.upsideDown ? " upside down" : "");
+        if (run.killed) {
+            ++a.deaths;
+            if (inside) {
+                ++a.agreed;
+            } else {
+                ++a.missed;
+                note(fmt::format("{}: GD killed it at ({:.2f}, {:.2f}) by {}, but no red region holds that point{}", who,
+                                 c.x, c.y, objectWords(run.killer),
+                                 killerGap >= 0.0 ? fmt::format(" (that object's red edge is {:.2f} away)", killerGap)
+                                                  : std::string()));
+            }
+        } else if (inside) {
+            ++a.falseAlarms;
+            note(fmt::format("{}: the center at ({:.2f}, {:.2f}) was {:.2f} inside the red of {}, and GD didn't kill it",
+                             who, c.x, c.y, depth, objectWords(inside)));
+        }
+        run.killed = false;
+        run.killer = nullptr;
+    }
+
+    matjson::Value HitborderOverlay::describe(float radius) {
+        auto out = matjson::Value::object();
+        auto* pl = PlayLayer::get();
+        if (!pl || !pl->m_player1 || !pl->m_objectLayer) {
+            out["error"] = "not in a level";
+            return out;
+        }
+        auto& traj = ::Bot::get()->trajectory();
+        PlayerObject* p1 = pl->m_player1;
+        PlayerObject* p2 = pl->m_gameState.m_isDualMode ? pl->m_player2 : nullptr;
+        hb::Player const pp = readPlayer(p1);
+
+        auto player = matjson::Value::object();
+        player["x"] = pp.pos.x;
+        player["y"] = pp.pos.y;
+        player["outer_half"] = std::vector<double>{pp.hx, pp.hy};
+        player["inner_half"] = std::vector<double>{pp.ix, pp.iy};
+        player["rotation"] = pp.rotation;
+        player["mode"] = std::string(modeWord(pp.mode));
+        player["mini"] = pp.vehicleSize != 1.0;
+        player["upside_down"] = pp.upsideDown;
+        player["platformer"] = pp.platformer;
+        player["sideways"] = pp.sideways;
+        player["going_left"] = pp.goingLeft;
+        player["d_block_slide"] = pp.dartSlide;
+        player["h_block"] = pp.hitHead;
+        player["on_slope"] = pp.onSlope;
+        out["player"] = player;
+        out["fix_radius_collision"] = pl->m_levelSettings && pl->m_levelSettings->m_fixRadiusCollision;
+
+        hb::Options opt;
+        opt.fixRadius = pl->m_levelSettings && pl->m_levelSettings->m_fixRadiusCollision;
+        opt.useTilt = true;
+        opt.core = true;
+        Settings const every = everyKind(true);
+        hb::Vec2 const c = pp.pos;
+        auto regions = matjson::Value::array();
+        size_t count = 0;
+        std::vector<hb::Shape> shapes;
+        forEachNearbyObject(pl, [&](GameObject* object) {
+            ObjectRead read;
+            if (!readObject(pl, traj, p1, p2, object, read) || !withinReach(read, c, radius))
+                return;
+            shapes.clear();
+            regionsFor(read, pp, opt, every, shapes);
+            for (auto const& s : shapes) {
+                auto r = matjson::Value::object();
+                r["kind"] = std::string(s.kind == hb::Kind::Lethal ? "deadly"
+                                        : s.kind == hb::Kind::Touch ? "touch"
+                                                                     : "special");
+                r["object_id"] = object->m_objectID;
+                r["uid"] = object->m_uniqueID;
+                r["type"] = static_cast<int>(object->m_objectType);
+                auto points = matjson::Value::array();
+                for (auto const& v : s.poly)
+                    points.push(std::vector<double>{std::round(v.x * 100.0) / 100.0, std::round(v.y * 100.0) / 100.0});
+                r["points"] = points;
+                r["holds_player"] = hb::contains(s.poly, c, 1e-6);
+                regions.push(r);
+                ++count;
+            }
+        });
+        out["regions"] = regions;
+        out["count"] = static_cast<int64_t>(count);
+        auto const& a = auditRun().audit;
+        auto audit = matjson::Value::object();
+        audit["on"] = a.on;
+        audit["passes"] = static_cast<int64_t>(a.passes);
+        audit["deaths"] = static_cast<int64_t>(a.deaths);
+        audit["agreed"] = static_cast<int64_t>(a.agreed);
+        audit["missed"] = static_cast<int64_t>(a.missed);
+        audit["false_alarms"] = static_cast<int64_t>(a.falseAlarms);
+        out["audit"] = audit;
+        return out;
+    }
+
 } // namespace gucci
 
 // ---------------------------------------------------------------- hooks
@@ -1038,7 +1296,35 @@ class $modify(GBHitborderButtonHook, PlayerObject) {
     }
 };
 
+// The accuracy audit (gucci_hitborders): one real collision pass at a time.
+// A hazard hit with ignoreDamage set returns 1 instead of killing; it counts
+// as a death all the same.
+class $modify(GBHitborderAuditPassHook, GJBaseGameLayer) {
+    int checkCollisions(PlayerObject* player, float dt, bool ignoreDamage) {
+        auto* overlay = gucci::HitborderOverlay::get();
+        bool const watched = overlay->auditBefore(this, player);
+        int const result = GJBaseGameLayer::checkCollisions(player, dt, ignoreDamage);
+        if (watched) {
+            if (ignoreDamage && result == 1)
+                overlay->auditDeath(this, player, nullptr);
+            overlay->auditAfter(this, player);
+        }
+        return result;
+    }
+};
+
 class $modify(GBHitborderPlayLayerHook, PlayLayer) {
+    // First in line, so the audit sees GD's decision even when noclip,
+    // Calculate or a pathfinder swallows the death further down.
+    static void onModify(auto& self) {
+        (void)self.setHookPriorityPre("PlayLayer::destroyPlayer", Priority::First);
+    }
+
+    void destroyPlayer(PlayerObject* player, GameObject* object) {
+        gucci::HitborderOverlay::get()->auditDeath(this, player, object);
+        PlayLayer::destroyPlayer(player, object);
+    }
+
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
         if (!PlayLayer::init(level, useReplay, dontCreateObjects))
             return false;

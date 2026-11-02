@@ -176,6 +176,8 @@ namespace gucci::hitborder {
     double area(std::vector<Vec2> const& poly);
     // Inside or on the edge of a convex counter-clockwise polygon, within eps.
     bool contains(std::vector<Vec2> const& poly, Vec2 p, double eps = 1e-9);
+    // How far p is from the polygon's edge, inside or out.
+    double distanceToEdge(std::vector<Vec2> const& poly, Vec2 p);
     // In any of these shapes of this kind.
     bool covered(std::vector<Shape> const& shapes, Kind kind, Vec2 p, double eps = 1e-9);
 

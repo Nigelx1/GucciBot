@@ -321,6 +321,12 @@ int main() {
         auto clipped = clipToRect(rectPoly({0, 0, 10, 10}), {5, -5, 20, 5});
         CHECK(near(area(clipped), 25.0));
 
+        // Distance to the edge, from inside and out (the audit's "missed by").
+        auto square = rectPoly({0, 0, 10, 10});
+        CHECK(near(distanceToEdge(square, {5, 4}), 4.0));
+        CHECK(near(distanceToEdge(square, {13, 14}), 5.0));
+        CHECK(near(distanceToEdge(square, {-0.5, 5}), 0.5));
+
         // Two upright boxes: the sum is a box of the summed halves.
         std::array<Vec2, 4> box{{{-3, -2}, {3, -2}, {3, 2}, {-3, 2}}};
         auto sum = minkowski(box, playerBox(15, 15, 0));

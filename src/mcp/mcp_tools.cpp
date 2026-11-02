@@ -28,6 +28,7 @@
 #include "analysis/trajectory.hpp"
 #include "tools/macro_check.hpp"
 #include "core/GucciBot.hpp"
+#include "hacks/hitborders.hpp"
 #include "hacks/safemode.hpp"
 #include "render/renderer.hpp"
 #include "trainers/click_indicators.hpp"
@@ -2142,6 +2143,49 @@ namespace gucci::mcp {
                 out["player1"] = playerJson(pl->m_player1);
                 if (pl->m_gameState.m_isDualMode && pl->m_player2)
                     out["player2"] = playerJson(pl->m_player2);
+                return out;
+            },
+        });
+
+        server.addTool({
+            "gucci_hitborders",
+            "Hitborders (Macro page): every hitbox grown by the player's own, so the player is "
+            "a point. action \"regions\" (the default): player 1 and the regions within `radius` "
+            "of it right now, every kind on and blocks Exact: deadly (the center dies there), "
+            "touch (the box touches something solid) and special (orbs, pads, portals), each a "
+            "convex polygon in level units with the object it came from and whether it holds "
+            "player 1's center. \"audit_on\" starts the accuracy audit from zero: from then on "
+            "every collision pass of a real player is checked, did GD's own pass kill it against "
+            "was its center in a deadly region, whether or not the borders are shown. \"audit\" "
+            "reads the counts and the latest disagreements, \"audit_off\" stops it. A death "
+            "noclip saves still counts as GD's. Reads only: nothing in the game changes.",
+            schemaOf({{"action", "string", "regions (default), audit, audit_on or audit_off"},
+                      {"radius", "integer", "regions: how far from player 1 to list, in level units (default 90)"}}),
+            [](matjson::Value const& a) {
+                auto const action = argStr(a, "action", "regions");
+                auto* overlay = HitborderOverlay::get();
+                if (action == "regions") {
+                    requireLevel();
+                    auto const radius = static_cast<float>(std::clamp<int64_t>(argInt(a, "radius", 90), 1, 2000));
+                    return overlay->describe(radius);
+                }
+                if (action == "audit_on" || action == "audit_off")
+                    overlay->setAudit(action == "audit_on");
+                else if (action != "audit")
+                    throw ToolError("action is regions, audit, audit_on or audit_off");
+                auto const& au = overlay->audit();
+                auto out = obj();
+                out["on"] = au.on;
+                out["passes"] = static_cast<int64_t>(au.passes);
+                out["deaths"] = static_cast<int64_t>(au.deaths);
+                out["agreed"] = static_cast<int64_t>(au.agreed);
+                out["missed"] = static_cast<int64_t>(au.missed);
+                out["false_alarms"] = static_cast<int64_t>(au.falseAlarms);
+                auto notes = matjson::Value::array();
+                for (auto const& n : au.notes)
+                    notes.push(n);
+                out["notes"] = notes;
+                out["shown"] = overlay->settings.show;
                 return out;
             },
         });
