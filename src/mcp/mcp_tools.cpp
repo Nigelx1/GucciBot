@@ -20,6 +20,7 @@
 #include "absense/glue.hpp"
 #include "audio/bigbrrr.hpp"
 #include "audio/clicks.hpp"
+#include "mcp/events.hpp"
 #include "mcp/scene.hpp"
 #include "mcp/screenshot.hpp"
 #include "mcp/test_settings.hpp"
@@ -52,6 +53,20 @@ namespace fs = std::filesystem;
 
 namespace gucci::mcp {
 
+    // Who, if anyone, currently owns the run. Returned by get_state so the
+    // caller can see it, used to refuse the driving tools, and watched by the
+    // event recorder (mcp/events.hpp).
+    std::string runOwner() {
+        auto* gb = GucciEngine::get();
+        if (SLRenderer::get()->isRecording())
+            return "render";
+        if (gb->analyzerOwnsRun())
+            return "analyzer";
+        if (Pathfinder::get()->active || absense::isRunning() || absense::startPending())
+            return "pathfinder";
+        return "";
+    }
+
     namespace {
 
         matjson::Value obj() {
@@ -74,19 +89,6 @@ namespace gucci::mcp {
             if (!a.contains(key))
                 return def;
             return a[key].asBool().unwrapOr(def);
-        }
-
-        // Who, if anyone, currently owns the run. Returned by get_state so the
-        // caller can see it, and used to refuse the driving tools.
-        std::string runOwner() {
-            auto* gb = GucciEngine::get();
-            if (SLRenderer::get()->isRecording())
-                return "render";
-            if (gb->analyzerOwnsRun())
-                return "analyzer";
-            if (Pathfinder::get()->active || absense::isRunning() || absense::startPending())
-                return "pathfinder";
-            return "";
         }
 
         void requireFreeRun() {
@@ -919,6 +921,59 @@ namespace gucci::mcp {
                     if (format != "text" && format != "json")
                         throw ToolError("format is text or json");
                     return scene::walk(o, format == "text");
+                },
+            });
+        }
+
+        // GucciBot (2026-11-01): the event recorder (mcp/events.hpp).
+        {
+            auto schema = schemaOf({{"since", "integer", "only events after this seq (default 0: all it holds)"},
+                                    {"limit", "integer", "most events returned (default 200, max 2000)"}});
+            auto kinds = obj();
+            kinds["description"] =
+                "only these kinds, as a list or comma-separated: notification, alert, alert_closed, scene, "
+                "level_open, level_quit, death, respawn, reset, complete, mode, run_start, run_end, calculate, "
+                "render, imgui_popup";
+            schema["properties"]["kinds"] = kinds;
+            server.addTool({
+                "gucci_events",
+                "What happened on screen and in the game, recorded as it happened "
+                "(every frame while Assistant Access is on), so a notification that "
+                "shows for two seconds or a death between two calls isn't missed: "
+                "Geode notifications (text, box, offscreen; updated: its text "
+                "changed), alerts and popups (title, body, buttons) and their "
+                "closing, the screen changing, a level opening or closing, player "
+                "1's death (x, y, percent), respawn, reset (the frame went back) "
+                "and the level's end, GucciBot's mode, a run starting and ending "
+                "(render, analyzer, pathfinder), Calculate's last message, a "
+                "render's result and ImGui popups opening. Each has seq, frame, "
+                "tick (in a level), ms since the recorder started, kind, text and "
+                "data. Pass the answer's seq back as since to get only what's "
+                "new; dropped counts events the 2000-event ring no longer holds.",
+                schema,
+                [](matjson::Value const& a) {
+                    int64_t const since = std::max<int64_t>(0, argInt(a, "since", 0));
+                    size_t const limit = (size_t)std::clamp<int64_t>(argInt(a, "limit", 200), 1, 2000);
+                    std::vector<std::string> kinds;
+                    if (a.contains("kinds")) {
+                        auto const& k = a["kinds"];
+                        if (k.isArray()) {
+                            for (auto const& v : k.asArray().unwrap())
+                                if (v.isString())
+                                    kinds.push_back(v.asString().unwrap());
+                        } else if (k.isString()) {
+                            std::stringstream in(k.asString().unwrap());
+                            for (std::string part; std::getline(in, part, ',');) {
+                                part.erase(0, part.find_first_not_of(' '));
+                                part.erase(part.find_last_not_of(' ') + 1);
+                                if (!part.empty())
+                                    kinds.push_back(part);
+                            }
+                        } else {
+                            throw ToolError("kinds is a list of kinds, or one string of them split by commas");
+                        }
+                    }
+                    return events::read((uint64_t)since, kinds, limit);
                 },
             });
         }

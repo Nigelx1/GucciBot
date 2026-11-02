@@ -28,6 +28,7 @@ namespace {
 #endif
 
 #include "mcp_server.hpp"
+#include "events.hpp"
 
 #include <Geode/Geode.hpp>
 
@@ -293,6 +294,13 @@ namespace gucci::mcp {
     }
 
     void Server::pump() {
+        // GucciBot (2026-11-01): what happened since the last frame, for
+        // gucci_events (mcp/events.hpp). A frame's worth of reads; nothing
+        // it does may stop the tools from running.
+        try {
+            events::tick();
+        } catch (...) {
+        }
         std::shared_ptr<Call> call;
         {
             std::lock_guard lock(m_callMutex);
