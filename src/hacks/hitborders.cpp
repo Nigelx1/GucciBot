@@ -35,6 +35,7 @@
 #include "tools/hitborder_geom.hpp"
 
 #include <Geode/Geode.hpp>
+#include <Geode/modify/AppDelegate.hpp>
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
 #include <Geode/modify/PlayerObject.hpp>
@@ -810,6 +811,11 @@ namespace gucci {
         }
     }
 
+    void HitborderOverlay::releaseGpu() {
+        for (auto& f : st().fbos)
+            f.release();
+    }
+
     // ---------------------------------------------------------------- tick
 
     void HitborderOverlay::sampleTick(GJBaseGameLayer* pl) {
@@ -1362,6 +1368,20 @@ class $modify(GBHitborderPlayLayerHook, PlayLayer) {
     void onQuit() {
         gucci::HitborderOverlay::get()->destroy();
         PlayLayer::onQuit();
+    }
+};
+
+// A phone can lose its GL context while the game is in the background (cocos
+// uploads its own textures again when it comes back; ui/art.hpp keeps the
+// pixels for that). The merged pass's texture and framebuffer are raw GL
+// names, so they are freed here, while the context is still current (on
+// Android this runs on the GL thread, before the context can go), and the
+// next frame makes them again: no name from the old context is ever bound in
+// the new one, where cocos may have given it to something of its own.
+class $modify(GBHitborderAppHook, AppDelegate) {
+    void applicationDidEnterBackground() {
+        gucci::HitborderOverlay::get()->releaseGpu();
+        AppDelegate::applicationDidEnterBackground();
     }
 };
 

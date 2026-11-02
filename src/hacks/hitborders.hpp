@@ -81,6 +81,10 @@ namespace gucci {
         void paint(GJBaseGameLayer* layer);                       // once per drawn frame
         bool drawMerged();                                        // the borders' one-pass outline
         bool attachedTo(GJBaseGameLayer* layer) const;
+        // The merged pass's texture and framebuffer, freed while the GL
+        // context is still there (the app going to the background); the next
+        // frame makes them again.
+        void releaseGpu();
 
         // The accuracy audit, for Assistant Access (gucci_hitborders): over
         // every collision pass of a real player, whether GD's own pass killed
