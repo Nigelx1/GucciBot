@@ -6637,7 +6637,10 @@ bool Trajectory::probeCollisions(GJBaseGameLayer* pl, const ProbeSetup& setup,
                 copy->m_isObjectRectDirty = true;
                 copy->m_isOrientedBoxDirty = true;
             }
+            // Both copies out of sight, as a run leaves them (a copy is made
+            // visible, at the level's start).
             if (t->m_fakePlayer1) t->m_fakePlayer1->setVisible(false);
+            if (t->m_fakePlayer2) t->m_fakePlayer2->setVisible(false);
             t->clearRingContacts();
             t->deactivateAllRemembered();
             t->clearKiller();

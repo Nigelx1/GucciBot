@@ -390,12 +390,20 @@ namespace gucci {
             out["error"] = "not in a level";
             return out;
         }
+        if (pl->m_loadingProgress < 1.0f) {
+            out["error"] = "the level is still loading";
+            return out;
+        }
         if (absense::judge::active()) {
             out["error"] = "the judge is playing a script for real (gucci_sim_vs_real); try again when it is done";
             return out;
         }
         PlayerObject* real = pl->m_player1;
         auto& traj = ::Bot::get()->trajectory();
+        // Absense's copies are made the first time something simulates in a
+        // level (absense/compat/bot.cpp), as its diagnostics make them.
+        if (!traj.exists())
+            traj.init();
 
         Trajectory::ProbeSetup setup;
         setup.mode = args.mode >= 0 ? args.mode : Trajectory::modeOf(real);
