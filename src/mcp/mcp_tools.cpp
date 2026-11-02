@@ -878,9 +878,16 @@ namespace gucci::mcp {
             auto props = obj();
             auto action = obj();
             action["type"] = "string";
-            action["enum"] = std::vector<std::string>{"start", "cancel", "results"};
-            action["description"] = "start a run, cancel one, or read the marks";
+            action["enum"] = std::vector<std::string>{"start", "cancel", "results", "progress"};
+            action["description"] = "start a run, cancel one, read the marks, or how a run is going";
             props["action"] = action;
+            for (auto const* k : {"from", "to"}) {
+                auto p = obj();
+                p["type"] = "integer";
+                p["description"] = std::string("start: only the inputs from this frame ") +
+                                   (k[0] == 'f' ? "on (default 0)" : "up to (default: the end)");
+                props[k] = p;
+            }
             schema["type"] = "object";
             schema["properties"] = props;
             schema["required"] = std::vector<std::string>{"action"};
@@ -888,7 +895,14 @@ namespace gucci::mcp {
             server.addTool({
                 "gucci_analyzer",
                 "Drive the frame-window analyzer (Calculate): start it on the "
-                "loaded macro, cancel it, or read the resulting windows.",
+                "loaded macro (from/to: only the inputs in that frame range, as "
+                "Calculate's own range does), cancel it, read the resulting "
+                "windows (results: each mark with its window and how it was "
+                "counted, plus the text labels added over the level as "
+                "messages), or read how a run is going (progress: running, "
+                "stage, status, index/total, progress, elapsed_s, measured, "
+                "skipped, desynced, last_run_ok, and report/ok, the last "
+                "message the Calculate page shows).",
                 schema,
                 [](matjson::Value const& a) {
                     auto& fw = Bot::get()->frameWindow();
@@ -898,9 +912,43 @@ namespace gucci::mcp {
                     if (what == "start") {
                         requireFreeRun();
                         auto* pl = requireLevel();
-                        auto rep = fw.start(pl);
+                        // GucciBot (2026-11-01): a range, as Calculate's own does
+                        // (FrameWindowAnalyzer::startRange).
+                        bool const range = a.contains("from") || a.contains("to");
+                        int64_t const from = argInt(a, "from", 0);
+                        int64_t const to = argInt(a, "to", (int64_t)UINT32_MAX);
+                        if (range && (from < 0 || to < from))
+                            throw ToolError("from and to are frames, from <= to");
+                        auto rep = range ? fw.startRange(pl, (uint32_t)from,
+                                                         (uint32_t)std::min<int64_t>(to, UINT32_MAX))
+                                         : fw.start(pl);
                         out["started"] = rep.ok;
                         out["message"] = rep.message;
+                        if (range) {
+                            out["from"] = from;
+                            out["to"] = to;
+                        }
+                        return out;
+                    }
+                    if (what == "progress") {
+                        auto* gb = GucciEngine::get();
+                        out["running"] = fw.running();
+                        out["capturing"] = fw.capturing();
+                        out["returning"] = fw.returning();
+                        if (fw.returning())
+                            out["return_frame"] = (int64_t)fw.returnFrame();
+                        out["stage"] = fw.stage();
+                        out["status"] = fw.status();
+                        out["index"] = (int64_t)fw.progressIndex();
+                        out["total"] = (int64_t)fw.progressTotal();
+                        out["progress"] = (double)fw.progress();
+                        out["elapsed_s"] = fw.elapsedSeconds();
+                        out["measured"] = (int64_t)fw.measuredCount();
+                        out["skipped"] = (int64_t)fw.skippedCount();
+                        out["desynced"] = (int64_t)fw.desyncCount();
+                        out["last_run_ok"] = fw.lastRunOk();
+                        out["report"] = gb->fwAcReport;
+                        out["ok"] = gb->fwAcOk;
                         return out;
                     }
                     if (what == "cancel") {
@@ -935,15 +983,67 @@ namespace gucci::mcp {
                                 e["cbf"] = true;
                             if (mk.clampedByNeighbour)
                                 e["clamped_by_neighbour"] = true;
+                            // GucciBot (2026-11-01): how it was counted, for the
+                            // Calculate checks (framewindow.hpp, FrameWindowMark).
+                            if (mk.subframe != 0.f)
+                                e["subframe"] = (double)mk.subframe;
+                            e["gamemode"] = std::string(1, mk.gamemode);
+                            if (mk.suggestion > 0.f) {
+                                // A suspicious click's "my suggestion is x frames".
+                                e["suggestion"] = (double)mk.suggestion;
+                                e["suggest_alignments"] = (int64_t)mk.suggestAlignments;
+                                e["suggest_coverage"] = (double)mk.suggestCoverage;
+                            }
+                            if (mk.dependent > 0.f) {
+                                e["dependent"] = (double)mk.dependent;
+                                e["dependent_min"] = (double)mk.dependentMin;
+                                e["dependent_max"] = (double)mk.dependentMax;
+                                e["dependent_coverage"] = (double)mk.dependentCoverage;
+                            }
+                            if (mk.manual) {
+                                e["manual"] = true;
+                                e["had_auto"] = mk.hadAuto;
+                                if (mk.hadAuto)
+                                    e["auto_window"] = (int64_t)mk.autoWindow;
+                            }
+                            if (mk.setupGroup) {
+                                e["setup_group"] = true;
+                                e["setup_low"] = (int64_t)mk.setupLow;
+                                e["setup_high"] = (int64_t)mk.setupHigh;
+                            }
+                            if (mk.hz != 0)
+                                e["hz"] = (int64_t)mk.hz;
+                            e["position"] = std::vector<double>{mk.position.x, mk.position.y};
+                            if (mk.bufferAssisted)
+                                e["buffer_assisted"] = true;
+                            if (mk.holes > 0)
+                                e["holes"] = (int64_t)mk.holes;
+                            if (mk.splitWindow) {
+                                e["split"] = true;
+                                e["split_shift"] = (int64_t)mk.splitShift;
+                            }
                             arr.push(e);
                         }
                         out["running"] = fw.running();
                         out["capturing"] = fw.capturing();
                         out["count"] = (int64_t)arr.size();
                         out["marks"] = arr;
+                        // The text labels added over the level (Calculate's Add text).
+                        auto messages = matjson::Value::array();
+                        for (auto const& m : fw.messages()) {
+                            auto e = obj();
+                            e["text"] = m.text;
+                            e["input"] = (int64_t)m.startIndex;
+                            e["span"] = (int64_t)m.span;
+                            e["scale"] = (double)m.scale;
+                            e["offset_y"] = (double)m.offsetY;
+                            e["enabled"] = m.enabled;
+                            messages.push(e);
+                        }
+                        out["messages"] = messages;
                         return out;
                     }
-                    throw ToolError("action must be start, cancel or results");
+                    throw ToolError("action must be start, cancel, results or progress");
                 },
             });
         }
