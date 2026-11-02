@@ -4,12 +4,17 @@
 #include "ui/art.hpp"
 #include "ui/look.hpp"
 #include "ui/png.hpp"
+#include "ui/ui.hpp"
 
 #include <Geode/Geode.hpp>
+#include <Geode/ui/GeodeUI.hpp>
+#include <Geode/ui/LazySprite.hpp>
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace gucci::ui::brand {
@@ -51,6 +56,69 @@ namespace gucci::ui::brand {
         }
         int g_pauseSource = 0;       // the picture's longer side, once it has loaded
         bool g_pauseFailed = false;  // it couldn't load: the plain button for the rest of the run
+
+        // GBot's own logo, plain on purpose: a charcoal rounded square with a
+        // steel-blue gear, a play triangle cut out of its hub. 336 x 336, as
+        // logo.png is, and shown as Geode shows that: as it is, not halved.
+        constexpr char const* kGBotLogo = "gbot_logo_336.png";
+        // Kept for the whole run once made, as the pause button's are.
+        art::Texture& gbotLogo() {
+            static auto* tex = new art::Texture();
+            return *tex;
+        }
+        bool g_gbotFailed = false;
+
+        // Under GBot (the disguise), a logo Geode made for this mod shows
+        // GBot's instead of logo.png, GucciBot's iced cone, which would give
+        // the mod away. (Its name can't change: Geode reads it from mod.json.)
+        // Geode sends ModLogoUIEvent for every logo it makes (a node holding
+        // a LazySprite that loads logo.png), as it's made and again once the
+        // picture has loaded or failed. That event's marker is
+        // ModItemUIEvent's (GeodeUI.hpp), so the mod list's row for the mod
+        // comes through here too; it has no LazySprite of its own and is left
+        // alone. GBot's logo goes in over the node's own pictures (the logo,
+        // its loading circle, an N/A when it couldn't load), which are hidden,
+        // and each later event hides them again.
+        void dressAsGBot(cocos2d::CCNode* node) {
+            using namespace cocos2d;
+            if (!node || !node->getChildren() || !disguised())
+                return;
+            bool madeForLogo = false;
+            for (CCNode* child : geode::cocos::CCArrayExt<CCNode*>(node->getChildren()))
+                if (geode::cast::typeinfo_cast<geode::LazySprite*>(child))
+                    madeForLogo = true;
+            if (!madeForLogo)
+                return;
+            CCNode* ours = node->getChildByID(GEODE_MOD_ID "/gbot-logo");
+            if (!ours) {
+                art::Texture& tex = gbotLogo();
+                if (!tex.ready()) {
+                    if (g_gbotFailed)
+                        return;
+                    std::string error;
+                    if (!tex.load(kGBotLogo, error)) {
+                        geode::log::error("[GucciBot] GBot's logo for Geode's list: {}", error);
+                        g_gbotFailed = true;
+                        return;
+                    }
+                }
+                auto* sprite = CCSprite::createWithTexture(tex.texture());
+                if (!sprite)
+                    return;
+                sprite->setID(GEODE_MOD_ID "/gbot-logo");
+                // In the box Geode fits its logo in (50 points square), and
+                // held at its middle the way Geode holds its own picture.
+                CCSize const box = node->getContentSize();
+                float const side = std::max(sprite->getContentSize().width, sprite->getContentSize().height);
+                if (side > 0.f)
+                    sprite->setScale(std::min(box.width, box.height) / side);
+                node->addChildAtPosition(sprite, geode::Anchor::Center);
+                ours = sprite;
+            }
+            for (CCNode* child : geode::cocos::CCArrayExt<CCNode*>(node->getChildren()))
+                if (child != ours)
+                    child->setVisible(false);
+        }
 
     } // namespace
 
@@ -129,3 +197,13 @@ namespace gucci::ui::brand {
     }
 
 } // namespace gucci::ui::brand
+
+$on_mod(Loaded) {
+    geode::ModLogoUIEvent()
+        .listen([](cocos2d::CCNode* node, std::string_view id, std::optional<geode::Mod*>) {
+            if (id == geode::Mod::get()->getID())
+                gucci::ui::brand::dressAsGBot(node);
+            return false;  // other mods' listeners get it too
+        })
+        .leak();
+}

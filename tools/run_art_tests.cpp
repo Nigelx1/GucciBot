@@ -313,7 +313,7 @@ namespace {
         };
         File const silhouette{"cone_silhouette_256.png", 256, 256};
         File const pause{"pause_button_256.png", 256, 256};
-        png::Pixels sil, button;
+        png::Pixels sil;
         if (load(dir, silhouette, sil)) {
             // One color, white, wherever anything is drawn: drawn with a tint
             // it's that color (and ui/art makes it a mask anyway).
@@ -343,15 +343,20 @@ namespace {
             else
                 hasArt(sidebar, 0, 0, 32, 32, "the silhouette at 32 x 32", 255);
         }
-        if (load(dir, pause, button)) {
-            // The whole logo: opaque in the middle, clear in the rounded corners.
+        // The whole logos: opaque in the middle, clear in the rounded corners.
+        File const gbot{"gbot_logo_336.png", 336, 336};
+        for (File const& logo : {pause, gbot}) {
+            png::Pixels px;
+            if (!load(dir, logo, px))
+                continue;
             int lo = 0, hi = 0;
-            alphaRange(button, 120, 120, 136, 136, lo, hi);
+            float const mid = px.width * 0.5f;
+            alphaRange(px, mid - 8.f, mid - 8.f, mid + 8.f, mid + 8.f, lo, hi);
             if (lo != 255)
-                fail(dir + pause.name + ": its middle isn't opaque");
-            alphaRange(button, 0, 0, 1, 1, lo, hi);
+                fail(dir + logo.name + ": its middle isn't opaque");
+            alphaRange(px, 0, 0, 1, 1, lo, hi);
             if (hi != 0)
-                fail(dir + pause.name + ": its corner isn't clear");
+                fail(dir + logo.name + ": its corner isn't clear");
         }
     }
 

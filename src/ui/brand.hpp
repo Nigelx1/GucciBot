@@ -3,8 +3,9 @@
 // GucciBot's mark, the iced cone Nigel approved on 2026-11-02, where the mod
 // shows it itself: the cone's silhouette at the top of the menu's sidebar,
 // and the whole logo on the pause menu's button (phones and Macs). (Geode's
-// mod list shows logo.png, next to mod.json.) The pictures are in
-// resources/brand, scaled down from docs/brand/logo_1080.png.
+// mod list shows logo.png, next to mod.json; under GBot, the disguise,
+// brand.cpp puts GBot's own logo over it as Geode makes it.) The pictures
+// are in resources/brand, scaled down from the masters in docs/brand.
 
 #include <imgui.h>
 
