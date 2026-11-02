@@ -42,6 +42,7 @@ namespace gucci::ui {
         int onAudioPitch = 0;
         int onRngLock = 0;
         int onHitboxes = 0;
+        int onHitborders = 0;
         int onLayoutMode = 0;
         int onNoMirror = 0;
         int onAutoclicker = 0;

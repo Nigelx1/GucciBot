@@ -96,6 +96,7 @@ namespace gucci::ui {
             {"key_compact_mode", "Compact mode", &Keys::onCompactMode},
             {"key_trajectory", "Path preview", &Keys::onTrajectory},
             {"key_hitboxes", "Hitboxes", &Keys::onHitboxes},
+            {"key_hitborders", "Hitborders", &Keys::onHitborders},
         };
 
         // Engine switches the engine does not load itself (engine_core's
@@ -1429,7 +1430,9 @@ namespace gucci::ui {
 
             // Nigel's layout (2026-10-18): hitboxes and the frame stepper sit
             // with the macro, not on a page of their own or down the Hacks page.
+            // Hitborders (2026-11-02) go right under Hitboxes.
             pages::hitboxCard();
+            pages::hitbordersCard();
             frameStepperCard();
 
             kit::BeginCard("Speed", nullptr);

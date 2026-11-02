@@ -1,6 +1,7 @@
 #include "core/GucciBot.hpp"
 #include "core/bot_switch.hpp"
 #include "hacks/autoclicker.hpp"
+#include "hacks/hitborders.hpp"
 #include "hacks/safemode.hpp"
 #include "trainers/trainer_core.hpp"
 #include "ui/ui.hpp"
@@ -67,6 +68,7 @@ namespace {
         used |= fire(keys.onNoclip, k, [&] { flipSaved(gb->noclipEnabled, "hack_noclip"); });
         used |= fire(keys.onTrajectory, k, [&] { flipSaved(gb->pathPreview, "hack_trajectory"); });
         used |= fire(keys.onHitboxes, k, [&] { flipSaved(gb->showHitboxes, "hack_hitboxes"); });
+        used |= fire(keys.onHitborders, k, [&] { HitborderOverlay::get()->toggleShown(); });
         used |= fire(keys.onLayoutMode, k, [&] { flipSaved(gb->layoutMode, "hack_layout_mode"); });
         used |= fire(keys.onNoMirror, k, [&] { flipSaved(gb->noMirrorEffect, "hack_no_mirror"); });
         used |= fire(keys.onAudioPitch, k, [&] { flipSaved(gb->updater.m_speedhackAudio, "feat_audio_pitch"); });
