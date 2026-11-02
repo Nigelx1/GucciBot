@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-02-b (the JupiterBot and JMF Trainer art shows at last: the menu's PNG reader now reads every kind of PNG, including the palettes Geode's packager turns the art into, and the log says when the art loads)"
+    "2026-11-02-c (SolarBot wears the Orrery on the dark sky, from new images: Janet in the top-right corner at the middle of an orrery, her eyes now bowed toward the menu, on the level's near-black sky with gold constellations, a medallion, a kite and corona bands; cards edged in her orange and gold, the page you're on framed in gold)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
