@@ -6626,6 +6626,17 @@ bool Trajectory::probeCollisions(GJBaseGameLayer* pl, const ProbeSetup& setup,
         ~Restore() {
             phys::g_touchListener = nullptr;
             g_probeTouched = nullptr;
+            // The copy as a fresh copy of the real player 1 again, its size
+            // included: a run sets the sprite scale from the real player, but
+            // the drawn prediction and the sub-tick preview take the copy's
+            // as they find it, and a mini probe would leave them a mini box.
+            // (Still under m_drawing: an event the re-copy raises goes nowhere.)
+            if (PlayerObject* copy = t->copyOfReal(pl, true)) {
+                copy->m_spriteWidthScale = pl->m_player1->m_spriteWidthScale;
+                copy->m_spriteHeightScale = pl->m_player1->m_spriteHeightScale;
+                copy->m_isObjectRectDirty = true;
+                copy->m_isOrientedBoxDirty = true;
+            }
             if (t->m_fakePlayer1) t->m_fakePlayer1->setVisible(false);
             t->clearRingContacts();
             t->deactivateAllRemembered();
