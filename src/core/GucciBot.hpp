@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-02-a (JupiterBot and the JMF Trainer wear Nigel's pick B, the star chart at night, drawn from new images: a moon dial whose rings turn two ways, scribbled stars and twinkles, rising specks, a skyline with lit windows that flicker; the JMF look's colours with no faded yellow, the page you're on lit like a window)"
+    "2026-11-02-b (the JupiterBot and JMF Trainer art shows at last: the menu's PNG reader now reads every kind of PNG, including the palettes Geode's packager turns the art into, and the log says when the art loads)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
