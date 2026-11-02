@@ -19,6 +19,7 @@
 #include "analysis/pathfinder.hpp"
 #include "absense/glue.hpp"
 #include "audio/bigbrrr.hpp"
+#include "audio/clicks.hpp"
 #include "mcp/screenshot.hpp"
 #include "mcp/test_settings.hpp"
 #include "mcp/tickprobe.hpp"
@@ -27,6 +28,7 @@
 #include "core/GucciBot.hpp"
 #include "hacks/safemode.hpp"
 #include "render/renderer.hpp"
+#include "trainers/click_indicators.hpp"
 #include "ui/ui.hpp"
 
 #include <Geode/Geode.hpp>
@@ -181,6 +183,30 @@ namespace gucci::mcp {
             return schema;
         }
 
+        // GD's flip fields, under the names these bindings give them, or
+        // nothing where they have neither (framewindow.cpp does the same: the
+        // CI and local bindings have differed).
+        template <class L>
+        auto cameraFlipOf(L const* l, int) -> std::optional<decltype(l->m_cameraFlip)> {
+            return l->m_cameraFlip;
+        }
+        template <class L>
+        std::optional<float> cameraFlipOf(L const*, long) {
+            return std::nullopt;
+        }
+        template <class S>
+        auto flipProgressOf(S const& gs, int) -> std::optional<decltype(gs.m_levelFlipProgress)> {
+            return gs.m_levelFlipProgress;
+        }
+        template <class S>
+        auto flipProgressOf(S const& gs, long) -> std::optional<decltype(gs.m_levelFlipping)> {
+            return gs.m_levelFlipping;
+        }
+        template <class S>
+        std::optional<float> flipProgressOf(S const&, ...) {
+            return std::nullopt;
+        }
+
         char const* gamemodeName(PlayerObject* p) {
             if (p->m_isShip) return "ship";
             if (p->m_isBall) return "ball";
@@ -245,7 +271,13 @@ namespace gucci::mcp {
             "one on). Also level.completed (the level's end reached this "
             "attempt), audio (BIG BRRRR enabled/playing/track/holds_game_audio, "
             "FMOD's master volume and pitch, the game's music and sfx volumes, "
-            "test_mute) and test_settings (the keys gucci_test_set holds).",
+            "test_mute, and clicks: the click sounds' switches, packs, background "
+            "noise and the last 20 clicks played) and test_settings (the keys "
+            "gucci_test_set holds). status_bar is the menu's status bar in words "
+            "{state: IDLE/RENDERING/CALCULATING/PATHFINDING/RECORDING/PLAYING, "
+            "tone, safe: the SAFE chip, text: the numbers beside it}; menu {open, "
+            "page, compact, theme}; start_pos_warning the Macro card's start "
+            "position warning (\"\" for none).",
             obj(),
             [](matjson::Value const&) {
                 auto* gb = GucciEngine::get();
@@ -296,9 +328,81 @@ namespace gucci::mcp {
                         audio["sfx_volume"] = (double)fmod->getEffectsVolume();
                     }
                     audio["test_mute"] = testset::muted();
+                    {
+                        // GucciBot (2026-11-01): the click sounds, and what they
+                        // played last. A pack's status loads it, so only while
+                        // they're on (they load at launch then anyway).
+                        auto const& cs = clicks::settings();
+                        auto c = obj();
+                        c["enabled"] = cs.enabled;
+                        c["pack"] = cs.pack;
+                        c["p2_separate"] = cs.separateP2;
+                        c["p2_pack"] = cs.p2Pack;
+                        c["volume"] = (double)cs.volume;
+                        c["during_playback"] = cs.duringPlayback;
+                        c["in_renders"] = cs.inRenders;
+                        if (cs.enabled) {
+                            auto packs = matjson::Value::array();
+                            for (bool const p2 : {false, true}) {
+                                if (p2 && !cs.separateP2)
+                                    break;
+                                auto const st = clicks::status(p2);
+                                auto p = obj();
+                                p["player2"] = p2;
+                                p["name"] = st.name;
+                                p["missing"] = st.missing;
+                                p["built_in"] = st.builtIn;
+                                p["audio_ready"] = st.audioReady;
+                                p["clicks"] = (int64_t)st.clicks;
+                                p["releases"] = (int64_t)st.releases;
+                                p["soft_clicks"] = (int64_t)st.softClicks;
+                                p["soft_releases"] = (int64_t)st.softReleases;
+                                p["unreadable"] = (int64_t)st.unreadable;
+                                p["has_noise"] = st.hasNoise;
+                                packs.push(p);
+                            }
+                            c["packs"] = packs;
+                        }
+                        auto noise = obj();
+                        noise["on"] = cs.noise;
+                        noise["volume"] = (double)cs.noiseVolume;
+                        noise["playing"] = clicks::noisePlaying();
+                        c["noise"] = noise;
+                        auto last = matjson::Value::array();
+                        for (auto const& p : clicks::recent()) {
+                            auto e = obj();
+                            e["frame"] = (int64_t)p.frame;
+                            e["p2"] = p.p2;
+                            e["pack"] = p.pack;
+                            e["kind"] = std::string(p.kind);
+                            e["source"] = std::string(p.source);
+                            last.push(e);
+                        }
+                        c["last"] = last;
+                        audio["clicks"] = c;
+                    }
                     out["audio"] = audio;
                 }
                 out["test_settings"] = testset::heldKeys();
+                {
+                    // GucciBot (2026-11-01): the menu's status bar in words (the
+                    // bar is drawn from the same ui::statusLine), and the menu.
+                    auto const line = ui::statusLine();
+                    auto bar = obj();
+                    bar["state"] = line.state;
+                    bar["tone"] = line.tone;
+                    bar["safe"] = line.safe;
+                    bar["text"] = line.text;
+                    out["status_bar"] = bar;
+                    auto const ms = ui::menuState();
+                    auto menu = obj();
+                    menu["open"] = ms.open;
+                    menu["page"] = ms.page;
+                    menu["compact"] = ms.compact;
+                    menu["theme"] = ms.themeName;
+                    out["menu"] = menu;
+                    out["start_pos_warning"] = gb->startPosWarning;
+                }
 
                 auto owner = runOwner();
                 out["run_owner"] = owner.empty() ? "none" : owner;
@@ -459,7 +563,13 @@ namespace gucci::mcp {
 
         server.addTool({
             "gucci_list_macros",
-            "The macro files on disk, with size and extension.",
+            "The macro files on disk, with size and extension (macros). Also "
+            "what the Saved macros card lists right now: listed [{name, ext, tag "
+            "(the theme it was saved under, \"\" for none), selected (the loaded "
+            "one)}], in the card's order, and foreign [{file, format, known}]: "
+            "other bots' macros in the replays folder, which the card offers to "
+            "convert. The card's list follows the folder within about 1.5 s "
+            "while the Macro page is open (or on Refresh).",
             obj(),
             [](matjson::Value const&) {
                 auto dir = GucciEngine::get()->getReplayDir();
@@ -479,6 +589,26 @@ namespace gucci::mcp {
                 auto out = obj();
                 out["dir"] = dir.string();
                 out["macros"] = arr;
+                // GucciBot (2026-11-01): the card's own list, as it shows it.
+                auto listed = matjson::Value::array();
+                for (auto const& m : ui::listedMacros()) {
+                    auto e = obj();
+                    e["name"] = m.name;
+                    e["ext"] = m.ext;
+                    e["tag"] = m.tag;
+                    e["selected"] = m.selected;
+                    listed.push(e);
+                }
+                out["listed"] = listed;
+                auto foreign = matjson::Value::array();
+                for (auto const& m : ui::foreignMacroList()) {
+                    auto e = obj();
+                    e["file"] = m.file;
+                    e["format"] = m.format;
+                    e["known"] = m.known;
+                    foreign.push(e);
+                }
+                out["foreign"] = foreign;
                 return out;
             },
         });
@@ -695,6 +825,48 @@ namespace gucci::mcp {
                 test["effects"] = s.testEffects;
                 out["test"] = test;
                 out["compact"] = s.compact;
+                return out;
+            },
+        });
+
+        // GucciBot (2026-11-01): Click Indicators as they stand, since its lane
+        // is drawn straight onto ImGui's background and is in no shot's text.
+        server.addTool({
+            "gucci_click_indicators",
+            "Click Indicators right now: enabled (its switch), active (showing in "
+            "the level this frame: only in a level, while GucciBot neither plays "
+            "nor records), showing (what it shows, \"\" for nothing), tally "
+            "{perfect, ok, miss} (the scoring of your own clicks), and settings: "
+            "the lane, its side, look-ahead, offset and the scoring's windows. "
+            "Only reads.",
+            schemaOf({}),
+            [](matjson::Value const&) {
+                auto const& s = clickind::settings();
+                auto out = obj();
+                out["enabled"] = s.enabled;
+                out["active"] = clickind::active();
+                auto const* showing = clickind::showing();
+                out["showing"] = std::string(showing ? showing : "");
+                auto const t = clickind::tally();
+                auto tally = obj();
+                tally["perfect"] = (int64_t)t.perfect;
+                tally["ok"] = (int64_t)t.ok;
+                tally["miss"] = (int64_t)t.miss;
+                out["tally"] = tally;
+                auto set = obj();
+                set["offset_ms"] = (int64_t)s.offsetMs;
+                set["look_ahead_s"] = (double)s.lookAhead;
+                set["max_notes"] = (int64_t)s.maxNotes;
+                set["lane"] = s.lane;
+                static char const* const kSides[] = {"left", "right", "middle"};
+                set["lane_side"] = std::string(kSides[std::clamp(s.laneSide, 0, 2)]);
+                set["lane_window_s"] = (double)s.laneWindow;
+                set["note_shape"] = s.noteShape == 1 ? "circles" : "slabs";
+                set["p2_lane"] = s.p2Lane;
+                set["accuracy"] = s.accuracy;
+                set["perfect_ms"] = (int64_t)s.perfectMs;
+                set["ok_ms"] = (int64_t)s.okMs;
+                out["settings"] = set;
                 return out;
             },
         });
@@ -1123,12 +1295,36 @@ namespace gucci::mcp {
             "two-player / dual, time warp, practice mode, and the level's saved "
             "stats as GD holds them now (attempts, jumps, normal_percent, "
             "practice_percent), so a test can check a run under safe mode left "
-            "them alone.",
+            "them alone. start_pos: the attempt starts from a start position; "
+            "start_positions: start position objects (id 31) in the level's "
+            "object list; mirror {flipped: the level is mirrored as the game "
+            "counts it, camera_flip: GD's m_cameraFlip, how the picture is drawn "
+            "(No Mirror leaves it as it was), flipping: GD's m_levelFlipping}.",
             obj(),
             [](matjson::Value const&) {
                 auto* pl = requireLevel();
                 auto* gb = GucciEngine::get();
                 auto out = obj();
+                // GucciBot (2026-11-01): start positions and the mirror, for
+                // the tests of the start position warning and No Mirror.
+                out["start_pos"] = pl->m_startPosObject != nullptr;
+                int64_t startPositions = 0;
+                if (pl->m_objects)
+                    for (auto* o : CCArrayExt<GameObject*>(pl->m_objects))
+                        if (o && o->m_objectID == 31)
+                            startPositions++;
+                out["start_positions"] = startPositions;
+                {
+                    auto mirror = obj();
+                    // No Mirror sets this one alone (toggleFlipped,
+                    // hook_gjbasegamelayer.cpp), so the picture stays as it was.
+                    mirror["flipped"] = pl->m_gameState.m_unkBool10;
+                    if (auto const f = cameraFlipOf(pl, 0))
+                        mirror["camera_flip"] = (double)*f;
+                    if (auto const f = flipProgressOf(pl->m_gameState, 0))
+                        mirror["flipping"] = (double)*f;
+                    out["mirror"] = mirror;
+                }
                 if (pl->m_level) {
                     out["name"] = std::string(pl->m_level->m_levelName);
                     out["id"] = (int64_t)pl->m_level->m_levelID.value();

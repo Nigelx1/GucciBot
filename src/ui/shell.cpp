@@ -552,6 +552,18 @@ namespace gucci::ui {
             return nullptr;
         }
 
+        // A saved macro's tag in the list: the theme it was saved under (by
+        // its extension), unless that's the plain .brrr, or the extension
+        // itself when no theme has it. None while disguised (GBot): the tags
+        // name the themes. `theme` gets the tagged theme, when one has it.
+        std::string macroTag(std::string const& ext, themes::Theme const** theme = nullptr) {
+            bool const tagged = !disguised() && !ext.empty() && ext != ".brrr";
+            themes::Theme const* t = tagged ? themeForExtension(ext) : nullptr;
+            if (theme)
+                *theme = t;
+            return !tagged ? std::string() : t ? t->name : ext;
+        }
+
         // A saved macro and its sidecars, gone. Empty on success, else why not.
         std::string deleteMacroFiles(std::string const& name) {
             auto* gb = GucciEngine::get();
@@ -1556,9 +1568,8 @@ namespace gucci::ui {
                 std::string const ext = extIt == gb->storedMacroExts.end() ? std::string() : extIt->second;
                 // The theme it was saved under, unless that's the plain .brrr.
                 // None while disguised (GBot): the tags name the themes.
-                bool const tagged = !disguised() && !ext.empty() && ext != ".brrr";
-                themes::Theme const* tagTheme = tagged ? themeForExtension(ext) : nullptr;
-                std::string const tag = !tagged ? std::string() : tagTheme ? tagTheme->name : ext;
+                themes::Theme const* tagTheme = nullptr;
+                std::string const tag = macroTag(ext, &tagTheme);
                 auto const& style = ImGui::GetStyle();
                 float const moreW = ImGui::CalcTextSize("...").x + style.FramePadding.x * 2.f;
                 float const tagW = tag.empty() ? 0.f : ImGui::CalcTextSize(tag.c_str()).x + style.ItemSpacing.x;
@@ -2608,30 +2619,41 @@ namespace gucci::ui {
 
         // ------------------------------------------------------------ windows
 
-        // What the bot is doing, in colour, with the numbers that go with it:
-        // the old menu's status bar, under every page's title.
-        void statusBar() {
+        // What the bot is doing, for the status bar's chip.
+        struct Doing {
+            const char* what;
+            Tone tone;
+        };
+        Doing doing() {
+            auto* gb = GucciEngine::get();
+            if (SLRenderer::get()->isRecording())
+                return {"RENDERING", Tone::Bad};
+            if (::Bot::get()->frameWindow().running() || gb->analyzerOwnsRun())
+                return {"CALCULATING", Tone::Accent};
+            if (absense::isRunning() || Pathfinder::get()->active)
+                return {"PATHFINDING", Tone::Accent};
+            if (gb->isRecording())
+                return {"RECORDING", Tone::Bad};
+            if (gb->isPlaying())
+                return {"PLAYING", Tone::Good};
+            return {"IDLE", Tone::Muted};
+        }
+
+        // ...and the numbers beside it.
+        std::string statusNumbers() {
             auto* gb = GucciEngine::get();
             auto const& upd = gb->updater;
-            const char* what = "IDLE";
-            Tone tone = Tone::Muted;
-            if (SLRenderer::get()->isRecording()) {
-                what = "RENDERING";
-                tone = Tone::Bad;
-            } else if (::Bot::get()->frameWindow().running() || gb->analyzerOwnsRun()) {
-                what = "CALCULATING";
-                tone = Tone::Accent;
-            } else if (absense::isRunning() || Pathfinder::get()->active) {
-                what = "PATHFINDING";
-                tone = Tone::Accent;
-            } else if (gb->isRecording()) {
-                what = "RECORDING";
-                tone = Tone::Bad;
-            } else if (gb->isPlaying()) {
-                what = "PLAYING";
-                tone = Tone::Good;
-            }
-            kit::Chip(what, tone);
+            std::string const frame = PlayLayer::get() ? fmt::format("frame {}  |  ", upd.getFrame()) : "";
+            return fmt::format("{}{:.0f} TPS  |  {:.2f}x  |  {} inputs", frame, upd.m_tps, upd.m_speedhack,
+                               gb->replay.m_actionAtom.m_actions.size());
+        }
+
+        // What the bot is doing, in colour, with the numbers that go with it:
+        // the old menu's status bar, under every page's title. Said in words
+        // by ui::statusLine, from the same two.
+        void statusBar() {
+            auto const now = doing();
+            kit::Chip(now.what, now.tone);
             // Safe mode forced on by a test run (hacks/safemode.hpp), where its
             // screenshots show it.
             if (safemode::forced()) {
@@ -2641,9 +2663,7 @@ namespace gucci::ui {
             ImGui::SameLine();
             UseFont f(Font::Small);
             ImGui::PushStyleColor(ImGuiCol_Text, look().pal.muted);
-            std::string const frame = PlayLayer::get() ? fmt::format("frame {}  |  ", upd.getFrame()) : "";
-            ImGui::Text("%s%.0f TPS  |  %.2fx  |  %zu inputs", frame.c_str(), upd.m_tps, upd.m_speedhack,
-                        gb->replay.m_actionAtom.m_actions.size());
+            ImGui::TextUnformatted(statusNumbers().c_str());
             ImGui::PopStyleColor();
         }
 
@@ -3368,6 +3388,51 @@ namespace gucci::ui {
         s.effects = look().effects;
         s.testEffects = g_test.effects;
         return s;
+    }
+
+    StatusLine statusLine() {
+        auto const now = doing();
+        StatusLine s;
+        s.state = now.what;
+        switch (now.tone) {
+            case Tone::Bad: s.tone = "bad"; break;
+            case Tone::Accent: s.tone = "accent"; break;
+            case Tone::Good: s.tone = "good"; break;
+            default: s.tone = "muted"; break;
+        }
+        s.safe = safemode::forced();
+        s.text = statusNumbers();
+        return s;
+    }
+
+    std::vector<ListedMacro> listedMacros() {
+        auto* gb = GucciEngine::get();
+        std::vector<ListedMacro> out;
+        out.reserve(gb->storedMacros.size());
+        for (auto const& name : gb->storedMacros) {
+            ListedMacro m;
+            m.name = name;
+            if (auto const it = gb->storedMacroExts.find(name); it != gb->storedMacroExts.end())
+                m.ext = it->second;
+            m.tag = macroTag(m.ext);
+            m.selected = name == gb->replayName;
+            out.push_back(std::move(m));
+        }
+        return out;
+    }
+
+    std::vector<ForeignMacro> foreignMacroList() {
+        std::vector<ForeignMacro> out;
+        for (auto const& n : GucciEngine::get()->foreignMacros) {
+            ForeignMacro m;
+            m.file = n;
+            // Named as the card names it (foreignMacrosSection).
+            auto const* format = convert::detect(readAll(replaysDir() / n), n);
+            m.known = format != nullptr;
+            m.format = format ? formatLabel(*format) : branded("not a format GucciBot knows");
+            out.push_back(std::move(m));
+        }
+        return out;
     }
 
 } // namespace gucci::ui

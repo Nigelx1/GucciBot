@@ -18,6 +18,7 @@
 #include <array>
 #include <chrono>
 #include <cwctype>
+#include <deque>
 #include <map>
 #include <random>
 #include <string_view>
@@ -93,6 +94,7 @@ namespace gucci::clicks {
         std::array<Timing, 2> g_timing;
         PlayLayer* g_clockLayer = nullptr;
         int g_clockAttempt = -1;
+        std::deque<Played> g_recent;  // recent(): the last clicks played, oldest first
 
         // ---- names and files
 
@@ -493,6 +495,21 @@ namespace gucci::clicks {
             return duration<double, std::milli>(steady_clock::now().time_since_epoch()).count();
         }
 
+        // A click that played, for recent(). Kept to the last 20.
+        void remember(bool p2, Pack const& pack, Kind kind, const char* source) {
+            static constexpr std::array<const char*, KindCount> kNames{"click", "release", "soft_click",
+                                                                       "soft_release"};
+            Played p;
+            p.frame = static_cast<uint32_t>(GucciEngine::get()->updater.getFrame());
+            p.p2 = p2;
+            p.pack = pack.name;
+            p.kind = kNames[kind];
+            p.source = source;
+            g_recent.push_back(std::move(p));
+            while (g_recent.size() > 20)
+                g_recent.pop_front();
+        }
+
         void onButton(bool p2, bool pressed) {
             auto& t = g_timing[p2 ? 1 : 0];
             double const now = nowMs();
@@ -520,6 +537,7 @@ namespace gucci::clicks {
             }
             Pack& pack = packFor(p2);
             play(soundFor(pack, p2, kind));
+            remember(p2, pack, kind, "input");
         }
 
     } // namespace
@@ -624,6 +642,16 @@ namespace gucci::clicks {
     void playClick(bool p2, float pitch) {
         Pack& pack = packFor(p2);
         play(soundFor(pack, p2, Click), pitch);
+        remember(p2, pack, Click, "cue");
+    }
+
+    bool noisePlaying() {
+        bool playing = false;
+        return g_noiseVoice && g_noiseVoice->isPlaying(&playing) == FMOD_OK && playing;
+    }
+
+    std::vector<Played> recent() {
+        return {g_recent.begin(), g_recent.end()};
     }
 
     void tickNoise() {

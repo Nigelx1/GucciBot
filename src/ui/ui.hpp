@@ -141,6 +141,40 @@ namespace gucci::ui {
     // when a test's theme was on.
     bool endTestTheme();
 
+    // ---- what the menu shows, as words (Assistant Access reads these)
+
+    // The status bar under every page's title: what the bot is doing (IDLE,
+    // RENDERING, CALCULATING, PATHFINDING, RECORDING or PLAYING), its chip's
+    // tone (muted, bad, accent or good), the SAFE chip (safe mode forced for
+    // this launch) and the numbers beside them. The bar is drawn from this,
+    // so the two can't drift.
+    struct StatusLine {
+        std::string state;
+        std::string tone;
+        bool safe = false;
+        std::string text;  // "frame 120  |  240 TPS  |  1.00x  |  56 inputs" (the frame only in a level)
+    };
+    StatusLine statusLine();
+
+    // The Saved macros list as its rows show it: the name, the file's
+    // extension, its theme tag ("" for none, and always while disguised) and
+    // whether it's the loaded one.
+    struct ListedMacro {
+        std::string name;
+        std::string ext;
+        std::string tag;
+        bool selected = false;
+    };
+    std::vector<ListedMacro> listedMacros();
+    // Other bots' macros in the replays folder, each with the format the
+    // card names for it (known false: not a format GucciBot can read).
+    struct ForeignMacro {
+        std::string file;
+        std::string format;
+        bool known = false;
+    };
+    std::vector<ForeignMacro> foreignMacroList();
+
     struct MenuState {
         bool open = false;
         bool compact = false;              // Compact mode: its small window shows instead of the pages

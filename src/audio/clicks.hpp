@@ -31,6 +31,7 @@
 // It stays quiet while the frame-window analyzer or the pathfinder drives the
 // game: those inputs are theirs, not the player's. Main thread only.
 
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -101,5 +102,21 @@ namespace gucci::clicks {
     // play now (in a level, not paused, the same switches as a click) and the
     // pack has a noise track, and stops it when not.
     void tickNoise();
+    // The background noise loop is playing right now.
+    bool noisePlaying();
+
+    // The clicks played lately, oldest first, at most 20 (Assistant Access's
+    // get_state reads them, 2026-11-01): the engine frame, the player, the
+    // pack it came from, the kind (click, release, soft_click, soft_release)
+    // and where it came from ("input": a press or release in the level;
+    // "cue": playClick, a trainer's metronome or the page's test button).
+    struct Played {
+        uint32_t frame = 0;
+        bool p2 = false;
+        std::string pack;
+        const char* kind = "";
+        const char* source = "";
+    };
+    std::vector<Played> recent();
 
 } // namespace gucci::clicks
