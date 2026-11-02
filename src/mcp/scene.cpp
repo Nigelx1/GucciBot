@@ -358,28 +358,50 @@ namespace gucci::mcp::scene {
     }
 
     matjson::Value alertOf(CCNode* alert) {
-        // The buttons' texts, and every other text in drawn order: the title
-        // first, then the body's lines.
+        // The buttons' texts, and every other text in reading order on the
+        // screen - top to bottom, then left to right - so the title, on top,
+        // comes first and the body's lines follow. Not in child order: GD
+        // adds an FLAlertLayer's body before its title, and the title came
+        // out as the body's last line (the 2026-11-02 observe pass: "Heads
+        // Up" at the end of the body, the body's first line as the title).
+        struct Placed {
+            std::string text;
+            float top = 0.f;
+            float left = 0.f;
+        };
         std::vector<std::string> buttons;
-        std::vector<std::string> texts;
+        std::vector<Placed> texts;
         std::function<void(CCNode*, int, bool)> collect = [&](CCNode* n, int depth, bool inButton) {
             if (!n || depth > 16)
                 return;
             bool const button = inButton || typeinfo_cast<CCMenuItem*>(n) != nullptr;
-            if (auto t = ownText(n); !t.empty())
-                (button ? buttons : texts).push_back(std::move(t));
+            if (auto t = ownText(n); !t.empty()) {
+                if (button) {
+                    buttons.push_back(std::move(t));
+                } else {
+                    CCRect const r = rectOf(n);
+                    texts.push_back({std::move(t), r.getMaxY(), r.getMinX()});
+                }
+            }
             for (auto* c : CCArrayExt<CCNode*>(n->getChildren()))
                 collect(c, depth + 1, button);
         };
         collect(alert, 0, false);
+        // Higher on the screen first (cocos's y grows upward); on one line,
+        // left first; a tie keeps the order drawn.
+        std::stable_sort(texts.begin(), texts.end(), [](Placed const& a, Placed const& b) {
+            if (a.top != b.top)
+                return a.top > b.top;
+            return a.left < b.left;
+        });
         auto e = obj();
         e["class"] = className(alert);
         if (!alert->getID().empty())
             e["id"] = std::string(alert->getID());
-        e["title"] = texts.empty() ? std::string() : texts.front();
+        e["title"] = texts.empty() ? std::string() : texts.front().text;
         std::string body;
         for (size_t i = 1; i < texts.size(); ++i)
-            body += (body.empty() ? "" : "\n") + texts[i];
+            body += (body.empty() ? "" : "\n") + texts[i].text;
         e["body"] = body;
         e["buttons"] = buttons;
         e["shown"] = drawn(alert);

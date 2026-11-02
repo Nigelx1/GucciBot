@@ -55,8 +55,9 @@ namespace gucci::mcp::scene {
     // body, buttons) and Geode notifications (text, box, offscreen).
     matjson::Value alerts();
     matjson::Value notifications();
-    // One alert's {class, id, title, body, buttons, shown}: the first text is
-    // its title, the rest its body; the buttons' texts apart.
+    // One alert's {class, id, title, body, buttons, shown}: the text highest
+    // on the screen is its title, the rest (top to bottom) its body; the
+    // buttons' texts apart.
     matjson::Value alertOf(cocos2d::CCNode* alert);
 
     // Every text under a node, in the order it's drawn: labels and text boxes.
