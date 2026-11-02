@@ -5,9 +5,11 @@
 #include "absense/glue.hpp"
 #include "analysis/pathfinder.hpp"
 #include "hacks/autoclicker.hpp"
+#include "hacks/hitborders.hpp"
 #include "mcp/mcp_server.hpp"
 #include "trainers/click_indicators.hpp"
 #include "trainers/trainer_core.hpp"
+#include "trainers/videomode.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/modify/GJGameLevel.hpp>
@@ -185,9 +187,9 @@ namespace gucci::safemode {
     // Anything that shows the way through the level counts as a cheat too
     // (Nigel, 2026-10-19: it takes the memory out of memory levels): Click
     // Indicators, the Survival Indicator and its click cue, the path preview,
-    // the macro's path, its clicks near you (Practice range), and the
-    // trainers' ghosts in their own levels -- the macro's, and your best
-    // attempt's.
+    // the macro's path, its clicks near you (Practice range), the trainers'
+    // ghosts in their own levels -- the macro's, and your best attempt's --
+    // and their Video Mode there, and the AI pathfinder's level map.
     bool showsTheWay() {
         auto* gb = GucciEngine::get();
         if (clickind::active() || gb->pathPreview)
@@ -208,6 +210,16 @@ namespace gucci::safemode {
         if (trainers::followsLevel(Kind::Any) &&
             ((gb->trainerGhostEnabled && !gb->trainerMacro.pathSamples.empty()) || gb->trainerBestGhostEnabled))
             return true;
+        // Video Mode over its trainer's own level: someone's run, played over
+        // yours on the level's own clock, the same as the ghosts (2026-11-02).
+        auto const video = videomode::source();
+        if ((video == videomode::Source::Jmf && trainers::followsLevel(Kind::Jupiter)) ||
+            (video == videomode::Source::Trainer && trainers::followsLevel(Kind::Any)))
+            return true;
+        // The AI pathfinder's level map, drawn over a level: the gaps you fit
+        // through, the parts that move and the choices ahead (2026-11-02).
+        if (absense::levelMapShown() && PlayLayer::get())
+            return true;
         return false;
     }
 
@@ -227,7 +239,21 @@ namespace gucci::safemode {
                || gb->forcedPlatformer // a level played as platformer that isn't one
                || showsTheWay()       // the way through shown in the level: no memory left to test
                || u.m_paused // frame advance
-               || Autoclicker::get()->enabled;
+               || Autoclicker::get()->enabled
+               // Seeing what a player can't (2026-11-02; the Demonlist's
+               // allowed-mods sheet marks each one Not Allowed): hitboxes and
+               // hitborders drawn while you play - their Show on death
+               // switches stay allowed, as the sheet allows on-death hitboxes
+               // - layout mode, and no mirror effect while it applies.
+               || gb->showHitboxes || HitborderOverlay::get()->settings.show || gb->layoutMode
+               || (gb->noMirrorEffect && (!gb->noMirrorRecordingOnly || gb->isRecording()))
+               // Recording switches that change the attempt being played: the
+               // same random triggers every attempt (RNG lock), one press
+               // moving both players (Mirror inputs), the press turned around
+               // while upside down (Maintain gravity). Each acts only while
+               // recording.
+               || (gb->isRecording() &&
+                   (gb->rngLocked || gb->replay.m_mirrorInputs || gb->replay.m_maintainGravity));
     }
 
 } // namespace gucci::safemode

@@ -13,9 +13,9 @@
 // in dual), and draws the result in the object layer just under the icon.
 // The Macro page card is ui/pages/hitborders_card.cpp.
 //
-// Not a cheat, as Show Hitboxes isn't (hacks/safemode.cpp): it shows the
-// level's own collision, grown, and the player's own past - never the
-// macro's way ahead.
+// A cheat while Show hitborders is on, as Show hitboxes is (hacks/safemode.cpp,
+// Nigel, 2026-11-02): the Demonlist's sheet marks live hitboxes Not Allowed.
+// Show on death alone isn't one; the sheet allows on-death hitboxes.
 
 #include <Geode/Geode.hpp>
 

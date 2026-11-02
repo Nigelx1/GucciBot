@@ -18,7 +18,11 @@
 //
 // A cheat: a macro, Calculate or the pathfinder playing; noclip; speedhack;
 // physics at a TPS other than 240; the autoclicker; Prevent Death; frame
-// advance (the engine's pause). One at any point taints the whole attempt.
+// advance (the engine's pause); Force Platformer; anything that shows the way
+// through the level (safemode.cpp, showsTheWay); hitboxes or hitborders shown
+// while you play (not their Show on death switches); layout mode; no mirror
+// effect while it applies; RNG lock, Mirror inputs or Maintain gravity while
+// recording. One at any point taints the whole attempt.
 //
 // Forced safe mode (2026-10-31) is the switch's effect for one launch, for
 // Claude's test runs over Assistant Access, which play on the owner's real
