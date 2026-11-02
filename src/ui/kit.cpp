@@ -3,6 +3,8 @@
 #include "ui/state.hpp"
 #include "ui/ui.hpp"
 
+#include <imgui_internal.h>  // a disabled button's flags and alpha (Button)
+
 #include <algorithm>
 #include <cmath>
 #include <string>
@@ -154,7 +156,7 @@ namespace gucci::ui::kit {
         ImVec2 const a = ImGui::GetCursorScreenPos();
         ImVec2 const b(a.x + width, a.y + textSize.y + pad.y * 2.f);
         auto* dl = ImGui::GetWindowDrawList();
-        dl->AddRectFilled(a, b, u32(withAlpha(edge, 0.11f)), pal.radius);
+        dl->AddRectFilled(a, b, u32(pal.solidTints ? pal.tint : withAlpha(edge, 0.11f)), pal.radius);
         dl->AddRectFilled(a, ImVec2(a.x + 3.f, b.y), u32(edge), pal.radius, ImDrawFlags_RoundCornersLeft);
         dl->AddText(ImGui::GetFont(), ImGui::GetFontSize(), ImVec2(a.x + 3.f + pad.x, a.y + pad.y),
                     u32(tone == Tone::Muted ? pal.muted : pal.ink), text, nullptr, wrap);
@@ -177,8 +179,12 @@ namespace gucci::ui::kit {
         // brown on orange): a tint of the tone over that orange can't be read
         // (no pastel reaches 3:1 on it), so the chip is a card-coloured pill
         // in the tone's outline, where the tones read at 4.5:1 and up. Every
-        // other theme's cards are lighter than its backdrop and keep the tint.
-        if (!pal.light && luminance(pal.surface) < luminance(pal.backdrop)) {
+        // other theme's cards are lighter than its backdrop and keep the tint,
+        // but for a look whose tints go grey (the JMF look's yellow over
+        // indigo), whose chips are filled with its solid tint.
+        if (pal.solidTints) {
+            dl->AddRectFilled(a, b, u32(pal.tint), size.y * 0.5f);
+        } else if (!pal.light && luminance(pal.surface) < luminance(pal.backdrop)) {
             dl->AddRectFilled(a, b, u32(pal.surface), size.y * 0.5f);
             dl->AddRect(a, b, u32(withAlpha(c, 0.6f)), size.y * 0.5f);
         } else {
@@ -479,12 +485,25 @@ namespace gucci::ui::kit {
             case Tone::Plain:
                 break;
         }
+        // Disabled under a look whose faded colours go grey (the JMF look:
+        // its yellow Save, faded over indigo, was olive): the solid tint with
+        // muted text, at full strength, rather than the button faded out. It
+        // stays disabled.
+        ImGuiContext const& g = *ImGui::GetCurrentContext();
+        bool const solidOff = pal.solidTints && (g.CurrentItemFlags & ImGuiItemFlags_Disabled) != 0;
+        if (solidOff) {
+            base = pal.tint;
+            text = mix(pal.muted, pal.tint, 0.35f);
+            ImGui::PushStyleVar(ImGuiStyleVar_Alpha, g.DisabledAlphaBackup);
+        }
         ImGui::PushStyleColor(ImGuiCol_Button, base);
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, shade(base, 0.06f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, shade(base, 0.12f));
         ImGui::PushStyleColor(ImGuiCol_Text, text);
         bool const pressed = ImGui::Button(label, ImVec2(width < 0.f ? Avail() : width, 0.f));
         ImGui::PopStyleColor(4);
+        if (solidOff)
+            ImGui::PopStyleVar();
         if (probe::on())
             probe::button(label, tone);
         return pressed;

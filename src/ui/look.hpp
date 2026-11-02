@@ -29,6 +29,13 @@ namespace gucci::ui {
         const char* hitName = "green";
         float radius = 6.f;
         float opacity = 0.96f;
+        // A look where a see-through accent or tone would go grey (the JMF
+        // look: yellow over indigo, complementary colours): chips, notes and
+        // a disabled button are filled with `tint`, a solid colour, the
+        // selected page in the sidebar is lit in the accent, and the click
+        // bar's blocks are solid. refresh() sets it off; the JMF look on.
+        bool solidTints = false;
+        ImVec4 tint{};
         // The theme is light (RondoBot's white): a hover or press darkens
         // instead of lifting (shade()), and good/warn/bad are deeper ones that
         // read on white. Set with setLight().

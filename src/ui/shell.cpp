@@ -2860,9 +2860,29 @@ namespace gucci::ui {
                     continue;
                 bool const selected = g_page == i;
                 ImVec2 const a = ImGui::GetCursorScreenPos();
+                // Under the JMF look (JupiterBot, the JMF page) the page you're
+                // on is lit like a window in its skyline: the accent, solid,
+                // with dark words and its light round it. Its usual highlight
+                // is a see-through accent, grey over that indigo.
+                bool const lit = selected && pal.solidTints;
+                if (lit) {
+                    ImVec2 const b(a.x + ImGui::GetContentRegionAvail().x, a.y + kRowH);
+                    auto* dl = ImGui::GetWindowDrawList();
+                    for (int k = 3; k >= 1; --k) {
+                        float const spread = 1.5f * static_cast<float>(k);
+                        dl->AddRectFilled(ImVec2(a.x - spread, a.y - spread), ImVec2(b.x + spread, b.y + spread),
+                                          u32(pal.accent, 0.07f), 4.f + spread);
+                    }
+                    dl->AddRectFilled(a, b, u32(pal.accent), 4.f);
+                    ImGui::PushStyleColor(ImGuiCol_Text, pal.onAccent);
+                    for (ImGuiCol slot : {ImGuiCol_Header, ImGuiCol_HeaderHovered, ImGuiCol_HeaderActive})
+                        ImGui::PushStyleColor(slot, ImVec4(0.f, 0.f, 0.f, 0.f));
+                }
                 if (ImGui::Selectable(kPages[i].title, selected, ImGuiSelectableFlags_None, ImVec2(0.f, kRowH)))
                     g_page = i;
-                if (selected) {
+                if (lit)
+                    ImGui::PopStyleColor(4);
+                if (selected && !lit) {
                     float const inset = (kRowH - 18.f) * 0.5f;  // an 18-unit bar, centred on the row
                     ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(a.x - 4.f, a.y + inset),
                                                               ImVec2(a.x - 1.f, a.y + (kRowH - inset)), u32(pal.accent), 1.5f);

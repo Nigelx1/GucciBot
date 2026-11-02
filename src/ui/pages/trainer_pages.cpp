@@ -211,6 +211,10 @@ namespace gucci::ui::pages {
                 ImGui::SetTooltip("Drag to skim.");
 
             auto* dl = ImGui::GetWindowDrawList();
+            // A look whose faded accent goes grey (the JMF look) draws the
+            // bar's yellow solid: solid blocks and a glowing centre line. The
+            // track stays see-through, over Video Mode's video too.
+            bool const solid = pal.solidTints;
             dl->AddRectFilled(p0, p1, u32(pal.raised, 0.55f), pal.radius);
             dl->PushClipRect(p0, p1, true);
 
@@ -226,7 +230,7 @@ namespace gucci::ui::pages {
                     continue;
                 bool const sel = (int)i == ps.selected;
                 dl->AddRectFilled(ImVec2(x(seg.startSec), p0.y), ImVec2(x(seg.endSec), p1.y),
-                                  u32(pal.accent, sel ? 0.16f : 0.08f));
+                                  solid ? u32(pal.line, sel ? 0.9f : 0.45f) : u32(pal.accent, sel ? 0.16f : 0.08f));
                 UseFont f(Font::Small);
                 dl->AddText(ImVec2(std::max(x(seg.startSec), p0.x) + 4.f, p1.y - ImGui::GetFontSize() - 2.f),
                             u32(pal.muted), seg.name.c_str());
@@ -259,8 +263,12 @@ namespace gucci::ui::pages {
                 if (b < left || a > right)
                     continue;
                 float const xa = x(a), xb = std::max(x(b), x(a) + 2.f);
-                dl->AddRectFilled(ImVec2(xa, laneTop), ImVec2(xb, laneMid - 4.f), u32(pal.accent, 0.45f), 3.f);
-                ImVec4 const edge = haveAnswers && answered[i] ? pal.hit : pal.accent;
+                dl->AddRectFilled(ImVec2(xa, laneTop), ImVec2(xb, laneMid - 4.f),
+                                  solid ? u32(pal.accent) : u32(pal.accent, 0.45f), 3.f);
+                // Its start: the hit colour once answered; until then the
+                // accent, or white where the block is the accent already.
+                ImVec4 const start = solid ? ImVec4(1.f, 1.f, 1.f, 1.f) : pal.accent;
+                ImVec4 const edge = haveAnswers && answered[i] ? pal.hit : start;
                 dl->AddLine(ImVec2(xa, laneTop - 2.f), ImVec2(xa, laneMid - 2.f), u32(edge), 2.5f);
             }
 
@@ -276,6 +284,8 @@ namespace gucci::ui::pages {
 
             // The fixed centre line.
             float const cx = p0.x + w * 0.5f;
+            if (solid)
+                dl->AddLine(ImVec2(cx, p0.y), ImVec2(cx, p1.y), u32(pal.ink, 0.22f), 7.f);
             dl->AddLine(ImVec2(cx, p0.y), ImVec2(cx, p1.y), u32(pal.ink), 2.f);
             dl->PopClipRect();
             dl->AddRect(p0, p1, u32(pal.line), pal.radius);
@@ -824,11 +834,19 @@ namespace gucci::ui::pages {
     namespace {
         // The JMF Trainer looks like Jupiter My Favourite (Nigel: "jmf tab isnt
         // jmfing"): deep indigo cards, the level's yellow and lavender text,
-        // over the star chart at night (pages/jupiter_backdrop.cpp).
+        // over the star chart at night (pages/jupiter_backdrop.cpp). B's
+        // colours (2026-11-02): the yellow is never faded, since a see-through
+        // yellow over this indigo turns grey (they're complementary); the
+        // quiet parts are blues instead, and the selected page is lit.
         ImVec4 const kJmfYellow{0.988f, 0.961f, 0.314f, 1.f};  // #FCF550
         ImVec4 const kJmfSky{0.027f, 0.016f, 0.247f, 1.f};     // #07043F
-        ImVec4 const kJmfCard{0.051f, 0.027f, 0.408f, 1.f};    // #0D0768
-        ImVec4 const kJmfRaised{0.082f, 0.043f, 0.510f, 1.f};  // #150B82
+        ImVec4 const kJmfCard{0.051f, 0.027f, 0.412f, 1.f};    // #0D0769
+        ImVec4 const kJmfRaised{0.102f, 0.055f, 0.557f, 1.f};  // #1A0E8E, fields and buttons
+        ImVec4 const kJmfHover{0.133f, 0.078f, 0.620f, 1.f};   // #22149E
+        ImVec4 const kJmfPress{0.165f, 0.102f, 0.682f, 1.f};   // #2A1AAE
+        ImVec4 const kJmfLine{0.184f, 0.149f, 0.600f, 1.f};    // #2F2699, borders and dividers
+        ImVec4 const kJmfLift{0.298f, 0.255f, 0.722f, 1.f};    // #4C41B8, the scroll grab, a selected row
+        ImVec4 const kJmfTint{0.102f, 0.055f, 0.525f, 1.f};    // #1A0E86, chips, notes, a disabled button
         ImVec4 const kJmfLavender{0.714f, 0.690f, 0.910f, 1.f}; // #B6B0E8
 
         Palette g_jmfSaved;
@@ -852,30 +870,46 @@ namespace gucci::ui::pages {
             p.raised = kJmfRaised;
             p.ink = ImVec4(0.957f, 0.949f, 1.f, 1.f);
             p.muted = kJmfLavender;
-            p.line = alpha(accent, 0.22f);
+            p.line = kJmfLine;
+            p.solidTints = true;  // the kit's chips, notes and disabled buttons, the lit page, the bar's blocks
+            p.tint = kJmfTint;
             setHit(p);  // against the JMF accent and cards, not the theme's
             set(ImGuiCol_Text, p.ink);
             set(ImGuiCol_TextDisabled, p.muted);
             set(ImGuiCol_Border, p.line);
             set(ImGuiCol_FrameBg, kJmfRaised);
-            set(ImGuiCol_FrameBgHovered, ImVec4(0.11f, 0.06f, 0.60f, 1.f));
-            set(ImGuiCol_FrameBgActive, ImVec4(0.13f, 0.08f, 0.66f, 1.f));
+            set(ImGuiCol_FrameBgHovered, kJmfHover);
+            set(ImGuiCol_FrameBgActive, kJmfPress);
             set(ImGuiCol_Button, kJmfRaised);
-            set(ImGuiCol_ButtonHovered, ImVec4(0.11f, 0.06f, 0.60f, 1.f));
-            set(ImGuiCol_ButtonActive, alpha(accent, 0.55f));
-            set(ImGuiCol_Header, alpha(accent, 0.22f));
-            set(ImGuiCol_HeaderHovered, alpha(accent, 0.30f));
-            set(ImGuiCol_HeaderActive, alpha(accent, 0.40f));
+            set(ImGuiCol_ButtonHovered, kJmfHover);
+            set(ImGuiCol_ButtonActive, kJmfPress);
+            // A list's selected row (a dropdown's), hovered and held: blues,
+            // under the list's own light text.
+            set(ImGuiCol_Header, kJmfLine);
+            set(ImGuiCol_HeaderHovered, kJmfPress);
+            set(ImGuiCol_HeaderActive, kJmfLift);
             set(ImGuiCol_CheckMark, accent);
             set(ImGuiCol_SliderGrab, accent);
             set(ImGuiCol_SliderGrabActive, accent);
-            set(ImGuiCol_ScrollbarGrab, alpha(kJmfLavender, 0.35f));
+            // Solid, so it reads over the art.
+            set(ImGuiCol_ScrollbarGrab, kJmfLift);
+            set(ImGuiCol_ScrollbarGrabHovered, ImVec4(0.353f, 0.310f, 0.784f, 1.f));  // #5A4FC8
+            set(ImGuiCol_ScrollbarGrabActive, accent);
             set(ImGuiCol_PlotHistogram, accent);
             set(ImGuiCol_WindowBg, alpha(kJmfSky, opacity));
             set(ImGuiCol_PopupBg, kJmfCard);
             set(ImGuiCol_Tab, kJmfRaised);
-            set(ImGuiCol_TabHovered, alpha(accent, 0.35f));
-            set(ImGuiCol_TabActive, alpha(accent, 0.45f));
+            set(ImGuiCol_TabHovered, kJmfPress);
+            set(ImGuiCol_TabActive, kJmfLift);
+            set(ImGuiCol_Separator, kJmfLine);
+            set(ImGuiCol_SeparatorHovered, kJmfLift);
+            set(ImGuiCol_SeparatorActive, accent);
+            set(ImGuiCol_ResizeGrip, kJmfLine);
+            set(ImGuiCol_ResizeGripHovered, kJmfLift);
+            set(ImGuiCol_ResizeGripActive, accent);
+            set(ImGuiCol_TextSelectedBg, kJmfLift);
+            set(ImGuiCol_TableBorderStrong, kJmfLine);
+            set(ImGuiCol_TableBorderLight, kJmfLine);
             p.backdrop = alpha(kJmfSky, opacity);
         }
     }
