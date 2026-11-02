@@ -45,6 +45,7 @@
       "resources/jmf_showcase.mp4",
       "resources/jupiter_my_favourite.gdr",
       "resources/jupiter_music.mp3",
+      "resources/jupiter/*.png",
       "resources/ffmpeg_libs/*.dll",
       "resources/fw_assets/*.wav"
     ]
