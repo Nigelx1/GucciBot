@@ -25,6 +25,7 @@
 #include <imgui.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <iterator>
@@ -86,6 +87,7 @@ namespace gucci::ui::pages {
             if (g_tried)
                 return false;
             g_tried = true;
+            auto const start = std::chrono::steady_clock::now();
             Art& layers = artLayers();
             struct Want {
                 art::Texture* tex;
@@ -111,6 +113,12 @@ namespace gucci::ui::pages {
                     return false;
                 }
             }
+            // A line for a load that worked too, so the log tells "loaded" from
+            // "never tried" (the theme not shown yet).
+            geode::log::info("[GucciBot] JupiterBot's art: loaded {} textures in {} ms", std::size(wants),
+                             std::chrono::duration_cast<std::chrono::milliseconds>(
+                                 std::chrono::steady_clock::now() - start)
+                                 .count());
             g_ready = true;
             return true;
         }
