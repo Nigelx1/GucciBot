@@ -192,12 +192,13 @@ namespace gucci::ui::kit {
         ImVec2 const b(a.x + size.x, a.y + size.y);
         auto* dl = ImGui::GetWindowDrawList();
         // A dark theme whose cards are darker than its backdrop (SolarBot's
-        // brown on orange): a tint of the tone over that orange can't be read
-        // (no pastel reaches 3:1 on it), so the chip is a card-coloured pill
-        // in the tone's outline, where the tones read at 4.5:1 and up. Every
-        // other theme's cards are lighter than its backdrop and keep the tint,
-        // but for a look whose tints go grey (the JMF look's yellow over
-        // indigo), whose chips are filled with its solid tint.
+        // brown on orange until 2026-11-02; now only a custom theme can be):
+        // a tint of the tone over such a backdrop may not read (none reached
+        // 3:1 on that orange), so the chip is a card-coloured pill in the
+        // tone's outline, where the tones read at 4.5:1 and up. The other
+        // themes keep the tint, but for a look whose tints go grey (the JMF
+        // look's yellow over indigo), whose chips are filled with its solid
+        // tint.
         if (pal.solidTints) {
             dl->AddRectFilled(a, b, u32(pal.tint), size.y * 0.5f);
         } else if (!pal.light && luminance(pal.surface) < luminance(pal.backdrop)) {

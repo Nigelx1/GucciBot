@@ -1589,7 +1589,7 @@ namespace gucci::ui {
                     // In the tagged theme's accent where that reads on the
                     // list (a frame), else in the text colour: LemonadeBot's
                     // yellow is lost on a light theme, RondoBot's green on a
-                    // dark one, a red on SolarBot's orange. Between themes
+                    // dark one, a red on SolarBot's dark brown. Between themes
                     // the list had before the 2026-10-31 four (built in or
                     // the user's own) on a dark menu, a tag keeps its accent
                     // as it always has, so those looks don't change.
@@ -3206,6 +3206,8 @@ namespace gucci::ui {
             // The JMF sky's pictures stay loaded while JupiterBot wears them,
             // and otherwise go once the JMF page has been left a while.
             pages::jupiterArtIdle(themes::active().scene == themes::Scene::Jupiter);
+            // SolarBot's stay while it's the theme.
+            pages::solarArtIdle(themes::active().scene == themes::Scene::Solar);
             // Every frame, menu open or not: it starts and stops Video Mode's
             // decoder as well as drawing it (trainers/videomode.hpp).
             videomode::drawOverlay();

@@ -307,14 +307,16 @@ namespace gucci::ui::themes {
             // Nigel's 2026-10-31 four. RondoBot: the Celtics' home whites,
             // Celtics green on white, cards white too (the Garden's parquet
             // and gold are in the backdrop); its muted green 6.9:1 on white.
-            // SolarBot: Solar Flare's sun-baked oranges, square and solid, the
-            // accent breathing. JupiterBot: the JMF page's own colors. GBot:
+            // SolarBot: Solar Flare's gold on the level's own warm near-black
+            // sky (#1A0800, 2026-11-02's Orrery), its cards a warm dark brown a
+            // step above it (#2E1204), square and solid, the accent breathing.
+            // JupiterBot: the JMF page's own colors. GBot:
             // plain and generic on purpose, an ordinary bot menu.
             {"RondoBot", vRondo, {0.000f, 0.478f, 0.200f}, {1.000f, 1.000f, 1.000f}, 0.97f,
              {1.000f, 1.000f, 1.000f}, {0.000f, 0.392f, 0.165f}, {0.290f, 0.373f, 0.322f}, 5.f, 0.97f, false, false,
              Scene::Garden},
-            {"SolarBot", vSolar, {1.000f, 0.769f, 0.000f}, {0.604f, 0.239f, 0.000f}, 1.f,
-             {0.420f, 0.165f, 0.000f}, {1.000f, 0.902f, 0.502f}, {0.941f, 0.690f, 0.376f}, 0.f, 1.f, true, false,
+            {"SolarBot", vSolar, {1.000f, 0.769f, 0.000f}, {0.102f, 0.031f, 0.000f}, 1.f,
+             {0.180f, 0.071f, 0.016f}, {1.000f, 0.902f, 0.502f}, {0.941f, 0.690f, 0.376f}, 0.f, 1.f, true, false,
              Scene::Solar, true},
             {"JupiterBot", vJupiter, {0.988f, 0.961f, 0.314f}, {0.027f, 0.016f, 0.247f}, 0.96f,
              {0.051f, 0.027f, 0.408f}, {0.957f, 0.949f, 1.000f}, {0.714f, 0.690f, 0.910f}, 5.f, 0.96f, false, false,

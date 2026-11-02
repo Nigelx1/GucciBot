@@ -25,8 +25,11 @@ namespace gucci::ui::pages {
     void jupiterLookPush(); // pages/trainer_pages.cpp: its colours over the whole menu (the shell, around the window)
     void jupiterLookPop();
     void jupiterLookApply(); // ... the same colours written over the style, for JupiterBot (after look().refresh())
-    void solarBackdrop();    // pages/solar_backdrop.cpp: SolarBot's scene, Janet rising behind the menu
-    void solarLookApply();   // ... her gems' blue in the checks and slider grabs (after look().refresh())
+    void solarBackdrop();    // pages/solar_backdrop.cpp: SolarBot's scene, Janet in the corner of an orrery behind the menu
+    // ... once a frame: its pictures' textures go a few seconds after it was
+    // last drawn, unless `keep` (SolarBot is the theme).
+    void solarArtIdle(bool keep);
+    void solarLookApply();   // ... her gems' blue, her card edges, the framed page and scroll grab (after look().refresh())
     void gardenBackdrop();   // pages/garden_backdrop.cpp: RondoBot's scene, the Garden's parquet behind the menu
     void jupiterVideoOverlay();  // Video Mode: the JMF click bar over the video, in place of the menu
     void trainerVideoOverlay();  // ... the Trainer's, over the video you picked
