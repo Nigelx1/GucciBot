@@ -1381,10 +1381,15 @@ namespace gucci::ui {
             kit::BeginCard("Macro", "Record a run, or play one back.");
             int mode = gb->isRecording() ? 1 : gb->isPlaying() ? 2 : 0;
             const char* modes[] = {"Off", "Record", "Play"};
-            if (kit::ChoiceRow("Mode", nullptr, &mode, modes, 3))
-                gb->setMode(mode == 1 ? GucciEngine::Mode::Recording
-                            : mode == 2 ? GucciEngine::Mode::Playing
-                                        : GucciEngine::Mode::Idle);
+            // Record while a macro plays carries on from there (GitHub issue
+            // #32, GucciEngine::setModeFromMenu).
+            if (kit::ChoiceRow("Mode",
+                               "Switch to Record while a macro plays to carry on from there. The rest of the macro "
+                               "is cut",
+                               &mode, modes, 3))
+                gb->setModeFromMenu(mode == 1   ? GucciEngine::Mode::Recording
+                                    : mode == 2 ? GucciEngine::Mode::Playing
+                                                : GucciEngine::Mode::Idle);
             kit::RowBegin("Name", nullptr);
             kit::InputText("name", &gb->replayName, "macro name");
             kit::RowEnd();
@@ -2890,9 +2895,9 @@ namespace gucci::ui {
                 int mode = gb->isRecording() ? 1 : gb->isPlaying() ? 2 : 0;
                 const char* modes[] = {"Off", "Rec", "Play"};
                 if (kit::Choice("mode", &mode, modes, 3))
-                    gb->setMode(mode == 1 ? GucciEngine::Mode::Recording
-                                : mode == 2 ? GucciEngine::Mode::Playing
-                                            : GucciEngine::Mode::Idle);
+                    gb->setModeFromMenu(mode == 1   ? GucciEngine::Mode::Recording
+                                        : mode == 2 ? GucciEngine::Mode::Playing
+                                                    : GucciEngine::Mode::Idle);
                 // A saved macro, loaded as a click in the Saved macros list
                 // loads it (not while recording).
                 auto const& saved = gb->storedMacros;

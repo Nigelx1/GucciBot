@@ -765,6 +765,13 @@ namespace gucci {
         }
         void setMode(Mode m);
         bool beginResumeRecording();
+        // The Mode switch on the Macro page and in Compact Mode (GitHub issue
+        // #32). Record while a macro plays in a level carries on from the
+        // current frame (beginResumeRecording): the rest of the macro is cut
+        // and any button it holds is let go. Not while Calculate measures or
+        // walks back, or the Classic Pathfinder runs: those runs play the
+        // macro. Anything else is setMode.
+        void setModeFromMenu(Mode m);
 
         bool noclipEnabled = false;
         bool noclipDeathFlash = true;

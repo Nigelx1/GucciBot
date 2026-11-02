@@ -1392,6 +1392,11 @@ namespace gucci {
         atom.clipFrom(now + 1);
         if (replay.m_pathSamples.size() > (size_t)now + 1)
             replay.m_pathSamples.resize((size_t)now + 1);
+        // Switched before the macro's first input: none of its clicks is
+        // left, and its frame windows would be saved with the new recording
+        // (Absense's start does the same).
+        if (atom.empty())
+            forgetMacroWindows();
 
         bool held[2][4] = {};
         for (auto const& a : atom.m_actions)
@@ -1424,6 +1429,14 @@ namespace gucci {
         log::info(
             "[GucciBot] Resume recording @ frame {} — {} actions kept", now, atom.m_actions.size());
         return true;
+    }
+
+    void GucciEngine::setModeFromMenu(Mode m) {
+        auto const& acfw = ::Bot::get()->frameWindow();
+        bool const runPlaysMacro = fwAnalyzing || acfw.running() || acfw.returning();
+        if (m == Mode::Recording && isPlaying() && !runPlaysMacro && beginResumeRecording())
+            return;
+        setMode(m);
     }
 
     void GucciEngine::reloadMacroList() {

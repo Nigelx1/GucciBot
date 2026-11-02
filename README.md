@@ -48,6 +48,7 @@ On `master` now, in the package every push builds:
 - Four more themes: **RondoBot**, **SolarBot**, **JupiterBot** and **GBot**, a disguise.
 - Calculate's **Default Look** (drawn like the counter in NaN GD's videos), your own text in the level over any input, presets (Balanced, Accuracy, Absolute) and **Max window**.
 - A stronger Pathfinder, with **Route drives** (experimental) and a much faster simulation of busy levels.
+- **Record from where a macro is**: switch Mode to Record while a macro plays and it carries on from there, with the rest cut, so a macro can be added to or its end redone.
 - **Block inputs during playback** (on by default, as in Silicate), an intro card with every line yours to edit, BrrrBot's snow, Intel Macs, and fixes: a release and a press in one tick are recorded once (beta.5 could record extra presses there), reopening a level with random triggers no longer crashes, and the Safe mode switch works.
 
 ## Themes
