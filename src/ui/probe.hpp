@@ -36,7 +36,8 @@
 namespace gucci::ui::probe {
 
     namespace detail {
-        extern bool g_on;
+        extern bool g_on;    // this frame is being captured
+        extern bool g_want;  // a tool asked for the next one
     }
 
     // This frame is being captured.
@@ -110,22 +111,43 @@ namespace gucci::ui::probe {
     // ---- the shell (ui/shell.cpp)
 
     // Around the shell's frame(): the capture starts and ends with it, so
-    // every early return is covered.
+    // every early return is covered. The checks are inline, so a frame no
+    // tool asked for costs two bool reads.
     struct FrameGuard {
-        FrameGuard();
-        ~FrameGuard();
+        FrameGuard() {
+            if (detail::g_want)
+                start();
+        }
+        ~FrameGuard() {
+            if (detail::g_on)
+                stop();
+        }
         FrameGuard(FrameGuard const&) = delete;
         FrameGuard& operator=(FrameGuard const&) = delete;
+
+    private:
+        static void start();
+        static void stop();
     };
 
     // Everything recorded inside carries ctx {key: value} (a saved macro's
     // row and its "..." menu: {macro: name}).
     struct Scope {
-        Scope(const char* key, std::string value);
-        ~Scope();
+        Scope(const char* key, std::string const& value) {
+            if (on())
+                open(key, value);
+        }
+        ~Scope() {
+            if (active)
+                close();
+        }
         Scope(Scope const&) = delete;
         Scope& operator=(Scope const&) = delete;
         bool active = false;
+
+    private:
+        void open(const char* key, std::string const& value);
+        void close();
     };
     // A row of the Saved macros list (its Selectable is the last item).
     void macroRow(std::string const& name, std::string const& ext, std::string const& tag, bool selected);
@@ -142,8 +164,14 @@ namespace gucci::ui::probe {
     // Around a text kit function: the text is recorded once it's drawn, and
     // logged with its mark ("~ " for a hint, "! " for a warning).
     struct Text {
-        Text(TextKind kind, const char* text, Tone tone);
-        ~Text();
+        Text(TextKind kind, const char* text, Tone tone) : kind(kind), text(text), tone(tone) {
+            if (on())
+                open();
+        }
+        ~Text() {
+            if (counted)
+                close();
+        }
         Text(Text const&) = delete;
         Text& operator=(Text const&) = delete;
         bool counted = false;  // inside a capture (nested ones count, only the outer one records)
@@ -151,6 +179,10 @@ namespace gucci::ui::probe {
         TextKind kind;
         const char* text;
         Tone tone;
+
+    private:
+        void open();
+        void close();
     };
     // Text the kit draws straight onto the draw list (Note, Chip), so ImGui's
     // log never sees it: logged here, at its place.
@@ -161,11 +193,21 @@ namespace gucci::ui::probe {
     // and said after the row's controls instead (endRow), so a row reads as
     // one line. RAII, a no-op unless capturing.
     struct Quiet {
-        Quiet();
-        ~Quiet();
+        Quiet() {
+            if (on())
+                open();
+        }
+        ~Quiet() {
+            if (active)
+                close();
+        }
         Quiet(Quiet const&) = delete;
         Quiet& operator=(Quiet const&) = delete;
         bool active = false;
+
+    private:
+        void open();
+        void close();
     };
 
     // Controls, after they're drawn; `widget` is the ImGui label the kit gave

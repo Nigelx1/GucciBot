@@ -109,14 +109,17 @@ namespace gucci::mcp::events {
                         }
                         notes[child] = text;
                     } else if (typeinfo_cast<FLAlertLayer*>(child)) {
+                        // Read once, when it appears.
+                        if (auto const it = g.alerts.find(child); it != g.alerts.end()) {
+                            alerts[child] = it->second;
+                            continue;
+                        }
                         auto info = scene::alertOf(child);
                         auto const title = info["title"].asString().unwrapOr("");
-                        if (!g.alerts.contains(child)) {
-                            std::string text = title;
-                            if (auto const body = info["body"].asString().unwrapOr(""); !body.empty())
-                                text += (text.empty() ? "" : "\n") + body;
-                            add("alert", text, info);
-                        }
+                        std::string text = title;
+                        if (auto const body = info["body"].asString().unwrapOr(""); !body.empty())
+                            text += (text.empty() ? "" : "\n") + body;
+                        add("alert", text, info);
                         alerts[child] = title;
                     }
                 }

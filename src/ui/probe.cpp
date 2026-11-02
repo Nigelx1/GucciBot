@@ -16,11 +16,13 @@ namespace gucci::ui::probe {
 
     namespace detail {
         bool g_on = false;
+        bool g_want = false;
     }
 
     namespace {
 
         using detail::g_on;
+        using detail::g_want;
 
         using Ctx = std::vector<std::pair<std::string, std::string>>;
 
@@ -88,7 +90,6 @@ namespace gucci::ui::probe {
         };
 
         Capture g_cap;
-        bool g_want = false;
         bool g_ready = false;
         int g_seq = 0;
 
@@ -938,25 +939,22 @@ namespace gucci::ui::probe {
 
     // ---- the shell
 
-    FrameGuard::FrameGuard() {
-        if (g_want && GImGui)
+    void FrameGuard::start() {
+        if (GImGui)
             begin();
     }
 
-    FrameGuard::~FrameGuard() {
-        if (g_on)
-            finish();
+    void FrameGuard::stop() {
+        finish();
     }
 
-    Scope::Scope(const char* key, std::string value) {
-        if (!g_on)
-            return;
+    void Scope::open(const char* key, std::string const& value) {
         active = true;
-        g_ctx.emplace_back(key, std::move(value));
+        g_ctx.emplace_back(key, value);
     }
 
-    Scope::~Scope() {
-        if (active && !g_ctx.empty())
+    void Scope::close() {
+        if (!g_ctx.empty())
             g_ctx.pop_back();
     }
 
@@ -1061,14 +1059,10 @@ namespace gucci::ui::probe {
         g_featureDepth = std::max(0, g_featureDepth + (open ? 1 : -1));
     }
 
-    Text::Text(TextKind kind, const char* text, Tone tone) : kind(kind), text(text), tone(tone) {
-        if (!g_on)
-            return;
-        if (g_textDepth++ > 0) {
-            counted = true;
-            return;
-        }
+    void Text::open() {
         counted = true;
+        if (g_textDepth++ > 0)
+            return;
         active = true;
         ensureLog();
         if (!text || !*text)
@@ -1091,9 +1085,7 @@ namespace gucci::ui::probe {
             decorate(g_textPrefix, g_textSuffix);
     }
 
-    Text::~Text() {
-        if (!counted)
-            return;
+    void Text::close() {
         --g_textDepth;
         if (!active || !g_on)
             return;
@@ -1105,15 +1097,15 @@ namespace gucci::ui::probe {
         e.tone = toneName(tone);
     }
 
-    Quiet::Quiet() {
-        if (!g_on || !GImGui->LogEnabled)
+    void Quiet::open() {
+        if (!GImGui->LogEnabled)
             return;
         active = true;
         GImGui->LogEnabled = false;
     }
 
-    Quiet::~Quiet() {
-        if (active && g_on)
+    void Quiet::close() {
+        if (g_on)
             GImGui->LogEnabled = true;
     }
 
