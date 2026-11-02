@@ -105,6 +105,37 @@ namespace {
         return overlaps1Way(a, b) && overlaps1Way(b, a);
     }
 
+    // collidedWithObjectInternal's two snaps, the center at c (0x392013-
+    // 0x392b6e): whether the block's top or bottom side takes the player
+    // before its inner box is tested. A snap clears that block's death.
+    bool snapTakes(Rect const& b, Player const& p, Vec2 c) {
+        // The classic wave (no D block) skips both (0x392013-0x392023).
+        if (p.mode == Mode::Wave && !p.dartSlide)
+            return false;
+        // thr: 10, or 6 for a ship, UFO, wave or swing (0x391b90-0x391c50).
+        bool const six = p.mode == Mode::Ship || p.mode == Mode::Ufo || p.mode == Mode::Wave || p.mode == Mode::Swing;
+        double const thr = six ? 6.0 : 10.0;
+        bool const flyer = six || p.mode == Mode::Ball;
+        bool const forced = p.hitHead || p.flipGravity;  // [rsp+0x35] (0x391e3e-0x391e62)
+        // The top side runs for dil (normal gravity; upside down, a flyer) or
+        // [rsp+0x35] (0x392351-0x392479), and snaps when the box's bottom edge
+        // plus thr reaches the block's top (0x39247f-0x3924a9).
+        if ((!p.upsideDown || flyer || forced) && (c.y - p.hy) + thr >= b.y1)
+            return true;
+        // The bottom side runs upside down, for a flyer, or for [rsp+0x35]
+        // (0x39289d-0x3928f2), and snaps when the box's top edge less thr
+        // reaches the block's bottom (0x392a35-0x392a45).
+        if ((p.upsideDown || flyer || forced) && (c.y + p.hy) - thr <= b.y0)
+            return true;
+        return false;
+    }
+
+    // A block's inner-box death (0x39361b-0x3937f8), the center at c: the
+    // inner box meets the rect and no snap came first.
+    bool blockKills(Rect const& b, Player const& p, Vec2 c) {
+        return rectsTouch(b, playerRect(c, p.ix, p.iy)) && !snapTakes(b, p, c);
+    }
+
     // checkCollisions' hazard test (0x2147c0-0x214955), the center at c.
     bool hazardHits(Collider const& h, Player const& p, Options const& o, Vec2 c) {
         Rect const pr = playerRect(c, p.hx, p.hy);
@@ -136,13 +167,12 @@ namespace {
         bool const top = slopeFloorTop(s.direction);
         bool const wallLeft = slopeWallLeft(s.direction);
         Rect const outer = playerRect(c, p.hx, p.hy);
-        Rect const inner = playerRect(c, p.ix, p.iy);
         int result = 0;
         auto asBlock = [&](Rect strip) {
             if (!rectsTouch(strip, outer))
                 return;
             result = std::max(result, 1);
-            if (o.core && !p.platformer && !s.passable && rectsTouch(strip, inner))
+            if (o.core && !p.platformer && !s.passable && blockKills(strip, p, c))
                 result = 2;
         };
         double const margin = (p.platformer && p.onSlope) ? 5.0 : 0.0;
@@ -458,22 +488,94 @@ int main() {
                     [&](Vec2 c) { return hazardHits(portal, p, o, c); }));
     }
 
-    // ---- blocks: blue where the outer box touches, red where the inner one does
-    for (Mode m : {Mode::Cube, Mode::Ship, Mode::Wave, Mode::Spider}) {
-        for (bool mini : {false, true}) {
-            Player const p = modePlayer(m, mini);
-            Block block;
-            block.rect = {500, 90, 530, 120};
-            std::vector<Shape> shapes;
-            blockShapes(block, p, o, shapes);
-            std::string const name = std::string("block, ") + modeName(m) + (mini ? " mini" : "");
-            CHECK(agree(name + " (touch)", {440, 30, 590, 180}, 0.73, 1e-4,
-                        [&](Vec2 c) { return covered(shapes, Kind::Touch, c); },
-                        [&](Vec2 c) { return rectsTouch(block.rect, playerRect(c, p.hx, p.hy)); }));
-            CHECK(agree(name + " (dead)", {440, 30, 590, 180}, 0.73, 1e-4,
-                        [&](Vec2 c) { return covered(shapes, Kind::Lethal, c); },
-                        [&](Vec2 c) { return rectsTouch(block.rect, playerRect(c, p.ix, p.iy)); }));
+    // ---- blocks: blue where the outer box touches, red where the inner one
+    // does and no snap takes the player first; every mode, size and gravity,
+    // and the D block (a sliding wave), the H block and block 2866
+    {
+        int cases = 0;
+        int bad = 0;
+        for (Mode m : {Mode::Cube, Mode::Ship, Mode::Ball, Mode::Ufo, Mode::Wave, Mode::Robot, Mode::Spider,
+                       Mode::Swing}) {
+            for (bool mini : {false, true}) {
+                for (bool upside : {false, true}) {
+                    for (int extra = 0; extra < 3; ++extra) {
+                        Player p = modePlayer(m, mini);
+                        p.upsideDown = upside;
+                        p.dartSlide = extra == 1;
+                        p.hitHead = extra == 2 && !upside;
+                        p.flipGravity = extra == 2 && upside;
+                        Block block;
+                        block.rect = {500, 90, 530, 120};
+                        std::vector<Shape> shapes;
+                        blockShapes(block, p, o, shapes);
+                        char name[96];
+                        std::snprintf(name, sizeof name, "block, %s%s%s%s", modeName(m), mini ? " mini" : "",
+                                      upside ? " upside down" : "",
+                                      extra == 1 ? ", D block" : extra == 2 ? (upside ? ", block 2866" : ", H block") : "");
+                        ++cases;
+                        bool const touch = agree(std::string(name) + " (touch)", {440, 30, 590, 180}, 0.73, 1e-4,
+                                                 [&](Vec2 c) { return covered(shapes, Kind::Touch, c); },
+                                                 [&](Vec2 c) { return rectsTouch(block.rect, playerRect(c, p.hx, p.hy)); });
+                        bool const dead = agree(std::string(name) + " (dead)", {440, 30, 590, 180}, 0.73, 1e-4,
+                                                [&](Vec2 c) { return covered(shapes, Kind::Lethal, c); },
+                                                [&](Vec2 c) { return blockKills(block.rect, p, c); });
+                        if (!touch || !dead)
+                            ++bad;
+                    }
+                }
+            }
         }
+        std::printf("blocks: %d cases\n", cases);
+        CHECK(bad == 0);
+    }
+    // The snaps by the numbers (the probe's findings in the game, 2026-11-02):
+    // the core's landing side for a block at [0,30] x [0,30], top 30.
+    {
+        Block block;
+        block.rect = {0, 0, 30, 30};
+        auto coreTop = [&](Player const& p) {
+            std::vector<Shape> s;
+            blockShapes(block, p, o, s);
+            return firstFree(15.0, 15.0, 60.0, 0.001, [&](Vec2 c) { return covered(s, Kind::Lethal, c); });
+        };
+        auto coreBottom = [&](Player const& p) {
+            std::vector<Shape> s;
+            blockShapes(block, p, o, s);
+            double y = 15.0;
+            while (y > -30.0 && covered(s, Kind::Lethal, {15.0, y - 0.001}))
+                y -= 0.001;
+            return y;
+        };
+        // A cube's inner box decides (15 - 10 = 5 > 4.5): 34.5 and -4.5.
+        CHECK(std::abs(coreTop(modePlayer(Mode::Cube, false)) - 34.5) < 0.01);
+        CHECK(std::abs(coreBottom(modePlayer(Mode::Cube, false)) + 4.5) < 0.01);
+        // A mini cube lands from 9 - 10 = 1 below the top: the core loses 5.5
+        // units there (Jumper's wall: the probe's mini cube at y 154.49 over a
+        // top of 150 was landed at 159).
+        CHECK(std::abs(coreTop(modePlayer(Mode::Cube, true)) - 29.0) < 0.01);
+        CHECK(std::abs(coreBottom(modePlayer(Mode::Cube, true)) + 4.5) < 0.01);
+        // A spider: 13.5 - 10 = 3.5 above the top, 0.55 off the core.
+        CHECK(std::abs(coreTop(modePlayer(Mode::Spider, false)) - 33.5) < 0.01);
+        // A mini ship: 9 - 6 = 3 on both sides (landed, and snapped under).
+        CHECK(std::abs(coreTop(modePlayer(Mode::Ship, true)) - 33.0) < 0.01);
+        CHECK(std::abs(coreBottom(modePlayer(Mode::Ship, true)) + 3.0) < 0.01);
+        // A mini ball: thr 10 both sides, 1 past each edge.
+        CHECK(std::abs(coreTop(modePlayer(Mode::Ball, true)) - 29.0) < 0.01);
+        CHECK(std::abs(coreBottom(modePlayer(Mode::Ball, true)) - 1.0) < 0.01);
+        // The classic wave is never snapped; a mini cube upside down lands
+        // under the block instead.
+        CHECK(std::abs(coreTop(modePlayer(Mode::Wave, true)) - 31.5) < 0.01);
+        Player flipped = modePlayer(Mode::Cube, true);
+        flipped.upsideDown = true;
+        CHECK(std::abs(coreTop(flipped) - 34.5) < 0.01);
+        CHECK(std::abs(coreBottom(flipped) - 1.0) < 0.01);
+        // Clubstep 2's false alarm in real play: a mini cube's center 0.70
+        // under the top of the old core at a block's top-left corner, landed.
+        Block corner;
+        corner.rect = {11600, 180, 11630, 210};
+        std::vector<Shape> s;
+        blockShapes(corner, modePlayer(Mode::Cube, true), o, s);
+        CHECK(!covered(s, Kind::Lethal, {11596.33, 213.80}) && covered(s, Kind::Touch, {11596.33, 213.80}));
     }
     // The inner box ignores mini: a mini cube's core is as wide as a cube's.
     {
@@ -896,15 +998,19 @@ int main() {
                 colliderShapes(spike, p, o, Kind::Lethal, shapes);
                 sampleAgainst("probe: spike, " + who, shapes, {},
                               [&](Vec2 c) { return hazardHits(spike, p, o, c) ? Region::Lethal : Region::None; });
-                Block block;
-                block.rect = {500, 90, 530, 120};
-                shapes.clear();
-                blockShapes(block, p, o, shapes);
-                sampleAgainst("probe: block, " + who, shapes, {}, [&](Vec2 c) {
-                    if (rectsTouch(block.rect, playerRect(c, p.ix, p.iy)))
-                        return Region::Lethal;
-                    return rectsTouch(block.rect, playerRect(c, p.hx, p.hy)) ? Region::Touch : Region::None;
-                });
+                for (bool upside : {false, true}) {
+                    Player q = p;
+                    q.upsideDown = upside;
+                    Block block;
+                    block.rect = {500, 90, 530, 120};
+                    shapes.clear();
+                    blockShapes(block, q, o, shapes);
+                    sampleAgainst("probe: block, " + who + (upside ? " upside down" : ""), shapes, {}, [&](Vec2 c) {
+                        if (blockKills(block.rect, q, c))
+                            return Region::Lethal;
+                        return rectsTouch(block.rect, playerRect(c, q.hx, q.hy)) ? Region::Touch : Region::None;
+                    });
+                }
                 Collider portal;
                 portal.rect = {400, 100, 425, 190};
                 shapes.clear();

@@ -399,13 +399,31 @@ namespace gucci::hitborder {
         push(out, kind, clipToRect(both, grown));
     }
 
+    Rect blockCore(Rect const& r, Player const& p) {
+        Rect core = inflate(r, p.ix, p.iy);
+        // The classic wave goes straight to the inner box (0x392013-0x392023).
+        if (p.mode == Mode::Wave && !p.dartSlide)
+            return core;
+        bool const six = p.mode == Mode::Ship || p.mode == Mode::Ufo || p.mode == Mode::Wave || p.mode == Mode::Swing;
+        double const thr = six ? 6.0 : 10.0;
+        // A ship, UFO, wave (sliding), swing or ball is snapped on its head
+        // side too; a cube, robot or spider only with an H block or block 2866
+        // touched (0x391e3e-0x391e62).
+        bool const headSnaps = six || p.mode == Mode::Ball || p.hitHead || p.flipGravity;
+        if (!p.upsideDown || headSnaps)
+            core.y1 = std::min(core.y1, r.y1 + p.hy - thr);
+        if (p.upsideDown || headSnaps)
+            core.y0 = std::max(core.y0, r.y0 - p.hy + thr);
+        return core;
+    }
+
     void blockShapes(Block const& b, Player const& p, Options const& o, std::vector<Shape>& out) {
         // The outer box touches (lands, snaps, slides); only the inner box
         // kills (0x39361b-0x3937f8), outside platformer, on a block that
-        // isn't passable or breakable.
+        // isn't passable or breakable, and not where a snap comes first.
         pushRect(out, Kind::Touch, inflate(b.rect, p.hx, p.hy));
         if (o.core && !p.platformer && !b.passable && !b.breakable)
-            pushRect(out, Kind::Lethal, inflate(b.rect, p.ix, p.iy));
+            pushRect(out, Kind::Lethal, blockCore(b.rect, p));
     }
 
     double slopeYPos(Slope const& s, double x) {
@@ -450,13 +468,14 @@ namespace gucci::hitborder {
         }
 
         // ---- the legs (preSlopeCollision 0x38f2e0): 1-unit blocks, each
-        // only while the center is past it, tested like any block.
+        // only while the center is past it, tested like any block, snaps
+        // included.
         bool const legsKill = o.core && !p.platformer && !s.passable;
         double const margin = (p.platformer && p.onSlope) ? 5.0 : 0.0;
         auto leg = [&](Rect strip, Rect beyond) {
             pushRect(out, Kind::Touch, intersect(inflate(strip, hx, hy), beyond));
             if (legsKill)
-                pushRect(out, Kind::Lethal, intersect(inflate(strip, p.ix, p.iy), beyond));
+                pushRect(out, Kind::Lethal, intersect(blockCore(strip, p), beyond));
         };
         // A left wall always counts (cx < x0); a right one, in classic mode,
         // only going left (or when the slope outruns you, not drawn).

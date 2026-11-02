@@ -344,6 +344,7 @@ namespace gucci {
             r.goingLeft = p->m_isGoingLeft;
             r.dartSlide = p->m_stateDartSlide > 0;
             r.hitHead = p->m_stateHitHead > 0;
+            r.flipGravity = p->m_stateFlipGravity > 0;
             r.onSlope = p->m_isOnSlope;
             r.jumpBuffered = p->m_jumpBuffered;
             r.boosted = p->m_maybeIsBoosted;

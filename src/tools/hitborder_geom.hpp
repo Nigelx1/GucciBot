@@ -72,6 +72,7 @@ namespace gucci::hitborder {
         bool goingLeft = false;
         bool dartSlide = false;     // m_stateDartSlide > 0: touching a D block (1755)
         bool hitHead = false;       // m_stateHitHead > 0: touching an H block (1859)
+        bool flipGravity = false;   // m_stateFlipGravity > 0: touching block 2866 (collisionCheckObjects 0x215ba1)
         // The slope tests' tolerances read these (collidedWithSlopeInternal).
         // checkCollisions copies m_isOnSlope into m_wasOnSlope as it starts,
         // so "on a slope now" is "was on a slope" for the next pass.
@@ -131,6 +132,21 @@ namespace gucci::hitborder {
     // Orbs, pads and portals pass Kind::Special; hazards Kind::Lethal.
     void colliderShapes(Collider const& c, Player const& p, Options const& o, Kind kind, std::vector<Shape>& out);
     void blockShapes(Block const& b, Player const& p, Options const& o, std::vector<Shape>& out);
+    // A block's red core (a slope's 1-unit legs have one too): where the
+    // inner box meets the rect, less where a snap takes the player first.
+    // collidedWithObjectInternal (0x391a70) snaps a center at or above
+    // y1 + hy - thr onto the block, and one at or below y0 - hy + thr under
+    // it, and a snap clears that block's death (0x392893, 0x392ebe; a landing
+    // returns at 0x393bcd). thr is 10, or 6 for a ship, UFO, wave or swing
+    // (0x391b90-0x391c50). The top side runs in normal gravity and, upside
+    // down, only for a ship, UFO, wave, swing or ball, or with an H block or
+    // block 2866 touched; the bottom side mirrors it (0x392351-0x39247f,
+    // 0x39289d-0x392a08). The classic wave skips both (0x392013). It shows
+    // where hy - thr < iy: a mini cube's core loses 5.5 units on its landing
+    // side, a spider's 0.55, a mini ship's 1.5 on both sides.
+    // At rest: the pass also snaps on the last step's position, so a fall
+    // reaches a little deeper than this before it is too late to land.
+    Rect blockCore(Rect const& r, Player const& p);
     void slopeShapes(Slope const& s, Player const& p, Options const& o, std::vector<Shape>& out);
 
     // The ground and the ceiling (checkCollisions 0x21395f-0x214162). The
