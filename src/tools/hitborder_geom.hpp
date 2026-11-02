@@ -114,12 +114,12 @@ namespace gucci::hitborder {
     };
 
     // What to draw. `core` is the blocks' red inner-box core ("Exact"); off,
-    // only the blue touch zone ("Simple").
+    // only the blue touch zone ("Simple"). Circles get as many sides as keep
+    // a chord within 0.05 units of the true edge (circleSides), at any zoom.
     struct Options {
         bool fixRadius = false;       // the level's "Fix radius collision" (LevelSettingsObject)
         bool useTilt = true;          // rotated objects against the icon's tilt; off: an upright icon
         bool core = true;
-        int circleSegments = 48;      // polygon sides for a full circle
     };
 
     // Orbs, pads and portals pass Kind::Special; hazards Kind::Lethal.
