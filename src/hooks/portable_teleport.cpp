@@ -133,7 +133,8 @@ class $modify(GBPortableTeleport, GJBaseGameLayer) {
         int const index = gucci::teleportpick::memberIndex(count, static_cast<int>(state));
         CCObject* target = group->objectAtIndex(static_cast<unsigned>(index));
 
-        CCArray* pick = CCArray::createWithObject(target);
+        CCArray* pick = CCArray::create();
+        pick->addObject(target);
         pick->retain();
         s_swap = GroupSwap{this, slot, group, pick};
         s_readThroughGetGroup = false;
