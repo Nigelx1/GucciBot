@@ -365,6 +365,8 @@ $execute {
 }
 #endif
 
+bool (*g_touchListener)(PlayerObject* copy, GameObject* object) = nullptr;
+
 void collisionCheckObjects(GJBaseGameLayer* pl, PlayerObject* player,
                            gd::vector<GameObject*>* objects, int objectCount,
                            float dt) {
@@ -499,6 +501,9 @@ void collisionCheckObjects(GJBaseGameLayer* pl, PlayerObject* player,
             obj->m_channelValue != pl->m_gameState.m_currentChannel) {
             continue;
         }
+
+        // The hitborders' accuracy probe: touched, and maybe kept from acting.
+        if (g_touchListener && g_touchListener(player, object)) continue;
 
         switch (object->m_objectType) {
             case GameObjectType::InverseGravityPortal:

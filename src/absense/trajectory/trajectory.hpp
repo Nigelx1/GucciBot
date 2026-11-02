@@ -1112,6 +1112,36 @@ class Trajectory {
     bool subtickBranch(GJBaseGameLayer* pl, bool p1, float fraction, bool hold, int ticks,
                        std::vector<cocos2d::CCPoint>& path);
 
+    // GucciBot (2026-11-02, gucci_hitborder_probe): the hitborders' accuracy
+    // probe. GD's own collision pass on the copy of player 1 standing still
+    // wherever the caller puts it, every pass from the same state. The copy is
+    // set up from the real player 1 the way a run sets it up, then made the
+    // kind, size and gravity asked for, turned `rotation` degrees and put at
+    // rest: no speed, not on the ground or a slope, no grace timer running (a
+    // flip or a change of kind a moment ago changes what kills), nothing held.
+    // `body` gets the copy, the pass's dt and `passAt`, which puts that state
+    // back, places the copy at a point and runs checkCollisions(copy, dt,
+    // false) once, returning what that returns; the caller's own hooks see
+    // what the pass did. While it runs, `touched` (when set) hears every
+    // object Absense's collisionCheckObjects finds the copy touching - past
+    // the overlap test, before the object acts - and true from it keeps the
+    // object from acting (phys::g_touchListener). Afterwards the game is put
+    // back as subtickPose puts it back, an exception from `body` included, and
+    // the copy is hidden; nothing is drawn. False, with why, when the copies
+    // are busy (a run, a search, a ghost, a kept start, the drawn prediction).
+    struct ProbeSetup {
+        int mode = kModeCube;   // FakeMode numbering
+        bool mini = false;
+        bool upsideDown = false;
+        float rotation = 0.0f;  // the icon's, in degrees: the rotated tests turn the copy's box by it
+        float dt = -1.0f;       // the pass's dt in GD's sixtieths; below 0, one tick's at the level's rate
+        std::function<bool(PlayerObject* copy, GameObject* object)> touched;
+    };
+    using ProbePass = std::function<int(cocos2d::CCPoint at)>;
+    bool probeCollisions(GJBaseGameLayer* pl, const ProbeSetup& setup,
+                         const std::function<void(PlayerObject* copy, float dt, const ProbePass& passAt)>& body,
+                         const char*& why);
+
    private:
     // A copy set up from the real player the way simulate() sets one up.
     PlayerObject* copyOfReal(GJBaseGameLayer* pl, bool p1);
@@ -1303,6 +1333,16 @@ class TrajectoryManager {
                   bool eitherDeath = false) {
         if (m_trajectory) return m_trajectory->run(pl, p1, inputs, ticks, buttonDown, trace, other, otherDown, eitherDeath);
         return {};
+    }
+    // GucciBot (2026-11-02): see Trajectory::probeCollisions.
+    bool probeCollisions(GJBaseGameLayer* pl, const Trajectory::ProbeSetup& setup,
+                         const std::function<void(PlayerObject*, float, const Trajectory::ProbePass&)>& body,
+                         const char*& why) {
+        if (!m_trajectory) {
+            why = "no copies of the player (not in a level)";
+            return false;
+        }
+        return m_trajectory->probeCollisions(pl, setup, body, why);
     }
 
 

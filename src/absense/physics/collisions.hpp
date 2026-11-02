@@ -165,6 +165,13 @@ void collisionCheckObjects(GJBaseGameLayer* pl, PlayerObject* player,
                            gd::vector<GameObject*>* objects, int objectCount,
                            float dt);
 
+// GucciBot (2026-11-02, gucci_hitborder_probe): while set, called for every
+// object a copy's collisionCheckObjects finds the copy touching - past the
+// overlap test and the channel filter, before the object acts. True: the
+// object does not act (the probe only asks whether it was touched). Set only
+// for the length of Trajectory::probeCollisions; null otherwise.
+extern bool (*g_touchListener)(PlayerObject* copy, GameObject* object);
+
 void triggerObject(EffectGameObject* obj, GJBaseGameLayer* pl,
                    PlayerObject* player);
 void checkSpawnObjects(GJBaseGameLayer* pl, PlayerObject* player);

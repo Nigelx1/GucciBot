@@ -18,6 +18,7 @@
 #include "absense/physics/collisions.hpp"
 #include "absense/physics/gravity.hpp"
 #include "absense/physics/object.hpp"
+#include "absense/physics/player.hpp"
 #include "absense/compat/bot.hpp"
 #include "absense/compat/bot.hpp"
 #include "absense/compat/settings.hpp"
@@ -6572,6 +6573,190 @@ bool Trajectory::subtickBranch(GJBaseGameLayer* pl, bool p1, float fraction, boo
     m_delta = savedDelta;
     m_drawing = false;
     return copy != nullptr;
+}
+
+// ------------------------------------------------------------ GucciBot: the hitborders' accuracy probe
+//
+// gucci_hitborder_probe (hacks/hitborder_probe.cpp) asks GD's own collision
+// pass what happens at points a hair either side of every border Hitborders
+// draws. Each point is one checkCollisions of the copy of player 1, standing
+// still there, from the same state every time. It runs like subtickPose:
+// m_drawing keeps the copy's pass from reaching the real level (a broken
+// block is not destroyed, an event goes to no listener, no jump is counted),
+// and the game state is put back afterwards.
+
+namespace {
+// The probe's listener while it runs (phys::g_touchListener).
+const std::function<bool(PlayerObject*, GameObject*)>* g_probeTouched = nullptr;
+
+bool probeTouchTrampoline(PlayerObject* copy, GameObject* object) {
+    return g_probeTouched && *g_probeTouched && (*g_probeTouched)(copy, object);
+}
+}  // namespace
+
+bool Trajectory::probeCollisions(GJBaseGameLayer* pl, const ProbeSetup& setup,
+                                 const std::function<void(PlayerObject*, float, const ProbePass&)>& body,
+                                 const char*& why) {
+    why = nullptr;
+    if (!pl || !pl->m_player1 || !m_fakePlayer1) {
+        why = "no player to copy";
+        return false;
+    }
+    if (m_drawing || m_simulating || m_search || m_leg || m_start || m_ghost || Sim::current) {
+        why = "the copies are busy (a run, a search, a ghost, a kept start or the drawn prediction)";
+        return false;
+    }
+    if (setup.mode < kModeCube || setup.mode > kModeSwing) {
+        why = "no such kind of player";
+        return false;
+    }
+
+    // What is put back at the end: subtickPose's list, and the run's
+    // teleport draw.
+    GJGameState state = pl->m_gameState;
+    auto pending = std::move(m_actions);
+    m_actions.clear();
+    struct Restore {
+        Trajectory* t;
+        GJBaseGameLayer* pl;
+        GJGameState& state;
+        std::vector<TrajectoryAction>& pending;
+        float delta;
+        uint64_t teleportRand;
+        ~Restore() {
+            phys::g_touchListener = nullptr;
+            g_probeTouched = nullptr;
+            if (t->m_fakePlayer1) t->m_fakePlayer1->setVisible(false);
+            t->clearRingContacts();
+            t->deactivateAllRemembered();
+            t->clearKiller();
+            t->forgetFired();
+            t->m_deadP1 = false;
+            t->m_deadP2 = false;
+            t->m_teleportRand = teleportRand;
+            gucci::gdAssign(pl->m_gameState, state);
+            t->m_actions = std::move(pending);
+            t->m_delta = delta;
+            t->m_drawing = false;
+        }
+    } restore{this, pl, state, pending, m_delta, m_teleportRand};
+    m_drawing = true;
+    m_delta = Bot::get()->updater().getPhysicsDt() * std::min(pl->m_gameState.m_timeWarp, 1.0f) * 60.0f;
+    const float dt = setup.dt >= 0.0f ? setup.dt : m_delta;
+
+    PlayerObject* copy = copyOfReal(pl, true);
+    if (!copy) {
+        why = "no player to copy";
+        return false;
+    }
+    // The kind, size and gravity asked for, through the game's own switches
+    // (the kind) and the ones a run's portals use (size, gravity).
+    setFakeMode(copy, setup.mode);
+    if ((copy->m_vehicleSize != 1.0f) != setup.mini) phys::togglePlayerScale(copy, setup.mini);
+    if (copy->m_isUpsideDown != setup.upsideDown) phys::flipGravityInner(copy, setup.upsideDown);
+    copy->m_isUpsideDown = setup.upsideDown;  // (a wave under Maintain gravity ignores the flip)
+    // At rest, nothing touched, nothing held.
+    copy->m_yVelocity = 0.0;
+    copy->m_platformerXVelocity = 0.0;
+    copy->m_isOnGround = false;
+    copy->m_isOnGround2 = false;
+    copy->m_isOnGround3 = false;
+    copy->m_isOnGround4 = false;
+    copy->m_isOnSlope = false;
+    copy->m_wasOnSlope = false;
+    copy->m_isCollidingWithSlope = false;
+    copy->m_collidingWithSlopeId = 0;
+    copy->m_currentSlope = nullptr;
+    copy->m_currentSlope2 = nullptr;
+    copy->m_currentPotentialSlope = nullptr;
+    copy->m_potentialSlopeMap.clear();
+    copy->m_isDashing = false;
+    copy->m_dashRing = nullptr;
+    copy->m_jumpBuffered = false;
+    copy->m_stateJumpBuffered = 0;
+    copy->m_stateRingJump = false;
+    copy->m_stateRingJump2 = false;
+    copy->m_maybeIsBoosted = false;
+    copy->m_touchedRing = false;
+    copy->m_touchedCustomRing = false;
+    copy->m_touchedGravityPortal = false;
+    copy->m_touchedPad = false;
+    copy->m_padRingRelated = false;
+    copy->m_ringRelatedSet.clear();
+    copy->m_stateNoAutoJump = 0;
+    copy->m_stateDartSlide = 0;
+    copy->m_stateHitHead = 0;
+    copy->m_stateFlipGravity = 0;
+    copy->m_stateForce = 0;
+    copy->m_stateForceVector = cocos2d::CCPoint{0.0f, 0.0f};
+    copy->m_stateScale = 0;
+    copy->m_isOutOfBounds = false;
+    copy->m_wasTeleported = false;
+    copy->m_isDead = false;
+    copy->m_ignoreDamage = false;
+    copy->m_maybeCanRunIntoBlocks = false;
+    for (PlayerButton b : {PlayerButton::Jump, PlayerButton::Left, PlayerButton::Right})
+        copy->m_holdingButtons[static_cast<int>(b)] = false;
+    // No grace timer: within 0.1 s of a flip or a change of kind a cube's head
+    // is snapped under a block or a slope instead of killed (RESEARCH.md §3.4),
+    // and every recent event is long past.
+    copy->m_totalTime = std::max(copy->m_totalTime, 10.0);
+    const double longAgo = copy->m_totalTime - 100.0;
+    copy->m_lastFlipTime = longAgo;
+    copy->m_gameModeChangedTime = longAgo;
+    copy->m_lastSpiderFlipTime = longAgo;
+    copy->m_lastJumpTime = longAgo;
+    copy->m_lastLandTime = longAgo;
+    copy->m_slopeStartTime = longAgo;
+    copy->m_slopeEndTime = longAgo;
+    copy->m_playEffects = false;
+    copy->m_maybeReducedEffects = true;
+    copy->setRotation(setup.rotation);
+    copy->setVisible(false);
+    // The size switch writes the sprite scale straight in: the boxes the
+    // caller reads before the first pass are worked out again.
+    copy->m_isObjectRectDirty = true;
+    copy->m_isOrientedBoxDirty = true;
+
+    // The state every pass starts from.
+    SavedPlayerCheckpoint clean = SavedPlayerCheckpoint::create(copy);
+    const float scaleX = copy->getScaleX();
+    const float scaleY = copy->getScaleY();
+    const float spriteW = copy->m_spriteWidthScale;
+    const float spriteH = copy->m_spriteHeightScale;
+    PortalState portal;
+    portal.grab(pl);
+
+    const ProbePass passAt = [&](cocos2d::CCPoint at) -> int {
+        setFakeMode(copy, setup.mode);
+        clean.apply(copy);
+        if (copy->getScaleX() != scaleX) copy->setScaleX(scaleX);
+        if (copy->getScaleY() != scaleY) copy->setScaleY(scaleY);
+        copy->m_spriteWidthScale = spriteW;
+        copy->m_spriteHeightScale = spriteH;
+        copy->setRotation(setup.rotation);
+        copy->setPosition(at);
+        copy->m_position = at;
+        copy->m_lastPosition = at;
+        copy->m_isObjectRectDirty = true;
+        copy->m_isOrientedBoxDirty = true;
+        if (copy->m_touchingRings) copy->m_touchingRings->removeAllObjects();
+        copy->m_touchedRings.clear();
+        copy->resetCollisionLog(false);
+        m_deadP1 = false;
+        m_deadP2 = false;
+        clearRingContacts();
+        clearKiller();
+        deactivateAllRemembered();
+        forgetFired();
+        portal.put(pl);
+        return pl->checkCollisions(copy, dt, false);
+    };
+
+    g_probeTouched = &setup.touched;
+    phys::g_touchListener = setup.touched ? &probeTouchTrampoline : nullptr;
+    body(copy, dt, passAt);
+    return true;
 }
 
 static void* RingObject_spawnCircle_orig = nullptr;
