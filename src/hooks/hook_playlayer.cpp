@@ -26,6 +26,8 @@
 #include <Geode/modify/PlayLayer.hpp>
 #if GB_NATIVE_ENGINE
 #include <safetyhook.hpp>
+#else
+#include <Geode/modify/UILayer.hpp>  // GBPortableCheckKey, at the end
 #endif
 #include <fmt/format.h>
 
@@ -1075,34 +1077,97 @@ $execute {
 #endif
 
 #if !GB_NATIVE_ENGINE
-// The same on macOS, iOS and Android, where there is no address hook. The
-// Windows hook above sits on UILayer::onCheck (0x4ce060: if practice mode is
-// on, PlayLayer::queueCheckpoint, which is inline there and only sets
-// m_tryPlaceCheckpoint). On the other platforms PlayLayer::queueCheckpoint is
-// a real function, which UILayer::onCheck (the checkpoint button, and the key)
-// should reach as a call, so the request is taken here and the checkpoint
-// placed in the frozen tick, as on Windows. Only the Windows binary was read:
-// if a platform's GD sets m_tryPlaceCheckpoint without this call, GD places
-// the checkpoint itself, mid-tick, as it would without GucciBot. Untested on
+// The same on macOS, iOS and Android, where there is no address hook.
+//
+// What the Windows hook above stands in for, read from the 2.2081 Windows
+// binary: UILayer::onCheck (0x4ce060) sets m_tryPlaceCheckpoint if practice
+// mode is on (PlayLayer::queueCheckpoint, inline there), the only place GD
+// sets it, and PlayLayer::processCheckpoints (0x3b4910) clears it and calls
+// markCheckpoint part-way through the next tick. Off Windows onCheck,
+// queueCheckpoint and processCheckpoints are all real, bound functions, so a
+// request is taken at the first of them it reaches:
+//  - UILayer::onCheck, hooked as on Windows. The checkpoint key, the button
+//    and GucciBot's own tryPlaceCheckpoint (hook_playerobject.cpp) all go
+//    through it.
+//  - PlayLayer::queueCheckpoint, for a platform whose GD inlined onCheck into
+//    a caller but still calls queueCheckpoint. GucciBot's own requests (the
+//    Trainer's loop, Assistant Access) come in here too.
+//  - PlayLayer::processCheckpoints, the net under both: a request that still
+//    set m_tryPlaceCheckpoint (onCheck and queueCheckpoint both inlined) is
+//    taken there instead of being placed mid-tick, and GD's own
+//    processCheckpoints then runs for everything else it does.
+// All three go through the Windows hook's gates to the same frozen-tick
+// placement, and one press makes one checkpoint. Only the Windows binary was
+// read; each path says in the log, once, that it took a request. Untested on
 // a device.
-class $modify(GBPortableCheckpoint, PlayLayer) {
-    void queueCheckpoint() {
-        auto* gb = GucciEngine::get();
-        if (!gb->enabled)
-            return PlayLayer::queueCheckpoint();
-        if (!m_isPracticeMode)
-            return;  // UILayer::onCheck's gate
+namespace {
+    // A checkpoint is waiting for the frozen tick.
+    bool s_checkpointQueued = false;
+
+    // The Windows hook's gates (queueCheckpointHook), then the frozen tick.
+    // False when the request is dropped, where the Windows hook drops it.
+    bool queueFrozenCheckpoint(PlayLayer* pl) {
+        if (!pl || !pl->m_isPracticeMode)
+            return false;  // UILayer::onCheck's gate
         // While Calculate walks you back after a Test it places your
         // checkpoints itself; a key press in the middle of that would throw
         // its count off.
         if (::Bot::get()->frameWindow().returning())
-            return;
-        if (m_player1->m_isDead || m_player2->m_isDead)
-            return;
-        gb->updater.scheduleFrozenFunction([](float) {
+            return false;
+        if (pl->m_player1->m_isDead || pl->m_player2->m_isDead)
+            return false;
+        // One is already waiting: a press that reached more than one of the
+        // hooks below adds nothing.
+        if (s_checkpointQueued)
+            return true;
+        s_checkpointQueued = true;
+        GucciEngine::get()->updater.scheduleFrozenFunction([](float) {
+            s_checkpointQueued = false;
             if (auto* p = PlayLayer::get())
                 p->markCheckpoint();
         });
+        return true;
+    }
+
+    void logRequestOnce(bool& logged, const char* via) {
+        if (logged)
+            return;
+        logged = true;
+        log::info("[GucciBot] Checkpoint request through {}: placed in the frozen tick. Logged once.", via);
+    }
+} // namespace
+
+class $modify(GBPortableCheckKey, UILayer) {
+    void onCheck(CCObject* sender) {
+        if (!GucciEngine::get()->enabled)
+            return UILayer::onCheck(sender);
+        static bool logged = false;
+        if (queueFrozenCheckpoint(PlayLayer::get()))
+            logRequestOnce(logged, "UILayer::onCheck");
+    }
+};
+
+class $modify(GBPortableCheckpoint, PlayLayer) {
+    void queueCheckpoint() {
+        if (!GucciEngine::get()->enabled)
+            return PlayLayer::queueCheckpoint();
+        static bool logged = false;
+        if (queueFrozenCheckpoint(this))
+            logRequestOnce(logged, "PlayLayer::queueCheckpoint");
+    }
+
+    void processCheckpoints() {
+        if (GucciEngine::get()->enabled && m_tryPlaceCheckpoint) {
+            m_tryPlaceCheckpoint = false;
+            static bool logged = false;
+            if (queueFrozenCheckpoint(this) && !logged) {
+                logged = true;
+                log::warn("[GucciBot] A checkpoint request reached PlayLayer::processCheckpoints without "
+                          "UILayer::onCheck or PlayLayer::queueCheckpoint seeing it: placed in the frozen tick "
+                          "instead. Logged once.");
+            }
+        }
+        PlayLayer::processCheckpoints();
     }
 };
 #endif
