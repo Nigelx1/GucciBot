@@ -49,6 +49,12 @@ namespace gucci::hitborder {
     struct Shape {
         Kind kind = Kind::Lethal;
         std::vector<Vec2> poly;
+        // A touch region where GD's pass leaves no sign of the touch: a cube,
+        // robot or spider less than 2 units into a slope over its head
+        // (0x390194-0x390224: nothing happens that tick). Drawn like any
+        // other; the accuracy probe (gucci_hitborder_probe) can only check
+        // that nothing kills there.
+        bool quiet = false;
     };
 
     enum class Mode : uint8_t { Cube, Ship, Ball, Ufo, Wave, Robot, Spider, Swing };
@@ -180,5 +186,51 @@ namespace gucci::hitborder {
     double distanceToEdge(std::vector<Vec2> const& poly, Vec2 p);
     // In any of these shapes of this kind.
     bool covered(std::vector<Shape> const& shapes, Kind kind, Vec2 p, double eps = 1e-9);
+
+    // ---------------------------------------------------------------- the accuracy probe
+    //
+    // gucci_hitborder_probe (hacks/hitborder_probe.cpp) puts a copy of the
+    // player a hair inside and a hair outside every drawn edge of an object's
+    // regions and asks GD's own collision pass what happens there. These say
+    // where those points are and what the drawing promises at each.
+
+    // What one object's regions say about a point: the deadliest kind holding
+    // it (red, then blue, then green), or nothing.
+    enum class Region : uint8_t { None, Special, Touch, Lethal };
+    // `quiet` (optional): the point is blue only by quiet regions (Shape::quiet).
+    Region regionAt(std::vector<Shape> const& shapes, Vec2 p, bool* quiet = nullptr);
+
+    // A circle an object's regions are drawn from (a saw's or an orb's, grown
+    // as colliderShapes grows it). A chord of one is sampled at its corner,
+    // which is on the circle, so the probe tests the circle GD tests and not
+    // the chord the drawing stands it in with (up to 0.05 units inside).
+    struct Circle {
+        Vec2 c;
+        double r = 0.0;
+    };
+    // The circles colliderShapes draws for `c`: one with Fix radius collision,
+    // the four corner circles without (the "hearts"); none without a radius.
+    std::vector<Circle> colliderCircles(Collider const& c, Player const& p, Options const& o);
+
+    // A point on a drawn edge, and the points `eps` either side of it along
+    // the edge's outward normal.
+    struct EdgeSample {
+        Vec2 on;
+        Vec2 normal;                    // outward, unit length
+        Vec2 in, out;                   // on - eps * normal, on + eps * normal
+        Region inside = Region::None;   // what the object's regions say at `in`
+        Region outside = Region::None;  // ... and at `out`
+        bool quietIn = false;           // regionAt's `quiet` at `in`
+        size_t shape = 0;               // the shape, and its edge from poly[edge] to the next corner
+        size_t edge = 0;
+        bool arc = false;               // a chord of one of `circles`: sampled at its corner, along the radius
+    };
+    // `perEdge` points evenly along every straight edge of every shape, away
+    // from its corners, and one on the circle for every chord of a circle. A
+    // point is kept only where the two sides differ (inside != outside): an
+    // edge inside the object's own regions is no border anyone sees.
+    // `skipped` (optional) counts the points left out that way.
+    std::vector<EdgeSample> edgeSamples(std::vector<Shape> const& shapes, std::vector<Circle> const& circles,
+                                        double eps, int perEdge, size_t* skipped = nullptr);
 
 } // namespace gucci::hitborder

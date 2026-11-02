@@ -747,6 +747,255 @@ int main() {
         }
     }
 
+    // ---- the accuracy probe's points (edgeSamples): a hair either side of
+    // every drawn edge, each point says what the point-by-point rules say
+    // there - the question gucci_hitborder_probe asks GD itself in the game
+    {
+        int points = 0;
+        int bad = 0;
+        auto regionFromEffect = [](int effect) {
+            return effect == 2 ? Region::Lethal : effect == 1 ? Region::Touch : Region::None;
+        };
+        auto sampleAgainst = [&](std::string const& name, std::vector<Shape> const& shapes,
+                                 std::vector<Circle> const& circles, auto rule) {
+            size_t skipped = 0;
+            auto const samples = edgeSamples(shapes, circles, 0.01, 3, &skipped);
+            int wrong = 0;
+            if (samples.empty()) {
+                std::printf("  %s: no points\n", name.c_str());
+                wrong = 1;
+            }
+            for (auto const& s : samples) {
+                ++points;
+                Region const in = rule(s.in);
+                Region const out = rule(s.out);
+                bool ok = in == s.inside && out == s.outside && s.inside != s.outside &&
+                          near(std::hypot(s.normal.x, s.normal.y), 1.0, 1e-9);
+                if (!ok && wrong < 3)
+                    std::printf("  %s: at (%.3f, %.3f) the rules say %d inside / %d outside, the drawing %d / %d\n",
+                                name.c_str(), s.on.x, s.on.y, (int)in, (int)out, (int)s.inside, (int)s.outside);
+                wrong += ok ? 0 : 1;
+            }
+            if (wrong > 0) {
+                std::printf("  %s: %d of %zu points disagree\n", name.c_str(), wrong, samples.size());
+                ++bad;
+            }
+            return samples;
+        };
+
+        // A spike: four edges, three points each, red inside and nothing out.
+        {
+            Player const p = modePlayer(Mode::Cube, false);
+            Collider spike;
+            spike.rect = {100, 90, 106, 102};
+            std::vector<Shape> shapes;
+            colliderShapes(spike, p, o, Kind::Lethal, shapes);
+            size_t skipped = 99;
+            auto const samples = edgeSamples(shapes, {}, 0.01, 3, &skipped);
+            CHECK(samples.size() == 12 && skipped == 0);
+            bool onEdge = true;
+            for (auto const& s : samples) {
+                onEdge = onEdge && s.inside == Region::Lethal && s.outside == Region::None && !s.arc;
+                onEdge = onEdge && (near(s.on.x, 85) || near(s.on.x, 121) || near(s.on.y, 75) || near(s.on.y, 117));
+                onEdge = onEdge && near(std::hypot(s.out.x - s.in.x, s.out.y - s.in.y), 0.02, 1e-9);
+            }
+            CHECK(onEdge);
+        }
+        // A block: the touch zone's edges (blue in, nothing out) and the
+        // core's (red in, blue out).
+        {
+            Block block;
+            block.rect = {500, 90, 530, 120};
+            std::vector<Shape> shapes;
+            blockShapes(block, modePlayer(Mode::Cube, false), o, shapes);
+            auto const samples = edgeSamples(shapes, {}, 0.01, 3);
+            int zone = 0;
+            int core = 0;
+            for (auto const& s : samples) {
+                zone += s.inside == Region::Touch && s.outside == Region::None;
+                core += s.inside == Region::Lethal && s.outside == Region::Touch;
+            }
+            CHECK(samples.size() == 24 && zone == 12 && core == 12);
+        }
+        // Two spikes side by side in one list: where they overlap, the edges
+        // inside the other one are no border, and are left out.
+        {
+            Player const p = modePlayer(Mode::Cube, false);
+            Collider a, b;
+            a.rect = {0, 0, 10, 20};
+            b.rect = {20, 0, 30, 20};  // grown by 15, the two overlap from 5 to 25
+            std::vector<Shape> shapes;
+            colliderShapes(a, p, o, Kind::Lethal, shapes);
+            colliderShapes(b, p, o, Kind::Lethal, shapes);
+            size_t skipped = 0;
+            auto const samples = edgeSamples(shapes, {}, 0.01, 3, &skipped);
+            CHECK(skipped > 0 && samples.size() + skipped == 24);
+        }
+        // Saws: every chord sampled at its corner, which is on the circle.
+        for (bool fix : {false, true}) {
+            Player const p = modePlayer(Mode::Cube, false);
+            Options of = o;
+            of.fixRadius = fix;
+            Collider saw;
+            saw.radius = 32.0;
+            saw.center = {300, 200};
+            saw.rect = {268, 168, 332, 232};
+            std::vector<Shape> shapes;
+            colliderShapes(saw, p, of, Kind::Lethal, shapes);
+            auto const circles = colliderCircles(saw, p, of);
+            CHECK(circles.size() == (fix ? 1u : 4u));
+            auto const samples = edgeSamples(shapes, circles, 0.01, 3);
+            bool onCircle = true;
+            size_t arcs = 0;
+            for (auto const& s : samples) {
+                if (!s.arc)
+                    continue;
+                ++arcs;
+                bool found = false;
+                for (auto const& c : circles)
+                    found = found || near(std::hypot(s.on.x - c.c.x, s.on.y - c.c.y), c.r, 1e-6);
+                onCircle = onCircle && found;
+            }
+            CHECK(onCircle && arcs > 0);
+            // With Fix radius collision the disk is the whole region: every
+            // corner of it is a point.
+            if (fix)
+                CHECK(arcs == samples.size() && samples.size() == shapes[0].poly.size());
+        }
+        // The cube's 2-unit band under a ceiling slope is quiet; a ship's is not.
+        {
+            Slope c;
+            c.rect = {0, 100, 30, 130};
+            c.direction = 1;
+            c.uphill = false;
+            for (Mode m : {Mode::Cube, Mode::Ship}) {
+                std::vector<Shape> shapes;
+                slopeShapes(c, modePlayer(m, false), o, shapes);
+                int quiet = 0;
+                for (auto const& s : edgeSamples(shapes, {}, 0.01, 3))
+                    quiet += s.quietIn;
+                CHECK(m == Mode::Cube ? quiet > 0 : quiet == 0);
+            }
+            std::vector<Shape> shapes;
+            slopeShapes(c, modePlayer(Mode::Cube, false), o, shapes);
+            double const Tc = (130.0 - 15.0) - 21.2132;
+            bool quiet = false;
+            CHECK(regionAt(shapes, {15, Tc + 1.0}, &quiet) == Region::Touch && quiet);
+            CHECK(regionAt(shapes, {15, Tc + 2.5}, &quiet) == Region::Lethal && !quiet);
+        }
+
+        // ... and against the point-by-point rules, object by object.
+        for (Mode m : {Mode::Cube, Mode::Ship, Mode::Wave, Mode::Spider, Mode::Ufo, Mode::Robot, Mode::Ball,
+                       Mode::Swing}) {
+            for (bool mini : {false, true}) {
+                Player const p = modePlayer(m, mini);
+                std::string const who = std::string(modeName(m)) + (mini ? " mini" : "");
+                Collider spike;
+                spike.rect = {100, 90, 106, 102};
+                std::vector<Shape> shapes;
+                colliderShapes(spike, p, o, Kind::Lethal, shapes);
+                sampleAgainst("probe: spike, " + who, shapes, {},
+                              [&](Vec2 c) { return hazardHits(spike, p, o, c) ? Region::Lethal : Region::None; });
+                Block block;
+                block.rect = {500, 90, 530, 120};
+                shapes.clear();
+                blockShapes(block, p, o, shapes);
+                sampleAgainst("probe: block, " + who, shapes, {}, [&](Vec2 c) {
+                    if (rectsTouch(block.rect, playerRect(c, p.ix, p.iy)))
+                        return Region::Lethal;
+                    return rectsTouch(block.rect, playerRect(c, p.hx, p.hy)) ? Region::Touch : Region::None;
+                });
+                Collider portal;
+                portal.rect = {400, 100, 425, 190};
+                shapes.clear();
+                colliderShapes(portal, p, o, Kind::Special, shapes);
+                sampleAgainst("probe: portal, " + who, shapes, {},
+                              [&](Vec2 c) { return hazardHits(portal, p, o, c) ? Region::Special : Region::None; });
+            }
+        }
+        for (double objRot : {30.0, 45.0, 72.5}) {
+            for (double tilt : {0.0, 23.0, -41.0}) {
+                Player p = modePlayer(Mode::Cube, false);
+                p.rotation = tilt;
+                Collider thorn;
+                thorn.oriented = true;
+                thorn.box = objectObb({200, 120}, 8, 20, objRot);
+                thorn.rect = boundsOf(thorn.box);
+                std::vector<Shape> shapes;
+                colliderShapes(thorn, p, o, Kind::Lethal, shapes);
+                char name[96];
+                std::snprintf(name, sizeof name, "probe: rotated hazard %.1f, tilt %.1f", objRot, tilt);
+                sampleAgainst(name, shapes, {},
+                              [&](Vec2 c) { return hazardHits(thorn, p, o, c) ? Region::Lethal : Region::None; });
+            }
+        }
+        for (double radius : {15.0, 32.0, 6.0}) {
+            for (Mode m : {Mode::Cube, Mode::Wave}) {
+                for (bool fix : {false, true}) {
+                    for (bool turned : {false, true}) {
+                        Player p = modePlayer(m, false);
+                        p.rotation = turned ? 17.0 : 0.0;
+                        Options of = o;
+                        of.fixRadius = fix;
+                        Collider saw;
+                        saw.radius = radius;
+                        saw.center = {300, 200};
+                        saw.rect = {300 - radius, 200 - radius, 300 + radius, 200 + radius};
+                        if (turned) {
+                            saw.oriented = true;
+                            saw.box = objectObb({300, 200}, radius * 1.5, radius * 1.5, 33.0);
+                            saw.rect = boundsOf(saw.box);
+                        }
+                        std::vector<Shape> shapes;
+                        colliderShapes(saw, p, of, Kind::Lethal, shapes);
+                        char name[96];
+                        std::snprintf(name, sizeof name, "probe: saw r=%.0f, %s, %s%s", radius, modeName(m),
+                                      fix ? "fix radius" : "legacy", turned ? ", turned" : "");
+                        sampleAgainst(name, shapes, colliderCircles(saw, p, of),
+                                      [&](Vec2 c) { return hazardHits(saw, p, of, c) ? Region::Lethal : Region::None; });
+                    }
+                }
+            }
+        }
+        for (int dir = 0; dir < 8; ++dir) {
+            bool const top = slopeFloorTop(dir);
+            bool const wallLeft = slopeWallLeft(dir);
+            bool const uphill = top ? wallLeft : !wallLeft;
+            for (double w : {30.0, 60.0}) {
+                for (bool hazard : {false, true}) {
+                    for (Mode m : {Mode::Cube, Mode::Ship, Mode::Wave, Mode::Ufo, Mode::Ball, Mode::Robot, Mode::Spider,
+                                   Mode::Swing}) {
+                        for (bool mini : {false, true}) {
+                            for (bool upside : {false, true}) {
+                                for (bool left : {false, true}) {
+                                    Slope s;
+                                    s.rect = {600, 150, 600 + w, 180};
+                                    s.direction = dir;
+                                    s.uphill = uphill;
+                                    s.hazard = hazard;
+                                    s.uniqueId = 7;
+                                    Player p = modePlayer(m, mini);
+                                    p.upsideDown = upside;
+                                    p.goingLeft = left;
+                                    std::vector<Shape> shapes;
+                                    slopeShapes(s, p, o, shapes);
+                                    char name[128];
+                                    std::snprintf(name, sizeof name, "probe: slope dir %d %gx30%s, %s%s%s%s", dir, w,
+                                                  hazard ? " hazard" : "", modeName(m), mini ? " mini" : "",
+                                                  upside ? " upside down" : "", left ? " going left" : "");
+                                    sampleAgainst(name, shapes, {},
+                                                  [&](Vec2 c) { return regionFromEffect(slopeEffect(s, p, o, c)); });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        std::printf("probe points: %d\n", points);
+        CHECK(bad == 0);
+    }
+
     // ---- ground and ceiling
     {
         Ground g;

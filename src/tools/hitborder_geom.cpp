@@ -95,6 +95,13 @@ namespace gucci::hitborder {
             return out;
         }
 
+        // The cube's 2-unit band under a slope (Shape::quiet): the shapes
+        // band() just added from `from` on.
+        void markQuiet(std::vector<Shape>& out, size_t from) {
+            for (size_t i = from; i < out.size(); ++i)
+                out[i].quiet = true;
+        }
+
         // Sides for a circle of radius r, so a chord strays under 0.05 units
         // from it.
         int circleSides(double r) {
@@ -539,8 +546,10 @@ namespace gucci::hitborder {
             if (cubeHead) {
                 // Upside down under a floor slope: dead below T - 2.
                 band(out, Kind::Lethal, xa, xb, kinks, lo, [&](double x) { return std::min(T(x) - 2.0, freshTop); });
+                size_t const quietFrom = out.size();
                 band(out, Kind::Touch, xa, xb, kinks, [&](double x) { return std::max(r.y0 + 1.0, T(x) - 2.0); },
                      [&](double x) { return std::min(T(x) + tol, freshTop); });
+                markQuiet(out, quietFrom);
             } else {
                 band(out, hitKind, xa, xb, kinks, lo, [&](double x) { return std::min(T(x) + tol, freshTop); });
             }
@@ -560,8 +569,10 @@ namespace gucci::hitborder {
                 // A cube, robot or spider with a slope over its head: dead
                 // past T' + 2 (0x390194-0x390224).
                 band(out, Kind::Lethal, xa, xb, kinks, [&](double x) { return std::max(T(x) + 2.0, freshBottom); }, hi);
+                size_t const quietFrom = out.size();
                 band(out, Kind::Touch, xa, xb, kinks, [&](double x) { return std::max(T(x) - tol, freshBottom); },
                      [&](double x) { return std::min(r.y1, T(x) + 2.0); });
+                markQuiet(out, quietFrom);
             } else {
                 band(out, hitKind, xa, xb, kinks, [&](double x) { return std::max(T(x) - tol, freshBottom); }, hi);
             }
@@ -590,6 +601,117 @@ namespace gucci::hitborder {
         pushRect(out, floorKind, {g.left, g.floorY - g.reach, g.right, g.floorY});
         if (g.corridor)
             pushRect(out, ceilingKind, {g.left, g.ceilingY, g.right, g.ceilingY + g.reach});
+    }
+
+    // ---------------------------------------------------------------- the accuracy probe
+
+    Region regionAt(std::vector<Shape> const& shapes, Vec2 p, bool* quiet) {
+        bool lethal = false;
+        bool touch = false;
+        bool loud = false;  // a touch region that isn't quiet holds it
+        bool special = false;
+        for (auto const& s : shapes) {
+            if (!contains(s.poly, p))
+                continue;
+            switch (s.kind) {
+            case Kind::Lethal: lethal = true; break;
+            case Kind::Touch:
+                touch = true;
+                loud = loud || !s.quiet;
+                break;
+            case Kind::Special: special = true; break;
+            }
+        }
+        if (quiet)
+            *quiet = !lethal && touch && !loud;
+        if (lethal)
+            return Region::Lethal;
+        if (touch)
+            return Region::Touch;
+        return special ? Region::Special : Region::None;
+    }
+
+    std::vector<Circle> colliderCircles(Collider const& c, Player const& p, Options const& o) {
+        std::vector<Circle> out;
+        if (!(c.radius > 0))
+            return out;
+        if (o.fixRadius) {
+            out.push_back({c.center, c.radius + p.hx});
+            return out;
+        }
+        for (int sx = -1; sx <= 1; sx += 2) {
+            for (int sy = -1; sy <= 1; sy += 2)
+                out.push_back({{c.center.x + sx * p.hx, c.center.y + sy * p.hy}, c.radius});
+        }
+        return out;
+    }
+
+    std::vector<EdgeSample> edgeSamples(std::vector<Shape> const& shapes, std::vector<Circle> const& circles,
+                                        double eps, int perEdge, size_t* skipped) {
+        std::vector<EdgeSample> out;
+        size_t dropped = 0;
+        perEdge = std::max(perEdge, 1);
+        auto tolerance = [](Circle const& c) { return 1e-7 * std::max(1.0, c.r); };
+        // The circle a corner lies on (circlePoly puts every corner on it).
+        auto onCircle = [&](Vec2 v) -> Circle const* {
+            for (auto const& c : circles) {
+                if (std::abs(std::hypot(v.x - c.c.x, v.y - c.c.y) - c.r) <= tolerance(c))
+                    return &c;
+            }
+            return nullptr;
+        };
+        auto within = [&](Circle const& c, Vec2 v) { return std::hypot(v.x - c.c.x, v.y - c.c.y) <= c.r + tolerance(c); };
+        auto add = [&](Vec2 on, Vec2 n, size_t si, size_t ei, bool arc) {
+            EdgeSample s;
+            s.on = on;
+            s.normal = n;
+            s.in = {on.x - eps * n.x, on.y - eps * n.y};
+            s.out = {on.x + eps * n.x, on.y + eps * n.y};
+            s.inside = regionAt(shapes, s.in, &s.quietIn);
+            s.outside = regionAt(shapes, s.out);
+            s.shape = si;
+            s.edge = ei;
+            s.arc = arc;
+            if (s.inside == s.outside) {
+                ++dropped;
+                return;
+            }
+            out.push_back(s);
+        };
+        for (size_t si = 0; si < shapes.size(); ++si) {
+            auto const& poly = shapes[si].poly;
+            size_t const n = poly.size();
+            if (n < 3)
+                continue;
+            for (size_t ei = 0; ei < n; ++ei) {
+                Vec2 const a = poly[ei];
+                Vec2 const b = poly[(ei + 1) % n];
+                double const dx = b.x - a.x;
+                double const dy = b.y - a.y;
+                double const len = std::hypot(dx, dy);
+                if (!(len > 1e-9))
+                    continue;
+                // A chord of a circle, or what clipping left of one: its
+                // corner on the circle, along the radius. A chord that only
+                // ends on the circle is sampled by the next edge, which
+                // starts there.
+                if (Circle const* c = onCircle(a); c && within(*c, b)) {
+                    double const r = std::hypot(a.x - c->c.x, a.y - c->c.y);
+                    add(a, {(a.x - c->c.x) / r, (a.y - c->c.y) / r}, si, ei, true);
+                    continue;
+                }
+                if (Circle const* c = onCircle(b); c && within(*c, a))
+                    continue;
+                Vec2 const normal{dy / len, -dx / len};  // outward of a counter-clockwise edge
+                for (int k = 1; k <= perEdge; ++k) {
+                    double const t = static_cast<double>(k) / (perEdge + 1);
+                    add({a.x + dx * t, a.y + dy * t}, normal, si, ei, false);
+                }
+            }
+        }
+        if (skipped)
+            *skipped = dropped;
+        return out;
     }
 
 } // namespace gucci::hitborder
