@@ -120,6 +120,13 @@ namespace absense {
     // how many were looked at and missed (world::g_pendingVerify).
     bool pendingVerify();
     void setPendingVerify(bool on);
+    // ... and its kill switch, never saved either (gucci_test_set
+    // pf_pending_cells, on by default): on a level with rows of sections
+    // (ORBIT, Heliopolis) a run writes back what the real game moved a
+    // section cell at a time; off, all at its first look, as before
+    // (world::g_pendingCells).
+    bool pendingCells();
+    void setPendingCells(bool on);
 
     // Step R1 of AI_PATHFINDER_PLAN.md: the route planner's map of the whole
     // level (absense/route/atlas.hpp), drawn over it when shown.

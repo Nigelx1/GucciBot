@@ -550,6 +550,14 @@ void absense::setPendingVerify(bool on) {
     world::g_pendingVerify = on;
 }
 
+bool absense::pendingCells() {
+    return world::g_pendingCells;
+}
+
+void absense::setPendingCells(bool on) {
+    world::g_pendingCells = on;
+}
+
 matjson::Value absense::runProfile() {
     const Trajectory::RunProfile r = Trajectory::runProfile();
     const world::NearProfile& np = world::g_nearProfile;

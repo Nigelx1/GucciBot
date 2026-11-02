@@ -657,6 +657,7 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
         line += part("starts stepped", u.stepStarts, "ticks");
         line += part("pending passes", u.pending, "objects");
         line += part("pending column writes", u.pendingColumns, "objects");
+        line += part("pending cell writes", u.pendingCells, "objects");
         line += part("pending re-looks after a restore", u.pendingRelooks, "objects");
         // GucciBot (2026-11-01, H1(b)): the pending write-back's check, when a
         // test turned it on (pf_pending_verify), and its first misses.

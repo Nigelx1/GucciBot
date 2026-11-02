@@ -379,10 +379,12 @@ namespace gucci::mcp {
                 "returns every key with its type and value now. Keys that were never "
                 "saved anyway: hack_rng_lock, hack_rng_seed, bigbrrr (this launch's "
                 "switch), test_mute (FMOD's master volume 0), fwac_conflict_test_id "
-                "(one more mod id for Calculate's conflict check) and pf_pending_verify "
+                "(one more mod id for Calculate's conflict check), pf_pending_verify "
                 "(the pathfinder checks, every tick, that each object the real game "
                 "moved and a copy could meet stands where the run has it; its stop line "
-                "counts the misses). A change made in "
+                "counts the misses) and pf_pending_cells (on by default: a level with "
+                "rows of sections writes those objects back a cell at a time; off, all "
+                "at a run's first look, as before). A change made in "
                 "the menu to a key this holds isn't saved this launch either.",
                 schema,
                 [](matjson::Value const& a) {

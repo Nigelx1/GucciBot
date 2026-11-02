@@ -128,7 +128,7 @@ Census takeCensus(GJBaseGameLayer* pl, const std::shared_ptr<const WorldDef>& de
     if (c.writable == 0) {
         c.pendingPath = "none (no table)";
     } else if ((double)c.factorY > 0.0) {
-        c.pendingPath = "full pass";
+        c.pendingPath = g_pendingCells ? "cells" : "full pass";
     } else {
         c.pendingPath = "columns";
     }

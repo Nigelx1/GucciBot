@@ -330,6 +330,13 @@ namespace gucci::testset {
                              [](matjson::Value const& val, bool) {
                                  absense::setPendingVerify(wantBool("pf_pending_verify", val));
                              }});
+                // The cell-by-cell write-back on a level with rows (on by
+                // default); off for the old pass of everything, to compare.
+                v.push_back({"pf_pending_cells", "bool", Store::Memory,
+                             [] { return matjson::Value(absense::pendingCells()); },
+                             [](matjson::Value const& val, bool) {
+                                 absense::setPendingCells(wantBool("pf_pending_cells", val));
+                             }});
                 // Not a setting: one more id for Calculate's conflict check.
                 v.push_back({"fwac_conflict_test_id", "text", Store::Memory,
                              [] { return matjson::Value(g_conflictTestId); },

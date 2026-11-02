@@ -47,6 +47,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <tuple>
 
 #if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
 #include <emmintrin.h>
@@ -231,6 +232,7 @@ struct PendingCache {
     uint32_t commandIndex = 0;
     uint64_t epoch = 0;
     std::size_t count = 0;
+    bool byCell = false;  // the index is by cell (g_pendingCells can change between runs)
     std::shared_ptr<const PendingColumns> columns;
 };
 PendingCache g_pendingCache;
@@ -1419,73 +1421,172 @@ void Materializer::verifyPending(Run& run, const Window& w) {
         const bool ok = written ? sameWritable(m_written[it->second].pose, want) : sameLive(want, o);
         g_pendingCheck.looks++;
         if (ok || g_pendingCheck.missed++ >= 8) continue;
+        const char* path = !m_pendingLazy                                    ? "full pass"
+                           : m_pendingColumns && m_pendingColumns->byCell ? "cells"
+                                                                          : "columns";
         g_pendingCheck.notes.push_back(fmt::format(
             "uid {} slot {} at run tick {} ({}, {}) wants {:.2f},{:.2f} (section {},{}), stands at {:.2f},{:.2f} "
             "filed {},{}, window {}..{} x {}..{}",
-            o->m_uniqueID, slot, run.ws->tick, written ? "written" : "unwritten",
-            m_pendingLazy ? "columns" : "full pass", want.x, want.y, wx, wy, o->m_positionX, o->m_positionY, sx, sy,
-            w.x0, w.x1, w.y0, w.y1));
+            o->m_uniqueID, slot, run.ws->tick, written ? "written" : "unwritten", path, want.x, want.y, wx, wy,
+            o->m_positionX, o->m_positionY, sx, sy, w.x0, w.x1, w.y0, w.y1));
     }
 }
+
+namespace {
+
+// GucciBot (2026-11-01, H1(b)): the pending index of a layer with rows. Each
+// object is filed under the cell where the table has it and, when it is filed
+// in another cell now, under that one too: the two places startPending files
+// a column by, with the row as well. A cell is only marked done by a window
+// that holds it, after every object filed in it has been looked at with that
+// window, so an object in a row the window never reached is never passed
+// over. (Marked by column, a copy high above an object would have marked its
+// column done, and the object left where the real game had it once the copy
+// came down to it - why a layer with rows kept the pass of everything until
+// now.) One the run's own ops move away from both is the reach's to write,
+// as with the columns.
+void fileByCell(const WorldDef& def, const BaseTable& table, const SectionShadow& shadow,
+                const std::vector<int>& pending, PendingColumns& out) {
+    struct Entry {
+        int32_t x = 0, y = 0;
+        uint32_t order = 0;  // the pending order, which a cell's slots keep
+        int slot = -1;
+    };
+    std::vector<Entry> entries;
+    entries.reserve(pending.size() * 2);
+    uint32_t order = 0;
+    for (int slot : pending) {
+        if (slot < 0 || (std::size_t)slot >= def.slots.size()) continue;
+        GameObject* o = def.slots[(std::size_t)slot];
+        const uint8_t flags = def.flags[(std::size_t)slot];
+        if (!o || !(flags & kCollidable)) continue;  // refresh leaves these
+        // Extended collision is met from any section (the list +0x35e0).
+        if (flags & kExtended) {
+            out.always.push_back(slot);
+            continue;
+        }
+        // Where the table has it, and where it is filed now, if it is filed
+        // at all (both at least 0).
+        const Pose* base = table.find(slot);
+        int sx = 0, sy = 0;
+        if (!base || !shadow.sectionOf(base->x, base->y, sx, sy)) {
+            out.always.push_back(slot);
+            continue;
+        }
+        entries.push_back(Entry{sx, sy, order++, slot});
+        const int nx = off::at<int>(o, off::kSecX);
+        const int ny = off::at<int>(o, off::kSecY);
+        if (nx < 0 || ny < 0 || (nx == sx && ny == sy)) continue;
+        if (nx > kMaxSection || ny > kMaxSection) {
+            out.always.push_back(slot);
+            continue;
+        }
+        entries.push_back(Entry{nx, ny, order++, slot});
+    }
+    // By cell, a slot filed twice in one cell dropped, then each cell's
+    // slots in pending order again.
+    std::sort(entries.begin(), entries.end(), [](const Entry& a, const Entry& b) {
+        return std::tie(a.x, a.y, a.slot, a.order) < std::tie(b.x, b.y, b.slot, b.order);
+    });
+    entries.erase(std::unique(entries.begin(), entries.end(),
+                              [](const Entry& a, const Entry& b) {
+                                  return a.x == b.x && a.y == b.y && a.slot == b.slot;
+                              }),
+                  entries.end());
+    std::sort(entries.begin(), entries.end(), [](const Entry& a, const Entry& b) {
+        return std::tie(a.x, a.y, a.order) < std::tie(b.x, b.y, b.order);
+    });
+    out.byCell = true;
+    const std::size_t columns = entries.empty() ? 0 : (std::size_t)entries.back().x + 1;
+    out.cellBegin.assign(columns + 1, 0);
+    out.cellSlots.reserve(entries.size());
+    for (std::size_t i = 0; i < entries.size();) {
+        PendingColumns::Cell cell;
+        cell.row = entries[i].y;
+        cell.first = (uint32_t)out.cellSlots.size();
+        std::size_t j = i;
+        for (; j < entries.size() && entries[j].x == entries[i].x && entries[j].y == entries[i].y; j++) {
+            out.cellSlots.push_back(entries[j].slot);
+        }
+        cell.count = (uint32_t)(j - i);
+        out.cellBegin[(std::size_t)entries[i].x + 1]++;  // the column's cells, summed below
+        out.cells.push_back(cell);
+        i = j;
+    }
+    for (std::size_t x = 0; x < columns; x++) out.cellBegin[x + 1] += out.cellBegin[x];
+}
+
+}  // namespace
 
 void Materializer::startPending(Run& run) {
     m_pendingLazy = false;
     m_pendingAlwaysDue = false;
     m_pendingDone.clear();
     m_pendingSeen.clear();
-    if (m_fy > 0.0 || m_pending.empty() || !m_table || !run.def) {
+    // GucciBot (2026-11-01, H1(b)): a layer with rows is filed by cell. The
+    // test switch off keeps the pass of everything at once it had before.
+    const bool byCell = m_fy > 0.0;
+    if (m_pending.empty() || !m_table || !run.def || (byCell && !g_pendingCells)) {
         g_upkeep.pending.items += m_pending.size();
         for (int slot : m_pending) refresh(run, slot, nullptr);
         return;
     }
     PendingCache& c = g_pendingCache;
     if (!(c.columns && c.table == m_table && c.progress == m_pendingProgress &&
-          c.commandIndex == m_pendingCommandIndex && c.epoch == g_realEpoch && c.count == m_pending.size())) {
+          c.commandIndex == m_pendingCommandIndex && c.epoch == g_realEpoch && c.count == m_pending.size() &&
+          c.byCell == byCell)) {
         auto out = std::make_shared<PendingColumns>();
         const WorldDef& def = *run.def;
-        auto put = [&out](int column, int slot) {
-            if (column < 0 || column > kMaxSection) return false;
-            if ((std::size_t)column >= out->columns.size()) out->columns.resize((std::size_t)column + 1);
-            auto& list = out->columns[(std::size_t)column];
-            if (list.empty() || list.back() != slot) list.push_back(slot);
-            return true;
-        };
-        for (int slot : m_pending) {
-            if (slot < 0 || (std::size_t)slot >= def.slots.size()) continue;
-            GameObject* o = def.slots[(std::size_t)slot];
-            const uint8_t flags = def.flags[(std::size_t)slot];
-            if (!o || !(flags & kCollidable)) continue;  // refresh leaves these
-            // Extended collision is met from any section (the list +0x35e0).
-            // (An ordered spawn reads its triggers' x from the run's poses, not
-            // the nodes - fire.cpp spawnObjectsInOrder - so effect objects can
-            // wait for their columns like the rest.)
-            if (flags & kExtended) {
-                out->always.push_back(slot);
-                continue;
+        if (byCell) {
+            fileByCell(def, *m_table, m_shadow, m_pending, *out);
+        } else {
+            auto put = [&out](int column, int slot) {
+                if (column < 0 || column > kMaxSection) return false;
+                if ((std::size_t)column >= out->columns.size()) out->columns.resize((std::size_t)column + 1);
+                auto& list = out->columns[(std::size_t)column];
+                if (list.empty() || list.back() != slot) list.push_back(slot);
+                return true;
+            };
+            for (int slot : m_pending) {
+                if (slot < 0 || (std::size_t)slot >= def.slots.size()) continue;
+                GameObject* o = def.slots[(std::size_t)slot];
+                const uint8_t flags = def.flags[(std::size_t)slot];
+                if (!o || !(flags & kCollidable)) continue;  // refresh leaves these
+                // Extended collision is met from any section (the list +0x35e0).
+                // (An ordered spawn reads its triggers' x from the run's poses, not
+                // the nodes - fire.cpp spawnObjectsInOrder - so effect objects can
+                // wait for their columns like the rest.)
+                if (flags & kExtended) {
+                    out->always.push_back(slot);
+                    continue;
+                }
+                // Where the table has it (and so where it belongs, unless the
+                // run's own ops move it - then the reach looks at it), and where
+                // it stands now, if it is filed at all.
+                const Pose* base = m_table->find(slot);
+                int sx = 0, sy = 0;
+                if (!base || !m_shadow.sectionOf(base->x, base->y, sx, sy) || !put(sx, slot)) {
+                    out->always.push_back(slot);
+                    continue;
+                }
+                const int now = off::at<int>(o, off::kSecX);
+                if (now >= 0 && now != sx && !put(now, slot)) out->always.push_back(slot);
             }
-            // Where the table has it (and so where it belongs, unless the
-            // run's own ops move it - then the reach looks at it), and where
-            // it stands now, if it is filed at all.
-            const Pose* base = m_table->find(slot);
-            int sx = 0, sy = 0;
-            if (!base || !m_shadow.sectionOf(base->x, base->y, sx, sy) || !put(sx, slot)) {
-                out->always.push_back(slot);
-                continue;
-            }
-            const int now = off::at<int>(o, off::kSecX);
-            if (now >= 0 && now != sx && !put(now, slot)) out->always.push_back(slot);
         }
         c.table = m_table;
         c.progress = m_pendingProgress;
         c.commandIndex = m_pendingCommandIndex;
         c.epoch = g_realEpoch;
         c.count = m_pending.size();
+        c.byCell = byCell;
         c.columns = std::move(out);
     }
     m_pendingColumns = c.columns;
     m_pendingLazy = true;
-    m_pendingDone.assign(m_pendingColumns->columns.size(), 0);
-    m_pendingSeen.assign(m_pendingColumns->columns.size(), 0);
+    const std::size_t looks =
+        m_pendingColumns->byCell ? m_pendingColumns->cells.size() : m_pendingColumns->columns.size();
+    m_pendingDone.assign(looks, 0);
+    m_pendingSeen.assign(looks, 0);
     m_pendingAlwaysDue = true;
     refreshPendingAlways(run);
 }
@@ -1499,6 +1600,10 @@ void Materializer::refreshPendingAlways(Run& run) {
 
 void Materializer::writePending(Run& run, const Window* window) {
     if (!m_pendingLazy || !m_pendingColumns) return;
+    if (m_pendingColumns->byCell) {
+        writePendingCells(run, window);
+        return;
+    }
     const auto& columns = m_pendingColumns->columns;
     if (columns.empty()) return;
     int x0 = 0;
@@ -1527,6 +1632,53 @@ void Materializer::writePending(Run& run, const Window* window) {
         // table has it, and moved on from there by the run's ops, is the
         // reach's to write when its window comes.
         for (int slot : columns[(std::size_t)x]) refresh(run, slot, window);
+    }
+}
+
+// GucciBot (2026-11-01, H1(b)): writePending on a layer with rows. Every cell
+// of the window's columns in the window's rows (each column's cells are by
+// row: the first at or past the window's lowest row, then on while still in
+// it), looked at once since the run began or was put back. No window (a
+// teleport, catchUpAll) is every cell; a spider's or the ghost's window,
+// every row, is every cell of its columns - only the rows something pending
+// is filed in.
+void Materializer::writePendingCells(Run& run, const Window* window) {
+    const PendingColumns& pc = *m_pendingColumns;
+    if (pc.cellBegin.size() < 2) return;
+    int x0 = 0;
+    int x1 = (int)pc.cellBegin.size() - 2;
+    int y0 = std::numeric_limits<int>::min();
+    int y1 = std::numeric_limits<int>::max();
+    if (window) {
+        x0 = std::max(x0, window->x0);
+        x1 = std::min(x1, window->x1);
+        y0 = window->y0;
+        y1 = window->y1;
+    }
+    std::optional<UpkeepTimer> upkeep;
+    for (int x = x0; x <= x1; x++) {
+        const auto first = pc.cells.begin() + pc.cellBegin[(std::size_t)x];
+        const auto last = pc.cells.begin() + pc.cellBegin[(std::size_t)x + 1];
+        auto it = std::lower_bound(first, last, y0,
+                                   [](const PendingColumns::Cell& cell, int row) { return cell.row < row; });
+        for (; it != last && it->row <= y1; ++it) {
+            const std::size_t i = (std::size_t)(it - pc.cells.begin());
+            if (m_pendingDone[i]) continue;
+            m_pendingDone[i] = 1;
+            if (!upkeep) upkeep.emplace(g_upkeep.pendingCells);
+            g_upkeep.pendingCells.items += it->count;
+            // A cell looked at before, and re-armed by a snapshot put back
+            // since (invalidate): counted and timed apart as well.
+            std::optional<UpkeepTimer> relook;
+            if (m_pendingSeen[i]) {
+                relook.emplace(g_upkeep.pendingRelooks);
+                g_upkeep.pendingRelooks.items += it->count;
+            } else {
+                m_pendingSeen[i] = 1;
+            }
+            // Through refresh's own window test, as for a column.
+            for (uint32_t k = it->first; k < it->first + it->count; k++) refresh(run, pc.cellSlots[k], window);
+        }
     }
 }
 

@@ -85,6 +85,21 @@ void forgetMaterialDef();
 struct PendingColumns {
     std::vector<std::vector<int>> columns;  // slots by column, each column's in pending order
     std::vector<int> always;                // extended collision, or no section to file it by: written at once
+    // GucciBot (2026-11-01, H1(b)): a layer with rows (y factor above 0) files
+    // them by section cell instead, and `columns` stays empty: a column is
+    // reached by windows of every height, and one marked done by a window
+    // high above an object would never have written it. Column x's cells are
+    // cells[cellBegin[x] .. cellBegin[x + 1]), rows ascending; a cell's slots
+    // are cellSlots[first .. first + count), in pending order.
+    struct Cell {
+        int32_t row = 0;
+        uint32_t first = 0;
+        uint32_t count = 0;
+    };
+    bool byCell = false;
+    std::vector<uint32_t> cellBegin;
+    std::vector<Cell> cells;
+    std::vector<int> cellSlots;
 };
 
 // An object that moved on the step before a table was read, by something the
@@ -475,14 +490,20 @@ class Materializer {
     // objects between a kept start's tick and the tick it plays, and writing
     // every one of them at each run's first look was 32 ms a run: 46 s of 108
     // s of deciding. A copy that teleports gets every column at once
-    // (catchUpAll); a layer with rows keeps the pass of everything at once.
+    // (catchUpAll). GucciBot (2026-11-01, H1(b)): a layer with rows (ORBIT's
+    // and Heliopolis's y factor is 0.01) is written back a section cell at a
+    // time the same way, the first time a window holds the cell - unless the
+    // test switch g_pendingCells is off, which keeps the pass of everything
+    // at once that such a layer had before.
     void startPending(Run& run);
     void writePending(Run& run, const Window* window);
+    void writePendingCells(Run& run, const Window* window);
     std::shared_ptr<const PendingColumns> m_pendingColumns;
-    std::vector<uint8_t> m_pendingDone;  // the columns looked at since the run began or was last put back
-    // GucciBot (2026-11-01, H1(b)): the columns looked at since startPending,
-    // whatever invalidate re-armed since - one looked at again is a re-look
-    // (Upkeep::pendingRelooks). Only counts; nothing is decided by it.
+    std::vector<uint8_t> m_pendingDone;  // the columns (or cells) looked at since the run began or was last put back
+    // GucciBot (2026-11-01, H1(b)): the columns (or cells) looked at since
+    // startPending, whatever invalidate re-armed since - one looked at again
+    // is a re-look (Upkeep::pendingRelooks). Only counts; nothing is decided
+    // by it.
     std::vector<uint8_t> m_pendingSeen;
     // The pending write-back's check (g_pendingVerify, world/world.hpp), for
     // the window `w` the look has just made good.

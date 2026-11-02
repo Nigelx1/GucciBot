@@ -29,6 +29,7 @@ CaptureProfile g_captureProfile;
 NearProfile g_nearProfile;
 Upkeep g_upkeep;
 bool g_pendingVerify = false;
+bool g_pendingCells = true;
 PendingCheck g_pendingCheck;
 std::vector<int> g_debugUids;
 
