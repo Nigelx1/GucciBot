@@ -9,6 +9,7 @@
 #include <Geode/Geode.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <unordered_set>
 
 using namespace geode::prelude;
@@ -64,7 +65,8 @@ namespace absense::judge {
         return out;
     }
 
-    Result run(std::span<const TickInput> inputs, int ticks, std::vector<TraceSample>* trace) {
+    Result run(std::span<const TickInput> inputs, int ticks, std::vector<TraceSample>* trace,
+               Options const& options) {
         Result r;
         auto* pl = PlayLayer::get();
         auto* gb = gucci::GucciEngine::get();
@@ -120,6 +122,8 @@ namespace absense::judge {
         // The side that moves player 1 (see sideFor; Flip 2-Player Controls
         // hands side 1 to player 2 in a 2-player level outside platformer).
         bool const side = gb->replay.sideFor(pl, false);
+        using Clock = std::chrono::steady_clock;
+        auto const playStart = Clock::now();
         for (int i = 0; i < n && !inputs.empty(); i++) {
             TickInput const& in = inputs[std::min((size_t)i, inputs.size() - 1)];
             // A tick's input as AbsensePathfinder::applyInput queues it.
@@ -135,8 +139,12 @@ namespace absense::judge {
                 pl->queueButton(1, in.held, side, 0.0);
 
             // One tick, as the pathfinder's stepGame runs one.
+            auto const tickStart = options.tickUs ? Clock::now() : Clock::time_point{};
             upd.stepOnce();
             CCScheduler::get()->update(static_cast<float>(upd.getPhysicsDt()));
+            if (options.tickUs)
+                options.tickUs->push_back(
+                    std::chrono::duration<float, std::micro>(Clock::now() - tickStart).count());
             if (upd.m_stepOnce_)
                 r.stepLeftArmed++;
 
@@ -161,9 +169,31 @@ namespace absense::judge {
                 s.speed = p->m_playerSpeed;
                 trace->push_back(s);
             }
+            if (s_died && options.throughDeaths) {
+                // GucciBot (2026-11-01, H0): noted, and the run goes on (the
+                // hook kept the player alive). The next tick's first hit is
+                // the next one noted.
+                NotedDeath d;
+                d.tick = i + 1;
+                if (s_killer) {
+                    d.uid = s_killer->m_uniqueID;
+                    d.id = s_killer->m_objectID;
+                    d.type = static_cast<int>(s_killer->m_objectType);
+                    d.x = (float)s_killer->m_positionX;
+                    d.y = (float)s_killer->m_positionY;
+                }
+                r.deaths.push_back(d);
+                s_died = false;
+                s_killer = nullptr;
+            }
             if (s_died || s_complete)
                 break;
             r.survived = i + 1;
+            if (options.maxMs > 0.0 && i + 1 < n &&
+                std::chrono::duration<double, std::milli>(Clock::now() - playStart).count() >= options.maxMs) {
+                r.stoppedByClock = true;
+                break;
+            }
         }
 
         r.died = s_died;
@@ -176,6 +206,15 @@ namespace absense::judge {
             // is read now (the sprite slides with an enter effect).
             r.killerX = (float)s_killer->m_positionX;
             r.killerY = (float)s_killer->m_positionY;
+        } else if (!r.deaths.empty()) {
+            // Carried on through its deaths: the first one.
+            NotedDeath const& d = r.deaths.front();
+            r.died = true;
+            r.killerId = d.id;
+            r.killerUid = d.uid;
+            r.killerType = d.type;
+            r.killerX = d.x;
+            r.killerY = d.y;
         }
 
         // Back to where it started: the player, the level and the frame
