@@ -1398,6 +1398,13 @@ namespace gucci {
             if (a.isInput())
                 held[a.m_player2 ? 1 : 0][(uint8_t)a.m_type] = a.m_holding;
 
+        // The recording goes on at the tick rate the game runs at now, the one
+        // the kept part of the macro left it at. Leaving playback, setMode
+        // puts back the rate from before playback started (userTpsSaved): in
+        // a macro with a TPS change before this frame, what's recorded next
+        // would run at a rate the macro doesn't say, and play back at the
+        // changed one.
+        userTpsSaved = 0.0;
         setMode(Mode::Recording);
 
         // A lane is a stored flag: in a 2-player level each is released on
