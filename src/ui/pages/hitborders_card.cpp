@@ -55,7 +55,7 @@ namespace gucci::ui::pages {
                                   "icon",
                                   &set.useTilt);
         changed |= kit::SwitchRow("Player 2",
-                                  "In dual, player 2's own borders as outlines, when its mode or size differs",
+                                  "In dual, player 2's own borders as outlines, where they differ from player 1's",
                                   &set.player2);
 
         kit::Section("You");

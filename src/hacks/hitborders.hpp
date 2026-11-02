@@ -43,7 +43,7 @@ namespace gucci {
             bool ground = true;     // the floor and, in a corridor, the ceiling
             bool useTilt = true;    // rotated objects against the icon's tilt
             bool merged = true;     // one outline around overlapping regions
-            bool player2 = true;    // player 2's own borders, as outlines, when its box differs
+            bool player2 = true;    // player 2's own borders, as outlines, where they differ from player 1's
             bool point = true;      // the player as a yellow dot
             bool path = true;       // the player's own path, one point a tick
             int pathTicks = 240;

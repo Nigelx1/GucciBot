@@ -353,11 +353,24 @@ namespace gucci {
             return r;
         }
 
-        // Two players whose borders would come out the same.
-        bool sameBorders(hb::Player const& a, hb::Player const& b) {
-            return a.hx == b.hx && a.hy == b.hy && a.ix == b.ix && a.iy == b.iy && a.mode == b.mode &&
-                   a.upsideDown == b.upsideDown && a.platformer == b.platformer && a.sideways == b.sideways &&
-                   a.goingLeft == b.goingLeft && a.dartSlide == b.dartSlide && a.hitHead == b.hitHead;
+        // Player 2's shapes from `from` on, dropped when they are player 1's
+        // from `mine` on, region for region: the same input makes the same
+        // numbers, so equal means equal.
+        void dropSame(std::vector<hb::Shape> const& shapes, size_t mine, std::vector<hb::Shape>& shapes2,
+                      size_t from) {
+            if (shapes2.size() - from != shapes.size() - mine)
+                return;
+            for (size_t i = 0; i < shapes2.size() - from; ++i) {
+                auto const& a = shapes[mine + i];
+                auto const& b = shapes2[from + i];
+                if (a.kind != b.kind || a.poly.size() != b.poly.size())
+                    return;
+                for (size_t k = 0; k < a.poly.size(); ++k) {
+                    if (a.poly[k].x != b.poly[k].x || a.poly[k].y != b.poly[k].y)
+                        return;
+                }
+            }
+            shapes2.erase(shapes2.begin() + static_cast<std::ptrdiff_t>(from), shapes2.end());
         }
 
         // One object near the camera, as the collision pass sees it.
@@ -885,12 +898,14 @@ namespace gucci {
 
         // ---- the regions
         hb::Player const first = readPlayer(p1);
+        // Player 2's own borders, as outlines, wherever they differ from
+        // player 1's. A mode or size of its own changes them all; in an
+        // ordinary dual (player 2 upside down) only slopes, the ground and
+        // turned objects differ, and the rest would draw player 1's regions
+        // again, one outline each, over the merged ones.
         std::optional<hb::Player> second;
-        if (p2 && settings.player2) {
-            hb::Player const other = readPlayer(p2);
-            if (!sameBorders(first, other))
-                second = other;
-        }
+        if (p2 && settings.player2)
+            second = readPlayer(p2);
         hb::Options opt;
         opt.fixRadius = pl->m_levelSettings && pl->m_levelSettings->m_fixRadiusCollision;
         opt.useTilt = settings.useTilt;
@@ -903,14 +918,22 @@ namespace gucci {
             ObjectRead read;
             if (!readObject(pl, traj, p1, p2, object, read))
                 return;
+            size_t const mine = shapes.size();
             regionsFor(read, first, opt, settings, shapes);
-            if (second)
+            if (second) {
+                size_t const from = shapes2.size();
                 regionsFor(read, *second, opt, settings, shapes2);
+                dropSame(shapes, mine, shapes2, from);
+            }
         });
         if (settings.ground) {
+            size_t const mine = shapes.size();
             groundFor(pl, p1, first, view, shapes);
-            if (second)
+            if (second) {
+                size_t const from = shapes2.size();
                 groundFor(pl, p2, *second, view, shapes2);
+                dropSame(shapes, mine, shapes2, from);
+            }
         }
 
         s.useMerged = settings.merged && !s.fboFailed;
