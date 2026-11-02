@@ -43,6 +43,14 @@ cl /nologo /std:c++20 /EHsc /O2 /MD /I src /I build\_deps\zlib-src /I build\_dep
 
 build\run_convert_tests.exe || exit /b 1
 
+REM JupiterBot's art (resources/jupiter) read the way the mod reads it (src/ui/png), against the
+REM tables that place it (src/ui/pages/jupiter_art.hpp). zlib as above.
+cl /nologo /std:c++20 /EHsc /O2 /MD /I src /I build\_deps\zlib-src /I build\_deps\zlib-build ^
+   tools\run_art_tests.cpp src\ui\png.cpp build\_deps\zlib-build\zlibstatic.lib ^
+   /Fe:build\run_art_tests.exe /Fo:build\ || exit /b 1
+
+build\run_art_tests.exe || exit /b 1
+
 REM Frame Editor rules (src/tools/edit_core, ported from Absense's macro editor).
 cl /nologo /std:c++20 /EHsc /O2 /MD /I src ^
    tools\run_edit_tests.cpp src\tools\edit_core.cpp /Fe:build\run_edit_tests.exe /Fo:build\ || exit /b 1
