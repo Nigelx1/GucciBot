@@ -6,8 +6,8 @@
 //    for, written point by point (the player's center at a point, the test
 //    run, hit or not), over a grid of thousands of points around the object.
 //    A point may only disagree when the test itself flips within a hair of it
-//    (it sits on the edge), or, for circles, within the polygon's 0.05-unit
-//    chord error;
+//    (it sits on the edge), or, for circles, within the 0.05 units the
+//    polygon drawn around one strays outside it;
 //  - numbers worked out by hand from the research note (RESEARCH.md §5.4):
 //    a cube rides 21.2 above a 45-degree line, gap sizes per mode, the mini
 //    cube's inner box.
@@ -460,18 +460,48 @@ int main() {
                     {230, 130, 370, 270}, 0.67, 0.06, [&](Vec2 c) { return covered(shapes, Kind::Lethal, c); },
                     [&](Vec2 c) { return hazardHits(saw, p, of, c); }));
     }
+    // A circle is drawn around the true one: every point of the circle is in
+    // the polygon, and no corner strays more than 0.05 out (circleSides).
+    for (double r : {6.0, 15.0, 21.6, 32.0, 47.0, 120.0}) {
+        Player const p = modePlayer(Mode::Cube, false);
+        Options of = o;
+        of.fixRadius = true;
+        Collider saw;
+        saw.radius = r;
+        saw.center = {10, 20};
+        std::vector<Shape> shapes;
+        colliderShapes(saw, p, of, Kind::Lethal, shapes);
+        double const grown = r + p.hx;
+        bool holds = shapes.size() == 1;
+        for (int k = 0; k < 3600 && holds; ++k) {
+            double const a = k * kPi / 1800.0;
+            holds = contains(shapes[0].poly, {10 + grown * std::cos(a), 20 + grown * std::sin(a)}, 1e-9);
+        }
+        double furthest = 0.0;
+        for (auto const& v : shapes.empty() ? std::vector<Vec2>{} : shapes[0].poly)
+            furthest = std::max(furthest, std::hypot(v.x - 10, v.y - 20) - grown);
+        CHECK(holds && furthest > 0.0 && furthest <= 0.05);
+    }
     // The hearts, by the numbers (RESEARCH.md §5.1): r = 15 reaches 15 straight
-    // up from a cube's square, not 30; r = 32 reaches 43.3.
+    // up from a cube's square, not 30; r = 32 reaches 43.3. With r = 15 the
+    // two top lobes only touch, right on that line, where a side of the
+    // polygon drawn around one lies along it for about 1.2 units either way
+    // (all of it under 0.05 outside the lobe's circle): the line reaches that
+    // much further, never short.
     {
         Player const p = modePlayer(Mode::Cube, false);
-        for (auto [r, reach] : {std::pair{15.0, 15.0}, std::pair{32.0, 43.3}}) {
+        for (auto [r, reach, sliver] : {std::tuple{15.0, 15.0, 1.5}, std::tuple{32.0, 43.27, 0.1}}) {
             Collider saw;
             saw.radius = r;
             saw.center = {0, 0};
             std::vector<Shape> shapes;
             colliderShapes(saw, p, o, Kind::Lethal, shapes);
             double const top = firstFree(0.0, 0.0, 100.0, 0.01, [&](Vec2 c) { return covered(shapes, Kind::Lethal, c); });
-            CHECK(std::abs(top - reach) < 0.1);
+            CHECK(top >= reach - 0.01 && top - reach < sliver);
+            // ... and how far that is from GD's own lobe: the 0.05 a corner
+            // may stray, and the scan's 0.01 step.
+            double const out = std::hypot(0.0 - (-p.hx), top - p.hy) - r;
+            CHECK(out < 0.06);
         }
     }
 
@@ -933,7 +963,8 @@ int main() {
             auto const samples = edgeSamples(shapes, {}, 0.01, 3, &skipped);
             CHECK(skipped > 0 && samples.size() + skipped == 24);
         }
-        // Saws: every chord sampled at its corner, which is on the circle.
+        // Saws: every side of a circle sampled where it touches it, on the
+        // circle.
         for (bool fix : {false, true}) {
             Player const p = modePlayer(Mode::Cube, false);
             Options of = o;
@@ -960,9 +991,46 @@ int main() {
             }
             CHECK(onCircle && arcs > 0);
             // With Fix radius collision the disk is the whole region: every
-            // corner of it is a point.
+            // side of it is a point.
             if (fix)
                 CHECK(arcs == samples.size() && samples.size() == shapes[0].poly.size());
+        }
+        // Where two lobes of a legacy saw's hearts meet (the probe's 2026-11-02
+        // run: a point 0.01 outside a cleft was drawn empty, though 0.014-0.022
+        // inside the next lobe's circle, when the lobes were drawn inside their
+        // circles): the radii of Bloodbath's and Clubstep's legacy saws, every
+        // size of player. No point of the probe's may disagree with GD's test.
+        for (double radius : {21.6, 25.0, 28.5, 40.0, 61.2}) {
+            for (Mode m : {Mode::Cube, Mode::Ship, Mode::Wave, Mode::Spider}) {
+                for (bool mini : {false, true}) {
+                    Player const p = modePlayer(m, mini);
+                    Collider saw;
+                    saw.radius = radius;
+                    saw.center = {1185, 345};
+                    saw.rect = {1185 - radius, 345 - radius, 1185 + radius, 345 + radius};
+                    std::vector<Shape> shapes;
+                    colliderShapes(saw, p, o, Kind::Lethal, shapes);
+                    char name[96];
+                    std::snprintf(name, sizeof name, "probe: hearts r=%.1f, %s%s", radius, modeName(m), mini ? " mini" : "");
+                    for (double eps : {0.01, 0.002}) {
+                        auto const samples = edgeSamples(shapes, colliderCircles(saw, p, o), eps, 3);
+                        int wrong = 0;
+                        for (auto const& s : samples) {
+                            Region const in = hazardHits(saw, p, o, s.in) ? Region::Lethal : Region::None;
+                            Region const out = hazardHits(saw, p, o, s.out) ? Region::Lethal : Region::None;
+                            ++points;
+                            if (in != s.inside || out != s.outside) {
+                                if (wrong < 2)
+                                    std::printf("  %s, eps %.3f: at (%.4f, %.4f) GD's test says %d / %d, the drawing %d / %d\n",
+                                                name, eps, s.on.x, s.on.y, (int)in, (int)out, (int)s.inside, (int)s.outside);
+                                ++wrong;
+                            }
+                        }
+                        if (wrong > 0)
+                            ++bad;
+                    }
+                }
+            }
         }
         // The cube's 2-unit band under a ceiling slope is quiet; a ship's is not.
         {

@@ -102,8 +102,8 @@ namespace gucci::hitborder {
                 out[i].quiet = true;
         }
 
-        // Sides for a circle of radius r, so a chord strays under 0.05 units
-        // from it.
+        // Sides for a circle of radius r, so a corner of the polygon around
+        // it strays under 0.05 units from it.
         int circleSides(double r) {
             if (!(r > 0))
                 return 16;
@@ -252,9 +252,12 @@ namespace gucci::hitborder {
             return out;
         segments = std::max(segments, 8);
         out.reserve(static_cast<size_t>(segments));
+        // Corners at r / cos(pi / n): every side touches the circle at its
+        // middle, so nothing GD tests is left out of the drawing.
+        double const corner = r / std::cos(kPi / segments);
         for (int i = 0; i < segments; ++i) {
             double const a = 2.0 * kPi * i / segments;
-            out.push_back({c.x + r * std::cos(a), c.y + r * std::sin(a)});
+            out.push_back({c.x + corner * std::cos(a), c.y + corner * std::sin(a)});
         }
         return out;
     }
@@ -671,15 +674,23 @@ namespace gucci::hitborder {
         size_t dropped = 0;
         perEdge = std::max(perEdge, 1);
         auto tolerance = [](Circle const& c) { return 1e-7 * std::max(1.0, c.r); };
-        // The circle a corner lies on (circlePoly puts every corner on it).
-        auto onCircle = [&](Vec2 v) -> Circle const* {
+        // The circle a side touches: circlePoly's sides all do, at their
+        // middles, and so does what clipping leaves of one. Its line is r
+        // from the center, with the center on its inner side, and its ends
+        // are no further out than a corner of the coarsest polygon circlePoly
+        // makes (8 sides).
+        double const kFurthest = 1.0 / std::cos(kPi / 8.0);
+        auto touching = [&](Vec2 a, Vec2 b, double len) -> Circle const* {
             for (auto const& c : circles) {
-                if (std::abs(std::hypot(v.x - c.c.x, v.y - c.c.y) - c.r) <= tolerance(c))
+                double const tol = tolerance(c);
+                if (std::abs(cross(a, b, c.c) / len - c.r) > tol)
+                    continue;
+                double const reach = c.r * kFurthest + tol;
+                if (std::hypot(a.x - c.c.x, a.y - c.c.y) <= reach && std::hypot(b.x - c.c.x, b.y - c.c.y) <= reach)
                     return &c;
             }
             return nullptr;
         };
-        auto within = [&](Circle const& c, Vec2 v) { return std::hypot(v.x - c.c.x, v.y - c.c.y) <= c.r + tolerance(c); };
         auto add = [&](Vec2 on, Vec2 n, size_t si, size_t ei, bool arc) {
             EdgeSample s;
             s.on = on;
@@ -710,18 +721,17 @@ namespace gucci::hitborder {
                 double const len = std::hypot(dx, dy);
                 if (!(len > 1e-9))
                     continue;
-                // A chord of a circle, or what clipping left of one: its
-                // corner on the circle, along the radius. A chord that only
-                // ends on the circle is sampled by the next edge, which
-                // starts there.
-                if (Circle const* c = onCircle(a); c && within(*c, b)) {
-                    double const r = std::hypot(a.x - c->c.x, a.y - c->c.y);
-                    add(a, {(a.x - c->c.x) / r, (a.y - c->c.y) / r}, si, ei, true);
+                Vec2 const normal{dy / len, -dx / len};  // outward of a counter-clockwise edge
+                // A side of a circle: sampled where it touches, which is on
+                // the circle, along the radius (the side's own normal there).
+                // A piece clipping left of one without that point lies
+                // outside the circle all along, by up to 0.05: left out.
+                if (Circle const* c = touching(a, b, len)) {
+                    double const t = ((c->c.x - a.x) * dx + (c->c.y - a.y) * dy) / (len * len);
+                    if (t >= -1e-9 && t <= 1.0 + 1e-9)
+                        add({a.x + dx * t, a.y + dy * t}, normal, si, ei, true);
                     continue;
                 }
-                if (Circle const* c = onCircle(b); c && within(*c, a))
-                    continue;
-                Vec2 const normal{dy / len, -dx / len};  // outward of a counter-clockwise edge
                 for (int k = 1; k <= perEdge; ++k) {
                     double const t = static_cast<double>(k) / (perEdge + 1);
                     add({a.x + dx * t, a.y + dy * t}, normal, si, ei, false);

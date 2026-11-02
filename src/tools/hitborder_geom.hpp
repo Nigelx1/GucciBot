@@ -121,8 +121,9 @@ namespace gucci::hitborder {
     };
 
     // What to draw. `core` is the blocks' red inner-box core ("Exact"); off,
-    // only the blue touch zone ("Simple"). Circles get as many sides as keep
-    // a chord within 0.05 units of the true edge (circleSides), at any zoom.
+    // only the blue touch zone ("Simple"). Circles are drawn as polygons
+    // around them, with as many sides as keep a corner within 0.05 units of
+    // the true edge (circleSides), at any zoom.
     struct Options {
         bool fixRadius = false;       // the level's "Fix radius collision" (LevelSettingsObject)
         bool useTilt = true;          // rotated objects against the icon's tilt; off: an upright icon
@@ -188,7 +189,11 @@ namespace gucci::hitborder {
     std::vector<Vec2> clipToRect(std::vector<Vec2> const& poly, Rect r);
     // ... and to another convex polygon.
     std::vector<Vec2> clipConvex(std::vector<Vec2> const& poly, std::vector<Vec2> const& clip);
-    // A circle as a polygon with `segments` corners on it.
+    // A circle as a polygon around it: `segments` sides, each touching the
+    // circle at its middle, so the polygon holds the whole circle and its
+    // corners stray r(1/cos(pi/segments) - 1) outside. Drawn this way, a
+    // region never shows less than GD tests, where the circles of a legacy
+    // saw's "hearts" meet included.
     std::vector<Vec2> circlePoly(Vec2 c, double r, int segments);
     // Every edge of a convex counter-clockwise polygon moved out by w (in by
     // -w), corners mitered. The drawer uses it for the outline band and to
@@ -217,9 +222,9 @@ namespace gucci::hitborder {
     Region regionAt(std::vector<Shape> const& shapes, Vec2 p, bool* quiet = nullptr);
 
     // A circle an object's regions are drawn from (a saw's or an orb's, grown
-    // as colliderShapes grows it). A chord of one is sampled at its corner,
-    // which is on the circle, so the probe tests the circle GD tests and not
-    // the chord the drawing stands it in with (up to 0.05 units inside).
+    // as colliderShapes grows it). A side of one is sampled where it touches
+    // the circle, so the probe tests the circle GD tests and not the side the
+    // drawing stands it in with (up to 0.05 units outside).
     struct Circle {
         Vec2 c;
         double r = 0.0;
@@ -239,13 +244,15 @@ namespace gucci::hitborder {
         bool quietIn = false;           // regionAt's `quiet` at `in`
         size_t shape = 0;               // the shape, and its edge from poly[edge] to the next corner
         size_t edge = 0;
-        bool arc = false;               // a chord of one of `circles`: sampled at its corner, along the radius
+        bool arc = false;               // a side of one of `circles`: sampled where it touches, along the radius
     };
     // `perEdge` points evenly along every straight edge of every shape, away
-    // from its corners, and one on the circle for every chord of a circle. A
-    // point is kept only where the two sides differ (inside != outside): an
-    // edge inside the object's own regions is no border anyone sees.
-    // `skipped` (optional) counts the points left out that way.
+    // from its corners, and one on the circle for every side of a circle (a
+    // piece clipping left of one is sampled only if it still holds the point
+    // where it touches). A point is kept only where the two sides differ
+    // (inside != outside): an edge inside the object's own regions is no
+    // border anyone sees. `skipped` (optional) counts the points left out
+    // that way.
     std::vector<EdgeSample> edgeSamples(std::vector<Shape> const& shapes, std::vector<Circle> const& circles,
                                         double eps, int perEdge, size_t* skipped = nullptr);
 

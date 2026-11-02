@@ -2273,7 +2273,7 @@ namespace gucci::mcp {
                        "comma-separated: spikes, saws, blocks, slopes (hazard slopes too), hazard_slopes, orbs, pads, "
                        "portals, other (default all)"},
                       {"eps", "number", "how far either side of an edge, in level units (default 0.01)"},
-                      {"per_edge", "integer", "points along each straight edge (default 3, 1 to 9; a circle's chord gets one)"},
+                      {"per_edge", "integer", "points along each straight edge (default 3, 1 to 9; a side of a circle gets one, where it touches the circle)"},
                       {"max_points", "integer", "collision passes at most, two a point (default 8000, max 40000)"},
                       {"max_list", "integer", "mismatches listed (default 40, max 400)"},
                       {"max_ms", "integer", "wall clock limit in ms (default 4000, max 8000: the server waits 10 s)"},

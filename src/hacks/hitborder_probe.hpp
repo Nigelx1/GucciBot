@@ -57,7 +57,7 @@ namespace gucci {
         int uid = 0;            // only this object (the whole level, unless a range is given)
         uint32_t kinds = ~0u;   // a bit per HitborderProbeKind
         double eps = 0.01;      // how far to either side of an edge, in level units
-        int perEdge = 3;        // points along each straight edge (a circle's chord gets one)
+        int perEdge = 3;        // points along each straight edge (a side of a circle gets one, where it touches)
         int maxPoints = 8000;   // collision passes, at most (two a sampled point)
         int maxList = 40;       // mismatches listed
         double maxMs = 4000.0;  // wall clock, at most
