@@ -410,9 +410,14 @@ int main() {
             }
         }
     }
-    {
+    // A saw turned by a trigger: legacy, the circle and the rotated test both;
+    // with Fix radius collision, the circle alone (0x214879-0x21488a skip the
+    // rotated test for an object with a radius).
+    for (bool fix : {false, true}) {
         Player p = modePlayer(Mode::Cube, false);
         p.rotation = 17.0;
+        Options of = o;
+        of.fixRadius = fix;
         Collider saw;
         saw.radius = 20.0;
         saw.center = {300, 200};
@@ -420,10 +425,10 @@ int main() {
         saw.box = objectObb({300, 200}, 30, 30, 33.0);
         saw.rect = boundsOf(saw.box);
         std::vector<Shape> shapes;
-        colliderShapes(saw, p, o, Kind::Lethal, shapes);
-        CHECK(agree("legacy saw turned by a trigger", {230, 130, 370, 270}, 0.67, 0.06,
-                    [&](Vec2 c) { return covered(shapes, Kind::Lethal, c); },
-                    [&](Vec2 c) { return hazardHits(saw, p, o, c); }));
+        colliderShapes(saw, p, of, Kind::Lethal, shapes);
+        CHECK(agree(fix ? "fix radius saw turned by a trigger" : "legacy saw turned by a trigger",
+                    {230, 130, 370, 270}, 0.67, 0.06, [&](Vec2 c) { return covered(shapes, Kind::Lethal, c); },
+                    [&](Vec2 c) { return hazardHits(saw, p, of, c); }));
     }
     // The hearts, by the numbers (RESEARCH.md §5.1): r = 15 reaches 15 straight
     // up from a cube's square, not 30; r = 32 reaches 43.3.
@@ -553,7 +558,8 @@ int main() {
             bool const uphill = top ? wallLeft : !wallLeft;
             for (double w : {30.0, 60.0}) {
                 for (bool hazard : {false, true}) {
-                    for (Mode m : {Mode::Cube, Mode::Ship, Mode::Wave, Mode::Ufo}) {
+                    for (Mode m : {Mode::Cube, Mode::Ship, Mode::Wave, Mode::Ufo, Mode::Ball, Mode::Robot,
+                                   Mode::Spider, Mode::Swing}) {
                         for (bool mini : {false, true}) {
                             for (bool upside : {false, true}) {
                                 for (bool left : {false, true}) {
@@ -597,6 +603,63 @@ int main() {
             }
         }
         std::printf("slopes: %d cases\n", cases);
+        CHECK(bad == 0);
+    }
+
+    // ---- slopes in a platformer level: the legs never kill and their ends
+    // draw in 5 while on a slope, a right wall counts going right too, no
+    // squeeze, and nothing but a hazard slope kills
+    {
+        int cases = 0;
+        int bad = 0;
+        for (int dir = 0; dir < 8; ++dir) {
+            bool const top = slopeFloorTop(dir);
+            bool const wallLeft = slopeWallLeft(dir);
+            bool const uphill = top ? wallLeft : !wallLeft;
+            for (bool hazard : {false, true}) {
+                for (Mode m : {Mode::Cube, Mode::Ship, Mode::Wave, Mode::Ball}) {
+                    for (bool upside : {false, true}) {
+                        for (bool onSlope : {false, true}) {
+                            Slope s;
+                            s.rect = {600, 150, 660, 180};
+                            s.direction = dir;
+                            s.uphill = uphill;
+                            s.hazard = hazard;
+                            s.uniqueId = 7;
+                            Player p = modePlayer(m, false);
+                            p.platformer = true;
+                            p.upsideDown = upside;
+                            p.onSlope = onSlope;
+                            p.ridingSlopeId = onSlope ? 3 : 0;
+                            p.ridingSlopeTop = !top;  // a squeeze, were it not a platformer
+                            std::vector<Shape> shapes;
+                            slopeShapes(s, p, o, shapes);
+                            char name[128];
+                            std::snprintf(name, sizeof name, "platformer slope dir %d%s, %s%s%s", dir,
+                                          hazard ? " hazard" : "", modeName(m), upside ? " upside down" : "",
+                                          onSlope ? " on a slope" : "");
+                            ++cases;
+                            bool const okDead = agree(std::string(name) + " (dead)", {550, 100, 710, 230}, 0.53, 1e-4,
+                                                      [&](Vec2 c) { return covered(shapes, Kind::Lethal, c); },
+                                                      [&](Vec2 c) { return slopeEffect(s, p, o, c) == 2; });
+                            bool const okAny = agree(
+                                std::string(name) + " (touched)", {550, 100, 710, 230}, 0.53, 1e-4,
+                                [&](Vec2 c) { return covered(shapes, Kind::Lethal, c) || covered(shapes, Kind::Touch, c); },
+                                [&](Vec2 c) { return slopeEffect(s, p, o, c) >= 1; });
+                            if (!okDead || !okAny)
+                                ++bad;
+                            // Only a hazard slope has any red.
+                            bool anyRed = false;
+                            for (auto const& sh : shapes)
+                                anyRed = anyRed || sh.kind == Kind::Lethal;
+                            if (anyRed != hazard)
+                                ++bad;
+                        }
+                    }
+                }
+            }
+        }
+        std::printf("platformer slopes: %d cases\n", cases);
         CHECK(bad == 0);
     }
 
