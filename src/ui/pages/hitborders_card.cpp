@@ -24,7 +24,8 @@ namespace gucci::ui::pages {
 
         kit::BeginCard("Hitborders",
                        "Every hitbox grown by the size of yours, so you can think of yourself as a point. The gaps "
-                       "you see are the room your center really has.");
+                       "you see are the room your center really has. Hitborders were NaN GD's idea; he isn't "
+                       "involved.");
 
         changed |= kit::SwitchRow("Show hitborders",
                                   "Red: your center dies there. Blue: your box touches something solid. Green: orbs, "
