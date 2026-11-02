@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-02-e (The iced cone logo: it replaces the photo as the mod's logo in Geode's list, its silhouette sits before the theme's name at the top of the sidebar in the color the cards are outlined in, the phone and Mac pause button shows the logo instead of the word, and under GBot Geode's mod list shows GBot's own plain logo; the README opens with the logo's header)"
+    "2026-11-02-f (Safe mode counts live hitboxes, live hitborders and seven more as cheats; the Hitborders credit for NaN GD's idea; the menu fits inside a short game window; Assistant Access fixes: gucci_test_set takes the hitbox and hitborder switches, gucci_ui's window and card filters work, an alert's title comes first, gucci_load_macro takes a file name; and gucci_hitborder_probe, which checks every drawn hitborder edge against GD's own collision pass on a hidden copy)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
