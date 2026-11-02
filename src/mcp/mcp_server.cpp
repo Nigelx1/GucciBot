@@ -182,6 +182,11 @@ namespace gucci::mcp {
     void Server::stop() {
         if (!m_running.exchange(false))
             return;
+        // GucciBot (2026-11-01): a call waiting for frames puts back what it
+        // changed and answers now, so the socket thread isn't left waiting
+        // for it (the join below would wait as long).
+        if (m_waiting)
+            this->dropWaiting("Assistant Access was switched off");
         // accept() below is behind a select() timeout, so the loop notices the
         // flag rather than needing its socket torn out from under it.
         if (m_thread.joinable())
@@ -293,6 +298,29 @@ namespace gucci::mcp {
         return call->result;
     }
 
+    void Server::finish(std::shared_ptr<Call> const& call, matjson::Value result, std::string error) {
+        {
+            std::lock_guard lock(m_callMutex);
+            call->result = std::move(result);
+            call->error = std::move(error);
+            call->done = true;
+        }
+        m_callCv.notify_all();
+    }
+
+    void Server::dropWaiting(std::string const& why) {
+        auto waiting = std::move(*m_waiting);
+        m_waiting.reset();
+        if (waiting.defer.cancel) {
+            try {
+                waiting.defer.cancel();
+            } catch (...) {
+            }
+        }
+        mcpFileLog(fmt::format("[mcp]    {} let go after {} frame(s): {}", waiting.call->name, waiting.frames, why));
+        this->finish(waiting.call, matjson::Value(), why);
+    }
+
     void Server::pump() {
         // GucciBot (2026-11-01): what happened since the last frame, for
         // gucci_events (mcp/events.hpp). A frame's worth of reads; nothing
@@ -301,6 +329,43 @@ namespace gucci::mcp {
             events::tick();
         } catch (...) {
         }
+
+        // GucciBot (2026-11-01): a call waiting for frames (a tool threw
+        // Defer) goes first, and no new one starts until it has answered.
+        if (m_waiting) {
+            bool abandoned = false;
+            {
+                std::lock_guard lock(m_callMutex);
+                abandoned = m_waiting->call->abandoned;
+            }
+            if (abandoned) {
+                this->dropWaiting("the caller stopped waiting");
+            } else {
+                std::optional<matjson::Value> answer;
+                std::string error;
+                try {
+                    answer = m_waiting->defer.poll();
+                } catch (ToolError const& e) {
+                    error = e.message;
+                } catch (std::exception const& e) {
+                    error = std::string("internal error: ") + e.what();
+                } catch (...) {
+                    error = "internal error";
+                }
+                if (!answer && error.empty() && ++m_waiting->frames > m_waiting->defer.maxFrames)
+                    error = fmt::format("{} gave up after {} frames", m_waiting->call->name, m_waiting->defer.maxFrames);
+                if (!error.empty()) {
+                    this->dropWaiting(error);
+                } else if (answer) {
+                    auto const call = m_waiting->call;
+                    m_waiting.reset();
+                    this->finish(call, std::move(*answer), "");
+                }
+                if (m_waiting)
+                    return;
+            }
+        }
+
         std::shared_ptr<Call> call;
         {
             std::lock_guard lock(m_callMutex);
@@ -317,6 +382,11 @@ namespace gucci::mcp {
             error.clear();
             try {
                 result = t.run(call->args);
+            } catch (Defer& d) {
+                // Answered over the next frames (above). The result is only
+                // ever written into the call the socket thread holds too.
+                m_waiting = Waiting{call, std::move(d), 0};
+                return;
             } catch (ToolError const& e) {
                 error = e.message;
             } catch (std::exception const& e) {
@@ -326,13 +396,7 @@ namespace gucci::mcp {
             }
             break;
         }
-        {
-            std::lock_guard lock(m_callMutex);
-            call->result = std::move(result);
-            call->error = std::move(error);
-            call->done = true;
-        }
-        m_callCv.notify_all();
+        this->finish(call, std::move(result), std::move(error));
     }
 
     std::string Server::handleRequest(std::string const& body) {

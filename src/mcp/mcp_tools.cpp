@@ -696,27 +696,32 @@ namespace gucci::mcp {
             "It's taken `frames` frames from now (default 3: a window that has just "
             "opened is hidden for its first frame), so this returns {pending: true, "
             "path} at once; then call it with status: true until done is true "
-            "(done, ok, error, path, width, height, ms). A minimized game draws "
-            "nothing, so its shot waits. Windows only for now.",
+            "(done, ok, error, path, width, height, ms). With wait: true it answers "
+            "once the file is on disk instead, with the same fields. A minimized "
+            "game draws nothing, so its shot waits. Windows only for now.",
             schemaOf({{"name", "string", "the file's name: 1 to 64 letters, digits, - or _, no extension"},
                       {"frames", "integer", "frames from now, 1 to 30 (default 3)"},
+                      {"wait", "boolean", "answer once the file is written (default false: pending, then status)"},
                       {"status", "boolean", "true: how the last shot went, instead of taking one"}}),
             [](matjson::Value const& a) -> matjson::Value {
 #ifdef GEODE_IS_WINDOWS
                 auto out = obj();
-                if (argBool(a, "status", false)) {
+                auto const statusJson = [] {
                     auto const s = shot::status();
-                    out["done"] = s.done;
-                    out["ok"] = s.ok;
-                    out["error"] = s.asked ? s.error : std::string("no screenshot asked for this launch");
-                    out["pending"] = s.pending;
-                    out["frames_left"] = (int64_t)s.framesLeft;
-                    out["path"] = geode::utils::string::pathToString(s.path);
-                    out["width"] = (int64_t)s.width;
-                    out["height"] = (int64_t)s.height;
-                    out["ms"] = s.ms;
-                    return out;
-                }
+                    auto st = obj();
+                    st["done"] = s.done;
+                    st["ok"] = s.ok;
+                    st["error"] = s.asked ? s.error : std::string("no screenshot asked for this launch");
+                    st["pending"] = s.pending;
+                    st["frames_left"] = (int64_t)s.framesLeft;
+                    st["path"] = geode::utils::string::pathToString(s.path);
+                    st["width"] = (int64_t)s.width;
+                    st["height"] = (int64_t)s.height;
+                    st["ms"] = s.ms;
+                    return st;
+                };
+                if (argBool(a, "status", false))
+                    return statusJson();
                 // A bare name, as gucci_read_log's: nothing outside the folder.
                 auto const name = argStr(a, "name");
                 bool bare = !name.empty() && name.size() <= 64;
@@ -736,6 +741,18 @@ namespace gucci::mcp {
                     throw ToolError("couldn't make the screenshots folder: " + ec.message());
                 auto const path = dir / (name + ".png");
                 shot::request(path, (int)frames);
+                // GucciBot (2026-11-01): answered once it's on disk (a call
+                // that spans frames, mcp_server.hpp's Defer).
+                if (argBool(a, "wait", false))
+                    throw Defer{[path, statusJson]() -> std::optional<matjson::Value> {
+                                    auto const s = shot::status();
+                                    if (s.path != path)
+                                        throw ToolError("another screenshot was asked for meanwhile");
+                                    if (!s.done)
+                                        return std::nullopt;
+                                    return statusJson();
+                                },
+                                {}, 3000};
                 out["pending"] = true;
                 out["path"] = geode::utils::string::pathToString(path);
                 return out;

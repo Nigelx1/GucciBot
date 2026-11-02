@@ -28,6 +28,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -41,6 +42,20 @@ namespace gucci::mcp {
     struct ToolError {
         std::string message;
         explicit ToolError(std::string m) : message(std::move(m)) {}
+    };
+
+    // GucciBot (2026-11-01): thrown by a tool's run instead of returning,
+    // for a tool that needs frames to pass (the menu captured, a scroll, a
+    // shot written). pump() keeps the call and runs `poll` at the start of
+    // every later frame; the first value it returns is the answer, and it may
+    // throw ToolError. No other call starts meanwhile (there is one at a time
+    // anyway). `cancel` puts back anything half done when the socket thread
+    // stops waiting (its 10 s) or the server stops, and after `maxFrames`
+    // frames the call ends with an error.
+    struct Defer {
+        std::function<std::optional<matjson::Value>()> poll;
+        std::function<void()> cancel;
+        int maxFrames = 300;
     };
 
     struct Tool {
@@ -108,6 +123,20 @@ namespace gucci::mcp {
         std::mutex m_callMutex;
         std::condition_variable m_callCv;
         std::shared_ptr<Call> m_call;  // queued for pump(), not yet taken
+
+        // A call whose tool threw Defer, polled at the start of each pump
+        // until it answers. Main thread only.
+        struct Waiting {
+            std::shared_ptr<Call> call;
+            Defer defer;
+            int frames = 0;
+        };
+        std::optional<Waiting> m_waiting;
+        // The answer, into the call the socket thread also holds.
+        void finish(std::shared_ptr<Call> const& call, matjson::Value result, std::string error);
+        // A waiting call let go of: its cancel, then (unless the socket thread
+        // already gave up) `why` as its answer.
+        void dropWaiting(std::string const& why);
     };
 
     // Everything the server does, appended to guccibot_mcp.log in the mod's
