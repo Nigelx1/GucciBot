@@ -125,6 +125,12 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
     MOD_VERSION="2.0.0-beta.5"
     NOMINMAX
     _HAS_ITERATOR_DEBUGGING=0
+    # ImGui's test-engine hooks, for Assistant Access's menu probe
+    # (src/ui/probe.hpp, which defines them). imgui-cocos is an INTERFACE
+    # library, so ImGui's own sources compile inside this target and see it
+    # too. ImGui calls the hooks only while GImGui->TestEngineHookItems is on,
+    # which the probe sets for the one frame it captures.
+    IMGUI_ENABLE_TEST_ENGINE
 )
 
 if(MSVC)

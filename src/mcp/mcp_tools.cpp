@@ -31,6 +31,7 @@
 #include "hacks/safemode.hpp"
 #include "render/renderer.hpp"
 #include "trainers/click_indicators.hpp"
+#include "ui/probe.hpp"
 #include "ui/ui.hpp"
 
 #include <Geode/Geode.hpp>
@@ -208,6 +209,70 @@ namespace gucci::mcp {
         template <class S>
         std::optional<float> flipProgressOf(S const&, ...) {
             return std::nullopt;
+        }
+
+        // gucci_ui's arguments (and a find for gucci_ui_view) as the menu
+        // probe's query (ui/probe.hpp).
+        ui::probe::Query uiQuery(matjson::Value const& a) {
+            ui::probe::Query q;
+            q.window = argStr(a, "window", "all");
+            q.card = argStr(a, "card");
+            auto const format = argStr(a, "format", "text");
+            if (format != "text" && format != "json")
+                throw ToolError("format is text or json");
+            q.text = format == "text";
+            q.visibleOnly = argBool(a, "visible_only", false);
+            q.lint = argBool(a, "lint", false);
+            q.max = (int)std::clamp<int64_t>(argInt(a, "max", 800), 1, 5000);
+            q.maxLines = (int)std::clamp<int64_t>(argInt(a, "max_lines", 400), 1, 20000);
+            if (a.contains("find")) {
+                auto const& f = a["find"];
+                if (!f.isObject())
+                    throw ToolError("find is an object: {window, card, row, label, kind, value, context, id, index}");
+                q.finding = true;
+                q.findWindow = argStr(f, "window");
+                q.findCard = argStr(f, "card");
+                q.findRow = argStr(f, "row");
+                q.findLabel = argStr(f, "label");
+                q.findKind = argStr(f, "kind");
+                if (f.contains("value"))
+                    q.findValue = f["value"].isString() ? argStr(f, "value") : f["value"].dump(matjson::NO_INDENTATION);
+                q.findContext = argStr(f, "context");
+                if (f.contains("id")) {
+                    auto const id = argStr(f, "id");
+                    try {
+                        q.findId = (uint32_t)std::stoul(id, nullptr, 16);
+                    } catch (...) {
+                        throw ToolError("find.id is an ImGui ID as gucci_ui shows it, e.g. \"0x8F3A12C0\"");
+                    }
+                }
+                if (f.contains("index"))
+                    q.findIndex = (int)argInt(f, "index", 0);
+                if (argBool(f, "visible_only", false))
+                    q.visibleOnly = true;
+            }
+            return q;
+        }
+
+        // What gucci_ui and gucci_ui_view add to the probe's answer: the
+        // engine's frame and the menu's state.
+        void uiHeader(matjson::Value& out) {
+            out["frame"] = (int64_t)GucciEngine::get()->updater.getFrame();
+            auto const s = ui::menuState();
+            auto menu = obj();
+            menu["open"] = s.open;
+            menu["compact"] = s.compact;
+            menu["page"] = s.page;
+            menu["theme"] = s.themeName;
+            menu["test_theme"] = s.testTheme;
+            menu["effects"] = s.effects;
+            out["menu"] = menu;
+            if (out.contains("outline")) {
+                std::string head = fmt::format("menu {}  page={}  theme={}{}{}\n", s.open ? "open" : "shut", s.page,
+                                               s.themeName, s.compact ? "  compact" : "",
+                                               s.testTheme ? "  (a test's theme)" : "");
+                out["outline"] = head + out["outline"].asString().unwrapOr("");
+            }
         }
 
         char const* gamemodeName(PlayerObject* p) {
@@ -848,6 +913,100 @@ namespace gucci::mcp {
                 return out;
             },
         });
+
+        // GucciBot (2026-11-01): the menu as text (ui/probe.hpp). The next
+        // frame the menu draws is captured, so this answers a frame or two
+        // later (a call that spans frames, mcp_server.hpp's Defer).
+        {
+            auto schema = schemaOf(
+                {{"page", "string", "show this page first (its title in the sidebar, as gucci_menu's page)"},
+                 {"open", "boolean", "open (true) or shut (false) the menu first"},
+                 {"window", "string",
+                  "all (default), menu, compact, overlays (the boxes over the level), popups, or a window's key"},
+                 {"card", "string", "only this card (its title)"},
+                 {"format", "string", "text (default: an outline to read) or json (every element, for scripts)"},
+                 {"visible_only", "boolean", "only what's in view (default false: what's scrolled away too)"},
+                 {"lint", "boolean", "layout checks too: clipped_right, choice_option_clipped, overlaps, offscreen"},
+                 {"max", "integer", "most elements (default 800, max 5000)"},
+                 {"max_lines", "integer", "most text lines a window (default 400)"}});
+            auto find = obj();
+            find["type"] = "object";
+            find["description"] =
+                "only the elements matching all that's given, each exact, then ignoring case, then a part: "
+                "{window, card, row, label (a control's row, a button's text, a text's words), kind (card, row, "
+                "section, label, paragraph, hint, note, chip, progress, switch, choice, dropdown, slider, input, "
+                "button, color, key, macro_row, item), value, context (e.g. a macro's name in Saved macros), id "
+                "(\"0x8F3A12C0\"), index (the n-th match), visible_only}";
+            schema["properties"]["find"] = find;
+            server.addTool({
+                "gucci_ui",
+                "GucciBot's menu as text, read off one frame of it, including what's "
+                "scrolled out of view: every page's cards, rows, controls with their "
+                "values (enabled or not, in view or not), texts, notes and chips with "
+                "their tone, the macro list's rows, open popups, Compact Mode and the "
+                "boxes over the level. The text outline reads top to bottom: \"## "
+                "Card\" headings (\"(below the view)\" when scrolled away), \"Row: "
+                "controls  ~ hint\" (v/^ in front: below/above the view), [x]/[ ] a "
+                "switch, (Chosen) Other a choice, [Button] (\"-\" after: disabled), "
+                "{value} an input, slider or dropdown, <CHIP>, \"! \" a warning, \"> \" "
+                "a note, \"~ \" a hint, \"-- Section --\". format json gives every "
+                "element {n, win, card, row, ctx, kind, label, text, tone, value, "
+                "options, ids, id, enabled, visible, rect} plus windows {name, key, "
+                "role, rect, scroll_y, scroll_max_y, view_h} and text by window. With "
+                "find, only the matches, each with its path. lint adds layout "
+                "checks (data, not pass or fail: some clipping is meant). Only reads; "
+                "page and open change only what gucci_menu would.",
+                schema,
+                [](matjson::Value const& a) -> matjson::Value {
+                    auto const q = uiQuery(a);
+                    for (char const* key : {"page", "card", "window"})
+                        if (a.contains(key) && !a[key].isString())
+                            throw ToolError(std::string(key) + " is a name (a string)");
+                    if (a.contains("open") && !a["open"].isBool())
+                        throw ToolError("open is true or false");
+                    if (a.contains("page")) {
+                        auto const title = argStr(a, "page");
+                        if (!ui::listsPage(title, nullptr)) {
+                            std::string pages;
+                            for (auto const& p : ui::pageTitles())
+                                pages += (pages.empty() ? "" : ", ") + p;
+                            throw ToolError("no page called \"" + title + "\" in the sidebar. Pages: " + pages);
+                        }
+                    }
+                    if (argBool(a, "open", false) && GucciEngine::get()->standingDown)
+                        throw ToolError("GucciBot is standing down (another bot is enabled), so its menu stays shut");
+                    // A page just shown, or the menu just opened, lays out over
+                    // a frame or two (its cards size themselves): captured after.
+                    int settle = 0;
+                    if (a.contains("page")) {
+                        settle = ui::pageTitle() == argStr(a, "page") ? settle : 2;
+                        ui::setPageByTitle(argStr(a, "page"));
+                    }
+                    if (a.contains("open")) {
+                        bool const open = argBool(a, "open", true);
+                        if (open != ui::isOpen())
+                            settle = 2;
+                        ui::setOpen(open);
+                    }
+                    auto wait = std::make_shared<int>(settle);
+                    if (*wait == 0)
+                        ui::probe::request();
+                    throw Defer{[wait, q]() -> std::optional<matjson::Value> {
+                                    if (*wait > 0) {
+                                        if (--*wait == 0)
+                                            ui::probe::request();
+                                        return std::nullopt;
+                                    }
+                                    if (!ui::probe::ready())
+                                        return std::nullopt;
+                                    auto out = ui::probe::result(q);
+                                    uiHeader(out);
+                                    return out;
+                                },
+                                {}, 120};
+                },
+            });
+        }
 
         // GucciBot (2026-11-01): Click Indicators as they stand, since its lane
         // is drawn straight onto ImGui's background and is in no shot's text.

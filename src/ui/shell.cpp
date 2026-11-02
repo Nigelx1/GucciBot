@@ -11,6 +11,7 @@
 #include "ui/kit.hpp"
 #include "ui/look.hpp"
 #include "ui/pages.hpp"
+#include "ui/probe.hpp"
 #include "ui/state.hpp"
 #include "ui/themes.hpp"
 #include "ui/touch.hpp"
@@ -1564,6 +1565,9 @@ namespace gucci::ui {
                 if (!lowered.empty() && n.find(lowered) == std::string::npos)
                     continue;
                 ImGui::PushID(name.c_str());
+                // The row, its "..." and its menu carry the macro's name for
+                // Assistant Access (ui/probe.hpp).
+                probe::Scope probeRow("macro", name);
                 auto const extIt = gb->storedMacroExts.find(name);
                 std::string const ext = extIt == gb->storedMacroExts.end() ? std::string() : extIt->second;
                 // The theme it was saved under, unless that's the plain .brrr.
@@ -1577,6 +1581,8 @@ namespace gucci::ui {
                 if (ImGui::Selectable(name.c_str(), name == gb->replayName, ImGuiSelectableFlags_None, ImVec2(rowW, 0.f)) &&
                     !gb->isRecording())
                     loadMacroByName(name);
+                if (probe::on())
+                    probe::macroRow(name, ext, tag, name == gb->replayName);
                 ImGui::OpenPopupOnItemClick("##rowmenu", ImGuiPopupFlags_MouseButtonRight);
                 if (!tag.empty()) {
                     ImGui::SameLine();
@@ -3078,6 +3084,9 @@ namespace gucci::ui {
         }
 
         void frame() {
+            // Assistant Access's menu probe (ui/probe.hpp): a frame a tool asked
+            // for is captured from here to every return below. Nothing otherwise.
+            probe::FrameGuard probeFrame;
             // The master switch's once-a-frame step: here the game's update for
             // the frame is over, so its code and hooks can come out or go back.
             botswitch::service();

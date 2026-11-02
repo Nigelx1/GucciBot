@@ -1,4 +1,5 @@
 #include "ui/kit.hpp"
+#include "ui/probe.hpp"
 #include "ui/state.hpp"
 #include "ui/ui.hpp"
 
@@ -71,6 +72,8 @@ namespace gucci::ui::kit {
                           ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
         ImGui::PopStyleVar(2);
         ImGui::PopStyleColor(2);
+        if (probe::on())
+            probe::card(title, caption);
         if (title && *title) {
             {
                 UseFont f(Font::Strong);
@@ -90,6 +93,8 @@ namespace gucci::ui::kit {
 
     void EndCard() {
         ImGui::EndChild();
+        if (probe::on())
+            probe::endCard();
         ImGui::PopID();
         ImGui::Dummy(ImVec2(0.f, 3.f));
     }
@@ -106,6 +111,7 @@ namespace gucci::ui::kit {
     }
 
     void Section(const char* text) {
+        probe::Text probed(probe::TextKind::Section, text, Tone::Accent);
         ImGui::Dummy(ImVec2(0.f, 2.f));
         UseFont f(Font::Small);
         ImGui::PushStyleColor(ImGuiCol_Text, look().pal.accent);
@@ -114,12 +120,14 @@ namespace gucci::ui::kit {
     }
 
     void Label(const char* text, Tone tone) {
+        probe::Text probed(probe::TextKind::Label, text, tone);
         ImGui::PushStyleColor(ImGuiCol_Text, look().tone(tone));
         ImGui::TextUnformatted(text);
         ImGui::PopStyleColor();
     }
 
     void Paragraph(const char* text, Tone tone) {
+        probe::Text probed(probe::TextKind::Paragraph, text, tone);
         ImGui::PushStyleColor(ImGuiCol_Text, look().tone(tone));
         ImGui::PushTextWrapPos(0.f);
         ImGui::TextUnformatted(text);
@@ -128,6 +136,7 @@ namespace gucci::ui::kit {
     }
 
     void Hint(const char* text) {
+        probe::Text probed(probe::TextKind::Hint, text, Tone::Muted);
         UseFont f(Font::Small);
         Paragraph(text, Tone::Muted);
     }
@@ -150,6 +159,8 @@ namespace gucci::ui::kit {
         dl->AddText(ImGui::GetFont(), ImGui::GetFontSize(), ImVec2(a.x + 3.f + pad.x, a.y + pad.y),
                     u32(tone == Tone::Muted ? pal.muted : pal.ink), text, nullptr, wrap);
         ImGui::Dummy(ImVec2(width, b.y - a.y));
+        if (probe::on())
+            probe::note(text, tone, a, b);
     }
 
     void Chip(const char* text, Tone tone) {
@@ -175,6 +186,8 @@ namespace gucci::ui::kit {
         }
         dl->AddText(ImVec2(a.x + pad.x, a.y + pad.y), u32(c), text);
         ImGui::Dummy(size);
+        if (probe::on())
+            probe::chip(text, tone, a, b);
     }
 
     void Quote(const char* text, const char* by) {
@@ -196,6 +209,8 @@ namespace gucci::ui::kit {
         ImGui::PushStyleColor(ImGuiCol_PlotHistogram, look().pal.accent);
         ImGui::PushStyleColor(ImGuiCol_FrameBg, look().pal.raised);
         ImGui::ProgressBar(std::clamp(fraction, 0.f, 1.f), ImVec2(Avail(), 0.f), overlay);
+        if (probe::on())
+            probe::progress(fraction, overlay);
         ImGui::PopStyleColor(2);
     }
 
@@ -209,10 +224,13 @@ namespace gucci::ui::kit {
         ImGui::BeginGroup();
         ImGui::PushTextWrapPos(startLocalX + labelWidth - 12.f);
         ImGui::AlignTextToFramePadding();
+        if (probe::on())
+            probe::row(label, hint);
         ImGui::TextUnformatted(label);
         if (hint && *hint) {
             UseFont f(Font::Small);
             ImGui::PushStyleColor(ImGuiCol_Text, look().pal.muted);
+            probe::Quiet quiet;  // said after the row's controls instead
             ImGui::TextUnformatted(hint);
             ImGui::PopStyleColor();
         }
@@ -227,6 +245,8 @@ namespace gucci::ui::kit {
 
     void RowEnd() {
         ImGui::EndGroup();
+        if (probe::on())
+            probe::endRow();
         float const controlBottom = ImGui::GetItemRectMax().y;
         if (rowStack().empty()) {
             ImGui::PopID();
@@ -249,6 +269,8 @@ namespace gucci::ui::kit {
         bool const clicked = ImGui::InvisibleButton(id, ImVec2(w, frame));
         if (clicked)
             *value = !*value;
+        if (probe::on())
+            probe::toggle(*value);
         bool const hovered = ImGui::IsItemHovered();
         float const t = ease(ImGui::GetItemID(), *value ? 1.f : 0.f);
 
@@ -312,6 +334,8 @@ namespace gucci::ui::kit {
         }
         ImGui::SetCursorScreenPos(p);
         ImGui::Dummy(ImVec2(width, frame));
+        if (probe::on())
+            probe::choice(*index, options, count);
         ImGui::PopID();
         return changed;
     }
@@ -320,6 +344,8 @@ namespace gucci::ui::kit {
         ImGui::PushID(id);
         ImGui::SetNextItemWidth(Avail());
         bool const changed = ImGui::Combo("##pick", index, options, count);
+        if (probe::on())
+            probe::dropdown(*index, options, count);
         ImGui::PopID();
         return changed;
     }
@@ -350,6 +376,8 @@ namespace gucci::ui::kit {
             }
             ImGui::EndCombo();
         }
+        if (probe::on())
+            probe::dropdown(*index, options, placeholder);
         ImGui::PopID();
         return changed;
     }
@@ -358,6 +386,8 @@ namespace gucci::ui::kit {
         ImGui::PushID(id);
         ImGui::SetNextItemWidth(Avail());
         bool const changed = ImGui::SliderFloat("##value", v, lo, hi, fmt);
+        if (probe::on())
+            probe::slider("##value", *v, lo, hi);
         ImGui::PopID();
         return changed;
     }
@@ -366,6 +396,8 @@ namespace gucci::ui::kit {
         ImGui::PushID(id);
         ImGui::SetNextItemWidth(Avail());
         bool const changed = ImGui::SliderInt("##value", v, lo, hi, fmt);
+        if (probe::on())
+            probe::slider("##value", *v, lo, hi);
         ImGui::PopID();
         return changed;
     }
@@ -374,6 +406,8 @@ namespace gucci::ui::kit {
         ImGui::PushID(id);
         ImGui::SetNextItemWidth(Avail());
         bool const changed = ImGui::InputFloat("##value", v, step, step * 10.f, fmt);
+        if (probe::on())
+            probe::input("##value", static_cast<double>(*v));
         ImGui::PopID();
         return changed;
     }
@@ -382,6 +416,8 @@ namespace gucci::ui::kit {
         ImGui::PushID(id);
         ImGui::SetNextItemWidth(Avail());
         bool const changed = ImGui::InputDouble("##value", v, step, step * 10.0, fmt);
+        if (probe::on())
+            probe::input("##value", *v);
         ImGui::PopID();
         return changed;
     }
@@ -390,6 +426,8 @@ namespace gucci::ui::kit {
         ImGui::PushID(id);
         ImGui::SetNextItemWidth(Avail());
         bool const changed = ImGui::InputInt("##value", v, step, step * 10);
+        if (probe::on())
+            probe::input("##value", static_cast<int64_t>(*v));
         ImGui::PopID();
         return changed;
     }
@@ -399,6 +437,8 @@ namespace gucci::ui::kit {
         ImGui::SetNextItemWidth(Avail());
         bool const changed = placeholder ? ImGui::InputTextWithHint("##text", placeholder, buf, size, flags)
                                          : ImGui::InputText("##text", buf, size, flags);
+        if (probe::on())
+            probe::input("##text", std::string(buf), placeholder);
         ImGui::PopID();
         return changed;
     }
@@ -411,6 +451,8 @@ namespace gucci::ui::kit {
                                  ? ImGui::InputTextWithHint("##text", placeholder, s->data(), s->capacity() + 1, flags,
                                                             growString, s)
                                  : ImGui::InputText("##text", s->data(), s->capacity() + 1, flags, growString, s);
+        if (probe::on())
+            probe::input("##text", *s, placeholder);
         ImGui::PopID();
         return changed;
     }
@@ -443,6 +485,8 @@ namespace gucci::ui::kit {
         ImGui::PushStyleColor(ImGuiCol_Text, text);
         bool const pressed = ImGui::Button(label, ImVec2(width < 0.f ? Avail() : width, 0.f));
         ImGui::PopStyleColor(4);
+        if (probe::on())
+            probe::button(label, tone);
         return pressed;
     }
 
@@ -451,6 +495,8 @@ namespace gucci::ui::kit {
         ImGuiColorEditFlags flags = ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel;
         flags |= alpha ? (ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreviewHalf) : ImGuiColorEditFlags_NoAlpha;
         bool const changed = ImGui::ColorEdit4("##colour", &c->x, flags);
+        if (probe::on())
+            probe::color(*c);
         ImGui::PopID();
         return changed;
     }
@@ -472,6 +518,8 @@ namespace gucci::ui::kit {
         }
         if (ImGui::IsItemHovered() && !waiting)
             ImGui::SetTooltip("Click, then press a key. Right-click to unbind.");
+        if (probe::on())
+            probe::key(waiting ? std::string("Press a key...") : keyName(*keyCode), waiting);
         ImGui::PopID();
         return changed;
     }
@@ -551,11 +599,15 @@ namespace gucci::ui::kit {
             return false;
         featureStack().push_back(ImGui::GetCursorScreenPos());
         ImGui::Indent(16.f);
+        if (probe::on())
+            probe::feature(true);
         return true;
     }
 
     void FeatureEnd() {
         ImGui::Unindent(16.f);
+        if (probe::on())
+            probe::feature(false);
         if (featureStack().empty())
             return;
         ImVec2 const top = featureStack().back();
