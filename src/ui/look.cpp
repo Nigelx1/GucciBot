@@ -314,6 +314,8 @@ namespace gucci::ui {
         pal.line = withAlpha(mix(theme.card, theme.text, pal.light ? 0.24f : 0.14f), 1.f);
         pal.radius = std::clamp(theme.radius, 0.f, 14.f);
         pal.solidTints = false;  // the JMF look turns it on after this (pages/trainer_pages.cpp jmfLook)
+        pal.cardEdge.on = false;   // SolarBot's look turns these on after this (pages/solar_backdrop.cpp)
+        pal.pageFrame.on = false;
         // An answered mark's color (setHit), judged against the accent at
         // every quarter of its breath, so it doesn't flip as the accent pulses.
         if (breathes) {

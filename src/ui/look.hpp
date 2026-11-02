@@ -36,6 +36,22 @@ namespace gucci::ui {
         // bar's blocks are solid. refresh() sets it off; the JMF look on.
         bool solidTints = false;
         ImVec4 tint{};
+        // A scene's own edge round the cards (SolarBot's: the level's orange
+        // outline with a dimmed gold line just inside it), in place of `line`.
+        // Off unless `on`: refresh() turns it off, the scene's look on
+        // (kit::BeginCard and EndCard).
+        struct CardEdge {
+            bool on = false;
+            ImVec4 outer{}, inner{};
+        } cardEdge;
+        // ... and its frame for the page you're on in the sidebar (SolarBot's):
+        // an outer line, an inner one, the card's fill, the page's name in
+        // `ink` and a gem at the frame's end. Off unless `on`, as above
+        // (ui/shell.cpp drawMain).
+        struct PageFrame {
+            bool on = false;
+            ImVec4 outer{}, inner{}, ink{}, gem{};
+        } pageFrame;
         // The theme is light (RondoBot's white): a hover or press darkens
         // instead of lifting (shade()), and good/warn/bad are deeper ones that
         // read on white. Set with setLight().

@@ -873,6 +873,8 @@ namespace gucci::ui::pages {
             p.line = kJmfLine;
             p.solidTints = true;  // the kit's chips, notes and disabled buttons, the lit page, the bar's blocks
             p.tint = kJmfTint;
+            p.cardEdge.on = false;   // a scene's own touches (SolarBot's card edges and page frame) stay off it
+            p.pageFrame.on = false;
             setHit(p);  // against the JMF accent and cards, not the theme's
             set(ImGuiCol_Text, p.ink);
             set(ImGuiCol_TextDisabled, p.muted);

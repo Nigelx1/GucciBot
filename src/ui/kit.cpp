@@ -66,7 +66,7 @@ namespace gucci::ui::kit {
         auto const& pal = look().pal;
         ImGui::PushID(title ? title : "card");
         ImGui::PushStyleColor(ImGuiCol_ChildBg, pal.surface);
-        ImGui::PushStyleColor(ImGuiCol_Border, pal.line);
+        ImGui::PushStyleColor(ImGuiCol_Border, pal.cardEdge.on ? pal.cardEdge.outer : pal.line);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.f, 11.f));
         ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, pal.radius + 3.f);
         ImGui::BeginChild("##card", ImVec2(0.f, 0.f),
@@ -94,6 +94,22 @@ namespace gucci::ui::kit {
     }
 
     void EndCard() {
+        // A scene's second line just inside the card's edge (SolarBot's gold),
+        // where ImGui draws a child's border: clipped to what the page shows.
+        if (auto const& edge = look().pal.cardEdge; edge.on) {
+            ImGuiWindow* card = ImGui::GetCurrentWindow();
+            ImVec2 const p0 = card->Pos;
+            ImVec2 const p1(card->Pos.x + card->Size.x, card->Pos.y + card->Size.y);
+            ImRect clip(p0, p1);
+            if (card->ParentWindow)
+                clip.ClipWith(card->ParentWindow->ClipRect);
+            if (clip.Max.x > clip.Min.x && clip.Max.y > clip.Min.y) {
+                card->DrawList->PushClipRect(clip.Min, clip.Max, false);
+                card->DrawList->AddRect(ImVec2(p0.x + 1.f, p0.y + 1.f), ImVec2(p1.x - 1.f, p1.y - 1.f), u32(edge.inner),
+                                        std::max(0.f, card->WindowRounding - 1.f), 0, 1.f);
+                card->DrawList->PopClipRect();
+            }
+        }
         ImGui::EndChild();
         if (probe::on())
             probe::endCard();

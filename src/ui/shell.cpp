@@ -2865,6 +2865,35 @@ namespace gucci::ui {
                 // with dark words and its light round it. Its usual highlight
                 // is a see-through accent, grey over that indigo.
                 bool const lit = selected && pal.solidTints;
+                // A scene's own frame for it (SolarBot's: her gold, edged in
+                // orange, round the card's fill, the name in gold a little in
+                // from the frame and her blue gem at its end), over the row's
+                // highlight (the Selectable's: half the row gap above and below).
+                bool const framed = selected && !lit && pal.pageFrame.on;
+                if (framed) {
+                    auto const& frame = pal.pageFrame;
+                    auto* dl = ImGui::GetWindowDrawList();
+                    float const gap = ImGui::GetStyle().ItemSpacing.y;
+                    ImVec2 const f0(a.x, a.y - std::floor(gap * 0.5f));
+                    ImVec2 const f1(a.x + ImGui::GetContentRegionAvail().x, a.y + kRowH + (gap - std::floor(gap * 0.5f)));
+                    dl->AddRectFilled(f0, f1, u32(frame.outer), pal.radius);
+                    dl->AddRectFilled(ImVec2(f0.x + 1.f, f0.y + 1.f), ImVec2(f1.x - 1.f, f1.y - 1.f), u32(frame.inner), pal.radius);
+                    dl->AddRectFilled(ImVec2(f0.x + 2.5f, f0.y + 2.5f), ImVec2(f1.x - 2.5f, f1.y - 2.5f), u32(pal.surface), pal.radius);
+                    ImVec2 const gem(f1.x - 14.f, (f0.y + f1.y) * 0.5f);
+                    auto const diamond = [&](float halfH, float halfW, ImU32 color) {
+                        dl->AddQuadFilled(ImVec2(gem.x, gem.y - halfH), ImVec2(gem.x + halfW, gem.y), ImVec2(gem.x, gem.y + halfH),
+                                          ImVec2(gem.x - halfW, gem.y), color);
+                    };
+                    diamond(6.f, 4.4f, u32(frame.inner));
+                    diamond(4.2f, 2.9f, u32(frame.gem));
+                    dl->AddText(ImVec2(a.x + 8.f, a.y + (kRowH - ImGui::GetTextLineHeight()) * 0.5f), u32(frame.ink),
+                                kPages[i].title);
+                    // The Selectable keeps its name (what reads the menu reads
+                    // it), unseen; and no highlight of its own.
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.f, 0.f, 0.f, 0.f));
+                    for (ImGuiCol slot : {ImGuiCol_Header, ImGuiCol_HeaderHovered, ImGuiCol_HeaderActive})
+                        ImGui::PushStyleColor(slot, ImVec4(0.f, 0.f, 0.f, 0.f));
+                }
                 if (lit) {
                     ImVec2 const b(a.x + ImGui::GetContentRegionAvail().x, a.y + kRowH);
                     auto* dl = ImGui::GetWindowDrawList();
@@ -2880,9 +2909,9 @@ namespace gucci::ui {
                 }
                 if (ImGui::Selectable(kPages[i].title, selected, ImGuiSelectableFlags_None, ImVec2(0.f, kRowH)))
                     g_page = i;
-                if (lit)
+                if (lit || framed)
                     ImGui::PopStyleColor(4);
-                if (selected && !lit) {
+                if (selected && !lit && !framed) {
                     float const inset = (kRowH - 18.f) * 0.5f;  // an 18-unit bar, centred on the row
                     ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(a.x - 4.f, a.y + inset),
                                                               ImVec2(a.x - 1.f, a.y + (kRowH - inset)), u32(pal.accent), 1.5f);
