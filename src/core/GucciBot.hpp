@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-02-h (Hitborders: slopes lose their new, not checked in the game yet mark, after the probe found every slope edge it tried agreeing with GD in the game; the probe lists every sign a pass gave, and how the copy ended, for each mismatch)"
+    "2026-11-02-i (Hitborders probe: once a pass has moved the copy anywhere, even if a later snap put it back, an object's silence there says nothing; slopes no longer marked new, the probe's per-mismatch signs, and -g's fixes: a block's red core stops where GD snaps the player first, circles drawn around GD's circle)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
