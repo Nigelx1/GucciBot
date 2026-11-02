@@ -587,6 +587,17 @@ void namedGroups(const WorldDef& w, const TriggerDef* d, EffectGameObject* e, st
 
 }  // namespace
 
+// The same function the build below names its groups with: a read of the
+// object's fields, which do not change after the level is set up.
+void WorldDef::namedGroupsOf(int slot, std::vector<int>& out) const {
+    out.clear();
+    if (slot < 0 || (std::size_t)slot >= slots.size() || !slots[(std::size_t)slot]) return;
+    if (!(flags[(std::size_t)slot] & kEffect)) return;
+    const int di = defOfSlot[(std::size_t)slot];
+    namedGroups(*this, di >= 0 ? &triggers[(std::size_t)di] : nullptr,
+                static_cast<EffectGameObject*>(slots[(std::size_t)slot]), out);
+}
+
 void WorldDef::setGroups(std::vector<std::vector<int>> members, std::vector<std::vector<int>> staticMembers,
                          std::vector<std::vector<int>> optimizedMembers, int slotCount) {
     auto fill = [](Lists<int>& out, std::vector<std::vector<int>>& in) {

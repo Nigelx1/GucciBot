@@ -433,6 +433,11 @@ class WorldDef {
     // mode centre, rotation target, or in its random / sequence / remap list -
     // as slots. Whether one is physical is its defOfSlot.
     std::span<const int> targetingGroup(int group) const { return m_targeting.at(clampGroup(group)); }
+    // GucciBot (2026-11-01, H0): the other way round - the groups the effect
+    // object in `slot` names, sorted, each once (empty for anything else):
+    // what targetingGroup and groupModelled were built from, so the level
+    // census counts the same groups certaintyOf does.
+    void namedGroupsOf(int slot, std::vector<int>& out) const;
     // Whether every physical trigger that names the group is a kind the World
     // runs (a group nothing names counts too). Worked out once with the rest
     // of the level, because a dying run asks it about its killer's groups and
