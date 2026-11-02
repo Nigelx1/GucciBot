@@ -1,4 +1,6 @@
-# GucciBot
+<h1 align="center"><img src="docs/images/readme-header.png" alt="GucciBot" width="100%"></h1>
+
+<!-- GitHub's social preview, the picture a link to this repo shows, is docs/images/github-social-preview.png (1280 x 640). GitHub can't take it from the repo: Nigel uploads it in the repo's Settings > General > Social preview > Edit > Upload an image. -->
 
 > Frame perfect. Ice cold. Brrr Brrr Brrr.
 
