@@ -445,7 +445,10 @@ namespace gucci {
                     keep = false;
                     break;
                 }
-                if (type == GameObjectType::Modifier &&
+                // Triggers and enter effect triggers both go to
+                // playerTouchedTrigger (0x215a55), which does nothing for one
+                // that isn't touch triggered (+0x5d0, 0x217f93).
+                if ((type == GameObjectType::Modifier || type == GameObjectType::EnterEffectObject) &&
                     std::find(kAlwaysShownModifiers.begin(), kAlwaysShownModifiers.end(), object->m_objectID) ==
                         kAlwaysShownModifiers.end() &&
                     !static_cast<EffectGameObject*>(object)->m_isTouchTriggered) {
