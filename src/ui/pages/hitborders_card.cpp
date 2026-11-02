@@ -47,7 +47,7 @@ namespace gucci::ui::pages {
                 changed = true;
             }
         }
-        changed |= kit::SwitchRow("Slopes", "New, not checked in the game yet", &set.slopes);
+        changed |= kit::SwitchRow("Slopes", nullptr, &set.slopes);
         changed |= kit::SwitchRow("Orbs, pads and portals", "And touch triggers. Ones you've used are hidden",
                                   &set.specials);
         changed |= kit::SwitchRow("Ground and ceiling", nullptr, &set.ground);
