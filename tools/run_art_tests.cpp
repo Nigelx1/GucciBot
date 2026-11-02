@@ -16,8 +16,9 @@
 //    them) decode at the sizes their table (src/ui/pages/solar_art.hpp) says,
 //    each of Janet's is the size of its box, the sky is opaque, and every part
 //    the tables name has art in it and is on the sheet.
-// 4. GucciBot's mark (src/ui/brand.cpp): the pictures in resources/brand
-//    decode at their sizes, the cone's silhouette is one color with a clear
+// 4. GucciBot's mark (src/ui/brand.cpp): the pictures in resources/brand and
+//    in tools/testdata/png/packaged (as the packager stores them) decode at
+//    their sizes, the cone's silhouette is one color with a clear
 //    margin round it, and what ui/art does to a picture before it's a texture
 //    (png::halve, fit, drawnBounds) does what it says, on small made-up
 //    pictures and on the silhouette made ready for the sidebar.
@@ -304,9 +305,8 @@ namespace {
         }
     }
 
-    // GucciBot's mark, as resources/brand has it.
-    void checkBrand() {
-        std::string const dir = "resources/brand/";
+    // GucciBot's mark, as resources/brand has it or as the packager stores it.
+    void checkBrand(std::string const& dir) {
         struct File {
             char const* name;
             int w, h;
@@ -424,7 +424,8 @@ int main() {
     checkSolar("resources/solar/");
     checkSolar(std::string(kData) + "packaged/");
     checkPictureWork();
-    checkBrand();
+    checkBrand("resources/brand/");
+    checkBrand(std::string(kData) + "packaged/");
 
     // Every picture in the manifest.
     std::vector<uint8_t> const expected = readFile(std::string(kData) + "expected.rgba");

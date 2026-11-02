@@ -1,12 +1,15 @@
 # Made by tools/make_png_tests.py: don't edit it by hand, run that again.
 # <png> <width> <height> <offset of its RGBA in expected.rgba, or - for none> <FNV-1a 64 of it>
 # refuse <png> <words its error has to contain>
+packaged/cone_silhouette_256.png 256 256 - 90f4e2b27501f1d3
+packaged/gbot_logo_336.png 336 336 - cfabbce63358c390
 packaged/jupiter_city.png 1024 512 - d448f5be2938cf25
 packaged/jupiter_dial.png 444 308 - 2ae1767692b3a799
 packaged/jupiter_dial_ccw.png 612 612 - 314e137153bb672c
 packaged/jupiter_dial_cw.png 484 484 - 2f9b44cdb133bc73
 packaged/jupiter_sky.png 1440 1000 - bfe244d862882691
 packaged/jupiter_sprites.png 512 238 - 5b67c4373fcb6062
+packaged/pause_button_256.png 256 256 - 126d1077637086d5
 packaged/solar_disc.png 376 320 - 54be8ec458dc145c
 packaged/solar_flames.png 352 536 - 8186e045307ff696
 packaged/solar_glow.png 168 154 - 565ab97413e71f5e

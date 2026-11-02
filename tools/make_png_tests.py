@@ -2,10 +2,11 @@
 tools/run_art_tests.cpp checks (run_tests.bat).
 
 Writes tools/testdata/png/:
-  packaged/       the JupiterBot and SolarBot art exactly as Geode's packager
-                  stores it in the .geode. It re-saves pictures with few colors
-                  as palettes of 4- or 8-bit indexes with a tRNS chunk, which
-                  build 2026-11-02-a's reader refused, so the art never showed.
+  packaged/       the JupiterBot and SolarBot art and GucciBot's mark
+                  (resources/brand) exactly as Geode's packager stores them in
+                  the .geode. It re-saves pictures with few colors as palettes
+                  of 4- or 8-bit indexes with a tRNS chunk, which build
+                  2026-11-02-a's reader refused, so the art never showed.
   variants/       small pictures of every color type, bit depth and interlace
                   PNG has, with and without tRNS. Pillow saves the kinds it can
                   (pil_*); a small writer here saves the rest (Adam7, 2- and
@@ -49,8 +50,11 @@ from PIL import Image
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "testdata", "png")
 # Each theme's art: the name its files start with, and the folder that holds them.
+# GucciBot's mark has no shared prefix, so each of its three files is named.
 RESOURCES = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "resources")
-ART = {"jupiter_": os.path.join(RESOURCES, "jupiter"), "solar_": os.path.join(RESOURCES, "solar")}
+ART = {"jupiter_": os.path.join(RESOURCES, "jupiter"), "solar_": os.path.join(RESOURCES, "solar"),
+       "cone_silhouette_": os.path.join(RESOURCES, "brand"), "pause_button_": os.path.join(RESOURCES, "brand"),
+       "gbot_logo_": os.path.join(RESOURCES, "brand")}
 SIGNATURE = b"\x89PNG\r\n\x1a\n"
 ADAM7 = [(0, 0, 8, 8), (4, 0, 8, 8), (0, 4, 4, 8), (2, 0, 4, 4), (0, 2, 2, 4), (1, 0, 2, 2), (0, 1, 1, 2)]
 CHANNELS = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}
