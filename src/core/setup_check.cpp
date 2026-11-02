@@ -11,11 +11,15 @@
 #include <fmt/format.h>
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <filesystem>
 #include <iterator>
+#include <optional>
 #include <string_view>
+#include <system_error>
 #include <unordered_map>
+#include <variant>
 
 #ifdef GEODE_IS_WINDOWS
 #include <Windows.h>
@@ -177,6 +181,121 @@ namespace gucci::setupcheck {
                                [&](const char* bot) { return id == bot; });
         }
 
+        // GitHub issue #31: a second GucciBot file in Geode's mods folder.
+        // Geode queues every .geode there and loads one file per mod id. A
+        // second file with the same id becomes an invalid entry in its mod
+        // list (a "geode_invalid-..." id, the file's name for a name), and as
+        // that entry has no Geode version of its own (v1.0.0), its load
+        // problem says it was made for an older Geode. A file Geode can't
+        // open is an invalid entry too (Geode 5.10.1: LoaderImpl.cpp
+        // queueMods, ModMetadataImpl.cpp createInvalidMetadata). Looked for
+        // both ways: the file of every load problem whose entry Geode
+        // couldn't read, and every nigelx1.guccibot*.geode beside the file
+        // GucciBot runs from (iOS saves a second download as
+        // "nigelx1.guccibot 2.geode", a browser as "nigelx1.guccibot
+        // (1).geode", Geode's own install from a file as
+        // "nigelx1.guccibot-0.geode"). A file counts when its own mod.json
+        // says it's GucciBot, or, named like it, when it can't be opened at
+        // all (a download that didn't finish). Found once a launch, since
+        // Geode only reads the folder then; a file deleted since drops out.
+        struct ExtraCopy {
+            std::filesystem::path path;
+            std::optional<VersionInfo> version; // unset: it can't be opened
+        };
+
+        bool samePath(std::filesystem::path const& a, std::filesystem::path const& b) {
+            std::error_code ec;
+            bool const same = std::filesystem::equivalent(a, b, ec);
+            return ec ? a.lexically_normal() == b.lexically_normal() : same;
+        }
+
+        bool namedLikeGucciBot(std::filesystem::path const& path) {
+            auto name = utils::string::pathToString(path.filename());
+            std::transform(name.begin(), name.end(), name.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            return name.rfind(std::string(Mod::get()->getID()), 0) == 0;
+        }
+
+        std::vector<ExtraCopy> const& extraCopies() {
+            static std::vector<ExtraCopy> s_found;
+            static bool s_done = false;
+            // Geode's load problems are all in once it has finished loading.
+            if (s_done || Loader::get()->getLoadingState() != Loader::LoadingState::Done)
+                return s_found;
+            s_done = true;
+
+            auto* self = Mod::get();
+            auto const running = self->getPackagePath();
+            std::vector<std::filesystem::path> seen;
+            auto const look = [&](std::filesystem::path const& path) {
+                std::error_code ec;
+                if (path.empty() || path.extension() != ".geode" || !std::filesystem::is_regular_file(path, ec) ||
+                    samePath(path, running))
+                    return;
+                if (std::any_of(seen.begin(), seen.end(), [&](auto const& p) { return samePath(p, path); }))
+                    return;
+                seen.push_back(path);
+                auto const meta = ModMetadata::createFromGeodeFile(path);
+                if (!meta.hasErrors() && meta.getID() == self->getID())
+                    s_found.push_back({path, meta.getVersion()});
+                else if (meta.hasErrors() && namedLikeGucciBot(path))
+                    s_found.push_back({path, std::nullopt});
+            };
+            for (auto const& problem : Loader::get()->getLoadProblems()) {
+                if (auto const* path = std::get_if<std::filesystem::path>(&problem.cause))
+                    look(*path);
+                else if (auto const* meta = std::get_if<ModMetadata>(&problem.cause); meta && meta->hasErrors())
+                    look(meta->getPath());
+                else if (auto const* mod = std::get_if<Mod*>(&problem.cause);
+                         mod && *mod && (*mod)->getMetadata().hasErrors())
+                    look((*mod)->getPackagePath());
+            }
+            std::error_code ec;
+            for (std::filesystem::directory_iterator it(dirs::getModsDir(), ec), end; !ec && it != end;
+                 it.increment(ec))
+                if (namedLikeGucciBot(it->path()))
+                    look(it->path());
+            return s_found;
+        }
+
+        // What to do about them, in words: which file to delete, by version
+        // where it can tell (the iOS reporter's extra file was the newer one).
+        std::string extraCopiesFix(std::vector<ExtraCopy> const& extras) {
+            auto const quoted = [](std::filesystem::path const& path) {
+                return "\"" + utils::string::pathToString(path.filename()) + "\"";
+            };
+            auto* self = Mod::get();
+            std::string const ours = quoted(self->getPackagePath());
+            std::string const ourVersion = self->getVersion().toVString();
+            if (extras.size() == 1) {
+                auto const& extra = extras.front();
+                if (!extra.version)
+                    return fmt::format("Geode can't open {} (a download that didn't finish, maybe), so it lists it as "
+                                       "invalid. Delete it from Geode's mods folder and restart the game.",
+                                       quoted(extra.path));
+                if (*extra.version > self->getVersion())
+                    return fmt::format("Geode loads one copy of a mod and lists any other as invalid, and it loaded the "
+                                       "older one: {}, from {}. {} is {}. Delete {} from Geode's mods folder and "
+                                       "restart the game to get the newer one.",
+                                       ourVersion, ours, quoted(extra.path), extra.version->toVString(), ours);
+                return fmt::format("Geode loads one copy of a mod and lists any other as invalid. The one running is "
+                                   "{}, from {}. Delete the other, {} ({}), from Geode's mods folder and restart the "
+                                   "game.",
+                                   ourVersion, ours, quoted(extra.path), extra.version->toVString());
+            }
+            std::string others;
+            for (auto const& extra : extras) {
+                if (!others.empty())
+                    others += ", ";
+                others += quoted(extra.path) + " (" +
+                          (extra.version ? extra.version->toVString() : std::string("Geode can't open it")) + ")";
+            }
+            return fmt::format("Geode loads one copy of a mod and lists the others as invalid. The one running is {}, "
+                               "from {}; the others are {}. Keep the newest, delete the rest from Geode's mods "
+                               "folder, and restart the game.",
+                               ourVersion, ours, others);
+        }
+
         // Dismissed mods, comma-separated (mod ids have no commas).
         constexpr const char* kDismissedKey = "setupcheck_dismissed";
 
@@ -257,6 +376,15 @@ namespace gucci::setupcheck {
                                    "list and restart the game.",
                                    ""});
             }
+
+            std::vector<ExtraCopy> extras;
+            for (auto const& extra : extraCopies()) {
+                std::error_code ec;
+                if (std::filesystem::exists(extra.path, ec))
+                    extras.push_back(extra);
+            }
+            if (!extras.empty())
+                out.push_back({"A second GucciBot file is in the mods folder", extraCopiesFix(extras), ""});
             // Said as GBot while disguised (ui::branded). current() works the
             // list out again every second, so a new theme shows within one.
             for (auto& p : out) {
@@ -333,6 +461,12 @@ namespace gucci::setupcheck {
                   "Extrapolation {}",
                   mh.live ? "asked live" : "from its save file", mh.practiceFix ? "on" : "off",
                   mh.frameExtrapolation ? "on" : "off", qolModFrameExtrapolation() ? "on" : "off");
+        std::string copies;
+        for (auto const& extra : extraCopies())
+            copies += fmt::format("{}{} ({})", copies.empty() ? "" : ", ", utils::string::pathToString(extra.path),
+                                  extra.version ? extra.version->toVString() : std::string("can't be opened"));
+        log::info("[SETUP-CHECK] GucciBot runs from {}; other GucciBot files in the mods folder: {}",
+                  utils::string::pathToString(Mod::get()->getPackagePath()), copies.empty() ? "none" : copies);
 
         g_dirty = true;
         auto const& problems = current();
