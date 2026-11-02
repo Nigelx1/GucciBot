@@ -17,7 +17,8 @@
 //     Absense's port of it; the overlap test in it is GD's (CCRect,
 //     playerCircleCollision, OBB2D).
 // Each sign is kept only if the copy was still where it was put, as it was
-// put, when it came.
+// put, when it came; and no sign says anything once the copy has been
+// anywhere else during the pass, even if a later snap put it back.
 
 #include "hacks/hitborder_probe.hpp"
 
@@ -81,6 +82,11 @@ namespace gucci {
             // Killed, with no object and outside any object's call: the
             // ground, the ceiling, the edge of the level.
             bool diedOfNothing = false;
+            // Seen somewhere else, or changed, at some point of the pass, by
+            // any call watched: a block's snap can move the copy, the next
+            // block test it there, and a later snap put it back where it was
+            // put (Bloodbath's ship section, block 922, 2026-11-02).
+            bool strayed = false;
 
             bool atStart(PlayerObject* p) const {
                 CCPoint const pos = p->getPosition();
@@ -88,17 +94,24 @@ namespace gucci {
                        Trajectory::modeOf(p) == mode && p->m_isUpsideDown == upsideDown && p->m_vehicleSize == size;
             }
 
+            // atStart, remembering a stray.
+            bool stillAt(PlayerObject* p) {
+                bool const still = atStart(p);
+                strayed = strayed || !still;
+                return still;
+            }
+
             void note(PlayerObject* p, GameObject* object, Ev ev) {
                 if (on && p == copy && object)
-                    events.push_back({object, ev, atStart(p)});
+                    events.push_back({object, ev, stillAt(p)});
             }
 
             void noteDeath(PlayerObject* p, GameObject* object) {
                 if (!on || p != copy)
                     return;
                 if (GameObject* by = object ? object : current)
-                    events.push_back({by, Ev::Dead, atStart(p)});
-                else if (atStart(p))
+                    events.push_back({by, Ev::Dead, stillAt(p)});
+                else if (stillAt(p))
                     diedOfNothing = true;
             }
 
@@ -106,6 +119,7 @@ namespace gucci {
                 events.clear();
                 current = nullptr;
                 diedOfNothing = false;
+                strayed = false;
             }
         };
 
@@ -122,6 +136,7 @@ namespace gucci {
             InCall(PlayerObject* p, GameObject* object) : o(observer()) {
                 mine = o.on && p == o.copy;
                 if (mine) {
+                    o.stillAt(p);
                     was = o.current;
                     o.current = object;
                 }
@@ -464,7 +479,7 @@ namespace gucci {
             Observer& o = observer();
             if (!o.on || copy != o.copy || !object || object->m_objectType == GameObjectType::Slope)
                 return false;
-            o.events.push_back({object, Ev::Special, o.atStart(copy)});
+            o.events.push_back({object, Ev::Special, o.stillAt(copy)});
             return true;
         };
 
@@ -663,7 +678,9 @@ namespace gucci {
                                 }
                             }
                             CCPoint const end = copy->getPosition();
-                            bool const displaced = !o.atStart(copy);
+                            // Moved or changed by the end, or at any point the
+                            // pass was watched (and put back later).
+                            bool const displaced = !o.atStart(copy) || o.strayed;
 
                             // A sign from the object, with the copy where it
                             // was put, is an answer; no sign is one only when
@@ -680,7 +697,10 @@ namespace gucci {
                                 v = got == want ? Verdict::Agree : Verdict::Mismatch;
                             } else if (displaced) {
                                 v = Verdict::Inconclusive;
-                                whyNot = "the pass moved the copy, or changed it, before this object gave any sign";
+                                whyNot = o.atStart(copy) ? "the pass moved the copy, or changed it, and put it back; this "
+                                                           "object gave no sign while it was where it was put"
+                                                         : "the pass moved the copy, or changed it, before this object "
+                                                           "gave any sign";
                             } else if (o.diedOfNothing) {
                                 v = Verdict::Inconclusive;
                                 whyNot = "the copy died of no object (the edge of the level) before any object was tested";
@@ -912,7 +932,7 @@ class $modify(GBHitborderProbePlayerHook, PlayerObject) {
         if (!o.on || this != o.copy || !object)
             return PlayerObject::collidedWithSlopeInternal(dt, object, forced);
         gucci::InCall call(this, object);
-        bool const atStart = o.atStart(this);
+        bool const atStart = o.stillAt(this);
         CCPoint const before = this->getPosition();
         bool const onBefore = m_isOnSlope;
         PlayerObject::collidedWithSlopeInternal(dt, object, forced);
