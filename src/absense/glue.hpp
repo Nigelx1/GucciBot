@@ -113,6 +113,14 @@ namespace absense {
     // cost per tick: the caller has made sure nothing else owns the run.
     matjson::Value levelCensus(int realTicks, float binWidth, int top);
 
+    // GucciBot (2026-11-01, H1(b)): the pending write-back's check, a test
+    // switch that is never saved (gucci_test_set pf_pending_verify): every
+    // object the real game moved that a copy could meet is checked to stand
+    // where the run has it, on every tick; a pathfinder run's stop line says
+    // how many were looked at and missed (world::g_pendingVerify).
+    bool pendingVerify();
+    void setPendingVerify(bool on);
+
     // Step R1 of AI_PATHFINDER_PLAN.md: the route planner's map of the whole
     // level (absense/route/atlas.hpp), drawn over it when shown.
     bool levelMapShown();

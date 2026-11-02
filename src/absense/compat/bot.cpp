@@ -542,6 +542,14 @@ void absense::profileRuns(bool on) {
     Trajectory::profileRuns(on);
 }
 
+bool absense::pendingVerify() {
+    return world::g_pendingVerify;
+}
+
+void absense::setPendingVerify(bool on) {
+    world::g_pendingVerify = on;
+}
+
 matjson::Value absense::runProfile() {
     const Trajectory::RunProfile r = Trajectory::runProfile();
     const world::NearProfile& np = world::g_nearProfile;

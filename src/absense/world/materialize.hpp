@@ -480,6 +480,13 @@ class Materializer {
     void writePending(Run& run, const Window* window);
     std::shared_ptr<const PendingColumns> m_pendingColumns;
     std::vector<uint8_t> m_pendingDone;  // the columns looked at since the run began or was last put back
+    // GucciBot (2026-11-01, H1(b)): the columns looked at since startPending,
+    // whatever invalidate re-armed since - one looked at again is a re-look
+    // (Upkeep::pendingRelooks). Only counts; nothing is decided by it.
+    std::vector<uint8_t> m_pendingSeen;
+    // The pending write-back's check (g_pendingVerify, world/world.hpp), for
+    // the window `w` the look has just made good.
+    void verifyPending(Run& run, const Window& w);
     bool m_pendingLazy = false;
     bool m_pendingAlwaysDue = false;     // the `always` list to look at again (a snapshot was put back)
     void refreshPendingAlways(Run& run);

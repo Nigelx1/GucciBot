@@ -931,6 +931,7 @@ void Materializer::restoreWritten() {
     m_pendingLazy = false;
     m_pendingAlwaysDue = false;
     m_pendingDone.clear();
+    m_pendingSeen.clear();
 }
 
 void Materializer::end() {
@@ -946,6 +947,7 @@ void Materializer::end() {
     m_pendingLazy = false;
     m_pendingAlwaysDue = false;
     m_pendingDone.clear();
+    m_pendingSeen.clear();
     m_pendingColumns.reset();
     m_pl = nullptr;
 }
@@ -1383,15 +1385,54 @@ void Materializer::materializeNear(Run& run, PlayerObject* copy) {
         }
     }
     lap(4);
+    if (g_pendingVerify) verifyPending(run, w);
     m_stale[ci] = false;
     m_window[ci] = w;
     m_haveWindow[ci] = true;
+}
+
+// GucciBot (2026-11-01, H1(b)): what every way of writing back the objects
+// the real game moved has to keep - all at the run's first look, a column or
+// a cell at a time as windows reach them - checked with refresh's own tests:
+// a pending object the copy's collision pass can meet, because where it is
+// filed now or where the run has it is in the window, stands where the run
+// has it (written there, or standing there untouched). That covers the
+// pending writes and the written, reach and carry loops together.
+void Materializer::verifyPending(Run& run, const Window& w) {
+    const WorldDef& def = *run.def;
+    for (int slot : m_pending) {
+        if (slot < 0 || (std::size_t)slot >= def.slots.size()) continue;
+        GameObject* o = def.slots[(std::size_t)slot];
+        const uint8_t f = def.flags[(std::size_t)slot];
+        if (!o || !(f & kCollidable)) continue;
+        const Pose want = desired(run, slot);
+        int wx = 0, wy = 0;
+        const bool wantIn = m_shadow.sectionOf(want.x, want.y, wx, wy) && inWindow(w, wx, wy);
+        // An object filed in no bucket (+0x278 below zero) is in no pass,
+        // whatever a window near the level's origin holds.
+        const int sx = off::at<int>(o, off::kSecX);
+        const int sy = off::at<int>(o, off::kSecY);
+        const bool nowIn = (f & kExtended) || (sx >= 0 && sy >= 0 && inWindow(w, sx, sy));
+        if (!wantIn && !nowIn) continue;  // nothing the collision pass can meet
+        auto it = m_writtenOf.find(slot);
+        const bool written = it != m_writtenOf.end();
+        const bool ok = written ? sameWritable(m_written[it->second].pose, want) : sameLive(want, o);
+        g_pendingCheck.looks++;
+        if (ok || g_pendingCheck.missed++ >= 8) continue;
+        g_pendingCheck.notes.push_back(fmt::format(
+            "uid {} slot {} at run tick {} ({}, {}) wants {:.2f},{:.2f} (section {},{}), stands at {:.2f},{:.2f} "
+            "filed {},{}, window {}..{} x {}..{}",
+            o->m_uniqueID, slot, run.ws->tick, written ? "written" : "unwritten",
+            m_pendingLazy ? "columns" : "full pass", want.x, want.y, wx, wy, o->m_positionX, o->m_positionY, sx, sy,
+            w.x0, w.x1, w.y0, w.y1));
+    }
 }
 
 void Materializer::startPending(Run& run) {
     m_pendingLazy = false;
     m_pendingAlwaysDue = false;
     m_pendingDone.clear();
+    m_pendingSeen.clear();
     if (m_fy > 0.0 || m_pending.empty() || !m_table || !run.def) {
         g_upkeep.pending.items += m_pending.size();
         for (int slot : m_pending) refresh(run, slot, nullptr);
@@ -1444,6 +1485,7 @@ void Materializer::startPending(Run& run) {
     m_pendingColumns = c.columns;
     m_pendingLazy = true;
     m_pendingDone.assign(m_pendingColumns->columns.size(), 0);
+    m_pendingSeen.assign(m_pendingColumns->columns.size(), 0);
     m_pendingAlwaysDue = true;
     refreshPendingAlways(run);
 }
@@ -1472,6 +1514,15 @@ void Materializer::writePending(Run& run, const Window* window) {
         if (columns[(std::size_t)x].empty()) continue;
         if (!upkeep) upkeep.emplace(g_upkeep.pendingColumns);
         g_upkeep.pendingColumns.items += columns[(std::size_t)x].size();
+        // A column looked at before, and re-armed by a snapshot put back
+        // since (invalidate): counted and timed apart as well.
+        std::optional<UpkeepTimer> relook;
+        if (m_pendingSeen[(std::size_t)x]) {
+            relook.emplace(g_upkeep.pendingRelooks);
+            g_upkeep.pendingRelooks.items += columns[(std::size_t)x].size();
+        } else {
+            m_pendingSeen[(std::size_t)x] = 1;
+        }
         // Through refresh's own window test: one filed here only by where the
         // table has it, and moved on from there by the run's ops, is the
         // reach's to write when its window comes.

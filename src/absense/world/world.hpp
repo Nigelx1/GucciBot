@@ -255,10 +255,28 @@ struct Upkeep {
     Part stepStarts;    // a kept start's state, stepped on from its keyframe
     Part pending;       // the objects the real game moved, written back at a run's first look
     Part pendingColumns;  // ... or a column of them at a time, as a window reaches it (Materializer::writePending)
+    // GucciBot (2026-11-01, H1(b)): a column of them looked at again because
+    // a snapshot was put back (Materializer::invalidate re-arms every one) -
+    // part of the writes above, counted apart (ANOMALIES item 2).
+    Part pendingRelooks;
     Part runBegins;     // Sim::begin
     Part runEnds;       // Sim::end
 };
 extern Upkeep g_upkeep;
+// GucciBot (2026-11-01, H1(b)): the pending write-back's check, for tests only
+// (gucci_test_set pf_pending_verify, never saved): at the end of every
+// materializeNear, every object the real game moved away from the run's table
+// that the copy's collision pass could meet - where it stands now or where
+// the run has it is in the copy's window - must stand where the run has it.
+// O(pending objects) per copy per tick. AbsensePathfinder::start clears the
+// count and its stop logs it, with the first few misses.
+extern bool g_pendingVerify;
+struct PendingCheck {
+    uint64_t looks = 0;   // objects checked
+    uint64_t missed = 0;  // ... found somewhere else than the run has them
+    std::vector<std::string> notes;  // the first 8 misses
+};
+extern PendingCheck g_pendingCheck;
 struct UpkeepTimer {
     Upkeep::Part& part;
     std::chrono::steady_clock::time_point at = std::chrono::steady_clock::now();

@@ -321,6 +321,15 @@ namespace gucci::testset {
                              [](matjson::Value const& val, bool) {
                                  absense::setRouteGuidance(static_cast<int>(wantInt("pf_route_mode", val, 0, 2)));
                              }});
+                // Not settings: the pathfinder's test switches for the
+                // pending write-back (world/materialize.cpp, H1(b)), this
+                // launch only. The check of every pending object a copy could
+                // meet, on every tick (slow; off by default).
+                v.push_back({"pf_pending_verify", "bool", Store::Memory,
+                             [] { return matjson::Value(absense::pendingVerify()); },
+                             [](matjson::Value const& val, bool) {
+                                 absense::setPendingVerify(wantBool("pf_pending_verify", val));
+                             }});
                 // Not a setting: one more id for Calculate's conflict check.
                 v.push_back({"fwac_conflict_test_id", "text", Store::Memory,
                              [] { return matjson::Value(g_conflictTestId); },

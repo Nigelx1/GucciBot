@@ -310,6 +310,7 @@ bool AbsensePathfinder::start() {
     auto* pl = PlayLayer::get();
     m_stats = Stats{};
     world::g_upkeep = world::Upkeep{};  // logged at the stop
+    world::g_pendingCheck = world::PendingCheck{};  // (with it)
     // Per run (step 1): the log caps, the route-search reason, and the card's
     // random pools, so a run repeats whatever ran before it in the session.
     m_spikeLines = 0;
@@ -656,7 +657,15 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
         line += part("starts stepped", u.stepStarts, "ticks");
         line += part("pending passes", u.pending, "objects");
         line += part("pending column writes", u.pendingColumns, "objects");
+        line += part("pending re-looks after a restore", u.pendingRelooks, "objects");
+        // GucciBot (2026-11-01, H1(b)): the pending write-back's check, when a
+        // test turned it on (pf_pending_verify), and its first misses.
+        const world::PendingCheck& check = world::g_pendingCheck;
+        if (world::g_pendingVerify || check.looks > 0)
+            line += fmt::format("; pending check {} looked at, {} missed", check.looks, check.missed);
         devlog::log(devlog::Cat::AbsensePathfinder, line);  // (log() stops at 511 characters)
+        for (const std::string& note : check.notes)
+            devlog::log(devlog::Cat::AbsensePathfinder, "pending check: missed " + note);
     }
     if (m_stats.routeLegs > 0 || m_stats.routeErrors > 0) {
         const double legs = (double)std::max<uint64_t>(1, m_stats.routeLegs);
