@@ -935,13 +935,23 @@ namespace gucci::mcp {
             mode["type"] = "string";
             mode["enum"] = std::vector<std::string>{"idle", "record", "play"};
             props["mode"] = mode;
+            // GitHub issue #32: what the menu's Mode switch does now, for a
+            // session to test it. Off by default, so scripts that switch to
+            // record during playback get what they always did.
+            auto fromHere = obj();
+            fromHere["type"] = "boolean";
+            fromHere["description"] = "record only: while a macro plays in a level, carry on from the current frame "
+                                      "as the menu's Mode switch does (the rest of the macro is cut, held buttons "
+                                      "let go). Default false: only the mode changes";
+            props["from_here"] = fromHere;
             schema["type"] = "object";
             schema["properties"] = props;
             schema["required"] = std::vector<std::string>{"mode"};
 
             server.addTool({
                 "gucci_set_mode",
-                "Put GucciBot into idle, record or play.",
+                "Put GucciBot into idle, record or play. With from_here, record during playback carries on from "
+                "the current frame, as the menu's Mode switch does.",
                 schema,
                 [](matjson::Value const& a) {
                     requireFreeRun();
@@ -949,6 +959,8 @@ namespace gucci::mcp {
                     auto const m = argStr(a, "mode");
                     if (m == "idle")
                         gb->setMode(GucciEngine::Mode::Idle);
+                    else if (m == "record" && argBool(a, "from_here", false))
+                        gb->setModeFromMenu(GucciEngine::Mode::Recording);
                     else if (m == "record")
                         gb->setMode(GucciEngine::Mode::Recording);
                     else if (m == "play")
@@ -958,6 +970,7 @@ namespace gucci::mcp {
 
                     auto out = obj();
                     out["mode"] = modeName(gb->mode);
+                    out["actions"] = (int64_t)gb->replay.m_actionAtom.length();
                     return out;
                 },
             });
