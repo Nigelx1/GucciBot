@@ -1711,8 +1711,21 @@ namespace gucci::ui {
             engineSwitch("Audio pitch follows speed", "Music and sounds play faster or slower with the game speed",
                          &upd.m_speedhackAudio, "feat_audio_pitch");
             engineSwitch("Scroll speed fix", nullptr, &upd.m_ssbFix, "feat_scroll_speed_fix");
+#if GB_NATIVE_ENGINE
             engineSwitch("High TPS precision", "Scales GD's velocity rounding with the tick rate. Changes physics",
                          &upd.m_highTpsPrecision, "updater_highTpsPrecision");
+#else
+            // It does nothing off Windows (hook_playerobject.cpp,
+            // yVelocityQuantum), so it shows off and can't be switched on;
+            // the saved choice is left alone.
+            {
+                bool off = false;
+                ImGui::BeginDisabled();
+                kit::SwitchRow("High TPS precision",
+                               "Windows only for now. A macro made with it on won't replay the same here", &off);
+                ImGui::EndDisabled();
+            }
+#endif
             engineSwitch("Prevent death", "Steps back instead of dying", &upd.m_preventDeath, "feat_prevent_death");
             float inputFps = static_cast<float>(upd.m_inputFps);
             kit::RowBegin("Input FPS", "While recording, clicks land only on this many ticks a second (sub-tick "

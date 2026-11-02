@@ -19,6 +19,7 @@ using namespace gucci;
 static constexpr double kVanillaQuantum = 0.001;
 
 static double yVelocityQuantum() {
+#if GB_NATIVE_ENGINE
     auto* gb = GucciEngine::get();
     if (!gb->updater.m_highTpsPrecision || !gb->enabled)
         return kVanillaQuantum;
@@ -29,6 +30,15 @@ static double yVelocityQuantum() {
     if (!(tps > ref))
         return kVanillaQuantum;
     return kVanillaQuantum * (ref / tps);
+#else
+    // Windows only for now. GD rounds y-velocity again inside
+    // PlayerObject::updateJump and reads the rounded value on from there;
+    // only the Windows midhook below reaches that. With just the setter half
+    // the switch gave a third physics here, the same as neither Windows with
+    // it on nor GD, so off Windows it does nothing (the menu greys it out and
+    // says so) and GD's own rounding stands.
+    return kVanillaQuantum;
+#endif
 }
 
 static double quantise(double value, double quantum) {
