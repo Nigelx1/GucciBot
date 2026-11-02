@@ -137,8 +137,20 @@ namespace gucci::mcp::scene {
             bool finding = !opt.findId.empty() || !opt.findClass.empty() || !opt.findText.empty();
 
             bool matches(CCNode* node, std::string const& cls, std::string const& own) const {
-                if (!opt.findId.empty() && !containsNoCase(node->getID(), opt.findId))
-                    return false;
+                // The ID: a part of it, or any of several split by "|".
+                if (!opt.findId.empty()) {
+                    bool any = false;
+                    std::string_view rest = opt.findId;
+                    while (!any) {
+                        auto const bar = rest.find('|');
+                        any = containsNoCase(node->getID(), rest.substr(0, bar)) && !rest.substr(0, bar).empty();
+                        if (bar == std::string_view::npos)
+                            break;
+                        rest = rest.substr(bar + 1);
+                    }
+                    if (!any)
+                        return false;
+                }
                 if (!opt.findClass.empty() && !containsNoCase(cls, opt.findClass))
                     return false;
                 if (!opt.findText.empty()) {

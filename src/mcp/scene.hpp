@@ -28,8 +28,9 @@ namespace gucci::mcp::scene {
         // "overlay", "ui" (the level's UI layer) or "id:<node id>".
         std::string root = "all";
         // Any that are set must match, ignoring case: the node's ID (a part of
-        // it), its class (a part) and its text (a part). With find, only the
-        // nodes that match are listed, each with every text under it.
+        // it; "a|b" for either), its class (a part) and its text (a part).
+        // With find, only the nodes that match are listed, each with every
+        // text under it.
         std::string findId;
         std::string findClass;
         std::string findText;

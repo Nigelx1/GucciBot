@@ -773,79 +773,201 @@ namespace gucci::mcp {
 
         // GucciBot (2026-10-31): the window as a PNG (mcp/screenshot.hpp), so
         // a session can see the menu and the level for itself.
-        server.addTool({
-            "gucci_screenshot",
-            "Save what the game window shows (the level, the menu, other mods' "
-            "overlays) as a PNG: screenshots/<name>.png in GucciBot's save folder. "
-            "It's taken `frames` frames from now (default 3: a window that has just "
-            "opened is hidden for its first frame), so this returns {pending: true, "
-            "path} at once; then call it with status: true until done is true "
-            "(done, ok, error, path, width, height, ms). With wait: true it answers "
-            "once the file is on disk instead, with the same fields. A minimized "
-            "game draws nothing, so its shot waits. Windows only for now.",
-            schemaOf({{"name", "string", "the file's name: 1 to 64 letters, digits, - or _, no extension"},
-                      {"frames", "integer", "frames from now, 1 to 30 (default 3)"},
-                      {"wait", "boolean", "answer once the file is written (default false: pending, then status)"},
-                      {"status", "boolean", "true: how the last shot went, instead of taking one"}}),
-            [](matjson::Value const& a) -> matjson::Value {
+        {
+            auto schema = schemaOf(
+                {{"name", "string", "the file's name: 1 to 64 letters, digits, - or _, no extension"},
+                 {"frames", "integer",
+                  "frames from now (or from the trigger) to the first shot, 1 to 600 (default 3; 1 with a trigger: "
+                  "the frame it fires on)"},
+                 {"count", "integer", "a burst: this many shots, 1 to 120 (default 1)"},
+                 {"every", "integer", "a burst: frames between its shots, 1 to 600 (default 1)"},
+                 {"scale", "integer", "1, 2 or 4: each side divided by it (default 1)"},
+                 {"trigger", "string",
+                  "now (default), death (player 1 dies), respawn (back alive, or the frame went back), complete (the "
+                  "level's end) or frame:<n> (the engine's frame reaches n)"},
+                 {"wait", "boolean", "answer once every file is written (default false: pending, then status)"},
+                 {"status", "boolean", "true: how the last shot went, instead of taking one"}});
+            auto crop = obj();
+            crop["description"] =
+                "a part of the window: [x, y, w, h] in ImGui's pixels (gucci_ui's rects), menu, page, compact, "
+                "player (a square around player 1, 160 px each side) or player:<half>, or card:<title> (a card in "
+                "the last gucci_ui capture)";
+            schema["properties"]["crop"] = crop;
+            server.addTool({
+                "gucci_screenshot",
+                "Save what the game window shows (the level, the menu, other mods' "
+                "overlays) as a PNG: screenshots/<name>.png in GucciBot's save folder. "
+                "It's taken `frames` frames from now (default 3: a window that has just "
+                "opened is hidden for its first frame), so this returns {pending: true, "
+                "path} at once; then call it with status: true until done is true "
+                "(done, ok, error, path, width, height, ms). With wait: true it answers "
+                "once the file is on disk instead, with the same fields. A burst "
+                "(count > 1) is <name>_000.png..., `every` frames apart, and a burst or "
+                "a trigger also writes <name>.json: each shot's engine frame, game "
+                "tick, ImGui frame, ms since the trigger, player 1 {x, y, dead} and "
+                "rect. A trigger (death, respawn, complete, frame:<n>) is checked "
+                "in the frame's swap itself, so a death flash a frame after the "
+                "death is caught exactly; status says armed while it waits. crop "
+                "takes part of the window, scale shrinks it (a full 1080p shot stalls "
+                "the frame a few ms: crop and scale a burst during anything timing "
+                "matters to). A minimized game draws nothing, so its shots wait. "
+                "Windows only for now.",
+                schema,
+                [](matjson::Value const& a) -> matjson::Value {
 #ifdef GEODE_IS_WINDOWS
-                auto out = obj();
-                auto const statusJson = [] {
-                    auto const s = shot::status();
-                    auto st = obj();
-                    st["done"] = s.done;
-                    st["ok"] = s.ok;
-                    st["error"] = s.asked ? s.error : std::string("no screenshot asked for this launch");
-                    st["pending"] = s.pending;
-                    st["frames_left"] = (int64_t)s.framesLeft;
-                    st["path"] = geode::utils::string::pathToString(s.path);
-                    st["width"] = (int64_t)s.width;
-                    st["height"] = (int64_t)s.height;
-                    st["ms"] = s.ms;
-                    return st;
-                };
-                if (argBool(a, "status", false))
-                    return statusJson();
-                // A bare name, as gucci_read_log's: nothing outside the folder.
-                auto const name = argStr(a, "name");
-                bool bare = !name.empty() && name.size() <= 64;
-                for (char const c : name)
-                    bare = bare && ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
-                                    c == '-' || c == '_');
-                if (!bare)
-                    throw ToolError("name must be 1 to 64 letters, digits, - or _ (no path, no extension)");
-                int64_t const frames = argInt(a, "frames", 3);
-                if (frames < 1 || frames > 30)
-                    throw ToolError("frames is 1 to 30");
+                    auto out = obj();
+                    auto const statusJson = [] {
+                        auto const s = shot::status();
+                        auto st = obj();
+                        st["done"] = s.done;
+                        st["ok"] = s.ok;
+                        st["error"] = s.asked ? s.error : std::string("no screenshot asked for this launch");
+                        st["pending"] = s.pending;
+                        st["armed"] = s.armed;
+                        st["frames_left"] = (int64_t)s.framesLeft;
+                        st["path"] = geode::utils::string::pathToString(s.path);
+                        st["width"] = (int64_t)s.width;
+                        st["height"] = (int64_t)s.height;
+                        st["ms"] = s.ms;
+                        st["count"] = (int64_t)s.count;
+                        st["taken"] = (int64_t)s.taken;
+                        st["written"] = (int64_t)s.written;
+                        if (s.count > 1 || !s.manifest.empty()) {
+                            auto files = matjson::Value::array();
+                            for (auto const& f : s.files)
+                                files.push(geode::utils::string::pathToString(f));
+                            st["files"] = files;
+                            st["manifest"] = geode::utils::string::pathToString(s.manifest);
+                        }
+                        return st;
+                    };
+                    if (argBool(a, "status", false))
+                        return statusJson();
+                    // A bare name, as gucci_read_log's: nothing outside the folder.
+                    auto const name = argStr(a, "name");
+                    if (!bareName(name))
+                        throw ToolError("name must be 1 to 64 letters, digits, - or _ (no path, no extension)");
 
-                auto const dir = Mod::get()->getSaveDir() / "screenshots";
-                std::error_code ec;
-                fs::create_directories(dir, ec);
-                if (ec)
-                    throw ToolError("couldn't make the screenshots folder: " + ec.message());
-                auto const path = dir / (name + ".png");
-                shot::request(path, (int)frames);
-                // GucciBot (2026-11-01): answered once it's on disk (a call
-                // that spans frames, mcp_server.hpp's Defer).
-                if (argBool(a, "wait", false))
-                    throw Defer{[path, statusJson]() -> std::optional<matjson::Value> {
-                                    auto const s = shot::status();
-                                    if (s.path != path)
-                                        throw ToolError("another screenshot was asked for meanwhile");
-                                    if (!s.done)
-                                        return std::nullopt;
-                                    return statusJson();
-                                },
-                                {}, 3000};
-                out["pending"] = true;
-                out["path"] = geode::utils::string::pathToString(path);
-                return out;
+                    // GucciBot (2026-11-01): bursts, crops, scale and triggers.
+                    shot::Burst b;
+                    b.dir = screenshotsDir();
+                    b.name = name;
+                    b.count = (int)argInt(a, "count", 1);
+                    if (b.count < 1 || b.count > 120)
+                        throw ToolError("count is 1 to 120");
+                    b.every = (int)argInt(a, "every", 1);
+                    if (b.every < 1 || b.every > 600)
+                        throw ToolError("every is 1 to 600");
+                    b.scale = (int)argInt(a, "scale", 1);
+                    if (b.scale != 1 && b.scale != 2 && b.scale != 4)
+                        throw ToolError("scale is 1, 2 or 4");
+                    auto const trigger = argStr(a, "trigger", "now");
+                    if (trigger == "now")
+                        b.trigger = shot::Trigger::Now;
+                    else if (trigger == "death")
+                        b.trigger = shot::Trigger::Death;
+                    else if (trigger == "respawn")
+                        b.trigger = shot::Trigger::Respawn;
+                    else if (trigger == "complete")
+                        b.trigger = shot::Trigger::Complete;
+                    else if (trigger.rfind("frame:", 0) == 0) {
+                        b.trigger = shot::Trigger::Frame;
+                        try {
+                            b.frame = std::stoll(trigger.substr(6));
+                        } catch (...) {
+                            throw ToolError("trigger frame:<n> needs a frame number, e.g. frame:600");
+                        }
+                    } else {
+                        throw ToolError("trigger is now, death, respawn, complete or frame:<n>");
+                    }
+                    int64_t const frames = argInt(a, "frames", b.trigger == shot::Trigger::Now ? 3 : 1);
+                    if (frames < 1 || frames > 600)
+                        throw ToolError("frames is 1 to 600");
+                    b.frames = (int)frames;
+                    if (a.contains("crop")) {
+                        auto const& c = a["crop"];
+                        auto rectOf = [&b](ImVec4 r) {
+                            b.crop.kind = shot::Crop::Kind::Rect;
+                            b.crop.x = r.x;
+                            b.crop.y = r.y;
+                            b.crop.w = r.z;
+                            b.crop.h = r.w;
+                        };
+                        if (c.isArray()) {
+                            auto const& v = c.asArray().unwrap();
+                            if (v.size() != 4)
+                                throw ToolError("crop as a list is [x, y, w, h]");
+                            rectOf(ImVec4((float)v[0].asDouble().unwrapOr(0.0), (float)v[1].asDouble().unwrapOr(0.0),
+                                          (float)v[2].asDouble().unwrapOr(0.0), (float)v[3].asDouble().unwrapOr(0.0)));
+                            if (b.crop.w <= 0.f || b.crop.h <= 0.f)
+                                throw ToolError("crop's w and h are above 0");
+                        } else if (c.isString()) {
+                            auto const spec = c.asString().unwrap();
+                            if (spec == "menu" || spec == "page" || spec == "compact" || spec == "macros") {
+                                auto const w = ui::probe::live(spec);
+                                if (!w)
+                                    throw ToolError("crop " + spec + ": that window isn't drawn now");
+                                rectOf(w->rect);
+                            } else if (spec == "player" || spec.rfind("player:", 0) == 0) {
+                                b.crop.kind = shot::Crop::Kind::Player;
+                                if (spec.size() > 7) {
+                                    try {
+                                        b.crop.half = std::stof(spec.substr(7));
+                                    } catch (...) {
+                                        throw ToolError("crop player:<half> needs a number of pixels, e.g. player:120");
+                                    }
+                                    if (b.crop.half < 8.f || b.crop.half > 2000.f)
+                                        throw ToolError("crop player:<half> is 8 to 2000 pixels");
+                                }
+                            } else if (spec.rfind("card:", 0) == 0) {
+                                auto const r = ui::probe::cardRect(spec.substr(5));
+                                if (!r)
+                                    throw ToolError("crop " + spec + ": no such card in the last gucci_ui capture "
+                                                    "(call gucci_ui with the card in view first)");
+                                rectOf(*r);
+                            } else {
+                                throw ToolError("crop is [x, y, w, h], menu, page, compact, player, player:<half> or "
+                                                "card:<title>");
+                            }
+                        } else {
+                            throw ToolError("crop is [x, y, w, h] or a name (menu, page, player, card:<title>...)");
+                        }
+                    }
+                    b.manifest = b.count > 1 || b.trigger != shot::Trigger::Now;
+                    bool const wait = argBool(a, "wait", false);
+                    // Waiting holds the call, and the caller gives up after 10 s:
+                    // only for what starts now and fits in about 6 s at 60 fps.
+                    if (wait && (b.trigger != shot::Trigger::Now || frames + (int64_t)b.count * b.every > 360))
+                        throw ToolError("wait is for shots that start now and take at most 360 frames (frames + "
+                                        "count x every); ask without wait, then poll with status: true");
+                    shot::request(b);
+                    auto const first = shot::status().path;
+                    // GucciBot (2026-11-01): answered once it's on disk (a call
+                    // that spans frames, mcp_server.hpp's Defer).
+                    if (wait)
+                        throw Defer{[first, statusJson]() -> std::optional<matjson::Value> {
+                                        auto const s = shot::status();
+                                        if (s.path != first)
+                                            throw ToolError("another screenshot was asked for meanwhile");
+                                        if (!s.done)
+                                            return std::nullopt;
+                                        return statusJson();
+                                    },
+                                    {}, 3000};
+                    out["pending"] = true;
+                    out["path"] = geode::utils::string::pathToString(first);
+                    if (b.manifest)
+                        out["manifest"] = geode::utils::string::pathToString(b.dir / (name + ".json"));
+                    out["count"] = (int64_t)b.count;
+                    out["armed"] = b.trigger != shot::Trigger::Now;
+                    return out;
 #else
-                (void)a;
-                throw ToolError("Windows only for now");
+                    (void)a;
+                    throw ToolError("Windows only for now");
 #endif
-            },
-        });
+                },
+            });
+        }
 
         // GucciBot (2026-10-31): the menu set up for a screenshot. Its theme
         // and Animations are a test's, never saved (ui.hpp, setTestTheme).
@@ -1332,7 +1454,7 @@ namespace gucci::mcp {
             find["type"] = "object";
             find["description"] =
                 "{id, class, text}: only the nodes that match all that are given (a part of each, ignoring "
-                "case), each with every text under it, e.g. {id: \"nigelx1.guccibot/\"}";
+                "case; id \"a|b\" for either), each with every text under it, e.g. {id: \"nigelx1.guccibot/\"}";
             schema["properties"]["find"] = find;
             server.addTool({
                 "gucci_scene",
@@ -1369,6 +1491,89 @@ namespace gucci::mcp {
                 },
             });
         }
+
+        // GucciBot (2026-11-01): everything over the level in one call: the
+        // menu probe's capture for GucciBot's own ImGui windows, the scene for
+        // its nodes, GD's labels, notifications and alerts.
+        server.addTool({
+            "gucci_overlays",
+            "Everything over the level right now, as text and data, in one call (a "
+            "frame later): imgui (GucciBot's ImGui windows other than the menu, with "
+            "their text: Calculate's box, the pathfinder's boxes and cover, Compact "
+            "Mode, Video Mode's bar and settings), gucci_nodes (GucciBot's own nodes "
+            "in the scene by ID: the HUD, the Survival Indicator, Calculate's labels "
+            "and markers, the safe-mode dot, Click Indicators... each with its text "
+            "and box), gd (GD's percentage, attempts and progress bar), "
+            "notifications (text, box, offscreen: whether it fits the screen), "
+            "alerts (title, body, buttons), click_indicators {enabled, active, "
+            "showing, tally} (its lane is drawn on ImGui's background, so it's read "
+            "from its state) and status_bar. Only reads.",
+            schemaOf({}),
+            [](matjson::Value const&) -> matjson::Value {
+                ui::probe::request();
+                throw Defer{[]() -> std::optional<matjson::Value> {
+                                if (!ui::probe::ready())
+                                    return std::nullopt;
+                                auto out = obj();
+                                {
+                                    ui::probe::Query q;
+                                    q.text = false;
+                                    q.max = 300;
+                                    auto imgui = obj();
+                                    auto windows = matjson::Value::array();
+                                    auto text = obj();
+                                    for (char const* which : {"overlays", "compact"}) {
+                                        q.window = which;
+                                        auto part = ui::probe::result(q);
+                                        for (auto const& w : part["windows"])
+                                            windows.push(w);
+                                        for (auto const& [key, value] : part["text"])
+                                            text[key] = value;
+                                    }
+                                    imgui["windows"] = windows;
+                                    imgui["text"] = text;
+                                    out["imgui"] = imgui;
+                                }
+                                {
+                                    scene::Options o;
+                                    o.findId = "nigelx1.guccibot/|framewindow";
+                                    o.max = 300;
+                                    o.visibleOnly = false;
+                                    auto nodes = scene::walk(o, false);
+                                    out["gucci_nodes"] = nodes["nodes"];
+                                    out["notifications"] = nodes["notifications"];
+                                    out["alerts"] = nodes["popups"];
+                                }
+                                if (auto* pl = PlayLayer::get())
+                                    out["gd"] = scene::gdLabels(pl);
+                                {
+                                    auto ci = obj();
+                                    ci["enabled"] = clickind::settings().enabled;
+                                    ci["active"] = clickind::active();
+                                    auto const* showing = clickind::showing();
+                                    ci["showing"] = std::string(showing ? showing : "");
+                                    auto const t = clickind::tally();
+                                    auto tally = obj();
+                                    tally["perfect"] = (int64_t)t.perfect;
+                                    tally["ok"] = (int64_t)t.ok;
+                                    tally["miss"] = (int64_t)t.miss;
+                                    ci["tally"] = tally;
+                                    out["click_indicators"] = ci;
+                                }
+                                {
+                                    auto const line = ui::statusLine();
+                                    auto bar = obj();
+                                    bar["state"] = line.state;
+                                    bar["safe"] = line.safe;
+                                    bar["text"] = line.text;
+                                    out["status_bar"] = bar;
+                                }
+                                out["frame"] = (int64_t)GucciEngine::get()->updater.getFrame();
+                                return out;
+                            },
+                            {}, 120};
+            },
+        });
 
         // GucciBot (2026-11-01): the event recorder (mcp/events.hpp).
         {
