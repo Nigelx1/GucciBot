@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-02-c (SolarBot wears the Orrery on the dark sky, from new images: Janet in the top-right corner at the middle of an orrery, her eyes now bowed toward the menu, on the level's near-black sky with gold constellations, a medallion, a kite and corona bands; cards edged in her orange and gold, the page you're on framed in gold)"
+    "2026-11-02-d (Hitborders, the accurate gaps: every hitbox grown by your own from GD's real collision tests for your mode, size and gravity - red where your center dies, blue where your box touches something solid with a red core where the small inner box kills, green orbs, pads and portals, the floor and ceiling - plus your dot, path and clicks and one merged outline; a card under Hitboxes on the Macro page and a keybind)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
