@@ -63,7 +63,9 @@ static void shakeRandomOverride(SafetyHookContext& ctx) {
 // seeded teleport state instead of GD's rand(). m_teleportRandomState was
 // stored and restored with checkpoints and reseeded every attempt, but the
 // hook that reads it was never installed. This one sits after the call (no
-// rip skip) -- Silicate's placement.
+// rip skip) -- Silicate's placement. Off Windows hooks/portable_teleport.cpp
+// makes the same pick from the same state (core/teleport_pick.hpp): keep the
+// two in step.
 #if GB_NATIVE_ENGINE // Windows midhooks and raw addresses (core/platform.hpp)
 static void teleportRandomOverride(SafetyHookContext& ctx) {
     uint64_t& state = GucciEngine::get()->replay.m_teleportRandomState;

@@ -1,5 +1,5 @@
 @echo off
-REM Offline tests: the GBR6 sub-tick and TPS sections, Check Macro, Macro Tools, other bots' formats and the Frame Editor's rules.
+REM Offline tests: the GBR6 sub-tick and TPS sections, Check Macro, Macro Tools, the random teleport's pick, other bots' formats and the Frame Editor's rules.
 
 setlocal
 set VCVARS="C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
@@ -28,6 +28,12 @@ cl /nologo /std:c++20 /EHsc /O2 /MD /I src ^
    tools\run_macroops_tests.cpp src\tools\macro_ops.cpp src\core\gbr6_format.cpp /Fe:build\run_macroops_tests.exe /Fo:build\ || exit /b 1
 
 build\run_macroops_tests.exe || exit /b 1
+
+REM The random teleport's pick (src/core/teleport_pick.hpp), which seeded teleports use off Windows.
+cl /nologo /std:c++20 /EHsc /O2 /MD /I src ^
+   tools\run_teleport_tests.cpp /Fe:build\run_teleport_tests.exe /Fo:build\ || exit /b 1
+
+build\run_teleport_tests.exe || exit /b 1
 
 REM Other bots' formats (src/tools/macro_convert): every writer round-trips. zlib comes from the
 REM mod's own build, so build the mod once first.
