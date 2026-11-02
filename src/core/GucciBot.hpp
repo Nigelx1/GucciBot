@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-02-f (Safe mode counts live hitboxes, live hitborders and seven more as cheats; the Hitborders credit for NaN GD's idea; the menu fits inside a short game window; Assistant Access fixes: gucci_test_set takes the hitbox and hitborder switches, gucci_ui's window and card filters work, an alert's title comes first, gucci_load_macro takes a file name; and gucci_hitborder_probe, which checks every drawn hitborder edge against GD's own collision pass on a hidden copy)"
+    "2026-11-02-g (Hitborders after the probe's first run in the game: a block's red core stops where GD lands or snaps the player first, for mini modes, the spider and slope legs; circles drawn around GD's circle so a legacy saw's hearts never show a gap GD doesn't have; the probe counts the deaths GD names no object for and leaves out points outside the floor and ceiling a mode has)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
