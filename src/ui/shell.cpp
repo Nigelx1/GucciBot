@@ -2368,6 +2368,13 @@ namespace gucci::ui {
         bool g_brrrWasOn = false;
         double g_brrrStart = 0.0; // ImGui time the drop started
 
+#if !defined(GEODE_IS_MOBILE)
+        // The menu inside the game's window (drawMain): the gap it keeps from
+        // the edges, and the window size it last made sure it fits.
+        constexpr float kMenuMargin = 8.f;
+        ImVec2 g_menuFitFor{0.f, 0.f};
+#endif
+
         void pageSettings() {
             // The master switch (core/bot_switch.hpp), asked for by dihmaster500.
             kit::BeginCard(brandName(), "Done botting? Switch it off: it leaves the game until you switch it back on, "
@@ -2819,10 +2826,19 @@ namespace gucci::ui {
             ImGui::SetNextWindowSize(ImVec2(areaMax.x - areaMin.x, areaMax.y - areaMin.y), ImGuiCond_Always);
             ImGuiWindowFlags const fit = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
 #else
-            ImGui::SetNextWindowSize(ImVec2(720.f, 500.f), ImGuiCond_FirstUseEver);
+            // 720 x 500 in the middle the first time it opens in a launch
+            // (nothing keeps where it was: there's no imgui.ini), but never
+            // bigger than the game's window: in a short one (764 x 430 on
+            // 2026-11-02) it hung 35 px off the top and the bottom. Nor can
+            // it be resized past the game's window, and it moves back inside
+            // if that shrinks under it (after Begin, below).
+            ImVec2 const room(std::max(1.f, io.DisplaySize.x - 2.f * kMenuMargin),
+                              std::max(1.f, io.DisplaySize.y - 2.f * kMenuMargin));
+            ImVec2 const least(std::min(520.f, room.x), std::min(360.f, room.y));
+            ImGui::SetNextWindowSize(ImVec2(std::min(720.f, room.x), std::min(500.f, room.y)), ImGuiCond_FirstUseEver);
             ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_FirstUseEver,
                                     ImVec2(0.5f, 0.5f));
-            ImGui::SetNextWindowSizeConstraints(ImVec2(520.f, 360.f), ImVec2(FLT_MAX, FLT_MAX));
+            ImGui::SetNextWindowSizeConstraints(least, room);
             ImGuiWindowFlags const fit = ImGuiWindowFlags_None;
 #endif
             bool open = true;
@@ -2832,6 +2848,23 @@ namespace gucci::ui {
                 ImGui::PopStyleVar();
                 return;
             }
+#if !defined(GEODE_IS_MOBILE)
+            // Inside the game's window on the first frame of a launch and
+            // whenever that window changes size; a drag in between is left
+            // alone. Measured without BIG BRRRR's shake, which rides on top.
+            if (io.DisplaySize.x != g_menuFitFor.x || io.DisplaySize.y != g_menuFitFor.y) {
+                g_menuFitFor = io.DisplaySize;
+                ImVec2 const pos = ImGui::GetWindowPos();
+                ImVec2 const size = ImGui::GetWindowSize();
+                ImVec2 const base(pos.x - g_brrrOffset.x, pos.y - g_brrrOffset.y);
+                float const maxX = std::max(kMenuMargin, io.DisplaySize.x - kMenuMargin - size.x);
+                float const maxY = std::max(kMenuMargin, io.DisplaySize.y - kMenuMargin - size.y);
+                ImVec2 const inside(std::round(std::clamp(base.x, kMenuMargin, maxX)),
+                                    std::round(std::clamp(base.y, kMenuMargin, maxY)));
+                if (inside.x != base.x || inside.y != base.y)
+                    ImGui::SetWindowPos(ImVec2(inside.x + g_brrrOffset.x, inside.y + g_brrrOffset.y));
+            }
+#endif
             // Behind the pages: the page's own picture (the JMF sky), else the
             // theme's scene, else its snow.
             if (Backdrop const backdrop = kPages[g_page].backdrop ? kPages[g_page].backdrop : sceneBackdrop())
