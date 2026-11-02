@@ -1374,11 +1374,24 @@ namespace gucci {
         if (!pl)
             return false;
 
+        // At frame `now` the inputs stored on `now` have already been played:
+        // playback hands an action over on the tick before its frame (it looks
+        // a frame ahead, lookupFrame = frame + 1), and the recording's first
+        // input lands on now + 1 (addInputToReplay, getFrame() + 1). So the
+        // macro keeps everything up to `now` and loses what comes after, as
+        // onReset's checkpoint cut (clipFrom(respawnFrame + 1)) and Absense's
+        // start (clipFrom(tick + 1)) do. clipFrom(now) cut the input just
+        // played: a press there left the player holding a button the macro no
+        // longer pressed, which nothing let go of; a release left the macro
+        // holding one, let go of a frame late. The path sample for `now` is
+        // where the player is (taken after the tick), so it stays too:
+        // without it the next tick's sample left an empty one (all zeros) in
+        // its place.
         uint32_t now = updater.getFrame();
         auto& atom = replay.m_actionAtom;
-        atom.clipFrom(now);
-        if (replay.m_pathSamples.size() > (size_t)now)
-            replay.m_pathSamples.resize((size_t)now);
+        atom.clipFrom(now + 1);
+        if (replay.m_pathSamples.size() > (size_t)now + 1)
+            replay.m_pathSamples.resize((size_t)now + 1);
 
         bool held[2][4] = {};
         for (auto const& a : atom.m_actions)
