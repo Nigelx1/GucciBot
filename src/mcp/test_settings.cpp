@@ -12,6 +12,7 @@
 #include "audio/clicks.hpp"
 #include "core/GucciBot.hpp"
 #include "hacks/autoclicker.hpp"
+#include "hacks/hitborders.hpp"
 #include "hacks/safemode.hpp"
 #include "mcp/mcp_server.hpp"
 #include "trainers/click_indicators.hpp"
@@ -184,6 +185,18 @@ namespace gucci::testset {
                                  gb()->rngSeedVal = static_cast<uint32_t>(
                                      wantInt("hack_rng_seed", val, 0, std::numeric_limits<uint32_t>::max()));
                              }});
+
+                // Hitboxes and hitborders, as their cards' switches set them
+                // (pages/hitboxes_card.cpp, pages/hitborders_card.cpp). The
+                // borders read their settings every drawn frame, so setting
+                // the field is all a change needs; the card saves every
+                // hitborder key at once, here only the one is written.
+                v.push_back(engineBool("hack_hitboxes", [e]() -> bool& { return e()->showHitboxes; }));
+                auto hb = [] { return &HitborderOverlay::get()->settings; };
+                v.push_back(engineBool("hack_hitborders", [hb]() -> bool& { return hb()->show; }));
+                v.push_back(engineBool("hack_hitborders_death", [hb]() -> bool& { return hb()->onDeath; }));
+                v.push_back(engineBool("hitborder_merged", [hb]() -> bool& { return hb()->merged; }));
+                v.push_back(engineBool("hitborder_blocks_exact", [hb]() -> bool& { return hb()->exactBlocks; }));
 
                 // Macro path and the engine.
                 v.push_back(engineBool("show_macro_path", [e]() -> bool& { return e()->showMacroPath; }));
