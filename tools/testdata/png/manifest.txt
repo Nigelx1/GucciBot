@@ -1,0 +1,111 @@
+# Made by tools/make_png_tests.py: don't edit it by hand, run that again.
+# <png> <width> <height> <offset of its RGBA in expected.rgba, or - for none> <FNV-1a 64 of it>
+# refuse <png> <words its error has to contain>
+packaged/jupiter_city.png 1024 512 - d448f5be2938cf25
+packaged/jupiter_dial.png 444 308 - 2ae1767692b3a799
+packaged/jupiter_dial_ccw.png 612 612 - 314e137153bb672c
+packaged/jupiter_dial_cw.png 484 484 - 2f9b44cdb133bc73
+packaged/jupiter_sky.png 1440 1000 - bfe244d862882691
+packaged/jupiter_sprites.png 512 238 - 5b67c4373fcb6062
+variants/c0_d1_plain.png 13 11 0 1150c7dc9f5ae1d0
+variants/c0_d1_adam7.png 21 19 572 4573a464315a9d09
+variants/c0_d2_plain.png 13 11 2168 9c5f299f2f23776b
+variants/c0_d2_adam7.png 21 19 2740 62462a52c897cd86
+variants/c0_d4_plain.png 13 11 4336 4c266f86242a9a96
+variants/c0_d4_adam7.png 21 19 4908 04e871af700ee5ac
+variants/c0_d8_plain.png 13 11 6504 3965eba946570962
+variants/c0_d8_adam7.png 21 19 7076 df315a909d9f7d98
+variants/c0_d16_plain.png 13 11 8672 ea8e5db295d90179
+variants/c0_d16_adam7.png 21 19 9244 1e344288abde8074
+variants/c2_d8_plain.png 13 11 10840 3d0f9f1971e9cc53
+variants/c2_d8_adam7.png 21 19 11412 2de3fb84d83488c3
+variants/c2_d16_plain.png 13 11 13008 ac87298e8f91c052
+variants/c2_d16_adam7.png 21 19 13580 8074f76cbddb2f1c
+variants/c3_d1_plain.png 13 11 15176 64b2d39608b948c3
+variants/c3_d1_adam7.png 21 19 15748 522b600d97605585
+variants/c3_d2_plain.png 13 11 17344 aa840d54939cdd68
+variants/c3_d2_adam7.png 21 19 17916 d11e8334a01344ef
+variants/c3_d4_plain.png 13 11 19512 ff0024267cb5bb46
+variants/c3_d4_adam7.png 21 19 20084 87e4c528d2298277
+variants/c3_d8_plain.png 13 11 21680 d99e42ee6354cb72
+variants/c3_d8_adam7.png 21 19 22252 0e1de8a26686defd
+variants/c4_d8_plain.png 13 11 23848 f7ec3b7f9faf811b
+variants/c4_d8_adam7.png 21 19 24420 1d8984196e5c0f90
+variants/c4_d16_plain.png 13 11 26016 574b2f91df828c4f
+variants/c4_d16_adam7.png 21 19 26588 0acfe8a3888ffe07
+variants/c6_d8_plain.png 13 11 28184 c5979b7030e6bbd0
+variants/c6_d8_adam7.png 21 19 28756 4d76582ea94554ca
+variants/c6_d16_plain.png 13 11 30352 dc662e70d03a241d
+variants/c6_d16_adam7.png 21 19 30924 b50c38034b0977e3
+variants/c0_d1_key_plain.png 13 11 32520 ddf30a0009b4d90c
+variants/c0_d2_key_plain.png 13 11 33092 09295c7a36e82f45
+variants/c0_d4_key_plain.png 13 11 33664 ce7d365b6532d448
+variants/c0_d8_key_plain.png 13 11 34236 39814e136843a8a9
+variants/c0_d16_key_plain.png 13 11 34808 ed8795dd4f9be0ab
+variants/c0_d2_key_adam7.png 21 19 35380 5963da738b7938f7
+variants/c0_d16_key_adam7.png 21 19 36976 f9a24d786a896720
+variants/c2_d8_key_plain.png 13 11 38572 3294ceb45f195f2c
+variants/c2_d16_key_plain.png 13 11 39144 ebb1733a4196dfcb
+variants/c2_d8_key_adam7.png 21 19 39716 8253ad2fb1e4c0da
+variants/c2_d16_key_adam7.png 21 19 41312 cb017da9d1b31b65
+variants/c3_d1_alpha_plain.png 13 11 42908 19872abe14c83dea
+variants/c3_d2_alpha_plain.png 13 11 43480 8cc4044456fa4b21
+variants/c3_d4_alpha_plain.png 13 11 44052 4f9891cb2343f0b4
+variants/c3_d8_alpha_plain.png 13 11 44624 336d0c5c7f3af574
+variants/c3_d4_alpha_adam7.png 21 19 45196 c9419242ce95190a
+variants/c3_d8_alpha_adam7.png 21 19 46792 c17f4fd1c7ebd128
+variants/c3_d8_short_palette.png 13 11 48388 8506c118c870a0e9
+variants/c3_d4_short_palette.png 13 11 48960 1f6e4c6e7951a942
+variants/c6_d8_adam7_1x1.png 1 1 49532 5712716fac6fc549
+variants/c6_d8_adam7_1x9.png 1 9 49536 ba19797328d28fff
+variants/c6_d8_adam7_9x1.png 9 1 49572 8613791714343e3c
+variants/c6_d8_adam7_2x2.png 2 2 49608 5afcab1010b71baa
+variants/c6_d8_adam7_3x3.png 3 3 49624 be6c9f17f72a0146
+variants/c6_d8_adam7_5x7.png 5 7 49660 7954362b40a1e6c2
+variants/c6_d8_adam7_8x8.png 8 8 49800 bb2d83405cf2a37d
+variants/c6_d8_adam7_9x9.png 9 9 50056 b2ecc21f099de8b5
+variants/c0_d1_adam7_5x7.png 5 7 50380 834b23525a702ce9
+variants/c0_d1_adam7_9x9.png 9 9 50520 dc5e8df063f78379
+variants/c3_d2_adam7_3x3.png 3 3 50844 fb2c2ede53cea775
+variants/c3_d2_adam7_9x1.png 9 1 50880 986739551e8dcd77
+variants/c0_d4_adam7_7x1.png 7 1 50916 4f6cb142e9917bb5
+variants/c2_d16_adam7_2x2.png 2 2 50944 b4ea3e790263888e
+variants/c4_d16_adam7_3x5.png 3 5 50960 2ea8e48b9c8fcfb7
+variants/c3_d4_adam7_1x1.png 1 1 51020 8161e86cce885066
+variants/text_bad_crc.png 13 11 51024 022731956748ce8f
+variants/extra_data.png 13 11 51596 d20efe7b7d87a94d
+variants/pil_1.png 13 11 52168 68e62b732cc32550
+variants/pil_l.png 13 11 52740 009c413e05764035
+variants/pil_l_key.png 13 11 53312 8a1438aeb494d530
+variants/pil_la.png 13 11 53884 0ff3e66bcfa50b5b
+variants/pil_rgb.png 13 11 54456 c3ec35ade5fdd293
+variants/pil_rgb_key.png 13 11 55028 7c6826ef51b44132
+variants/pil_rgb_optimized.png 13 11 55600 c3ec35ade5fdd293
+variants/pil_rgba.png 13 11 56172 ca383a92e0d0996b
+variants/pil_p1.png 13 11 56744 da75f07fce941353
+variants/pil_p1_alpha.png 13 11 57316 815d3aec927f007c
+variants/pil_p1_clear_index.png 13 11 57888 9405c933c1c7033e
+variants/pil_p2.png 13 11 58460 6355387bca8c67dd
+variants/pil_p2_alpha.png 13 11 59032 8f7e83b3ca77b6ea
+variants/pil_p2_clear_index.png 13 11 59604 d64efd402a96493d
+variants/pil_p4.png 13 11 60176 2e5d6eb21e9506e0
+variants/pil_p4_alpha.png 13 11 60748 64ee82229d5e33dd
+variants/pil_p4_clear_index.png 13 11 61320 11af3687657fd2e0
+variants/pil_p8.png 13 11 61892 12396280cd8230d5
+variants/pil_p8_alpha.png 13 11 62464 199f21dde03ec97f
+variants/pil_p8_clear_index.png 13 11 63036 0e12129fc9cb369d
+variants/pil_i16.png 13 11 63608 6e39bdc14f51797a
+variants/pil_rgba_as_palette.png 13 11 64180 42b35807c54bc04b
+refuse bad/short_data.png stops short
+refuse bad/garbage_data.png is damaged
+refuse bad/damaged_idat.png damaged IDAT
+refuse bad/cut_in_half.png past the end
+refuse bad/no_palette.png without a palette
+refuse bad/palette_16_bit.png doesn't have
+refuse bad/rgb_4_bit.png doesn't have
+refuse bad/interlace_2.png interlace method
+refuse bad/zero_wide.png unlikely size
+refuse bad/filter_5.png filtered
+refuse bad/cgbi.png CgBI
+refuse bad/idat_first.png before its header
+refuse bad/header_only.png no picture

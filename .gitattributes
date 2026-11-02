@@ -1,0 +1,6 @@
+# The PNG reader's test data (tools/make_png_tests.py) is checked byte for
+# byte: git never changes its line endings, and never guesses whether the
+# expected pixels are text.
+tools/testdata/** -text
+tools/testdata/**/*.png binary
+tools/testdata/**/*.rgba binary

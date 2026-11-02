@@ -1,17 +1,27 @@
-// The JupiterBot / JMF Trainer art (resources/jupiter, made by
-// tools/jupiter_art.py), read the way the mod reads it (src/ui/png.cpp): every
-// picture decodes at the size its table (src/ui/pages/jupiter_art.hpp) says,
-// the sky is opaque, and every part the tables name has art in it. Run from
-// the repo root (run_tests.bat).
+// The JupiterBot / JMF Trainer art and the PNG reader that loads it
+// (src/ui/png.cpp). Run from the repo root (run_tests.bat).
+//
+// 1. The art: the pictures in resources/jupiter (as tools/jupiter_art.py
+//    writes them) and in tools/testdata/png/packaged (the same art as Geode's
+//    packager stores it in the .geode: palettes of 4-bit indexes with tRNS,
+//    which is what the game reads) decode at the sizes their table
+//    (src/ui/pages/jupiter_art.hpp) says, the sky is opaque, and every part
+//    the tables name has art in it.
+// 2. The reader against Pillow: every picture tools/make_png_tests.py made
+//    (tools/testdata/png/manifest.txt: every color type, bit depth and
+//    interlace, with and without tRNS) decodes to what Pillow decodes it to,
+//    pixel for pixel, and every broken file is refused for the right reason.
 
 #include "ui/pages/jupiter_art.hpp"
 #include "ui/png.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <fstream>
 #include <iterator>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -20,6 +30,8 @@ namespace png = gucci::ui::png;
 
 namespace {
 
+    char const* const kData = "tools/testdata/png/";
+
     int g_failed = 0;
 
     void fail(std::string const& what) {
@@ -27,10 +39,21 @@ namespace {
         ++g_failed;
     }
 
-    bool load(ja::File const& file, png::Pixels& px) {
-        std::string const path = std::string("resources/jupiter/") + file.name;
+    std::vector<uint8_t> readFile(std::string const& path) {
         std::ifstream in(path, std::ios::binary);
-        std::vector<uint8_t> const bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        return std::vector<uint8_t>((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    }
+
+    uint64_t fnv1a64(std::vector<uint8_t> const& bytes) {
+        uint64_t h = 0xCBF29CE484222325ull;
+        for (uint8_t b : bytes)
+            h = (h ^ b) * 0x100000001B3ull;
+        return h;
+    }
+
+    bool load(std::string const& dir, ja::File const& file, png::Pixels& px) {
+        std::string const path = dir + file.name;
+        std::vector<uint8_t> const bytes = readFile(path);
         std::string error;
         if (bytes.empty()) {
             fail(path + ": missing");
@@ -67,65 +90,177 @@ namespace {
             fail(what + ": nothing drawn in its rect");
     }
 
+    // The table checks on one copy of the art.
+    void checkArt(std::string const& dir) {
+        png::Pixels sky, dial, cw, ccw, city, sprites;
+        if (load(dir, ja::kSky, sky)) {
+            int lo = 0, hi = 0;
+            alphaRange(sky, 0, 0, (float)sky.width, (float)sky.height, lo, hi);
+            if (lo != 255)
+                fail(dir + ": the sky has see-through pixels");
+        }
+        if (load(dir, ja::kDial, dial))
+            hasArt(dial, 0, 0, (float)dial.width, (float)dial.height, dir + ": the dial");
+        if (load(dir, ja::kDialCw, cw))
+            hasArt(cw, 0, 0, (float)cw.width, (float)cw.height, dir + ": the dial's clockwise rings");
+        if (load(dir, ja::kDialCcw, ccw))
+            hasArt(ccw, 0, 0, (float)ccw.width, (float)ccw.height, dir + ": the dial's other rings");
+        if (load(dir, ja::kCity, city)) {
+            ja::Part const parts[] = {ja::kCityLeft, ja::kCityRight, ja::kCityMiddle};
+            char const* const names[] = {"the skyline's left piece", "its right piece", "its middle strip"};
+            for (int i = 0; i < 3; ++i) {
+                auto const& p = parts[i];
+                hasArt(city, p.u0, p.v0, p.u1, p.v1, dir + ": " + names[i]);
+                if ((p.u1 - p.u0) / ja::kPx != p.w || (p.v1 - p.v0) / ja::kPx != p.h)
+                    fail(std::string(names[i]) + ": its rect in the file isn't its size in the menu");
+            }
+        }
+        if (load(dir, ja::kSprites, sprites)) {
+            int i = 0;
+            for (auto const& s : ja::kSpriteRects) {
+                hasArt(sprites, s.u0, s.v0, s.u1, s.v1, dir + ": sprite " + std::to_string(i));
+                if (s.u1 > sprites.width || s.v1 > sprites.height)
+                    fail("sprite " + std::to_string(i) + " runs off the sheet");
+                ++i;
+            }
+            for (auto const& star : ja::kStars)
+                if (star.sprite < 0 || star.sprite >= (int)std::size(ja::kSpriteRects))
+                    fail("a star names a sprite that isn't there");
+        }
+    }
+
+    // One picture against Pillow's decode: its pixels in expected.rgba (from
+    // `offset`), or only their hash for the big packaged ones. A packaged one
+    // that differs is written to build\ for a closer look.
+    void checkPicture(std::string const& path, int w, int h, std::string const& offset, uint64_t hash,
+                      std::vector<uint8_t> const& expected) {
+        std::vector<uint8_t> const bytes = readFile(kData + path);
+        if (bytes.empty()) {
+            fail(path + ": missing");
+            return;
+        }
+        png::Pixels px;
+        std::string error;
+        if (!png::decode(bytes.data(), bytes.size(), px, error)) {
+            fail(path + ": " + error);
+            return;
+        }
+        if (px.width != w || px.height != h) {
+            fail(path + ": " + std::to_string(px.width) + "x" + std::to_string(px.height) + ", Pillow's is " +
+                 std::to_string(w) + "x" + std::to_string(h));
+            return;
+        }
+        size_t const n = (size_t)w * h * 4;
+        if (offset != "-") {
+            size_t const at = std::stoull(offset);
+            if (at + n > expected.size()) {
+                fail(path + ": expected.rgba is too short for it (run tools/make_png_tests.py)");
+                return;
+            }
+            size_t differ = 0, first = 0;
+            for (size_t i = 0; i < n; i += 4) {
+                if (std::equal(px.rgba.begin() + i, px.rgba.begin() + i + 4, expected.begin() + at + i))
+                    continue;
+                if (differ++ == 0)
+                    first = i;
+            }
+            if (differ) {
+                auto const rgba = [](uint8_t const* p) {
+                    char text[32];
+                    std::snprintf(text, sizeof(text), "(%d,%d,%d,%d)", p[0], p[1], p[2], p[3]);
+                    return std::string(text);
+                };
+                size_t const pixel = first / 4;
+                fail(path + ": " + std::to_string(differ) + " pixel(s) differ from Pillow's, first at (" +
+                     std::to_string(pixel % w) + "," + std::to_string(pixel / w) + "): " +
+                     rgba(px.rgba.data() + first) + ", Pillow " + rgba(expected.data() + at + first));
+                return;
+            }
+        }
+        if (fnv1a64(px.rgba) != hash) {
+            std::string const dump = "build/png_mismatch_" + path.substr(path.find_last_of('/') + 1) + ".rgba";
+            std::ofstream(dump, std::ios::binary).write(reinterpret_cast<char const*>(px.rgba.data()),
+                                                        (std::streamsize)px.rgba.size());
+            fail(path + ": differs from Pillow's decode (ours is in " + dump + ")");
+        }
+    }
+
 } // namespace
 
 int main() {
-    png::Pixels sky, dial, cw, ccw, city, sprites;
-    if (load(ja::kSky, sky)) {
-        int lo = 0, hi = 0;
-        alphaRange(sky, 0, 0, (float)sky.width, (float)sky.height, lo, hi);
-        if (lo != 255)
-            fail("the sky has see-through pixels");
-    }
-    if (load(ja::kDial, dial))
-        hasArt(dial, 0, 0, (float)dial.width, (float)dial.height, "the dial");
-    if (load(ja::kDialCw, cw))
-        hasArt(cw, 0, 0, (float)cw.width, (float)cw.height, "the dial's clockwise rings");
-    if (load(ja::kDialCcw, ccw))
-        hasArt(ccw, 0, 0, (float)ccw.width, (float)ccw.height, "the dial's other rings");
-    if (load(ja::kCity, city)) {
-        ja::Part const parts[] = {ja::kCityLeft, ja::kCityRight, ja::kCityMiddle};
-        char const* const names[] = {"the skyline's left piece", "its right piece", "its middle strip"};
-        for (int i = 0; i < 3; ++i) {
-            auto const& p = parts[i];
-            hasArt(city, p.u0, p.v0, p.u1, p.v1, names[i]);
-            if ((p.u1 - p.u0) / ja::kPx != p.w || (p.v1 - p.v0) / ja::kPx != p.h)
-                fail(std::string(names[i]) + ": its rect in the file isn't its size in the menu");
+    checkArt("resources/jupiter/");
+    checkArt(std::string(kData) + "packaged/");
+
+    // Every picture in the manifest.
+    std::vector<uint8_t> const expected = readFile(std::string(kData) + "expected.rgba");
+    std::ifstream manifest(std::string(kData) + "manifest.txt");
+    if (!manifest || expected.empty())
+        fail(std::string(kData) + ": no manifest.txt or expected.rgba (run tools/make_png_tests.py)");
+    int pictures = 0, refused = 0;
+    std::string line;
+    while (std::getline(manifest, line)) {
+        if (!line.empty() && line.back() == '\r')
+            line.pop_back();
+        if (line.empty() || line[0] == '#')
+            continue;
+        std::istringstream in(line);
+        std::string first;
+        in >> first;
+        if (first == "refuse") {
+            std::string path, words;
+            in >> path;
+            std::getline(in >> std::ws, words);
+            std::vector<uint8_t> const bytes = readFile(kData + path);
+            png::Pixels px;
+            std::string error;
+            if (bytes.empty())
+                fail(path + ": missing");
+            else if (png::decode(bytes.data(), bytes.size(), px, error))
+                fail(path + ": decoded, when it should be refused (" + words + ")");
+            else if (error.find(words) == std::string::npos)
+                fail(path + ": refused with \"" + error + "\", not for \"" + words + "\"");
+            else
+                ++refused;
+            continue;
         }
-    }
-    if (load(ja::kSprites, sprites)) {
-        int i = 0;
-        for (auto const& s : ja::kSpriteRects) {
-            hasArt(sprites, s.u0, s.v0, s.u1, s.v1, "sprite " + std::to_string(i));
-            if (s.u1 > sprites.width || s.v1 > sprites.height)
-                fail("sprite " + std::to_string(i) + " runs off the sheet");
-            ++i;
-        }
-        for (auto const& star : ja::kStars)
-            if (star.sprite < 0 || star.sprite >= (int)std::size(ja::kSpriteRects))
-                fail("a star names a sprite that isn't there");
+        int w = 0, h = 0;
+        std::string offset, hash;
+        in >> w >> h >> offset >> hash;
+        int const before = g_failed;
+        checkPicture(first, w, h, offset, std::stoull(hash, nullptr, 16), expected);
+        if (g_failed == before)
+            ++pictures;
     }
 
-    // Not a PNG, and a PNG cut short, are refused rather than read past.
+    // Junk isn't a PNG.
     {
         png::Pixels px;
         std::string error;
         uint8_t const junk[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
         if (png::decode(junk, sizeof(junk), px, error))
             fail("junk decoded as a PNG");
-        std::ifstream in("resources/jupiter/jupiter_dial.png", std::ios::binary);
-        std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-        if (bytes.size() > 200) {
-            bytes.resize(bytes.size() / 2);
-            if (png::decode(bytes.data(), bytes.size(), px, error))
-                fail("half a PNG decoded");
+    }
+
+    // What loading the art as packaged costs the frame it's first drawn in.
+    {
+        std::vector<std::vector<uint8_t>> files;
+        for (ja::File const& f : {ja::kSky, ja::kDial, ja::kDialCw, ja::kDialCcw, ja::kCity, ja::kSprites})
+            files.push_back(readFile(std::string(kData) + "packaged/" + f.name));
+        auto const start = std::chrono::steady_clock::now();
+        for (auto const& bytes : files) {
+            png::Pixels px;
+            std::string error;
+            png::decode(bytes.data(), bytes.size(), px, error);
         }
+        double const ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+        std::printf("art: the six layers as packaged decode in %.1f ms\n", ms);
     }
 
     if (g_failed) {
         std::printf("%d art check(s) failed\n", g_failed);
         return 1;
     }
-    std::printf("art: all checks passed\n");
+    std::printf("art: all checks passed (%d pictures match Pillow pixel for pixel, %d broken files refused)\n",
+                pictures, refused);
     return 0;
 }
