@@ -18,6 +18,8 @@
 #include "ui/touch.hpp"
 
 #include "absense/glue.hpp"
+#include "ai/job.hpp"
+#include "ai/pilot.hpp"
 #include "analysis/ac/framewindow.hpp"
 #include "analysis/ac/shim.hpp"
 #include "analysis/pathfinder.hpp"
@@ -1887,6 +1889,67 @@ namespace gucci::ui {
                            &GucciEngine::get()->pfAgencyDebug);
         }
 
+        // The AI pilot (stage D of the AI build, 2026-11-02): trained networks
+        // play and practice the level in its own session of GD's physics. It
+        // never touches the old search below.
+        std::string g_aiError;  // why the last Start was refused
+
+        void aiPathfinder() {
+            namespace pilot = gucci::ai::pilot;
+            auto const& live = pilot::live();
+            bool running = false;
+            matjson::Value st;
+            if (live.job) {
+                try {
+                    st = gucci::ai::job::status(live.job);
+                    auto const state = st["state"].asString().unwrapOr("");
+                    running = state == "queued" || state == "running";
+                } catch (...) {
+                }
+            }
+            bool const ready = pilot::ready();
+            kit::Note(pilot::weightsLine().c_str(), ready ? Tone::Muted : Tone::Warn);
+            int attempts = std::clamp(geode::Mod::get()->getSavedValue<int>("pf_ai_max_attempts", 50000), 1, 1000000);
+            int seconds = std::clamp(geode::Mod::get()->getSavedValue<int>("pf_ai_max_seconds", 300), 10, 3600);
+            if (kit::SliderRow("Attempts", "It stops after this many tries", &attempts, 100, 500000))
+                geode::Mod::get()->setSavedValue("pf_ai_max_attempts", attempts);
+            if (kit::SliderRow("Time limit", "It stops after this long", &seconds, 10, 3600, "%d s"))
+                geode::Mod::get()->setSavedValue("pf_ai_max_seconds", seconds);
+            kit::RowBegin("", nullptr);
+            if (!running) {
+                ImGui::BeginDisabled(!PlayLayer::get() || !ready);
+                if (kit::Button("Start", Tone::Accent, -1.f)) {
+                    pilot::PlayOptions o;
+                    o.maxAttempts = attempts;
+                    o.maxSeconds = seconds;
+                    std::string why;
+                    auto job = pilot::makePlay(o, why);
+                    if (job) {
+                        g_aiError.clear();
+                        pilot::setLiveJob(gucci::ai::job::submit(std::move(job)));
+                    } else {
+                        g_aiError = why;
+                    }
+                }
+                ImGui::EndDisabled();
+            } else if (kit::Button("Stop", Tone::Bad, -1.f)) {
+                gucci::ai::job::cancel(live.job);
+            }
+            kit::RowEnd();
+            if (!g_aiError.empty()) kit::Note(g_aiError.c_str(), Tone::Warn);
+            if (live.job && (running || live.attempts > 0)) {
+                kit::Progress(live.bestPercent / 100.f, fmt::format("best {:.1f}%", live.bestPercent).c_str());
+                if (!st.isNull()) kit::Hint(st["progress"].asString().unwrapOr("").c_str());
+            }
+            for (auto const& line : live.lines)
+                kit::Hint(line.c_str());
+            kit::RowBegin("Networks", "Load the trained networks again (after the trainer writes new ones)");
+            ImGui::BeginDisabled(running);
+            if (kit::Button("Reload", Tone::Muted, -1.f)) pilot::reload();
+            ImGui::EndDisabled();
+            kit::RowEnd();
+        }
+
         std::string g_speedTest;  // the last speed test's result (step R0 of AI_PATHFINDER_PLAN.md)
         std::string g_legText;    // the last "find a way to the next gate" (step R3)
 
@@ -1895,11 +1958,23 @@ namespace gucci::ui {
         kit::Note("The Pathfinder is Windows-only for now: its model of the level reads GD's Windows memory layout.", Tone::Warn);
 #endif
             kit::BeginCard("Pathfinder", "Finds a way through the level on its own.");
+            int brain = gucci::ai::pilot::engineAi() ? 0 : 1;
+            const char* brains[] = {"AI", "Search (old)"};
+            if (kit::ChoiceRow("Engine",
+                               "AI: trained networks play the level and practice it. Search (old): the searches "
+                               "from before the AI",
+                               &brain, brains, 2))
+                gucci::ai::pilot::setEngineAi(brain == 0);
+            if (brain == 0) {
+                aiPathfinder();
+                kit::EndCard();
+                return;
+            }
             int engine = absense::classicSelected() ? 1 : 0;
             const char* engines[] = {"Absense", "Classic"};
             std::string const engineHint =
                 branded("Absense: Absent's planner, the default. Classic: GucciBot's own search");
-            if (kit::ChoiceRow("Engine", engineHint.c_str(), &engine, engines, 2))
+            if (kit::ChoiceRow("Search", engineHint.c_str(), &engine, engines, 2))
                 absense::selectClassic(engine == 1);
             if (engine == 1) {
                 classicPathfinder();
