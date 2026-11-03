@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-02-l (AI pilot stage B: what the pilot sees - the per-tick record of hitborder scan, tokens and player state with its 472-float expansion - and the recorder: gucci_ai_record, gucci_ai_validate_real, gucci_ai_find_level, gucci_ai_layout, level tapes; AI jobs also run outside a level)"
+    "2026-11-02-m (AI pilot stage C: the networks run in the mod - GBNN loader with layout-hash check, dense and dilated conv1d forward with no fused multiply-add, and an offline test against the trainer golden set)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
