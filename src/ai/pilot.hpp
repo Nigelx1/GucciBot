@@ -18,6 +18,7 @@
 // real game (absense::judge) to confirm it.
 
 #include "ai/job.hpp"
+#include "ai/net.hpp"
 
 #include <cstdint>
 #include <deque>
@@ -42,6 +43,9 @@ namespace gucci::ai::pilot {
     bool ready();
     // One plain line for the menu: what is loaded, or why nothing is.
     std::string weightsLine();
+    // The loaded pilot for the other AI jobs (the rollout), or null; its
+    // hold_logit output and the file it came from.
+    net::Net* pilotNet(int& holdIndex, std::string& path);
 
     struct PlayOptions {
         int maxAttempts = 50000;  // a few thousand a second on easy levels

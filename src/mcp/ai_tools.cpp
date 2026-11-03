@@ -8,11 +8,13 @@
 #include "ai/observe.hpp"
 #include "ai/pilot.hpp"
 #include "ai/record.hpp"
+#include "ai/rollout.hpp"
 #include "ai/smoke.hpp"
 #include "ai/tape.hpp"
 
 #include <Geode/Geode.hpp>
 
+#include <cctype>
 #include <stdexcept>
 
 namespace gucci::mcp {
@@ -206,6 +208,55 @@ namespace gucci::mcp {
                 ai::pilot::setLiveJob(id);
                 auto out = matjson::Value::object();
                 out["job"] = id;
+                return out;
+            },
+        });
+
+        server.addTool({
+            "gucci_ai_rollout",
+            "Reinforcement learning experience: the pilot plays the open level in the AI's own session of GD's "
+            "physics for `seconds`, sampling hold or release each tick from its own probability (at `temperature`). "
+            "Episodes start at the level's start, at a point along the human run of the level (AI_ROOT\\data, "
+            "replayed in the copies) or at the furthest point reached so far (start_mix {start, human, frontier}); "
+            "an episode ends at a death, the level's end or max_episode_seconds (truncated). Reward per tick: "
+            "progress (a whole level about +10), death -1, finishing +2. Every tick is written to "
+            "AI_ROOT\\rl\\rollouts\\<tag>_<n>.* for tools/ai/rl_ppo.py. Returns {job}; the result has ticks, "
+            "episodes, mean_return, mean_progress, ticks_per_second, files.",
+            schemaFor({{"level_id", "integer", "the level it is for (checked against the open level; 0 skips)"},
+                       {"seconds", "number", "working time, wall clock (default 60)"},
+                       {"max_ticks", "integer", "stop after this many ticks (default 400000)"},
+                       {"temperature", "number", "sampling temperature (default 1)"},
+                       {"seed", "integer", "random seed (default 1)"},
+                       {"max_episode_seconds", "number", "game seconds before an episode is cut (default 30)"},
+                       {"start_mix", "object", "{start, human, frontier} weights (default 0.4, 0.4, 0.2)"},
+                       {"tag", "string", "file name prefix (default rollout)"},
+                       {"slice_ms", "number", "AI work per frame while it runs, ms (default: unchanged, 10)"}}),
+            [](matjson::Value const& a) {
+                requireNoOwner();
+                ai::rollout::Options o;
+                o.levelId = intArg(a, "level_id", 0);
+                if (a.contains("seconds")) o.seconds = a["seconds"].asDouble().unwrapOr(o.seconds);
+                o.maxTicks = intArg(a, "max_ticks", o.maxTicks);
+                if (a.contains("temperature")) o.temperature = a["temperature"].asDouble().unwrapOr(1.0);
+                o.seed = (uint64_t)intArg(a, "seed", 1);
+                if (a.contains("max_episode_seconds"))
+                    o.maxEpisodeSeconds = a["max_episode_seconds"].asDouble().unwrapOr(o.maxEpisodeSeconds);
+                if (a.contains("start_mix") && a["start_mix"].isObject()) {
+                    auto const& m = a["start_mix"];
+                    o.mixStart = m.contains("start") ? m["start"].asDouble().unwrapOr(0.0) : 0.0;
+                    o.mixHuman = m.contains("human") ? m["human"].asDouble().unwrapOr(0.0) : 0.0;
+                    o.mixFrontier = m.contains("frontier") ? m["frontier"].asDouble().unwrapOr(0.0) : 0.0;
+                }
+                if (a.contains("tag")) o.tag = a["tag"].asString().unwrapOr(o.tag);
+                for (char& c : o.tag)
+                    if (!std::isalnum((unsigned char)c) && c != '_' && c != '-') c = '_';
+                if (o.tag.empty()) o.tag = "rollout";
+                if (a.contains("slice_ms")) o.sliceMs = a["slice_ms"].asDouble().unwrapOr(0.0);
+                std::string why;
+                auto job = ai::rollout::make(o, why);
+                if (!job) throw ToolError(why);
+                auto out = matjson::Value::object();
+                out["job"] = ai::job::submit(std::move(job));
                 return out;
             },
         });

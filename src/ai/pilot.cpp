@@ -1172,6 +1172,14 @@ namespace gucci::ai::pilot {
         return out;
     }
 
+    net::Net* pilotNet(int& holdIndex, std::string& path) {
+        if (!ready()) return nullptr;
+        auto& M = models();
+        holdIndex = M.hold;
+        path = M.pilot.path;
+        return &M.pilot.net;
+    }
+
     bool ready() {
         if (!models().tried) reload();
         return models().pilot.net.loaded();
