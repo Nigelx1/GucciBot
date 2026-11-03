@@ -123,6 +123,10 @@ namespace gucci::safemode {
         return forcedByEnvironment() || g_forcedByTool;
     }
 
+    bool testLaunch() {
+        return forcedByEnvironment();
+    }
+
     bool tainted() {
         return g_tainted;
     }

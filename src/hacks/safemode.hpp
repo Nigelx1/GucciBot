@@ -38,6 +38,9 @@ namespace gucci::safemode {
 
     bool forced();
     void forceForSession();
+    // Started with GUCCIBOT_FORCE_SAFE_MODE set (a test launch from tools/assist.py),
+    // not just forced later by the tool. GD's saves are never written then (hooks/test_save_guard.cpp).
+    bool testLaunch();
 
     bool autoSafeMode();
     void setAutoSafeMode(bool on);
