@@ -19,6 +19,7 @@
 #include "absense/world/world.hpp"
 #include "absense/glue.hpp"
 #include "absense/judge.hpp"
+#include "ai/job.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/modify/CCScheduler.hpp>
@@ -219,7 +220,7 @@ void GucciUpdater::calculateSteps(float dt, float targetDt) {
     // skipped or reordered; what is let go of is wall clock the frame could
     // not keep up with.
     int realtimeCap = 0;
-    if (!rendering && !isPaused() && ::Bot::get()->pathfinder().drivesGame()) {
+    if (!rendering && !isPaused() && (::Bot::get()->pathfinder().drivesGame() || gucci::ai::job::holdsGame())) {
         realtimeCap = std::max(1, (int)(m_tps / 30.0));
         steps = std::min(steps, realtimeCap);
     }
@@ -868,8 +869,14 @@ static void tickSettledWork() {
             // player again. Only while it runs -- normal play pays nothing.
             // (Not a tick the judge is playing for real: that path is put
             // back afterwards and is none of the pathfinder's business.)
+            // The AI pilot's jobs too (src/ai/job.hpp): the ledger learns
+            // every real tick while one holds the game, so its starts at ticks
+            // the game has left find their World (SIM_API.md section 13).
             if (auto& apf = ::Bot::get()->pathfinder(); apf.isRunning() && !absense::judge::active()) {
                 apf.afterLiveTick();
+                world::World::afterRealTick(pl, (int)upd.getFrame());
+                ::Bot::get()->trajectory().realStateChanged();
+            } else if (gucci::ai::job::holdsGame() && !absense::judge::active()) {
                 world::World::afterRealTick(pl, (int)upd.getFrame());
                 ::Bot::get()->trajectory().realStateChanged();
             } else if (!absense::judge::active()) {
@@ -1233,6 +1240,13 @@ class $modify(GB7CCDirector, CCDirector) {
             gb->updater.runFrozenTick();
             restoreMs = msSince(t1);
             gb->updater.m_frozenSeconds = std::min((sliceMs + restoreMs) / 1000.0, 1.0);
+        }
+        // The AI pilot's job, a slice of at most its budget (10 ms by
+        // default): the game stays responsive while the AI simulates, and
+        // the time is taken out of the frame's delta like the search's.
+        if (gucci::ai::job::busy()) {
+            double const aiMs = gucci::ai::job::tick();
+            gb->updater.m_frozenSeconds = std::min(gb->updater.m_frozenSeconds + aiMs / 1000.0, 1.0);
         }
 
         CCDirector::drawScene();

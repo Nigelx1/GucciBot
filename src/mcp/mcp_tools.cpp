@@ -18,6 +18,7 @@
 #include "analysis/ac/lstar.hpp"
 #include "analysis/pathfinder.hpp"
 #include "absense/glue.hpp"
+#include "ai/job.hpp"
 #include "audio/bigbrrr.hpp"
 #include "audio/clicks.hpp"
 #include "mcp/events.hpp"
@@ -68,6 +69,10 @@ namespace gucci::mcp {
             return "analyzer";
         if (Pathfinder::get()->active || absense::isRunning() || absense::startPending())
             return "pathfinder";
+        // The AI pilot's jobs (src/ai/job.hpp): they hold the level at its
+        // start and have the copies while one runs.
+        if (gucci::ai::job::busy())
+            return "ai";
         return "";
     }
 
@@ -3298,6 +3303,9 @@ namespace gucci::mcp {
                 return out;
             },
         });
+
+        // The AI pilot's tools (src/mcp/ai_tools.cpp).
+        registerAiTools(server);
     }
 
 } // namespace gucci::mcp
