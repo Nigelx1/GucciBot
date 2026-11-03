@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-02-n (AI pilot stage D: the pilot plays and practices - play loop, snapshot ring, mistake finder, escalation, death sentences, practice logs, saved macro checked by the judge; gucci_ai_play and gucci_ai_reload; Pathfinder engine AI or Search (old))"
+    "2026-11-03-b (a minimized game keeps running during AI jobs and test launches: going to the background is skipped)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
