@@ -35,3 +35,4 @@ src_backup_pre_strip_2026-07-05/
 # history; they just aren't published with the repo anymore.
 /CLAUDE.md
 /.claude/settings.local.json
+__pycache__/
