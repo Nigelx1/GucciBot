@@ -9,6 +9,7 @@ under AI_ROOT and what the trainer gives back:
     AI_ROOT\practice\<level_id>\<attempt>.json + s3 arrays + .p.f32 .alive.i32
                                                                     the AI's own attempts (s6)
     AI_ROOT\weights\<model>.gbnn                                   trained networks (s7)
+    AI_ROOT\validation\<run_id>.json                              the real game's verdict (Python's)
 
 Each tick is stored compact (s3): 40 state floats, 160 scan bytes and 8
 tokens of 6 bytes, 368 bytes in all. Every network sees the same 472-float
@@ -17,8 +18,11 @@ must match the mod's C++ bit for bit: the recorder writes golden expanded
 rows next to every run, and loading a run checks them.
 
 Python only ever reads data\, tapes\ and practice\ (the mod owns them). It
-writes weights\ (orchestrate.py installs them there) and its own train\
-folder (checkpoints, progress files, reports), which the mod never reads.
+writes weights\ (orchestrate.py installs them there), its own train\
+folder (checkpoints, progress files, reports) and validation\: one sidecar
+per recorded run that died in the simulation, holding what
+gucci_ai_validate_real said when the same macro played in the real game
+(orchestrate.py record writes them; usable_ticks reads them).
 Arrays are read whole with np.fromfile (random batches from a memmap are ~50x
 slower on Nigel's PC, TOOLCHAIN.md 4.3), one run at a time, and dropped with
 close() once copied.
@@ -428,13 +432,29 @@ class Run:
     def has_golden(self):
         return os.path.exists(self.base + ".golden.idx.i32")
 
+    @property
+    def validation(self):
+        """The real game's verdict on this run (AI_ROOT\\validation\\<run_id>.json), or None."""
+        if self.practice:
+            return None
+        if "_validation" not in self.__dict__:
+            path = validation_path(os.path.dirname(os.path.dirname(self.json_path)), self.run_id)
+            try:
+                self._validation = read_json(path) if os.path.exists(path) else None
+            except (OSError, ValueError, DataError):
+                self._validation = None
+        return self._validation
+
     def usable_ticks(self):
         """How many leading ticks the trainers learn from (s4).
 
-        A human run: all of it when it completed in the copies (validated
-        "sim" or "real"); when it didn't complete, only if the real game agreed
-        it dies there (validated "real") and then only the ticks before
-        died_tick - tps; nothing from a run marked "failed" (or anything else).
+        A human run (validation_rule): all of it when it completed in the
+        copies (validated "sim" or "real"); when it died there, the ticks
+        before died_tick - tps, and only if the real game (the validation
+        sidecar) completed it (a simulator mismatch) or died within 1 block of
+        the simulation's death x; nothing otherwise, nor from a run its
+        sidecar excludes. A run without a sidecar whose header says
+        validated "real" keeps the older reading (the real game agreed).
         A practice attempt (s6) that didn't complete loses its last second
         before the death (or before its end, when a limit stopped it). Nothing
         from the first tick the meta marks dead on, minus the same margin,
@@ -450,10 +470,10 @@ class Run:
                 died = self.died_tick
                 end = (int(died) if died is not None else T) - margin
         else:
-            v = self.validated
-            if self.completed and v in ("sim", "real"):
+            rule, _ = validation_rule(self.header, self.validation)
+            if rule == "whole":
                 end = T
-            elif not self.completed and v == "real" and self.died_tick is not None:
+            elif rule == "before_death":
                 end = int(self.died_tick) - margin
             else:
                 return 0
@@ -461,6 +481,66 @@ class Run:
         if len(dead):
             end = min(end, int(dead[0]) - margin)
         return int(min(max(end, 0), T))
+
+
+# ---- the real game's verdict on a recorded run (AI_ROOT\validation\<run_id>.json) -----------
+
+VALIDATION_FORMAT = "gbai-validation"
+SAME_DEATH_BLOCKS = 1.0  # the real game "dies there too" within this many blocks of the simulation's death x
+
+
+def validation_path(root, run_id):
+    return os.path.join(root, "validation", f"{run_id}.json")
+
+
+def write_validation(root, run_id, sidecar):
+    """Writes AI_ROOT\\validation\\<run_id>.json (atomic). sidecar: {completed, died_x, percent, frame_offset,
+    when} from gucci_ai_validate_real, plus whatever else is worth keeping (sim_died_x, exclude, ...)."""
+    out = {"format": VALIDATION_FORMAT, "run_id": run_id}
+    out.update(sidecar)
+    out.setdefault("when", now_iso())
+    path = validation_path(root, run_id)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    write_json_atomic(path, out)
+    return path
+
+
+def validation_rule(header, sidecar=None):
+    """(rule, why): which ticks of a recorded human run the trainers may use.
+
+    "whole": the simulation completed it. "before_death": it died in the
+    simulation, and the real game either completed it (the simulator is wrong
+    there) or died within SAME_DEATH_BLOCKS of the same x; the ticks before
+    the simulation's death minus 1 s count. "none": anything else (no real
+    game verdict, a verdict for another frame offset, a death elsewhere, a
+    sidecar that excludes the run).
+    """
+    if sidecar and sidecar.get("exclude"):
+        return "none", f"excluded: {sidecar['exclude']}"
+    completed = bool(header.get("completed"))
+    v = header.get("validated")
+    if completed:
+        if v in ("sim", "real"):
+            return "whole", "completed in the simulation"
+        return "none", f"completed but validated {v!r}"
+    if header.get("died_tick") is None:
+        return "none", "died in the simulation at no known tick"
+    if not sidecar:
+        if v == "real":
+            return "before_death", "the header says the real game agreed"
+        return "none", "died in the simulation, not checked in the real game"
+    if sidecar.get("frame_offset") is not None and header.get("frame_offset") is not None and \
+            int(sidecar["frame_offset"]) != int(header["frame_offset"]):
+        return "none", (f"the real game played offset {sidecar['frame_offset']}, the run is offset "
+                        f"{header['frame_offset']}")
+    if sidecar.get("completed") is True:
+        return "before_death", "the real game completed it (a simulator mismatch)"
+    sim_x, real_x = header.get("died_x"), sidecar.get("died_x")
+    if sidecar.get("completed") is False and _is_num(sim_x) and _is_num(real_x):
+        if abs(float(real_x) - float(sim_x)) <= SAME_DEATH_BLOCKS * BLOCK:
+            return "before_death", "the real game dies at the same place"
+        return "none", f"the real game dies at x {float(real_x):.0f}, the simulation at x {float(sim_x):.0f}"
+    return "none", "no usable real-game result"
 
 
 def check_run_header(h, practice=False):

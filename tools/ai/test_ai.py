@@ -272,15 +272,22 @@ class FakeGame:
     """
 
     ALL = {"gucci_ai_record", "gucci_ai_status", "gucci_ai_reload", "gucci_ai_play", "gucci_ai_layout",
-           "gucci_open_level", "gucci_quit_level", "gucci_get_state"}
+           "gucci_open_level", "gucci_quit_level", "gucci_get_state", "gucci_ai_find_level",
+           "gucci_ai_validate_real", "gucci_ai_cancel"}
     TAPE_HASH = "00aa11bb22cc33dd"
 
-    def __init__(self, root, tools=None):
+    def __init__(self, root, tools=None, sim=None, real=None, find=None, crash=None):
+        """sim: {macro stem: tick it dies at in the simulation}; real: {stem: validate_real's result, or
+        "hang"}; find: {name: candidates}; crash: {stem: times gucci_ai_record takes the game down}."""
         self.root = root
         self.tools = set(self.ALL if tools is None else tools)
         self.jobs = {}
         self.level = None
         self.calls = []
+        self.sim, self.real, self.find = sim or {}, real or {}, find or {}
+        self.crash = dict(crash or {})
+        self.up = True
+        self.recoveries = 0
 
     def __enter__(self):
         return self
@@ -289,30 +296,59 @@ class FakeGame:
         return False
 
     def alive(self):
-        return True
+        return self.up
 
-    def _job(self, result):
+    def recover(self):
+        self.up = True
+        self.recoveries += 1
+
+    def _job(self, result, state="done"):
         job = f"job{len(self.jobs)}"
-        self.jobs[job] = {"polls": 0, "result": result}
+        self.jobs[job] = {"polls": 0, "result": result, "state": state}
         return {"job": job}
 
     def call(self, tool, **args):
         self.calls.append((tool, args))
+        if not self.up:
+            raise ConnectionRefusedError("the game isn't running")
         if tool not in self.tools:
             raise RuntimeError(f"{tool}: no tool called {tool}")
+        if tool == "gucci_ai_find_level":
+            return self._job({"query": args["name"], "candidates": self.find.get(args["name"], [])})
+        if tool == "gucci_ai_validate_real":
+            stem = os.path.splitext(os.path.basename(args["macro_path"]))[0]
+            res = self.real.get(stem, {"completed": True, "died_x": None, "percent": 100.0})
+            if res == "hang":
+                return self._job(None, state="running")
+            return self._job(dict(res, frame_offset=args.get("frame_offset", 0)))
+        if tool == "gucci_ai_cancel":
+            return {"cancelled": True}
         if tool == "gucci_ai_layout":
             return {"layout_hash": TOY_HASH, "obs_dim": gbai.OBS_DIM, "tape_layout": TAPE_LAYOUT,
                     "tape_layout_hash": self.TAPE_HASH}
         if tool == "gucci_ai_record":
             lid = int(args["level_id"])
             stem = os.path.splitext(os.path.basename(args["macro_path"]))[0]
+            if self.crash.get(stem):
+                self.crash[stem] -= 1
+                self.up = False
+                raise ConnectionResetError("the game crashed")
+            died = self.sim.get(stem)
+            import orchestrate  # the mod's run_id: <level>__<stem>__<format>
+            fmt = {".ybot": "ybot2", ".slc": "slc3", ".tcm": "tcm", ".gdr": "gdr"}.get(
+                os.path.splitext(args["macro_path"])[1].lower(), "gbr6")
             run_id, gaps, length = write_toy_run(self.root, lid, f"Level {stem}", ticks=4000, seed=lid % 997,
-                                                 stem=stem, macro_file=args["macro_path"])
+                                                 stem=f"{orchestrate.sanitize(stem)}__{fmt}",
+                                                 macro_file=args["macro_path"], died_tick=died,
+                                                 validated="failed" if died else None)
             write_toy_tape(self.root, lid, gaps, length)
-            return self._job({"run_id": run_id})
+            header = gbai.read_json(os.path.join(self.root, "data", run_id + ".json"))
+            return self._job(dict(header, run_id=run_id))
         if tool == "gucci_ai_status":
             j = self.jobs[args["job"]]
             j["polls"] += 1
+            if j["state"] != "done":
+                return {"state": j["state"], "progress": "playing in the real game: frame 9000, x 31000"}
             return {"state": "done", "progress": 1.0, "result": j["result"]}
         if tool == "gucci_ai_reload":
             return {"models": sorted(n[:-5] for n in os.listdir(os.path.join(self.root, "weights")))}
@@ -1223,6 +1259,172 @@ class OrchestrateTests(unittest.TestCase):
                 orchestrate.main(["play", "--root", root, "--levels", "14"], log=quiet,
                                  game_factory=lambda: FakeGame(root, tools=FakeGame.ALL - {"gucci_ai_play"}))
             self.assertIn("gucci_ai_play", str(cm.exception))
+
+
+class RecordTests(unittest.TestCase):
+    """orchestrate.py record: the overnight data run against a fake game."""
+
+    def setUp(self):
+        import orchestrate
+        self.o = orchestrate
+
+    def entries(self):
+        def e(stem, lid, name, **kw):
+            return dict({"file": f"C:/m/{stem}.ybot", "format": "ybot2", "level_id": lid, "level_name": name,
+                         "use_for_training": True, "origin": "human"}, **kw)
+        return [e("Done", 3001, "Done"),
+                e("RealDone", 3002, "Real Done"),  # dies in the sim, the real game completes it
+                e("SamePlace", 3003, "Same Place"),  # dies in both, within a block
+                e("Elsewhere", 3004, "Elsewhere"),  # dies in both, 3 blocks apart
+                e("Hangs", 3005, "Hangs"),  # the real game is still playing at the time cap
+                e("Found", None, "Found", find_name="Found"),
+                e("Twice", None, "Twice", find_name="Twice"),
+                e("Nowhere", None, "Nowhere", find_name="Nowhere"),
+                e("Crashy", 3006, "Crashy"),
+                e("Bloodbath", 10565740, "Bloodbath"),  # an exam: recorded, never trained on
+                e("Junk", 3007, "Junk", use_for_training=False, exclude_reason="junk"),
+                e("Dup", 3001, "Done", use_for_training=False, duplicate_of="C:/m/Done.ybot")]
+
+    def game(self, root):
+        return FakeGame(root, sim={"RealDone": 2000, "SamePlace": 2000, "Elsewhere": 2000, "Hangs": 2000},
+                        find={"Found": [{"id": 5555, "name": "found", "stars": 0}, {"id": 5556, "name": "Found It"}],
+                              "Twice": [{"id": 1, "name": "Twice", "stars": 2}, {"id": 2, "name": "twice", "stars": 3}],
+                              "Nowhere": [{"id": 9, "name": "Somewhere"}]},
+                        crash={"Crashy": 1})
+
+    def run_record(self, root, m, game, *extra):
+        return self.o.main(["record", "--root", root, "--manifest", m, "--validate-timeout", "-1", *extra],
+                           log=quiet, game_factory=lambda: game)
+
+    def test_validation_rule(self):
+        base = {"completed": False, "validated": "failed", "died_tick": 900, "died_x": 3000.0, "frame_offset": 1}
+        rule = gbai.validation_rule
+        self.assertEqual(rule(dict(base, completed=True, validated="sim", died_tick=None))[0], "whole")
+        self.assertEqual(rule(base)[0], "none")  # died, never checked in the real game
+        self.assertEqual(rule(base, {"completed": True, "frame_offset": 1})[0], "before_death")
+        self.assertEqual(rule(base, {"completed": False, "died_x": 3029.0, "frame_offset": 1})[0], "before_death")
+        self.assertEqual(rule(base, {"completed": False, "died_x": 2971.0})[0], "before_death")
+        self.assertEqual(rule(base, {"completed": False, "died_x": 3031.0, "frame_offset": 1})[0], "none")
+        self.assertEqual(rule(base, {"completed": True, "frame_offset": 0})[0], "none")  # another offset
+        self.assertEqual(rule(base, {"completed": None, "timed_out": True})[0], "none")
+        self.assertEqual(rule(base, {"exclude": "two-player level"})[0], "none")
+        self.assertEqual(rule(dict(base, completed=True, validated="sim"), {"exclude": "x"})[0], "none")
+        self.assertEqual(rule(dict(base, died_tick=None), {"completed": True})[0], "none")
+        with TempRoot() as root:
+            write_toy_run(root, 1001, "Toy", ticks=3000, seed=1, died_tick=2000, stem="died", validated="failed")
+            run = gbai.list_runs(root)[0][0]
+            self.assertEqual(run.usable_ticks(), 0)
+            gbai.write_validation(root, run.run_id, {"completed": True, "frame_offset": 0, "died_x": None,
+                                                     "percent": 100.0})
+            run = gbai.list_runs(root)[0][0]
+            self.assertEqual(run.usable_ticks(), 2000 - TPS)
+            side = gbai.read_json(gbai.validation_path(root, run.run_id))
+            self.assertEqual(side["format"], "gbai-validation")
+            self.assertIn("when", side)
+            gbai.write_validation(root, run.run_id, {"completed": False, "died_x": run.header["died_x"] + 2 * gbai.BLOCK,
+                                                     "frame_offset": 0})
+            self.assertEqual(gbai.list_runs(root)[0][0].usable_ticks(), 0)
+
+    def test_pick_level(self):
+        pick = self.o.pick_level
+        self.assertEqual(pick("Found", [{"id": 5, "name": "FOUND"}, {"id": 6, "name": "Found 2"}])[0], 5)
+        self.assertIsNone(pick("Found", [{"id": 6, "name": "Found 2"}])[0])
+        self.assertIsNone(pick("x", [])[0])
+        self.assertEqual(pick("A", [{"id": 1, "name": "a", "stars": 0}, {"id": 2, "name": "A", "stars": 5}])[0], 2)
+        self.assertEqual(pick("A", [{"id": 1, "name": "a", "stars": 2, "downloads": 10},
+                                    {"id": 2, "name": "A", "stars": 3, "downloads": 900}])[0], 2)
+        self.assertIsNone(pick("A", [{"id": 1, "name": "a", "stars": 2}, {"id": 2, "name": "A", "stars": 3}])[0])
+        self.assertIsNone(pick("A", [{"id": 1, "name": "a"}, {"id": 2, "name": "A"}])[0])
+        self.assertEqual(self.o.sanitize("Thé End!"), "Th___End_")  # per UTF-8 byte (2 for the e), like the mod
+        self.assertEqual(self.o.expected_run_id(14, "C:/x/Clubstep.gdr", "gdr"), "14__Clubstep__gdr")
+
+    def test_record_validates_resumes_and_reports(self):
+        with TempRoot() as root:
+            m = os.path.join(root, "manifest.json")
+            with open(m, "w", encoding="utf-8") as f:
+                json.dump(self.entries(), f)
+            game = self.game(root)
+            # The real game's deaths, placed against where the simulation died (FakeGame seeds by level id).
+            sim_x = {stem: float(toy_arrays(lid % 997, 4000, TPS, 1.0, 2000)[4][2000, gbai.META_X])
+                     for stem, lid in (("SamePlace", 3003), ("Elsewhere", 3004))}
+            game.real = {"RealDone": {"completed": True, "died_x": None, "percent": 100.0},
+                         "SamePlace": {"completed": False, "died_x": sim_x["SamePlace"] + 20.0, "percent": 50.0},
+                         "Elsewhere": {"completed": False, "died_x": sim_x["Elsewhere"] + 90.0, "percent": 51.0},
+                         "Hangs": "hang"}
+            out = self.run_record(root, m, game)["record"]
+            by = {os.path.splitext(os.path.basename(r["macro_path"]))[0]: r for r in out}
+            self.assertNotIn("Junk", by)
+            self.assertNotIn("Dup", by)
+            self.assertEqual(by["Done"]["verdict"], "whole")
+            self.assertEqual(by["RealDone"]["verdict"], "before_death")
+            self.assertEqual(by["SamePlace"]["verdict"], "before_death")
+            self.assertEqual(by["Elsewhere"]["verdict"], "none")
+            self.assertEqual(by["Hangs"]["verdict"], "none")
+            self.assertTrue(by["Hangs"]["real"]["timed_out"])
+            self.assertTrue(by["Hangs"]["real"]["real_passed_sim_death"])
+            self.assertEqual((by["Found"]["state"], by["Found"]["level_id"]), ("done", 5555))
+            self.assertEqual(by["Twice"]["state"], "unresolved")  # two rated exact matches, no downloads to pick by
+            self.assertEqual(by["Nowhere"]["state"], "unresolved")
+            self.assertEqual(by["Crashy"]["state"], "done")
+            self.assertEqual(game.recoveries, 1)
+            self.assertEqual(by["Bloodbath"]["state"], "done")
+            # Sidecars only for runs that died in the simulation; the usable rule reads them.
+            vdir = os.path.join(root, "validation")
+            self.assertEqual(sorted(os.listdir(vdir)),
+                             sorted(f"{by[s]['run_id']}.json" for s in ("RealDone", "SamePlace", "Elsewhere", "Hangs")))
+            runs = {r.run_id: r for r in gbai.list_runs(root)[0]}
+            self.assertEqual(runs[by["RealDone"]["run_id"]].usable_ticks(), 2000 - TPS)
+            self.assertEqual(runs[by["SamePlace"]["run_id"]].usable_ticks(), 2000 - TPS)
+            self.assertEqual(runs[by["Elsewhere"]["run_id"]].usable_ticks(), 0)
+            self.assertEqual(runs[by["Done"]["run_id"]].usable_ticks(), 4000)
+            # The exam's run is recorded but never trained on, in any fold.
+            for k in range(3):
+                split = gbai.make_split(list(runs.values()), gbai.Showcase(), (k, 3),
+                                        usable=lambda r: r.usable_ticks() > 0)
+                self.assertNotIn(10565740, {r.level_id for r in split["train"] + split["val"]})
+            progress = gbai.read_json(os.path.join(root, "train", "record_progress.json"))
+            self.assertEqual(progress["resolved"]["found"]["id"], 5555)
+            with open(os.path.join(root, "DATA_REPORT.md"), encoding="utf-8") as f:
+                report = f.read()
+            for text in ("By format", "By frame offset", "Simulation vs the real game", "simulator bugs to fix",
+                         "Held-out exam macros", "Bloodbath", "Not recorded, and why", "Twice", "ambiguous",
+                         "sim died, real completed", "Elsewhere"):
+                self.assertIn(text, report)
+            self.assertTrue(os.path.exists(os.path.join(root, "train", "reports", "DATA_REPORT.md")))
+            # A second run carries on: nothing finished is recorded again.
+            game2 = self.game(root)
+            again = self.run_record(root, m, game2)["record"]
+            self.assertTrue(all(r["state"] == "skipped" for r in again), [r["state"] for r in again])
+            self.assertFalse([c for c in game2.calls if c[0] in ("gucci_ai_record", "gucci_ai_validate_real")])
+
+    def test_a_game_that_keeps_crashing_is_given_up_on(self):
+        with TempRoot() as root:
+            m = os.path.join(root, "manifest.json")
+            with open(m, "w", encoding="utf-8") as f:
+                json.dump([{"file": "C:/m/Bad.ybot", "level_id": 3100, "level_name": "Bad", "use_for_training": True},
+                           {"file": "C:/m/Good.ybot", "level_id": 3101, "level_name": "Good",
+                            "use_for_training": True}], f)
+            game = FakeGame(root, crash={"Bad": 99})
+            out = self.run_record(root, m, game)["record"]
+            states = {os.path.basename(r["macro_path"]): r["state"] for r in out}
+            self.assertEqual(states, {"Bad.ybot": "failed", "Good.ybot": "done"})
+            self.assertEqual(game.recoveries, self.o.MAX_CRASHES_PER_ENTRY)
+
+    def test_same_run_id_from_two_folders_gets_a_copy(self):
+        with TempRoot() as root:
+            src = os.path.join(root, "src")
+            for sub, data in (("a", b"one"), ("b", b"two")):
+                os.makedirs(os.path.join(src, sub))
+                with open(os.path.join(src, sub, "Same.ybot"), "wb") as f:
+                    f.write(data)
+            m = os.path.join(root, "manifest.json")
+            with open(m, "w", encoding="utf-8") as f:
+                json.dump([{"file": os.path.join(src, s, "Same.ybot"), "format": "ybot2", "level_id": 3200,
+                            "level_name": "Same", "use_for_training": True} for s in ("a", "b")], f)
+            out = self.run_record(root, m, FakeGame(root))["record"]
+            self.assertEqual([r["state"] for r in out], ["done", "done"])
+            self.assertNotEqual(out[0]["run_id"], out[1]["run_id"])
+            self.assertIn("macro_copies", out[1]["recorded_from_copy"])
 
 
 if __name__ == "__main__":
