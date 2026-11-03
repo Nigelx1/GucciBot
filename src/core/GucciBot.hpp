@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-03-c (the AI judge plays two seconds past the end, so the real game can note the level end)"
+    "2026-11-03-d (a test launch never writes GDs save files)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
