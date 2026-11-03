@@ -19,7 +19,7 @@ Or from a shell:
     python tools/assist.py call gucci_get_state
     python tools/assist.py call gucci_menu open=true "page=JMF Trainer"
     python tools/assist.py shot solar_settings 3
-    python tools/assist.py launch | restart | ours | safe | close
+    python tools/assist.py launch [--visible] | restart | ours | safe | close | show | hide
 
 Values after key= are read as JSON when they parse (true, 3, "x") and as
 text otherwise.
@@ -87,6 +87,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -288,6 +289,167 @@ def _why_silent(since):
     return "is it on (Settings > Assistant Access)?"
 
 
+# ---- the window: minimized, so tests run in the background -------------------
+#
+# Nigel keeps using his PC (and may turn the monitor off) while tests and AI
+# jobs run, so launch() keeps the game's window out of his way without ever
+# taking the focus: whatever he was typing in keeps it (or gets it back). A
+# game minimized before GucciBot has loaded stops dead (GD pauses everything
+# in the background, and only the loaded mod skips that for test launches and
+# AI jobs, src/ai/background.cpp), so while it loads the window is moved off
+# the screen, and once Assistant Access answers it is put back and minimized.
+# shot(), burst() and page_shots() show it for the picture (still without the
+# focus) and minimize it again. VISIBLE = True (or GUCCIBOT_ASSIST_VISIBLE=1,
+# or launch(visible=True)) keeps the old behavior: a normal window.
+
+VISIBLE = os.environ.get("GUCCIBOT_ASSIST_VISIBLE") == "1"
+_minimized = False  # our game's window is kept minimized (launch() chose it)
+
+_u32 = ctypes.WinDLL("user32", use_last_error=True)
+_WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+_u32.EnumWindows.argtypes = [_WNDENUMPROC, wintypes.LPARAM]
+_u32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+_u32.GetWindowThreadProcessId.restype = wintypes.DWORD
+_u32.IsWindowVisible.argtypes = [wintypes.HWND]
+_u32.IsIconic.argtypes = [wintypes.HWND]
+_u32.IsWindow.argtypes = [wintypes.HWND]
+_u32.GetWindow.argtypes = [wintypes.HWND, wintypes.UINT]
+_u32.GetWindow.restype = wintypes.HWND
+_u32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+_u32.GetForegroundWindow.restype = wintypes.HWND
+_u32.SetForegroundWindow.argtypes = [wintypes.HWND]
+_u32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
+_u32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+_u32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                              wintypes.UINT]
+_u32.GetSystemMetrics.argtypes = [ctypes.c_int]
+_SWP_NOSIZE, _SWP_NOZORDER, _SWP_NOACTIVATE = 0x1, 0x4, 0x10
+_SW_MINIMIZE = 6          # minimizes and activates the next window down (the one used before)
+_SW_SHOWMINNOACTIVE = 7   # minimizes, the focus stays where it is
+_SW_SHOWNOACTIVATE = 4    # shows it at its normal size without taking the focus
+_GW_OWNER = 4
+
+
+def _windows(pid):
+    """The game's top-level windows (visible, unowned), main one first (the one with a title)."""
+    found = []
+
+    def each(hwnd, _):
+        owner = wintypes.DWORD()
+        _u32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
+        if owner.value == pid and _u32.IsWindowVisible(hwnd) and not _u32.GetWindow(hwnd, _GW_OWNER):
+            found.append(hwnd)
+        return True
+
+    _u32.EnumWindows(_WNDENUMPROC(each), 0)
+    found.sort(key=lambda h: -_u32.GetWindowTextLengthW(h))
+    return found
+
+
+def _window():
+    rec = _recorded()
+    if not rec or not _alive(rec):
+        return None
+    w = _windows(rec[0])
+    return w[0] if w else None
+
+
+def _minimize(hwnd, before=None):
+    """Minimizes the game's window. When the game took the focus, the window used
+    before gets it back (SW_MINIMIZE activates the next window down; then `before`
+    is asked for by name, which Windows may refuse)."""
+    if not hwnd or _u32.IsIconic(hwnd):
+        return
+    focused = _u32.GetForegroundWindow() == hwnd
+    _u32.ShowWindow(hwnd, _SW_MINIMIZE if focused else _SW_SHOWMINNOACTIVE)
+    if focused and before and _u32.IsWindow(before) and _u32.GetForegroundWindow() != before:
+        _u32.SetForegroundWindow(before)
+
+
+def hide():
+    """Minimizes our game's window (it keeps running; see the mod's background mode)."""
+    global _minimized
+    _minimized = True
+    _minimize(_window())
+
+
+def show():
+    """Shows our game's window again at its normal size, without taking the focus, and
+    stops keeping it minimized."""
+    global _minimized
+    _minimized = False
+    hwnd = _window()
+    if hwnd and _u32.IsIconic(hwnd):
+        _u32.ShowWindow(hwnd, _SW_SHOWNOACTIVATE)
+
+
+@contextlib.contextmanager
+def _shown(settle=0.6):
+    """The window shown for a picture when it's minimized, and minimized again afterwards."""
+    hwnd = _window()
+    if not hwnd or not _u32.IsIconic(hwnd):
+        yield
+        return
+    _u32.ShowWindow(hwnd, _SW_SHOWNOACTIVATE)
+    time.sleep(settle)  # the game draws again once it's back
+    try:
+        yield
+    finally:
+        _minimize(hwnd)
+
+
+_loading = set()  # PIDs whose window is kept off the screen while the game loads
+
+
+def _park(pid, before):
+    """While game `pid` loads: its window off the screen (to the right of every monitor),
+    and the focus back where it was whenever the game takes it. Returns where each window
+    stood, for _unpark(). Runs in a thread launch() starts, until _loading drops the PID."""
+    home = {}
+    right = _u32.GetSystemMetrics(76) + _u32.GetSystemMetrics(78) + 200  # SM_XVIRTUALSCREEN + SM_CXVIRTUALSCREEN
+    flags = _SWP_NOSIZE | _SWP_NOZORDER | _SWP_NOACTIVATE
+    while pid in _loading and _process(pid):
+        for hwnd in _windows(pid):
+            if _u32.GetForegroundWindow() == hwnd:
+                # Minimizing activates the window used before; shown again at once (not
+                # activated), a game that hasn't loaded GucciBot yet never stops.
+                _u32.ShowWindow(hwnd, _SW_MINIMIZE)
+                if before and _u32.IsWindow(before) and _u32.GetForegroundWindow() != before:
+                    _u32.SetForegroundWindow(before)
+                _u32.ShowWindow(hwnd, _SW_SHOWNOACTIVATE)
+            r = wintypes.RECT()
+            if _u32.IsIconic(hwnd) or not _u32.GetWindowRect(hwnd, ctypes.byref(r)):
+                continue
+            if r.left < right - 100:
+                home[hwnd] = (r.left, r.top)
+                _u32.SetWindowPos(hwnd, None, right, r.top, 0, 0, flags)
+        time.sleep(0.05)
+    _homes[pid] = home
+
+
+_homes = {}
+
+
+def _unpark(pid, minimize=True):
+    """The game's windows back where they stood, then minimized (no focus taken)."""
+    _loading.discard(pid)
+    end = time.time() + 2
+    while pid not in _homes and time.time() < end:
+        time.sleep(0.05)
+    flags = _SWP_NOSIZE | _SWP_NOZORDER | _SWP_NOACTIVATE
+    for hwnd, (x, y) in _homes.pop(pid, {}).items():
+        if _u32.IsWindow(hwnd):
+            _u32.SetWindowPos(hwnd, None, x, y, 0, 0, flags)
+    if minimize:
+        for hwnd in _windows(pid):
+            _minimize(hwnd)
+
+
+def _start_parking(pid, before):
+    _loading.add(pid)
+    threading.Thread(target=_park, args=(pid, before), daemon=True).start()
+
+
 def _wait_for_tools(start, timeout):
     """Until our game's Assistant Access answers; `start` is when the wait began (time.time())."""
     while not _answers():
@@ -308,7 +470,7 @@ def _require_forced():
         raise RuntimeError("safe mode isn't forced in the game, and gucci_force_safe_mode didn't turn it on")
 
 
-def launch(force_safe=True, timeout=180, settle=20):
+def launch(force_safe=True, timeout=180, settle=20, visible=None):
     """Starts Geometry Dash (the Geode copy) and waits until Assistant Access answers.
 
     Refuses if any GeometryDash.exe is running already (it may be Nigel's), if
@@ -320,7 +482,12 @@ def launch(force_safe=True, timeout=180, settle=20):
     says safe mode is forced. Waits `settle` more seconds once it answers:
     opening a level while Mega Hack is still loading crashed it once.
     Assistant Access has to be on already (it's remembered across launches).
+
+    The window is minimized as soon as it appears, without taking the focus
+    (the window used before keeps it or gets it back), so the game runs in the
+    background; visible=True (default: VISIBLE) leaves it up.
     """
+    global _minimized
     if _running(os.path.basename(GD_EXE)):
         raise RuntimeError("Geometry Dash is already running; close it first (assist.close() only "
                            "closes a game launch() started)")
@@ -342,18 +509,32 @@ def launch(force_safe=True, timeout=180, settle=20):
     # of any job this shell runs in where that's allowed.
     flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
     devnull = subprocess.DEVNULL
+    _minimized = not (VISIBLE if visible is None else visible)
+    before = _u32.GetForegroundWindow()
+    startup = None
+    if _minimized:  # its first ShowWindow without the focus, where the game asks for the default
+        startup = subprocess.STARTUPINFO(dwFlags=subprocess.STARTF_USESHOWWINDOW, wShowWindow=_SW_SHOWNOACTIVATE)
     try:
         proc = subprocess.Popen([GD_EXE], cwd=GD_DIR, env=env, stdin=devnull, stdout=devnull, stderr=devnull,
-                                creationflags=flags | subprocess.CREATE_BREAKAWAY_FROM_JOB)
+                                creationflags=flags | subprocess.CREATE_BREAKAWAY_FROM_JOB, startupinfo=startup)
     except OSError:
         proc = subprocess.Popen([GD_EXE], cwd=GD_DIR, env=env, stdin=devnull, stdout=devnull, stderr=devnull,
-                                creationflags=flags)
+                                creationflags=flags, startupinfo=startup)
     info = _process(proc.pid)
     if not info:
         raise RuntimeError("the game closed right after starting")
     _record(proc.pid, info[1])
+    if _minimized:
+        _start_parking(proc.pid, before)
 
-    _wait_for_tools(time.time(), timeout)
+    try:
+        _wait_for_tools(time.time(), timeout)
+    except BaseException:
+        if _minimized:
+            _unpark(proc.pid, minimize=False)  # in sight, to see what went wrong
+        raise
+    if _minimized:
+        _unpark(proc.pid)  # GucciBot answers: loaded, so a minimized game keeps running
     # Still the game it started, still answering, once settled: one that
     # closed or restarted meanwhile (a restart from inside it, an update)
     # isn't launch()'s, and whatever runs now is left alone.
@@ -394,7 +575,16 @@ def restart(timeout=180, settle=20):
                 info = _process(pid) if exe.lower() == GD_NAME and parent in line else None
                 if info and info[1] > old[1]:
                     _record(pid, info[1])
-                    _wait_for_tools(start, timeout)
+                    if _minimized:
+                        _start_parking(pid, _u32.GetForegroundWindow())
+                    try:
+                        _wait_for_tools(start, timeout)
+                    except BaseException:
+                        if _minimized:
+                            _unpark(pid, minimize=False)
+                        raise
+                    if _minimized:
+                        _unpark(pid)
                     time.sleep(settle)
                     _require_forced()
                     return pid
@@ -418,6 +608,11 @@ def shot(name, frames=3, timeout=10):
     Builds with calls that span frames answer once it's written (wait=True);
     an older build answers at once, and this polls its status as before.
     """
+    with _shown():
+        return _shot(name, frames, timeout)
+
+
+def _shot(name, frames, timeout):
     res = call("gucci_screenshot", name=name, frames=frames, wait=True)
     if res.get("done"):
         if not res.get("ok"):
@@ -873,7 +1068,8 @@ def page_shots(name, window="page", overlap=0.1, crop=None, **kw):
     args = dict(shots=name, window=window, overlap=overlap, **kw)
     if crop:
         args["crop"] = crop
-    return view(**args)
+    with _shown():
+        return view(**args)
 
 
 def scene(**kw):
@@ -934,6 +1130,11 @@ def burst(name, count=6, every=1, trigger="now", crop=None, scale=1, frames=None
     if wait is None:
         wait = trigger == "now" and count * every <= 300
     args["wait"] = wait
+    with _shown():
+        return _burst(name, trigger, args)
+
+
+def _burst(name, trigger, args):
     res = call("gucci_screenshot", **args)
     start = time.time()
     while not res.get("done"):
@@ -1186,7 +1387,8 @@ def _pairs(items):
 
 def main(argv):
     usage = ("usage: assist.py call [--any-game] TOOL [key=value...] | menu [key=value...] | "
-             "shot NAME [FRAMES] | launch [--no-safe] | restart | ensure_safe | ours | close | "
+             "shot NAME [FRAMES] | launch [--no-safe] [--visible] | show | hide | restart | ensure_safe | ours | "
+             "close | "
              "snapshot FILE | diff BEFORE AFTER | learn BEFORE AFTER | check BEFORE AFTER | sweep | "
              "copy SOURCE ZZ_GBTEST_NAME | test_set KEY VALUE | test_set reset | test_set list | "
              "ui [key=value...] | scene [key=value...] | events [since=N] [kinds=a,b] | overlays | "
@@ -1259,7 +1461,10 @@ def main(argv):
     elif cmd == "burst" and rest:
         result = burst(rest[0], **_pairs(rest[1:]))
     elif cmd == "launch":
-        result = {"pid": launch(force_safe="--no-safe" not in rest)}
+        result = {"pid": launch(force_safe="--no-safe" not in rest, visible=True if "--visible" in rest else None)}
+    elif cmd in ("show", "hide"):
+        show() if cmd == "show" else hide()
+        result = {cmd: True}
     elif cmd == "restart":
         result = {"pid": restart()}
     elif cmd in ("ensure_safe", "safe"):
