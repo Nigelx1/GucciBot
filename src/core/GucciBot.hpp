@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-03-e (AI layout v3: exact distances to hazards, walls, floor and ceiling ends)"
+    "2026-11-03-f (AI practice: replays the last seconds with more variety when one death keeps repeating)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
