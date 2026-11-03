@@ -1,29 +1,34 @@
-"""GucciBot AI: the trainer's side of the files the mod writes (contract v1).
+r"""GucciBot AI: the trainer's side of the files the mod writes (contract v2).
 
-The contract (CONTRACT.md, "AI pilot contract v1") fixes what the mod records
+The contract (CONTRACT.md, "AI pilot contract v2") fixes what the mod records
 under AI_ROOT and what the trainer gives back:
 
-    AI_ROOT\\data\\<run_id>.json + .obs.f16 .act.u8 .meta.f32       recorded runs (s2)
-    AI_ROOT\\tapes\\<level_id>.json + .tape.f16                      the level as columns (s3)
-    AI_ROOT\\practice\\<level_id>\\<attempt>.json + ... .alive.i32   the AI's own attempts (s4)
-    AI_ROOT\\weights\\<model>.gbnn                                   trained networks (s5)
+    AI_ROOT\data\<run_id>.json + .state.f32 .scan.u8 .tok.u8 .act.u8 .meta.f32
+                                  + .golden.f32 .golden.idx.i32       recorded runs (s3, s4)
+    AI_ROOT\tapes\<level_id>.json + .tape.u8                       the level as columns (s5)
+    AI_ROOT\practice\<level_id>\<attempt>.json + s3 arrays + .p.f32 .alive.i32
+                                                                    the AI's own attempts (s6)
+    AI_ROOT\weights\<model>.gbnn                                   trained networks (s7)
 
-Python only ever reads data\\, tapes\\ and practice\\ (the mod owns them). It
-writes weights\\ (orchestrate.py installs them there) and its own train\\
+Each tick is stored compact (s3): 40 state floats, 160 scan bytes and 8
+tokens of 6 bytes, 368 bytes in all. Every network sees the same 472-float
+expansion of it (expand_np here, expand_torch for training batches), which
+must match the mod's C++ bit for bit: the recorder writes golden expanded
+rows next to every run, and loading a run checks them.
+
+Python only ever reads data\, tapes\ and practice\ (the mod owns them). It
+writes weights\ (orchestrate.py installs them there) and its own train\
 folder (checkpoints, progress files, reports), which the mod never reads.
-
-This module reads and checks all of it (numpy memmaps for the arrays), writes
-and reads GBNN files byte for byte as the contract lays them out, and holds
-what the trainers share: the showcase levels (never trained on), splits by
-level, and progress files another process can poll. numpy only, no torch,
-so the shell commands below start fast.
+Arrays are read whole with np.fromfile (random batches from a memmap are ~50x
+slower on Nigel's PC, TOOLCHAIN.md 4.3), one run at a time, and dropped with
+close() once copied.
 
     import gbai
     root = gbai.ai_root()                    # or $GUCCIBOT_AI_ROOT
     runs, problems = gbai.list_runs(root)    # human runs that passed the checks
     runs, layout_hash = gbai.pick_layout(runs)
     run = runs[0]
-    run.obs[:run.usable_ticks()]             # float16 [T][N], read from disk as used
+    run.obs[:run.usable_ticks()]             # float32 [T][472], expanded as read
 
 From a shell:
 
@@ -50,14 +55,49 @@ MOD_ID = "nigelx1.guccibot"
 # ---- the contract's constants --------------------------------------------------
 
 BLOCK = 30.0  # GD units per block
+RUN_VERSION = 2  # recorded runs and practice attempts (s4)
+TAPE_VERSION = 1  # level tapes (s5)
 META_FIELDS = ["x", "y", "yvel", "mode", "gravity_flipped", "mini", "speed", "dead"]
 META_X, META_Y, META_YVEL, META_MODE, META_GRAVITY, META_MINI, META_SPEED, META_DEAD = range(8)
 MODES = ["cube", "ship", "ball", "ufo", "wave", "robot", "spider", "swing"]
 SPEEDS = ["0.5x", "1x", "2x", "3x", "4x"]
-# H = round(1.0 * tps): the practice log's "alive" cap (s4), and how much of a
-# run that died the trainers drop before the death (s2).
+VALIDATED = ("sim", "real", "failed")
+# H = round(1.0 * tps): the practice log's "alive" cap (s6), and how much of a
+# run that died the trainers drop before the death (s4).
 SURVIVE_SECONDS = 1.0
 DROP_SECONDS = 1.0
+
+# The compact per-tick record (s3) and its expansion.
+STATE_DIM = 40
+SCAN_COLUMNS = 40
+SCAN_DIM = 4 * SCAN_COLUMNS  # deadly above, deadly below, solid above, solid below per column
+SCAN_NONE = 255  # nothing within 12 blocks
+SCAN_NONE_VALUE = 12.5  # what SCAN_NONE expands to (blocks)
+SCAN_MAX = 96  # 12 blocks in 1/8 block
+TOKENS = 8
+TOKEN_BYTES = 6  # float16 dx, float16 dy, uint8 type, uint8 0
+TOK_DIM = TOKENS * TOKEN_BYTES
+TOKEN_TYPES = 32  # one-hot width; index 0 (empty) unused, types 1..31
+TOKEN_FLOATS = 2 + TOKEN_TYPES
+OBS_DIM = STATE_DIM + SCAN_DIM + TOKENS * TOKEN_FLOATS  # 472
+STATE_OFFSET, SCAN_OFFSET, TOK_OFFSET = 0, STATE_DIM, STATE_DIM + SCAN_DIM
+# Named state slots the trainer reads (s3).
+STATE_MODE0 = 0
+STATE_GRAVITY = 8
+STATE_SPEED0 = 10
+STATE_HELD = 18  # held before this tick: must equal act[t-1]
+STATE_INV_TPS = 23  # 60 / tps
+TOKEN_NAMES = {1: "yellow orb", 2: "pink orb", 3: "red orb", 4: "blue orb", 5: "green orb", 6: "black orb",
+               7: "green dash orb", 8: "pink dash orb", 9: "spider orb", 10: "teleport orb", 11: "yellow pad",
+               12: "pink pad", 13: "red pad", 14: "blue pad", 15: "spider pad", 16: "gravity-down portal",
+               17: "gravity-up portal", 18: "gravity-flip portal", 19: "cube portal", 20: "ship portal",
+               21: "ball portal", 22: "ufo portal", 23: "wave portal", 24: "robot portal", 25: "spider portal",
+               26: "swing portal", 27: "mini portal", 28: "normal-size portal", 29: "speed portal",
+               30: "mirror portal", 31: "dual portal"}
+# The arrays of one run (s3, s4): extension, dtype, values per tick.
+RUN_ARRAYS = [(".state.f32", "<f4", STATE_DIM), (".scan.u8", "<u1", SCAN_DIM), (".tok.u8", "<u1", TOK_DIM),
+              (".act.u8", "<u1", 1), (".meta.f32", "<f4", len(META_FIELDS))]
+PRACTICE_ARRAYS = [(".p.f32", "<f4", 1), (".alive.i32", "<i4", 1)]
 
 HASH_RE = re.compile(r"^[0-9a-fA-F]{16}$")
 
@@ -171,22 +211,172 @@ def _check_layout_list(entries, total, what):
     return errors
 
 
-# ---- recorded runs and practice attempts (s2, s4) ------------------------------
+# ---- the per-tick record and its 472-float expansion (s3) ------------------------
 
-class Run:
-    """One recorded run (contract s2) or practice attempt (s4): its header and arrays.
+def obs_name(j):
+    """What value j of the expansion is, for messages: 'state[18]', 'scan col 3 solid below', 'token 2 type 11'."""
+    j = int(j)
+    if j < SCAN_OFFSET:
+        return f"state[{j}]"
+    if j < TOK_OFFSET:
+        c, k = divmod(j - SCAN_OFFSET, 4)
+        return f"scan col {c} " + ("deadly above", "deadly below", "solid above", "solid below")[k]
+    s, k = divmod(j - TOK_OFFSET, TOKEN_FLOATS)
+    return f"token {s} " + ("dx" if k == 0 else "dy" if k == 1 else f"type {k - 2}")
 
-    The arrays are read-only numpy memmaps, opened on first use. Drop every
-    reference to them (or call close()) before deleting the files: Windows
-    can't delete a mapped file.
+
+def expand_np(state, scan, tok):
+    """The 472 floats every network sees (s3), from compact rows, in numpy.
+
+    state float32 [n][40] (or [40]), scan uint8 [n][160], tok uint8 [n][48].
+    [state as-is][scan: 255 -> 12.5, else v / 8][per token: dx, dy, one-hot(type, 32)
+    with index 0 unused]; a slot whose type is 0 (or outside 1..31) is all zeros.
+    Bit for bit what the mod's C++ computes (the golden rows check it).
+    """
+    state = np.asarray(state, np.float32)
+    single = state.ndim == 1
+    state = np.atleast_2d(state)
+    scan = np.atleast_2d(np.asarray(scan, np.uint8))
+    tok = np.atleast_2d(np.asarray(tok, np.uint8))
+    n = len(state)
+    out = np.zeros((n, OBS_DIM), np.float32)
+    out[:, :STATE_DIM] = state
+    s = scan.astype(np.float32) / np.float32(8.0)
+    s[scan == SCAN_NONE] = np.float32(SCAN_NONE_VALUE)
+    out[:, SCAN_OFFSET:TOK_OFFSET] = s
+    t = np.ascontiguousarray(tok).reshape(n, TOKENS, TOKEN_BYTES)
+    dxdy = np.ascontiguousarray(t[:, :, :4]).view("<f2").astype(np.float32)  # [n][8][2]
+    typ = t[:, :, 4].astype(np.int64)
+    valid = (typ >= 1) & (typ < TOKEN_TYPES)
+    block = np.zeros((n, TOKENS, TOKEN_FLOATS), np.float32)
+    block[:, :, :2] = np.where(valid[:, :, None], dxdy, np.float32(0.0))
+    r, c = np.nonzero(valid)
+    block[r, c, 2 + typ[r, c]] = 1.0
+    out[:, TOK_OFFSET:] = block.reshape(n, TOKENS * TOKEN_FLOATS)
+    return out[0] if single else out
+
+
+def expand_torch(state, scan, tok):
+    """expand_np in torch, for training batches: state float32 [B][40], scan uint8 [B][160],
+    tok uint8 [B][48] tensors -> float32 [B][472], the same bits as expand_np."""
+    import torch
+    B = state.shape[0]
+    s = scan.to(torch.float32) / 8.0
+    s = torch.where(scan == SCAN_NONE, torch.full_like(s, SCAN_NONE_VALUE), s)
+    t = tok.reshape(B, TOKENS, TOKEN_BYTES)
+    dxdy = t[:, :, :4].contiguous().view(torch.float16).to(torch.float32)  # [B][8][2]
+    typ = t[:, :, 4].to(torch.int64)
+    valid = (typ >= 1) & (typ < TOKEN_TYPES)
+    dxdy = torch.where(valid[:, :, None], dxdy, torch.zeros_like(dxdy))
+    onehot = torch.zeros(B, TOKENS, TOKEN_TYPES, dtype=torch.float32)
+    onehot.scatter_(2, typ.clamp(0, TOKEN_TYPES - 1)[:, :, None], 1.0)
+    onehot = onehot * valid[:, :, None].to(torch.float32)
+    tokens = torch.cat([dxdy, onehot], 2).reshape(B, TOKENS * TOKEN_FLOATS)
+    return torch.cat([state.to(torch.float32), s, tokens], 1)
+
+
+def clean_compact(state, tok):
+    """Values that aren't finite (state floats, token dx/dy) set to 0, in place; returns how many.
+    The expansion of the cleaned rows equals clean_rows() of the raw rows' expansion."""
+    bad = finite_rows(state)
+    if not tok.flags.c_contiguous:
+        raise ValueError("tok must be C-contiguous (cleaned in place)")
+    f = tok.reshape(len(tok), TOKENS, TOKEN_BYTES)[:, :, :4].view("<f2")  # a view: writes reach tok
+    nf = ~np.isfinite(f)
+    if nf.any():
+        bad += int(nf.sum())
+        f[nf] = 0
+    return bad
+
+
+class CompactRows:
+    """Training rows kept compact in RAM (368 bytes a tick, not 472 floats = 1888), expanded per batch.
+
+    rows(idx) -> numpy float32 [n][472]; batch(idx) -> a torch tensor, the same bits.
+    Indexing (X[i], X[a:b], X[array]) is rows().
     """
 
-    def __init__(self, json_path, header):
+    def __init__(self, n):
+        n = int(n)
+        try:
+            self.state = np.zeros((n, STATE_DIM), np.float32)
+            self.scan = np.zeros((n, SCAN_DIM), np.uint8)
+            self.tok = np.zeros((n, TOK_DIM), np.uint8)
+        except MemoryError:
+            raise DataError(f"{n} ticks need {n * self.BYTES_PER_ROW / 2**30:.2f} GiB of free RAM, which isn't "
+                            "there (close what's using it; OneDrive is often the biggest), or train on less "
+                            "(--load-far-keep)")
+
+    BYTES_PER_ROW = STATE_DIM * 4 + SCAN_DIM + TOK_DIM
+
+    def __len__(self):
+        return len(self.state)
+
+    @property
+    def nbytes(self):
+        return self.state.nbytes + self.scan.nbytes + self.tok.nbytes
+
+    def put(self, dest, run, rows):
+        """Copies a run's rows (a slice or index array) to dest (slice or index array)."""
+        self.state[dest] = run.state[rows]
+        self.scan[dest] = run.scan[rows]
+        self.tok[dest] = run.tok[rows]
+
+    def clean(self, chunk=65536):
+        bad = 0
+        for a in range(0, len(self), chunk):
+            bad += clean_compact(self.state[a:a + chunk], self.tok[a:a + chunk])
+        return bad
+
+    def rows(self, idx):
+        return expand_np(self.state[idx], self.scan[idx], self.tok[idx])
+
+    def batch(self, idx):
+        import torch
+        return expand_torch(torch.from_numpy(np.ascontiguousarray(self.state[idx])),
+                            torch.from_numpy(np.ascontiguousarray(self.scan[idx])),
+                            torch.from_numpy(np.ascontiguousarray(self.tok[idx])))
+
+    def __getitem__(self, idx):
+        return self.rows(idx)
+
+
+class ObsView:
+    """A run's expanded rows, made as they're indexed: run.obs[a:b], run.obs[t], run.obs[array].
+    Values that aren't finite read as 0 (clean_rows), as in training."""
+
+    def __init__(self, run):
+        self.run = run
+
+    def __len__(self):
+        return self.run.ticks
+
+    @property
+    def shape(self):
+        return (self.run.ticks, OBS_DIM)
+
+    def __getitem__(self, idx):
+        r = self.run
+        return clean_rows(expand_np(r.state[idx], r.scan[idx], r.tok[idx]))
+
+
+# ---- recorded runs and practice attempts (s4, s6) ------------------------------
+
+class Run:
+    """One recorded run (s4) or practice attempt (s6): its header and arrays.
+
+    The arrays are read whole (np.fromfile) on first use and kept until
+    close(): call it once a run has been copied out, so only one run's
+    arrays sit in RAM at a time.
+    """
+
+    def __init__(self, json_path, header, practice=False):
         self.json_path = os.path.abspath(json_path)
         self.header = header
+        self.practice = practice
         self.base = self.json_path[:-len(".json")]
         self.run_id = os.path.basename(self.base)
-        self._maps = {}
+        self._arrays = {}
 
     def __repr__(self):
         return f"<Run {self.run_id} {self.level_name!r} {self.ticks} ticks>"
@@ -198,65 +388,75 @@ class Run:
     macro_file = property(lambda self: str(self.header.get("macro_file") or ""))
     tps = property(lambda self: float(self.header["tps"]))
     ticks = property(lambda self: int(self.header["ticks"]))
-    obs_dim = property(lambda self: int(self.header["obs_dim"]))
-    layout_hash = property(lambda self: self.header["obs_layout_hash"])
+    layout_hash = property(lambda self: self.header["layout_hash"])
     completed = property(lambda self: bool(self.header.get("completed")))
     died_tick = property(lambda self: self.header.get("died_tick"))
-    # Practice branches (s4): which attempt and tick this one flipped. first_tick
-    # is the tick of row 0 (not in the contract yet; 0 when absent).
+    validated = property(lambda self: self.header.get("validated"))
+    frame_offset = property(lambda self: self.header.get("frame_offset"))
+    obs_dim = OBS_DIM
+    # Practice branches (s6): which attempt and tick this one flipped. first_tick
+    # is the tick of row 0 (not in the contract; 0 when absent).
     branch_of = property(lambda self: self.header.get("branch_of"))
     first_tick = property(lambda self: int(self.header.get("first_tick") or 0))
 
     @property
     def horizon(self):
-        """H = round(1.0 * tps) ticks (s4)."""
+        """H = round(1.0 * tps) ticks (s6)."""
         return int(round(SURVIVE_SECONDS * self.tps))
 
-    def _map(self, ext, dtype, shape):
-        arr = self._maps.get(ext)
+    def _arr(self, ext, dtype, width):
+        arr = self._arrays.get(ext)
         if arr is None:
-            if self.ticks == 0:
-                arr = np.zeros(shape, dtype)
-            else:
-                arr = np.memmap(self.base + ext, dtype=dtype, mode="r", shape=shape)
-            self._maps[ext] = arr
+            shape = (self.ticks,) if width == 1 else (self.ticks, width)
+            arr = np.zeros(shape, dtype) if self.ticks == 0 else \
+                np.fromfile(self.base + ext, dtype=dtype).reshape(shape)
+            self._arrays[ext] = arr
         return arr
 
-    @property
-    def obs(self):
-        return self._map(".obs.f16", "<f2", (self.ticks, self.obs_dim))
-
-    @property
-    def act(self):
-        return self._map(".act.u8", "<u1", (self.ticks,))
-
-    @property
-    def meta(self):
-        return self._map(".meta.f32", "<f4", (self.ticks, len(META_FIELDS)))
-
-    @property
-    def alive(self):
-        return self._map(".alive.i32", "<i4", (self.ticks,))
+    state = property(lambda self: self._arr(".state.f32", "<f4", STATE_DIM))
+    scan = property(lambda self: self._arr(".scan.u8", "<u1", SCAN_DIM))
+    tok = property(lambda self: self._arr(".tok.u8", "<u1", TOK_DIM))
+    act = property(lambda self: self._arr(".act.u8", "<u1", 1))
+    meta = property(lambda self: self._arr(".meta.f32", "<f4", len(META_FIELDS)))
+    p = property(lambda self: self._arr(".p.f32", "<f4", 1))
+    alive = property(lambda self: self._arr(".alive.i32", "<i4", 1))
+    obs = property(lambda self: ObsView(self))
 
     def close(self):
-        self._maps.clear()
+        self._arrays.clear()
+
+    def has_golden(self):
+        return os.path.exists(self.base + ".golden.idx.i32")
 
     def usable_ticks(self):
-        """How many leading ticks the trainers learn from (s2).
+        """How many leading ticks the trainers learn from (s4).
 
-        All of a completed run. A run that didn't complete loses its last
-        DROP_SECONDS before the death (or before its end, when it just
-        stopped): those ticks led into the death. Nothing from the first tick
-        the meta marks dead on, minus the same margin, ever counts.
+        A human run: all of it when it completed in the copies (validated
+        "sim" or "real"); when it didn't complete, only if the real game agreed
+        it dies there (validated "real") and then only the ticks before
+        died_tick - tps; nothing from a run marked "failed" (or anything else).
+        A practice attempt (s6) that didn't complete loses its last second
+        before the death (or before its end, when a limit stopped it). Nothing
+        from the first tick the meta marks dead on, minus the same margin,
+        ever counts.
         """
         T = self.ticks
         if T == 0:
             return 0
         margin = int(round(DROP_SECONDS * self.tps))
-        end = T
-        if not self.completed:
-            died = self.died_tick
-            end = (int(died) if died is not None else T) - margin
+        if self.practice:
+            end = T
+            if not self.completed:
+                died = self.died_tick
+                end = (int(died) if died is not None else T) - margin
+        else:
+            v = self.validated
+            if self.completed and v in ("sim", "real"):
+                end = T
+            elif not self.completed and v == "real" and self.died_tick is not None:
+                end = int(self.died_tick) - margin
+            else:
+                return 0
         dead = np.flatnonzero(np.asarray(self.meta[:, META_DEAD]) >= 0.5)
         if len(dead):
             end = min(end, int(dead[0]) - margin)
@@ -264,63 +464,127 @@ class Run:
 
 
 def check_run_header(h, practice=False):
-    """What's wrong with a run's header (s2, s4), as a list of strings (empty: fine)."""
+    """What's wrong with a run's header (s4, s6), as a list of strings (empty: fine)."""
     errors = []
     if not isinstance(h, dict):
         return ["the header is not a JSON object"]
     if h.get("format") != "gbai-run":
         errors.append(f"format is {h.get('format')!r}, not 'gbai-run'")
-    if h.get("version") != 1:
-        errors.append(f"version is {h.get('version')!r}, not 1")
+    if h.get("version") != RUN_VERSION:
+        errors.append(f"version is {h.get('version')!r}, not {RUN_VERSION} (contract v2; record it again)")
     if h.get("source") not in ("human", "ai"):
         errors.append(f"source is {h.get('source')!r}, not 'human' or 'ai'")
     if practice and h.get("source") != "ai":
         errors.append("a practice attempt's source must be 'ai'")
     if not _is_int(h.get("level_id")) or h["level_id"] < 0:
         errors.append("level_id is not a non-negative integer")
-    if not isinstance(h.get("level_name", ""), str):
-        errors.append("level_name is not a string")
+    for key in ("level_name", "macro_file", "macro_format", "notes"):
+        if key in h and h[key] is not None and not isinstance(h[key], str):
+            errors.append(f"{key} is not a string")
     if not _is_num(h.get("tps")) or not h["tps"] > 0:
         errors.append("tps is not a positive number")
     if not _is_int(h.get("ticks")) or h["ticks"] < 0:
         errors.append("ticks is not a non-negative integer")
-    if not _is_int(h.get("obs_dim")) or h["obs_dim"] < 1:
-        errors.append("obs_dim is not a positive integer")
-    if not isinstance(h.get("obs_layout_hash"), str) or not HASH_RE.match(h["obs_layout_hash"]):
-        errors.append(f"obs_layout_hash {h.get('obs_layout_hash')!r} is not 16 hex characters")
-    if _is_int(h.get("obs_dim")):
-        errors += _check_layout_list(h.get("obs_layout"), h["obs_dim"], "obs_layout")
-    if h.get("meta_fields") != META_FIELDS:
-        errors.append(f"meta_fields is {h.get('meta_fields')!r}, not {META_FIELDS}")
+    if not isinstance(h.get("layout_hash"), str) or not HASH_RE.match(h["layout_hash"]):
+        errors.append(f"layout_hash {h.get('layout_hash')!r} is not 16 hex characters")
     if not isinstance(h.get("completed"), bool):
         errors.append("completed is not true or false")
     died = h.get("died_tick")
     if died is not None and (not _is_int(died) or died < 0 or (_is_int(h.get("ticks")) and died > h["ticks"])):
         errors.append(f"died_tick {died!r} is not null or a tick of the run")
+    for key in ("died_x", "level_length_x"):
+        if h.get(key) is not None and not _is_num(h[key]):
+            errors.append(f"{key} is not null or a number")
+    if not practice:
+        if h.get("validated") not in VALIDATED:
+            errors.append(f"validated is {h.get('validated')!r}, not one of {', '.join(VALIDATED)}")
+        if not _is_int(h.get("frame_offset")):
+            errors.append("frame_offset is not an integer")
+    elif h.get("validated") is not None and h["validated"] not in VALIDATED:
+        errors.append(f"validated is {h.get('validated')!r}, not one of {', '.join(VALIDATED)}")
+    tried = h.get("offsets_tried")
+    if tried is not None:
+        if not isinstance(tried, dict) or not all(isinstance(v, dict) for v in tried.values()):
+            errors.append("offsets_tried is not {\"offset\": {...}}")
+        else:
+            for k in tried:
+                try:
+                    int(k)
+                except ValueError:
+                    errors.append(f"offsets_tried key {k!r} is not an integer")
     branch = h.get("branch_of")
     if branch is not None:
-        if not isinstance(branch, dict) or not isinstance(branch.get("attempt"), str) \
-                or not _is_int(branch.get("tick")) or branch["tick"] < 0:
+        if not isinstance(branch, dict) or not isinstance(branch.get("attempt"), (str, int)) \
+                or isinstance(branch.get("attempt"), bool) or not _is_int(branch.get("tick")) or branch["tick"] < 0:
             errors.append("branch_of is not {\"attempt\": name, \"tick\": t}")
+    forced = h.get("forced")
+    if forced is not None and (not isinstance(forced, list) or not all(
+            isinstance(f, list) and len(f) == 2 and _is_int(f[0]) and f[1] in (0, 1, True, False) for f in forced)):
+        errors.append("forced is not [[tick, held], ...]")
     first = h.get("first_tick", 0)
     if first is not None and (not _is_int(first) or first < 0):
         errors.append("first_tick is not a non-negative integer")
     return errors
 
 
-def _expected_files(base, ticks, obs_dim, practice):
-    files = [(".obs.f16", ticks * obs_dim * 2), (".act.u8", ticks), (".meta.f32", ticks * len(META_FIELDS) * 4)]
-    if practice:
-        files.append((".alive.i32", ticks * 4))
-    return [(base + ext, size) for ext, size in files]
+def _expected_files(base, ticks, practice):
+    arrays = RUN_ARRAYS + (PRACTICE_ARRAYS if practice else [])
+    return [(base + ext, ticks * width * np.dtype(dtype).itemsize) for ext, dtype, width in arrays]
+
+
+def _row(path, dtype, width, t):
+    """Row t of a [T][width] array file, read alone."""
+    size = np.dtype(dtype).itemsize
+    return np.fromfile(path, dtype=dtype, count=width, offset=int(t) * width * size)
+
+
+def check_golden(run):
+    """The recorder's golden rows (s3) against expand_np of the same ticks: a list of errors.
+
+    .golden.idx.i32 [G] ticks, .golden.f32 [G][472] the mod's expansion of them.
+    They must match bit for bit (a -0.0 vs 0.0 or a NaN payload counts). Reads
+    only the G rows it needs.
+    """
+    base = run.base
+    errors = []
+    try:
+        isize = os.path.getsize(base + ".golden.idx.i32")
+        fsize = os.path.getsize(base + ".golden.f32")
+    except OSError as e:
+        return [f"golden file missing: {os.path.basename(e.filename or '')}"]
+    if isize % 4:
+        return [f"golden.idx.i32 is {isize} bytes, not a whole number of int32"]
+    G = isize // 4
+    if fsize != G * OBS_DIM * 4:
+        return [f"golden.f32 is {fsize} bytes, not {G * OBS_DIM * 4} ({G} rows of {OBS_DIM})"]
+    if G == 0:
+        return [] if run.ticks == 0 else ["the golden files hold no rows"]
+    idx = np.fromfile(base + ".golden.idx.i32", "<i4")
+    want = np.fromfile(base + ".golden.f32", "<f4").reshape(G, OBS_DIM)
+    bad_idx = idx[(idx < 0) | (idx >= run.ticks)]
+    if len(bad_idx):
+        return [f"golden.idx.i32 names ticks outside the run: {bad_idx[:5].tolist()}"]
+    for g, t in enumerate(idx):
+        got = expand_np(_row(base + ".state.f32", "<f4", STATE_DIM, t), _row(base + ".scan.u8", "<u1", SCAN_DIM, t),
+                        _row(base + ".tok.u8", "<u1", TOK_DIM, t))
+        diff = np.flatnonzero(got.view(np.uint32) != want[g].view(np.uint32))
+        if len(diff):
+            j = int(diff[0])
+            errors.append(f"golden row {g} (tick {int(t)}) differs from Python's expansion at {len(diff)} values, "
+                          f"first {obs_name(j)} (index {j}): the mod has {want[g, j]!r}, Python {got[j]!r}")
+            if len(errors) >= 3:
+                break
+    return errors
 
 
 def load_run(json_path, practice=False, deep=False):
-    """One run (s2) or practice attempt (s4, practice=True), checked against the contract.
+    """One run (s4) or practice attempt (s6, practice=True), checked against the contract.
 
     Raises DataError naming the file and every problem: header fields, each
-    array's size (exactly `ticks` rows), act holding only 0 and 1. deep=True
-    also reads every value (finite obs, modes 0..7, alive in 0..H).
+    array's size (exactly `ticks` rows), act holding only 0 and 1, the golden
+    rows (required for a recorded run, checked when a practice attempt has
+    them). deep=True also reads every value (finite, modes 0..7, scan bytes,
+    token slots, held-before = act[t-1], alive in 0..H).
     """
     try:
         header = read_json(json_path)
@@ -329,8 +593,8 @@ def load_run(json_path, practice=False, deep=False):
     errors = check_run_header(header, practice)
     if errors:
         raise DataError(f"{json_path}: " + "; ".join(errors))
-    run = Run(json_path, header)
-    for path, size in _expected_files(run.base, run.ticks, run.obs_dim, practice):
+    run = Run(json_path, header, practice)
+    for path, size in _expected_files(run.base, run.ticks, practice):
         try:
             have = os.path.getsize(path)
         except OSError:
@@ -342,7 +606,9 @@ def load_run(json_path, practice=False, deep=False):
         act = np.fromfile(run.base + ".act.u8", np.uint8)
         if act.max() > 1:
             errors.append(f"act holds {int(act.max())}; only 0 and 1 are allowed")
-        if deep:
+        if not practice or run.has_golden():
+            errors += check_golden(run)
+        if deep and not errors:
             errors += _deep_check(run, practice)
     if errors:
         raise DataError(f"{json_path}: " + "; ".join(errors))
@@ -351,12 +617,31 @@ def load_run(json_path, practice=False, deep=False):
 
 def _deep_check(run, practice):
     errors = []
-    bad = 0
-    for a in range(0, run.ticks, 65536):
-        bad += int((~np.isfinite(np.asarray(run.obs[a:a + 65536], np.float32))).sum())
-    if bad:
-        errors.append(f"obs holds {bad} values that aren't finite")
-    meta = np.asarray(run.meta)
+    state = run.state
+    if not np.isfinite(state).all():
+        errors.append(f"state holds {int((~np.isfinite(state)).sum())} values that aren't finite")
+    scan = run.scan
+    bad = (scan > SCAN_MAX) & (scan != SCAN_NONE)
+    if bad.any():
+        errors.append(f"scan holds {int(bad.sum())} bytes outside 0..{SCAN_MAX} and {SCAN_NONE}")
+    t = run.tok.reshape(run.ticks, TOKENS, TOKEN_BYTES)
+    typ = t[:, :, 4]
+    if (typ >= TOKEN_TYPES).any():
+        errors.append(f"a token type is {int(typ.max())}; types are 0..{TOKEN_TYPES - 1}")
+    if (t[:, :, 5] != 0).any():
+        errors.append("a token's 6th byte is not 0")
+    if (t[typ == 0] != 0).any():
+        errors.append("an empty token slot (type 0) holds bytes that aren't 0")
+    f = np.ascontiguousarray(t[:, :, :4]).view("<f2")
+    if not np.isfinite(f).all():
+        errors.append("a token dx/dy isn't finite")
+    held = state[:, STATE_HELD]
+    want = before(run.act).astype(np.float32)
+    off = np.flatnonzero(held != want)
+    if len(off):
+        errors.append(f"state[{STATE_HELD}] (held before this tick) differs from act[t-1] on {len(off)} ticks, first "
+                      f"tick {int(off[0])} (contract s1: rec[t] is what the pilot sees before step t)")
+    meta = run.meta
     if not np.isfinite(meta).all():
         errors.append("meta holds values that aren't finite")
     modes = meta[:, META_MODE]
@@ -366,15 +651,18 @@ def _deep_check(run, practice):
     if ((speeds < 0) | (speeds > len(SPEEDS) - 1)).any():
         errors.append("meta speed is outside 0..4")
     if practice:
-        alive = np.asarray(run.alive)
+        alive = run.alive
         if (alive < 0).any() or (alive > run.horizon).any():
             errors.append(f"alive is outside 0..{run.horizon} (H = round(1.0 * tps))")
+        p = run.p
+        if not (np.isfinite(p).all() and (p >= 0).all() and (p <= 1).all()):
+            errors.append("p (P(hold)) is outside 0..1 or not finite")
     run.close()
     return errors
 
 
 def list_runs(root, source="human", deep=False):
-    """Every recorded run in <root>\\data (s2) that passes the checks, by run_id.
+    """Every recorded run in <root>\\data (s4) that passes the checks, by run_id.
 
     source: "human", "ai" or None for both. Returns (runs, problems), problems
     being (path, why) for each file that didn't pass.
@@ -397,7 +685,7 @@ def list_runs(root, source="human", deep=False):
 
 
 def list_practice(root, deep=False):
-    """Every practice attempt under <root>\\practice\\<level_id>\\ (s4). Returns (attempts, problems)."""
+    """Every practice attempt under <root>\\practice\\<level_id>\\ (s6). Returns (attempts, problems)."""
     base = os.path.join(root, "practice")
     runs, problems = [], []
     if not os.path.isdir(base):
@@ -423,13 +711,12 @@ def list_practice(root, deep=False):
 
 
 def pick_layout(runs, want=None):
-    """The runs recorded with one observation layout, and its hash.
+    """The runs recorded with one layout hash, and the hash.
 
     A network only fits the encoder it was trained for (the mod refuses
-    weights whose obs_layout_hash differs from its own), so one training run
+    weights whose layout hash differs from its own), so one training run
     uses one layout. want: the hash to use (gucci_ai_layout gives the mod's
-    current one). Without it, every run must share one hash. Runs with the
-    same hash must carry the same layout too (else the mod's hash is broken).
+    current one). Without it, every run must share one hash.
     """
     if not runs:
         raise DataError("no runs to train on")
@@ -438,7 +725,7 @@ def pick_layout(runs, want=None):
         groups.setdefault(r.layout_hash, []).append(r)
     if want:
         if want not in groups:
-            raise DataError(f"no run was recorded with obs layout {want}; found " +
+            raise DataError(f"no run was recorded with layout {want}; found " +
                             ", ".join(f"{h} ({len(g)} runs)" for h, g in sorted(groups.items())))
         chosen = want
     elif len(groups) > 1:
@@ -446,24 +733,18 @@ def pick_layout(runs, want=None):
         for h, g in sorted(groups.items(), key=lambda kv: -max(os.path.getmtime(r.json_path) for r in kv[1])):
             newest = max(os.path.getmtime(r.json_path) for r in g)
             lines.append(f"{h}: {len(g)} runs, newest {time.strftime('%Y-%m-%d %H:%M', time.localtime(newest))}")
-        raise DataError("the runs were recorded with different observation layouts (" + "; ".join(lines) +
+        raise DataError("the runs were recorded with different layouts (" + "; ".join(lines) +
                         "). Pass --layout-hash with the mod's current one (gucci_ai_layout) and "
                         "record the others again.")
     else:
         chosen = next(iter(groups))
-    chosen_runs = groups[chosen]
-    ref = chosen_runs[0]
-    for r in chosen_runs[1:]:
-        if r.obs_dim != ref.obs_dim or r.header["obs_layout"] != ref.header["obs_layout"]:
-            raise DataError(f"{r.run_id} and {ref.run_id} share obs_layout_hash {chosen} but not the layout "
-                            "itself: the mod's layout hash is broken")
-    return chosen_runs, chosen
+    return groups[chosen], chosen
 
 
-# ---- level tapes (s3) ----------------------------------------------------------
+# ---- level tapes (s5) ----------------------------------------------------------
 
 class Tape:
-    """A level as columns (s3): float16 [C][K], a read-only memmap opened on first use."""
+    """A level as columns (s5): uint8 [C][K], read whole on first use."""
 
     def __init__(self, json_path, header):
         self.json_path = os.path.abspath(json_path)
@@ -474,20 +755,21 @@ class Tape:
     level_id = property(lambda self: int(self.header["level_id"]))
     columns = property(lambda self: int(self.header["columns"]))
     channels = property(lambda self: int(self.header["channels"]))
+    bands = property(lambda self: int(self.header["bands"]))
     x0 = property(lambda self: float(self.header["x0"]))
     y0 = property(lambda self: float(self.header["y0"]))
     column_width = property(lambda self: float(self.header["column_width"]))
     band_height = property(lambda self: float(self.header["band_height"]))
     channel_layout = property(lambda self: self.header["channel_layout"])
-    # Not in contract v1 (see CONTRACT_ISSUES.md): the tape encoder's own hash.
+    # Not in the contract (see CONTRACT_ISSUES.md): the tape encoder's own hash.
     layout_hash = property(lambda self: self.header.get("layout_hash"))
 
     @property
     def data(self):
         if self._data is None:
             shape = (self.columns, self.channels)
-            self._data = np.zeros(shape, np.float16) if self.columns == 0 else \
-                np.memmap(self.base + ".tape.f16", dtype="<f2", mode="r", shape=shape)
+            self._data = np.zeros(shape, np.uint8) if self.columns == 0 else \
+                np.fromfile(self.base + ".tape.u8", dtype=np.uint8).reshape(shape)
         return self._data
 
     def close(self):
@@ -504,8 +786,8 @@ def check_tape_header(h, level_id=None):
         return ["the header is not a JSON object"]
     if h.get("format") != "gbai-tape":
         errors.append(f"format is {h.get('format')!r}, not 'gbai-tape'")
-    if h.get("version") != 1:
-        errors.append(f"version is {h.get('version')!r}, not 1")
+    if h.get("version") != TAPE_VERSION:
+        errors.append(f"version is {h.get('version')!r}, not {TAPE_VERSION}")
     if not _is_int(h.get("level_id")):
         errors.append("level_id is not an integer")
     elif level_id is not None and h["level_id"] != level_id:
@@ -516,11 +798,15 @@ def check_tape_header(h, level_id=None):
     for key in ("x0", "y0"):
         if not _is_num(h.get(key)):
             errors.append(f"{key} is not a number")
-    for key in ("columns", "channels"):
-        if not _is_int(h.get(key)) or h[key] < (0 if key == "columns" else 1):
+    for key, low in (("columns", 0), ("channels", 1), ("bands", 1)):
+        if not _is_int(h.get(key)) or h[key] < low:
             errors.append(f"{key} is not a valid count")
-    if _is_int(h.get("channels")):
-        errors += _check_layout_list(h.get("channel_layout"), h["channels"], "channel_layout")
+    layout = h.get("channel_layout")
+    if not isinstance(layout, list) or not layout:
+        errors.append("channel_layout is not a non-empty list")
+    elif _is_int(h.get("channels")) and all(isinstance(e, dict) and "offset" in e and "size" in e for e in layout):
+        # The contract leaves the entries' form open; when they say where they sit, check that.
+        errors += _check_layout_list(layout, h["channels"], "channel_layout")
     lh = h.get("layout_hash")
     if lh is not None and (not isinstance(lh, str) or not HASH_RE.match(lh)):
         errors.append(f"layout_hash {lh!r} is not 16 hex characters")
@@ -528,7 +814,7 @@ def check_tape_header(h, level_id=None):
 
 
 def load_tape(root, level_id, deep=False):
-    """The tape of one level (s3), checked; None when it hasn't been recorded."""
+    """The tape of one level (s5), checked; None when it hasn't been recorded."""
     path = os.path.join(root, "tapes", f"{int(level_id)}.json")
     if not os.path.exists(path):
         return None
@@ -543,17 +829,13 @@ def _load_tape_file(path, level_id, deep=False):
     errors = check_tape_header(header, level_id)
     if not errors:
         tape = Tape(path, header)
-        want = tape.columns * tape.channels * 2
+        want = tape.columns * tape.channels
         try:
-            have = os.path.getsize(tape.base + ".tape.f16")
+            have = os.path.getsize(tape.base + ".tape.u8")
             if have != want:
-                errors.append(f"{os.path.basename(tape.base)}.tape.f16 is {have} bytes, not {want}")
+                errors.append(f"{os.path.basename(tape.base)}.tape.u8 is {have} bytes, not {want}")
         except OSError:
-            errors.append(f"{os.path.basename(tape.base)}.tape.f16 is missing")
-        if not errors and deep and tape.columns:
-            if not np.isfinite(np.asarray(tape.data, np.float32)).all():
-                errors.append("the tape holds values that aren't finite")
-            tape.close()
+            errors.append(f"{os.path.basename(tape.base)}.tape.u8 is missing")
     if errors:
         raise DataError(f"{path}: " + "; ".join(errors))
     return tape
@@ -580,7 +862,7 @@ def list_tapes(root, deep=False):
     return tapes, problems
 
 
-# ---- writing synthetic data (tests only) -----------------------------------------
+# ---- writing synthetic data (tests and golden files only) ---------------------------
 
 def _refuse_real_root(folder):
     real = os.path.normcase(os.path.abspath(default_ai_root()))
@@ -590,8 +872,9 @@ def _refuse_real_root(folder):
                            "data\\, tapes\\ and practice\\")
 
 
-def write_run(folder, run_id, header, obs, act, meta, alive=None):
-    """Writes one run (s2) or practice attempt (s4, with alive) in the contract's format.
+def write_run(folder, run_id, header, state, scan, tok, act, meta, p=None, alive=None, golden_idx=None):
+    """Writes one run (s4) or practice attempt (s6, with p and alive) in the contract's format,
+    plus golden rows for the ticks in golden_idx (expanded here, as the recorder would).
 
     For tests and synthetic data only: the trainer never writes into AI_ROOT's
     data\\, tapes\\ or practice\\, and this refuses the mod's real AI_ROOT.
@@ -599,21 +882,38 @@ def write_run(folder, run_id, header, obs, act, meta, alive=None):
     _refuse_real_root(folder)
     os.makedirs(folder, exist_ok=True)
     base = os.path.join(folder, run_id)
-    np.ascontiguousarray(obs, "<f2").tofile(base + ".obs.f16")
+    np.ascontiguousarray(state, "<f4").tofile(base + ".state.f32")
+    np.ascontiguousarray(scan, "<u1").tofile(base + ".scan.u8")
+    np.ascontiguousarray(tok, "<u1").tofile(base + ".tok.u8")
     np.ascontiguousarray(act, "<u1").tofile(base + ".act.u8")
     np.ascontiguousarray(meta, "<f4").tofile(base + ".meta.f32")
+    if p is not None:
+        np.ascontiguousarray(p, "<f4").tofile(base + ".p.f32")
     if alive is not None:
         np.ascontiguousarray(alive, "<i4").tofile(base + ".alive.i32")
+    if golden_idx is not None:
+        gi = np.asarray(golden_idx, np.int64)
+        rows = expand_np(np.asarray(state)[gi], np.asarray(scan)[gi], np.asarray(tok)[gi]) if len(gi) else \
+            np.zeros((0, OBS_DIM), np.float32)
+        np.ascontiguousarray(gi, "<i4").tofile(base + ".golden.idx.i32")
+        np.ascontiguousarray(rows, "<f4").tofile(base + ".golden.f32")
     write_json_atomic(base + ".json", header)
     return base + ".json"
 
 
+def golden_ticks(T, G=32):
+    """G ticks spread over a run of T (the recorder's choice is its own; this is the tests')."""
+    if T <= 0:
+        return np.zeros(0, np.int64)
+    return np.unique(np.linspace(0, T - 1, min(G, T)).round().astype(np.int64))
+
+
 def write_tape(folder, header, data):
-    """Writes one tape (s3); tests only, like write_run()."""
+    """Writes one tape (s5); tests only, like write_run()."""
     _refuse_real_root(folder)
     os.makedirs(folder, exist_ok=True)
     base = os.path.join(folder, str(int(header["level_id"])))
-    np.ascontiguousarray(data, "<f2").tofile(base + ".tape.f16")
+    np.ascontiguousarray(data, "<u1").tofile(base + ".tape.u8")
     write_json_atomic(base + ".json", header)
     return base + ".json"
 
@@ -727,55 +1027,67 @@ def level_key(run_or_id, name=""):
     return f"id:{lid}" if lid else f"name:{name_key(name)}"
 
 
+DEFAULT_FOLDS = 8
+
+
 def parse_fold(text):
-    """'k/K' -> (k, K) with 0 <= k < K, K >= 2."""
-    m = re.match(r"^\s*(\d+)\s*/\s*(\d+)\s*$", str(text or ""))
+    """--fold: 'k/K' -> (k, K); 'k' -> (k, 8); 'all' (or 'none') -> None, train on every level.
+
+    0 <= k < K, K >= 2. The default everywhere is 0/8: eight level-grouped
+    folds, each level held out exactly once over k = 0..7.
+    """
+    t = str(text if text is not None else "").strip().lower()
+    if t in ("all", "none"):
+        return None
+    m = re.match(r"^(\d+)\s*(?:/\s*(\d+))?$", t)
     if not m:
-        raise ValueError(f"--fold is k/K (like 0/5), not {text!r}")
-    k, n = int(m.group(1)), int(m.group(2))
+        raise ValueError(f"--fold is k/K (like 0/8), k (of 8) or all, not {text!r}")
+    k, n = int(m.group(1)), int(m.group(2) or DEFAULT_FOLDS)
     if n < 2 or not 0 <= k < n:
         raise ValueError(f"--fold {text}: needs K >= 2 and 0 <= k < K")
     return k, n
 
 
-def split_levels(keys, fold=None, val_frac=0.15, seed=0):
-    """(train keys, validation keys), split by level, never by tick.
+def fold_order(keys, seed=0):
+    """The levels in the order they're dealt into folds: sorted by a hash of (seed, level), so a
+    level's place doesn't depend on Python's hash seed or the order the files were listed in."""
+    return sorted(set(keys), key=lambda k: hashlib.sha256(f"{seed}:{k}".encode()).hexdigest())
 
-    fold=(k, K): the levels, shuffled once by `seed`, dealt into K folds;
-    fold k validates and the rest train (K = the number of levels is leave-
-    one-out). Without a fold, about val_frac of the levels validate (at least
-    one when there are two or more and val_frac > 0); val_frac=0 trains on
-    them all.
+
+def split_levels(keys, fold=None, seed=0):
+    """(train keys, validation keys, folds used), split by level, never by tick.
+
+    fold=(k, K): the levels, in fold_order, dealt into K folds; fold k
+    validates and the rest train. With fewer than K levels it becomes
+    leave-one-out (K = the number of levels), and k must still name one.
+    fold=None trains on every level and validates on none.
     """
     keys = sorted(set(keys))
-    order = [keys[i] for i in np.random.default_rng(seed).permutation(len(keys))]
-    if fold is not None:
-        k, n = fold
-        if n > len(keys):
-            raise DataError(f"--fold {k}/{n}: only {len(keys)} levels to split")
-        val = [key for i, key in enumerate(order) if i % n == k]
-    else:
-        n_val = int(round(len(keys) * val_frac))
-        if val_frac > 0 and len(keys) >= 2:
-            n_val = max(1, n_val)
-        n_val = min(n_val, max(0, len(keys) - 1))
-        val = order[:n_val]
+    if fold is None:
+        return keys, [], None
+    k, n = fold
+    if len(keys) < 2:
+        raise DataError(f"--fold {k}/{n}: {len(keys)} level(s) to split; it takes 2 or more (or --fold all)")
+    n = min(n, len(keys))
+    if k >= n:
+        raise DataError(f"--fold {k}/{fold[1]}: only {len(keys)} levels, so only folds 0..{n - 1}")
+    val = [key for i, key in enumerate(fold_order(keys, seed)) if i % n == k]
     train = [key for key in keys if key not in set(val)]
-    return train, sorted(val)
+    return train, sorted(val), (k, n)
 
 
-def make_split(runs, showcase, fold=None, val_frac=0.15, seed=0, usable=None):
+def make_split(runs, showcase, fold=(0, DEFAULT_FOLDS), seed=0, usable=None):
     """Leaves the showcase levels out, then splits the rest by level.
 
     usable (optional): run -> bool. A run it rejects has nothing to learn
-    from (0 ticks, or a death inside its first second) and is left out
-    BEFORE the split, so a level with nothing in it can't take a validation
-    or fold slot: that left a fold with nothing to validate on, or training
-    with nothing to train on, depending on how the levels happened to fall.
+    from (0 ticks, a failed validation, or a death inside its first second)
+    and is left out BEFORE the split, so a level with nothing in it can't
+    take a validation or fold slot.
 
     Returns {"train": runs, "val": runs, "excluded": [(run, reason)],
-    "unusable": runs, "train_levels": keys, "val_levels": keys}. A showcase
-    run is never in train or val, whatever the fold.
+    "unusable": runs, "train_levels": keys, "val_levels": keys, "fold": (k, K)
+    or None}. A showcase run is never in train or val, whatever the fold: the
+    showcase levels are held out of every fold.
     """
     pool, excluded, unusable = [], [], []
     for r in runs:
@@ -786,19 +1098,22 @@ def make_split(runs, showcase, fold=None, val_frac=0.15, seed=0, usable=None):
             unusable.append(r)
         else:
             pool.append(r)
-    train_keys, val_keys = split_levels([level_key(r) for r in pool], fold, val_frac, seed)
+    train_keys, val_keys, used = split_levels([level_key(r) for r in pool], fold, seed)
     tk, vk = set(train_keys), set(val_keys)
     return {"train": [r for r in pool if level_key(r) in tk], "val": [r for r in pool if level_key(r) in vk],
-            "excluded": excluded, "unusable": unusable, "train_levels": train_keys, "val_levels": val_keys}
+            "excluded": excluded, "unusable": unusable, "train_levels": train_keys, "val_levels": val_keys,
+            "fold": used, "fold_asked": fold}
 
 
-def split_record(split, model, layout_hash, fold=None, val_frac=None, seed=0):
+def split_record(split, model, layout_hash, seed=0):
     """split.json's contents: what trained, what validated, what was left out and why.
     evaluate.py reads it to tell held-out levels from trained ones."""
     def runs(rs):
         return [{"run_id": r.run_id, "level_id": r.level_id, "level_name": r.level_name} for r in rs]
-    return {"format": "gbai-split", "version": 1, "model": model, "created": now_iso(), "layout_hash": layout_hash,
-            "fold": f"{fold[0]}/{fold[1]}" if fold else None, "val_frac": None if fold else val_frac, "seed": seed,
+    used, asked = split.get("fold"), split.get("fold_asked")
+    return {"format": "gbai-split", "version": 2, "model": model, "created": now_iso(), "layout_hash": layout_hash,
+            "fold": f"{used[0]}/{used[1]}" if used else "all",
+            "fold_asked": f"{asked[0]}/{asked[1]}" if asked else "all", "seed": seed,
             "train_levels": split["train_levels"], "val_levels": split["val_levels"],
             "train_runs": runs(split["train"]), "val_runs": runs(split["val"]),
             "showcase_excluded": [dict(runs([r])[0], reason=why) for r, why in split["excluded"]],
@@ -841,11 +1156,11 @@ def finite_rows(x, fill=0.0):
 
 
 def clean_rows(x):
-    """Rows read from a run (float16) as a float32 copy, values that aren't finite set to 0.
+    """Expanded rows as a float32 copy, values that aren't finite set to 0.
 
     Training does that to its rows (finite_rows), so every prediction made
     for validation or a report goes through here too. Without it the same
-    broken value (a float16 overflow is inf) read as P = 0.5, a hold, in
+    broken value (an inf state float or token dx) read as P = 0.5, a hold, in
     train_pilot's validation and as NaN, a release, in evaluate.py.
     """
     out = np.array(x, np.float32)
@@ -903,7 +1218,7 @@ def moments(chunks, n_in):
     return mean.astype(np.float32), std.astype(np.float32)
 
 
-# ---- GBNN weights (s5) -----------------------------------------------------------
+# ---- GBNN weights (s7) -----------------------------------------------------------
 
 GBNN_MAGIC = b"GBNN"
 GBNN_VERSION = 1
@@ -956,7 +1271,7 @@ class GBNN:
 
 
 def check_gbnn(net):
-    """Raises DataError unless the network is one the mod can run (s5)."""
+    """Raises DataError unless the network is one the mod can run (s7)."""
     errors = []
     if net.kind not in (KIND_MLP, KIND_CONV):
         errors.append(f"kind {net.kind} is not 0 (mlp) or 1 (conv1d stack)")
@@ -996,7 +1311,7 @@ def check_gbnn(net):
 
 
 def gbnn_bytes(net):
-    """The file's bytes, exactly as contract s5 lays them out (little-endian)."""
+    """The file's bytes, exactly as contract s7 lays them out (little-endian)."""
     check_gbnn(net)
     parts = [struct.pack("<4sII16sI", GBNN_MAGIC, GBNN_VERSION, net.kind, net.layout_hash.encode("ascii"), net.n_in),
              net.mean.astype("<f4").tobytes(), net.std.astype("<f4").tobytes(), struct.pack("<I", len(net.layers))]
@@ -1160,10 +1475,10 @@ def _cmd_list(root):
         for r in rs:
             state = "completed" if r.completed else f"died at tick {r.died_tick}"
             print(f"    {r.run_id}: {r.source}, {r.ticks} ticks at {r.tps:g} tps ({r.usable_ticks()} usable), "
-                  f"{state}, layout {r.layout_hash}")
+                  f"{state}, validated {r.validated}, frame offset {r.frame_offset}, layout {r.layout_hash}")
     hashes = sorted({r.layout_hash for r in runs})
     if len(hashes) > 1:
-        print(f"  NOTE: {len(hashes)} different obs layouts: {', '.join(hashes)}")
+        print(f"  NOTE: {len(hashes)} different layouts: {', '.join(hashes)}")
     tapes, tape_problems = list_tapes(root)
     print(f"\nTapes (tapes\\): {len(tapes)}")
     for lid, t in sorted(tapes.items()):
@@ -1210,7 +1525,7 @@ def _cmd_check(root):
         print(f"FAIL {why}")
     hashes = sorted({r.layout_hash for r in runs + practice})
     if len(hashes) > 1:
-        print(f"NOTE: {len(hashes)} obs layouts in use: {', '.join(hashes)} (training uses one)")
+        print(f"NOTE: {len(hashes)} layouts in use: {', '.join(hashes)} (training uses one)")
     return 1 if all_problems else 0
 
 

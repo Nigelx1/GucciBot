@@ -9,7 +9,7 @@ talks to a game it didn't start. Training runs with the game closed.
 
     python tools/ai/orchestrate.py status                 # what's recorded, trained, installed
     python tools/ai/orchestrate.py record [--manifest FILE] [--only TEXT] [--redo]
-    python tools/ai/orchestrate.py train [--fold k/K] [--pilot-epochs N] [--threads 6]
+    python tools/ai/orchestrate.py train [--fold k/8 | all] [--cv] [--pilot-epochs N] [--threads auto] [--background]
     python tools/ai/orchestrate.py install                # train\\<model>\\<model>.gbnn -> weights\\
     python tools/ai/orchestrate.py play [--levels ID,ID] [--max-attempts N] [--max-seconds S]
     python tools/ai/orchestrate.py all                    # record, train, install, play
@@ -20,7 +20,17 @@ for each one not recorded yet, polling gucci_ai_status. play opens each
 showcase level (gucci_open_level), reloads the weights (gucci_ai_reload) and
 runs gucci_ai_play, then writes a report to AI_ROOT\\train\\reports\\.
 
-The AI tools (contract s6) are new on the C++ side. Before anything starts,
+train runs each trainer with the game closed (BelowNormal priority, --threads
+auto = 3 while Geometry Dash runs, else 6). --fold all (the default here)
+trains the models to ship on every level but the showcase ones; --cv first
+trains the pilot on each of the 8 level folds (train\\pilot_folds\\fold_k\\,
+each with its held-out report) and writes train\\pilot_folds\\cv_summary.json,
+the honest numbers. --background launches the whole train step detached
+(background.py: it outlives this session; `orchestrate.py status` polls it,
+`background.py stop DIR` stops a trainer at its next step, and the same
+command resumes).
+
+The AI tools (contract v2 s8) are new on the C++ side. Before anything starts,
 the game's tool list (MCP tools/list) is checked; a build without them stops
 with a message naming what's missing.
 """
@@ -32,6 +42,7 @@ import sys
 import time
 import urllib.request
 
+import background
 import gbai
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -51,7 +62,7 @@ def require(game, names):
     """Raises MissingTools unless the game has every tool in `names`."""
     missing = [n for n in names if n not in game.tools]
     if missing:
-        raise MissingTools(f"this GucciBot build has no {', '.join(missing)} (contract s6; the C++ side, src/ai/, "
+        raise MissingTools(f"this GucciBot build has no {', '.join(missing)} (contract v2 s8; the C++ side, src/ai/, "
                            "isn't built into it yet). Build and install one that has them, then run this again.")
 
 
@@ -222,24 +233,24 @@ def record(game, root, entries, redo=False, timeout=1800, log=print):
 # ---- train -----------------------------------------------------------------------
 
 def layout_hashes(layout):
-    """(obs hash, tape hash) from gucci_ai_layout's answer. The contract doesn't fix its field names
-    (CONTRACT_ISSUES.md), so a few likely ones are read; None where there's none."""
+    """(layout hash, tape hash) from gucci_ai_layout's answer. The contract names "the layout hash"
+    without fixing its field name (CONTRACT_ISSUES.md), so a few likely ones are read; None where
+    there's none. Without a tape hash the reader gets the layout hash too."""
     def pick(*keys):
         for k in keys:
             v = layout.get(k)
             if isinstance(v, str) and gbai.HASH_RE.match(v):
                 return v
         return None
-    return pick("obs_layout_hash", "layout_hash", "hash"), pick("tape_layout_hash", "tape_hash")
+    return pick("layout_hash", "obs_layout_hash", "hash"), pick("tape_layout_hash", "tape_hash")
 
 
-def trainer_steps(root, args):
-    """[(model, argv)] for the trainers that have data to learn from."""
+def trainer_steps(root, args, fold=None, out=None, models=None):
+    """[(model, argv)] for the trainers that have data to learn from. fold overrides args.fold;
+    out maps a model to its output folder; models limits which ones."""
     layout = gbai.read_json(os.path.join(root, "train", "layout.json")) \
         if os.path.exists(os.path.join(root, "train", "layout.json")) else {}
-    common = ["--root", root, "--threads", str(args.threads)]
-    if args.fold:
-        common += ["--fold", args.fold]
+    common = ["--root", root, "--threads", str(args.threads), "--fold", fold or args.fold]
     # The same manifest record used (AI_ROOT\manifest.json unless --manifest), so its
     # is_bar_level entries stay out of training even when --manifest wasn't typed.
     manifest = args.manifest or os.path.join(root, "manifest.json")
@@ -249,44 +260,96 @@ def trainer_steps(root, args):
         common += ["--fresh"]
     obs_hash, tape_hash = layout_hashes(layout)
     steps = []
-    pilot = common + (["--layout-hash", obs_hash] if obs_hash else [])
-    if args.pilot_epochs:
-        pilot += ["--epochs", str(args.pilot_epochs)]
-    steps.append(("pilot", pilot))
+
+    def add(model, argv, epochs):
+        if models is not None and model not in models:
+            return
+        if epochs:
+            argv = argv + ["--epochs", str(epochs)]
+        if out and model in out:
+            argv = argv + ["--out", out[model]]
+        steps.append((model, argv))
+    add("pilot", common + (["--layout-hash", obs_hash] if obs_hash else []), args.pilot_epochs)
     tapes, _ = gbai.list_tapes(root)
     if tapes:
-        reader = common + (["--layout-hash", tape_hash] if tape_hash else [])
-        if args.reader_epochs:
-            reader += ["--epochs", str(args.reader_epochs)]
-        steps.append(("reader", reader))
+        tape = tape_hash or obs_hash
+        add("reader", common + (["--layout-hash", tape] if tape else []), args.reader_epochs)
     attempts, _ = gbai.list_practice(root)
     if attempts:
-        critic = common + (["--layout-hash", obs_hash] if obs_hash else [])
-        if args.critic_epochs:
-            critic += ["--epochs", str(args.critic_epochs)]
-        steps.append(("critic", critic))
+        add("critic", common + (["--layout-hash", obs_hash] if obs_hash else []), args.critic_epochs)
     return steps
 
 
+def _run_trainer(model, argv, log, in_process):
+    log(f"training the {model}: {' '.join(argv)}")
+    if in_process:
+        import importlib
+        mod = importlib.import_module(f"train_{model}")
+        try:
+            return mod.main(argv, log=log)
+        except (gbai.DataError, SystemExit) as e:
+            log(f"  the {model} didn't train: {e}")
+            return None
+    code = subprocess.run([background.python_exe(), os.path.join(HERE, f"train_{model}.py")] + argv).returncode
+    if code:
+        log(f"  the {model} trainer exited with {code}")
+    return None
+
+
+def cross_validate(root, args, log=print, in_process=False):
+    """The pilot on each of the 8 level folds (train\\pilot_folds\\fold_k), and cv_summary.json: per fold,
+    its validation and showcase numbers. Every level is held out exactly once."""
+    base = gbai.train_dir(root, "pilot_folds")
+    k_max = gbai.DEFAULT_FOLDS
+    folds = []
+    for k in range(k_max):
+        out = os.path.join(base, f"fold_{k}")
+        steps = trainer_steps(root, args, fold=f"{k}/{k_max}", out={"pilot": out}, models={"pilot"})
+        for model, argv in steps:
+            _run_trainer(model, argv, log, in_process)
+        rep = os.path.join(out, "eval_report.json")
+        split = os.path.join(out, "split.json")
+        entry = {"fold": f"{k}/{k_max}", "out": out}
+        if os.path.exists(split):
+            sp = gbai.read_json(split)
+            entry["fold_used"] = sp.get("fold")
+            entry["val_levels"] = sp.get("val_levels")
+        if os.path.exists(rep):
+            groups = gbai.read_json(rep).get("groups", {})
+            entry["validation"] = groups.get("validation", {}).get("model")
+            entry["showcase"] = groups.get("showcase", {}).get("model")
+        folds.append(entry)
+        if entry.get("fold_used") and int(entry["fold_used"].split("/")[1]) <= k + 1:
+            break  # fewer levels than folds: leave-one-out ran out of folds
+    summary = {"format": "gbai-cv", "created": gbai.now_iso(), "folds": folds,
+               "note": "each fold's model validated on levels it never trained on; showcase levels are held out "
+                       "of every fold"}
+    gbai.write_json_atomic(os.path.join(base, "cv_summary.json"), summary)
+    log(f"cross-validation: {len(folds)} folds, summary {os.path.join(base, 'cv_summary.json')}")
+    return summary
+
+
 def train(root, args, log=print, in_process=False):
-    """Runs each trainer (in its own process unless in_process) and returns {model: progress}."""
+    """Runs each trainer (in its own process unless in_process) and returns {model: progress}
+    (plus "cv" with --cv)."""
     out = {}
+    if getattr(args, "cv", False):
+        out["cv"] = cross_validate(root, args, log, in_process)
     for model, argv in trainer_steps(root, args):
-        log(f"training the {model}: {' '.join(argv)}")
-        script = os.path.join(HERE, f"train_{model}.py")
-        if in_process:
-            import importlib
-            mod = importlib.import_module(f"train_{model}")
-            try:
-                mod.main(argv, log=log)
-            except (gbai.DataError, SystemExit) as e:
-                log(f"  the {model} didn't train: {e}")
-        else:
-            code = subprocess.run([sys.executable, script] + argv).returncode
-            if code:
-                log(f"  the {model} trainer exited with {code}")
+        _run_trainer(model, argv, log, in_process)
         out[model] = gbai.read_progress(os.path.join(root, "train", model, "progress.json"))
     return out
+
+
+def launch_train(root, argv, log=print, dry_run=False):
+    """`orchestrate.py train ...` (without --background) started detached: it outlives this session."""
+    rest = [a for a in argv if a != "--background"]
+    log_path = os.path.join(gbai.train_dir(root, "logs"), f"train_{stamp()}.log")
+    info = background.launch([os.path.abspath(__file__)] + rest, log_path, dry_run=dry_run)
+    info["log"] = log_path
+    log(f"training launched in the background (pid {info['pid']}); log {log_path}. "
+        "Poll it with `orchestrate.py status`; stop a trainer with `background.py stop <its train folder>`.")
+    return info
 
 
 # ---- install ---------------------------------------------------------------------
@@ -385,10 +448,11 @@ def play(game, root, levels, args, log=print):
         t0 = time.time()
         try:
             open_level(game, lid)
-            call = {"max_attempts": args.max_attempts, "max_seconds": args.max_seconds, "practice": True,
-                    "route_weight": args.route_weight}
+            call = {"max_attempts": args.max_attempts, "max_seconds": args.max_seconds}  # contract v2 s8
             if args.save_macros:
                 call["save_macro"] = f"AI {name or lid}"
+            if args.log_practice:
+                call["log_practice"] = True
             job = game.call("gucci_ai_play", **call)["job"]
             st = wait_job(game, job, args.max_seconds + 300, name or str(lid), log)
             results.append(dict(item, state=st.get("state"), result=st.get("result"),
@@ -407,7 +471,7 @@ def play(game, root, levels, args, log=print):
                 pass
     report = {"format": "gbai-play-report", "created": gbai.now_iso(), "reload": reload,
               "settings": {"max_attempts": args.max_attempts, "max_seconds": args.max_seconds,
-                           "route_weight": args.route_weight}, "results": results}
+                           "log_practice": bool(args.log_practice)}, "results": results}
     base = os.path.join(gbai.train_dir(root, "reports"), f"play_{stamp()}")
     gbai.write_json_atomic(base + ".json", report)
     gbai.write_bytes_atomic(base + ".md", play_markdown(report).encode("utf-8"))
@@ -453,6 +517,7 @@ def status(root, manifest=None, log=print):
         p = gbai.read_progress(os.path.join(root, "train", m, "progress.json"))
         if p:
             log(f"{m}: {p.get('state')}, epoch {p.get('epoch')}/{p.get('epochs')}, eta {p.get('eta')}, "
+                f"pid {p.get('pid')}, {p.get('threads')} threads, updated {p.get('updated')}, "
                 f"{p.get('message') or ''}")
         w = os.path.join(root, "weights", f"{m}.gbnn")
         if os.path.exists(w):
@@ -472,16 +537,22 @@ def parse_args(argv):
     ap.add_argument("--only", help="record: only entries whose level or macro name holds this")
     ap.add_argument("--redo", action="store_true", help="record: record entries again even if already recorded")
     ap.add_argument("--record-timeout", type=float, default=1800, help="seconds one recording may take")
-    ap.add_argument("--fold", help="train: k/K, hold out fold k of the levels")
+    ap.add_argument("--fold", default="all",
+                    help="train: k/8 holds out fold k of the levels; all (default) trains the models to ship")
+    ap.add_argument("--cv", action="store_true",
+                    help="train: first the pilot on each of the 8 level folds, for honest held-out numbers")
+    ap.add_argument("--background", action="store_true",
+                    help="train: launch it detached (it outlives this session) and return")
     ap.add_argument("--pilot-epochs", type=int)
     ap.add_argument("--reader-epochs", type=int)
     ap.add_argument("--critic-epochs", type=int)
-    ap.add_argument("--threads", type=int, default=6, help="train: CPU threads (6 = one per core)")
+    ap.add_argument("--threads", default="auto", help="train: CPU threads, or auto (3 while Geometry Dash runs, "
+                                                      "else 6)")
     ap.add_argument("--fresh", action="store_true", help="train: start the trainers over")
     ap.add_argument("--levels", help="play: level ids, comma separated (default: every showcase level)")
     ap.add_argument("--max-attempts", type=int, default=200)
     ap.add_argument("--max-seconds", type=int, default=900)
-    ap.add_argument("--route-weight", type=float, default=1.0, help="play: 1 = Accurate, 0 = Cool")
+    ap.add_argument("--log-practice", action="store_true", help="play: log the attempts (contract s6)")
     ap.add_argument("--save-macros", action="store_true", help="play: save each finished run as a macro")
     ap.add_argument("--no-save-check", action="store_true",
                     help="skip proving the session left Nigel's files alone (assist snapshot/check)")
@@ -499,6 +570,8 @@ def main(argv=None, log=print, game_factory=None):
     if args.command == "install":
         return install(root, log)
     if args.command == "train":
+        if args.background:
+            return launch_train(root, list(argv if argv is not None else sys.argv[1:]), log)
         return train(root, args, log, in_process=game_factory is not None)
     out = {}
     if args.command in ("record", "all"):

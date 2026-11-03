@@ -1,23 +1,24 @@
-"""Self-contained tests for the AI trainer package (tools/ai/).
+"""Self-contained tests for the AI trainer package (tools/ai/), contract v2.
 
-Writes a SYNTHETIC dataset in the exact contract format into a temporary
-AI_ROOT and runs the real trainers on it. Nothing here touches the mod's own
-AI_ROOT, the game, or anything outside a temp folder.
+Writes a SYNTHETIC dataset in the exact contract format (compact per-tick
+records, golden rows, headers) into a temporary AI_ROOT and runs the real
+trainers on it. Nothing here touches the mod's own AI_ROOT, the game, or
+anything outside a temp folder (and tools/ai/golden, which it only reads).
 
-The toy: a cube runs right at GD speed (240 tps, one level at 360). Gaps come
-every 6-20 blocks; the "human" holds exactly while the next gap is 2.5 to 1.0
-blocks ahead (about 35 ticks of hold, then 100-450 ticks released: sparse
-presses like a real macro). Speed portals change the speed inside a level,
-so a hold's length in ticks varies. The pilot sees that distance (coarse,
-and a fine copy clipped at 3 blocks) among 38 other inputs (the button it
-holds, ticks since the last press/release, 19 smooth distractors), so it has
-to learn the window; the trivial baseline (repeat the last tick's button)
-never presses at all.
+The toy: a cube runs right at GD speed (240 tps, two levels at 360). Gaps come
+every 6-20 blocks, each marked by a token (type 11, a yellow pad) at its near
+edge, whose float16 dx is exact; the "human" holds exactly while the next gap
+is 2.5 to 1.0 blocks ahead (about 35 ticks of hold, then 100-450 ticks
+released: sparse presses like a real macro). Speed portals change the speed
+inside a level, so a hold's length in ticks varies. The scan shows the pits
+(deadly below) and a smooth ceiling that differs per level, the state the
+button held before the tick and the ticks since the last press/release, so
+the pilot has to find the window; the trivial baseline (repeat the last
+tick's button) never presses at all.
 
     python tools/ai/test_ai.py            # all tests
     python tools/ai/test_ai.py -k pilot   # the ones with "pilot" in their name
 """
-import hashlib
 import json
 import os
 import shutil
@@ -36,21 +37,9 @@ import gbai  # noqa: E402
 TPS = 240
 BLOCKS_PER_SEC = 10.386  # GD's 1x speed in blocks per second
 HOLD_FROM, HOLD_TO = 2.5, 1.0  # hold while the next gap is this far ahead (blocks)
-TOY_LAYOUT = [
-    {"name": "player.mode", "offset": 0, "size": 8},
-    {"name": "player.gravity_flipped", "offset": 8, "size": 1},
-    {"name": "player.speed", "offset": 9, "size": 5},
-    {"name": "player.yvel", "offset": 14, "size": 1},
-    {"name": "player.held", "offset": 15, "size": 1},
-    {"name": "player.log_since_press", "offset": 16, "size": 1},
-    {"name": "player.log_since_release", "offset": 17, "size": 1},
-    {"name": "player.inv_tps", "offset": 18, "size": 1},
-    {"name": "scan.gap_ahead", "offset": 19, "size": 1},
-    {"name": "scan.gap_ahead_near", "offset": 20, "size": 1},
-    {"name": "scan.distractors", "offset": 21, "size": 19},
-]
-TOY_DIM = 40
-TOY_HASH = hashlib.sha256(json.dumps(TOY_LAYOUT).encode()).hexdigest()[:16]
+GAP_WIDTH = 1.5  # blocks
+GAP_TOKEN = 11  # yellow pad
+TOY_HASH = "70a1b2c3d4e5f607"
 TAPE_LAYOUT = [{"name": "gap", "offset": 0, "size": 1}, {"name": "deadly_band", "offset": 1, "size": 2},
                {"name": "solid_band", "offset": 3, "size": 2}, {"name": "portal_ship", "offset": 5, "size": 1}]
 TAPE_K = 6
@@ -69,14 +58,15 @@ SHOWCASE_TOY_IDS = {10565740, 2002}
 SPEED_STEPS = (0.8, 1.0, 1.25)  # speed portals: the multiplier changes every 900-2400 ticks
 
 
-def toy_arrays(seed, ticks, tps=TPS, speed=1.0, died_tick=None, ship=True):
-    """(obs float16, act, meta, gaps_x) for one synthetic run, per the contract's tick convention.
+def scan_bytes(blocks):
+    """Distances (blocks) as scan bytes: 1/8 block, 255 past 12 blocks."""
+    v = np.round(np.asarray(blocks, np.float64) * 8)
+    return np.where(v > gbai.SCAN_MAX, gbai.SCAN_NONE, np.clip(v, 0, gbai.SCAN_MAX)).astype(np.uint8)
 
-    The speed changes inside the run (like speed portals), so how long a hold
-    lasts in ticks varies and only the gap distance tells when to let go. The
-    20 distractor inputs are smooth along the level (as real scan inputs are),
-    not fresh noise every tick, which a network could memorize presses by.
-    """
+
+def toy_arrays(seed, ticks, tps=TPS, speed=1.0, died_tick=None, ship=True):
+    """(state, scan, tok, act, meta, gaps_x) for one synthetic run, per the contract's tick convention:
+    rec[t] is what the pilot sees before step t, act[t] the button during it."""
     rng = np.random.default_rng(seed)
     mult = np.empty(ticks)
     t0 = 0
@@ -92,84 +82,124 @@ def toy_arrays(seed, ticks, tps=TPS, speed=1.0, died_tick=None, ship=True):
         p += rng.uniform(6, 20)
     gaps = np.array(gaps)
     nxt = np.minimum(np.searchsorted(gaps, x, side="right"), len(gaps) - 1)
-    g = np.minimum(gaps[nxt] - x, 20.0).astype(np.float16)  # the next gap ahead, as the pilot sees it
+    g = (gaps[nxt] - x).astype(np.float16).astype(np.float64)  # the next gap ahead, as its token's dx says
     act = ((g >= HOLD_TO) & (g < HOLD_FROM)).astype(np.uint8)
     h = gbai.before(act).astype(np.uint8)
     t = np.arange(ticks)
     press = (act == 1) & (h == 0)
     release = (act == 0) & (h == 1)
-    # Ticks since the last press/release BEFORE this tick (obs[t] is before step t).
+    # Ticks since the last press/release BEFORE this tick (rec[t] is before step t).
     lp = np.maximum.accumulate(np.where(press, t, -100000))
     lr = np.maximum.accumulate(np.where(release, t, -100000))
     lp_before = np.concatenate([[-100000], lp[:-1]])
     lr_before = np.concatenate([[-100000], lr[:-1]])
     speed_index = np.searchsorted(np.array(SPEED_STEPS) * speed, mult - 1e-9).clip(0, 4)
-    obs = np.zeros((ticks, TOY_DIM), np.float32)
-    obs[:, 0] = 1.0
-    obs[t, 9 + speed_index] = 1.0
-    obs[:, 14] = 0.05 * np.sin(x * 1.7 + seed)
-    obs[:, 15] = h
-    obs[:, 16] = np.log1p(np.minimum(t - lp_before, 100000))
-    obs[:, 17] = np.log1p(np.minimum(t - lr_before, 100000))
-    obs[:, 18] = 1.0 / tps
-    obs[:, 19] = g
-    obs[:, 20] = np.minimum(g, np.float16(3.0))  # the same distance, fine scale (moves ~6x more per tick)
-    freq = rng.uniform(0.05, 0.6, 19)
-    phase = rng.uniform(0, 2 * np.pi, 19)
-    obs[:, 21:] = np.sin(x[:, None] * freq[None, :] + phase[None, :]) * rng.uniform(0.5, 3.0, 19)
+    mode = np.zeros(ticks, np.int64)
+    if ship:
+        mode[int(ticks * 0.6):int(ticks * 0.7)] = 1  # a ship part, for the reader's labels
+    state = np.zeros((ticks, gbai.STATE_DIM), np.float32)
+    state[t, mode] = 1.0
+    state[t, gbai.STATE_SPEED0 + speed_index] = 1.0
+    state[:, 15] = 0.05 * np.sin(x * 1.7 + seed)
+    state[:, 16] = 1.0  # on ground
+    state[:, gbai.STATE_HELD] = h
+    state[:, 19] = np.log1p(np.minimum(t - lp_before, 100000)) / 5
+    state[:, 20] = np.log1p(np.minimum(t - lr_before, 100000)) / 5
+    state[:, 21] = 0.0
+    state[:, 22] = 15.0
+    state[:, gbai.STATE_INV_TPS] = np.float32(60.0 / tps)
+    # The scan: pits (deadly 1 block below, nothing solid) where a gap overlaps the column, the
+    # ground at the feet elsewhere, and a smooth ceiling that differs per level.
+    cols = -1.0 + 0.5 * np.arange(gbai.SCAN_COLUMNS)
+    a = x[:, None] + cols[None, :]
+    j = np.searchsorted(gaps, a + 0.5, side="left") - 1
+    pit = (j >= 0) & (gaps[np.maximum(j, 0)] + GAP_WIDTH > a)
+    freq, phase, depth = rng.uniform(0.05, 0.4), rng.uniform(0, 2 * np.pi), rng.uniform(3, 9)
+    ceiling = depth + 2.5 * np.sin(a * freq + phase)
+    scan = np.full((ticks, gbai.SCAN_COLUMNS, 4), gbai.SCAN_NONE, np.uint8)
+    scan[:, :, 1] = np.where(pit, scan_bytes(1.0), gbai.SCAN_NONE)
+    scan[:, :, 2] = scan_bytes(ceiling)
+    scan[:, :, 3] = np.where(pit, gbai.SCAN_NONE, 0)
+    scan = scan.reshape(ticks, gbai.SCAN_DIM)
+    # Tokens: the gaps' pads with dx in [-1, 20], nearest first.
+    tok = np.zeros((ticks, gbai.TOKENS, gbai.TOKEN_BYTES), np.uint8)
+    first = np.searchsorted(gaps, x - 1.0, side="left")
+    for s in range(gbai.TOKENS):
+        k = first + s
+        ok = k < len(gaps)
+        dx = np.where(ok, gaps[np.minimum(k, len(gaps) - 1)] - x, 99.0)
+        ok &= dx <= 20.0
+        pair = np.zeros((ticks, 2), "<f2")
+        pair[:, 0] = dx
+        tok[ok, s, :4] = pair[ok].view(np.uint8).reshape(-1, 4)
+        tok[ok, s, 4] = GAP_TOKEN
+    tok = tok.reshape(ticks, gbai.TOK_DIM)
     meta = np.zeros((ticks, len(gbai.META_FIELDS)), np.float32)
     meta[:, gbai.META_X] = x * gbai.BLOCK
     meta[:, gbai.META_Y] = 105.0 + gbai.BLOCK * act
-    meta[:, gbai.META_YVEL] = obs[:, 14]
-    if ship:
-        meta[int(ticks * 0.6):int(ticks * 0.7), gbai.META_MODE] = 1  # a ship part, for the reader's labels
+    meta[:, gbai.META_YVEL] = state[:, 15]
+    meta[:, gbai.META_MODE] = mode
     meta[:, gbai.META_SPEED] = speed_index
     if died_tick is not None:
         meta[died_tick + 1:, gbai.META_DEAD] = 1
-    return obs.astype(np.float16), act, meta, gaps
+    return state, scan, tok, act, meta, gaps
 
 
 def run_header(level_id, name, ticks, tps, meta, completed=True, died_tick=None, macro_file="", source="human",
-               layout_hash=TOY_HASH, layout=TOY_LAYOUT, dim=TOY_DIM, **extra):
-    h = {"format": "gbai-run", "version": 1, "source": source, "level_id": level_id, "level_name": name,
-         "macro_file": macro_file, "macro_format": "slc3", "tps": tps, "ticks": ticks, "obs_dim": dim,
-         "obs_layout_hash": layout_hash, "obs_layout": layout, "meta_fields": list(gbai.META_FIELDS),
+               layout_hash=TOY_HASH, validated=None, **extra):
+    h = {"format": "gbai-run", "version": 2, "source": source, "level_id": level_id, "level_name": name,
+         "macro_file": macro_file, "macro_format": "slc3", "tps": tps, "ticks": ticks, "layout_hash": layout_hash,
+         "frame_offset": 0, "offsets_tried": {"0": {"completed": completed,
+                                                    "died_x": None if completed else 1234.5}},
          "completed": completed, "died_tick": died_tick,
          "died_x": None if died_tick is None else float(meta[died_tick, gbai.META_X]),
-         "level_length_x": float(meta[-1, gbai.META_X]) + 300.0, "notes": "synthetic test data"}
+         "level_length_x": float(meta[-1, gbai.META_X]) + 300.0 if len(meta) else 0.0,
+         "validated": validated or ("sim" if completed else "real"), "notes": "synthetic test data"}
+    if source == "ai":
+        h.pop("validated")
+        h.pop("frame_offset")
+        h.pop("offsets_tried")
     h.update(extra)
     return h
 
 
+def write_arrays(folder, run_id, header, arrays, p=None, alive=None, golden=True):
+    state, scan, tok, act, meta = arrays[:5]
+    return gbai.write_run(folder, run_id, header, state, scan, tok, act, meta, p=p, alive=alive,
+                          golden_idx=gbai.golden_ticks(len(state)) if golden else None)
+
+
 def write_toy_run(root, level_id, name, speed=1.0, tps=TPS, ticks=7000, seed=0, died_tick=None, stem=None,
-                  macro_file=None):
-    obs, act, meta, gaps = toy_arrays(seed, ticks, tps, speed, died_tick)
+                  macro_file=None, validated=None):
+    arrays = toy_arrays(seed, ticks, tps, speed, died_tick)
     stem = stem or name.strip().replace(" ", "_")
     run_id = f"{level_id}__{stem}"
-    header = run_header(level_id, name, ticks, tps, meta, died_tick is None, died_tick,
-                        macro_file or f"C:/macros/{stem}.slc")
-    gbai.write_run(os.path.join(root, "data"), run_id, header, obs, act, meta)
-    return run_id, gaps, float(meta[-1, gbai.META_X]) / gbai.BLOCK + 2.0
+    header = run_header(level_id, name, ticks, tps, arrays[4], died_tick is None, died_tick,
+                        macro_file or f"C:/macros/{stem}.slc", validated=validated)
+    write_arrays(os.path.join(root, "data"), run_id, header, arrays)
+    return run_id, arrays[5], float(arrays[4][-1, gbai.META_X]) / gbai.BLOCK + 2.0
 
 
 def write_toy_tape(root, level_id, gaps, length_blocks):
     """A tape for a toy level: 0.5-block columns, a 'gap' channel where a gap starts, a ship portal mark."""
     cols = int(np.ceil(length_blocks * 2)) + 4
-    data = np.zeros((cols, TAPE_K), np.float32)
+    data = np.zeros((cols, TAPE_K), np.uint8)
     for gx in gaps:
         c = int(np.floor(gx * gbai.BLOCK / 15.0))
         if 0 <= c < cols:
-            data[c, 0] = 1.0
-            data[c, 1] = 1.0
-    data[:, 3] = 1.0  # the ground
-    data[cols * 6 // 10, 5] = 1.0
+            data[c, 0] = 1
+            data[c, 1] = 1
+    data[:, 3] = 1  # the ground
+    data[cols * 6 // 10, 5] = 1
     header = {"format": "gbai-tape", "version": 1, "level_id": level_id, "column_width": 15.0, "x0": 0.0,
-              "columns": cols, "channels": TAPE_K, "channel_layout": TAPE_LAYOUT, "y0": 105.0, "band_height": 15.0}
-    gbai.write_tape(os.path.join(root, "tapes"), header, data.astype(np.float16))
+              "columns": cols, "bands": 2, "channels": TAPE_K, "channel_layout": TAPE_LAYOUT, "y0": 105.0,
+              "band_height": 15.0}
+    gbai.write_tape(os.path.join(root, "tapes"), header, data)
 
 
 def make_toy_root(root, tapes=False):
-    """Every toy level (one run each, two on Toy One, Toy Two's second run dies). Returns {run_id: level}."""
+    """Every toy level (one run each, two on Toy One, Toy Two's second run dies, proven in the real
+    game; Toy Three's second run failed validation). Returns {run_id: level}."""
     made = {}
     for i, (lid, name, speed, tps, ticks) in enumerate(TOY_LEVELS):
         run_id, gaps, length = write_toy_run(root, lid, name, speed, tps, ticks, seed=100 + i)
@@ -180,11 +210,14 @@ def make_toy_root(root, tapes=False):
     made[rid] = 1001
     rid, _, _ = write_toy_run(root, 1002, "Toy Two", 0.9, TPS, 5000, seed=8, died_tick=4200, stem="Toy_Two_died")
     made[rid] = 1002
+    rid, _, _ = write_toy_run(root, 1003, "Toy Three", 1.1, TPS, 3000, seed=9, died_tick=2000, stem="Toy_Three_bad",
+                              validated="failed")
+    made[rid] = 1003
     return made
 
 
 class TempRoot:
-    """A temporary AI_ROOT, removed afterwards (memmaps released first: Windows can't delete mapped files)."""
+    """A temporary AI_ROOT, removed afterwards."""
 
     def __enter__(self):
         self.path = tempfile.mkdtemp(prefix="gbai_test_")
@@ -197,12 +230,12 @@ class TempRoot:
 
 
 def write_toy_practice(root, level_id, name, seed, ticks=3000, tps=TPS):
-    """Practice attempts on one toy level (contract s4):
+    """Practice attempts on one toy level (contract s6):
     a0 skips its 3rd press and dies 40 ticks later; b0 branches from a0 at that
     tick, presses, and completes (its log starts at tick 0, a copy of a0's
     before it); a1 completes; a2 stops at a limit without dying (its last H
     rows have no known outcome). Returns (H, the branch tick, row counts)."""
-    obs, act, meta, _ = toy_arrays(seed, ticks, tps, ship=False)
+    state, scan, tok, act, meta, _ = toy_arrays(seed, ticks, tps, ship=False)
     H = int(round(tps))
     presses = np.flatnonzero((act == 1) & (gbai.before(act) == 0))
     tf = int(presses[2])
@@ -211,13 +244,18 @@ def write_toy_practice(root, level_id, name, seed, ticks=3000, tps=TPS):
 
     def put(attempt, n, a, alive, completed, died_tick, **extra):
         header = run_header(level_id, name, n, tps, meta[:n], completed, died_tick, "", "ai", **extra)
-        gbai.write_run(folder, attempt, header, obs[:n], a[:n], meta[:n], alive.astype(np.int32))
+        p = np.where(a[:n] == 1, 0.9, 0.1).astype(np.float32)
+        st = state[:n].copy()
+        st[:, gbai.STATE_HELD] = gbai.before(a[:n])  # what this attempt held, not the human's
+        gbai.write_run(folder, attempt, header, st, scan[:n], tok[:n], a[:n], meta[:n], p=p,
+                       alive=alive.astype(np.int32))
 
     died = tf + 40
     a0 = act.copy()
     a0[tf:] = 0
     put("a0", died + 1, a0, np.minimum(H, died - t[:died + 1]), False, died)
-    put("b0", ticks, act, np.full(ticks, H), True, None, branch_of={"attempt": "a0", "tick": tf}, first_tick=0)
+    put("b0", ticks, act, np.full(ticks, H), True, None, branch_of={"attempt": "a0", "tick": tf}, first_tick=0,
+        forced=[[tf, 1]])
     put("a1", ticks, act, np.full(ticks, H), True, None)
     stop = 2000
     put("a2", stop, act, np.minimum(H, stop - t[:stop]), False, None)
@@ -226,7 +264,7 @@ def write_toy_practice(root, level_id, name, seed, ticks=3000, tps=TPS):
 
 
 class FakeGame:
-    """Stands in for the game in orchestrate.py's tests: the contract's tools (s6), answered from here.
+    """Stands in for the game in orchestrate.py's tests: the contract's tools (s8), answered from here.
 
     gucci_ai_record writes a toy run (and tape) for the macro into the temp
     AI_ROOT; gucci_ai_play answers with a made-up result. Leave tools out to
@@ -263,7 +301,7 @@ class FakeGame:
         if tool not in self.tools:
             raise RuntimeError(f"{tool}: no tool called {tool}")
         if tool == "gucci_ai_layout":
-            return {"obs_layout": TOY_LAYOUT, "obs_layout_hash": TOY_HASH, "tape_layout": TAPE_LAYOUT,
+            return {"layout_hash": TOY_HASH, "obs_dim": gbai.OBS_DIM, "tape_layout": TAPE_LAYOUT,
                     "tape_layout_hash": self.TAPE_HASH}
         if tool == "gucci_ai_record":
             lid = int(args["level_id"])
@@ -287,14 +325,134 @@ class FakeGame:
             self.level = None
             return {"leaving": True}
         if tool == "gucci_ai_play":
-            return self._job({"completed": False, "best_percent": 42.5, "attempts": 3,
+            if set(args) - {"max_attempts", "max_seconds", "save_macro", "log_practice"}:
+                raise RuntimeError(f"gucci_ai_play: arguments the contract doesn't have: {sorted(args)}")
+            return self._job({"completed": False, "best_percent": 42.5, "attempts": 3, "ticks_simulated": 9000,
                               "deaths": [{"tick": 900, "x": 2700.0, "percent": 12.0, "cause": "spike from above",
-                                          "mistake_tick": 893, "fix": "pressed 3 ticks earlier"}]})
+                                          "mistake_tick": 893, "mistake_was": "release",
+                                          "fix": "pressed 3 ticks earlier"}]})
         raise RuntimeError(f"FakeGame has no {tool}")
 
 
 def quiet(*_):
     pass
+
+
+def random_compact(rng, n):
+    """Random compact rows that follow the contract (incl. empty slots, scan 255, -0.0)."""
+    state = rng.normal(0, 3, (n, gbai.STATE_DIM)).astype(np.float32)
+    state[0, 0] = np.float32(-0.0)
+    scan = rng.integers(0, gbai.SCAN_MAX + 1, (n, gbai.SCAN_DIM)).astype(np.uint8)
+    scan[rng.random((n, gbai.SCAN_DIM)) < 0.3] = gbai.SCAN_NONE
+    tok = np.zeros((n, gbai.TOKENS, gbai.TOKEN_BYTES), np.uint8)
+    used = rng.random((n, gbai.TOKENS)) < 0.6
+    dxdy = np.stack([rng.uniform(-1, 20, (n, gbai.TOKENS)), rng.uniform(-10, 10, (n, gbai.TOKENS))], 2)
+    tok[:, :, :4] = dxdy.astype("<f2").view(np.uint8).reshape(n, gbai.TOKENS, 4)
+    tok[:, :, 4] = rng.integers(1, gbai.TOKEN_TYPES, (n, gbai.TOKENS))
+    tok[~used] = 0
+    return state, scan, tok.reshape(n, gbai.TOK_DIM)
+
+
+class ExpansionTests(unittest.TestCase):
+    """The 472-float expansion (contract s3): numpy, torch and the hand-written rule agree bit for bit."""
+
+    def test_layout_by_hand(self):
+        state = np.arange(gbai.STATE_DIM, dtype=np.float32)
+        scan = np.full(gbai.SCAN_DIM, gbai.SCAN_NONE, np.uint8)
+        scan[:4] = [0, 1, 95, 96]
+        tok = np.zeros((gbai.TOKENS, gbai.TOKEN_BYTES), np.uint8)
+        tok[0, :4] = np.array([2.5, -1.0], "<f2").view(np.uint8)
+        tok[0, 4] = 11
+        tok[1, :4] = np.array([19.75, 0.5], "<f2").view(np.uint8)
+        tok[1, 4] = 31
+        x = gbai.expand_np(state, scan, tok.reshape(-1))
+        self.assertEqual(x.shape, (472,))
+        self.assertEqual(gbai.OBS_DIM, 472)
+        np.testing.assert_array_equal(x[:40], state)
+        np.testing.assert_array_equal(x[40:44], [0.0, 0.125, 11.875, 12.0])
+        self.assertTrue((x[44:200] == 12.5).all())
+        self.assertEqual(list(x[200:202]), [2.5, -1.0])
+        self.assertEqual(int(np.flatnonzero(x[202:234])[0]), 11)
+        self.assertEqual(x[202:234].sum(), 1.0)
+        self.assertEqual(list(x[234:236]), [19.75, 0.5])
+        self.assertEqual(int(np.flatnonzero(x[236:268])[0]), 31)
+        self.assertTrue((x[268:] == 0).all())  # six empty slots
+        self.assertEqual(gbai.obs_name(18), "state[18]")
+        self.assertEqual(gbai.obs_name(41), "scan col 0 deadly below")
+        self.assertEqual(gbai.obs_name(200 + 34 + 2 + 31), "token 1 type 31")
+
+    def test_numpy_and_torch_match_bit_for_bit(self):
+        import torch
+        rng = np.random.default_rng(5)
+        state, scan, tok = random_compact(rng, 3000)
+        a = gbai.expand_np(state, scan, tok)
+        b = gbai.expand_torch(torch.from_numpy(state), torch.from_numpy(scan), torch.from_numpy(tok)).numpy()
+        self.assertTrue(np.array_equal(a.view(np.uint32), b.view(np.uint32)))
+        self.assertEqual(a[0, 0].view(np.uint32), np.float32(-0.0).view(np.uint32))
+        rows = gbai.CompactRows(3000)
+        rows.state[:], rows.scan[:], rows.tok[:] = state, scan, tok
+        idx = np.array([5, 17, 2999])
+        self.assertTrue(np.array_equal(rows.batch(idx).numpy().view(np.uint32), a[idx].view(np.uint32)))
+        self.assertTrue(np.array_equal(rows[idx], a[idx]))
+        self.assertEqual(rows.BYTES_PER_ROW, 368)
+
+    def test_empty_or_bad_slot_is_all_zeros(self):
+        """A slot with type 0 (or a type outside 1..31) expands to zeros, whatever its other bytes hold."""
+        import torch
+        state = np.zeros((1, gbai.STATE_DIM), np.float32)
+        scan = np.zeros((1, gbai.SCAN_DIM), np.uint8)
+        tok = np.zeros((1, gbai.TOKENS, gbai.TOKEN_BYTES), np.uint8)
+        tok[0, 0, :4] = np.array([3.0, 4.0], "<f2").view(np.uint8)  # type 0
+        tok[0, 1, :4] = np.array([np.inf, 1.0], "<f2").view(np.uint8)
+        tok[0, 1, 4] = 40  # no such type
+        tok = tok.reshape(1, -1)
+        a = gbai.expand_np(state, scan, tok)
+        b = gbai.expand_torch(torch.from_numpy(state), torch.from_numpy(scan), torch.from_numpy(tok)).numpy()
+        self.assertTrue((a[0, 200:] == 0).all())
+        self.assertTrue(np.array_equal(a, b))
+
+    def test_cleaning_compact_rows_equals_cleaning_expanded_rows(self):
+        rng = np.random.default_rng(6)
+        state, scan, tok = random_compact(rng, 50)
+        state[3, 7], state[4, 15] = np.inf, np.nan
+        t = tok.reshape(50, gbai.TOKENS, gbai.TOKEN_BYTES)
+        t[5, 0, :4] = np.array([np.inf, -np.inf], "<f2").view(np.uint8)
+        t[5, 0, 4] = 3
+        want = gbai.clean_rows(gbai.expand_np(state, scan, tok))
+        rows = gbai.CompactRows(50)
+        rows.state[:], rows.scan[:], rows.tok[:] = state, scan, tok
+        self.assertEqual(rows.clean(), 4)
+        self.assertTrue(np.array_equal(rows[np.arange(50)], want))
+
+
+class GoldenSetTests(unittest.TestCase):
+    """tools/ai/golden: what stage C's C++ test loads."""
+
+    def test_committed_golden_set_checks_out(self):
+        import export
+        self.assertTrue(os.path.exists(os.path.join(export.GOLDEN_DIR, "golden.json")),
+                        "make it with: python tools/ai/export.py golden")
+        self.assertEqual(export.check_golden_dir(), [])
+        doc = gbai.read_json(os.path.join(export.GOLDEN_DIR, "golden.json"))
+        self.assertEqual(doc["layout_hash"], export.GOLDEN_HASH)
+        for kind in ("pilot", "critic"):
+            dec = np.fromfile(os.path.join(export.GOLDEN_DIR, f"{kind}.dec.u8"), np.uint8)
+            self.assertTrue(0 < dec.sum() < len(dec), kind)  # both decisions appear
+        net = gbai.read_gbnn(os.path.join(export.GOLDEN_DIR, "critic.gbnn"))
+        self.assertEqual(net.layers[-1].activation, gbai.ACT_NONE)  # v2: logits
+        self.assertEqual(net.out_names, ["alive_hold", "alive_release"])
+        self.assertLess(doc["models"]["reader"]["columns"][1], doc["models"]["reader"]["receptive_field"])
+
+    def test_make_golden_is_repeatable(self):
+        import export
+        with TempRoot() as d:
+            export.make_golden(os.path.join(d, "a"), log=quiet)
+            export.make_golden(os.path.join(d, "b"), log=quiet)
+            self.assertEqual(export.check_golden_dir(os.path.join(d, "a")), [])
+            for name in os.listdir(os.path.join(d, "a")):
+                if name != "golden.json":
+                    with open(os.path.join(d, "a", name), "rb") as f, open(os.path.join(d, "b", name), "rb") as g:
+                        self.assertEqual(f.read(), g.read(), name)
 
 
 class GBNNTests(unittest.TestCase):
@@ -396,42 +554,53 @@ class ForwardTests(unittest.TestCase):
 
     def test_pilot(self):
         import models
-        x = (self.rng.standard_normal((64, TOY_DIM)) * 5).astype(np.float32)
-        self.check(models.Pilot(TOY_DIM, (256, 256)), x)
+        x = (self.rng.standard_normal((64, gbai.OBS_DIM)) * 5).astype(np.float32)
+        net = self.check(models.Pilot(gbai.OBS_DIM, (256, 256)), x)
+        self.assertEqual((net.out_names, net.layers[-1].activation), (["hold_logit"], gbai.ACT_NONE))
 
     def test_critic(self):
         import models
-        x = (self.rng.standard_normal((64, TOY_DIM)) * 5).astype(np.float32)
-        net = self.check(models.Critic(TOY_DIM, (256, 256)), x)
-        self.assertEqual(net.layers[-1].activation, gbai.ACT_SIGMOID)
+        x = (self.rng.standard_normal((64, gbai.OBS_DIM)) * 5).astype(np.float32)
+        net = self.check(models.Critic(gbai.OBS_DIM, (256, 256)), x)
+        self.assertEqual(net.layers[-1].activation, gbai.ACT_NONE)  # contract v2: logits
         self.assertEqual(net.out_names, ["alive_hold", "alive_release"])
 
     def test_reader(self):
         import models
         model = models.Reader(TAPE_K, 16, 5, (1, 2, 4, 8, 16, 32))
-        seqs = [self.rng.standard_normal((c, TAPE_K)).astype(np.float32) for c in (1, 2, 7, 40, 300)]
+        seqs = [self.rng.integers(0, 3, (c, TAPE_K)).astype(np.float32) for c in (1, 2, 7, 40, 300)]
         net = self.check(model, seqs)
         self.assertEqual(net.out_names, models.READER_OUTPUTS)
 
+    def test_decision_rule_is_logit_above_zero(self):
+        import evaluate
+        logits = np.array([-1.0, -0.0, 0.0, 1e-30, 2.0], np.float32)
+        self.assertEqual(evaluate.decide(logits).tolist(), [False, False, False, True, True])  # ties release
+
     def test_broken_values_read_as_zero_everywhere(self):
-        """A value that isn't finite (a float16 overflow is inf) trains as 0. Validation and the report
-        must read it the same way: they used to give P = 0.5 (a hold) and NaN (a release)."""
+        """A value that isn't finite trains as 0. Validation and the report must read it the same way."""
         import evaluate
         import export
         import models
         import train_pilot
-        model = models.Pilot(TOY_DIM, (16,))
-        model.set_norm(self.rng.standard_normal(TOY_DIM), self.rng.uniform(0.5, 2.0, TOY_DIM))
+        model = models.Pilot(gbai.OBS_DIM, (16,))
+        model.set_norm(self.rng.standard_normal(gbai.OBS_DIM), self.rng.uniform(0.5, 2.0, gbai.OBS_DIM))
         net = gbai.parse_gbnn(gbai.gbnn_bytes(export.to_gbnn(model, TOY_HASH)))
-        rows = (self.rng.standard_normal((6, TOY_DIM)) * 3).astype(np.float16)
-        rows[0, 3], rows[1, 5], rows[2, 7] = np.inf, -np.inf, np.nan
-        clean = rows.astype(np.float32)
-        clean[~np.isfinite(clean)] = 0
-        want = export.sigmoid(export.forward(net, clean)[:, 0])
-        np.testing.assert_allclose(evaluate.pilot_probs(net, rows), want, atol=1e-5)
-        np.testing.assert_allclose(export.sigmoid(train_pilot.predict_logits(model, rows)), want, atol=1e-5)
-        self.assertTrue(np.isfinite(rows[3:]).all())  # the caller's rows are left as they were
-        self.assertTrue(np.isinf(rows[0, 3]))
+        with TempRoot() as root:
+            arrays = list(toy_arrays(4, 300))
+            arrays[0][0, 3], arrays[0][1, 15] = np.inf, np.nan
+            t = arrays[2].reshape(300, gbai.TOKENS, gbai.TOKEN_BYTES)
+            t[2, 0, :2] = np.array([np.inf], "<f2").view(np.uint8)
+            t[2, 0, 4] = GAP_TOKEN
+            write_arrays(os.path.join(root, "data"), "9__broken", run_header(9, "B", 300, TPS, arrays[4]), arrays)
+            run = gbai.list_runs(root)[0][0]
+            clean = gbai.clean_rows(gbai.expand_np(arrays[0][:6], arrays[1][:6], arrays[2][:6]))
+            want = export.forward(net, clean)[:, 0]
+            np.testing.assert_allclose(evaluate.pilot_logits(net, run.obs[:6]), want, atol=1e-5)
+            np.testing.assert_allclose(train_pilot.predict_logits(model, run.obs[:6]), want, atol=1e-5)
+            X, *_ = train_pilot.assemble([run], 8)
+            np.testing.assert_allclose(export.forward(net, X[np.arange(6)])[:, 0], want, atol=1e-6)
+            run.close()
 
     def test_conv_is_the_contracts_loop(self):
         """The contract's formula, written as plain loops, gives what export.forward gives."""
@@ -465,61 +634,114 @@ class DataTests(unittest.TestCase):
         with TempRoot() as root:
             write_toy_run(root, 1001, "Toy One", ticks=500, seed=1)
             write_toy_run(root, 1002, "Toy Two", ticks=500, seed=2)
-            runs, problems = gbai.list_runs(root)
+            runs, problems = gbai.list_runs(root, deep=True)
             self.assertEqual((len(runs), problems), (2, []))
-            for r in runs:
-                r.close()
             base = os.path.join(root, "data", "1002__Toy_Two")
             with open(base + ".act.u8", "ab") as f:
                 f.write(b"\0")  # one row too many
             runs, problems = gbai.list_runs(root)
             self.assertEqual(len(runs), 1)
             self.assertIn("act.u8 is 501 bytes, not 500", problems[0][1])
-            obs, act, meta, _ = toy_arrays(3, 300)
-            act[5] = 2
-            gbai.write_run(os.path.join(root, "data"), "1003__bad", run_header(1003, "Bad", 300, TPS, meta), obs,
-                           act, meta)
-            h = run_header(1004, "Bad hash", 300, TPS, meta, layout_hash="xyz")
-            gbai.write_run(os.path.join(root, "data"), "1004__badhash", h, obs, act.clip(0, 1), meta)
+            arrays = list(toy_arrays(3, 300))
+            arrays[3] = arrays[3].copy()
+            arrays[3][5] = 2
+            write_arrays(os.path.join(root, "data"), "1003__bad", run_header(1003, "Bad", 300, TPS, arrays[4]), arrays)
+            h = run_header(1004, "Bad hash", 300, TPS, arrays[4], layout_hash="xyz")
+            arrays[3] = arrays[3].clip(0, 1)
+            write_arrays(os.path.join(root, "data"), "1004__badhash", h, arrays)
+            h = run_header(1005, "v1", 300, TPS, arrays[4])
+            h["version"] = 1
+            write_arrays(os.path.join(root, "data"), "1005__v1", h, arrays)
+            h = run_header(1006, "No validated", 300, TPS, arrays[4])
+            del h["validated"]
+            write_arrays(os.path.join(root, "data"), "1006__noval", h, arrays)
+            write_arrays(os.path.join(root, "data"), "1007__nogolden", run_header(1007, "NG", 300, TPS, arrays[4]),
+                         arrays, golden=False)
             runs, problems = gbai.list_runs(root)
             text = " | ".join(p[1] for p in problems)
             self.assertIn("only 0 and 1", text)
             self.assertIn("not 16 hex", text)
-            for r in runs:
-                r.close()
+            self.assertIn("not 2 (contract v2", text)
+            self.assertIn("validated is None", text)
+            self.assertIn("golden file missing", text)
+
+    def test_golden_rows_catch_a_different_expansion(self):
+        """The recorder's golden rows must equal Python's expansion bit for bit; one flipped bit fails the run."""
+        with TempRoot() as root:
+            write_toy_run(root, 1001, "Toy One", ticks=400, seed=1)
+            base = os.path.join(root, "data", "1001__Toy_One")
+            g = np.fromfile(base + ".golden.f32", "<f4").reshape(-1, gbai.OBS_DIM)
+            self.assertEqual(len(g), 32)
+            g[3, 40 + 9] = np.nextafter(g[3, 40 + 9], np.float32(100))
+            g.tofile(base + ".golden.f32")
+            runs, problems = gbai.list_runs(root)
+            self.assertEqual(runs, [])
+            self.assertIn("golden row 3", problems[0][1])
+            self.assertIn("scan col 2 deadly below", problems[0][1])
+
+    def test_deep_check_wants_held_before_to_be_the_last_action(self):
+        with TempRoot() as root:
+            arrays = list(toy_arrays(2, 600))
+            arrays[0] = arrays[0].copy()
+            arrays[0][:, gbai.STATE_HELD] = arrays[3]  # off by one tick: the label leaks into what it sees
+            write_arrays(os.path.join(root, "data"), "5__leak", run_header(5, "Leak", 600, TPS, arrays[4]), arrays)
+            self.assertEqual(len(gbai.list_runs(root)[0]), 1)  # shallow checks can't see it
+            runs, problems = gbai.list_runs(root, deep=True)
+            self.assertIn("differs from act[t-1]", problems[0][1])
 
     def test_one_layout_per_training(self):
         with TempRoot() as root:
             write_toy_run(root, 1001, "Toy One", ticks=300, seed=1)
-            obs, act, meta, _ = toy_arrays(2, 300)
+            arrays = toy_arrays(2, 300)
             other = "aaaaaaaaaaaaaaaa"
-            gbai.write_run(os.path.join(root, "data"), "1002__other",
-                           run_header(1002, "Other", 300, TPS, meta, layout_hash=other), obs, act, meta)
+            write_arrays(os.path.join(root, "data"), "1002__other",
+                         run_header(1002, "Other", 300, TPS, arrays[4], layout_hash=other), arrays)
             runs, _ = gbai.list_runs(root)
             with self.assertRaises(gbai.DataError) as cm:
                 gbai.pick_layout(runs)
             self.assertIn("--layout-hash", str(cm.exception))
             picked, h = gbai.pick_layout(runs, other)
             self.assertEqual(([r.run_id for r in picked], h), (["1002__other"], other))
-            for r in runs:
-                r.close()
 
-    def test_a_run_that_died_loses_its_last_second(self):
+    def test_usable_ticks_follow_validated(self):
+        """Contract s4: all of a completed run; from one that died, the ticks before death - tps, and
+        only when the real game agreed (validated real); nothing from a failed run."""
         with TempRoot() as root:
-            write_toy_run(root, 1002, "Toy Two", ticks=5000, seed=8, died_tick=4200, stem="died")
-            write_toy_run(root, 1001, "Toy One", ticks=5000, seed=7)
-            runs = {r.run_id: r for r in gbai.list_runs(root)[0]}
-            self.assertEqual(runs["1002__died"].usable_ticks(), 4200 - 240)
-            self.assertEqual(runs["1001__Toy_One"].usable_ticks(), 5000)
-            for r in runs.values():
-                r.close()
+            write_toy_run(root, 1, "done sim", ticks=5000, seed=1)
+            write_toy_run(root, 2, "done real", ticks=5000, seed=2, validated="real")
+            write_toy_run(root, 3, "died real", ticks=5000, seed=3, died_tick=4200)
+            write_toy_run(root, 4, "died failed", ticks=5000, seed=4, died_tick=4200, validated="failed")
+            write_toy_run(root, 5, "died sim", ticks=5000, seed=5, died_tick=4200, validated="sim")
+            write_toy_run(root, 6, "early", ticks=5000, seed=6, died_tick=100)
+            write_toy_run(root, 7, "done failed", ticks=5000, seed=7, validated="failed")
+            got = {r.level_id: r.usable_ticks() for r in gbai.list_runs(root)[0]}
+            self.assertEqual(got, {1: 5000, 2: 5000, 3: 4200 - 240, 4: 0, 5: 0, 6: 0, 7: 0})
+
+    def test_practice_files(self):
+        with TempRoot() as root:
+            H, tf, rows = write_toy_practice(root, 1001, "Toy One", seed=11)
+            attempts, problems = gbai.list_practice(root, deep=True)
+            self.assertEqual((len(attempts), problems), (4, []))
+            os.remove(os.path.join(root, "practice", "1001", "a1.p.f32"))
+            attempts, problems = gbai.list_practice(root)
+            self.assertIn("a1.p.f32 is missing", problems[0][1])
+
+    def test_tapes(self):
+        with TempRoot() as root:
+            write_toy_tape(root, 1001, [10.0, 20.0], 40.0)
+            tapes, problems = gbai.list_tapes(root)
+            self.assertEqual((sorted(tapes), problems), ([1001], []))
+            self.assertEqual(tapes[1001].data.dtype, np.uint8)
+            self.assertEqual(tapes[1001].bands, 2)
+            with open(os.path.join(root, "tapes", "1001.tape.u8"), "ab") as f:
+                f.write(b"\0")
+            self.assertIn("tape.u8 is", gbai.list_tapes(root)[1][0][1])
 
     def test_showcase_matching(self):
         show = gbai.Showcase()
         for lid, name, macro in [(10565740, "anything", ""), (14, "", ""), (0, "Theory of Everything 2", ""),
                                  (55, "LIMBO", ""), (56, "Heliopolis      ", ""), (57, "", "C:/x/ORBIT.slc"),
                                  (58, "the  NIGHTMARE", ""), (59, "Silent clubstep", ""), (60, "", "toe2.gdr"),
-                                 # every showcase level by id alone too (an empty or changed name can't let one in)
                                  (13519, "", ""), (18, "", ""), (20, "", ""), (86084399, "a renamed copy", ""),
                                  (133175713, "", "run.slc"), (136530685, "", "")]:
             self.assertIsNotNone(show.reason(lid, name, macro), (lid, name, macro))
@@ -536,43 +758,62 @@ class DataTests(unittest.TestCase):
             self.assertIsNotNone(show.reason(0, "some bar level", ""))
 
     def test_levels_with_nothing_usable_take_no_split_slot(self):
-        """A level whose only run is empty or died in its first second is set aside before the split,
-        so it can't be the level a fold validates on (nothing to validate) or all that trains."""
         with TempRoot() as root:
             for lid in (1001, 1002, 1003):
                 write_toy_run(root, lid, f"Toy {lid}", ticks=600, seed=lid)
             write_toy_run(root, 1004, "Toy Early", ticks=600, seed=4, died_tick=100, stem="early")
-            obs, act, meta, _ = toy_arrays(5, 10)
-            gbai.write_run(os.path.join(root, "data"), "1005__empty", run_header(1005, "Empty", 0, TPS, meta),
-                           obs[:0], act[:0], meta[:0])
+            write_toy_run(root, 1006, "Toy Failed", ticks=600, seed=6, validated="failed", stem="failed")
+            arrays = toy_arrays(5, 10)
+            write_arrays(os.path.join(root, "data"), "1005__empty", run_header(1005, "Empty", 0, TPS, arrays[4][:0]),
+                         [a[:0] for a in arrays])
             runs, problems = gbai.list_runs(root)
             self.assertEqual(problems, [])
             for k in range(3):
                 split = gbai.make_split(runs, gbai.Showcase(), (k, 3), usable=lambda r: r.usable_ticks() > 0)
-                self.assertEqual(sorted(r.run_id for r in split["unusable"]), ["1004__early", "1005__empty"])
+                self.assertEqual(sorted(r.run_id for r in split["unusable"]),
+                                 ["1004__early", "1005__empty", "1006__failed"])
                 self.assertEqual((len(split["train"]), len(split["val"])), (2, 1))
-                self.assertTrue(all(r.usable_ticks() > 0 for r in split["train"] + split["val"]))
-                rec = gbai.split_record(split, "pilot", TOY_HASH, (k, 3))
-                self.assertEqual(sorted(r["run_id"] for r in rec["unusable_runs"]), ["1004__early", "1005__empty"])
-            for r in runs:
-                r.close()
+                rec = gbai.split_record(split, "pilot", TOY_HASH)
+                self.assertEqual(rec["fold"], f"{k}/3")
 
-    def test_splits_are_by_level(self):
-        keys = [f"id:{i}" for i in range(1, 11)]
+    def test_eight_level_folds(self):
+        keys = [f"id:{i}" for i in range(1, 21)]
         seen = []
-        for k in range(5):
-            train, val = gbai.split_levels(keys, fold=(k, 5))
+        for k in range(8):
+            train, val, used = gbai.split_levels(keys, fold=(k, 8))
+            self.assertEqual(used, (k, 8))
             self.assertFalse(set(train) & set(val))
             self.assertEqual(sorted(train + val), sorted(keys))
+            self.assertIn(len(val), (2, 3))
             seen += val
-        self.assertEqual(sorted(seen), sorted(keys))  # every level validates exactly once over the folds
-        train, val = gbai.split_levels(keys, val_frac=0.15)
-        self.assertEqual(len(val), 2)
-        self.assertEqual(gbai.split_levels(keys, val_frac=0)[1], [])
+        self.assertEqual(sorted(seen), sorted(keys))  # every level validates exactly once over the 8 folds
+        # The deal doesn't depend on the order the levels were listed in.
+        self.assertEqual(gbai.split_levels(list(reversed(keys)), (3, 8))[1], gbai.split_levels(keys, (3, 8))[1])
+        self.assertEqual(gbai.split_levels(keys, None), (sorted(keys), [], None))
+        # Fewer levels than folds: leave-one-out.
+        train, val, used = gbai.split_levels(keys[:5], (4, 8))
+        self.assertEqual((len(val), used), (1, (4, 5)))
+        with self.assertRaises(gbai.DataError):
+            gbai.split_levels(keys[:5], (6, 8))
         self.assertEqual(gbai.parse_fold("2/7"), (2, 7))
-        for bad in ("7/7", "1/1", "x"):
+        self.assertEqual(gbai.parse_fold("3"), (3, 8))
+        self.assertIsNone(gbai.parse_fold("all"))
+        for bad in ("7/7", "1/1", "x", "8"):
             with self.assertRaises(ValueError):
                 gbai.parse_fold(bad)
+
+    def test_showcase_levels_are_out_of_every_fold(self):
+        with TempRoot() as root:
+            made = make_toy_root(root)
+            runs, problems = gbai.list_runs(root)
+            self.assertEqual(problems, [])
+            showcase_runs = {rid for rid, lid in made.items() if lid in SHOWCASE_TOY_IDS}
+            for k in range(8):
+                split = gbai.make_split(runs, gbai.Showcase(), (k, 8), usable=lambda r: r.usable_ticks() > 0)
+                used = {r.run_id for r in split["train"] + split["val"]}
+                self.assertFalse(used & showcase_runs)
+                self.assertEqual({r.run_id for r, _ in split["excluded"]}, showcase_runs)
+                self.assertEqual([r.run_id for r in split["unusable"]], ["1003__Toy_Three_bad"])
 
 
 class EvaluateTests(unittest.TestCase):
@@ -623,12 +864,12 @@ class PilotTests(unittest.TestCase):
             showcase_runs = {rid for rid, lid in made.items() if lid in SHOWCASE_TOY_IDS}
             self.assertEqual({r["run_id"] for r in split["showcase_excluded"]}, showcase_runs)
             self.assertFalse(trained & showcase_runs)
+            self.assertNotIn("1003__Toy_Three_bad", trained)  # failed validation: nothing from it
             self.assertFalse(set(split["train_levels"]) & set(split["val_levels"]))
             report = gbai.read_json(os.path.join(out, "eval_report.json"))
             self.assertEqual({r["group"] for r in report["runs"]}, {"validation", "showcase"})
             for g in ("validation", "showcase"):
                 m, b = report["groups"][g]["model"], report["groups"][g]["baseline"]
-                # Measured over 4 seeds and 3 folds: presses 79-100%, releases 69-89% within 2 ticks.
                 for side in ("press", "release"):
                     self.assertEqual(b[f"{side}_within_2"], 0.0)
                     self.assertGreaterEqual(m[f"{side}_within_2"], 0.55, (g, side, m))
@@ -639,10 +880,10 @@ class PilotTests(unittest.TestCase):
             self.assertTrue(ok, worst)
             self.assertGreaterEqual(n, 2)
             net = gbai.read_gbnn(gbnn)
-            self.assertEqual(net.layout_hash, TOY_HASH)
+            self.assertEqual((net.layout_hash, net.n_in), (TOY_HASH, gbai.OBS_DIM))
             model, ck = models.from_checkpoint(os.path.join(out, "best.pt"))
             run = [r for r in gbai.list_runs(root)[0] if r.level_id == 10565740][0]
-            x = np.asarray(run.obs[:3000], np.float32)  # real rows of a level it never saw
+            x = run.obs[:3000]  # real rows of a level it never saw
             run.close()
             self.assertLessEqual(export.compare(net, model, x), 1e-5)
             prog = gbai.read_json(os.path.join(out, "progress.json"))
@@ -650,11 +891,8 @@ class PilotTests(unittest.TestCase):
             self.assertEqual(res["best"]["epoch"], prog["best_epoch"])
             with open(os.path.join(out, "eval_report.md"), encoding="utf-8") as f:
                 self.assertIn("Showcase levels (never trained on)", f.read())
-            del model
 
     def test_same_seed_and_threads_train_the_same_network(self):
-        """--seed seeds torch's weight init too (it used to give a different network every run),
-        and --threads reaches numpy's own BLAS as well as torch."""
         import torch
         import train_pilot
         with TempRoot() as root:
@@ -663,13 +901,13 @@ class PilotTests(unittest.TestCase):
             files = []
             for i in range(2):
                 out = os.path.join(root, f"out{i}")
-                train_pilot.main(["--root", root, "--out", out, "--epochs", "1", "--threads", "2", "--val-frac", "0",
+                train_pilot.main(["--root", root, "--out", out, "--epochs", "1", "--threads", "2", "--fold", "all",
                                   "--no-eval"], log=quiet)
                 self.assertEqual(torch.get_num_threads(), 2)
                 with open(os.path.join(out, "pilot.gbnn"), "rb") as f:
                     files.append(f.read())
             self.assertEqual(files[0], files[1])
-            self.assertIsInstance(gbai.limit_blas_threads(2), bool)  # True with the pip numpy (OpenBLAS)
+            self.assertIsInstance(gbai.limit_blas_threads(2), bool)
 
     def test_pilot_resumes_and_refuses_other_settings(self):
         import train_pilot
@@ -677,6 +915,7 @@ class PilotTests(unittest.TestCase):
             make_toy_root(root)
             lines = []
             train_pilot.main(["--root", root, "--epochs", "2", "--threads", "2", "--no-eval"], log=lines.append)
+            self.assertTrue(any(ln.startswith("fold 0/8:") for ln in lines), lines)
             lines.clear()
             train_pilot.main(["--root", root, "--epochs", "3", "--threads", "2", "--no-eval"], log=lines.append)
             self.assertTrue(any(ln.startswith("resuming after epoch 2") for ln in lines), lines)
@@ -688,23 +927,95 @@ class PilotTests(unittest.TestCase):
             self.assertIn("batch", str(cm.exception))
             self.assertEqual(gbai.read_json(os.path.join(root, "train", "pilot", "progress.json"))["state"], "failed")
 
+    def test_load_far_keep_loads_less(self):
+        import train_pilot
+        with TempRoot() as root:
+            write_toy_run(root, 1001, "Toy One", ticks=4000, seed=1)
+            runs = gbai.list_runs(root)[0]
+            X1, y1, _, near1, b1, _ = train_pilot.assemble(runs, 8)
+            X2, y2, _, near2, b2, _ = train_pilot.assemble(runs, 8, load_far_keep=0.25)
+            self.assertLess(len(X2), 0.5 * len(X1))
+            self.assertEqual(int(near1.sum()), int(near2.sum()))  # every tick near a change is kept
+            self.assertEqual(set(np.unique(b2).round(3)), {1.0, 4.0})
+
+
+class BackgroundTests(unittest.TestCase):
+    def test_stop_file_checkpoints_and_the_same_command_resumes_to_the_same_network(self):
+        """A STOP file stops a run mid-epoch with a checkpoint; running the same command again finishes it,
+        and the result is the network an uninterrupted run gives, byte for byte."""
+        import background
+        import train_pilot
+        with TempRoot() as root:
+            for lid in (1001, 1002, 1003, 1004):
+                write_toy_run(root, lid, f"Toy {lid}", ticks=3000, seed=lid)
+            common = ["--root", root, "--epochs", "2", "--threads", "2", "--batch", "512", "--fold", "0/4",
+                      "--no-eval", "--priority", "normal"]
+            ref = os.path.join(root, "ref")
+            train_pilot.main(common + ["--out", ref], log=quiet)
+            out = os.path.join(root, "stopped")
+            background.request_stop(out)
+            res = train_pilot.main(common + ["--out", out], log=quiet)
+            self.assertTrue(res.get("stopped"))
+            self.assertFalse(os.path.exists(background.stop_path(out)))  # removed, so the rerun resumes
+            prog = gbai.read_json(os.path.join(out, "progress.json"))
+            self.assertEqual(prog["state"], "stopped")
+            self.assertEqual(prog["step"], 1)
+            self.assertEqual(models_ck(out)["batch"], 1)
+            lines = []
+            train_pilot.main(common + ["--out", out], log=lines.append)
+            self.assertTrue(any("resuming after epoch 0, batch 1" in ln for ln in lines), lines)
+            with open(os.path.join(ref, "pilot.gbnn"), "rb") as a, open(os.path.join(out, "pilot.gbnn"), "rb") as b:
+                self.assertEqual(a.read(), b.read())
+            self.assertEqual(gbai.read_json(os.path.join(out, "progress.json"))["state"], "done")
+
+    def test_reader_stops_and_resumes(self):
+        import background
+        import train_reader
+        with TempRoot() as root:
+            make_toy_root(root, tapes=True)
+            common = ["--root", root, "--epochs", "2", "--channels", "8", "--threads", "2", "--tapes-per-step", "2",
+                      "--layout-hash", "00aa11bb22cc33dd", "--priority", "normal"]
+            out = os.path.join(root, "r")
+            background.request_stop(out)
+            self.assertTrue(train_reader.main(common + ["--out", out], log=quiet).get("stopped"))
+            lines = []
+            res = train_reader.main(common + ["--out", out], log=lines.append)
+            self.assertTrue(any("resuming after epoch 0, batch 1" in ln for ln in lines), lines)
+            self.assertEqual(len(res["history"]), 2)
+
+    def test_threads_and_launch_command(self):
+        import background
+        self.assertIn(background.resolve_threads("auto"), (3, 6))
+        self.assertEqual(background.resolve_threads("4"), 4)
+        if os.name == "nt":
+            info = background.launch([os.path.join(HERE, "train_pilot.py"), "--threads", "auto"],
+                                     os.path.join(tempfile.gettempdir(), "x.log"), dry_run=True)
+            self.assertIn(" run --log ", info["command"])
+            self.assertIn("train_pilot.py", info["command"])
+            self.assertIsNone(info["pid"])
+
+
+def models_ck(out):
+    import models
+    return models.load_checkpoint(os.path.join(out, "last.pt"))
+
 
 class ReaderTests(unittest.TestCase):
     def test_labels_per_column(self):
         import train_reader
         with TempRoot() as root:
             header = {"format": "gbai-tape", "version": 1, "level_id": 5, "column_width": 15.0, "x0": 0.0,
-                      "columns": 6, "channels": 2, "channel_layout": [{"name": "a", "offset": 0, "size": 2}],
+                      "columns": 6, "bands": 1, "channels": 2, "channel_layout": [{"name": "a", "offset": 0, "size": 2}],
                       "y0": 100.0, "band_height": 15.0}
-            gbai.write_tape(os.path.join(root, "tapes"), header, np.zeros((6, 2), np.float16))
-            meta = np.zeros((8, 8), np.float32)
+            gbai.write_tape(os.path.join(root, "tapes"), header, np.zeros((6, 2), np.uint8))
+            arrays = list(toy_arrays(1, 8, ship=False))
+            meta = arrays[4]
             meta[:, gbai.META_X] = [0, 5, 14.9, 15, 29, 45, 46, 200]  # columns 0 0 0 1 1 3 3 (13: off the tape)
             meta[:, gbai.META_Y] = [100, 130, 160, 115, 145, 100, 100, 100]
             meta[:, gbai.META_MODE] = [0, 1, 1, 4, 4, 2, 2, 0]
             meta[:, gbai.META_GRAVITY] = [0, 0, 1, 1, 1, 0, 0, 0]
-            act = np.array([1, 0, 0, 1, 1, 0, 0, 1], np.uint8)
-            obs = np.zeros((8, TOY_DIM), np.float16)
-            gbai.write_run(os.path.join(root, "data"), "5__hand", run_header(5, "Hand", 8, TPS, meta), obs, act, meta)
+            arrays[3] = np.array([1, 0, 0, 1, 1, 0, 0, 1], np.uint8)
+            write_arrays(os.path.join(root, "data"), "5__hand", run_header(5, "Hand", 8, TPS, meta), arrays)
             tape = gbai.load_tape(root, 5)
             run = gbai.list_runs(root)[0][0]
             lab = train_reader.column_labels(tape, run)
@@ -713,8 +1024,6 @@ class ReaderTests(unittest.TestCase):
             self.assertEqual(lab["mode"][[0, 1, 3]].tolist(), [1, 4, 2])
             np.testing.assert_allclose(lab["gravity"][[0, 1, 3]], [1 / 3, 1.0, 0.0], atol=1e-6)
             np.testing.assert_allclose(lab["hold"][[0, 1, 3]], [1 / 3, 1.0, 0.0], atol=1e-6)
-            run.close()
-            tape.close()
 
     def test_reader_trains_exports_and_leaves_showcase_out(self):
         import export
@@ -730,6 +1039,7 @@ class ReaderTests(unittest.TestCase):
             self.assertEqual({r["run_id"] for r in split["showcase_excluded"]}, showcase_runs)
             used = {r["run_id"] for r in split["train_runs"] + split["val_runs"]}
             self.assertFalse(used & showcase_runs)
+            self.assertEqual(split["fold"], "0/8")
             hist = res["history"]
             self.assertLess(hist[-1]["train_loss"], hist[0]["train_loss"])
             gbnn = os.path.join(out, "reader.gbnn")
@@ -740,7 +1050,6 @@ class ReaderTests(unittest.TestCase):
             model, _ = models.from_checkpoint(os.path.join(out, "best.pt" if best != len(hist) else "last.pt"))
             tape = np.asarray(gbai.load_tape(root, 1001).data, np.float32)[:120]
             self.assertLessEqual(export.compare(net, model, [tape]), 1e-5)
-            del model
 
 
 class CriticTests(unittest.TestCase):
@@ -763,11 +1072,9 @@ class CriticTests(unittest.TestCase):
             labels = M.sum(1)
             self.assertEqual(int((labels == 2).sum()), 1)  # the pair
             self.assertEqual(int((labels == 0).sum()), 1)  # b0's own row at tf, now the pair's other half
-            self.assertEqual(int((labels == 1).sum()), len(X) - 2)  # every other row: the head of its action
+            self.assertEqual(int((labels == 1).sum()), len(X) - 2)
             died = int(((Y == 0) & (M == 1)).sum())
-            self.assertEqual(died, H)  # a0's last H rows (each less than 1 s before its death); a2's last H aren't there
-            for a in attempts:
-                a.close()
+            self.assertEqual(died, H)
 
     def test_critic_trains_and_exports_without_showcase(self):
         import export
@@ -776,8 +1083,7 @@ class CriticTests(unittest.TestCase):
             for i, (lid, name) in enumerate([(1001, "Toy One"), (1002, "Toy Two"), (1003, "Toy Three"),
                                              (10565740, "Bloodbath")]):
                 write_toy_practice(root, lid, name, seed=20 + i)
-            res = train_critic.main(["--root", root, "--epochs", "3", "--threads", "4", "--val-frac", "0.34"],
-                                    log=quiet)
+            res = train_critic.main(["--root", root, "--epochs", "3", "--threads", "4", "--fold", "0/3"], log=quiet)
             out = os.path.join(root, "train", "critic")
             split = gbai.read_json(os.path.join(out, "split.json"))
             self.assertTrue(split["showcase_excluded"])
@@ -785,7 +1091,9 @@ class CriticTests(unittest.TestCase):
             self.assertFalse([r for r in split["train_runs"] + split["val_runs"] if r["level_id"] == 10565740])
             gbnn = os.path.join(out, "critic.gbnn")
             self.assertTrue(export.check_golden(gbnn)[0])
-            self.assertEqual(gbai.read_gbnn(gbnn).out_names, ["alive_hold", "alive_release"])
+            net = gbai.read_gbnn(gbnn)
+            self.assertEqual(net.out_names, ["alive_hold", "alive_release"])
+            self.assertEqual(net.layers[-1].activation, gbai.ACT_NONE)
             self.assertIsNotNone(res["val"])
 
 
@@ -814,34 +1122,53 @@ class OrchestrateTests(unittest.TestCase):
                 games.append(FakeGame(root))
                 return games[-1]
             out = orchestrate.main(["all", "--root", root, "--manifest", m, "--pilot-epochs", "2",
-                                    "--reader-epochs", "2", "--threads", "2", "--levels", "10565740,14"],
-                                   log=quiet, game_factory=factory)
+                                    "--reader-epochs", "2", "--threads", "2", "--levels", "10565740,14",
+                                    "--log-practice"], log=quiet, game_factory=factory)
             recorded = [r for r in out["record"] if r["state"] == "done"]
             self.assertEqual(len(recorded), 7)  # six to train on and the bar level; not the unused one
-            self.assertEqual(gbai.read_json(os.path.join(root, "train", "layout.json"))["obs_layout_hash"], TOY_HASH)
+            self.assertEqual(gbai.read_json(os.path.join(root, "train", "layout.json"))["layout_hash"], TOY_HASH)
             self.assertEqual(out["train"]["pilot"]["state"], "done")
             self.assertEqual(out["train"]["reader"]["state"], "done")
             self.assertNotIn("critic", out["train"])  # no practice attempts yet
             installed = {i["model"]: i for i in out["install"]}
             self.assertEqual(set(installed), {"pilot", "reader"})
+            self.assertEqual(installed["pilot"]["layout_hash"], TOY_HASH)
             self.assertEqual(installed["reader"]["layout_hash"], FakeGame.TAPE_HASH)
             for name in ("pilot", "reader"):
                 with open(os.path.join(root, "weights", f"{name}.gbnn"), "rb") as a, \
                         open(os.path.join(root, "train", name, f"{name}.gbnn"), "rb") as b:
                     self.assertEqual(a.read(), b.read())
             split = gbai.read_json(os.path.join(root, "train", "pilot", "split.json"))
+            self.assertEqual(split["fold"], "all")  # the model to ship trains on every non-showcase level
             self.assertIn(10565740, {r["level_id"] for r in split["showcase_excluded"]})
             play = out["play"]
             self.assertEqual(sorted(r["level_id"] for r in play["results"]), [14, 10565740])
             self.assertTrue(all(r["state"] == "done" for r in play["results"]))
+            calls = [args for tool, args in games[-1].calls if tool == "gucci_ai_play"]
+            self.assertTrue(all(c.get("log_practice") for c in calls))
             opened = [args for tool, args in games[-1].calls if tool == "gucci_open_level"]
             self.assertEqual(sorted(opened, key=str), sorted([{"id": 10565740}, {"main": 14}], key=str))
             reports = os.listdir(os.path.join(root, "train", "reports"))
             self.assertTrue(any(n.startswith("play_") and n.endswith(".md") for n in reports))
-            # Recording again skips what's there.
             again = orchestrate.main(["record", "--root", root, "--manifest", m], log=quiet,
                                      game_factory=lambda: FakeGame(root))
             self.assertTrue(all(r["state"] == "skipped" for r in again["record"]))
+
+    def test_cross_validation_over_level_folds(self):
+        import orchestrate
+        with TempRoot() as root:
+            for lid in (1001, 1002, 1003):
+                write_toy_run(root, lid, f"Toy {lid}", ticks=1200, seed=lid)
+            write_toy_run(root, 10565740, "Bloodbath", ticks=1200, seed=9)
+            out = orchestrate.main(["train", "--root", root, "--cv", "--pilot-epochs", "1", "--threads", "2"],
+                                   log=quiet, game_factory=lambda: None)
+            folds = out["cv"]["folds"]
+            self.assertEqual([f["fold_used"] for f in folds], ["0/3", "1/3", "2/3"])  # 3 levels: leave-one-out
+            held = sorted(lv for f in folds for lv in f["val_levels"])
+            self.assertEqual(held, ["id:1001", "id:1002", "id:1003"])
+            self.assertTrue(all(f["showcase"] for f in folds))
+            self.assertTrue(os.path.exists(os.path.join(root, "train", "pilot_folds", "cv_summary.json")))
+            self.assertEqual(out["pilot"]["state"], "done")
 
     def test_missing_tools_stop_with_a_clear_message(self):
         import orchestrate

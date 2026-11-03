@@ -5,7 +5,8 @@ against PyTorch, so this is what the mod runs) over human runs of levels it
 never trained on, and reports, next to a trivial baseline that repeats the
 previous tick's button:
 
-- tick accuracy: the share of ticks where the pilot's button (P >= threshold)
+- tick accuracy: the share of ticks where the pilot's button (hold when its
+  logit > 0, ties release: the mod's rule, contract v2 s7)
   matches the human's. The baseline scores ~99% here, which is why this number
   alone says little.
 - presses and releases within 1, 2 and 4 ticks: for each human press (or
@@ -147,22 +148,37 @@ def rates(c, with_prob=True):
     return out
 
 
-def pilot_probs(net, obs, chunk=65536):
-    """P(hold) per row from a pilot GBNN (float32 numpy forward, like the mod). A value that
+def decide(logits, threshold=0.5):
+    """The pilot's button from its logits: hold when logit > 0 (ties release), the mod's rule.
+    threshold is a P(hold) cut for experiments: hold when logit > log(t / (1 - t))."""
+    logits = np.asarray(logits)
+    cut = 0.0 if threshold == 0.5 else float(np.log(threshold / (1.0 - threshold)))
+    return logits > cut
+
+
+def pilot_logits(net, obs, n=None, chunk=16384):
+    """hold_logit per row from a pilot GBNN (float32 numpy forward, like the mod). A value that
     isn't finite counts as 0, as it did in training (gbai.clean_rows); `gbai.py check` names
-    the runs that have them."""
-    out = np.empty(len(obs), np.float32)
-    for a in range(0, len(obs), chunk):
-        out[a:a + chunk] = export.sigmoid(export.forward(net, gbai.clean_rows(obs[a:a + chunk]), np.float32)[:, 0])
+    the runs that have them. obs: a run's obs view (expanded a chunk at a time) or an array."""
+    n = len(obs) if n is None else int(n)
+    out = np.empty(n, np.float32)
+    for a in range(0, n, chunk):
+        out[a:min(a + chunk, n)] = export.forward(net, gbai.clean_rows(obs[a:min(a + chunk, n)]), np.float32)[:, 0]
     return out
+
+
+def pilot_probs(net, obs, chunk=65536):
+    """P(hold) per row (sigmoid of pilot_logits), for reports."""
+    return export.sigmoid(pilot_logits(net, obs, chunk=chunk)).astype(np.float32)
 
 
 def evaluate_run(net, run, threshold=0.5):
     """{"model": counts, "baseline": counts} over the run's usable ticks."""
     n = run.usable_ticks()
     act = np.asarray(run.act[:n])
-    prob = pilot_probs(net, run.obs[:n]) if n else np.zeros(0, np.float32)
-    model = transition_metrics(act, prob >= threshold, run.tps, prob)
+    logits = pilot_logits(net, run.obs, n) if n else np.zeros(0, np.float32)
+    prob = export.sigmoid(logits)
+    model = transition_metrics(act, decide(logits, threshold), run.tps, prob)
     base = transition_metrics(act, gbai.before(act), run.tps)
     return {"model": model, "baseline": base}
 
@@ -201,8 +217,12 @@ def evaluate(net, runs, split, showcase, threshold=0.5, include_trained=False, l
         if g == "trained" and not include_trained:
             continue
         if run.layout_hash != net.layout_hash:
-            skipped.append({"run_id": run.run_id, "why": f"recorded with obs layout {run.layout_hash}, the model "
+            skipped.append({"run_id": run.run_id, "why": f"recorded with layout {run.layout_hash}, the model "
                                                           f"expects {net.layout_hash}"})
+            continue
+        if run.usable_ticks() == 0:
+            skipped.append({"run_id": run.run_id, "why": f"no usable ticks (validated {run.validated}, completed "
+                                                          f"{run.completed})"})
             continue
         res = evaluate_run(net, run, threshold)
         run.close()
@@ -215,7 +235,9 @@ def evaluate(net, runs, split, showcase, threshold=0.5, include_trained=False, l
         m = per_run[-1]["model"]
         log(f"  {run.run_id} [{g}]: press within 2 {_pct(m['press_within_2'])}, release within 2 "
             f"{_pct(m['release_within_2'])}, false {_num(m['false_per_sec'])}/s")
-    report = {"format": "gbai-eval", "version": 1, "created": gbai.now_iso(), "threshold": threshold,
+    report = {"format": "gbai-eval", "version": 2, "created": gbai.now_iso(), "threshold": threshold,
+              "decision": "hold when hold_logit > 0, ties release" if threshold == 0.5 else
+              f"hold when P(hold) > {threshold}",
               "layout_hash": net.layout_hash, "tolerances": list(TOLERANCES),
               "groups": {g: {"title": GROUP_TITLES[g], "model": rates(v["model"]),
                              "baseline": rates(v["baseline"], with_prob=False)} for g, v in groups.items()},
@@ -274,15 +296,18 @@ def main(argv=None, log=print):
     ap.add_argument("--root", help="AI_ROOT (default: $GUCCIBOT_AI_ROOT or the mod's save folder)")
     ap.add_argument("--model", help="pilot.gbnn (default: AI_ROOT\\train\\pilot\\pilot.gbnn)")
     ap.add_argument("--split", help="split.json from train_pilot.py (default: next to the model)")
-    ap.add_argument("--threshold", type=float, default=0.5)
+    ap.add_argument("--threshold", type=float, default=0.5,
+                    help="hold when P > this; 0.5 is the mod's rule (logit > 0, ties release)")
     ap.add_argument("--runs", help="only these run ids, comma separated")
     ap.add_argument("--include-trained", action="store_true",
                     help="also report the levels it trained on (as their own group, never as held out)")
     ap.add_argument("--manifest", help="a manifest whose is_bar_level entries are showcase levels too")
     ap.add_argument("--out", help="report JSON (default: eval_report.json next to the model); .md goes beside it")
-    ap.add_argument("--threads", type=int, default=6, help="CPU threads for numpy (6 = one per core on Nigel's PC)")
+    ap.add_argument("--threads", default="6", help="CPU threads for numpy, or auto (3 while Geometry Dash runs)")
     args = ap.parse_args(argv)
-    gbai.limit_blas_threads(args.threads)
+    import background
+    background.set_below_normal_priority()
+    gbai.limit_blas_threads(background.resolve_threads(args.threads))
     root = gbai.ai_root(args.root)
     model_path = args.model or os.path.join(root, "train", "pilot", "pilot.gbnn")
     net = gbai.read_gbnn(model_path)

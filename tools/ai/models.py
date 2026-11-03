@@ -1,8 +1,10 @@
-"""The AI's three networks in PyTorch, for training only (contract s5, GBNN v1).
+"""The AI's three networks in PyTorch, for training only (contract v2 s7, GBNN v1).
 
-    Pilot   MLP, obs -> 256 -> 256 -> 1 logit: hold this tick if sigmoid >= 0.5
-    Critic  MLP, obs -> 256 -> 256 -> 2 sigmoid heads: still alive in 1 s if it
-            holds now / if it releases now
+    Pilot   MLP, the 472-float expansion -> 256 -> 256 -> 1 logit "hold_logit":
+            hold this tick if logit > 0 (ties release)
+    Critic  MLP, 472 -> 256 -> 256 -> 2 logits "alive_hold", "alive_release":
+            still alive in 1 s if it holds now / if it releases now (logits, no
+            sigmoid in the file: the mod compares them, never needs libm)
     Reader  conv1d stack over the level tape: per column [y_rel, 8 mode logits,
             gravity logit, hold_frac]
 
@@ -14,7 +16,7 @@ the file's header (the network sees (x-mean)/std). No batch or layer norm.
 Each model takes RAW inputs and normalizes them with its in_mean/in_std
 buffers, so what trains is exactly what exports. forward() gives what the
 loss needs (logits); export_forward() gives what the GBNN file computes (the
-critic's sigmoid included). gbnn_layers() lists the layers for export.py.
+same logits for all three in v2). gbnn_layers() lists the layers for export.py.
 
 The conv1d semantics match the contract's C++ loop:
     out[o][t] = b[o] + sum_i sum_k w[o][i][k] * x[i][t + (k-(K-1)/2)*dilation]
@@ -97,7 +99,8 @@ class _MLP(_Net):
 
 
 class Pilot(_MLP):
-    """P(hold) each tick from what the pilot sees. forward() -> logits [B]."""
+    """Hold or not each tick from what the pilot sees. forward() -> logits [B]; the mod holds
+    when the logit is > 0 (ties release)."""
 
     model_kind = "pilot"
     out_names = ["hold_logit"]
@@ -113,15 +116,15 @@ class Pilot(_MLP):
 
 
 class Critic(_MLP):
-    """P(still alive in 1 s) if it holds / if it releases now. forward() -> logits [B, 2]
-    (heads in out_names order); the GBNN file ends in a sigmoid."""
+    """Still alive in 1 s if it holds / if it releases now. forward() -> logits [B, 2]
+    (heads in out_names order); the GBNN file outputs these logits as they are (contract v2)."""
 
     model_kind = "critic"
     out_names = ["alive_hold", "alive_release"]
     HOLD, RELEASE = 0, 1
 
     def __init__(self, n_in, hidden=(256, 256)):
-        super().__init__(n_in, hidden, 2, gbai.ACT_SIGMOID)
+        super().__init__(n_in, hidden, 2, gbai.ACT_NONE)
 
     def forward(self, x):
         return self.logits(x)
@@ -259,38 +262,59 @@ def plain(obj):
     return json.loads(json.dumps(obj, default=gbai._json_default))
 
 
+def epoch_order(n, seed, epoch, near=None, far_keep=1.0):
+    """(row order, loss boost [n][1] or None) for one epoch: the same every time for (seed, epoch),
+    so a run stopped mid-epoch resumes on exactly the batches it hadn't done."""
+    rng = np.random.default_rng([seed, epoch])
+    if near is None or far_keep >= 1:
+        return rng.permutation(n), None
+    idx = np.flatnonzero(near | (rng.random(n) < far_keep))
+    return idx[rng.permutation(len(idx))], np.where(near, 1.0, 1.0 / far_keep).astype(np.float32)[:, None]
+
+
+def as_batch(X, bi):
+    """Rows bi of X as a float32 tensor: X is gbai.CompactRows (expanded in torch) or an array."""
+    if hasattr(X, "batch"):
+        return X.batch(bi)
+    return torch.from_numpy(np.asarray(X[bi], np.float32))
+
+
 def fit_rows(model, X, Y, W, settings, validate, out, signature, layout_hash, prog, log=print, near=None):
     """Trains an MLP on rows: the loop the pilot and the critic share.
 
-    X float16 [N][n_in] raw inputs; Y float32 [N][k] targets; W float32 [N][k]
-    loss weights (0 where a row has no label for that output); the loss is
-    binary cross-entropy on model.logits(x) [B][k], weighted, summed over k.
+    X gbai.CompactRows [N] (expanded to 472 floats per batch, in torch) or a
+    float array [N][n_in]; Y float32 [N][k] targets; W float32 [N][k] loss
+    weights (0 where a row has no label for that output); the loss is binary
+    cross-entropy on model.logits(x) [B][k], weighted, summed over k.
     settings (an argparse namespace works): epochs, batch, lr, weight_decay,
-    seed, far_keep, select ("timing" / "loss" / "last"), fresh, ema. near: bool
-    [N], the rows every epoch takes when far_keep < 1 (the others are sampled
-    at far_keep and weigh 1/far_keep).
+    seed, far_keep, select ("timing" / "loss" / "last"), fresh, ema,
+    ckpt_every_s. near: bool [N], the rows every epoch takes when far_keep < 1
+    (the others are sampled at far_keep and weigh 1/far_keep).
 
     ema: what gets validated, checkpointed as model_state and exported is an
     exponential moving average of the weights over about `ema` steps (-1:
     half an epoch, 50..2000 steps; 0: off). A press is a boundary 1 tick wide,
-    and every noisy step moves it; the average holds it still. (On the toy
-    data the held-out timing of the raw weights swung by 20 points between
-    identical runs.) The raw weights ride along as train_state for resuming.
+    and every noisy step moves it; the average holds it still. The raw
+    weights ride along as train_state for resuming.
 
     validate(model) -> (val_loss, val_metrics, score, text): score picks the
     epoch under "timing" (None falls back to the loss); text goes in the log.
     Pass validate=None when there's nothing to validate on (the last epoch is
     kept).
 
-    Every epoch: last.pt (and best.pt when the pick improves) in `out`, and
-    the progress file. With a last.pt whose signature matches, it carries on
-    after that epoch; one that doesn't match stops it (settings.fresh starts
-    over). Leaves the picked epoch's weights in the model; returns (best, history).
+    Checkpoints (background.py): last.pt at every epoch end (and best.pt when
+    the pick improves), and mid-epoch every ckpt_every_s seconds with the
+    batch it got to. A STOP file in `out` makes it write last.pt and raise
+    background.StopRequested. With a last.pt whose signature matches, it
+    carries on from there (mid-epoch too, on the same batches); one that
+    doesn't match stops it (settings.fresh starts over). Leaves the picked
+    epoch's weights in the model; returns (best, history).
     """
     import torch.nn.functional as F
+    import background
     last_path, best_path = os.path.join(out, "last.pt"), os.path.join(out, "best.pt")
     opt = torch.optim.AdamW(model.parameters(), lr=settings.lr, weight_decay=settings.weight_decay)
-    start_epoch, step, history = 0, 0, []
+    start_epoch, start_batch, step, history, loss_avg = 0, 0, 0, [], None
     best = {"epoch": None, "val_loss": None, "score": None}
     n = len(X)
     far_keep = getattr(settings, "far_keep", 1.0)
@@ -305,6 +329,8 @@ def fit_rows(model, X, Y, W, settings, validate, out, signature, layout_hash, pr
         ema_steps = int(min(2000, max(50, steps_per_epoch // 2)))
     signature = dict(signature, ema_steps=ema_steps)
     ema = {k: v.detach().clone() for k, v in model.state_dict().items()} if ema_steps > 0 else None
+    if settings.fresh:
+        background.clear_stop(out)
     if os.path.exists(last_path) and not settings.fresh:
         ck = load_checkpoint(last_path)
         want, have = plain(signature), ck.get("signature") or {}
@@ -314,31 +340,42 @@ def fit_rows(model, X, Y, W, settings, validate, out, signature, layout_hash, pr
                              "--fresh to start over (or give --out another folder)")
         model.load_state_dict(ck.get("train_state") or ck["model_state"])
         if ema is not None:
-            ema = {k: v.detach().clone() for k, v in ck["model_state"].items()}
+            ema = {k: v.detach().clone() for k, v in (ck.get("ema_state") or ck["model_state"]).items()}
         opt.load_state_dict(ck["optimizer_state"])
         start_epoch, step, history, best = ck["epoch"], ck["step"], ck["history"], ck["best"]
-        log(f"resuming after epoch {start_epoch} (step {step})")
+        start_batch, loss_avg = int(ck.get("batch") or 0), ck.get("loss_avg")
+        log(f"resuming after epoch {start_epoch}" + (f", batch {start_batch}" if start_batch else "") +
+            f" (step {step})")
+
+    def save_partial(epoch, batch):
+        """last.pt in the middle of an epoch: raw weights, the average, the optimizer, where it got to."""
+        ck = {"format": "gbai-ckpt", "model": model.model_kind, "model_config": model.config(),
+              "model_state": ema if ema is not None else model.state_dict(), "train_state": model.state_dict(),
+              "ema_state": ema, "optimizer_state": opt.state_dict(), "epoch": epoch, "batch": batch, "step": step,
+              "loss_avg": loss_avg, "signature": plain(signature), "layout_hash": layout_hash,
+              "history": plain(history), "best": plain(best)}
+        if ema is None:
+            ck.pop("ema_state")
+        save_checkpoint(last_path, ck)
 
     prog.set(state="training", epochs=settings.epochs, epoch=start_epoch, steps_per_epoch=steps_per_epoch, step=step,
-             history=history, best_epoch=best["epoch"], force=True, message="")
+             history=history, best_epoch=best["epoch"], force=True, message="",
+             threads=torch.get_num_threads(), stop_file=background.stop_path(out))
     session_steps, session_time, val_time = 0, 0.0, []
+    ckpt_every = float(getattr(settings, "ckpt_every_s", 0) or 0)
+    t_ckpt = time.time()
     for epoch in range(start_epoch, settings.epochs):
-        rng = np.random.default_rng([settings.seed, epoch])
-        if near is None or far_keep >= 1:
-            idx = rng.permutation(n)
-            boost = None
-        else:
-            idx = np.flatnonzero(near | (rng.random(n) < far_keep))
-            idx = idx[rng.permutation(len(idx))]
-            boost = np.where(near, 1.0, 1.0 / far_keep).astype(np.float32)[:, None]
+        idx, boost = epoch_order(n, settings.seed, epoch, near, far_keep)
         n_steps = int(np.ceil(len(idx) / settings.batch))
+        first = start_batch if epoch == start_epoch else 0
         model.train()
         t_epoch = time.time()
-        loss_avg = None
-        for b in range(n_steps):
+        if first == 0:
+            loss_avg = None
+        for b in range(first, n_steps):
             t_step = time.time()
             bi = np.sort(idx[b * settings.batch:(b + 1) * settings.batch])
-            xb = torch.from_numpy(X[bi].astype(np.float32))
+            xb = as_batch(X, bi)
             yb = torch.from_numpy(Y[bi])
             wb = W[bi] if boost is None else W[bi] * boost[bi]
             lr = lr_at(step, total_steps, settings.lr)
@@ -367,6 +404,17 @@ def fit_rows(model, X, Y, W, settings, validate, out, signature, layout_hash, pr
             eta = left * session_time / session_steps + (settings.epochs - epoch) * (np.mean(val_time) if val_time
                                                                                      else 0.0)
             prog.set(epoch=epoch, step=step, train_loss=loss_avg, eta_seconds=eta, lr=lr)
+            if b + 1 < n_steps:
+                if background.stop_requested(out):
+                    save_partial(epoch, b + 1)
+                    background.clear_stop(out)
+                    prog.finish("stopped", f"stopped by the STOP file at epoch {epoch + 1}, batch {b + 1}; run the "
+                                "same command again to carry on", step=step)
+                    log(f"stopped at epoch {epoch + 1}, batch {b + 1} (step {step}); checkpoint {last_path}")
+                    raise background.StopRequested(last_path)
+                if ckpt_every > 0 and time.time() - t_ckpt >= ckpt_every:
+                    save_partial(epoch, b + 1)
+                    t_ckpt = time.time()
         train_seconds = time.time() - t_epoch
         t_val = time.time()
         raw = None
@@ -390,11 +438,13 @@ def fit_rows(model, X, Y, W, settings, validate, out, signature, layout_hash, pr
         history, best = plain(history), plain(best)
         ck = {"format": "gbai-ckpt", "model": model.model_kind, "model_config": model.config(),
               "model_state": model.state_dict(), "optimizer_state": opt.state_dict(), "epoch": epoch + 1,
-              "step": step, "signature": plain(signature), "layout_hash": layout_hash, "history": history,
-              "best": best}
+              "batch": 0, "step": step, "loss_avg": loss_avg, "signature": plain(signature),
+              "layout_hash": layout_hash, "history": history, "best": best}
         if raw is not None:
             ck["train_state"] = raw
+            ck["ema_state"] = {k: v.detach().clone() for k, v in ema.items()}
         save_checkpoint(last_path, ck)
+        t_ckpt = time.time()
         if improved:
             save_checkpoint(best_path, ck)
         if raw is not None:
@@ -406,6 +456,12 @@ def fit_rows(model, X, Y, W, settings, validate, out, signature, layout_hash, pr
         log(f"epoch {epoch + 1}/{settings.epochs}: train {loss_avg:.4f}" +
             (f", val {val_loss:.4f}" if val_loss is not None else "") + (f", {text}" if text else "") +
             f" ({train_seconds:.0f} s)")
+        if epoch + 1 < settings.epochs and background.stop_requested(out):
+            background.clear_stop(out)
+            prog.finish("stopped", f"stopped by the STOP file after epoch {epoch + 1}; run the same command again "
+                        "to carry on", step=step)
+            log(f"stopped after epoch {epoch + 1}; checkpoint {last_path}")
+            raise background.StopRequested(last_path)
     pick = best_path if best["epoch"] is not None and os.path.exists(best_path) else last_path
     if os.path.exists(pick):
         model.load_state_dict(load_checkpoint(pick)["model_state"])

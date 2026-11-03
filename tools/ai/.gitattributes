@@ -1,0 +1,7 @@
+# The golden set (export.py golden) is checked byte for byte by the mod's C++ test:
+# git must never change line endings in it or guess whether its arrays are text.
+golden/** -text
+golden/*.gbnn binary
+golden/*.f32 binary
+golden/*.f64 binary
+golden/*.u8 binary

@@ -1,11 +1,12 @@
 """The level reader: from a level's tape, where a human goes along it.
 
-Input: the tape (contract s3), float16 [C columns][K channels], 0.5 block per
+Input: the tape (contract v2 s5), uint8 [C columns][K channels] read as floats, 0.5 block per
 column. Output per column: y_rel (blocks above the tape's y0), 8 mode logits,
 the gravity-flipped logit and hold_frac. The pilot reads them as its route.
 
 Labels come from the human runs of each level that has a tape: every usable
-tick (the same cut as the pilot's: a run that died loses its last second)
+tick (the same cut as the pilot's, gbai.Run.usable_ticks: nothing from a
+"failed" run, and a run that died loses its last second)
 falls in column floor((x - x0) / column_width), and per column
     y_rel     = mean(y of those ticks) - y0, in blocks (30 units)
     mode      = the mode most of them are in (meta's order: cube ship ball ufo
@@ -15,8 +16,8 @@ falls in column floor((x - x0) / column_width), and per column
                 0..1; the mod clamps it)
 Columns no tick falls in are masked (no loss there). Each (tape, run) pair is
 one sample, so a level with two macros teaches both routes. Showcase levels
-are left out, as for the pilot, and the split is by level (--fold or
---val-frac).
+are left out, as for the pilot, and the split is by level (--fold k/8,
+default 0/8, or all).
 
 The network is a conv1d stack (same padding; dilations 1..32; a 1x1 conv on
 top), and every tape goes through whole, one at a time: padding tapes into a
@@ -24,10 +25,13 @@ batch would put non-zero activations where the mod's C++ loop has zeros
 outside [0, C). Gradients add up over --tapes-per-step tapes.
 
 reader.gbnn carries a layout hash like the others; tapes have none in
-contract v1 (CONTRACT_ISSUES.md), so it is --layout-hash, else the tapes'
-"layout_hash" field, else the human runs' obs_layout_hash.
+contract v2 (CONTRACT_ISSUES.md), so it is --layout-hash, else the tapes'
+"layout_hash" field, else the human runs' layout_hash.
 
-    python tools/ai/train_reader.py [--root DIR] [--epochs 60] [--threads 6]
+Priority, threads, the STOP file and resuming (mid-epoch too) work as in
+train_pilot.py (background.py).
+
+    python tools/ai/train_reader.py [--root DIR] [--epochs 60] [--threads auto]
 """
 import argparse
 import os
@@ -38,6 +42,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+import background
 import export
 import gbai
 import models
@@ -49,8 +54,8 @@ def parse_args(argv):
     ap.add_argument("--root", help="AI_ROOT (default: $GUCCIBOT_AI_ROOT or the mod's save folder)")
     ap.add_argument("--out", help="output folder (default: AI_ROOT\\train\\reader)")
     ap.add_argument("--layout-hash", help="the hash reader.gbnn carries (the mod's tape layout)")
-    ap.add_argument("--fold", help="k/K: hold out fold k of K, split by level")
-    ap.add_argument("--val-frac", type=float, default=0.15, help="without --fold: share of levels to validate on")
+    ap.add_argument("--fold", default="0/8",
+                    help="k/K (or k, of 8): validate on fold k of the levels, train on the rest; all: train on all")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--epochs", type=int, default=60)
     ap.add_argument("--tapes-per-step", type=int, default=4, help="tapes whose gradients add up per step")
@@ -64,13 +69,13 @@ def parse_args(argv):
     ap.add_argument("--w-gravity", type=float, default=0.5, help="loss weight of gravity")
     ap.add_argument("--w-hold", type=float, default=1.0, help="loss weight of hold_frac")
     ap.add_argument("--select", choices=["loss", "last"], default="loss")
-    ap.add_argument("--threads", type=int, default=6, help="CPU threads (6 = one per core on Nigel's PC)")
     ap.add_argument("--manifest", help="a manifest whose is_bar_level entries are showcase levels too")
     ap.add_argument("--exclude", action="append", default=[],
                     help="another level to leave out of training, by id or name (repeatable)")
     ap.add_argument("--fresh", action="store_true", help="ignore last.pt and start over")
+    background.add_args(ap)
     args = ap.parse_args(argv)
-    args.fold_k = gbai.parse_fold(args.fold) if args.fold else None
+    args.fold_k = gbai.parse_fold(args.fold)
     if args.kernel < 1 or args.kernel % 2 == 0:
         ap.error("--kernel must be odd")
     return args
@@ -133,8 +138,8 @@ def reader_hash(args, tapes, runs, log=print):
                              "pass --layout-hash")
     run_hashes = {r.layout_hash for r in runs}
     if len(run_hashes) == 1:
-        log("NOTE: the tapes carry no layout_hash (contract v1 has none, see CONTRACT_ISSUES.md); reader.gbnn gets "
-            "the human runs' obs_layout_hash")
+        log("NOTE: the tapes carry no layout_hash (contract v2 has none, see CONTRACT_ISSUES.md); reader.gbnn gets "
+            "the human runs' layout_hash")
         return run_hashes.pop()
     raise gbai.DataError("can't tell which layout hash reader.gbnn should carry: pass --layout-hash "
                          "(gucci_ai_layout gives the mod's)")
@@ -192,7 +197,7 @@ def validate(model, samples, inputs, args):
 
 def main(argv=None, log=print):
     args = parse_args(argv)
-    models.set_threads(args.threads)
+    background.setup(args, log)
     models.set_seed(args.seed)
     root = gbai.ai_root(args.root)
     out = os.path.abspath(args.out) if args.out else gbai.train_dir(root, "reader")
@@ -200,6 +205,8 @@ def main(argv=None, log=print):
     prog = gbai.Progress(os.path.join(out, "progress.json"), "reader", out)
     try:
         result = train(args, root, out, prog, log)
+    except background.StopRequested:
+        return {"model": "reader", "stopped": True}
     except BaseException as e:
         prog.finish("failed", f"{type(e).__name__}: {e}")
         raise
@@ -219,8 +226,7 @@ def train(args, root, out, prog, log):
     if not runs:
         raise gbai.DataError("no human run is on a level that has a tape")
     showcase = train_pilot.showcase_from_args(args)
-    split = gbai.make_split(runs, showcase, args.fold_k, args.val_frac, args.seed,
-                            usable=lambda r: r.usable_ticks() > 0)
+    split = gbai.make_split(runs, showcase, args.fold_k, args.seed, usable=lambda r: r.usable_ticks() > 0)
     for r in split["unusable"]:
         log(f"not used: {r.run_id} has no usable ticks (empty, or it died in its first second)")
     used = {r.level_id for r in split["train"] + split["val"]}
@@ -228,7 +234,7 @@ def train(args, root, out, prog, log):
     if len(layouts) > 1:
         raise gbai.DataError("the tapes were made with different channel layouts; record them again with one build")
     layout_hash = reader_hash(args, [t for lid, t in tapes.items() if lid in used], split["train"] + split["val"], log)
-    record = gbai.split_record(split, "reader", layout_hash, args.fold_k, args.val_frac, args.seed)
+    record = gbai.split_record(split, "reader", layout_hash, args.seed)
     gbai.write_json_atomic(os.path.join(out, "split.json"), record)
     for r, why in split["excluded"]:
         log(f"left out of training: {r.run_id}: {why}")
@@ -254,10 +260,14 @@ def train(args, root, out, prog, log):
     signature = models.plain({"layout_hash": layout_hash, "channels_in": K, "model_config": model.config(),
                               "train": sorted(s[1] for s in train_s), "val": sorted(s[1] for s in val_s),
                               "weights": [args.w_y, args.w_mode, args.w_gravity, args.w_hold],
-                              "tapes_per_step": args.tapes_per_step, "seed": args.seed, "select": args.select})
+                              "tapes_per_step": args.tapes_per_step, "seed": args.seed, "select": args.select,
+                              "fold": record["fold"]})
     last_path, best_path = os.path.join(out, "last.pt"), os.path.join(out, "best.pt")
-    start_epoch, step, history = 0, 0, []
+    start_epoch, start_batch, step, history = 0, 0, 0, []
+    part_sums, part_count = {}, 0
     best = {"epoch": None, "val_loss": None}
+    if args.fresh:
+        background.clear_stop(out)
     if os.path.exists(last_path) and not args.fresh:
         ck = models.load_checkpoint(last_path)
         have = ck.get("signature") or {}
@@ -268,20 +278,32 @@ def train(args, root, out, prog, log):
         model.load_state_dict(ck["model_state"])
         opt.load_state_dict(ck["optimizer_state"])
         start_epoch, step, history, best = ck["epoch"], ck["step"], ck["history"], ck["best"]
-        log(f"resuming after epoch {start_epoch}")
+        start_batch = int(ck.get("batch") or 0)
+        part_sums, part_count = dict(ck.get("sums") or {}), int(ck.get("count") or 0)
+        log(f"resuming after epoch {start_epoch}" + (f", batch {start_batch}" if start_batch else ""))
 
     steps_per_epoch = max(1, int(np.ceil(len(train_s) / args.tapes_per_step)))
     total_steps = steps_per_epoch * args.epochs
     prog.set(state="training", epochs=args.epochs, epoch=start_epoch, steps_per_epoch=steps_per_epoch, step=step,
-             history=history, best_epoch=best["epoch"], force=True)
-    t_start, epochs_run = time.time(), 0
+             history=history, best_epoch=best["epoch"], force=True, threads=torch.get_num_threads(),
+             stop_file=background.stop_path(out))
+    t_start, epochs_run, t_ckpt = time.time(), 0, time.time()
+
+    def save_partial(epoch, batch, sums, count):
+        models.save_checkpoint(last_path, {
+            "format": "gbai-ckpt", "model": "reader", "model_config": model.config(),
+            "model_state": model.state_dict(), "optimizer_state": opt.state_dict(), "epoch": epoch, "batch": batch,
+            "sums": sums, "count": count, "step": step, "signature": signature, "layout_hash": layout_hash,
+            "history": models.plain(history), "best": models.plain(best)})
+
     for epoch in range(start_epoch, args.epochs):
         rng = np.random.default_rng([args.seed, epoch])
         order = rng.permutation(len(train_s))
         model.train()
         t_epoch = time.time()
-        sums, count = {}, 0
-        for b in range(steps_per_epoch):
+        first = start_batch if epoch == start_epoch else 0
+        sums, count = (part_sums, part_count) if first else ({}, 0)
+        for b in range(first, steps_per_epoch):
             chunk = order[b * args.tapes_per_step:(b + 1) * args.tapes_per_step]
             lr = models.lr_at(step, total_steps, args.lr)
             for g in opt.param_groups:
@@ -299,6 +321,17 @@ def train(args, root, out, prog, log):
             torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
             opt.step()
             step += 1
+            if b + 1 < steps_per_epoch:
+                if background.stop_requested(out):
+                    save_partial(epoch, b + 1, sums, count)
+                    background.clear_stop(out)
+                    prog.finish("stopped", f"stopped by the STOP file at epoch {epoch + 1}, batch {b + 1}; run the "
+                                "same command again to carry on", step=step)
+                    log(f"stopped at epoch {epoch + 1}, batch {b + 1}; checkpoint {last_path}")
+                    raise background.StopRequested(last_path)
+                if args.ckpt_every_s > 0 and time.time() - t_ckpt >= args.ckpt_every_s:
+                    save_partial(epoch, b + 1, sums, count)
+                    t_ckpt = time.time()
         train_parts = {k: v / max(1, count) for k, v in sums.items()}
         val_loss, val = validate(model, val_s, inputs, args) if val_s else (None, None)
         epochs_run += 1
@@ -314,6 +347,7 @@ def train(args, root, out, prog, log):
               "model_state": model.state_dict(), "optimizer_state": opt.state_dict(), "epoch": epoch + 1,
               "step": step, "signature": signature, "layout_hash": layout_hash, "history": history, "best": best}
         models.save_checkpoint(last_path, ck)
+        t_ckpt = time.time()
         if improved:
             models.save_checkpoint(best_path, ck)
         eta = (args.epochs - epoch - 1) * (time.time() - t_start) / epochs_run
@@ -323,6 +357,12 @@ def train(args, root, out, prog, log):
             log(f"epoch {epoch + 1}/{args.epochs}: train {entry['train_loss']:.4f}" +
                 (f", val {val_loss:.4f}, y off by {val['y_mae_blocks']:.2f} blocks, mode right "
                  f"{100 * val['mode_accuracy']:.1f}%" if val else ""))
+        if epoch + 1 < args.epochs and background.stop_requested(out):
+            background.clear_stop(out)
+            prog.finish("stopped", f"stopped by the STOP file after epoch {epoch + 1}; run the same command again "
+                        "to carry on", step=step)
+            log(f"stopped after epoch {epoch + 1}; checkpoint {last_path}")
+            raise background.StopRequested(last_path)
 
     prog.set(state="exporting", force=True, message="writing reader.gbnn")
     if best["epoch"] is not None and best["epoch"] != len(history) and os.path.exists(best_path):

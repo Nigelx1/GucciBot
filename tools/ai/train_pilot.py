@@ -1,15 +1,22 @@
 """Behavior cloning: the pilot learns from human runs what a human holds each tick.
 
-Data: the human runs in AI_ROOT\\data, all recorded with one observation
-layout (--layout-hash, or the only one there is). The showcase levels
-(gbai.SHOWCASE_LEVELS, plus any manifest is_bar_level entry) are never
-trained on, nor used to pick the best epoch: they're for evaluation only.
-The rest is split by level, never by tick: --fold k/K holds out one fold of
-the levels (K = the number of levels is leave-one-out); without it about
---val-frac of the levels validate (0 trains on all of them).
+Data: the human runs in AI_ROOT\\data (contract v2), all recorded with one
+layout (--layout-hash, or the only one there is). Each tick is read compact
+(state, scan, tokens: 368 bytes) into RAM and expanded to the 472 floats the
+pilot sees per batch, in torch (gbai.expand_torch; the recorder's golden rows
+are checked bit for bit against the same expansion when a run loads). The
+showcase levels (gbai.SHOWCASE_LEVELS, plus any manifest is_bar_level entry)
+are never trained on, nor used to pick the best epoch: they're held out of
+every fold, for evaluation only. The rest is split by level, never by tick,
+into 8 folds: --fold k/8 (default 0/8) validates on fold k and trains on the
+other seven; --fold all trains on every level (the model to ship, once the
+folds have given honest numbers).
 
-A run that died loses its last second (gbai.Run.usable_ticks). Loss: binary
-cross-entropy on act[t] (the human's button during tick t, from obs[t]),
+What a run gives (gbai.Run.usable_ticks): all of a run that completed in the
+copies; from one that didn't, only the ticks before its death minus a
+second, and only when the real game agreed it dies there (validated "real");
+nothing from a "failed" run. Loss: binary
+cross-entropy on act[t] (the human's button during tick t, from rec[t]),
 class balanced, and ticks within +-8 of a human press or release weigh 5x:
 when the button changes is what matters. The class balance goes by the
 button going INTO each tick (act[t-1]), not by the label: the time spent
@@ -25,7 +32,10 @@ usual copycat trap of cloning with the held button as an input). The input
 mean/std come from the training split and go into the GBNN header.
 
 Every epoch: a checkpoint (last.pt, and best.pt) and progress.json, which
-another process can poll (state, epoch, losses, validation numbers, eta).
+another process can poll (state, epoch, losses, validation numbers, eta);
+mid-epoch checkpoints every --ckpt-every-s. It runs at BelowNormal priority;
+a STOP file in the output folder makes it checkpoint and exit, and the same
+command resumes (background.py, which can also launch it detached).
 "Best" is by validation timing by default (--select timing: the share of
 presses and releases within 2 ticks, minus 0.25 per false transition per
 second): on the toy data the validation loss kept rising while the timing
@@ -34,12 +44,13 @@ from last.pt; --fresh starts over. At the end it exports pilot.gbnn (+
 pilot.golden.json) from the best epoch and writes eval_report.json/.md
 (evaluate.py) for every held-out run.
 
-    python tools/ai/train_pilot.py [--root DIR] [--fold 0/5] [--epochs 8] [--threads 6]
+    python tools/ai/train_pilot.py [--root DIR] [--fold 0/8 | all] [--epochs 8] [--threads auto]
 
 Outputs go to AI_ROOT\\train\\pilot\\ (or --out): progress.json, split.json,
 last.pt, best.pt, pilot.gbnn, pilot.golden.json, metrics.json, eval_report.*.
 """
 import argparse
+import hashlib
 import os
 import sys
 
@@ -47,6 +58,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+import background
 import evaluate
 import export
 import gbai
@@ -58,8 +70,8 @@ def parse_args(argv):
     ap.add_argument("--root", help="AI_ROOT (default: $GUCCIBOT_AI_ROOT or the mod's save folder)")
     ap.add_argument("--out", help="output folder (default: AI_ROOT\\train\\pilot)")
     ap.add_argument("--layout-hash", help="train on runs with this obs layout only (gucci_ai_layout gives the mod's)")
-    ap.add_argument("--fold", help="k/K: hold out fold k of K, split by level")
-    ap.add_argument("--val-frac", type=float, default=0.15, help="without --fold: share of levels to validate on")
+    ap.add_argument("--fold", default="0/8",
+                    help="k/K (or k, of 8): validate on fold k of the levels, train on the rest; all: train on all")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--epochs", type=int, default=8)
     ap.add_argument("--batch", type=int, default=1024)
@@ -72,10 +84,13 @@ def parse_args(argv):
                     help="how much more the human's press and release ticks themselves weigh")
     ap.add_argument("--far-keep", type=float, default=1.0,
                     help="share of the other ticks each epoch samples (weighted back up); 1 = all")
-    ap.add_argument("--threshold", type=float, default=0.5, help="hold when P >= this (validation numbers)")
+    ap.add_argument("--threshold", type=float, default=0.5,
+                    help="validation numbers hold when P > this (0.5 = the mod's rule, logit > 0)")
+    ap.add_argument("--load-far-keep", type=float, default=1.0,
+                    help="share of the ticks away from presses/releases to load at all (weighted back up); "
+                         "for when RAM is short")
     ap.add_argument("--select", choices=["timing", "loss", "last"], default="timing",
                     help="which epoch to export: best validation timing, lowest validation loss, or the last")
-    ap.add_argument("--threads", type=int, default=6, help="CPU threads (6 = one per core on Nigel's PC)")
     ap.add_argument("--manifest", help="a manifest whose is_bar_level entries are showcase levels too")
     ap.add_argument("--exclude", action="append", default=[],
                     help="another level to leave out of training, by id or name (repeatable)")
@@ -83,10 +98,13 @@ def parse_args(argv):
                     help="export an average of the weights over this many steps (-1: half an epoch; 0: off)")
     ap.add_argument("--fresh", action="store_true", help="ignore last.pt and start over")
     ap.add_argument("--no-eval", action="store_true", help="skip the held-out report at the end")
+    background.add_args(ap)
     args = ap.parse_args(argv)
-    args.fold_k = gbai.parse_fold(args.fold) if args.fold else None
+    args.fold_k = gbai.parse_fold(args.fold)
     if not 0 < args.far_keep <= 1:
         ap.error("--far-keep is in (0, 1]")
+    if not 0 < args.load_far_keep <= 1:
+        ap.error("--load-far-keep is in (0, 1]")
     return args
 
 
@@ -96,37 +114,48 @@ def showcase_from_args(args):
     return gbai.Showcase(extra_ids=ids, extra_names=names, manifest=args.manifest)
 
 
-def assemble(runs, near_ticks):
-    """Every training tick in RAM: obs float16 [N][obs_dim], act uint8 [N], the button going into
-    each tick uint8 [N] (act[t-1]), near bool [N]; and how many obs values weren't finite.
-    A press or release is where act differs from the button going in."""
-    sizes = [r.usable_ticks() for r in runs]
-    total = sum(sizes)
-    dim = runs[0].obs_dim
-    # Random batches need the rows in RAM (from a memmap they're ~50x slower: TOOLCHAIN.md 4.3).
-    # That's dim * 2 bytes a tick: ~3.6 GB for the 4.2M human ticks at ~430 inputs.
-    try:
-        X = np.empty((total, dim), np.float16)
-    except MemoryError:
-        raise gbai.DataError(f"{total} training ticks x {dim} inputs need {total * dim * 2 / 2**30:.1f} GiB of free "
-                             "RAM, which isn't there (close what's using it; OneDrive is often the biggest)")
+def pick_rows(run, n, near, load_far_keep, seed):
+    """Which of a run's first n ticks to load: all of them, or (load_far_keep < 1) every tick near a
+    press/release and that share of the rest, the same ones every time for (seed, run)."""
+    if load_far_keep >= 1:
+        return np.arange(n)
+    h = int(hashlib.sha256(f"{seed}:{run.run_id}".encode()).hexdigest()[:8], 16)
+    keep = near[:n] | (np.random.default_rng([h]).random(n) < load_far_keep)
+    return np.flatnonzero(keep)
+
+
+def assemble(runs, near_ticks, load_far_keep=1.0, seed=0):
+    """Every training tick in RAM, compact: X gbai.CompactRows [N] (368 bytes a tick), act uint8
+    [N], the button going into each tick uint8 [N] (act[t-1]), near bool [N], a loss boost float32
+    [N] (1/load_far_keep on the far ticks loaded, else 1); and how many values weren't finite.
+    A press or release is where act differs from the button going in.
+
+    Random batches need the rows in RAM (from a memmap they're ~50x slower: TOOLCHAIN.md 4.3):
+    ~1.5 GiB for the 4.2M human ticks. Runs are read one at a time and dropped once copied."""
+    plans, total = [], 0
+    for r in runs:
+        n = r.usable_ticks()
+        if n:
+            rows = pick_rows(r, n, gbai.near_mask(np.asarray(r.act), near_ticks), load_far_keep, seed)
+            plans.append((r, rows))
+            total += len(rows)
+        r.close()
+    X = gbai.CompactRows(total)
     y = np.empty(total, np.uint8)
     hb = np.empty(total, np.uint8)
     near = np.empty(total, bool)
     pos = 0
-    for r, n in zip(runs, sizes):
-        if n:
-            X[pos:pos + n] = r.obs[:n]
-            a = np.asarray(r.act)
-            y[pos:pos + n] = a[:n]
-            hb[pos:pos + n] = gbai.before(a)[:n]
-            near[pos:pos + n] = gbai.near_mask(a, near_ticks)[:n]
-            pos += n
+    for r, rows in plans:
+        k = len(rows)
+        a = np.asarray(r.act)
+        X.put(slice(pos, pos + k), r, rows)
+        y[pos:pos + k] = a[rows]
+        hb[pos:pos + k] = gbai.before(a)[rows]
+        near[pos:pos + k] = gbai.near_mask(a, near_ticks)[rows]
+        pos += k
         r.close()
-    bad = 0
-    for a in range(0, total, 65536):
-        bad += gbai.finite_rows(X[a:a + 65536])
-    return X, y, hb, near, bad
+    boost = np.where(near, 1.0, 1.0 / load_far_keep).astype(np.float32)
+    return X, y, hb, near, boost, X.clean()
 
 
 def class_balance(y, hb):
@@ -147,12 +176,14 @@ def tick_weights(y, hb, near, cb, args, norm=1.0):
     return (w / norm).astype(np.float32)
 
 
-def predict_logits(model, obs, chunk=65536):
-    """Logits per row; values that aren't finite count as 0, as in training (gbai.clean_rows)."""
-    out = np.empty(len(obs), np.float32)
+def predict_logits(model, obs, n=None, chunk=16384):
+    """Logits for the first n rows (all by default) of obs (a run's obs view, expanded a chunk at a
+    time, or an array); values that aren't finite count as 0, as in training (gbai.clean_rows)."""
+    n = len(obs) if n is None else int(n)
+    out = np.empty(n, np.float32)
     with torch.no_grad():
-        for a in range(0, len(obs), chunk):
-            out[a:a + chunk] = model(torch.from_numpy(gbai.clean_rows(obs[a:a + chunk]))).numpy()
+        for a in range(0, n, chunk):
+            out[a:min(a + chunk, n)] = model(torch.from_numpy(gbai.clean_rows(obs[a:min(a + chunk, n)]))).numpy()
     return out
 
 
@@ -167,7 +198,7 @@ def validate(model, runs, cb, w_norm, args):
             continue
         a = np.asarray(r.act)
         yv = a[:n]
-        logits = predict_logits(model, r.obs[:n])
+        logits = predict_logits(model, r.obs, n)
         np.nan_to_num(logits, copy=False)
         w = tick_weights(yv, gbai.before(a)[:n], gbai.near_mask(a, args.near_ticks)[:n], cb, args, w_norm)
         lt = torch.from_numpy(logits)
@@ -175,9 +206,21 @@ def validate(model, runs, cb, w_norm, args):
         loss_sum += float((loss.numpy() * w).sum())
         n_sum += n
         prob = export.sigmoid(logits)
-        counts = evaluate.add_counts(counts, evaluate.transition_metrics(yv, prob >= args.threshold, r.tps, prob))
+        counts = evaluate.add_counts(counts, evaluate.transition_metrics(yv, evaluate.decide(logits, args.threshold),
+                                                                         r.tps, prob))
         r.close()
     return (loss_sum / n_sum if n_sum else None), (evaluate.rates(counts) if n_sum else None)
+
+
+def fold_text(split, args):
+    """'fold 3/8', 'all levels', or the fold it became when there were fewer levels than folds."""
+    if not split["fold"]:
+        return "all levels"
+    k, n = split["fold"]
+    text = f"fold {k}/{n}"
+    if args.fold_k and n != args.fold_k[1]:
+        text += f" (asked for {args.fold_k[0]}/{args.fold_k[1]}; there are only {n} levels)"
+    return text
 
 
 def timing_score(val):
@@ -210,7 +253,7 @@ def golden_rows(runs, near_ticks, n=6, seed=0):
 
 def main(argv=None, log=print):
     args = parse_args(argv)
-    models.set_threads(args.threads)
+    background.setup(args, log)
     models.set_seed(args.seed)
     root = gbai.ai_root(args.root)
     out = os.path.abspath(args.out) if args.out else gbai.train_dir(root, "pilot")
@@ -218,6 +261,8 @@ def main(argv=None, log=print):
     prog = gbai.Progress(os.path.join(out, "progress.json"), "pilot", out)
     try:
         result = train(args, root, out, prog, log)
+    except background.StopRequested:
+        return {"model": "pilot", "stopped": True}
     except BaseException as e:
         prog.finish("failed", f"{type(e).__name__}: {e}")
         raise
@@ -234,38 +279,42 @@ def train(args, root, out, prog, log):
         raise gbai.DataError(f"no human runs in {os.path.join(root, 'data')}")
     runs, layout_hash = gbai.pick_layout(runs, args.layout_hash)
     showcase = showcase_from_args(args)
-    split = gbai.make_split(runs, showcase, args.fold_k, args.val_frac, args.seed,
-                            usable=lambda r: r.usable_ticks() > 0)
-    record = gbai.split_record(split, "pilot", layout_hash, args.fold_k, args.val_frac, args.seed)
+    split = gbai.make_split(runs, showcase, args.fold_k, args.seed, usable=lambda r: r.usable_ticks() > 0)
+    record = gbai.split_record(split, "pilot", layout_hash, args.seed)
     gbai.write_json_atomic(os.path.join(out, "split.json"), record)
     for r, why in split["excluded"]:
         log(f"left out of training: {r.run_id}: {why}")
     for r in split["unusable"]:
-        log(f"not used: {r.run_id} has no usable ticks (empty, or it died in its first second)")
+        log(f"not used: {r.run_id} has no usable ticks (validated {r.validated}, completed {r.completed}: empty, "
+            "a failed run, or it died in its first second)")
     train_runs, val_runs = split["train"], split["val"]
     if not train_runs:
         raise gbai.DataError("no runs left to train on once the showcase levels and the runs with no usable ticks "
                              "are left out")
-    log(f"{len(train_runs)} training runs ({len(split['train_levels'])} levels), {len(val_runs)} validation runs "
-        f"({len(split['val_levels'])} levels), {len(split['excluded'])} showcase runs left out; layout {layout_hash}")
+    log(f"{fold_text(split, args)}: {len(train_runs)} training runs ({len(split['train_levels'])} levels), "
+        f"{len(val_runs)} validation runs ({len(split['val_levels'])} levels), {len(split['excluded'])} showcase "
+        f"runs left out; layout {layout_hash}")
 
-    X, y, hb, near, bad = assemble(train_runs, args.near_ticks)
+    prog.set(message="reading the training ticks", force=True)
+    X, y, hb, near, boost, bad = assemble(train_runs, args.near_ticks, args.load_far_keep, args.seed)
     if bad:
-        log(f"NOTE: {bad} obs values weren't finite; trained on them as 0 (a recorder bug to look at)")
+        log(f"NOTE: {bad} values weren't finite; trained on them as 0 (a recorder bug to look at)")
     if len(X) == 0:
         raise gbai.DataError("the training runs have no usable ticks")
-    dim = X.shape[1]
+    dim = gbai.OBS_DIM
     mean, std = gbai.moments((X[a:a + 16384] for a in range(0, len(X), 16384)), dim)
     cb = class_balance(y, hb)
-    raw_w = tick_weights(y, hb, near, cb, args)
-    w_norm = float(raw_w.mean())
-    w = raw_w / w_norm
+    plain_w = tick_weights(y, hb, near, cb, args)
+    w_norm = float(plain_w.mean())  # validation weighs its ticks the same way (no load boost there)
+    w = plain_w * boost
+    w = w / float(w.mean())
     log(f"{len(X)} training ticks, {int(y.sum())} held ({100.0 * y.mean():.1f}%), {int(near.sum())} near a "
         f"press/release; {X.nbytes / 2**30:.2f} GiB in RAM")
 
     model = models.Pilot(dim, models.parse_ints(args.hidden))
     model.set_norm(mean, std)
-    signature = {"layout_hash": layout_hash, "obs_dim": dim, "model_config": model.config(),
+    signature = {"layout_hash": layout_hash, "obs_dim": dim, "model_config": model.config(), "fold": record["fold"],
+                 "load_far_keep": args.load_far_keep,
                  "train_runs": sorted(r.run_id for r in train_runs), "val_runs": sorted(r.run_id for r in val_runs),
                  "near_ticks": args.near_ticks, "near_weight": args.near_weight,
                  "change_weight": args.change_weight, "far_keep": args.far_keep,

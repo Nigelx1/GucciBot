@@ -1,0 +1,227 @@
+{
+ "format": "gbai-golden",
+ "version": 2,
+ "contract": "AI pilot contract v2",
+ "layout_hash": "a1b2c3d4e5f60718",
+ "tolerance_abs": 1e-05,
+ "decision_margin": 0.001,
+ "obs_dim": 472,
+ "record": {
+  "rows": 16,
+  "expansion": "[state 40 as-is][scan 160: v == 255 ? 12.5 : v / 8.0][8 tokens: dx, dy (float16 -> float32), one-hot(type, 32), index 0 unused; type 0 = all zeros]",
+  "check": "expand(record) == record.expanded.f32 bit for bit"
+ },
+ "models": {
+  "pilot": {
+   "cases": 30,
+   "n_in": 472,
+   "n_out": 1,
+   "out_names": [
+    "hold_logit"
+   ],
+   "holds": 15,
+   "max_err_vs_torch": 3.66894662498507e-08
+  },
+  "critic": {
+   "cases": 32,
+   "n_in": 472,
+   "n_out": 2,
+   "out_names": [
+    "alive_hold",
+    "alive_release"
+   ],
+   "holds": 16,
+   "max_err_vs_torch": 1.0786561133180328e-07
+  },
+  "reader": {
+   "cases": 3,
+   "columns": [
+    1,
+    5,
+    40
+   ],
+   "n_in": 24,
+   "n_out": 11,
+   "out_names": [
+    "y_rel",
+    "mode_logit_cube",
+    "mode_logit_ship",
+    "mode_logit_ball",
+    "mode_logit_ufo",
+    "mode_logit_wave",
+    "mode_logit_robot",
+    "mode_logit_spider",
+    "mode_logit_swing",
+    "gravity_logit",
+    "hold_frac"
+   ],
+   "receptive_field": 29,
+   "max_err_vs_torch": 3.4800225756637104e-08
+  }
+ },
+ "rules": {
+  "pilot": "hold when hold_logit > 0 (ties release); pilot.dec.u8 1 = hold",
+  "critic": "two logits, no sigmoid; critic.dec.u8 1 = alive_hold > alive_release",
+  "reader": "conv1d same padding with dilation, zeros outside [0, C) in normalized space and at every layer; outputs y_rel, 8 mode logits, gravity_logit, hold_frac (unclamped)",
+  "inputs": "raw (before the file's mean/std); MLP in [cases][n_in], out [cases][n_out]; reader in [C][K], out [C][11]",
+  "compare": "|C++ float32 - out.f64| <= tolerance_abs for every value; decisions identical"
+ },
+ "files": {
+  "record.state.f32": {
+   "dtype": "float32",
+   "shape": [
+    16,
+    40
+   ],
+   "bytes": 2560,
+   "sha256": "c12e932bc53d3b8a20a0b0c02b3985ec2f77d6602ae1a46cf35ed89abf58c51f"
+  },
+  "record.scan.u8": {
+   "dtype": "uint8",
+   "shape": [
+    16,
+    160
+   ],
+   "bytes": 2560,
+   "sha256": "459b0bf8f5810f8bbc41c460fbecfbbe02b48a9417434c800cc60f20f717c580"
+  },
+  "record.tok.u8": {
+   "dtype": "uint8",
+   "shape": [
+    16,
+    48
+   ],
+   "bytes": 768,
+   "sha256": "6ca1c4e64d60fa3dd96d44a46485f0d091c7953adb006b6274c38ae6fa48b189"
+  },
+  "record.expanded.f32": {
+   "dtype": "float32",
+   "shape": [
+    16,
+    472
+   ],
+   "bytes": 30208,
+   "sha256": "78795906d9d447f3e82cbab6d0ce5a5b56ef0e5d31dde637f0ff0cd9ab38d781"
+  },
+  "pilot.gbnn": {
+   "bytes": 68802,
+   "sha256": "23ec88a076eb185510cf80f201fa77b6d7200cc77212fe2fbf071c2d2a6a73d8"
+  },
+  "pilot.in.f32": {
+   "dtype": "float32",
+   "shape": [
+    30,
+    472
+   ],
+   "bytes": 56640,
+   "sha256": "6f37cfba663ca852ee589eaf71e60b559d24ddbbdf0493be9aa72adb27db8c90"
+  },
+  "pilot.out.f64": {
+   "dtype": "float64",
+   "shape": [
+    30,
+    1
+   ],
+   "bytes": 240,
+   "sha256": "2b07fbd2420268997cf5e56a90d74ab7009ff636ea2bf907013d38150643a6bb"
+  },
+  "pilot.dec.u8": {
+   "dtype": "uint8",
+   "shape": [
+    30
+   ],
+   "bytes": 30,
+   "sha256": "a5f47ca5e6453c4b2619a207c745c17b60ce9c98041c42d1f1a3f198980dd9aa"
+  },
+  "critic.gbnn": {
+   "bytes": 68951,
+   "sha256": "612bd754e751ed498b517b436ae4e39f8a569e8522f407abe6a1ea6d85807406"
+  },
+  "critic.in.f32": {
+   "dtype": "float32",
+   "shape": [
+    32,
+    472
+   ],
+   "bytes": 60416,
+   "sha256": "96c64da85ea7c5f44023ab47b6d2dcbb5ef4d6f52eb77df439fa546ae8923c09"
+  },
+  "critic.out.f64": {
+   "dtype": "float64",
+   "shape": [
+    32,
+    2
+   ],
+   "bytes": 512,
+   "sha256": "df8be57e08ce079baf0dd6b3c2661c2750ce2eddd453ad6fe12d7a8fea77d1c7"
+  },
+  "critic.dec.u8": {
+   "dtype": "uint8",
+   "shape": [
+    32
+   ],
+   "bytes": 32,
+   "sha256": "8b9af2473f47558023e75c7c2ca963edf8d4fa6a4c6cc0ad616d955e8e02483d"
+  },
+  "reader.gbnn": {
+   "bytes": 7414,
+   "sha256": "f36bba834e52299c5dae27d748c60cb0fe60cc03bba062f8e88abb221cf5a798"
+  },
+  "reader.case0.in.f32": {
+   "dtype": "float32",
+   "shape": [
+    1,
+    24
+   ],
+   "bytes": 96,
+   "sha256": "82beac1b0e2c9aa38f1974f3c1917f25c78ecaec29e2463984222785d314304a"
+  },
+  "reader.case0.out.f64": {
+   "dtype": "float64",
+   "shape": [
+    1,
+    11
+   ],
+   "bytes": 88,
+   "sha256": "3a98819136b2f83dff4d317c56978a45928bc090fe9a4ed9450dfdd8e3039ee0"
+  },
+  "reader.case1.in.f32": {
+   "dtype": "float32",
+   "shape": [
+    5,
+    24
+   ],
+   "bytes": 480,
+   "sha256": "55a70c3acbd806d4c8e66a709321ccf9fa567d1f610ee5b2e956c97603a314dd"
+  },
+  "reader.case1.out.f64": {
+   "dtype": "float64",
+   "shape": [
+    5,
+    11
+   ],
+   "bytes": 440,
+   "sha256": "6f2e7c2f8a49ee3ada316ab130610ee5adfa2b9a151a61bdda4a2b7989faf6fc"
+  },
+  "reader.case2.in.f32": {
+   "dtype": "float32",
+   "shape": [
+    40,
+    24
+   ],
+   "bytes": 3840,
+   "sha256": "1f1eb744fbc4e0ac07f72bbbfd5cab6c925e3b34a8d79a3eaf9f5995df2cb07f"
+  },
+  "reader.case2.out.f64": {
+   "dtype": "float64",
+   "shape": [
+    40,
+    11
+   ],
+   "bytes": 3520,
+   "sha256": "0410e16818fa204616953737ea5627c6aaa60eb5648eb7098fb80ab24a5c9916"
+  }
+ },
+ "made_by": "python tools/ai/export.py golden",
+ "seed": 0
+}

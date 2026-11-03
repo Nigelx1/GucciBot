@@ -1,8 +1,9 @@
 """The critic: from the AI's own practice, how likely it is to still be alive 1 s later if it
 holds now, and if it releases now.
 
-Data: the practice attempts in AI_ROOT\\practice\\<level_id>\\ (contract s4), all
-with one observation layout. Each tick t of an attempt labels ONE head, the
+Data: the practice attempts in AI_ROOT\\practice\\<level_id>\\ (contract v2 s6),
+all with one layout; rows are kept compact in RAM and expanded to the 472
+floats per batch, like the pilot's. Each tick t of an attempt labels ONE head, the
 action it took: act[t] = 1 -> alive_hold, 0 -> alive_release; the label is
 alive[t] >= H (H = round(1.0 * tps): it was still alive H ticks later, or
 completed).
@@ -21,12 +22,13 @@ Rows used: every tick the player is alive. An attempt that ended without
 completing or dying (stopped by a limit) loses its last H rows: their
 outcome isn't known. Practice on the showcase levels is evaluation, never
 training. Each head is class balanced (surviving and dying weigh the same in
-total). The split is by level, like the pilot's (--fold k/K or --val-frac).
-Checkpoints, progress.json and resuming work as in train_pilot.py; the epoch
-with the lowest validation loss is exported as critic.gbnn (two sigmoid
-outputs: alive_hold, alive_release) with critic.golden.json.
+total). The split is by level, like the pilot's (--fold k/8, default 0/8, or
+all). Checkpoints, progress.json, the STOP file and resuming work as in
+train_pilot.py; the epoch with the lowest validation loss is exported as
+critic.gbnn (two logits, no sigmoid: alive_hold, alive_release; the mod
+compares them) with critic.golden.json.
 
-    python tools/ai/train_critic.py [--root DIR] [--epochs 6] [--threads 6]
+    python tools/ai/train_critic.py [--root DIR] [--epochs 6] [--threads auto]
 """
 import argparse
 import os
@@ -36,6 +38,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+import background
 import export
 import gbai
 import models
@@ -47,8 +50,8 @@ def parse_args(argv):
     ap.add_argument("--root", help="AI_ROOT (default: $GUCCIBOT_AI_ROOT or the mod's save folder)")
     ap.add_argument("--out", help="output folder (default: AI_ROOT\\train\\critic)")
     ap.add_argument("--layout-hash", help="train on attempts with this obs layout only")
-    ap.add_argument("--fold", help="k/K: hold out fold k of K, split by level")
-    ap.add_argument("--val-frac", type=float, default=0.15, help="without --fold: share of levels to validate on")
+    ap.add_argument("--fold", default="0/8",
+                    help="k/K (or k, of 8): validate on fold k of the levels, train on the rest; all: train on all")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--epochs", type=int, default=6)
     ap.add_argument("--batch", type=int, default=1024)
@@ -59,15 +62,15 @@ def parse_args(argv):
                     help="how much more a state with both answers (a branch and its parent) weighs")
     ap.add_argument("--select", choices=["loss", "last"], default="loss",
                     help="which epoch to export: lowest validation loss, or the last")
-    ap.add_argument("--threads", type=int, default=6, help="CPU threads (6 = one per core on Nigel's PC)")
     ap.add_argument("--manifest", help="a manifest whose is_bar_level entries are showcase levels too")
     ap.add_argument("--exclude", action="append", default=[],
                     help="another level to leave out of training, by id or name (repeatable)")
     ap.add_argument("--ema", type=int, default=-1,
                     help="export an average of the weights over this many steps (-1: half an epoch; 0: off)")
     ap.add_argument("--fresh", action="store_true", help="ignore last.pt and start over")
+    background.add_args(ap)
     args = ap.parse_args(argv)
-    args.fold_k = gbai.parse_fold(args.fold) if args.fold else None
+    args.fold_k = gbai.parse_fold(args.fold)
     args.far_keep = 1.0
     return args
 
@@ -94,8 +97,9 @@ def _attempt_name(text):
 
 
 def assemble(attempts, pair_weight, log=print):
-    """Rows for the critic: X float16 [N][dim], Y float32 [N][2] (alive_hold, alive_release),
-    M float32 [N][2] (1 where a head has a label), row weights [N], and the rows that hold a pair."""
+    """Rows for the critic: X gbai.CompactRows [N], Y float32 [N][2] (alive_hold, alive_release),
+    M float32 [N][2] (1 where a head has a label), row weights [N], the rows that hold a pair,
+    and how many values weren't finite (trained as 0)."""
     plans, total = [], 0
     by_name = {}
     for a in attempts:
@@ -106,14 +110,10 @@ def assemble(attempts, pair_weight, log=print):
         plans.append((a, keep, idx))
         by_name[(a.level_id, a.run_id)] = (a, idx)
         total += n
-    dim = attempts[0].obs_dim if attempts else 0
-    # In RAM like the pilot's rows (dim * 2 bytes a row). Practice logs grow with every play
+        a.close()
+    # In RAM like the pilot's rows (368 bytes a row). Practice logs grow with every play
     # session, so this is the trainer that will outgrow RAM first.
-    try:
-        X = np.empty((total, dim), np.float16)
-    except MemoryError:
-        raise gbai.DataError(f"{total} practice rows x {dim} inputs need {total * dim * 2 / 2**30:.1f} GiB of free "
-                             "RAM, which isn't there (close what's using it, or move old practice logs away)")
+    X = gbai.CompactRows(total)
     Y = np.zeros((total, 2), np.float32)
     M = np.zeros((total, 2), np.float32)
     sw = np.ones(total, np.float32)
@@ -122,12 +122,13 @@ def assemble(attempts, pair_weight, log=print):
         if not len(rows):
             continue
         g = idx[rows]
-        X[g] = a.obs[rows]
+        X.put(g, a, rows)
         act = np.asarray(a.act)[rows]
         alive = np.asarray(a.alive)[rows]
         head = np.where(act == 1, models.Critic.HOLD, models.Critic.RELEASE)
         Y[g, head] = (alive >= a.horizon).astype(np.float32)
         M[g, head] = 1.0
+        a.close()
     pairs = []
     for a, keep, idx in plans:
         b = a.branch_of
@@ -149,7 +150,7 @@ def assemble(attempts, pair_weight, log=print):
         if int(p.act[rp]) == int(a.act[rb]):
             log(f"NOTE: {a.run_id}: the branch took the same action as its parent at tick {t}; not a pair")
             continue
-        sp, sb = np.asarray(p.obs[rp], np.float32), np.asarray(a.obs[rb], np.float32)
+        sp, sb = p.obs[rp], a.obs[rb]
         if not np.allclose(sp, sb, atol=1e-2, rtol=1e-2, equal_nan=True):
             log(f"NOTE: {a.run_id}: at tick {t} the branch saw a different state than its parent (max difference "
                 f"{float(np.nanmax(np.abs(sp - sb))):.3g}); the snapshot restore may not be exact. Not paired.")
@@ -160,12 +161,11 @@ def assemble(attempts, pair_weight, log=print):
         sw[gp] = pair_weight
         M[gb] = 0.0  # the branch's own row is now the pair's other half
         pairs.append(gp)
+        a.close()
+        p.close()
     for a, _, _ in plans:
         a.close()
-    bad = 0
-    for s in range(0, total, 65536):
-        bad += gbai.finite_rows(X[s:s + 65536])
-    return X, Y, M, sw, np.array(pairs, np.int64), bad
+    return X, Y, M, sw, np.array(pairs, np.int64), X.clean()
 
 
 def head_balance(Y, M):
@@ -194,19 +194,19 @@ def predict(model, X, chunk=65536):
     out = np.empty((len(X), 2), np.float32)
     with torch.no_grad():
         for a in range(0, len(X), chunk):
-            out[a:a + chunk] = model(torch.from_numpy(np.asarray(X[a:a + chunk], np.float32))).numpy()
+            out[a:a + chunk] = model(models.as_batch(X, np.arange(a, min(a + chunk, len(X))))).numpy()
     return out
 
 
 def metrics(logits, Y, M, pairs):
-    """Per head: labels, base rate, accuracy and balanced accuracy at 0.5; and for each pair whose two
-    answers differ, whether the critic ranks the surviving action higher."""
-    p = export.sigmoid(logits)
+    """Per head: labels, base rate, accuracy and balanced accuracy (alive when logit > 0); and for
+    each pair whose two answers differ, whether the critic ranks the surviving action higher."""
+    p = np.asarray(logits)
     out = {}
     for j, name in enumerate(models.Critic.out_names):
         lab = M[:, j] > 0
         y = Y[lab, j] > 0.5
-        q = p[lab, j] >= 0.5
+        q = p[lab, j] > 0
         n = int(lab.sum())
         pos, neg = int(y.sum()), int((~y).sum())
         tpr = float((q & y).sum()) / pos if pos else None
@@ -224,7 +224,7 @@ def metrics(logits, Y, M, pairs):
 
 def main(argv=None, log=print):
     args = parse_args(argv)
-    models.set_threads(args.threads)
+    background.setup(args, log)
     models.set_seed(args.seed)
     root = gbai.ai_root(args.root)
     out = os.path.abspath(args.out) if args.out else gbai.train_dir(root, "critic")
@@ -232,6 +232,8 @@ def main(argv=None, log=print):
     prog = gbai.Progress(os.path.join(out, "progress.json"), "critic", out)
     try:
         result = train(args, root, out, prog, log)
+    except background.StopRequested:
+        return {"model": "critic", "stopped": True}
     except BaseException as e:
         prog.finish("failed", f"{type(e).__name__}: {e}")
         raise
@@ -248,9 +250,8 @@ def train(args, root, out, prog, log):
         raise gbai.DataError(f"no practice attempts in {os.path.join(root, 'practice')} (gucci_ai_play writes them)")
     attempts, layout_hash = gbai.pick_layout(attempts, args.layout_hash)
     showcase = train_pilot.showcase_from_args(args)
-    split = gbai.make_split(attempts, showcase, args.fold_k, args.val_frac, args.seed,
-                            usable=lambda a: bool(rows_to_use(a).any()))
-    record = gbai.split_record(split, "critic", layout_hash, args.fold_k, args.val_frac, args.seed)
+    split = gbai.make_split(attempts, showcase, args.fold_k, args.seed, usable=lambda a: bool(rows_to_use(a).any()))
+    record = gbai.split_record(split, "critic", layout_hash, args.seed)
     gbai.write_json_atomic(os.path.join(out, "split.json"), record)
     for a, why in split["excluded"]:
         log(f"left out of training: {a.run_id}: {why}")
@@ -267,10 +268,11 @@ def train(args, root, out, prog, log):
     cb = head_balance(Y, M)
     W, norm = weights(Y, M, sw, cb)
     lab = M > 0
-    log(f"{len(split['train'])} attempts ({len(split['train_levels'])} levels), {len(X)} rows, {len(pairs)} pairs; "
+    log(f"{train_pilot.fold_text(split, args)}: {len(split['train'])} attempts ({len(split['train_levels'])} levels), "
+        f"{len(X)} rows ({X.nbytes / 2**30:.2f} GiB in RAM), {len(pairs)} pairs; "
         f"alive rate hold {float(Y[lab[:, 0], 0].mean()) if lab[:, 0].any() else float('nan'):.3f}, release "
         f"{float(Y[lab[:, 1], 1].mean()) if lab[:, 1].any() else float('nan'):.3f}")
-    dim = X.shape[1]
+    dim = gbai.OBS_DIM
     mean, std = gbai.moments((X[a:a + 16384] for a in range(0, len(X), 16384)), dim)
     val = None
     if split["val"]:
@@ -280,7 +282,7 @@ def train(args, root, out, prog, log):
 
     model = models.Critic(dim, models.parse_ints(args.hidden))
     model.set_norm(mean, std)
-    signature = {"layout_hash": layout_hash, "obs_dim": dim, "model_config": model.config(),
+    signature = {"layout_hash": layout_hash, "obs_dim": dim, "model_config": model.config(), "fold": record["fold"],
                  "train_runs": sorted(a.run_id for a in split["train"]),
                  "val_runs": sorted(a.run_id for a in split["val"]), "pair_weight": args.pair_weight,
                  "batch": args.batch, "seed": args.seed, "select": args.select}
@@ -300,8 +302,8 @@ def train(args, root, out, prog, log):
     prog.set(state="exporting", force=True, message="writing critic.gbnn")
     rng = np.random.default_rng(args.seed)
     src = val[0] if val and len(val[0]) else X
-    rows = [np.asarray(src[int(i)], np.float32) for i in rng.integers(0, len(src), min(6, len(src)))]
-    rows += [np.asarray(X[int(i)], np.float32) for i in pairs[:2]]
+    rows = [src[int(i)] for i in rng.integers(0, len(src), min(6, len(src)))]
+    rows += [X[int(i)] for i in pairs[:2]]
     rows.append(np.zeros(dim, np.float32))
     info = export.export_model(model, layout_hash, os.path.join(out, "critic.gbnn"), np.stack(rows))
     log(f"wrote {info['gbnn']} ({info['bytes']} bytes, numpy vs torch {info['max_err_vs_torch']:.2g})")
