@@ -490,7 +490,11 @@ def check_run_header(h, practice=False):
     if not isinstance(h.get("completed"), bool):
         errors.append("completed is not true or false")
     died = h.get("died_tick")
-    if died is not None and (not _is_int(died) or died < 0 or (_is_int(h.get("ticks")) and died > h["ticks"])):
+    # died_tick counts from the level's start (contract s1), like first_tick (a practice branch's
+    # log starts at first_tick, so its rows end at first_tick + ticks).
+    first0 = h.get("first_tick") or 0
+    end = h["ticks"] + (first0 if _is_int(first0) else 0) if _is_int(h.get("ticks")) else None
+    if died is not None and (not _is_int(died) or died < 0 or (end is not None and died > end)):
         errors.append(f"died_tick {died!r} is not null or a tick of the run")
     for key in ("died_x", "level_length_x"):
         if h.get(key) is not None and not _is_num(h[key]):
@@ -637,6 +641,8 @@ def _deep_check(run, practice):
         errors.append("a token dx/dy isn't finite")
     held = state[:, STATE_HELD]
     want = before(run.act).astype(np.float32)
+    if run.first_tick > 0 and len(want):
+        want[0] = held[0]  # the tick before a branch log's first row is in its parent's log
     off = np.flatnonzero(held != want)
     if len(off):
         errors.append(f"state[{STATE_HELD}] (held before this tick) differs from act[t-1] on {len(off)} ticks, first "
