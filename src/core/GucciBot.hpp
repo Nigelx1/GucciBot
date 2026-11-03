@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-03-d (a test launch never writes GDs save files)"
+    "2026-11-03-e (AI layout v3: exact distances to hazards, walls, floor and ceiling ends)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
