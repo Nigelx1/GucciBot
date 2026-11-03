@@ -1195,8 +1195,13 @@ class $modify(GB7CCDirector, CCDirector) {
             return;
         }
 
-        if (!pl)
+        if (!pl) {
+            // AI jobs that work outside a level too (finding a level online,
+            // leaving one level to open another).
+            if (gucci::ai::job::busy())
+                (void)gucci::ai::job::tick();
             return CCDirector::drawScene();
+        }
 
         // The legacy TTR capture loop ran from here. It was gated on
         // gb->renderer.recording, which SLRenderer never sets, so it has been

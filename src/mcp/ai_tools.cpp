@@ -5,7 +5,10 @@
 #include "mcp_server.hpp"
 
 #include "ai/job.hpp"
+#include "ai/observe.hpp"
+#include "ai/record.hpp"
 #include "ai/smoke.hpp"
+#include "ai/tape.hpp"
 
 #include <Geode/Geode.hpp>
 
@@ -35,6 +38,34 @@ namespace gucci::mcp {
             return def;
         }
 
+        // Another Assistant Access tool, called from an AI job on the main
+        // thread (opening and leaving levels): a ToolError comes back as
+        // std::runtime_error.
+        ai::ToolCall toolCaller(Server& server) {
+            return [&server](char const* name, matjson::Value const& args) -> matjson::Value {
+                for (auto const& t : server.tools()) {
+                    if (t.name != name) continue;
+                    try {
+                        return t.run(args);
+                    } catch (ToolError const& e) {
+                        throw std::runtime_error(e.message);
+                    }
+                }
+                throw std::runtime_error(std::string("no tool ") + name);
+            };
+        }
+
+        std::string pathArg(matjson::Value const& a) {
+            auto const path = a.contains("macro_path") ? a["macro_path"].asString().unwrapOr("") : "";
+            if (path.empty()) throw ToolError("macro_path is required");
+            return path;
+        }
+
+        void requireNoOwner() {
+            auto const who = runOwner();
+            if (!who.empty()) throw ToolError(who + " currently owns the run; wait for it or cancel it first");
+        }
+
         int jobArg(matjson::Value const& a) {
             if (!a.contains("job")) throw ToolError("job is required (the id a gucci_ai_* tool returned)");
             return (int)intArg(a, "job", 0);
@@ -42,6 +73,94 @@ namespace gucci::mcp {
     }  // namespace
 
     void registerAiTools(Server& server) {
+        server.addTool({
+            "gucci_ai_layout",
+            "What the AI pilot sees and how it is laid out (AI contract v2 section 3): the per-tick record's "
+            "state slots, scan, token table and meta, N (472), obs_layout_hash (networks carry it), and the level "
+            "tape's layout and tape_layout_hash.",
+            schemaFor({}),
+            [](matjson::Value const&) {
+                auto out = ai::obs::layoutJson();
+                auto t = ai::tape::layoutJson();
+                for (auto const& [k, v] : t) out[k] = v;
+                out["ai_root"] = std::string(reinterpret_cast<char const*>(ai::aiRoot().u8string().c_str()));
+                return out;
+            },
+        });
+
+        server.addTool({
+            "gucci_ai_record",
+            "Record a human macro (any format the converter reads) as AI training data: the level is opened if "
+            "needed (online levels download), the macro played in the AI's own session of GD's physics from the "
+            "level's start at the macro's tick rate, for each frame offset until one completes (default 0, 1, -1; "
+            "Silicate files 0 only: their +1 is in the converter), then the completing (or furthest) offset played "
+            "again with the observer on and written to AI_ROOT\data (contract section 4, golden rows included) "
+            "with the level's tape if it has none. Returns {job}; poll gucci_ai_status.",
+            schemaFor({{"macro_path", "string", "full path of the macro file"},
+                       {"level_id", "integer", "the level it is for (main levels 1-22 by number)"},
+                       {"offsets", "array", "frame offsets to try in order (optional)"},
+                       {"tps", "number", "tick rate (default: the macro's)"}}),
+            [&server](matjson::Value const& a) {
+                auto const path = pathArg(a);
+                requireNoOwner();
+                std::vector<int> offsets;
+                bool given = false;
+                if (a.contains("offsets") && a["offsets"].isArray()) {
+                    given = true;
+                    for (auto const& v : a["offsets"]) offsets.push_back((int)v.asInt().unwrapOr(0));
+                    if (offsets.empty()) throw ToolError("offsets is empty");
+                }
+                double tps = 0.0;
+                if (a.contains("tps")) tps = a["tps"].asDouble().unwrapOr(0.0);
+                std::string why;
+                auto job = ai::makeRecord(path, intArg(a, "level_id", 0), std::move(offsets), given, tps,
+                                          toolCaller(server), why);
+                if (!job) throw ToolError(why);
+                auto out = matjson::Value::object();
+                out["job"] = ai::job::submit(std::move(job));
+                return out;
+            },
+        });
+
+        server.addTool({
+            "gucci_ai_validate_real",
+            "Play a macro in the real game to check it: it is converted, shifted by frame_offset, saved as a "
+            "zz_gbtest_ GucciBot macro, loaded and played by GucciBot's own playback from the level's start (safe "
+            "mode must be on; the level is opened if needed), in real time. Result: {completed, died_x, percent}. "
+            "The copy is deleted after and the mode set back to idle (the loaded macro is replaced). Returns {job}.",
+            schemaFor({{"macro_path", "string", "full path of the macro file"},
+                       {"level_id", "integer", "the level it is for"},
+                       {"frame_offset", "integer", "frames added to every input (default 0)"}}),
+            [&server](matjson::Value const& a) {
+                auto const path = pathArg(a);
+                requireNoOwner();
+                std::string why;
+                auto job = ai::makeValidateReal(path, intArg(a, "level_id", 0), (int)intArg(a, "frame_offset", 0),
+                                                toolCaller(server), why);
+                if (!job) throw ToolError(why);
+                auto out = matjson::Value::object();
+                out["job"] = ai::job::submit(std::move(job));
+                return out;
+            },
+        });
+
+        server.addTool({
+            "gucci_ai_find_level",
+            "Search GD's servers for a level by name: {candidates: [{id, name, author, stars, demon, length, "
+            "exact_name}]} (the first page of GD's own search). The caller decides; an ambiguous name is skipped, "
+            "not guessed. Returns {job}.",
+            schemaFor({{"name", "string", "the level's name"}}),
+            [](matjson::Value const& a) {
+                auto const name = a.contains("name") ? a["name"].asString().unwrapOr("") : "";
+                std::string why;
+                auto job = ai::makeFindLevel(name, why);
+                if (!job) throw ToolError(why);
+                auto out = matjson::Value::object();
+                out["job"] = ai::job::submit(std::move(job));
+                return out;
+            },
+        });
+
         server.addTool({
             "gucci_ai_status",
             "The state of an AI job (queued, running, done or failed), its progress, and its result or error. "
