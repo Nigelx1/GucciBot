@@ -209,6 +209,13 @@ class Trajectory {
     std::vector<SimBroken> m_simBroken;
     bool m_deadP1;
     bool m_deadP2;
+    // GucciBot (2026-11-03): the copy a dual portal has just brought into the
+    // level, on the tick it joins. GJBaseGameLayer::update moves the players
+    // before their collision passes, so a player 2 that appears during player
+    // 1's pass gets a collision pass on that tick but no update: it stands
+    // where player 1 is and moves from the next tick (measured with the tick
+    // probe on Bloodbath; the copy used to run a step ahead, see iterate()).
+    PlayerObject* m_joinedNoUpdate = nullptr;
     // The top of what a copy can touch in the level (see inVoid), worked out
     // once per read of the level.
     float m_voidTop = 0.0f;

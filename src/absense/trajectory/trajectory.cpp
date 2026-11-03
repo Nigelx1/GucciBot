@@ -173,7 +173,10 @@ bool Trajectory::iterate(GJBaseGameLayer* pl, PlayerObject* player, int mode,
     // float delta = m_delta;
 
     player->m_playEffects = false;
-    player->update(delta);
+    // A copy that joined in this tick's dual portal moves from the next tick
+    // (m_joinedNoUpdate); its collision pass below still runs.
+    if (player == m_joinedNoUpdate) m_joinedNoUpdate = nullptr;
+    else player->update(delta);
 
     if (pl->checkCollisions(player, delta, false) == 1) {
         this->hasDied(player);
@@ -2589,7 +2592,10 @@ struct Trajectory::Sim {
     // part on (0x216979). The copy of the other player joins the run inside
     // the collision pass that crossed the portal, where the game puts it: the
     // dual flag is read again after player 1's pass (update 0x238517), so the
-    // new player gets its own update and collision pass in the same step.
+    // new player gets its own collision pass in the same step - but not its
+    // update: the players moved before the passes, while the flag was off
+    // (m_joinedNoUpdate; the real game's player 2 stands on player 1's spot
+    // after the portal's tick).
     void enterDual(PlayerObject* by, GameObject* portal) {
         if (count != 1 || !t->m_fakePlayer1 || !t->m_fakePlayer2) return;
         PlayerObject* lead = players[0];
@@ -2656,6 +2662,10 @@ struct Trajectory::Sim {
         players[1] = partner;
         masks[1] = lead == t->m_fakePlayer1 ? TrajectoryMode::Player2 : TrajectoryMode::Player1;
         count = 2;
+        // Its collision pass runs in this step, its update from the next one:
+        // the game moves both players before either collision pass, and the
+        // dual flag was off when it moved them (Trajectory::m_joinedNoUpdate).
+        t->m_joinedNoUpdate = partner;
         syncSeparate();
         syncRunPlayers();
         // The spawn walk goes after the last copy that ticks in the step
@@ -2779,6 +2789,7 @@ struct Trajectory::Sim {
         // triggers the copies fire its whole run.
         world::Scope worldScope(worldStep ? &run : nullptr, worldOn ? &ws : nullptr);
         const unsigned int idx = tickIndex();
+        t->m_joinedNoUpdate = nullptr;  // only ever for the tick a copy joins in
         // The real tick this simulated tick produces: what a phantom spot's
         // window is measured against (hitsPhantom).
         t->m_simRealTick = realTickBase + (int)idx + 1;
