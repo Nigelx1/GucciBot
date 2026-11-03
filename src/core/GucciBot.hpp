@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-02-i (Hitborders probe: once a pass has moved the copy anywhere, even if a later snap put it back, an object's silence there says nothing; slopes no longer marked new, the probe's per-mismatch signs, and -g's fixes: a block's red core stops where GD snaps the player first, circles drawn around GD's circle)"
+    "2026-11-02-j (AI pilot stage A: the AI gets its own tick-by-tick session of the game physics - step, snapshot, restore, read both players - held at the level start, run in 10 ms slices as a queued job; gucci_ai_sim_smoke plays a macro of any format in it)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
