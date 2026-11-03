@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-03-f (AI practice: replays the last seconds with more variety when one death keeps repeating)"
+    "2026-11-03-g (AI: reinforcement learning rollouts, and the network plays alone by default; old practice rules kept for comparison)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
