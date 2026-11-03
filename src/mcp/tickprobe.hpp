@@ -36,6 +36,15 @@ namespace gucci::tickprobe {
         // tick (PlayerObject::pushButton / releaseButton), whoever queued them.
         uint8_t pushes = 0;
         uint8_t releases = 0;
+        // Player 2 in the dual part (2026-11-02, the AI session's dual check):
+        // its node position, y speed, kind, and held / on ground / upside down
+        // as bits 0..2.
+        bool dual = false;
+        float x2 = 0.f;
+        float y2 = 0.f;
+        float yVel2 = 0.f;
+        char mode2 = 'C';
+        uint8_t flags2 = 0;
     };
 
     // Written by PlayerObject::update's hook for the real player 1, read and

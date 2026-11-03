@@ -2945,7 +2945,10 @@ namespace gucci::mcp {
                                            f, s.x, s.y, s.yVel, s.rot,
                                            s.held ? " H" : "", s.onGround ? " G" : "", s.mode, s.dt,
                                            s.split ? " SPLIT" : "", s.extraDelta, s.hidden, s.rings, s.pushes,
-                                           s.releases);
+                                           s.releases) +
+                               (s.dual ? fmt::format(" | P2 x={:.3f} y={:.3f} vy={:.3f} {} f2={}", s.x2, s.y2,
+                                                     s.yVel2, s.mode2, (int)s.flags2)
+                                       : std::string());
                     };
                     auto range = [](std::map<uint32_t, tickprobe::Sample> const& m) {
                         auto r = obj();
@@ -2982,7 +2985,9 @@ namespace gucci::mcp {
                         auto const& B = tickprobe::current;
                         int64_t compared = 0;
                         int64_t first = -1;
+                        int64_t const diffFrom = argInt(a, "from", 0);
                         for (auto const& [f, s] : A) {
+                            if ((int64_t)f < diffFrom) continue;
                             auto it = B.find(f);
                             if (it == B.end())
                                 continue;
@@ -2991,7 +2996,10 @@ namespace gucci::mcp {
                             if (std::fabs(s.x - t.x) > 1e-3f || std::fabs(s.y - t.y) > 1e-3f ||
                                 std::fabs(s.yVel - t.yVel) > 1e-3f || s.held != t.held ||
                                 s.mode != t.mode || s.hidden != t.hidden || s.rings != t.rings ||
-                                s.pushes != t.pushes || s.releases != t.releases) {
+                                s.pushes != t.pushes || s.releases != t.releases || s.dual != t.dual ||
+                                (s.dual && (std::fabs(s.x2 - t.x2) > 1e-3f || std::fabs(s.y2 - t.y2) > 1e-3f ||
+                                            std::fabs(s.yVel2 - t.yVel2) > 1e-3f || s.mode2 != t.mode2 ||
+                                            s.flags2 != t.flags2))) {
                                 first = f;
                                 break;
                             }

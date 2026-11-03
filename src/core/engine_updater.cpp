@@ -844,6 +844,18 @@ static void tickSettledWork() {
                     tickprobe::lastPushes,
                     tickprobe::lastReleases,
                 };
+                if (pl->m_gameState.m_isDualMode && pl->m_player2) {
+                    auto* q = pl->m_player2;
+                    auto& smp = tickprobe::current[upd.getFrame()];
+                    auto const jt = q->m_holdingButtons.find(static_cast<int>(PlayerButton::Jump));
+                    smp.dual = true;
+                    smp.x2 = q->getPositionX();
+                    smp.y2 = q->getPositionY();
+                    smp.yVel2 = (float)q->m_yVelocity;
+                    smp.mode2 = gamemodeChar(q);
+                    smp.flags2 = (uint8_t)(((jt != q->m_holdingButtons.end() && jt->second) ? 1 : 0) |
+                                           (q->m_isOnGround ? 2 : 0) | (q->m_isUpsideDown ? 4 : 0));
+                }
                 tickprobe::lastDt = 0.f;
                 tickprobe::lastSplit = false;
                 tickprobe::lastPushes = 0;
