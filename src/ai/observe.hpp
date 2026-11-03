@@ -33,63 +33,23 @@
 
 #include <matjson.hpp>
 
+#include "ai/obs_core.hpp"
+
 class GJBaseGameLayer;
 class GameObject;
 class PlayerObject;
 
 namespace gucci::ai::obs {
 
-    constexpr int kStateDim = 40;
-    constexpr int kColumns = 40;
-    constexpr int kScanDim = 4 * kColumns;
-    constexpr int kTokens = 8;
-    constexpr int kTokenBytes = 6;
-    constexpr int kTokDim = kTokens * kTokenBytes;
-    constexpr int kTokenTypes = 32;  // one-hot width; type 0 = empty slot
-    constexpr int kMetaDim = 8;
-    constexpr int kObsDim = kStateDim + kScanDim + kTokens * (2 + kTokenTypes);  // 472
-    static_assert(kObsDim == 472);
-
-    constexpr uint8_t kScanNone = 255;
-    constexpr int kScanMax = 96;           // 12 blocks in 1/8 block
-    constexpr float kBlock = 30.0f;        // GD units in a block
-    constexpr float kColumnWidth = 15.0f;  // half a block
-
-    // Token types (CONTRACT.md section 3), defined once here.
-    enum Token : uint8_t {
-        kNoToken = 0,
-        kYellowOrb = 1, kPinkOrb, kRedOrb, kBlueOrb, kGreenOrb, kBlackOrb, kGreenDashOrb, kPinkDashOrb,
-        kSpiderOrb, kTeleportOrb,
-        kYellowPad = 11, kPinkPad, kRedPad, kBluePad, kSpiderPad,
-        kGravityDownPortal = 16, kGravityUpPortal, kGravityFlipPortal,
-        kCubePortal = 19, kShipPortal, kBallPortal, kUfoPortal, kWavePortal, kRobotPortal, kSpiderPortal,
-        kSwingPortal,
-        kMiniPortal = 27, kNormalSizePortal, kSpeedPortal, kMirrorPortal, kDualPortal,
-        kTokenCount = 32,
-    };
     char const* tokenName(int type);
     // The token an object is, or kNoToken.
     uint8_t tokenOf(GameObject* object);
-
-    struct Record {
-        float state[kStateDim] = {};
-        uint8_t scan[kScanDim] = {};
-        uint8_t tok[kTokDim] = {};
-        float meta[kMetaDim] = {};
-    };
-
-    // The 472 floats, the same bits as tools/ai/gbai.py's expand_np.
-    void expand(Record const& r, float* out);
 
     // The layout's hash (16 hex): every network carries the hash of the
     // layout it was trained on, and the mod refuses one that differs.
     std::string layoutHash();
     // The tables: state slots, scan, tokens, meta, N (gucci_ai_layout).
     matjson::Value layoutJson();
-
-    // float <-> IEEE half (round to nearest even), as numpy's float16.
-    uint16_t toHalf(float f);
-    float fromHalf(uint16_t h);
 
     // The level read once for the scan and the tokens: every object GD's
     // collision pass can touch (src/hacks/hitborders.cpp's reading of it),
