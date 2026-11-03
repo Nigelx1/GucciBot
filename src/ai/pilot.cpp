@@ -865,7 +865,12 @@ namespace gucci::ai::pilot {
                     absense::judge::Options jo;
                     jo.maxMs = 8000.0;
                     std::vector<TraceSample> trace;
-                    auto const r = absense::judge::run(inputs, (int)T, &trace, jo);
+                    // The real game notes the end a little after the copies do (2026-11-03:
+                    // Clutterfunk survived all T ticks with no death and no level end), so the
+                    // judge gets a released tail of up to two seconds to reach it.
+                    std::vector<TickInput> judged = inputs;
+                    judged.resize(T + (uint32_t)std::max(60, 2 * (int)m_tps));
+                    auto const r = absense::judge::run(judged, (int)judged.size(), &trace, jo);
                     auto j = matjson::Value::object();
                     j["ran"] = r.ran;
                     if (!r.ran) {
