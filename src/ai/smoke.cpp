@@ -5,6 +5,7 @@
 #include "ai/start.hpp"
 #include "core/GucciBot.hpp"
 #include "tools/macro_convert.hpp"
+#include "mcp/tickprobe.hpp"
 
 #include <Geode/Geode.hpp>
 
@@ -19,9 +20,53 @@ namespace gucci::ai {
 
     namespace {
 
+        char kindChar(PlayerObject* p) {
+            if (!p) return 'C';
+            if (p->m_isRobot) return 'R';
+            if (p->m_isSpider) return 'X';
+            if (p->m_isSwing) return 'G';
+            if (p->m_isShip) return 'H';
+            if (p->m_isBall) return 'B';
+            if (p->m_isBird) return 'U';
+            if (p->m_isDart) return 'V';
+            return 'C';
+        }
+
+        // The tick probe's sample of the copies (gucci_tick_probe's reference),
+        // so a run in the session compares tick by tick with the real game.
+        tickprobe::Sample probeSample(PlayerObject* p, PlayerObject* q) {
+            tickprobe::Sample smp;
+            if (!p) return smp;
+            auto const it = p->m_holdingButtons.find(static_cast<int>(PlayerButton::Jump));
+            smp.x = p->getPositionX();
+            smp.y = p->getPositionY();
+            smp.yVel = (float)p->m_yVelocity;
+            smp.rot = p->getRotation();
+            smp.held = it != p->m_holdingButtons.end() && it->second;
+            smp.onGround = p->m_isOnGround;
+            smp.mode = kindChar(p);
+            smp.hidden = (uint8_t)((p->m_jumpBuffered ? 1 : 0) | (p->m_stateRingJump ? 2 : 0) |
+                                   (p->m_stateRingJump2 ? 4 : 0) | (p->m_ringJumpRelated ? 8 : 0) |
+                                   (p->m_touchedRing ? 16 : 0) | (p->m_isUpsideDown ? 32 : 0) |
+                                   (p->m_wasJumpBuffered ? 64 : 0));
+            smp.rings = (uint8_t)std::min<unsigned>(255, p->m_touchingRings ? p->m_touchingRings->count() : 0);
+            if (q) {
+                auto const jt = q->m_holdingButtons.find(static_cast<int>(PlayerButton::Jump));
+                smp.dual = true;
+                smp.x2 = q->getPositionX();
+                smp.y2 = q->getPositionY();
+                smp.yVel2 = (float)q->m_yVelocity;
+                smp.mode2 = kindChar(q);
+                smp.flags2 = (uint8_t)(((jt != q->m_holdingButtons.end() && jt->second) ? 1 : 0) |
+                                       (q->m_isOnGround ? 2 : 0) | (q->m_isUpsideDown ? 4 : 0));
+            }
+            return smp;
+        }
+
         struct Event {
             int64_t frame = 0;  // GucciBot numbering, offset included
             bool down = false;
+            bool p2 = false;  // player 2's own button (a two-player level)
         };
 
         class SimSmoke : public job::Job {
@@ -34,11 +79,13 @@ namespace gucci::ai {
             int64_t levelId = 0;
             int offset = 0;
             int64_t maxTicks = 0;
+            bool probe = false;  // each tick into gucci_tick_probe's reference
             convert::Macro macro;
             std::string format;
             std::vector<Event> events;
             int p2Merged = 0;
             int p2Dropped = 0;
+            int p2Own = 0;  // player 2's inputs, its own button (a two-player level)
             int otherButtons = 0;
 
             bool slice(job::Clock::time_point until) override {
@@ -75,6 +122,7 @@ namespace gucci::ai {
             size_t m_next = 0;
             int m_early = 0;
             bool m_down = false;
+            bool m_down2 = false;  // player 2's own button (a two-player level)
             uint32_t m_ticks = 0;
             uint32_t m_limit = 0;
             float m_finalX = 0.0f;
@@ -85,6 +133,7 @@ namespace gucci::ai {
             uint32_t m_snapTick = 0;
             size_t m_snapNext = 0;
             bool m_snapDown = false;
+            bool m_snapDown2 = false;
             int m_saves = 0;
             double m_saveUs = 0.0;
 
@@ -136,23 +185,32 @@ namespace gucci::ai {
                         m_snapTick = m_ticks;
                         m_snapNext = m_next;
                         m_snapDown = m_down;
+                        m_snapDown2 = m_down2;
                     }
-                    uint8_t presses = 0;
-                    bool held = m_down;
+                    uint8_t presses = 0, presses2 = 0;
+                    bool held = m_down, held2 = m_down2;
                     int64_t const frame = (int64_t)m_startFrame + 1 + (int64_t)m_ticks;
                     while (m_next < events.size() && events[m_next].frame <= frame) {
-                        if (events[m_next].down) {
-                            if (presses < 255) presses++;
-                            held = true;
+                        Event const& e = events[m_next];
+                        uint8_t& n = e.p2 ? presses2 : presses;
+                        bool& h = e.p2 ? held2 : held;
+                        if (e.down) {
+                            if (n < 255) n++;
+                            h = true;
                         } else {
-                            held = false;
+                            h = false;
                         }
                         m_next++;
                     }
                     m_down = held;
-                    bool const dead = sim::step(presses, held);
+                    m_down2 = held2;
+                    bool const dead = sim::step2(presses, held, presses2, held2);
                     m_ticks++;
                     sim::read(m_state);
+                    if (probe && timed) {
+                        tickprobe::saved[(uint32_t)frame] =
+                            probeSample(sim::copy(0), m_state.count == 2 ? sim::copy(1) : nullptr);
+                    }
                     m_finalX = m_state.p[0].x;
                     if (dead || m_state.complete) return true;
                     if (timed && (m_ticks & 127) == 0 && job::Clock::now() >= until) return false;
@@ -189,6 +247,7 @@ namespace gucci::ai {
                     m_ticks = m_snapTick;
                     m_next = m_snapNext;
                     m_down = m_snapDown;
+                    m_down2 = m_snapDown2;
                     char const* why2 = nullptr;
                     (void)advance({}, false, why2);
                     bool const same = m_ticks == ticks1 && m_finalX == x1 && m_state.p[0].y == y1 &&
@@ -248,6 +307,7 @@ namespace gucci::ai {
                 mac["last_frame"] = events.empty() ? 0 : events.back().frame;
                 mac["p2_merged"] = p2Merged;
                 mac["p2_dropped"] = p2Dropped;
+                mac["p2_own"] = p2Own;
                 mac["other_buttons"] = otherButtons;
                 mac["tps_changes"] = (int64_t)macro.tpsChanges.size();
                 out["macro"] = mac;
@@ -267,9 +327,9 @@ namespace gucci::ai {
     }  // namespace
 
     std::unique_ptr<job::Job> makeSimSmoke(std::string const& macroPath, int64_t levelId, int offset,
-                                           int64_t maxTicks, std::string& why) {
+                                           int64_t maxTicks, std::string& why, bool probe) {
 #if !GB_NATIVE_ENGINE
-        (void)macroPath, (void)levelId, (void)offset, (void)maxTicks;
+        (void)macroPath, (void)levelId, (void)offset, (void)maxTicks, (void)probe;
         why = "The AI's simulation is Windows-only for now: its model of the level reads GD's Windows memory layout.";
         return nullptr;
 #endif
@@ -322,11 +382,14 @@ namespace gucci::ai {
         job->levelId = openId;
         job->offset = offset;
         job->maxTicks = maxTicks;
+        job->probe = probe;
+        if (probe) tickprobe::saved.clear();
         job->format = read.format ? std::string(read.format->id) : std::string("gbr6");
         job->macro = std::move(read.macro);
-        // One button stream for player 1: in a one-player level the game hands
-        // player 2's inputs to player 1 too (DATA.md section 8). A two-player
-        // level's player 2 is not simulated here (stage A).
+        // In a one-player level the game hands player 2's inputs to player 1
+        // too (DATA.md section 8): one button stream. A two-player level's
+        // player 2 has a button of its own, which drives the second copy in
+        // the dual part (sim::step2).
         bool const twoPlayer = pl->m_levelSettings && pl->m_levelSettings->m_twoPlayerMode;
         for (auto const& in : job->macro.inputs) {
             if (in.button != 1) {
@@ -334,13 +397,10 @@ namespace gucci::ai {
                 continue;
             }
             if (in.player2) {
-                if (twoPlayer) {
-                    job->p2Dropped++;
-                    continue;
-                }
-                job->p2Merged++;
+                if (twoPlayer) job->p2Own++;
+                else job->p2Merged++;
             }
-            job->events.push_back(Event{in.frame, in.down});
+            job->events.push_back(Event{in.frame, in.down, in.player2 && twoPlayer});
         }
         return job;
     }

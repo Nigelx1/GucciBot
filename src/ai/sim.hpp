@@ -100,6 +100,10 @@ namespace gucci::ai::sim {
     // when the session is over (a death; see State::dead). Reaching the end
     // is State::complete, which does not stop stepping by itself.
     bool step(uint8_t presses, bool held);
+    // The same with player 2's own button (presses2, held2 as above). Only a
+    // two-player level's dual part reads it; in a one-player level the game
+    // hands player 1's button to both players, and step2 is step.
+    bool step2(uint8_t presses, bool held, uint8_t presses2, bool held2);
     void read(State& out);
     void save(Snapshot& out);
     void restore(Snapshot& in);  // the death and the killer go with it

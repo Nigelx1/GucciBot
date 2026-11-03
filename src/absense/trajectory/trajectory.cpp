@@ -2749,8 +2749,10 @@ struct Trajectory::Sim {
     }
 
     // The tick's input on every copy (the other copy's own script with
-    // separate controls), then the tick; true when the run is over.
-    bool step(const TickInput& in) {
+    // separate controls), then the tick; true when the run is over. `own2`:
+    // the other copy's input for this tick in place of its script (the AI
+    // session's two-player levels); ignored when one input drives both.
+    bool step(const TickInput& in, const TickInput* own2 = nullptr) {
         // A copy's tick runs the game's own code, which reports to the level
         // (event triggers on landing or jumping, a breakable block destroyed,
         // the jump count). The hooks drop those while simulating() is true. The
@@ -2822,7 +2824,7 @@ struct Trajectory::Sim {
                 }
             }
         };
-        const TickInput in2 = separate ? otherAt(idx) : in;
+        const TickInput in2 = separate ? (own2 ? *own2 : otherAt(idx)) : in;
         ProfLap lap;  // the speed test's timer (see StepProfile)
         if (worldStep) {
             // GJBaseGameLayer::update's order (world/step.cpp (h)): the queued
@@ -5330,12 +5332,12 @@ struct Trajectory::EpisodeOps {
 
     static bool isSuspended(Trajectory* t) { return t->m_episode && t->m_episode->suspended; }
 
-    static bool step(Trajectory* t, TickInput in) {
+    static bool step(Trajectory* t, TickInput in, const TickInput* in2 = nullptr) {
         Episode* ep = t->m_episode;
         if (!ep || ep->suspended) return true;
         const uint64_t ringsBefore = t->m_ringsUsed;
         t->forgetFired();
-        const bool over = ep->s.step(in);
+        const bool over = ep->s.step(in, in2);
         ep->fired = t->firedThisTick(ep->s.players[0]);
         ep->ring = t->m_ringsUsed != ringsBefore;
         ep->dead = over;
@@ -5560,6 +5562,12 @@ namespace gucci::ai::sim {
     bool step(uint8_t presses, bool held) {
         Trajectory* t = traj();
         return t ? Trajectory::EpisodeOps::step(t, TickInput{presses, held}) : true;
+    }
+
+    bool step2(uint8_t presses, bool held, uint8_t presses2, bool held2) {
+        Trajectory* t = traj();
+        const TickInput in2{presses2, held2};
+        return t ? Trajectory::EpisodeOps::step(t, TickInput{presses, held}, &in2) : true;
     }
 
     void read(State& out) {

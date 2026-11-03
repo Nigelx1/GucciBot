@@ -45,6 +45,7 @@ namespace gucci::ai {
         struct Event {
             int64_t frame = 0;  // GucciBot numbering, before the offset
             bool down = false;
+            bool p2 = false;  // player 2's own button (a two-player level)
         };
 
         struct MacroIn {
@@ -57,6 +58,7 @@ namespace gucci::ai {
             std::vector<Event> events;
             int p2Merged = 0;
             int p2Dropped = 0;
+            int p2Own = 0;  // player 2's inputs on its own button (a two-player level)
             int otherButtons = 0;
         };
 
@@ -90,22 +92,20 @@ namespace gucci::ai {
                 out.macro = std::move(read.macro);
             }
             out.silicate = out.format.rfind("slc", 0) == 0;
-            // One button stream for player 1: in a one-player level the game
-            // hands player 2's inputs to player 1 too; a two-player level's
-            // player 2 is not simulated (it is dropped and counted).
+            // In a one-player level the game hands player 2's inputs to player
+            // 1 too: one button stream. A two-player level's player 2 has a
+            // button of its own, which drives the second copy in the dual part
+            // (sim::step2; act stays player 1's).
             for (auto const& in : out.macro.inputs) {
                 if (in.button != 1) {
                     out.otherButtons++;
                     continue;
                 }
                 if (in.player2) {
-                    if (twoPlayer) {
-                        out.p2Dropped++;
-                        continue;
-                    }
-                    out.p2Merged++;
+                    if (twoPlayer) out.p2Own++;
+                    else out.p2Merged++;
                 }
-                out.events.push_back(Event{in.frame, in.down});
+                out.events.push_back(Event{in.frame, in.down, in.player2 && twoPlayer});
             }
             std::stable_sort(out.events.begin(), out.events.end(),
                              [](Event const& a, Event const& b) { return a.frame < b.frame; });
@@ -248,6 +248,7 @@ namespace gucci::ai {
             int m_startFrame = 0;
             size_t m_next = 0;
             bool m_down = false;
+            bool m_down2 = false;  // player 2's own button (a two-player level)
             uint32_t m_ticks = 0;
             uint32_t m_limit = 0;
             int m_early = 0;
@@ -361,6 +362,7 @@ namespace gucci::ai {
                 m_startFrame = sim::startFrame(*start);
                 sim::read(m_state);
                 m_down = false;
+                m_down2 = false;
                 m_next = 0;
                 m_ticks = 0;
                 m_taps = 0;
@@ -399,20 +401,24 @@ namespace gucci::ai {
                         m_tokRows.insert(m_tokRows.end(), rec.tok, rec.tok + obs::kTokDim);
                         m_metaRows.insert(m_metaRows.end(), rec.meta, rec.meta + obs::kMetaDim);
                     }
-                    uint8_t presses = 0;
-                    bool held = m_down;
+                    uint8_t presses = 0, presses2 = 0;
+                    bool held = m_down, held2 = m_down2;
                     int64_t const frame = (int64_t)m_startFrame + 1 + (int64_t)m_ticks;
                     while (m_next < in.events.size() && in.events[m_next].frame + offset <= frame) {
-                        if (in.events[m_next].down) {
-                            if (presses < 255) presses++;
-                            held = true;
+                        Event const& e = in.events[m_next];
+                        uint8_t& n = e.p2 ? presses2 : presses;
+                        bool& h = e.p2 ? held2 : held;
+                        if (e.down) {
+                            if (n < 255) n++;
+                            h = true;
                         } else {
-                            held = false;
+                            h = false;
                         }
                         m_next++;
                     }
                     m_down = held;
-                    bool const dead = sim::step(presses, held);
+                    m_down2 = held2;
+                    bool const dead = sim::step2(presses, held, presses2, held2);
                     sim::read(m_state);
                     bool const act = m_state.p[0].button;
                     if (presses > 0 && !act) m_taps++;
@@ -526,6 +532,9 @@ namespace gucci::ai {
                 if (m_taps) notes += fmt::format("{} zero-length taps (act is 0 on their ticks). ", m_taps);
                 if (in.p2Merged) notes += fmt::format("{} player-2 inputs merged into player 1. ", in.p2Merged);
                 if (in.p2Dropped) notes += fmt::format("{} player-2 inputs dropped (two-player level). ", in.p2Dropped);
+                if (in.p2Own)
+                    notes += fmt::format("{} player-2 inputs drove player 2 (two-player level; act is player 1's). ",
+                                         in.p2Own);
                 if (!in.macro.tpsChanges.empty())
                     notes += fmt::format("{} tick-rate changes in the macro were ignored. ", in.macro.tpsChanges.size());
                 if (m_early) notes += fmt::format("{} inputs at or before the start frame went in on tick 0. ", m_early);

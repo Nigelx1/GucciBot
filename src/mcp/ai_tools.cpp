@@ -246,7 +246,9 @@ namespace gucci::mcp {
             schemaFor({{"macro_path", "string", "full path of the macro file"},
                        {"level_id", "integer", "the level it is for (checked against the open level; 0 skips)"},
                        {"offset", "integer", "frames added to every input (default 0)"},
-                       {"max_ticks", "integer", "stop after this many ticks (default: the last input plus a minute)"}}),
+                       {"max_ticks", "integer", "stop after this many ticks (default: the last input plus a minute)"},
+                       {"probe", "boolean", "every tick of both copies into gucci_tick_probe's reference (diff it "
+                                            "against a real replay recorded with gucci_tick_probe start)"}}),
             [](matjson::Value const& a) {
                 auto const path = a.contains("macro_path") ? a["macro_path"].asString().unwrapOr("") : "";
                 if (path.empty()) throw ToolError("macro_path is required");
@@ -254,7 +256,8 @@ namespace gucci::mcp {
                 if (!who.empty()) throw ToolError(who + " currently owns the run; wait for it or cancel it first");
                 std::string why;
                 auto job = ai::makeSimSmoke(path, intArg(a, "level_id", 0), (int)intArg(a, "offset", 0),
-                                            intArg(a, "max_ticks", 0), why);
+                                            intArg(a, "max_ticks", 0), why,
+                                            a.contains("probe") && a["probe"].asBool().unwrapOr(false));
                 if (!job) throw ToolError(why);
                 auto out = matjson::Value::object();
                 out["job"] = ai::job::submit(std::move(job));
