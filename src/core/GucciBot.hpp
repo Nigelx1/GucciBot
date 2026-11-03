@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-03-b (a minimized game keeps running during AI jobs and test launches: going to the background is skipped)"
+    "2026-11-03-c (the AI judge plays two seconds past the end, so the real game can note the level end)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
