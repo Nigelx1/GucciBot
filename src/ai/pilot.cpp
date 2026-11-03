@@ -324,7 +324,7 @@ namespace gucci::ai::pilot {
             std::vector<sim::SnapshotPtr> m_pool;
             float m_lastX = 0.0f;
             // practice log rows of the line (when asked)
-            std::vector<float> m_stateRows, m_metaRows;
+            std::vector<float> m_stateRows, m_metaRows, m_geoRows;
             std::vector<uint8_t> m_scanRows, m_tokRows, m_actRows;
 
             // the practice
@@ -478,6 +478,7 @@ namespace gucci::ai::pilot {
                         m_scanRows.insert(m_scanRows.end(), rec.scan, rec.scan + obs::kScanDim);
                         m_tokRows.insert(m_tokRows.end(), rec.tok, rec.tok + obs::kTokDim);
                         m_metaRows.insert(m_metaRows.end(), rec.meta, rec.meta + obs::kMetaDim);
+                        m_geoRows.insert(m_geoRows.end(), rec.geo, rec.geo + obs::kGeoDim);
                         m_actRows.push_back(act ? 1 : 0);
                     }
                     m_prev = held;
@@ -718,6 +719,7 @@ namespace gucci::ai::pilot {
                     m_scanRows.resize((size_t)m_t * obs::kScanDim);
                     m_tokRows.resize((size_t)m_t * obs::kTokDim);
                     m_metaRows.resize((size_t)m_t * obs::kMetaDim);
+                    m_geoRows.resize((size_t)m_t * obs::kGeoDim);
                     m_actRows.resize(m_t);
                 }
                 m_forced = std::move(F);
@@ -759,6 +761,7 @@ namespace gucci::ai::pilot {
                           writeArray(pathOf(".tok.u8"), &m_tokRows[(size_t)m_first * obs::kTokDim], n * obs::kTokDim) &&
                           writeArray(pathOf(".act.u8"), &m_actRows[m_first], n) &&
                           writeArray(pathOf(".meta.f32"), &m_metaRows[(size_t)m_first * obs::kMetaDim], n * obs::kMetaDim) &&
+                          writeArray(pathOf(".geo.f32"), &m_geoRows[(size_t)m_first * obs::kGeoDim], n * obs::kGeoDim) &&
                           writeArray(pathOf(".p.f32"), p.data(), n) && writeArray(pathOf(".alive.i32"), alive.data(), n);
                 auto h = matjson::Value::object();
                 h["format"] = "gbai-run";

@@ -260,7 +260,7 @@ namespace gucci::ai {
             std::string m_levelName;
             double m_simMs = 0.0;
             // the record
-            std::vector<float> m_stateRows, m_metaRows;
+            std::vector<float> m_stateRows, m_metaRows, m_geoRows;
             std::vector<uint8_t> m_scanRows, m_tokRows, m_actRows;
 
             bool prepare() {
@@ -380,6 +380,7 @@ namespace gucci::ai {
                     size_t const guess = std::min<size_t>(m_limit, 400'000);
                     m_stateRows.clear(), m_stateRows.reserve(guess * obs::kStateDim);
                     m_metaRows.clear(), m_metaRows.reserve(guess * obs::kMetaDim);
+                    m_geoRows.clear(), m_geoRows.reserve(guess * obs::kGeoDim);
                     m_scanRows.clear(), m_scanRows.reserve(guess * obs::kScanDim);
                     m_tokRows.clear(), m_tokRows.reserve(guess * obs::kTokDim);
                     m_actRows.clear(), m_actRows.reserve(guess);
@@ -400,6 +401,7 @@ namespace gucci::ai {
                         m_scanRows.insert(m_scanRows.end(), rec.scan, rec.scan + obs::kScanDim);
                         m_tokRows.insert(m_tokRows.end(), rec.tok, rec.tok + obs::kTokDim);
                         m_metaRows.insert(m_metaRows.end(), rec.meta, rec.meta + obs::kMetaDim);
+                        m_geoRows.insert(m_geoRows.end(), rec.geo, rec.geo + obs::kGeoDim);
                     }
                     uint8_t presses = 0, presses2 = 0;
                     bool held = m_down, held2 = m_down2;
@@ -464,7 +466,7 @@ namespace gucci::ai {
                 uint32_t const T = m_ticks;
                 bool ok = writeArray(pathOf(".state.f32"), m_stateRows) && writeArray(pathOf(".scan.u8"), m_scanRows) &&
                           writeArray(pathOf(".tok.u8"), m_tokRows) && writeArray(pathOf(".act.u8"), m_actRows) &&
-                          writeArray(pathOf(".meta.f32"), m_metaRows);
+                          writeArray(pathOf(".meta.f32"), m_metaRows) && writeArray(pathOf(".geo.f32"), m_geoRows);
                 // Golden rows: 32 ticks spread over the run, expanded here.
                 std::vector<int32_t> gidx;
                 if (T > 0) {
@@ -481,6 +483,7 @@ namespace gucci::ai {
                     std::copy_n(&m_stateRows[t * obs::kStateDim], obs::kStateDim, r.state);
                     std::copy_n(&m_scanRows[t * obs::kScanDim], obs::kScanDim, r.scan);
                     std::copy_n(&m_tokRows[t * obs::kTokDim], obs::kTokDim, r.tok);
+                    std::copy_n(&m_geoRows[t * obs::kGeoDim], obs::kGeoDim, r.geo);
                     obs::expand(r, &golden[g * obs::kObsDim]);
                 }
                 ok = ok && writeArray(pathOf(".golden.idx.i32"), gidx) && writeArray(pathOf(".golden.f32"), golden);

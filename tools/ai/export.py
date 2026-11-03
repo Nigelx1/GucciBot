@@ -23,7 +23,7 @@ logits, the reader's 11 columns.
 
 `golden` writes tools/ai/golden/ (make_golden): small pilot, critic and
 reader GBNN files with inputs, float64 outputs and decisions, plus a compact
-record and its 472-float expansion. The mod's offline C++ test
+record and its 494-float expansion. The mod's offline C++ test
 (tools/run_ai_net_tests.cpp, stage C) loads them; golden.json describes every
 file.
 
@@ -268,7 +268,12 @@ def golden_record(G=16, seed=7):
     # Exact and signed values the conversion must keep: -0.0, 0, -1, 19.75.
     tok[0, 0, :4] = np.array([np.float16(-0.0), np.float16(0.0)], "<f2").view(np.uint8)
     tok[0, 1, :4] = np.array([np.float16(-1.0), np.float16(19.75)], "<f2").view(np.uint8)
-    return state, scan, tok.reshape(G, gbai.TOK_DIM)
+    # Layout v3's geometry: distances 0..20 (some exactly 0, some none = 20.5), the two flags 0/1.
+    geo = rng.uniform(0, gbai.GEO_REACH, (G, gbai.GEO_DIM)).astype(np.float32)
+    geo[rng.random((G, gbai.GEO_DIM)) < 0.3] = np.float32(gbai.GEO_NONE)
+    geo[:, list(gbai.GEO_FLAGS)] = rng.integers(0, 2, (G, 2))
+    geo[0, :3] = [0.0, np.float32(-0.0), gbai.GEO_REACH]
+    return state, scan, tok.reshape(G, gbai.TOK_DIM), geo
 
 
 def _away_from_boundary(values, margin=GOLDEN_MARGIN):
@@ -278,8 +283,8 @@ def _away_from_boundary(values, margin=GOLDEN_MARGIN):
 def make_golden(out_dir=None, seed=0, log=print):
     """Writes the golden set stage C's C++ test checks (tools/ai/golden/ by default):
 
-    record.state.f32 [G][40], record.scan.u8 [G][160], record.tok.u8 [G][48]: a compact record;
-    record.expanded.f32 [G][472]: its expansion (gbai.expand_np; the C++ expansion must match
+    record.state.f32 [G][40], record.scan.u8 [G][160], record.tok.u8 [G][48], record.geo.f32 [G][22]:
+    a compact record; record.expanded.f32 [G][494]: its expansion (gbai.expand_np; the C++ expansion must match
     bit for bit). pilot/critic/reader.gbnn: small random-init models with layout hash
     GOLDEN_HASH. <model>.in.f32 and <model>.out.f64: raw inputs and the float64 forward pass of
     the float32 weights (the C++ float32 forward must land within 1e-5); pilot.dec.u8 (1 = hold:
@@ -302,11 +307,12 @@ def make_golden(out_dir=None, seed=0, log=print):
         files[name] = {"dtype": np.dtype(dtype).name, "shape": list(a.shape), "bytes": int(a.nbytes),
                        "sha256": gbai.sha256_file(os.path.join(out_dir, name))}
 
-    state, scan, tok = golden_record()
-    expanded = gbai.expand_np(state, scan, tok)
+    state, scan, tok, geo = golden_record()
+    expanded = gbai.expand_np(state, scan, tok, geo)
     put("record.state.f32", state, "<f4")
     put("record.scan.u8", scan, "<u1")
     put("record.tok.u8", tok, "<u1")
+    put("record.geo.f32", geo, "<f4")
     put("record.expanded.f32", expanded, "<f4")
 
     # MLP inputs: the golden record's expanded rows, then random rows around them.
@@ -393,7 +399,8 @@ def check_golden_dir(out_dir=None):
         f = doc["files"][name]
         return np.fromfile(os.path.join(out_dir, name), np.dtype(f["dtype"]).newbyteorder("<")).reshape(f["shape"])
 
-    exp = gbai.expand_np(load("record.state.f32"), load("record.scan.u8"), load("record.tok.u8"))
+    exp = gbai.expand_np(load("record.state.f32"), load("record.scan.u8"), load("record.tok.u8"),
+                         load("record.geo.f32"))
     if not np.array_equal(exp.view(np.uint32), load("record.expanded.f32").view(np.uint32)):
         problems.append("record expansion differs from record.expanded.f32")
     tol = doc["tolerance_abs"]

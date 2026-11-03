@@ -3,7 +3,7 @@
 //
 // Everything is checked against tools/ai/golden/, the golden set the trainer
 // makes (python tools/ai/export.py golden; golden.json describes the files):
-//  - the compact record's 472-float expansion equals record.expanded.f32 bit
+//  - the compact record's 494-float expansion equals record.expanded.f32 bit
 //    for bit (the trainer's expand_np), and float16 decoding round-trips;
 //  - pilot.gbnn and critic.gbnn (mlp) and reader.gbnn (conv1d, same padding
 //    with dilation; one case shorter than its receptive field) give the
@@ -81,12 +81,14 @@ namespace {
         auto const state = readArray<float>("record.state.f32");
         auto const scan = readArray<uint8_t>("record.scan.u8");
         auto const tok = readArray<uint8_t>("record.tok.u8");
+        auto const geo = readArray<float>("record.geo.f32");
         auto const want = readArray<float>("record.expanded.f32");
         size_t const rows = state.size() / obs::kStateDim;
         CHECK(rows >= 8);
         CHECK(state.size() == rows * obs::kStateDim);
         CHECK(scan.size() == rows * obs::kScanDim);
         CHECK(tok.size() == rows * obs::kTokDim);
+        CHECK(geo.size() == rows * obs::kGeoDim);
         CHECK(want.size() == rows * obs::kObsDim);
         if (fails) return;
         int bad = 0;
@@ -96,6 +98,7 @@ namespace {
             std::memcpy(rec.state, &state[r * obs::kStateDim], sizeof(rec.state));
             std::memcpy(rec.scan, &scan[r * obs::kScanDim], sizeof(rec.scan));
             std::memcpy(rec.tok, &tok[r * obs::kTokDim], sizeof(rec.tok));
+            std::memcpy(rec.geo, &geo[r * obs::kGeoDim], sizeof(rec.geo));
             std::fill(got.begin(), got.end(), std::numeric_limits<float>::quiet_NaN());
             obs::expand(rec, got.data());
             for (int i = 0; i < obs::kObsDim; i++) {

@@ -1,8 +1,8 @@
 """The AI's three networks in PyTorch, for training only (contract v2 s7, GBNN v1).
 
-    Pilot   MLP, the 472-float expansion -> 256 -> 256 -> 1 logit "hold_logit":
+    Pilot   MLP, the 494-float expansion -> 256 -> 256 -> 1 logit "hold_logit":
             hold this tick if logit > 0 (ties release)
-    Critic  MLP, 472 -> 256 -> 256 -> 2 logits "alive_hold", "alive_release":
+    Critic  MLP, 494 -> 256 -> 256 -> 2 logits "alive_hold", "alive_release":
             still alive in 1 s if it holds now / if it releases now (logits, no
             sigmoid in the file: the mod compares them, never needs libm)
     Reader  conv1d stack over the level tape: per column [y_rel, 8 mode logits,
@@ -282,7 +282,7 @@ def as_batch(X, bi):
 def fit_rows(model, X, Y, W, settings, validate, out, signature, layout_hash, prog, log=print, near=None):
     """Trains an MLP on rows: the loop the pilot and the critic share.
 
-    X gbai.CompactRows [N] (expanded to 472 floats per batch, in torch) or a
+    X gbai.CompactRows [N] (expanded to 494 floats per batch, in torch) or a
     float array [N][n_in]; Y float32 [N][k] targets; W float32 [N][k] loss
     weights (0 where a row has no label for that output); the loss is binary
     cross-entropy on model.logits(x) [B][k], weighted, summed over k.

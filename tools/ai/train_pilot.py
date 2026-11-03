@@ -2,7 +2,7 @@
 
 Data: the human runs in AI_ROOT\\data (contract v2), all recorded with one
 layout (--layout-hash, or the only one there is). Each tick is read compact
-(state, scan, tokens: 368 bytes) into RAM and expanded to the 472 floats the
+(state, scan, tokens, geometry: 456 bytes) into RAM and expanded to the 494 floats the
 pilot sees per batch, in torch (gbai.expand_torch; the recorder's golden rows
 are checked bit for bit against the same expansion when a run loads). The
 held-out exam levels (tools/ai/heldout.json by level id, plus any manifest
@@ -125,7 +125,7 @@ def pick_rows(run, n, near, load_far_keep, seed):
 
 
 def assemble(runs, near_ticks, load_far_keep=1.0, seed=0):
-    """Every training tick in RAM, compact: X gbai.CompactRows [N] (368 bytes a tick), act uint8
+    """Every training tick in RAM, compact: X gbai.CompactRows [N] (456 bytes a tick), act uint8
     [N], the button going into each tick uint8 [N] (act[t-1]), near bool [N], a loss boost float32
     [N] (1/load_far_keep on the far ticks loaded, else 1); and how many values weren't finite.
     A press or release is where act differs from the button going in.

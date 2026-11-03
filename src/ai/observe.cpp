@@ -62,7 +62,7 @@ namespace gucci::ai::obs {
         // Every choice that changes what a value means goes in here, so a
         // change to any of them changes the hash.
         std::string layoutText() {
-            std::string s = "gbai-obs v2 2026-11-02 stageB;";
+            std::string s = "gbai-obs v3 2026-11-03 geo;";
             s += fmt::format("N={};state={};", kObsDim, kStateDim);
             for (auto const* n : kStateNames) s += std::string(n) + ",";
             s += fmt::format(";scan={}x4 cols from -1 block step 0.5, deadly-up,deadly-down,solid-up,solid-down, "
@@ -73,6 +73,11 @@ namespace gucci::ai::obs {
             for (auto const* n : kTokenNames) s += std::string(n) + ",";
             s += ";meta=";
             for (auto const* n : kMetaNames) s += std::string(n) + ",";
+            s += fmt::format(";geo={} at {}: rays from the center dx to first deadly then solid hitborder at heights "
+                             "-2..+2 step 0.5 gravity-relative, floor_under, floor_end_or_start_dx, ceiling_over, "
+                             "ceiling_end_or_start_dx; blocks 0..{} none {}; floor/ceiling within 6 blocks, chain "
+                             "band 0.5 block;",
+                             kGeoDim, kGeoOffset, kGeoReach, kGeoNone);
             return s;
         }
     }  // namespace
@@ -157,6 +162,15 @@ namespace gucci::ai::obs {
         auto meta = matjson::Value::array();
         for (auto const* n : kMetaNames) meta.push(n);
         layout["meta"] = meta;
+        auto geo = matjson::Value::object();
+        geo["offset"] = kGeoOffset;
+        geo["size"] = kGeoDim;
+        geo["ray_heights_blocks"] = std::vector<double>{-2.0, -1.5, -1.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0};
+        geo["slots"] = std::vector<std::string>{"deadly_ray[9]", "solid_ray[9]", "floor_under", "floor_dx",
+                                                "ceiling_over", "ceiling_dx"};
+        geo["unit"] = fmt::format("blocks from the player's center, 0..{}; {} = none within reach", kGeoReach,
+                                  kGeoNone);
+        layout["geo"] = geo;
         out["obs_layout"] = layout;
         return out;
     }
@@ -169,6 +183,27 @@ namespace gucci::ai::obs {
         constexpr float kMoverReach = 900.0f;   // a mover is looked for this far from where the level put it
         constexpr float kReach = 360.0f;        // 12 blocks
         constexpr float kInf = std::numeric_limits<float>::infinity();
+        constexpr float kRayReach = kGeoReach * kBlock;   // 20 blocks
+        constexpr float kSurfReach = 180.0f;               // a floor/ceiling is looked for within 6 blocks
+        constexpr float kSurfTouch = 2.0f;                 // a surface this far past the center still counts
+        constexpr float kSurfBand = 15.0f;                 // a floor/ceiling continues within half a block
+
+        // A convex polygon's x-range along the line y = yy (false: it misses it).
+        bool lineRange(std::array<float, 2> const* v, int n, float dx, float dy, float yy, float& lo, float& hi) {
+            lo = kInf;
+            hi = -kInf;
+            for (int i = 0; i < n; i++) {
+                float const x0 = v[i][0] + dx, y0 = v[i][1] + dy;
+                auto const& w = v[(i + 1) % n];
+                float const x1 = w[0] + dx, y1 = w[1] + dy;
+                if (y0 == yy) lo = std::min(lo, x0), hi = std::max(hi, x0);
+                if ((y0 < yy && y1 > yy) || (y0 > yy && y1 < yy)) {
+                    float const x = x0 + (x1 - x0) * (yy - y0) / (y1 - y0);
+                    lo = std::min(lo, x), hi = std::max(hi, x);
+                }
+            }
+            return lo <= hi;
+        }
 
         struct Reg {
             float x0, x1, y0, y1;
@@ -271,6 +306,17 @@ namespace gucci::ai::obs {
             uint8_t type;
         };
         std::vector<Cand> cands;
+        // geometry scratch (layout v3)
+        float rayDx[2][kRays];
+        float rayY[kRays];
+        struct Sol {
+            float x0, x1, lo, hi;  // x absolute; y relative to the player, gravity-relative (+ = up)
+            float pLo, pHi;        // the y-range over x = px (pLo > pHi: it doesn't cover px)
+            bool poly;
+        };
+        std::vector<Sol> sols;
+        std::vector<std::pair<float, float>> chain;
+        bool flipNow = false;
 
         int bucketOf(float x) const {
             return std::clamp((int)std::floor(x / kBucket), 0, (int)buckets.size() - 1);
@@ -450,6 +496,7 @@ namespace gucci::ai::obs {
 
         void apply(Reg const& r, float dx, float dy, float px, float py, float xa) {
             float const rx0 = r.x0 + dx, rx1 = r.x1 + dx;
+            geometry(r, dx, dy, px, py, rx0, rx1);
             int c0 = (int)std::floor((rx0 - xa) / kColumnWidth);
             int c1 = (int)std::floor((rx1 - xa) / kColumnWidth);
             if (c1 < 0 || c0 >= kColumns) return;
@@ -467,6 +514,76 @@ namespace gucci::ai::obs {
                 if (lo < py) down[k][c] = std::min(down[k][c], std::max(0.0f, py - hi));
             }
             (void)px;
+        }
+
+        // Layout v3: the rays and the floor/ceiling candidates from one region.
+        void geometry(Reg const& r, float dx, float dy, float px, float py, float rx0, float rx1) {
+            if (rx1 < px || rx0 > px + kRayReach) return;
+            float const ry0 = r.y0 + dy, ry1 = r.y1 + dy;
+            int const k = r.lethal ? 0 : 1;
+            for (int h = 0; h < kRays; h++) {
+                float const yy = rayY[h];
+                if (yy < ry0 || yy > ry1) continue;
+                float xl = rx0, xr = rx1;
+                if (r.nv && !lineRange(&verts[r.v], r.nv, dx, dy, yy, xl, xr)) continue;
+                if (xr < px) continue;
+                rayDx[k][h] = std::min(rayDx[k][h], std::max(0.0f, xl - px));
+            }
+            if (r.lethal) return;
+            float lo = ry0 - py, hi = ry1 - py;
+            if (flipNow) lo = py - ry1, hi = py - ry0;
+            if (hi < -kSurfReach || lo > kSurfReach) return;
+            Sol so{rx0, rx1, lo, hi, 1.0f, 0.0f, r.nv != 0};
+            if (rx0 <= px && rx1 >= px) {
+                float a = ry0, b = ry1;
+                if (!r.nv || slabRange(&verts[r.v], r.nv, dx, dy, px, px, a, b)) {
+                    so.pLo = flipNow ? py - b : a - py;
+                    so.pHi = flipNow ? py - a : b - py;
+                }
+            }
+            sols.push_back(so);
+        }
+
+        // The floor (below) or the ceiling (!below) of the player: whether
+        // there is one under/over it now (its surface within 6 blocks), and the
+        // dx (blocks) to where it ends or, with none, to where the next one starts.
+        void surface(bool below, float px, float& under, float& dxOut) {
+            // Mirrored for the ceiling, so "below" is the only case.
+            auto top = [&](Sol const& s) { return below ? s.hi : -s.lo; };
+            auto bot = [&](Sol const& s) { return below ? s.lo : -s.hi; };
+            float best = -kInf;
+            for (auto const& s : sols) {
+                if (s.pLo > s.pHi) continue;
+                float const t = below ? s.pHi : -s.pLo;
+                if (t <= kSurfTouch && t >= -kSurfReach) best = std::max(best, t);
+            }
+            float d = kInf;
+            if (best > -kInf) {
+                under = 1.0f;
+                chain.clear();
+                for (auto const& s : sols) {
+                    if (s.x1 <= px) continue;
+                    float const t = top(s), b = bot(s);
+                    bool const inBand = s.poly ? (t >= best - kSurfBand && b <= best + kSurfBand)
+                                             : (t >= best - kSurfBand && t <= best + kSurfBand);
+                    if (inBand) chain.push_back({s.x0, s.x1});
+                }
+                std::sort(chain.begin(), chain.end());
+                float cur = px;
+                for (auto const& [a, b] : chain) {
+                    if (a > cur + 0.5f) break;
+                    cur = std::max(cur, b);
+                }
+                d = cur - px;
+            } else {
+                under = 0.0f;
+                for (auto const& s : sols) {
+                    float const t = top(s);
+                    if (s.x0 > px && t <= kSurfTouch && t >= -kSurfReach) d = std::min(d, s.x0 - px);
+                }
+            }
+            d /= kBlock;
+            dxOut = d <= kGeoReach ? d : kGeoNone;
         }
 
         void visit(Config& c, uint32_t idx, float dx, float dy, float px, float py, float xa, float xb, bool flip) {
@@ -503,8 +620,16 @@ namespace gucci::ai::obs {
             for (int k = 0; k < 2; k++)
                 for (int c = 0; c < kColumns; c++) up[k][c] = down[k][c] = kInf;
             cands.clear();
+            sols.clear();
+            flipNow = flip;
+            for (int h = 0; h < kRays; h++) {
+                rayDx[0][h] = rayDx[1][h] = kInf;
+                float const rel = (-2.0f + 0.5f * (float)h) * kBlock;
+                rayY[h] = flip ? py - rel : py + rel;
+            }
             float const xa = px - kBlock;                         // column 0's left edge
-            float const xb = xa + kColumns * kColumnWidth;        // column 39's right edge
+            // Column 39's right edge, or as far as the rays reach (layout v3).
+            float const xb = std::max(xa + kColumns * kColumnWidth, px + kRayReach);
             if (++stamp == 0) {
                 std::fill(seen.begin(), seen.end(), 0);
                 stamp = 1;
@@ -560,6 +685,16 @@ namespace gucci::ai::obs {
                 regs.resize(r0);
                 verts.resize(v0);
             }
+
+            // The geometry block (layout v3).
+            for (int h = 0; h < kRays; h++) {
+                for (int k = 0; k < 2; k++) {
+                    float const d = rayDx[k][h] / kBlock;
+                    out.geo[k * kRays + h] = d <= kGeoReach ? d : kGeoNone;
+                }
+            }
+            surface(true, px, out.geo[2 * kRays + 0], out.geo[2 * kRays + 1]);
+            surface(false, px, out.geo[2 * kRays + 2], out.geo[2 * kRays + 3]);
 
             // The scan, gravity-relative.
             for (int c = 0; c < kColumns; c++) {

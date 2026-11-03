@@ -3,7 +3,7 @@ r"""GucciBot AI: the trainer's side of the files the mod writes (contract v2).
 The contract (CONTRACT.md, "AI pilot contract v2") fixes what the mod records
 under AI_ROOT and what the trainer gives back:
 
-    AI_ROOT\data\<run_id>.json + .state.f32 .scan.u8 .tok.u8 .act.u8 .meta.f32
+    AI_ROOT\data\<run_id>.json + .state.f32 .scan.u8 .tok.u8 .act.u8 .meta.f32 .geo.f32
                                   + .golden.f32 .golden.idx.i32       recorded runs (s3, s4)
     AI_ROOT\tapes\<level_id>.json + .tape.u8                       the level as columns (s5)
     AI_ROOT\practice\<level_id>\<attempt>.json + s3 arrays + .p.f32 .alive.i32
@@ -11,8 +11,9 @@ under AI_ROOT and what the trainer gives back:
     AI_ROOT\weights\<model>.gbnn                                   trained networks (s7)
     AI_ROOT\validation\<run_id>.json                              the real game's verdict (Python's)
 
-Each tick is stored compact (s3): 40 state floats, 160 scan bytes and 8
-tokens of 6 bytes, 368 bytes in all. Every network sees the same 472-float
+Each tick is stored compact (s3): 40 state floats, 160 scan bytes, 8
+tokens of 6 bytes and 22 geometry floats (layout v3), 456 bytes in all.
+Every network sees the same 494-float
 expansion of it (expand_np here, expand_torch for training batches), which
 must match the mod's C++ bit for bit: the recorder writes golden expanded
 rows next to every run, and loading a run checks them.
@@ -32,7 +33,7 @@ close() once copied.
     runs, problems = gbai.list_runs(root)    # human runs that passed the checks
     runs, layout_hash = gbai.pick_layout(runs)
     run = runs[0]
-    run.obs[:run.usable_ticks()]             # float32 [T][472], expanded as read
+    run.obs[:run.usable_ticks()]             # float32 [T][494], expanded as read
 
 From a shell:
 
@@ -83,8 +84,19 @@ TOKEN_BYTES = 6  # float16 dx, float16 dy, uint8 type, uint8 0
 TOK_DIM = TOKENS * TOKEN_BYTES
 TOKEN_TYPES = 32  # one-hot width; index 0 (empty) unused, types 1..31
 TOKEN_FLOATS = 2 + TOKEN_TYPES
-OBS_DIM = STATE_DIM + SCAN_DIM + TOKENS * TOKEN_FLOATS  # 472
+# Layout v3 (2026-11-03): exact distances. [0-8] dx (blocks) to the first deadly hitborder along a
+# horizontal ray from the player's center at heights -2..+2 blocks (step 0.5, gravity-relative); [9-17]
+# the same for solid; [18] floor under now (0/1), [19] dx to where it ends (none under: where the next
+# starts); [20] ceiling over now (0/1), [21] the same for it. dx 0..20, GEO_NONE = nothing within reach.
+RAYS = 9
+RAY_HEIGHTS = [-2.0, -1.5, -1.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0]
+GEO_DIM = 2 * RAYS + 4  # 22
+GEO_REACH = 20.0
+GEO_NONE = 20.5
+GEO_FLAGS = (2 * RAYS, 2 * RAYS + 2)  # the 0/1 slots
+OBS_DIM = STATE_DIM + SCAN_DIM + TOKENS * TOKEN_FLOATS + GEO_DIM  # 494
 STATE_OFFSET, SCAN_OFFSET, TOK_OFFSET = 0, STATE_DIM, STATE_DIM + SCAN_DIM
+GEO_OFFSET = TOK_OFFSET + TOKENS * TOKEN_FLOATS  # 472
 # Named state slots the trainer reads (s3).
 STATE_MODE0 = 0
 STATE_GRAVITY = 8
@@ -100,7 +112,7 @@ TOKEN_NAMES = {1: "yellow orb", 2: "pink orb", 3: "red orb", 4: "blue orb", 5: "
                30: "mirror portal", 31: "dual portal"}
 # The arrays of one run (s3, s4): extension, dtype, values per tick.
 RUN_ARRAYS = [(".state.f32", "<f4", STATE_DIM), (".scan.u8", "<u1", SCAN_DIM), (".tok.u8", "<u1", TOK_DIM),
-              (".act.u8", "<u1", 1), (".meta.f32", "<f4", len(META_FIELDS))]
+              (".act.u8", "<u1", 1), (".meta.f32", "<f4", len(META_FIELDS)), (".geo.f32", "<f4", GEO_DIM)]
 PRACTICE_ARRAYS = [(".p.f32", "<f4", 1), (".alive.i32", "<i4", 1)]
 
 HASH_RE = re.compile(r"^[0-9a-fA-F]{16}$")
@@ -215,7 +227,7 @@ def _check_layout_list(entries, total, what):
     return errors
 
 
-# ---- the per-tick record and its 472-float expansion (s3) ------------------------
+# ---- the per-tick record and its 494-float expansion (s3) ------------------------
 
 def obs_name(j):
     """What value j of the expansion is, for messages: 'state[18]', 'scan col 3 solid below', 'token 2 type 11'."""
@@ -225,16 +237,28 @@ def obs_name(j):
     if j < TOK_OFFSET:
         c, k = divmod(j - SCAN_OFFSET, 4)
         return f"scan col {c} " + ("deadly above", "deadly below", "solid above", "solid below")[k]
+    if j >= GEO_OFFSET:
+        g = j - GEO_OFFSET
+        if g < 2 * RAYS:
+            return f"geo {'deadly' if g < RAYS else 'solid'} ray {RAY_HEIGHTS[g % RAYS]:+g}"
+        return "geo " + ("floor_under", "floor_dx", "ceiling_over", "ceiling_dx")[g - 2 * RAYS]
     s, k = divmod(j - TOK_OFFSET, TOKEN_FLOATS)
     return f"token {s} " + ("dx" if k == 0 else "dy" if k == 1 else f"type {k - 2}")
 
 
-def expand_np(state, scan, tok):
-    """The 472 floats every network sees (s3), from compact rows, in numpy.
+def default_geo(n=None):
+    """A geometry block that sees nothing (rays and dx GEO_NONE, no floor or ceiling): synthetic data only."""
+    g = np.full(GEO_DIM, GEO_NONE, np.float32)
+    g[list(GEO_FLAGS)] = 0.0
+    return g if n is None else np.tile(g, (int(n), 1))
 
-    state float32 [n][40] (or [40]), scan uint8 [n][160], tok uint8 [n][48].
+
+def expand_np(state, scan, tok, geo):
+    """The 494 floats every network sees (s3), from compact rows, in numpy.
+
+    state float32 [n][40] (or [40]), scan uint8 [n][160], tok uint8 [n][48], geo float32 [n][22].
     [state as-is][scan: 255 -> 12.5, else v / 8][per token: dx, dy, one-hot(type, 32)
-    with index 0 unused]; a slot whose type is 0 (or outside 1..31) is all zeros.
+    with index 0 unused][geo as-is]; a token slot whose type is 0 (or outside 1..31) is all zeros.
     Bit for bit what the mod's C++ computes (the golden rows check it).
     """
     state = np.asarray(state, np.float32)
@@ -242,6 +266,7 @@ def expand_np(state, scan, tok):
     state = np.atleast_2d(state)
     scan = np.atleast_2d(np.asarray(scan, np.uint8))
     tok = np.atleast_2d(np.asarray(tok, np.uint8))
+    geo = np.atleast_2d(np.asarray(geo, np.float32))
     n = len(state)
     out = np.zeros((n, OBS_DIM), np.float32)
     out[:, :STATE_DIM] = state
@@ -256,13 +281,14 @@ def expand_np(state, scan, tok):
     block[:, :, :2] = np.where(valid[:, :, None], dxdy, np.float32(0.0))
     r, c = np.nonzero(valid)
     block[r, c, 2 + typ[r, c]] = 1.0
-    out[:, TOK_OFFSET:] = block.reshape(n, TOKENS * TOKEN_FLOATS)
+    out[:, TOK_OFFSET:GEO_OFFSET] = block.reshape(n, TOKENS * TOKEN_FLOATS)
+    out[:, GEO_OFFSET:] = geo
     return out[0] if single else out
 
 
-def expand_torch(state, scan, tok):
+def expand_torch(state, scan, tok, geo):
     """expand_np in torch, for training batches: state float32 [B][40], scan uint8 [B][160],
-    tok uint8 [B][48] tensors -> float32 [B][472], the same bits as expand_np."""
+    tok uint8 [B][48], geo float32 [B][22] tensors -> float32 [B][494], the same bits as expand_np."""
     import torch
     B = state.shape[0]
     s = scan.to(torch.float32) / 8.0
@@ -276,13 +302,13 @@ def expand_torch(state, scan, tok):
     onehot.scatter_(2, typ.clamp(0, TOKEN_TYPES - 1)[:, :, None], 1.0)
     onehot = onehot * valid[:, :, None].to(torch.float32)
     tokens = torch.cat([dxdy, onehot], 2).reshape(B, TOKENS * TOKEN_FLOATS)
-    return torch.cat([state.to(torch.float32), s, tokens], 1)
+    return torch.cat([state.to(torch.float32), s, tokens, geo.to(torch.float32)], 1)
 
 
-def clean_compact(state, tok):
-    """Values that aren't finite (state floats, token dx/dy) set to 0, in place; returns how many.
+def clean_compact(state, tok, geo):
+    """Values that aren't finite (state and geo floats, token dx/dy) set to 0, in place; returns how many.
     The expansion of the cleaned rows equals clean_rows() of the raw rows' expansion."""
-    bad = finite_rows(state)
+    bad = finite_rows(state) + finite_rows(geo)
     if not tok.flags.c_contiguous:
         raise ValueError("tok must be C-contiguous (cleaned in place)")
     f = tok.reshape(len(tok), TOKENS, TOKEN_BYTES)[:, :, :4].view("<f2")  # a view: writes reach tok
@@ -294,9 +320,9 @@ def clean_compact(state, tok):
 
 
 class CompactRows:
-    """Training rows kept compact in RAM (368 bytes a tick, not 472 floats = 1888), expanded per batch.
+    """Training rows kept compact in RAM (456 bytes a tick, not 494 floats = 1976), expanded per batch.
 
-    rows(idx) -> numpy float32 [n][472]; batch(idx) -> a torch tensor, the same bits.
+    rows(idx) -> numpy float32 [n][494]; batch(idx) -> a torch tensor, the same bits.
     Indexing (X[i], X[a:b], X[array]) is rows().
     """
 
@@ -306,40 +332,43 @@ class CompactRows:
             self.state = np.zeros((n, STATE_DIM), np.float32)
             self.scan = np.zeros((n, SCAN_DIM), np.uint8)
             self.tok = np.zeros((n, TOK_DIM), np.uint8)
+            self.geo = np.zeros((n, GEO_DIM), np.float32)
         except MemoryError:
             raise DataError(f"{n} ticks need {n * self.BYTES_PER_ROW / 2**30:.2f} GiB of free RAM, which isn't "
                             "there (close what's using it; OneDrive is often the biggest), or train on less "
                             "(--load-far-keep)")
 
-    BYTES_PER_ROW = STATE_DIM * 4 + SCAN_DIM + TOK_DIM
+    BYTES_PER_ROW = STATE_DIM * 4 + SCAN_DIM + TOK_DIM + GEO_DIM * 4
 
     def __len__(self):
         return len(self.state)
 
     @property
     def nbytes(self):
-        return self.state.nbytes + self.scan.nbytes + self.tok.nbytes
+        return self.state.nbytes + self.scan.nbytes + self.tok.nbytes + self.geo.nbytes
 
     def put(self, dest, run, rows):
         """Copies a run's rows (a slice or index array) to dest (slice or index array)."""
         self.state[dest] = run.state[rows]
         self.scan[dest] = run.scan[rows]
         self.tok[dest] = run.tok[rows]
+        self.geo[dest] = run.geo[rows]
 
     def clean(self, chunk=65536):
         bad = 0
         for a in range(0, len(self), chunk):
-            bad += clean_compact(self.state[a:a + chunk], self.tok[a:a + chunk])
+            bad += clean_compact(self.state[a:a + chunk], self.tok[a:a + chunk], self.geo[a:a + chunk])
         return bad
 
     def rows(self, idx):
-        return expand_np(self.state[idx], self.scan[idx], self.tok[idx])
+        return expand_np(self.state[idx], self.scan[idx], self.tok[idx], self.geo[idx])
 
     def batch(self, idx):
         import torch
         return expand_torch(torch.from_numpy(np.ascontiguousarray(self.state[idx])),
                             torch.from_numpy(np.ascontiguousarray(self.scan[idx])),
-                            torch.from_numpy(np.ascontiguousarray(self.tok[idx])))
+                            torch.from_numpy(np.ascontiguousarray(self.tok[idx])),
+                            torch.from_numpy(np.ascontiguousarray(self.geo[idx])))
 
     def __getitem__(self, idx):
         return self.rows(idx)
@@ -361,7 +390,7 @@ class ObsView:
 
     def __getitem__(self, idx):
         r = self.run
-        return clean_rows(expand_np(r.state[idx], r.scan[idx], r.tok[idx]))
+        return clean_rows(expand_np(r.state[idx], r.scan[idx], r.tok[idx], r.geo[idx]))
 
 
 # ---- recorded runs and practice attempts (s4, s6) ------------------------------
@@ -420,6 +449,7 @@ class Run:
     state = property(lambda self: self._arr(".state.f32", "<f4", STATE_DIM))
     scan = property(lambda self: self._arr(".scan.u8", "<u1", SCAN_DIM))
     tok = property(lambda self: self._arr(".tok.u8", "<u1", TOK_DIM))
+    geo = property(lambda self: self._arr(".geo.f32", "<f4", GEO_DIM))
     act = property(lambda self: self._arr(".act.u8", "<u1", 1))
     meta = property(lambda self: self._arr(".meta.f32", "<f4", len(META_FIELDS)))
     p = property(lambda self: self._arr(".p.f32", "<f4", 1))
@@ -625,7 +655,7 @@ def _row(path, dtype, width, t):
 def check_golden(run):
     """The recorder's golden rows (s3) against expand_np of the same ticks: a list of errors.
 
-    .golden.idx.i32 [G] ticks, .golden.f32 [G][472] the mod's expansion of them.
+    .golden.idx.i32 [G] ticks, .golden.f32 [G][494] the mod's expansion of them.
     They must match bit for bit (a -0.0 vs 0.0 or a NaN payload counts). Reads
     only the G rows it needs.
     """
@@ -650,7 +680,7 @@ def check_golden(run):
         return [f"golden.idx.i32 names ticks outside the run: {bad_idx[:5].tolist()}"]
     for g, t in enumerate(idx):
         got = expand_np(_row(base + ".state.f32", "<f4", STATE_DIM, t), _row(base + ".scan.u8", "<u1", SCAN_DIM, t),
-                        _row(base + ".tok.u8", "<u1", TOK_DIM, t))
+                        _row(base + ".tok.u8", "<u1", TOK_DIM, t), _row(base + ".geo.f32", "<f4", GEO_DIM, t))
         diff = np.flatnonzero(got.view(np.uint32) != want[g].view(np.uint32))
         if len(diff):
             j = int(diff[0])
@@ -719,6 +749,14 @@ def _deep_check(run, practice):
     f = np.ascontiguousarray(t[:, :, :4]).view("<f2")
     if not np.isfinite(f).all():
         errors.append("a token dx/dy isn't finite")
+    geo = run.geo
+    dist = np.delete(geo, list(GEO_FLAGS), axis=1)
+    if not np.isfinite(geo).all():
+        errors.append("a geometry value isn't finite")
+    elif ((dist < 0) | ((dist > GEO_REACH) & (dist != np.float32(GEO_NONE)))).any():
+        errors.append(f"a geometry distance is outside 0..{GEO_REACH:g} and {GEO_NONE:g}")
+    elif not np.isin(geo[:, list(GEO_FLAGS)], (0.0, 1.0)).all():
+        errors.append("a geometry floor/ceiling flag is not 0 or 1")
     held = state[:, STATE_HELD]
     want = before(run.act).astype(np.float32)
     if run.first_tick > 0 and len(want):
@@ -958,7 +996,7 @@ def _refuse_real_root(folder):
                            "data\\, tapes\\ and practice\\")
 
 
-def write_run(folder, run_id, header, state, scan, tok, act, meta, p=None, alive=None, golden_idx=None):
+def write_run(folder, run_id, header, state, scan, tok, act, meta, p=None, alive=None, golden_idx=None, geo=None):
     """Writes one run (s4) or practice attempt (s6, with p and alive) in the contract's format,
     plus golden rows for the ticks in golden_idx (expanded here, as the recorder would).
 
@@ -973,13 +1011,17 @@ def write_run(folder, run_id, header, state, scan, tok, act, meta, p=None, alive
     np.ascontiguousarray(tok, "<u1").tofile(base + ".tok.u8")
     np.ascontiguousarray(act, "<u1").tofile(base + ".act.u8")
     np.ascontiguousarray(meta, "<f4").tofile(base + ".meta.f32")
+    if geo is None:
+        geo = default_geo(len(np.asarray(act)))
+    np.ascontiguousarray(geo, "<f4").tofile(base + ".geo.f32")
     if p is not None:
         np.ascontiguousarray(p, "<f4").tofile(base + ".p.f32")
     if alive is not None:
         np.ascontiguousarray(alive, "<i4").tofile(base + ".alive.i32")
     if golden_idx is not None:
         gi = np.asarray(golden_idx, np.int64)
-        rows = expand_np(np.asarray(state)[gi], np.asarray(scan)[gi], np.asarray(tok)[gi]) if len(gi) else \
+        rows = expand_np(np.asarray(state)[gi], np.asarray(scan)[gi], np.asarray(tok)[gi],
+                         np.asarray(geo)[gi]) if len(gi) else \
             np.zeros((0, OBS_DIM), np.float32)
         np.ascontiguousarray(gi, "<i4").tofile(base + ".golden.idx.i32")
         np.ascontiguousarray(rows, "<f4").tofile(base + ".golden.f32")

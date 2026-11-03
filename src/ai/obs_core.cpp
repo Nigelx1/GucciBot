@@ -84,6 +84,7 @@ namespace gucci::ai::obs {
             slot[1] = fromHalf(dy);
             slot[2 + type] = 1.0f;
         }
+        std::memcpy(out + kGeoOffset, r.geo, sizeof(r.geo));
     }
 
 } // namespace gucci::ai::obs

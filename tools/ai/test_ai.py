@@ -386,11 +386,15 @@ def random_compact(rng, n):
     tok[:, :, :4] = dxdy.astype("<f2").view(np.uint8).reshape(n, gbai.TOKENS, 4)
     tok[:, :, 4] = rng.integers(1, gbai.TOKEN_TYPES, (n, gbai.TOKENS))
     tok[~used] = 0
-    return state, scan, tok.reshape(n, gbai.TOK_DIM)
+    geo = rng.uniform(0, gbai.GEO_REACH, (n, gbai.GEO_DIM)).astype(np.float32)
+    geo[rng.random((n, gbai.GEO_DIM)) < 0.3] = np.float32(gbai.GEO_NONE)
+    geo[:, list(gbai.GEO_FLAGS)] = rng.integers(0, 2, (n, 2))
+    geo[0, 0] = np.float32(-0.0)
+    return state, scan, tok.reshape(n, gbai.TOK_DIM), geo
 
 
 class ExpansionTests(unittest.TestCase):
-    """The 472-float expansion (contract s3): numpy, torch and the hand-written rule agree bit for bit."""
+    """The 494-float expansion (contract s3, layout v3): numpy, torch and the hand-written rule agree bit for bit."""
 
     def test_layout_by_hand(self):
         state = np.arange(gbai.STATE_DIM, dtype=np.float32)
@@ -401,9 +405,11 @@ class ExpansionTests(unittest.TestCase):
         tok[0, 4] = 11
         tok[1, :4] = np.array([19.75, 0.5], "<f2").view(np.uint8)
         tok[1, 4] = 31
-        x = gbai.expand_np(state, scan, tok.reshape(-1))
-        self.assertEqual(x.shape, (472,))
-        self.assertEqual(gbai.OBS_DIM, 472)
+        geo = np.arange(gbai.GEO_DIM, dtype=np.float32) / 4
+        x = gbai.expand_np(state, scan, tok.reshape(-1), geo)
+        self.assertEqual(x.shape, (494,))
+        self.assertEqual(gbai.OBS_DIM, 494)
+        self.assertEqual(gbai.GEO_OFFSET, 472)
         np.testing.assert_array_equal(x[:40], state)
         np.testing.assert_array_equal(x[40:44], [0.0, 0.125, 11.875, 12.0])
         self.assertTrue((x[44:200] == 12.5).all())
@@ -412,7 +418,11 @@ class ExpansionTests(unittest.TestCase):
         self.assertEqual(x[202:234].sum(), 1.0)
         self.assertEqual(list(x[234:236]), [19.75, 0.5])
         self.assertEqual(int(np.flatnonzero(x[236:268])[0]), 31)
-        self.assertTrue((x[268:] == 0).all())  # six empty slots
+        self.assertTrue((x[268:472] == 0).all())  # six empty slots
+        np.testing.assert_array_equal(x[472:], geo)
+        self.assertEqual(gbai.obs_name(472), "geo deadly ray -2")
+        self.assertEqual(gbai.obs_name(472 + 13), "geo solid ray +0")
+        self.assertEqual(gbai.obs_name(472 + 19), "geo floor_dx")
         self.assertEqual(gbai.obs_name(18), "state[18]")
         self.assertEqual(gbai.obs_name(41), "scan col 0 deadly below")
         self.assertEqual(gbai.obs_name(200 + 34 + 2 + 31), "token 1 type 31")
@@ -420,17 +430,18 @@ class ExpansionTests(unittest.TestCase):
     def test_numpy_and_torch_match_bit_for_bit(self):
         import torch
         rng = np.random.default_rng(5)
-        state, scan, tok = random_compact(rng, 3000)
-        a = gbai.expand_np(state, scan, tok)
-        b = gbai.expand_torch(torch.from_numpy(state), torch.from_numpy(scan), torch.from_numpy(tok)).numpy()
+        state, scan, tok, geo = random_compact(rng, 3000)
+        a = gbai.expand_np(state, scan, tok, geo)
+        b = gbai.expand_torch(torch.from_numpy(state), torch.from_numpy(scan), torch.from_numpy(tok),
+                              torch.from_numpy(geo)).numpy()
         self.assertTrue(np.array_equal(a.view(np.uint32), b.view(np.uint32)))
         self.assertEqual(a[0, 0].view(np.uint32), np.float32(-0.0).view(np.uint32))
         rows = gbai.CompactRows(3000)
-        rows.state[:], rows.scan[:], rows.tok[:] = state, scan, tok
+        rows.state[:], rows.scan[:], rows.tok[:], rows.geo[:] = state, scan, tok, geo
         idx = np.array([5, 17, 2999])
         self.assertTrue(np.array_equal(rows.batch(idx).numpy().view(np.uint32), a[idx].view(np.uint32)))
         self.assertTrue(np.array_equal(rows[idx], a[idx]))
-        self.assertEqual(rows.BYTES_PER_ROW, 368)
+        self.assertEqual(rows.BYTES_PER_ROW, 456)
 
     def test_empty_or_bad_slot_is_all_zeros(self):
         """A slot with type 0 (or a type outside 1..31) expands to zeros, whatever its other bytes hold."""
@@ -442,22 +453,25 @@ class ExpansionTests(unittest.TestCase):
         tok[0, 1, :4] = np.array([np.inf, 1.0], "<f2").view(np.uint8)
         tok[0, 1, 4] = 40  # no such type
         tok = tok.reshape(1, -1)
-        a = gbai.expand_np(state, scan, tok)
-        b = gbai.expand_torch(torch.from_numpy(state), torch.from_numpy(scan), torch.from_numpy(tok)).numpy()
+        geo = np.zeros((1, gbai.GEO_DIM), np.float32)
+        a = gbai.expand_np(state, scan, tok, geo)
+        b = gbai.expand_torch(torch.from_numpy(state), torch.from_numpy(scan), torch.from_numpy(tok),
+                              torch.from_numpy(geo)).numpy()
         self.assertTrue((a[0, 200:] == 0).all())
         self.assertTrue(np.array_equal(a, b))
 
     def test_cleaning_compact_rows_equals_cleaning_expanded_rows(self):
         rng = np.random.default_rng(6)
-        state, scan, tok = random_compact(rng, 50)
+        state, scan, tok, geo = random_compact(rng, 50)
         state[3, 7], state[4, 15] = np.inf, np.nan
+        geo[6, 2] = np.nan
         t = tok.reshape(50, gbai.TOKENS, gbai.TOKEN_BYTES)
         t[5, 0, :4] = np.array([np.inf, -np.inf], "<f2").view(np.uint8)
         t[5, 0, 4] = 3
-        want = gbai.clean_rows(gbai.expand_np(state, scan, tok))
+        want = gbai.clean_rows(gbai.expand_np(state, scan, tok, geo))
         rows = gbai.CompactRows(50)
-        rows.state[:], rows.scan[:], rows.tok[:] = state, scan, tok
-        self.assertEqual(rows.clean(), 4)
+        rows.state[:], rows.scan[:], rows.tok[:], rows.geo[:] = state, scan, tok, geo
+        self.assertEqual(rows.clean(), 5)
         self.assertTrue(np.array_equal(rows[np.arange(50)], want))
 
 
@@ -630,7 +644,7 @@ class ForwardTests(unittest.TestCase):
             t[2, 0, 4] = GAP_TOKEN
             write_arrays(os.path.join(root, "data"), "9__broken", run_header(9, "B", 300, TPS, arrays[4]), arrays)
             run = gbai.list_runs(root)[0][0]
-            clean = gbai.clean_rows(gbai.expand_np(arrays[0][:6], arrays[1][:6], arrays[2][:6]))
+            clean = gbai.clean_rows(gbai.expand_np(arrays[0][:6], arrays[1][:6], arrays[2][:6], gbai.default_geo(6)))
             want = export.forward(net, clean)[:, 0]
             np.testing.assert_allclose(evaluate.pilot_logits(net, run.obs[:6]), want, atol=1e-5)
             np.testing.assert_allclose(train_pilot.predict_logits(model, run.obs[:6]), want, atol=1e-5)

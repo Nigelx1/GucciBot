@@ -2,7 +2,7 @@
 holds now, and if it releases now.
 
 Data: the practice attempts in AI_ROOT\\practice\\<level_id>\\ (contract v2 s6),
-all with one layout; rows are kept compact in RAM and expanded to the 472
+all with one layout; rows are kept compact in RAM and expanded to the 494
 floats per batch, like the pilot's. Each tick t of an attempt labels ONE head, the
 action it took: act[t] = 1 -> alive_hold, 0 -> alive_release; the label is
 alive[t] >= H (H = round(1.0 * tps): it was still alive H ticks later, or
@@ -111,7 +111,7 @@ def assemble(attempts, pair_weight, log=print):
         by_name[(a.level_id, a.run_id)] = (a, idx)
         total += n
         a.close()
-    # In RAM like the pilot's rows (368 bytes a row). Practice logs grow with every play
+    # In RAM like the pilot's rows (456 bytes a row). Practice logs grow with every play
     # session, so this is the trainer that will outgrow RAM first.
     X = gbai.CompactRows(total)
     Y = np.zeros((total, 2), np.float32)
