@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-02-m (AI pilot stage C: the networks run in the mod - GBNN loader with layout-hash check, dense and dilated conv1d forward with no fused multiply-add, and an offline test against the trainer golden set)"
+    "2026-11-02-n (AI pilot stage D: the pilot plays and practices - play loop, snapshot ring, mistake finder, escalation, death sentences, practice logs, saved macro checked by the judge; gucci_ai_play and gucci_ai_reload; Pathfinder engine AI or Search (old))"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
