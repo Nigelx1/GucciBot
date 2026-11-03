@@ -24,6 +24,8 @@
 #include <string>
 
 class GJBaseGameLayer;
+class GameObject;
+class PlayerObject;
 
 namespace gucci::ai::sim {
 
@@ -43,6 +45,7 @@ namespace gucci::ai::sim {
         bool dashing = false;
         bool goingLeft = false;
         bool held = false;         // the jump button after this tick's input
+        bool button = false;       // the copy's own m_holdingButtons[jump] (what GD applied)
         bool touchingOrb = false;  // a press on the next tick fires an orb
         float speed = 0.0f;        // m_playerSpeed (0.7 0.9 1.1 1.3 1.6)
         float vehicleSize = 1.0f;
@@ -105,5 +108,16 @@ namespace gucci::ai::sim {
     void suspend();
     void resume();
     void end();
+
+    // Stage B (what the pilot sees). Valid while the session is open and not
+    // suspended. The copy of player i (0, or 1 in dual), or null.
+    PlayerObject* copy(int i);
+    // Where an object the level's triggers can move or toggle stands in the
+    // session right now (the World's log, the slot of world::WorldDef), and
+    // whether it is toggled off. False when the session doesn't run the
+    // World's objects (the object's own fields are then as good as it gets).
+    bool objectPose(int slot, double& x, double& y, bool& disabled);
+    // Player 1's copy has used this orb, pad or portal in this session.
+    bool copyActivated(GameObject* object);
 
 } // namespace gucci::ai::sim

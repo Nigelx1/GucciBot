@@ -5347,6 +5347,10 @@ struct Trajectory::EpisodeOps {
         out.dashing = p->m_isDashing;
         out.goingLeft = p->m_isGoingLeft;
         out.held = held;
+        {
+            auto it = p->m_holdingButtons.find(static_cast<int>(PlayerButton::Jump));
+            out.button = it != p->m_holdingButtons.end() && it->second;
+        }
         out.touchingOrb = p->m_touchingRings && p->m_touchingRings->count() > 0;
         out.speed = p->m_playerSpeed;
         out.vehicleSize = p->m_vehicleSize;
@@ -5433,6 +5437,28 @@ struct Trajectory::EpisodeOps {
         t->m_delta = Bot::get()->updater().getPhysicsDt() * std::min(pl->m_gameState.m_timeWarp, 1.0f) * 60.0f;
         t->m_killer = ep->killer;
         ep->suspended = false;
+    }
+
+    static PlayerObject* copy(Trajectory* t, int i) {
+        Episode* ep = t->m_episode;
+        if (!ep || ep->suspended || i < 0 || i >= ep->s.count) return nullptr;
+        return ep->s.players[i];
+    }
+
+    static bool objectPose(Trajectory* t, int slot, double& x, double& y, bool& disabled) {
+        Episode* ep = t->m_episode;
+        if (!ep || ep->suspended || !ep->s.worldObjects) return false;
+        const world::Pose& p = ep->s.cache.pose(ep->s.log, slot);
+        x = p.x;
+        y = p.y;
+        disabled = p.disabled;
+        return true;
+    }
+
+    static bool copyActivated(Trajectory* t, GameObject* object) {
+        Episode* ep = t->m_episode;
+        if (!ep || ep->suspended || !ep->s.players[0] || !object) return false;
+        return t->playerHasActivated(ep->s.players[0], static_cast<EnhancedGameObject*>(object));
     }
 
     static void end(Trajectory* t) {
@@ -5548,6 +5574,21 @@ namespace gucci::ai::sim {
 
     void end() {
         if (Trajectory* t = traj()) Trajectory::EpisodeOps::end(t);
+    }
+
+    PlayerObject* copy(int i) {
+        Trajectory* t = traj();
+        return t ? Trajectory::EpisodeOps::copy(t, i) : nullptr;
+    }
+
+    bool objectPose(int slot, double& x, double& y, bool& disabled) {
+        Trajectory* t = traj();
+        return t && Trajectory::EpisodeOps::objectPose(t, slot, x, y, disabled);
+    }
+
+    bool copyActivated(GameObject* object) {
+        Trajectory* t = traj();
+        return t && Trajectory::EpisodeOps::copyActivated(t, object);
     }
 
 }  // namespace gucci::ai::sim
