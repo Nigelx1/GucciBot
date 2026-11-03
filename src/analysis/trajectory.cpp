@@ -137,7 +137,10 @@ namespace gucci {
         auto* pl = PlayLayer::get();
         // Nothing made yet, nothing to keep fresh. Absense's pathfinder keeps
         // its own copies fresh while it runs.
+        // Nor while the AI pilot's session has them (src/ai/sim.hpp).
         if (!pl || !copies().exists() || ::Bot::get()->pathfinder().drivesGame())
+            return;
+        if (auto* t = copies().unsafeInner(); t && t->episodeOpen())
             return;
         sync(pl, true);
     }
@@ -160,7 +163,9 @@ namespace gucci {
             copies().init();
         }
         auto* t = copies().unsafeInner();
-        if (!t || t->searching() || t->legActive() || t->usingStart() || t->drawing() || t->simulating())
+        // (episodeOpen: the AI pilot's session, src/ai/sim.hpp, has the copies.)
+        if (!t || t->searching() || t->legActive() || t->usingStart() || t->drawing() || t->simulating() ||
+            t->episodeOpen())
             return false;
         sync(pl, false);
         return true;

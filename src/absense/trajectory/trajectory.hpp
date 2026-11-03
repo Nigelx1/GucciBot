@@ -235,11 +235,13 @@ class Trajectory {
 
     // A scripted run of the copies (one player, or both in dual mode):
     // set-up, one tick with an input, snapshots so a branch can be undone.
-    struct SimSnapshot;
     struct Sim;
     struct SearchState;
     struct GhostState;
    public:
+    // Declared public (2026-11-02) so the AI pilot's session (src/ai/sim.hpp)
+    // can hold one; it is only defined in trajectory.cpp.
+    struct SimSnapshot;
     struct SimStart;  // see captureStart
     // Step R0 of AI_PATHFINDER_PLAN.md: what a simulated tick and a snapshot
     // cost, timed from the real player's state. Nothing in the game changes.
@@ -457,7 +459,22 @@ class Trajectory {
     bool ghosting() const { return m_ghost != nullptr; }
     GhostReport ghostSoFar() const;  // how far the ghost out now has got
     void dropGhost();
+
+    // GucciBot (2026-11-02, AI pilot stage A): one run of the copies kept open
+    // tick by tick for the AI - begin, step a tick with the button as the AI
+    // wants it, snapshot and restore, read both players, end - spanning frames
+    // the way a search's slices do. Its public face is src/ai/sim.hpp; the
+    // AI never goes through the searches above. While one is open the copies
+    // are its (the ghost waits, the drawn prediction and the preview stand down).
+    struct Episode;  // defined in trajectory.cpp
+    struct EpisodeOps;  // ... and what src/ai/sim.hpp's functions do with it
+    Episode* episode() { return m_episode; }
+    bool episodeOpen() const { return m_episode != nullptr; }
+    // The level is being torn down: the episode is let go of without putting
+    // anything back (between slices everything already is).
+    void dropEpisode();
    private:
+    Episode* m_episode = nullptr;
     SearchState* m_search = nullptr;  // a search in progress (beginSearch)
     GhostState* m_ghost = nullptr;    // a ghost run in progress (beginGhost)
     struct LegState;
@@ -1373,6 +1390,7 @@ class TrajectoryManager {
 
     void uninit() {
         moverCacheInvalidate();
+        if (m_trajectory) m_trajectory->dropEpisode();  // the AI pilot's session (src/ai/sim.hpp)
         delete m_trajectory;
         m_trajectory = nullptr;
     }

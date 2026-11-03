@@ -26,6 +26,8 @@
 #include "absense/world/ledger.hpp"
 #include "absense/world/offsets.hpp"
 #include "absense/world/materialize.hpp"
+#include "absense/glue.hpp"
+#include "ai/sim.hpp"
 
 #ifdef ABSENSE_PROTECT
 // #include "VMProtect/VMProtectSDK.h"  (not used in GucciBot)
@@ -5070,7 +5072,7 @@ bool Trajectory::beginGhost(GJBaseGameLayer* pl, std::vector<std::pair<float, fl
                             GhostReport& refused) {
     dropGhost();
     refused = GhostReport{};
-    if (m_search || m_leg || m_simulating || m_drawing) {
+    if (m_search || m_leg || m_simulating || m_drawing || m_episode) {
         refused.why = "the simulation is busy";
         return false;
     }
@@ -5134,7 +5136,8 @@ bool Trajectory::beginGhost(GJBaseGameLayer* pl, std::vector<std::pair<float, fl
 bool Trajectory::stepGhost(std::chrono::steady_clock::time_point until) {
     GhostState* st = m_ghost;
     if (!st || st->over) return true;
-    if (m_simulating || m_drawing) return false;  // never inside somebody else's run
+    // Never inside somebody else's run, nor while the AI's session has the copies.
+    if (m_simulating || m_drawing || m_episode) return false;
     using Clock = std::chrono::steady_clock;
     const auto started = Clock::now();
     const Killer keptKiller = m_killer;
@@ -5226,6 +5229,328 @@ Trajectory::GhostReport Trajectory::finishGhost() {
     dropGhost();
     return out;
 }
+
+// ------------------------------------------------ the AI pilot's session (src/ai/sim.hpp)
+
+// GucciBot (2026-11-02, AI pilot stage A): one Sim kept open across frames for
+// the AI, tick by tick. Built like the ghost (its slices, its pause), with a
+// public step, snapshot and restore. Nothing of the searches is used: the
+// phantom list is emptied when a session begins (only the search fills it)
+// and distrusted killers are not skipped for the copies while one is open
+// (hook_playlayer.cpp destroyPlayer).
+struct Trajectory::Episode {
+    Sim s;
+    std::shared_ptr<SimStart> start;  // in use (useStart) for the session's life
+    SimSnapshot resume;               // the state at the end of the last slice
+    bool suspended = false;
+    bool dead = false;
+    bool deadP2 = false;
+    int fired = 0;
+    bool ring = false;
+    Killer killer;      // the session's own, kept while the real game has the copies
+    Killer keptKiller;  // the one from before the slice, put back after it
+    uint64_t keptRand = 0;
+};
+
+namespace gucci::ai::sim {
+    struct Start {
+        std::shared_ptr<Trajectory::SimStart> sim;
+        int frame = 0;
+        float x = 0.0f;
+    };
+    struct Snapshot {
+        Trajectory::SimSnapshot snap;
+        bool dead = false;
+        bool deadP2 = false;
+    };
+}  // namespace gucci::ai::sim
+
+void Trajectory::dropEpisode() {
+    delete m_episode;
+    m_episode = nullptr;
+}
+
+// What the free functions of src/ai/sim.hpp do, with Trajectory's private
+// parts in reach.
+struct Trajectory::EpisodeOps {
+    static bool begin(Trajectory* t, GJBaseGameLayer* pl, std::shared_ptr<SimStart> from, std::string& why) {
+        if (t->m_episode) {
+            why = "an AI session is already open";
+            return false;
+        }
+        if (t->m_search || t->m_leg || t->m_simulating || t->m_drawing) {
+            why = "the simulation is busy (a search or another run has the copies)";
+            return false;
+        }
+        if (!pl || !pl->m_objects || !pl->m_player1 || !t->m_fakePlayer1 || !t->m_fakePlayer2 ||
+            pl->m_loadingProgress < 1.0f) {
+            why = "no level";
+            return false;
+        }
+        if (!from && (pl->m_player1->m_isDead || pl->m_playerDied)) {
+            why = "the player is dead";
+            return false;
+        }
+        auto* ep = new Episode();
+        ep->keptKiller = t->m_killer;
+        ep->keptRand = t->m_teleportRand;
+        t->clearPhantoms();  // the search's verdicts: never read by the AI
+        bool down = false;
+        if (from) {
+            t->useStart(from);
+            ep->start = from;
+            down = startHeld(*from);
+        } else {
+            auto it = pl->m_player1->m_holdingButtons.find(static_cast<int>(PlayerButton::Jump));
+            down = it != pl->m_player1->m_holdingButtons.end() && it->second;
+        }
+        if (!ep->s.begin(t, pl, true, down)) {
+            if (from) t->useStart(nullptr);
+            t->m_killer = ep->keptKiller;
+            t->m_teleportRand = ep->keptRand;
+            delete ep;
+            why = "the simulation could not start here";
+            return false;
+        }
+        t->clearKiller();
+        t->m_episode = ep;
+        return true;
+    }
+
+    static bool isSuspended(Trajectory* t) { return t->m_episode && t->m_episode->suspended; }
+
+    static bool step(Trajectory* t, TickInput in) {
+        Episode* ep = t->m_episode;
+        if (!ep || ep->suspended) return true;
+        const uint64_t ringsBefore = t->m_ringsUsed;
+        t->forgetFired();
+        const bool over = ep->s.step(in);
+        ep->fired = t->firedThisTick(ep->s.players[0]);
+        ep->ring = t->m_ringsUsed != ringsBefore;
+        ep->dead = over;
+        ep->deadP2 = over && ep->s.deadPlayer2();
+        return over;
+    }
+
+    static void readPlayer(PlayerObject* p, bool held, gucci::ai::sim::Player& out) {
+        const cocos2d::CCPoint pos = p->getPosition();
+        out.x = pos.x;
+        out.y = pos.y;
+        out.yVel = static_cast<float>(p->m_yVelocity);
+        out.xVel = static_cast<float>(p->m_platformerXVelocity);
+        out.rotation = p->getRotation();
+        out.mode = modeOf(p);
+        out.upsideDown = p->m_isUpsideDown;
+        out.mini = p->m_vehicleSize != 1.0f;
+        out.onGround = p->m_isOnGround;
+        out.onSlope = p->m_isOnSlope;
+        out.dashing = p->m_isDashing;
+        out.goingLeft = p->m_isGoingLeft;
+        out.held = held;
+        out.touchingOrb = p->m_touchingRings && p->m_touchingRings->count() > 0;
+        out.speed = p->m_playerSpeed;
+        out.vehicleSize = p->m_vehicleSize;
+        out.gravityMod = static_cast<float>(p->m_gravityMod);
+    }
+
+    static void read(Trajectory* t, gucci::ai::sim::State& out) {
+        out = gucci::ai::sim::State{};
+        Episode* ep = t->m_episode;
+        if (!ep) return;
+        Sim& s = ep->s;
+        out.tick = s.ticks;
+        out.startFrame = s.realTickBase;
+        out.count = s.count;
+        out.levelLength = s.levelEnd;
+        if (!ep->suspended && s.players[0]) {
+            readPlayer(s.players[0], s.down, out.p[0]);
+            if (s.count == 2 && s.players[1]) readPlayer(s.players[1], s.separate ? s.downOther : s.down, out.p[1]);
+            // The level's length, or an end trigger (3600) the World fired:
+            // Sim::complete alone does not see the trigger (SIM_API.md 2.5).
+            out.complete = s.complete() || (s.worldOn && s.ws.levelEnd);
+        }
+        out.dead = ep->dead;
+        out.deadP2 = ep->deadP2;
+        out.fired = ep->fired;
+        out.ring = ep->ring;
+        const Killer& k = ep->suspended ? ep->killer : t->m_killer;
+        if (ep->dead && k.valid) {
+            out.killerId = k.id;
+            out.killerUid = k.uid;
+            out.killerX = k.x;
+            out.killerY = k.y;
+            out.voidDeath = k.voidDeath;
+        }
+    }
+
+    static void save(Trajectory* t, gucci::ai::sim::Snapshot& out) {
+        Episode* ep = t->m_episode;
+        if (!ep || ep->suspended) return;
+        ep->s.snapshot(out.snap);
+        out.dead = ep->dead;
+        out.deadP2 = ep->deadP2;
+    }
+
+    static void restore(Trajectory* t, gucci::ai::sim::Snapshot& in) {
+        Episode* ep = t->m_episode;
+        if (!ep || ep->suspended) return;
+        ep->s.restore(in.snap);
+        ep->dead = in.dead;
+        ep->deadP2 = in.deadP2;
+        ep->fired = 0;
+        ep->ring = false;
+        t->clearKiller();
+    }
+
+    // As the ghost's pause: the real game ticks (or draws) before the next slice.
+    static void suspend(Trajectory* t) {
+        Episode* ep = t->m_episode;
+        if (!ep || ep->suspended) return;
+        Sim& s = ep->s;
+        s.snapshot(ep->resume);
+        s.objects.restoreWritten();
+        s.mv.suspend();
+        gucci::gdAssign(s.pl->m_gameState, s.savedState);
+        for (int i = 0; i < s.count; i++) s.players[i]->setVisible(false);
+        ep->killer = t->m_killer;
+        t->m_killer = ep->keptKiller;
+        t->m_teleportRand = ep->keptRand;
+        ep->suspended = true;
+    }
+
+    static void resume(Trajectory* t) {
+        Episode* ep = t->m_episode;
+        if (!ep || !ep->suspended) return;
+        Sim& s = ep->s;
+        GJBaseGameLayer* pl = s.pl;
+        ep->keptKiller = t->m_killer;
+        ep->keptRand = t->m_teleportRand;
+        s.savedState = pl->m_gameState;
+        s.mv.resume();
+        if (s.worldObjects) s.objects.resume(s.savedState.m_currentProgress, s.savedState.m_commandIndex);
+        s.restore(ep->resume);  // the run's teleport state comes back with it
+        // The PlayerObject::update hook wrote the real tick's dt in between.
+        t->m_delta = Bot::get()->updater().getPhysicsDt() * std::min(pl->m_gameState.m_timeWarp, 1.0f) * 60.0f;
+        t->m_killer = ep->killer;
+        ep->suspended = false;
+    }
+
+    static void end(Trajectory* t) {
+        Episode* ep = t->m_episode;
+        if (!ep) return;
+        Sim& s = ep->s;
+        if (ep->suspended) {
+            // Ended between slices: from where the game stands now (the last
+            // slice put back everything it wrote), as finishGhost does.
+            s.savedState = s.pl->m_gameState;
+            s.mv.resume();
+        }
+        s.end();
+        if (ep->start) t->useStart(nullptr);  // puts the objects' flags back
+        t->m_killer = ep->keptKiller;
+        t->m_teleportRand = ep->keptRand;
+        t->m_episode = nullptr;
+        delete ep;
+    }
+};
+
+namespace gucci::ai::sim {
+
+    namespace {
+        Trajectory* traj() {
+            auto& mgr = Bot::get()->trajectory();
+            return mgr.exists() ? mgr.unsafeInner() : nullptr;
+        }
+        // The copies are made lazily (nothing makes them at level load).
+        Trajectory* makeTraj() {
+            auto& mgr = Bot::get()->trajectory();
+            if (!mgr.exists() && PlayLayer::get()) mgr.init();
+            return mgr.exists() ? mgr.unsafeInner() : nullptr;
+        }
+    }  // namespace
+
+    std::shared_ptr<Start> capture(GJBaseGameLayer* pl, std::string& why) {
+        if (!pl || !pl->m_player1) {
+            why = "no level";
+            return nullptr;
+        }
+        Trajectory* t = makeTraj();
+        if (!t) {
+            why = "the simulation could not be made";
+            return nullptr;
+        }
+        // Exact start flags as the Pathfinder page has them (on by default),
+        // for AI runs too, not only for the search (SIM_API.md section 13).
+        SLSettings::get()->pathfinder.exactStartFlags = absense::exactStartFlags();
+        t->resetExactFlagStats();
+        auto out = std::make_shared<Start>();
+        out->sim = t->captureStart(pl, true);
+        if (!out->sim) {
+            why = "the start could not be captured";
+            return nullptr;
+        }
+        out->frame = (int)Bot::get()->updater().getFrame();
+        out->x = Trajectory::startX(*out->sim);
+        return out;
+    }
+
+    int startFrame(Start const& s) { return s.frame; }
+    float startX(Start const& s) { return s.x; }
+
+    void SnapshotDelete::operator()(Snapshot* s) const { delete s; }
+    SnapshotPtr newSnapshot() { return SnapshotPtr(new Snapshot()); }
+    uint32_t snapshotTick(Snapshot const& s) { return s.snap.ticks; }
+
+    bool begin(GJBaseGameLayer* pl, std::shared_ptr<Start> start, std::string& why) {
+        Trajectory* t = makeTraj();
+        if (!t) {
+            why = "no simulation in this level";
+            return false;
+        }
+        return Trajectory::EpisodeOps::begin(t, pl, start ? start->sim : nullptr, why);
+    }
+
+    bool open() {
+        Trajectory* t = traj();
+        return t && t->episodeOpen();
+    }
+
+    bool suspended() {
+        Trajectory* t = traj();
+        return t && Trajectory::EpisodeOps::isSuspended(t);
+    }
+
+    bool step(uint8_t presses, bool held) {
+        Trajectory* t = traj();
+        return t ? Trajectory::EpisodeOps::step(t, TickInput{presses, held}) : true;
+    }
+
+    void read(State& out) {
+        if (Trajectory* t = traj()) Trajectory::EpisodeOps::read(t, out);
+        else out = State{};
+    }
+
+    void save(Snapshot& out) {
+        if (Trajectory* t = traj()) Trajectory::EpisodeOps::save(t, out);
+    }
+
+    void restore(Snapshot& in) {
+        if (Trajectory* t = traj()) Trajectory::EpisodeOps::restore(t, in);
+    }
+
+    void suspend() {
+        if (Trajectory* t = traj()) Trajectory::EpisodeOps::suspend(t);
+    }
+
+    void resume() {
+        if (Trajectory* t = traj()) Trajectory::EpisodeOps::resume(t);
+    }
+
+    void end() {
+        if (Trajectory* t = traj()) Trajectory::EpisodeOps::end(t);
+    }
+
+}  // namespace gucci::ai::sim
 
 std::shared_ptr<Trajectory::SimStart> Trajectory::advanceStart(GJBaseGameLayer* pl, std::shared_ptr<SimStart> from,
                                                               std::span<const TickInput> inputs,
@@ -5830,7 +6155,8 @@ void Trajectory::update(GJBaseGameLayer* pl) {
     const bool pathfinding = Bot::get()->pathfinder().drivesGame();
     auto* playLayer = PlayLayer::get();
     const bool pausedUnderneath = playLayer && playLayer->m_isPaused && !usingStart();
-    if (!m_state->m_enabled->inner() || (pathfinding && !pausedUnderneath)) {
+    // The AI pilot's session (src/ai/sim.hpp) has the copies even between its slices.
+    if (!m_state->m_enabled->inner() || (pathfinding && !pausedUnderneath) || m_episode) {
         m_node->setVisible(false);
         return;
     }

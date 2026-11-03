@@ -779,7 +779,10 @@ class $modify(GB7PlayLayer, PlayLayer) {
         if (auto& abst = ::Bot::get()->trajectory(); abst.isFakePlayer(player)) {
             // A killer the real game has shown the simulation to be wrong
             // about (absense/judge.hpp): the copy carries on through it.
-            if (obj && absense::judge::distrusted(obj->m_uniqueID))
+            // Not for the AI pilot's session (src/ai/sim.hpp): the search's
+            // verdicts are never the AI's.
+            if (obj && absense::judge::distrusted(obj->m_uniqueID) &&
+                !(abst.unsafeInner() && abst.unsafeInner()->episodeOpen()))
                 return;
             abst.noteKiller(player, obj);
             abst.hasDied(player);
