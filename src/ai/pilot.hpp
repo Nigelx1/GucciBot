@@ -53,6 +53,12 @@ namespace gucci::ai::pilot {
         std::string saveMacro;      // empty: "AI - <level name>"
         bool logPractice = false;   // write practice logs (AI contract v2 section 6)
         bool judge = true;          // confirm a completed run in the real game
+        // The old hand-written practice rules (comparison only, 2026-11-03).
+        // Off: the network alone plays. Its first attempt is its own best
+        // guess (greedy); later attempts start from the level's start again
+        // and sample from its own odds at `temperature`.
+        bool practice = false;
+        double temperature = 1.0;
     };
     // Plays the open level. Null with `why` when it can't start.
     std::unique_ptr<job::Job> makePlay(PlayOptions const& options, std::string& why);

@@ -1915,6 +1915,15 @@ namespace gucci::ui {
                 geode::Mod::get()->setSavedValue("pf_ai_max_attempts", attempts);
             if (kit::SliderRow("Time limit", "It stops after this long", &seconds, 10, 3600, "%d s"))
                 geode::Mod::get()->setSavedValue("pf_ai_max_seconds", seconds);
+            bool oldRules = geode::Mod::get()->getSavedValue<bool>("pf_ai_old_practice", false);
+            if (kit::SwitchRow("Old practice rules", "For comparison only: hand-written rules pick a decision to change "
+                               "after each death", &oldRules))
+                geode::Mod::get()->setSavedValue("pf_ai_old_practice", oldRules);
+            kit::Hint(oldRules ? "Now: the network plays, and after each death the old hand-written rules change one of "
+                                 "its decisions and retry from just before it."
+                               : "Now: the network plays alone. Attempt 1 is its best guess; each later attempt starts "
+                                 "over and lets it try its own less likely choices. It gets better from training, not "
+                                 "from rules.");
             kit::RowBegin("", nullptr);
             if (!running) {
                 ImGui::BeginDisabled(!PlayLayer::get() || !ready);
@@ -1922,6 +1931,7 @@ namespace gucci::ui {
                     pilot::PlayOptions o;
                     o.maxAttempts = attempts;
                     o.maxSeconds = seconds;
+                    o.practice = oldRules;
                     std::string why;
                     auto job = pilot::makePlay(o, why);
                     if (job) {

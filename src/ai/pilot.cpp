@@ -370,6 +370,7 @@ namespace gucci::ai::pilot {
             int m_varietyTries = 0;
             int m_varietyKept = 0;
             int m_attempt = 0;
+            uint64_t m_freeRng = 0;  // the network-alone mode's sampling
             uint32_t m_first = 0;   // the tick this attempt began at (restored to)
             int m_branchAttempt = 0;
             uint64_t m_ticks = 0;   // simulated in all
@@ -436,9 +437,18 @@ namespace gucci::ai::pilot {
                 m_attempt = 1;
                 m_first = 0;
                 m_running = true;
-                say(fmt::format("Playing {} with the pilot{}; up to {} attempts and {:.0f} seconds.", m_levelName,
-                                m_critic ? " and the critic" : " (no critic: mistakes are picked from the pilot's own doubts)",
-                                opt.maxAttempts, opt.maxSeconds));
+                m_freeRng = ((uint64_t)m_levelId * 0x100000001B3ull) ^ 0xD1B54A32D192ED03ull;
+                if (opt.practice)
+                    say(fmt::format("Playing {} with the pilot and the old practice rules (comparison only){}; up to {} "
+                                    "attempts and {:.0f} seconds.",
+                                    m_levelName,
+                                    m_critic ? ", the critic picking mistakes" : ", mistakes picked from the pilot's own doubts",
+                                    opt.maxAttempts, opt.maxSeconds));
+                else
+                    say(fmt::format("Playing {} with the network alone, no practice rules: attempt 1 is its best guess, "
+                                    "later attempts start over and sample from its own odds. Up to {} attempts and {:.0f} "
+                                    "seconds.",
+                                    m_levelName, opt.maxAttempts, opt.maxSeconds));
                 sim::suspend();  // the first slice runs on the next frame
                 return false;
             }
@@ -503,6 +513,14 @@ namespace gucci::ai::pilot {
                     m_obsUs += std::chrono::duration<double, std::micro>(o1 - o0).count();
                     m_netUs += std::chrono::duration<double, std::micro>(o2 - o1).count();
                     bool held = forcedHere ? m_forced[m_t] : net::holds(logit);
+                    if (!opt.practice && m_attempt > 1 && !forcedHere) {
+                        // The network alone (no practice rules): after its first, greedy
+                        // attempt it samples from its own odds.
+                        double const z = (double)logit / std::max(0.05, opt.temperature);
+                        double const ph = 1.0 / (1.0 + std::exp(-z));
+                        double const u = (double)(splitmix(m_freeRng) >> 11) * (1.0 / 9007199254740992.0);
+                        held = u < ph;
+                    }
                     if (m_varietyOn && !forcedHere && m_t >= m_varFrom) {
                         if (m_lastX > m_varPastX) {
                             m_varietyOn = false;  // past the death: greedy again
@@ -657,6 +675,7 @@ namespace gucci::ai::pilot {
                     m_bestPercent = pct;
                     m_bestAttempt = m_attempt;
                 }
+                if (!opt.practice) return freeDeath(st, D, x, pct, cause);
                 // What this attempt's change did.
                 std::string lead;
                 m_varietyOn = false;
@@ -789,6 +808,57 @@ namespace gucci::ai::pilot {
                 if (m_deaths.size() > 200) m_deaths.erase(m_deaths.begin());
 
                 apply(idx, c);
+                m_attempt++;
+                return false;
+            }
+
+            // A death with the practice rules off: say it, then start over from
+            // the level's start (the network alone decides every tick).
+            bool freeDeath(sim::State const& st, uint32_t D, float x, float pct, std::string const& cause) {
+                std::string const sentence =
+                    fmt::format("Attempt {} died at {:.1f}% (frame {}): {}.", m_attempt, pct, frameOf(D), cause);
+                say(sentence);
+                auto dj = matjson::Value::object();
+                dj["attempt"] = m_attempt;
+                dj["tick"] = (int64_t)D;
+                dj["frame"] = frameOf(D);
+                dj["x"] = (double)x;
+                dj["percent"] = (double)pct;
+                dj["cause"] = cause;
+                dj["killer_id"] = st.killerId;
+                dj["sentence"] = sentence;
+                m_deaths.push_back(dj);
+                if (m_deaths.size() > 200) m_deaths.erase(m_deaths.begin());
+                if (m_attempt >= opt.maxAttempts)
+                    return finish("attempts", fmt::format("Out of attempts ({}).", opt.maxAttempts));
+                if (secondsUsed() >= opt.maxSeconds)
+                    return finish("seconds", fmt::format("Out of time ({:.0f} seconds).", opt.maxSeconds));
+                for (auto it = m_snaps.begin(); it != m_snaps.end();) {
+                    if (it->first != 0) {
+                        m_pool.push_back(std::move(it->second.s));
+                        it = m_snaps.erase(it);
+                    } else {
+                        ++it;
+                    }
+                }
+                auto const& s0 = m_snaps.at(0);
+                sim::restore(*s0.s);
+                m_obs.setHistory(s0.h);
+                m_prev = s0.prev;
+                m_t = 0;
+                m_d.clear();
+                m_logit.clear();
+                m_adv.clear();
+                m_stateRows.clear(), m_scanRows.clear(), m_tokRows.clear();
+                m_metaRows.clear(), m_geoRows.clear(), m_actRows.clear();
+                m_forced.clear();
+                m_first = 0;
+                m_tryIdx = -1;
+                {
+                    sim::State s;
+                    sim::read(s);
+                    m_lastX = s.p[0].x;
+                }
                 m_attempt++;
                 return false;
             }
@@ -1077,6 +1147,8 @@ namespace gucci::ai::pilot {
                 out["tps"] = m_tps;
                 out["start_frame"] = m_startFrame;
                 out["critic"] = m_critic;
+                out["practice"] = opt.practice;
+                out["temperature"] = opt.temperature;
                 out["pilot"] = models().pilot.path;
                 out["pilot_layout_hash"] = models().pilot.net.layoutHash();
                 out["changes_kept"] = (int64_t)m_forced.size();

@@ -180,8 +180,11 @@ namespace gucci::mcp {
 
         server.addTool({
             "gucci_ai_play",
-            "The AI pilot plays the open level and practices it in its own session of GD's physics: the real game is "
-            "restarted and held at its start, then the pilot plays tick by tick; on each death it names the cause, "
+            "The AI pilot plays the open level in its own session of GD's physics: the real game is restarted and "
+            "held at its start, then the pilot plays tick by tick. By default (practice false) the network alone "
+            "plays: attempt 1 is its greedy best guess, later attempts start over from the level's start and sample "
+            "from its own odds at `temperature`; max_attempts 1 is a cold exam. With practice true (the old "
+            "hand-written practice rules, kept for comparison only): on each death it names the cause, "
             "picks the decision most likely to be the mistake (the critic's advantage, or without a critic the "
             "pilot's least-sure decisions near its last presses and releases, most recent first), changes it and "
             "goes again from a saved state just before it. A finished run is saved as a GucciBot macro and played "
@@ -192,10 +195,14 @@ namespace gucci::mcp {
                        {"max_seconds", "number", "stop after this many seconds (default 300)"},
                        {"save_macro", "string", "name of the macro a finished run is saved as (default AI - <level>)"},
                        {"log_practice", "boolean", "write practice logs to AI_ROOT\\practice (default false)"},
-                       {"judge", "boolean", "play a finished run in the real game to confirm it (default true)"}}),
+                       {"judge", "boolean", "play a finished run in the real game to confirm it (default true)"},
+                       {"practice", "boolean", "use the old hand-written practice rules (default false: the network alone)"},
+                       {"temperature", "number", "network alone: sampling temperature of attempts after the first (default 1)"}}),
             [](matjson::Value const& a) {
                 requireNoOwner();
                 ai::pilot::PlayOptions o;
+                if (a.contains("practice")) o.practice = a["practice"].asBool().unwrapOr(false);
+                if (a.contains("temperature")) o.temperature = a["temperature"].asDouble().unwrapOr(1.0);
                 o.maxAttempts = (int)intArg(a, "max_attempts", o.maxAttempts);
                 if (a.contains("max_seconds")) o.maxSeconds = a["max_seconds"].asDouble().unwrapOr(o.maxSeconds);
                 if (a.contains("save_macro")) o.saveMacro = a["save_macro"].asString().unwrapOr("");
