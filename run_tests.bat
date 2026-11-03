@@ -1,5 +1,5 @@
 @echo off
-REM Offline tests: the GBR6 sub-tick and TPS sections, Check Macro, Macro Tools, the random teleport's pick, other bots' formats, the menu art's PNG reader, Hitborders' shapes and the Frame Editor's rules.
+REM Offline tests: the GBR6 sub-tick and TPS sections, Check Macro, Macro Tools, the random teleport's pick, other bots' formats, the menu art's PNG reader, Hitborders' shapes, the AI pilot's networks and the Frame Editor's rules.
 
 setlocal
 set VCVARS="C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
@@ -62,6 +62,14 @@ cl /nologo /std:c++20 /EHsc /O2 /MD /I src ^
    tools\run_hitborder_tests.cpp src\tools\hitborder_geom.cpp /Fe:build\run_hitborder_tests.exe /Fo:build\ || exit /b 1
 
 build\run_hitborder_tests.exe || exit /b 1
+
+REM The AI pilot's networks (src/ai/net) and its record expansion (src/ai/obs_core) against the
+REM trainer's golden set in tools/ai/golden (python tools/ai/export.py golden): outputs within 1e-5,
+REM the same decisions, the expansion bit for bit, broken weight files refused.
+cl /nologo /std:c++20 /EHsc /O2 /MD /I src ^
+   tools\run_ai_net_tests.cpp src\ai\net.cpp src\ai\obs_core.cpp /Fe:build\run_ai_net_tests.exe /Fo:build\ || exit /b 1
+
+build\run_ai_net_tests.exe || exit /b 1
 
 REM Frame Editor rules (src/tools/edit_core, ported from Absense's macro editor).
 cl /nologo /std:c++20 /EHsc /O2 /MD /I src ^
