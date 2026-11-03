@@ -6,6 +6,7 @@
 
 #include "ai/job.hpp"
 #include "ai/observe.hpp"
+#include "ai/pilot.hpp"
 #include "ai/record.hpp"
 #include "ai/smoke.hpp"
 #include "ai/tape.hpp"
@@ -94,7 +95,7 @@ namespace gucci::mcp {
             "needed (online levels download), the macro played in the AI's own session of GD's physics from the "
             "level's start at the macro's tick rate, for each frame offset until one completes (default 0, 1, -1; "
             "Silicate files 0 only: their +1 is in the converter), then the completing (or furthest) offset played "
-            "again with the observer on and written to AI_ROOT\data (contract section 4, golden rows included) "
+            "again with the observer on and written to AI_ROOT\\data (contract section 4, golden rows included) "
             "with the level's tape if it has none. Returns {job}; poll gucci_ai_status.",
             schemaFor({{"macro_path", "string", "full path of the macro file"},
                        {"level_id", "integer", "the level it is for (main levels 1-22 by number)"},
@@ -157,6 +158,54 @@ namespace gucci::mcp {
                 if (!job) throw ToolError(why);
                 auto out = matjson::Value::object();
                 out["job"] = ai::job::submit(std::move(job));
+                return out;
+            },
+        });
+
+        server.addTool({
+            "gucci_ai_reload",
+            "Load the AI's networks again: pilot.gbnn, critic.gbnn and reader.gbnn from AI_ROOT\\weights (else the "
+            "copies shipped with the mod in resources/ai; none are shipped yet). A network trained for another "
+            "layout is refused, and the answer says which layout it was trained for. Returns {models: [{name, loaded, "
+            "path, layout_hash, inputs, outputs, error}], pilot_loaded, critic_loaded, reader_loaded, obs_layout_hash, "
+            "tape_layout_hash, weights_dir, summary}.",
+            schemaFor({}),
+            [](matjson::Value const&) {
+                if (ai::job::busy()) throw ToolError("an AI job is running; wait for it or cancel it first");
+                return ai::pilot::reload();
+            },
+        });
+
+        server.addTool({
+            "gucci_ai_play",
+            "The AI pilot plays the open level and practices it in its own session of GD's physics: the real game is "
+            "restarted and held at its start, then the pilot plays tick by tick; on each death it names the cause, "
+            "picks the decision most likely to be the mistake (the critic's advantage, or without a critic the "
+            "pilot's least-sure decisions near its last presses and releases, most recent first), changes it and "
+            "goes again from a saved state just before it. A finished run is saved as a GucciBot macro and played "
+            "in the real game (the judge) to confirm it. Never uses the old search. Returns {job}; the result "
+            "(gucci_ai_status) is {completed, best_percent, attempts, ticks_simulated, deaths: [{tick, x, percent, "
+            "cause, mistake_tick, mistake_was, fix, sentence}], macro_file?, judge?: {completed, died_x}}.",
+            schemaFor({{"max_attempts", "integer", "stop after this many attempts (default 50000)"},
+                       {"max_seconds", "number", "stop after this many seconds (default 300)"},
+                       {"save_macro", "string", "name of the macro a finished run is saved as (default AI - <level>)"},
+                       {"log_practice", "boolean", "write practice logs to AI_ROOT\\practice (default false)"},
+                       {"judge", "boolean", "play a finished run in the real game to confirm it (default true)"}}),
+            [](matjson::Value const& a) {
+                requireNoOwner();
+                ai::pilot::PlayOptions o;
+                o.maxAttempts = (int)intArg(a, "max_attempts", o.maxAttempts);
+                if (a.contains("max_seconds")) o.maxSeconds = a["max_seconds"].asDouble().unwrapOr(o.maxSeconds);
+                if (a.contains("save_macro")) o.saveMacro = a["save_macro"].asString().unwrapOr("");
+                if (a.contains("log_practice")) o.logPractice = a["log_practice"].asBool().unwrapOr(false);
+                if (a.contains("judge")) o.judge = a["judge"].asBool().unwrapOr(true);
+                std::string why;
+                auto job = ai::pilot::makePlay(o, why);
+                if (!job) throw ToolError(why);
+                int const id = ai::job::submit(std::move(job));
+                ai::pilot::setLiveJob(id);
+                auto out = matjson::Value::object();
+                out["job"] = id;
                 return out;
             },
         });
