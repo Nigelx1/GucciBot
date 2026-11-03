@@ -198,6 +198,11 @@ namespace gucci::ai::pilot {
             int level = -1;       // escalation level of `cands`
             std::vector<Cand> cands;
             size_t next = 0;
+            // The human-like retry (2026-11-03): attempts at this death that
+            // didn't get past it, and the variety rounds played so far.
+            int fails = 0;
+            int varRound = 0;
+            int varLeft = 0;      // tries left in the current round
         };
 
         // How a death is attacked, from the first try to the last: a single
@@ -220,6 +225,29 @@ namespace gucci::ai::pilot {
         constexpr uint32_t kSnapEvery = 30;
         constexpr size_t kMaxSnaps = 512;
         constexpr float kProgressX = 30.0f;  // a block further counts as getting past a death
+
+        // The human-like retry (2026-11-03): single changes next to a death can
+        // stay stuck on it for tens of thousands of attempts. Every kVarietyAfter
+        // failed attempts at the same death, a round of kVarietyTries replays the
+        // last few seconds (1.5 s, then 3 s, then 6 s) from the snapshot before
+        // them, the pilot choosing hold or release by sampling its own
+        // probabilities at a temperature that grows round by round. A try that
+        // gets past the death is kept (its sampled choices become forced
+        // decisions of the line), and the pilot plays greedy again from there.
+        // Sampling is seeded from the level and the attempt, so a run reproduces.
+        constexpr int kVarietyAfter = 20;
+        constexpr int kVarietyTries = 8;
+        constexpr double kVarietyWindowS[] = {1.5, 3.0, 6.0};
+        constexpr float kVarietyTemp0 = 1.0f;
+        constexpr float kVarietyTempStep = 0.5f;
+        constexpr float kVarietyTempMax = 4.0f;
+
+        uint64_t splitmix(uint64_t& x) {
+            uint64_t z = (x += 0x9E3779B97F4A7C15ull);
+            z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
+            z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
+            return z ^ (z >> 31);
+        }
 
         uint32_t divergence(std::map<uint32_t, bool> const& a, std::map<uint32_t, bool> const& b) {
             auto ia = a.begin();
@@ -331,6 +359,16 @@ namespace gucci::ai::pilot {
             std::vector<Target> m_stack;
             int m_tryIdx = -1;      // the target whose candidate this attempt tries (-1: the first play)
             Cand m_try;
+            // the variety retry this attempt plays (if any)
+            bool m_tryVariety = false;
+            double m_varWindowS = 0.0;
+            bool m_varietyOn = false;  // sampling now
+            uint32_t m_varFrom = 0;
+            float m_varPastX = 0.0f;
+            float m_varTemp = 1.0f;
+            uint64_t m_varRng = 0;
+            int m_varietyTries = 0;
+            int m_varietyKept = 0;
             int m_attempt = 0;
             uint32_t m_first = 0;   // the tick this attempt began at (restored to)
             int m_branchAttempt = 0;
@@ -464,7 +502,21 @@ namespace gucci::ai::pilot {
                     auto const o2 = Clock::now();
                     m_obsUs += std::chrono::duration<double, std::micro>(o1 - o0).count();
                     m_netUs += std::chrono::duration<double, std::micro>(o2 - o1).count();
-                    bool const held = forcedHere ? m_forced[m_t] : net::holds(logit);
+                    bool held = forcedHere ? m_forced[m_t] : net::holds(logit);
+                    if (m_varietyOn && !forcedHere && m_t >= m_varFrom) {
+                        if (m_lastX > m_varPastX) {
+                            m_varietyOn = false;  // past the death: greedy again
+                        } else {
+                            // Sample the pilot's own P(hold) at the round's temperature;
+                            // a choice that differs from greedy is kept as a forced one,
+                            // so the line replays exactly.
+                            double const ph = 1.0 / (1.0 + std::exp(-(double)logit / (double)m_varTemp));
+                            double const u = (double)(splitmix(m_varRng) >> 11) * (1.0 / 9007199254740992.0);
+                            bool const pick = u < ph;
+                            if (pick != held) m_forced[m_t] = pick;
+                            held = pick;
+                        }
+                    }
                     uint8_t const presses = held && !m_prev ? 1 : 0;
                     bool const dead = sim::step(presses, held);
                     sim::read(st);
@@ -607,23 +659,40 @@ namespace gucci::ai::pilot {
                 }
                 // What this attempt's change did.
                 std::string lead;
+                m_varietyOn = false;
                 if (m_tryIdx < 0) {
                     pushTarget(D, x, cause);
                 } else {
-                    Target const& tg = m_stack[(size_t)m_tryIdx];
+                    Target& tg = m_stack[(size_t)m_tryIdx];
+                    if (m_tryVariety)
+                        lead = fmt::format("Tried the last {:g} s again with more variety: ", m_varWindowS);
                     if (x > tg.x + kProgressX) {
-                        lead = fmt::format("The change got past {:.1f}%. ", tg.percent);
+                        lead += fmt::format("{} got past {:.1f}%. ", m_tryVariety ? "it" : "The change", tg.percent);
+                        if (m_tryVariety) m_varietyKept++;
                         m_stack.resize((size_t)m_tryIdx + 1);
                         pushTarget(D, x, cause);
                     } else if (std::fabs(x - tg.x) <= kProgressX) {
-                        lead = "The same death again. ";
+                        lead += m_tryVariety ? "the same death again. " : "The same death again. ";
+                        tg.fails++;
                     } else {
-                        lead = fmt::format("Worse: it died before {:.1f}%. ", tg.percent);
+                        lead += fmt::format("{}orse: it died before {:.1f}%. ", m_tryVariety ? "w" : "W", tg.percent);
+                        tg.fails++;
                     }
                 }
-                // The next mistake to change.
+                // The next mistake to change, or a variety retry of the last seconds.
                 std::string turn;
-                while (!m_stack.empty()) {
+                bool variety = false;
+                if (!m_stack.empty()) {
+                    Target& tg = m_stack.back();
+                    if (tg.varLeft > 0) {
+                        variety = true;
+                    } else if (tg.fails >= kVarietyAfter * (tg.varRound + 1)) {
+                        tg.varRound++;
+                        tg.varLeft = kVarietyTries;
+                        variety = true;
+                    }
+                }
+                while (!variety && !m_stack.empty()) {
                     Target& tg = m_stack.back();
                     if (tg.next < tg.cands.size()) break;
                     if (tg.level + 1 < kLevelCount) {
@@ -651,6 +720,37 @@ namespace gucci::ai::pilot {
                 }
                 size_t const idx = m_stack.size() - 1;
                 Target& tg = m_stack[idx];
+                if (variety) {
+                    int const r = std::min(tg.varRound - 1, (int)std::size(kVarietyWindowS) - 1);
+                    double const windowS = kVarietyWindowS[r];
+                    float const temp =
+                        std::min(kVarietyTempMax, kVarietyTemp0 + kVarietyTempStep * (float)(tg.varRound - 1));
+                    int const tryNo = kVarietyTries - tg.varLeft + 1;
+                    tg.varLeft--;
+                    std::string const fix = fmt::format("the last {:g} s again with more variety", windowS);
+                    std::string const sentence = fmt::format(
+                        "{} {}{}The same death {} times: trying {} (round {}, try {} of {}, temperature {:.1f}; "
+                        "death {} of the run).",
+                        head, lead, turn, tg.fails, fix, tg.varRound, tryNo, kVarietyTries, temp, idx + 1);
+                    say(sentence);
+                    auto dj = matjson::Value::object();
+                    dj["attempt"] = m_attempt;
+                    dj["tick"] = (int64_t)D;
+                    dj["frame"] = frameOf(D);
+                    dj["x"] = (double)x;
+                    dj["percent"] = (double)pct;
+                    dj["cause"] = cause;
+                    dj["killer_id"] = st.killerId;
+                    dj["mistake_tick"] = matjson::Value(nullptr);
+                    dj["mistake_was"] = "variety";
+                    dj["fix"] = fix;
+                    dj["sentence"] = sentence;
+                    m_deaths.push_back(dj);
+                    if (m_deaths.size() > 200) m_deaths.erase(m_deaths.begin());
+                    applyVariety(idx, windowS, temp);
+                    m_attempt++;
+                    return false;
+                }
                 Cand const c = tg.cands[tg.next++];
                 bool const was = !c.v;
                 std::string sure;
@@ -725,6 +825,60 @@ namespace gucci::ai::pilot {
                 m_forced = std::move(F);
                 m_tryIdx = (int)idx;
                 m_try = c;
+                m_tryVariety = false;
+                m_varietyOn = false;
+                m_first = m_t;
+                m_branchAttempt = tg.attempt;
+            }
+
+            // Back to the snapshot before the last windowS seconds of the target's
+            // line; from there the pilot samples its own choices until it is a
+            // block past the death (run()).
+            void applyVariety(size_t idx, double windowS, float temp) {
+                Target const& tg = m_stack[idx];
+                uint32_t const W = ticksOf(windowS);
+                uint32_t const from = tg.D >= W ? tg.D - W : 0;
+                std::map<uint32_t, bool> F = tg.base;
+                uint32_t const split = divergence(m_forced, F);
+                for (auto it = m_snaps.upper_bound(split); it != m_snaps.end();) {
+                    m_pool.push_back(std::move(it->second.s));
+                    it = m_snaps.erase(it);
+                }
+                uint32_t const want = std::min({split, from, m_t});
+                auto it = m_snaps.upper_bound(want);
+                --it;  // tick 0 is always there
+                sim::restore(*it->second.s);
+                m_obs.setHistory(it->second.h);
+                m_prev = it->second.prev;
+                m_t = it->first;
+                m_d.resize(m_t);
+                m_logit.resize(m_t);
+                m_adv.resize(m_t);
+                if (opt.logPractice) {
+                    m_stateRows.resize((size_t)m_t * obs::kStateDim);
+                    m_scanRows.resize((size_t)m_t * obs::kScanDim);
+                    m_tokRows.resize((size_t)m_t * obs::kTokDim);
+                    m_metaRows.resize((size_t)m_t * obs::kMetaDim);
+                    m_geoRows.resize((size_t)m_t * obs::kGeoDim);
+                    m_actRows.resize(m_t);
+                }
+                {
+                    sim::State st;
+                    sim::read(st);
+                    m_lastX = st.p[0].x;  // where the restored line stands
+                }
+                m_forced = std::move(F);
+                m_tryIdx = (int)idx;
+                m_try = Cand{from, W, false};
+                m_tryVariety = true;
+                m_varWindowS = windowS;
+                m_varietyOn = true;
+                m_varFrom = from;
+                m_varPastX = tg.x + kProgressX;
+                m_varTemp = temp;
+                // Seeded from the level and the attempt: the same run samples the same.
+                m_varRng = ((uint64_t)m_levelId * 0x100000001B3ull) ^ ((uint64_t)(m_attempt + 1) * 0xD1B54A32D192ED03ull);
+                m_varietyTries++;
                 m_first = m_t;
                 m_branchAttempt = tg.attempt;
             }
@@ -926,6 +1080,8 @@ namespace gucci::ai::pilot {
                 out["pilot"] = models().pilot.path;
                 out["pilot_layout_hash"] = models().pilot.net.layoutHash();
                 out["changes_kept"] = (int64_t)m_forced.size();
+                out["variety_tries"] = m_varietyTries;
+                out["variety_kept"] = m_varietyKept;
                 out["snapshots"] = (int64_t)m_snaps.size();
                 out["observe_us_avg"] = m_ticks ? m_obsUs / (double)m_ticks : 0.0;
                 out["networks_us_avg"] = m_ticks ? m_netUs / (double)m_ticks : 0.0;
