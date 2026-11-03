@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-02-j (AI pilot stage A: the AI gets its own tick-by-tick session of the game physics - step, snapshot, restore, read both players - held at the level start, run in 10 ms slices as a queued job; gucci_ai_sim_smoke plays a macro of any format in it)"
+    "2026-11-02-l (AI pilot stage B: what the pilot sees - the per-tick record of hitborder scan, tokens and player state with its 472-float expansion - and the recorder: gucci_ai_record, gucci_ai_validate_real, gucci_ai_find_level, gucci_ai_layout, level tapes; AI jobs also run outside a level)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
