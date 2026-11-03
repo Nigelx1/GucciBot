@@ -5,8 +5,8 @@ layout (--layout-hash, or the only one there is). Each tick is read compact
 (state, scan, tokens: 368 bytes) into RAM and expanded to the 472 floats the
 pilot sees per batch, in torch (gbai.expand_torch; the recorder's golden rows
 are checked bit for bit against the same expansion when a run loads). The
-showcase levels (gbai.SHOWCASE_LEVELS, plus any manifest is_bar_level entry)
-are never trained on, nor used to pick the best epoch: they're held out of
+held-out exam levels (tools/ai/heldout.json by level id, plus any manifest
+is_bar_level / held_out id) are never trained on, nor used to pick the best epoch: they're held out of
 every fold, for evaluation only. The rest is split by level, never by tick,
 into 8 folds: --fold k/8 (default 0/8) validates on fold k and trains on the
 other seven; --fold all trains on every level (the model to ship, once the
@@ -91,9 +91,9 @@ def parse_args(argv):
                          "for when RAM is short")
     ap.add_argument("--select", choices=["timing", "loss", "last"], default="timing",
                     help="which epoch to export: best validation timing, lowest validation loss, or the last")
-    ap.add_argument("--manifest", help="a manifest whose is_bar_level entries are showcase levels too")
+    ap.add_argument("--manifest", help="a manifest whose is_bar_level / held_out entries (by id) are held out too")
     ap.add_argument("--exclude", action="append", default=[],
-                    help="another level to leave out of training, by id or name (repeatable)")
+                    help="another level id to leave out of training (repeatable); a name only warns")
     ap.add_argument("--ema", type=int, default=-1,
                     help="export an average of the weights over this many steps (-1: half an epoch; 0: off)")
     ap.add_argument("--fresh", action="store_true", help="ignore last.pt and start over")
@@ -284,6 +284,8 @@ def train(args, root, out, prog, log):
     gbai.write_json_atomic(os.path.join(out, "split.json"), record)
     for r, why in split["excluded"]:
         log(f"left out of training: {r.run_id}: {why}")
+    for r, warn in split.get("name_warnings", []):
+        log(f"NOTE (kept): {r.run_id}: {warn}")
     for r in split["unusable"]:
         log(f"not used: {r.run_id} has no usable ticks (validated {r.validated}, completed {r.completed}: empty, "
             "a failed run, or it died in its first second)")

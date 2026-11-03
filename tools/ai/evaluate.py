@@ -202,7 +202,7 @@ def group_of(run, split, showcase):
 
 
 GROUP_TITLES = {"validation": "Validation levels (held out from training)",
-                "showcase": "Showcase levels (never trained on)",
+                "showcase": "Held-out exam levels (never trained on)",
                 "unseen": "Other levels the model never trained on",
                 "trained": "Levels it trained on (NOT held out; for comparison only)"}
 
@@ -301,7 +301,7 @@ def main(argv=None, log=print):
     ap.add_argument("--runs", help="only these run ids, comma separated")
     ap.add_argument("--include-trained", action="store_true",
                     help="also report the levels it trained on (as their own group, never as held out)")
-    ap.add_argument("--manifest", help="a manifest whose is_bar_level entries are showcase levels too")
+    ap.add_argument("--manifest", help="a manifest whose is_bar_level / held_out entries (by id) are held out too")
     ap.add_argument("--out", help="report JSON (default: eval_report.json next to the model); .md goes beside it")
     ap.add_argument("--threads", default="6", help="CPU threads for numpy, or auto (3 while Geometry Dash runs)")
     args = ap.parse_args(argv)

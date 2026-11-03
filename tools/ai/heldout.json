@@ -1,0 +1,31 @@
+{
+  "_about": "Nigel's official 10-tier ladder (2026-11-02/03) + the 2.0 bar + bonus exams. NEVER trained on (match by level_id; low ids 1-22 are main levels). Passing a tier = all three beaten cold, confirmed in the real game. IDs given by Nigel 2026-11-03.",
+  "levels": [
+    {"tier": 4, "name": "Stereo Madness", "level_id": 1, "main": true},
+    {"tier": 4, "name": "Base After Base", "level_id": 5, "main": true},
+    {"tier": 4, "name": "Clutterfunk", "level_id": 11, "main": true},
+    {"tier": 5, "name": "The Nightmare", "level_id": 13519},
+    {"tier": 5, "name": "Forest Temple", "level_id": 11402965},
+    {"tier": 5, "name": "Stalemate", "level_id": 4545425},
+    {"tier": 6, "name": "Bloodbath", "level_id": 10565740},
+    {"tier": 6, "name": "Slaughterhouse", "level_id": 27690100},
+    {"tier": 6, "name": "GRIEF", "level_id": 149992717, "note": "2-player only in short, fairly easy transitions"},
+    {"tier": 7, "name": "Sakupen End", "level_id": 100856004, "note": "has a secret way: at the very beginning there is a ship portal, and holding up skips the whole level. The exam counts only WITHOUT it (Nigel 11-03): a run that flies up out of the start ship section / finishes far faster than the level's normal length fails the exam"},
+    {"tier": 7, "name": "LIGHTMARE", "level_id": 77233362},
+    {"tier": 7, "name": "Realm of Bloodshadow", "level_id": 78706057},
+    {"tier": 8, "name": "Killbot", "level_id": 38754426},
+    {"tier": 8, "name": "Jupiter My Favourite", "level_id": 92466083},
+    {"tier": 8, "name": "Cold Sweat", "level_id": 63996127},
+    {"tier": 9, "name": "Glungus Adventures", "level_id": 138615726},
+    {"tier": 9, "name": "The Art of the Blade", "level_id": 82606722, "note": "the random-trigger exam"},
+    {"tier": 9, "name": "ORBIT", "level_id": 133175713},
+    {"tier": 10, "name": "Unnerfed Suffer", "level_id": 85688607},
+    {"tier": 10, "name": "Cortex Break", "level_id": 146615106, "note": "replaced Maze of Justice (80517643), which is only possible on 2.1"},
+    {"tier": 10, "name": "Desideration", "level_id": 133493855},
+    {"tier": "2.0 bar", "name": "Clubstep", "level_id": 14, "main": true},
+    {"tier": "2.0 bar", "name": "Theory of Everything 2", "level_id": 18, "main": true},
+    {"tier": "2.0 bar", "name": "Deadlocked", "level_id": 20, "main": true},
+    {"tier": "bonus 6-7", "name": "Heliopolis", "level_id": 136530685},
+    {"tier": "bonus 8-9", "name": "LIMBO", "level_id": 86084399}
+  ]
+}

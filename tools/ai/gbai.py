@@ -924,26 +924,40 @@ def write_tape(folder, header, data):
     return base + ".json"
 
 
-# ---- showcase levels: never trained on -------------------------------------------
+# ---- held-out exam levels: never trained on -------------------------------------
 
-# Nigel's showcase (bar) levels. Every result he sees on them must come from a
-# model that never learned them, so no trainer ever takes a tick from them, in
-# any macro format. Evaluation only.
-SHOWCASE_LEVELS = ["Bloodbath", "The Nightmare", "Clubstep", "Theory of Everything 2", "Deadlocked", "LIMBO",
-                   "ORBIT", "Heliopolis"]
-# IDs known for certain. RobTop's levels keep their main-level number (Clubstep
-# 14, Theory of Everything 2 18, Deadlocked 20). The online ones were confirmed
-# by both the Geode census log and Nigel's save (DATA.md, "Bar-level IDs").
-# Every showcase level is matched by id AND by name, so neither a recorder
-# that leaves level_name empty nor a renamed copy lets one through.
-SHOWCASE_IDS = {10565740: "Bloodbath", 13519: "The Nightmare", 14: "Clubstep", 18: "Theory of Everything 2",
-                20: "Deadlocked", 86084399: "LIMBO", 133175713: "ORBIT", 136530685: "Heliopolis"}
-# Name matches, after name_key(): anywhere in the level's name or the macro's
-# file name. Generous on purpose (it also catches "Silent Clubstep" and
-# "Null Clubstep", copies of Clubstep's layout): a level wrongly left out
-# costs a little data, one wrongly let in costs the honesty of every result.
-SHOWCASE_KEYS = ["bloodbath", "thenightmare", "clubstep", "theoryofeverything2", "toe2", "deadlocked", "limbo",
-                 "orbit", "heliopolis"]
+# Nigel's exams (his 10-tier ladder, the 2.0 bar levels and the bonus ones):
+# tools/ai/heldout.json, a copy of the list he gave with ids (2026-11-03).
+# Every result he sees on them must come from a model that never learned
+# them, so no trainer ever takes a tick from them and they never sit in a
+# fold's validation set either. They are matched by level_id ONLY (main
+# levels by their number, 1-22): a name match only warns, since names collide
+# ("Sakupen End" is not Sakupen Circles, "Clubstep" is not Silent Clubstep).
+HELDOUT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "heldout.json")
+
+
+def read_heldout(path=None):
+    """{level_id: entry} from heldout.json ({"levels": [{tier, name, level_id, ...}]}). A missing or broken
+    file is an error, never an empty list: training with no exams held out would be silently wrong."""
+    path = path or HELDOUT_PATH
+    try:
+        data = read_json(path)
+    except (OSError, ValueError) as e:
+        raise DataError(f"the held-out exam list {path} can't be read ({e}); training needs it") from e
+    levels = data.get("levels") if isinstance(data, dict) else None
+    if not isinstance(levels, list) or not levels:
+        raise DataError(f"{path}: expected {{\"levels\": [...]}} with at least one level")
+    out = {}
+    for e in levels:
+        if not isinstance(e, dict) or not _is_int(e.get("level_id")) or int(e["level_id"]) <= 0:
+            raise DataError(f"{path}: every level needs a positive level_id ({e!r})")
+        out[int(e["level_id"])] = e
+    return out
+
+
+# Kept for the play step and old callers: {level_id: name} of every exam level.
+SHOWCASE_IDS = {lid: str(e.get("name") or "") for lid, e in read_heldout().items()}     if os.path.exists(HELDOUT_PATH) else {}
+SHOWCASE_LEVELS = sorted(set(SHOWCASE_IDS.values()))
 
 
 def name_key(text):
@@ -952,39 +966,56 @@ def name_key(text):
 
 
 class Showcase:
-    """Which levels are showcase levels. extra_ids/extra_names add to the lists;
-    a manifest adds every entry marked is_bar_level."""
+    """The held-out exam levels (by id). extra_ids add to them; a manifest adds its entries marked
+    is_bar_level or held_out (by their ids). Names (extra_names, a level's name, a macro's file name) only
+    ever give a warning (warning()), never an exclusion."""
 
-    def __init__(self, extra_ids=(), extra_names=(), manifest=None):
-        self.ids = dict(SHOWCASE_IDS)
-        self.keys = list(SHOWCASE_KEYS)
+    def __init__(self, extra_ids=(), extra_names=(), manifest=None, heldout=None):
+        self.entries = read_heldout(heldout)
+        self.ids = {lid: str(e.get("name") or "an exam level") for lid, e in self.entries.items()}
         for i in extra_ids:
-            self.ids[int(i)] = "listed"
+            self.ids.setdefault(int(i), "listed")
+        self.warn_keys = {name_key(e.get("name")): str(e.get("name")) for e in self.entries.values()}
         for n in extra_names:
             if name_key(n):
-                self.keys.append(name_key(n))
+                self.warn_keys[name_key(n)] = str(n)
         if manifest:
             for e in read_manifest(manifest):
-                if e["is_bar_level"]:
-                    if e["level_id"]:
-                        self.ids[e["level_id"]] = e["level_name"] or "a bar level in the manifest"
-                    if name_key(e["level_name"]):
-                        self.keys.append(name_key(e["level_name"]))
+                if (e["is_bar_level"] or e["raw"].get("held_out")) and e["level_id"]:
+                    self.ids.setdefault(e["level_id"], e["level_name"] or "a held-out level in the manifest")
+        self.warn_keys.pop("", None)
 
     def reason(self, level_id=0, level_name="", macro_file=""):
-        """Why this level is a showcase level, or None."""
+        """Why this level is held out (by its id), or None. Names never exclude."""
         if level_id and int(level_id) in self.ids:
-            return f"showcase level id {int(level_id)} ({self.ids[int(level_id)]})"
+            e = self.entries.get(int(level_id)) or {}
+            tier = f", tier {e['tier']} exam" if "tier" in e else ""
+            return f"held-out level id {int(level_id)} ({self.ids[int(level_id)]}{tier})"
+        return None
+
+    def warning(self, level_id=0, level_name="", macro_file=""):
+        """A note when a level that ISN'T held out has an exam level's name in its name or macro file name
+        (it may be a copy of the level, or just a similar name), or None. Never an exclusion."""
+        if self.reason(level_id):
+            return None
         stem = os.path.splitext(os.path.basename(str(macro_file or "").replace("\\", "/")))[0]
         for text, what in ((level_name, "level name"), (stem, "macro file")):
             k = name_key(text)
-            for key in self.keys:
-                if key and key in k:
-                    return f"showcase {what} {text!r} (matches {key!r})"
+            for key, name in self.warn_keys.items():
+                if key in k:
+                    how = "is" if key == k else "contains"
+                    return (f"level id {int(level_id or 0)}: its {what} {text!r} {how} the exam level name {name!r}, "
+                            "but the id isn't held out, so it is trained on (check it isn't the exam level)")
         return None
 
     def run_reason(self, run):
         return self.reason(run.level_id, run.level_name, run.macro_file)
+
+    def run_warning(self, run):
+        return self.warning(run.level_id, run.level_name, run.macro_file)
+
+
+HeldOut = Showcase
 
 
 def read_manifest(path):
@@ -1083,7 +1114,7 @@ def split_levels(keys, fold=None, seed=0):
 
 
 def make_split(runs, showcase, fold=(0, DEFAULT_FOLDS), seed=0, usable=None):
-    """Leaves the showcase levels out, then splits the rest by level.
+    """Leaves the held-out exam levels out (by id), then splits the rest by level.
 
     usable (optional): run -> bool. A run it rejects has nothing to learn
     from (0 ticks, a failed validation, or a death inside its first second)
@@ -1092,22 +1123,28 @@ def make_split(runs, showcase, fold=(0, DEFAULT_FOLDS), seed=0, usable=None):
 
     Returns {"train": runs, "val": runs, "excluded": [(run, reason)],
     "unusable": runs, "train_levels": keys, "val_levels": keys, "fold": (k, K)
-    or None}. A showcase run is never in train or val, whatever the fold: the
-    showcase levels are held out of every fold.
+    or None, "name_warnings": [(run, text)]}. A held-out run is never in train
+    or val, whatever the fold. A run whose name only looks like an exam
+    level's is kept and listed in name_warnings.
     """
-    pool, excluded, unusable = [], [], []
+    pool, excluded, unusable, warnings = [], [], [], []
     for r in runs:
         why = showcase.run_reason(r)
         if why:
             excluded.append((r, why))
-        elif usable is not None and not usable(r):
+            continue
+        warn = showcase.run_warning(r) if hasattr(showcase, "run_warning") else None
+        if warn:
+            warnings.append((r, warn))
+        if usable is not None and not usable(r):
             unusable.append(r)
         else:
             pool.append(r)
     train_keys, val_keys, used = split_levels([level_key(r) for r in pool], fold, seed)
     tk, vk = set(train_keys), set(val_keys)
     return {"train": [r for r in pool if level_key(r) in tk], "val": [r for r in pool if level_key(r) in vk],
-            "excluded": excluded, "unusable": unusable, "train_levels": train_keys, "val_levels": val_keys,
+            "excluded": excluded, "unusable": unusable, "name_warnings": warnings,
+            "train_levels": train_keys, "val_levels": val_keys,
             "fold": used, "fold_asked": fold}
 
 
@@ -1123,6 +1160,7 @@ def split_record(split, model, layout_hash, seed=0):
             "train_levels": split["train_levels"], "val_levels": split["val_levels"],
             "train_runs": runs(split["train"]), "val_runs": runs(split["val"]),
             "showcase_excluded": [dict(runs([r])[0], reason=why) for r, why in split["excluded"]],
+            "name_warnings": [dict(runs([r])[0], warning=w) for r, w in split.get("name_warnings", [])],
             "unusable_runs": runs(split.get("unusable", []))}
 
 
@@ -1476,7 +1514,7 @@ def _cmd_list(root):
     print(f"\nRecorded runs (data\\): {len(runs)} in {len(levels)} levels")
     for key, rs in sorted(levels.items(), key=lambda kv: kv[1][0].level_name.lower()):
         r0 = rs[0]
-        flag = "  SHOWCASE (evaluation only)" if show.run_reason(r0) else ""
+        flag = "  HELD OUT (exam level, never trained on)" if show.run_reason(r0) else ""
         print(f"  {r0.level_name or '?'} ({key}){flag}")
         for r in rs:
             state = "completed" if r.completed else f"died at tick {r.died_tick}"

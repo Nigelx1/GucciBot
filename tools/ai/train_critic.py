@@ -62,9 +62,9 @@ def parse_args(argv):
                     help="how much more a state with both answers (a branch and its parent) weighs")
     ap.add_argument("--select", choices=["loss", "last"], default="loss",
                     help="which epoch to export: lowest validation loss, or the last")
-    ap.add_argument("--manifest", help="a manifest whose is_bar_level entries are showcase levels too")
+    ap.add_argument("--manifest", help="a manifest whose is_bar_level / held_out entries (by id) are held out too")
     ap.add_argument("--exclude", action="append", default=[],
-                    help="another level to leave out of training, by id or name (repeatable)")
+                    help="another level id to leave out of training (repeatable); a name only warns")
     ap.add_argument("--ema", type=int, default=-1,
                     help="export an average of the weights over this many steps (-1: half an epoch; 0: off)")
     ap.add_argument("--fresh", action="store_true", help="ignore last.pt and start over")
@@ -255,6 +255,8 @@ def train(args, root, out, prog, log):
     gbai.write_json_atomic(os.path.join(out, "split.json"), record)
     for a, why in split["excluded"]:
         log(f"left out of training: {a.run_id}: {why}")
+    for a, warn in split.get("name_warnings", []):
+        log(f"NOTE (kept): {a.run_id}: {warn}")
     for a in split["unusable"]:
         log(f"not used: {a.run_id} has no rows with a known outcome")
     if not split["train"]:

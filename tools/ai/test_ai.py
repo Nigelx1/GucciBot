@@ -44,15 +44,15 @@ TAPE_LAYOUT = [{"name": "gap", "offset": 0, "size": 1}, {"name": "deadly_band", 
                {"name": "solid_band", "offset": 3, "size": 2}, {"name": "portal_ship", "offset": 5, "size": 1}]
 TAPE_K = 6
 # (level_id, name, speed, tps, ticks): twelve ordinary levels and two
-# showcase ones (Bloodbath by its id, The Nightmare by its name).
+# held-out exam ones (Bloodbath and The Nightmare, by their ids).
 TOY_LEVELS = [(1001, "Toy One", 1.0, 240, 7000), (1002, "Toy Two", 0.9, 240, 7000),
               (1003, "Toy Three", 1.1, 240, 7000), (1004, "Toy Four", 1.0, 360, 9000),
               (1005, "Toy Five", 1.25, 240, 6000), (1006, "Toy Six", 0.8, 240, 7000),
               (1007, "Toy Seven", 1.0, 240, 7000), (1008, "Toy Eight", 0.85, 240, 7000),
               (1009, "Toy Nine", 1.15, 240, 7000), (1010, "Toy Ten", 1.0, 360, 9000),
               (1011, "Toy Eleven", 0.95, 240, 7000), (1012, "Toy Twelve", 1.2, 240, 6000),
-              (10565740, "BB copy", 1.0, 240, 6000), (2002, "the  NIGHTMARE", 1.0, 240, 6000)]
-SHOWCASE_TOY_IDS = {10565740, 2002}
+              (10565740, "BB copy", 1.0, 240, 6000), (13519, "the  NIGHTMARE", 1.0, 240, 6000)]
+SHOWCASE_TOY_IDS = {10565740, 13519}
 
 
 SPEED_STEPS = (0.8, 1.0, 1.25)  # speed portals: the multiplier changes every 900-2400 ticks
@@ -737,25 +737,65 @@ class DataTests(unittest.TestCase):
                 f.write(b"\0")
             self.assertIn("tape.u8 is", gbai.list_tapes(root)[1][0][1])
 
-    def test_showcase_matching(self):
+    def test_heldout_exams_by_id_only(self):
         show = gbai.Showcase()
-        for lid, name, macro in [(10565740, "anything", ""), (14, "", ""), (0, "Theory of Everything 2", ""),
-                                 (55, "LIMBO", ""), (56, "Heliopolis      ", ""), (57, "", "C:/x/ORBIT.slc"),
-                                 (58, "the  NIGHTMARE", ""), (59, "Silent clubstep", ""), (60, "", "toe2.gdr"),
-                                 (13519, "", ""), (18, "", ""), (20, "", ""), (86084399, "a renamed copy", ""),
-                                 (133175713, "", "run.slc"), (136530685, "", "")]:
-            self.assertIsNotNone(show.reason(lid, name, macro), (lid, name, macro))
-        for lid, name, macro in [(1, "Stereo Madness", ""), (61, "Lucid Nightmares", ""), (62, "Bloodlust", ""),
-                                 (63, "Evolutionary Theory", ""), (12, "Theory of Everything", "toe.slc")]:
+        listed = gbai.read_json(gbai.HELDOUT_PATH)["levels"]
+        self.assertEqual(len(listed), 26)
+        for e in listed:  # every exam level is held out by its id, whatever it's called
+            self.assertIsNotNone(show.reason(e["level_id"], "a renamed copy", "x.slc"), e)
+        for lid in (1, 5, 11, 14, 18, 20, 13519, 10565740, 100856004, 146615106):
+            self.assertIsNotNone(show.reason(lid))
+        # Names never exclude: same-looking names on other ids are trained on, with a warning at most.
+        for lid, name, macro in [(0, "Theory of Everything 2", ""), (55, "LIMBO", ""), (59, "Silent Clubstep", ""),
+                                 (60, "", "Clubstep.gdr"), (61, "Sakupen Circles", ""), (62, "Sakupen Hell", ""),
+                                 (63, "Sakupen End", ""), (12, "Theory of Everything", "toe.slc"),
+                                 (80517643, "Maze of Justice", "")]:
             self.assertIsNone(show.reason(lid, name, macro), (lid, name, macro))
+        self.assertIsNotNone(show.warning(59, "Silent Clubstep"))
+        self.assertIsNotNone(show.warning(63, "Sakupen End"))
+        self.assertIsNotNone(show.warning(60, "", "C:/m/Clubstep.gdr"))
+        self.assertIsNone(show.warning(61, "Sakupen Circles"))  # "Sakupen End" isn't in it
+        self.assertIsNone(show.warning(62, "Sakupen Hell"))
+        self.assertIsNone(show.warning(14, "Clubstep"))  # held out: an exclusion, not a warning
+        show2 = gbai.Showcase(extra_ids=[777], extra_names=["Some Level"])
+        self.assertIsNotNone(show2.reason(777))
+        self.assertIsNone(show2.reason(778, "some level"))
+        self.assertIsNotNone(show2.warning(778, "some level"))
         with TempRoot() as d:
             path = os.path.join(d, "manifest.json")
             with open(path, "w", encoding="utf-8") as f:
                 json.dump({"entries": [{"path": "x.slc", "level_id": 777, "level_name": "Some Bar Level",
-                                        "is_bar_level": True}]}, f)
+                                        "is_bar_level": True},
+                                       {"path": "y.slc", "level_id": 778, "level_name": "Exam", "held_out": "tier 4"},
+                                       {"path": "z.slc", "level_id": 0, "level_name": "No Id", "is_bar_level": True}]},
+                          f)
             show = gbai.Showcase(manifest=path)
             self.assertIsNotNone(show.reason(777, "renamed", ""))
-            self.assertIsNotNone(show.reason(0, "some bar level", ""))
+            self.assertIsNotNone(show.reason(778))
+            self.assertIsNone(show.reason(0, "some bar level", ""))
+            for bad in ("{}", '{"levels": []}', '{"levels": [{"name": "x"}]}'):
+                with open(os.path.join(d, "h.json"), "w") as f:
+                    f.write(bad)
+                with self.assertRaises(gbai.DataError):
+                    gbai.Showcase(heldout=os.path.join(d, "h.json"))
+            with self.assertRaises(gbai.DataError):
+                gbai.Showcase(heldout=os.path.join(d, "missing.json"))
+
+    def test_heldout_split_keeps_lookalike_names(self):
+        with TempRoot() as root:
+            for lid, name in [(1001, "Sakupen Circles"), (1002, "Silent Clubstep"), (1003, "Toy"),
+                              (1004, "Sakupen Hell"), (100856004, "renamed copy"), (14, ""), (1, "Stereo Madness")]:
+                write_toy_run(root, lid, name, ticks=600, seed=lid % 97, stem=f"r{lid}")
+            runs, problems = gbai.list_runs(root)
+            self.assertEqual(problems, [])
+            for k in range(4):
+                split = gbai.make_split(runs, gbai.Showcase(), (k, 4), usable=lambda r: r.usable_ticks() > 0)
+                used = {r.level_id for r in split["train"] + split["val"]}
+                self.assertEqual(used, {1001, 1002, 1003, 1004})
+                self.assertEqual({r.level_id for r, _ in split["excluded"]}, {100856004, 14, 1})
+                self.assertEqual({r.level_id for r, _ in split["name_warnings"]}, {1002})
+                rec = gbai.split_record(split, "pilot", TOY_HASH)
+                self.assertEqual([w["level_id"] for w in rec["name_warnings"]], [1002])
 
     def test_levels_with_nothing_usable_take_no_split_slot(self):
         with TempRoot() as root:
@@ -890,7 +930,7 @@ class PilotTests(unittest.TestCase):
             self.assertEqual((prog["state"], prog["epoch"], prog["epochs"]), ("done", 30, 30))
             self.assertEqual(res["best"]["epoch"], prog["best_epoch"])
             with open(os.path.join(out, "eval_report.md"), encoding="utf-8") as f:
-                self.assertIn("Showcase levels (never trained on)", f.read())
+                self.assertIn("Held-out exam levels (never trained on)", f.read())
 
     def test_same_seed_and_threads_train_the_same_network(self):
         import torch

@@ -69,9 +69,9 @@ def parse_args(argv):
     ap.add_argument("--w-gravity", type=float, default=0.5, help="loss weight of gravity")
     ap.add_argument("--w-hold", type=float, default=1.0, help="loss weight of hold_frac")
     ap.add_argument("--select", choices=["loss", "last"], default="loss")
-    ap.add_argument("--manifest", help="a manifest whose is_bar_level entries are showcase levels too")
+    ap.add_argument("--manifest", help="a manifest whose is_bar_level / held_out entries (by id) are held out too")
     ap.add_argument("--exclude", action="append", default=[],
-                    help="another level to leave out of training, by id or name (repeatable)")
+                    help="another level id to leave out of training (repeatable); a name only warns")
     ap.add_argument("--fresh", action="store_true", help="ignore last.pt and start over")
     background.add_args(ap)
     args = ap.parse_args(argv)
@@ -238,6 +238,8 @@ def train(args, root, out, prog, log):
     gbai.write_json_atomic(os.path.join(out, "split.json"), record)
     for r, why in split["excluded"]:
         log(f"left out of training: {r.run_id}: {why}")
+    for r, warn in split.get("name_warnings", []):
+        log(f"NOTE (kept): {r.run_id}: {warn}")
     train_s = samples_for(split["train"], tapes, log)
     val_s = samples_for(split["val"], tapes, log)
     if not train_s:
