@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-03-g (AI: reinforcement learning rollouts, and the network plays alone by default; old practice rules kept for comparison)"
+    "2026-11-03-h (several test games at once: own Assistant Access port each, test launches write no settings, quiet windows with no taskbar button, per-game AI weights folder)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
