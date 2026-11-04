@@ -2430,7 +2430,16 @@ namespace gucci::ui {
         // Server::start or registerTools, so it could not be turned on at all.
         // The choice is remembered so it comes back after a restart (the
         // restart_game tool relies on that).
-        constexpr int kAssistantPort = 8790;
+        // 8790, or GUCCIBOT_MCP_PORT when it is set (tools/assist.py gives each
+        // of several test games its own port).
+        int assistantPort() {
+            static int const s_port = [] {
+                char const* v = std::getenv("GUCCIBOT_MCP_PORT");
+                int const p = v ? std::atoi(v) : 0;
+                return p > 0 && p < 65536 ? p : 8790;
+            }();
+            return s_port;
+        }
         bool g_assistantAccessFailed = false;
         // Running when GucciBot was switched off, so it comes back with it
         // (suspendAssistantAccess below; core/bot_switch.hpp).
@@ -2443,7 +2452,7 @@ namespace gucci::ui {
             if (on) {
                 if (server->tools().empty())
                     mcp::registerTools(*server);
-                if (!server->running() && !server->start(kAssistantPort))
+                if (!server->running() && !server->start(assistantPort()))
                     g_assistantAccessFailed = true;
             } else {
                 server->stop();
@@ -2598,7 +2607,10 @@ namespace gucci::ui {
             if (server->running())
                 kit::Hint(fmt::format("Listening on 127.0.0.1:{}", server->port()).c_str());
             else if (g_assistantAccessFailed)
-                kit::Note("It could not start: something else is using port 8790. guccibot_mcp.log has the details.",
+                kit::Note(fmt::format("It could not start: something else is using port {}. guccibot_mcp.log has the "
+                                      "details.",
+                                      assistantPort())
+                              .c_str(),
                           Tone::Warn);
             kit::EndCard();
             // GBot (the disguise) has no BIG BRRRR and doesn't mention it: the
@@ -3458,7 +3470,7 @@ namespace gucci::ui {
         auto* server = mcp::Server::get();
         if (server->tools().empty())
             mcp::registerTools(*server);
-        if (!server->running() && !server->start(kAssistantPort))
+        if (!server->running() && !server->start(assistantPort()))
             g_assistantAccessFailed = true;
     }
 
