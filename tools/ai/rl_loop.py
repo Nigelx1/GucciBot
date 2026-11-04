@@ -35,6 +35,7 @@ import datetime
 import json
 import os
 import random
+import shutil
 import sys
 import threading
 import time
@@ -125,6 +126,10 @@ class Loop:
     def stopping(self):
         if os.path.exists(self.stop_path):
             return "STOP file"
+        # 2026-11-04 the loop filled Nigel's C: drive and crashed mid-round; stop cleanly with room to spare instead.
+        free_gb = shutil.disk_usage(self.dir).free / 1e9
+        if free_gb < 8:
+            return f"low disk space ({free_gb:.1f} GB free, need 8)"
         if datetime.datetime.now() >= self.end:
             return f"reached {self.args.end}"
         n = self.args.iterations
