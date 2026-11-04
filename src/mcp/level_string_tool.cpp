@@ -35,11 +35,21 @@ namespace {
     Ref<GJGameLevel> g_level;  // the last opened one, kept while the play layer may use it
 
     bool overridden(int id) { return g_song.id != 0 && id == g_song.id; }
+
+    // The first few answers, so a test can see GD asked for the song.
+    gd::string answer(char const* who) {
+        static int s_logged = 0;
+        if (s_logged < 8) {
+            ++s_logged;
+            log::info("[level string] {}: song {} -> {}", who, g_song.id, g_song.path);
+        }
+        return g_song.path;
+    }
 }  // namespace
 
 class $modify(GBLevelStringSongs, MusicDownloadManager) {
     gd::string pathForSong(int id) {
-        if (overridden(id)) return g_song.path;
+        if (overridden(id)) return answer("pathForSong");
         return MusicDownloadManager::pathForSong(id);
     }
     bool isSongDownloaded(int id) {
@@ -50,7 +60,7 @@ class $modify(GBLevelStringSongs, MusicDownloadManager) {
 
 class $modify(GBLevelStringLevel, GJGameLevel) {
     gd::string getAudioFileName() {
-        if (overridden(m_songID)) return g_song.path;
+        if (overridden(m_songID)) return answer("getAudioFileName");
         return GJGameLevel::getAudioFileName();
     }
 };
