@@ -56,6 +56,7 @@ def parse_args(argv):
     ap.add_argument("--keep-rollouts", type=int, default=2, help="iterations of rollout files kept on disk")
     ap.add_argument("--lr-actor", type=float, default=None)
     ap.add_argument("--imitation", type=float, default=None)
+    ap.add_argument("--entropy", type=float, default=None, help="PPO entropy bonus (how hard it keeps exploring)")
     ap.add_argument("--launch", action="store_true", help="start detached and return")
     return ap.parse_args(argv)
 
@@ -79,6 +80,8 @@ class Loop:
             self.cfg["lr_actor"] = args.lr_actor
         if args.imitation is not None:
             self.cfg["imitation"] = args.imitation
+        if args.entropy is not None:
+            self.cfg["entropy"] = args.entropy
 
     # ---- bookkeeping
     def save_state(self):
