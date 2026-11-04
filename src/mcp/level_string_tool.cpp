@@ -85,6 +85,9 @@ namespace gucci::mcp {
             field("song_id", "integer",
                   "the custom song id the level uses; with song_path, pick one GD has no file for");
             field("audio_track", "integer", "one of RobTop's songs instead (0 Stereo Madness, ...)");
+            field("level_id", "integer",
+                  "an id for the level (default 0), so tools that check the open level's id "
+                  "(gucci_ai_validate_real) accept it; pick one no real level uses");
             auto schema = matjson::Value::object();
             schema["type"] = "object";
             schema["properties"] = props;
@@ -154,6 +157,8 @@ namespace gucci::mcp {
                 level->m_isEditable = true;
                 level->m_songID = songId;
                 level->m_audioTrack = (int)numArg(a, "audio_track", 0);
+                if (auto const id = numArg(a, "level_id", 0); id > 0)
+                    level->m_levelID = (int)id;
                 g_level = level;
 
                 auto* scene = PlayLayer::scene(level, false, false);
@@ -163,6 +168,7 @@ namespace gucci::mcp {
                 out["song_id"] = (int64_t)songId;
                 out["song_override"] = !songPath.empty();
                 out["packed_bytes"] = (int64_t)packed.size();
+                out["level_id"] = (int64_t)level->m_levelID.value();
                 return out;
             },
         });
