@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-03-h (several test games at once: own Assistant Access port each, test launches write no settings, quiet windows with no taskbar button, per-game AI weights folder)"
+    "2026-11-03-i (quiet test windows: a minimized test game is kept off the screen instead of at the bottom left of the desktop)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
