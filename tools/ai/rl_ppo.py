@@ -55,8 +55,14 @@ def defaults():
                 target_kl=0.03, grad_clip=0.5, value_warmup_epochs=3, human_ticks=200000, seed=0)
 
 
+# The loop's own folder under AI_ROOT and the folder its pilot is installed to: a second loop (another pilot,
+# e.g. "Accurate") sets both (rl_loop.py --rl-name / --weights-name) so the two never share a file.
+RL_NAME = "rl"
+WEIGHTS_NAME = "weights"
+
+
 def rl_dir(root, *parts):
-    p = os.path.join(root, "rl", *parts)
+    p = os.path.join(root, RL_NAME, *parts)
     os.makedirs(p if not os.path.splitext(p)[1] else os.path.dirname(p), exist_ok=True)
     return p
 
@@ -267,7 +273,7 @@ def install(root, log=print):
     ok, worst, _ = export.check_golden(src)
     if not ok:
         raise RuntimeError(f"{src} doesn't reproduce its golden vectors (worst {worst:.3g}); not installed")
-    wdir = os.path.join(root, "weights")
+    wdir = os.path.join(root, WEIGHTS_NAME)
     os.makedirs(wdir, exist_ok=True)
     dst = os.path.join(wdir, "pilot.gbnn")
     keep = os.path.join(wdir, "pilot_before_rl.gbnn")
