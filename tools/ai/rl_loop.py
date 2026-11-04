@@ -288,7 +288,7 @@ class Loop:
                 self.progress(state="running", iteration=it + 1)
                 self.prune(it)
                 failures = 0
-            except (RuntimeError, TimeoutError, OSError, KeyError, ValueError) as e:
+            except Exception as e:  # noqa: BLE001 - a failed iteration is retried, never the end of the loop
                 failures += 1
                 self.log(f"iteration {it} failed ({failures} in a row): {e!r}")
                 self.progress(state="recovering", error=str(e))
