@@ -194,7 +194,7 @@ namespace gucci::safemode {
     // Indicators, the Survival Indicator and its click cue, the path preview,
     // the macro's path, its clicks near you (Practice range), the trainers'
     // ghosts in their own levels -- the macro's, and your best attempt's --
-    // and their Video Mode there, and the AI pathfinder's level map.
+    // their Video Mode and click bar there, and the AI pathfinder's level map.
     bool showsTheWay() {
         auto* gb = GucciEngine::get();
         if (clickind::active() || gb->pathPreview)
@@ -221,6 +221,14 @@ namespace gucci::safemode {
         if ((video == videomode::Source::Jmf && trainers::followsLevel(Kind::Jupiter)) ||
             (video == videomode::Source::Trainer && trainers::followsLevel(Kind::Any)))
             return true;
+        // A trainer page's click bar while it follows its own level: the
+        // macro's next clicks, scrolling past with the level (Nigel,
+        // 2026-11-02). It only follows while the page is drawn.
+        for (Kind k : {Kind::Jupiter, Kind::Any}) {
+            auto const s = trainers::state(k);
+            if (s.pageVisible && s.barEnabled && !s.macro.clickIntervalsSec.empty() && trainers::followsLevel(k))
+                return true;
+        }
         // The AI pathfinder's level map, drawn over a level: the gaps you fit
         // through, the parts that move and the choices ahead (2026-11-02).
         if (absense::levelMapShown() && PlayLayer::get())
