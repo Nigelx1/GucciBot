@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-03-i (quiet test windows: a minimized test game is kept off the screen instead of at the bottom left of the desktop)"
+    "2026-11-03-j (AI jobs free their memory when they finish: a learning-loop game no longer grows to 5 GB)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
