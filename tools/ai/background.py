@@ -151,8 +151,12 @@ def launch(script_args, log_path, cwd=None, dry_run=False):
     if dry_run:
         return {"pid": None, "command": cmd, "cwd": cwd}
     ps_cmd = cmd.replace("'", "''")
-    ps = ("$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments "
-          f"@{{CommandLine = '{ps_cmd}'; CurrentDirectory = '{cwd.replace(chr(39), chr(39) * 2)}'}}; "
+    # ShowWindow 0: the console starts hidden (no Windows Terminal window for Nigel to see), and the child
+    # processes it starts inherit that hidden console instead of opening windows of their own.
+    ps = ("$si = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{ShowWindow = [uint16]0}; "
+          "$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments "
+          f"@{{CommandLine = '{ps_cmd}'; CurrentDirectory = '{cwd.replace(chr(39), chr(39) * 2)}'; "
+          "ProcessStartupInformation = $si}; "
           "Write-Output ('{0} {1}' -f $r.ReturnValue, $r.ProcessId)")
     out = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps], capture_output=True,
                          text=True, timeout=60)
