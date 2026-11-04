@@ -149,6 +149,8 @@ namespace gucci::mcp {
     void registerTools(Server& server);
     // The AI pilot's tools (gucci_ai_*). Defined in ai_tools.cpp.
     void registerAiTools(Server& server);
+    // gucci_open_level_string. Defined in level_string_tool.cpp.
+    void registerLevelStringTools(Server& server);
 
     // Who owns the run right now: "render", "analyzer", "pathfinder", or ""
     // for nobody. The driving tools refuse while it isn't "". Defined in

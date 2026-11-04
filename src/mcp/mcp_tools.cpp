@@ -3314,6 +3314,8 @@ namespace gucci::mcp {
 
         // The AI pilot's tools (src/mcp/ai_tools.cpp).
         registerAiTools(server);
+        // Levels built outside the game (src/mcp/level_string_tool.cpp).
+        registerLevelStringTools(server);
     }
 
 } // namespace gucci::mcp
