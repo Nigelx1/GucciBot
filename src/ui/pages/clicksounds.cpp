@@ -85,6 +85,11 @@ namespace gucci::ui::pages {
         bool dirty = false;
 
         kit::BeginCard("Click sounds", "A click when jump is pressed, a release when it is let go.");
+        // The Demonlist's allowed-mods sheet: "Click sounds are not acceptable
+        // as a replacement for actual click audio" (Nigel, 2026-11-02).
+        kit::Note("Lists like the Demonlist don't take these as click audio for a record. Record your real clicks "
+                  "with a mic.",
+                  Tone::Muted);
         bool flipped = false;
         if (kit::FeatureBegin("On", nullptr, &s.enabled, nullptr, &flipped)) {
             if (packRow("Pack", "pack", &s.pack)) {
