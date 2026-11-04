@@ -251,13 +251,11 @@ namespace gucci::safemode {
                // - layout mode, and no mirror effect while it applies.
                || gb->showHitboxes || HitborderOverlay::get()->settings.show || gb->layoutMode
                || (gb->noMirrorEffect && (!gb->noMirrorRecordingOnly || gb->isRecording()))
-               // Recording switches that change the attempt being played: the
-               // same random triggers every attempt (RNG lock), one press
-               // moving both players (Mirror inputs), the press turned around
-               // while upside down (Maintain gravity). Each acts only while
-               // recording.
-               || (gb->isRecording() &&
-                   (gb->rngLocked || gb->replay.m_mirrorInputs || gb->replay.m_maintainGravity));
+               // Recording by itself (Nigel, 2026-11-02: the list bans "Record"
+               // in every mod menu, and it runs on physics ticks). That also
+               // covers the switches that only act while recording: RNG lock,
+               // Mirror inputs and Maintain gravity.
+               || gb->isRecording();
     }
 
 } // namespace gucci::safemode
