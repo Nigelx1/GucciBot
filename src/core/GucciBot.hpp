@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-03-l (gucci_open_level_string logs when GD asks for the test song)"
+    "2026-11-03-m (gucci_open_level_string takes a level id, so a real-game macro check works on it)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
