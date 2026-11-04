@@ -80,11 +80,15 @@ class AssistGame:
     Optionally proves it left Nigel's files alone (assist's snapshot/check,
     when an allowlist has been learned): the AI's own folder (ai\\) is left
     out of the snapshot, since recording writes there on purpose.
+
+    `port`: this game's Assistant Access port (several games at once, each its
+    own; None is assist's default game). Every call goes to it, from any thread.
     """
 
-    def __init__(self, log=print, check_saves=True):
+    def __init__(self, log=print, check_saves=True, port=None):
         self.log = log
         self.check_saves = check_saves
+        self.port = port
         self.tools = set()
         self.before = None
         self.saves_changed = None
@@ -94,6 +98,11 @@ class AssistGame:
             sys.path.insert(0, TOOLS_DIR)
         import assist
         self.assist = assist
+        with assist.using(self.port):
+            return self._enter()
+
+    def _enter(self):
+        assist = self.assist
         if self.check_saves and os.path.exists(assist.ALLOWLIST):
             assist._TREE_SKIP = tuple(assist._TREE_SKIP) + ("ai/*",)
             self.before = assist.snapshot()
@@ -101,7 +110,7 @@ class AssistGame:
             self.log(f"NOTE: no allowlist at {assist.ALLOWLIST}, so this session can't prove it left the saves "
                      "alone (assist.learn() makes one from a no-op session)")
         try:
-            # Refuses while any Geometry Dash runs (it may be Nigel's), before starting anything;
+            # Refuses while a Geometry Dash none of ours started runs (it may be Nigel's), before starting;
             # inside the try so a game it did start and then gave up on still gets closed.
             assist.launch()
             self._setup()
@@ -111,7 +120,8 @@ class AssistGame:
         return self
 
     def __exit__(self, *exc):
-        self._close()
+        with self.assist.using(self.port):
+            self._close()
         if self.before is not None:
             try:
                 self.assist.check(self.before, self.assist.snapshot())
@@ -125,7 +135,8 @@ class AssistGame:
             self.assist.close()
 
     def alive(self):
-        return self.assist.ours()
+        with self.assist.using(self.port):
+            return self.assist.ours()
 
     def _setup(self):
         self.assist.ensure_safe()
@@ -137,6 +148,10 @@ class AssistGame:
         into its new process; safe mode stays forced), else close() it if it still runs, then launch() a new
         one. A Geometry Dash this script didn't start (Nigel's) is never touched: launch waits for it to close,
         checking every `other_poll` seconds, up to `other_wait`."""
+        with self.assist.using(self.port):
+            self._recover(other_poll, other_wait)
+
+    def _recover(self, other_poll, other_wait):
         a = self.assist
         if a.ours():
             if a._answers():
@@ -149,7 +164,7 @@ class AssistGame:
             if a.ours():
                 a.close()  # never kills; raises if the game won't close
         start = time.time()
-        while a._running(os.path.basename(a.GD_EXE)):
+        while a.others():
             if time.time() - start > other_wait:
                 raise RuntimeError(f"a Geometry Dash this script didn't start is still running after "
                                    f"{gbai.fmt_seconds(other_wait)}; stopping (run record again to carry on)")
@@ -164,14 +179,15 @@ class AssistGame:
             raise
 
     def call(self, tool, **args):
-        return self.assist.call(tool, **args)
+        with self.assist.using(self.port):
+            return self.assist.call(tool, **args)
 
     def _tool_list(self):
         """The game's tool names (MCP tools/list), asked only of the game launch() started."""
         if not self.assist.ours():
             raise RuntimeError("no game launch() started is running")
         body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}).encode()
-        req = urllib.request.Request(self.assist.URL, body, {"Content-Type": "application/json"})
+        req = urllib.request.Request(self.assist._url(), body, {"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=20) as r:
             res = json.loads(r.read())["result"]
         return {t["name"] for t in res.get("tools", [])}

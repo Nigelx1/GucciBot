@@ -21,6 +21,18 @@ Or from a shell:
     python tools/assist.py shot solar_settings 3
     python tools/assist.py launch [--visible] | restart | ours | safe | close | show | hide
 
+Several games at once (2026-11-03): each has its own Assistant Access port
+(the game reads GUCCIBOT_MCP_PORT) and its own PID file. launch(port=8791)
+makes that game this thread's; every call after it in the thread goes to it.
+using(port) is the same for a block; use(port) switches. Threads keep their
+own game, so one thread per game runs them side by side:
+    assist.launch(port=8791)          # this thread now talks to the game on 8791
+    with assist.using(8790): assist.call("gucci_get_state")   # another one of ours
+    assist.others()                   # GDs none of ours started (Nigel's): leave them alone
+A game it keeps minimized also starts with GUCCIBOT_QUIET_WINDOW=1: from the
+moment GucciBot loads it never takes the focus, never flashes and has no
+taskbar button (src/ai/quiet_window.cpp).
+
 Values after key= are read as JSON when they parse (true, 3, "x") and as
 text otherwise.
 
@@ -94,7 +106,8 @@ import xml.etree.ElementTree as ET
 import zlib
 from ctypes import wintypes
 
-URL = "http://127.0.0.1:8790/"
+DEFAULT_PORT = 8790
+URL = f"http://127.0.0.1:{DEFAULT_PORT}/"  # the default game's; _url() is this thread's
 GD_DIR = r"C:\Program Files (x86)\Steam\steamapps\common\Geode Geometry Dash"
 GD_EXE = os.path.join(GD_DIR, "GeometryDash.exe")
 GD_NAME = os.path.basename(GD_EXE).lower()
@@ -106,6 +119,41 @@ GEODE_LOGS = os.path.join(GD_DIR, "geode", "logs")
 MOD_ID = "nigelx1.guccibot"
 
 _id = 0
+_tls = threading.local()
+
+
+def port():
+    """The Assistant Access port of this thread's game (DEFAULT_PORT until use() or launch(port=))."""
+    return getattr(_tls, "port", None) or DEFAULT_PORT
+
+
+_current_port = port  # for launch(), whose argument is called port
+
+
+def use(p):
+    """This thread's calls go to the game on port `p` from now on."""
+    _tls.port = int(p) if p else None
+
+
+@contextlib.contextmanager
+def using(p):
+    """This thread's calls go to the game on port `p` inside the block."""
+    old = getattr(_tls, "port", None)
+    use(p)
+    try:
+        yield
+    finally:
+        _tls.port = old
+
+
+def _url():
+    return f"http://127.0.0.1:{port()}/"
+
+
+def _pid_file(p=None):
+    """The PID file of the game on port `p` (this thread's): the default game keeps the old name."""
+    p = p or port()
+    return PID_FILE if p == DEFAULT_PORT else PID_FILE[:-len(".txt")] + f"_{p}.txt"
 
 
 def call(tool, /, _any_game=False, **args):
@@ -135,7 +183,7 @@ def _rpc(tool, args):
     _id += 1
     body = json.dumps({"jsonrpc": "2.0", "id": _id, "method": "tools/call",
                        "params": {"name": tool, "arguments": args}}).encode()
-    req = urllib.request.Request(URL, body, {"Content-Type": "application/json"})
+    req = urllib.request.Request(_url(), body, {"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=20) as r:
         res = json.loads(r.read())["result"]
     text = res["content"][0]["text"]
@@ -223,10 +271,10 @@ def _processes():
         _k32.CloseHandle(snap)
 
 
-def _recorded():
-    """(pid, creation time) launch() (or restart()) wrote down, or None."""
+def _recorded(p=None):
+    """(pid, creation time) launch() (or restart()) wrote down for this thread's game (port `p`), or None."""
     try:
-        with open(PID_FILE) as f:
+        with open(_pid_file(p)) as f:
             pid, created = f.read().split()
         return int(pid), int(created)
     except (OSError, ValueError):
@@ -234,7 +282,7 @@ def _recorded():
 
 
 def _record(pid, created):
-    with open(PID_FILE, "w") as f:
+    with open(_pid_file(), "w") as f:
         f.write(f"{pid} {created}")
 
 
@@ -242,6 +290,62 @@ def _alive(rec):
     """The process (pid, creation time) is still running as the GeometryDash.exe it was."""
     now = _process(rec[0])
     return bool(now) and now[0].lower() == GD_NAME and now[1] == rec[1]
+
+
+def ours_all():
+    """{port: pid} of every game assist started (any port, any script) that still runs."""
+    out = {}
+    folder, base = os.path.split(PID_FILE)
+    stem = base[:-len(".txt")]
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        return out
+    for name in names:
+        if not (name.startswith(stem) and name.endswith(".txt")):
+            continue
+        rest = name[len(stem):-len(".txt")]
+        if rest and not (rest.startswith("_") and rest[1:].isdigit()):
+            continue
+        p = int(rest[1:]) if rest else DEFAULT_PORT
+        rec = _recorded(p)
+        if rec and _alive(rec):
+            out[p] = rec[0]
+    return out
+
+
+def others():
+    """PIDs of running Geometry Dash games that no launch() started (Nigel's): never touched."""
+    mine = set(ours_all().values())
+    return [p for p in _running(GD_NAME) if p not in mine]
+
+
+class _MemCounters(ctypes.Structure):  # PROCESS_MEMORY_COUNTERS_EX
+    _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD)] +                [(n, ctypes.c_size_t) for n in ("PeakWorkingSetSize", "WorkingSetSize", "QuotaPeakPagedPoolUsage",
+                                               "QuotaPagedPoolUsage", "QuotaPeakNonPagedPoolUsage",
+                                               "QuotaNonPagedPoolUsage", "PagefileUsage", "PeakPagefileUsage",
+                                               "PrivateUsage")]
+
+
+def memory_mb(pid=None):
+    """Private memory (MB) of process `pid` (default: this thread's game), or None."""
+    if pid is None:
+        rec = _recorded()
+        pid = rec[0] if rec and _alive(rec) else None
+    if not pid:
+        return None
+    h = _k32.OpenProcess(_QUERY_LIMITED_INFORMATION, False, pid)
+    if not h:
+        return None
+    try:
+        c = _MemCounters()
+        c.cb = ctypes.sizeof(c)
+        psapi = ctypes.WinDLL("psapi")
+        if not psapi.GetProcessMemoryInfo(wintypes.HANDLE(h), ctypes.byref(c), c.cb):
+            return None
+        return c.PrivateUsage / 2**20
+    finally:
+        _k32.CloseHandle(h)
 
 
 def ours():
@@ -470,7 +574,7 @@ def _require_forced():
         raise RuntimeError("safe mode isn't forced in the game, and gucci_force_safe_mode didn't turn it on")
 
 
-def launch(force_safe=True, timeout=180, settle=20, visible=None):
+def launch(force_safe=True, timeout=180, settle=20, visible=None, port=None, env=None):
     """Starts Geometry Dash (the Geode copy) and waits until Assistant Access answers.
 
     Refuses if any GeometryDash.exe is running already (it may be Nigel's), if
@@ -483,14 +587,23 @@ def launch(force_safe=True, timeout=180, settle=20, visible=None):
     opening a level while Mega Hack is still loading crashed it once.
     Assistant Access has to be on already (it's remembered across launches).
 
+    port: this game's Assistant Access port (GUCCIBOT_MCP_PORT); it becomes
+    this thread's game (use()). Other games assist started may run (several
+    at once); one nobody started through assist (others()) means it refuses.
+    env: more environment variables for the game (e.g. GUCCIBOT_AI_WEIGHTS).
+
     The window is minimized as soon as it appears, without taking the focus
     (the window used before keeps it or gets it back), so the game runs in the
     background; visible=True (default: VISIBLE) leaves it up.
     """
     global _minimized
-    if _running(os.path.basename(GD_EXE)):
-        raise RuntimeError("Geometry Dash is already running; close it first (assist.close() only "
-                           "closes a game launch() started)")
+    if port:
+        use(port)
+    if ours():
+        raise RuntimeError(f"a game launch() started on port {_current_port()} is still running; close() it first")
+    if others():
+        raise RuntimeError("a Geometry Dash no launch() started is running (it may be Nigel's); close it first "
+                           "(assist.close() only closes a game launch() started)")
     if not _running("steam.exe"):
         raise RuntimeError("Steam isn't running, and the game can't start without it. Starting "
                            "Steam is Nigel's call.")
@@ -500,7 +613,11 @@ def launch(force_safe=True, timeout=180, settle=20, visible=None):
         raise RuntimeError("GucciBot is switched off in Geode's mod list (geode.loader/saved.json), so the "
                            "game would start without it. Switching it on is Nigel's call.")
 
-    env = dict(os.environ)
+    env = dict(os.environ, **(env or {}))
+    if _current_port() != DEFAULT_PORT:
+        env["GUCCIBOT_MCP_PORT"] = str(_current_port())
+    else:
+        env.pop("GUCCIBOT_MCP_PORT", None)
     if force_safe:
         env["GUCCIBOT_FORCE_SAFE_MODE"] = "1"
     else:
@@ -514,6 +631,10 @@ def launch(force_safe=True, timeout=180, settle=20, visible=None):
     startup = None
     if _minimized:  # its first ShowWindow without the focus, where the game asks for the default
         startup = subprocess.STARTUPINFO(dwFlags=subprocess.STARTF_USESHOWWINDOW, wShowWindow=_SW_SHOWNOACTIVATE)
+        if force_safe:
+            env["GUCCIBOT_QUIET_WINDOW"] = "1"  # no focus, flashing or taskbar button once GucciBot loads
+    if not (_minimized and force_safe):
+        env.pop("GUCCIBOT_QUIET_WINDOW", None)
     try:
         proc = subprocess.Popen([GD_EXE], cwd=GD_DIR, env=env, stdin=devnull, stdout=devnull, stderr=devnull,
                                 creationflags=flags | subprocess.CREATE_BREAKAWAY_FROM_JOB, startupinfo=startup)
@@ -542,7 +663,7 @@ def launch(force_safe=True, timeout=180, settle=20, visible=None):
     while time.time() < end and ours():
         time.sleep(0.5)
     if not ours() or not _answers():
-        now = _running(os.path.basename(GD_EXE))
+        now = others()
         raise RuntimeError("the game closed or restarted while settling" +
                            (f"; the Geometry Dash running now (PID {', '.join(map(str, now))}) isn't one "
                             "launch() started, so leave it alone" if now else ""))
@@ -677,7 +798,7 @@ def close(timeout=60):
             raise TimeoutError(f"the game didn't close within {timeout} s (a dialog open?)")
         time.sleep(0.5)
     try:
-        os.remove(PID_FILE)
+        os.remove(_pid_file())
     except OSError:
         pass
 
