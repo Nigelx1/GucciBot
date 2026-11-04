@@ -12,7 +12,9 @@
 //     game (it can't take the focus or flash any more);
 //   - its window becomes a tool window, so it has no taskbar button (and isn't
 //     in Alt+Tab), any flashing started before is stopped, and the button the
-//     taskbar already made is taken off (ITaskbarList::DeleteTab).
+//     taskbar already made is taken off (ITaskbarList::DeleteTab);
+//   - minimized, it is kept off the screen (a minimized tool window would sit
+//     at the bottom left of the desktop as a small title bar).
 // GD loads its window before GucciBot loads (a non-early mod), so the first
 // few seconds of a launch can still show a button; assist.py keeps the window
 // off the screen meanwhile. Any other launch is untouched. Windows only.
@@ -72,25 +74,41 @@ namespace {
         return out;
     }
 
-    // Tool window + no flashing + no taskbar button; true when a window was changed.
+    // Tool window, no taskbar button, and when minimized, off the screen: a
+    // minimized tool window is otherwise parked as a little title bar at the
+    // bottom left of the desktop (seen 2026-11-03), since the taskbar has no
+    // button to shrink it into. True when a window was changed.
     bool quieten(ITaskbarList* taskbar) {
         bool changed = false;
         for (HWND h : ourWindows()) {
+            if (!IsWindowVisible(h)) continue;
             LONG_PTR const ex = GetWindowLongPtrW(h, GWL_EXSTYLE);
             LONG_PTR const want = (ex | WS_EX_TOOLWINDOW) & ~(LONG_PTR)WS_EX_APPWINDOW;
             if (ex != want) {
                 SetWindowLongPtrW(h, GWL_EXSTYLE, want);
+                if (taskbar) taskbar->DeleteTab(h);
                 changed = true;
             }
-            if (IsWindowVisible(h) && taskbar) taskbar->DeleteTab(h);
+            RECT r{};
+            if (IsIconic(h) && GetWindowRect(h, &r) && r.left > -30000) {
+                WINDOWPLACEMENT wp{sizeof(WINDOWPLACEMENT)};
+                if (GetWindowPlacement(h, &wp)) {
+                    wp.flags |= WPF_SETMINPOSITION | WPF_ASYNCWINDOWPLACEMENT;
+                    wp.ptMinPosition = POINT{-32000, -32000};
+                    wp.showCmd = SW_SHOWMINNOACTIVE;
+                    SetWindowPlacement(h, &wp);
+                    changed = true;
+                }
+            }
         }
         return changed;
     }
 
     void quietThread() {
         // Off the main thread: the window calls below wait on GD's message
-        // loop, and the game must not wait on them. For the first minute,
-        // every half second (a window shown again gets its button back).
+        // loop, and the game must not wait on them. Every half second for as
+        // long as the game runs: assist.py shows the window for a screenshot
+        // and minimizes it again.
         bool const com = SUCCEEDED(CoInitializeEx(nullptr, COINIT_MULTITHREADED));
         ITaskbarList* taskbar = nullptr;
         if (SUCCEEDED(CoCreateInstance(CLSID_TaskbarList, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&taskbar))) &&
@@ -98,15 +116,12 @@ namespace {
             taskbar->Release();
             taskbar = nullptr;
         }
-        auto const until = std::chrono::steady_clock::now() + std::chrono::seconds(60);
         int changed = 0;
-        while (std::chrono::steady_clock::now() < until) {
-            if (quieten(taskbar)) ++changed;
+        for (;;) {
+            if (quieten(taskbar) && ++changed <= 5) log::info("[quiet window] window quietened");
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
         }
-        log::info("[quiet window] done ({} change{})", changed, changed == 1 ? "" : "s");
-        if (taskbar) taskbar->Release();
-        if (com) CoUninitialize();
+        (void)com;
     }
 
 }  // namespace
