@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-03-j (AI jobs free their memory when they finish: a learning-loop game no longer grows to 5 GB)"
+    "2026-11-03-k (gucci_open_level_string: test games open a level string, unsaved, with a song from any file)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
