@@ -33,6 +33,7 @@
 #include <fmt/format.h>
 
 #include <algorithm>
+#include <chrono>
 #include <unordered_set>
 #include <vector>
 
@@ -414,6 +415,27 @@ class $modify(GB7PlayLayer, PlayLayer) {
         // (core/platform.hpp: the global on Windows, GD's own get/set
         // functions elsewhere).
         uint64_t state = readGdRandom();
+
+        // Plain play (no macro recording or playing, no Calculate run): GD's
+        // own random, as without GucciBot (Nigel, 2026-11-02). Pinning the
+        // stored seed here made every Random trigger, shake and random teleport
+        // pick the same way on every attempt: the Demonlist's "Random Seed" /
+        // "Seed Master", both Not Allowed. GD's random state and its variance
+        // table are left alone, and GucciBot's own random sources (the Random
+        // trigger, shake and teleport hooks draw from them) get a fresh seed
+        // each attempt, from GD's random and the clock. A reset to a kept
+        // state (the judge, the pathfinder's step back) is not a new attempt
+        // and keeps the old handling below.
+        if (gb->isIdle() && !gb->analyzerOwnsRun() && !gb->practiceFix.m_forcedState) {
+            uint64_t const fresh =
+                (state ^ static_cast<uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count())) *
+                0x9E3779B97F4A7C15ull;
+            rs.m_startingSeedThisAttempt = fresh >> 16;
+            rs.m_shakeRandomState = rs.m_startingSeedThisAttempt & 0x7FFF;
+            rs.m_teleportRandomState = rs.m_startingSeedThisAttempt & 0x7FFF;
+            gb->practiceFix.reseedAdvancedRandom(rs.m_startingSeedThisAttempt);
+            return;
+        }
 
         if (!gb->updater.m_expectsDeath)
             rs.m_startingSeedThisAttempt = rs.m_startingSeed;
