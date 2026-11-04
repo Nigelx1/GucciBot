@@ -6,6 +6,7 @@
 #include "analysis/pathfinder.hpp"
 #include "hacks/autoclicker.hpp"
 #include "hacks/hitborders.hpp"
+#include "hacks/hud.hpp"
 #include "mcp/mcp_server.hpp"
 #include "trainers/click_indicators.hpp"
 #include "trainers/trainer_core.hpp"
@@ -255,7 +256,10 @@ namespace gucci::safemode {
                // in every mod menu, and it runs on physics ticks). That also
                // covers the switches that only act while recording: RNG lock,
                // Mirror inputs and Maintain gravity.
-               || gb->isRecording();
+               || gb->isRecording()
+               // HUD readouts the sheet doesn't list: Touching orbs and Time
+               // warp (Nigel, 2026-11-02).
+               || hud::showsCheat(gb->hud);
     }
 
 } // namespace gucci::safemode

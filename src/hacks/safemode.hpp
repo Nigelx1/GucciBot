@@ -21,8 +21,8 @@
 // advance (the engine's pause); Force Platformer; anything that shows the way
 // through the level (safemode.cpp, showsTheWay); hitboxes or hitborders shown
 // while you play (not their Show on death switches); layout mode; no mirror
-// effect while it applies; recording a macro (Nigel, 2026-11-02). One at any
-// point taints the whole attempt.
+// effect while it applies; recording a macro; the HUD's Touching orbs or Time
+// warp readout (Nigel, 2026-11-02). One at any point taints the whole attempt.
 //
 // Forced safe mode (2026-10-31) is the switch's effect for one launch, for
 // Claude's test runs over Assistant Access, which play on the owner's real

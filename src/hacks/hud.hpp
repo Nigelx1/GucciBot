@@ -83,6 +83,23 @@ namespace gucci::hud {
     // few leaves an empty one at the end, which this catches.
     static_assert(kReadouts.back().field != nullptr);
 
+    // Readouts that count as a cheat while the HUD shows them (Nigel,
+    // 2026-11-02): Touching orbs works as a click-now cue for orbs, and Time
+    // warp shows hidden changes, like Speed.
+    inline constexpr bool isCheat(bool HudConfig::* field) {
+        return field == &HudConfig::showOrbs || field == &HudConfig::showTimeWarp;
+    }
+
+    // The HUD is on with a cheat readout shown.
+    inline bool showsCheat(HudConfig const& config) {
+        if (!config.enabled)
+            return false;
+        for (auto const& r : kReadouts)
+            if (isCheat(r.field) && config.*r.field)
+                return true;
+        return false;
+    }
+
     // The look's saved keys.
     inline constexpr const char* kKeyEnabled = "hud_enabled";
     inline constexpr const char* kKeyBigFont = "hud_big_font";
