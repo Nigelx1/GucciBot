@@ -8,7 +8,8 @@
 // CCLocalLevels(2).dat (both managers are GManagers), and AppDelegate::trySaveGame
 // is the exit/background/autosave path that calls them. Normal launches, and a
 // game only forced into safe mode later by the gucci_force_safe_mode tool, save
-// as they always have.
+// as they always have. The exit save of the mods' own data (Geode's, which
+// writes GucciBot's saved.json and settings.json) is skipped too.
 
 #include "hacks/safemode.hpp"
 
@@ -38,6 +39,15 @@ class $modify(GBTestSaveGuardGM, GManager) {
 };
 
 class $modify(GBTestSaveGuardApp, AppDelegate) {
+    // First in line: Geode's own trySaveGame hook (loader/src/hooks/save.cpp)
+    // writes every mod's saved.json and settings.json before calling on, and
+    // ran ahead of this one until 2026-11-03 (the test launches' logs showed
+    // "Saving mod data..." before the skip). Several test games run at once
+    // now, and each would write back its own copy of the user's settings.
+    static void onModify(auto& self) {
+        (void)self.setHookPriority("AppDelegate::trySaveGame", Priority::First);
+    }
+
     void trySaveGame(bool force) {
         if (skipSave("AppDelegate::trySaveGame")) return;
         AppDelegate::trySaveGame(force);

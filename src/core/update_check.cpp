@@ -13,6 +13,7 @@
 // waits for the main menu: a popup there could cost an attempt.
 
 #include "core/GucciBot.hpp"
+#include "hacks/safemode.hpp"
 #include "ui/ui.hpp"
 
 #include <Geode/Geode.hpp>
@@ -111,6 +112,10 @@ namespace gucci::updates {
         if (g_checked)
             return;
         g_checked = true;
+        // A test launch (tools/assist.py; several may run at once) writes
+        // nothing of GucciBot's, and the check's crash guard is a write.
+        if (gucci::safemode::testLaunch())
+            return;
         auto* mod = Mod::get();
         if (!mod->getSavedValue<bool>("update_check", true))
             return;

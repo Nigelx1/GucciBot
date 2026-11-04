@@ -218,6 +218,11 @@ namespace gucci::ui {
             if (!now && t - s_lastLook < std::chrono::milliseconds(500))
                 return;
             s_lastLook = t;
+            // A test launch (tools/assist.py) never writes saved.json: several
+            // can run at once, and each would put back its own copy of the
+            // user's settings (hooks/test_save_guard.cpp stops the exit save).
+            if (safemode::testLaunch())
+                return;
             auto* mod = Mod::get();
             auto const& saved = mod->getSaveContainerConst();
             if (!s_written) {
