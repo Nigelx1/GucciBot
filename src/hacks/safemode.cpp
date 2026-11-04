@@ -194,7 +194,8 @@ namespace gucci::safemode {
     // Indicators, the Survival Indicator and its click cue, the path preview,
     // the macro's path, its clicks near you (Practice range), the trainers'
     // ghosts in their own levels -- the macro's, and your best attempt's --
-    // their Video Mode and click bar there, and the AI pathfinder's level map.
+    // their Video Mode and click bar there, and the AI pathfinder's level map,
+    // planned route and next gate.
     bool showsTheWay() {
         auto* gb = GucciEngine::get();
         if (clickind::active() || gb->pathPreview)
@@ -233,6 +234,15 @@ namespace gucci::safemode {
         // through, the parts that move and the choices ahead (2026-11-02).
         if (absense::levelMapShown() && PlayLayer::get())
             return true;
+        // Its planned route through the level, and the way it found to the
+        // route's next gate (Pathfinder page > Next gate), drawn over the level
+        // until a new one replaces it (Nigel, 2026-11-02).
+        if (auto* pl = PlayLayer::get()) {
+            if (absense::routeShown())
+                return true;
+            if (pl->m_objectLayer && pl->m_objectLayer->getChildByID("route-leg"_spr))
+                return true;
+        }
         return false;
     }
 
