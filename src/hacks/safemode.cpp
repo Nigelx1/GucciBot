@@ -13,6 +13,7 @@
 #include "trainers/videomode.hpp"
 
 #include <Geode/Geode.hpp>
+#include <Geode/modify/EndLevelLayer.hpp>
 #include <Geode/modify/GJGameLevel.hpp>
 #include <Geode/modify/GameManager.hpp>
 #include <Geode/modify/GameStatsManager.hpp>
@@ -375,6 +376,40 @@ class $modify(GB7SafeModePlayLayer, PlayLayer) {
         if (shielded())
             return;
         PlayLayer::showNewBest(newReward, orbs, diamonds, demonKey, noRetry, noTitle);
+    }
+};
+
+// The cheat mark on the end screen too, as Mega Hack keeps one there (the
+// Demonlist requires it: "Cheat indicator on endscreen must remain enabled";
+// Nigel, 2026-11-02). Red when a cheat was on at any point in the attempt,
+// whatever safe mode did with the run, so a recording of the end screen
+// shows it; green, if the green dot is on, when none was. Only the owner's
+// unlocked "hide the red dot" hides it. Drawn in the panel's top-left corner,
+// so it slides in with the panel.
+class $modify(GB7SafeModeEndLevel, EndLevelLayer) {
+    void customSetup() {
+        EndLevelLayer::customSetup();
+        auto* gb = GucciEngine::get();
+        if (gb->standingDown || botswitch::takenOut() || !m_mainLayer)
+            return;
+        bool const cheated = safemode::g_tainted || safemode::cheatingNow();
+        bool const red = cheated && !safemode::dotHidden();
+        bool const green = !cheated && safemode::greenDot();
+        if (!red && !green)
+            return;
+        CCPoint at;
+        if (m_listLayer) {
+            auto const pos = m_listLayer->getPosition();
+            auto const size = m_listLayer->getScaledContentSize();
+            at = ccp(pos.x + 12.f, pos.y + size.height - 12.f);
+        } else {
+            auto const win = CCDirector::get()->getWinSize();
+            at = ccp(14.f, win.height - 14.f);
+        }
+        auto* dot = CCDrawNode::create();
+        dot->drawDot(at, 5.5f, red ? ccc4f(1.f, 0.16f, 0.16f, 1.f) : ccc4f(0.2f, 0.85f, 0.35f, 1.f));
+        dot->setID(red ? "endscreen-cheat-dot"_spr : "endscreen-clean-dot"_spr);
+        m_mainLayer->addChild(dot, 1000);
     }
 };
 
