@@ -30,8 +30,13 @@
 
 namespace gucci::ai::pilot {
 
-    // <AI_ROOT>\weights (the trainer's exports go there).
+    // <AI_ROOT>\weights (the trainer's exports go there), or the folder in
+    // GUCCIBOT_AI_WEIGHTS, or the one given to setWeightsDir (gucci_ai_reload
+    // dir): several games, each with its own pilot (2026-11-03). A relative
+    // folder is under AI_ROOT.
     std::filesystem::path weightsDir();
+    // For the rest of this launch; empty goes back to the default above.
+    void setWeightsDir(std::string const& dir);
 
     // Loads pilot.gbnn, critic.gbnn and reader.gbnn from weightsDir(), else
     // the copies shipped with the mod (resources/ai; none yet). A network

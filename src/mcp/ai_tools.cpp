@@ -168,12 +168,15 @@ namespace gucci::mcp {
             "gucci_ai_reload",
             "Load the AI's networks again: pilot.gbnn, critic.gbnn and reader.gbnn from AI_ROOT\\weights (else the "
             "copies shipped with the mod in resources/ai; none are shipped yet). A network trained for another "
-            "layout is refused, and the answer says which layout it was trained for. Returns {models: [{name, loaded, "
+            "layout is refused, and the answer says which layout it was trained for. `dir` loads from another "
+            "folder for the rest of this launch (relative: under AI_ROOT; \"\" goes back to the default, which "
+            "is GUCCIBOT_AI_WEIGHTS when the game was started with it). Returns {models: [{name, loaded, "
             "path, layout_hash, inputs, outputs, error}], pilot_loaded, critic_loaded, reader_loaded, obs_layout_hash, "
             "tape_layout_hash, weights_dir, summary}.",
-            schemaFor({}),
-            [](matjson::Value const&) {
+            schemaFor({{"dir", "string", "the weights folder for this launch (default: unchanged)"}}),
+            [](matjson::Value const& a) {
                 if (ai::job::busy()) throw ToolError("an AI job is running; wait for it or cancel it first");
+                if (a.contains("dir")) ai::pilot::setWeightsDir(a["dir"].asString().unwrapOr(""));
                 return ai::pilot::reload();
             },
         });

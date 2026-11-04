@@ -12,6 +12,8 @@
 
 #include <Geode/Geode.hpp>
 
+#include <cstdlib>
+
 #include <algorithm>
 #include <cmath>
 #include <fstream>
@@ -41,6 +43,18 @@ namespace gucci::ai::rollout {
 
         fs::path u8path(std::string const& s) {
             return fs::path(std::u8string(s.begin(), s.end()));
+        }
+
+        // "_p<port>" in a game started with its own Assistant Access port
+        // (GUCCIBOT_MCP_PORT; several games at once), so two games given the
+        // same tag never write the same files.
+        std::string const& instanceSuffix() {
+            static std::string const s = [] {
+                char const* v = std::getenv("GUCCIBOT_MCP_PORT");
+                int const p = v ? std::atoi(v) : 0;
+                return p > 0 && p < 65536 && p != 8790 ? fmt::format("_p{}", p) : std::string();
+            }();
+            return s;
         }
 
         uint64_t splitmix(uint64_t& x) {
@@ -474,7 +488,7 @@ namespace gucci::ai::rollout {
                 auto const dir = aiRoot() / "rl" / "rollouts";
                 std::error_code ec;
                 fs::create_directories(dir, ec);
-                auto const base = utf8(dir / fmt::format("{}_{}", opt.tag, m_part++));
+                auto const base = utf8(dir / fmt::format("{}{}_{}", opt.tag, instanceSuffix(), m_part++));
                 auto pathOf = [&](char const* ext) { return u8path(base + ext); };
                 size_t const T = m_act.size();
                 bool ok = writeArray(pathOf(".state.f32"), m_state) && writeArray(pathOf(".scan.u8"), m_scan) &&

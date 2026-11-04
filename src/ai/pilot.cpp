@@ -16,6 +16,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
 #include <ctime>
 #include <fstream>
 #include <iterator>
@@ -1186,8 +1188,25 @@ namespace gucci::ai::pilot {
 
     }  // namespace
 
+    namespace {
+        fs::path g_weightsDir;  // setWeightsDir's, for this launch
+
+        fs::path underRoot(fs::path p) {
+            return p.is_absolute() ? p : aiRoot() / p;
+        }
+    }  // namespace
+
     fs::path weightsDir() {
-        return aiRoot() / "weights";
+        if (!g_weightsDir.empty()) return g_weightsDir;
+        static fs::path const s_env = [] {
+            char const* v = std::getenv("GUCCIBOT_AI_WEIGHTS");
+            return v && *v ? underRoot(fs::path(std::u8string(v, v + std::strlen(v)))) : fs::path();
+        }();
+        return s_env.empty() ? aiRoot() / "weights" : s_env;
+    }
+
+    void setWeightsDir(std::string const& dir) {
+        g_weightsDir = dir.empty() ? fs::path() : underRoot(fs::path(std::u8string(dir.begin(), dir.end())));
     }
 
     matjson::Value reload() {
