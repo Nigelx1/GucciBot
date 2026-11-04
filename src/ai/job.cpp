@@ -40,6 +40,25 @@ namespace gucci::ai::job {
             return "?";
         }
 
+        // What a finished job leaves: its progress, result and error. The job
+        // itself goes (2026-11-03): the last 32 are kept for status(), and a
+        // rollout's buffers and saved states are ~150 MB, so a game running
+        // the learning loop grew to 5 GB holding finished jobs.
+        struct Finished final : Job {
+            char const* kind() const override { return "finished"; }
+            bool slice(Clock::time_point) override { return true; }
+            void cancel() override {}
+        };
+
+        void slim(Entry& e) {
+            if (!e.job || dynamic_cast<Finished*>(e.job.get())) return;
+            auto f = std::make_unique<Finished>();
+            f->progress = std::move(e.job->progress);
+            f->result = std::move(e.job->result);
+            f->error = std::move(e.job->error);
+            e.job = std::move(f);
+        }
+
         void forgetOld() {
             size_t finished = 0;
             for (auto const& [id, e] : s_jobs)
@@ -64,6 +83,7 @@ namespace gucci::ai::job {
             if (e.job && e.job->error.empty()) e.job->error = why;
             e.state = State::Failed;
             geode::log::info("[AI] job {} ({}) failed: {}", e.id, e.kind, e.job ? e.job->error : why);
+            slim(e);
         }
     }  // namespace
 
@@ -170,6 +190,7 @@ namespace gucci::ai::job {
             geode::log::info("[AI] job {} ({}) {} after {:.1f} ms of work in {} slices", e.id, e.kind,
                              stateName(e.state), e.ms, e.slices);
             s_running = 0;
+            slim(e);
         }
         return ms;
     }
