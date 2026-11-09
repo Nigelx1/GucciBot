@@ -180,9 +180,9 @@ The 2026-10-28 sweep checked everything GucciBot advertises against the code. It
 - [ ] Click sounds' background noise: built -fa (a pack's noise track loops under the clicks), untested
 
 ## Release
-Target: 2.0 by Thanksgiving, Thursday 2026-11-26 (Nigel, 2026-10-23). Checkpoint 2026-11-15: if the pathfinder hasn't reached the bar by then, Nigel decides between shipping it marked experimental or holding 2.0.
+Target: 2.0 on Monday 2026-11-23 at 4 PM CT (Nigel, 2026-11-02; it was Thanksgiving, 2026-11-26, from 2026-10-23). Checkpoint 2026-11-15: if the pathfinder hasn't reached the bar by then, Nigel decides between shipping it marked experimental or holding 2.0.
 
-- [ ] The new GD version: Geode's support for it (the standalone copy was dropped 2026-10-23). If Geode isn't ready by 11-26, does 2.0 ship for 2.2081 or wait? Nigel's call
+- [ ] The new GD version: Geode's support for it (the standalone copy was dropped 2026-10-23). If Geode isn't ready by 11-23, does 2.0 ship for 2.2081 or wait? Nigel's call (docs/PORT_2209_ASSESSMENT.md, 2026-11-09: the target is 2.2091; recommended: 2.0 on 2.2081, the 2.2091 build about a week after Geode 6 is stable)
 - [ ] The trailer ships with 2.0
 - [ ] Release day: version bump, about.md/README/site/changelog, tag v2.0.0, the GitHub package as Latest, the site's Download link
 
