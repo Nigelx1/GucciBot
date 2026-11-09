@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-09-f (Calculate hands GD its anticheat spike after every restore, so a leg that leaves a slope right away gets its launch - KOCMOC 10440)"
+    "2026-11-09-h (BIG BRRRR: a theme picked while the drop plays switches to its own song - LemonadeBot and YoungstaBot kept the last theme's)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

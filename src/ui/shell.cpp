@@ -2837,10 +2837,20 @@ namespace gucci::ui {
         // one starts it again: the switch stays the user's. Switching the bot
         // off stops BIG BRRRR for good (botswitch's stopEverything), so it
         // ends a hold too: the drop doesn't come back after.
+        //
+        // GucciBot (2026-11-09): a theme picked while the drop plays takes it
+        // over, on its own track from its own drop. start() picks the file
+        // once, when the drop starts, so the new theme's beat ran over the old
+        // theme's song (Nigel, 2026-11-07: LemonadeBot's and YoungstaBot's
+        // songs "don't work"; Juice reported the same in 1.4.0, and the menu
+        // rebuilt on 2026-10-01 lost that fix). Themes that share a track (the
+        // three ToosiiBots, the ones on GucciBot's own) don't start it over.
         bool g_brrrHeld = false;
+        std::string g_brrrFile;  // the theme track the playing drop started on
         void brrrFollowsTheme() {
             if (!botswitch::wanted()) {
                 g_brrrHeld = false;
+                g_brrrFile.clear();
                 return;
             }
             auto* brrr = BigBrrrManager::get();
@@ -2849,9 +2859,17 @@ namespace gucci::ui {
                     brrr->setEnabled(false);
                     g_brrrHeld = true;
                 }
-            } else if (std::exchange(g_brrrHeld, false)) {
-                brrr->setEnabled(true);
+                g_brrrFile.clear();
+                return;
             }
+            if (!brrr->enabled && !g_brrrHeld) {
+                g_brrrFile.clear();
+                return;
+            }
+            std::string file = activeThemeAudio().file;
+            if (std::exchange(g_brrrHeld, false) || (!g_brrrFile.empty() && file != g_brrrFile))
+                brrr->setEnabled(true);  // this theme's track, from its drop
+            g_brrrFile = brrr->enabled ? std::move(file) : std::string();
         }
 
         // The theme's name at the top of the sidebar, after GucciBot's mark:
