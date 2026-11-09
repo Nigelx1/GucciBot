@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-09-i (JupiterBot: the SAFE and PLAYING chips are green, mint on deep teal, as in its mockup)"
+    "2026-11-09-j (the sidebar cone mark: bigger, and at least 4 to 1 against the backdrop on every theme, like SolarBot)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
