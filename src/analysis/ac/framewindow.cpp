@@ -2103,6 +2103,26 @@ void FrameWindowAnalyzer::reportStateDiff(PlayLayer* pl) {
         realRuns > 24 ? "\n    (truncated)" : "");
 }
 
+// GucciBot (2026-11-09): a restore is a resetLevel, and outside practice mode
+// resetLevel clears PlayLayer::m_damageVerified, which re-arms GD's anticheat
+// spike. Until GD's own destroyPlayer has had the spike, every collision pass
+// returns before PlayerObject::postCollision, where GD launches the player off
+// a slope -- so a leg that leaves a slope in its first few ticks after the
+// restore plays differently from the capture, which ran with the spike long
+// settled. KOCMOC's ship press at 10440 was written off as desynced for this:
+// restored to 10425, the ship left a ceiling slope at 10427 and got no launch.
+// Handing GD the spike once, before anything is stepped, is how Absense's
+// pathfinder rewinds (AbsensePathfinder::settleAnticheatSpike): destroyPlayer
+// with the spike only sets the flag, and never kills.
+void FrameWindowAnalyzer::settleAnticheatSpike() {
+    auto* pl = PlayLayer::get();
+    if (!pl || !pl->m_anticheatSpike || !pl->m_player1 || pl->m_player1->m_isDead) return;
+    if (pl->m_damageVerified) return;  // practice mode, or nothing re-armed it
+    pl->destroyPlayer(pl->m_player1, pl->m_anticheatSpike);
+    FWLOG("[fw][restore] handed GD its anticheat spike (damage verified={})",
+          pl->m_damageVerified);
+}
+
 void FrameWindowAnalyzer::reassertHeldButtons(uint32_t frame) {
     auto* pl = PlayLayer::get();
     if (!pl) return;
@@ -2161,6 +2181,7 @@ bool FrameWindowAnalyzer::restoreToBranch() {
     pf.resetWithState(m_saved);
     m_restoring = false;
     bot->replaySystem().onReset(updater.getFrame());
+    this->settleAnticheatSpike();
     this->reassertHeldButtons(updater.getFrame());
 
     if (auto* pS = PlayLayer::get(); pS && pS->m_player1)

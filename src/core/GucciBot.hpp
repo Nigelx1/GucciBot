@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-09-d (gucci_scene says whether each checkbox is on, so other mods settings pages read as text)"
+    "2026-11-09-f (Calculate hands GD its anticheat spike after every restore, so a leg that leaves a slope right away gets its launch - KOCMOC 10440)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

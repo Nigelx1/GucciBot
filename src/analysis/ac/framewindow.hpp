@@ -201,6 +201,7 @@ class FrameWindowAnalyzer {
 
    private:
     void reassertHeldButtons(uint32_t frame);
+    void settleAnticheatSpike();
 
     static constexpr size_t PLAYER_BYTES = sizeof(PlayerObject);
     std::vector<unsigned char> m_snapP1;
