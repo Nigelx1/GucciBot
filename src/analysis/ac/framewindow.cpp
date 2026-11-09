@@ -5902,8 +5902,12 @@ bool FrameWindowAnalyzer::stepSuggest(PlayLayer* pl) {
                              static_cast<double>(click.res)
                        : 0.0;
         m_sugWidths.push_back(width);
-        FWLOG("[fw][suggest] click {} with click {} at {:+.2f}: window {:.2f}",
-              click.b + 1, click.a + 1, click.alignments[m_sugAlign], width);
+        FWLOG("[fw][suggest] click {} with click {} at {:+.2f}: window {:.2f} "
+              "({} of {} scan shifts tried)",
+              click.b + 1, click.a + 1, click.alignments[m_sugAlign], width,
+              std::count_if(m_sugViable.begin(), m_sugViable.end(),
+                            [](signed char v) { return v >= 0; }),
+              m_sugScan.size());
 
         if (++m_sugAlign >= click.alignments.size()) {
             this->finishSuggestClick();
@@ -5948,7 +5952,11 @@ void FrameWindowAnalyzer::startSuggestAlignment() {
 
     m_sugScan.clear();
     m_sugViable.clear();
-    m_sugScanAt = 0;
+    m_sugOrder.clear();
+    m_sugOrderAt = 0;
+    m_sugTesting = NO_INDEX;
+    m_sugBest = NO_INDEX;
+    m_sugLeft = m_sugRight = 0;
     m_sugEdgesSet = false;
     m_sugFound = false;
     m_sugInCont = false;
@@ -5967,37 +5975,70 @@ void FrameWindowAnalyzer::startSuggestAlignment() {
         m_sugScan.push_back(0);
         std::sort(m_sugScan.begin(), m_sugScan.end());
     }
+
+    // GucciBot (2026-11-09): the scan is tried lazily (nextSuggestShift),
+    // nearest the click's own timing first, and on a tie the earlier shift
+    // first: the nearest viable shift is the same one the full scan picked.
+    m_sugViable.assign(m_sugScan.size(), -1);
+    m_sugOrder.resize(m_sugScan.size());
+    std::iota(m_sugOrder.begin(), m_sugOrder.end(), size_t{0});
+    std::stable_sort(m_sugOrder.begin(), m_sugOrder.end(), [this](size_t x, size_t y) {
+        return std::abs(m_sugScan[x]) < std::abs(m_sugScan[y]);
+    });
 }
 
 // nextDependentShift's walk: the scan first, then each edge of the viable run
 // nearest the click's own timing bisected down to one unit.
+//
+// GucciBot (2026-11-09): the scan, lazily. The window reads only that run --
+// the viable shift nearest the click's own timing (the earlier one on a tie)
+// and its viable neighbours out to the first dead shift each way -- so the
+// shifts are tried nearest first until one is viable, then outward from it
+// each way until a dead one, and no further. Every shift the full scan would
+// have read is still tried, exactly as before; the ones skipped were legs
+// whose result nothing read. On KOCMOC UNLEASHED (Nigel, 2026-11-06) the
+// full scan tried 51 shifts an alignment of the first suspicious click, 33 of
+// them dead at 8 legs each (the click survives its own leg, then the input
+// after it fails at all 7 timings), for an answer the 6 around the click's
+// own timing gave: 79 s an alignment, 7 alignments a click.
 bool FrameWindowAnalyzer::nextSuggestShift(int64_t& shift) {
-    if (m_sugScanAt < m_sugScan.size()) {
-        shift = m_sugScan[m_sugScanAt];
-        return true;
-    }
-
     if (!m_sugEdgesSet) {
-        m_sugEdgesSet = true;
-        size_t best = NO_INDEX;
-        for (size_t i = 0; i < m_sugScan.size(); i++) {
-            if (!m_sugViable[i]) continue;
-            if (best == NO_INDEX ||
-                std::abs(m_sugScan[i]) < std::abs(m_sugScan[best]))
-                best = i;
+        size_t const n = m_sugScan.size();
+        auto const tryShift = [&](size_t i) {
+            m_sugTesting = i;
+            shift = m_sugScan[i];
+            return true;
+        };
+        // The nearest viable shift: every one nearer is dead.
+        while (m_sugBest == NO_INDEX && m_sugOrderAt < n) {
+            size_t const i = m_sugOrder[m_sugOrderAt];
+            if (m_sugViable[i] < 0) return tryShift(i);
+            if (m_sugViable[i] > 0) {
+                m_sugBest = m_sugLeft = m_sugRight = i;
+                break;
+            }
+            m_sugOrderAt++;
         }
-        m_sugFound = best != NO_INDEX;
-        if (!m_sugFound) return false;
+        m_sugFound = m_sugBest != NO_INDEX;
+        if (!m_sugFound) {
+            m_sugEdgesSet = true;
+            return false;
+        }
+        // Its run, each way to the first dead shift or the end of the scan.
+        while (m_sugLeft > 0 && m_sugViable[m_sugLeft - 1] != 0) {
+            if (m_sugViable[m_sugLeft - 1] < 0) return tryShift(m_sugLeft - 1);
+            m_sugLeft--;
+        }
+        while (m_sugRight + 1 < n && m_sugViable[m_sugRight + 1] != 0) {
+            if (m_sugViable[m_sugRight + 1] < 0) return tryShift(m_sugRight + 1);
+            m_sugRight++;
+        }
+        m_sugEdgesSet = true;
 
-        size_t left = best;
-        while (left > 0 && m_sugViable[left - 1]) left--;
-        size_t right = best;
-        while (right + 1 < m_sugScan.size() && m_sugViable[right + 1]) right++;
-
-        m_sugLow = m_sugScan[left];
-        m_sugLowDead = left > 0 ? m_sugScan[left - 1] : m_sugLow;
-        m_sugAlive = m_sugScan[right];
-        m_sugDead = right + 1 < m_sugScan.size() ? m_sugScan[right + 1] : m_sugAlive;
+        m_sugLow = m_sugScan[m_sugLeft];
+        m_sugLowDead = m_sugLeft > 0 ? m_sugScan[m_sugLeft - 1] : m_sugLow;
+        m_sugAlive = m_sugScan[m_sugRight];
+        m_sugDead = m_sugRight + 1 < n ? m_sugScan[m_sugRight + 1] : m_sugAlive;
     }
 
     if (m_sugLow - m_sugLowDead > 1) {
@@ -6012,9 +6053,9 @@ bool FrameWindowAnalyzer::nextSuggestShift(int64_t& shift) {
 }
 
 void FrameWindowAnalyzer::recordSuggestTest(bool viable) {
-    if (m_sugScanAt < m_sugScan.size()) {
-        m_sugViable.push_back(viable ? 1 : 0);
-        m_sugScanAt++;
+    if (m_sugTesting != NO_INDEX) {
+        m_sugViable[m_sugTesting] = viable ? 1 : 0;
+        m_sugTesting = NO_INDEX;
     } else if (m_sugShift < m_sugLow) {
         (viable ? m_sugLow : m_sugLowDead) = m_sugShift;
     } else {

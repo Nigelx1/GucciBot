@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-08-a (gucci_song_time: where GD has the song - FMOD's position, the level time, GD's own time for any x)"
+    "2026-11-09-a (Calculate: Juice's check-back tries only the timings its answer reads - same results, far fewer legs)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

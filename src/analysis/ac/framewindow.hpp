@@ -1009,10 +1009,16 @@ class FrameWindowAnalyzer {
     bool m_sugLegActive = false;
     uint32_t m_sugLegTarget = 0;
     std::vector<int64_t> m_sugScan;   // the click's shifts at this alignment (in res units)
-    std::vector<char> m_sugViable;    // per shift: survived, and the next input could follow
-    size_t m_sugScanAt = 0;
+    // Per shift: -1 not tried (nor needed yet), 0 dead, 1 survived and the
+    // next input could follow. The scan is lazy (nextSuggestShift).
+    std::vector<signed char> m_sugViable;
+    std::vector<size_t> m_sugOrder;   // the scan's shifts, the click's own timing's nearest first
+    size_t m_sugOrderAt = 0;
+    size_t m_sugTesting = NO_INDEX;   // the scan shift under test; NO_INDEX for a bisection step
+    size_t m_sugBest = NO_INDEX;      // the viable shift nearest the click's own timing
+    size_t m_sugLeft = 0, m_sugRight = 0;  // the viable run around it, as far as found
     int64_t m_sugShift = 0;           // the shift under test
-    bool m_sugEdgesSet = false;       // the scan is done; the edges are being bisected
+    bool m_sugEdgesSet = false;       // the run is found; its edges are being bisected
     bool m_sugFound = false;
     int64_t m_sugLow = 0, m_sugLowDead = 0, m_sugAlive = 0, m_sugDead = 0;
     bool m_sugInCont = false;         // testing the input after it for this shift
