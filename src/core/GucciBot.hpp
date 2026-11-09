@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-09-c (MCP-only test launches keep every window of the game off the screen, an OS file dialog too)"
+    "2026-11-09-d (gucci_scene says whether each checkbox is on, so other mods settings pages read as text)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

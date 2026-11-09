@@ -189,6 +189,8 @@ namespace gucci::mcp::scene {
                     for (auto const& t : under)
                         line += " \"" + t + "\"";
                     line += fmt::format(" @({},{}) {}x{}", fmtNum(box.x), fmtNum(box.y), fmtNum(box.w), fmtNum(box.h));
+                    if (auto* toggler = typeinfo_cast<CCMenuItemToggler*>(node))
+                        line += toggler->isToggled() ? " [on]" : " [off]";
                     if (!shown)
                         line += " hidden";
                     else if (!onScreen(box))
@@ -223,6 +225,10 @@ namespace gucci::mcp::scene {
                     e["texts"] = under;
                 if (auto* item = typeinfo_cast<CCMenuItem*>(node))
                     e["enabled"] = item->isEnabled();
+                // A checkbox's state (GucciBot 2026-11-09: other mods' settings
+                // pages read as text).
+                if (auto* toggler = typeinfo_cast<CCMenuItemToggler*>(node))
+                    e["toggled"] = toggler->isToggled();
                 if (auto* dn = typeinfo_cast<CCDrawNode*>(node))
                     e["vertices"] = (int64_t)dn->m_nBufferCount;
                 e["children"] = (int64_t)node->getChildrenCount();
