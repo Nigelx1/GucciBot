@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-09-m (every quiet test launch keeps the game's windows off the screen the moment they show, not only MCP-only ones)"
+    "2026-11-09-n (Calculate: a test leg ends one tick earlier, where anticroom's own ends - GucciBot numbers inputs one frame ahead of Silicate)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

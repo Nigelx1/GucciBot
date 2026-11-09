@@ -911,8 +911,21 @@ int64_t FrameWindowAnalyzer::legReach(size_t afterAi, int64_t from,
                          : static_cast<int64_t>(actions[beyond].m_frame) - from);
         }
     }
+    // GucciBot (2026-11-09): one tick less, so a leg ends where anticroom's
+    // own ends for the same input. His analyzer runs in Silicate, which labels
+    // an input with the frame it is applied at; GucciBot labels it one higher
+    // (CLAUDE.md section 4; an analyzer run looks inputs up at frame + 1,
+    // hook_gjbasegamelayer.cpp). Every caller ends its leg at `from + reach`
+    // with `from` a GucciBot label, so without this each leg ran one physics
+    // tick further than his for the same Slack, MIN_HORIZON and Horizon.
+    // Antic's Counter vs Calculate on KOCMOC (2026-11-09): 21 inputs were one
+    // or two frames narrower here; the sampled legs died in that extra tick,
+    // and with this, a full run matched the counter on 395 of 400 (the rest:
+    // 8496, where Calculate is right, and four sub-tick edges). Nigel's call,
+    // 2026-11-09: match anticroom.
     return std::clamp<int64_t>(std::max<int64_t>(gap - m_slack_, 0),
-                               MIN_HORIZON, static_cast<int64_t>(m_horizon));
+                               MIN_HORIZON, static_cast<int64_t>(m_horizon)) -
+           1;
 }
 
 // GucciBot (2026-10-23): the 2-player fixes (anticroom's antics-counter beta.6
