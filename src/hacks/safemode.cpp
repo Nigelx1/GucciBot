@@ -9,6 +9,7 @@
 #include "hacks/hitborders.hpp"
 #include "hacks/hud.hpp"
 #include "mcp/mcp_server.hpp"
+#include "render/renderer.hpp"
 #include "trainers/click_indicators.hpp"
 #include "trainers/trainer_core.hpp"
 #include "trainers/videomode.hpp"
@@ -303,6 +304,30 @@ namespace {
             return true;
         return safemode::autoSafeMode() && (safemode::g_tainted || safemode::cheatingNow());
     }
+
+    // A cheat dot (in the level or on the end screen) that isn't drawn while a
+    // render runs (Nigel, 2026-11-09: "remove the cheat indicator for all
+    // renders cus theres no way to get raw footage"). Checked as the node is
+    // drawn, so no frame the renderer captures has it, whenever the render
+    // starts or stops; outside a render it draws as before.
+    class CheatDotNode : public CCDrawNode {
+    public:
+        static CheatDotNode* create() {
+            auto* node = new CheatDotNode();
+            if (node->init()) {
+                node->autorelease();
+                return node;
+            }
+            delete node;
+            return nullptr;
+        }
+
+        void visit() override {
+            if (gucci::SLRenderer::get()->isRecording())
+                return;
+            CCDrawNode::visit();
+        }
+    };
 } // namespace
 
 // GD's own test-mode flag is never left changed. GD sets it for a start position
@@ -326,11 +351,12 @@ class $modify(GB7SafeModePlayLayer, PlayLayer) {
         if (!PlayLayer::init(level, useReplay, dontCreateObjects))
             return false;
         // The dots: top left, on the PlayLayer itself rather than its UI layer
-        // (which some mods hide), so recordings and renders show them. Red while
+        // (which some mods hide), so recordings show them (renders don't:
+        // CheatDotNode). Red while
         // a cheat is on with auto safe mode off; green, if wanted, while none is.
         auto const win = CCDirector::get()->getWinSize();
         auto make = [&](ccColor4F color, const char* id) {
-            auto* dot = CCDrawNode::create();
+            auto* dot = CheatDotNode::create();
             dot->drawDot(ccp(9.f, win.height - 9.f), 4.5f, color);
             dot->setVisible(false);
             dot->setID(id);
@@ -391,8 +417,9 @@ class $modify(GB7SafeModePlayLayer, PlayLayer) {
 // Nigel, 2026-11-02). Red when a cheat was on at any point in the attempt,
 // whatever safe mode did with the run, so a recording of the end screen
 // shows it; green, if the green dot is on, when none was. Only the owner's
-// unlocked "hide the red dot" hides it. Drawn in the panel's top-left corner,
-// so it slides in with the panel.
+// unlocked "hide the red dot" hides it, and a render never shows it
+// (CheatDotNode). Drawn in the panel's top-left corner, so it slides in with
+// the panel.
 class $modify(GB7SafeModeEndLevel, EndLevelLayer) {
     static void onModify(auto& self) {
         gucci::mcponly::keep(self);  // stays in an MCP-only test launch (core/mcp_only.hpp)
@@ -417,7 +444,7 @@ class $modify(GB7SafeModeEndLevel, EndLevelLayer) {
             auto const win = CCDirector::get()->getWinSize();
             at = ccp(14.f, win.height - 14.f);
         }
-        auto* dot = CCDrawNode::create();
+        auto* dot = CheatDotNode::create();
         dot->drawDot(at, 5.5f, red ? ccc4f(1.f, 0.16f, 0.16f, 1.f) : ccc4f(0.2f, 0.85f, 0.35f, 1.f));
         dot->setID(red ? "endscreen-cheat-dot"_spr : "endscreen-clean-dot"_spr);
         m_mainLayer->addChild(dot, 1000);
