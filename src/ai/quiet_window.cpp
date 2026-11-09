@@ -127,10 +127,13 @@ namespace {
         (void)com;
     }
 
-    // GucciBot (2026-11-09): an MCP-only test launch (core/mcp_only.hpp)
-    // drives another mod's UI, which may open windows of its own (an OS file
-    // dialog, a message box), and GD puts its own window back over the whole
-    // monitor when it is restored. None of the game's top-level windows may
+    // GucciBot (2026-11-09): GD puts its own window back over the whole
+    // monitor when it is restored (a test's screenshot restores it: once,
+    // 2026-11-09 13:54, it sat at 0,0 for up to a 20 ms poll before
+    // assist's watcher moved it), and an MCP-only test launch
+    // (core/mcp_only.hpp) drives another mod's UI, which may open windows of
+    // its own (an OS file dialog, a message box). So in every quiet test
+    // launch none of the game's top-level windows may
     // come on the screen: one that is shown or moves onto a monitor is put to
     // the right of every monitor at once, never activated. In-context, so this
     // runs in the thread that showed or moved the window, before the desktop
@@ -148,7 +151,7 @@ namespace {
         if (s_logged.fetch_add(1) < 20) {
             wchar_t cls[64]{};
             GetClassNameW(hwnd, cls, 64);
-            log::info("[quiet window] MCP-only launch: a window ({}) came onto the screen at {},{}; moved off it",
+            log::info("[quiet window] test launch: a window ({}) came onto the screen at {},{}; moved off it",
                       geode::utils::string::wideToUtf8(cls), r.left, r.top);
         }
     }
@@ -161,7 +164,7 @@ namespace {
                              GetCurrentProcessId(), 0, WINEVENT_INCONTEXT))
             log::warn("[quiet window] couldn't watch the game's windows (SetWinEventHook: {})", GetLastError());
         else
-            log::info("[quiet window] MCP-only launch: every window of the game is kept off the screen");
+            log::info("[quiet window] test launch: every window of the game is kept off the screen");
         // Whatever is on a monitor already goes now.
         for (HWND h : ourWindows())
             keepOffScreen(nullptr, EVENT_OBJECT_LOCATIONCHANGE, h, OBJID_WINDOW, CHILDID_SELF, 0, 0);
@@ -171,7 +174,7 @@ namespace {
 
 $on_mod(Loaded) {
     if (!quietLaunch()) return;
-    if (gucci::mcponly::launch()) keepWindowsOffScreen();
+    keepWindowsOffScreen();
     log::info("[quiet window] test launch with GUCCIBOT_QUIET_WINDOW: no focus, no flashing, no taskbar button");
     // Any flashing started while GD loaded stops, before FlashWindowEx is a no-op.
     for (HWND h : ourWindows()) {

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-09-l (Legit only keeps the saved Survival Indicator switch, keeps Video Mode to one at a time, and stops and greys out the AI pilot too)"
+    "2026-11-09-m (every quiet test launch keeps the game's windows off the screen the moment they show, not only MCP-only ones)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
