@@ -2907,56 +2907,20 @@ namespace gucci::ui {
         }
 
         // The theme's name at the top of the sidebar, after GucciBot's mark:
-        // the iced cone's silhouette in the colour the cards are outlined in
-        // (Nigel, 2026-11-01: "as a silhouette with like the same color as
-        // the option outline boxes"), taller than the name's line.
+        // the iced cone's silhouette, taller than the name's line.
         // The row is the mark's height with the name centred on it: centred
         // on the name's own line instead, the cherry would poke out above the
         // sidebar and be cut off. Not while disguised: GBot shows nothing of
         // GucciBot's. A name too long for the room left beside the mark is
         // drawn a little smaller (three quarters at least) rather than cut
         // off; of the built-ins only the two longer ToosiiBot names, by 3 and
-        // 5%.
+        // 5%. The mark is 1.6 times the name's line tall.
         //
-        // GucciBot (2026-11-09, Nigel 2026-11-02): it looks like SolarBot's on
-        // every theme, and bigger. SolarBot's is its orange card edge, 4.3:1
-        // on its sky; the other themes' outline is a faint line (1.4:1 to
-        // 1.9:1 on their backdrops), so the mark there was barely there. Where
-        // the outline isn't 4:1 off the window's backdrop, the mark is a shade
-        // of the theme's accent that is, about 4:1 like SolarBot's: on a dark
-        // theme the accent dimmed (its hue kept: a deep gold on GucciBot, a
-        // dull yellow on JupiterBot), on a light one lightened toward white;
-        // an accent too dark to reach it goes toward the text color. And 1.6
-        // times the name's line tall (was 1.25).
-        ImVec4 markColor(const Palette& pal) {
-            constexpr float kStandOff = 4.f;
-            ImVec4 const behind = withAlpha(pal.backdrop, 1.f);
-            if (ImVec4 const edge = withAlpha(outline(pal), 1.f); contrast(edge, behind) >= kStandOff)
-                return edge;
-            ImVec4 const accent = withAlpha(pal.accent, 1.f);
-            if (contrast(accent, behind) >= kStandOff) {
-                // The farthest step from the accent that still stands 4:1 off.
-                ImVec4 best = accent;
-                for (int i = 1; i <= 20; ++i) {
-                    float const t = 0.05f * (float)i;
-                    ImVec4 const c = pal.light ? mix(accent, ImVec4(1.f, 1.f, 1.f, 1.f), t)
-                                               : ImVec4(accent.x * (1.f - t), accent.y * (1.f - t),
-                                                        accent.z * (1.f - t), 1.f);
-                    if (contrast(c, behind) < kStandOff)
-                        break;
-                    best = c;
-                }
-                return best;
-            }
-            ImVec4 const ink = withAlpha(pal.ink, 1.f);
-            for (int i = 1; i <= 20; ++i) {
-                ImVec4 const c = withAlpha(mix(accent, ink, 0.05f * (float)i), 1.f);
-                if (contrast(c, behind) >= kStandOff)
-                    return c;
-            }
-            return ink;
-        }
-
+        // GucciBot (2026-11-09, Nigel: "make the cone the same color as the
+        // text beside it"): the mark is drawn in the name's own color on every
+        // theme, the theme's accent, with the window's alpha applied as ImGui
+        // applies it to the text. It was the card outline's color first
+        // (Nigel, 2026-11-01), then a shade of the accent 4:1 off the backdrop.
         void sidebarName(const Palette& pal) {
             UseFont f(Font::Title);
             const char* name = themes::active().name.c_str();
@@ -2966,8 +2930,9 @@ namespace gucci::ui {
             float indent = 0.f, rowH = lineH;
             if (!disguised()) {
                 float const markH = std::round(lineH * 1.6f);
+                // GetColorU32 scales by the style's alpha, as the text is drawn.
                 float const markW = brand::drawMark(ImGui::GetWindowDrawList(), ImVec2(std::round(at.x), std::round(at.y)),
-                                                    markH, u32(markColor(pal)));
+                                                    markH, ImGui::GetColorU32(pal.accent));
                 if (markW > 0.f) {
                     indent = std::round(markW + lineH * 0.32f);
                     rowH = markH;

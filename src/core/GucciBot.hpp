@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-09-q (Legit only lets a render play the loaded macro, for as long as it renders)"
+    "2026-11-09-r (the sidebar cone is drawn in the same color as the theme name beside it)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
