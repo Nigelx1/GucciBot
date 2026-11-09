@@ -184,7 +184,7 @@ namespace gucci::ui::kit {
     void Chip(const char* text, Tone tone) {
         UseFont f(Font::Small);
         auto const& pal = look().pal;
-        ImVec4 const c = look().tone(tone);
+        ImVec4 c = look().tone(tone);
         ImVec2 const pad(7.f, 2.f);
         ImVec2 const textSize = ImGui::CalcTextSize(text);
         ImVec2 const size(textSize.x + pad.x * 2.f, textSize.y + pad.y * 2.f);
@@ -199,7 +199,13 @@ namespace gucci::ui::kit {
         // themes keep the tint, but for a look whose tints go grey (the JMF
         // look's yellow over indigo), whose chips are filled with its solid
         // tint.
-        if (pal.solidTints) {
+        // A good chip there (SAFE, PLAYING) is green as in JupiterBot's
+        // mockup (Nigel, 2026-11-02: "green is ok"): its mint on a deep
+        // teal pill (#7DF0B0 on #0C4440, 7.8:1), not good over the indigo.
+        if (pal.solidTints && tone == Tone::Good) {
+            c = ImVec4(0.490f, 0.941f, 0.690f, 1.f);  // #7DF0B0
+            dl->AddRectFilled(a, b, u32(ImVec4(0.047f, 0.267f, 0.251f, 1.f)), size.y * 0.5f);  // #0C4440
+        } else if (pal.solidTints) {
             dl->AddRectFilled(a, b, u32(pal.tint), size.y * 0.5f);
         } else if (!pal.light && luminance(pal.surface) < luminance(pal.backdrop)) {
             dl->AddRectFilled(a, b, u32(pal.surface), size.y * 0.5f);

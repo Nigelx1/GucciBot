@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-09-h (BIG BRRRR: a theme picked while the drop plays switches to its own song - LemonadeBot and YoungstaBot kept the last theme's)"
+    "2026-11-09-i (JupiterBot: the SAFE and PLAYING chips are green, mint on deep teal, as in its mockup)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
