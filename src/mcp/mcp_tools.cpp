@@ -32,6 +32,8 @@
 #include "hacks/hitborder_probe.hpp"
 #include "hacks/hitborders.hpp"
 #include "hacks/safemode.hpp"
+#include "core/mcp_only.hpp"
+#include "hooks/util_midhook.hpp"
 #include "render/renderer.hpp"
 #include "trainers/click_indicators.hpp"
 #include "ui/probe.hpp"
@@ -398,6 +400,18 @@ namespace gucci::mcp {
                     sm["cheating_now"] = safemode::cheatingNow();
                     sm["tainted"] = safemode::tainted();
                     out["safe_mode"] = sm;
+                }
+                // GucciBot (2026-11-09): an MCP-only test launch
+                // (core/mcp_only.hpp): what of GucciBot is still in the game.
+                out["mcp_only"] = mcponly::launch();
+                if (mcponly::launch()) {
+                    auto in = matjson::Value::array();
+                    for (auto* hook : Mod::get()->getHooks())
+                        if (hook->isEnabled())
+                            in.push(std::string(hook->getDisplayName()));
+                    out["mcp_only_hooks_in"] = in;
+                    out["mcp_only_midhooks_placed"] = (int64_t)(g_midhookAttempts - g_midhookFailures);
+                    out["mcp_only_patches_placed"] = (int64_t)(g_patchAttempts - g_patchFailures);
                 }
                 {
                     // GucciBot (2026-11-01): what's making sound, for the test

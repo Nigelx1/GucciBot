@@ -1,4 +1,5 @@
 #include "hacks/safemode.hpp"
+#include "core/mcp_only.hpp"
 
 #include "core/GucciBot.hpp"
 #include "core/bot_switch.hpp"
@@ -309,6 +310,10 @@ namespace {
 // raised only while levelComplete runs, the new-best popup is skipped, and
 // GJGameLevel::savePercentage (where a death's % is saved) is skipped.
 class $modify(GB7SafeModePlayLayer, PlayLayer) {
+    static void onModify(auto& self) {
+        gucci::mcponly::keep(self);  // stays in an MCP-only test launch (core/mcp_only.hpp)
+    }
+
     struct Fields {
         CCDrawNode* red = nullptr;
         CCDrawNode* green = nullptr;
@@ -387,6 +392,10 @@ class $modify(GB7SafeModePlayLayer, PlayLayer) {
 // unlocked "hide the red dot" hides it. Drawn in the panel's top-left corner,
 // so it slides in with the panel.
 class $modify(GB7SafeModeEndLevel, EndLevelLayer) {
+    static void onModify(auto& self) {
+        gucci::mcponly::keep(self);  // stays in an MCP-only test launch (core/mcp_only.hpp)
+    }
+
     void customSetup() {
         EndLevelLayer::customSetup();
         auto* gb = GucciEngine::get();
@@ -414,6 +423,10 @@ class $modify(GB7SafeModeEndLevel, EndLevelLayer) {
 };
 
 class $modify(GB7SafeModeLevel, GJGameLevel) {
+    static void onModify(auto& self) {
+        gucci::mcponly::keep(self);  // stays in an MCP-only test launch (core/mcp_only.hpp)
+    }
+
     void savePercentage(int percent, bool isPracticeMode, int clicks, int attempts, bool isChkValid) {
         if (PlayLayer::get() && shielded())
             return;
@@ -455,6 +468,7 @@ namespace {
 class $modify(GB7SafeModeCounts, PlayLayer) {
     static void onModify(auto& self) {
         (void)self.setHookPriority("PlayLayer::resetLevel", Priority::VeryLate);
+        gucci::mcponly::keep(self);  // stays in an MCP-only test launch (core/mcp_only.hpp)
         (void)self.setHookPriority("PlayLayer::updateAttempts", Priority::VeryLate);
     }
 
@@ -487,6 +501,7 @@ class $modify(GB7SafeModeCounts, PlayLayer) {
 class $modify(GB7SafeModeJumps, PlayerObject) {
     static void onModify(auto& self) {
         (void)self.setHookPriority("PlayerObject::incrementJumps", Priority::VeryLate);
+        gucci::mcponly::keep(self);  // stays in an MCP-only test launch (core/mcp_only.hpp)
     }
 
     void incrementJumps() {
@@ -502,6 +517,7 @@ class $modify(GB7SafeModeJumps, PlayerObject) {
 class $modify(GB7SafeModeStats, GameStatsManager) {
     static void onModify(auto& self) {
         (void)self.setHookPriority("GameStatsManager::incrementStat", Priority::VeryLate);
+        gucci::mcponly::keep(self);  // stays in an MCP-only test launch (core/mcp_only.hpp)
     }
 
     void incrementStat(char const* key, int amount) {
@@ -517,6 +533,7 @@ class $modify(GB7SafeModeStats, GameStatsManager) {
 class $modify(GB7SafeModeAchievements, GameManager) {
     static void onModify(auto& self) {
         (void)self.setHookPriority("GameManager::reportAchievementWithID", Priority::VeryLate);
+        gucci::mcponly::keep(self);  // stays in an MCP-only test launch (core/mcp_only.hpp)
     }
 
     void reportAchievementWithID(char const* key, int percent, bool dontNotify) {

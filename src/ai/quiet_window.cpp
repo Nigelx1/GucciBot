@@ -20,6 +20,7 @@
 // off the screen meanwhile. Any other launch is untouched. Windows only.
 
 #include "hacks/safemode.hpp"
+#include "core/mcp_only.hpp"
 
 #include <Geode/Geode.hpp>
 
@@ -58,6 +59,7 @@ namespace {
         auto res = Mod::get()->hook(addr, detour, fmt::format("user32 {} (quiet test window)", name),
                                     tulip::hook::TulipConvention::Default);
         if (res.isErr()) log::warn("[quiet window] couldn't hook {}: {}", name, res.unwrapErr());
+        else gucci::mcponly::keepHook(res.unwrap());  // stays in an MCP-only test launch (core/mcp_only.hpp)
     }
 
     std::vector<HWND> ourWindows() {

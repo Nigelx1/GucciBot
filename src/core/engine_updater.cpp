@@ -5,6 +5,7 @@
 #include "analysis/pathfinder.hpp"
 #include "analysis/ac/framewindow.hpp"
 #include "core/bot_switch.hpp"
+#include "core/mcp_only.hpp"
 #include "hooks/util_midhook.hpp"
 #include "render/renderer.hpp"
 #include "trailbuf/trailbuf.hpp"
@@ -1107,6 +1108,12 @@ static void frameUpdateMidhook(SafetyHookContext&) {
 #endif
 
 class $modify(GB7CCScheduler, CCScheduler) {
+    // The one engine hook an MCP-only test launch keeps (core/mcp_only.hpp):
+    // it carries Assistant Access's calls, and steps straight through to GD.
+    static void onModify(auto& self) {
+        gucci::mcponly::keep(self);
+    }
+
     void update(float dt) override {
         auto* gb = GucciEngine::get();
         // Anything the MCP socket thread queued runs here and nowhere else,
@@ -1115,7 +1122,7 @@ class $modify(GB7CCScheduler, CCScheduler) {
         // even when the engine is standing down.
         if (mcp::Server::get()->running())
             mcp::Server::get()->pump();
-        if (gb->updater.m_onlyRefresh || !gb->enabled) {
+        if (gb->updater.m_onlyRefresh || !gb->enabled || gucci::mcponly::launch()) {
             CCScheduler::update(dt);
             return;
         }

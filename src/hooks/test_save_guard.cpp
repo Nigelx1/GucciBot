@@ -11,6 +11,7 @@
 // as they always have. The exit save of the mods' own data (Geode's, which
 // writes GucciBot's saved.json and settings.json) is skipped too.
 
+#include "core/mcp_only.hpp"
 #include "hacks/safemode.hpp"
 
 #include <Geode/Geode.hpp>
@@ -32,6 +33,10 @@ namespace {
 }  // namespace
 
 class $modify(GBTestSaveGuardGM, GManager) {
+    static void onModify(auto& self) {
+        gucci::mcponly::keep(self);  // stays in an MCP-only test launch (core/mcp_only.hpp)
+    }
+
     void save() {
         if (skipSave("GManager::save")) return;
         GManager::save();
@@ -46,6 +51,7 @@ class $modify(GBTestSaveGuardApp, AppDelegate) {
     // now, and each would write back its own copy of the user's settings.
     static void onModify(auto& self) {
         (void)self.setHookPriority("AppDelegate::trySaveGame", Priority::First);
+        gucci::mcponly::keep(self);  // stays in an MCP-only test launch (core/mcp_only.hpp)
     }
 
     void trySaveGame(bool force) {

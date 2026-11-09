@@ -15,6 +15,7 @@
 
 #include "mcp_server.hpp"
 
+#include "core/mcp_only.hpp"
 #include "hacks/safemode.hpp"
 
 #include <Geode/Geode.hpp>
@@ -48,6 +49,10 @@ namespace {
 }  // namespace
 
 class $modify(GBLevelStringSongs, MusicDownloadManager) {
+    static void onModify(auto& self) {
+        gucci::mcponly::keep(self);  // stays in an MCP-only test launch (core/mcp_only.hpp)
+    }
+
     gd::string pathForSong(int id) {
         if (overridden(id)) return answer("pathForSong");
         return MusicDownloadManager::pathForSong(id);
@@ -59,6 +64,10 @@ class $modify(GBLevelStringSongs, MusicDownloadManager) {
 };
 
 class $modify(GBLevelStringLevel, GJGameLevel) {
+    static void onModify(auto& self) {
+        gucci::mcponly::keep(self);  // stays in an MCP-only test launch (core/mcp_only.hpp)
+    }
+
     gd::string getAudioFileName() {
         if (overridden(m_songID)) return answer("getAudioFileName");
         return GJGameLevel::getAudioFileName();

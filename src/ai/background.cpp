@@ -15,6 +15,7 @@
 // GL context away, which no game may ignore.
 
 #include "ai/job.hpp"
+#include "core/mcp_only.hpp"
 #include "hacks/safemode.hpp"
 
 #include <Geode/Geode.hpp>
@@ -35,6 +36,10 @@ namespace {
 }  // namespace
 
 class $modify(GBBackgroundRunHook, AppDelegate) {
+    static void onModify(auto& self) {
+        gucci::mcponly::keep(self);  // stays in an MCP-only test launch (core/mcp_only.hpp)
+    }
+
     void applicationDidEnterBackground() {
         if (keepRunning()) {
             if (!s_keptRunning) log::info("[AI] minimized: kept running (an AI job or a test launch)");

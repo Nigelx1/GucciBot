@@ -9,8 +9,10 @@
 #include "analysis/pathfinder.hpp"
 #include "audio/bigbrrr.hpp"
 #include "core/GucciBot.hpp"
+#include "core/mcp_only.hpp"
 #include "core/platform.hpp"
 #include "hooks/util_midhook.hpp"
+#include "mcp/mcp_server.hpp"
 #include "render/renderer.hpp"
 #include "trainers/videomode.hpp"
 #include "ui/ui.hpp"
@@ -144,11 +146,13 @@ namespace gucci::botswitch {
                 BigBrrrManager::get()->setEnabled(false);
         }
 
-        // Every Geode hook GucciBot owns, bar the menu's, off.
+        // Every Geode hook GucciBot owns, bar the menu's, off. In an MCP-only
+        // test launch, bar the ones it keeps too (core/mcp_only.hpp).
         void disableHooks() {
             int count = 0;
+            bool const mcpOnly = mcponly::launch();
             for (auto* hook : Mod::get()->getHooks()) {
-                if (!hook->isEnabled() || menuNeeds(hook))
+                if (!hook->isEnabled() || menuNeeds(hook) || (mcpOnly && mcponly::kept(hook)))
                     continue;
                 if (auto res = hook->disable(); res.isErr()) {
                     log::error("[GucciBot] switch: hook {} would not come out: {}", hook->getDisplayName(),
@@ -215,6 +219,8 @@ namespace gucci::botswitch {
 
     void request(bool on) {
         ensureLoaded();
+        if (mcponly::launch())
+            return;  // stays out for the whole launch (core/mcp_only.hpp)
         if (on == s_wanted)
             return;
         if (on && GucciEngine::get()->standingDown)
@@ -255,6 +261,8 @@ namespace gucci::botswitch {
         }
         if (s_wanted != s_takenOut)
             return;  // settled
+        if (mcponly::launch())
+            return;  // out for the whole launch, whatever was saved
         if (levelOpen())
             return;
         if (!s_wanted) {
@@ -270,6 +278,30 @@ namespace gucci::botswitch {
 
     void applyAtLaunch() {
         ensureLoaded();
+        // An MCP-only test launch (core/mcp_only.hpp): out from the start like
+        // a launch with the switch off, except Assistant Access stays on and
+        // the hooks it keeps stay in. Never saved.
+        if (mcponly::launch()) {
+            GucciEngine::get()->enabled = false;
+            disableHooks();
+            s_takenOut = true;
+            std::string names;
+            int in = 0;
+            for (auto* hook : Mod::get()->getHooks()) {
+                if (!hook->isEnabled())
+                    continue;
+                ++in;
+                if (!names.empty())
+                    names += ", ";
+                names += hook->getDisplayName();
+            }
+            log::info("[GucciBot] MCP-only test launch: no midhook or patch placed, {} hooks left in: {}", in,
+                      names);
+            mcp::mcpFileLog(fmt::format("[mcp only] GUCCIBOT_MCP_ONLY: engine off, no midhook or patch placed; "
+                                        "{} hooks left in: {}",
+                                        in, names));
+            return;
+        }
         if (s_wanted)
             return;
         // No midhook or patch went in (util_midhook/util_patch read the same

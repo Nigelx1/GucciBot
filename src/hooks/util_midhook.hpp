@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/bot_switch.hpp"
+#include "core/mcp_only.hpp"
 #include "core/platform.hpp"
 #include "core/standdown.hpp"
 
@@ -57,8 +58,11 @@ namespace gucci {
     }
 
     // The switch as it was saved. Readable this early: Geode loads a mod's
-    // saved values before it loads the mod's binary.
+    // saved values before it loads the mod's binary. An MCP-only test launch
+    // (core/mcp_only.hpp) places nothing either, and nothing can put it in.
     inline bool engineCodeWantedAtLaunch() {
+        if (mcponly::launch())
+            return false;
         return geode::Mod::get()->getSavedValue<bool>(botswitch::kSaveKey, true);
     }
 
@@ -121,6 +125,8 @@ namespace gucci {
     // reverse. Called from the ImGui draw, where nothing that runs through
     // these addresses (GJBaseGameLayer::update and below) is on the stack.
     inline void setEngineCodeIn(bool in) {
+        if (in && mcponly::launch())
+            return;  // an MCP-only test launch: nothing goes in (core/mcp_only.hpp)
         if (in) {
             for (auto& site : patchSites()) {
                 if (!site.patch) {
