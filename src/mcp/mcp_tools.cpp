@@ -3316,6 +3316,9 @@ namespace gucci::mcp {
         registerAiTools(server);
         // Levels built outside the game (src/mcp/level_string_tool.cpp).
         registerLevelStringTools(server);
+        // Where GD has the song: FMOD's position, the level time, GD's own
+        // time for a position (src/mcp/song_time_tool.cpp).
+        registerSongTimeTools(server);
     }
 
 } // namespace gucci::mcp
