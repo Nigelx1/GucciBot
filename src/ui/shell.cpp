@@ -1955,7 +1955,7 @@ namespace gucci::ui {
                                  "from rules.");
             kit::RowBegin("", nullptr);
             if (!running) {
-                ImGui::BeginDisabled(!PlayLayer::get() || !ready);
+                ImGui::BeginDisabled(!PlayLayer::get() || !ready || legit::on());  // a pathfinder run is a cheat
                 if (kit::Button("Start", Tone::Accent, -1.f)) {
                     pilot::PlayOptions o;
                     o.maxAttempts = attempts;

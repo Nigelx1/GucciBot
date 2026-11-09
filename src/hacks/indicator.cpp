@@ -25,6 +25,7 @@
 #include "analysis/trajectory.hpp"
 #include "audio/clicks.hpp"
 #include "core/GucciBot.hpp"
+#include "hacks/legit.hpp"
 #include "hacks/noclip_accuracy.hpp"
 #include "render/renderer.hpp"
 #include "trainers/calibration.hpp"
@@ -491,7 +492,9 @@ namespace gucci::indicator {
     void saveSettings() {
         auto* gb = GucciEngine::get();
         auto* mod = Mod::get();
-        mod->setSavedValue<bool>(kKeyEnabled, gb->survivalIndicator);
+        // Legit only holds the switch off: the user's value, not the held-off one
+        // (this saves with every other switch on the Indicators page).
+        mod->setSavedValue<bool>(kKeyEnabled, legit::kept(gb->survivalIndicator));
         mod->setSavedValue<int>(kKeyLookahead, gb->indicatorLookahead);
         mod->setSavedValue<int>(kKeyStyle, gb->indicatorStyle);
         mod->setSavedValue<float>(kKeyOpacity, gb->indicatorOpacity);

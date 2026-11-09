@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-09-k (Legit only: one switch under Safe mode turns off and greys out everything safe mode counts as a cheat, and gives it all back when it goes off)"
+    "2026-11-09-l (Legit only keeps the saved Survival Indicator switch, keeps Video Mode to one at a time, and stops and greys out the AI pilot too)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

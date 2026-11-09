@@ -7,6 +7,8 @@
 #include "hacks/legit.hpp"
 
 #include "absense/glue.hpp"
+#include "ai/job.hpp"
+#include "ai/pilot.hpp"
 #include "analysis/ac/framewindow.hpp"
 #include "analysis/pathfinder.hpp"
 #include "core/GucciBot.hpp"
@@ -117,9 +119,19 @@ namespace gucci::legit {
                     // and Video Mode are how the trainer is used.
                     auto own = [k] { return trainers::followsLevel(k); };
                     v.push_back(field<bool>(B(s.barEnabled), false, own));
-                    v.push_back(field<bool>(
-                        B(k == Kind::Jupiter ? gb->jupiterVideoModeEnabled : gb->trainerVideoModeEnabled), false,
-                        own));
+                    // Video Mode is one at a time (the menu switches the
+                    // other off). If the other one was turned on while this
+                    // one was held off, that newer pick stays and this one
+                    // doesn't come back on over it.
+                    bool& video = k == Kind::Jupiter ? gb->jupiterVideoModeEnabled : gb->trainerVideoModeEnabled;
+                    bool& otherVideo = k == Kind::Jupiter ? gb->trainerVideoModeEnabled : gb->jupiterVideoModeEnabled;
+                    Row vm = field<bool>(B(video), false, own);
+                    vm.give = [give = vm.give, &video, &otherVideo] {
+                        give();
+                        if (video && otherVideo)
+                            video = false;
+                    };
+                    v.push_back(std::move(vm));
                 }
                 v.push_back(toggle([] { return absense::levelMapShown(); }, [](bool b) { absense::showLevelMap(b); }));
                 v.push_back(toggle([] { return absense::routeShown(); }, [](bool b) { absense::showRoute(b); }));
@@ -165,6 +177,12 @@ namespace gucci::legit {
         // What isn't a setting: runs and modes. Stopped, never started again.
         void stopRuns() {
             auto* gb = GucciEngine::get();
+            // The AI pilot (Pathfinder page, the AI engine), first: its run
+            // holds the game paused at the level's start (ai/start.hpp), and
+            // the pause below would pull the game out from under it. Stopping
+            // it puts the pause back the way the run found it.
+            if (int const job = gucci::ai::pilot::live().job)
+                (void)gucci::ai::job::cancel(job);
             if (gb->isPlaying() || gb->isRecording())
                 gb->setMode(GucciEngine::Mode::Idle);
             if (::Bot::get()->frameWindow().running())
