@@ -1,4 +1,5 @@
 #include "core/GucciBot.hpp"
+#include "hacks/legit.hpp"
 #include "analysis/ac/framewindow.hpp"
 #include "ui/ui.hpp"
 #include <fmt/format.h>
@@ -1330,6 +1331,9 @@ namespace gucci {
     }
 
     void GucciEngine::setMode(Mode m) {
+        // Legit only (hacks/legit.hpp): playing and recording are cheats.
+        if (m != Mode::Idle && legit::on())
+            return;
         if (fwAnalyzing && m != Mode::Playing) {
             cancelAnalysis();
         }
@@ -2405,19 +2409,20 @@ namespace gucci {
     static BotSettingsPreset capturePreset(GucciEngine& e, std::string const& name) {
         BotSettingsPreset p;
         p.name = name;
-        p.tps = e.updater.m_tps;
-        p.speedhack = e.updater.m_speedhack;
+        // Legit only's forced-off values are captured as the user left them.
+        p.tps = legit::kept(e.updater.m_tps);
+        p.speedhack = legit::kept(e.updater.m_speedhack);
         p.lockDelta = e.updater.m_lockDelta;
         p.lockDeltaMode = static_cast<int>(e.updater.m_lockDeltaMode);
         p.backwardsStepping = e.updater.m_backwardsStepping;
         p.maxBackstepFrames = e.updater.m_maxBackstepFrames;
         p.ssbFix = e.updater.m_ssbFix;
         p.extrapolateFrames = e.updater.m_extrapolateFrames;
-        p.preventDeath = e.updater.m_preventDeath;
+        p.preventDeath = legit::kept(e.updater.m_preventDeath);
         p.autoFlipOnDeath = e.updater.m_autoFlipOnDeath;
         p.maintainGravity = e.replay.m_maintainGravity;
         p.mirrorInputs = e.replay.m_mirrorInputs;
-        p.noclip = e.noclipEnabled;
+        p.noclip = legit::kept(e.noclipEnabled);
         p.autosaveInterval = e.autosaveIntervalSec;
         p.autosaveAtInterval = e.autosaveAtInterval;
         p.autosaveAtLevelEnd = e.autosaveAtLevelEnd;

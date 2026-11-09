@@ -2,6 +2,7 @@
 // the Trainer's macro and track. See trainer_core.hpp for the shape of it.
 
 #include "trainers/trainer_core.hpp"
+#include "hacks/legit.hpp"
 #include "trainers/click_indicators.hpp"
 #include "core/bot_switch.hpp"
 #include "trainers/jupiterghost.hpp"
@@ -384,13 +385,14 @@ namespace gucci::trainers {
     void saveSettings(Kind k) {
         auto* mod = Mod::get();
         auto s = state(k);
-        mod->setSavedValue<bool>(key(k, "bar_on"), s.barEnabled);
+        // Legit only's forced-off switches save as the user left them.
+        mod->setSavedValue<bool>(key(k, "bar_on"), legit::kept(s.barEnabled));
         mod->setSavedValue<double>(key(k, "bar_window"), s.barWindowSec);
         mod->setSavedValue<bool>(key(k, "bar_loop"), s.barLoop);
         mod->setSavedValue<bool>(key(k, "music"), s.musicEnabled);
         mod->setSavedValue<double>(key(k, "music_offset"), s.musicOffsetSec);
-        mod->setSavedValue<bool>(key(k, "ghost"), s.ghost);
-        mod->setSavedValue<bool>(key(k, "best_ghost"), s.bestGhost);
+        mod->setSavedValue<bool>(key(k, "ghost"), legit::kept(s.ghost));
+        mod->setSavedValue<bool>(key(k, "best_ghost"), legit::kept(s.bestGhost));
     }
 
     void saveScoreWindows() {

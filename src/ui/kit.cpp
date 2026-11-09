@@ -1,4 +1,5 @@
 #include "ui/kit.hpp"
+#include "hacks/legit.hpp"
 #include "ui/probe.hpp"
 #include "ui/state.hpp"
 #include "ui/ui.hpp"
@@ -14,6 +15,9 @@
 namespace gucci::ui::kit {
 
     namespace {
+        // LegitGates open around the rows being drawn (the depth of them
+        // that are greying a cheat out).
+        int g_legitDepth = 0;
 
         // Eased per-control values (a switch's knob position), by ImGui id.
         float ease(ImGuiID id, float target, float speed = 16.f) {
@@ -253,6 +257,8 @@ namespace gucci::ui::kit {
         ImGui::BeginGroup();
         ImGui::PushTextWrapPos(startLocalX + labelWidth - 12.f);
         ImGui::AlignTextToFramePadding();
+        if (g_legitDepth > 0)
+            hint = legit::kReason;  // a cheat's row while Legit only is on
         if (probe::on())
             probe::row(label, hint);
         ImGui::TextUnformatted(label);
@@ -302,6 +308,11 @@ namespace gucci::ui::kit {
             probe::toggle(*value);
         bool const hovered = ImGui::IsItemHovered();
         float const t = ease(ImGui::GetItemID(), *value ? 1.f : 0.f);
+        // Greyed out while disabled (Legit only, kit::LegitGate), as ImGui's
+        // own widgets are: its drawing faded by the disabled alpha.
+        float const fade = (ImGui::GetCurrentContext()->CurrentItemFlags & ImGuiItemFlags_Disabled) != 0
+                               ? ImGui::GetStyle().Alpha
+                               : 1.f;
 
         auto const& pal = look().pal;
         ImVec2 const a(p.x, p.y + (frame - h) * 0.5f);
@@ -314,13 +325,13 @@ namespace gucci::ui::kit {
         if (hovered)
             track = shade(track, 0.05f);
         auto* dl = ImGui::GetWindowDrawList();
-        dl->AddRectFilled(a, b, u32(track), h * 0.5f);
+        dl->AddRectFilled(a, b, u32(track, fade), h * 0.5f);
         float const r = h * 0.5f - 2.5f;
         ImVec2 const knob(a.x + h * 0.5f + t * (w - h), a.y + h * 0.5f);
-        dl->AddCircleFilled(ImVec2(knob.x, knob.y + 0.8f), r, u32(ImVec4(0.f, 0.f, 0.f, 0.25f)));
-        dl->AddCircleFilled(knob, r, u32(ImVec4(0.97f, 0.97f, 0.96f, 1.f)));
+        dl->AddCircleFilled(ImVec2(knob.x, knob.y + 0.8f), r, u32(ImVec4(0.f, 0.f, 0.f, 0.25f), fade));
+        dl->AddCircleFilled(knob, r, u32(ImVec4(0.97f, 0.97f, 0.96f, 1.f), fade));
         if (pal.light)  // the knob's edge, so it keeps its shape over a pale accent too
-            dl->AddCircle(knob, r, u32(pal.ink, 0.25f), 0, 1.f);
+            dl->AddCircle(knob, r, u32(pal.ink, 0.25f * fade), 0, 1.f);
         return clicked;
     }
 
@@ -334,7 +345,11 @@ namespace gucci::ui::kit {
         float const segment = width / static_cast<float>(count);
         ImVec2 const p = ImGui::GetCursorScreenPos();
         auto* dl = ImGui::GetWindowDrawList();
-        dl->AddRectFilled(p, ImVec2(p.x + width, p.y + frame), u32(pal.raised), pal.radius);
+        // Faded while disabled, as Switch is.
+        float const fade = (ImGui::GetCurrentContext()->CurrentItemFlags & ImGuiItemFlags_Disabled) != 0
+                               ? ImGui::GetStyle().Alpha
+                               : 1.f;
+        dl->AddRectFilled(p, ImVec2(p.x + width, p.y + frame), u32(pal.raised, fade), pal.radius);
 
         bool changed = false;
         for (int i = 0; i < count; ++i) {
@@ -351,13 +366,13 @@ namespace gucci::ui::kit {
             ImVec2 const in1(a.x + segment - 2.f, a.y + frame - 2.f);
             float const rounding = std::max(0.f, pal.radius - 1.f);
             if (selected)
-                dl->AddRectFilled(in0, in1, u32(pal.accent), rounding);
+                dl->AddRectFilled(in0, in1, u32(pal.accent, fade), rounding);
             else if (hovered)
-                dl->AddRectFilled(in0, in1, u32(shade(pal.raised, 0.06f)), rounding);
+                dl->AddRectFilled(in0, in1, u32(shade(pal.raised, 0.06f), fade), rounding);
             ImVec2 const textSize = ImGui::CalcTextSize(options[i]);
             ImVec2 const at(a.x + std::max(4.f, (segment - textSize.x) * 0.5f), a.y + (frame - textSize.y) * 0.5f);
             dl->PushClipRect(in0, in1, true);
-            dl->AddText(at, u32(selected ? pal.onAccent : (hovered ? pal.ink : pal.muted)), options[i]);
+            dl->AddText(at, u32(selected ? pal.onAccent : (hovered ? pal.ink : pal.muted), fade), options[i]);
             dl->PopClipRect();
             ImGui::PopID();
         }
@@ -688,6 +703,25 @@ namespace gucci::ui::kit {
             ImGui::EndPopup();
         }
         return result;
+    }
+
+    bool CheatFeatureBegin(const char* label, const char* hint, bool* enabled, int* keyCode, bool* changed) {
+        LegitGate gate;
+        return FeatureBegin(label, hint, enabled, keyCode, changed);
+    }
+
+    LegitGate::LegitGate(bool cheat) : m_on(cheat && gucci::legit::on()) {
+        if (!m_on)
+            return;
+        ImGui::BeginDisabled();
+        ++g_legitDepth;
+    }
+
+    LegitGate::~LegitGate() {
+        if (!m_on)
+            return;
+        --g_legitDepth;
+        ImGui::EndDisabled();
     }
 
 } // namespace gucci::ui::kit

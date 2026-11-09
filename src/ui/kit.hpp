@@ -94,6 +94,26 @@ namespace gucci::ui::kit {
     bool FeatureBegin(const char* label, const char* hint, bool* enabled, int* keyCode = nullptr,
                       bool* changed = nullptr);
     void FeatureEnd();
+    // The same for a feature safe mode counts as a cheat: its switch row
+    // greyed out while Legit only is on (LegitGate, below).
+    bool CheatFeatureBegin(const char* label, const char* hint, bool* enabled, int* keyCode = nullptr,
+                           bool* changed = nullptr);
+
+    // Legit only (hacks/legit.hpp): a cheat's controls, greyed out and fixed
+    // while it's on, every row inside saying "Legit only is on" in place of
+    // its hint. Scope it round the rows: { kit::LegitGate gate; ... }.
+    // `cheat`: false leaves the rows as they are (a feature that only counts
+    // as a cheat some of the time, when it doesn't).
+    class LegitGate {
+    public:
+        explicit LegitGate(bool cheat = true);
+        ~LegitGate();
+        LegitGate(LegitGate const&) = delete;
+        LegitGate& operator=(LegitGate const&) = delete;
+
+    private:
+        bool m_on = false;
+    };
 
     // A yes/no dialog. Call Confirm() every frame from the page; OpenConfirm()
     // to show it. Returns 1 when confirmed, -1 when cancelled, 0 otherwise.

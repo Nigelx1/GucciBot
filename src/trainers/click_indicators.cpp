@@ -1,6 +1,7 @@
 // Click Indicators (click_indicators.hpp says what and why).
 
 #include "trainers/click_indicators.hpp"
+#include "hacks/legit.hpp"
 
 #include "core/GucciBot.hpp"
 #include "trainers/trainer_core.hpp"
@@ -256,7 +257,7 @@ namespace gucci::clickind {
 
     void save() {
         auto* m = Mod::get();
-        m->setSavedValue("ci_enabled", g_s.enabled);
+        m->setSavedValue("ci_enabled", legit::kept(g_s.enabled));  // never Legit only's forced off
         m->setSavedValue<double>("ci_look_ahead", g_s.lookAhead);
         m->setSavedValue<int64_t>("ci_offset_ms", g_s.offsetMs);
         m->setSavedValue<int64_t>("ci_max_notes", g_s.maxNotes);

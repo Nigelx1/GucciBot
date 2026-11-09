@@ -11,6 +11,7 @@
 
 #include "core/GucciBot.hpp"
 #include "trainers/videomode.hpp"
+#include "trainers/trainer_core.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/utils/async.hpp>
@@ -232,6 +233,9 @@ namespace gucci::ui::pages {
         // The switch: one Video Mode at a time.
         void videoSwitch(Binding const& b, const char* hint, bool canTurnOn) {
             auto* gb = GucciEngine::get();
+            // A cheat only over its trainer's own level (Legit only).
+            kit::LegitGate gate(gucci::trainers::followsLevel(b.source == vm::Source::Jmf ? gucci::trainers::Kind::Jupiter
+                                                                                          : gucci::trainers::Kind::Any));
             ImGui::BeginDisabled(!canTurnOn && !b.enabled);
             if (kit::SwitchRow("Video Mode", hint, &b.enabled)) {
                 g_message.clear();

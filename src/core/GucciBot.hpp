@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-09-j (the sidebar cone mark: bigger, and at least 4 to 1 against the backdrop on every theme, like SolarBot)"
+    "2026-11-09-k (Legit only: one switch under Safe mode turns off and greys out everything safe mode counts as a cheat, and gives it all back when it goes off)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

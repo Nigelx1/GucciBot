@@ -27,8 +27,11 @@ namespace gucci::ui::pages {
 
         kit::BeginCard("Hitboxes", "Collision boxes over the level, in play, practice, recording and playback.");
 
-        if (kit::SwitchRow("Show hitboxes", "Players, blocks, hazards, orbs and portals", &gb->showHitboxes))
-            mod->setSavedValue<bool>("hack_hitboxes", gb->showHitboxes);
+        {
+            kit::LegitGate gate;  // shown while you play: a cheat (Show on death isn't)
+            if (kit::SwitchRow("Show hitboxes", "Players, blocks, hazards, orbs and portals", &gb->showHitboxes))
+                mod->setSavedValue<bool>("hack_hitboxes", gb->showHitboxes);
+        }
         if (kit::SwitchRow("Show on death", "Draw them once the player dies, even with the switch above off",
                            &gb->hitboxOnDeath))
             mod->setSavedValue<bool>("hack_hitbox_death", gb->hitboxOnDeath);

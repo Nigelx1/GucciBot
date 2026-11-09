@@ -41,6 +41,7 @@ namespace gucci::ui::pages {
                     continue;
                 // Two hints name GucciBot's frame (GBot's while disguised).
                 std::string const hint = r.hint ? branded(r.hint) : std::string();
+                kit::LegitGate gate(hud::isCheat(r.field));  // Touching orbs and Time warp
                 if (kit::SwitchRow(r.label, r.hint ? hint.c_str() : nullptr, &(cfg.*r.field)))
                     mod->setSavedValue<bool>(r.key, cfg.*r.field);
             }

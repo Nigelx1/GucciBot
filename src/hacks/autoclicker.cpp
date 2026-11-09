@@ -13,6 +13,7 @@
 // The black orb UFO loop is Absent's, from Absense: see kBlackOrbLoop below.
 
 #include "hacks/autoclicker.hpp"
+#include "hacks/legit.hpp"
 
 #include "absense/glue.hpp"
 #include "analysis/pathfinder.hpp"
@@ -321,7 +322,7 @@ namespace gucci {
 
     void Autoclicker::saveSettings() const {
         auto* mod = Mod::get();
-        mod->setSavedValue<bool>("autoclicker_enabled", enabled);
+        mod->setSavedValue<bool>("autoclicker_enabled", legit::kept(enabled));  // never Legit only's forced off
         mod->setSavedValue<bool>("autoclicker_only_while_holding", onlyWhileHolding);
         PlayerSettings const* players[] = {&p1, &p2};
         for (int i = 0; i < 2; ++i) {

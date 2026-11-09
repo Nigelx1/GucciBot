@@ -103,7 +103,7 @@ namespace gucci::ui::pages {
 #else
         int* const key = &keys().onAutoclicker;
 #endif
-        if (kit::FeatureBegin("On", "While recording, its clicks go into the macro", &ac->enabled, key,
+        if (kit::CheatFeatureBegin("On", "While recording, its clicks go into the macro", &ac->enabled, key,
                               &changed)) {
             statusRow(*ac);
             changed |= kit::SwitchRow("Only while holding", "Clicks only while you hold jump yourself",

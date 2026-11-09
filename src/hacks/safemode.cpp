@@ -248,6 +248,8 @@ namespace gucci::safemode {
         return false;
     }
 
+    // Legit only (hacks/legit.cpp) holds off everything read here and in
+    // showsTheWay: a new cheat here needs a row there too.
     bool cheatingNow() {
         auto* gb = GucciEngine::get();
         if (gb->standingDown || botswitch::takenOut())

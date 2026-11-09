@@ -27,10 +27,13 @@ namespace gucci::ui::pages {
                        "you see are the room your center really has. Hitborders were NaN GD's idea; he isn't "
                        "involved.");
 
-        changed |= kit::SwitchRow("Show hitborders",
-                                  "Red: your center dies there. Blue: your box touches something solid. Green: orbs, "
-                                  "pads and portals",
-                                  &set.show);
+        {
+            kit::LegitGate gate;  // shown while you play: a cheat (Show on death isn't)
+            changed |= kit::SwitchRow("Show hitborders",
+                                      "Red: your center dies there. Blue: your box touches something solid. Green: "
+                                      "orbs, pads and portals",
+                                      &set.show);
+        }
         changed |= kit::SwitchRow("Show on death", "Draw them once you die, even with the switch above off", &set.onDeath);
 
         kit::Section("What to draw");

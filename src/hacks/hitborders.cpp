@@ -27,6 +27,7 @@
 // (m_isDisabled and m_isGroupDisabled, not m_isActivated).
 
 #include "hacks/hitborders.hpp"
+#include "hacks/legit.hpp"
 
 #include "absense/compat/bot.hpp"
 #include "absense/judge.hpp"
@@ -699,7 +700,7 @@ namespace gucci {
 
     void HitborderOverlay::save() const {
         auto* mod = Mod::get();
-        mod->setSavedValue<bool>("hack_hitborders", settings.show);
+        mod->setSavedValue<bool>("hack_hitborders", legit::kept(settings.show));  // never Legit only's forced off
         mod->setSavedValue<bool>("hack_hitborders_death", settings.onDeath);
         mod->setSavedValue<bool>("hitborder_hazards", settings.hazards);
         mod->setSavedValue<bool>("hitborder_blocks", settings.blocks);

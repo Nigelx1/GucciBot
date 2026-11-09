@@ -2,6 +2,7 @@
 #include "core/bot_switch.hpp"
 #include "hacks/autoclicker.hpp"
 #include "hacks/hitborders.hpp"
+#include "hacks/legit.hpp"
 #include "hacks/safemode.hpp"
 #include "trainers/trainer_core.hpp"
 #include "ui/ui.hpp"
@@ -37,6 +38,15 @@ namespace {
         Mod::get()->setSavedValue<bool>(saveKey, value);
     }
 
+    // The same for a cheat's key (hacks/legit.hpp): while Legit only is on it
+    // only says so, and nothing changes or is saved.
+    void flipCheat(bool& value, const char* saveKey) {
+        if (legit::blockKey())
+            return;
+        value = !value;
+        Mod::get()->setSavedValue<bool>(saveKey, value);
+    }
+
     // One-shot toggles: the key is consumed when it matches.
     bool runToggles(int k) {
         auto* gb = GucciEngine::get();
@@ -54,26 +64,33 @@ namespace {
         if (!botswitch::on())
             return used;
         used |= fire(keys.onFrameAdvance, k, [&] {
+            if (legit::blockKey())
+                return;
             if (PlayLayer::get())
                 gb->updater.togglePaused();
         });
         used |= fire(keys.onReplayToggle, k, [&] {
             if (gb->isPlaying())
                 gb->setMode(GucciEngine::Mode::Idle);
-            else if (!gb->replay.m_actionAtom.empty())
+            else if (!gb->replay.m_actionAtom.empty() && !legit::blockKey())
                 gb->setMode(GucciEngine::Mode::Playing);
         });
         // Every setting a key flips is saved like its menu switch, so it
         // outlasts a restart. RNG lock isn't: its switch doesn't save either.
-        used |= fire(keys.onNoclip, k, [&] { flipSaved(gb->noclipEnabled, "hack_noclip"); });
-        used |= fire(keys.onTrajectory, k, [&] { flipSaved(gb->pathPreview, "hack_trajectory"); });
-        used |= fire(keys.onHitboxes, k, [&] { flipSaved(gb->showHitboxes, "hack_hitboxes"); });
-        used |= fire(keys.onHitborders, k, [&] { HitborderOverlay::get()->toggleShown(); });
-        used |= fire(keys.onLayoutMode, k, [&] { flipSaved(gb->layoutMode, "hack_layout_mode"); });
-        used |= fire(keys.onNoMirror, k, [&] { flipSaved(gb->noMirrorEffect, "hack_no_mirror"); });
+        used |= fire(keys.onNoclip, k, [&] { flipCheat(gb->noclipEnabled, "hack_noclip"); });
+        used |= fire(keys.onTrajectory, k, [&] { flipCheat(gb->pathPreview, "hack_trajectory"); });
+        used |= fire(keys.onHitboxes, k, [&] { flipCheat(gb->showHitboxes, "hack_hitboxes"); });
+        used |= fire(keys.onHitborders, k, [&] {
+            if (!legit::blockKey())
+                HitborderOverlay::get()->toggleShown();
+        });
+        used |= fire(keys.onLayoutMode, k, [&] { flipCheat(gb->layoutMode, "hack_layout_mode"); });
+        used |= fire(keys.onNoMirror, k, [&] { flipCheat(gb->noMirrorEffect, "hack_no_mirror"); });
         used |= fire(keys.onAudioPitch, k, [&] { flipSaved(gb->updater.m_speedhackAudio, "feat_audio_pitch"); });
         used |= fire(keys.onRngLock, k, [&] { gb->rngLocked = !gb->rngLocked; });
         used |= fire(keys.onAutoclicker, k, [&] {
+            if (legit::blockKey())
+                return;
             auto* ac = Autoclicker::get();
             ac->enabled = !ac->enabled;
             ac->saveSettings();
@@ -83,7 +100,7 @@ namespace {
                 gb->updater.m_canDie = !gb->updater.m_canDie;
         });
         used |= fire(keys.onAutoFlip, k, [&] { flipSaved(gb->updater.m_autoFlipOnDeath, "feat_auto_flip"); });
-        used |= fire(keys.onPreventDeath, k, [&] { flipSaved(gb->updater.m_preventDeath, "feat_prevent_death"); });
+        used |= fire(keys.onPreventDeath, k, [&] { flipCheat(gb->updater.m_preventDeath, "feat_prevent_death"); });
         used |= fire(keys.onMirrorInputs, k, [&] { flipSaved(gb->replay.m_mirrorInputs, "feat_mirror_inputs"); });
         used |= fire(keys.onSafeMode, k, [&] {
             flipSaved(gb->protectedMode, "hack_safe_mode");

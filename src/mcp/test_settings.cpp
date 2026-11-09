@@ -13,6 +13,7 @@
 #include "core/GucciBot.hpp"
 #include "hacks/autoclicker.hpp"
 #include "hacks/hitborders.hpp"
+#include "hacks/legit.hpp"
 #include "hacks/safemode.hpp"
 #include "mcp/mcp_server.hpp"
 #include "trainers/click_indicators.hpp"
@@ -158,6 +159,25 @@ namespace gucci::testset {
         }
 
         std::string g_conflictTestId;
+
+        // The keys that turn on something safe mode counts as a cheat, and
+        // whether `value` would (hacks/legit.hpp: refused while Legit only is
+        // on, as its switch is greyed out in the menu).
+        bool turnsOnCheat(std::string const& name, matjson::Value const& value) {
+            if (name == "eng_tick_rate" || name == "eng_speed") {
+                double const want = name == "eng_tick_rate" ? 240.0 : 1.0;
+                return value.isNumber() && std::abs(value.asDouble().unwrapOr(want) - want) > 1e-6;
+            }
+            static constexpr std::string_view kSwitches[] = {
+                "hack_force_platformer", "hack_no_mirror",   "ind_enabled",         "hack_hitboxes",
+                "hack_hitborders",       "show_macro_path",  "autoclicker_enabled", "ci_enabled",
+                "trainer_any_ghost",     "trainer_any_best_ghost",
+            };
+            for (auto k : kSwitches)
+                if (name == k)
+                    return value.isBool() && value.asBool().unwrapOr(false);
+            return false;
+        }
 
         std::vector<Key> const& keys() {
             static std::vector<Key> const k = [] {
@@ -448,6 +468,9 @@ namespace gucci::testset {
                     v.push_back(uc);
                 }
 
+                // Legit only (hacks/legit.hpp), saved like its switch.
+                v.push_back({"legit_only", "bool", Store::Field, [] { return matjson::Value(legit::on()); },
+                             [](matjson::Value const& val, bool) { legit::setOn(wantBool("legit_only", val)); }});
                 // Sound: this launch's switches.
                 v.push_back({"bigbrrr", "bool", Store::Memory,
                              [] { return matjson::Value(BigBrrrManager::get()->enabled); },
@@ -569,6 +592,8 @@ namespace gucci::testset {
                 names += (names.empty() ? "" : ", ") + std::string(key.name);
             throw ToolError("not a key gucci_test_set takes: \"" + name + "\". Keys: " + names);
         }
+        if (legit::on() && turnsOnCheat(name, value))
+            throw ToolError("refused: Legit only is on, and " + name + " turns on something safe mode counts as a cheat");
 
         // The originals are taken once, before the first set.
         std::vector<std::pair<std::string, Held>> fresh;

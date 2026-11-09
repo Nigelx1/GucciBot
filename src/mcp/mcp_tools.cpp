@@ -32,6 +32,7 @@
 #include "hacks/hitborder_probe.hpp"
 #include "hacks/hitborders.hpp"
 #include "hacks/safemode.hpp"
+#include "hacks/legit.hpp"
 #include "core/mcp_only.hpp"
 #include "hooks/util_midhook.hpp"
 #include "render/renderer.hpp"
@@ -399,6 +400,7 @@ namespace gucci::mcp {
                         !gb->protectedMode && !safemode::forced() && !safemode::autoSafeMode();
                     sm["cheating_now"] = safemode::cheatingNow();
                     sm["tainted"] = safemode::tainted();
+                    sm["legit_only"] = legit::on();
                     out["safe_mode"] = sm;
                 }
                 // GucciBot (2026-11-09): an MCP-only test launch
@@ -2170,6 +2172,9 @@ namespace gucci::mcp {
                 [](matjson::Value const& a) {
                     requireFreeRun();
                     auto* gb = GucciEngine::get();
+                    // Frame advance is a cheat (hacks/legit.hpp).
+                    if (argBool(a, "paused", true) && legit::on())
+                        throw ToolError("refused: Legit only is on, and frame advance counts as a cheat");
                     gb->updater.m_paused = argBool(a, "paused", true);
                     auto out = obj();
                     out["paused"] = gb->updater.m_paused;

@@ -6,6 +6,7 @@
 #include "tools/macro_convert.hpp"
 #include "core/platform.hpp"
 #include "core/setup_check.hpp"
+#include "hacks/legit.hpp"
 #include "hacks/safemode.hpp"
 #include "ui/ui.hpp"
 #include "ui/brand.hpp"
@@ -465,6 +466,13 @@ namespace gucci::ui {
             if (changed && saveKey)
                 saveEngineSwitch(saveKey, *value);
             return changed;
+        }
+
+        // A switch for something safe mode counts as a cheat: greyed out and
+        // held off while Legit only is on (hacks/legit.hpp).
+        bool cheatSwitch(const char* label, const char* hint, bool* value, const char* saveKey) {
+            kit::LegitGate gate;
+            return engineSwitch(label, hint, value, saveKey);
         }
 
         std::filesystem::path replaysDir() {
@@ -1285,6 +1293,8 @@ namespace gucci::ui {
         // >, so the three fit on one line). Step back needs Backwards stepping.
         void stepButtons(bool compact) {
             auto& upd = GucciEngine::get()->updater;
+            // Frame advance is a cheat: greyed out while Legit only is on.
+            kit::LegitGate gate;
             float const arrow = compact ? ImGui::GetFrameHeight() : 0.f;
             float const pauseW = compact ? kit::Avail() - 2.f * (arrow + ImGui::GetStyle().ItemSpacing.x) : 0.f;
             if (kit::Button(upd.m_paused ? "Resume" : "Pause", Tone::Accent, pauseW))
@@ -1338,6 +1348,8 @@ namespace gucci::ui {
         // (without the hints there).
         void speedRows(bool hints) {
             auto* gb = GucciEngine::get();
+            // 240 TPS and 1.00x while Legit only is on (hacks/legit.hpp).
+            kit::LegitGate gate;
             float tps = static_cast<float>(gb->updater.m_tps);
 #if GB_NATIVE_ENGINE
             kit::RowBegin("Tick rate", hints ? "Physics ticks per second" : nullptr);
@@ -1404,7 +1416,9 @@ namespace gucci::ui {
             int mode = gb->isRecording() ? 1 : gb->isPlaying() ? 2 : 0;
             const char* modes[] = {"Off", "Record", "Play"};
             // Record while a macro plays carries on from there (GitHub issue
-            // #32, GucciEngine::setModeFromMenu).
+            // #32, GucciEngine::setModeFromMenu). Off only while Legit only
+            // is on: recording and playing both count as a cheat.
+            std::optional<kit::LegitGate> modeGate(std::in_place);
             if (kit::ChoiceRow("Mode",
                                "Switch to Record while a macro plays to carry on from there. The rest of the macro "
                                "is cut",
@@ -1412,6 +1426,7 @@ namespace gucci::ui {
                 gb->setModeFromMenu(mode == 1   ? GucciEngine::Mode::Recording
                                     : mode == 2 ? GucciEngine::Mode::Playing
                                                 : GucciEngine::Mode::Idle);
+            modeGate.reset();
             kit::RowBegin("Name", nullptr);
             kit::InputText("name", &gb->replayName, "macro name");
             kit::RowEnd();
@@ -1424,7 +1439,7 @@ namespace gucci::ui {
             ImGui::EndDisabled();
             ImGui::SameLine();
             bool const canCalc = PlayLayer::get() && !actions.empty();
-            ImGui::BeginDisabled(!canCalc);
+            ImGui::BeginDisabled(!canCalc || legit::on());  // a Calculate run is a cheat
             if (kit::Button("Calculate"))
                 startCalculate();
             ImGui::EndDisabled();
@@ -1656,7 +1671,7 @@ namespace gucci::ui {
             auto* gb = GucciEngine::get();
             auto& upd = gb->updater;
             kit::BeginCard("Gameplay", nullptr);
-            engineSwitch("Noclip", "Pass through hazards", &gb->noclipEnabled, "hack_noclip");
+            cheatSwitch("Noclip", "Pass through hazards", &gb->noclipEnabled, "hack_noclip");
             if (gb->noclipEnabled)
                 engineSwitch("Flash on a blocked death", "Tints the player when noclip saves you", &gb->noclipDeathFlash,
                              "hack_noclip_flash");
@@ -1670,6 +1685,16 @@ namespace gucci::ui {
             } else {
                 engineSwitch("Safe mode", "No progress or stats are saved", &gb->protectedMode, "hack_safe_mode");
             }
+            // Mega Hack's kind of switch (Nigel, 2026-11-02): everything safe
+            // mode counts as a cheat, off at once and kept off. hacks/legit.hpp.
+            {
+                bool legitOnly = legit::on();
+                if (kit::SwitchRow("Legit only",
+                                   "Turns off everything that counts as a cheat and keeps it off. Turn it off to get "
+                                   "your settings back",
+                                   &legitOnly))
+                    legit::setOn(legitOnly);
+            }
             engineSwitch("Instant respawn", "Respawn the moment you die", &gb->hackRespawnInstant,
                          "hack_respawn_instant");
             engineSwitch("Auto retry", "Respawn after your own delay instead of GD's", &gb->hackAutoRetry,
@@ -1682,7 +1707,7 @@ namespace gucci::ui {
                 }
                 kit::RowEnd();
             }
-            engineSwitch("Force platformer", "Levels you open play as platformer levels", &gb->hackForcePlatformer,
+            cheatSwitch("Force platformer", "Levels you open play as platformer levels", &gb->hackForcePlatformer,
                          "hack_force_platformer");
             engineSwitch("RNG lock", "Same random triggers every attempt", &gb->rngLocked, nullptr);
             if (gb->rngLocked) {
@@ -1699,19 +1724,18 @@ namespace gucci::ui {
             pages::noclipAccuracyCard();
 
             kit::BeginCard("Visual", nullptr);
-            engineSwitch("Layout mode", nullptr, &gb->layoutMode, "hack_layout_mode");
-            engineSwitch("No mirror effect", nullptr, &gb->noMirrorEffect, "hack_no_mirror");
+            cheatSwitch("Layout mode", nullptr, &gb->layoutMode, "hack_layout_mode");
+            cheatSwitch("No mirror effect", nullptr, &gb->noMirrorEffect, "hack_no_mirror");
             if (gb->noMirrorEffect)
                 engineSwitch("Only while recording", "Playback and renders keep GD's mirror portals",
                              &gb->noMirrorRecordingOnly, "hack_no_mirror_recording_only");
             engineSwitch("Hide attempts", nullptr, &gb->hackHideAttempts, "hack_hide_attempts");
             engineSwitch("Hide percentage", nullptr, &gb->hackHidePercentage, "hack_hide_percentage");
             engineSwitch("No death flash", nullptr, &gb->hackNoSpikeFlash, "hack_no_flash");
-            engineSwitch("Practice range", "Shows the loaded macro's clicks near you in the level. Counts as a cheat",
-                         &gb->practiceRangeEnabled,
-                         "practice_range");
-            engineSwitch("Macro path", "Draws the loaded macro's path and its clicks in the level. Counts as a cheat",
-                         &gb->showMacroPath, "show_macro_path");
+            cheatSwitch("Practice range", "Shows the loaded macro's clicks near you in the level",
+                        &gb->practiceRangeEnabled, "practice_range");
+            cheatSwitch("Macro path", "Draws the loaded macro's path and its clicks in the level", &gb->showMacroPath,
+                        "show_macro_path");
             if (gb->showMacroPath) {
                 if (kit::SliderRow("Marker size", nullptr, &gb->macroPathMarkerSize, 2.f, 24.f, "%.0f"))
                     saveFloat("macro_path_marker_size", gb->macroPathMarkerSize);
@@ -1754,7 +1778,7 @@ namespace gucci::ui {
                 ImGui::EndDisabled();
             }
 #endif
-            engineSwitch("Prevent death", "Steps back instead of dying", &upd.m_preventDeath, "feat_prevent_death");
+            cheatSwitch("Prevent death", "Steps back instead of dying", &upd.m_preventDeath, "feat_prevent_death");
             float inputFps = static_cast<float>(upd.m_inputFps);
             kit::RowBegin("Input FPS", "While recording, clicks land only on this many ticks a second (sub-tick "
                                        "recording is off then). 0, or the tick rate and up: every tick");
@@ -1847,7 +1871,7 @@ namespace gucci::ui {
             auto* pf = Pathfinder::get();
             kit::RowBegin("", nullptr);
             if (!pf->active) {
-                ImGui::BeginDisabled(!PlayLayer::get());
+                ImGui::BeginDisabled(!PlayLayer::get() || legit::on());  // a pathfinder run is a cheat
                 if (kit::Button("Start", Tone::Accent, -1.f))
                     pf->begin();
                 ImGui::EndDisabled();
@@ -2032,7 +2056,7 @@ namespace gucci::ui {
             auto const s = absense::status();
             kit::RowBegin("", nullptr);
             if (!s.running && !absense::startPending()) {
-                ImGui::BeginDisabled(!PlayLayer::get());
+                ImGui::BeginDisabled(!PlayLayer::get() || legit::on());  // a pathfinder run is a cheat
                 if (kit::Button("Start", Tone::Accent, -1.f))
                     absense::requestStart(fromStart);
                 ImGui::EndDisabled();
@@ -2070,6 +2094,7 @@ namespace gucci::ui {
             if (!g_speedTest.empty())
                 kit::Hint(g_speedTest.c_str());
             // Step R1: the AI pathfinder's map of the whole level, drawn over it.
+            std::optional<kit::LegitGate> drawings(std::in_place);  // the map, the route and the next gate
             bool showMap = absense::levelMapShown();
             if (kit::SwitchRow("Show the level map",
                                "The AI pathfinder's map: gaps the player fits through (green), parts that move "
@@ -2123,6 +2148,7 @@ namespace gucci::ui {
             }
             ImGui::EndDisabled();
             kit::RowEnd();
+            drawings.reset();
             if (!g_legText.empty())
                 kit::Hint(g_legText.c_str());
             kit::EndCard();
@@ -3217,10 +3243,13 @@ namespace gucci::ui {
             if (ImGui::Begin(fmt::format("{}###compact", brandName()).c_str(), &open, ImGuiWindowFlags_NoCollapse)) {
                 int mode = gb->isRecording() ? 1 : gb->isPlaying() ? 2 : 0;
                 const char* modes[] = {"Off", "Rec", "Play"};
-                if (kit::Choice("mode", &mode, modes, 3))
-                    gb->setModeFromMenu(mode == 1   ? GucciEngine::Mode::Recording
-                                        : mode == 2 ? GucciEngine::Mode::Playing
-                                                    : GucciEngine::Mode::Idle);
+                {
+                    kit::LegitGate gate;  // Off only while Legit only is on
+                    if (kit::Choice("mode", &mode, modes, 3))
+                        gb->setModeFromMenu(mode == 1   ? GucciEngine::Mode::Recording
+                                            : mode == 2 ? GucciEngine::Mode::Playing
+                                                        : GucciEngine::Mode::Idle);
+                }
                 // A saved macro, loaded as a click in the Saved macros list
                 // loads it (not while recording).
                 auto const& saved = gb->storedMacros;
@@ -3239,7 +3268,7 @@ namespace gucci::ui {
                     saveLoadedMacro();
                 ImGui::EndDisabled();
                 ImGui::SameLine();
-                ImGui::BeginDisabled(!PlayLayer::get() || gb->replay.m_actionAtom.empty());
+                ImGui::BeginDisabled(!PlayLayer::get() || gb->replay.m_actionAtom.empty() || legit::on());
                 if (kit::Button("Calculate", Tone::Plain, -1.f))
                     startCalculate();
                 ImGui::EndDisabled();

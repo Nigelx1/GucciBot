@@ -313,8 +313,13 @@ namespace gucci::ui::pages {
                 "and each of its presses you answer gets a {} line at its start.",
                 look().pal.light ? "dark" : "white", look().pal.hitName);
             kit::BeginCard("Click Trainer", caption.c_str());
-            if (kit::SwitchRow("Click bar", "Off stops its clock and stops listening for your keys", &s.barEnabled))
-                tr::saveSettings(k);
+            {
+                // A cheat only while it follows the trainer's own level.
+                kit::LegitGate gate(tr::followsLevel(k));
+                if (kit::SwitchRow("Click bar", "Off stops its clock and stops listening for your keys",
+                                   &s.barEnabled))
+                    tr::saveSettings(k);
+            }
             if (!s.barEnabled) {
                 kit::EndCard();
                 return;
@@ -399,12 +404,15 @@ namespace gucci::ui::pages {
         void ghostsCard(Kind k) {
             auto* gb = GucciEngine::get();
             auto s = tr::state(k);
-            kit::BeginCard("Ghosts", "Drawn in the level while you play it. Safe mode counts them as a cheat.");
-            if (kit::SwitchRow("Macro ghost", "Where the macro's player is on your frame", &s.ghost))
-                tr::saveSettings(k);
-            if (kit::SwitchRow("Best-attempt ghost", "Your furthest run this session, replayed alongside you",
-                               &s.bestGhost))
-                tr::saveSettings(k);
+            kit::BeginCard("Ghosts", "Drawn in the level while you play it.");
+            {
+                kit::LegitGate gate;
+                if (kit::SwitchRow("Macro ghost", "Where the macro's player is on your frame", &s.ghost))
+                    tr::saveSettings(k);
+                if (kit::SwitchRow("Best-attempt ghost", "Your furthest run this session, replayed alongside you",
+                                   &s.bestGhost))
+                    tr::saveSettings(k);
+            }
             if (kit::FeatureBegin("Scrub", "Freeze both ghosts at one point of the level to study it",
                                   &s.scrubActive)) {
                 kit::SliderRow("Point", nullptr, &s.scrubPercent, 0.f, 100.f, "%.1f%%");

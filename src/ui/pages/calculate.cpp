@@ -25,6 +25,7 @@
 #include "analysis/ac/fw_settings_store.hpp"
 #include "analysis/ac/lstar.hpp"
 #include "core/GucciBot.hpp"
+#include "hacks/legit.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/utils/general.hpp>
@@ -165,7 +166,7 @@ namespace gucci::ui::pages {
                     fw.stopReturn();
             } else {
                 bool const canRun = PlayLayer::get() && !actions.empty();
-                ImGui::BeginDisabled(!canRun);
+                ImGui::BeginDisabled(!canRun || legit::on());  // a Calculate run is a cheat
                 if (kit::Button("Calculate", Tone::Accent))
                     gb->analyzeFrameWindows();
                 ImGui::EndDisabled();
