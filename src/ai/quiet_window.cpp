@@ -29,6 +29,7 @@
 #include <Windows.h>
 #include <ShObjIdl.h>
 
+#include <atomic>
 #include <chrono>
 #include <cstdlib>
 #include <string_view>
@@ -126,10 +127,51 @@ namespace {
         (void)com;
     }
 
+    // GucciBot (2026-11-09): an MCP-only test launch (core/mcp_only.hpp)
+    // drives another mod's UI, which may open windows of its own (an OS file
+    // dialog, a message box), and GD puts its own window back over the whole
+    // monitor when it is restored. None of the game's top-level windows may
+    // come on the screen: one that is shown or moves onto a monitor is put to
+    // the right of every monitor at once, never activated. In-context, so this
+    // runs in the thread that showed or moved the window, before the desktop
+    // draws it there.
+    void CALLBACK keepOffScreen(HWINEVENTHOOK, DWORD, HWND hwnd, LONG idObject, LONG idChild, DWORD, DWORD) {
+        if (!hwnd || idObject != OBJID_WINDOW || idChild != CHILDID_SELF) return;
+        if (GetAncestor(hwnd, GA_ROOT) != hwnd || !IsWindowVisible(hwnd) || IsIconic(hwnd)) return;
+        RECT r{};
+        if (!GetWindowRect(hwnd, &r)) return;
+        int const vx = GetSystemMetrics(SM_XVIRTUALSCREEN), vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        int const vr = vx + GetSystemMetrics(SM_CXVIRTUALSCREEN), vb = vy + GetSystemMetrics(SM_CYVIRTUALSCREEN);
+        if (r.right <= vx || r.left >= vr || r.bottom <= vy || r.top >= vb) return;  // off every monitor already
+        SetWindowPos(hwnd, nullptr, vr + 200, r.top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        static std::atomic<int> s_logged{0};
+        if (s_logged.fetch_add(1) < 20) {
+            wchar_t cls[64]{};
+            GetClassNameW(hwnd, cls, 64);
+            log::info("[quiet window] MCP-only launch: a window ({}) came onto the screen at {},{}; moved off it",
+                      geode::utils::string::wideToUtf8(cls), r.left, r.top);
+        }
+    }
+
+    void keepWindowsOffScreen() {
+        HMODULE self = nullptr;
+        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           reinterpret_cast<LPCWSTR>(&keepOffScreen), &self);
+        if (!SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_LOCATIONCHANGE, self, &keepOffScreen,
+                             GetCurrentProcessId(), 0, WINEVENT_INCONTEXT))
+            log::warn("[quiet window] couldn't watch the game's windows (SetWinEventHook: {})", GetLastError());
+        else
+            log::info("[quiet window] MCP-only launch: every window of the game is kept off the screen");
+        // Whatever is on a monitor already goes now.
+        for (HWND h : ourWindows())
+            keepOffScreen(nullptr, EVENT_OBJECT_LOCATIONCHANGE, h, OBJID_WINDOW, CHILDID_SELF, 0, 0);
+    }
+
 }  // namespace
 
 $on_mod(Loaded) {
     if (!quietLaunch()) return;
+    if (gucci::mcponly::launch()) keepWindowsOffScreen();
     log::info("[quiet window] test launch with GUCCIBOT_QUIET_WINDOW: no focus, no flashing, no taskbar button");
     // Any flashing started while GD loaded stops, before FlashWindowEx is a no-op.
     for (HWND h : ourWindows()) {

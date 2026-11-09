@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-09-b (Assistant Access: GUCCIBOT_MCP_ONLY test launches keep GucciBot out of the game, and gucci_ui_tap presses any button)"
+    "2026-11-09-c (MCP-only test launches keep every window of the game off the screen, an OS file dialog too)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
