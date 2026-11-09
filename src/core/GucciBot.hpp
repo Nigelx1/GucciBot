@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-09-n (Calculate: a test leg ends one tick earlier, where anticroom's own ends - GucciBot numbers inputs one frame ahead of Silicate)"
+    "2026-11-09-o (GucciBot stands down while Antic's Counter is enabled, as it does for ToastyReplay Lite and Silicate)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -15,6 +15,12 @@
 //   or hooks/PlayerObject.cpp). Two midhooks on one instruction is the likely
 //   cause of a crash a user sent on 2026-10-03: an access violation writing to
 //   0x0 from code in no module, with both mods enabled.
+// - Antic's Counter (anticroom's frame-window counter): it plays macros with
+//   an engine of its own (its about.md: ToastyReplay's v2.2.4), which hooks
+//   the main game update and much of what GucciBot's engine hooks. The two
+//   were never run together, and Nigel decided (2026-11-09) that GucciBot
+//   stands down for it too. A test that drives the counter launches GucciBot
+//   MCP-only (core/mcp_only.hpp), which keeps Assistant Access either way.
 //
 // This runs while GucciBot loads, which can be before the other mod has, so
 // it asks whether the mod is set to load (Mod::shouldLoad, the mod list's
@@ -43,6 +49,11 @@ namespace gucci {
              "and GucciBot's engine is built from Silicate's, so with both on they patch the same spots in "
              "the game's code, which crashes the game. GucciBot left the game alone this launch. Open the "
              "Geode mod list, turn one of the two off, and restart."},
+            {"anticroom.antics-counter",
+             "Antic's Counter",
+             "and it plays macros with an engine of its own that hooks the same parts of the game as "
+             "GucciBot's. GucciBot left the game alone this launch. Open the Geode mod list, turn one of "
+             "the two off, and restart."},
         };
         static const StandDownBot* const s_found = []() -> const StandDownBot* {
             for (auto const& bot : kBots) {
