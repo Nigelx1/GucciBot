@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-09-r (the sidebar cone is drawn in the same color as the theme name beside it)"
+    "2026-11-09-s (Legit only blocks macro playback again, renders included - the render exception is taken back out; renders still never show the cheat dot)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

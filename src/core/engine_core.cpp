@@ -1331,9 +1331,8 @@ namespace gucci {
     }
 
     void GucciEngine::setMode(Mode m) {
-        // Legit only (hacks/legit.hpp): playing and recording are cheats, but
-        // for a render's own playback (legit::startRenderPlayback).
-        if (m != Mode::Idle && legit::on() && !(m == Mode::Playing && legit::renderStartsPlayback()))
+        // Legit only (hacks/legit.hpp): playing and recording are cheats.
+        if (m != Mode::Idle && legit::on())
             return;
         if (fwAnalyzing && m != Mode::Playing) {
             cancelAnalysis();
