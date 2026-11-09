@@ -3,6 +3,7 @@
 #include "core/standdown.hpp"
 #include "render/renderer.hpp"
 #include "hacks/autoclicker.hpp"
+#include "hacks/legit.hpp"
 #include "analysis/trajectory.hpp"
 #include "hooks/respawn.hpp"
 #include "analysis/pathfinder.hpp"
@@ -1018,6 +1019,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
             sl->m_startOnNextLevel = false;
             sl->loadSettingsFromGeode();
             sl->queueStart();
+            gucci::legit::startRenderPlayback();  // Legit only: the render plays the loaded macro
             sl->startIfQueued();
         }
         PlayLayer::setupHasCompleted();

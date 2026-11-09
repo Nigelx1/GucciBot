@@ -11,7 +11,10 @@
 //   - its hotkey does nothing but say so, and Assistant Access's test
 //     settings refuse to turn one on;
 //   - a macro can't play or record, and Calculate, the pathfinders and frame
-//     advance can't run: whichever is going stops;
+//     advance can't run: whichever is going stops. One exception: a render
+//     (Nigel, 2026-11-09: a render can't pass as raw footage). Starting one
+//     plays the loaded macro (startRenderPlayback), and that playback runs
+//     until the render stops. Safe mode still counts it as a cheat;
 //   - the physics rate stays at 240 TPS and the speed at 1.00x.
 // Anything that gets one turned on anyway (a settings preset loaded, a
 // setting read back later) is turned off again before the next tick, and
@@ -45,6 +48,16 @@ namespace gucci::legit {
     // holds it off, else the switch itself. For settings saved as a group.
     bool kept(bool const& field);
     double kept(double const& field);
+
+    // A render starting (the Render page's starts, a render of the next level
+    // opened): while Legit only is on, plays the loaded macro, the one
+    // playback it lets through, for as long as that render runs. Nothing while
+    // Legit only is off, or with no macro loaded (the render records your own
+    // run then).
+    void startRenderPlayback();
+    // True only inside startRenderPlayback: GucciEngine::setMode lets that
+    // one Playing through.
+    bool renderStartsPlayback();
 
     // The words a greyed-out control shows under it.
     inline constexpr const char* kReason = "Legit only is on";

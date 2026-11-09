@@ -2285,21 +2285,29 @@ namespace gucci::ui {
                 if (kit::Button("Cancel", Tone::Plain, -1.f))
                     sl->m_startOnNextLevel = false;
             } else if (auto* pl = PlayLayer::get()) {
+                // With Legit only on, a start plays the loaded macro too: the
+                // macro menu's Play is off then (legit::startRenderPlayback).
                 if (kit::Button("Start", Tone::Accent, -1.f)) {
                     sl->loadSettingsFromGeode();
                     sl->queueStart();
+                    legit::startRenderPlayback();
                 }
                 // From frame 0 rather than wherever the attempt is: the level
                 // goes back to its start (in practice mode too), then the render
                 // starts on the next frame (startIfQueued, the drawScene hook).
                 if (kit::Button("Start from the beginning", Tone::Plain, -1.f)) {
                     sl->loadSettingsFromGeode();
+                    legit::startRenderPlayback();  // before the reset, as Play then restart
                     pl->resetLevelFromStart();
                     sl->queueStart();
                 }
             } else if (kit::Button("Render the next level I open", Tone::Accent, -1.f)) {
                 sl->m_startOnNextLevel = true;
             }
+            if (legit::on() && !sl->isRecording())
+                kit::Hint(GucciEngine::get()->replay.m_actionAtom.empty()
+                              ? "Legit only is on: a render records your own run. Load a macro and a render plays it."
+                              : "Legit only is on: a render plays the loaded macro, and only while it renders.");
             if (!sl->isRecording() && !sl->m_lastError.empty())
                 kit::Note(fmt::format("The last render didn't start: {}", sl->m_lastError).c_str(), Tone::Bad);
 #if GB_NATIVE_ENGINE

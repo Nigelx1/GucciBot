@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-09-p (renders never show the cheat dot, in the level or on the end screen)"
+    "2026-11-09-q (Legit only lets a render play the loaded macro, for as long as it renders)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -15,6 +15,7 @@
 #include "core/bot_switch.hpp"
 #include "hacks/autoclicker.hpp"
 #include "hacks/hitborders.hpp"
+#include "render/renderer.hpp"
 #include "trainers/click_indicators.hpp"
 #include "trainers/trainer_core.hpp"
 #include "trainers/videomode.hpp"
@@ -174,6 +175,17 @@ namespace gucci::legit {
             return !gb->standingDown && !botswitch::takenOut();
         }
 
+        // The playing going on is a render's (startRenderPlayback), and
+        // startRenderPlayback is setting it now.
+        bool g_renderPlay = false;
+        bool g_renderStarting = false;
+
+        // A render running, or asked to start on the next frame.
+        bool renderBusy() {
+            auto* sl = SLRenderer::get();
+            return sl->isRecording() || sl->m_shouldStart;
+        }
+
         // What isn't a setting: runs and modes. Stopped, never started again.
         void stopRuns() {
             auto* gb = GucciEngine::get();
@@ -183,7 +195,11 @@ namespace gucci::legit {
             // it puts the pause back the way the run found it.
             if (int const job = gucci::ai::pilot::live().job)
                 (void)gucci::ai::job::cancel(job);
-            if (gb->isPlaying() || gb->isRecording())
+            // A render's own playback runs while the render does; it stops
+            // with it (or when its start fails), as any other does at once.
+            if (!gb->isPlaying() || !renderBusy())
+                g_renderPlay = false;
+            if ((gb->isPlaying() && !g_renderPlay) || gb->isRecording())
                 gb->setMode(GucciEngine::Mode::Idle);
             if (::Bot::get()->frameWindow().running())
                 ::Bot::get()->frameWindow().cancel();
@@ -211,6 +227,8 @@ namespace gucci::legit {
             return;
         s.on = want;
         Mod::get()->setSavedValue(kSaveKey, want);
+        // Only playback a render started under Legit only gets through.
+        g_renderPlay = false;
         if (!want) {
             // Everything back as it was left (or as last asked for).
             for (auto& r : rows())
@@ -265,6 +283,24 @@ namespace gucci::legit {
                 if (r.holding && r.addr == &f)
                     return r.heldValue();
         return f;
+    }
+
+    void startRenderPlayback() {
+        if (!st().on || !live())
+            return;
+        auto* gb = GucciEngine::get();
+        if (gb->replay.m_actionAtom.empty() || gb->isRecording())
+            return;
+        if (!gb->isPlaying()) {
+            g_renderStarting = true;
+            gb->setMode(GucciEngine::Mode::Playing);
+            g_renderStarting = false;
+        }
+        g_renderPlay = gb->isPlaying();
+    }
+
+    bool renderStartsPlayback() {
+        return g_renderStarting;
     }
 
     bool blockKey() {
