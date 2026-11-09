@@ -153,6 +153,8 @@ namespace gucci::mcp {
     void registerLevelStringTools(Server& server);
     // gucci_song_time. Defined in song_time_tool.cpp.
     void registerSongTimeTools(Server& server);
+    // gucci_ui_tap. Defined in ui_tap_tool.cpp.
+    void registerUiTapTools(Server& server);
 
     // Who owns the run right now: "render", "analyzer", "pathfinder", or ""
     // for nobody. The driving tools refuse while it isn't "". Defined in

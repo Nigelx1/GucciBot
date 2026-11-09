@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-09-a (Calculate: Juice's check-back tries only the timings its answer reads - same results, far fewer legs)"
+    "2026-11-09-b (Assistant Access: GUCCIBOT_MCP_ONLY test launches keep GucciBot out of the game, and gucci_ui_tap presses any button)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
