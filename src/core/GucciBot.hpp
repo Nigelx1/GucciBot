@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-s (Saved macros: opening the Macro page reads the folder again, so a macro copied in before the first look shows up)"
+    "2026-11-10-t (Small fixes: a cancelled menu press cannot fire later, a mute without an audio engine is not counted, and the fw log comment is current)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

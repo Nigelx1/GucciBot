@@ -118,11 +118,11 @@ void gucci::fwEngineLog(std::string const& line) {
     fwFileLog(line);
 }
 
-// Mirrored to a file as well as the console. Geode's console log is not
-// persisted on this machine, so console-only output means every question about
-// what a run actually did gets answered by guessing at the code instead of
-// reading what happened. Written to guccibot_fw.log in the mod's save
-// directory, truncated each launch, and only while Verbose Log is on.
+// What a run did is read from guccibot_fw.log in the mod's save directory
+// (fwFileLog above: one file per launch, the last launch's kept as
+// guccibot_fw.old.log). FWWARN goes to Geode's log and the file, flushed;
+// FWLOG only while Verbose Log is on, and FWFILEWARN always, both to the file
+// only; each run's [fw][finish] line to both, flushed.
 void fwFileLog(std::string const& line, bool important);
 
 #define FWWARN(...)                                  do {                                                    auto const fww_ = fmt::format(__VA_ARGS__);         geode::log::warn("{}", fww_);                       fwFileLog("WARN " + fww_, true);                } while (0)

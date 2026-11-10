@@ -81,6 +81,11 @@ namespace gucci::ui::press {
             key(ImGuiKey_Enter, false);
         if (g.phase == Phase::Release)
             key(ImGuiKey_Delete, false);
+        // An activation still queued (armed, not yet taken at a NewFrame)
+        // would otherwise go through after the cancel, without the disabled
+        // check Pressing makes.
+        if (GImGui && GImGui->NavNextActivateId == g.req.id)
+            GImGui->NavNextActivateId = 0;
         g = State{};
         hooks(false);
     }

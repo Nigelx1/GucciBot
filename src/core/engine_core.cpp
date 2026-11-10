@@ -2983,11 +2983,16 @@ namespace gucci {
     // volumes saved are the player's, whichever mute comes first and in
     // whatever order they let go.
     void GucciEngine::holdMute() {
-        if (fwMuteHolds++ > 0)
+        if (fwMuteHolds > 0) {
+            ++fwMuteHolds;
             return;
+        }
+        // No audio engine, no mute: a hold counted here saved no volumes, and
+        // its release would have put back whatever the saved ones last were.
         auto* fmod = FMODAudioEngine::sharedEngine();
         if (!fmod)
             return;
+        fwMuteHolds = 1;
         fwSavedMusicVolume = fmod->getBackgroundMusicVolume();
         fwSavedEffectsVolume = fmod->getEffectsVolume();
         fmod->setBackgroundMusicVolume(0.f);
