@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-ak (a fresh recorded attempt seeds shake, teleport and Advanced Random from the seed it saves, as playback does)"
+    "2026-11-10-al (Settings has a Diagnostics card with the startup self-checks results)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

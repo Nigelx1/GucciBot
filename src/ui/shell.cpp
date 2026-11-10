@@ -37,6 +37,7 @@
 #include "trainers/videomode.hpp"
 #include "trainers/click_indicators.hpp"
 #include "tools/macro_check.hpp"
+#include "tools/selfcheck.hpp"
 
 #include <Geode/Geode.hpp>
 #include <imgui-cocos.hpp>
@@ -2677,6 +2678,37 @@ namespace gucci::ui {
                                       assistantPort())
                               .c_str(),
                           Tone::Warn);
+            kit::EndCard();
+
+            // The startup self-check (tools/selfcheck.hpp): its results were
+            // only in Geode's log.
+            kit::BeginCard("Diagnostics", "What GucciBot checked about itself when the game started.");
+            if (!gbcheck::g_ranOnce) {
+                kit::Hint("The startup self-check hasn't run in this launch.");
+            } else {
+                if (gbcheck::g_failCount == 0)
+                    kit::Chip(fmt::format("All {} checks passed", gbcheck::g_passCount).c_str(), Tone::Good);
+                else
+                    kit::Chip(fmt::format("{} of {} checks failed",
+                                          gbcheck::g_failCount,
+                                          gbcheck::g_passCount + gbcheck::g_failCount)
+                                  .c_str(),
+                              Tone::Bad);
+                for (auto const& r : gbcheck::g_results)
+                    if (!r.passed)
+                        kit::Note(fmt::format("{}: {}", r.name, r.detail.empty() ? "failed" : r.detail).c_str(),
+                                  Tone::Bad);
+                if (ImGui::TreeNode("Every check")) {
+                    for (auto const& r : gbcheck::g_results)
+                        kit::Hint(fmt::format("{} {}{}{}",
+                                              r.passed ? "OK  " : "FAIL",
+                                              r.name,
+                                              r.detail.empty() ? "" : ": ",
+                                              r.detail)
+                                      .c_str());
+                    ImGui::TreePop();
+                }
+            }
             kit::EndCard();
             // GBot (the disguise) has no BIG BRRRR and doesn't mention it: the
             // card, the last one here, isn't drawn. Its saved switches are
