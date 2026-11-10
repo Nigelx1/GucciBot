@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-an (a failed open of guccibot_mcp.log is tried again every 5 s instead of never)"
+    "2026-11-10-ao (the frame-window logs size-cap banner says file-only warnings stop there)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -56,7 +56,8 @@ static std::ofstream g_fwLog;
 //   guccibot_fw.old.log, so testing and then relaunching still leaves the run
 //   you were about to read (why it appended in the first place);
 // - a launch writes at most kFwLogCap. Past that only the important lines (the
-//   warnings and each run's [fw][finish] summary) go in, up to kFwLogHardCap,
+//   FWWARN warnings, not FWFILEWARN's, and each run's [fw][finish] summary) go
+//   in, up to kFwLogHardCap,
 //   so one launch can't fill the disk and the summaries still land;
 // - every line is flushed, as before -p, so the lines just before a crash or
 //   a hang are on disk (-p buffered them, and a crash could lose that tail);
@@ -97,10 +98,11 @@ void fwFileLog(std::string const& line, bool important = false) {
     if (g_fwLogBytes >= kFwLogCap && !g_fwLogCapped) {
         g_fwLogCapped = true;
         g_fwLog << "===== this launch's log reached " << (kFwLogCap >> 20)
-                << " MB: from here on only warnings and run summaries =====\n";
+                << " MB: from here on only the warnings that also go to Geode's log, and run summaries "
+                   "([fw][finish]); file-only warnings like [fw][statediff] stop here =====\n";
         g_fwLog.flush();
-        geode::log::warn("[fw] guccibot_fw.log reached {} MB this launch: only warnings and run summaries "
-                         "are written from here on",
+        geode::log::warn("[fw] guccibot_fw.log reached {} MB this launch: only the warnings in this log and "
+                         "run summaries are written there from here on",
                          kFwLogCap >> 20);
     }
     if (g_fwLogCapped && (!important || g_fwLogBytes >= kFwLogHardCap))
