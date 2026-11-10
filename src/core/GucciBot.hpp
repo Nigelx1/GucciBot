@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-w (Render: only a software RGB encoder such as libx264rgb is tagged RGB full range, a GPU encoder given rgb0 keeps the YUV tags)"
+    "2026-11-10-x (Render: the in-render HUD says its frame count includes the intro card, the seconds are the level)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
