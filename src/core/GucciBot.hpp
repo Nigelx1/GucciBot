@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-ab (guccibot_mcp.log: a fresh file each launch, the last one kept as guccibot_mcp.old.log, capped at 50 MB, every line flushed)"
+    "2026-11-10-ac (Record from Off: a button held at the switch goes on the lane its release will, with Flip 2-Player Controls on in a 1-player level)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

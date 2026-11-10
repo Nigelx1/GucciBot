@@ -1495,7 +1495,13 @@ namespace gucci {
                 continue;
             for (int b = 1; b <= 3; ++b)
                 if ((bool)who->m_holdingButtons[b])
-                    rs.m_actionAtom.addAction(now + 1, static_cast<gb::ActionType>(b), true, p2);
+                    // The flag addInputToReplay will give this button's
+                    // release: in a 1-player level it stores the side
+                    // flipped by Flip 2-Player Controls (playerFlipped), so a
+                    // plain p2 put the press on one lane and the release on
+                    // the other when the setting was on.
+                    rs.m_actionAtom.addAction(
+                        now + 1, static_cast<gb::ActionType>(b), true, twoPlayer ? p2 : rs.playerFlipped(false));
         }
         rs.m_inputIndex = rs.m_actionAtom.length();
         log::info("[GucciBot] Record from Off @ frame {} -- fresh recording, {} old actions dropped, "
