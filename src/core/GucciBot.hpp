@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-bj (the log warnings say appending only when the log opened)"
+    "2026-11-10-bk (a restart in Off or Record lets go of a hold playback left on player 2)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

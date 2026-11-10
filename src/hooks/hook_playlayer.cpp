@@ -582,8 +582,17 @@ class $modify(GB7PlayLayer, PlayLayer) {
                 auto* p = (idx == 1) ? m_player1 : m_player2;
                 bool const side = m_levelSettings->m_twoPlayerMode ? rs.sideFor(this, p2)
                                                                    : rs.playerFlipped(p2);
-                if (held != (bool)p->m_holdingButtons[button])
-                    queueButton(button, held, side, 0.0);
+                if (held != (bool)p->m_holdingButtons[button]) {
+                    // GucciBot (2026-11-10): player 2 outside the dual. GD's
+                    // handleButton doesn't reach it there, so a queued release
+                    // never landed and a hold a playback left on player 2
+                    // outlived the reset (Record from Off then recorded it at
+                    // frame 1). Not recorded: playback's reset releases both.
+                    if (p2 && !held && !m_gameState.m_isDualMode)
+                        p->releaseButton(static_cast<PlayerButton>(button));
+                    else
+                        queueButton(button, held, side, 0.0);
+                }
             };
             check(p1H, 1, false);
             // Platformer also has to put the held DIRECTION back, not just the
@@ -623,8 +632,17 @@ class $modify(GB7PlayLayer, PlayLayer) {
                 auto* p = (idx == 1) ? m_player1 : m_player2;
                 bool const side = m_levelSettings->m_twoPlayerMode ? rs.sideFor(this, p2)
                                                                    : rs.playerFlipped(p2);
-                if (held != (bool)p->m_holdingButtons[button])
-                    queueButton(button, held, side, 0.0);
+                if (held != (bool)p->m_holdingButtons[button]) {
+                    // GucciBot (2026-11-10): player 2 outside the dual. GD's
+                    // handleButton doesn't reach it there, so a queued release
+                    // never landed and a hold a playback left on player 2
+                    // outlived the reset (Record from Off then recorded it at
+                    // frame 1). Not recorded: playback's reset releases both.
+                    if (p2 && !held && !m_gameState.m_isDualMode)
+                        p->releaseButton(static_cast<PlayerButton>(button));
+                    else
+                        queueButton(button, held, side, 0.0);
+                }
             };
             check(p1H, 1, false);
             // Platformer also has to put the held DIRECTION back, not just the
