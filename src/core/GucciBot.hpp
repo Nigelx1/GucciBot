@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-bs (Calculate: 2-player fixes are on by default, a saved off stays off)"
+    "2026-11-10-bt (intro card: a level name too wide for one line takes two, broken at the space nearest the middle, and shrinks only if it still does not fit)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

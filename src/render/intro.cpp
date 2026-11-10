@@ -49,6 +49,34 @@ namespace gucci {
         constexpr float Y_HEAD3 = 0.6906f;
         constexpr float Y_GREY = 0.8979f;
         constexpr float Y_FOOTER = 0.9656f;
+        // A level name too wide for one line takes two (2026-11-10): the
+        // second stays at Y_NAME, the first goes one line up, by the card's
+        // own name-to-note spacing. Its box then starts 0.0708 of the height
+        // from the top, below the legend's header row (which ends at 0.064).
+        constexpr float NAME_LINE_STEP = Y_NOTE - Y_NAME;
+
+        // Where to break a name in two: the space nearest the middle, or npos
+        // when it has none.
+        size_t nameBreak(std::string const& name) {
+            size_t best = std::string::npos;
+            double const middle = static_cast<double>(name.size()) / 2.0;
+            for (size_t i = 0; i < name.size(); i++) {
+                if (name[i] != ' ')
+                    continue;
+                if (best == std::string::npos ||
+                    std::abs(static_cast<double>(i) - middle) < std::abs(static_cast<double>(best) - middle))
+                    best = i;
+            }
+            return best;
+        }
+
+        std::string trimmed(std::string const& text) {
+            size_t const a = text.find_first_not_of(' ');
+            if (a == std::string::npos)
+                return "";
+            size_t const b = text.find_last_not_of(' ');
+            return text.substr(a, b - a + 1);
+        }
 
         constexpr char const* kFallbackFont = "bigFont.fnt";
 
@@ -374,7 +402,8 @@ namespace gucci {
                 into.push_back(label);
         };
 
-        keep(left, add(fill(levelName, subs), LEFT_X, Y_NAME, LEFT_MAIN_H, 0.f, white, 255));
+        // The level name goes in once the legend is placed (below): whether
+        // it takes two lines depends on where the legend starts.
         keep(left, add(fill(settings.m_levelNote, subs), LEFT_X, Y_NOTE, LEFT_MAIN_H, 0.f, white, 255));
         keep(left, add(fill(settings.m_heading1, subs), LEFT_X, Y_HEAD1, LEFT_MAIN_H, 0.f, white, 255));
         keep(left, add(fill(settings.m_heading2, subs), LEFT_X, Y_HEAD2, LEFT_MAIN_H, 0.f, white, 255));
@@ -412,18 +441,59 @@ namespace gucci {
         // (Squidward Circles, 2026-10-27). Shrink a line that would, so it ends
         // a small gap before the legend lines beside it.
         float const gap = win.width * 0.015f;
-        for (auto* label : left) {
-            CCRect const l = label->boundingBox();
+        auto limitFor = [&](CCRect const& l) {
             float limit = win.width;
             for (auto* r : right) {
                 CCRect const rb = r->boundingBox();
                 if (rb.getMaxY() > l.getMinY() && rb.getMinY() < l.getMaxY())
                     limit = std::min(limit, rb.getMinX() - gap);
             }
+            return limit;
+        };
+
+        // The level name (2026-11-10): one line when it fits, as before.
+        // Too wide, it breaks at the space nearest the middle into two lines
+        // (NAME_LINE_STEP), and only shrinks if a line still doesn't fit.
+        std::vector<CCNode*> nameLines;
+        {
+            std::string const name = trimmed(sanitize(fill(levelName, subs)));
+            if (auto* one = add(name, LEFT_X, Y_NAME, LEFT_MAIN_H, 0.f, white, 255)) {
+                CCRect const b = one->boundingBox();
+                size_t const cut = nameBreak(name);
+                std::string const first = cut == std::string::npos ? "" : trimmed(name.substr(0, cut));
+                std::string const second = cut == std::string::npos ? "" : trimmed(name.substr(cut + 1));
+                if (b.getMaxX() > limitFor(b) && !first.empty() && !second.empty()) {
+                    // add() put it last in m_labels.
+                    m_labels.pop_back();
+                    one->removeFromParentAndCleanup(true);
+                    keep(nameLines, add(first, LEFT_X, Y_NAME - NAME_LINE_STEP, LEFT_MAIN_H, 0.f, white, 255));
+                    keep(nameLines, add(second, LEFT_X, Y_NAME, LEFT_MAIN_H, 0.f, white, 255));
+                } else {
+                    nameLines.push_back(one);
+                }
+            }
+        }
+
+        for (auto* label : left) {
+            CCRect const l = label->boundingBox();
+            float const limit = limitFor(l);
             float const width = l.getMaxX() - l.getMinX();
             if (width > 0.f && l.getMaxX() > limit)
                 label->setScale(label->getScale() * std::max(limit - l.getMinX(), width * 0.25f) / width);
         }
+        // The name never runs into the legend (no quarter-width floor), and
+        // its two lines share one size: the smaller, which fits both.
+        float nameScale = 0.f;
+        for (auto* label : nameLines) {
+            CCRect const l = label->boundingBox();
+            float const limit = limitFor(l);
+            float const width = l.getMaxX() - l.getMinX();
+            if (width > 0.f && l.getMaxX() > limit)
+                label->setScale(label->getScale() * std::max(limit - l.getMinX(), 1.f) / width);
+            nameScale = nameScale == 0.f ? label->getScale() : std::min(nameScale, label->getScale());
+        }
+        for (auto* label : nameLines)
+            label->setScale(nameScale);
 
         this->setAlpha(0.f);
     }
