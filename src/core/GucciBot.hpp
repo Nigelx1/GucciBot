@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-09-t (Calculate: sub-tick legs run Retime first, then Buffer after a dead Retime leg, like Antic's Counter)"
+    "2026-11-09-u (Calculate: a sub-tick Retime leg splits its tail ticks for the measured player only, so the other player's click on a shared tick stays on the tick edge)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -1001,6 +1001,21 @@ int FrameWindowAnalyzer::cbfArmPlayer() const {
                : 0;
 }
 
+// GucciBot (2026-11-09): who a sub-tick Retime leg's tail ticks (m_tailArm)
+// are armed for. Retime moves only the measured player's inputs in a 2-player
+// level (inRetimeTail), so the split on a tail tick is that player's alone,
+// with the 2-player fixes on or off: an arm for any input (-1) took the other
+// player's click too whenever it shared a tick with a later input of the
+// measured one, and split a click the leg never moved. With the fixes on this
+// is cbfArmPlayer(). In a 1-player level -1, as before: one click moves both
+// players there, and with pairs the tail is both flags' inputs.
+int FrameWindowAnalyzer::tailArmPlayer() const {
+    if (!m_twoPlayerLevel || m_index >= m_samples.size()) return -1;
+    return Bot::get()->replaySystem().playerFlipped(m_samples[m_index].player2)
+               ? 1
+               : 0;
+}
+
 // GucciBot (2026-10-23): the 2-player fixes (anticroom's antics-counter beta.4
 // changelog; no source). The joint setup sweep and the entry offset move every
 // action from a point on - the other player's clicks too, so a test of one
@@ -2430,8 +2445,10 @@ void FrameWindowAnalyzer::beginShift(int64_t shift, ShiftMode mode) {
         eng->arm(static_cast<uint32_t>(std::max<int64_t>(shifted, 0)), fraction,
                  armFor);
         if (mode == ShiftMode::Retime) {
+            // GucciBot (2026-11-09): the tail's ticks for its own player only.
+            int const tailFor = this->tailArmPlayer();
             for (int64_t f : m_tailArm)
-                eng->arm(static_cast<uint32_t>(f), fraction, armFor);
+                eng->arm(static_cast<uint32_t>(f), fraction, tailFor);
         } else if (m_releaseFrame >= 0 && m_releaseFrame != shifted) {
             eng->arm(static_cast<uint32_t>(m_releaseFrame), fraction, armFor);
         }

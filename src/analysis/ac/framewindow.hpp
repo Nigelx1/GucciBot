@@ -696,6 +696,9 @@ class FrameWindowAnalyzer {
     // GucciBot (2026-10-23): who a CBF split for the input under test is armed
     // for (cbf::Armed::player): its own player with splitsByPlayer, else -1.
     int cbfArmPlayer() const;
+    // GucciBot (2026-11-09): who a sub-tick Retime leg's tail ticks are armed
+    // for: the measured player in any 2-player level, else -1.
+    int tailArmPlayer() const;
     // GucciBot (2026-10-23): whether a move that carries everything after a
     // point (the joint setup sweep, the entry offset) carries action k, for a
     // move of a `player2` input: with countsByPlayer only that player's own
