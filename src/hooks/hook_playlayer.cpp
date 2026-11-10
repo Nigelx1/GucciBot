@@ -241,6 +241,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
         // crash. Before the enabled check: the triggers add themselves either
         // way.
         gb->practiceFix.removeAll();
+        gucci::SLRenderer::get()->m_quittingLayer = nullptr;  // a new level (see onQuit)
         if (!gb->enabled)
             return PlayLayer::init(level, useReplay, dontCreateObjects);
 
@@ -291,6 +292,9 @@ class $modify(GB7PlayLayer, PlayLayer) {
             gb->cancelAnalysis();
         if (gucci::SLRenderer::get()->isRecording())
             gucci::SLRenderer::get()->flushAndStop();
+        // GD keeps this layer as PlayLayer::get() through the quit's fade: a
+        // render started then (the Render page's Start) is refused.
+        gucci::SLRenderer::get()->m_quittingLayer = this;
         TrajectoryPredictionService::get().updatePreview(nullptr);
         PlayLayer::onQuit();
         gb->practiceFix.clearStoredFrames();

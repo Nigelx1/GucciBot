@@ -1173,6 +1173,12 @@ class $modify(GB7CCDirector, CCDirector) {
         auto* pl = PlayLayer::get();
 
         auto* sl = SLRenderer::get();
+        // A render outlives its level when the level goes by any way other
+        // than the onQuit hook (which stops it): with no level to draw nothing
+        // is captured again, but the render stayed on, the Render card showing
+        // "Rendering" with a frozen frame count until Stop was pressed.
+        if (sl->isRecording() && pl != sl->m_layer)
+            sl->flushAndStop();
         if (sl->m_shouldStart)
             sl->startIfQueued();
         if (pl && sl->isRecording() && !pl->m_isPaused && pl->m_started) {

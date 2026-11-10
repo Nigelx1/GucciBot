@@ -206,6 +206,16 @@ namespace gucci {
             return m_recording;
         }
 
+        // The level a render runs on, compared by address only (never read
+        // through): drawScene stops a render whose level has gone. Set by
+        // start().
+        PlayLayer* m_layer = nullptr;
+        // A level whose quit has begun (the PlayLayer::onQuit hook sets it,
+        // PlayLayer::init clears it): GD keeps it as PlayLayer::get() through
+        // the quit's fade, and no render may start on it, since nothing would
+        // stop that render (the quit's own stop has already run).
+        PlayLayer* m_quittingLayer = nullptr;
+
         // Moved off the legacy TTR renderer in 2.0. The render-complete popup
         // and the render HUD were both reading that renderer's fields, and it
         // has been unreachable since SLRenderer took over -- so neither ever

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-av (an editor level finished under safe mode no longer says Level Verified on its end screen)"
+    "2026-11-10-aw (a render stops when its level goes away, and cannot start on a level that is closing)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

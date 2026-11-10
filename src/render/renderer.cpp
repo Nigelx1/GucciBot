@@ -336,6 +336,8 @@ namespace gucci {
         auto* pl = PlayLayer::get();
         if (!pl)
             return geode::Err("Not in a level");
+        if (pl == m_quittingLayer)
+            return geode::Err("The level is closing");
 
         loadSettingsFromGeode();
 
@@ -628,6 +630,7 @@ namespace gucci {
         m_introIndex = 0;
         m_introTotal = 0;
         RenderIntro::get()->destroy();
+        m_layer = pl;
         m_recording = true;
 
         m_texture.m_width = m_settings.m_width;
