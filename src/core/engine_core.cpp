@@ -1490,9 +1490,14 @@ namespace gucci {
         // Off's reset left GD's own random and the variance table alone (the
         // last macro's, or GD's), and a playback reset sets both from the
         // saved seed (hook_playlayer.cpp). At frame 0 no tick has drawn from
-        // either yet, so setting them here the way playback will makes the
-        // whole recorded run replay the same. Mid-level, frames 0 to here
-        // were never recorded, so nothing can replay them anyway.
+        // either yet, so they're set here the way playback sets them. The
+        // variance table then matches playback's exactly (the same fill as
+        // hook_playlayer.cpp's reset). GD's random only starts from the same
+        // value: a test (2026-11-10) saw it move between playback restarts
+        // while paused at frame 0, so an unknown number of draws follow the
+        // write in both paths, and I'm not sure a run that uses GD's random
+        // replays the same. Mid-level, frames 0 to here were never recorded,
+        // so nothing can replay them anyway.
         if (now == 0) {
             uint64_t v = rs.m_startingSeed;
             for (auto& x : pl->m_varianceValues) {
