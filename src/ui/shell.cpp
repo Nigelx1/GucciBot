@@ -2317,6 +2317,9 @@ namespace gucci::ui {
                 if (kit::Button("Cancel", Tone::Plain, -1.f))
                     sl->m_startOnNextLevel = false;
             } else if (auto* pl = PlayLayer::get()) {
+                // Without FFmpeg a render can't start (the note below says
+                // why), so its buttons are greyed out rather than pressable.
+                ImGui::BeginDisabled(!sl->isFFmpegLoaded());
                 if (kit::Button("Start", Tone::Accent, -1.f)) {
                     sl->loadSettingsFromGeode();
                     sl->queueStart();
@@ -2329,8 +2332,12 @@ namespace gucci::ui {
                     pl->resetLevelFromStart();
                     sl->queueStart();
                 }
-            } else if (kit::Button("Render the next level I open", Tone::Accent, -1.f)) {
-                sl->m_startOnNextLevel = true;
+                ImGui::EndDisabled();
+            } else {
+                ImGui::BeginDisabled(!sl->isFFmpegLoaded());
+                if (kit::Button("Render the next level I open", Tone::Accent, -1.f))
+                    sl->m_startOnNextLevel = true;
+                ImGui::EndDisabled();
             }
             if (!sl->isRecording() && !sl->m_lastError.empty())
                 kit::Note(fmt::format("The last render didn't start: {}", sl->m_lastError).c_str(), Tone::Bad);

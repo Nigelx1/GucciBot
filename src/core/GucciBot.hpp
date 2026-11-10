@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-ai (the Render cards frame count mentions the intro card only when there is one)"
+    "2026-11-10-aj (the Render cards Start buttons are greyed out while FFmpeg isnt loaded)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
