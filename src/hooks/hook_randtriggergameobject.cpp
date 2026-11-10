@@ -1,5 +1,6 @@
 #include <Geode/Geode.hpp>
 #include <Geode/binding/RandTriggerGameObject.hpp>
+#include <Geode/modify/EffectGameObject.hpp>
 #include <Geode/modify/RandTriggerGameObject.hpp>
 
 #include <cmath>
@@ -31,10 +32,12 @@ using namespace gucci;
 // fix so checkpoints can capture and restore it. The selection below
 // reimplements GD's weighted pick against that state instead of the shared RNG.
 //
-// The plain Random trigger (object 1912) is the same class: GD's
-// RandTriggerGameObject::triggerObject (0x4b41e0 on Windows) passes every id
-// but 2068 to EffectGameObject::triggerObject, whose 1912 case draws once from
-// GD's shared fast random (0x6c2e90 on Windows) and spawns one of two groups.
+// The plain Random trigger (object 1912) is handled in
+// EffectGameObject::triggerObject (0x4a5f30 on Windows), whose 1912 case draws
+// once from GD's shared fast random (0x6c2e90 on Windows) and spawns one of
+// two groups. RandTriggerGameObject::triggerObject (0x4b41e0) passes every id
+// but 2068 to that function too, so the hook at the end of this file is on
+// EffectGameObject and catches 1912 whichever class the object is.
 // The game also draws from that shared state for spawn delays and particles,
 // so the value it holds when a 1912 trigger fires differed between the
 // recording and every replay (seen in-game 2026-11-10, build -at). While a
@@ -69,43 +72,10 @@ struct GB7RandTriggerGameObject
             {&this->m_fields->m_randomState, this->m_uniqueID});
     }
 
-    // Object 1912 (see the top of the file). The same trigger firing more than
-    // once on one frame (a spawn loop) gets a different value each time.
-    void triggerSeededRandom(GJBaseGameLayer* layer,
-                             int uniqueID,
-                             gd::vector<int> const* remapKeys) {
-        auto* gb = GucciEngine::get();
-        static uint32_t s_frame = std::numeric_limits<uint32_t>::max();
-        static std::unordered_map<int, uint32_t> s_firedThisFrame;
-        uint32_t const frame = gb->updater.getFrame();
-        if (frame != s_frame) {
-            s_frame = frame;
-            s_firedThisFrame.clear();
-        }
-        uint32_t const repeat = s_firedThisFrame[m_uniqueID]++;
-
-        // splitmix64 over the seed, the trigger and the frame.
-        uint64_t key = gb->replay.m_startingSeed ^
-                       (static_cast<uint64_t>(static_cast<uint32_t>(m_uniqueID)) * 0x9E3779B97F4A7C15ull) ^
-                       (static_cast<uint64_t>(frame) * 0xC2B2AE3D27D4EB4Full) ^
-                       (static_cast<uint64_t>(repeat) * 0x165667B19E3779F9ull);
-        key += 0x9E3779B97F4A7C15ull;
-        key = (key ^ (key >> 30)) * 0xBF58476D1CE4E5B9ull;
-        key = (key ^ (key >> 27)) * 0x94D049BB133111EBull;
-        key ^= key >> 31;
-
-        uint64_t const saved = readGdRandom();
-        writeGdRandom(key);
-        RandTriggerGameObject::triggerObject(layer, uniqueID, remapKeys);
-        writeGdRandom(saved);
-    }
-
     void triggerObject(GJBaseGameLayer* layer,
                        int uniqueID,
                        gd::vector<int> const* remapKeys) override {
         auto* gb = GucciEngine::get();
-        if (m_objectID == 1912 && gb->enabled && (!gb->isIdle() || gb->analyzerOwnsRun()))
-            return this->triggerSeededRandom(layer, uniqueID, remapKeys);
         if (m_objectID != 2068 || !gb->enabled)
             return RandTriggerGameObject::triggerObject(layer, uniqueID, remapKeys);
 
@@ -135,5 +105,43 @@ struct GB7RandTriggerGameObject
             keys = *remapKeys;
 
         layer->spawnGroup(groupID, false, 0.0, keys, m_uniqueID, m_controlID);
+    }
+};
+
+// Object 1912 (see the top of the file). The same trigger firing more than
+// once on one frame (a spawn loop) gets a different value each time.
+struct GB7RandomEffectGameObject : Modify<GB7RandomEffectGameObject, EffectGameObject> {
+    void triggerObject(GJBaseGameLayer* layer,
+                       int uniqueID,
+                       gd::vector<int> const* remapKeys) override {
+        auto* gb = GucciEngine::get();
+        if (m_objectID != 1912 || !gb->enabled || (gb->isIdle() && !gb->analyzerOwnsRun()))
+            return EffectGameObject::triggerObject(layer, uniqueID, remapKeys);
+
+        static uint32_t s_frame = std::numeric_limits<uint32_t>::max();
+        static std::unordered_map<int, uint32_t> s_firedThisFrame;
+        uint32_t const frame = gb->updater.getFrame();
+        if (frame != s_frame) {
+            s_frame = frame;
+            s_firedThisFrame.clear();
+        }
+        uint32_t const repeat = s_firedThisFrame[m_uniqueID]++;
+
+        // splitmix64 over the seed, the trigger and the frame.
+        uint64_t key = gb->replay.m_startingSeed ^
+                       (static_cast<uint64_t>(static_cast<uint32_t>(m_uniqueID)) * 0x9E3779B97F4A7C15ull) ^
+                       (static_cast<uint64_t>(frame) * 0xC2B2AE3D27D4EB4Full) ^
+                       (static_cast<uint64_t>(repeat) * 0x165667B19E3779F9ull);
+        key += 0x9E3779B97F4A7C15ull;
+        key = (key ^ (key >> 30)) * 0xBF58476D1CE4E5B9ull;
+        key = (key ^ (key >> 27)) * 0x94D049BB133111EBull;
+        key ^= key >> 31;
+
+        uint64_t const saved = readGdRandom();
+        writeGdRandom(key);
+        EffectGameObject::triggerObject(layer, uniqueID, remapKeys);
+        writeGdRandom(saved);
+        log::debug("Random trigger {} on frame {} (seed {}, repeat {}): value {}", m_uniqueID, frame,
+                   gb->replay.m_startingSeed, repeat, key);
     }
 };
