@@ -1456,12 +1456,15 @@ namespace gucci {
     // played, or loaded, and the level restarted). The atom still held that
     // macro, and addInputToReplay drops an input that comes before its last
     // action, so nothing was recorded until a death or restart cleared it.
-    // Same rule as Record during playback (beginResumeRecording): the macro
-    // up to this frame is kept and recording goes on from here, so at frame 0
-    // it's a fresh recording. Nothing is playing, so the player holds only
-    // what the user holds: a button the kept part leaves held that the player
-    // isn't holding is let go of on the first recorded frame, as a respawn
-    // does.
+    // This is a fresh recording, from this frame: in Off nothing of the macro
+    // was played, so frames 0 to here came from the player's own run, which
+    // nothing recorded. Keeping the macro's part up to here (Play to Record's
+    // rule, beginResumeRecording, where that part was played) spliced old
+    // clicks onto a run that didn't make them. So the old macro goes, with
+    // its frame windows, path samples, seed, starting TPS and start-position
+    // mark, as a restart while recording does; at frame 0 that's the whole
+    // run. A button the player holds at the switch is recorded as pressed on
+    // the first recorded frame, so its release later has a press before it.
     bool GucciEngine::beginRecordingFromOff() {
         if (mode != Mode::Idle || replay.m_actionAtom.empty() || legit::on())
             return false;
@@ -1470,26 +1473,36 @@ namespace gucci {
             return false;
 
         uint32_t const now = updater.getFrame();
-        auto& atom = replay.m_actionAtom;
-        size_t const before = atom.length();
-        atom.clipFrom(now + 1);
-        if (replay.m_pathSamples.size() > (size_t)now + 1)
-            replay.m_pathSamples.resize((size_t)now + 1);
-        if (atom.empty()) {
-            // Nothing of the old macro is left: its frame windows would be
-            // saved with the new recording, and Save marks the file with
-            // where this one starts (as a restart while recording does).
-            forgetMacroWindows();
-            replay.m_recordedFromStartPos = pl->m_startPosObject != nullptr;
-        }
+        auto& rs = replay;
+        size_t const before = rs.m_actionAtom.length();
+        rs.m_actionAtom.m_actions.clear();
+        rs.m_pathSamples.clear();
+        rs.clearDispatchOrder();
+        forgetMacroWindows();
+        rs.m_recordedFromStartPos = pl->m_startPosObject != nullptr;
+        rs.m_initialTPS = updater.m_tps;
+        // This attempt's seed (the reset gave GucciBot's random sources a
+        // fresh one in Off), not the old macro's.
+        rs.m_startingSeed = rs.m_startingSeedThisAttempt;
 
         setMode(Mode::Recording);
-        replay.releaseButtonsNotHeldAfterRespawn(now + 1);
-        replay.m_inputIndex = atom.length();
-        log::info("[GucciBot] Record from Off @ frame {} -- {} of {} actions kept",
+
+        bool const twoPlayer = pl->m_levelSettings && pl->m_levelSettings->m_twoPlayerMode;
+        for (int lane = 0; lane < (twoPlayer ? 2 : 1); ++lane) {
+            bool const p2 = lane == 1;
+            auto* who = rs.flagMovesPlayer2(pl, p2) ? pl->m_player2 : pl->m_player1;
+            if (!who)
+                continue;
+            for (int b = 1; b <= 3; ++b)
+                if ((bool)who->m_holdingButtons[b])
+                    rs.m_actionAtom.addAction(now + 1, static_cast<gb::ActionType>(b), true, p2);
+        }
+        rs.m_inputIndex = rs.m_actionAtom.length();
+        log::info("[GucciBot] Record from Off @ frame {} -- fresh recording, {} old actions dropped, "
+                  "{} held button(s) recorded",
                   now,
-                  atom.m_actions.size(),
-                  before);
+                  before,
+                  rs.m_actionAtom.length());
         return true;
     }
 

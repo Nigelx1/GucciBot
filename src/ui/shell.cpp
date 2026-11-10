@@ -1423,14 +1423,14 @@ namespace gucci::ui {
             kit::BeginCard("Macro", "Record a run, or play one back.");
             int mode = gb->isRecording() ? 1 : gb->isPlaying() ? 2 : 0;
             const char* modes[] = {"Off", "Record", "Play"};
-            // Record in a level carries on from there, from Play (GitHub
-            // issue #32) or from Off with a macro loaded
-            // (GucciEngine::setModeFromMenu). Off only while Legit only is
-            // on: recording and playing both count as a cheat.
+            // Record while a macro plays carries on from there (GitHub issue
+            // #32); Record from Off is a fresh recording, even with a macro
+            // loaded (GucciEngine::setModeFromMenu). Off only while Legit
+            // only is on: recording and playing both count as a cheat.
             std::optional<kit::LegitGate> modeGate(std::in_place);
             if (kit::ChoiceRow("Mode",
-                               "Record in a level keeps the macro up to where you are and records from there. The "
-                               "rest of the macro is cut",
+                               "Switch to Record while a macro plays to carry on from there. The rest of the macro "
+                               "is cut. Record from Off starts a new recording",
                                &mode, modes, 3))
                 gb->setModeFromMenu(mode == 1   ? GucciEngine::Mode::Recording
                                     : mode == 2 ? GucciEngine::Mode::Playing
