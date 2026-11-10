@@ -22,6 +22,10 @@ namespace gucci {
     inline int g_midhookFailures = 0;
     inline int g_patchAttempts = 0;
     inline int g_patchFailures = 0;
+    // Placed earlier but would not go back in at the last switch-on
+    // (setEngineCodeIn below); counted again each time the switch goes on.
+    inline int g_midhooksNotBackIn = 0;
+    inline int g_patchesNotBackIn = 0;
 
 #if GB_NATIVE_ENGINE
     // Every midhook and byte patch GucciBot asks for is written down here,
@@ -128,21 +132,27 @@ namespace gucci {
         if (in && mcponly::launch())
             return;  // an MCP-only test launch: nothing goes in (core/mcp_only.hpp)
         if (in) {
+            g_midhooksNotBackIn = 0;
+            g_patchesNotBackIn = 0;
             for (auto& site : patchSites()) {
                 if (!site.patch) {
                     placePatch(site);
                 } else if (!site.patch->isEnabled()) {
-                    if (auto res = site.patch->enable(); res.isErr())
+                    if (auto res = site.patch->enable(); res.isErr()) {
+                        ++g_patchesNotBackIn;
                         geode::log::error("[GucciBot] Patch '{}' would not go back in: {}", site.name,
                                           res.unwrapErr());
+                    }
                 }
             }
             for (auto& site : midhookSites()) {
                 if (!site.hook) {
                     placeMidhook(site);
                 } else if (!site.hook.enabled()) {
-                    if (!site.hook.enable())
+                    if (!site.hook.enable()) {
+                        ++g_midhooksNotBackIn;
                         geode::log::error("[GucciBot] Midhook '{}' would not go back in", site.name);
+                    }
                 }
             }
             return;

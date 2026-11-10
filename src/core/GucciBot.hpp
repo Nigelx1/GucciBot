@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-bn (a Record restart with practice checkpoints leaves a stray player 2 hold as playback would)"
+    "2026-11-10-bo (the self-check at switch-on fails if a midhook or patch would not go back in)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

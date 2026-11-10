@@ -50,8 +50,10 @@ namespace gucci {
             geode::log::info("[GucciBot] ===== self-check =====");
 
             {
-                int got = g_midhookAttempts - g_midhookFailures;
-                bool ok = (g_midhookFailures == 0) && (got >= expectedMidhooks);
+                // A midhook that would not go back in at the last switch-on
+                // was counted as placed at launch, so it's taken off again.
+                int got = g_midhookAttempts - g_midhookFailures - g_midhooksNotBackIn;
+                bool ok = (g_midhookFailures == 0) && (g_midhooksNotBackIn == 0) && (got >= expectedMidhooks);
                 add("Midhooks installed",
                     ok,
                     std::to_string(got) + "/" + std::to_string(expectedMidhooks));
@@ -63,12 +65,12 @@ namespace gucci {
                                       "-- physics WILL malfunction (frozen player / desync)",
                                       got,
                                       expectedMidhooks,
-                                      g_midhookFailures);
+                                      g_midhookFailures + g_midhooksNotBackIn);
             }
 
             {
-                int got = g_patchAttempts - g_patchFailures;
-                bool ok = (g_patchFailures == 0) && (g_patchAttempts >= expectedPatches);
+                int got = g_patchAttempts - g_patchFailures - g_patchesNotBackIn;
+                bool ok = (g_patchFailures == 0) && (g_patchesNotBackIn == 0) && (g_patchAttempts >= expectedPatches);
                 add("Binary patches applied", ok);
                 if (ok)
                     geode::log::info(
@@ -78,7 +80,7 @@ namespace gucci {
                                       "-- offsets may be wrong for this GD version",
                                       got,
                                       expectedPatches,
-                                      g_patchFailures);
+                                      g_patchFailures + g_patchesNotBackIn);
             }
 
             {

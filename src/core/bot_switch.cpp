@@ -206,7 +206,8 @@ namespace gucci::botswitch {
             gb->runSelfCheck();
             ui::resumeAssistantAccess();
             log::info("[GucciBot] Switched on: back in the game ({} midhooks, {} patches placed so far)",
-                      g_midhookAttempts - g_midhookFailures, g_patchAttempts - g_patchFailures);
+                      g_midhookAttempts - g_midhookFailures - g_midhooksNotBackIn,
+                      g_patchAttempts - g_patchFailures - g_patchesNotBackIn);
         }
 
     } // namespace
