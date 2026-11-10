@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-ax (Mirror Inputs mirrors both players from the same holds under Maintain gravity)"
+    "2026-11-10-ay (Maintain gravity hint covers player 2)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
