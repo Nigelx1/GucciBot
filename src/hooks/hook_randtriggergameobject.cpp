@@ -148,7 +148,5 @@ struct GB7RandomEffectGameObject : Modify<GB7RandomEffectGameObject, EffectGameO
         writeGdRandom(key);
         EffectGameObject::triggerObject(layer, uniqueID, remapKeys);
         writeGdRandom(saved);
-        log::debug("Random trigger {} on frame {} (seed {}, repeat {}): value {}", m_uniqueID, frame,
-                   gb->replay.m_startingSeed, repeat, key);
     }
 };

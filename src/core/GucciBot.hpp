@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-bf (plain Random triggers pick the same again after a practice respawn)"
+    "2026-11-10-bg (plain Random triggers no longer log every pick)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
