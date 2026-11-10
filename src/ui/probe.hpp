@@ -219,6 +219,7 @@ namespace gucci::ui::probe {
     void slider(const char* widget, double value, double lo, double hi);
     void input(const char* widget, matjson::Value value, const char* placeholder = nullptr);
     void button(const char* label, Tone tone);
+    void arrow(const char* name);  // kit::Arrow: a button named `name`, the arrow has no text
     void color(ImVec4 const& c);
     void key(std::string const& name, bool waiting);
 

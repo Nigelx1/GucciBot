@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-z (Saved macros: reopening the menu reads the macro folder again even if no menu frames ran while it was hidden)"
+    "2026-11-10-aa (Assistant Access: the band Reorder arrows in Calculate show in gucci_ui and gucci_ui_press can press them)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

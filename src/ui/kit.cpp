@@ -547,6 +547,13 @@ namespace gucci::ui::kit {
         return pressed;
     }
 
+    bool Arrow(const char* id, ImGuiDir dir, const char* name) {
+        bool const pressed = ImGui::ArrowButton(id, dir);
+        if (probe::on())
+            probe::arrow(name);
+        return pressed;
+    }
+
     bool Color(const char* id, ImVec4* c, bool alpha) {
         ImGui::PushID(id);
         ImGuiColorEditFlags flags = ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel;

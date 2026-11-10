@@ -73,6 +73,10 @@ namespace gucci::ui::kit {
     // width: 0 = fit the label, < 0 = fill the rest of the line, > 0 = exact.
     bool Button(const char* label, Tone tone = Tone::Plain, float width = 0.f);
     bool Color(const char* id, ImVec4* c, bool alpha = true);
+    // A small arrow button (ImGui's ArrowButton). `name` is what the menu
+    // probe calls it (gucci_ui lists it, gucci_ui_press can press it), since
+    // the arrow itself has no text.
+    bool Arrow(const char* id, ImGuiDir dir, const char* name);
     // Shows the bound key; click to capture the next key (Escape unbinds),
     // right-click to unbind.
     bool Key(const char* id, int* keyCode);

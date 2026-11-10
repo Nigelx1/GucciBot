@@ -1307,6 +1307,20 @@ namespace gucci::ui::probe {
             ImGui::LogText("-");
     }
 
+    void arrow(const char* name) {
+        Element& e = push("button");
+        fromLastItem(e);
+        e.id = GImGui->LastItemData.ID;
+        e.label = name ? name : "";
+        e.tone = toneName(Tone::Plain);
+        e.extra["arrow"] = true;
+        claim(e.id);
+        // The arrow draws no text, so ImGui's log has nothing for it: it's
+        // logged as a button is, [name], and a disabled one gets a "-".
+        if (GImGui->LogEnabled)
+            logAt(e.rect.Min, fmt::format("[{}]{}", e.label, e.enabled ? "" : "-"));
+    }
+
     void color(ImVec4 const& c) {
         Element& e = push("color");
         fromLastItem(e);

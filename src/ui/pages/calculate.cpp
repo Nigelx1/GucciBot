@@ -731,12 +731,12 @@ namespace gucci::ui::pages {
                 // Order matters: a window takes the first band it fits.
                 ImGui::SameLine();
                 ImGui::BeginDisabled(i == 0);
-                if (ImGui::ArrowButton("##up", ImGuiDir_Up))
+                if (kit::Arrow("##up", ImGuiDir_Up, "Move up"))
                     moveFrom = static_cast<int>(i), moveTo = static_cast<int>(i) - 1;
                 ImGui::EndDisabled();
                 ImGui::SameLine();
                 ImGui::BeginDisabled(i + 1 == tiers.size());
-                if (ImGui::ArrowButton("##down", ImGuiDir_Down))
+                if (kit::Arrow("##down", ImGuiDir_Down, "Move down"))
                     moveFrom = static_cast<int>(i), moveTo = static_cast<int>(i) + 1;
                 ImGui::EndDisabled();
                 ImGui::SameLine();
