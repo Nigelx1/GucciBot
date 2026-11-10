@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-l (gucci_ui_press: Assistant Access presses a menu control by its ID, as a click would; a disabled one refuses)"
+    "2026-11-10-m (Saved macros: Save makes the saved file the loaded one, and renaming another row of the same name leaves the name field be)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

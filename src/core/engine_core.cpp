@@ -1208,8 +1208,15 @@ namespace gucci {
 
         if (!f.saveToPath(path)) {
             log::error("[GucciBot] Failed to save to {}", path.string());
-        } else if (!f.deaths.empty()) {
-            log::info("[GucciBot] Saved with {} intentional-death marker(s)", f.deaths.size());
+        } else {
+            if (!f.deaths.empty())
+                log::info("[GucciBot] Saved with {} intentional-death marker(s)", f.deaths.size());
+            // The file just saved under the name in the name field is the
+            // loaded one now: Save writes the theme's extension, which may not
+            // be the one loaded (zz.solar loaded, zz.juice saved), and the
+            // autosaves, sidecars and highlighted row follow getCurrentPath.
+            if (path.parent_path() == gb->getReplayDir() && path.stem().string() == gb->replayName)
+                m_loadedPath = path;
         }
         saveFwMarks(path);
         saveAcResults(path);
@@ -1666,6 +1673,10 @@ namespace gucci {
         // would be replaced by the rename.
         if (fs::exists(dst, ec) && !fs::equivalent(src, dst, ec))
             return fmt::format("{} is already in the folder.", dst.filename().string());
+        // The name field follows the rename only when this row is the loaded
+        // file: with zz.juice loaded, renaming the zz.solar row leaves it be.
+        std::error_code curEc;
+        bool const wasCurrent = replayName == from && fs::equivalent(replay.getCurrentPath(), src, curEc);
         fs::rename(src, dst, ec);
         if (ec)
             return fmt::format("Couldn't rename it: {}", ec.message());
@@ -1680,7 +1691,7 @@ namespace gucci {
             std::error_code ec2;
             fs::rename(p, sidecars / (newPrefix + p.filename().string().substr(oldPrefix.size())), ec2);
         }
-        if (replayName == from)
+        if (wasCurrent)
             replayName = name;
         if (replay.m_loadedPath == src)
             replay.m_loadedPath = dst;
