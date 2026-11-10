@@ -120,7 +120,7 @@ namespace gucci::ui::press {
                                   "nothing with that ID was drawn the frame of the press (its page or popup shut, "
                                   "or a different ID now)");
                 if (g.disabled)
-                    return finish("refused_disabled", false, "the control is disabled (greyed out)");
+                    return finish("refused_disabled", false, "the control is disabled (grayed out)");
                 if (ctx.LastActiveId != id)
                     return finish("not_taken", false, "the item was drawn but didn't take the press (not pressable)");
                 if (!g.req.text)

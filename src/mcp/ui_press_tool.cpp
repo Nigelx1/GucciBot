@@ -226,7 +226,7 @@ namespace gucci::mcp {
                     if (!(*el)["enabled"].asBool().unwrapOr(true)) {
                         j.out["pressed"] = false;
                         j.out["status"] = "refused_disabled";
-                        j.out["detail"] = std::string("the control is disabled (greyed out)") +
+                        j.out["detail"] = std::string("the control is disabled (grayed out)") +
                                           (gucci::legit::on() ? "; Legit only is on" : "");
                         return j.out;
                     }
@@ -393,7 +393,7 @@ namespace gucci::mcp {
             "Press one of GucciBot's menu controls by its ID (test launches only), the way a click on it "
             "does: a button, a switch (on: the state wanted), a choice's option, a dropdown's option, a menu "
             "item, a macro row's \"...\", a tab, or a text box's text (typed, then Enter). Read the IDs "
-            "with gucci_ui (format json, or find); one scrolled out of view is scrolled into view first. A disabled control (greyed out, Legit only) is refused "
+            "with gucci_ui (format json, or find); one scrolled out of view is scrolled into view first. A disabled control (grayed out, Legit only) is refused "
             "and says so. Answers {status: pressed, typed, already, refused_disabled, not_drawn, not_taken "
             "or no_focus; pressed; before; after; scrolled; popups: what opened}. It presses exactly what it's told: "
             "a control that opens a file dialog or a folder opens it, so leave those alone in a hidden game.",

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-ar (Maintain gravity drives player 2 too in a 2-player level)"
+    "2026-11-10-as (gray, the American spelling, in the menu press messages)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
