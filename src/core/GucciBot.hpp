@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-m (Saved macros: Save makes the saved file the loaded one, and renaming another row of the same name leaves the name field be)"
+    "2026-11-10-n (Render: the in-render HUD counts the frames written, and the count starts at 0 each render)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

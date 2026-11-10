@@ -601,7 +601,12 @@ namespace gucci {
         m_time = 0.0;
         m_endTime = 0.0f;
         m_updateIndex = 0;
-        m_frameCount = 0;
+        // The encode thread's count, read by the Render card's HUD and by the
+        // ring's room check (tryBeginFrame). It has to start each render at
+        // 0: the ring's issued count does (SLRenderTexture::init), and a count
+        // left over from the last render made the check always pass, so a
+        // slow encoder could have its slot reclaimed before it read it.
+        m_encoded.store(0, std::memory_order_release);
         m_introStarted = false;
         m_introFinished = false;
         m_introIndex = 0;

@@ -217,8 +217,9 @@ namespace gucci {
         void setChannels(int c) {
             m_channels = c;
         }
+        // Frames the encode thread has written to the video so far.
         int renderedFrames() const {
-            return m_frameCount;
+            return (int)m_encoded.load(std::memory_order_acquire);
         }
         void publishRenderResult(bool success);
         float getTime() const {
@@ -302,7 +303,6 @@ namespace gucci {
         float m_visualFps = 60.0f;
         bool m_recording = false;
 
-        int m_frameCount = 0;
         int m_updateIndex = 0;
         float m_endTime = 0;
 
