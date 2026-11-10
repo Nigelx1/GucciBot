@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-ba (a render stops when its level goes away, checked by a level count as well as the address)"
+    "2026-11-10-bb (the planned route ghost waits out Calculate and renders again)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

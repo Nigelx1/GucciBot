@@ -789,7 +789,13 @@ class $modify(GB7PlayLayer, PlayLayer) {
         }
         // The AI pathfinder's level map: its ghost run, a slice a frame, and the
         // drawing over the level when it is switched on.
-        absense::route::tickGhost(this);
+        // Not while Calculate or a render runs. Their drawScene branches have
+        // counted frames since -au (for hitborders), and the ghost runs a slice
+        // per counted frame: before, it stood still through both, and nothing
+        // has checked it stepping while Calculate puts states back or eating a
+        // render's frame time.
+        if (!gb->fwAnalyzing && !gucci::SLRenderer::get()->isRecording())
+            absense::route::tickGhost(this);
         absense::route::tickOverlay(this);
         absense::route::tickRoute(this);
     }
