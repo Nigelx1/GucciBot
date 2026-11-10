@@ -2980,6 +2980,13 @@ namespace gucci {
         log::info("[GucciBot] ========================================");
         log::info("[GucciBot] " MOD_VERSION " initialized — {} macros", storedMacros.size());
 
+        runSelfCheck();
+    }
+
+    // The launch self-check (Settings > Diagnostics). bot_switch.cpp runs it
+    // again when the bot is switched back on, so the card stops saying it
+    // is off and expects the engine's midhooks and patches again.
+    void GucciEngine::runSelfCheck() {
         // Standing down, or switched off, no midhooks or patches went in on
         // purpose (util_midhook, engine_updater.cpp): expect none. Otherwise
         // 12 midhooks: 5 in engine_updater.cpp, 6 in hook_gjbasegamelayer.cpp

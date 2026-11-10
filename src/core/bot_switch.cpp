@@ -201,6 +201,9 @@ namespace gucci::botswitch {
 #endif
             gb->enabled = true;
             s_takenOut = false;
+            // Diagnostics still had the launch's check, which expected nothing
+            // and said the bot is switched off.
+            gb->runSelfCheck();
             ui::resumeAssistantAccess();
             log::info("[GucciBot] Switched on: back in the game ({} midhooks, {} patches placed so far)",
                       g_midhookAttempts - g_midhookFailures, g_patchAttempts - g_patchFailures);

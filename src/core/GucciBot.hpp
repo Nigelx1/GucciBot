@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-bh (an MCP-only test launch keeps Assistant Access on with the bot switched off)"
+    "2026-11-10-bi (Diagnostics checks again when the bot is switched back on)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -1211,6 +1211,9 @@ namespace gucci {
         int mcpPort = 8790;
 
         void initialize();
+        // The self-check initialize() ends with (Settings > Diagnostics);
+        // again when the Disable bot switch puts GucciBot back in.
+        void runSelfCheck();
         // The ONE place engine settings are read back from disk. Called from
         // initialize(), at startup, before anything can be played.
         //
