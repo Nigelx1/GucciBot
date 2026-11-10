@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-a (the Pathfinder's Follow the planned route setting drops its (AI) tag - it is the search's route planning, not the trained AI)"
+    "2026-11-10-b (hitborders draw green, then blue, then red, so a block's blue band sits over an orb's green the way NaN GD draws them)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

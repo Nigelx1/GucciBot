@@ -947,8 +947,10 @@ namespace gucci {
         s.useMerged = settings.merged && !s.fboFailed;
         std::vector<CCPoint> scratch;
         ccColor4F const clear{0.f, 0.f, 0.f, 0.f};
-        // Blue, then green, then red: red ends up on top.
-        constexpr hb::Kind kOrder[] = {hb::Kind::Touch, hb::Kind::Special, hb::Kind::Lethal};
+        // Green, then blue, then red: red ends up on top and blue over green, the
+        // way NaN GD draws his hitborders (2026-11-10, from his videos' frames: a
+        // block's blue band covers an orb's green square). It was blue, green, red.
+        constexpr hb::Kind kOrder[] = {hb::Kind::Special, hb::Kind::Touch, hb::Kind::Lethal};
         for (hb::Kind const kind : kOrder) {
             int const part = partFor(kind);
             ccColor4F const line = lineColour(settings, part);
