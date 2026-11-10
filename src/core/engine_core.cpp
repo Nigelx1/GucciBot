@@ -1484,6 +1484,20 @@ namespace gucci {
         // This attempt's seed (the reset gave GucciBot's random sources a
         // fresh one in Off), not the old macro's.
         rs.m_startingSeed = rs.m_startingSeedThisAttempt;
+        // Off's reset left GD's own random and the variance table alone (the
+        // last macro's, or GD's), and a playback reset sets both from the
+        // saved seed (hook_playlayer.cpp). At frame 0 no tick has drawn from
+        // either yet, so setting them here the way playback will makes the
+        // whole recorded run replay the same. Mid-level, frames 0 to here
+        // were never recorded, so nothing can replay them anyway.
+        if (now == 0) {
+            uint64_t v = rs.m_startingSeed;
+            for (auto& x : pl->m_varianceValues) {
+                x = (float)(v & 0xFFFF) / 32768.0 - 1.0;
+                v = 214013 * v + 2531011;
+            }
+            writeGdRandom(rs.m_startingSeed);
+        }
 
         setMode(Mode::Recording);
 

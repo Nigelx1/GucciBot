@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-ac (Record from Off: a button held at the switch goes on the lane its release will, with Flip 2-Player Controls on in a 1-player level)"
+    "2026-11-10-ad (Record from Off at frame 0 sets GDs random and the variance table from the new seed, as playback will)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
