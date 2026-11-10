@@ -109,7 +109,8 @@ struct GB7RandTriggerGameObject
 };
 
 // Object 1912 (see the top of the file). The same trigger firing more than
-// once on one frame (a spawn loop) gets a different value each time.
+// once on one frame of one attempt (a spawn loop) gets a different value each
+// time.
 struct GB7RandomEffectGameObject : Modify<GB7RandomEffectGameObject, EffectGameObject> {
     void triggerObject(GJBaseGameLayer* layer,
                        int uniqueID,
@@ -118,11 +119,17 @@ struct GB7RandomEffectGameObject : Modify<GB7RandomEffectGameObject, EffectGameO
         if (m_objectID != 1912 || !gb->enabled || (gb->isIdle() && !gb->analyzerOwnsRun()))
             return EffectGameObject::triggerObject(layer, uniqueID, remapKeys);
 
+        // The count starts again on a new frame or a new attempt: a practice
+        // respawn plays the checkpoint's frames again, and a trigger that
+        // fires on the same frame as before must pick the same way.
         static uint32_t s_frame = std::numeric_limits<uint32_t>::max();
+        static int s_attempt = -1;
         static std::unordered_map<int, uint32_t> s_firedThisFrame;
         uint32_t const frame = gb->updater.getFrame();
-        if (frame != s_frame) {
+        int const attempt = layer ? layer->m_attempts : 0;
+        if (frame != s_frame || attempt != s_attempt) {
             s_frame = frame;
+            s_attempt = attempt;
             s_firedThisFrame.clear();
         }
         uint32_t const repeat = s_firedThisFrame[m_uniqueID]++;
