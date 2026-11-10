@@ -64,7 +64,7 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 - [ ] Legend groups: several bands counted on one legend row
 - [ ] Ring boldness: line thickness of the plain ring
 - [ ] The CBF placed / on-edge counter: counted per attempt, shown nowhere. Built 2026-10-30-a (3569d28): while recording with Sub-tick clicks on, Macro > Recording and playback shows "This attempt: N placed in the tick, M on the edge", starting over at each respawn; untested
-- [ ] Settings > Diagnostics: the startup self-check's results
+- [x] Settings > Diagnostics: the startup self-check's results. Built 2026-11-10-al (a4a61df): a pass/fail chip, each failed check with its detail, and an "Every check" list; checked in a test copy (4 checks listed, all passed)
 - [ ] The Log Frame Increments switch: since 2026-10-30-a (7af8f56) it loads from a saved key, debug_tick_logs (off unless set by hand: frame increments to guccibot_frameinc.log, the per-input lines to guccibot_slope.log); still no switch in the menu
 - [ ] HUD branding overlay: what it showed is unknown; waiting on Nigel's description
 - [ ] Ask Nigel: branch playback (View / Go) for the suggestion's alignments; Juice's numbers on the in-level markers (clashes with "markers stay strict")
