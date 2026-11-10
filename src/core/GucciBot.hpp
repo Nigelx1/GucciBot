@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-au (hitborders follow the camera in renders and Calculate: those frames are counted now)"
+    "2026-11-10-av (an editor level finished under safe mode no longer says Level Verified on its end screen)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

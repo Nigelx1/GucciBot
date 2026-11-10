@@ -21,6 +21,7 @@
 #include <Geode/modify/GameStatsManager.hpp>
 #include <Geode/modify/PlayLayer.hpp>
 #include <Geode/modify/PlayerObject.hpp>
+#include <Geode/modify/TextArea.hpp>
 #include <Geode/utils/hash.hpp>
 
 #include <array>
@@ -420,14 +421,37 @@ class $modify(GB7SafeModePlayLayer, PlayLayer) {
 // unlocked "hide the red dot" hides it, and a render never shows it
 // (CheatDotNode). Drawn in the panel's top-left corner, so it slides in with
 // the panel.
+// While GD writes a shielded editor completion's end-screen line (above).
+static bool g_verifyLineSwap = false;
+
+class $modify(GB7SafeModeVerifyText, TextArea) {
+    static void onModify(auto& self) {
+        gucci::mcponly::keep(self);  // stays in an MCP-only test launch (core/mcp_only.hpp)
+    }
+
+    void setString(gd::string text) {
+        if (g_verifyLineSwap && std::string_view(text.c_str()).find("Verified!") != std::string_view::npos)
+            text = "Safe mode was on: this run didn't verify the level.";
+        TextArea::setString(text);
+    }
+};
+
 class $modify(GB7SafeModeEndLevel, EndLevelLayer) {
     static void onModify(auto& self) {
         gucci::mcponly::keep(self);  // stays in an MCP-only test launch (core/mcp_only.hpp)
     }
 
     void customSetup() {
-        EndLevelLayer::customSetup();
         auto* gb = GucciEngine::get();
+        // An editor level's end screen says "Level Verified!" from the level's
+        // coins alone, but a shielded completion didn't verify it: levelComplete
+        // ran with m_isTestMode raised, which skips GD's verify write (and the
+        // level can't be uploaded). The line is swapped while GD writes it.
+        auto* pl = m_playLayer;
+        g_verifyLineSwap = !gb->standingDown && !botswitch::takenOut() && pl && pl->m_level &&
+                           pl->m_level->m_levelType == GJLevelType::Editor && shielded();
+        EndLevelLayer::customSetup();
+        g_verifyLineSwap = false;
         if (gb->standingDown || botswitch::takenOut() || !m_mainLayer)
             return;
         bool const cheated = safemode::g_tainted || safemode::cheatingNow();
