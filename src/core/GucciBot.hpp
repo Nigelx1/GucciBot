@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-h (a log line on every reset during playback, to catch the restart-after-a-finished-replay desync if it comes back)"
+    "2026-11-10-i (Calculate gives the music and sound volume back exactly as they were, with Mute while it runs on or off)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -1062,6 +1062,11 @@ namespace gucci {
         float fwSavedMusicVolume = 0.f;
         float fwSavedEffectsVolume = 0.f;
         bool fwMusicMuted = false;
+        // How many mutes hold the game silent right now: Calculate's own, its
+        // "Mute while it runs" switch, the Pathfinder's. The volumes are saved
+        // by the first and put back by the last, so two mutes in a row no
+        // longer save the first one's zeros (test pass 2026-11-10, bug 1).
+        int fwMuteHolds = 0;
 
         // Only the Classic Pathfinder still sets this (to Idle), and nothing
         // reads it: the states it had belonged to GucciBot's 1.x analyzer,
@@ -1072,6 +1077,8 @@ namespace gucci {
         void cancelAnalysis();
         void muteAnalysisMusic();
         void unmuteAnalysisMusic();
+        void holdMute();
+        void releaseMute();
         // Writes the analyzer's results next to the current macro.
         void saveAcFrameWindowResults();
         // What a Calculate run that just stopped leaves next to the macro (the

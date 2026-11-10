@@ -793,8 +793,6 @@ class FrameWindowAnalyzer {
     bool m_savedCanDie = false;
     bool m_savedExpectsDeath = false;
     bool m_wasPaused = false;
-    float m_savedMusicVolume = 1.f;
-    float m_savedSfxVolume = 1.f;
     bool m_mutedAudio = false;
 
     void muteAudio();

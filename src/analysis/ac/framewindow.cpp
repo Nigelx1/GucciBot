@@ -1128,25 +1128,19 @@ bool FrameWindowAnalyzer::inRetimeTail(size_t k, size_t ai, bool player2) const 
            (actions[k].m_player2 == player2 || !m_partner.empty());
 }
 
+// GucciBot (2026-11-10): through GucciEngine's mute holds, shared with
+// Calculate's "Mute while it runs" switch and the Pathfinder. Each used to
+// save the volumes it found, so the switch saved this mute's zeros and put
+// them back after this one had restored the player's volumes.
 void FrameWindowAnalyzer::muteAudio() {
     if (m_mutedAudio) return;
-    auto* engine = FMODAudioEngine::sharedEngine();
-    if (!engine) return;
-
-    m_savedMusicVolume = engine->m_musicVolume;
-    m_savedSfxVolume = engine->m_sfxVolume;
-    engine->setBackgroundMusicVolume(0.f);
-    engine->setEffectsVolume(0.f);
+    gucci::GucciEngine::get()->holdMute();
     m_mutedAudio = true;
 }
 
 void FrameWindowAnalyzer::unmuteAudio() {
     if (!m_mutedAudio) return;
-    auto* engine = FMODAudioEngine::sharedEngine();
-    if (engine) {
-        engine->setBackgroundMusicVolume(m_savedMusicVolume);
-        engine->setEffectsVolume(m_savedSfxVolume);
-    }
+    gucci::GucciEngine::get()->releaseMute();
     m_mutedAudio = false;
 }
 

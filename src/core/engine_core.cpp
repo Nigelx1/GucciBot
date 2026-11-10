@@ -2893,6 +2893,23 @@ namespace gucci {
     void GucciEngine::muteAnalysisMusic() {
         if (fwMusicMuted)
             return;
+        fwMusicMuted = true;
+        holdMute();
+    }
+
+    void GucciEngine::unmuteAnalysisMusic() {
+        if (!fwMusicMuted)
+            return;
+        fwMusicMuted = false;
+        releaseMute();
+    }
+
+    // Every mute goes through these two (the analyzer's muteAudio too), so the
+    // volumes saved are the player's, whichever mute comes first and in
+    // whatever order they let go.
+    void GucciEngine::holdMute() {
+        if (fwMuteHolds++ > 0)
+            return;
         auto* fmod = FMODAudioEngine::sharedEngine();
         if (!fmod)
             return;
@@ -2900,18 +2917,15 @@ namespace gucci {
         fwSavedEffectsVolume = fmod->getEffectsVolume();
         fmod->setBackgroundMusicVolume(0.f);
         fmod->setEffectsVolume(0.f);
-        fwMusicMuted = true;
     }
 
-    void GucciEngine::unmuteAnalysisMusic() {
-        if (!fwMusicMuted)
+    void GucciEngine::releaseMute() {
+        if (fwMuteHolds <= 0 || --fwMuteHolds > 0)
             return;
-        auto* fmod = FMODAudioEngine::sharedEngine();
-        if (fmod) {
+        if (auto* fmod = FMODAudioEngine::sharedEngine()) {
             fmod->setBackgroundMusicVolume(fwSavedMusicVolume);
             fmod->setEffectsVolume(fwSavedEffectsVolume);
         }
-        fwMusicMuted = false;
     }
 
     // These two keep their names because their meaning is unchanged -- start
