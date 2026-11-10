@@ -28,6 +28,7 @@
 #include "audio/bigbrrr.hpp"
 #include "core/GucciBot.hpp"
 #include "core/bot_switch.hpp"
+#include "core/mcp_only.hpp"
 #include "hacks/autoclicker.hpp"
 #include "mcp/mcp_server.hpp"
 #include "mcp/test_settings.hpp"
@@ -3823,7 +3824,9 @@ $on_mod(Loaded) {
             gucci::GucciEngine::get()->reloadMacroList();
             if (Mod::get()->getSavedValue<bool>("assistant_access", false)) {
                 // Switched off (core/bot_switch.hpp): it starts when GucciBot does.
-                if (gucci::botswitch::wanted())
+                // An MCP-only test launch (core/mcp_only.hpp) keeps it on
+                // whatever the switch says: it is the one thing that launch is for.
+                if (gucci::botswitch::wanted() || gucci::mcponly::launch())
                     gucci::ui::setAssistantAccess(true);
                 else
                     gucci::ui::g_assistantSuspended = true;

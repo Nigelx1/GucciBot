@@ -6,6 +6,7 @@
 #include "core/bot_switch.hpp"
 #include "core/brr_format.hpp"
 #include "core/gbr6_format.hpp"
+#include "core/mcp_only.hpp"
 #include "core/platform.hpp"
 #include "core/setup_check.hpp"
 #include "core/standdown.hpp"
@@ -2989,6 +2990,7 @@ namespace gucci {
         gbcheck::g_engineSkippedWhy =
             !GB_NATIVE_ENGINE ? "this platform doesn't use the Windows engine"
             : standingDown    ? "GucciBot stood down for another bot this launch"
+            : mcponly::launch() ? "this is an MCP-only test launch (GUCCIBOT_MCP_ONLY)"
             : botswitch::takenOut() ? "the bot is switched off (Disable bot)"
                                     : nullptr;
         gbcheck::run(noEngineCode ? 0 : 12, noEngineCode ? 0 : 4, GBR6_VERSION, BRR_FORMAT_VERSION,

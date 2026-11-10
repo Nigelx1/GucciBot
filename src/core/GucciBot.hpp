@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-bg (plain Random triggers no longer log every pick)"
+    "2026-11-10-bh (an MCP-only test launch keeps Assistant Access on with the bot switched off)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
