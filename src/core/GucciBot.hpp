@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-bm (the pathfinder judge sees the plain Random trigger pick a recording would make)"
+    "2026-11-10-bn (a Record restart with practice checkpoints leaves a stray player 2 hold as playback would)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

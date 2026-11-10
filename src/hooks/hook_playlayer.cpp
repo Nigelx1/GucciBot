@@ -587,8 +587,10 @@ class $modify(GB7PlayLayer, PlayLayer) {
                     // handleButton doesn't reach it there, so a queued release
                     // never landed and a hold a playback left on player 2
                     // outlived the reset (Record from Off then recorded it at
-                    // frame 1). Not recorded: playback's reset releases both.
-                    if (p2 && !held && !m_gameState.m_isDualMode)
+                    // frame 1). Not recorded, so only where playback does
+                    // the same: its reset releases both players only with no
+                    // saved practice checkpoints (the playing branch above).
+                    if (p2 && !held && !m_gameState.m_isDualMode && gb->practiceFix.m_savedCheckpoints.empty())
                         p->releaseButton(static_cast<PlayerButton>(button));
                     else
                         queueButton(button, held, side, 0.0);
