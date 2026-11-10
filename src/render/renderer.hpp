@@ -210,6 +210,11 @@ namespace gucci {
         // through): drawScene stops a render whose level has gone. Set by
         // start().
         PlayLayer* m_layer = nullptr;
+        // Which level that is, as a count PlayLayer::init raises
+        // (m_levelGen): a new level allocated where the old one was has the
+        // same address, so the address alone could carry a render on into it.
+        uint64_t m_levelGen = 0;
+        uint64_t m_layerGen = 0;
         // A level whose quit has begun (the PlayLayer::onQuit hook sets it,
         // PlayLayer::init clears it): GD keeps it as PlayLayer::get() through
         // the quit's fade, and no render may start on it, since nothing would

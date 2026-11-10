@@ -242,6 +242,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
         // way.
         gb->practiceFix.removeAll();
         gucci::SLRenderer::get()->m_quittingLayer = nullptr;  // a new level (see onQuit)
+        ++gucci::SLRenderer::get()->m_levelGen;  // and a new one for drawScene's check
         if (!gb->enabled)
             return PlayLayer::init(level, useReplay, dontCreateObjects);
 

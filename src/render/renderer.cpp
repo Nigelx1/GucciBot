@@ -631,6 +631,7 @@ namespace gucci {
         m_introTotal = 0;
         RenderIntro::get()->destroy();
         m_layer = pl;
+        m_layerGen = m_levelGen;
         m_recording = true;
 
         m_texture.m_width = m_settings.m_width;

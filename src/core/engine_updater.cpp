@@ -1177,7 +1177,7 @@ class $modify(GB7CCDirector, CCDirector) {
         // than the onQuit hook (which stops it): with no level to draw nothing
         // is captured again, but the render stayed on, the Render card showing
         // "Rendering" with a frozen frame count until Stop was pressed.
-        if (sl->isRecording() && pl != sl->m_layer)
+        if (sl->isRecording() && (pl != sl->m_layer || sl->m_layerGen != sl->m_levelGen))
             sl->flushAndStop();
         if (sl->m_shouldStart)
             sl->startIfQueued();
