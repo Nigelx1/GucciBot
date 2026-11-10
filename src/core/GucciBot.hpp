@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-y (Audio: a mute hold that could not mute is not released later, so it cannot unmute another hold early)"
+    "2026-11-10-z (Saved macros: reopening the menu reads the macro folder again even if no menu frames ran while it was hidden)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -1579,15 +1579,20 @@ namespace gucci::ui {
             // the folder again: the time was only taken on the first look, so
             // a file copied in after launch but before the page was first
             // opened stayed out of the list until the next change or Refresh
-            // (test pass 2026-11-10).
+            // (test pass 2026-11-10). "Not drawn on the frame before" is ImGui's
+            // frame count skipping or, in case ImGui runs no frames while the
+            // menu is hidden, a quarter second since the card was last drawn.
             {
                 static auto s_lastLook = std::chrono::steady_clock::time_point{};
+                static auto s_lastDrawnAt = std::chrono::steady_clock::time_point{};
                 static std::filesystem::file_time_type s_lastWrite{};
                 static int s_lastDrawn = -10;
                 int const frame = ImGui::GetFrameCount();
-                bool const opened = frame - s_lastDrawn > 1;
-                s_lastDrawn = frame;
                 auto const now = std::chrono::steady_clock::now();
+                bool const opened =
+                    frame - s_lastDrawn > 1 || now - s_lastDrawnAt > std::chrono::milliseconds(250);
+                s_lastDrawn = frame;
+                s_lastDrawnAt = now;
                 if (opened || now - s_lastLook > std::chrono::milliseconds(1500)) {
                     s_lastLook = now;
                     std::error_code ec;
