@@ -1480,6 +1480,9 @@ namespace gucci {
         rs.clearDispatchOrder();
         forgetMacroWindows();
         rs.m_recordedFromStartPos = pl->m_startPosObject != nullptr;
+        // The Macro card's note was the dropped file's ("Recorded from a
+        // start position"), not this recording's.
+        startPosWarning.clear();
         rs.m_initialTPS = updater.m_tps;
         // This attempt's seed (the reset gave GucciBot's random sources a
         // fresh one in Off), not the old macro's.

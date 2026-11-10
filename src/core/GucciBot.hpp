@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-ae (MCP set_mode: from_here says that from idle it drops the loaded macro and records fresh)"
+    "2026-11-10-af (Record from Off clears the dropped macros start-position note on the Macro card)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
