@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-bo (the self-check at switch-on fails if a midhook or patch would not go back in)"
+    "2026-11-10-bp (the fw log keeps the reason the last log could not be kept when it can not open)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

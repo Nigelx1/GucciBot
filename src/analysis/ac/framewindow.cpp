@@ -79,6 +79,8 @@ static void fwLogOpen() {
     if (!g_fwLog.is_open()) {
         // Tried once a launch (fwFileLog): nothing goes to it this launch.
         geode::log::warn("[fw] couldn't open {}: no frame-window log this launch", path.string());
+        if (!why.empty())
+            geode::log::warn("[fw] couldn't keep the last log as {} ({})", old.string(), why);
         return;
     }
     if (!why.empty()) {
