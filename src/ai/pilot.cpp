@@ -1342,8 +1342,12 @@ namespace gucci::ai::pilot {
         s_live.job = id;
     }
 
+    // GucciBot (2026-11-09): the search engine is the default until a trained
+    // network ships in the package (Nigel's call). None does yet, so with AI as
+    // the default a new install's Pathfinder page opened on "No trained AI yet"
+    // with Start greyed out. Someone who picked an engine keeps their pick.
     bool engineAi() {
-        return Mod::get()->getSavedValue<bool>("pf_engine_ai", true);
+        return Mod::get()->getSavedValue<bool>("pf_engine_ai", false);
     }
 
     void setEngineAi(bool on) {

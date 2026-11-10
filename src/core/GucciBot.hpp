@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-09-u (Calculate: a sub-tick Retime leg splits its tail ticks for the measured player only, so the other player's click on a shared tick stays on the tick edge)"
+    "2026-11-09-v (the Pathfinder opens on the search engine by default until a trained AI ships)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
