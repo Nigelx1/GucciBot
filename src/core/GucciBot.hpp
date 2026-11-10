@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-bb (the planned route ghost waits out Calculate and renders again)"
+    "2026-11-10-bc (plain Random triggers pick from the macro seed, trigger and frame)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
