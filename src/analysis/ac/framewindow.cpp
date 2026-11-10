@@ -57,30 +57,38 @@ static std::ofstream g_fwLog;
 // - a launch writes at most kFwLogCap. Past that only the important lines (the
 //   warnings and each run's [fw][finish] summary) go in, up to kFwLogHardCap,
 //   so one launch can't fill the disk and the summaries still land;
-// - writes are buffered. An important line flushes, and so does any line a
-//   second after the last flush, so a crash still leaves what matters.
+// - every line is flushed, as before -p, so the lines just before a crash or
+//   a hang are on disk (-p buffered them, and a crash could lose that tail);
+// - the file is opened to append. If the last log can't be moved aside
+//   (another game sharing this save folder has it open: on Windows that
+//   blocks the rename but not a truncate), this launch appends to it after a
+//   banner, so neither game's lines are lost. After a move it's a new file.
 static constexpr std::uintmax_t kFwLogCap = 50ull << 20;
 static constexpr std::uintmax_t kFwLogHardCap = 55ull << 20;
 static std::uintmax_t g_fwLogBytes = 0;
 static bool g_fwLogCapped = false;
-static Clock::time_point g_fwLogLastFlush;
-static char g_fwLogBuf[1 << 16];
 
 static void fwLogOpen() {
     auto const dir = geode::Mod::get()->getSaveDir();
     auto const path = dir / "guccibot_fw.log";
     auto const old = dir / "guccibot_fw.old.log";
     std::error_code ec;
+    bool rotated = true;
     if (std::filesystem::exists(path, ec)) {
         std::filesystem::remove(old, ec);
         std::filesystem::rename(path, old, ec);
-        if (ec)
-            geode::log::warn("[fw] couldn't keep the last log as {}: {}", old.string(), ec.message());
+        if (ec) {
+            rotated = false;
+            geode::log::warn("[fw] couldn't keep the last log as {} ({}): appending to it instead",
+                             old.string(),
+                             ec.message());
+        }
     }
-    // Before open: the buffer is set for the file it opens.
-    g_fwLog.rdbuf()->pubsetbuf(g_fwLogBuf, sizeof(g_fwLogBuf));
-    g_fwLog.open(path, std::ios::out | std::ios::trunc);
-    g_fwLogLastFlush = Clock::now();
+    g_fwLog.open(path, std::ios::out | std::ios::app);
+    if (!rotated && g_fwLog.is_open())
+        g_fwLog << "\n===== new launch (the last log couldn't be moved aside: is another game using "
+                   "this save folder?) =====\n"
+                << std::flush;
     geode::log::info("[fw] log file at: {} (the last launch's: {})", path.string(), old.filename().string());
 }
 
@@ -105,13 +113,8 @@ void fwFileLog(std::string const& line, bool important = false) {
     }
     if (g_fwLogCapped && (!important || g_fwLogBytes >= kFwLogHardCap))
         return;
-    g_fwLog << line << '\n';
+    g_fwLog << line << '\n' << std::flush;
     g_fwLogBytes += line.size() + 1;
-    auto const now = Clock::now();
-    if (important || now - g_fwLogLastFlush >= std::chrono::seconds(1)) {
-        g_fwLog.flush();
-        g_fwLogLastFlush = now;
-    }
 }
 
 void gucci::fwEngineLog(std::string const& line) {
@@ -120,9 +123,10 @@ void gucci::fwEngineLog(std::string const& line) {
 
 // What a run did is read from guccibot_fw.log in the mod's save directory
 // (fwFileLog above: one file per launch, the last launch's kept as
-// guccibot_fw.old.log). FWWARN goes to Geode's log and the file, flushed;
-// FWLOG only while Verbose Log is on, and FWFILEWARN always, both to the file
-// only; each run's [fw][finish] line to both, flushed.
+// guccibot_fw.old.log). FWWARN goes to Geode's log and the file; FWLOG only
+// while Verbose Log is on, and FWFILEWARN always, both to the file only; each
+// run's [fw][finish] line to both. Past the size cap only the warnings (FWWARN
+// and FWFILEWARN) and the [fw][finish] lines are written.
 void fwFileLog(std::string const& line, bool important);
 
 #define FWWARN(...)                                  do {                                                    auto const fww_ = fmt::format(__VA_ARGS__);         geode::log::warn("{}", fww_);                       fwFileLog("WARN " + fww_, true);                } while (0)
@@ -135,7 +139,7 @@ static size_t g_fwFileOnlyLines = 0;
 // A warning that comes once per restore or step, not once per run: the file
 // only, counted like FWLOG. Rare ones (a death in the capture, a divergence)
 // stay FWWARN, in both logs.
-#define FWFILEWARN(...) do { fwFileLog("WARN " + fmt::format(__VA_ARGS__)); ++g_fwFileOnlyLines; } while (0)
+#define FWFILEWARN(...) do { fwFileLog("WARN " + fmt::format(__VA_ARGS__), true); ++g_fwFileOnlyLines; } while (0)
 
 
 cocos2d::ccColor3B FrameWindowAnalyzer::colorForWindow(int window) {

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-u (Macro: Record from Off with a macro loaded starts a fresh recording, at any frame, instead of keeping old clicks the run never made)"
+    "2026-11-10-v (Calculate: guccibot_fw.log flushes every line again, appends instead of wiping when another game holds it, and keeps file-only warnings past the cap)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
