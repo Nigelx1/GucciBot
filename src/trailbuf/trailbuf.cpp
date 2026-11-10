@@ -123,12 +123,18 @@ void TrailBuffer::reportKill(PlayerObject* player, GameObject* killer) {
     float const overlapY = std::min(me.getMaxY(), them.getMaxY()) -
                            std::max(me.getMinY(), them.getMinY());
 
-    log::warn(
+    auto const line = fmt::format(
         "[trailbuf] killed at frame {} by object {} at ({:.5f}, {:.5f}) scale "
         "{:.6f} x {:.6f}: object {} player {} overlap x {:.5f} y {:.5f}",
         Bot::get()->updater().getFrame(), id, killer->getPositionX(),
         killer->getPositionY(), killer->m_scaleX, killer->m_scaleY, box(them),
         box(me), overlapX, overlapY);
+    if (m_quietKills >= 0) {
+        gucci::fwEngineLog("WARN " + line);
+        ++m_quietKills;
+        return;
+    }
+    log::warn("{}", line);
 }
 
 void TrailBuffer::record(GJBaseGameLayer* pl, PlayerObject* player, int slot,

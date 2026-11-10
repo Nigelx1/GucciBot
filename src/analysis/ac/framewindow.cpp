@@ -79,7 +79,15 @@ void fwFileLog(std::string const& line);
 
 #define FWWARN(...)                                  do {                                                    auto const fww_ = fmt::format(__VA_ARGS__);         geode::log::warn("{}", fww_);                       fwFileLog("WARN " + fww_);                      } while (0)
 
-#define FWLOG(...)                                           do {                                                         if (m_verbose->inner()) {                                    auto const fwl_ = fmt::format(__VA_ARGS__);              geode::log::info("{}", fwl_);                            fwFileLog(fwl_);                                     }                                                    } while (0)
+// GucciBot (2026-11-10): verbose lines go to guccibot_fw.log only. In Geode's
+// log too, a 9-input run wrote about 6,300 lines there, up to 1,500 a second
+// (test pass 2026-11-10, bug 4); the run's end says how many went to the file.
+static size_t g_fwFileOnlyLines = 0;
+#define FWLOG(...) do { if (m_verbose->inner()) { fwFileLog(fmt::format(__VA_ARGS__)); ++g_fwFileOnlyLines; } } while (0)
+// A warning that comes once per restore or step, not once per run: the file
+// only, counted like FWLOG. Rare ones (a death in the capture, a divergence)
+// stay FWWARN, in both logs.
+#define FWFILEWARN(...) do { fwFileLog("WARN " + fmt::format(__VA_ARGS__)); ++g_fwFileOnlyLines; } while (0)
 
 
 cocos2d::ccColor3B FrameWindowAnalyzer::colorForWindow(int window) {
@@ -130,8 +138,10 @@ static void logPlayerState(char const* tag, PlayerObject* p) {
             p->m_isUpsideDown, p->m_gravityMod, p->m_isOnGround, p->m_isOnGround2,
             p->m_isOnGround3, p->m_isOnGround4, p->m_isDart, p->m_isSideways,
             p->m_inputsLocked, p->m_vehicleSize, p->m_playerSpeed);
-        geode::log::info("{}", st_);
+        // The file only (bug 4 of the 2026-11-10 test pass): one per restore
+        // and per step.
         fwFileLog(st_);
+        ++g_fwFileOnlyLines;
     }
 }
 
@@ -1340,6 +1350,10 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
 
     m_trailP1 = bot->trailBuffer().stream(0);
     m_trailP2 = bot->trailBuffer().stream(1);
+    // Every test leg dies on a trail spike: those deaths go to
+    // guccibot_fw.log, counted, until finish().
+    bot->trailBuffer().beginQuietKills();
+    g_fwFileOnlyLines = 0;
 
     m_wasPaused = updater.isPaused();
     updater.setPaused(true);
@@ -2118,7 +2132,7 @@ void FrameWindowAnalyzer::reportStateDiff(PlayLayer* pl) {
     }
 
     m_stateDiffReal++;
-    FWWARN(
+    FWFILEWARN(
         "[fw][statediff] click {}: {} differing run(s) in PlayerObject after "
         "restore, outside cached fields{}{}",
         m_index + 1, realRuns, out,
@@ -4047,6 +4061,16 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
             m_fastSub, message);
         log::info("{}", fin_);
         fwFileLog(fin_);
+    }
+
+    // What went to guccibot_fw.log alone this run, said once in Geode's log.
+    {
+        int const kills = Bot::get()->trailBuffer().endQuietKills();
+        if (g_fwFileOnlyLines > 0 || kills > 0)
+            log::info("[fw] this run wrote {} detail line(s) to guccibot_fw.log only, {} of them deaths on the "
+                      "trail spikes ([trailbuf] killed)",
+                      g_fwFileOnlyLines + kills, kills);
+        g_fwFileOnlyLines = 0;
     }
 
     if (m_stateDiffRestores > 0) {

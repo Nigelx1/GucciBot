@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-j (Saved macros: one row per file, so one name under several themes gets its own rows, ids, tags and menus)"
+    "2026-11-10-k (Calculate keeps its per-step detail and trail-spike deaths in guccibot_fw.log, out of the Geode log, with a count at the end)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

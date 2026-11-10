@@ -31,6 +31,16 @@ class TrailBuffer {
     void saveTick(GJBaseGameLayer* pl);
     void saveCollision(GJBaseGameLayer* pl, PlayerObject* player);
     void reportKill(PlayerObject* player, GameObject* killer);
+    // GucciBot (2026-11-10): while Calculate runs, reportKill's line goes to
+    // guccibot_fw.log only and is counted (2,628 of them in Geode's log on a
+    // 9-input run). endQuietKills returns the count and puts the line back
+    // in Geode's log.
+    void beginQuietKills() { m_quietKills = 0; }
+    int endQuietKills() {
+        int const n = m_quietKills < 0 ? 0 : m_quietKills;
+        m_quietKills = -1;
+        return n;
+    }
 
     void saveSpiderDash(PlayerObject* player, cocos2d::CCPoint from,
                         cocos2d::CCPoint to);
@@ -131,6 +141,7 @@ class TrailBuffer {
         &SLSettings::get()->trailBuffer.spikeReleases);
 
    private:
+    int m_quietKills = -1;  // -1: not quiet
     void append(int slot, tbuf::RectF const& rect, uint32_t frame);
     void record(GJBaseGameLayer* pl, PlayerObject* player, int slot,
                 uint32_t frame);

@@ -1286,7 +1286,7 @@ namespace gucci::ui::pages {
 
                 kit::Section("Debug");
                 if (feature("Verbose log",
-                            "Log every sample, checkpoint and tested shift to the Geode log and guccibot_fw.log",
+                            "Log every sample, checkpoint and tested shift to guccibot_fw.log",
                             &FW::verbose)) {
                     flag("Analysis overlay",
                          "Bottom left while counting: stage, current input, shift being tested, window so far, test "
