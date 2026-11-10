@@ -182,6 +182,11 @@ namespace gucci {
         // game this frame.
         bool tickIntro(PlayLayer* pl);
         bool introEnabled() const;
+        // This render has played (or is playing) an intro card: fixed when the
+        // intro starts, so changing the settings mid-render doesn't change it.
+        bool introInThisRender() const {
+            return m_introStarted && m_introTotal > 0;
+        }
 
         void displayPreview() {
             m_texture.displayPreview();

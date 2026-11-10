@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-ao (the frame-window logs size-cap banner says file-only warnings stop there)"
+    "2026-11-10-ap (the renders frame count mentions the intro card only when this render played one, whatever the settings say now)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

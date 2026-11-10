@@ -2308,7 +2308,7 @@ namespace gucci::ui {
                 kit::Chip("Rendering", Tone::Bad);
                 kit::Hint(fmt::format("{} frames written{}, {:.1f} s of the level so far",
                                       sl->renderedFrames(),
-                                      sl->introEnabled() ? " (the intro card's too)" : "",
+                                      sl->introInThisRender() ? " (the intro card's too)" : "",
                                       sl->getTime())
                               .c_str());
                 if (kit::Button("Stop", Tone::Bad, -1.f))
