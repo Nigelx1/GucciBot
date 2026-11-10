@@ -100,11 +100,11 @@ public:
         m_builtForName = gb->replayName;
         m_builtForRevealX = revealX;
 
-        rebuild(samples, revealX);
+        rebuild(pl, samples, revealX);
     }
 
 private:
-    void rebuild(const std::vector<MacroPathSample>& samples, float revealX) {
+    void rebuild(PlayLayer* pl, const std::vector<MacroPathSample>& samples, float revealX) {
         auto* gb = GucciEngine::get();
         m_lineNode->clear();
         m_markerNode->clear();
@@ -150,12 +150,19 @@ private:
                 continue;
             auto const& s = samples[a.m_frame];
 
-            CCPoint at = a.m_player2 ? ccp(s.p2x, s.p2y) : ccp(s.p1x, s.p1y);
+            // The player the input moves, not the raw stored flag: a 1-player
+            // macro recorded with Flip 2-Player Controls on stores every input
+            // as player 2, and in a 2-player platformer the flag's player is
+            // flipped (flagMovesPlayer2). Player 2's sample is only there in a
+            // dual. GucciBot (2026-11-10): those markers sat at (0, 0) or on
+            // player 2 before.
+            bool const mover2 = gb->replay.flagMovesPlayer2(pl, a.m_player2) && s.hasP2;
+            CCPoint at = mover2 ? ccp(s.p2x, s.p2y) : ccp(s.p1x, s.p1y);
             if (at.x > revealX)
                 continue;
 
             bool isRelease = !a.m_holding;
-            char gm = a.m_player2 ? s.gamemode2 : s.gamemode1;
+            char gm = mover2 ? s.gamemode2 : s.gamemode1;
             if (isRelease && !(gm == 'V' || gm == 'R' || gm == 'H'))
                 continue;
 

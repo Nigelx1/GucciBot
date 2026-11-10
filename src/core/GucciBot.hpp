@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-e (Maintain gravity follows Flip 2-Player Controls as GD does: no swap in a platformer, both sides count in a 1-player level)"
+    "2026-11-10-f (Show Macro Path puts each click marker on the player it moves, also with Flip 2-Player Controls on)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
