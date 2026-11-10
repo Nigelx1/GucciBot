@@ -4,8 +4,11 @@
 // every hitbox grown by the player's own, so the player is a point and the
 // gaps it has are what is drawn. Red is where the player's center dies, blue
 // where its box touches something solid (lands, slides, snaps), green orbs,
-// pads, portals and touch triggers. The player is drawn as a yellow dot with
-// its own path and clicks behind it.
+// pads, portals and touch triggers. The player's path and clicks are drawn in
+// yellow behind it (the player as a dot too, if asked). Drawn the way NaN GD
+// draws his (2026-11-10, Nigel: "jus do it like him"): used orbs, pads and
+// portals stay drawn, the path is half as thick as the outlines, no dot by
+// default, and the level darkened under the borders so they stand out.
 //
 // The shapes come from tools/hitborder_geom (GD 2.2081's own collision tests,
 // read from the binary); hitborders.cpp reads the level for it once a drawn
@@ -43,16 +46,19 @@ namespace gucci {
             bool exactBlocks = true;  // the red core where the inner box kills; off, the touch zone only
             bool slopes = true;
             bool specials = true;   // orbs, pads, portals, touch triggers
+            bool hideUsed = false;  // ... except the ones every player has used (NaN's stay drawn)
             bool ground = true;     // the floor and, in a corridor, the ceiling
             bool useTilt = true;    // rotated objects against the icon's tilt
             bool merged = true;     // one outline around overlapping regions
             bool player2 = true;    // player 2's own borders, as outlines, where they differ from player 1's
-            bool point = true;      // the player as a yellow dot
+            bool point = false;     // the player as a yellow dot (NaN's videos have none)
             bool path = true;       // the player's own path, one point a tick
             int pathTicks = 240;
             bool clicks = true;     // a dot where the player pressed, a ring where it let go
-            float lineWidth = 1.5f; // screen points, at any zoom
+            float lineWidth = 2.f;  // screen points, at any zoom; the path is half as thick
             float fill = 0.5f;      // inside of each region, 0..1 of its color's alpha
+            bool darken = true;     // a black layer over the level, under the borders, while they show
+            float darkness = 0.6f;  // that layer's opacity, 0..1
             float rgba[PartCount][4] = {};
         };
 

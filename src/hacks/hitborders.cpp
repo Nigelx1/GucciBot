@@ -173,6 +173,7 @@ namespace gucci {
             bool haveRegions = false;
             bool useMerged = false;
             bool fboFailed = false;  // the GPU wouldn't make the texture: per-region outlines from then on
+            float darkAlpha = 0.f;   // the dark layer under the borders this frame; 0 for none
             std::array<Fbo, 2> fbos{};  // the screen's size, and the renderer's while it captures
             std::deque<PathPoint> path[2];
             std::deque<ClickMark> clicks[2];
@@ -188,6 +189,47 @@ namespace gucci {
             return layer && node && node->getParent() == layer->m_objectLayer;
         }
 
+        // NaN GD recolors the level's own objects black so his hitborders
+        // stand out (2026-11-10, from his videos' frames). Here, a black layer
+        // over everything drawn so far (the background and the level under
+        // the icon) and under the borders: one quad across the whole viewport,
+        // the way drawMerged lays its texture, so it covers the window and
+        // the renderer's capture alike, at any zoom or camera turn.
+        void drawDarkLayer(float alpha) {
+            if (!(alpha > 0.f))
+                return;
+            auto* program = CCShaderCache::sharedShaderCache()->programForKey(kCCShader_PositionColor);
+            if (!program)
+                return;
+            alpha = std::min(alpha, 1.f);
+            kmGLMatrixMode(KM_GL_PROJECTION);
+            kmGLPushMatrix();
+            kmGLLoadIdentity();
+            kmGLMatrixMode(KM_GL_MODELVIEW);
+            kmGLPushMatrix();
+            kmGLLoadIdentity();
+            program->use();
+            program->setUniformsForBuiltins();
+            ccGLBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            ccGLEnableVertexAttribs(kCCVertexAttribFlag_Position | kCCVertexAttribFlag_Color);
+            static GLfloat const kQuad[] = {-1.f, -1.f, 1.f, -1.f, -1.f, 1.f, 1.f, 1.f};
+            GLfloat colours[16];
+            for (int i = 0; i < 4; ++i) {
+                colours[i * 4 + 0] = 0.f;
+                colours[i * 4 + 1] = 0.f;
+                colours[i * 4 + 2] = 0.f;
+                colours[i * 4 + 3] = alpha;
+            }
+            glBindBuffer(GL_ARRAY_BUFFER, 0);
+            glVertexAttribPointer(kCCVertexAttrib_Position, 2, GL_FLOAT, GL_FALSE, 0, kQuad);
+            glVertexAttribPointer(kCCVertexAttrib_Color, 4, GL_FLOAT, GL_FALSE, 0, colours);
+            glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+            kmGLMatrixMode(KM_GL_PROJECTION);
+            kmGLPopMatrix();
+            kmGLMatrixMode(KM_GL_MODELVIEW);
+            kmGLPopMatrix();
+        }
+
         void BordersNode::visit() {
             auto& s = st();
             if (!m_bVisible || s.borders != this || !heldBy(m_layer, this))
@@ -195,7 +237,8 @@ namespace gucci {
             auto* overlay = HitborderOverlay::get();
             overlay->paint(m_layer);
             if (!s.haveRegions)
-                return;
+                return;  // no borders this frame: no dark layer either
+            drawDarkLayer(s.darkAlpha);
             kmGLPushMatrix();
             transform();
             bool drawn = false;
@@ -409,8 +452,12 @@ namespace gucci {
             }
         }
 
+        // hideSpent: orbs, pads and portals every player has used are left
+        // out. The drawing leaves them in unless Hide used orbs, pads and
+        // portals is on (NaN GD's stay drawn); the audit and the probe always
+        // leave them out, as they did.
         bool readObject(GJBaseGameLayer* pl, TrajectoryManager& traj, PlayerObject* p1, PlayerObject* p2,
-                        GameObject* object, ObjectRead& out) {
+                        GameObject* object, ObjectRead& out, bool hideSpent = true) {
             // collisionCheckObjects 0x214a2e-0x214a94: what the pass skips.
             if (object->m_isGroupDisabled || object->m_isDisabled)
                 return false;
@@ -453,7 +500,8 @@ namespace gucci {
                 break;
             default:
                 // Orbs, pads and portals every player has used are spent.
-                if (object->hasBeenActivatedByPlayer(p1) && (!p2 || object->hasBeenActivatedByPlayer(p2))) {
+                if (hideSpent && object->hasBeenActivatedByPlayer(p1) &&
+                    (!p2 || object->hasBeenActivatedByPlayer(p2))) {
                     keep = false;
                     break;
                 }
@@ -679,6 +727,7 @@ namespace gucci {
         settings.exactBlocks = flag("hitborder_blocks_exact", def.exactBlocks);
         settings.slopes = flag("hitborder_slopes", def.slopes);
         settings.specials = flag("hitborder_specials", def.specials);
+        settings.hideUsed = flag("hitborder_hide_used", def.hideUsed);
         settings.ground = flag("hitborder_ground", def.ground);
         settings.useTilt = flag("hitborder_tilt", def.useTilt);
         settings.merged = flag("hitborder_merged", def.merged);
@@ -691,6 +740,9 @@ namespace gucci {
         settings.lineWidth = static_cast<float>(
             std::clamp(mod->getSavedValue<double>("hitborder_line_width", def.lineWidth), 0.25, 6.0));
         settings.fill = static_cast<float>(std::clamp(mod->getSavedValue<double>("hitborder_fill", def.fill), 0.0, 1.0));
+        settings.darken = flag("hitborder_darken", def.darken);
+        settings.darkness = static_cast<float>(
+            std::clamp(mod->getSavedValue<double>("hitborder_darkness", def.darkness), 0.0, 1.0));
         for (int i = 0; i < PartCount; ++i) {
             auto const packed = mod->getSavedValue<int64_t>(std::string("hitborder_") + kPartKeys[i] + "_color",
                                                             packColour(def.rgba[i]));
@@ -707,6 +759,7 @@ namespace gucci {
         mod->setSavedValue<bool>("hitborder_blocks_exact", settings.exactBlocks);
         mod->setSavedValue<bool>("hitborder_slopes", settings.slopes);
         mod->setSavedValue<bool>("hitborder_specials", settings.specials);
+        mod->setSavedValue<bool>("hitborder_hide_used", settings.hideUsed);
         mod->setSavedValue<bool>("hitborder_ground", settings.ground);
         mod->setSavedValue<bool>("hitborder_tilt", settings.useTilt);
         mod->setSavedValue<bool>("hitborder_merged", settings.merged);
@@ -717,6 +770,8 @@ namespace gucci {
         mod->setSavedValue<int64_t>("hitborder_path_len", settings.pathTicks);
         mod->setSavedValue<double>("hitborder_line_width", settings.lineWidth);
         mod->setSavedValue<double>("hitborder_fill", settings.fill);
+        mod->setSavedValue<bool>("hitborder_darken", settings.darken);
+        mod->setSavedValue<double>("hitborder_darkness", settings.darkness);
         for (int i = 0; i < PartCount; ++i)
             mod->setSavedValue<int64_t>(std::string("hitborder_") + kPartKeys[i] + "_color",
                                         static_cast<int64_t>(packColour(settings.rgba[i])));
@@ -873,6 +928,7 @@ namespace gucci {
             return;  // the renderer's capture visits the level a second time
         s.builtFrame = frame;
         s.haveRegions = false;
+        s.darkAlpha = 0.f;
         if (!s.merged || !s.plain || !s.second || !s.marksDraw)
             return;
         s.merged->clear();
@@ -924,7 +980,7 @@ namespace gucci {
         shapes.reserve(512);
         forEachNearbyObject(pl, [&](GameObject* object) {
             ObjectRead read;
-            if (!readObject(pl, traj, p1, p2, object, read))
+            if (!readObject(pl, traj, p1, p2, object, read, settings.hideUsed))
                 return;
             size_t const mine = shapes.size();
             regionsFor(read, first, opt, settings, shapes);
@@ -983,11 +1039,14 @@ namespace gucci {
             }
         }
         s.haveRegions = true;
+        s.darkAlpha = settings.darken ? std::clamp(settings.darkness, 0.f, 1.f) : 0.f;
 
         // ---- the player's marks
         ccColor4F const mark = lineColour(settings, Marks);
         if (settings.path) {
-            float const radius = std::max(width * 0.5f, 0.35f / scale);
+            // Half as thick as the outlines, as NaN GD's path is (a segment
+            // of radius r is 2r thick; a merged outline is `width` thick).
+            float const radius = std::max(width * 0.25f, 0.25f / scale);
             float const minStep = 1.f / scale;  // closer than a point on screen: skipped
             for (int i = 0; i < 2; ++i) {
                 auto const& path = s.path[i];

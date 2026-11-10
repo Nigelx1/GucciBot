@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-b (hitborders draw green, then blue, then red, so a block's blue band sits over an orb's green the way NaN GD draws them)"
+    "2026-11-10-c (hitborders like NaN GD: used orbs, pads and portals stay drawn with a switch to hide them, no dot by default, a path half as thick, line width 2, and Darken the level)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

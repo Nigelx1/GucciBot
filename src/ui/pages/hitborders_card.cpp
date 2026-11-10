@@ -51,8 +51,11 @@ namespace gucci::ui::pages {
             }
         }
         changed |= kit::SwitchRow("Slopes", nullptr, &set.slopes);
-        changed |= kit::SwitchRow("Orbs, pads and portals", "And touch triggers. Ones you've used are hidden",
+        changed |= kit::SwitchRow("Orbs, pads and portals", "And touch triggers. Ones you've used stay drawn",
                                   &set.specials);
+        if (set.specials)
+            changed |= kit::SwitchRow("Hide used orbs, pads and portals",
+                                      "Once you've used one, it isn't drawn anymore", &set.hideUsed);
         changed |= kit::SwitchRow("Ground and ceiling", nullptr, &set.ground);
         changed |= kit::SwitchRow("Rotated objects use your tilt",
                                   "Turned objects are tested against your icon's own tilt. Off: drawn for an upright "
@@ -63,17 +66,25 @@ namespace gucci::ui::pages {
                                   &set.player2);
 
         kit::Section("You");
-        changed |= kit::SwitchRow("Show yourself as a dot", "Where the game last tested you. Your icon stays",
-                                  &set.point);
-        changed |= kit::SwitchRow("Your path", "A line through your center, one point a tick", &set.path);
+        changed |= kit::SwitchRow("Show yourself as a dot",
+                                  "A yellow dot where the game last tested you, over your icon", &set.point);
+        changed |= kit::SwitchRow("Your path", "A thin line through your center, one point a tick", &set.path);
         if (set.path)
             changed |= kit::SliderRow("Path length", "Ticks kept; at 240 TPS, 240 is one second", &set.pathTicks,
                                       HitborderOverlay::kMinPathTicks, HitborderOverlay::kMaxPathTicks, "%d ticks");
         changed |= kit::SwitchRow("Clicks", "A dot where you pressed, a ring where you let go", &set.clicks);
 
         kit::Section("Look");
-        changed |= kit::SliderRow("Line width", nullptr, &set.lineWidth, 0.25f, 6.f, "%.2f");
+        changed |= kit::SliderRow("Line width", "Of the outlines. Your path is half as thick", &set.lineWidth, 0.25f,
+                                  6.f, "%.2f");
         changed |= kit::SliderRow("Fill", "How solid the inside of each border is", &set.fill, 0.f, 1.f, "%.2f");
+        changed |= kit::SwitchRow("Darken the level",
+                                  "A dark layer over the level, under the borders, so they stand out. Only while "
+                                  "borders show",
+                                  &set.darken);
+        if (set.darken)
+            changed |= kit::SliderRow("Darkness", "0 leaves the level as it is, 1 makes it black", &set.darkness, 0.f,
+                                      1.f, "%.2f");
         changed |= kit::SwitchRow("One outline",
                                   "Borders that overlap share one outline. Off: each one has its own", &set.merged);
         if (kit::FeatureBegin("Colors", "Pick the color of each kind", &g_showColors)) {
@@ -95,6 +106,8 @@ namespace gucci::ui::pages {
                 set.lineWidth = def.lineWidth;
                 set.fill = def.fill;
                 set.merged = def.merged;
+                set.darken = def.darken;
+                set.darkness = def.darkness;
                 for (int i = 0; i < HitborderOverlay::PartCount; ++i) {
                     for (int k = 0; k < 4; ++k)
                         set.rgba[i][k] = def.rgba[i][k];

@@ -217,6 +217,12 @@ namespace gucci::testset {
                 v.push_back(engineBool("hack_hitborders_death", [hb]() -> bool& { return hb()->onDeath; }));
                 v.push_back(engineBool("hitborder_merged", [hb]() -> bool& { return hb()->merged; }));
                 v.push_back(engineBool("hitborder_blocks_exact", [hb]() -> bool& { return hb()->exactBlocks; }));
+                v.push_back(engineBool("hitborder_hide_used", [hb]() -> bool& { return hb()->hideUsed; }));
+                v.push_back(engineBool("hitborder_point", [hb]() -> bool& { return hb()->point; }));
+                v.push_back(engineBool("hitborder_path", [hb]() -> bool& { return hb()->path; }));
+                v.push_back(engineBool("hitborder_darken", [hb]() -> bool& { return hb()->darken; }));
+                v.push_back(engineFloat("hitborder_darkness", 0.0, 1.0, [hb]() -> float& { return hb()->darkness; }));
+                v.push_back(engineFloat("hitborder_line_width", 0.25, 6.0, [hb]() -> float& { return hb()->lineWidth; }));
 
                 // Macro path and the engine.
                 v.push_back(engineBool("show_macro_path", [e]() -> bool& { return e()->showMacroPath; }));
