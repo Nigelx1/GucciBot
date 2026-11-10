@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-aq (Diagnostics says when the engine checks expected nothing, and why)"
+    "2026-11-10-ar (Maintain gravity drives player 2 too in a 2-player level)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

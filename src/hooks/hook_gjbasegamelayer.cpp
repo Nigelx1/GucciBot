@@ -614,6 +614,30 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
                               .m_step = 0});
             handleButton(p1J ^ p1->m_isUpsideDown, 1, !side);
         }
+
+        // GucciBot (2026-11-10): player 2, in a 2-player level outside
+        // platformer, the same way from its own hold (p2J, already swapped by
+        // Flip 2-Player Controls and mirrored above) on the side that moves it.
+        // Before, the queue was cleared and only player 1 was driven, so
+        // player 2's clicks were dropped: it never moved and nothing was
+        // recorded for it. Only while the dual is on, where GD moves player 2
+        // at all; a click outside it would not change its jump buffer, and
+        // the loop would never end. The cap guards against that too: each
+        // pass flips the buffer, so two are all a tick should need.
+        // 1-player levels and platformer are left as they were.
+        auto* p2 = m_player2;
+        if (twoPlayer && !m_isPlatformer && p2 && m_gameState.m_isDualMode) {
+            bool const side2 = gb->replay.sideFor(this, true);
+            for (int pass = 0; pass < 4 && !p2->m_controlsDisabled &&
+                               p2->m_isUpsideDown == (p2J == p2->m_jumpBuffered);
+                 ++pass) {
+                addInputToReplay({.m_button = (PlayerButton)1,
+                                  .m_isPush = (bool)(p2J ^ p2->m_isUpsideDown),
+                                  .m_isPlayer2 = side2,
+                                  .m_step = 0});
+                handleButton(p2J ^ p2->m_isUpsideDown, 1, !side2);
+            }
+        }
     }
 
     void requeueInverted() {
