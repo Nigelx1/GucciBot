@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-bd (plain Random triggers: the seeded pick hooks the class GD really uses for them)"
+    "2026-11-10-be (Record from Off with no macro loaded saves the seed its run used)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

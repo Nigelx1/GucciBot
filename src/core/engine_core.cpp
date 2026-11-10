@@ -1465,8 +1465,14 @@ namespace gucci {
     // mark, as a restart while recording does; at frame 0 that's the whole
     // run. A button the player holds at the switch is recorded as pressed on
     // the first recorded frame, so its release later has a press before it.
+    //
+    // With nothing loaded this runs too (2026-11-10). It used to go straight
+    // to setMode, which kept the seed GucciBot started with (0) or the last
+    // macro's, while Off's reset had seeded the Random triggers from a fresh
+    // one: the macro saved a seed its run was not played under, and a cold
+    // replay picked other groups at Advanced Random triggers.
     bool GucciEngine::beginRecordingFromOff() {
-        if (mode != Mode::Idle || replay.m_actionAtom.empty() || legit::on())
+        if (mode != Mode::Idle || legit::on())
             return false;
         auto* pl = PlayLayer::get();
         if (!pl)
