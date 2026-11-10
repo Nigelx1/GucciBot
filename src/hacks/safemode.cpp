@@ -337,6 +337,20 @@ namespace {
     // shielded() says by then.
     PlayLayer* g_completeLayer = nullptr;
     bool g_completeShielded = false;
+    // GucciBot (2026-11-10, Nigel: yes): an editor level completed with a
+    // cheat on at some point in the attempt never verifies, safe mode or not.
+    // Whether the last completion was kept from verifying that way (and not
+    // shielded), for the end screen's line.
+    bool g_completeCheatBlocked = false;
+
+    // An editor level (the only kind a completion verifies) with a cheat on at
+    // some point in this attempt or now. Nothing while GucciBot stands down
+    // or is switched off, as the end screen's cheat mark.
+    bool cheatedEditorRun(PlayLayer* pl) {
+        auto* gb = GucciEngine::get();
+        return !gb->standingDown && !botswitch::takenOut() && pl && pl->m_level &&
+               pl->m_level->m_levelType == GJLevelType::Editor && (safemode::g_tainted || safemode::cheatingNow());
+    }
 } // namespace
 
 // GD's own test-mode flag is never left changed. GD sets it for a start position
@@ -409,9 +423,14 @@ class $modify(GB7SafeModePlayLayer, PlayLayer) {
     void levelComplete() {
         bool const was = m_isTestMode;
         bool const shield = shielded();
+        // Not shielded, but an editor level with a cheat on: kept from
+        // verifying the same way, by m_isTestMode around this call. Online and
+        // main levels go through shielded() alone, as before.
+        bool const cheatBlock = !shield && cheatedEditorRun(this);
         g_completeLayer = this;
         g_completeShielded = shield;
-        if (shield)
+        g_completeCheatBlocked = cheatBlock;
+        if (shield || cheatBlock)
             m_isTestMode = true; // only raised, and only for this call
         PlayLayer::levelComplete();
         m_isTestMode = was;
@@ -434,6 +453,8 @@ class $modify(GB7SafeModePlayLayer, PlayLayer) {
 // the panel.
 // While GD writes a shielded editor completion's end-screen line (above).
 static bool g_verifyLineSwap = false;
+// The line it gets: safe mode's, or (2026-11-10) a cheat's with safe mode off.
+static char const* g_verifyLineText = "";
 // Whether the swap happened, for a warning in the log when it didn't (the line
 // may be set another way on a platform it hasn't been tried on).
 static bool g_verifyLineSwapped = false;
@@ -445,7 +466,7 @@ class $modify(GB7SafeModeVerifyText, TextArea) {
 
     void setString(gd::string text) {
         if (g_verifyLineSwap && std::string_view(text.c_str()).find("Verified!") != std::string_view::npos) {
-            text = "Safe mode was on: this run didn't verify the level.";
+            text = g_verifyLineText;
             g_verifyLineSwapped = true;
         }
         TextArea::setString(text);
@@ -463,10 +484,17 @@ class $modify(GB7SafeModeEndLevel, EndLevelLayer) {
         // coins alone, but a shielded completion didn't verify it: levelComplete
         // ran with m_isTestMode raised, which skips GD's verify write (and the
         // level can't be uploaded). The line is swapped while GD writes it.
+        // A cheat with safe mode off keeps an editor level from verifying too
+        // (2026-11-10, levelComplete), and says so in its own words.
         auto* pl = m_playLayer;
-        g_verifyLineSwap = !gb->standingDown && !botswitch::takenOut() && pl && pl->m_level &&
-                           pl->m_level->m_levelType == GJLevelType::Editor &&
-                           (pl == g_completeLayer ? g_completeShielded : shielded());
+        bool const editor = !gb->standingDown && !botswitch::takenOut() && pl && pl->m_level &&
+                            pl->m_level->m_levelType == GJLevelType::Editor;
+        bool const wasShielded = editor && (pl == g_completeLayer ? g_completeShielded : shielded());
+        bool const wasCheat =
+            editor && !wasShielded && (pl == g_completeLayer ? g_completeCheatBlocked : cheatedEditorRun(pl));
+        g_verifyLineSwap = wasShielded || wasCheat;
+        g_verifyLineText = wasShielded ? "Safe mode was on: this run didn't verify the level."
+                                       : "A cheat was on: this run didn't verify the level.";
         g_verifyLineSwapped = false;
         bool const wantSwap = g_verifyLineSwap;
         EndLevelLayer::customSetup();

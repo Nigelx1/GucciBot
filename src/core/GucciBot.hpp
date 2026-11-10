@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-bu (Maintain gravity: player 2 counts the gravity it starts the dual with as upright, kept through practice checkpoints)"
+    "2026-11-10-bv (an editor level completed with a cheat on at any point in the attempt never verifies, even with safe mode off)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
