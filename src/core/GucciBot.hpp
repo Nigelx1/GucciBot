@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-k (Calculate keeps its per-step detail and trail-spike deaths in guccibot_fw.log, out of the Geode log, with a count at the end)"
+    "2026-11-10-l (gucci_ui_press: Assistant Access presses a menu control by its ID, as a click would; a disabled one refuses)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

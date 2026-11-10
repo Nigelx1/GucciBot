@@ -3359,6 +3359,7 @@ namespace gucci::mcp {
         registerSongTimeTools(server);
         // Pressing any cocos UI's buttons (src/mcp/ui_tap_tool.cpp).
         registerUiTapTools(server);
+        registerUiPressTools(server);
     }
 
 } // namespace gucci::mcp

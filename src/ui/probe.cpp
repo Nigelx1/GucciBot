@@ -3,6 +3,8 @@
 
 #include "ui/probe.hpp"
 
+#include "ui/press.hpp"
+
 #include <Geode/Geode.hpp>
 #include <imgui_internal.h>
 
@@ -385,7 +387,8 @@ namespace gucci::ui::probe {
                 ImGui::LogFinish();  // the last part, into sinkClipboard
             ImGui::GetPlatformIO().Platform_SetClipboardTextFn = g_setClipboard;
             g_setClipboard = nullptr;
-            ctx.TestEngineHookItems = false;
+            // A press in flight (ui/press.hpp) keeps the hooks on.
+            ctx.TestEngineHookItems = press::hooking();
             g_on = false;
 
             for (ImGuiWindow* w : ctx.Windows) {
@@ -1371,10 +1374,13 @@ namespace gucci::ui::probe {
 } // namespace gucci::ui::probe
 
 // ImGui's test-engine hooks (imgui_internal.h, IMGUI_ENABLE_TEST_ENGINE):
-// called only while GImGui->TestEngineHookItems is on, the capture frame.
+// called only while GImGui->TestEngineHookItems is on: the capture frame, and
+// the frames of a press (ui/press.hpp).
 void ImGuiTestEngineHook_ItemAdd(ImGuiContext* ctx, ImGuiID id, const ImRect& bb, const ImGuiLastItemData* item_data) {
     if (gucci::ui::probe::on())
         gucci::ui::probe::hookItemAdd(ctx, id, bb, item_data);
+    if (gucci::ui::press::hooking())
+        gucci::ui::press::hookItemAdd(ctx, id, item_data);
 }
 
 void ImGuiTestEngineHook_ItemInfo(ImGuiContext* ctx, ImGuiID id, const char* label, ImGuiItemStatusFlags flags) {

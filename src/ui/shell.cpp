@@ -13,6 +13,7 @@
 #include "ui/kit.hpp"
 #include "ui/look.hpp"
 #include "ui/pages.hpp"
+#include "ui/press.hpp"
 #include "ui/probe.hpp"
 #include "ui/state.hpp"
 #include "ui/themes.hpp"
@@ -3379,6 +3380,9 @@ namespace gucci::ui {
             // Assistant Access's menu probe (ui/probe.hpp): a frame a tool asked
             // for is captured from here to every return below. Nothing otherwise.
             probe::FrameGuard probeFrame;
+            // A press asked for by Assistant Access (ui/press.hpp) moves on a
+            // step, before anything is drawn.
+            press::step();
             // The master switch's once-a-frame step: here the game's update for
             // the frame is over, so its code and hooks can come out or go back.
             botswitch::service();
