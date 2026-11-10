@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-p (Calculate: guccibot_fw.log starts fresh each launch, keeps the last one as guccibot_fw.old.log, stops at 50 MB and is written in a buffer)"
+    "2026-11-10-q (Macros: a backup keeps the file's own extension, zz.juice.bak, so same-name macros under different themes no longer share one)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

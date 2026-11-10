@@ -647,14 +647,17 @@ namespace gucci {
     void GucciReplaySystem::backupExisting(const fs::path& path) {
         if (!fs::exists(path))
             return;
+        // The file's own extension plus .bak (zz.juice -> zz.juice.bak).
+        // Always .brrr.bak, whatever the theme, made backups of zz.juice and
+        // zz.solar overwrite each other (test pass 2026-11-10, part 2 bug 5).
         auto backup = path;
-        backup.replace_extension(".brrr.bak");
+        backup += ".bak";
         std::error_code ec;
         fs::copy_file(path, backup, fs::copy_options::overwrite_existing, ec);
         if (ec)
             return;
         // GucciBot (2026-10-23): the frame windows go with it, as the backup's
-        // own sidecars (replays/sidecars/<name>.brrr.bak.fwac and .fw). A new
+        // own sidecars (replays/sidecars/<file>.bak.fwac and .fw). A new
         // recording saved over a macro drops its windows (forgetMacroWindows),
         // typed ones included, and no Calculate run gives those back, so a
         // backup without them brought back the clicks alone. A macro with none
