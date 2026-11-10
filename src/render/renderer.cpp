@@ -459,10 +459,18 @@ namespace gucci {
             m_videoCodecCtx->time_base = {1, m_settings.m_fps};
             m_videoCodecCtx->framerate = {m_settings.m_fps, 1};
             m_videoCodecCtx->max_b_frames = 0;
+            // An RGB stream (rgb0, rgb24: Showcase's libx264rgb) is tagged as
+            // RGB, full range. Tagged BT.709 limited-range YUV like the others,
+            // libx264rgb wrote that matrix into the stream, and players turned
+            // its RGB planes into colors as if they were YUV: a teal background
+            // and a green ground (test pass 2026-11-10, part 2 bug 2). The
+            // primaries and transfer stay BT.709, as for YUV.
+            bool const rgbStream =
+                m_settings.m_pixFmt == AV_PIX_FMT_RGB0 || m_settings.m_pixFmt == AV_PIX_FMT_RGB24;
             m_videoCodecCtx->color_primaries = AVCOL_PRI_BT709;
-            m_videoCodecCtx->colorspace = AVCOL_SPC_BT709;
+            m_videoCodecCtx->colorspace = rgbStream ? AVCOL_SPC_RGB : AVCOL_SPC_BT709;
             m_videoCodecCtx->color_trc = AVCOL_TRC_BT709;
-            m_videoCodecCtx->color_range = AVCOL_RANGE_MPEG;
+            m_videoCodecCtx->color_range = rgbStream ? AVCOL_RANGE_JPEG : AVCOL_RANGE_MPEG;
             if (m_formatCtx->oformat->flags & AVFMT_GLOBALHEADER)
                 m_videoCodecCtx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 

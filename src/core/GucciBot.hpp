@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-q (Macros: a backup keeps the file's own extension, zz.juice.bak, so same-name macros under different themes no longer share one)"
+    "2026-11-10-r (Render: an RGB render such as Showcase is tagged RGB full range, so players show its real colors)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
