@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-ah (guccibot_fw.log: past the 50 MB cap the per-restore warnings stop, so every runs summary still lands)"
+    "2026-11-10-ai (the Render cards frame count mentions the intro card only when there is one)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

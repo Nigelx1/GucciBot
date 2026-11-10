@@ -2305,8 +2305,9 @@ namespace gucci::ui {
             kit::BeginCard("Render", "Records the level to a video with FFmpeg.");
             if (sl->isRecording()) {
                 kit::Chip("Rendering", Tone::Bad);
-                kit::Hint(fmt::format("{} frames written (the intro card's too), {:.1f} s of the level so far",
+                kit::Hint(fmt::format("{} frames written{}, {:.1f} s of the level so far",
                                       sl->renderedFrames(),
+                                      sl->introEnabled() ? " (the intro card's too)" : "",
                                       sl->getTime())
                               .c_str());
                 if (kit::Button("Stop", Tone::Bad, -1.f))
