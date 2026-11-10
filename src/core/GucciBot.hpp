@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-bi (Diagnostics checks again when the bot is switched back on)"
+    "2026-11-10-bj (the log warnings say appending only when the log opened)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

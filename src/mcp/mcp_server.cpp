@@ -77,13 +77,15 @@ namespace gucci::mcp {
             auto const path = dir / "guccibot_mcp.log";
             auto const old = dir / "guccibot_mcp.old.log";
             auto const why = logrotate::rotate(path, old);
-            if (!why.empty())
+            g_mcpLog.open(path, std::ios::out | std::ios::app);
+            // Only once it's open: when it isn't, mcpFileLog's "couldn't open"
+            // line says so, and it's tried again.
+            if (!why.empty() && g_mcpLog.is_open()) {
                 geode::log::warn("[mcp] couldn't keep the last log as {} ({}): appending to it instead",
                                  old.string(),
                                  why);
-            g_mcpLog.open(path, std::ios::out | std::ios::app);
-            if (!why.empty() && g_mcpLog.is_open())
                 g_mcpLog << logrotate::banner(why) << std::flush;
+            }
         }
     }
 

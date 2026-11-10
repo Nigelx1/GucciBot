@@ -75,13 +75,18 @@ static void fwLogOpen() {
     auto const path = dir / "guccibot_fw.log";
     auto const old = dir / "guccibot_fw.old.log";
     auto const why = gucci::logrotate::rotate(path, old);
-    if (!why.empty())
+    g_fwLog.open(path, std::ios::out | std::ios::app);
+    if (!g_fwLog.is_open()) {
+        // Tried once a launch (fwFileLog): nothing goes to it this launch.
+        geode::log::warn("[fw] couldn't open {}: no frame-window log this launch", path.string());
+        return;
+    }
+    if (!why.empty()) {
         geode::log::warn("[fw] couldn't keep the last log as {} ({}): appending to it instead",
                          old.string(),
                          why);
-    g_fwLog.open(path, std::ios::out | std::ios::app);
-    if (!why.empty() && g_fwLog.is_open())
         g_fwLog << gucci::logrotate::banner(why) << std::flush;
+    }
     geode::log::info("[fw] log file at: {} (the last launch's: {})", path.string(), old.filename().string());
 }
 
