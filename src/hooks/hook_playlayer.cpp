@@ -479,6 +479,12 @@ class $modify(GB7PlayLayer, PlayLayer) {
                 state = 214013 * state + 2531011;
                 rs.m_startingSeed = state;
                 rs.m_startingSeedThisAttempt = state;
+                // Shake, teleport and Advanced Random were seeded above from
+                // the previous seed; playback seeds them from this one, the
+                // seed the macro saves, so they're seeded again from it here.
+                rs.m_shakeRandomState = state & 0x7FFF;
+                rs.m_teleportRandomState = state & 0x7FFF;
+                gb->practiceFix.reseedAdvancedRandom(state);
                 seedVariance(state);
             }
         } else {

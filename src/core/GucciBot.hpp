@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-aj (the Render cards Start buttons are greyed out while FFmpeg isnt loaded)"
+    "2026-11-10-ak (a fresh recorded attempt seeds shake, teleport and Advanced Random from the seed it saves, as playback does)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
