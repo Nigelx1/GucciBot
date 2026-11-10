@@ -1575,19 +1575,27 @@ namespace gucci::ui {
             // The list follows the folder: a macro the Pathfinder saves, or one
             // copied in, shows up without pressing Refresh. The folder's write
             // time moves when a file is added, removed or renamed in it.
+            // Opening the page (this card not drawn on the frame before) reads
+            // the folder again: the time was only taken on the first look, so
+            // a file copied in after launch but before the page was first
+            // opened stayed out of the list until the next change or Refresh
+            // (test pass 2026-11-10).
             {
                 static auto s_lastLook = std::chrono::steady_clock::time_point{};
                 static std::filesystem::file_time_type s_lastWrite{};
+                static int s_lastDrawn = -10;
+                int const frame = ImGui::GetFrameCount();
+                bool const opened = frame - s_lastDrawn > 1;
+                s_lastDrawn = frame;
                 auto const now = std::chrono::steady_clock::now();
-                if (now - s_lastLook > std::chrono::milliseconds(1500)) {
+                if (opened || now - s_lastLook > std::chrono::milliseconds(1500)) {
                     s_lastLook = now;
                     std::error_code ec;
                     auto const written = std::filesystem::last_write_time(gb->getReplayDir(), ec);
-                    if (!ec && written != s_lastWrite) {
-                        if (s_lastWrite != std::filesystem::file_time_type{})
-                            gb->reloadMacroList();
+                    if (opened || (!ec && written != s_lastWrite))
+                        gb->reloadMacroList();
+                    if (!ec)
                         s_lastWrite = written;
-                    }
                 }
             }
             std::string lowered = s_filter;

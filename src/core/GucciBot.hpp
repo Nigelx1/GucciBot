@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-r (Render: an RGB render such as Showcase is tagged RGB full range, so players show its real colors)"
+    "2026-11-10-s (Saved macros: opening the Macro page reads the folder again, so a macro copied in before the first look shows up)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
