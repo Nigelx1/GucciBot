@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-as (gray, the American spelling, in the menu press messages)"
+    "2026-11-10-at (test tool: gucci_click can send the Up arrow for player 2)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

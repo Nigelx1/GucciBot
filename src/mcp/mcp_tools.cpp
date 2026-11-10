@@ -2635,24 +2635,32 @@ namespace gucci::mcp {
             "or up through GD's own keyboard handling instead, as a key held on "
             "the keyboard comes in: UILayer takes it and keeps it as held (what "
             "Maintain gravity and the autoclicker's only-while-holding read), "
-            "on button side 1, which GD gives to a player itself.",
+            "on button side 1, which GD gives to a player itself. With key and "
+            "player2, the Up arrow goes instead (button side 2 in a 2-player "
+            "level). A key's result says which sides UILayer holds after it.",
             schemaOf({{"press", "boolean", "true to press, false to release (default true)"},
                       {"player2", "boolean", "player 2 instead of 1 (default false)"},
-                      {"key", "boolean", "send Space through the keyboard dispatcher (default false)"}}),
+                      {"key", "boolean", "send Space (with player2: the Up arrow) through the keyboard "
+                                         "dispatcher (default false)"}}),
             [](matjson::Value const& a) {
                 requireFreeRun();
                 auto* pl = requireLevel();
                 bool const press = argBool(a, "press", true);
                 bool const p2 = argBool(a, "player2", false);
                 if (argBool(a, "key", false)) {
-                    if (p2)
-                        throw ToolError("key sends Space, button side 1; leave player2 out");
 #ifdef GEODE_IS_IOS
                     throw ToolError("no keyboard dispatcher on iOS");
 #else
-                    CCKeyboardDispatcher::get()->dispatchKeyboardMSG(KEY_Space, press, false, 0.0);
+                    // Up for player 2's side: which side GD gives it is read
+                    // back from UILayer below, not assumed.
+                    CCKeyboardDispatcher::get()->dispatchKeyboardMSG(p2 ? KEY_Up : KEY_Space, press, false, 0.0);
                     auto out = obj();
                     out["key"] = press ? "down" : "up";
+                    out["key_name"] = p2 ? "Up" : "Space";
+                    if (auto* ui = pl->m_uiLayer) {
+                        out["ui_side1_held"] = ui->m_p1Jumping;
+                        out["ui_side2_held"] = ui->m_p2Jumping;
+                    }
                     out["frame"] = (int64_t)GucciEngine::get()->updater.getFrame();
                     return out;
 #endif
