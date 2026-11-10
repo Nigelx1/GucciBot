@@ -625,6 +625,12 @@ namespace gucci {
     fs::path GucciReplaySystem::getCurrentPath() const {
         auto* gb = GucciEngine::get();
         auto dir = gb->getReplayDir();
+        {
+            std::error_code ec;
+            if (!m_loadedPath.empty() && m_loadedPath.parent_path() == dir &&
+                m_loadedPath.stem().string() == gb->replayName && fs::exists(m_loadedPath, ec))
+                return m_loadedPath;
+        }
         for (auto& ext : ui::knownMacroExtensions()) {
             std::error_code ec;
             auto candidate = dir / (gb->replayName + ext);
@@ -1283,6 +1289,7 @@ namespace gucci {
                                       : "";
             m_actionAtom.clear();
             m_inputIndex = 0;
+            m_loadedPath = path;
             for (auto& inp : f.p1Inputs)
                 m_actionAtom.addAction(
                     inp.frame, static_cast<gb::ActionType>(inp.button), inp.pressed, false);
@@ -1445,7 +1452,7 @@ namespace gucci {
 
     void GucciEngine::reloadMacroList() {
         storedMacros.clear();
-        storedMacroExts.clear();
+        storedMacroFiles.clear();
         incompatibleMacros.clear();
         foreignMacros.clear();
         jaMacros.clear();
@@ -1517,7 +1524,7 @@ namespace gucci {
             }
             if (isKnown) {
                 storedMacros.push_back(stem);
-                storedMacroExts[stem] = ext;
+                storedMacroFiles.emplace_back(stem, ext);
                 if (ext == ".ja")
                     jaMacros.insert(stem);
                 if (ext == ".giddey")
@@ -1585,6 +1592,7 @@ namespace gucci {
             }
         }
         std::sort(storedMacros.begin(), storedMacros.end());
+        std::sort(storedMacroFiles.begin(), storedMacroFiles.end());
         std::sort(foreignMacros.begin(), foreignMacros.end());
     }
 
@@ -1608,9 +1616,13 @@ namespace gucci {
 
     // Macro Tools. Everything here is file in, file out through
     // tools/macro_ops; the loaded macro is never read or changed.
-    fs::path GucciEngine::findMacroFile(const std::string& name) const {
+    fs::path GucciEngine::findMacroFile(const std::string& name, const std::string& ext) const {
         auto dir = getReplayDir();
         std::error_code ec;
+        if (!ext.empty()) {
+            auto const exact = dir / (name + ext);
+            return fs::exists(exact, ec) ? exact : fs::path();
+        }
         for (auto const& ext : ui::knownMacroExtensions()) {
             auto candidate = dir / (name + ext);
             if (fs::exists(candidate, ec))
@@ -1623,8 +1635,9 @@ namespace gucci {
     // to .brrr), its sidecars with it: they are named after the whole file
     // name (replays/sidecars/<name><ext>.path ...). Empty on success, else
     // what went wrong, in words for the menu.
-    std::string GucciEngine::moveMacro(const std::string& from, const std::string& toName, const std::string& toExt) {
-        auto const src = findMacroFile(from);
+    std::string GucciEngine::moveMacro(const std::string& from, const std::string& toName, const std::string& toExt,
+                                       const std::string& fromExt) {
+        auto const src = findMacroFile(from, fromExt);
         if (src.empty())
             return fmt::format("\"{}\" isn't in the replays folder any more.", from);
         std::string name = toName;
@@ -1648,7 +1661,10 @@ namespace gucci {
             return fmt::format("There's already a macro called \"{}\".", name);
         auto const dst = src.parent_path() / (name + ext);
         std::error_code ec;
-        if (!sameName && fs::exists(dst, ec))
+        // A case change on Windows or macOS is the same file; anything else
+        // already there (the same name under the extension it's converted to)
+        // would be replaced by the rename.
+        if (fs::exists(dst, ec) && !fs::equivalent(src, dst, ec))
             return fmt::format("{} is already in the folder.", dst.filename().string());
         fs::rename(src, dst, ec);
         if (ec)
@@ -1666,6 +1682,8 @@ namespace gucci {
         }
         if (replayName == from)
             replayName = name;
+        if (replay.m_loadedPath == src)
+            replay.m_loadedPath = dst;
         log::info("[GucciBot] macro {} -> {}", src.filename().string(), dst.filename().string());
         reloadMacroList();
         return "";

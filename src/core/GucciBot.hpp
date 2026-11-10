@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-i (Calculate gives the music and sound volume back exactly as they were, with Mute while it runs on or off)"
+    "2026-11-10-j (Saved macros: one row per file, so one name under several themes gets its own rows, ids, tags and menus)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -431,6 +431,11 @@ namespace gucci {
         void save(const std::filesystem::path& path, bool noOverwrite = false);
         void load(const std::filesystem::path& path);
         std::filesystem::path getCurrentPath() const;
+        // The file the last load read. getCurrentPath prefers it while it still
+        // names the loaded macro: one name may be saved under several themes
+        // (zz.juice and zz.solar), and the name alone picked whichever came
+        // first in the extension list.
+        std::filesystem::path m_loadedPath;
         void backupExisting(const std::filesystem::path& path);
     };
 
@@ -1127,7 +1132,10 @@ namespace gucci {
         // Other bots' macros in the replays folder, and GucciBot 1.x's old
         // .brrr files, by file name: the Saved macros card converts them.
         std::vector<std::string> foreignMacros;
-        std::map<std::string, std::string> storedMacroExts;  // name -> its file's extension (the theme tag)
+        // One (name, extension) per file, sorted: the Saved macros rows. One
+        // name may be listed more than once, under several themes' extensions
+        // (test pass 2026-11-10, bug 2: a map by name gave all of them one).
+        std::vector<std::pair<std::string, std::string>> storedMacroFiles;
         std::unordered_set<std::string> jaMacros;
         std::unordered_set<std::string> giddeyMacros;
         std::unordered_set<std::string> toosiiMacros;
@@ -1164,10 +1172,13 @@ namespace gucci {
         // to the source (same folder and extension, "_trim" / "_merged",
         // numbered if taken) and reload the macro list; Outcome::message
         // says why when nothing was written.
-        std::filesystem::path findMacroFile(const std::string& name) const;
+        // With an extension, only that file (a Saved macros row names one).
+        std::filesystem::path findMacroFile(const std::string& name, const std::string& ext = "") const;
         // Rename and/or re-extension a saved macro, sidecars included; empty on
-        // success, else the reason (engine_core.cpp).
-        std::string moveMacro(const std::string& from, const std::string& toName, const std::string& toExt = "");
+        // success, else the reason (engine_core.cpp). fromExt picks which file
+        // when one name is saved under several themes.
+        std::string moveMacro(const std::string& from, const std::string& toName, const std::string& toExt = "",
+                              const std::string& fromExt = "");
         struct MacroDiffResult {
             bool ok = false;
             std::string error;

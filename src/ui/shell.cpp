@@ -486,10 +486,14 @@ namespace gucci::ui {
             return disguised() ? macroExtension() : std::string(".brrr");
         }
 
-        void loadMacroByName(std::string const& name) {
+        // With an extension, that one file: one name may be saved under
+        // several themes, and a Saved macros row names one of them.
+        void loadMacroByName(std::string const& name, std::string const& only = "") {
             auto* gb = GucciEngine::get();
             std::error_code ec;
             for (auto const& ext : knownMacroExtensions()) {
+                if (!only.empty() && ext != only)
+                    continue;
                 auto path = replaysDir() / (name + ext);
                 if (std::filesystem::exists(path, ec)) {
                     gb->replay.load(path);
@@ -583,10 +587,10 @@ namespace gucci::ui {
         }
 
         // A saved macro and its sidecars, gone. Empty on success, else why not.
-        std::string deleteMacroFiles(std::string const& name) {
+        std::string deleteMacroFiles(std::string const& name, std::string const& ext = "") {
             auto* gb = GucciEngine::get();
             std::error_code ec;
-            auto const file = gb->findMacroFile(name);
+            auto const file = gb->findMacroFile(name, ext);
             if (file.empty() || !std::filesystem::remove(file, ec))
                 return fmt::format("Couldn't delete \"{}\"{}", name, ec ? ": " + ec.message() : ".");
             auto const prefix = file.filename().string() + ".";
@@ -1044,8 +1048,9 @@ namespace gucci::ui {
         }
 
         // A saved macro written out in another bot's format, to replays/exports.
-        std::pair<bool, std::string> exportMacro(std::string const& name, convert::Format const& f) {
-            auto const file = GucciEngine::get()->findMacroFile(name);
+        std::pair<bool, std::string> exportMacro(std::string const& name, convert::Format const& f,
+                                                 std::string const& ext = "") {
+            auto const file = GucciEngine::get()->findMacroFile(name, ext);
             if (file.empty())
                 return {false, fmt::format("Couldn't find \"{}\".", name)};
             convert::Macro m;
@@ -1221,8 +1226,10 @@ namespace gucci::ui {
             auto* gb = GucciEngine::get();
             static std::string s_menuFor, s_rename;
             static bool s_confirmDelete = false;
-            if (s_menuFor != name) {
-                s_menuFor = name;
+            // Keyed by the whole file name: the same name under another theme
+            // is another row, with its own menu.
+            if (s_menuFor != name + ext) {
+                s_menuFor = name + ext;
                 s_rename = name;
                 s_confirmDelete = false;
             }
@@ -1231,11 +1238,11 @@ namespace gucci::ui {
             bool const recording = gb->isRecording();
             ImGui::BeginDisabled(recording);
             if (ImGui::MenuItem("Load"))
-                act = [who] { loadMacroByName(who); };
+                act = [who, ext] { loadMacroByName(who, ext); };
             bool const canCalc = PlayLayer::get() != nullptr;
             if (ImGui::MenuItem("Calculate", nullptr, false, canCalc))
-                act = [who] {
-                    loadMacroByName(who);
+                act = [who, ext] {
+                    loadMacroByName(who, ext);
                     GucciEngine::get()->analyzeFrameWindows();
                 };
             if (!canCalc && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
@@ -1243,14 +1250,14 @@ namespace gucci::ui {
             // To the plain extension: .brrr, or GBot's own while disguised.
             std::string const plainExt = plainMacroExtension();
             if (!ext.empty() && ext != plainExt && ImGui::MenuItem(fmt::format("Convert to {}", plainExt).c_str()))
-                act = [who, plainExt] { g_rowNote = GucciEngine::get()->moveMacro(who, who, plainExt); };
+                act = [who, plainExt, ext] { g_rowNote = GucciEngine::get()->moveMacro(who, who, plainExt, ext); };
             if (ImGui::BeginMenu("Export as")) {
                 for (auto const& f : convert::formats()) {
                     if (!f.canWrite)
                         continue;
                     if (ImGui::MenuItem(std::string(f.name).c_str())) {
                         convert::Format const* fp = &f;
-                        act = [who, fp] { std::tie(g_rowNoteOk, g_rowNote) = exportMacro(who, *fp); };
+                        act = [who, fp, ext] { std::tie(g_rowNoteOk, g_rowNote) = exportMacro(who, *fp, ext); };
                     }
                 }
                 ImGui::Separator();
@@ -1266,7 +1273,7 @@ namespace gucci::ui {
             kit::InputText("rename", &s_rename, "new name");
             if (kit::Button("Rename", Tone::Plain, -1.f)) {
                 std::string const to = s_rename;
-                act = [who, to] { g_rowNote = GucciEngine::get()->moveMacro(who, to); };
+                act = [who, to, ext] { g_rowNote = GucciEngine::get()->moveMacro(who, to, "", ext); };
                 ImGui::CloseCurrentPopup();
             }
             ImGui::Separator();
@@ -1275,7 +1282,7 @@ namespace gucci::ui {
                     s_confirmDelete = true;
             } else if (kit::Button("Really delete it?", Tone::Bad, -1.f)) {
                 s_confirmDelete = false;
-                act = [who] { g_rowNote = deleteMacroFiles(who); };
+                act = [who, ext] { g_rowNote = deleteMacroFiles(who, ext); };
                 ImGui::CloseCurrentPopup();
             }
             ImGui::EndDisabled();
@@ -1545,7 +1552,9 @@ namespace gucci::ui {
                         s_confirmDelete = gb->replayName;
                 } else {
                     if (kit::Button("Really delete it?", Tone::Bad)) {
-                        auto const why = deleteMacroFiles(gb->replayName);
+                        // The loaded file, not another theme's file of that name.
+                        auto const why = deleteMacroFiles(gb->replayName,
+                                                          gb->replay.getCurrentPath().extension().string());
                         s_deleteNote = why.empty()
                                            ? fmt::format("Deleted \"{}\". It is still loaded: Save brings it back.",
                                                          gb->replayName)
@@ -1585,17 +1594,22 @@ namespace gucci::ui {
             // reloads the list: that waits until the list has been drawn.
             std::function<void()> afterList;
             ImGui::BeginChild("##macros", ImVec2(0.f, 200.f), ImGuiChildFlags_FrameStyle);
-            for (auto const& name : gb->storedMacros) {
+            // One row per file, keyed by the whole file name (test pass
+            // 2026-11-10, bug 2): one name saved under .juice and .solar is
+            // two rows, each with its own id, theme tag and menu, so a click
+            // on one never acts on the other.
+            auto const loadedExt = gb->replayName.empty() ? std::string()
+                                                          : gb->replay.getCurrentPath().extension().string();
+            for (auto const& [name, ext] : gb->storedMacroFiles) {
                 std::string n = name;
                 std::transform(n.begin(), n.end(), n.begin(), [](unsigned char c) { return std::tolower(c); });
                 if (!lowered.empty() && n.find(lowered) == std::string::npos)
                     continue;
-                ImGui::PushID(name.c_str());
+                ImGui::PushID((name + ext).c_str());
                 // The row, its "..." and its menu carry the macro's name for
                 // Assistant Access (ui/probe.hpp).
                 probe::Scope probeRow("macro", name);
-                auto const extIt = gb->storedMacroExts.find(name);
-                std::string const ext = extIt == gb->storedMacroExts.end() ? std::string() : extIt->second;
+                bool const isLoaded = name == gb->replayName && ext == loadedExt;
                 // The theme it was saved under, unless that's the plain .brrr.
                 // None while disguised (GBot): the tags name the themes.
                 themes::Theme const* tagTheme = nullptr;
@@ -1604,11 +1618,11 @@ namespace gucci::ui {
                 float const moreW = ImGui::CalcTextSize("...").x + style.FramePadding.x * 2.f;
                 float const tagW = tag.empty() ? 0.f : ImGui::CalcTextSize(tag.c_str()).x + style.ItemSpacing.x;
                 float const rowW = std::max(40.f, ImGui::GetContentRegionAvail().x - moreW - tagW - style.ItemSpacing.x);
-                if (ImGui::Selectable(name.c_str(), name == gb->replayName, ImGuiSelectableFlags_None, ImVec2(rowW, 0.f)) &&
+                if (ImGui::Selectable(name.c_str(), isLoaded, ImGuiSelectableFlags_None, ImVec2(rowW, 0.f)) &&
                     !gb->isRecording())
-                    loadMacroByName(name);
+                    loadMacroByName(name, ext);
                 if (probe::on())
-                    probe::macroRow(name, ext, tag, name == gb->replayName);
+                    probe::macroRow(name, ext, tag, isLoaded);
                 ImGui::OpenPopupOnItemClick("##rowmenu", ImGuiPopupFlags_MouseButtonRight);
                 if (!tag.empty()) {
                     ImGui::SameLine();
@@ -3700,14 +3714,15 @@ namespace gucci::ui {
     std::vector<ListedMacro> listedMacros() {
         auto* gb = GucciEngine::get();
         std::vector<ListedMacro> out;
-        out.reserve(gb->storedMacros.size());
-        for (auto const& name : gb->storedMacros) {
+        out.reserve(gb->storedMacroFiles.size());
+        auto const loadedExt =
+            gb->replayName.empty() ? std::string() : gb->replay.getCurrentPath().extension().string();
+        for (auto const& [name, ext] : gb->storedMacroFiles) {
             ListedMacro m;
             m.name = name;
-            if (auto const it = gb->storedMacroExts.find(name); it != gb->storedMacroExts.end())
-                m.ext = it->second;
+            m.ext = ext;
             m.tag = macroTag(m.ext);
-            m.selected = name == gb->replayName;
+            m.selected = name == gb->replayName && ext == loadedExt;
             out.push_back(std::move(m));
         }
         return out;
