@@ -156,7 +156,7 @@ namespace absense {
     matjson::Value routeLeg(float gateX, float lo, float hi, int maxTicks, int frontierCap, bool exact, double maxMs,
                             float cellY = 10.0f);
 
-    // Pathfinder page > Follow the planned route (AI), saved with the mod: 0
+    // Pathfinder page > Follow the planned route, saved with the mod: 0
     // off (the pathfinder as it was), 1 route ideas (step R4: each decision
     // also tries the physics map's way to the planned route's next gate), 2
     // route drives (docs/ROUTE_ENGINE_PLAN.md step 5: each decision aims at

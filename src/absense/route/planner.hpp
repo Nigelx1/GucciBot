@@ -106,7 +106,7 @@ namespace absense::route {
     // level's start (so every gate ahead of wherever it starts is on it),
     // cached until the map changes.
     const Plan* guidePlan(GJBaseGameLayer* pl);
-    // Pathfinder page > Follow the planned route (AI), saved with the mod.
+    // Pathfinder page > Follow the planned route, saved with the mod.
     // Off: the pathfinder as it was. Route ideas (step R4): each decision also
     // tries the physics map's way to the planned route's next gate. Route
     // drives (docs/ROUTE_ENGINE_PLAN.md step 5): each decision aims at the

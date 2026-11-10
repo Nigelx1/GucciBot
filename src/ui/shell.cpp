@@ -2027,7 +2027,7 @@ namespace gucci::ui {
             // step 5), saved with the mod.
             int guided = std::clamp(absense::routeGuidance(), 0, 2);
             const char* guidance[] = {"Off", "Route ideas", "Route drives"};
-            if (kit::ChoiceRow("Follow the planned route (AI)",
+            if (kit::ChoiceRow("Follow the planned route",
                                "Route ideas: each decision also tries the way physics finds to the planned route's "
                                "next gate. Route drives: each decision aims at the planned route's next gate and "
                                "plays the way physics finds into it. Off: the pathfinder as it was",

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-09-v (the Pathfinder opens on the search engine by default until a trained AI ships)"
+    "2026-11-10-a (the Pathfinder's Follow the planned route setting drops its (AI) tag - it is the search's route planning, not the trained AI)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

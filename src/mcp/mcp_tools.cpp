@@ -2820,7 +2820,7 @@ namespace gucci::mcp {
 
         server.addTool({
             "gucci_route_guidance",
-            "The Pathfinder page's 'Follow the planned route (AI)' setting, saved with the mod. "
+            "The Pathfinder page's 'Follow the planned route' setting, saved with the mod. "
             "off: the pathfinder as it was. ideas (step R4 of AI_PATHFINDER_PLAN.md): each "
             "Absense decision also asks the physics map for the way to the planned route's next "
             "gate, and that idea goes first when it reaches the gate alive and clears the "
