@@ -1,5 +1,6 @@
 #include "framewindow.hpp"
 #include "core/GucciBot.hpp"
+#include "core/log_rotate.hpp"
 #include "trailbuf/trailbuf.hpp"
 
 #include "cbf.hpp"
@@ -60,9 +61,9 @@ static std::ofstream g_fwLog;
 // - every line is flushed, as before -p, so the lines just before a crash or
 //   a hang are on disk (-p buffered them, and a crash could lose that tail);
 // - the file is opened to append. If the last log can't be moved aside
-//   (another game sharing this save folder has it open: on Windows that
-//   blocks the rename but not a truncate), this launch appends to it after a
-//   banner, so neither game's lines are lost. After a move it's a new file.
+//   (another game sharing this save folder has it open, see
+//   core/log_rotate.hpp), this launch appends to it after a banner saying
+//   why, so neither game's lines are lost. After a move it's a new file.
 static constexpr std::uintmax_t kFwLogCap = 50ull << 20;
 static constexpr std::uintmax_t kFwLogHardCap = 55ull << 20;
 static std::uintmax_t g_fwLogBytes = 0;
@@ -72,26 +73,14 @@ static void fwLogOpen() {
     auto const dir = geode::Mod::get()->getSaveDir();
     auto const path = dir / "guccibot_fw.log";
     auto const old = dir / "guccibot_fw.old.log";
-    std::error_code ec;
-    bool rotated = true;
-    if (std::filesystem::exists(path, ec)) {
-        // rename replaces an existing old.log (MSVC: MoveFileExW with
-        // MOVEFILE_REPLACE_EXISTING; POSIX rename does too). Removing it
-        // first lost it whenever the rename then failed (another game
-        // holding the live log).
-        std::filesystem::rename(path, old, ec);
-        if (ec) {
-            rotated = false;
-            geode::log::warn("[fw] couldn't keep the last log as {} ({}): appending to it instead",
-                             old.string(),
-                             ec.message());
-        }
-    }
+    auto const why = gucci::logrotate::rotate(path, old);
+    if (!why.empty())
+        geode::log::warn("[fw] couldn't keep the last log as {} ({}): appending to it instead",
+                         old.string(),
+                         why);
     g_fwLog.open(path, std::ios::out | std::ios::app);
-    if (!rotated && g_fwLog.is_open())
-        g_fwLog << "\n===== new launch (the last log couldn't be moved aside: is another game using "
-                   "this save folder?) =====\n"
-                << std::flush;
+    if (!why.empty() && g_fwLog.is_open())
+        g_fwLog << gucci::logrotate::banner(why) << std::flush;
     geode::log::info("[fw] log file at: {} (the last launch's: {})", path.string(), old.filename().string());
 }
 

@@ -29,6 +29,7 @@ namespace {
 
 #include "mcp_server.hpp"
 #include "events.hpp"
+#include "core/log_rotate.hpp"
 
 #include <Geode/Geode.hpp>
 
@@ -61,9 +62,9 @@ namespace gucci::mcp {
         //   kMcpLogHardCap;
         // - every line is flushed, so the lines before a crash are on disk;
         // - the file is opened to append. If the last log can't be moved aside
-        //   (another game sharing this save folder has it open: on Windows that
-        //   blocks the rename but not a truncate), this launch appends to it
-        //   after a banner, so neither game's lines are lost.
+        //   (another game sharing this save folder has it open, see
+        //   core/log_rotate.hpp), this launch appends to it after a banner
+        //   saying why, so neither game's lines are lost.
         constexpr std::uintmax_t kMcpLogCap = 50ull << 20;
         constexpr std::uintmax_t kMcpLogHardCap = 55ull << 20;
 
@@ -71,26 +72,14 @@ namespace gucci::mcp {
             auto const dir = geode::Mod::get()->getSaveDir();
             auto const path = dir / "guccibot_mcp.log";
             auto const old = dir / "guccibot_mcp.old.log";
-            std::error_code ec;
-            bool rotated = true;
-            if (std::filesystem::exists(path, ec)) {
-                // rename replaces an existing old.log (MSVC: MoveFileExW with
-                // MOVEFILE_REPLACE_EXISTING; POSIX rename does too). Removing it
-                // first lost it whenever the rename then failed (another game
-                // holding the live log).
-                std::filesystem::rename(path, old, ec);
-                if (ec) {
-                    rotated = false;
-                    geode::log::warn("[mcp] couldn't keep the last log as {} ({}): appending to it instead",
-                                     old.string(),
-                                     ec.message());
-                }
-            }
+            auto const why = logrotate::rotate(path, old);
+            if (!why.empty())
+                geode::log::warn("[mcp] couldn't keep the last log as {} ({}): appending to it instead",
+                                 old.string(),
+                                 why);
             g_mcpLog.open(path, std::ios::out | std::ios::app);
-            if (!rotated && g_mcpLog.is_open())
-                g_mcpLog << "\n===== new launch (the last log couldn't be moved aside: is another game using "
-                            "this save folder?) =====\n"
-                         << std::flush;
+            if (!why.empty() && g_mcpLog.is_open())
+                g_mcpLog << logrotate::banner(why) << std::flush;
         }
     }
 

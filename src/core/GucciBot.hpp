@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-al (Settings has a Diagnostics card with the startup self-checks results)"
+    "2026-11-10-am (off Windows a log is moved aside only when no other game is using the save folder, and the banner says why a move failed)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
