@@ -735,6 +735,10 @@ class $modify(GB7PlayLayer, PlayLayer) {
         // Read before onReset and restoreHoldOnReset change them.
         bool const canDieBefore = upd.m_canDie;
         bool const expectsDeathBefore = upd.m_expectsDeath;
+        // Maintain gravity's player-2 upright starts over with the attempt; a
+        // checkpoint respawn puts its own back (applyCheckpoint, from inside
+        // PlayLayer::resetLevel).
+        gb->practiceFix.m_p2DualGravity = -1;
         PlayLayer::resetLevel();
 
         if (hasAddedCheckpoint) {

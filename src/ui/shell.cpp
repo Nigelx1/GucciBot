@@ -1484,8 +1484,9 @@ namespace gucci::ui {
                              "feat_mirror_inverted");
             engineSwitch("Maintain gravity",
                          "While recording: while a player is upside down, a hold records as a release and a release "
-                         "as a hold. In a 2-player level each player follows its own key, so a player that starts "
-                         "the dual upside down keeps jumping until you hold its key",
+                         "as a hold. In a 2-player level each player follows its own key, and player 2 counts the "
+                         "gravity it starts the dual with as upright, so with no key held it acts like a normal dual "
+                         "player",
                          &gb->replay.m_maintainGravity, "feat_maintain_gravity");
             engineSwitch("Sub-tick clicks (CBF recording)", "Records each click where inside the tick you pressed it",
                          &gb->replay.m_scbfRecording, "scbf_recording");

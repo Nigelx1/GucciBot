@@ -633,17 +633,25 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         // the loop would never end. The cap guards against that too: each
         // pass flips the buffer, so two are all a tick should need.
         // 1-player levels and platformer are left as they were.
+        //
+        // Upright for player 2 is the gravity it had when the dual started
+        // (2026-11-10, m_p2DualGravity), not GD's: GD usually starts the dual
+        // with player 2 upside down, and judged against GD's upright player 2
+        // kept jumping until its key was held. Now, with no key held, it acts
+        // as a normal dual player; a gravity change later in the dual is
+        // judged against the dual's start.
         auto* p2 = m_player2;
         if (twoPlayer && !m_isPlatformer && p2 && m_gameState.m_isDualMode) {
             bool const side2 = gb->replay.sideFor(this, true);
-            for (int pass = 0; pass < 4 && !p2->m_controlsDisabled &&
-                               p2->m_isUpsideDown == (p2J == p2->m_jumpBuffered);
+            bool const startFlipped = gb->practiceFix.m_p2DualGravity == 1;
+            auto const flipped2 = [&] { return p2->m_isUpsideDown != startFlipped; };
+            for (int pass = 0; pass < 4 && !p2->m_controlsDisabled && flipped2() == (p2J == p2->m_jumpBuffered);
                  ++pass) {
                 addInputToReplay({.m_button = (PlayerButton)1,
-                                  .m_isPush = (bool)(p2J ^ p2->m_isUpsideDown),
+                                  .m_isPush = (bool)(p2J ^ flipped2()),
                                   .m_isPlayer2 = side2,
                                   .m_step = 0});
-                handleButton(p2J ^ p2->m_isUpsideDown, 1, !side2);
+                handleButton(p2J ^ flipped2(), 1, !side2);
             }
         }
     }
@@ -810,6 +818,16 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
             return GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
 
         gb->practiceFix.updatePlatformerInputs(m_queuedButtons);
+        // Maintain gravity's player-2 upright (GucciPracticeFix::m_p2DualGravity):
+        // the gravity player 2 has on the first tick of the dual, kept until
+        // the dual ends. Only read in a 2-player level outside platformer.
+        {
+            auto& ref = gb->practiceFix.m_p2DualGravity;
+            if (!m_levelSettings->m_twoPlayerMode || m_isPlatformer || !m_player2 || !m_gameState.m_isDualMode)
+                ref = -1;
+            else if (ref < 0)
+                ref = m_player2->m_isUpsideDown ? 1 : 0;
+        }
         // Absense's pathfinder in realtime: this tick's planned input. A no-op
         // unless it is driving the game.
         ::Bot::get()->pathfinder().liveInput();

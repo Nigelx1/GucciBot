@@ -111,6 +111,7 @@ namespace gucci {
         state.m_calcNonEffectObjects = pl->m_calcNonEffectObjects;
         state.m_calcNonEffectObjectsSize = pl->m_calcNonEffectObjectsSize;
         state.m_hasLevelState = true;
+        state.m_p2DualGravity = m_p2DualGravity;
 
         return state;
     }
@@ -230,6 +231,8 @@ namespace gucci {
             return;
 
         pl->m_gameState = state.m_gameState;
+        // Maintain gravity's player-2 upright, as it was at this checkpoint.
+        m_p2DualGravity = state.m_p2DualGravity;
 
         auto* p1 = pl->m_player1;
         auto* p2 = pl->m_player2;

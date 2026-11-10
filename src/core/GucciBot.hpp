@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-bt (intro card: a level name too wide for one line takes two, broken at the space nearest the middle, and shrinks only if it still does not fit)"
+    "2026-11-10-bu (Maintain gravity: player 2 counts the gravity it starts the dual with as upright, kept through practice checkpoints)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -114,6 +114,11 @@ namespace gucci {
         std::vector<GameObject*> m_calcNonEffectObjects;
         int m_calcNonEffectObjectsSize = 0;
         bool m_hasLevelState = false;
+
+        // GucciPracticeFix::m_p2DualGravity at this checkpoint (Maintain
+        // gravity's upright for player 2 in a 2-player dual). -1: not known
+        // (no dual, or a checkpoint from before 2026-11-10).
+        int m_p2DualGravity = -1;
     };
 
     struct StoredFrame {
@@ -140,6 +145,14 @@ namespace gucci {
         bool m_isBackstep = false;
         bool m_hasDiedNormally = false;
         bool m_shouldLoadPlatformer = false;
+
+        // GucciBot (2026-11-10): Maintain gravity's upright for player 2 in a
+        // 2-player level outside platformer: the gravity player 2 had when the
+        // dual started (1 upside down, 0 not), as GD usually starts it upside
+        // down. -1 while there is no dual. Taken each tick in
+        // processQueuedButtons, cleared at every reset and put back from the
+        // checkpoint a respawn restores.
+        int m_p2DualGravity = -1;
 
         SavedCheckpointState* m_forcedState = nullptr;
 
