@@ -226,6 +226,17 @@ namespace gucci::testset {
 
                 // Macro path and the engine.
                 v.push_back(engineBool("show_macro_path", [e]() -> bool& { return e()->showMacroPath; }));
+                // The Macro page's Maintain gravity switch (recording only).
+                v.push_back(engineBool("feat_maintain_gravity",
+                                       [e]() -> bool& { return e()->replay.m_maintainGravity; }));
+                // GD's own Flip 2-Player Controls option (game variable 0010,
+                // which hasFlippedControls reads), for this launch only: reset
+                // puts it back before the game closes and saves its options.
+                v.push_back({"gd_flip_2p", "bool", Store::Memory,
+                             [] { return matjson::Value(GameManager::get()->getGameVariable("0010")); },
+                             [](matjson::Value const& val, bool) {
+                                 GameManager::get()->setGameVariable("0010", wantBool("gd_flip_2p", val));
+                             }});
                 v.push_back(engineBool("trainer_reveal", [e]() -> bool& { return e()->trainerRevealEnabled; }));
                 v.push_back(engineFloat("trainer_reveal_ahead", 0.0, 600.0,
                                         [e]() -> float& { return e()->trainerRevealBuffer; }));

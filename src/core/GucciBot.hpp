@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-c (hitborders like NaN GD: used orbs, pads and portals stay drawn with a switch to hide them, no dot by default, a path half as thick, line width 2, and Darken the level)"
+    "2026-11-10-d (test tools: test_set takes Maintain gravity and GD's Flip 2-Player Controls for this launch only, and gucci_click can hold Space as the keyboard does)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

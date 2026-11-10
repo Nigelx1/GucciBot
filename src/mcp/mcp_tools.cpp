@@ -592,7 +592,8 @@ namespace gucci::mcp {
                 "(or leaves the key out, as it was). {reset: true} puts every one back, "
                 "in memory too; tools/assist.py's close() does that first. {list: true} "
                 "returns every key with its type and value now. Keys that were never "
-                "saved anyway: hack_rng_lock, hack_rng_seed, bigbrrr (this launch's "
+                "saved anyway: hack_rng_lock, hack_rng_seed, gd_flip_2p (GD's Flip "
+                "2-Player Controls option), bigbrrr (this launch's "
                 "switch), test_mute (FMOD's master volume 0), fwac_conflict_test_id "
                 "(one more mod id for Calculate's conflict check), pf_pending_verify "
                 "(the pathfinder checks, every tick, that each object the real game "
@@ -2627,14 +2628,32 @@ namespace gucci::mcp {
         server.addTool({
             "gucci_click",
             "Queue a press or release of jump for the next tick, as if the "
-            "player did it (recorded if recording).",
+            "player did it (recorded if recording). With key, Space goes down "
+            "or up through GD's own keyboard handling instead, as a key held on "
+            "the keyboard comes in: UILayer takes it and keeps it as held (what "
+            "Maintain gravity and the autoclicker's only-while-holding read), "
+            "on button side 1, which GD gives to a player itself.",
             schemaOf({{"press", "boolean", "true to press, false to release (default true)"},
-                      {"player2", "boolean", "player 2 instead of 1 (default false)"}}),
+                      {"player2", "boolean", "player 2 instead of 1 (default false)"},
+                      {"key", "boolean", "send Space through the keyboard dispatcher (default false)"}}),
             [](matjson::Value const& a) {
                 requireFreeRun();
                 auto* pl = requireLevel();
                 bool const press = argBool(a, "press", true);
                 bool const p2 = argBool(a, "player2", false);
+                if (argBool(a, "key", false)) {
+                    if (p2)
+                        throw ToolError("key sends Space, button side 1; leave player2 out");
+#ifdef GEODE_IS_IOS
+                    throw ToolError("no keyboard dispatcher on iOS");
+#else
+                    CCKeyboardDispatcher::get()->dispatchKeyboardMSG(KEY_Space, press, false, 0.0);
+                    auto out = obj();
+                    out["key"] = press ? "down" : "up";
+                    out["frame"] = (int64_t)GucciEngine::get()->updater.getFrame();
+                    return out;
+#endif
+                }
                 // player2 is the player, queued on the side that moves it
                 // (see sideFor; Flip 2-Player Controls swaps them outside
                 // platformer).
