@@ -98,7 +98,7 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
   - -i: JupiterBot's green SAFE chip;
   - -j: the sidebar cone at 4:1 contrast, and bigger;
   - -k/-l: Legit only, one switch that turns off every cheat and gives everything back.
-  Checked in the test game, except Legit only's hotkeys and clicks (keys don't reach the off-screen test window). Untested by Nigel. Open: whether rendering should work with Legit only on, and how bright the cone should be.
+  Checked in the test game, except Legit only's hotkeys and clicks (keys don't reach the off-screen test window). Untested by Nigel. Decided 2026-11-09: Legit only keeps blocking macro playback, renders included (the -q render exception was reverted in -s), renders never show the cheat dot (-p), and the cone takes the theme name's color (-r).
 - [x] about.md, the README and the site match what ships: -fa (acad95e) and the site (aaa4a8b)
 
 ## 3. Calculate
@@ -121,7 +121,7 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
   - A Calculate restore settles GD's anticheat spike, so a leg that leaves a slope right after its checkpoint gets its launch (f403d4c, -f). 10440 is now measured at 17, the counter's number, and a full rerun matches Nigel's run on 399 of 400.
   - Antic's Counter beta.15, set like Calculate, finds the same 8 one-frame windows.
   - Sub-tick legs run Retime first, then Buffer, like Antic's Counter (390e15b, -t): a full KOCMOC run matches counter beta.16 on 398 of 400 (was 395). The 2 left: 8496 (real play backs Calculate) and 6957 (the counter's search skips two dead slots Calculate tests).
-  - Untested by Nigel. Open for him: the one-tick leg end (patch in the doc), standing down with Antic's Counter, and NaN's level and rules.
+  - Untested by Nigel. His calls, 2026-11-09: the one-tick leg end, yes (afbd98d, -n); Retime-first sub-tick legs, yes (390e15b -t, with 5dea7b6 -u keeping a 2-player tail on the measured player; that part has never run on a real 2-player macro, none is on disk); standing down with Antic's Counter, yes (71db499, -o). Still open: NaN's 1 (his level and rules; parked, "doesnt really matter right now"), and Antic's beta.16 Ship Steering and Place Markers (asked, not answered).
 - [ ] Speed: progress and a time cap (resetting to checkpoints is 87% of the time): built -ez (a time cap that keeps what it measured, and time so far and to go in the level), untested; the restores themselves aren't faster yet
 - [ ] Markers in the ground (#26; the fix in build -dt is untested)
 - [ ] The trail check being one frame off; recheck the 42,000-frame noclip runaway
