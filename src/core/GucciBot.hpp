@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-ad (Record from Off at frame 0 sets GDs random and the variance table from the new seed, as playback will)"
+    "2026-11-10-ae (MCP set_mode: from_here says that from idle it drops the loaded macro and records fresh)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -1999,9 +1999,11 @@ namespace gucci::mcp {
             // record during playback get what they always did.
             auto fromHere = obj();
             fromHere["type"] = "boolean";
-            fromHere["description"] = "record only: while a macro plays in a level, carry on from the current frame "
-                                      "as the menu's Mode switch does (the rest of the macro is cut, held buttons "
-                                      "let go). Default false: only the mode changes";
+            fromHere["description"] = "record only: do what the menu's Mode switch does. While a macro plays in a "
+                                      "level, carry on from the current frame (the rest of the macro is cut, held "
+                                      "buttons let go). From idle in a level with a macro loaded, start a fresh "
+                                      "recording from the current frame: the loaded macro is DROPPED from memory "
+                                      "(its file is kept). Default false: only the mode changes";
             props["from_here"] = fromHere;
             schema["type"] = "object";
             schema["properties"] = props;
@@ -2009,8 +2011,9 @@ namespace gucci::mcp {
 
             server.addTool({
                 "gucci_set_mode",
-                "Put GucciBot into idle, record or play. With from_here, record during playback carries on from "
-                "the current frame, as the menu's Mode switch does.",
+                "Put GucciBot into idle, record or play. With from_here, record does what the menu's Mode switch "
+                "does: during playback it carries on from the current frame; from idle with a macro loaded it "
+                "drops that macro and records fresh from the current frame.",
                 schema,
                 [](matjson::Value const& a) {
                     requireFreeRun();
