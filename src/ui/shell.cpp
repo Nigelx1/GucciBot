@@ -3497,11 +3497,12 @@ namespace gucci::ui {
                         showNotice("Calculate: " + text + kept,
                                    analyzer.lastRunOk() ? NotificationIcon::Success : NotificationIcon::Warning, 6.f);
                     }
+                    // This let go of the removed "Mute while it runs" switch's
+                    // mute. Kept (2026-11-10) so the Pathfinder's mute, the
+                    // other user of this pair, is let go exactly as it was
+                    // with the switch at its default (off).
                     gbe->unmuteAnalysisMusic();
                 }
-                // Mute while it runs (Calculate page switch).
-                if (!s_wasRunning && running && Mod::get()->getSavedValue<bool>("calc_mute", false))
-                    GucciEngine::get()->muteAnalysisMusic();
                 s_wasRunning = running;
                 analyzer.tick(PlayLayer::get());
                 if (auto* pl = PlayLayer::get()) {

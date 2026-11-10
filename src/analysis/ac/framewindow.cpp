@@ -1193,10 +1193,11 @@ bool FrameWindowAnalyzer::inRetimeTail(size_t k, size_t ai, bool player2) const 
            (actions[k].m_player2 == player2 || !m_partner.empty());
 }
 
-// GucciBot (2026-11-10): through GucciEngine's mute holds, shared with
-// Calculate's "Mute while it runs" switch and the Pathfinder. Each used to
-// save the volumes it found, so the switch saved this mute's zeros and put
-// them back after this one had restored the player's volumes.
+// GucciBot (2026-11-10): through GucciEngine's mute holds, shared with the
+// Pathfinder (and, until it was removed later that day, Calculate's "Mute
+// while it runs" switch). Each used to save the volumes it found, so the
+// switch saved this mute's zeros and put them back after this one had
+// restored the player's volumes.
 void FrameWindowAnalyzer::muteAudio() {
     if (m_mutedAudio) return;
     // Set only when the hold counted, so unmuteAudio releases only its own.

@@ -190,11 +190,10 @@ namespace gucci::ui::pages {
                 // was only written to the log.
                 if (auto const& conflicts = gb->analyzerConflicts(); !conflicts.empty())
                     kit::Note(branded(conflicts).c_str(), Tone::Warn);
-                // Read from the saved value every time, so Reset (confirms())
-                // turns it off here too.
-                bool mute = Mod::get()->getSavedValue<bool>("calc_mute", false);
-                if (kit::SwitchRow("Mute while it runs", "Silences the music and sounds until it finishes", &mute))
-                    Mod::get()->setSavedValue("calc_mute", mute);
+                // GucciBot (2026-11-10): the "Mute while it runs" switch is gone
+                // (Nigel: "ditch the switch"). The analyzer mutes the game for
+                // the whole run on its own (muteAudio), so the switch did
+                // nothing; an old saved calc_mute is never read.
             }
 
             if (!fw.results().empty())
@@ -1358,12 +1357,11 @@ namespace gucci::ui::pages {
                              "Reset") == 1) {
                 fwstore::resetAll();
                 // Default Look lives on GucciEngine, not in the analyzer's
-                // settings, and Mute while it runs is a saved value of its own.
+                // settings.
                 auto* gb = GucciEngine::get();
                 gb->fwDefaultLook = gb->fwDefaultLookBells = false;
                 Mod::get()->setSavedValue("fw_default_look", false);
                 Mod::get()->setSavedValue("fw_default_look_bells", false);
-                Mod::get()->setSavedValue("calc_mute", false);
                 g_openBands.clear();
                 g_look = true;
             }

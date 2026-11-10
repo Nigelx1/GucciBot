@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-bp (the fw log keeps the reason the last log could not be kept when it can not open)"
+    "2026-11-10-bq (Calculate: the Mute while it runs switch is gone, Calculate still mutes the game while it runs)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -1070,8 +1070,9 @@ namespace gucci {
         float fwSavedMusicVolume = 0.f;
         float fwSavedEffectsVolume = 0.f;
         bool fwMusicMuted = false;
-        // How many mutes hold the game silent right now: Calculate's own, its
-        // "Mute while it runs" switch, the Pathfinder's. The volumes are saved
+        // How many mutes hold the game silent right now: Calculate's own and
+        // the Pathfinder's (Calculate's "Mute while it runs" switch was one
+        // too, until it was removed on 2026-11-10). The volumes are saved
         // by the first and put back by the last, so two mutes in a row no
         // longer save the first one's zeros (test pass 2026-11-10, bug 1).
         int fwMuteHolds = 0;

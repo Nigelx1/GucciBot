@@ -12,7 +12,7 @@
 //
 // What keeps it off the disk: menu rows write the save container the moment
 // they change, several features save whole structs (Click Indicators writes
-// every ci_* key) and some read the container live (calc_mute, render_*).
+// every ci_* key) and some read the container live (render_*).
 // So the override is shielded where the file is written, not where the value
 // is set: every saved.json write puts the user's own value (or no key, when
 // there wasn't one) under each overridden key, writes, and puts the test's

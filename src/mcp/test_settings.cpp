@@ -349,7 +349,6 @@ namespace gucci::testset {
                                          analyzer.clearDisplay();
                                  }});
                 }
-                v.push_back(live("calc_mute", LiveType::Bool));
                 v.push_back(engineBool("pf_hide_search", [] () -> bool& { return Pathfinder::get()->hideSearch; }));
                 // The Pathfinder page's Exact start flags and Remember
                 // solutions: a search reads both from the container when it
