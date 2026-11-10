@@ -1196,8 +1196,8 @@ bool FrameWindowAnalyzer::inRetimeTail(size_t k, size_t ai, bool player2) const 
 // them back after this one had restored the player's volumes.
 void FrameWindowAnalyzer::muteAudio() {
     if (m_mutedAudio) return;
-    gucci::GucciEngine::get()->holdMute();
-    m_mutedAudio = true;
+    // Set only when the hold counted, so unmuteAudio releases only its own.
+    m_mutedAudio = gucci::GucciEngine::get()->holdMute();
 }
 
 void FrameWindowAnalyzer::unmuteAudio() {

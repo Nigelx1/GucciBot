@@ -2981,8 +2981,7 @@ namespace gucci {
     void GucciEngine::muteAnalysisMusic() {
         if (fwMusicMuted)
             return;
-        fwMusicMuted = true;
-        holdMute();
+        fwMusicMuted = holdMute();
     }
 
     void GucciEngine::unmuteAnalysisMusic() {
@@ -2994,22 +2993,25 @@ namespace gucci {
 
     // Every mute goes through these two (the analyzer's muteAudio too), so the
     // volumes saved are the player's, whichever mute comes first and in
-    // whatever order they let go.
-    void GucciEngine::holdMute() {
+    // whatever order they let go. holdMute says whether it counted the hold:
+    // a caller calls releaseMute only for a hold that counted, or its release
+    // would take one from another holder and unmute early.
+    bool GucciEngine::holdMute() {
         if (fwMuteHolds > 0) {
             ++fwMuteHolds;
-            return;
+            return true;
         }
         // No audio engine, no mute: a hold counted here saved no volumes, and
         // its release would have put back whatever the saved ones last were.
         auto* fmod = FMODAudioEngine::sharedEngine();
         if (!fmod)
-            return;
+            return false;
         fwMuteHolds = 1;
         fwSavedMusicVolume = fmod->getBackgroundMusicVolume();
         fwSavedEffectsVolume = fmod->getEffectsVolume();
         fmod->setBackgroundMusicVolume(0.f);
         fmod->setEffectsVolume(0.f);
+        return true;
     }
 
     void GucciEngine::releaseMute() {

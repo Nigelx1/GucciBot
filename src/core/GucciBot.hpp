@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-x (Render: the in-render HUD says its frame count includes the intro card, the seconds are the level)"
+    "2026-11-10-y (Audio: a mute hold that could not mute is not released later, so it cannot unmute another hold early)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -1085,7 +1085,7 @@ namespace gucci {
         void cancelAnalysis();
         void muteAnalysisMusic();
         void unmuteAnalysisMusic();
-        void holdMute();
+        bool holdMute();
         void releaseMute();
         // Writes the analyzer's results next to the current macro.
         void saveAcFrameWindowResults();
