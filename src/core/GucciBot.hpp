@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-ag (log rotation no longer deletes the last old.log when another game holds the live log)"
+    "2026-11-10-ah (guccibot_fw.log: past the 50 MB cap the per-restore warnings stop, so every runs summary still lands)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

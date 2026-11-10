@@ -128,8 +128,8 @@ void gucci::fwEngineLog(std::string const& line) {
 // (fwFileLog above: one file per launch, the last launch's kept as
 // guccibot_fw.old.log). FWWARN goes to Geode's log and the file; FWLOG only
 // while Verbose Log is on, and FWFILEWARN always, both to the file only; each
-// run's [fw][finish] line to both. Past the size cap only the warnings (FWWARN
-// and FWFILEWARN) and the [fw][finish] lines are written.
+// run's [fw][finish] line to both. Past the size cap only FWWARN's warnings and
+// the [fw][finish] lines are written.
 void fwFileLog(std::string const& line, bool important);
 
 #define FWWARN(...)                                  do {                                                    auto const fww_ = fmt::format(__VA_ARGS__);         geode::log::warn("{}", fww_);                       fwFileLog("WARN " + fww_, true);                } while (0)
@@ -141,8 +141,10 @@ static size_t g_fwFileOnlyLines = 0;
 #define FWLOG(...) do { if (m_verbose->inner()) { fwFileLog(fmt::format(__VA_ARGS__)); ++g_fwFileOnlyLines; } } while (0)
 // A warning that comes once per restore or step, not once per run: the file
 // only, counted like FWLOG. Rare ones (a death in the capture, a divergence)
-// stay FWWARN, in both logs.
-#define FWFILEWARN(...) do { fwFileLog("WARN " + fmt::format(__VA_ARGS__), true); ++g_fwFileOnlyLines; } while (0)
+// stay FWWARN, in both logs. Not important past the size cap: one run can
+// write thousands (the per-restore [fw][statediff], about 650 KB a run), and
+// they filled the room past the cap that keeps every run's [fw][finish] line.
+#define FWFILEWARN(...) do { fwFileLog("WARN " + fmt::format(__VA_ARGS__)); ++g_fwFileOnlyLines; } while (0)
 
 
 cocos2d::ccColor3B FrameWindowAnalyzer::colorForWindow(int window) {
