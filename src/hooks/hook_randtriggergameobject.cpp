@@ -44,9 +44,13 @@ using namespace gucci;
 // macro records or plays (or Calculate replays one), the pick is made from a
 // value built from the macro's seed, the trigger's unique id and the frame
 // it fires on: the shared state is saved, that value written, GD's own code
-// run, and the saved state put back, so nothing else in the game sees a
-// change. The key holds no state of its own, so a practice checkpoint respawn
-// gives the same pick for free. Plain play (Off) keeps GD's own random.
+// run, and the saved state put back. That is not quite invisible: GD's own
+// pick would have moved the shared state on by one draw, so after each 1912
+// it is one draw behind where plain play would leave it, and any draws made
+// inside the call come from the keyed value and are thrown away. Recording
+// and playback do exactly the same, so the two stay in step. The key holds no
+// state of its own, so a practice checkpoint respawn gives the same pick for
+// free. Plain play (Off) keeps GD's own random.
 struct GB7RandTriggerGameObject
     : Modify<GB7RandTriggerGameObject, RandTriggerGameObject> {
     struct Fields {
@@ -119,17 +123,27 @@ struct GB7RandomEffectGameObject : Modify<GB7RandomEffectGameObject, EffectGameO
         if (m_objectID != 1912 || !gb->enabled || (gb->isIdle() && !gb->analyzerOwnsRun()))
             return EffectGameObject::triggerObject(layer, uniqueID, remapKeys);
 
-        // The count starts again on a new frame or a new attempt: a practice
-        // respawn plays the checkpoint's frames again, and a trigger that
-        // fires on the same frame as before must pick the same way.
+        // The count starts again on a new frame, a new attempt, any reset or
+        // another layer: a practice respawn plays the checkpoint's frames
+        // again, and a trigger that fires on the same frame as before must
+        // pick the same way. m_attempts alone wasn't enough: a full restart
+        // sets it back to 0 and a level opened again starts it at 1, so a
+        // trigger firing on the frame the last one fired on before the restart
+        // counted as a repeat (2026-11-10). m_resetCount goes up on every
+        // resetLevel, before GD's own reset runs.
         static uint32_t s_frame = std::numeric_limits<uint32_t>::max();
         static int s_attempt = -1;
+        static uint32_t s_resets = std::numeric_limits<uint32_t>::max();
+        static GJBaseGameLayer* s_layer = nullptr;
         static std::unordered_map<int, uint32_t> s_firedThisFrame;
         uint32_t const frame = gb->updater.getFrame();
         int const attempt = layer ? layer->m_attempts : 0;
-        if (frame != s_frame || attempt != s_attempt) {
+        uint32_t const resets = gb->updater.m_resetCount;
+        if (frame != s_frame || attempt != s_attempt || resets != s_resets || layer != s_layer) {
             s_frame = frame;
             s_attempt = attempt;
+            s_resets = resets;
+            s_layer = layer;
             s_firedThisFrame.clear();
         }
         uint32_t const repeat = s_firedThisFrame[m_uniqueID]++;

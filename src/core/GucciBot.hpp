@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-bk (a restart in Off or Record lets go of a hold playback left on player 2)"
+    "2026-11-10-bl (a full restart or a level opened again no longer counts a plain Random trigger as fired twice on one frame)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
