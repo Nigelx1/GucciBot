@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-09-s (Legit only blocks macro playback again, renders included - the render exception is taken back out; renders still never show the cheat dot)"
+    "2026-11-09-t (Calculate: sub-tick legs run Retime first, then Buffer after a dead Retime leg, like Antic's Counter)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

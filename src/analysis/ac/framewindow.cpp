@@ -2343,9 +2343,15 @@ void FrameWindowAnalyzer::beginShift(int64_t shift, ShiftMode mode) {
 
     bool const thisP2 = m_samples[m_index].player2;
 
-    if (m_fine > 1 && mode == ShiftMode::Retime) {
-        mode = ShiftMode::Buffer;
-
+    // GucciBot (2026-11-09): sub-tick legs run Retime first and Buffer after
+    // a dead Retime leg (concludeShift), as the whole-frame legs do. Taken
+    // from Antic's Counter beta.15/beta.16's behavior on KOCMOC (its logs:
+    // every sub-tick slot runs mode=retime with the whole tail at the same
+    // fraction, then mode=buffer when that dies; no source). anticroom's
+    // slc-count source, which this was ported from, forced every sub-tick
+    // leg into Buffer. Nigel's call, 2026-11-09. A sub-tick Buffer leg still
+    // runs when it crosses a neighbouring input, with the warning, as before.
+    if (m_fine > 1 && mode == ShiftMode::Buffer) {
         // GucciBot (2026-10-23): not for Faster sub-tick search's test of the
         // tick past the edge (only ever run with the switch on). That leg is
         // outside the window: when it dies, as it should, it adds nothing to
@@ -2401,7 +2407,13 @@ void FrameWindowAnalyzer::beginShift(int64_t shift, ShiftMode mode) {
     if (m_subtickMacro && m_fine > 1) {
         shifted = this->placeSubtick(ai, shift, m_entryOffset);
         fraction = scbf::offsetOf(actions[ai]);
-        if (size_t const rel = this->pairedReleaseFor(ai); rel != NO_INDEX) {
+        if (mode == ShiftMode::Retime) {
+            // GucciBot (2026-11-09): a sub-tick Retime leg moves the whole
+            // tail by the same slots, each from its own recorded offset.
+            for (size_t k = 0; k < actions.size(); k++)
+                if (k != ai && this->inRetimeTail(k, ai, thisP2))
+                    this->placeSubtick(k, shift, this->entryShift(k));
+        } else if (size_t const rel = this->pairedReleaseFor(ai); rel != NO_INDEX) {
             int64_t const relEntry =
                 m_entryActive && rel >= m_entryPrevAi ? m_entryOffset : 0;
             m_releaseFrame = this->placeSubtick(rel, shift, relEntry);
@@ -2480,9 +2492,12 @@ void FrameWindowAnalyzer::concludeShift(bool survived) {
     m_testActive = false;
 
     if (!survived && !m_recoveryActive && m_shiftMode == ShiftMode::Retime &&
-        m_fine <= 1 && !m_bufferTried && m_shift != 0) {
+        !m_bufferTried && m_shift != 0) {
         m_bufferTried = true;
-        if (this->bufferShiftValid(m_shift)) {
+        // GucciBot (2026-11-09): sub-tick legs too (beginShift); theirs runs
+        // even across a neighbouring input, with the warning, as it did when
+        // every sub-tick leg was Buffer.
+        if (m_fine > 1 || this->bufferShiftValid(m_shift)) {
             this->beginShift(m_shift, ShiftMode::Buffer);
             return;
         }
