@@ -2,6 +2,7 @@
 #include "core/GucciBot.hpp"
 #include "analysis/ac/sound.hpp"
 #include "analysis/ac/shim.hpp"  // SLSettings (the intro reads the frame-window switch)
+#include "hacks/hitborders.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/binding/PlayLayer.hpp>
@@ -816,6 +817,9 @@ namespace gucci {
         // Cancelled mid-intro: take the card down. Game thread, so this is
         // safe (finishStop).
         RenderIntro::get()->destroy();
+        // The hitborders' framebuffer at the render's size (133 MB at 8K)
+        // isn't kept until the level closes; the live game makes its own.
+        HitborderOverlay::get()->releaseGpu();
 
         AudioRecorder::get()->stopMonitor();
         AudioRecorder::get()->detach();

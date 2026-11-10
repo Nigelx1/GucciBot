@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-at (test tool: gucci_click can send the Up arrow for player 2)"
+    "2026-11-10-au (hitborders follow the camera in renders and Calculate: those frames are counted now)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

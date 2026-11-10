@@ -869,8 +869,12 @@ namespace gucci {
     }
 
     void HitborderOverlay::releaseGpu() {
-        for (auto& f : st().fbos)
+        auto& s = st();
+        for (auto& f : s.fbos)
             f.release();
+        // A size the GPU refused (an 8K render's, say) doesn't hold the live
+        // game to plain outlines afterward: the next frame tries again.
+        s.fboFailed = false;
     }
 
     // ---------------------------------------------------------------- tick
@@ -925,7 +929,7 @@ namespace gucci {
         auto& s = st();
         unsigned const frame = CCDirector::get()->getTotalFrames();
         if (s.builtFrame == frame)
-            return;  // the renderer's capture visits the level a second time
+            return;  // the borders node and the marks node share one rebuild a frame
         s.builtFrame = frame;
         s.haveRegions = false;
         s.darkAlpha = 0.f;

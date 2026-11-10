@@ -1199,6 +1199,11 @@ class $modify(GB7CCDirector, CCDirector) {
             // game held still, so the level starts right after it.
             if (sl->tickIntro(pl)) {
                 sl->displayPreview();
+                // CCDirector::drawScene counts its frames here; this branch
+                // replaces it, so it counts them itself. Hitborders rebuild
+                // once a counted frame: uncounted, a render kept drawing its
+                // first frame's borders for the whole video.
+                ++m_uTotalFrames;
                 this->m_pobOpenGLView->swapBuffers();
                 gb->updater.runFrozenTick();
                 return;
@@ -1209,6 +1214,7 @@ class $modify(GB7CCDirector, CCDirector) {
                 this->setNextScene();
             sl->update(pl);
             sl->displayPreview();
+            ++m_uTotalFrames;  // as the intro's frame above
             this->m_pobOpenGLView->swapBuffers();
             gb->updater.runFrozenTick();
             return;
@@ -1235,6 +1241,7 @@ class $modify(GB7CCDirector, CCDirector) {
                 this->setNextScene();
             if (m_pRunningScene)
                 m_pRunningScene->visit();
+            ++m_uTotalFrames;  // as the render's frames above
             this->m_pobOpenGLView->swapBuffers();
             gb->updater.runFrozenTick();
             return;
