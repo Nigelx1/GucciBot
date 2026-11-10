@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-bl (a full restart or a level opened again no longer counts a plain Random trigger as fired twice on one frame)"
+    "2026-11-10-bm (the pathfinder judge sees the plain Random trigger pick a recording would make)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

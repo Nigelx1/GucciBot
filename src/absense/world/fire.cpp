@@ -195,6 +195,10 @@
 //     not trusted. (The design said to draw from ws.seed, the replay system's
 //     teleport state; the binary's own generator is a plain global the mod can
 //     read, so the run starts from the value the game would draw next.)
+//     While a macro records or plays, GucciBot makes the real 1912 pick from
+//     a value keyed on the macro seed, the trigger and the frame instead
+//     (hooks/hook_randtriggergameobject.cpp), so this copy no longer matches
+//     it there; the groups stay uncertain, which is still the safe answer.
 //
 // (ab) SequenceTriggerGameObject::triggerObject 0x4b4870 keeps its state on
 //     the object itself: m_sequenceState's two maps, m_sequenceTimes (+0x758)

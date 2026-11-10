@@ -11,6 +11,7 @@
 
 #include "core/GucciBot.hpp"
 #include "core/platform.hpp"
+#include "absense/judge.hpp"
 
 using namespace geode::prelude;
 using namespace gucci;
@@ -50,7 +51,9 @@ using namespace gucci;
 // inside the call come from the keyed value and are thrown away. Recording
 // and playback do exactly the same, so the two stay in step. The key holds no
 // state of its own, so a practice checkpoint respawn gives the same pick for
-// free. Plain play (Off) keeps GD's own random.
+// free. Plain play (Off) keeps GD's own random. The pathfinder's judge plays
+// its runs idle; when it stands in for a recording or a playback it gets the
+// keyed pick too, so what it judges is what the macro then plays.
 struct GB7RandTriggerGameObject
     : Modify<GB7RandTriggerGameObject, RandTriggerGameObject> {
     struct Fields {
@@ -120,7 +123,8 @@ struct GB7RandomEffectGameObject : Modify<GB7RandomEffectGameObject, EffectGameO
                        int uniqueID,
                        gd::vector<int> const* remapKeys) override {
         auto* gb = GucciEngine::get();
-        if (m_objectID != 1912 || !gb->enabled || (gb->isIdle() && !gb->analyzerOwnsRun()))
+        if (m_objectID != 1912 || !gb->enabled ||
+            (gb->isIdle() && !gb->analyzerOwnsRun() && !absense::judge::activeInMacro()))
             return EffectGameObject::triggerObject(layer, uniqueID, remapKeys);
 
         // The count starts again on a new frame, a new attempt, any reset or

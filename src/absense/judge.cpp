@@ -18,6 +18,7 @@ namespace absense::judge {
 
     namespace {
         bool s_active = false;
+        bool s_inMacro = false;  // the run stood in for a recording or a playback
         bool s_died = false;
         bool s_complete = false;
         GameObject* s_killer = nullptr;
@@ -33,6 +34,10 @@ namespace absense::judge {
 
     bool active() {
         return s_active;
+    }
+
+    bool activeInMacro() {
+        return s_active && s_inMacro;
     }
 
     void noteDeath(GameObject* object) {
@@ -112,6 +117,7 @@ namespace absense::judge {
         // put back at the end.
         bool const stepArmedBefore = upd.consumeStep();
 
+        s_inMacro = savedMode != gucci::GucciEngine::Mode::Idle;
         s_active = true;
         s_died = false;
         s_complete = false;

@@ -83,6 +83,10 @@ namespace absense::judge {
     // For the hooks: while a run is on, the real player's death and the end of
     // the level are noted here instead of happening.
     bool active();
+    // A run that stood in for a recording or playback (the mode it set to
+    // idle was one of those): the plain Random trigger picks the way the
+    // macro would there (hooks/hook_randtriggergameobject.cpp).
+    bool activeInMacro();
     void noteDeath(GameObject* object);
     void noteComplete();
 
