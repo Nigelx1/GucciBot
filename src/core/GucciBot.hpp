@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-d (test tools: test_set takes Maintain gravity and GD's Flip 2-Player Controls for this launch only, and gucci_click can hold Space as the keyboard does)"
+    "2026-11-10-e (Maintain gravity follows Flip 2-Player Controls as GD does: no swap in a platformer, both sides count in a 1-player level)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

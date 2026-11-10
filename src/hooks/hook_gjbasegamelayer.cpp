@@ -579,25 +579,40 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         auto* gb = GucciEngine::get();
         m_queuedButtons.clear();
 
+        // UILayer keeps its holds by button side. GucciBot (2026-11-10):
+        // swapped only where GD hands a side to the other player (see sideFor:
+        // a 2-player level outside platformer), and in a 1-player level both
+        // sides are player 1's, as the autoclicker's only-while-holding reads
+        // them. Before, Flip 2-Player Controls swapped them everywhere, so in
+        // a 1-player level holding Space read as not held and recording made
+        // no input at all.
         bool p1J = m_uiLayer->m_p1Jumping || m_uiLayer->m_p1TouchId != -1;
         bool p2J = m_uiLayer->m_p2Jumping || m_uiLayer->m_p2TouchId != -1;
-        if (gb->replay.hasFlippedControls())
+        bool const twoPlayer = m_levelSettings->m_twoPlayerMode;
+        if (gb->replay.hasFlippedControls() && twoPlayer && !m_isPlatformer)
             std::swap(p1J, p2J);
         if (gb->replay.m_mirrorInputs) {
             p1J |= p2J ^ gb->replay.m_mirrorInverted;
             p2J |= p1J ^ gb->replay.m_mirrorInverted;
         }
+        if (!twoPlayer)
+            p1J |= p2J;
 
         auto* p1 = m_player1;
         if (PlayLayer::get()->m_levelEndAnimationStarted)
             return;
 
+        // The side that moves player 1 (flipped only where GD flips it), for
+        // the recording and the press alike: addInputToReplay stores it as
+        // playback queues it back. Before, a 2-player platformer with the
+        // setting on pressed side 2 here, which moves player 2 there.
+        bool const side = gb->replay.sideFor(this, false);
         while (p1->m_isUpsideDown == (p1J == p1->m_jumpBuffered) && !p1->m_controlsDisabled) {
             addInputToReplay({.m_button = (PlayerButton)1,
                               .m_isPush = (bool)(p1J ^ p1->m_isUpsideDown),
-                              .m_isPlayer2 = gb->replay.playerFlipped(false),
+                              .m_isPlayer2 = side,
                               .m_step = 0});
-            handleButton(p1J ^ p1->m_isUpsideDown, 1, gb->replay.playerFlipped(true));
+            handleButton(p1J ^ p1->m_isUpsideDown, 1, !side);
         }
     }
 
