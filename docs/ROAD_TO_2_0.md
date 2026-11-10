@@ -120,7 +120,8 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
   - Juice's check-back now tries only the timings its answer reads (c75d5c3, -a): the first click went from 402 s to 79 s with the same results.
   - A Calculate restore settles GD's anticheat spike, so a leg that leaves a slope right after its checkpoint gets its launch (f403d4c, -f). 10440 is now measured at 17, the counter's number, and a full rerun matches Nigel's run on 399 of 400.
   - Antic's Counter beta.15, set like Calculate, finds the same 8 one-frame windows.
-  - Untested by Nigel. Open for him: the one-tick leg end (patch in the doc), Retime-first sub-tick legs, standing down with Antic's Counter, and NaN's level and rules.
+  - Sub-tick legs run Retime first, then Buffer, like Antic's Counter (390e15b, -t): a full KOCMOC run matches counter beta.16 on 398 of 400 (was 395). The 2 left: 8496 (real play backs Calculate) and 6957 (the counter's search skips two dead slots Calculate tests).
+  - Untested by Nigel. Open for him: the one-tick leg end (patch in the doc), standing down with Antic's Counter, and NaN's level and rules.
 - [ ] Speed: progress and a time cap (resetting to checkpoints is 87% of the time): built -ez (a time cap that keeps what it measured, and time so far and to go in the level), untested; the restores themselves aren't faster yet
 - [ ] Markers in the ground (#26; the fix in build -dt is untested)
 - [ ] The trail check being one frame off; recheck the 42,000-frame noclip runaway
