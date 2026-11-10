@@ -1070,24 +1070,30 @@ def log_path(name="geode"):
 
 
 def log_mark(name="geode"):
-    """Where a log ends now: (path, byte offset). Read what comes after with log_since()."""
+    """Where a log ends now: (path, byte offset, file id). Read what comes after with log_since().
+    The file id tells a new file from the old one: guccibot_fw.log starts fresh each launch
+    (the last launch's becomes guccibot_fw.old.log), so a mark taken before a launch points
+    into a file that isn't there any more."""
     path = log_path(name)
     try:
-        return path, os.path.getsize(path)
+        st = os.stat(path)
+        return path, st.st_size, st.st_ino
     except OSError:
-        return path, 0
+        return path, 0, None
 
 
 def log_since(mark, grep=None, max_bytes=16 << 20):
     """The lines a log gained since log_mark() (read from disk, not through the game:
     guccibot_fw.log runs to hundreds of MB). Only lines containing `grep`, if given;
-    at most the last max_bytes. A log that shrank (a new file) is read from the start."""
-    path, offset = mark
+    at most the last max_bytes. A new file since the mark (a log started fresh), or one that
+    shrank, is read from the start."""
+    path, offset, *rest = mark
     try:
-        size = os.path.getsize(path)
+        st = os.stat(path)
     except OSError:
         return []
-    if size < offset:
+    size = st.st_size
+    if size < offset or (rest and rest[0] is not None and st.st_ino != rest[0]):
         offset = 0
     offset = max(offset, size - max_bytes)
     with open(path, "rb") as f:

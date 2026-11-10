@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-o (Macro: Record from Off with a macro loaded keeps the macro up to here and records from there, so at frame 0 it is a fresh recording)"
+    "2026-11-10-p (Calculate: guccibot_fw.log starts fresh each launch, keeps the last one as guccibot_fw.old.log, stops at 50 MB and is written in a buffer)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

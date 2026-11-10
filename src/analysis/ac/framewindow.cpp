@@ -47,22 +47,70 @@ static uint32_t g_traceLastFrame = UINT32_MAX;
 
 static std::ofstream g_fwLog;
 
-void fwFileLog(std::string const& line) {
-    if (!g_fwLog.is_open()) {
-        auto path = geode::Mod::get()->getSaveDir() / "guccibot_fw.log";
-        // Appends rather than truncates: the log used to be wiped on every
-        // launch, so testing and then relaunching destroyed the run we were
-        // about to read -- which happened, and cost a round trip. Each session
-        // gets a banner instead so runs stay separable.
-        bool const fresh = !std::filesystem::exists(path);
-        g_fwLog.open(path, std::ios::out | std::ios::app);
-        if (!fresh && g_fwLog.is_open())
-            g_fwLog << "\n===== new session =====\n";
-        geode::log::info("[fw] log file at: {}", path.string());
+// guccibot_fw.log, one file per launch (2026-11-10, test pass bug 4). It used
+// to append forever with a flush on every line: the test save's copy reached
+// 101 MB, and since -k every Calculate run's detail goes there too (20,407
+// lines for a 5-input run). Now:
+// - each launch starts it fresh, and the launch before's log is kept as
+//   guccibot_fw.old.log, so testing and then relaunching still leaves the run
+//   you were about to read (why it appended in the first place);
+// - a launch writes at most kFwLogCap. Past that only the important lines (the
+//   warnings and each run's [fw][finish] summary) go in, up to kFwLogHardCap,
+//   so one launch can't fill the disk and the summaries still land;
+// - writes are buffered. An important line flushes, and so does any line a
+//   second after the last flush, so a crash still leaves what matters.
+static constexpr std::uintmax_t kFwLogCap = 50ull << 20;
+static constexpr std::uintmax_t kFwLogHardCap = 55ull << 20;
+static std::uintmax_t g_fwLogBytes = 0;
+static bool g_fwLogCapped = false;
+static Clock::time_point g_fwLogLastFlush;
+static char g_fwLogBuf[1 << 16];
+
+static void fwLogOpen() {
+    auto const dir = geode::Mod::get()->getSaveDir();
+    auto const path = dir / "guccibot_fw.log";
+    auto const old = dir / "guccibot_fw.old.log";
+    std::error_code ec;
+    if (std::filesystem::exists(path, ec)) {
+        std::filesystem::remove(old, ec);
+        std::filesystem::rename(path, old, ec);
+        if (ec)
+            geode::log::warn("[fw] couldn't keep the last log as {}: {}", old.string(), ec.message());
     }
-    if (g_fwLog.is_open()) {
-        g_fwLog << line << "\n";
+    // Before open: the buffer is set for the file it opens.
+    g_fwLog.rdbuf()->pubsetbuf(g_fwLogBuf, sizeof(g_fwLogBuf));
+    g_fwLog.open(path, std::ios::out | std::ios::trunc);
+    g_fwLogLastFlush = Clock::now();
+    geode::log::info("[fw] log file at: {} (the last launch's: {})", path.string(), old.filename().string());
+}
+
+void fwFileLog(std::string const& line, bool important = false) {
+    if (!g_fwLog.is_open()) {
+        static bool tried = false;
+        if (tried)
+            return;
+        tried = true;
+        fwLogOpen();
+        if (!g_fwLog.is_open())
+            return;
+    }
+    if (g_fwLogBytes >= kFwLogCap && !g_fwLogCapped) {
+        g_fwLogCapped = true;
+        g_fwLog << "===== this launch's log reached " << (kFwLogCap >> 20)
+                << " MB: from here on only warnings and run summaries =====\n";
         g_fwLog.flush();
+        geode::log::warn("[fw] guccibot_fw.log reached {} MB this launch: only warnings and run summaries "
+                         "are written from here on",
+                         kFwLogCap >> 20);
+    }
+    if (g_fwLogCapped && (!important || g_fwLogBytes >= kFwLogHardCap))
+        return;
+    g_fwLog << line << '\n';
+    g_fwLogBytes += line.size() + 1;
+    auto const now = Clock::now();
+    if (important || now - g_fwLogLastFlush >= std::chrono::seconds(1)) {
+        g_fwLog.flush();
+        g_fwLogLastFlush = now;
     }
 }
 
@@ -75,9 +123,9 @@ void gucci::fwEngineLog(std::string const& line) {
 // what a run actually did gets answered by guessing at the code instead of
 // reading what happened. Written to guccibot_fw.log in the mod's save
 // directory, truncated each launch, and only while Verbose Log is on.
-void fwFileLog(std::string const& line);
+void fwFileLog(std::string const& line, bool important);
 
-#define FWWARN(...)                                  do {                                                    auto const fww_ = fmt::format(__VA_ARGS__);         geode::log::warn("{}", fww_);                       fwFileLog("WARN " + fww_);                      } while (0)
+#define FWWARN(...)                                  do {                                                    auto const fww_ = fmt::format(__VA_ARGS__);         geode::log::warn("{}", fww_);                       fwFileLog("WARN " + fww_, true);                } while (0)
 
 // GucciBot (2026-11-10): verbose lines go to guccibot_fw.log only. In Geode's
 // log too, a 9-input run wrote about 6,300 lines there, up to 1,500 a second
@@ -4060,7 +4108,7 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
             ok, m_measured, m_skipped, m_desynced, m_legCounter, m_fineLegsRun,
             m_fastSub, message);
         log::info("{}", fin_);
-        fwFileLog(fin_);
+        fwFileLog(fin_, true);  // flushed: the end of every run is on disk
     }
 
     // What went to guccibot_fw.log alone this run, said once in Geode's log.
