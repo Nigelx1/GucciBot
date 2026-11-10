@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-n (Render: the in-render HUD counts the frames written, and the count starts at 0 each render)"
+    "2026-11-10-o (Macro: Record from Off with a macro loaded keeps the macro up to here and records from there, so at frame 0 it is a fresh recording)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -770,10 +770,13 @@ namespace gucci {
         }
         void setMode(Mode m);
         bool beginResumeRecording();
+        bool beginRecordingFromOff();
         // The Mode switch on the Macro page and in Compact Mode (GitHub issue
         // #32). Record while a macro plays in a level carries on from the
         // current frame (beginResumeRecording): the rest of the macro is cut
-        // and any button it holds is let go. Not while Calculate measures or
+        // and any button it holds is let go. Record from Off in a level with a
+        // macro loaded does the same (beginRecordingFromOff), so at frame 0
+        // it's a fresh recording. Not while Calculate measures or
         // walks back, or the Classic Pathfinder runs: those runs play the
         // macro. Anything else is setMode.
         void setModeFromMenu(Mode m);

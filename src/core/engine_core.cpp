@@ -1449,10 +1449,53 @@ namespace gucci {
         return true;
     }
 
+    // Record from Off, in a level, with a macro still loaded (one just
+    // played, or loaded, and the level restarted). The atom still held that
+    // macro, and addInputToReplay drops an input that comes before its last
+    // action, so nothing was recorded until a death or restart cleared it.
+    // Same rule as Record during playback (beginResumeRecording): the macro
+    // up to this frame is kept and recording goes on from here, so at frame 0
+    // it's a fresh recording. Nothing is playing, so the player holds only
+    // what the user holds: a button the kept part leaves held that the player
+    // isn't holding is let go of on the first recorded frame, as a respawn
+    // does.
+    bool GucciEngine::beginRecordingFromOff() {
+        if (mode != Mode::Idle || replay.m_actionAtom.empty() || legit::on())
+            return false;
+        auto* pl = PlayLayer::get();
+        if (!pl)
+            return false;
+
+        uint32_t const now = updater.getFrame();
+        auto& atom = replay.m_actionAtom;
+        size_t const before = atom.length();
+        atom.clipFrom(now + 1);
+        if (replay.m_pathSamples.size() > (size_t)now + 1)
+            replay.m_pathSamples.resize((size_t)now + 1);
+        if (atom.empty()) {
+            // Nothing of the old macro is left: its frame windows would be
+            // saved with the new recording, and Save marks the file with
+            // where this one starts (as a restart while recording does).
+            forgetMacroWindows();
+            replay.m_recordedFromStartPos = pl->m_startPosObject != nullptr;
+        }
+
+        setMode(Mode::Recording);
+        replay.releaseButtonsNotHeldAfterRespawn(now + 1);
+        replay.m_inputIndex = atom.length();
+        log::info("[GucciBot] Record from Off @ frame {} -- {} of {} actions kept",
+                  now,
+                  atom.m_actions.size(),
+                  before);
+        return true;
+    }
+
     void GucciEngine::setModeFromMenu(Mode m) {
         auto const& acfw = ::Bot::get()->frameWindow();
         bool const runPlaysMacro = fwAnalyzing || acfw.running() || acfw.returning();
         if (m == Mode::Recording && isPlaying() && !runPlaysMacro && beginResumeRecording())
+            return;
+        if (m == Mode::Recording && !runPlaysMacro && beginRecordingFromOff())
             return;
         setMode(m);
     }
