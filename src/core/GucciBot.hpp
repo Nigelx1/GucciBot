@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-af (Record from Off clears the dropped macros start-position note on the Macro card)"
+    "2026-11-10-ag (log rotation no longer deletes the last old.log when another game holds the live log)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -75,7 +75,10 @@ static void fwLogOpen() {
     std::error_code ec;
     bool rotated = true;
     if (std::filesystem::exists(path, ec)) {
-        std::filesystem::remove(old, ec);
+        // rename replaces an existing old.log (MSVC: MoveFileExW with
+        // MOVEFILE_REPLACE_EXISTING; POSIX rename does too). Removing it
+        // first lost it whenever the rename then failed (another game
+        // holding the live log).
         std::filesystem::rename(path, old, ec);
         if (ec) {
             rotated = false;
