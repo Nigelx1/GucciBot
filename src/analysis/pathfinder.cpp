@@ -1162,9 +1162,17 @@ namespace gucci {
         if (!savedAtom.m_actions.empty() && !points.empty()) {
             uint32_t const lo = (uint32_t)std::max<int64_t>(start, 1);
             auto const& acts = savedAtom.m_actions;
+            // Player 1's inputs: the player a stored flag moves now, not the
+            // flag itself. GucciBot (2026-11-10): a 1-player macro recorded
+            // with Flip 2-Player Controls on stores every input as player 2,
+            // so it gave no hint at all.
+            auto* hintLayer = PlayLayer::get();
+            auto const movesP2 = [hintLayer](gb::Action const& x) {
+                return GucciEngine::get()->replay.flagMovesPlayer2(hintLayer, x.m_player2);
+            };
             for (size_t i = 0; i < acts.size(); i++) {
                 auto const& a = acts[i];
-                if (a.m_player2 || !a.m_holding)
+                if (movesP2(a) || !a.m_holding)
                     continue;  // player 1 presses only, same as everything else here
                 if (a.m_frame < lo || a.m_frame >= d)
                     continue;
@@ -1172,7 +1180,7 @@ namespace gucci {
                 // Pair it with its release to get the real hold length.
                 int hold = 0;
                 for (size_t j = i + 1; j < acts.size(); j++) {
-                    if (acts[j].m_player2 || acts[j].m_holding)
+                    if (movesP2(acts[j]) || acts[j].m_holding)
                         continue;
                     hold = (int)((int64_t)acts[j].m_frame - (int64_t)a.m_frame);
                     break;

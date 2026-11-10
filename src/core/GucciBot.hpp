@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-f (Show Macro Path puts each click marker on the player it moves, also with Flip 2-Player Controls on)"
+    "2026-11-10-g (the Classic Pathfinder takes its hint from a loaded 1-player macro recorded with Flip 2-Player Controls on)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
