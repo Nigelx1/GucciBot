@@ -2694,6 +2694,11 @@ namespace gucci::ui {
                                           gbcheck::g_passCount + gbcheck::g_failCount)
                                   .c_str(),
                               Tone::Bad);
+                if (gbcheck::g_engineSkippedWhy)
+                    kit::Note(fmt::format("The engine's checks (midhooks and patches) expected none: {}.",
+                                          gbcheck::g_engineSkippedWhy)
+                                  .c_str(),
+                              Tone::Warn);
                 for (auto const& r : gbcheck::g_results)
                     if (!r.passed)
                         kit::Note(fmt::format("{}: {}", r.name, r.detail.empty() ? "failed" : r.detail).c_str(),

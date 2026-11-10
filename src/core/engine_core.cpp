@@ -2975,6 +2975,11 @@ namespace gucci {
         // a site registers itself as it's placed, so one whose $execute never
         // ran would shrink both counts and still pass.
         bool const noEngineCode = standingDown || botswitch::takenOut() || !GB_NATIVE_ENGINE;
+        gbcheck::g_engineSkippedWhy =
+            !GB_NATIVE_ENGINE ? "this platform doesn't use the Windows engine"
+            : standingDown    ? "GucciBot stood down for another bot this launch"
+            : botswitch::takenOut() ? "the bot is switched off (Disable bot)"
+                                    : nullptr;
         gbcheck::run(noEngineCode ? 0 : 12, noEngineCode ? 0 : 4, GBR6_VERSION, BRR_FORMAT_VERSION,
                      MOD_VERSION);
     }

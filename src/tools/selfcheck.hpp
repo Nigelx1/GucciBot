@@ -20,6 +20,9 @@ namespace gucci {
         inline bool g_ranOnce = false;
         inline int g_passCount = 0;
         inline int g_failCount = 0;
+        // Why the engine's checks expected no midhooks or patches this launch
+        // (set before run() by engine_core.cpp), or null when they were checked.
+        inline const char* g_engineSkippedWhy = nullptr;
 
         inline void add(const char* name, bool passed, std::string detail = "") {
             g_results.push_back({name, passed, std::move(detail)});
