@@ -139,11 +139,11 @@ namespace gucci::mcp {
         void dropWaiting(std::string const& why);
     };
 
-    // Everything the server does, appended to guccibot_mcp.log in the mod's
-    // save dir. Geode's own console log is not persisted on this machine, so a
-    // failed bind or a tool call left no evidence at all -- which is a silly
-    // way for a diagnostic tool to behave.
-    void mcpFileLog(std::string const& line);
+    // Everything the server does, written to guccibot_mcp.log in the mod's
+    // save dir: a fresh file each launch (the last launch's kept as
+    // guccibot_mcp.old.log), every line flushed, at most 50 MB a launch, after
+    // which only `important` lines (warnings and errors) go in. Any thread.
+    void mcpFileLog(std::string const& line, bool important = false);
 
     // Registers GucciBot's own tools. Defined in mcp_tools.cpp.
     void registerTools(Server& server);

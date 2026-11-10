@@ -37,6 +37,7 @@ namespace {
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <mutex>
 
 using namespace geode::prelude;
 
@@ -44,23 +45,75 @@ namespace gucci::mcp {
 
     namespace {
         std::ofstream g_mcpLog;
+        std::mutex g_mcpLogMutex;  // the socket thread and the main thread both write
+        bool g_mcpLogTried = false;
+        std::uintmax_t g_mcpLogBytes = 0;
+        bool g_mcpLogCapped = false;
+
+        // guccibot_mcp.log, one file per launch (2026-11-10), as guccibot_fw.log
+        // has been since -p/-v (src/analysis/ac/framewindow.cpp): it used to
+        // append forever (127 MB in the test save).
+        // - each launch starts it fresh, and the launch before's log is kept as
+        //   guccibot_mcp.old.log, so a session that already happened is still
+        //   readable after one relaunch;
+        // - a launch writes at most kMcpLogCap. Past that only warnings and
+        //   errors (a failed start or bind, a call let go) go in, up to
+        //   kMcpLogHardCap;
+        // - every line is flushed, so the lines before a crash are on disk;
+        // - the file is opened to append. If the last log can't be moved aside
+        //   (another game sharing this save folder has it open: on Windows that
+        //   blocks the rename but not a truncate), this launch appends to it
+        //   after a banner, so neither game's lines are lost.
+        constexpr std::uintmax_t kMcpLogCap = 50ull << 20;
+        constexpr std::uintmax_t kMcpLogHardCap = 55ull << 20;
+
+        void mcpLogOpen() {
+            auto const dir = geode::Mod::get()->getSaveDir();
+            auto const path = dir / "guccibot_mcp.log";
+            auto const old = dir / "guccibot_mcp.old.log";
+            std::error_code ec;
+            bool rotated = true;
+            if (std::filesystem::exists(path, ec)) {
+                std::filesystem::remove(old, ec);
+                std::filesystem::rename(path, old, ec);
+                if (ec) {
+                    rotated = false;
+                    geode::log::warn("[mcp] couldn't keep the last log as {} ({}): appending to it instead",
+                                     old.string(),
+                                     ec.message());
+                }
+            }
+            g_mcpLog.open(path, std::ios::out | std::ios::app);
+            if (!rotated && g_mcpLog.is_open())
+                g_mcpLog << "\n===== new launch (the last log couldn't be moved aside: is another game using "
+                            "this save folder?) =====\n"
+                         << std::flush;
+        }
     }
 
-    // Appends rather than truncates, with a banner per launch, so a session
-    // that already happened is still readable afterwards. Same shape as
-    // fwFileLog.
-    void mcpFileLog(std::string const& line) {
+    void mcpFileLog(std::string const& line, bool important) {
+        std::lock_guard lock(g_mcpLogMutex);
         if (!g_mcpLog.is_open()) {
-            auto path = geode::Mod::get()->getSaveDir() / "guccibot_mcp.log";
-            bool const fresh = !std::filesystem::exists(path);
-            g_mcpLog.open(path, std::ios::out | std::ios::app);
-            if (!fresh && g_mcpLog.is_open())
-                g_mcpLog << "\n===== new session =====\n";
+            if (g_mcpLogTried)
+                return;
+            g_mcpLogTried = true;
+            mcpLogOpen();
+            if (!g_mcpLog.is_open())
+                return;
         }
-        if (g_mcpLog.is_open()) {
-            g_mcpLog << line << "\n";
-            g_mcpLog.flush();
+        if (g_mcpLogBytes >= kMcpLogCap && !g_mcpLogCapped) {
+            g_mcpLogCapped = true;
+            g_mcpLog << "===== this launch's log reached " << (kMcpLogCap >> 20)
+                     << " MB: from here on only warnings and errors =====\n"
+                     << std::flush;
+            geode::log::warn("[mcp] guccibot_mcp.log reached {} MB this launch: only warnings and errors are "
+                             "written from here on",
+                             kMcpLogCap >> 20);
         }
+        if (g_mcpLogCapped && (!important || g_mcpLogBytes >= kMcpLogHardCap))
+            return;
+        g_mcpLog << line << '\n' << std::flush;
+        g_mcpLogBytes += line.size() + 1;
     }
 
     namespace {
@@ -150,7 +203,7 @@ namespace gucci::mcp {
         WSADATA wsa{};
         if (int const e = WSAStartup(MAKEWORD(2, 2), &wsa); e != 0) {
             log::error("[GucciBot] MCP: WSAStartup failed ({})", e);
-            mcpFileLog(fmt::format("[mcp] start FAILED: WSAStartup returned {}", e));
+            mcpFileLog(fmt::format("[mcp] start FAILED: WSAStartup returned {}", e), true);
             return false;
         }
 #endif
@@ -169,7 +222,7 @@ namespace gucci::mcp {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
         if (m_bindState.load() != 1) {
-            mcpFileLog("[mcp] start FAILED: see the bind error above");
+            mcpFileLog("[mcp] start FAILED: see the bind error above", true);
             this->stop();
             return false;
         }
@@ -201,7 +254,7 @@ namespace gucci::mcp {
     void Server::listenLoop() {
         SOCKET listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
         if (listener == INVALID_SOCKET) {
-            mcpFileLog(fmt::format("[mcp] socket() failed, WSA error {}", WSAGetLastError()));
+            mcpFileLog(fmt::format("[mcp] socket() failed, WSA error {}", WSAGetLastError()), true);
             m_bindState = 2;
             m_running = false;
             return;
@@ -225,7 +278,8 @@ namespace gucci::mcp {
                 "[mcp] could not bind 127.0.0.1:{} -- WSA error {}{}", m_port, e,
                 e == WSAEADDRINUSE ? " (port already in use: close the program holding it, then switch Assistant "
                                      "Access off and on in Settings)"
-                                   : ""));
+                                   : ""),
+                true);
             closesocket(listener);
             m_bindState = 2;
             m_running = false;
@@ -317,7 +371,7 @@ namespace gucci::mcp {
             } catch (...) {
             }
         }
-        mcpFileLog(fmt::format("[mcp]    {} let go after {} frame(s): {}", waiting.call->name, waiting.frames, why));
+        mcpFileLog(fmt::format("[mcp]    {} let go after {} frame(s): {}", waiting.call->name, waiting.frames, why), true);
         this->finish(waiting.call, matjson::Value(), why);
     }
 

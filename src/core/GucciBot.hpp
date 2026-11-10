@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-aa (Assistant Access: the band Reorder arrows in Calculate show in gucci_ui and gucci_ui_press can press them)"
+    "2026-11-10-ab (guccibot_mcp.log: a fresh file each launch, the last one kept as guccibot_mcp.old.log, capped at 50 MB, every line flushed)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
