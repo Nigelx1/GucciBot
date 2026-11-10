@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-am (off Windows a log is moved aside only when no other game is using the save folder, and the banner says why a move failed)"
+    "2026-11-10-an (a failed open of guccibot_mcp.log is tried again every 5 s instead of never)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -47,7 +47,11 @@ namespace gucci::mcp {
     namespace {
         std::ofstream g_mcpLog;
         std::mutex g_mcpLogMutex;  // the socket thread and the main thread both write
-        bool g_mcpLogTried = false;
+        // A failed open is tried again 5 s later, not every line (that was
+        // the old cost) and not never (one locked moment, OneDrive or an
+        // antivirus, lost the whole launch's log without a word).
+        std::chrono::steady_clock::time_point g_mcpLogNextTry{};
+        bool g_mcpLogWarned = false;
         std::uintmax_t g_mcpLogBytes = 0;
         bool g_mcpLogCapped = false;
 
@@ -86,12 +90,20 @@ namespace gucci::mcp {
     void mcpFileLog(std::string const& line, bool important) {
         std::lock_guard lock(g_mcpLogMutex);
         if (!g_mcpLog.is_open()) {
-            if (g_mcpLogTried)
+            auto const now = std::chrono::steady_clock::now();
+            if (now < g_mcpLogNextTry)
                 return;
-            g_mcpLogTried = true;
             mcpLogOpen();
-            if (!g_mcpLog.is_open())
+            if (!g_mcpLog.is_open()) {
+                g_mcpLog.clear();
+                g_mcpLogNextTry = now + std::chrono::seconds(5);
+                if (!g_mcpLogWarned) {
+                    g_mcpLogWarned = true;
+                    geode::log::warn("[mcp] couldn't open guccibot_mcp.log: trying again every 5 s, lines "
+                                     "until then aren't in the file");
+                }
                 return;
+            }
         }
         if (g_mcpLogBytes >= kMcpLogCap && !g_mcpLogCapped) {
             g_mcpLogCapped = true;
