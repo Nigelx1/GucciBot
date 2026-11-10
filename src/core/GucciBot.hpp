@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-g (the Classic Pathfinder takes its hint from a loaded 1-player macro recorded with Flip 2-Player Controls on)"
+    "2026-11-10-h (a log line on every reset during playback, to catch the restart-after-a-finished-replay desync if it comes back)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

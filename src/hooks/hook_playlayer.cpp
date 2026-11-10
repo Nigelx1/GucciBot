@@ -698,6 +698,12 @@ class $modify(GB7PlayLayer, PlayLayer) {
         ::Bot::get()->trailBuffer().clear();
 
         updateRandomSeedOnReset();
+        // GD's end state before its reset, for the playback log line below.
+        bool const wasComplete = m_hasCompletedLevel;
+        bool const wasEnding = m_levelEndAnimationStarted;
+        // Read before onReset and restoreHoldOnReset change them.
+        bool const canDieBefore = upd.m_canDie;
+        bool const expectsDeathBefore = upd.m_expectsDeath;
         PlayLayer::resetLevel();
 
         if (hasAddedCheckpoint) {
@@ -711,6 +717,25 @@ class $modify(GB7PlayLayer, PlayLayer) {
 
         uint32_t respawnFrame = (uint32_t)upd.m_frameOnLastAttempt;
         gb->replay.onReset(respawnFrame, (uint32_t)deathFrame);
+        // GucciBot (2026-11-10): one line per reset during playback (never
+        // under Calculate), to catch the restart-after-a-finished-replay desync
+        // if it comes back (docs/ROAD_TO_2_0.md): compare the line before a bad
+        // attempt with one before a good attempt.
+        if (gb->isPlaying() && !gb->fwAnalyzing)
+            log::info("[GucciBot] Playback reset: died@{} respawn@{} next input {}/{} seed {} "
+                      "completed {}->{} end animation {}->{} checkpoints {} canDie {} expectsDeath {}",
+                      deathFrame,
+                      respawnFrame,
+                      gb->replay.m_inputIndex,
+                      gb->replay.m_actionAtom.length(),
+                      gb->replay.m_startingSeedThisAttempt,
+                      wasComplete,
+                      (bool)m_hasCompletedLevel,
+                      wasEnding,
+                      (bool)m_levelEndAnimationStarted,
+                      gb->practiceFix.m_savedCheckpoints.size(),
+                      canDieBefore,
+                      expectsDeathBefore);
         Autoclicker::get()->reset();
         TrajectoryPredictionService::get().updatePreview(this);
 
