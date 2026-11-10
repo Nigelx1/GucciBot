@@ -329,6 +329,14 @@ namespace {
             CCDrawNode::visit();
         }
     };
+
+    // Whether the last completion was shielded, as it was when levelComplete
+    // ran (and the layer it ran on). The end screen comes after the completion
+    // animation, and a cheat or the Safe mode switch can change in between:
+    // its "Level Verified!" line follows what levelComplete did, not what
+    // shielded() says by then.
+    PlayLayer* g_completeLayer = nullptr;
+    bool g_completeShielded = false;
 } // namespace
 
 // GD's own test-mode flag is never left changed. GD sets it for a start position
@@ -400,7 +408,10 @@ class $modify(GB7SafeModePlayLayer, PlayLayer) {
 
     void levelComplete() {
         bool const was = m_isTestMode;
-        if (shielded())
+        bool const shield = shielded();
+        g_completeLayer = this;
+        g_completeShielded = shield;
+        if (shield)
             m_isTestMode = true; // only raised, and only for this call
         PlayLayer::levelComplete();
         m_isTestMode = was;
@@ -423,6 +434,9 @@ class $modify(GB7SafeModePlayLayer, PlayLayer) {
 // the panel.
 // While GD writes a shielded editor completion's end-screen line (above).
 static bool g_verifyLineSwap = false;
+// Whether the swap happened, for a warning in the log when it didn't (the line
+// may be set another way on a platform it hasn't been tried on).
+static bool g_verifyLineSwapped = false;
 
 class $modify(GB7SafeModeVerifyText, TextArea) {
     static void onModify(auto& self) {
@@ -430,8 +444,10 @@ class $modify(GB7SafeModeVerifyText, TextArea) {
     }
 
     void setString(gd::string text) {
-        if (g_verifyLineSwap && std::string_view(text.c_str()).find("Verified!") != std::string_view::npos)
+        if (g_verifyLineSwap && std::string_view(text.c_str()).find("Verified!") != std::string_view::npos) {
             text = "Safe mode was on: this run didn't verify the level.";
+            g_verifyLineSwapped = true;
+        }
         TextArea::setString(text);
     }
 };
@@ -449,9 +465,14 @@ class $modify(GB7SafeModeEndLevel, EndLevelLayer) {
         // level can't be uploaded). The line is swapped while GD writes it.
         auto* pl = m_playLayer;
         g_verifyLineSwap = !gb->standingDown && !botswitch::takenOut() && pl && pl->m_level &&
-                           pl->m_level->m_levelType == GJLevelType::Editor && shielded();
+                           pl->m_level->m_levelType == GJLevelType::Editor &&
+                           (pl == g_completeLayer ? g_completeShielded : shielded());
+        g_verifyLineSwapped = false;
+        bool const wantSwap = g_verifyLineSwap;
         EndLevelLayer::customSetup();
         g_verifyLineSwap = false;
+        if (wantSwap && !g_verifyLineSwapped)
+            log::warn("[SafeMode] the end screen's Level Verified line was not found to replace");
         if (gb->standingDown || botswitch::takenOut() || !m_mainLayer)
             return;
         bool const cheated = safemode::g_tainted || safemode::cheatingNow();

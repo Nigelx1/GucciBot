@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-ay (Maintain gravity hint covers player 2)"
+    "2026-11-10-az (the end screen verify line follows the completion, not when the screen is built)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
