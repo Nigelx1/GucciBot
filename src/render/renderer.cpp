@@ -459,14 +459,21 @@ namespace gucci {
             m_videoCodecCtx->time_base = {1, m_settings.m_fps};
             m_videoCodecCtx->framerate = {m_settings.m_fps, 1};
             m_videoCodecCtx->max_b_frames = 0;
-            // An RGB stream (rgb0, rgb24: Showcase's libx264rgb) is tagged as
+            // An RGB stream (Showcase's libx264rgb with rgb24) is tagged as
             // RGB, full range. Tagged BT.709 limited-range YUV like the others,
             // libx264rgb wrote that matrix into the stream, and players turned
             // its RGB planes into colors as if they were YUV: a teal background
             // and a green ground (test pass 2026-11-10, part 2 bug 2). The
             // primaries and transfer stay BT.709, as for YUV.
-            bool const rgbStream =
+            // What decides it is the stream, not the input: a GPU encoder
+            // (NVENC, AMF, QSV, Media Foundation) that takes rgb0 converts it
+            // to YUV itself, so its stream keeps the YUV tags. Only a software
+            // encoder that takes RGB input writes RGB.
+            bool const rgbInput =
                 m_settings.m_pixFmt == AV_PIX_FMT_RGB0 || m_settings.m_pixFmt == AV_PIX_FMT_RGB24;
+            bool const gpuEncoder =
+                (m_videoCodec->capabilities & (AV_CODEC_CAP_HARDWARE | AV_CODEC_CAP_HYBRID)) != 0;
+            bool const rgbStream = rgbInput && !gpuEncoder;
             m_videoCodecCtx->color_primaries = AVCOL_PRI_BT709;
             m_videoCodecCtx->colorspace = rgbStream ? AVCOL_SPC_RGB : AVCOL_SPC_BT709;
             m_videoCodecCtx->color_trc = AVCOL_TRC_BT709;

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-v (Calculate: guccibot_fw.log flushes every line again, appends instead of wiping when another game holds it, and keeps file-only warnings past the cap)"
+    "2026-11-10-w (Render: only a software RGB encoder such as libx264rgb is tagged RGB full range, a GPU encoder given rgb0 keeps the YUV tags)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
