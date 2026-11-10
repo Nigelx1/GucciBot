@@ -1346,7 +1346,7 @@ namespace gucci::ui::pages {
                      "to the measured player's next click; in a 1-player level a click a macro stores for both "
                      "players counts once. Their windows can come out wider or narrower: wider where tests skipped "
                      "or moved the other player's clicks, narrower where a test now runs further and meets a later "
-                     "death. Off by default while it's compared with the old count",
+                     "death. On by default; off is the old count",
                      &FW::twoPlayerFixes);
 
                 kit::Section("Debug");

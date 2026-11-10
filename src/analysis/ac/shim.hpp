@@ -207,8 +207,10 @@ struct FrameWindowSettings {
     // GucciBot (2026-10-23): 2-player fixes, from anticroom's antics-counter
     // beta.4 and beta.6 changelogs (no source): how Calculate counts 2-player
     // macros and dual levels (FrameWindowAnalyzer::countsByPlayer and what
-    // reads it). Off: today's count, while the two are compared.
-    bool twoPlayerFixes = false;
+    // reads it). On by default since 2026-11-10 (Nigel): with them off,
+    // player 2 got a wrong early edge in a test. A saved false still loads
+    // as false (fwstore::load).
+    bool twoPlayerFixes = true;
     bool testShipReleases = true;
     bool testAllReleases = false;
     bool orbAwareReleaseSkip = true;

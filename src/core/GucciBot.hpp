@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-br (Calculate: Set every window to x frames in the Every input table, by hand, with a confirm before it replaces typed windows)"
+    "2026-11-10-bs (Calculate: 2-player fixes are on by default, a saved off stays off)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
