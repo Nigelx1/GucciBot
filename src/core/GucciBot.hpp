@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-bq (Calculate: the Mute while it runs switch is gone, Calculate still mutes the game while it runs)"
+    "2026-11-10-br (Calculate: Set every window to x frames in the Every input table, by hand, with a confirm before it replaces typed windows)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

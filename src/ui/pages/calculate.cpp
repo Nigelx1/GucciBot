@@ -906,6 +906,39 @@ namespace gucci::ui::pages {
         std::string g_pageToDeleteMacro;
         bool g_askDeletePage = false;
 
+        // GucciBot (2026-11-10, Nigel's idea; it also covers antics-counter's
+        // Place Markers): one window, typed once, for every input in the
+        // Every input table, each marked by hand. With the frames and macro
+        // it was pressed for, kept until the confirm answers.
+        constexpr const char* kSetAllId = "##fw-set-all";
+        int g_setAllFrames = 1;
+        int g_setAllPending = 0;
+        size_t g_setAllReplacing = 0;
+        std::string g_setAllMacro;
+        bool g_askSetAll = false;
+
+        // Every row of the table gets `frames`, by hand (labelWith, as typing
+        // it into each row would). Last frame first: a new window goes in
+        // after every window at or before its frame, so the marks of the rows
+        // still to do (at or before it) stay where allInputs found them.
+        // Returns how many rows it set.
+        size_t setEveryWindow(FrameWindowAnalyzer& fw, int frames, bool releases) {
+            if (fw.running() || frames < 1)
+                return 0;
+            auto rows = fw.allInputs(releases);
+            std::stable_sort(rows.begin(), rows.end(),
+                             [](FrameWindowAnalyzer::PlayheadInput const& a,
+                                FrameWindowAnalyzer::PlayheadInput const& b) { return a.frame > b.frame; });
+            for (auto const& in : rows)
+                labelWith(fw, in, static_cast<float>(frames));
+            if (!rows.empty()) {
+                // Labels are results: kept with the macro, and L* moves.
+                GucciEngine::get()->saveAcFrameWindowResults();
+                lstar::Solver::get()->markDirty();
+            }
+            return rows.size();
+        }
+
         // Manual Frame Windows (the old menu's table, Juice's idea), rebuilt
         // 2026-10-21: every input of the macro, its window -- Calculate's, or
         // one typed in -- and Calculate's suggestion where a suspicious click
@@ -935,6 +968,39 @@ namespace gucci::ui::pages {
             }
             kit::Hint("Type a window into any row, then Enter (0 clears it). A window you type stays through the next "
                       "Calculate run; Clear goes back to Calculate's own count.");
+
+            // Set every window to x (2026-11-10).
+            {
+                ImGui::BeginDisabled(fw.running());
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextUnformatted("Set every window to");
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(110.f);
+                if (ImGui::InputInt("##fw-set-all-frames", &g_setAllFrames, 1, 10))
+                    g_setAllFrames = std::clamp(g_setAllFrames, 1, 999);
+                ImGui::SameLine();
+                ImGui::TextUnformatted("frames");
+                ImGui::SameLine();
+                if (kit::Button("Set")) {
+                    // The by-hand windows it would replace, one a window.
+                    std::set<int> manual;
+                    for (auto const& in : rows)
+                        if (in.mark >= 0 && in.mark < static_cast<int>(results.size()) &&
+                            results[static_cast<size_t>(in.mark)].manual)
+                            manual.insert(in.mark);
+                    if (manual.empty()) {
+                        setEveryWindow(fw, g_setAllFrames, s.labelReleases);
+                    } else {
+                        g_setAllPending = g_setAllFrames;
+                        g_setAllReplacing = manual.size();
+                        g_setAllMacro = gb->replayName;
+                        g_askSetAll = true;
+                    }
+                }
+                ImGui::EndDisabled();
+                kit::Hint("Gives every input in this table that window, by hand. 1 gives placeholder 1-frame windows "
+                          "to edit one by one. Clear on a row puts Calculate's own count back.");
+            }
 
             int waiting = 0;
             for (auto const& in : rows)
@@ -1345,6 +1411,23 @@ namespace gucci::ui::pages {
                     lstar::Solver::get()->markDirty();
                 }
                 g_pageToDelete.clear();
+            }
+
+            if (g_askSetAll) {
+                kit::OpenConfirm(kSetAllId);
+                g_askSetAll = false;
+            }
+            {
+                std::string const setAllTitle = fmt::format("Set every window to {} frame{}?", g_setAllPending,
+                                                            g_setAllPending == 1 ? "" : "s");
+                std::string const setAllText = fmt::format(
+                    "{} window{} you typed by hand {} replaced too. Clear on a row still puts Calculate's own count "
+                    "back.",
+                    g_setAllReplacing, g_setAllReplacing == 1 ? "" : "s", g_setAllReplacing == 1 ? "is" : "are");
+                // Not if another macro was loaded while the confirm was up.
+                if (kit::Confirm(kSetAllId, setAllTitle.c_str(), setAllText.c_str(), "Set") == 1 &&
+                    GucciEngine::get()->replayName == g_setAllMacro)
+                    setEveryWindow(analyzer(), g_setAllPending, S().labelReleases);
             }
 
             if (g_askReset) {
