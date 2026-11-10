@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-aw (a render stops when its level goes away, and cannot start on a level that is closing)"
+    "2026-11-10-ax (Mirror Inputs mirrors both players from the same holds under Maintain gravity)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -591,9 +591,17 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         bool const twoPlayer = m_levelSettings->m_twoPlayerMode;
         if (gb->replay.hasFlippedControls() && twoPlayer && !m_isPlatformer)
             std::swap(p1J, p2J);
+        // Each player mirrors what the other was holding before the mirror,
+        // both from the same pair. Before (2026-11-10), player 2's line read
+        // player 1's already-mirrored hold: with Mirror inverted, player 2
+        // never got player 1's mirror (p2 | !(p1 | !p2) is p2), and with
+        // neither key down only player 1 was held. A 1-player level comes out
+        // the same either way (both are folded into player 1 below).
         if (gb->replay.m_mirrorInputs) {
-            p1J |= p2J ^ gb->replay.m_mirrorInverted;
-            p2J |= p1J ^ gb->replay.m_mirrorInverted;
+            bool const inv = gb->replay.m_mirrorInverted;
+            bool const held1 = p1J, held2 = p2J;
+            p1J = held1 | (held2 ^ inv);
+            p2J = held2 | (held1 ^ inv);
         }
         if (!twoPlayer)
             p1J |= p2J;
