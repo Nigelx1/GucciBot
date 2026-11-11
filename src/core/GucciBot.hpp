@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-bw (2-player fixes now load on for saves from before -bs too, under a new saved key)"
+    "2026-11-10-bx (a window set on an input away from the player takes its spot from the trail or when its marker draws, so Set every window markers no longer pile up)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

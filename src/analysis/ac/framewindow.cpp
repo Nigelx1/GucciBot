@@ -8631,15 +8631,30 @@ void FrameWindowAnalyzer::applyLabelTo(PlayheadInput const& in, int window,
         // capture takes it (movesPlayer2).
         bool const moved2 = movesPlayer2(pl, in.player2);
         auto* player = pl ? (moved2 ? pl->m_player2 : pl->m_player1) : nullptr;
-        if (player) {
+        // GucciBot (2026-11-10): the player's spot only when the player is at
+        // the input (GucciBot keys inputs one frame ahead). Set every window
+        // labels inputs far from the player, and every one of them took the
+        // player's spot, so their markers piled up there. With no spot the
+        // mark stays at (0,0), which spawnMarker reads as "find it when it
+        // draws" (the trail or the played path, issue #26).
+        uint32_t const now = Bot::get()->updater().getFrame();
+        if (player && (in.frame == now || in.frame == now + 1)) {
             mk.position = player->getPosition();
             mk.gamemode = gamemodeOf(player);
         }
 
-        for (auto const& t : Bot::get()->trailBuffer().stream(moved2 ? 1 : 0)) {
-            if (t.frame != in.frame) continue;
-            mk.position = cocos2d::CCPoint((t.rect.minX + t.rect.maxX) * 0.5f,
-                                           (t.rect.minY + t.rect.maxY) * 0.5f);
+        // The trail covers this attempt only, from firstFrame to lastFrame:
+        // past those it can't hold the input, and Set every window would
+        // scan it once per input. Newest first, as the old loop's last match.
+        auto const& trail = Bot::get()->trailBuffer();
+        auto const& stream = trail.stream(moved2 ? 1 : 0);
+        if (!stream.empty() && in.frame >= trail.firstFrame() && in.frame <= trail.lastFrame()) {
+            for (auto t = stream.rbegin(); t != stream.rend(); ++t) {
+                if (t->frame != in.frame) continue;
+                mk.position = cocos2d::CCPoint((t->rect.minX + t->rect.maxX) * 0.5f,
+                                               (t->rect.minY + t->rect.maxY) * 0.5f);
+                break;
+            }
         }
 
         if (pl && pl->m_levelLength > 0.f)
