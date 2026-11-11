@@ -4277,6 +4277,14 @@ bool FrameWindowAnalyzer::advanceEntryPass(FrameWindowMark const& mk) {
         // GucciBot (2026-10-23): a wide click (Max Window) isn't a tight
         // one, whatever the threshold.
         if (mk.wide) return false;
+        // GucciBot (2026-11-10): nor a steered one (Ship Steering). Entry
+        // legs count plainly, so its "Can be from X to Y" would stand beside
+        // a steered window it doesn't contain.
+        if (mk.steered) {
+            FWLOG("[fw][entry] click {}: steered, no entry sweep (its entries would count without steering)",
+                  m_index + 1);
+            return false;
+        }
         if (window <= 0) return false;
         if (window > std::max(0, m_tightThreshold->inner())) return false;
 

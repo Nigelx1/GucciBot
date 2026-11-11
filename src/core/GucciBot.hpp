@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-cj (Max Window goes by the plain count, so Ship Steering never marks an input wide)"
+    "2026-11-10-ck (a steered ship input gets no entry sweep, so its window and its Can be from range never disagree)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
