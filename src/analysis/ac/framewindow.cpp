@@ -3746,6 +3746,9 @@ bool FrameWindowAnalyzer::startSubframeProbe() {
         m_steeredMark = this->buildMark();
         m_steeredMark.steered = true;
         m_steeredMark.steerSaved = m_steerSaves;
+        m_steeredMark.havePlain = true;
+        m_steeredMark.plainLow = this->plainLow();
+        m_steeredMark.plainHigh = this->plainHigh();
         m_haveSteeredMark = true;
     }
     m_coarseWindow = this->plainValid();
@@ -4110,6 +4113,9 @@ void FrameWindowAnalyzer::finishClick() {
         if (m_fine <= 1) {
             mk.steered = true;
             mk.steerSaved = m_steerSaves;
+            mk.havePlain = true;
+            mk.plainLow = this->plainLow();
+            mk.plainHigh = this->plainHigh();
         } else if (m_haveSteeredMark) {
             float const fine = mk.subframe > 0.f ? mk.subframe : static_cast<float>(mk.window);
             if (static_cast<float>(m_steeredMark.window) > fine) {
@@ -5159,8 +5165,10 @@ bool FrameWindowAnalyzer::beginDependentPass(std::string message) {
         pair.markB = rb;
         pair.resA = ma.cbf ? m_depRes : 1;
         pair.resB = mb.cbf ? m_depRes : 1;
-        pair.aLo = static_cast<double>(ma.low) / static_cast<double>(pair.resA);
-        pair.aHi = static_cast<double>(ma.high) / static_cast<double>(pair.resA);
+        // GucciBot (2026-11-10): a steered input before it moves across its
+        // plain band; this pass never steers.
+        pair.aLo = static_cast<double>(ma.havePlain ? ma.plainLow : ma.low) / static_cast<double>(pair.resA);
+        pair.aHi = static_cast<double>(ma.havePlain ? ma.plainHigh : ma.high) / static_cast<double>(pair.resA);
         if (pair.aHi <= pair.aLo) continue;
         pair.strictLo = mb.low;
         pair.strictHi = mb.high;
@@ -6366,8 +6374,11 @@ bool FrameWindowAnalyzer::beginSuggestPass(std::string message) {
                 for (int k = 0; k < DEP_POINTS; k++)
                     click.alignments.push_back(lo + (hi - lo) * k / (DEP_POINTS - 1));
         } else {
-            int64_t const lo = std::max<int64_t>(-z, ma.low);
-            int64_t const hi = std::min<int64_t>(z, ma.high);
+            // GucciBot (2026-11-10): a steered input before it moves across
+            // its plain band (Suggest legs never steer), so steering changes
+            // no other click's suggestion.
+            int64_t const lo = std::max<int64_t>(-z, ma.havePlain ? ma.plainLow : ma.low);
+            int64_t const hi = std::min<int64_t>(z, ma.havePlain ? ma.plainHigh : ma.high);
             for (int64_t s = lo; s <= hi; s++)
                 click.alignments.push_back(static_cast<double>(s));
         }

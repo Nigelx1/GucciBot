@@ -46,6 +46,13 @@ struct FrameWindowMark {
     // how many did. Written to the results only when set.
     bool steered = false;
     int steerSaved = 0;
+    // The plain band (the count without steering) of a steered mark, for the
+    // Suggest and dependent passes, which never steer: they move the input
+    // before a click across it, not across the steered band. In memory only
+    // (those passes run on this run's marks).
+    bool havePlain = false;
+    int64_t plainLow = 0;
+    int64_t plainHigh = 0;
     bool setupGroup = false;
     char gamemode = 'C';
     int setupLow = 0;

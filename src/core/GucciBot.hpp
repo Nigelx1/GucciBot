@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-ch (Ship Steering shows itself: Calculate, steered on the input row of the Every input table, with a tooltip, and a line in Copy info)"
+    "2026-11-10-ci (Suggest and the dependent pass move a steered ship input across its plain band, so Ship Steering changes no other click's suggestion)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
