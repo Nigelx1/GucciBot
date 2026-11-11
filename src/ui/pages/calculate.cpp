@@ -322,9 +322,11 @@ namespace gucci::ui::pages {
             }
             // GucciBot (2026-11-10): Ship Steering, from Antic's Counter beta.16's behavior.
             if (feature("Ship steering",
-                        "A ship click or release that kills you still counts if you could fly back onto the "
-                        "macro's path with taps a person could make, the way you'd save it when playing. Closer to "
-                        "how ship is really played, and a little slower. Off counts ship like every other mode",
+                        "A ship click or release that kills you still counts if taps a person could make, starting "
+                        "after your reaction time, keep you alive as far as the normal test of that timing goes, the "
+                        "way you'd save it when playing. It doesn't check that you get back onto the macro's path "
+                        "after that. Late timings past the reaction time count the normal way. Closer to how ship is "
+                        "really played, and a little slower. Off counts ship like every other mode",
                         &FW::shipSteering)) {
                 slider("Reaction time",
                        "How long after a mistimed input before steering can start to correct it. Lower is more "
@@ -1137,7 +1139,8 @@ namespace gucci::ui::pages {
                         // GucciBot (2026-11-10): Ship Steering.
                         if (mk && !mk->manual && mk->steered && ImGui::IsItemHovered())
                             ImGui::SetTooltip("Ship steering: %d shift%s of this ship input counted because taps "
-                                              "could fly it back onto the macro's path",
+                                              "kept it alive as far as the normal test goes (not always back "
+                                              "on the macro's path)",
                                               mk->steerSaved, mk->steerSaved == 1 ? "" : "s");
 
                         ImGui::TableNextColumn();

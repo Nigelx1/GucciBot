@@ -7600,8 +7600,8 @@ std::string FrameWindowAnalyzer::describe() const {
     for (auto const& mk : m_results)
         if (mk.steered && !mk.manual) steered++;
     if (steered > 0)
-        out += fmt::format("\nShip steering: {} ship input{} counted wider because taps could fly them back onto "
-                           "the macro's path\n",
+        out += fmt::format("\nShip steering: {} ship input{} counted wider because taps kept them alive as far "
+                           "as the normal test goes\n",
                            steered, steered == 1 ? "" : "s");
 
     if (!out.empty() && out.back() == '\n') out.pop_back();

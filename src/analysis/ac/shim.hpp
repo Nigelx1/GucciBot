@@ -214,9 +214,11 @@ struct FrameWindowSettings {
     bool twoPlayerFixes = true;
     // GucciBot (2026-11-10): Ship Steering, built from Antic's Counter
     // 1.0.0-beta.16's behavior (anticroom's; no source), on by default as
-    // there: a ship click or release that kills you still counts if you could
-    // fly back onto the macro's path with taps a person could make. Reaction
-    // time: how long after the mistimed input before steering may correct it.
+    // there: a ship click or release that kills you still counts if taps a
+    // person could make keep you alive to the end of the plain test's leg (it
+    // doesn't check a return to the macro's path). Reaction time: how long
+    // after the mistimed input before steering may correct it; late shifts at
+    // or past it count plainly.
     bool shipSteering = true;
     int steerReactionMs = 100;
     bool testShipReleases = true;

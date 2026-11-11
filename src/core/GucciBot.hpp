@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-cm (Ship Steering stays off in a macro with paired dual clicks, where the other flag's clicks would go missing)"
+    "2026-11-10-cn (Ship Steering says what it checks: taps keep you alive as far as the normal test goes, not always back onto the macro path)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
