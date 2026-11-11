@@ -1,5 +1,5 @@
 @echo off
-REM Offline tests: the GBR6 sub-tick and TPS sections, Check Macro, Macro Tools, the random teleport's pick, other bots' formats, the menu art's PNG reader, Hitborders' shapes, the AI pilot's networks and the Frame Editor's rules.
+REM Offline tests: the GBR6 sub-tick and TPS sections, Check Macro, Macro Tools, the random teleport's pick, other bots' formats, the menu art's PNG reader, Hitborders' shapes, the AI pilot's networks, Ship Steering's controller and the Frame Editor's rules.
 
 setlocal
 set VCVARS="C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
@@ -70,6 +70,13 @@ cl /nologo /std:c++20 /EHsc /O2 /MD /I src ^
    tools\run_ai_net_tests.cpp src\ai\net.cpp src\ai\obs_core.cpp /Fe:build\run_ai_net_tests.exe /Fo:build\ || exit /b 1
 
 build\run_ai_net_tests.exe || exit /b 1
+
+REM Ship Steering's controller (src/analysis/ac/steer): the motion model's fit, handback from off the
+REM line, the dwell between taps, the same taps twice, and no model from too few samples.
+cl /nologo /std:c++20 /EHsc /O2 /MD /I src ^
+   tools\run_steer_tests.cpp src\analysis\ac\steer.cpp /Fe:build\run_steer_tests.exe /Fo:build\ || exit /b 1
+
+build\run_steer_tests.exe || exit /b 1
 
 REM Frame Editor rules (src/tools/edit_core, ported from Absense's macro editor).
 cl /nologo /std:c++20 /EHsc /O2 /MD /I src ^

@@ -468,6 +468,30 @@ static std::optional<MarkerSpot> markerSpot(uint32_t frame, bool player2) {
     return std::nullopt;
 }
 
+// GucciBot (2026-11-10): Ship Steering's recorded line (steer.hpp): each
+// player's position, y-velocity, button-1 hold and mode on this frame of the
+// capture pass. The capture steps one tick per update, so every frame is here.
+void FrameWindowAnalyzer::recordLine(PlayLayer* pl, uint32_t frame) {
+    for (int i = 0; i < 2; i++) {
+        auto* p = i ? pl->m_player2 : pl->m_player1;
+        auto& line = m_line[i];
+        if (!p) continue;
+        if (line.size() <= frame) line.resize(frame + 1);
+        auto const held = p->m_holdingButtons.find(1);
+        bool const hold = held != p->m_holdingButtons.end() && held->second;
+        bool const ground = p->m_isOnGround;  // the ceiling too, upside down (GD flips its frame)
+        uint8_t flags = gucci::steer::kValid;
+        if (hold) flags |= gucci::steer::kHold;
+        if (p->m_isShip) flags |= gucci::steer::kShip;
+        if (p->m_isUpsideDown) flags |= gucci::steer::kUpside;
+        if (p->m_vehicleSize != 1.f) flags |= gucci::steer::kMini;
+        if (ground) flags |= gucci::steer::kGround;
+        if (!p->m_isDead && !pl->m_playerDied) flags |= gucci::steer::kAlive;
+        line[frame] = {p->getPositionX(), p->getPositionY(),
+                       static_cast<float>(p->m_yVelocity), flags};
+    }
+}
+
 FrameWindowAnalyzer::StepResult FrameWindowAnalyzer::stepToward(PlayLayer* pl,
                                                                uint32_t until) {
     auto& updater = Bot::get()->updater();
@@ -555,6 +579,7 @@ FrameWindowAnalyzer::StepResult FrameWindowAnalyzer::stepToward(PlayLayer* pl,
                     m_capturePath.resize(cf + 1,
                                          cocos2d::CCPoint(-1e9f, -1e9f));
                 m_capturePath[cf] = pl->m_player1->getPosition();
+                this->recordLine(pl, cf);
                 this->checkCaptureAgainstTrail(pl, cf);
             } else if (m_phase == Phase::Nominal && m_shift == 0 &&
                        cf < m_capturePath.size() &&
@@ -1381,6 +1406,8 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
     m_restoreFailed = false;
     m_haveLastTickCall = false;
     m_capturePath.clear();
+    m_line[0].clear();
+    m_line[1].clear();
     m_captureNoclip = false;
     m_camHasTarget = false;
     m_captureDeathFrame = UINT32_MAX;

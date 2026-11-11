@@ -16,6 +16,7 @@
 #include "lstar.hpp"
 #include "shim.hpp"
 #include "sound.hpp"
+#include "steer.hpp"
 
 class PlayLayer;
 class CheckpointObject;
@@ -215,6 +216,11 @@ class FrameWindowAnalyzer {
     bool m_noclip = false;
     bool m_noclipNextAdvance = false;
     std::vector<cocos2d::CCPoint> m_capturePath;
+    // GucciBot (2026-11-10): Ship Steering's recorded line, per frame of the
+    // capture pass, for player 1 and player 2 (steer.hpp). Filled where
+    // m_capturePath is; nothing reads it with steering off.
+    std::vector<gucci::steer::LinePoint> m_line[2];
+    void recordLine(PlayLayer* pl, uint32_t frame);
     bool m_pathDiverged = false;
     int m_resyncFailures = 0;
     bool m_resyncGaveUp = false;

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-cb (an editor level kept from verifying by a cheat says a cheat or the bot was on, as recording counts)"
+    "2026-11-10-cc (Ship Steering, part 1: Calculate records the ship line in its capture, and the steering controller with its offline test; nothing uses them yet)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
