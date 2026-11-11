@@ -3174,7 +3174,7 @@ bool FrameWindowAnalyzer::beginSteerLeg(bool reordered) {
     uint32_t const target = m_steerRetimeTarget;
     auto const skip = [&](char const* why, long& counter, std::string const& more = {}) {
         counter++;
-        FWLOG("[fw][steer][{}] click {} shift={:+d}{}", why, m_index + 1, m_shift, more);
+        FWLOG("[fw][steer][{}] click {} rec={} shift={:+d}{}", why, m_index + 1, m_recorded, m_shift, more);
         return false;
     };
     if (!pl || pl->m_isPlatformer) return skip("platformer", m_steerTot.skipped);
@@ -3266,9 +3266,9 @@ bool FrameWindowAnalyzer::beginSteerLeg(bool reordered) {
     m_steer.model = std::move(model);
     m_steerTot.armed++;
     if (reordered) m_steerTot.reordered++;
-    FWLOG("[fw][steer][arm] click {} shift={:+d} {} react={} target={} retimeDied={} p{} tps={:.0f} lift={:.3f} "
+    FWLOG("[fw][steer][arm] click {} rec={} shift={:+d} {} react={} target={} retimeDied={} p{} tps={:.0f} lift={:.3f} "
           "v={:.2f}..{:.2f} samples={}/{} fit={}..{}{}",
-          m_index + 1, m_shift, s.release ? "release" : "press", react, target, m_steerRetimeDeath, lineIdx + 1,
+          m_index + 1, m_recorded, m_shift, s.release ? "release" : "press", react, target, m_steerRetimeDeath, lineIdx + 1,
           tps, m_steer.model.lift, m_steer.model.vMin, m_steer.model.vMax, m_steer.model.samplesHold,
           m_steer.model.samplesFree, fitLo, fitHi, reordered ? " reordered" : "");
     this->beginShift(m_shift, ShiftMode::Steer);

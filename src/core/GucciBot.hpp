@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-ce (Ship Steering fits its ship model again: GD keeps its on-ground flag set through ship flight, so riding the floor now means on ground with no y-velocity)"
+    "2026-11-10-cf (Ship Steering tuning build: the switch margin at 0.25 units; steer log lines carry the input frame)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
