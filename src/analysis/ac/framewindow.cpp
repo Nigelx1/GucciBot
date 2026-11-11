@@ -3195,6 +3195,12 @@ bool FrameWindowAnalyzer::beginSteerLeg(bool reordered) {
             return skip("tps", m_steerTot.skipped, fmt::format(" tps change at {}", f));
     }
     int const reactT = gucci::steer::reactTicks(m_steerReactMs, tps);
+    // A late shift at or past the reaction time never plays the input itself:
+    // steering would start before it lands and hold it back, so every such
+    // shift is one leg (fly on without the input) and says nothing about this
+    // input's timing. Those shifts count only the plain way.
+    if (m_shift >= reactT)
+        return skip("late", m_steerTot.skipped, fmt::format(" react={} ticks", reactT));
     int const span = gucci::steer::ticksAt(gucci::steer::kFitSpan240, tps);
     int64_t fitLo = std::max<int64_t>(0, recorded - span);
     int64_t fitHi = recorded + span;

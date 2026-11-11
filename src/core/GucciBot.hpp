@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-ck (a steered ship input gets no entry sweep, so its window and its Can be from range never disagree)"
+    "2026-11-10-cl (Ship Steering leaves late shifts at or past the reaction time to the plain count: steering would hold back the input itself)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
