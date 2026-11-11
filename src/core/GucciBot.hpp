@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-ca (Maintain gravity follows the start and end of a dual even with the bot switched off, so a new dual takes a fresh player 2 upright)"
+    "2026-11-10-cb (an editor level kept from verifying by a cheat says a cheat or the bot was on, as recording counts)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

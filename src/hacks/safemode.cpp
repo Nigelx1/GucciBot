@@ -485,7 +485,9 @@ class $modify(GB7SafeModeEndLevel, EndLevelLayer) {
         // ran with m_isTestMode raised, which skips GD's verify write (and the
         // level can't be uploaded). The line is swapped while GD writes it.
         // A cheat with safe mode off keeps an editor level from verifying too
-        // (2026-11-10, levelComplete), and says so in its own words.
+        // (2026-11-10, levelComplete), and says so in its own words. "the bot"
+        // because recording counts (Nigel's 2026-11-02 cheat policy), so a
+        // run recorded to keep a macro of it doesn't verify either.
         auto* pl = m_playLayer;
         bool const editor = !gb->standingDown && !botswitch::takenOut() && pl && pl->m_level &&
                             pl->m_level->m_levelType == GJLevelType::Editor;
@@ -494,7 +496,7 @@ class $modify(GB7SafeModeEndLevel, EndLevelLayer) {
             editor && !wasShielded && (pl == g_completeLayer ? g_completeCheatBlocked : cheatedEditorRun(pl));
         g_verifyLineSwap = wasShielded || wasCheat;
         g_verifyLineText = wasShielded ? "Safe mode was on: this run didn't verify the level."
-                                       : "A cheat was on: this run didn't verify the level.";
+                                       : "A cheat or the bot was on: the level wasn't verified.";
         g_verifyLineSwapped = false;
         bool const wantSwap = g_verifyLineSwap;
         EndLevelLayer::customSetup();
