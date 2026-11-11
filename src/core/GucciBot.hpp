@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-by (Set every window asks first whenever it would replace any window, Calculate measured or typed, and applies after the table draws)"
+    "2026-11-10-bz (a one-line level name on the intro card draws and shrinks exactly as before the two-line wrap)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

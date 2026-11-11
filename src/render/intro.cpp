@@ -456,8 +456,11 @@ namespace gucci {
         // (NAME_LINE_STEP), and only shrinks if a line still doesn't fit.
         std::vector<CCNode*> nameLines;
         {
-            std::string const name = trimmed(sanitize(fill(levelName, subs)));
-            if (auto* one = add(name, LEFT_X, Y_NAME, LEFT_MAIN_H, 0.f, white, 255)) {
+            // One line draws the name exactly as before, spaces and all; the
+            // break works on it trimmed.
+            std::string const whole = sanitize(fill(levelName, subs));
+            std::string const name = trimmed(whole);
+            if (auto* one = add(whole, LEFT_X, Y_NAME, LEFT_MAIN_H, 0.f, white, 255)) {
                 CCRect const b = one->boundingBox();
                 size_t const cut = nameBreak(name);
                 std::string const first = cut == std::string::npos ? "" : trimmed(name.substr(0, cut));
@@ -481,15 +484,19 @@ namespace gucci {
             if (width > 0.f && l.getMaxX() > limit)
                 label->setScale(label->getScale() * std::max(limit - l.getMinX(), width * 0.25f) / width);
         }
-        // The name never runs into the legend (no quarter-width floor), and
-        // its two lines share one size: the smaller, which fits both.
+        // Two lines never run into the legend (no floor: each is about half
+        // the name already), and share one size: the smaller, which fits
+        // both. One line (a name with no space) keeps the quarter-width
+        // floor it always had, so a very long word isn't drawn tiny.
+        bool const twoLines = nameLines.size() > 1;
         float nameScale = 0.f;
         for (auto* label : nameLines) {
             CCRect const l = label->boundingBox();
             float const limit = limitFor(l);
             float const width = l.getMaxX() - l.getMinX();
             if (width > 0.f && l.getMaxX() > limit)
-                label->setScale(label->getScale() * std::max(limit - l.getMinX(), 1.f) / width);
+                label->setScale(label->getScale() *
+                                std::max(limit - l.getMinX(), twoLines ? 1.f : width * 0.25f) / width);
             nameScale = nameScale == 0.f ? label->getScale() : std::min(nameScale, label->getScale());
         }
         for (auto* label : nameLines)
