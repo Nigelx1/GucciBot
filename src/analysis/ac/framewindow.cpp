@@ -7562,6 +7562,15 @@ std::string FrameWindowAnalyzer::describe() const {
     if (spreadOver >= 0.005)
         out += fmt::format("{}+: {:.2f}\n", top, spreadOver);
 
+    // GucciBot (2026-11-10): Ship Steering, only when it widened something.
+    int steered = 0;
+    for (auto const& mk : m_results)
+        if (mk.steered && !mk.manual) steered++;
+    if (steered > 0)
+        out += fmt::format("\nShip steering: {} ship input{} counted wider because taps could fly them back onto "
+                           "the macro's path\n",
+                           steered, steered == 1 ? "" : "s");
+
     if (!out.empty() && out.back() == '\n') out.pop_back();
     return out;
 }

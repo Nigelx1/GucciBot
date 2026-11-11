@@ -1132,7 +1132,13 @@ namespace gucci::ui::pages {
                         ImGui::TextDisabled("%s", !mk                ? "-"
                                                   : mk->manual       ? "By hand"
                                                   : mk->desynced     ? "Desynced"
+                                                  : mk->steered      ? "Calculate, steered"
                                                                      : "Calculate");
+                        // GucciBot (2026-11-10): Ship Steering.
+                        if (mk && !mk->manual && mk->steered && ImGui::IsItemHovered())
+                            ImGui::SetTooltip("Ship steering: %d shift%s of this ship input counted because taps "
+                                              "could fly it back onto the macro's path",
+                                              mk->steerSaved, mk->steerSaved == 1 ? "" : "s");
 
                         ImGui::TableNextColumn();
                         if (mk && suggested(in)) {
