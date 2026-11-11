@@ -69,7 +69,9 @@ namespace gucci::fwstore {
             {"fwac_adaptive_budget", &FW::adaptiveBudget},
             {"fwac_full_range_sweep", &FW::fullRangeSweep},
             {"fwac_check_past_next", &FW::checkPastNextInput},
-            {"fwac_two_player_fixes", &FW::twoPlayerFixes},
+            // A new key (2026-11-10): saves from before -bs held false, the old
+            // default, and a saved value loads over the default.
+            {"fwac_two_player_fixes2", &FW::twoPlayerFixes},
             {"fwac_test_ship_releases", &FW::testShipReleases},
             {"fwac_test_all_releases", &FW::testAllReleases},
             {"fwac_orb_aware_skip", &FW::orbAwareReleaseSkip},

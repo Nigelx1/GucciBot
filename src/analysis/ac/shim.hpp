@@ -208,8 +208,9 @@ struct FrameWindowSettings {
     // beta.4 and beta.6 changelogs (no source): how Calculate counts 2-player
     // macros and dual levels (FrameWindowAnalyzer::countsByPlayer and what
     // reads it). On by default since 2026-11-10 (Nigel): with them off,
-    // player 2 got a wrong early edge in a test. A saved false still loads
-    // as false (fwstore::load).
+    // player 2 got a wrong early edge in a test. Saved under a new key
+    // (fwac_two_player_fixes2), so the false every older save holds doesn't
+    // load over it; a choice made after -bw stays.
     bool twoPlayerFixes = true;
     bool testShipReleases = true;
     bool testAllReleases = false;

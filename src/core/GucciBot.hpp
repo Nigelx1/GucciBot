@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-bv (an editor level completed with a cheat on at any point in the attempt never verifies, even with safe mode off)"
+    "2026-11-10-bw (2-player fixes now load on for saves from before -bs too, under a new saved key)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
