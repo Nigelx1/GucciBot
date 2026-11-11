@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-cd (Ship Steering in Calculate: a ship click or release that dies still counts if taps could fly it back onto the macro path; on by default, reaction time 100 ms)"
+    "2026-11-10-ce (Ship Steering fits its ship model again: GD keeps its on-ground flag set through ship flight, so riding the floor now means on ground with no y-velocity)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

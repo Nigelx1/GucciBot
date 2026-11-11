@@ -32,7 +32,7 @@ enum : uint8_t {
     kShip = 4,
     kUpside = 8,
     kMini = 16,
-    kGround = 32,  // on the floor, or on the ceiling upside down
+    kGround = 32,  // riding the floor or the ceiling (on ground with no y-velocity)
     kAlive = 64,
 };
 

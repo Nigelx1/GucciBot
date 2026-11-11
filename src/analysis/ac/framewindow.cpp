@@ -479,7 +479,11 @@ void FrameWindowAnalyzer::recordLine(PlayLayer* pl, uint32_t frame) {
         if (line.size() <= frame) line.resize(frame + 1);
         auto const held = p->m_holdingButtons.find(1);
         bool const hold = held != p->m_holdingButtons.end() && held->second;
-        bool const ground = p->m_isOnGround;  // the ceiling too, upside down (GD flips its frame)
+        // Riding the floor (or the ceiling upside down): GD's m_isOnGround
+        // alone stays set through a lot of ship flight on KOCMOC (the trace
+        // reads ground=1 with the y-velocity changing every tick), so only
+        // with no y-velocity.
+        bool const ground = p->m_isOnGround && p->m_yVelocity == 0.0;
         uint8_t flags = gucci::steer::kValid;
         if (hold) flags |= gucci::steer::kHold;
         if (p->m_isShip) flags |= gucci::steer::kShip;
@@ -3229,9 +3233,24 @@ bool FrameWindowAnalyzer::beginSteerLeg(bool reordered) {
     bool const upside = line[recorded].flags & gucci::steer::kUpside;
     auto model = gucci::steer::fit(line.data(), line.size(), static_cast<size_t>(fitLo),
                                    static_cast<size_t>(std::max(fitLo, fitHi)), upside);
-    if (!model.ok)
+    if (!model.ok) {
+        // What the fit window holds, for the log.
+        int valid = 0, ship = 0, alive = 0, ground = 0, flipped = 0, held = 0;
+        for (int64_t f = fitLo; f <= fitHi && f < static_cast<int64_t>(line.size()); f++) {
+            uint8_t const fl = line[f].flags;
+            valid += (fl & gucci::steer::kValid) != 0;
+            ship += (fl & gucci::steer::kShip) != 0;
+            alive += (fl & gucci::steer::kAlive) != 0;
+            ground += (fl & gucci::steer::kGround) != 0;
+            flipped += static_cast<bool>(fl & gucci::steer::kUpside) != upside;
+            held += (fl & gucci::steer::kHold) != 0;
+        }
         return skip("nomodel", m_steerTot.nomodel,
-                    fmt::format(" hold={} free={}", model.samplesHold, model.samplesFree));
+                    fmt::format(" hold={} free={} fit={}..{} valid={} ship={} alive={} ground={} otherGravity={} "
+                                "held={}",
+                                model.samplesHold, model.samplesFree, fitLo, fitHi, valid, ship, alive, ground,
+                                flipped, held));
+    }
 
     this->clearSteer();
     m_steer.armed = true;
@@ -3274,7 +3293,7 @@ void FrameWindowAnalyzer::steerDecide(PlayLayer* pl) {
     s.vy = static_cast<float>(p->m_yVelocity);
     s.hold = held != p->m_holdingButtons.end() && held->second;
     s.upside = p->m_isUpsideDown;
-    s.ground = p->m_isOnGround;
+    s.ground = p->m_isOnGround && p->m_yVelocity == 0.0;  // as recordLine reads it
 
     // The line at the same tick; if the player is off it in x, by x (then
     // never a handback: the recording's frames would be the wrong time).
