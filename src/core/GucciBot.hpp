@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-cf (Ship Steering tuning build: the switch margin at 0.25 units; steer log lines carry the input frame)"
+    "2026-11-10-cg (Ship Steering tuned and frozen: the switch margin back at 0.75 units, 0.25 gave the same windows with more taps)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

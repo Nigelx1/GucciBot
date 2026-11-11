@@ -39,8 +39,10 @@ enum : uint8_t {
 // The controller's constants, at 240 TPS (ticks are scaled to the macro's TPS).
 // Tuned once on KOCMOC's ship ranges, then frozen; not settings.
 // A press or release has to bring the next 100 ms this much closer to the line
-// (mean distance, level units) than keeping the button as it is.
-inline constexpr float kSwitchMargin = 0.25f;
+// (mean distance, level units) than keeping the button as it is. Tuned once on
+// KOCMOC's ship ranges (2026-11-10): 0.25 gave the same windows with more taps,
+// so it stays at 0.75. Frozen.
+inline constexpr float kSwitchMargin = 0.75f;
 inline constexpr float kHandbackDy = 1.5f;      // back on the line: y within this
 inline constexpr float kHandbackDvy = 0.6f;     // and y-velocity within this
 inline constexpr int kDwell240 = 10;            // the shortest hold or let-go, in ticks at 240
