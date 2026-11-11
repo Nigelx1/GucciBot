@@ -1798,6 +1798,10 @@ namespace gucci::mcp {
                             e["position"] = std::vector<double>{mk.position.x, mk.position.y};
                             if (mk.bufferAssisted)
                                 e["buffer_assisted"] = true;
+                            if (mk.steered) {
+                                e["steered"] = true;
+                                e["steer_saved"] = (int64_t)mk.steerSaved;
+                            }
                             if (mk.holes > 0)
                                 e["holes"] = (int64_t)mk.holes;
                             if (mk.splitWindow) {

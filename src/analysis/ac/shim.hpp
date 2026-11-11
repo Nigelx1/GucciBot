@@ -212,6 +212,13 @@ struct FrameWindowSettings {
     // (fwac_two_player_fixes2), so the false every older save holds doesn't
     // load over it; a choice made after -bw stays.
     bool twoPlayerFixes = true;
+    // GucciBot (2026-11-10): Ship Steering, built from Antic's Counter
+    // 1.0.0-beta.16's behavior (anticroom's; no source), on by default as
+    // there: a ship click or release that kills you still counts if you could
+    // fly back onto the macro's path with taps a person could make. Reaction
+    // time: how long after the mistimed input before steering may correct it.
+    bool shipSteering = true;
+    int steerReactionMs = 100;
     bool testShipReleases = true;
     bool testAllReleases = false;
     bool orbAwareReleaseSkip = true;

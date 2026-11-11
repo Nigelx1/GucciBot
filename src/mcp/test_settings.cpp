@@ -328,6 +328,7 @@ namespace gucci::testset {
                 v.push_back(engineBool("fw_default_look_bells", [e]() -> bool& { return e()->fwDefaultLookBells; }));
                 for (char const* fw : {"fwac_tiers", "fwac_time_cap", "fwac_max_window", "fwac_sweep_range",
                                        "fwac_algorithm", "fwac_recovery_range", "fwac_check_past_next", "fwac_suggest",
+                                       "fwac_ship_steering", "fwac_steer_reaction",
                                        "fwac_leg_trail", "fwac_fast_subtick", "fwac_dependent_search",
                                        "fwac_show_markers"}) {
                     auto const t = fwstore::getOne(fw);

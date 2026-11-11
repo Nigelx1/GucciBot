@@ -41,6 +41,11 @@ struct FrameWindowMark {
     float percent = 0.f;
     bool cbf = false;
     bool bufferAssisted = false;
+    // GucciBot (2026-11-10): Ship Steering. Some counted shift of this ship
+    // input lived only because it could be steered back onto the line, and
+    // how many did. Written to the results only when set.
+    bool steered = false;
+    int steerSaved = 0;
     bool setupGroup = false;
     char gamemode = 'C';
     int setupLow = 0;
@@ -89,7 +94,8 @@ struct FrameWindowMessage {
 
 class FrameWindowAnalyzer {
    public:
-    enum class ShiftMode { Retime, Buffer };
+    // GucciBot (2026-11-10): Steer is Ship Steering's leg (beginSteerLeg).
+    enum class ShiftMode { Retime, Buffer, Steer };
 
     static constexpr int MAX_SWEEP = 32;
     static constexpr int MIN_HORIZON = 12;
@@ -174,6 +180,18 @@ class FrameWindowAnalyzer {
     // level.
     bool twoPlayerFixes() const { return m_running && m_twoPlayer; }
 
+    // GucciBot (2026-11-10): Ship Steering, for the playback hook
+    // (processQueuedButtons). steering(): a steer leg is running and hasn't
+    // handed back. steerSwallows(k): action k is one of the measured player's
+    // inputs the steering holds back (the gate). steerTapFlag(): the player-2
+    // flag of this tick's tap, or -1. takeSteerTap(): the tap to queue, given
+    // whether one of that player's recorded inputs went through this tick
+    // (then the tap is dropped and logged; it never should).
+    bool steering() const { return m_running && m_steer.armed && !m_steer.handedBack && !m_steer.lost; }
+    bool steerSwallows(size_t actionIndex) const;
+    int steerTapFlag() const { return this->steering() && m_steer.pending >= 0 ? (m_steer.flag ? 1 : 0) : -1; }
+    std::optional<bool> takeSteerTap(bool recordedSameTick);
+
     bool returning() const { return m_trip.active; }
     uint32_t returnFrame() const { return m_trip.frame; }
     float returnProgress() const;
@@ -221,6 +239,62 @@ class FrameWindowAnalyzer {
     // m_capturePath is; nothing reads it with steering off.
     std::vector<gucci::steer::LinePoint> m_line[2];
     void recordLine(PlayLayer* pl, uint32_t frame);
+    // The steer leg's state (cleared by clearSteer).
+    struct Steer {
+        bool armed = false;
+        bool handedBack = false;  // back on the line (or forced): the recording plays the rest
+        bool lost = false;        // stopped where it can't go on: the leg is lost
+        bool reordered = false;   // run straight after Retime (the side already had a save)
+        bool noHandback = false;  // the x guard looked the line up by x
+        uint32_t react = 0;
+        uint32_t target = 0;
+        uint32_t handback = 0;
+        int line = 0;      // m_line index of the measured player
+        bool flag = false; // the sample's player-2 flag, for the taps
+        int dwell = 1;
+        int look = 1;
+        int reactTicks = 0;
+        double tps = 240.0;
+        uint32_t lastChange = 0;  // the label of the last hold change
+        int pending = -1;         // this tick's tap: 1 press, 0 release
+        uint32_t pendingAt = 0;
+        int taps = 0;
+        int ticks = 0;
+        std::string forced;
+        std::vector<char> gate;   // by action index
+        gucci::steer::Model model;
+    } m_steer;
+    bool m_steerOn = false;
+    int m_steerReactMs = 100;
+    bool m_steerTried = false;               // this shift has had its steer decision
+    uint32_t m_steerRetimeDeath = UINT32_MAX;  // the shift's Retime leg died here
+    uint32_t m_steerRetimeTarget = 0;
+    bool m_steerNominalDiverged = false;
+    // The plain band (what the sweep had when a side's first steer save
+    // came): the entry sweep and the sub-tick probe go by it, so steering
+    // never changes them.
+    bool m_steerSavedNeg = false;
+    bool m_steerSavedPos = false;
+    int64_t m_plainLow = 0;
+    int64_t m_plainHigh = 0;
+    int64_t m_steerCounted = 0;
+    int m_steerSaves = 0;
+    bool m_haveSteeredMark = false;
+    FrameWindowMark m_steeredMark;
+    std::vector<uint32_t> m_steerCapFrames;  // the frames the capture played
+    struct SteerTotals {
+        long armed = 0, shortLegs = 0, early = 0, nomodel = 0, skipped = 0;
+        long saved = 0, lost = 0, handbacks = 0, forced = 0, taps = 0;
+        long ticks = 0, reordered = 0, wider = 0;
+    } m_steerTot;
+    void clearSteer();
+    bool beginSteerLeg(bool reordered);
+    void deadShift();
+    void steerDecide(PlayLayer* pl);
+    void noteSteerSave();
+    int64_t plainLow() const { return m_steerSavedNeg ? m_plainLow : m_low; }
+    int64_t plainHigh() const { return m_steerSavedPos ? m_plainHigh : m_high; }
+    int64_t plainValid() const { return m_validCount - m_steerCounted; }
     bool m_pathDiverged = false;
     int m_resyncFailures = 0;
     bool m_resyncGaveUp = false;
@@ -470,6 +544,13 @@ class FrameWindowAnalyzer {
     SLValuePtr<bool> m_twoPlayerFixes = SLValue<bool>::create(
         "framewindow.two_player_fixes",
         &SLSettings::get()->frameWindow.twoPlayerFixes);
+    // GucciBot (2026-11-10): Ship Steering (taken once per run, startRange).
+    SLValuePtr<bool> m_shipSteering = SLValue<bool>::create(
+        "framewindow.ship_steering",
+        &SLSettings::get()->frameWindow.shipSteering);
+    SLValuePtr<int> m_steerReaction = SLValue<int>::create(
+        "framewindow.steer_reaction",
+        &SLSettings::get()->frameWindow.steerReactionMs);
     SLValuePtr<bool> m_testAllReleases = SLValue<bool>::create(
         "framewindow.all_releases",
         &SLSettings::get()->frameWindow.testAllReleases);

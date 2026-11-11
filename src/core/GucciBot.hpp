@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-cc (Ship Steering, part 1: Calculate records the ship line in its capture, and the steering controller with its offline test; nothing uses them yet)"
+    "2026-11-10-cd (Ship Steering in Calculate: a ship click or release that dies still counts if taps could fly it back onto the macro path; on by default, reaction time 100 ms)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -343,6 +343,16 @@ namespace gucci {
 
         [[nodiscard]] std::optional<gb::Action> getCurrentQueuedInput() const;
         [[nodiscard]] std::optional<gb::Action> getNextInput(uint32_t frame);
+
+        // GucciBot (2026-11-10): the index of the action getNextInput handed out
+        // last (Ship Steering's gate). Read only.
+        size_t lastHandedIndex() const {
+            if (this->dispatchByOrder())
+                return m_dispatchCursor > 0 && m_dispatchCursor <= m_dispatchOrder.size()
+                           ? m_dispatchOrder[m_dispatchCursor - 1]
+                           : static_cast<size_t>(-1);
+            return m_inputIndex > 0 ? m_inputIndex - 1 : static_cast<size_t>(-1);
+        }
 
         void advanceInputIndex() {
             if (this->dispatchByOrder()) {

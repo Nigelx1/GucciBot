@@ -72,6 +72,7 @@ namespace gucci::fwstore {
             // A new key (2026-11-10): saves from before -bs held false, the old
             // default, and a saved value loads over the default.
             {"fwac_two_player_fixes2", &FW::twoPlayerFixes},
+            {"fwac_ship_steering", &FW::shipSteering},
             {"fwac_test_ship_releases", &FW::testShipReleases},
             {"fwac_test_all_releases", &FW::testAllReleases},
             {"fwac_orb_aware_skip", &FW::orbAwareReleaseSkip},
@@ -100,6 +101,9 @@ namespace gucci::fwstore {
             {"fwac_max_frames", &FW::maxFrames, FWA::MIN_HORIZON, 2400},
             {"fwac_slack", &FW::slack, 0, 20},
             {"fwac_recovery_range", &FW::recoveryRange, 0, 20},
+            // Under 50 ms a late ship input could be steered from its own
+            // frame, and every late ship window would run to the search limit.
+            {"fwac_steer_reaction", &FW::steerReactionMs, 50, 500},
             {"fwac_cbf_readout_threshold", &FW::cbfReadoutThreshold, 0, 20},
             {"fwac_subframe_scan_percent", &FW::subframeScanPercent, 1, 100},
             {"fwac_tight_threshold", &FW::tightThreshold, 0, 20},

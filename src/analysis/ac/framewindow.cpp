@@ -555,6 +555,22 @@ FrameWindowAnalyzer::StepResult FrameWindowAnalyzer::stepToward(PlayLayer* pl,
             batch = std::max(1, batch);
         }
 
+        // GucciBot (2026-11-10): Ship Steering. Batches stop at react - 1,
+        // then one tick per update, each decided before it is stepped (its
+        // tap lands on the next frame, as a recorded input would), until the
+        // leg hands back.
+        if (m_steer.armed && m_steer.lost) return StepResult::Died;
+        if (m_steer.armed && !m_steer.handedBack) {
+            uint32_t const f = updater.getFrame();
+            if (f + 1 >= m_steer.react) {
+                batch = 1;
+                this->steerDecide(pl);
+                if (m_steer.lost) return StepResult::Died;
+            } else {
+                batch = std::max(1, std::min<int>(batch, static_cast<int>(m_steer.react - 1 - f)));
+            }
+        }
+
         auto const stepStart = Clock::now();
         updater.stepOnce();
         if (batch > 1) {
@@ -1331,6 +1347,9 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
     m_twoPlayer = m_twoPlayerFixes->inner();
     m_twoPlayerLevel = pl->m_levelSettings && pl->m_levelSettings->m_twoPlayerMode;
     m_dispatchLegArmed = false;
+    // GucciBot (2026-11-10): Ship Steering, taken once per run (floor 50 ms).
+    m_steerOn = m_shipSteering->inner();
+    m_steerReactMs = std::clamp(m_steerReaction->inner(), 50, 500);
 
     if (!this->collectSamples()) {
         // (A whole run's results were cleared already; its messages come back.)
@@ -1421,6 +1440,17 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
     m_pathDiverged = false;
     m_baseTps = Bot::get()->updater().m_tps;
     m_resultsTps = m_baseTps;
+    // GucciBot (2026-11-10): Ship Steering's run state. Its own start line,
+    // so the start line scripts read stays as it was.
+    this->clearSteer();
+    m_steerTot = {};
+    m_steerCapFrames = m_originalFrames;
+    FWLOG("[fw][start] steering={} reaction={}ms ({} ticks at {:.0f} TPS) margin={:.2f} dwell={} look={} "
+          "handback dy={:.1f} dvy={:.1f}",
+          m_steerOn ? "on" : "off", m_steerReactMs, gucci::steer::reactTicks(m_steerReactMs, m_baseTps),
+          m_baseTps, gucci::steer::kSwitchMargin, gucci::steer::ticksAt(gucci::steer::kDwell240, m_baseTps),
+          gucci::steer::ticksAt(gucci::steer::kLook240, m_baseTps), gucci::steer::kHandbackDy,
+          gucci::steer::kHandbackDvy);
     m_probeDied = false;
     m_captureHeartbeat = 0;
     m_legCounter = 0;
@@ -1776,6 +1806,18 @@ void FrameWindowAnalyzer::commitSetupGroup(SetupGroup const& sg) {
 
 void FrameWindowAnalyzer::beginClick() {
     m_desyncPending = false;
+    // GucciBot (2026-11-10): Ship Steering's per-input state.
+    m_steerSavedNeg = false;
+    m_steerSavedPos = false;
+    m_plainLow = 0;
+    m_plainHigh = 0;
+    m_steerCounted = 0;
+    m_steerSaves = 0;
+    m_haveSteeredMark = false;
+    m_steerNominalDiverged = false;
+    m_steerTried = false;
+    m_steerRetimeDeath = UINT32_MAX;
+    this->clearSteer();
     m_recorded = m_samples[m_index].frame;
 
     long const nRoom = this->negRoom(m_index);
@@ -2434,6 +2476,13 @@ void FrameWindowAnalyzer::beginShift(int64_t shift, ShiftMode mode) {
     cbf::Engine::get()->reset();
     m_releaseFrame = -1;
     this->restoreOffsets();
+    // GucciBot (2026-11-10): Ship Steering. Only a steer leg keeps the steer
+    // state beginSteerLeg set up; a Retime leg starts a new shift.
+    if (mode != ShiftMode::Steer) this->clearSteer();
+    if (mode == ShiftMode::Retime) {
+        m_steerTried = false;
+        m_steerRetimeDeath = UINT32_MAX;
+    }
 
     if (!this->restoreToBranch()) return;
     this->openTrailLeg();  // GucciBot (2026-10-23): a leg starts, for the Leg Trail
@@ -2489,6 +2538,33 @@ void FrameWindowAnalyzer::beginShift(int64_t shift, ShiftMode mode) {
             actions[k].m_frame = static_cast<uint64_t>(moved);
             if (tail && moved != shifted) m_tailArm.push_back(moved);
         }
+    } else if (mode == ShiftMode::Steer) {
+        // GucciBot (2026-11-10): Ship Steering. The tail as Retime places it
+        // where that is before react; the rest of the tail is gated, placed
+        // at max(recorded, react) so the actions stay in frame order, and
+        // played only after a handback, on its recorded frame.
+        int64_t const react = static_cast<int64_t>(m_steer.react);
+        m_steer.gate.assign(actions.size(), 0);
+        for (size_t k = 0; k < actions.size(); k++) {
+            int64_t moved = static_cast<int64_t>(m_originalFrames[k]);
+            moved += this->entryShift(k);
+            if (this->inRetimeTail(k, ai, thisP2)) {
+                if (moved + tickShift < react) {
+                    moved += tickShift;
+                } else {
+                    moved = std::max(moved, react);
+                    m_steer.gate[k] = 1;
+                }
+            }
+            actions[k].m_frame = static_cast<uint64_t>(std::max<int64_t>(moved, 0));
+        }
+        // The last hold change before react on the measured player's side:
+        // the dwell counts from it.
+        m_steer.lastChange = 0;
+        for (size_t k = 0; k < actions.size(); k++)
+            if (!m_steer.gate[k] && isMeasurableInput(actions[k]) && this->movesWith(k, thisP2) &&
+                actions[k].m_frame < m_steer.react)
+                m_steer.lastChange = std::max<uint32_t>(m_steer.lastChange, static_cast<uint32_t>(actions[k].m_frame));
     } else {
         for (size_t k = 0; k < actions.size(); k++) {
             int64_t moved = static_cast<int64_t>(m_originalFrames[k]);
@@ -2554,6 +2630,8 @@ void FrameWindowAnalyzer::beginShift(int64_t shift, ShiftMode mode) {
     m_legPressBuffered = false;
     m_legPressSeen = false;
     m_testTarget = static_cast<uint32_t>(std::max<int64_t>(shifted + reach, 0));
+    // GucciBot (2026-11-10): a steer leg ends where its dead Retime leg did.
+    if (mode == ShiftMode::Steer) m_testTarget = m_steer.target;
     // GucciBot (2026-10-23): where the nominal leg ends (captureDeathInSpan).
     if (shift == 0) m_nominalTarget = m_testTarget;
     m_testActive = true;
@@ -2572,7 +2650,8 @@ void FrameWindowAnalyzer::beginShift(int64_t shift, ShiftMode mode) {
         m_legCounter, m_index + 1, shift, tickShift, fraction, m_releaseFrame,
         m_tailArm.size(), fraction, reach,
         m_testTarget, Bot::get()->updater().getFrame(),
-        mode == ShiftMode::Retime ? "retime" : "buffer", std::max<int64_t>(1, m_fine));
+        mode == ShiftMode::Retime ? "retime" : mode == ShiftMode::Steer ? "steer" : "buffer",
+        std::max<int64_t>(1, m_fine));
 }
 
 void FrameWindowAnalyzer::concludeShift(bool survived) {
@@ -2598,6 +2677,56 @@ void FrameWindowAnalyzer::concludeShift(bool survived) {
     this->syncDispatch();  // GucciBot (2026-10-23): the 2-player fixes
 
     m_testActive = false;
+
+    // GucciBot (2026-11-10): Ship Steering. A steer leg's verdict: saved goes
+    // on to the next shift; lost is the shift's dead verdict, except when it
+    // ran straight after Retime (the side already had a save), where the
+    // shift's usual Buffer and recovery legs still get their turn.
+    bool const wasSteer = m_shiftMode == ShiftMode::Steer;
+    if (wasSteer) {
+        bool const saved = survived && !m_steer.lost;
+        uint32_t const at = Bot::get()->updater().getFrame();
+        if (saved) {
+            m_steerTot.saved++;
+            FWLOG("[fw][steer][saved] click {} shift={:+d} frame={} target={} handedBack={} h={} taps={} ticks={}",
+                  m_index + 1, m_shift, at, m_steer.target, m_steer.handedBack ? 1 : 0,
+                  m_steer.handedBack ? static_cast<int64_t>(m_steer.handback) : -1, m_steer.taps, m_steer.ticks);
+        } else {
+            m_steerTot.lost++;
+            FWLOG("[fw][steer][lost] click {} shift={:+d} frame={} killer={} handedBack={} taps={} ticks={}{}",
+                  m_index + 1, m_shift, at, m_steer.lost ? -1 : m_lastKillerId, m_steer.handedBack ? 1 : 0,
+                  m_steer.taps, m_steer.ticks, m_steer.lost ? fmt::format(" stopped={}", m_steer.forced) : "");
+        }
+        bool const reordered = m_steer.reordered;
+        this->clearSteer();
+        m_shiftMode = ShiftMode::Retime;
+        if (saved) {
+            this->noteSteerSave();
+            this->advanceSweep(true);
+            return;
+        }
+        if (!reordered) {
+            this->advanceSweep(false);
+            return;
+        }
+        survived = false;
+    } else if (m_shiftMode == ShiftMode::Retime && !m_recoveryActive && m_fine <= 1) {
+        // The shift's own Retime leg: a steer leg plays what it played up to
+        // react, and ends where it ended.
+        m_steerRetimeDeath = survived ? UINT32_MAX : Bot::get()->updater().getFrame();
+        m_steerRetimeTarget = m_testTarget;
+        if (m_shift == 0 && m_phase == Phase::Nominal && !m_entryActive)
+            m_steerNominalDiverged = m_pathDiverged;
+    }
+    // Once a side has a steer save, the next shifts try steering straight
+    // after Retime. A shift's verdict is the OR of its legs, so the order
+    // changes no window; it skips the Buffer and recovery legs a saved shift
+    // would have run first (only bufferAssisted can differ, logged as
+    // reordered).
+    if (!wasSteer && !survived && !m_recoveryActive && m_shiftMode == ShiftMode::Retime && m_shift != 0 &&
+        (m_phase == Phase::Earlier ? m_steerSavedNeg : m_phase == Phase::Later && m_steerSavedPos) &&
+        this->beginSteerLeg(true))
+        return;
 
     if (!survived && !m_recoveryActive && m_shiftMode == ShiftMode::Retime &&
         !m_bufferTried && m_shift != 0) {
@@ -2641,13 +2770,17 @@ void FrameWindowAnalyzer::concludeShift(bool survived) {
         }
         m_recoveryOffset++;
         if (m_recoveryOffset > m_recovery) {
-            this->advanceSweep(false);
+            this->deadShift();  // GucciBot (2026-11-10): Ship Steering's last try
             return;
         }
         this->beginRecovery();
         return;
     }
 
+    if (!survived) {
+        this->deadShift();  // GucciBot (2026-11-10): Ship Steering's last try
+        return;
+    }
     this->advanceSweep(survived);
 }
 
@@ -2672,7 +2805,14 @@ void FrameWindowAnalyzer::advanceSweep(bool survived) {
 
     if (m_nominalDied) counting = true;
 
-    if (survived && counting && !m_bisect) m_validCount++;
+    if (survived && counting && !m_bisect) {
+        m_validCount++;
+        // GucciBot (2026-11-10): a count past the side's first steer save,
+        // which the plain band leaves out.
+        if (!m_entryActive && m_fine <= 1 && ((m_phase == Phase::Earlier && m_steerSavedNeg) ||
+                               (m_phase == Phase::Later && m_steerSavedPos)))
+            m_steerCounted++;
+    }
 
     // GucciBot (2026-10-23): Max Window, from anticroom's antics-counter beta.6
     // changelog. A whole-frame count that reaches it stops here: the input is
@@ -2980,6 +3120,242 @@ void FrameWindowAnalyzer::advanceSweep(bool survived) {
     }
 
     this->finishClick();
+}
+
+// GucciBot (2026-11-10): Ship Steering, built from Antic's Counter
+// 1.0.0-beta.16's behavior (anticroom's; no source). A steer leg is one more
+// test of a ship shift that died every other way: the recording plays as the
+// dead Retime leg did up to `react` (the reaction time after the first frame
+// the leg left the recording), then the controller (steer.hpp) taps the
+// button to fly back onto the capture's line, and once it is back on it (the
+// handback) the recording's own inputs play again on their recorded frames.
+// The shift counts if the player is alive at the Retime leg's own end. It
+// never changes a shift that already lives, so no window gets narrower, and
+// the taps go to GD's input queue only (processQueuedButtons): nothing is
+// recorded.
+void FrameWindowAnalyzer::clearSteer() { m_steer = Steer{}; }
+
+void FrameWindowAnalyzer::deadShift() {
+    if (this->beginSteerLeg(false)) return;
+    this->advanceSweep(false);
+}
+
+void FrameWindowAnalyzer::noteSteerSave() {
+    m_steerSaves++;
+    if (m_phase == Phase::Earlier && !m_steerSavedNeg) {
+        m_steerSavedNeg = true;
+        m_plainLow = m_low;
+    } else if (m_phase == Phase::Later && !m_steerSavedPos) {
+        m_steerSavedPos = true;
+        m_plainHigh = m_high;
+    }
+}
+
+bool FrameWindowAnalyzer::beginSteerLeg(bool reordered) {
+    if (!m_steerOn || m_steerTried) return false;
+    if (m_fine != 1 || m_entryActive || m_seedLeg || m_bisect || m_scanning || m_recoveryActive) return false;
+    if (m_phase != Phase::Earlier && m_phase != Phase::Later) return false;
+    if (m_shift == 0 || m_nominalDied) return false;
+    if (!(m_phase == Phase::Earlier ? m_negCounting : m_posCounting)) return false;
+    if (m_index >= m_samples.size()) return false;
+    auto const& s = m_samples[m_index];
+    if (s.gamemode != 'H') return false;
+    if (m_steerRetimeDeath == UINT32_MAX) return false;
+    m_steerTried = true;
+
+    auto* pl = PlayLayer::get();
+    auto const& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
+    int64_t const recorded = static_cast<int64_t>(m_recorded);
+    int64_t const first = std::min(recorded, recorded + m_shift);
+    uint32_t const target = m_steerRetimeTarget;
+    auto const skip = [&](char const* why, long& counter, std::string const& more = {}) {
+        counter++;
+        FWLOG("[fw][steer][{}] click {} shift={:+d}{}", why, m_index + 1, m_shift, more);
+        return false;
+    };
+    if (!pl || pl->m_isPlatformer) return skip("platformer", m_steerTot.skipped);
+    if (m_steerNominalDiverged) return skip("diverged", m_steerTot.skipped);
+
+    // The TPS at the input; a TPS change inside the leg skips it, and the fit
+    // stops at the TPS changes either side.
+    double tps = m_baseTps;
+    for (size_t k = 0; k < actions.size(); k++) {
+        if (actions[k].m_type != slc::ActionType::TPS) continue;
+        int64_t const f = m_originalFrames[k];
+        if (f <= recorded) tps = actions[k].m_tps;
+        if (f >= first && f <= static_cast<int64_t>(target))
+            return skip("tps", m_steerTot.skipped, fmt::format(" tps change at {}", f));
+    }
+    int const reactT = gucci::steer::reactTicks(m_steerReactMs, tps);
+    int const span = gucci::steer::ticksAt(gucci::steer::kFitSpan240, tps);
+    int64_t fitLo = std::max<int64_t>(0, recorded - span);
+    int64_t fitHi = recorded + span;
+    for (size_t k = 0; k < actions.size(); k++) {
+        if (actions[k].m_type != slc::ActionType::TPS) continue;
+        int64_t const f = m_originalFrames[k];
+        if (f <= recorded) fitLo = std::max(fitLo, f + 1);
+        else fitHi = std::min(fitHi, f - 1);
+    }
+    uint32_t const react = static_cast<uint32_t>(std::max<int64_t>(0, first + reactT));
+    if (react >= target)
+        return skip("short", m_steerTot.shortLegs, fmt::format(" react={} target={}", react, target));
+    // The steer leg plays the Retime leg's inputs up to react, so it would
+    // die where that did.
+    if (m_steerRetimeDeath < react)
+        return skip("early", m_steerTot.early, fmt::format(" died={} react={}", m_steerRetimeDeath, react));
+    for (uint32_t const d : m_captureDeaths)
+        if (d >= m_branchFrame && d <= target)
+            return skip("noclip", m_steerTot.skipped, fmt::format(" capture died at {}", d));
+    for (size_t k = 0; k < actions.size(); k++) {
+        int64_t const f = m_originalFrames[k];
+        auto const type = actions[k].m_type;
+        if ((type == slc::ActionType::Death || type == slc::ActionType::Restart ||
+             type == slc::ActionType::RestartFull) &&
+            f >= react && f <= target)
+            return skip("practice", m_steerTot.skipped, fmt::format(" action at {}", f));
+        // A joint setup group moved an input here: the line is the capture's
+        // alignment, not the one played after a handback.
+        if (k < m_steerCapFrames.size() && m_steerCapFrames[k] != m_originalFrames[k] && f >= first - 1 &&
+            f <= static_cast<int64_t>(target))
+            return skip("setup", m_steerTot.skipped, fmt::format(" input {} realigned", k));
+    }
+
+    int const lineIdx = movesPlayer2(pl, s.player2) ? 1 : 0;
+    int const look = gucci::steer::ticksAt(gucci::steer::kLook240, tps);
+    auto const& line = m_line[lineIdx];
+    if (line.size() <= static_cast<size_t>(target) + look || recorded >= static_cast<int64_t>(line.size()) ||
+        !(line[recorded].flags & gucci::steer::kShip))
+        return skip("noline", m_steerTot.skipped);
+    bool const upside = line[recorded].flags & gucci::steer::kUpside;
+    auto model = gucci::steer::fit(line.data(), line.size(), static_cast<size_t>(fitLo),
+                                   static_cast<size_t>(std::max(fitLo, fitHi)), upside);
+    if (!model.ok)
+        return skip("nomodel", m_steerTot.nomodel,
+                    fmt::format(" hold={} free={}", model.samplesHold, model.samplesFree));
+
+    this->clearSteer();
+    m_steer.armed = true;
+    m_steer.reordered = reordered;
+    m_steer.react = react;
+    m_steer.target = target;
+    m_steer.line = lineIdx;
+    m_steer.flag = s.player2;
+    m_steer.tps = tps;
+    m_steer.reactTicks = reactT;
+    m_steer.dwell = gucci::steer::ticksAt(gucci::steer::kDwell240, tps);
+    m_steer.look = look;
+    m_steer.model = std::move(model);
+    m_steerTot.armed++;
+    if (reordered) m_steerTot.reordered++;
+    FWLOG("[fw][steer][arm] click {} shift={:+d} {} react={} target={} retimeDied={} p{} tps={:.0f} lift={:.3f} "
+          "v={:.2f}..{:.2f} samples={}/{} fit={}..{}{}",
+          m_index + 1, m_shift, s.release ? "release" : "press", react, target, m_steerRetimeDeath, lineIdx + 1,
+          tps, m_steer.model.lift, m_steer.model.vMin, m_steer.model.vMax, m_steer.model.samplesHold,
+          m_steer.model.samplesFree, fitLo, fitHi, reordered ? " reordered" : "");
+    this->beginShift(m_shift, ShiftMode::Steer);
+    return true;
+}
+
+void FrameWindowAnalyzer::steerDecide(PlayLayer* pl) {
+    auto& st = m_steer;
+    uint32_t const t = Bot::get()->updater().getFrame();
+    auto* p = st.line ? pl->m_player2 : pl->m_player1;
+    auto const& line = m_line[st.line];
+    auto const stop = [&](char const* why) {
+        st.lost = true;
+        st.forced = why;
+        FWLOG("[fw][steer][stop] click {} shift={:+d} frame={} {}", m_index + 1, m_shift, t, why);
+    };
+    if (!p || line.empty()) return stop("noplayer");
+
+    auto const held = p->m_holdingButtons.find(1);
+    gucci::steer::State s;
+    s.y = p->getPositionY();
+    s.vy = static_cast<float>(p->m_yVelocity);
+    s.hold = held != p->m_holdingButtons.end() && held->second;
+    s.upside = p->m_isUpsideDown;
+    s.ground = p->m_isOnGround;
+
+    // The line at the same tick; if the player is off it in x, by x (then
+    // never a handback: the recording's frames would be the wrong time).
+    float const x = p->getPositionX();
+    int64_t base = t;
+    if (t >= line.size() || !(line[t].flags & gucci::steer::kValid) || std::fabs(x - line[t].x) > 0.5f) {
+        int64_t const lo = std::max<int64_t>(0, static_cast<int64_t>(t) - 60);
+        int64_t const hi = std::min<int64_t>(static_cast<int64_t>(line.size()) - 1, static_cast<int64_t>(t) + 60);
+        int64_t best = -1;
+        for (int64_t f = lo; f <= hi; f++)
+            if ((line[f].flags & gucci::steer::kValid) && std::fabs(x - line[f].x) <= 0.5f &&
+                (best < 0 || std::fabs(x - line[f].x) < std::fabs(x - line[best].x)))
+                best = f;
+        if (best < 0) return stop("x");
+        if (!st.noHandback) FWLOG("[fw][steer][x] click {} frame={} line by x at {}", m_index + 1, t, best);
+        st.noHandback = true;
+        base = best;
+    }
+    auto const& at = line[static_cast<size_t>(base)];
+
+    if (t >= st.react) {
+        char const* forced = nullptr;
+        if (!p->m_isShip) forced = "mode";
+        else if ((p->m_vehicleSize != 1.f) != static_cast<bool>(at.flags & gucci::steer::kMini)) forced = "size";
+        else if (s.upside != static_cast<bool>(at.flags & gucci::steer::kUpside)) forced = "gravity";
+        if (forced && st.noHandback) return stop(forced);
+        if (forced || (!st.noHandback && gucci::steer::onLine(st.model, s, at))) {
+            st.handedBack = true;
+            st.handback = t;
+            st.pending = -1;
+            m_steerTot.handbacks++;
+            if (forced) m_steerTot.forced++;
+            FWLOG("[fw][steer][handback] click {} shift={:+d} frame={} dy={:.2f} dvy={:.2f}{}", m_index + 1, m_shift,
+                  t, s.y - at.y, s.vy - at.vy, forced ? fmt::format(" forced={}", forced) : std::string());
+            return;
+        }
+    }
+
+    st.ticks++;
+    m_steerTot.ticks++;
+    // The line from the tick the decision lands on, `look` points, held at
+    // the leg's end.
+    std::vector<gucci::steer::LinePoint> ahead(static_cast<size_t>(st.look));
+    int64_t const offset = base - static_cast<int64_t>(t);
+    for (int k = 0; k < st.look; k++) {
+        int64_t f = std::min<int64_t>(static_cast<int64_t>(t) + 1 + k, st.target) + offset;
+        f = std::clamp<int64_t>(f, 0, static_cast<int64_t>(line.size()) - 1);
+        ahead[static_cast<size_t>(k)] = line[static_cast<size_t>(f)];
+    }
+    int const since = static_cast<int>(static_cast<int64_t>(t) + 1 - static_cast<int64_t>(st.lastChange));
+    float e = 0.f;
+    auto const d = gucci::steer::decide(st.model, s, since, st.dwell, st.look, ahead.data(), at, &e);
+    if (d == gucci::steer::Decision::Keep) return;
+    st.pending = d == gucci::steer::Decision::Press ? 1 : 0;
+    st.pendingAt = t;
+    st.lastChange = t + 1;
+    st.taps++;
+    m_steerTot.taps++;
+    FWLOG("[fw][steer][tap] click {} shift={:+d} frame={} {} y={:.2f} line={:.2f} vy={:.3f} e={:.2f}", m_index + 1,
+          m_shift, t + 1, st.pending ? "press" : "release", s.y, at.y, s.vy, e);
+}
+
+bool FrameWindowAnalyzer::steerSwallows(size_t k) const {
+    if (!m_running || !m_steer.armed || k >= m_steer.gate.size() || !m_steer.gate[k]) return false;
+    if (m_steer.lost || !m_steer.handedBack) return true;
+    return k < m_originalFrames.size() && m_originalFrames[k] <= m_steer.handback;
+}
+
+std::optional<bool> FrameWindowAnalyzer::takeSteerTap(bool recordedSameTick) {
+    if (!this->steering() || m_steer.pending < 0) return std::nullopt;
+    bool const hold = m_steer.pending == 1;
+    m_steer.pending = -1;
+    uint32_t const now = Bot::get()->updater().getFrame();
+    if (now != m_steer.pendingAt || recordedSameTick) {
+        FWWARN("[fw][steer] click {}: tap for frame {} dropped ({})", m_index + 1, m_steer.pendingAt + 1,
+               recordedSameTick ? "a recorded input of that player on the same tick" : "a different tick");
+        m_steer.lost = true;
+        m_steer.forced = "tap";
+        return std::nullopt;
+    }
+    return hold;
 }
 
 void FrameWindowAnalyzer::noteSweepStep(bool survived, bool counting) {
@@ -3333,7 +3709,11 @@ bool FrameWindowAnalyzer::startSubframeProbe() {
     int const tight = std::max(0, m_tightThreshold->inner());
     bool const impossible = m_nominalDied && this->captureDiedInSpan();
     if (m_nominalDied && !impossible) return false;
-    if (!impossible && !m_subframeAll->inner() && m_validCount > tight)
+    // GucciBot (2026-11-10): by the plain band (Ship Steering aside), so
+    // steering never changes which inputs get the sub-tick pass or where it
+    // starts. The steered whole-frame mark is kept, and finishClick reports
+    // the wider of the two.
+    if (!impossible && !m_subframeAll->inner() && this->plainValid() > tight)
         return false;
     if (m_maxNeg <= 0 && m_maxPos <= 0) {
         FWLOG(
@@ -3342,9 +3722,16 @@ bool FrameWindowAnalyzer::startSubframeProbe() {
         return false;
     }
 
-    m_coarseWindow = m_validCount;
-    m_coarseLow = m_low;
-    m_coarseHigh = m_high;
+    m_haveSteeredMark = false;
+    if (m_steerSaves > 0) {
+        m_steeredMark = this->buildMark();
+        m_steeredMark.steered = true;
+        m_steeredMark.steerSaved = m_steerSaves;
+        m_haveSteeredMark = true;
+    }
+    m_coarseWindow = this->plainValid();
+    m_coarseLow = this->plainLow();
+    m_coarseHigh = this->plainHigh();
     m_coarseNominalDied = m_nominalDied;
     m_coarseMaxNeg = m_maxNeg;
     m_coarseMaxPos = m_maxPos;
@@ -3373,7 +3760,7 @@ bool FrameWindowAnalyzer::startSubframeProbe() {
     bool const coarseHoles =
         m_fastSub &&
         std::any_of(m_deadShifts.begin(), m_deadShifts.end(),
-                    [this](int64_t d) { return d > m_low && d < m_high; });
+                    [this](int64_t d) { return d > this->plainLow() && d < this->plainHigh(); });
 
     m_phase = Phase::Nominal;
     m_shift = 0;
@@ -3456,7 +3843,7 @@ void FrameWindowAnalyzer::beginRecovery() {
 
     size_t const recIdx = this->nextSampleFor(m_index);
     if (recIdx == NO_INDEX) {
-        this->advanceSweep(false);
+        this->deadShift();  // GucciBot (2026-11-10): Ship Steering's last try
         return;
     }
 
@@ -3529,7 +3916,7 @@ void FrameWindowAnalyzer::beginRecovery() {
             (niRelPair != NO_INDEX && !fits(niRelPair))))
         m_recoveryOffset++;
     if (m_recoveryOffset > m_recovery) {
-        this->advanceSweep(false);
+        this->deadShift();  // GucciBot (2026-11-10): Ship Steering's last try
         return;
     }
 
@@ -3697,6 +4084,23 @@ void FrameWindowAnalyzer::finishClick() {
 
     FrameWindowMark mk = this->buildMark();
 
+    // GucciBot (2026-11-10): Ship Steering. A whole-frame mark notes its
+    // steered shifts; after a sub-tick pass (run from the plain band), the
+    // steered whole-frame window stands when it is the wider one.
+    if (!m_entryActive && m_steerSaves > 0) {
+        if (m_fine <= 1) {
+            mk.steered = true;
+            mk.steerSaved = m_steerSaves;
+        } else if (m_haveSteeredMark) {
+            float const fine = mk.subframe > 0.f ? mk.subframe : static_cast<float>(mk.window);
+            if (static_cast<float>(m_steeredMark.window) > fine) {
+                FWLOG("[fw][click {}] steered window {} is wider than the sub-tick pass's {:.3f}, keeping it",
+                      m_index + 1, m_steeredMark.window, fine);
+                mk = m_steeredMark;
+            }
+        }
+    }
+
     // GucciBot (2026-10-23): what this input's sub-tick pass cost, and how
     // it searched (Faster sub-tick search).
     if (m_fine > 1)
@@ -3710,8 +4114,8 @@ void FrameWindowAnalyzer::finishClick() {
 
     if (!m_entryActive && !m_entryDone && m_index < m_sampleBand.size())
         m_sampleBand[m_index] = {
-            static_cast<int>(m_fine > 1 ? m_coarseLow : mk.low),
-            static_cast<int>(m_fine > 1 ? m_coarseHigh : mk.high)};
+            static_cast<int>(m_fine > 1 ? m_coarseLow : this->plainLow()),
+            static_cast<int>(m_fine > 1 ? m_coarseHigh : this->plainHigh())};
     // GucciBot (2026-10-23): a wide mark's low and high are where its count
     // stopped at Max Window, one side only, so the next click's entry sweep
     // isn't pinned to them: no band, no entries.
@@ -3811,6 +4215,13 @@ void FrameWindowAnalyzer::finishClick() {
                              ? "FLOOR (edge on sweep limit)"
         : mk.bufferAssisted  ? "buffer-assisted (input moved alone)"
                              : "exact to sampling resolution");
+    // GucciBot (2026-11-10): Ship Steering, on its own line (the RESULT line
+    // stays as scripts read it).
+    if (mk.steered) {
+        m_steerTot.wider++;
+        FWLOG("[fw][click {}] steered={} (ship steering saved {} shift(s)), plain band {}..{}", m_index + 1,
+              mk.steerSaved, mk.steerSaved, this->plainLow(), this->plainHigh());
+    }
 
     if (mk.window <= 0) m_noclipNextAdvance = true;
 
@@ -3826,8 +4237,9 @@ void FrameWindowAnalyzer::finishClick() {
 bool FrameWindowAnalyzer::advanceEntryPass(FrameWindowMark const& mk) {
     if (!m_entrySweep->inner()) return false;
 
-    int const window =
-        static_cast<int>(m_fine > 1 ? m_coarseWindow : m_validCount);
+    // GucciBot (2026-11-10): the plain count (Ship Steering aside).
+    int const window = static_cast<int>(
+        m_fine > 1 ? m_coarseWindow : m_entryActive ? m_validCount : this->plainValid());
 
     if (!m_entryActive) {
         if (m_entryDone) return false;
@@ -3997,6 +4409,14 @@ void FrameWindowAnalyzer::nextClick() {
 void FrameWindowAnalyzer::finish(std::string message, bool ok) {
     // GucciBot (2026-10-23): the Leg Trail is only for while a run counts.
     this->dropLegTrail();
+    // GucciBot (2026-11-10): Ship Steering's totals, and nothing left armed.
+    if (m_steerOn)
+        FWLOG("[fw][steer][total] armed={} short={} early={} nomodel={} skipped={} legs={} saved={} lost={} "
+              "handbacks={} forced={} taps={} ticks={} reordered={} steeredInputs={}",
+              m_steerTot.armed, m_steerTot.shortLegs, m_steerTot.early, m_steerTot.nomodel, m_steerTot.skipped,
+              m_steerTot.saved + m_steerTot.lost, m_steerTot.saved, m_steerTot.lost, m_steerTot.handbacks,
+              m_steerTot.forced, m_steerTot.taps, m_steerTot.ticks, m_steerTot.reordered, m_steerTot.wider);
+    this->clearSteer();
     // If the capture pass died, it carried on with noclip so the run could
     // still produce something -- but a player that cannot die survives every
     // shift, so the windows come back pinned to the sweep limit and read as
@@ -6468,6 +6888,9 @@ struct StoredMark {
     int autoWindow = 0;
     float autoSubframe = 0.f;
     bool autoCbf = false;
+    // GucciBot (2026-11-10): Ship Steering (written only when set).
+    bool steered = false;
+    int steerSaved = 0;
 };
 
 struct StoredMessage {
@@ -6553,6 +6976,12 @@ static matjson::Value markToJson(StoredMark const& m) {
     // so a results file without one reads exactly as before.
     if (m.dependentCoverage > 0.f)
         mark.set("dependentCoverage", (double)m.dependentCoverage);
+    // GucciBot (2026-11-10): Ship Steering, the same way: a run with it off
+    // writes the same file as before.
+    if (m.steered) {
+        mark.set("steered", true);
+        mark.set("steerSaved", (int64_t)m.steerSaved);
+    }
     return mark;
 }
 
@@ -6675,6 +7104,8 @@ static bool fromJson(std::string const& text, StoredResults& out) {
             m.suggestCoverage = (float)jreal(j, "suggestCoverage", m.suggestCoverage);
             m.manual = jbool(j, "manual", m.manual);
             m.hadAuto = jbool(j, "hadAuto", m.hadAuto);
+            m.steered = jbool(j, "steered", m.steered);
+            m.steerSaved = (int)jnum(j, "steerSaved", m.steerSaved);
             m.autoWindow = (int)jnum(j, "autoWindow", m.autoWindow);
             m.autoSubframe = (float)jreal(j, "autoSubframe", m.autoSubframe);
             m.autoCbf = jbool(j, "autoCbf", m.autoCbf);
@@ -6731,6 +7162,8 @@ bool FrameWindowAnalyzer::saveResults(std::filesystem::path const& path) const {
                              mk.suggestAlignments, mk.suggestCoverage, mk.manual,
                              mk.hadAuto, mk.autoWindow, mk.autoSubframe,
                              mk.autoCbf});
+        out.marks.back().steered = mk.steered;
+        out.marks.back().steerSaved = mk.steerSaved;
     }
 
     out.messages.reserve(m_messages.size());
@@ -6805,6 +7238,8 @@ bool FrameWindowAnalyzer::loadResults(std::filesystem::path const& path) {
         mk.autoWindow = sm.autoWindow;
         mk.autoSubframe = sm.autoSubframe;
         mk.autoCbf = sm.autoCbf;
+        mk.steered = sm.steered;
+        mk.steerSaved = sm.steerSaved;
         m_results.push_back(mk);
     }
 
@@ -8112,6 +8547,7 @@ void FrameWindowAnalyzer::updateProgressOverlay(PlayLayer* pl) {
     flag(m_captureNoclip, "capdied");
     flag(m_restoreFailed, "RESTOREFAIL");
     flag(m_shiftMode == ShiftMode::Buffer, "buffer");
+    flag(m_shiftMode == ShiftMode::Steer, "steer");  // GucciBot (2026-11-10): Ship Steering
     if (flags.empty()) flags = "-";
 
     std::string const sample =

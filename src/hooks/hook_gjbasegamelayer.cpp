@@ -885,7 +885,21 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
             // was built against it.
             bool const acRun = gb->analyzerOwnsRun();
             uint32_t lookupFrame = (gb->fwAnalyzing && !acRun) ? frame : frame + 1;
+            // GucciBot (2026-11-10): Calculate's Ship Steering. While a steer
+            // leg steers, the measured player's gated inputs are held back
+            // (never reach processReplayAction: no CBF, no CPS, no queue), and
+            // the controller's tap for this tick goes to GD's queue below, as
+            // processReplayAction would queue it. Nothing records it.
+            auto& acfw = ::Bot::get()->frameWindow();
+            bool const steering = acRun && acfw.steering();
+            int const tapFlag = steering ? acfw.steerTapFlag() : -1;
+            bool recordedSameTick = false;
             while (auto input = gb->replay.getNextInput(lookupFrame)) {
+                if (steering && acfw.steerSwallows(gb->replay.lastHandedIndex()))
+                    continue;
+                if (tapFlag >= 0 && input->m_type == gb::ActionType::Jump &&
+                    gb->replay.playerFlipped(input->m_player2) == gb->replay.playerFlipped(tapFlag != 0))
+                    recordedSameTick = true;
                 // Nigel's real test (2026-09-06): a Pathfinder result "calculated
                 // correctly" but every one of its inputs failed to fire on normal
                 // playback (fwAnalyzing == false) -- died at the exact same frame
@@ -911,6 +925,9 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
                                                       input->m_player2 ? 1 : 0));
                 processReplayAction(input.value());
             }
+            if (steering)
+                if (auto const tap = acfw.takeSteerTap(recordedSameTick))
+                    queueButton(1, *tap, gb->replay.playerFlipped(tapFlag != 0), 0.0);
         }
 
         GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);

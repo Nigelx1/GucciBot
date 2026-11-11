@@ -210,7 +210,8 @@ namespace gucci::ui::pages {
         const char* presetHint(int preset) {
             switch (preset) {
                 case 0:
-                    return "Balanced, the default: the strict count. A shift counts only if the macro survives it";
+                    return "Balanced, the default: the strict count. A shift counts only if the macro survives it "
+                           "(ship steering, under Measurement, aside)";
                 case 1:
                     return "Accuracy: Recovery Range at 2. A shift that dies still counts if moving the next input up "
                            "to 2 frames saves it. Slightly slower";
@@ -298,7 +299,8 @@ namespace gucci::ui::pages {
                        "tighter. The same setting as the Tight threshold on the Sub-tick (CBF) counting card",
                        &FW::tightThreshold, "%d frames");
             if (feature("Suggestions for suspicious clicks",
-                        "Calculate's count stays strict. A tight click right after another input is also counted "
+                        "Calculate's count stays strict (ship steering aside). A tight click right after another "
+                        "input is also counted "
                         "Juice's way (his Alignment-Independent method: the input before it moved across its own "
                         "window), and when that comes out wider the Frame Editor flags the click: \"my suggestion is "
                         "x frames\"",
@@ -316,6 +318,18 @@ namespace gucci::ui::pages {
                 flag("Show setup range", "Reports those inputs as the range their setup can produce, \"Can be from 1 "
                                          "to 4\"",
                      &FW::showSetupRange, true);
+                kit::FeatureEnd();
+            }
+            // GucciBot (2026-11-10): Ship Steering, from Antic's Counter beta.16's behavior.
+            if (feature("Ship steering",
+                        "A ship click or release that kills you still counts if you could fly back onto the "
+                        "macro's path with taps a person could make, the way you'd save it when playing. Closer to "
+                        "how ship is really played, and a little slower. Off counts ship like every other mode",
+                        &FW::shipSteering)) {
+                slider("Reaction time",
+                       "How long after a mistimed input before steering can start to correct it. Lower is more "
+                       "lenient",
+                       &FW::steerReactionMs, "%d ms");
                 kit::FeatureEnd();
             }
 
