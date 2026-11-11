@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-bx (a window set on an input away from the player takes its spot from the trail or when its marker draws, so Set every window markers no longer pile up)"
+    "2026-11-10-by (Set every window asks first whenever it would replace any window, Calculate measured or typed, and applies after the table draws)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

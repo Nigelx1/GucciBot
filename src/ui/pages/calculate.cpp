@@ -916,6 +916,19 @@ namespace gucci::ui::pages {
         size_t g_setAllReplacing = 0;
         std::string g_setAllMacro;
         bool g_askSetAll = false;
+        size_t g_setAllMeasured = 0;
+        // Set with nothing to replace: done after the table, not in it, as
+        // the rest of the table draws from rows taken before the change.
+        bool g_setAllNow = false;
+
+        // What tells one macro from another while a confirm is up. The name
+        // alone doesn't: a fresh recording keeps the loaded macro's name.
+        std::string macroKey() {
+            auto const& actions = ::Bot::get()->replaySystem().m_actionAtom.m_actions;
+            return fmt::format("{}|{}|{}|{}", GucciEngine::get()->replayName, actions.size(),
+                               actions.empty() ? -1 : static_cast<long long>(actions.front().m_frame),
+                               actions.empty() ? -1 : static_cast<long long>(actions.back().m_frame));
+        }
 
         // Every row of the table gets `frames`, by hand (labelWith, as typing
         // it into each row would). Last frame first: a new window goes in
@@ -982,18 +995,20 @@ namespace gucci::ui::pages {
                 ImGui::TextUnformatted("frames");
                 ImGui::SameLine();
                 if (kit::Button("Set")) {
-                    // The by-hand windows it would replace, one a window.
-                    std::set<int> manual;
+                    // The windows it would replace, one a window: typed by
+                    // hand, and Calculate's own (a re-run keeps typed
+                    // windows, so it can't undo this).
+                    std::set<int> manual, measured;
                     for (auto const& in : rows)
-                        if (in.mark >= 0 && in.mark < static_cast<int>(results.size()) &&
-                            results[static_cast<size_t>(in.mark)].manual)
-                            manual.insert(in.mark);
-                    if (manual.empty()) {
-                        setEveryWindow(fw, g_setAllFrames, s.labelReleases);
+                        if (in.mark >= 0 && in.mark < static_cast<int>(results.size()))
+                            (results[static_cast<size_t>(in.mark)].manual ? manual : measured).insert(in.mark);
+                    g_setAllPending = g_setAllFrames;
+                    g_setAllMacro = macroKey();
+                    if (manual.empty() && measured.empty()) {
+                        g_setAllNow = true;
                     } else {
-                        g_setAllPending = g_setAllFrames;
                         g_setAllReplacing = manual.size();
-                        g_setAllMacro = gb->replayName;
+                        g_setAllMeasured = measured.size();
                         g_askSetAll = true;
                     }
                 }
@@ -1420,13 +1435,28 @@ namespace gucci::ui::pages {
             {
                 std::string const setAllTitle = fmt::format("Set every window to {} frame{}?", g_setAllPending,
                                                             g_setAllPending == 1 ? "" : "s");
+                auto const count = [](size_t n, char const* what) {
+                    return fmt::format("{} {}{}", n, what, n == 1 ? "" : "s");
+                };
+                std::string replacing;
+                if (g_setAllMeasured > 0)
+                    replacing = count(g_setAllMeasured, "window") + " Calculate measured";
+                if (g_setAllReplacing > 0)
+                    replacing += (replacing.empty() ? count(g_setAllReplacing, "window") : " and " +
+                                  std::to_string(g_setAllReplacing)) + " you typed by hand";
                 std::string const setAllText = fmt::format(
-                    "{} window{} you typed by hand {} replaced too. Clear on a row still puts Calculate's own count "
-                    "back.",
-                    g_setAllReplacing, g_setAllReplacing == 1 ? "" : "s", g_setAllReplacing == 1 ? "is" : "are");
-                // Not if another macro was loaded while the confirm was up.
+                    "This replaces {}. Running Calculate again won't undo it: the new windows count as typed by "
+                    "hand. Clear on a row puts Calculate's own count back.",
+                    replacing);
+                // Not if another macro was loaded or recorded while the
+                // confirm was up.
                 if (kit::Confirm(kSetAllId, setAllTitle.c_str(), setAllText.c_str(), "Set") == 1 &&
-                    GucciEngine::get()->replayName == g_setAllMacro)
+                    macroKey() == g_setAllMacro)
+                    setEveryWindow(analyzer(), g_setAllPending, S().labelReleases);
+            }
+            if (g_setAllNow) {
+                g_setAllNow = false;
+                if (macroKey() == g_setAllMacro)
                     setEveryWindow(analyzer(), g_setAllPending, S().labelReleases);
             }
 
