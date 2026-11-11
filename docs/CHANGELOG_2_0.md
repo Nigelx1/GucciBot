@@ -119,6 +119,7 @@ GucciBot's safe mode follows what the Demonlist allows, strictly. The aim is sim
 
 ### Fixes
 
+- **The Classic Pathfinder no longer saves over your macro.** With a macro loaded, a solved search used to replace that macro's file. The solution now goes beside it as "name pathfinder". *Checked in a test game.*
 - **Recording no longer writes extra presses.** When one tick held a release and a press, it was recorded as five events instead of three. The extra buffered press could then fire the next orb early. **Macros recorded with 2.0.0-beta.2 through beta.5 may contain these extra presses.** Re-record any that misbehave.
 - **Reopening a level with random triggers no longer crashes** the game or quietly damages its memory.
 - **Playback no longer ends early** when you respawn at a checkpoint, or step back, onto a click's frame. *Checked in a test game.*
