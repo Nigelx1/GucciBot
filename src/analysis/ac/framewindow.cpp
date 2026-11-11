@@ -2824,8 +2824,12 @@ void FrameWindowAnalyzer::advanceSweep(bool survived) {
     // Search distance. Only the plain count, where m_validCount is the
     // unbroken run around the macro's own timing - not an entry-sweep re-test,
     // and not the search for any survivor once the nominal has died.
+    // GucciBot (2026-11-10): by the plain count (Ship Steering aside), so
+    // steering never marks an input wide: a wide mark loses its sub-tick pass
+    // and the next input its entry band. A steered count past Max Window is
+    // reported as counted, not as N+.
     if (survived && counting && m_fine <= 1 && m_maxWin > 0 &&
-        m_validCount >= m_maxWin && !m_nominalDied && !m_entryActive) {
+        this->plainValid() >= m_maxWin && !m_nominalDied && !m_entryActive) {
         if (m_phase == Phase::Earlier)
             m_low = m_shift;
         else if (m_phase == Phase::Later)

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-ci (Suggest and the dependent pass move a steered ship input across its plain band, so Ship Steering changes no other click's suggestion)"
+    "2026-11-10-cj (Max Window goes by the plain count, so Ship Steering never marks an input wide)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
