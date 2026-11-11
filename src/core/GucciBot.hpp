@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-bz (a one-line level name on the intro card draws and shrinks exactly as before the two-line wrap)"
+    "2026-11-10-ca (Maintain gravity follows the start and end of a dual even with the bot switched off, so a new dual takes a fresh player 2 upright)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

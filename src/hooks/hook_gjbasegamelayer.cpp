@@ -814,13 +814,11 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
 
     void processQueuedButtons(float dt, bool clearInputQueue) {
         auto* gb = GucciEngine::get();
-        if (!gb->enabled)
-            return GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
-
-        gb->practiceFix.updatePlatformerInputs(m_queuedButtons);
         // Maintain gravity's player-2 upright (GucciPracticeFix::m_p2DualGravity):
         // the gravity player 2 has on the first tick of the dual, kept until
-        // the dual ends. Only read in a 2-player level outside platformer.
+        // the dual ends. Only read in a 2-player level outside platformer. Kept
+        // with the bot off too (2026-11-10), so a dual that ends while it's off
+        // doesn't leave the old upright for the next one.
         {
             auto& ref = gb->practiceFix.m_p2DualGravity;
             if (!m_levelSettings->m_twoPlayerMode || m_isPlatformer || !m_player2 || !m_gameState.m_isDualMode)
@@ -828,6 +826,10 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
             else if (ref < 0)
                 ref = m_player2->m_isUpsideDown ? 1 : 0;
         }
+        if (!gb->enabled)
+            return GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
+
+        gb->practiceFix.updatePlatformerInputs(m_queuedButtons);
         // Absense's pathfinder in realtime: this tick's planned input. A no-op
         // unless it is driving the game.
         ::Bot::get()->pathfinder().liveInput();
