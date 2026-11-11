@@ -1583,9 +1583,22 @@ namespace gucci {
             // search that looks like nothing happened is a bad hand-off.
             // Only auto-names when the user hasn't already named something;
             // if they have, that name is theirs and we don't touch it.
-            if (gb->replayName.empty()) {
-                auto dir = Mod::get()->getSaveDir() / "replays";
-                std::string ext = ui::macroExtension();
+            // GucciBot (2026-11-10): unless a macro file already has it (a
+            // loaded macro keeps its name here): the search's result went over
+            // that file. It goes beside it as "<name> pathfinder" instead.
+            auto dir = Mod::get()->getSaveDir() / "replays";
+            std::string ext = ui::macroExtension();
+            if (!gb->replayName.empty()) {
+                std::error_code ec;
+                if (std::filesystem::exists(dir / (gb->replayName + ext), ec)) {
+                    std::string const base = gb->replayName + " pathfinder";
+                    std::string name = base;
+                    for (int n = 2; std::filesystem::exists(dir / (name + ext), ec); ++n)
+                        name = fmt::format("{} {}", base, n);
+                    log::info("[Pathfinder] \"{}\" is a saved macro; the solution goes beside it", gb->replayName);
+                    gb->replayName = name;
+                }
+            } else {
                 // Named after the level rather than "pathfinder" (Nigel's ask,
                 // 2026-09-13). Level names are free text and routinely contain
                 // characters that aren't legal in a Windows filename, so strip
@@ -1614,8 +1627,7 @@ namespace gucci {
                 gb->replayName = name;
             }
 
-            auto savePath =
-                Mod::get()->getSaveDir() / "replays" / (gb->replayName + ui::macroExtension());
+            auto savePath = dir / (gb->replayName + ext);
             if (gb->replayBackupsEnabled)
                 gb->replay.backupExisting(savePath);
             gb->replay.save(savePath);

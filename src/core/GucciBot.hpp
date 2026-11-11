@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-cn (Ship Steering says what it checks: taps keep you alive as far as the normal test goes, not always back onto the macro path)"
+    "2026-11-10-co (a Classic Pathfinder solution no longer saves over the loaded macro file: it goes beside it as name pathfinder)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
