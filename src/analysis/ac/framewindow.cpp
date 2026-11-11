@@ -3183,6 +3183,10 @@ bool FrameWindowAnalyzer::beginSteerLeg(bool reordered) {
     };
     if (!pl || pl->m_isPlatformer) return skip("platformer", m_steerTot.skipped);
     if (m_steerNominalDiverged) return skip("diverged", m_steerTot.skipped);
+    // Paired dual clicks (pairDualClicks): the gate holds back both flags'
+    // tails, but taps go to the measured flag only, so the partner's own
+    // clicks would go missing until the handback.
+    if (!m_partner.empty()) return skip("pairs", m_steerTot.skipped);
 
     // The TPS at the input; a TPS change inside the leg skips it, and the fit
     // stops at the TPS changes either side.

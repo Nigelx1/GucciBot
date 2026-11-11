@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-cl (Ship Steering leaves late shifts at or past the reaction time to the plain count: steering would hold back the input itself)"
+    "2026-11-10-cm (Ship Steering stays off in a macro with paired dual clicks, where the other flag's clicks would go missing)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
