@@ -175,6 +175,7 @@ namespace absense::judge {
                 s.speed = p->m_playerSpeed;
                 trace->push_back(s);
             }
+            if (options.perTick) options.perTick(i + 1);
             if (s_died && options.throughDeaths) {
                 // GucciBot (2026-11-01, H0): noted, and the run goes on (the
                 // hook kept the player alive). The next tick's first hit is

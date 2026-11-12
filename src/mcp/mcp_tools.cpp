@@ -3109,7 +3109,10 @@ namespace gucci::mcp {
             "whether the real game and the simulation agree about such a tap.",
             schemaOf({{"script", "string", "steps, e.g. h20 r15 p1 h40 (t1: a tap inside one tick)"},
                       {"ticks", "integer", "ticks to run (default: the script's length, max 1500)"},
-                      {"every", "integer", "report both paths every N ticks (default 10)"}}),
+                      {"every", "integer", "report both paths every N ticks (default 10)"},
+                      {"watch", "string",
+                       "unique ids \"5308,5340\": where each run has those objects every `every` ticks (the real "
+                       "run then carries on through its deaths, listed in real_deaths)"}}),
             [](matjson::Value const& a) {
                 requireFreeRun();
                 requireLevel();
@@ -3117,7 +3120,7 @@ namespace gucci::mcp {
                 int const ticks = (int)std::clamp<int64_t>(
                     argInt(a, "ticks", std::max<int64_t>(1, (int64_t)script.size())), 1, 1500);
                 int const every = (int)std::clamp<int64_t>(argInt(a, "every", 10), 1, 240);
-                auto out = absense::simVsReal(script, ticks, every);
+                auto out = absense::simVsReal(script, ticks, every, argStr(a, "watch"));
                 if (out.contains("error"))
                     throw ToolError(out["error"].asString().unwrapOr("failed"));
                 return out;

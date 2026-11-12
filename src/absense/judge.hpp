@@ -14,6 +14,7 @@
 #include "absense/trajectory/trajectory.hpp"
 
 #include <cstdint>
+#include <functional>
 #include <span>
 #include <string>
 #include <vector>
@@ -69,6 +70,9 @@ namespace absense::judge {
         std::vector<float>* tickUs = nullptr;
         // The run stops after this many milliseconds of playing (0: no limit).
         double maxMs = 0.0;
+        // GucciBot (2026-11-12): called after each tick played (1 for the
+        // first), with the game standing as that tick left it.
+        std::function<void(int)> perTick;
     };
 
     // Plays `inputs` (one per tick; the last repeats to `ticks`) on the real

@@ -93,7 +93,8 @@ namespace absense {
     // gucci_sim_vs_real: the same script from the same moment, once in the
     // simulation and once for real (absense/judge.hpp), and the first tick the
     // two part. The game is put back afterwards.
-    matjson::Value simVsReal(std::vector<ScriptTick> const& script, int ticks, int every);
+    matjson::Value simVsReal(std::vector<ScriptTick> const& script, int ticks, int every,
+                             std::string const& watch = "");
 
     // Step R0 of AI_PATHFINDER_PLAN.md: how fast the simulation runs from the
     // real player's state (simulated ticks a second, snapshot save, restore

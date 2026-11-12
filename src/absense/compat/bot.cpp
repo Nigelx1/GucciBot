@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <map>
 
 TrajectoryManager& Bot::trajectory() {
     static TrajectoryManager inst;
@@ -1178,7 +1179,8 @@ matjson::Value absense::routeLeg(float gateX, float lo, float hi, int maxTicks, 
     return out;
 }
 
-matjson::Value absense::simVsReal(std::vector<ScriptTick> const& script, int ticks, int every) {
+matjson::Value absense::simVsReal(std::vector<ScriptTick> const& script, int ticks, int every,
+                                  std::string const& watch) {
     auto out = matjson::Value::object();
     auto* pl = PlayLayer::get();
     auto* bot = Bot::get();
@@ -1202,12 +1204,54 @@ matjson::Value absense::simVsReal(std::vector<ScriptTick> const& script, int tic
     // The same script twice from the same moment: the simulation's copy
     // (which puts the game back itself), then the real player (judge::run
     // puts it back too).
+    // GucciBot (2026-11-12): objects to follow by unique id, where each run
+    // has them every `every` ticks (the real run then carries on through its
+    // deaths, so the objects can be followed to the end).
+    std::vector<GameObject*> watched;
+    if (!watch.empty() && pl->m_objects) {
+        std::vector<int> uids;
+        for (auto const& part : geode::utils::string::split(watch, ","))
+            if (auto v = geode::utils::numFromString<int>(geode::utils::string::trim(part))) uids.push_back(*v);
+        for (auto* o : geode::cocos::CCArrayExt<GameObject*>(pl->m_objects)) {
+            if (o && std::find(uids.begin(), uids.end(), o->m_uniqueID) != uids.end()) watched.push_back(o);
+            if (watched.size() >= 16) break;
+        }
+    }
+    std::map<int, std::string> simWatch, realWatch;
+    auto describeWatched = [&](int tick) {
+        std::string s;
+        for (auto* o : watched) {
+            auto const rect = o->getObjectRect();
+            s += fmt::format("{}uid {} {:.2f},{:.2f} rot {:.2f} rect {:.1f},{:.1f} {:.1f}x{:.1f}{}{}",
+                             s.empty() ? "" : "; ", o->m_uniqueID, (float)o->m_positionX, (float)o->m_positionY,
+                             o->getRotation(), rect.origin.x, rect.origin.y, rect.size.width, rect.size.height,
+                             o->m_isGroupDisabled ? " group-off" : "", o->m_isDisabled ? " off" : "");
+        }
+        return s;
+    };
+    int const watchEvery = std::max(1, every);
+    if (!watched.empty()) {
+        simWatch[0] = describeWatched(0);
+        t->m_traceWatch = [&](int tick) {
+            if (tick % watchEvery == 0) simWatch[tick] = describeWatched(tick);
+        };
+    }
+
     t->clearKiller();
     std::vector<TraceSample> sim;
     auto const sr = t->run(pl, true, inputs, ticks, downNow, &sim);
+    t->m_traceWatch = nullptr;
     auto const k = t->lastKiller();
     std::vector<TraceSample> real;
-    auto const rr = judge::run(inputs, ticks, &real);
+    judge::Options jopt;
+    if (!watched.empty()) {
+        jopt.throughDeaths = true;
+        realWatch[0] = describeWatched(0);
+        jopt.perTick = [&](int tick) {
+            if (tick % watchEvery == 0) realWatch[tick] = describeWatched(tick);
+        };
+    }
+    auto const rr = judge::run(inputs, ticks, &real, jopt);
     if (!rr.ran) {
         out["error"] = rr.error;
         return out;
@@ -1293,6 +1337,21 @@ matjson::Value absense::simVsReal(std::vector<ScriptTick> const& script, int tic
                               i < real.size() ? fmt::format("{:.1f},{:.1f}", real[i].x, real[i].y) : "-"));
     }
     out["path"] = path;
+    if (!watched.empty()) {
+        auto w = matjson::Value::array();
+        for (auto const& [tk, r] : realWatch) {
+            auto const it = simWatch.find(tk);
+            w.push(fmt::format("{} sim {} | real {}", tk, it == simWatch.end() ? "-" : it->second, r));
+        }
+        out["watched"] = w;
+        if (!rr.deaths.empty()) {
+            auto d = matjson::Value::array();
+            for (auto const& nd : rr.deaths)
+                if (d.size() < 40)
+                    d.push(fmt::format("{} uid {} id {} at {:.1f},{:.1f}", nd.tick, nd.uid, nd.id, nd.x, nd.y));
+            out["real_deaths"] = d;
+        }
+    }
     return out;
 }
 
