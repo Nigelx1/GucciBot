@@ -1239,7 +1239,11 @@ matjson::Value absense::simVsReal(std::vector<ScriptTick> const& script, int tic
 
     t->clearKiller();
     std::vector<TraceSample> sim;
+    // Following objects, the copy carries on through what it touches too (a
+    // copy that died would stop following them).
+    judge::g_distrustAll = !watched.empty();
     auto const sr = t->run(pl, true, inputs, ticks, downNow, &sim);
+    judge::g_distrustAll = false;
     t->m_traceWatch = nullptr;
     auto const k = t->lastKiller();
     std::vector<TraceSample> real;

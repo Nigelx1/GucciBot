@@ -3111,8 +3111,8 @@ namespace gucci::mcp {
                       {"ticks", "integer", "ticks to run (default: the script's length, max 1500)"},
                       {"every", "integer", "report both paths every N ticks (default 10)"},
                       {"watch", "string",
-                       "unique ids \"5308,5340\": where each run has those objects every `every` ticks (the real "
-                       "run then carries on through its deaths, listed in real_deaths)"}}),
+                       "unique ids \"5308,5340\": where each run has those objects every `every` ticks (both runs "
+                       "then carry on through what they touch; the real run's deaths are listed in real_deaths)"}}),
             [](matjson::Value const& a) {
                 requireFreeRun();
                 requireLevel();

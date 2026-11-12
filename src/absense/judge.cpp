@@ -61,6 +61,7 @@ namespace absense::judge {
     }
 
     bool distrusted(int uid) {
+        if (g_distrustAll) return true;
         return uid != 0 && s_distrusted.count(uid) != 0;
     }
 

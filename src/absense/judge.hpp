@@ -99,6 +99,9 @@ namespace absense::judge {
     void distrust(int uid);
     void clearDistrust();
     bool distrusted(int uid);
+    // GucciBot (2026-11-12): while set, every killer is distrusted (a copy
+    // dies of nothing it touches), for gucci_sim_vs_real's watch.
+    inline bool g_distrustAll = false;
     std::vector<int> distrustedList();
 
 }  // namespace absense::judge

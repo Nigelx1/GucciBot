@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-12-c (Assistant Access: gucci_sim_vs_real can follow objects by unique id, where the simulation and the real game each have them tick by tick)"
+    "2026-11-12-d (Assistant Access: with watch, gucci_sim_vs_real keeps the simulated player going through hazards too, so it follows the objects to the end)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
