@@ -1876,6 +1876,14 @@ namespace gucci::mcp {
                 "Absense's engine: restart the level (Full Restart) and search from frame 0 "
                 "(default: the Pathfinder tab's switch). It also starts from the pause menu.";
             props["from_beginning"] = fromBeginning;
+            {
+                auto pauseAfter = obj();
+                pauseAfter["type"] = "boolean";
+                pauseAfter["description"] =
+                    "cancel: leave the game paused right where the search stopped it (in the same call, so not a "
+                    "tick runs between; default false: it goes back to how it was before the search)";
+                props["pause"] = pauseAfter;
+            }
             auto exactFlags = obj();
             exactFlags["type"] = "boolean";
             exactFlags["description"] =
@@ -1938,6 +1946,10 @@ namespace gucci::mcp {
                     if (what == "cancel") {
                         absense::stopPathfinder();
                         pf->cancel();
+                        // GucciBot (2026-11-12): a test that wants the state the
+                        // search had (gucci_sim_vs_real from there) pauses it here.
+                        if (argBool(a, "pause", false) && PlayLayer::get())
+                            GucciEngine::get()->updater.setPaused(true);
                         out["cancelled"] = true;
                         return out;
                     }
