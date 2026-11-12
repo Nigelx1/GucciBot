@@ -3133,8 +3133,9 @@ void FrameWindowAnalyzer::advanceSweep(bool survived) {
 // GucciBot (2026-11-10): Ship Steering, built from Antic's Counter
 // 1.0.0-beta.16's behavior (anticroom's; no source). A steer leg is one more
 // test of a ship shift that died every other way: the recording plays as the
-// dead Retime leg did up to `react` (the reaction time after the first frame
-// the leg left the recording), then the controller (steer.hpp) taps the
+// dead Retime leg did up to `react` (the reaction time after the input's
+// recorded frame, early or late shift alike: the counter's clock, 2026-11-11),
+// then the controller (steer.hpp) taps the
 // button to fly back onto the capture's line, and once it is back on it (the
 // handback) the recording's own inputs play again on their recorded frames.
 // The shift counts if the player is alive at the Retime leg's own end. It
@@ -3214,7 +3215,10 @@ bool FrameWindowAnalyzer::beginSteerLeg(bool reordered) {
         if (f <= recorded) fitLo = std::max(fitLo, f + 1);
         else fitHi = std::min(fitHi, f - 1);
     }
-    uint32_t const react = static_cast<uint32_t>(std::max<int64_t>(0, first + reactT));
+    // The clock starts at the recorded frame, not the earlier of it and the
+    // shifted one (anticroom's way, 2026-11-11): an early shift gets the same
+    // react frame as the recording, which fits the counter's early edges.
+    uint32_t const react = static_cast<uint32_t>(std::max<int64_t>(0, recorded + reactT));
     if (react >= target)
         return skip("short", m_steerTot.shortLegs, fmt::format(" react={} target={}", react, target));
     // The steer leg plays the Retime leg's inputs up to react, so it would

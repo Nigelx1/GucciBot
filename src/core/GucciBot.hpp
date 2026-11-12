@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-10-co (a Classic Pathfinder solution no longer saves over the loaded macro file: it goes beside it as name pathfinder)"
+    "2026-11-11-a (Ship Steering starts its reaction clock at the input's recorded frame, early or late shift alike, the way Antic's Counter does)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -329,8 +329,8 @@ namespace gucci::ui::pages {
                         "really played, and a little slower. Off counts ship like every other mode",
                         &FW::shipSteering)) {
                 slider("Reaction time",
-                       "How long after a mistimed input before steering can start to correct it. Lower is more "
-                       "lenient",
+                       "How long after the macro's own timing of the input before steering can start, whether the "
+                       "test moved it earlier or later. Lower is more lenient",
                        &FW::steerReactionMs, "%d ms");
                 kit::FeatureEnd();
             }
