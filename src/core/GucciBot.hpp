@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-12-g (Assistant Access: test switch pf_no_ahead, so the pathfinder decides only from the real game, to test where its missed deaths come from)"
+    "2026-11-12-h (Pathfinder: every decision is made from the real game, none ahead of a plan end - plans decided ahead walked into deaths the simulation never saw)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

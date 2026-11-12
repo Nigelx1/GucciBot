@@ -121,9 +121,9 @@ namespace absense {
     // how many were looked at and missed (world::g_pendingVerify).
     bool pendingVerify();
     void setPendingVerify(bool on);
-    // GucciBot (2026-11-12): a test switch, this launch only (pf_no_ahead):
-    // the pathfinder makes no decision ahead of a plan's end, so every
-    // decision is made from the real game.
+    // GucciBot (2026-11-12): the pathfinder makes no decision ahead of a
+    // plan's end, so every decision is made from the real game (on by
+    // default; the test switch pf_no_ahead, this launch only, turns it off).
     bool noAhead();
     void setNoAhead(bool on);
     // ... and its kill switch, never saved either (gucci_test_set

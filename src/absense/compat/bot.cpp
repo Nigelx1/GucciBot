@@ -544,7 +544,15 @@ void absense::profileRuns(bool on) {
 }
 
 namespace {
-bool g_noAhead = false;
+// GucciBot (2026-11-12): on by default. A decision made ahead of a plan's end
+// is judged from a start the copy carried forward itself, and on Slaughterhouse
+// and GRIEF those plans walked into deaths the copy did not see (the real and
+// simulated player stood on the same spot; from the real game the copy saw
+// the same death). With every decision made from the real game, GRIEF's wave
+// part had no missed death (17 before), Slaughterhouse went from 59% to 100%
+// cold, and Bloodbath and The Nightmare still pass. pf_no_ahead false puts
+// the old way back for a test.
+bool g_noAhead = true;
 }
 
 bool absense::noAhead() {

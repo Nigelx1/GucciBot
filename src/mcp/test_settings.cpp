@@ -381,8 +381,8 @@ namespace gucci::testset {
                                  absense::setPendingVerify(wantBool("pf_pending_verify", val));
                              }});
                 // GucciBot (2026-11-12): no decisions made ahead of a plan's
-                // end, to tell whether a miss comes from a start the copy
-                // carried forward rather than the real game.
+                // end (on by default since build 2026-11-12-h); false puts the
+                // decisions made ahead back, to compare.
                 v.push_back({"pf_no_ahead", "bool", Store::Memory,
                              [] { return matjson::Value(absense::noAhead()); },
                              [](matjson::Value const& val, bool) {
