@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-12-a (Pathfinder log: a death the simulation missed now names the object that killed the player and where the simulation had the player on that tick)"
+    "2026-11-12-b (Pathfinder log: the missed-death line reads the simulated position before the plan is dropped, so it is no longer always no sample)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

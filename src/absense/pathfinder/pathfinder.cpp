@@ -5377,6 +5377,14 @@ bool AbsensePathfinder::afterTick(uint64_t tick, const TickInput& in, const Tick
     if (m_completed) return false;  // handled by tick()
 
     if (died) {
+        // GucciBot (2026-11-12): where the simulation had the player on this
+        // tick, read before the plan is dropped below (the miss line).
+        const size_t missIndex = m_planIndex;
+        TraceSample missExpected;
+        const bool missHasSample = m_planIndex >= 1 && m_planIndex <= m_planTrace.size() &&
+                                   m_planTrace[m_planIndex - 1].tick > 0;
+        if (missHasSample) missExpected = m_planTrace[m_planIndex - 1];
+        const size_t missTraceSize = m_planTrace.size();
         m_stats.deadEnds++;
         pauseLive();
         cancelAhead();
@@ -5415,10 +5423,7 @@ bool AbsensePathfinder::afterTick(uint64_t tick, const TickInput& in, const Tick
         // same place means the copy has the object wrong, another place the
         // player's physics.
         if (!expected) {
-            const TraceSample* ex = m_planIndex >= 1 && m_planIndex <= m_planTrace.size() &&
-                                            m_planTrace[m_planIndex - 1].tick > 0
-                                        ? &m_planTrace[m_planIndex - 1]
-                                        : nullptr;
+            const TraceSample* ex = missHasSample ? &missExpected : nullptr;
             PlayerObject* p = m_wouldDieP2 && pl->m_player2 ? pl->m_player2 : pl->m_player1;
             log("  missed death: %s; killed by %s; real player%s (%.2f, %.2f) vy %.3f rot %.1f%s%s, simulated (%s) on "
                 "plan tick %zu of %zu",
@@ -5429,7 +5434,7 @@ bool AbsensePathfinder::afterTick(uint64_t tick, const TickInput& in, const Tick
                                  (int)ex->mode, ex->dead ? " dead" : "")
                          .c_str()
                    : "no sample",
-                m_planIndex, m_planTrace.size());
+                missIndex, missTraceSize);
         }
         if (!expected && killedBy != world::Certainty::Uncertain) {
             log("the simulation did not see that death, but what it happened at is %s: no spot kept",
