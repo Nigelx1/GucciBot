@@ -4823,6 +4823,7 @@ void AbsensePathfinder::cancelAhead() {
 // end of the plan, and the decision is made from there like a probe.
 void AbsensePathfinder::beginAhead() {
     if (m_ahead.active || m_probe.active) return;
+    if (absense::noAhead()) return;  // the test switch pf_no_ahead
     // A plan played into a death the simulation is not sure about is there
     // to let the real game speak: nothing to decide ahead of it. And once
     // a decision about this plan's end found nothing, the plan plays out

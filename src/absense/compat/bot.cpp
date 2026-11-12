@@ -543,6 +543,18 @@ void absense::profileRuns(bool on) {
     Trajectory::profileRuns(on);
 }
 
+namespace {
+bool g_noAhead = false;
+}
+
+bool absense::noAhead() {
+    return g_noAhead;
+}
+
+void absense::setNoAhead(bool on) {
+    g_noAhead = on;
+}
+
 bool absense::pendingVerify() {
     return world::g_pendingVerify;
 }

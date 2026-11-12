@@ -380,6 +380,14 @@ namespace gucci::testset {
                              [](matjson::Value const& val, bool) {
                                  absense::setPendingVerify(wantBool("pf_pending_verify", val));
                              }});
+                // GucciBot (2026-11-12): no decisions made ahead of a plan's
+                // end, to tell whether a miss comes from a start the copy
+                // carried forward rather than the real game.
+                v.push_back({"pf_no_ahead", "bool", Store::Memory,
+                             [] { return matjson::Value(absense::noAhead()); },
+                             [](matjson::Value const& val, bool) {
+                                 absense::setNoAhead(wantBool("pf_no_ahead", val));
+                             }});
                 // The cell-by-cell write-back on a level with rows (on by
                 // default); off for the old pass of everything, to compare.
                 v.push_back({"pf_pending_cells", "bool", Store::Memory,

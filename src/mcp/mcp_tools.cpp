@@ -598,7 +598,8 @@ namespace gucci::mcp {
                 "(one more mod id for Calculate's conflict check), pf_pending_verify "
                 "(the pathfinder checks, every tick, that each object the real game "
                 "moved and a copy could meet stands where the run has it; its stop line "
-                "counts the misses) and pf_pending_cells (on by default: a level with "
+                "counts the misses), pf_no_ahead (no decision made ahead of a plan's end: every one from "
+                "the real game) and pf_pending_cells (on by default: a level with "
                 "rows of sections writes those objects back a cell at a time; off, all "
                 "at a run's first look, as before). A change made in "
                 "the menu to a key this holds isn't saved this launch either.",

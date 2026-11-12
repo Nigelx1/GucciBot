@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-12-f (Assistant Access: gucci_pathfinder cancel can leave the game paused where the search stopped, with pause true)"
+    "2026-11-12-g (Assistant Access: test switch pf_no_ahead, so the pathfinder decides only from the real game, to test where its missed deaths come from)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
