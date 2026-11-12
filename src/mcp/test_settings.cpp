@@ -363,6 +363,7 @@ namespace gucci::testset {
                                  absense::setExactStartFlags(wantBool("pf_exact_start_flags2", val));
                              }});
                 v.push_back(live("pf_remember_solutions", LiveType::Bool));
+                v.push_back(live("pf_try_other_routes", LiveType::Bool));
                 // Follow the planned route: the route planner keeps it after
                 // its first read (route/planner.cpp, g_guidance), so it goes
                 // through the row's setter, which sets both.

@@ -369,6 +369,12 @@ public:
         // beginBacktrack); routeForced once a route idea was taken for it.
         bool forceRoute = false;
         bool routeForced = false;
+        // GucciBot (2026-11-12, Try other routes at dead ends): a repair stop
+        // took an idea of another route class (see classSwitch), played for
+        // classCap ticks, through the fork; once only, or false.
+        bool classSwitch = false;
+        int classCap = 0;
+        bool classLooked = false;  // classSwitch had its look at this verdict
         // Play no more than this many ticks of the chosen idea (0: no cap): a
         // route idea whose way to its gate is all that is known to hold up a
         // tick late, or that is played although nothing of it does.
@@ -663,6 +669,13 @@ public:
         int anyway = 0;      // times the floor's best idea was played although it does not get past
         int level = 0;       // times every stop of this spot failed: each one widens what is tried (see escalate)
         std::vector<uint64_t> routeForced;  // step R5: decisions gone back to for this spot, to take the route
+        // GucciBot (2026-11-12, Try other routes at dead ends; camila314's
+        // idea): the route classes taken from a stop of this spot, as
+        // {stop tick, class key} - a class taken once and dead-ended is not
+        // taken again from that stop - and how many were taken at this level.
+        std::vector<std::pair<uint64_t, uint64_t>> deadClasses;
+        int classSwitches = 0;
+        int classLevel = 0;  // the level classSwitches counts for
     };
     std::vector<Trap> m_traps;
     Trap* trapAt(uint64_t tick, uint64_t slack);
@@ -674,6 +687,9 @@ public:
     // floor - or the start - goes a bounded step further back when anything is
     // kept there, and the stops are walked again. Never stops the search.
     void escalate(const char* why);
+    // GucciBot (2026-11-12): Try other routes at dead ends (see the .cpp).
+    const Candidate* classSwitch(Decision& d, int need, int margin, uint64_t tick, std::vector<size_t> order);
+    std::vector<TraceSample> m_classTrace;  // scratch for classSwitch's runs
     // Every batch of ideas the card scores uses new random ones, so walking
     // the same stops again is not the same walk.
     uint32_t m_gpuSeed = 0;

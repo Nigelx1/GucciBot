@@ -2086,6 +2086,16 @@ namespace gucci::ui {
                                "time. Takes effect when a search starts",
                                &remember))
                 absense::setRememberSolutions(remember);
+            // GucciBot (2026-11-12): camila314's idea, re-planning from a
+            // stepped-back point (AbsensePathfinder::classSwitch).
+            bool otherRoutes = absense::tryOtherRoutes();
+            if (kit::SwitchRow("Try other routes at dead ends",
+                               "Off by default. On: when the pathfinder keeps dying at the same spot, it may go back "
+                               "and take a different orb, pad or portal earlier on, even if that way dies sooner at "
+                               "first, and carry on from there. A way that failed once is not taken again from the "
+                               "same moment. Takes effect when a search starts",
+                               &otherRoutes))
+                absense::setTryOtherRoutes(otherRoutes);
             auto const s = absense::status();
             kit::RowBegin("", nullptr);
             if (!s.running && !absense::startPending()) {

@@ -217,6 +217,14 @@ void absense::setRememberSolutions(bool on) {
     geode::Mod::get()->setSavedValue("pf_remember_solutions", on);
 }
 
+bool absense::tryOtherRoutes() {
+    return geode::Mod::get()->getSavedValue<bool>("pf_try_other_routes", false);
+}
+
+void absense::setTryOtherRoutes(bool on) {
+    geode::Mod::get()->setSavedValue("pf_try_other_routes", on);
+}
+
 
 void absense::stopPathfinder() {
     if (s_pending.active) {

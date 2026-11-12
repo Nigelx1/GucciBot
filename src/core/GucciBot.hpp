@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-12-h (Pathfinder: every decision is made from the real game, none ahead of a plan end - plans decided ahead walked into deaths the simulation never saw)"
+    "2026-11-12-i (Pathfinder: new switch Try other routes at dead ends, off by default - camila314s re-plan idea: a widened dead end may take another orb, pad or portal route that dies sooner, with a memory of routes that failed)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
