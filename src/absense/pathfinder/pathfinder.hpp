@@ -827,6 +827,9 @@ public:
     uint64_t m_wouldDieTick = 0;
     cocos2d::CCRect m_wouldDieRect;   // the player's inner hitbox when the game killed it
     bool m_wouldDieP2 = false;        // it was player 2 the game killed
+    // GucciBot (2026-11-12): what the game killed the player with, for the
+    // "the simulation did not see that death" line (the cause of a miss).
+    std::string m_wouldDieWhat;
     // How well the World follows the object the game killed the player with
     // (world::certaintyOf, asked outside a run): only a death at one it cannot
     // follow leaves a phantom spot behind. Uncertain when nothing named it -

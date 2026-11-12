@@ -776,6 +776,7 @@ bool AbsensePathfinder::onWouldDie(PlayerObject* player, GameObject* object) {
     // Either player dying while the search drives the game is a dead end;
     // the death itself is skipped and the search goes back instead.
     if (!isRunning()) return false;
+    const bool firstHit = !m_wouldDie;
     m_wouldDie = true;
     m_wouldDieTick = currentTick();
     if (player) m_wouldDieRect = player->getObjectRect(0.3f, 0.3f);
@@ -783,6 +784,26 @@ bool AbsensePathfinder::onWouldDie(PlayerObject* player, GameObject* object) {
     // Asked here, while the object is still at hand: the death is looked at a
     // tick later (afterTick), by which time the game has moved on.
     m_wouldDieCertainty = world::certaintyOf(GJBaseGameLayer::get(), object);
+    // GucciBot (2026-11-12): the killer itself, for the miss line in afterTick
+    // (the first hit of the tick).
+    if (!firstHit) {
+    } else if (object) {
+        const cocos2d::CCRect r = object->getObjectRect();
+        std::string groups;
+        for (int i = 0; i < object->m_groupCount && object->m_groups && i < 10; i++)
+            groups += (groups.empty() ? "" : ",") + std::to_string((int)object->m_groups->at(i));
+        char buf[512];
+        std::snprintf(buf, sizeof buf,
+                      "id %d uid %d type %d at (%.1f, %.1f) start (%.1f, %.1f) rot %.1f scale %.2f,%.2f rect "
+                      "%.1f,%.1f %.1fx%.1f groups [%s] %s",
+                      object->m_objectID, object->m_uniqueID, (int)object->m_objectType, (float)object->m_positionX,
+                      (float)object->m_positionY, object->m_startPosition.x, object->m_startPosition.y,
+                      object->getRotation(), object->getScaleX(), object->getScaleY(), r.origin.x, r.origin.y,
+                      r.size.width, r.size.height, groups.c_str(), world::certaintyName(m_wouldDieCertainty));
+        m_wouldDieWhat = buf;
+    } else {
+        m_wouldDieWhat = "no object (a block's side, the floor or ceiling)";
+    }
     return true;
 }
 
@@ -5389,6 +5410,27 @@ bool AbsensePathfinder::afterTick(uint64_t tick, const TickInput& in, const Tick
         // it is, and a rect that kills every run through that corridor for the
         // rest of the attempt buys nothing; the search learns from those
         // deaths as confirmed killers instead.
+        // GucciBot (2026-11-12): what killed it and where the simulation had
+        // the player on that tick, so a miss names its cause in the log: the
+        // same place means the copy has the object wrong, another place the
+        // player's physics.
+        if (!expected) {
+            const TraceSample* ex = m_planIndex >= 1 && m_planIndex <= m_planTrace.size() &&
+                                            m_planTrace[m_planIndex - 1].tick > 0
+                                        ? &m_planTrace[m_planIndex - 1]
+                                        : nullptr;
+            PlayerObject* p = m_wouldDieP2 && pl->m_player2 ? pl->m_player2 : pl->m_player1;
+            log("  missed death: %s; killed by %s; real player%s (%.2f, %.2f) vy %.3f rot %.1f%s%s, simulated (%s) on "
+                "plan tick %zu of %zu",
+                m_wouldDie ? "caught" : "not caught", m_wouldDie ? m_wouldDieWhat.c_str() : "?",
+                m_wouldDieP2 ? " 2" : "", p->m_position.x, p->m_position.y, (double)p->m_yVelocity, p->getRotation(),
+                p->m_isUpsideDown ? " upside-down" : "", p->m_vehicleSize < 1.0f ? " mini" : "",
+                ex ? fmt::format("{:.2f}, {:.2f} vy {:.3f} rot {:.1f} mode {}{}", ex->x, ex->y, ex->yVel, ex->rotation,
+                                 (int)ex->mode, ex->dead ? " dead" : "")
+                         .c_str()
+                   : "no sample",
+                m_planIndex, m_planTrace.size());
+        }
         if (!expected && killedBy != world::Certainty::Uncertain) {
             log("the simulation did not see that death, but what it happened at is %s: no spot kept",
                 world::certaintyName(killedBy));

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-11-a (Ship Steering starts its reaction clock at the input's recorded frame, early or late shift alike, the way Antic's Counter does)"
+    "2026-11-12-a (Pathfinder log: a death the simulation missed now names the object that killed the player and where the simulation had the player on that tick)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
