@@ -48,7 +48,9 @@ namespace gucci::ui::pages {
 
         // ---- the path preview
         bool changed = false;
-        if (kit::CheatFeatureBegin("Path preview", "Lines ahead of the player: green if you hold, red if you let go",
+        // Nigel (2026-11-12): called Show Trajectory again, the name people know
+        // from other mod menus (it was "Path preview" in beta.5).
+        if (kit::CheatFeatureBegin("Show Trajectory", "Lines ahead of the player: green if you hold, red if you let go",
                               &gb->pathPreview, nullptr, &changed)) {
             if (kit::SliderRow("Length", "How far ahead, in ticks; at 240 TPS, 240 is one second", &gb->pathLength,
                                kMinPathTicks, kMaxPathTicks, "%d ticks"))

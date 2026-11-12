@@ -101,7 +101,7 @@ namespace gucci::ui {
             {"key_prevent_death", "Prevent death", &Keys::onPreventDeath},
             {"key_mirror_inputs", "Mirror inputs", &Keys::onMirrorInputs},
             {"key_compact_mode", "Compact mode", &Keys::onCompactMode},
-            {"key_trajectory", "Path preview", &Keys::onTrajectory},
+            {"key_trajectory", "Show Trajectory", &Keys::onTrajectory},
             {"key_hitboxes", "Hitboxes", &Keys::onHitboxes},
             {"key_hitborders", "Hitborders", &Keys::onHitborders},
         };

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-12-q (Macro page: the Speed card with the tick rate and speed comes first, above Hitboxes)"
+    "2026-11-12-r (Path preview is called Show Trajectory again, in the Prediction card and its hotkey)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
