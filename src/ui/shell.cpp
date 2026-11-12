@@ -1462,16 +1462,18 @@ namespace gucci::ui {
                 kit::Note(gb->startPosWarning.c_str(), Tone::Warn);
             kit::EndCard();
 
+            // Nigel's layout (2026-11-12): the tick rate and speed come first,
+            // right under the macro, above Hitboxes.
+            kit::BeginCard("Speed", nullptr);
+            speedRows(true);
+            kit::EndCard();
+
             // Nigel's layout (2026-10-18): hitboxes and the frame stepper sit
             // with the macro, not on a page of their own or down the Hacks page.
             // Hitborders (2026-11-02) go right under Hitboxes.
             pages::hitboxCard();
             pages::hitbordersCard();
             frameStepperCard();
-
-            kit::BeginCard("Speed", nullptr);
-            speedRows(true);
-            kit::EndCard();
 
             kit::BeginCard("Recording and playback", nullptr);
             engineSwitch("Block inputs during playback", "Only the macro presses buttons", &gb->replay.m_ignoreInputs,

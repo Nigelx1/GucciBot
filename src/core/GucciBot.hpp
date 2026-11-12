@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-12-p (removed the Pathfinder switch Try other routes at dead ends, it did not help; the search behaves as it did with the switch off)"
+    "2026-11-12-q (Macro page: the Speed card with the tick rate and speed comes first, above Hitboxes)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
