@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-12-i (Pathfinder: new switch Try other routes at dead ends, off by default - camila314s re-plan idea: a widened dead end may take another orb, pad or portal route that dies sooner, with a memory of routes that failed)"
+    "2026-11-12-j (Pathfinder: Try other routes at dead ends logs why a stop found no other route - ideas on the same route, ideas that die at their fork, routes taken before)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

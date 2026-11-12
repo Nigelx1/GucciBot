@@ -5179,6 +5179,7 @@ const AbsensePathfinder::Candidate* AbsensePathfinder::classSwitch(Decision& d, 
 
     const int unit = (int)std::lround(2.0 * scale);  // "alive past an object": a couple of ticks after it
     const int pastFork = std::max(8, margin / 4);    // how far past the fork an idea has to live
+    int sameRoute = 0, diedAtFork = 0, takenBefore = 0, bestOther = -1;
     for (size_t idx : order) {
         Candidate& c = d.candidates[idx];
         int lasted = 0;
@@ -5205,13 +5206,21 @@ const AbsensePathfinder::Candidate* AbsensePathfinder::classSwitch(Decision& d, 
                 break;
             }
         }
-        if (forkTick == INT_MAX) continue;           // the same route, retimed
-        if (lasted < forkTick + pastFork) continue;  // dies at the fork
+        if (forkTick == INT_MAX) {  // the same route, retimed
+            sameRoute++;
+            continue;
+        }
+        if (lasted < forkTick + pastFork) {  // dies at the fork
+            diedAtFork++;
+            bestOther = std::max(bestOther, lasted - forkTick);
+            continue;
+        }
         const uint64_t key = ((uint64_t)(uint32_t)forkUid << 1) | (took ? 1u : 0u);
         const bool dead = std::any_of(trap->deadClasses.begin(), trap->deadClasses.end(), [&](const auto& k) {
             return k.second == key && d.tick + slack >= k.first && d.tick <= k.first + slack;
         });
         if (dead) {
+            takenBefore++;
             log("tick %llu: %s %s object %d at +%d, a route already taken from here for this spot; not again",
                 (unsigned long long)tick, c.name.c_str(), took ? "takes" : "skips", forkUid, forkTick);
             continue;
@@ -5227,6 +5236,12 @@ const AbsensePathfinder::Candidate* AbsensePathfinder::classSwitch(Decision& d, 
             trap->classSwitches, kClassSwitchesPerLevel, trap->level);
         return &c;
     }
+    // Why not, so a run's log shows the switch had its look.
+    log("tick %llu: no other route here: of %zu ideas looked at, %d take the dead end's route, %d of another die "
+        "within %d ticks of their fork (best %d past it), %d were taken from here before; the dead end's path fired %zu "
+        "objects",
+        (unsigned long long)tick, order.size(), sameRoute, diedAtFork, pastFork, bestOther, takenBefore,
+        failedEv.size());
     return nullptr;
 }
 
