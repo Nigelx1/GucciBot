@@ -4621,8 +4621,11 @@ void AbsensePathfinder::decide() {
                           : std::max(std::max(1, survived / 6), std::min(K, survived - margin));
     if (!complete && SLSettings::get()->pathfinder.smooth && survived >= H) {
         // Realtime: a plan that lasts the whole horizon is played for two
-        // thirds of it - the next decision is made meanwhile, from a start
-        // the simulation carries to its end - so there are half as many.
+        // thirds of it, so there are half as many decisions. This was made
+        // for deciding ahead (the next decision made meanwhile, from a start
+        // the simulation carries to its end); with that off (pf_no_ahead,
+        // the default since build -h) the game waits at each plan's end
+        // instead, and the longer plan halves those waits.
         commit = std::max(commit, std::min((2 * H) / 3, survived - margin));
     }
     const bool flying = m_probe.active ? (m_probe.flying || (m_probe.pair && m_probe.flying2))
@@ -5031,6 +5034,7 @@ void AbsensePathfinder::beginFreeze() {
                        : m_planKnownDeath != UINT64_MAX     ? "the plan was played into a death, for the game's word"
                        : separateNow()                      ? "two-player mode decides from the real state"
                        : portal                             ? "the plan ends past a portal, as another kind of player"
+                       : absense::noAhead()                 ? "deciding ahead is off (pf_no_ahead, the default since build -h)"
                                                             : "none could begin";
     }
 }
@@ -5235,9 +5239,10 @@ const AbsensePathfinder::Candidate* AbsensePathfinder::classSwitch(Decision& d, 
         // build -i: tick 924 took object 668, died, then skipped it again).
         trap->deadClasses.push_back({d.tick, key ^ 1u});
         trap->classSwitches++;
-        log("tick %llu: another route here (camila314's re-plan): %s %s object %d at +%d where the dead end's path "
-            "did not; lasts %d (needed %d), played %d ticks, then repaired forward [%d of %d at level %d]",
-            (unsigned long long)tick, c.name.c_str(), took ? "takes" : "skips", forkUid, forkTick, lasted, need, cap,
+        log("tick %llu: another route here (camila314's re-plan): %s %s object %d at +%d, %s; lasts %d (needed %d), "
+            "played %d ticks, then repaired forward [%d of %d at level %d]",
+            (unsigned long long)tick, c.name.c_str(), took ? "takes" : "skips", forkUid, forkTick,
+            took ? "which the dead end's path did not" : "which the dead end's path fired", lasted, need, cap,
             trap->classSwitches, kClassSwitchesPerLevel, trap->level);
         return &c;
     }

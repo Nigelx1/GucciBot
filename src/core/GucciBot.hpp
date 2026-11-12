@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-12-l (quiet test launches: the game can no longer move or confine the mouse cursor, so a hidden test game never pulls the cursor into a corner of the desktop)"
+    "2026-11-12-m (Pathfinder log wording: a Try other routes switch that skips an object says the dead end fired it, and the wait line says when deciding ahead is off)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
