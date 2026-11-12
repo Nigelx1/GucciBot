@@ -3318,7 +3318,18 @@ namespace gucci::ui {
                 if (kit::Button("Calculate", Tone::Plain, -1.f))
                     startCalculate();
                 ImGui::EndDisabled();
+                // Nigel (2026-11-12): Compact Mode's quick controls, in his
+                // order: tick rate, speed, hitboxes, Show Trajectory, then the
+                // frame stepper. Both switches are cheats (grayed out under
+                // Legit only) and save the same keys as their full rows.
                 speedRows(false);
+                {
+                    kit::LegitGate gate;
+                    if (kit::SwitchRow("Show hitboxes", nullptr, &gb->showHitboxes))
+                        Mod::get()->setSavedValue<bool>("hack_hitboxes", gb->showHitboxes);
+                    if (kit::SwitchRow("Show Trajectory", nullptr, &gb->pathPreview))
+                        Mod::get()->setSavedValue<bool>("hack_trajectory", gb->pathPreview);
+                }
                 if (PlayLayer::get())
                     stepButtons(true);
                 if (kit::Button("Full menu", Tone::Plain, -1.f))

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-12-s (Show Trajectory moves into the Hitboxes card, right under Show hitboxes)"
+    "2026-11-12-t (Compact Mode: tick rate, speed, Show hitboxes, Show Trajectory, then the frame stepper)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
