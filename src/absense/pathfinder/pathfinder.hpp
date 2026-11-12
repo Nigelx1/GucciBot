@@ -674,6 +674,11 @@ public:
         // {stop tick, class key} - a class taken once and dead-ended is not
         // taken again from that stop - and how many were taken at this level.
         std::vector<std::pair<uint64_t, uint64_t>> deadClasses;
+        // ... and the dead end's own route at each switch's fork, as {stop
+        // tick, class key}: it failed from every stop down to the floor, so
+        // it is not taken again from that stop or any earlier one (Bloodbath,
+        // build -k: a stop 61 ticks earlier flipped back to it).
+        std::vector<std::pair<uint64_t, uint64_t>> leftRoutes;
         int classSwitches = 0;
         int classLevel = 0;  // the level classSwitches counts for
     };

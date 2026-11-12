@@ -5222,6 +5222,8 @@ const AbsensePathfinder::Candidate* AbsensePathfinder::classSwitch(Decision& d, 
         const uint64_t key = ((uint64_t)(uint32_t)forkUid << 1) | (took ? 1u : 0u);
         const bool dead = std::any_of(trap->deadClasses.begin(), trap->deadClasses.end(), [&](const auto& k) {
             return k.second == key && d.tick + slack >= k.first && d.tick <= k.first + slack;
+        }) || std::any_of(trap->leftRoutes.begin(), trap->leftRoutes.end(), [&](const auto& k) {
+            return k.second == key && d.tick <= k.first + slack;
         });
         if (dead) {
             takenBefore++;
@@ -5237,7 +5239,7 @@ const AbsensePathfinder::Candidate* AbsensePathfinder::classSwitch(Decision& d, 
         // other way): it already failed at every stop down to the floor, so a
         // later switch from here does not just flip back to it (Bloodbath,
         // build -i: tick 924 took object 668, died, then skipped it again).
-        trap->deadClasses.push_back({d.tick, key ^ 1u});
+        trap->leftRoutes.push_back({d.tick, key ^ 1u});
         trap->classSwitches++;
         log("tick %llu: another route here (camila314's re-plan): %s %s object %d at +%d, %s; lasts %d (needed %d), "
             "played %d ticks, then repaired forward [%d of %d at level %d]",
