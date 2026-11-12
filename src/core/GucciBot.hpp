@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-12-k (Pathfinder: Try other routes at dead ends also remembers the dead end route it left, so a later switch from the same moment cannot flip straight back to it)"
+    "2026-11-12-l (quiet test launches: the game can no longer move or confine the mouse cursor, so a hidden test game never pulls the cursor into a corner of the desktop)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

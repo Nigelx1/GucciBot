@@ -48,6 +48,13 @@ namespace {
     BOOL WINAPI noForeground(HWND) { return TRUE; }
     BOOL WINAPI noFlash(HWND, BOOL) { return FALSE; }
     BOOL WINAPI noFlashEx(PFLASHWINFO) { return FALSE; }
+    // GucciBot (2026-11-12): the mouse is Nigel's. GD moves and locks the
+    // cursor into its own window (entering a level, regaining the focus), and
+    // a quiet test window sits off the screen, so Windows put his cursor in the
+    // corner of the desktop mid-use. In a quiet test launch the game can't move
+    // or confine the cursor at all.
+    BOOL WINAPI noCursorPos(int, int) { return TRUE; }
+    BOOL WINAPI noClipCursor(RECT const*) { return TRUE; }
 
     template <class Detour>
     void hookOne(char const* name, Detour detour) {
@@ -184,6 +191,8 @@ $on_mod(Loaded) {
     hookOne("SetForegroundWindow", &noForeground);
     hookOne("FlashWindow", &noFlash);
     hookOne("FlashWindowEx", &noFlashEx);
+    hookOne("SetCursorPos", &noCursorPos);
+    hookOne("ClipCursor", &noClipCursor);
     std::thread(quietThread).detach();
 }
 
