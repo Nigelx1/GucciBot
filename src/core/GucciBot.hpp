@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-12-d (Assistant Access: with watch, gucci_sim_vs_real keeps the simulated player going through hazards too, so it follows the objects to the end)"
+    "2026-11-12-e (Assistant Access: with watch, gucci_sim_vs_real keeps the simulated player alive through blocks too and still names the first thing it would have died of)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

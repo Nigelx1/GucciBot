@@ -815,7 +815,12 @@ class Trajectory {
         });
     }
 
+    // GucciBot (2026-11-12): while set, a copy never dies (gucci_sim_vs_real's
+    // watch: the first thing it would have died of is still noted).
+    inline static bool s_noDeaths = false;
+
     bool hasDied(PlayerObject* player) {
+        if (s_noDeaths && isFakePlayer(player)) return false;
         if (player == m_fakePlayer1) {
             m_deadP1 = true;
             return true;

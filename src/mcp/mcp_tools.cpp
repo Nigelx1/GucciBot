@@ -3112,7 +3112,8 @@ namespace gucci::mcp {
                       {"every", "integer", "report both paths every N ticks (default 10)"},
                       {"watch", "string",
                        "unique ids \"5308,5340\": where each run has those objects every `every` ticks (both runs "
-                       "then carry on through what they touch; the real run's deaths are listed in real_deaths)"}}),
+                       "then carry on through what they touch: sim names the first thing the copy would have died "
+                       "of, real_deaths lists the real run's)"}}),
             [](matjson::Value const& a) {
                 requireFreeRun();
                 requireLevel();
