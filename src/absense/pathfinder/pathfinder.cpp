@@ -495,9 +495,6 @@ bool AbsensePathfinder::start() {
     // remembered solutions into runs counted as cold).
     SLSettings::get()->pathfinder.learn = absense::rememberSolutions();
     if (SLSettings::get()->pathfinder.learn) absense::memory::Store::get().open(pl);
-    // GucciBot (2026-11-12): Try other routes at dead ends (off by default),
-    // kept for the run (see classSwitch).
-    SLSettings::get()->pathfinder.otherRoutes = absense::tryOtherRoutes();
     // GucciBot (2026-10-23): the Pathfinder page's "exact start flags" switch
     // (on by default since 2026-11-01), taken now - before the first kept
     // start - and kept for the whole run (PathfinderSettings::exactStartFlags).
@@ -1912,9 +1909,6 @@ bool AbsensePathfinder::trimStep(Decision& d) {
     // worth trimming; forced INTO the death (forcedCommit = survived + 1)
     // is not - that plan is not a way past anything.
     if (!pl || c.inputs.empty() || (d.forcedCommit > 0 && d.forcedCommit > c.survived)) return true;
-    // Another route class taken at a dead end (classSwitch): a trim that
-    // drops the click taking the other orb would put the old route back.
-    if (d.classSwitch) return true;
     const int H = d.H;
     const bool held = d.held;
     // GucciBot (2026-10-23): the ticks that will really be played. In realtime
@@ -4295,18 +4289,7 @@ void AbsensePathfinder::decide() {
         // (an idea lasting exactly 500 ticks where the margin was 500); the
         // plan of one tick that was the worry is dealt with where the commit
         // length is worked out, not here.
-        // GucciBot (2026-11-12): Try other routes at dead ends (off by
-        // default): a stop of a repair with nothing past the spot may take an
-        // idea of another route class that gets past the fork (classSwitch).
-        if (!d.classLooked && best && !best->complete && best->survived < need && m_repair.active &&
-            SLSettings::get()->pathfinder.otherRoutes) {
-            d.classLooked = true;
-            std::vector<size_t> order = d.tried;
-            std::sort(order.begin(), order.end(),
-                      [&](size_t a, size_t b) { return better(candidates[a], candidates[b]); });
-            if (const Candidate* other = classSwitch(d, need, margin, tick, std::move(order))) best = other;
-        }
-        const bool viable = best && (best->complete || best->survived >= need || d.routeForced || d.classSwitch);
+        const bool viable = best && (best->complete || best->survived >= need || d.routeForced);
         // Playing an idea the simulation says dies: up to just before it does.
         int forcedCommit = -1;
         m_planKnownDeath = UINT64_MAX;
@@ -4575,7 +4558,7 @@ void AbsensePathfinder::decide() {
     // A plan the simulation already knows dies (a forced commit, or the best
     // idea played anyway at the floor) is not a way past anything, so there
     // is nothing to learn from it.
-    if (!pair && d.viable && forcedCommit <= 0 && !d.classSwitch) {
+    if (!pair && d.viable && forcedCommit <= 0) {
         const bool learning = SLSettings::get()->pathfinder.learn && absense::memory::Store::get().isOpen();
         // Learned only once the real game has got as far as this idea was
         // judged to last (see confirmLessons).
@@ -4658,9 +4641,6 @@ void AbsensePathfinder::decide() {
         commit = std::max(1, d.routeCap);
     } else if (d.routeForced && !complete) {
         commit = std::max(1, d.routeCap);
-    } else if (d.classSwitch && !complete) {
-        // Through the fork, so the next decision is made on the new route.
-        commit = std::max(1, d.classCap);
     } else if (d.routeCap > 0 && !complete && forcedCommit <= 0) {
         commit = std::max(1, std::min(commit, d.routeCap));
     }
@@ -4799,14 +4779,7 @@ void AbsensePathfinder::decide() {
     m_stats.lastDecision = buf;
     log("%s [%zu of %zu ideas tried]%s", buf, triedCount, ideaCount, ahead ? " (ahead)" : "");
     endFreeze("this decision");  // if the game was waiting for it (it plays again below)
-    if (m_repair.active) {
-        resumeFrom(tick);
-        // Another route class (classSwitch) dies sooner than the old spot by
-        // design: the decisions after it are not held to getting past that
-        // spot, or they would throw the new route away at once. Its own death
-        // is repaired from there.
-        if (d.classSwitch) m_lastResume.valid = false;
-    }
+    if (m_repair.active) resumeFrom(tick);
     m_phase = Phase::Committing;
     // Realtime: the game plays the plan on its own clock from here.
     if (SLSettings::get()->pathfinder.smooth && !m_live && m_planIndex < m_plan.size()) goLive();
@@ -5105,158 +5078,6 @@ int AbsensePathfinder::widenLevel(uint64_t at) {
 // stored before it), never further from the death than a decision at that
 // level still sees. Only the player, closing the level or completing it ends
 // the search.
-// GucciBot (2026-11-12): Try other routes at dead ends (the Pathfinder tab's
-// switch, off by default). The idea is camila314's (github.com/camila314/
-// pathfinder, as described in our notes on her method; nothing of hers is
-// copied): when a dead end sends the search back, re-plan from the
-// stepped-back point instead of only retiming the path that failed - her
-// fresh patterns there are free to take another branch. Here it is done on
-// purpose: an idea's route class is the set of orbs, pads, portals and
-// triggers its run fired; the class of what was played into the dead end is
-// known (its inputs from this stop, run again); an idea that fires something
-// the failed path did not, or goes past something it fired without firing it,
-// has another class from the first such object on (the fork). At a stop with
-// nothing past the spot, the best idea of another class that lives past the
-// fork is taken even though it dies sooner, and played through the fork; its
-// own death is repaired from there. Only once the spot has widened (the old
-// class failed at every stop down to the floor), at most
-// kClassSwitchesPerLevel times a level, and never a class already taken from
-// (about) the same stop for this spot: a nogood, so it cannot spin.
-// Not built yet: seeding classes on purpose with rescue legs.
-static constexpr int kClassSwitchesPerLevel = 3;
-static constexpr size_t kClassIdeas = 8;  // ideas looked at per stop (each is run again)
-
-const AbsensePathfinder::Candidate* AbsensePathfinder::classSwitch(Decision& d, int need, int margin, uint64_t tick,
-                                                                  std::vector<size_t> order) {
-    if (!SLSettings::get()->pathfinder.otherRoutes || !m_repair.active || d.pair || d.routeForced || d.drivePass)
-        return nullptr;
-    if (d.tick < m_stats.startTick || d.tick >= m_repair.from) return nullptr;
-    const double scale = std::max(1.0, Bot::get()->updater().getTps() / 240.0);
-    const uint64_t slack = (uint64_t)std::lround(32.0 * scale);
-    Trap* trap = trapAt(m_repair.deathTick, slack);
-    if (!trap || trap->level < 1) return nullptr;
-    if (trap->classLevel != trap->level) {
-        trap->classLevel = trap->level;
-        trap->classSwitches = 0;
-    }
-    if (trap->classSwitches >= kClassSwitchesPerLevel) return nullptr;
-    const size_t from = (size_t)(d.tick - m_stats.startTick);
-    if (from >= m_repair.failed.size()) return nullptr;
-
-    struct Ev {
-        int tick;
-        int uid;
-    };
-    // The objects a run fired, in order, while the copy was alive.
-    auto eventsOf = [&](std::span<const TickInput> in, int ticks, int& lasted) {
-        m_classTrace.clear();
-        const RunResult r = runFor(d, in, ticks, &m_classTrace);
-        m_stats.simulations++;
-        m_stats.simulatedTicks += (uint64_t)std::max(0, r.survived) + 1u;
-        lasted = r.complete ? INT_MAX / 2 : r.survived;
-        std::vector<Ev> ev;
-        for (const TraceSample& s : m_classTrace) {
-            if (s.dead) break;
-            if (s.fired != 0) ev.push_back({s.tick, s.fired});
-        }
-        return ev;
-    };
-    auto has = [](const std::vector<Ev>& v, int uid) {
-        return std::any_of(v.begin(), v.end(), [&](const Ev& e) { return e.uid == uid; });
-    };
-
-    const int played = (int)std::min<size_t>(m_repair.failed.size() - from, (size_t)d.H);
-    std::vector<TickInput> path(m_repair.failed.begin() + (std::ptrdiff_t)from,
-                                m_repair.failed.begin() + (std::ptrdiff_t)(from + (size_t)played));
-    if (path.empty()) return nullptr;
-    const TickInput last = path.back();
-    while ((int)path.size() < d.H) path.push_back({0, last.held});
-    int failedLasted = 0;
-    const std::vector<Ev> failedEv = eventsOf(path, d.H, failedLasted);
-
-    // (`order`: the judged ideas, best first.)
-    std::erase_if(order, [&](size_t i) {
-        const Candidate& c = d.candidates[i];
-        return !c.evaluated || c.complete || c.survived <= 0 || c.survived >= need || c.inputs.empty();
-    });
-    if (order.size() > kClassIdeas) order.resize(kClassIdeas);
-
-    const int unit = (int)std::lround(2.0 * scale);  // "alive past an object": a couple of ticks after it
-    const int pastFork = std::max(8, margin / 4);    // how far past the fork an idea has to live
-    int sameRoute = 0, diedAtFork = 0, takenBefore = 0, bestOther = -1;
-    for (size_t idx : order) {
-        Candidate& c = d.candidates[idx];
-        int lasted = 0;
-        const std::vector<Ev> ev = eventsOf(c.inputs, std::min(d.H, c.survived + 2), lasted);
-        // The fork: the first object this idea fired that the failed path did
-        // not though it was alive then, or the first the failed path fired that
-        // this idea went past without firing.
-        int forkTick = INT_MAX, forkUid = 0;
-        bool took = false;
-        for (const Ev& e : ev) {
-            if (!has(failedEv, e.uid) && failedLasted > e.tick + unit) {
-                forkTick = e.tick;
-                forkUid = e.uid;
-                took = true;
-                break;
-            }
-        }
-        for (const Ev& e : failedEv) {
-            if (e.tick >= forkTick) break;
-            if (!has(ev, e.uid) && lasted > e.tick + unit) {
-                forkTick = e.tick;
-                forkUid = e.uid;
-                took = false;
-                break;
-            }
-        }
-        if (forkTick == INT_MAX) {  // the same route, retimed
-            sameRoute++;
-            continue;
-        }
-        if (lasted < forkTick + pastFork) {  // dies at the fork
-            diedAtFork++;
-            bestOther = std::max(bestOther, lasted - forkTick);
-            continue;
-        }
-        const uint64_t key = ((uint64_t)(uint32_t)forkUid << 1) | (took ? 1u : 0u);
-        const bool dead = std::any_of(trap->deadClasses.begin(), trap->deadClasses.end(), [&](const auto& k) {
-            return k.second == key && d.tick + slack >= k.first && d.tick <= k.first + slack;
-        }) || std::any_of(trap->leftRoutes.begin(), trap->leftRoutes.end(), [&](const auto& k) {
-            return k.second == key && d.tick <= k.first + slack;
-        });
-        if (dead) {
-            takenBefore++;
-            log("tick %llu: %s %s object %d at +%d, a route already taken from here for this spot; not again",
-                (unsigned long long)tick, c.name.c_str(), took ? "takes" : "skips", forkUid, forkTick);
-            continue;
-        }
-        const int cap = std::clamp(lasted - std::max(1, std::min(margin / 2, lasted / 3)), forkTick + 1, lasted);
-        d.classSwitch = true;
-        d.classCap = cap;
-        trap->deadClasses.push_back({d.tick, key});
-        // ... and the dead end's own route at that fork (the same object, the
-        // other way): it already failed at every stop down to the floor, so a
-        // later switch from here does not just flip back to it (Bloodbath,
-        // build -i: tick 924 took object 668, died, then skipped it again).
-        trap->leftRoutes.push_back({d.tick, key ^ 1u});
-        trap->classSwitches++;
-        log("tick %llu: another route here (camila314's re-plan): %s %s object %d at +%d, %s; lasts %d (needed %d), "
-            "played %d ticks, then repaired forward [%d of %d at level %d]",
-            (unsigned long long)tick, c.name.c_str(), took ? "takes" : "skips", forkUid, forkTick,
-            took ? "which the dead end's path did not" : "which the dead end's path fired", lasted, need, cap,
-            trap->classSwitches, kClassSwitchesPerLevel, trap->level);
-        return &c;
-    }
-    // Why not, so a run's log shows the switch had its look.
-    log("tick %llu: no other route here: of %zu ideas looked at, %d take the dead end's route, %d of another die "
-        "within %d ticks of their fork (best %d past it), %d were taken from here before; the dead end's path fired %zu "
-        "objects",
-        (unsigned long long)tick, order.size(), sameRoute, diedAtFork, pastFork, bestOther, takenBefore,
-        failedEv.size());
-    return nullptr;
-}
-
 void AbsensePathfinder::escalate(const char* why) {
     auto* bot = Bot::get();
     pauseLive();

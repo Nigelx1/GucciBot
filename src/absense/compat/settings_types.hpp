@@ -88,9 +88,6 @@ namespace absense_settings {
         double maxBackSeconds = 3.0;  // how far back a dead end may send the search
         bool smooth = true;           // keep the frame rate while it thinks
         bool learn = true;            // remember what worked, per level and across them
-        // GucciBot (2026-11-12): Try other routes at dead ends (off by
-        // default), taken from the saved switch when a search starts.
-        bool otherRoutes = false;
         // Absense scores ideas on the graphics card in a separate program
         // (gpuapp) first. GucciBot does not ship that program, so this is off
         // and every idea goes through the game's own physics.

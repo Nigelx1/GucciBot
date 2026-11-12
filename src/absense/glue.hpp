@@ -48,11 +48,6 @@ namespace absense {
     // level's earlier runs.
     bool rememberSolutions();
     void setRememberSolutions(bool on);
-    // GucciBot (2026-11-12): the Pathfinder tab's "Try other routes at dead
-    // ends" switch (saved, off by default; camila314's idea of re-planning
-    // from a stepped-back point, see AbsensePathfinder::classSwitch).
-    bool tryOtherRoutes();
-    void setTryOtherRoutes(bool on);
     void stopPathfinder();
     bool isRunning();
 
