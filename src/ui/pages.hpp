@@ -39,6 +39,7 @@ namespace gucci::ui::pages {
 
     // Cards drawn inside other pages
     void hitboxCard();       // pages/hitboxes_card.cpp (Macro page)
+    void trajectoryRows();   // pages/prediction_card.cpp: Show Trajectory and its options (in the Hitboxes card)
     void hitbordersCard();   // pages/hitborders_card.cpp (Macro page, under Hitboxes)
     void autoclickerCard();  // pages/autoclicker_card.cpp (Hacks page)
     void predictionCard();   // pages/prediction_card.cpp (Hacks page)

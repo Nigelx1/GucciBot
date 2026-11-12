@@ -36,22 +36,19 @@ namespace gucci::ui::pages {
 
     } // namespace
 
-    void predictionCard() {
-#if !GB_NATIVE_ENGINE
-        kit::Note("Untested on this platform. Moving objects keep the speed they have now: triggers that start, stop or change them later are not simulated here (that part reads GD's Windows memory layout).", Tone::Warn);
-#endif
+    // Show Trajectory and its options. Nigel (2026-11-12): called Show
+    // Trajectory again, the name people know from other mod menus (it was
+    // "Path preview" in beta.5), and drawn in the Hitboxes card right under
+    // Show hitboxes rather than in this card.
+    void trajectoryRows() {
         auto* gb = GucciEngine::get();
-        auto& upd = gb->updater;
         auto* mod = Mod::get();
-
-        kit::BeginCard("Prediction", "Copies of the player run ahead of it through the level to show or test what comes next.");
-
-        // ---- the path preview
         bool changed = false;
-        // Nigel (2026-11-12): called Show Trajectory again, the name people know
-        // from other mod menus (it was "Path preview" in beta.5).
         if (kit::CheatFeatureBegin("Show Trajectory", "Lines ahead of the player: green if you hold, red if you let go",
                               &gb->pathPreview, nullptr, &changed)) {
+#if !GB_NATIVE_ENGINE
+            kit::Note("Untested on this platform. Moving objects keep the speed they have now: triggers that start, stop or change them later are not simulated here (that part reads GD's Windows memory layout).", Tone::Warn);
+#endif
             if (kit::SliderRow("Length", "How far ahead, in ticks; at 240 TPS, 240 is one second", &gb->pathLength,
                                kMinPathTicks, kMaxPathTicks, "%d ticks"))
                 mod->setSavedValue<int>("hack_trajectory_len", gb->pathLength);
@@ -68,6 +65,17 @@ namespace gucci::ui::pages {
         }
         if (changed)
             saveSwitch("hack_trajectory", gb->pathPreview);
+    }
+
+    void predictionCard() {
+#if !GB_NATIVE_ENGINE
+        kit::Note("Untested on this platform. Moving objects keep the speed they have now: triggers that start, stop or change them later are not simulated here (that part reads GD's Windows memory layout).", Tone::Warn);
+#endif
+        auto* gb = GucciEngine::get();
+        auto& upd = gb->updater;
+        auto* mod = Mod::get();
+
+        kit::BeginCard("Prediction", "Copies of the player run ahead of it through the level to show or test what comes next.");
 
         // ---- Frame Extrapolation
         if (kit::SwitchRow("Frame extrapolation",

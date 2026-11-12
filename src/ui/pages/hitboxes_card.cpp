@@ -32,6 +32,8 @@ namespace gucci::ui::pages {
             if (kit::SwitchRow("Show hitboxes", "Players, blocks, hazards, orbs and portals", &gb->showHitboxes))
                 mod->setSavedValue<bool>("hack_hitboxes", gb->showHitboxes);
         }
+        // Nigel (2026-11-12): Show Trajectory right under Show hitboxes.
+        trajectoryRows();
         if (kit::SwitchRow("Show on death", "Draw them once the player dies, even with the switch above off",
                            &gb->hitboxOnDeath))
             mod->setSavedValue<bool>("hack_hitbox_death", gb->hitboxOnDeath);

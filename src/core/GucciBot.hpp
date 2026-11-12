@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-12-r (Path preview is called Show Trajectory again, in the Prediction card and its hotkey)"
+    "2026-11-12-s (Show Trajectory moves into the Hitboxes card, right under Show hitboxes)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
