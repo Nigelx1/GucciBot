@@ -5229,6 +5229,11 @@ const AbsensePathfinder::Candidate* AbsensePathfinder::classSwitch(Decision& d, 
         d.classSwitch = true;
         d.classCap = cap;
         trap->deadClasses.push_back({d.tick, key});
+        // ... and the dead end's own route at that fork (the same object, the
+        // other way): it already failed at every stop down to the floor, so a
+        // later switch from here does not just flip back to it (Bloodbath,
+        // build -i: tick 924 took object 668, died, then skipped it again).
+        trap->deadClasses.push_back({d.tick, key ^ 1u});
         trap->classSwitches++;
         log("tick %llu: another route here (camila314's re-plan): %s %s object %d at +%d where the dead end's path "
             "did not; lasts %d (needed %d), played %d ticks, then repaired forward [%d of %d at level %d]",

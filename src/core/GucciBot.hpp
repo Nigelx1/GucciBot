@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-12-j (Pathfinder: Try other routes at dead ends logs why a stop found no other route - ideas on the same route, ideas that die at their fork, routes taken before)"
+    "2026-11-12-k (Pathfinder: Try other routes at dead ends also remembers the dead end route it left, so a later switch from the same moment cannot flip straight back to it)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
