@@ -1270,10 +1270,20 @@ matjson::Value absense::simVsReal(std::vector<ScriptTick> const& script, int tic
     // Following objects, the copy carries on through what it touches too (a
     // copy that died would stop following them); the first killer is still
     // named.
+    // Both are put back by a guard, so a run that throws can't leave every
+    // copy unable to die, or a watch pointing at this dead stack frame.
+    struct WatchReset {
+        Trajectory* t;
+        ~WatchReset() {
+            Trajectory::s_noDeaths = false;
+            t->m_traceWatch = nullptr;
+        }
+    };
     Trajectory::s_noDeaths = !watched.empty();
-    auto const sr = t->run(pl, true, inputs, ticks, downNow, &sim);
-    Trajectory::s_noDeaths = false;
-    t->m_traceWatch = nullptr;
+    auto const sr = [&] {
+        WatchReset reset{t};
+        return t->run(pl, true, inputs, ticks, downNow, &sim);
+    }();
     auto const k = t->lastKiller();
     std::vector<TraceSample> real;
     judge::Options jopt;
@@ -1300,7 +1310,9 @@ matjson::Value absense::simVsReal(std::vector<ScriptTick> const& script, int tic
     {
         auto s = matjson::Value::object();
         s["survived"] = (int64_t)sr.survived;
-        s["died"] = sr.died;
+        // In watch mode the copy can't die (it goes on through what it
+        // touches), so `died` is whether it hit a killer at all.
+        s["died"] = watched.empty() ? sr.died : (sr.died || k.valid);
         s["complete"] = sr.complete;
         if (k.valid) {
             s["killer_id"] = (int64_t)k.id;
@@ -1333,6 +1345,10 @@ matjson::Value absense::simVsReal(std::vector<ScriptTick> const& script, int tic
         }
         out["real"] = s;
     }
+    if (!watched.empty())
+        out["watch_note"] = "watch mode: both runs go on through deaths, so survived counts every tick played, not "
+                            "the ticks before the first death; died and killer_* name the first death. Run without "
+                            "watch for the survived counts.";
 
     // The first tick the two part: a position apart, or one dead and not the
     // other, or one run over while the other goes on.

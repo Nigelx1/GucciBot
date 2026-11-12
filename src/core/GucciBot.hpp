@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-12-m (Pathfinder log wording: a Try other routes switch that skips an object says the dead end fired it, and the wait line says when deciding ahead is off)"
+    "2026-11-12-n (sim_vs_real watch mode: the no-deaths flag and the watch callback are put back even if a run throws, and survived/died are labeled for watch mode)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
