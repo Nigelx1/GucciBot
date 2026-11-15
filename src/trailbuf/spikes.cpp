@@ -332,8 +332,10 @@ SpikeReport placeSpikes(LevelEditorLayer* editor,
         return refuse(fmt::format(
             "{} frames would get a spike, over the {} limit. {}",
             picked.size(), MAX_PLACED,
-            s.aroundClicks ? "Lower Frames Around Each Click."
-                           : "Raise Every Nth Frame."));
+            // GucciBot (2026-11-15): the card's names for the two controls
+            // (ui/pages/editor_tools.cpp), not Silicate's.
+            s.aroundClicks ? "Lower Click radius."
+                           : "Raise Every Nth."));
 
     auto* placed = CCArray::create();
     std::array<int, 4> perSide{};

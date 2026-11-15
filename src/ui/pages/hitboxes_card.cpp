@@ -34,7 +34,7 @@ namespace gucci::ui::pages {
         }
         // Nigel (2026-11-12): Show Trajectory right under Show hitboxes.
         trajectoryRows();
-        if (kit::SwitchRow("Show on death", "Draw them once the player dies, even with the switch above off",
+        if (kit::SwitchRow("Show on death", "Draw them once the player dies, even with Show hitboxes off",
                            &gb->hitboxOnDeath))
             mod->setSavedValue<bool>("hack_hitbox_death", gb->hitboxOnDeath);
         if (kit::SwitchRow("Trail", "Leave the player's boxes behind it, one per tick", &gb->hitboxTrail)) {

@@ -1562,6 +1562,16 @@ namespace gucci::ui {
             engineSwitch("Sub-tick clicks (CBF recording)", "Records each click where inside the tick you pressed it",
                          &gb->replay.m_scbfRecording, "scbf_recording");
             if (gb->replay.m_scbfRecording) {
+#if !GB_NATIVE_ENGINE
+                // It places a click by GD's own timestamp on the press against
+                // GucciBot's clock (replay/scbf_input.cpp clockSeconds), which
+                // nobody has checked on a phone or a Mac yet: if they disagree,
+                // every click records on the tick's edge. The count below
+                // shows which.
+                kit::Note("Untested on this platform. If the count below says every click landed on the edge, it "
+                          "isn't working here yet.",
+                          Tone::Warn);
+#endif
                 engineSwitch("Split the tick at each click", nullptr, &gb->replay.m_scbfTickSplit, "scbf_tick_split");
                 // Either of these records on whole ticks instead, silently.
                 if (gb->updater.inputFpsActive())
@@ -1827,7 +1837,10 @@ namespace gucci::ui {
             }
             cheatSwitch("Force platformer", "Levels you open play as platformer levels", &gb->hackForcePlatformer,
                          "hack_force_platformer");
-            engineSwitch("RNG lock", "Same random triggers every attempt", &gb->rngLocked, nullptr);
+            // Not saved (nor the seed): off again at each launch, and the key
+            // doesn't save it either (keybinds.cpp).
+            engineSwitch("RNG lock", "While recording: every attempt starts from the seed below. Off again at "
+                                     "each launch", &gb->rngLocked, nullptr);
             if (gb->rngLocked) {
                 // The seed recordings start from while locked (hook_playlayer.cpp
                 // reads it); about.md promises one of your choosing.
@@ -1877,10 +1890,12 @@ namespace gucci::ui {
 
             kit::BeginCard("Engine", nullptr);
             engineSwitch("Lock delta", "Fixed physics step per tick", &upd.m_lockDelta, "feat_lock_delta");
-            engineSwitch("Auto flip on death", nullptr, &upd.m_autoFlipOnDeath, "feat_auto_flip");
+            engineSwitch("Auto flip on death", "With Prevent death on: flips your hold (press or let go) once it steps "
+                                               "back or stops", &upd.m_autoFlipOnDeath, "feat_auto_flip");
             engineSwitch("Audio pitch follows speed", "Music and sounds play faster or slower with the game speed",
                          &upd.m_speedhackAudio, "feat_audio_pitch");
-            engineSwitch("Scroll speed fix", nullptr, &upd.m_ssbFix, "feat_scroll_speed_fix");
+            engineSwitch("Scroll speed fix", "Renders with audio only, with Lock delta on: keeps the level in time with "
+                                             "the music", &upd.m_ssbFix, "feat_scroll_speed_fix");
 #if GB_NATIVE_ENGINE
             engineSwitch("High TPS precision", "Scales GD's velocity rounding with the tick rate. Changes physics",
                          &upd.m_highTpsPrecision, "updater_highTpsPrecision");
@@ -1897,6 +1912,13 @@ namespace gucci::ui {
             }
 #endif
             cheatSwitch("Prevent death", "Steps back instead of dying", &upd.m_preventDeath, "feat_prevent_death");
+            // The step back needs Backwards stepping (engine_updater.cpp
+            // backwardsStep); without it a death only pauses the game, dead.
+            // Stop before a death's look-ahead doesn't need it.
+            if (upd.m_preventDeath && !upd.m_backwardsStepping && !upd.m_fullGamePrediction)
+                kit::Note("Needs Backwards stepping (Macro > Frame stepper) to step back; without it a death just "
+                          "pauses the game. Or turn on Stop before a death (Hacks > Prediction).",
+                          Tone::Warn);
             float inputFps = static_cast<float>(upd.m_inputFps);
             kit::RowBegin("Input FPS", "While recording, clicks land only on this many ticks a second (sub-tick "
                                        "recording is off then). 0, or the tick rate and up: every tick");
@@ -2029,7 +2051,9 @@ namespace gucci::ui {
                 changed = true;
             }
             kit::RowEnd();
-            changed |= kit::SwitchRow("Hide the search", "Only show the run that counts", &pf->hideSearch);
+            changed |= kit::SwitchRow("Hide the search", "Covers the level while it searches, with its progress and "
+                                                         "Cancel. Off: a small box in the corner, and the level shows",
+                                      &pf->hideSearch);
             if (changed)
                 pf->saveSettings();
             kit::SwitchRow("Agency map", "During a search (with Hide the search off), shows which ticks an input "
@@ -2556,8 +2580,9 @@ namespace gucci::ui {
             saveVolume("Music volume", "render_music_volume");
             saveVolume("Sound effects volume", "render_sfx_volume");
             saveVolume("Trigger sound volume", "render_trigger_sfx_volume");
-            saveSwitch("Separate audio tracks", "Music and sound effects on tracks of their own", "render_split_audio_tracks",
-                       false);
+            saveSwitch("Separate audio tracks", "Four tracks: everything mixed, then the music, the sound effects and "
+                                                "the frame-window sounds on their own",
+                       "render_split_audio_tracks", false);
             saveSwitch("Play audio while rendering", nullptr, "render_preview_audio", false);
             kit::EndCard();
 
@@ -2858,6 +2883,7 @@ namespace gucci::ui {
                     saveFloat("brrr_flicker", brrr->flickerIntensity);
                 if (kit::Button("Open the BIG BRRRR folder"))
                     brrr->openBrrrFolder();
+                kit::Hint("A track you put in this folder plays instead of every theme's own, until you take it out.");
             }
             kit::EndCard();
         }
@@ -3493,7 +3519,7 @@ namespace gucci::ui {
             if (ImGui::Begin("##classicPathfinderCover", nullptr, boxFlags)) {
                 {
                     UseFont f(Font::Strong);
-                    ImGui::TextUnformatted("Calculating...");
+                    ImGui::TextUnformatted("Pathfinding...");
                 }
                 kit::Progress(pf->bestPct / 100.f, fmt::format("best {:.1f}%", pf->bestPct).c_str());
                 kit::Hint(fmt::format("{}  |  {} runs", pf->stage, pf->runs).c_str());

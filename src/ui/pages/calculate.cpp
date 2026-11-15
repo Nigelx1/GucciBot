@@ -295,7 +295,8 @@ namespace gucci::ui::pages {
                    &FW::slack, "%d frames");
 
             flag("Full range sweep",
-                 "Keeps testing past the first death. Slower, and survivors past a gap still aren't counted",
+                 "Keeps testing past the first death. Slower, and survivors past a gap still aren't counted. "
+                 "Sub-tick counting doesn't bisect edges while it's on",
                  &FW::fullRangeSweep);
             // GucciBot (2026-10-23): Entry sweep and Dependent pair search both pick their inputs by the Tight
             // threshold whatever else is on (advanceEntryPass, beginDependentPass), and the Sub-tick (CBF) counting
@@ -403,14 +404,18 @@ namespace gucci::ui::pages {
                            "Only inputs with a window this tight or tighter are counted. It also picks which inputs "
                            "Entry sweep and Dependent pair search re-test",
                            &FW::tightThreshold, "%d frames");
+                // GucciBot (2026-11-15): Full range sweep turns bisecting off
+                // (framewindow.cpp m_bisect), and the stride only acts with
+                // it, so it shows only under Bisect edges.
                 flag("Bisect edges",
                      "Binary-searches the edges instead of testing every slot. Much faster, but can't see gaps "
-                     "inside the window",
+                     "inside the window. Not with Full range sweep",
                      &FW::subframeBisect);
-                slider("Search stride",
-                       "Distance between probes before an edge is bisected. Smaller gaps can be missed; 1 tests every "
-                       "slot",
-                       &FW::subframeScanPercent, "%d%%");
+                if (s.subframeBisect)
+                    slider("Search stride",
+                           "Distance between probes before an edge is bisected. Smaller gaps can be missed; 1 tests "
+                           "every slot. Not with Full range sweep",
+                           &FW::subframeScanPercent, "%d%%");
                 // GucciBot (2026-10-23): from anticroom's antics-counter beta.6 changelog ("Small CBF count speed
                 // optimization"); the search is ours. Only with bisected edges, so only shown with them.
                 if (s.subframeBisect)
@@ -565,8 +570,8 @@ namespace gucci::ui::pages {
             kit::BeginCard("Overlay", "What the measured windows look like over the level.");
 
             if (flag("Show windows",
-                     "Markers appear once the player reaches each input. Off hides the markers, the HUD and the L* "
-                     "readout",
+                     "While a macro plays, markers appear once the player reaches each input. Off hides the "
+                     "markers, the HUD and the L* readout",
                      &FW::enabled, true))
                 g_lstar = true;
             if (s.enabled) {
@@ -1445,8 +1450,8 @@ namespace gucci::ui::pages {
                 g_askClear = false;
             }
             if (kit::Confirm(kClearId, "Clear the windows?",
-                             "The measured windows for this macro are removed, including the copy saved next to the "
-                             "macro file. This can't be undone.",
+                             "Every window for this macro goes, typed ones included, along with its text in the "
+                             "level, here and in the copy saved next to the macro file. This can't be undone.",
                              "Clear") == 1) {
                 auto& fw = analyzer();
                 if (!fw.running()) {

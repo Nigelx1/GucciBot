@@ -417,7 +417,8 @@ namespace gucci::ui::pages {
                                "The drop this theme plays. Without a track of its own it plays the default one.");
             else
                 kit::BeginCard("BIG BRRRR",
-                               "The drop this theme plays. Without a track of its own it plays GucciBot's.");
+                               "The drop this theme plays. Without a track of its own it plays GucciBot's. A track "
+                               "in the BIG BRRRR folder (Settings) plays instead, for every theme.");
             {
                 std::string status;
                 if (!ed.track.copyFrom.empty())

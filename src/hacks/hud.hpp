@@ -54,7 +54,7 @@ namespace gucci::hud {
         {&HudConfig::showIntentional, "hud_show_intentional", nullptr, "Intentional death",
          "Whether the next death is meant to happen (recording: armed; playback: expected)", Bot},
         {&HudConfig::showTickLimit, "hud_show_tick_limit", nullptr, "Tick limit",
-         "Most physics ticks run in one drawn frame (Max UPR, or Dynamic UPR's measure)", Bot},
+         "Most physics ticks run in one drawn frame (Frame pacing's limit, or what Dynamic measured)", Bot},
 
         {&HudConfig::showX, "hud_show_x", nullptr, "X position", nullptr, Player},
         {&HudConfig::showY, "hud_show_y", nullptr, "Y position", nullptr, Player},
