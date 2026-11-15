@@ -31,7 +31,9 @@ own game, so one thread per game runs them side by side:
     assist.others()                   # GDs none of ours started (Nigel's): leave them alone
 A game it keeps minimized also starts with GUCCIBOT_QUIET_WINDOW=1: from the
 moment GucciBot loads it never takes the focus, never flashes and has no
-taskbar button (src/ai/quiet_window.cpp).
+taskbar button (src/ai/quiet_window.cpp). A test copy's save is set to
+windowed before such a launch (_ensure_windowed): full screen, GD centers the
+mouse cursor on its new window before GucciBot has loaded.
 
 Values after key= are read as JSON when they parse (true, 3, "x") and as
 text otherwise.
@@ -94,6 +96,7 @@ import http.client
 import json
 import math
 import os
+import re
 import shutil
 import struct
 import subprocess
@@ -635,6 +638,8 @@ def launch(force_safe=True, timeout=180, settle=20, visible=None, port=None, env
             env["GUCCIBOT_QUIET_WINDOW"] = "1"  # no focus, flashing or taskbar button once GucciBot loads
     if not (_minimized and force_safe):
         env.pop("GUCCIBOT_QUIET_WINDOW", None)
+    else:
+        _ensure_windowed()
     try:
         proc = subprocess.Popen([GD_EXE], cwd=GD_DIR, env=env, stdin=devnull, stdout=devnull, stderr=devnull,
                                 creationflags=flags | subprocess.CREATE_BREAKAWAY_FROM_JOB, startupinfo=startup)
@@ -837,6 +842,45 @@ def gd_decode(path):
         return gzip.decompress(data).decode("utf-8", "replace")
     except (OSError, EOFError, zlib.error):
         return zlib.decompress(data[10:], -15).decode("utf-8", "replace")
+
+
+GV_WINDOWED = "gv_0025"  # GD's windowed switch (Graphics > Fullscreen off); not in the save = full screen
+
+
+def _ensure_windowed():
+    """Sets a test copy's save (GD_SAVE_DIR) to windowed, before a quiet launch.
+
+    Measured 2026-11-15: a full-screen test game moved Nigel's mouse cursor to
+    the middle of his screen about a second after it started, when GD made its
+    window. That was before GucciBot loads, so the cursor blocks in
+    src/ai/quiet_window.cpp couldn't stop it. The same launch windowed never
+    moved the cursor. Only a test copy's own save is changed, never Nigel's
+    (%LOCALAPPDATA%\\GeometryDash). A copy with no save yet is left alone, and
+    its first launch is full screen. True when the save was changed."""
+    nigel = os.path.normcase(os.path.join(os.environ.get("LOCALAPPDATA", ""), "GeometryDash"))
+    if not GD_SAVE_DIR or os.path.normcase(os.path.abspath(GD_SAVE_DIR)) == nigel:
+        return False
+    path = os.path.join(GD_SAVE_DIR, "CCGameManager.dat")
+    if not os.path.exists(path):
+        return False
+    text = gd_decode(path)
+    key = f"<k>{GV_WINDOWED}</k>"
+    if key + "<s>1</s>" in text:
+        return False
+    if key in text:
+        new = re.sub(re.escape(key) + r"<s>[^<]*</s>", key + "<s>1</s>", text, count=1)
+    elif "<k>valueKeeper</k><d>" in text:
+        new = text.replace("<k>valueKeeper</k><d>", "<k>valueKeeper</k><d>" + key + "<s>1</s>", 1)
+    elif "<k>valueKeeper</k><d />" in text:
+        new = text.replace("<k>valueKeeper</k><d />", "<k>valueKeeper</k><d>" + key + "<s>1</s></d>", 1)
+    else:
+        return False
+    encoded = bytes(b ^ 11 for b in base64.urlsafe_b64encode(gzip.compress(new.encode("utf-8"))))
+    tmp = path + ".gbtmp"
+    with open(tmp, "wb") as f:
+        f.write(encoded)
+    os.replace(tmp, path)
+    return True
 
 
 def gd_flatten(xml_text):
