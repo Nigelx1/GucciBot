@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-x (Calculate: Solve L* solves whenever the in-level readout will not)"
+    "2026-11-15-y (Calculate: Text in the level stays on its input when windows are typed or deleted by hand)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -9388,7 +9388,9 @@ void FrameWindowAnalyzer::applyLabelTo(PlayheadInput const& in, int window,
             had.manual = false;
             had.hadAuto = false;
         } else {
+            auto const anchors = this->anchorMessages();
             m_results.erase(m_results.begin() + in.mark);
+            this->reanchorMessages(anchors);
         }
         this->markEdited();
         return;
@@ -9458,10 +9460,12 @@ void FrameWindowAnalyzer::applyLabelTo(PlayheadInput const& in, int window,
     if (in.mark >= 0) {
         m_results[in.mark] = mk;
     } else {
+        auto const anchors = this->anchorMessages();
         auto const at = std::upper_bound(
             m_results.begin(), m_results.end(), mk.frame,
             [](uint32_t f, FrameWindowMark const& m) { return f < m.frame; });
         m_results.insert(at, mk);
+        this->reanchorMessages(anchors);
     }
     this->markEdited();
 }
@@ -9503,6 +9507,7 @@ size_t FrameWindowAnalyzer::eraseMarks(std::vector<PlayheadInput> const& inputs)
     if (m_running || inputs.empty()) return 0;
     auto const owned = marksOwnedBy(m_results, inputs);
     if (owned.empty()) return 0;
+    auto const anchors = this->anchorMessages();
     std::vector<char> gone(m_results.size(), 0);
     for (size_t k : owned) gone[k] = 1;
     size_t kept = 0;
@@ -9512,6 +9517,7 @@ size_t FrameWindowAnalyzer::eraseMarks(std::vector<PlayheadInput> const& inputs)
         kept++;
     }
     m_results.resize(kept);
+    this->reanchorMessages(anchors);
     this->markEdited();
     return owned.size();
 }
@@ -9618,6 +9624,16 @@ void FrameWindowAnalyzer::putBackMessages() {
     m_keptMessages.clear();
     auto const anchors = std::move(m_keptMessageAnchors);
     m_keptMessageAnchors.clear();
+    this->reanchorMessages(anchors);
+}
+
+// GucciBot (2026-11-15): the messages back on the inputs `anchors` (from
+// anchorMessages, before the results changed) says they stood on. A run
+// and a hand edit that adds or removes results (a window typed for an
+// unmeasured input, Clear on a typed-only one, Delete this page's windows)
+// both need it: a message is a place in the results, and every message after
+// the change point moved onto another input, and was saved that way.
+void FrameWindowAnalyzer::reanchorMessages(std::vector<MessageAnchor> const& anchors) {
     int const last = std::max(0, static_cast<int>(m_results.size()) - 1);
     for (size_t i = 0; i < m_messages.size(); i++) {
         auto& msg = m_messages[i];

@@ -997,6 +997,7 @@ class FrameWindowAnalyzer {
     std::vector<MessageAnchor> m_keptMessageAnchors;
     std::vector<MessageAnchor> anchorMessages() const;
     void putBackMessages();
+    void reanchorMessages(std::vector<MessageAnchor> const& anchors);
     int resultIndexFor(InputKey const& key) const;
 
     bool inProbeRange(size_t index) const;
