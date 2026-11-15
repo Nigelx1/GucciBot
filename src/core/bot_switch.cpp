@@ -50,6 +50,9 @@ namespace gucci::botswitch {
         constexpr std::string_view kMenuHooks[] = {
             "cocos2d::CCEGLView::swapBuffers",
             "cocos2d::CCEGLView::toggleFullScreen",
+            // The cursor shows while the menu is open (ui/cursor.cpp, Windows).
+            "cocos2d::CCEGLView::showCursor",
+            "cocos2d::CCEGLView::toggleLockCursor",
 #if !defined(GEODE_IS_WINDOWS) && !defined(GEODE_IS_IOS)
             "cocos2d::CCDirector::drawScene",
 #endif

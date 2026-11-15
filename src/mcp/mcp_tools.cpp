@@ -37,6 +37,7 @@
 #include "hooks/util_midhook.hpp"
 #include "render/renderer.hpp"
 #include "trainers/click_indicators.hpp"
+#include "ui/cursor.hpp"
 #include "ui/probe.hpp"
 #include "ui/ui.hpp"
 
@@ -374,7 +375,11 @@ namespace gucci::mcp {
             "gucci_test_set holds). status_bar is the menu's status bar in words "
             "{state: IDLE/RENDERING/CALCULATING/PATHFINDING/RECORDING/PLAYING, "
             "tone, safe: the SAFE chip, text: the numbers beside it}; menu {open, "
-            "page, compact, theme}; start_pos_warning the Macro card's start "
+            "page, compact, theme}; cursor {supported (Windows), menu_has_it: the "
+            "open menu holds the mouse cursor shown, hidden_now/locked_now: GD's "
+            "view of it, gd_wants_hidden/gd_wants_locked: what GD wants (kept "
+            "aside while the menu has it), gameplay_active, show_in_game_option "
+            "(0024), lock_option (0128)}; start_pos_warning the Macro card's start "
             "position warning (\"\" for none).",
             obj(),
             [](matjson::Value const&) {
@@ -512,6 +517,23 @@ namespace gucci::mcp {
                     menu["compact"] = ms.compact;
                     menu["theme"] = ms.themeName;
                     out["menu"] = menu;
+                    {
+                        // GucciBot (2026-11-15): the mouse cursor, shown while
+                        // the menu is open (ui/cursor.hpp). GD's view of it, so a
+                        // hidden test game can check what a player would see.
+                        auto const cs = ui::cursor::state();
+                        auto c = obj();
+                        c["supported"] = cs.supported;
+                        c["menu_has_it"] = cs.menuHasIt;
+                        c["hidden_now"] = cs.hiddenNow;
+                        c["locked_now"] = cs.lockedNow;
+                        c["gd_wants_hidden"] = cs.gdWantsHidden;
+                        c["gd_wants_locked"] = cs.gdWantsLocked;
+                        c["gameplay_active"] = cs.gameplayActive;
+                        c["show_in_game_option"] = cs.showInGame;
+                        c["lock_option"] = cs.lockOption;
+                        out["cursor"] = c;
+                    }
                     out["start_pos_warning"] = gb->startPosWarning;
                 }
 

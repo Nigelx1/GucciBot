@@ -10,6 +10,7 @@
 #include "hacks/safemode.hpp"
 #include "ui/ui.hpp"
 #include "ui/brand.hpp"
+#include "ui/cursor.hpp"
 #include "ui/kit.hpp"
 #include "ui/look.hpp"
 #include "ui/pages.hpp"
@@ -3560,6 +3561,9 @@ namespace gucci::ui {
             // The master switch's once-a-frame step: here the game's update for
             // the frame is over, so its code and hooks can come out or go back.
             botswitch::service();
+            // The mouse cursor shows while the menu is open, and goes back to
+            // what GD wants when it closes (ui/cursor.hpp; Windows only).
+            cursor::frame(g_open);
             bool const menuClosed = std::exchange(g_menuClosed, false);
             // A text box lets go of the keyboard after a click on the game, or
             // when the menu closes (ui/touch.cpp).

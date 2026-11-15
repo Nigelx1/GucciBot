@@ -237,6 +237,20 @@ namespace gucci::testset {
                              [](matjson::Value const& val, bool) {
                                  GameManager::get()->setGameVariable("0010", wantBool("gd_flip_2p", val));
                              }});
+                // GD's Lock Cursor (0128) and Show Cursor In-Game (0024), the
+                // same way: what a level does with the cursor (ui/cursor.hpp,
+                // gucci_get_state's cursor).
+                v.push_back({"gd_lock_cursor", "bool", Store::Memory,
+                             [] { return matjson::Value(GameManager::get()->getGameVariable("0128")); },
+                             [](matjson::Value const& val, bool) {
+                                 GameManager::get()->setGameVariable("0128", wantBool("gd_lock_cursor", val));
+                             }});
+                v.push_back({"gd_show_cursor_in_game", "bool", Store::Memory,
+                             [] { return matjson::Value(GameManager::get()->getGameVariable("0024")); },
+                             [](matjson::Value const& val, bool) {
+                                 GameManager::get()->setGameVariable("0024",
+                                                                     wantBool("gd_show_cursor_in_game", val));
+                             }});
                 v.push_back(engineBool("trainer_reveal", [e]() -> bool& { return e()->trainerRevealEnabled; }));
                 v.push_back(engineFloat("trainer_reveal_ahead", 0.0, 600.0,
                                         [e]() -> float& { return e()->trainerRevealBuffer; }));
