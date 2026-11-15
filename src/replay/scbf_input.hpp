@@ -27,6 +27,11 @@ namespace scbf {
     // A real, recent press with a usable timestamp (not one GucciBot or the
     // replay queued with a zero stamp).
     bool isLivePress(PlayerButtonCommand const& cmd);
+    // Off Windows, once a launch: logs how the first stamped press in GD's
+    // queue compares with clockSeconds(), so a device test shows whether
+    // the two clocks share a base (if not, SCBF records nothing there). Log
+    // only; it changes nothing. A no-op on Windows.
+    void noteClock(gd::vector<PlayerButtonCommand> const& queue);
 
     struct Due {
         PlayerButtonCommand cmd;

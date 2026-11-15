@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-b (Video Mode says it is Windows-only for now on Mac and phones)"
+    "2026-11-15-c (Off Windows the log says once whether GD press stamps match the sub-tick recorder clock)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

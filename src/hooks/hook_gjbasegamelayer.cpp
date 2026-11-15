@@ -826,6 +826,8 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
             else if (ref < 0)
                 ref = m_player2->m_isUpsideDown ? 1 : 0;
         }
+        // Off Windows, once: GD's press stamps against SCBF's clock (log only).
+        scbf::noteClock(m_queuedButtons);
         if (!gb->enabled)
             return GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
 

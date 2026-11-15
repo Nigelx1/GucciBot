@@ -55,6 +55,42 @@ namespace scbf {
                cmd.m_timestamp <= now + MAX_STAMP_LEAD;
     }
 
+    void noteClock(gd::vector<PlayerButtonCommand> const& queue) {
+        // Windows' base is known (QueryPerformanceCounter); the question is
+        // only open on Mac, iOS and Android (steady_clock there).
+        if (GB_NATIVE_ENGINE)
+            return;
+        // 0: nothing seen yet, 1: saw a press with no stamp, 2: logged.
+        static int s_state = 0;
+        if (s_state == 2)
+            return;
+        for (auto const& cmd : queue) {
+            if (!cmd.m_isPush)
+                continue;
+            if (cmd.m_timestamp == 0.0) {
+                if (s_state == 0) {
+                    s_state = 1;
+                    log::info("[GucciBot] SCBF clock check: a press reached GD's queue with no timestamp (0); "
+                              "waiting for one that has one.");
+                }
+                continue;
+            }
+            s_state = 2;
+            double const ours = clockSeconds();
+            double const wall =
+                std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
+            bool const cbf = Loader::get()->isModLoaded("syzzi.click_between_frames");
+            log::info("[GucciBot] SCBF clock check (logged once): GD's press stamp {:.6f} s; GucciBot's clock "
+                      "{:.6f} s (stamp minus it {:+.6f} s); wall clock {:.6f} s (stamp minus it {:+.6f} s); "
+                      "Click Between Frames {}. SCBF takes a press from 1 s old to 0.05 s ahead: {}.",
+                      cmd.m_timestamp, ours, cmd.m_timestamp - ours, wall, cmd.m_timestamp - wall,
+                      cbf ? "loaded" : "not loaded",
+                      isLivePress(cmd) ? "MATCH, this press would count"
+                                       : "NO MATCH, SCBF would record nothing on this platform");
+            return;
+        }
+    }
+
     LiveRecorder& LiveRecorder::get() {
         static LiveRecorder instance;
         return instance;
