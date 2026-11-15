@@ -52,12 +52,45 @@ namespace gucci {
         return (float)SLRenderer::get()->m_settings.m_triggerSfxVolume;
     }
 
+    // GD's playEffect overloads hand the sound on to playEffectAdvanced (the
+    // death sound, explode_11.ogg, goes playEffect -> playEffectAdvanced), so
+    // the hook below sees a gameplay sound twice (seen in a render's log,
+    // 2026-11-15). Before these counters the second hook scaled it again by
+    // the TRIGGER volume: a render with sound effects at 100% and trigger
+    // sounds at 0% had no death sound, and 50%/50% would play it at 25%.
+    // A gameplay sound is scaled once, by the first overload that carries a
+    // volume. Game thread only, like every FMODAudioEngine call.
+    static int s_inGameplayEffect = 0;  // inside a gameplay playEffect
+    static int s_gameplayScaled = 0;    // ... one that applied the SFX volume
+    // A sound that isn't loaded yet is queued (queuePlayEffect, from inside
+    // playEffectAdvanced) with the volume it was given -- already scaled --
+    // and played once it has loaded by a second playEffectAdvanced call from
+    // GD's queue. Scaling that one again played the first use of every SFX
+    // trigger's sound at the trigger volume squared (measured: 0.25 instead
+    // of 0.5 at 50%, its later uses 0.50).
+    static int s_inQueuedReplay = 0;
+
+    struct GameplayEffectScope {
+        bool scaled;
+        explicit GameplayEffectScope(bool scaledHere) : scaled(scaledHere) {
+            ++s_inGameplayEffect;
+            if (scaled)
+                ++s_gameplayScaled;
+        }
+        ~GameplayEffectScope() {
+            --s_inGameplayEffect;
+            if (scaled)
+                --s_gameplayScaled;
+        }
+    };
+
     struct GB7AudioEngine : Modify<GB7AudioEngine, FMODAudioEngine> {
         // Gameplay sound. The one-argument overload carries no volume to
         // scale, so at zero the call is dropped rather than played silently.
         int playEffect(gd::string path) {
             if (gameplaySfxScale() <= 0.f)
                 return 0;
+            GameplayEffectScope scope(false);
             return FMODAudioEngine::playEffect(path);
         }
 
@@ -65,22 +98,44 @@ namespace gucci {
             float const scale = gameplaySfxScale();
             if (scale <= 0.f)
                 return 0;
-            return FMODAudioEngine::playEffect(path, speed, unknown, volume * scale);
+            bool const scaleHere = s_gameplayScaled == 0;
+            GameplayEffectScope scope(scaleHere);
+            return FMODAudioEngine::playEffect(path, speed, unknown,
+                                               scaleHere ? volume * scale : volume);
         }
 
-        // SFX triggers.
+        // SFX triggers -- and, called from inside the playEffect overloads
+        // above, gameplay sound on its way through (see s_inGameplayEffect).
         int playEffectAdvanced(gd::string path, float speed, float unknown, float volume,
                                float pitch, bool fastFourierTransform, bool reverb,
                                int startMillis, int endMillis, int fadeIn, int fadeOut,
                                bool loopEnabled, int effectID, bool override, bool noPreload,
                                int channelID, int uniqueID, float minInterval, int sfxGroup) {
-            float const scale = triggerSfxScale();
+            float scale = triggerSfxScale();
+            if (s_inQueuedReplay > 0)
+                scale = 1.f;
+            else if (s_inGameplayEffect > 0)
+                scale = s_gameplayScaled > 0 ? 1.f : gameplaySfxScale();
             if (scale <= 0.f)
                 return 0;
             return FMODAudioEngine::playEffectAdvanced(
                 path, speed, unknown, volume * scale, pitch, fastFourierTransform, reverb,
                 startMillis, endMillis, fadeIn, fadeOut, loopEnabled, effectID, override,
                 noPreload, channelID, uniqueID, minInterval, sfxGroup);
+        }
+
+        // GD's queue playing sounds that have finished loading (see
+        // s_inQueuedReplay). Both entry points, as either may be the one
+        // that plays them.
+        void updateQueuedEffects() {
+            ++s_inQueuedReplay;
+            FMODAudioEngine::updateQueuedEffects();
+            --s_inQueuedReplay;
+        }
+        void queuedEffectFinishedLoading(gd::string path) {
+            ++s_inQueuedReplay;
+            FMODAudioEngine::queuedEffectFinishedLoading(path);
+            --s_inQueuedReplay;
         }
 
         void update(float dt) {

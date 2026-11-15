@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-ao (Renderer: with 0 seconds after the end, the video ends on the level-complete frame)"
+    "2026-11-15-ap (Render audio: gameplay sounds follow only the SFX volume and trigger sounds only the trigger volume, so the death sound is in renders again)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
