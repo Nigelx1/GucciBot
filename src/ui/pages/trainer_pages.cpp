@@ -992,11 +992,19 @@ namespace gucci::ui::pages {
                               Tone::Warn);
                 else
                     drawBar(k);
-                if (kit::Button(s.paused ? "Resume" : "Pause", Tone::Accent))
-                    tr::setPaused(k, !s.paused);
-                ImGui::SameLine();
-                if (kit::Button("Restart"))
-                    tr::restart(k);
+                // While its level is open the bar follows the level (tick()
+                // holds it paused at the level's time): Pause did nothing and
+                // Restart only wiped your clicks, as on the Click Trainer card,
+                // which hides them then.
+                if (tr::followsLevel(k)) {
+                    kit::Label("Following the level", Tone::Muted);
+                } else {
+                    if (kit::Button(s.paused ? "Resume" : "Pause", Tone::Accent))
+                        tr::setPaused(k, !s.paused);
+                    ImGui::SameLine();
+                    if (kit::Button("Restart"))
+                        tr::restart(k);
+                }
                 ImGui::SameLine();
                 if (kit::Button("Exit Video Mode", Tone::Muted)) {
                     gb->jupiterVideoModeEnabled = false;

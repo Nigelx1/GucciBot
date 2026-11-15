@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-ab (Click cue: leaving the level stops a calibration)"
+    "2026-11-15-ac (Video Mode bar: no Pause or Restart while it follows the level)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
