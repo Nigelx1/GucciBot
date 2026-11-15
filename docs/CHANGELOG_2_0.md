@@ -161,6 +161,24 @@ GucciBot's safe mode follows what the Demonlist allows, strictly. The aim is sim
 - **Update checker:** its crash guard no longer switches it off by mistake. If you had it off, turn Check for updates back on in Settings. *Not tested yet.*
 - **The start-position warning** can show now: a run started from a start position is marked when it's saved. *Checked in a test game.*
 - Geode's log no longer fills up with lines from every tick, or with Calculate's step-by-step detail, which goes to guccibot_fw.log now. *Checked in a test game.*
+- **Delete on the Macro card** deletes only the macro you have loaded, and shows only then. Before, it acted on whatever name was typed in Name, so typing another saved macro's name deleted that macro. *Checked in a test game.*
+- **A macro can't be loaded while Calculate or a pathfinder runs** (from the Saved macros list or Macro Tools' Load it again): it says "Calculate is running. Load once it has finished." Before, Calculate carried on over the new macro, which could crash the game or damage the macro. *Checked in a test game.*
+- **Mirror inputs** acts only in two-player levels, as its hint says. In a 1-player level with Mirror inverted on, it turned every hold inside out. *Checked in a test game.*
+- **Tick rate:** a rate you type takes effect once you've finished typing it. Before, typing 480 ran the game at 4 and then 48 TPS on the way, and a recording kept each one. *Checked in a test game.*
+- **Save** says whether it saved, and refuses a name with \ / : * ? " < > | (as Rename does). Before, a bad name failed without a word. *Checked in a test game.*
+- **Hide attempts:** switching it off shows the attempt counter again right away, not at the next restart. *Checked in a test game.*
+- **Macro Tools' pickers** (Diff, Trim, Merge, Edit a macro) list a name saved under two themes once per file, with its theme tag, and each entry acts on its own file. *Checked in a test game.*
+- **Import a macro**'s file picker shows GucciBot macros saved under every theme. On a Mac they couldn't be picked at all. *Not tested yet.*
+- **Pathfinder:** one engine at a time. The Engine and Search choices are grayed out while a search runs, so a second one can't start on top of it. *Checked in a test game.*
+- **Calculate:** Solve L* works in a level with no macro playing. Under Legit only, the playhead's Test and a Saved macros row's Calculate are grayed out, and both Calculate buttons say why. *Checked in a test game.*
+- **Find the best tick** obeys Legit only. *Checked in a test game.*
+- **Calibration** stops when you leave the level, as its hint always said. *Checked in a test game.*
+- **Trainer stats:** finishing a run counts as an attempt. Before, Attempts only counted deaths. *Checked in a test game.*
+- **Video Mode's bar** has no Pause or Restart while it follows the level. They did nothing there, and Restart wiped your clicks for the run. *Not tested yet.*
+- **Classic Pathfinder:** a Minimum progress above 60 survives a restart, the search cover says "Pathfinding..." (not "Calculating..."), and the Agency map no longer shows the last search's frozen result. *Checked in a test game, except the Agency map.*
+- **Macro path:** Marker size and Line opacity change on screen as you move them. *Not tested yet.*
+- **Macro Buffing:** spikes around clicks center on the click's own tick. They were one tick late. *Not tested yet.*
+- **On phones:** the Frame Editor has Select all and Select this lane buttons, and the Click Trainer has a Tap button to click along away from the level. *Not tested on a phone yet.*
 - Text across the menu was fixed so it says what each setting really does, in American spelling.
 
 ### Platforms
