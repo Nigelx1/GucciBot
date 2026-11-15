@@ -372,6 +372,20 @@ void FrameWindowAnalyzer::restoreOffsets() {
         scbf::setOffset(actions[k], m_originalOffsets[k]);
 }
 
+// GucciBot (2026-11-15): saving the macro mid-run wrote the inputs where the
+// run had them for a test: the one it was measuring moved, and with Retime
+// every later input of that player too.
+bool FrameWindowAnalyzer::unshiftedTiming(std::vector<slc::Action>& actions) const {
+    if (!m_running || actions.size() != m_originalFrames.size() ||
+        actions.size() != m_originalOffsets.size())
+        return false;
+    for (size_t k = 0; k < actions.size(); k++) {
+        actions[k].m_frame = m_originalFrames[k];
+        scbf::setOffset(actions[k], m_originalOffsets[k]);
+    }
+    return true;
+}
+
 static bool isDashOrb(GameObjectType type) {
     return type == GameObjectType::DashRing ||
            type == GameObjectType::GravityDashRing;

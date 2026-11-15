@@ -211,6 +211,12 @@ class FrameWindowAnalyzer {
 
     bool armsTicks() const { return m_running && !m_subtickMacro; }
 
+    // GucciBot (2026-11-15): while a run counts, it moves the macro's inputs
+    // to test them. This puts the macro's own timing (what the run's end puts
+    // back) on a copy of its actions, for a save mid-run
+    // (GucciReplaySystem::save). False when no run has them moved.
+    bool unshiftedTiming(std::vector<slc::Action>& actions) const;
+
     // GucciBot (2026-10-23): this run counts with the 2-player fixes (the
     // switch as it was when the run started) in a 2-player level. The replay
     // then hands out actions in frame order (GucciReplaySystem::

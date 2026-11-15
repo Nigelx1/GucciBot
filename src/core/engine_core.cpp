@@ -1160,8 +1160,15 @@ namespace gucci {
         auto* gb = GucciEngine::get();
         m_replayName = gb->replayName;
 
+        // GucciBot (2026-11-15): mid-run, Calculate has the inputs moved to
+        // test them; the file gets the macro's own timing (unshiftedTiming).
+        decltype(m_actionAtom.m_actions) unshifted;
+        auto& acfw = ::Bot::get()->frameWindow();
+        bool const moved = acfw.running() && (unshifted = m_actionAtom.m_actions, acfw.unshiftedTiming(unshifted));
+        auto const& actions = moved ? unshifted : m_actionAtom.m_actions;
+
         std::vector<GBR6Input> p1, p2;
-        for (auto& a : m_actionAtom.m_actions) {
+        for (auto const& a : actions) {
             if (!a.isInput())
                 continue;
             GBR6Input inp;
@@ -1179,7 +1186,7 @@ namespace gucci {
         hdr.tps = static_cast<float>(gb->updater.m_tps);
         // A macro with TPS changes in it starts at the rate it was loaded
         // with: by now the game may be running at one of the later ones.
-        for (auto const& a : m_actionAtom.m_actions) {
+        for (auto const& a : actions) {
             if (a.m_type == gb::ActionType::TPS) {
                 hdr.tps = static_cast<float>(m_initialTPS);
                 break;
@@ -1201,7 +1208,7 @@ namespace gucci {
 
         auto f = GBR6File::fromInputs(hdr, p1, p2);
 
-        for (auto& a : m_actionAtom.m_actions) {
+        for (auto const& a : actions) {
             auto t = a.m_type;
             if (t == gb::ActionType::Death || t == gb::ActionType::Restart ||
                 t == gb::ActionType::RestartFull) {
@@ -1211,7 +1218,7 @@ namespace gucci {
         if (!f.deaths.empty())
             f.header.flags |= GBR6_HAS_DEATHS;
 
-        for (auto const& a : m_actionAtom.m_actions) {
+        for (auto const& a : actions) {
             if (!a.isInput() || !(a.m_subtick > 0.0 && a.m_subtick < 1.0))
                 continue;
             f.subticks.push_back({a.m_frame,
@@ -1224,7 +1231,7 @@ namespace gucci {
             f.header.flags |= GBR6_HAS_SUBTICK;
 
         // Mid-macro TPS changes (Macro Tools adds them).
-        for (auto const& a : m_actionAtom.m_actions)
+        for (auto const& a : actions)
             if (a.m_type == gb::ActionType::TPS && a.m_frame > 0 && std::isfinite(a.m_tps) && a.m_tps > 0.0)
                 f.tpsChanges.push_back({a.m_frame, a.m_tps});
         if (!f.tpsChanges.empty())

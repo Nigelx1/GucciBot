@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-au (Calculate: a run that stops keeps every window, and Continue picks up where it stopped)"
+    "2026-11-15-av (Saving a macro during a Calculate run writes its own timing, not the run's test shifts)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
