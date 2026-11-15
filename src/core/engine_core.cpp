@@ -3153,6 +3153,48 @@ namespace gucci {
         return false;
     }
 
+    // GucciBot (2026-11-15): a user ran Calculate for 7 hours and shut his PC
+    // off; nothing writes the windows file mid-run unless the macro is saved.
+    // Now, while a run counts, the file is written about every two minutes,
+    // the way a save mid-run writes it (what the run would leave if it
+    // stopped then: FrameWindowAnalyzer::saveResults), and once more as the
+    // game closes. Only when the macro has a saved file and the windows are
+    // that file's (fwWindowsForgotten), only when the run has counted more
+    // since the last write, and never for a run whose capture died.
+    void GucciEngine::keepRunningWindows(bool closing) {
+        using Clock = std::chrono::steady_clock;
+        static bool s_tracking = false;
+        static Clock::time_point s_next{};
+        static uint64_t s_stamp = 0;
+        constexpr auto kEvery = std::chrono::minutes(2);
+        auto& acfw = ::Bot::get()->frameWindow();
+        if (!acfw.running()) {
+            s_tracking = false;
+            return;
+        }
+        auto const now = Clock::now();
+        if (!s_tracking) {
+            // A run that just started has counted nothing new yet.
+            s_tracking = true;
+            s_next = now + kEvery;
+            s_stamp = acfw.runStamp();
+        }
+        if (!closing && now < s_next)
+            return;
+        s_next = now + kEvery;
+        if (acfw.runStamp() == s_stamp || fwWindowsForgotten)
+            return;
+        auto const path = replay.getCurrentPath();
+        std::error_code ec;
+        if (path.empty() || !fs::exists(path, ec))
+            return;
+        if (acfw.saveResults(fwAcSidecarPath(path))) {
+            s_stamp = acfw.runStamp();
+            log::info("[GucciBot] frame windows: {} the running count alongside {}",
+                      closing ? "the game is closing, saved" : "saved", path.filename().string());
+        }
+    }
+
     // Loading a macro already swaps its windows in (loadAcResults clears
     // first). This is for the paths that drop a macro's clicks without
     // loading another -- a fresh recording (onReset's full restart), a
@@ -3380,3 +3422,11 @@ namespace gucci {
     // build 2026-09-20-d for the last version that had both.
 
 } // namespace gucci
+
+// GucciBot (2026-11-15): a Calculate run going as the game closes writes its
+// windows file once more (GucciEngine::keepRunningWindows). Geode sends this
+// on a normal close; a PC that shuts off or a crash may never get here, which
+// is what the two-minute writes are for.
+$on_game(Exiting) {
+    gucci::GucciEngine::get()->keepRunningWindows(true);
+}

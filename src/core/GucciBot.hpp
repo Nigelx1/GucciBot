@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-av (Saving a macro during a Calculate run writes its own timing, not the run's test shifts)"
+    "2026-11-15-aw (Calculate: a running run's windows file is written every two minutes and as the game closes)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -1137,6 +1137,11 @@ namespace gucci {
         // menu calls it): a run that didn't finish keeps the windows saved
         // before it, and returns true when it did.
         bool saveAcResultsAfterRun(bool ok);
+        // GucciBot (2026-11-15): while a Calculate run counts, its windows file
+        // is written about every two minutes (the menu's frame calls this), and
+        // once more when the game is closing (`closing`), so a game that
+        // closes or a PC that shuts off mid-run loses two minutes at most.
+        void keepRunningWindows(bool closing = false);
         // Drops the frame windows in memory (not the sidecar on disk) when
         // the macro they belong to stops being the loaded one.
         void forgetMacroWindows();

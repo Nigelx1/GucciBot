@@ -3689,6 +3689,8 @@ namespace gucci::ui {
                 }
                 s_wasRunning = running;
                 analyzer.tick(PlayLayer::get());
+                // GucciBot (2026-11-15): the windows file, about every two minutes of a run.
+                GucciEngine::get()->keepRunningWindows();
                 if (auto* pl = PlayLayer::get()) {
                     analyzer.updateProgressOverlay(pl);
                     analyzer.updateLegTrail(pl);
