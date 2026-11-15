@@ -1911,14 +1911,9 @@ namespace gucci::ui {
                 ImGui::EndDisabled();
             }
 #endif
+            // It keeps its own step-back ticks while on (GucciUpdater::
+            // keepsStepBacks), so it works with Backwards stepping off.
             cheatSwitch("Prevent death", "Steps back instead of dying", &upd.m_preventDeath, "feat_prevent_death");
-            // The step back needs Backwards stepping (engine_updater.cpp
-            // backwardsStep); without it a death only pauses the game, dead.
-            // Stop before a death's look-ahead doesn't need it.
-            if (upd.m_preventDeath && !upd.m_backwardsStepping && !upd.m_fullGamePrediction)
-                kit::Note("Needs Backwards stepping (Macro > Frame stepper) to step back; without it a death just "
-                          "pauses the game. Or turn on Stop before a death (Hacks > Prediction).",
-                          Tone::Warn);
             float inputFps = static_cast<float>(upd.m_inputFps);
             kit::RowBegin("Input FPS", "While recording, clicks land only on this many ticks a second (sub-tick "
                                        "recording is off then). 0, or the tick rate and up: every tick");

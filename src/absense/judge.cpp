@@ -95,6 +95,7 @@ namespace absense::judge {
         auto const savedMode = gb->mode;
         bool const savedPaused = upd.m_paused;
         bool const savedBackstep = upd.m_backwardsStepping;
+        bool const savedStoreHold = upd.m_holdStepBackStore;
         uint32_t const startFrame = upd.getFrame();
         r.startFrame = startFrame;
         r.xBefore = pl->m_player1->getPositionX();
@@ -111,6 +112,7 @@ namespace absense::judge {
         if (savedMode != gucci::GucciEngine::Mode::Idle)
             gb->setMode(gucci::GucciEngine::Mode::Idle);
         upd.m_backwardsStepping = false;
+        upd.m_holdStepBackStore = true;  // nor for Prevent death's sake
         upd.setPaused(true);
         r.onlyRefreshAtStart = upd.m_onlyRefresh;
         // A step someone else armed is theirs: taken out of the way here and
@@ -243,6 +245,7 @@ namespace absense::judge {
         cp->release();
 
         upd.m_backwardsStepping = savedBackstep;
+        upd.m_holdStepBackStore = savedStoreHold;
         if (savedMode != gucci::GucciEngine::Mode::Idle)
             gb->setMode(savedMode);
         upd.setPaused(savedPaused);

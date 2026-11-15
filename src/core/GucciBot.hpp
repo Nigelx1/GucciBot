@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-ap (Render audio: gameplay sounds follow only the SFX volume and trigger sounds only the trigger volume, so the death sound is in renders again)"
+    "2026-11-15-aq (Prevent death works with Backwards stepping off: it keeps its own step-back ticks while it is on)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -569,6 +569,20 @@ namespace gucci {
         bool m_predicting = false;
 
         bool m_preventDeath = false;
+        // Prevent death steps back through the same store as Backwards
+        // stepping (tickStartWork, backwardsStep), so the store is kept
+        // whenever either is on: same store, same cap (m_maxBackstepFrames),
+        // same memory. Until 2026-11-15 it needed Backwards stepping on too,
+        // and without it a death only paused the game, dead. The menu's step
+        // back, the MCP step and Find the best tick still need Backwards
+        // stepping itself. A run that switches Backwards stepping off to keep
+        // its own ticks out of the store (the judge, Calculate's trip back)
+        // sets m_holdStepBackStore as well, so Prevent death doesn't fill it
+        // under them.
+        bool m_holdStepBackStore = false;
+        bool keepsStepBacks() const {
+            return m_backwardsStepping || (m_preventDeath && !m_holdStepBackStore);
+        }
         bool m_autoFlipOnDeath = false;
         // Silicate's two Prevent Death extras. Both were declared here and
         // read by nothing until 2026-09-27.

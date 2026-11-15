@@ -603,7 +603,7 @@ void GucciUpdater::runFrozenTick() {
 
 void GucciUpdater::backwardsStep(int n) {
     m_paused = true;
-    if (n <= 0 || !m_backwardsStepping)
+    if (n <= 0 || !keepsStepBacks())
         return;
 
     auto* pl = PlayLayer::get();
@@ -710,7 +710,7 @@ static void tickStartWork() {
     auto* pl = PlayLayer::get();
     if (!pl)
         return;
-    if (!pl->m_playerDied && upd.m_backwardsStepping && !SLRenderer::get()->isRecording()) {
+    if (!pl->m_playerDied && upd.keepsStepBacks() && !SLRenderer::get()->isRecording()) {
         // Absense's pathfinder asks for a frame only every few ticks while it
         // searches (Silicate's m_storeEvery); otherwise every tick, as always.
         uint32_t const every = gb->practiceFix.m_storeEvery;

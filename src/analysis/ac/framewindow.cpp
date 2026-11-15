@@ -9733,6 +9733,8 @@ void FrameWindowAnalyzer::beginTrip() {
     m_trip.backstep = updater.m_backwardsStepping;
 
     updater.m_backwardsStepping = false;
+    // Nor for Prevent death's sake (GucciUpdater::keepsStepBacks).
+    updater.m_holdStepBackStore = true;
     updater.setPaused(true);
     updater.m_predicting = true;
     this->muteAudio();
@@ -9784,8 +9786,11 @@ void FrameWindowAnalyzer::stepTrip(PlayLayer* pl) {
             return;
         }
 
-        if (m_trip.backstep && now + kept >= m_trip.frame)
-            updater.m_backwardsStepping = true;
+        if (now + kept >= m_trip.frame) {
+            if (m_trip.backstep)
+                updater.m_backwardsStepping = true;
+            updater.m_holdStepBackStore = false;
+        }
 
         updater.stepOnce();
         cocos2d::CCScheduler::get()->update(updater.getPhysicsDt());
@@ -9817,6 +9822,7 @@ void FrameWindowAnalyzer::endTrip(PlayLayer* pl, bool arrived,
     auto& updater = bot->updater();
 
     updater.m_backwardsStepping = m_trip.backstep;
+    updater.m_holdStepBackStore = false;
     updater.m_predicting = false;
     this->unmuteAudio();
     bot->trailBuffer().loadSamples(m_trip.trail[0], m_trip.trail[1]);
