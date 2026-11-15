@@ -432,17 +432,15 @@ void ringJump(PlayerObject* player, RingObject* ring) {
     // 0x399520-0x39956b: a ball spins, anything else not locked or dashing
     // takes the normal rotation, and a locked or dashing one takes neither.
     if (player->m_isBall) {
-#ifdef GEODE_IS_WINDOWS
+        // Bound on every platform (win, imac, m1, ios; Android by symbol), as
+        // gravity.cpp's unguarded calls already rely on.
         player->runBallRotation2();
-#endif
     } else if (!player->m_isLocked && !player->m_isDashing) {
         player->m_isRotating = false;
         player->m_isBallRotating2 = false;
         player->m_isBallRotating = false;
         player->m_rotationSpeed = 0.0;
-#ifdef GEODE_IS_WINDOWS
         player->runNormalRotation(0, 1.0);
-#endif
     }
 
     cocos2d::CCPoint playerPos = player->getPosition();

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-12-t (Compact Mode: tick rate, speed, Show hitboxes, Show Trajectory, then the frame stepper)"
+    "2026-11-15-a (Look-ahead copies spin a ball and turn a normal player on ring jumps off Windows too)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
