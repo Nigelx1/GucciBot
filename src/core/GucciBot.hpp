@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-ac (Video Mode bar: no Pause or Restart while it follows the level)"
+    "2026-11-15-ad (Trainer stats: a completed run counts as an attempt)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

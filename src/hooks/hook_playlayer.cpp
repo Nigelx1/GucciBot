@@ -1067,11 +1067,16 @@ class $modify(GB7PlayLayer, PlayLayer) {
             return;
 
         PlayLayer::levelComplete();
+        // A finished run is an attempt too: Attempts only went up on a death
+        // (destroyPlayer), so the Stats card's Attempts chip always read the
+        // same as Deaths.
         if (!gb->isPlaying() && gbju::isJupiterLevel(this)) {
+            gb->jupiterAttemptCount++;
             gb->jupiterSessionBestPct = 100.f;
             gbju::notifyJupiterAttemptEnded();
         }
         if (!gb->isPlaying() && gbtr::isTrainerLevel(this)) {
+            gb->trainerAttemptCount++;
             gb->trainerSessionBestPct = 100.f;
             gbtr::notifyTrainerAttemptEnded();
         }
