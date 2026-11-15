@@ -160,7 +160,9 @@ GucciBot's safe mode follows what the Demonlist allows, strictly. The aim is sim
 - **Presets** refuse names they can't save, and say when a save fails. *Not tested yet.*
 - **Hide percentage** (Hacks > Visual) now hides GD's percentage label. In beta.5 it did nothing. *Not tested yet.*
 - **Video Mode:** Opacity, Sync offset, Nudge and the Alignment Tool can be reached again, in a small "Video settings" window over the video. *Not tested yet.*
-- **Hotkeys:** every hotkey toggle (except RNG lock) now saves its setting, the same way its menu switch does. *Not tested yet.*
+- **Hotkeys:** every hotkey toggle now saves its setting, the same way its menu switch does. *Not tested yet.*
+- **Prevent death** works with Backwards stepping off: it keeps its own step-back ticks while it's on. Before, without Backwards stepping it paused after you were already dead. *Checked in a test game.*
+- **RNG lock and its seed** are saved across launches, like the other switches. *Checked in a test game.*
 - **Update checker:** its crash guard no longer switches it off by mistake. If you had it off, turn Check for updates back on in Settings. *Not tested yet.*
 - **The start-position warning** can show now: a run started from a start position is marked when it's saved. *Checked in a test game.*
 - Geode's log no longer fills up with lines from every tick, or with Calculate's step-by-step detail, which goes to guccibot_fw.log now. *Checked in a test game.*
@@ -176,7 +178,8 @@ GucciBot's safe mode follows what the Demonlist allows, strictly. The aim is sim
 - **Calculate:** Solve L* works in a level with no macro playing. Under Legit only, the playhead's Test and a Saved macros row's Calculate are grayed out, and both Calculate buttons say why. *Checked in a test game.*
 - **Find the best tick** obeys Legit only. *Checked in a test game.*
 - **Calibration** stops when you leave the level, as its hint always said. *Checked in a test game.*
-- **Trainer stats:** finishing a run counts as an attempt. Before, Attempts only counted deaths. *Checked in a test game.*
+- **Trainer stats:** finishing a run, or restarting part way through, counts as an attempt, and reopening a level doesn't count the last one again. Before, Attempts only counted deaths. *Checked in a test game.*
+- **The Trainer page's macro picker** lists a name saved under two themes once per file, with its theme tag, loads that file, and remembers which one after a restart. *Checked in a test game.*
 - **Video Mode's bar** has no Pause or Restart while it follows the level. They did nothing there, and Restart wiped your clicks for the run. *Not tested yet.*
 - **Classic Pathfinder:** a Minimum progress above 60 survives a restart, the search cover says "Pathfinding..." (not "Calculating..."), and the Agency map no longer shows the last search's frozen result. *Checked in a test game, except the Agency map.*
 - **Macro path:** Marker size and Line opacity change on screen as you move them. *Not tested yet.*
