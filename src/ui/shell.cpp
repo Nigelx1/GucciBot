@@ -1369,14 +1369,17 @@ namespace gucci::ui {
             // 240 TPS and 1.00x while Legit only is on (hacks/legit.hpp).
             kit::LegitGate gate;
             float tps = static_cast<float>(gb->updater.m_tps);
+            float const tpsWas = tps;
+            // A typed rate counts once it's finished (Enter or clicking away),
+            // so a half-typed one ("4" on the way to 480) never runs or goes
+            // into a recording; the - and + steps count at once.
 #if GB_NATIVE_ENGINE
             kit::RowBegin("Tick rate", hints ? "Physics ticks per second" : nullptr);
-            if (kit::InputFloat("tps", &tps, 1.f, "%.0f") && tps >= 1.f) {
+            if (kit::InputFloatCommit("tps", &tps, 1.f, "%.0f") && tps >= 1.f && tps != tpsWas) {
 #else
-            // Only a rate GD can run here is taken (core/portable_tps.hpp), so
-            // a half-typed one ("4" on the way to 480) is passed over.
+            // Only a rate GD can run here is taken (core/portable_tps.hpp).
             kit::RowBegin("Tick rate", hints ? "Physics ticks per second: 240, or 162 and up on this platform" : nullptr);
-            if (kit::InputFloat("tps", &tps, 1.f, "%.0f") && gucci::portable_tps::runnable(tps)) {
+            if (kit::InputFloatCommit("tps", &tps, 1.f, "%.0f") && gucci::portable_tps::runnable(tps) && tps != tpsWas) {
 #endif
                 gb->updater.setTps(tps);
                 Mod::get()->setSavedValue<double>("eng_tick_rate", tps);

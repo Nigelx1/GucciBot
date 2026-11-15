@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-l (Macro Tools: Edit a macro's Open opens the picked macro again)"
+    "2026-11-15-m (Tick rate: a typed rate counts once it is finished, not on every keystroke)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -456,6 +456,40 @@ namespace gucci::ui::kit {
         return changed;
     }
 
+    bool InputFloatCommit(const char* id, float* v, float step, const char* fmt) {
+        ImGui::PushID(id);
+        ImGui::SetNextItemWidth(Avail());
+        ImGuiStorage* store = ImGui::GetStateStorage();
+        ImGuiID const pendingKey = ImGui::GetID("##pending");
+        ImGuiID const hasKey = ImGui::GetID("##hasPending");
+        float shown = *v;
+        bool const edited = ImGui::InputFloat("##value", &shown, step, step * 10.f, fmt);
+        // InputScalar's text box is "" under the label's ID (imgui_widgets.cpp).
+        ImGui::PushID("##value");
+        ImGuiID const boxId = ImGui::GetID("");
+        ImGui::PopID();
+        bool const typing = ImGui::GetActiveID() == boxId;
+        bool changed = false;
+        if (edited && typing) {
+            // Mid-typing: hold it until the box lets go.
+            store->SetFloat(pendingKey, shown);
+            store->SetBool(hasKey, true);
+        } else if (edited) {
+            // A - or + step.
+            store->SetBool(hasKey, false);
+            *v = shown;
+            changed = true;
+        } else if (!typing && store->GetBool(hasKey, false)) {
+            store->SetBool(hasKey, false);
+            *v = store->GetFloat(pendingKey, *v);
+            changed = true;
+        }
+        if (probe::on())
+            probe::input("##value", static_cast<double>(*v));
+        ImGui::PopID();
+        return changed;
+    }
+
     bool InputDouble(const char* id, double* v, double step, const char* fmt) {
         ImGui::PushID(id);
         ImGui::SetNextItemWidth(Avail());

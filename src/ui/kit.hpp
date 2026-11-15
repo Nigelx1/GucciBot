@@ -65,6 +65,11 @@ namespace gucci::ui::kit {
     bool SliderFloat(const char* id, float* v, float lo, float hi, const char* fmt = "%.2f");
     bool SliderInt(const char* id, int* v, int lo, int hi, const char* fmt = "%d");
     bool InputFloat(const char* id, float* v, float step = 0.f, const char* fmt = "%.3f");
+    // InputFloat that reports a typed value only once it's finished (Enter, or
+    // clicking away), not one keystroke at a time; the - and + steps still
+    // count at once. For a value where a half-typed number does harm (the tick
+    // rate: "4" on the way to 480).
+    bool InputFloatCommit(const char* id, float* v, float step = 0.f, const char* fmt = "%.3f");
     bool InputDouble(const char* id, double* v, double step = 0.0, const char* fmt = "%.3f");
     bool InputInt(const char* id, int* v, int step = 1);
     bool InputText(const char* id, char* buf, size_t size, const char* placeholder = nullptr,
