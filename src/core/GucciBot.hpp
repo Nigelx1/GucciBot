@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-q (Save says whether it saved, and refuses a name with a reserved character)"
+    "2026-11-15-r (Hide attempts: switching it off shows the attempt label again)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

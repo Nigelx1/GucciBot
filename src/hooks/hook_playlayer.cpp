@@ -101,6 +101,9 @@ class $modify(GB7PlayLayer, PlayLayer) {
         // Hide percentage took GD's percentage label down, so switching it
         // off puts the label back (and only then: GD's own option decides).
         bool m_hidPercent = false;
+        // ...and Hide attempts the same way: off left the label hidden until
+        // the next reset (in-game check, 2026-11-15).
+        bool m_hidAttempts = false;
     };
 
     CheckpointObject* markCheckpoint() {
@@ -796,8 +799,17 @@ class $modify(GB7PlayLayer, PlayLayer) {
     void postUpdate(float dt) {
         PlayLayer::postUpdate(dt);
         auto* gb = GucciEngine::get();
-        if (gb->hackHideAttempts && m_attemptLabel)
-            m_attemptLabel->setVisible(false);
+        if (m_attemptLabel) {
+            if (gb->hackHideAttempts) {
+                if (m_attemptLabel->isVisible()) {
+                    m_attemptLabel->setVisible(false);
+                    m_fields->m_hidAttempts = true;
+                }
+            } else if (m_fields->m_hidAttempts) {
+                m_fields->m_hidAttempts = false;
+                m_attemptLabel->setVisible(true);
+            }
+        }
         // Hacks > Visual > Hide percentage: GD's percentage label, next to the
         // progress bar.
         if (m_percentageLabel) {
