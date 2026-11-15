@@ -23,7 +23,10 @@
 
 #include <utility>
 
-#if defined(GEODE_IS_WINDOWS)
+// GB_FORCE_PORTABLE (a TEST-ONLY CMake option, default off; never set by CI,
+// build_win.bat or a release) builds Windows with the off-Windows engine, so a
+// hidden Windows test game can run the code macOS and Android run.
+#if defined(GEODE_IS_WINDOWS) && !defined(GB_FORCE_PORTABLE)
 #define GB_NATIVE_ENGINE 1
 #else
 #define GB_NATIVE_ENGINE 0

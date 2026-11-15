@@ -3013,6 +3013,10 @@ namespace gucci {
                 log::info("[GucciBot] Portable engine: {:.0f} TPS; the Windows-only features stand aside.",
                           updater.m_tps);
         }
+#ifdef GB_FORCE_PORTABLE
+        log::warn("[GucciBot] TEST build (GB_FORCE_PORTABLE): Windows running the off-Windows engine. "
+                  "Never ship it.");
+#endif
 
         // Switched off from its own menu last time (core/bot_switch.hpp): no
         // midhook or patch went in, and the hooks come out here. Standing

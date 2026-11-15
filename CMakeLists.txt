@@ -133,6 +133,21 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
     IMGUI_ENABLE_TEST_ENGINE
 )
 
+# TEST ONLY (2026-11-15): -DGB_FORCE_PORTABLE=ON builds Windows with the
+# off-Windows engine (GB_NATIVE_ENGINE 0, core/platform.hpp: GJBaseGameLayer::
+# processCommands ticking, portable TPS and checkpoint placement, the World
+# off), so a hidden Windows test game can exercise what macOS and Android run.
+# Off by default; CI, build_win.bat and releases never set it, and without it
+# nothing here changes. Build it in its own folder (tools/build_portable.py).
+option(GB_FORCE_PORTABLE "TEST ONLY: build Windows with the off-Windows engine" OFF)
+if(GB_FORCE_PORTABLE)
+    if(NOT WIN32)
+        message(FATAL_ERROR "GB_FORCE_PORTABLE is a Windows test build")
+    endif()
+    message(WARNING "GB_FORCE_PORTABLE: TEST build with the off-Windows engine. Never ship it.")
+    target_compile_definitions(${PROJECT_NAME} PRIVATE GB_FORCE_PORTABLE=1)
+endif()
+
 if(MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE /bigobj /utf-8 /wd4201)
 endif()

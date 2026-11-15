@@ -1353,6 +1353,9 @@ class $modify(GBPortableCheckKey, UILayer) {
 };
 
 class $modify(GBPortableCheckpoint, PlayLayer) {
+    // Inline on Windows: not in the GB_FORCE_PORTABLE test build (core/platform.hpp),
+    // where onCheck and processCheckpoints still take every request.
+#if !defined(GEODE_IS_WINDOWS)
     void queueCheckpoint() {
         if (!GucciEngine::get()->enabled)
             return PlayLayer::queueCheckpoint();
@@ -1360,6 +1363,7 @@ class $modify(GBPortableCheckpoint, PlayLayer) {
         if (queueFrozenCheckpoint(this))
             logRequestOnce(logged, "PlayLayer::queueCheckpoint");
     }
+#endif
 
     void processCheckpoints() {
         if (GucciEngine::get()->enabled && m_tryPlaceCheckpoint) {

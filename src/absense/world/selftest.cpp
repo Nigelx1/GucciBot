@@ -684,7 +684,7 @@ void World::turnOff(const char* why) {
 }
 
 void World::init(GJBaseGameLayer* pl) {
-#ifndef GEODE_IS_WINDOWS
+#if !defined(GEODE_IS_WINDOWS) || defined(GB_FORCE_PORTABLE)  // core/platform.hpp
     // GucciBot multiplatform (2026-10-05): the World reads and writes GD's
     // Windows memory layout (world/offsets.hpp), and the checks below compare
     // code bytes at Windows addresses, which in another platform's binary are
