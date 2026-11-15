@@ -577,7 +577,7 @@ def _require_forced():
         raise RuntimeError("safe mode isn't forced in the game, and gucci_force_safe_mode didn't turn it on")
 
 
-def launch(force_safe=True, timeout=180, settle=20, visible=None, port=None, env=None):
+def launch(force_safe=True, timeout=180, settle=20, visible=None, port=None, env=None, sharp=False):
     """Starts Geometry Dash (the Geode copy) and waits until Assistant Access answers.
 
     Refuses if any GeometryDash.exe is running already (it may be Nigel's), if
@@ -594,6 +594,10 @@ def launch(force_safe=True, timeout=180, settle=20, visible=None, port=None, env
     this thread's game (use()). Other games assist started may run (several
     at once); one nobody started through assist (others()) means it refuses.
     env: more environment variables for the game (e.g. GUCCIBOT_AI_WEIGHTS).
+    sharp: give a test copy's save Nigel's screen resolution and texture
+    quality first (_ensure_sharp), so screenshots come out like his screen
+    instead of 640x480 with default textures. The window still starts
+    minimized and off screen; it costs GPU time, so only ask when shots matter.
 
     The window is minimized as soon as it appears, without taking the focus
     (the window used before keeps it or gets it back), so the game runs in the
@@ -640,6 +644,8 @@ def launch(force_safe=True, timeout=180, settle=20, visible=None, port=None, env
         env.pop("GUCCIBOT_QUIET_WINDOW", None)
     else:
         _ensure_windowed()
+    if sharp:
+        _ensure_sharp()
     try:
         proc = subprocess.Popen([GD_EXE], cwd=GD_DIR, env=env, stdin=devnull, stdout=devnull, stderr=devnull,
                                 creationflags=flags | subprocess.CREATE_BREAKAWAY_FROM_JOB, startupinfo=startup)
@@ -874,6 +880,48 @@ def _ensure_windowed():
     elif "<k>valueKeeper</k><d />" in text:
         new = text.replace("<k>valueKeeper</k><d />", "<k>valueKeeper</k><d>" + key + "<s>1</s></d>", 1)
     else:
+        return False
+    encoded = bytes(b ^ 11 for b in base64.urlsafe_b64encode(gzip.compress(new.encode("utf-8"))))
+    tmp = path + ".gbtmp"
+    with open(tmp, "wb") as f:
+        f.write(encoded)
+    os.replace(tmp, path)
+    return True
+
+
+def _ensure_sharp():
+    """Gives a test copy's save Nigel's resolution and texture quality, before a launch(sharp=True).
+
+    Measured 2026-11-15: a test copy's save keeps GD's defaults (resolution -1, no texQuality), which windowed
+    is a 640x480 window with default textures, so its screenshots were 640x480; Nigel's save had resolution 21
+    and texQuality 3 (High). His save is only READ, for those two values (21 and 3 when it can't be read);
+    only the test copy's own save is written. True when the save was changed."""
+    local = os.environ.get("LOCALAPPDATA", "")
+    nigel = os.path.normcase(os.path.join(local, "GeometryDash"))
+    if not GD_SAVE_DIR or os.path.normcase(os.path.abspath(GD_SAVE_DIR)) == nigel:
+        return False
+    path = os.path.join(GD_SAVE_DIR, "CCGameManager.dat")
+    if not os.path.exists(path):
+        return False
+    want = {"resolution": "21", "texQuality": "3"}
+    try:
+        his = gd_decode(os.path.join(nigel, "CCGameManager.dat"))
+        for k in want:
+            m = re.search(r"<k>" + k + r"</k><i>(-?\d+)</i>", his)
+            if m:
+                want[k] = m.group(1)
+    except Exception:  # noqa: BLE001 - his save unreadable: the defaults above
+        pass
+    text = gd_decode(path)
+    new = text
+    for k, v in want.items():
+        pat = r"<k>" + k + r"</k><i>-?\d+</i>"
+        if re.search(pat, new):
+            new = re.sub(pat, f"<k>{k}</k><i>{v}</i>", new, count=1)
+        elif k == "texQuality" and re.search(r"<k>resolution</k><i>-?\d+</i>", new):
+            new = re.sub(r"(<k>resolution</k><i>-?\d+</i>)", lambda m: m.group(1) + f"<k>texQuality</k><i>{v}</i>",
+                         new, count=1)
+    if new == text:
         return False
     encoded = bytes(b ^ 11 for b in base64.urlsafe_b64encode(gzip.compress(new.encode("utf-8"))))
     tmp = path + ".gbtmp"
