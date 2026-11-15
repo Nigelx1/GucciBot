@@ -3767,6 +3767,10 @@ namespace gucci::ui {
 
     } // namespace
 
+    std::string savedMacroTag(std::string const& ext) {
+        return macroTag(ext);
+    }
+
     void suspendAssistantAccess() {
         auto* server = mcp::Server::get();
         if (!server->running())

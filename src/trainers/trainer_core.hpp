@@ -133,8 +133,9 @@ namespace gucci::trainers {
     // ---- the Trainer's macro and track
 
     // Loads a saved macro by name (stem) into the Trainer with its segments
-    // and notes. Keeps the previous one if it doesn't load.
-    bool selectMacro(std::string const& stem);
+    // and notes: the file with extension `ext`, or with none given the active
+    // theme's file first. Keeps the previous one if it doesn't load.
+    bool selectMacro(std::string const& stem, std::string const& ext = "");
     std::filesystem::path importedTrackPath();
     bool importTrack(std::filesystem::path const& from, std::string& error);
     void removeTrack();

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-as (Trainer stats: a restart part way through counts as an attempt, and opening a level does not count the last one again)"
+    "2026-11-15-at (Trainer page: the macro picker lists each file with its theme tag and loads that file)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -970,6 +970,7 @@ namespace gucci {
 
         TrainerMacroData trainerMacro;
         std::string trainerMacroName;
+        std::string trainerMacroExt;  // the loaded file's extension (".brrr", ...)
 
         std::string trainerNotes;
         std::string trainerSegmentsRaw;
@@ -1011,7 +1012,10 @@ namespace gucci {
         // Click Indicators in the level (Bogdaner09's idea): the trainer macro's
         // coming presses drawn as bars where it pressed, as wide as it held.
 
-        bool loadTrainerMacro(const std::string& stem);
+        // The file `stem` + `ext` when `ext` is given; with a name alone, the
+        // active theme's file first (findMacroFile). Saves the pick, name and
+        // extension, for the next launch.
+        bool loadTrainerMacro(const std::string& stem, const std::string& ext = "");
         // The JMF macro's ghost path: the bundled .gdr has inputs only, so the
         // JMF page hands over a played macro's path and this keeps it (memory
         // and a sidecar in the jupiter folder). Empty clears it.

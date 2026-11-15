@@ -466,7 +466,10 @@ namespace gucci::testset {
                 v.push_back(engineBool("trainer_any_best_ghost", [tr]() -> bool& { return tr().bestGhost; }));
                 // The page's macro pick. A test points it only at its own
                 // copies (zz_gbtest_*), which can't be one of Nigel's macros.
-                v.push_back({"trainer_macro_name", "text", Store::Field,
+                // The file's extension is saved beside it (trainer_macro_ext):
+                // shielded with it, and the user's own file is the one loaded
+                // again at the reset.
+                Key trainerPick{"trainer_macro_name", "text", Store::Field,
                              [] {
                                  trainers::ensureLoaded();
                                  return matjson::Value(gb()->trainerMacroName);
@@ -475,16 +478,27 @@ namespace gucci::testset {
                                  auto const name = wantString("trainer_macro_name", val);
                                  if (!restoring && name.rfind("zz_gbtest_", 0) != 0)
                                      throw ToolError("trainer_macro_name takes a test copy's name (zz_gbtest_...)");
+                                 // The user's file, taken before a test's first pick.
+                                 static std::optional<std::string> userExt;
+                                 if (!restoring && !userExt)
+                                     userExt = gb()->trainerMacroExt;
+                                 std::string const ext = restoring && userExt ? *userExt : std::string();
+                                 if (restoring)
+                                     userExt.reset();
                                  if (name.empty()) {
                                      // None was picked: the Trainer goes back to empty.
                                      gb()->trainerMacro = {};
                                      gb()->trainerMacroName.clear();
+                                     gb()->trainerMacroExt.clear();
                                      Mod::get()->setSavedValue<std::string>("trainer_macro_name", "");
+                                     Mod::get()->setSavedValue<std::string>("trainer_macro_ext", "");
                                      return;
                                  }
-                                 if (!trainers::selectMacro(name))
+                                 if (!trainers::selectMacro(name, ext))
                                      throw ToolError("no macro called " + name + " in the replays folder");
-                             }});
+                             }};
+                trainerPick.alsoShield = {"trainer_macro_ext"};
+                v.push_back(std::move(trainerPick));
 
                 // Render (read from the container when a render starts).
                 v.push_back(live("render_output_folder", LiveType::Text));

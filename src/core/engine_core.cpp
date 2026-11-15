@@ -957,26 +957,30 @@ namespace gucci {
         return deltaFrames;
     }
 
-    bool GucciEngine::loadTrainerMacro(const std::string& stem) {
-        auto dir = getReplayDir();
-        fs::path found;
-        for (auto& ext : ui::knownMacroExtensions()) {
-            std::error_code ec;
-            auto candidate = dir / (stem + ext);
-            if (fs::exists(candidate, ec)) {
-                found = candidate;
-                break;
-            }
-        }
+    // The Trainer page's picker lists every file with its theme tag and hands
+    // over the file's extension (2026-11-15): one name saved under two themes
+    // used to be two entries that both loaded the active theme's file. A pick
+    // saved before then has no extension and still finds that one.
+    bool GucciEngine::loadTrainerMacro(const std::string& stem, const std::string& ext) {
+        auto found = findMacroFile(stem, ext);
+        // The picked file was converted to another theme's extension (Convert
+        // to .brrr renames it): the name alone still finds it, as it did
+        // before the extension was saved.
+        if (found.empty() && !ext.empty())
+            found = findMacroFile(stem);
         if (found.empty())
             return false;
 
         loadTrainerMacroData(found, trainerMacro);
         if (!trainerMacro.loaded)
             return false;
+        // The extension is what follows the name ("a.b" + ".brrr" is ".brrr").
+        std::string const file = found.filename().string();
         trainerMacroName = stem;
+        trainerMacroExt = file.size() > stem.size() ? file.substr(stem.size()) : found.extension().string();
         Mod::get()->setSavedValue("trainer_macro_name", stem);
-        log::info("[GucciBot] Trainer: loaded macro '{}'", stem);
+        Mod::get()->setSavedValue("trainer_macro_ext", trainerMacroExt);
+        log::info("[GucciBot] Trainer: loaded macro '{}{}'", stem, trainerMacroExt);
         return true;
     }
 

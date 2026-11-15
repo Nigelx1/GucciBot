@@ -378,7 +378,10 @@ namespace gucci::trainers {
         g_macroRestored = true;
         auto* gb = GucciEngine::get();
         auto const saved = Mod::get()->getSavedValue<std::string>("trainer_macro_name", "");
-        if (!saved.empty() && gb->trainerMacroName.empty() && gb->loadTrainerMacro(saved))
+        // The file's extension, saved beside the name since 2026-11-15; a
+        // pick saved before has none and loads the active theme's file.
+        auto const savedExt = Mod::get()->getSavedValue<std::string>("trainer_macro_ext", "");
+        if (!saved.empty() && gb->trainerMacroName.empty() && gb->loadTrainerMacro(saved, savedExt))
             loadMacroScoped(Kind::Any);
     }
 
@@ -823,14 +826,15 @@ namespace gucci::trainers {
 
     // ------------------------------------------------------------ the Trainer's macro and track
 
-    bool selectMacro(std::string const& stem) {
+    bool selectMacro(std::string const& stem, std::string const& ext) {
         auto* gb = GucciEngine::get();
         std::string const previous = gb->trainerMacroName;
-        if (!gb->loadTrainerMacro(stem)) {
+        std::string const previousExt = gb->trainerMacroExt;
+        if (!gb->loadTrainerMacro(stem, ext)) {
             // loadTrainerMacro has already emptied the Trainer; put the macro
             // that was there back rather than leave its name on nothing.
             if (!previous.empty())
-                gb->loadTrainerMacro(previous);
+                gb->loadTrainerMacro(previous, previousExt);
             return false;
         }
         loadMacroScoped(Kind::Any);

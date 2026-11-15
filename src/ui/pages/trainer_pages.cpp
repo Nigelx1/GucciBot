@@ -789,34 +789,46 @@ namespace gucci::ui::pages {
             auto s = tr::state(Kind::Any);
             kit::BeginCard("Trainer", "Point it at any of your saved macros.");
 
-            auto const& names = gb->storedMacros;
-            if (g_pick < 0 || g_pick >= (int)names.size()) {
-                auto it = std::find(names.begin(), names.end(), gb->trainerMacroName);
-                g_pick = it == names.end() ? -1 : (int)(it - names.begin());
+            // One entry per file, tagged with its theme as the Saved macros
+            // list is (Compact Mode's picker does the same): a name saved
+            // under two themes is two entries, each loading its own file.
+            auto const& files = gb->storedMacroFiles;
+            auto const label = [](std::string const& name, std::string const& ext) {
+                std::string const tag = ui::savedMacroTag(ext);
+                return tag.empty() ? name : fmt::format("{} ({})", name, tag);
+            };
+            std::vector<std::string> labels;
+            labels.reserve(files.size());
+            for (auto const& [name, ext] : files)
+                labels.push_back(label(name, ext));
+            if (g_pick < 0 || g_pick >= (int)files.size()) {
+                auto it = std::find(files.begin(), files.end(),
+                                    std::pair<std::string, std::string>{gb->trainerMacroName, gb->trainerMacroExt});
+                g_pick = it == files.end() ? -1 : (int)(it - files.begin());
             }
-            kit::RowBegin("Macro", names.empty() ? "No saved macros yet" : nullptr);
-            if (kit::Button("Load", Tone::Accent) && g_pick >= 0 && g_pick < (int)names.size()) {
-                std::string const stem = names[(size_t)g_pick];
-                g_macroMsg = tr::selectMacro(stem)
+            kit::RowBegin("Macro", files.empty() ? "No saved macros yet" : nullptr);
+            if (kit::Button("Load", Tone::Accent) && g_pick >= 0 && g_pick < (int)files.size()) {
+                auto const [stem, ext] = files[(size_t)g_pick];
+                g_macroMsg = tr::selectMacro(stem, ext)
                                  ? Message{}
                                  : Message{fmt::format("'{}' didn't load: it has no click pairs, or it isn't a "
                                                        "format the Trainer reads (GucciBot macros are).",
-                                                       stem),
+                                                       label(stem, ext)),
                                            Tone::Bad};
             }
             ImGui::SameLine();
             if (kit::Button("Refresh"))
                 gb->reloadMacroList();
             ImGui::SameLine();
-            kit::Dropdown("macro", &g_pick, names);
+            kit::Dropdown("macro", &g_pick, labels);
             kit::RowEnd();
 
             if (s.macro.loaded) {
                 kit::RowBegin("Loaded", nullptr);
-                kit::Label(gb->trainerMacroName.c_str());
+                kit::Label(label(gb->trainerMacroName, gb->trainerMacroExt).c_str());
                 ImGui::SameLine();
                 if (kit::Button("Reload")) {
-                    if (!tr::selectMacro(gb->trainerMacroName))
+                    if (!tr::selectMacro(gb->trainerMacroName, gb->trainerMacroExt))
                         g_macroMsg = {"It didn't load again; the file may have moved.", Tone::Bad};
                 }
                 kit::RowEnd();

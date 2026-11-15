@@ -74,6 +74,9 @@ namespace gucci::ui {
     // or a custom theme's own), and every extension any theme uses.
     std::string macroExtension();
     std::vector<std::string> knownMacroExtensions();
+    // A saved macro's theme tag, as the Saved macros list shows it: the theme
+    // its extension belongs to, none for .brrr (or while disguised).
+    std::string savedMacroTag(std::string const& ext);
 
     // The active custom theme's name and extension (empty when a built-in is
     // active), and the folder custom themes (and their audio) live in.
