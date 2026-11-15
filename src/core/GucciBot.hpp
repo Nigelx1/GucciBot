@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-ar (RNG lock and its seed are saved across launches)"
+    "2026-11-15-as (Trainer stats: a restart part way through counts as an attempt, and opening a level does not count the last one again)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
