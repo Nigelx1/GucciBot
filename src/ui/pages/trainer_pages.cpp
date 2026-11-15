@@ -308,9 +308,17 @@ namespace gucci::ui::pages {
             // palette's hit color (drawBar). Only that line: the press's block
             // stays in the accent.
             std::string const caption = fmt::format(
+#if defined(GEODE_IS_MOBILE)
+                // No keyboard here (iOS doesn't even get the key hook): the
+                // card's Tap button stands in for space.
+                "The macro's clicks scroll past a fixed center line at real speed. Hold the Tap button under the "
+                "bar along with it, or play the level: every press and release you make shows up as a {} line "
+                "under the macro's, and each of its presses you answer gets a {} line at its start.",
+#else
                 "The macro's clicks scroll past a fixed center line at real speed. Tap space, up or W along with "
                 "it, or play the level: every press and release you make shows up as a {} line under the macro's, "
                 "and each of its presses you answer gets a {} line at its start.",
+#endif
                 look().pal.light ? "dark" : "white", look().pal.hitName);
             kit::BeginCard("Click Trainer", caption.c_str());
             {
@@ -345,6 +353,16 @@ namespace gucci::ui::pages {
                 kit::Hint("While the level is open the bar is your run: it shows the frame you're on and resets "
                           "with you.");
             } else {
+#if defined(GEODE_IS_MOBILE)
+                // Away from the level only the keyboard reached the bar
+                // (keybinds.cpp -> onKeyInput), and a touch on the bar skims:
+                // pressed and let go, this is space.
+                ImGui::Button("Tap##tapAlong", ImVec2(kit::Avail(), ImGui::GetFrameHeight() * 2.5f));
+                if (ImGui::IsItemActivated())
+                    tr::onKeyInput(true);
+                if (ImGui::IsItemDeactivated())
+                    tr::onKeyInput(false);
+#endif
                 if (kit::Button(s.paused ? "Resume" : "Pause", Tone::Accent))
                     tr::setPaused(k, !s.paused);
                 ImGui::SameLine();

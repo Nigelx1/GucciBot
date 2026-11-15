@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-ai (Macro Buffing: spikes center on the click's own tick, as in Silicate)"
+    "2026-11-15-aj (Click Trainer on phones: a Tap button to click along away from the level)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
