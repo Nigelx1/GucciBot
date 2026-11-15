@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-e (Renderer: yuv444p output, the same BT.709 colors as yuv420p with full-size color planes)"
+    "2026-11-15-f (Renderer: Video args skip -vf and other filter options with one log line, and name any option the encoder did not take)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

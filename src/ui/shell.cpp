@@ -2441,7 +2441,13 @@ namespace gucci::ui {
             }
             saveWhole("Bitrate (Mbps)", nullptr, "render_bitrate", 30, 1, 1000);
             saveText("File type", nullptr, "render_file_extension", ".mp4", ".mp4");
-            saveText("Extra FFmpeg options", "For people who know FFmpeg", "render_video_args", "", "");
+            // The encoder's own options, as -name value pairs (renderer.cpp
+            // parseArgs). An -vf filter is skipped with a log line: there is
+            // no filter graph, and the colors are BT.709 already.
+            saveText("Extra FFmpeg options",
+                     "Encoder options, like -preset ultrafast -qp 0. Filters (-vf) aren't needed: "
+                     "colors are already converted to BT.709.",
+                     "render_video_args", "", "");
             // No "Colour fix" switch: nothing read it, in Silicate either, and
             // the fix it names is always on (the colorspace shaders convert with
             // BT.709 coefficients into limited range, and the stream is tagged

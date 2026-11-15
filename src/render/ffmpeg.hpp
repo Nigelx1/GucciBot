@@ -79,6 +79,9 @@ namespace gucci {
         FFMPEG_FN(sws_getContext)
         FFMPEG_FN(sws_scale)
         FFMPEG_FN(sws_freeContext)
+
+        // Lists the Video args the encoder didn't take (renderer.cpp).
+        FFMPEG_FN(av_dict_get)
     } ff_t;
 
     static std::vector<std::string> DLL_FUNCTION_NAMES = {"avformat_alloc_output_context2",
@@ -125,7 +128,8 @@ namespace gucci {
                                                           "avcodec_flush_buffers",
                                                           "sws_getContext",
                                                           "sws_scale",
-                                                          "sws_freeContext"};
+                                                          "sws_freeContext",
+                                                          "av_dict_get"};
 
 #ifdef _WIN32
     inline void* loadFunction(HMODULE* modules, size_t moduleSize, const char* name) {
@@ -148,7 +152,7 @@ namespace gucci {
 #endif
 
 
-    static_assert(sizeof(ff_t) == sizeof(void*) * 45);
+    static_assert(sizeof(ff_t) == sizeof(void*) * 46);
 
     inline bool loadFFmpegFunctions(void* ff) {
 #ifdef _WIN32

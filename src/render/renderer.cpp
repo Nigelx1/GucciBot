@@ -63,6 +63,13 @@ namespace gucci {
         return opts;
     }
 
+    // The ffmpeg command line's filter options (video and audio). They belong
+    // to its filter graph, not to an encoder, and this renderer has no graph.
+    static bool isFilterOption(std::string const& name) {
+        return name == "vf" || name == "af" || name == "filter" || name == "filter_complex" ||
+               name == "lavfi" || name.starts_with("filter:");
+    }
+
     enum class GPUVendor { NVIDIA, AMD, INTEL, OTHER };
 
     static GPUVendor getGPUVendor() {
@@ -489,9 +496,37 @@ namespace gucci {
                 m_videoCodecCtx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 
             AVDictionary* video_opts = nullptr;
-            for (const auto& arg : args)
+            for (const auto& arg : args) {
+                // Video args are the encoder's own options (-preset, -crf,
+                // -qp, -threads...): this renderer runs no FFmpeg filter
+                // graph. A filter pair like TCBot's "-vf colorspace=..." used
+                // to go in as a codec option no encoder has, and was dropped
+                // without a word. It isn't needed: the colorspace shaders
+                // already convert to BT.709 and the stream is tagged so.
+                if (isFilterOption(arg.m_name)) {
+                    geode::log::info("[GucciBot] Video args: skipped -{} {} (GucciBot runs no FFmpeg filters; "
+                                     "it already writes BT.709 color itself)",
+                                     arg.m_name, arg.m_value);
+                    continue;
+                }
                 ff->av_dict_set(&video_opts, arg.m_name.c_str(), arg.m_value.c_str(), 0);
+            }
             int const opened = ff->avcodec_open2(m_videoCodecCtx.get(), m_videoCodec, &video_opts);
+            // avcodec_open2 leaves behind the options nothing took. Said once
+            // in the log, so a typo (or an option of another encoder) doesn't
+            // look like it was used.
+            if (opened >= 0 && video_opts) {
+                std::string unused;
+                for (AVDictionaryEntry* e = nullptr;
+                     (e = ff->av_dict_get(video_opts, "", e, AV_DICT_IGNORE_SUFFIX));) {
+                    if (!unused.empty())
+                        unused += ", ";
+                    unused += fmt::format("-{} {}", e->key, e->value);
+                }
+                if (!unused.empty())
+                    geode::log::warn("[GucciBot] Video args not used ('{}' has no such option): {}", name,
+                                     unused);
+            }
             ff->av_dict_free(&video_opts);
             if (opened < 0)
                 return geode::Err("Failed to open codec '{}'", name);
