@@ -189,6 +189,8 @@ namespace gucci::ui::pages {
                 }
                 if (!canRun)
                     kit::Hint("Needs a level open and a macro loaded.");
+                else if (legit::on())
+                    kit::Hint(legit::kReason);
                 else if (!fw.results().empty())
                     kit::Hint("Copy info: the precision and window breakdown in the format NaN uses in video "
                               "descriptions, grouped by your bands.");
@@ -1320,7 +1322,9 @@ namespace gucci::ui::pages {
 
             slider("Inputs to test", "How many inputs back from the playhead to measure", &FW::labelTestCount, "%d");
             kit::RowBegin("Measure them", "Measures just those inputs, then plays back to where you were");
-            ImGui::BeginDisabled(fw.running() || fw.returning() || !in.valid || !PlayLayer::get());
+            // A Calculate run, so not under Legit only (it said "Switch to
+            // playback mode first", Legit only having refused the mode).
+            ImGui::BeginDisabled(fw.running() || fw.returning() || !in.valid || !PlayLayer::get() || legit::on());
             if (kit::Button("Test")) {
                 auto const r = fw.testPlayhead(PlayLayer::get(), s.labelTestCount);
                 gb->fwAcReport = r.message;
@@ -1328,6 +1332,8 @@ namespace gucci::ui::pages {
             }
             ImGui::EndDisabled();
             kit::RowEnd();
+            if (legit::on())
+                kit::Hint(legit::kReason);
         }
 
         // Windows by hand, out where it can be found (it was inside Advanced;

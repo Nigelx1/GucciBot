@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-y (Calculate: Text in the level stays on its input when windows are typed or deleted by hand)"
+    "2026-11-15-z (Calculate: the playhead Test is greyed out under Legit only, and both buttons say why)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
