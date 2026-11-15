@@ -116,10 +116,16 @@ namespace gucci::ui::pages {
         // marked dirty, and records each input's frame while it does so it
         // can count them off as the player passes them. A solve started from
         // here would skip that bookkeeping, so when the readout is going to
-        // run, the button just marks the solver dirty and lets it.
+        // run, the button just marks the solver dirty and lets it. The
+        // readout only runs while a macro plays (framewindow.cpp render's
+        // `want`, since build -dv): in a level with the macro idle or
+        // recording, the button solves by itself.
         bool readoutWillSolve() {
             auto const& s = S();
-            return s.enabled && s.lstarEnabled && s.lstarHud && PlayLayer::get();
+            auto const& fw = analyzer();
+            return s.enabled && s.lstarEnabled && s.lstarHud && PlayLayer::get() &&
+                   GucciEngine::get()->isPlaying() && !fw.results().empty() && !fw.running() &&
+                   !fw.returning();
         }
 
         void solveLStar() {

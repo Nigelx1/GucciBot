@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-w (Disable bot: switching GucciBot off stops the AI pilot's run too)"
+    "2026-11-15-x (Calculate: Solve L* solves whenever the in-level readout will not)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
