@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-r (Hide attempts: switching it off shows the attempt label again)"
+    "2026-11-15-s (Calculate: Continue from where it stopped, keeping every window already counted)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -1127,7 +1127,9 @@ namespace gucci {
         // are not the windows of the file that name points at (it still names
         // the old macro), so they are kept in memory only.
         bool fwWindowsForgotten = false;
-        void analyzeFrameWindows();
+        // resume: Continue from where it stopped (FrameWindowAnalyzer::startResume),
+        // every input without a window, keeping the windows already there.
+        void analyzeFrameWindows(bool resume = false);
 
         // Calculate's last message for its page, shown under its buttons
         // while it isn't running: from a run starting, stopping or finishing,

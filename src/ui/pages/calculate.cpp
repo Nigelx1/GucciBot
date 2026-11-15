@@ -186,6 +186,23 @@ namespace gucci::ui::pages {
                 else if (!fw.results().empty())
                     kit::Hint("Copy info: the precision and window breakdown in the format NaN uses in video "
                               "descriptions, grouped by your bands.");
+                // GucciBot (2026-11-15): a user's ask, after a 7-hour run stopped at about 85% and was
+                // saved with its windows. Only when some clicks have a window and some don't
+                // (FrameWindowAnalyzer::resumePoint); it counts every input without one and keeps the rest.
+                if (canRun) {
+                    if (auto const rp = fw.resumePoint(PlayLayer::get()); rp.valid) {
+                        kit::Gap(0.25f);
+                        ImGui::BeginDisabled(legit::on());
+                        if (kit::Button("Continue from where it stopped"))
+                            gb->analyzeFrameWindows(true);
+                        ImGui::EndDisabled();
+                        kit::Hint(fmt::format("{} of {} clicks have a window. Continue counts the other {}, "
+                                              "starting at click {}, and keeps every window already counted. Use "
+                                              "the same settings as the first run, or the two parts won't match.",
+                                              rp.counted, rp.counted + rp.left, rp.left, rp.number)
+                                      .c_str());
+                    }
+                }
                 // Mods that step frames themselves throw the numbers off; this
                 // was only written to the log.
                 if (auto const& conflicts = gb->analyzerConflicts(); !conflicts.empty())

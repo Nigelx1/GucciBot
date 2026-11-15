@@ -128,6 +128,31 @@ class FrameWindowAnalyzer {
     Report start(PlayLayer* pl);
     Report startRange(PlayLayer* pl, uint32_t from, uint32_t to);
 
+    // GucciBot (2026-11-15): Continue from where it stopped (a user's ask: a
+    // 7-hour run that stopped at about 85% and was saved with its windows).
+    // Where the loaded macro's windows run out: the first click with no
+    // window, how many clicks have one and how many don't. `valid` when some
+    // do and some don't. Releases aren't counted here: Calculate leaves most
+    // of them out on purpose (the release filter), so a release without a
+    // window says nothing about where a run stopped.
+    struct ResumePoint {
+        bool valid = false;
+        uint32_t frame = 0;  // the first click with no window
+        int number = 0;      // which click that is, from 1 (as Every input numbers them)
+        int counted = 0;     // clicks with a window
+        int left = 0;        // clicks without one
+    };
+    // Worked out again only when the windows or the macro's inputs change (the
+    // Calculate page asks every frame).
+    ResumePoint resumePoint(PlayLayer* pl) const;
+    // A run over every input without a window, from that click on, that
+    // keeps every window already there (typed ones too).
+    Report startResume(PlayLayer* pl);
+    // The last run counted only some inputs and kept the rest (a range or a
+    // Continue). Its results then hold the windows from before it too, so
+    // even one that was canceled can be saved without losing any.
+    bool lastRunKeptOthers() const { return m_lastKeptOthers; }
+
     struct PlayheadInput {
         bool valid = false;
         uint32_t frame = 0;
@@ -331,6 +356,14 @@ class FrameWindowAnalyzer {
     float progress() const;
     size_t progressIndex() const { return m_index; }
     size_t progressTotal() const { return m_total; }
+    // GucciBot (2026-11-15): the progress the probing started at (0 for a
+    // whole run; a Continue starts where the last run stopped), for a time to
+    // go taken from this run's own pace.
+    float progressStart() const {
+        return m_total && m_index >= m_probeStartIndex
+                   ? static_cast<float>(m_probeStartIndex) / static_cast<float>(m_total)
+                   : 0.0f;
+    }
     std::string const& status() const { return m_status; }
     // GucciBot: seconds since the run started (0 when none is running).
     double elapsedSeconds() const {
@@ -808,6 +841,7 @@ class FrameWindowAnalyzer {
         return k < m_partner.size() ? m_partner[k] : NO_INDEX;
     }
     void pairDualClicks();
+    std::vector<size_t> dualPartners(size_t* pairsOut) const;
     void followPartner(size_t k);
     bool inRetimeTail(size_t k, size_t ai, bool player2) const;
 
@@ -967,6 +1001,37 @@ class FrameWindowAnalyzer {
 
     bool inProbeRange(size_t index) const;
     void mergeKept();
+
+    // GucciBot (2026-11-15): Continue from where it stopped (startResume).
+    // The run behind both start() and startRange(); `resume` also skips
+    // every input that has a window already.
+    Report startRun(PlayLayer* pl, uint32_t from, uint32_t to, bool resume);
+    // The inputs that had a window as the run started, sorted. A window
+    // counts only under its own input's flag (the other half of a pair is no
+    // input of its own: pairDualClicks).
+    bool m_resume = false;
+    int m_resumeNumber = 0;
+    std::vector<uint64_t> m_resumeKeys;  // packed (framewindow.cpp, resumeKey)
+    bool resumeCounted(uint32_t frame, bool player2, bool release) const;
+    // Which samples a resumed run measures, by sample index, built once the
+    // capture has settled the samples (buildResumeMask); empty until then.
+    std::vector<char> m_probeMask;
+    void buildResumeMask();
+    // The counts from before a resumed run, added back when it finishes.
+    int m_resumePrevMeasured = 0;
+    int m_resumePrevDesynced = 0;
+    // How many inputs this run measures (all of them for a whole run).
+    size_t probeTotal() const;
+    // Where the probing started, for the overlay's time to go.
+    size_t m_probeStartIndex = 0;
+    bool m_lastKeptOthers = false;
+    ResumePoint computeResumePoint(PlayLayer* pl) const;
+    mutable ResumePoint m_resumeCache;
+    mutable uint64_t m_resumeCacheKey = 0;
+    mutable bool m_haveResumeCache = false;
+    // Set by Cancel and by leaving the level, the two stops that aren't the
+    // run going wrong: a range or Continue run stopped that way still saves.
+    bool m_stoppedByPlayer = false;
 
     // The Suggest pass places its alignments and scans with these too, so
     // they stay as they are.

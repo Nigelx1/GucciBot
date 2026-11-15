@@ -1035,6 +1035,12 @@ namespace gucci {
     // a Calculate run never deletes it (saveAcResultsAfterRun).
     static void saveAcResults(const fs::path& macroPath, bool allowDelete = true) {
         auto& acfw = ::Bot::get()->frameWindow();
+        // GucciBot (2026-11-15): never while a run counts. Its results then are
+        // only what it has counted so far (a Continue's, or a range's, without
+        // the windows it keeps aside), so a save mid-run replaced the file with
+        // part of it. The run's end saves them (saveAcResultsAfterRun).
+        if (acfw.running())
+            return;
         auto const sc = fwAcSidecarPath(macroPath);
         std::error_code ec;
         if (acfw.results().empty()) {
@@ -3306,7 +3312,7 @@ namespace gucci {
         return fwAcConflicts;
     }
 
-    void GucciEngine::analyzeFrameWindows() {
+    void GucciEngine::analyzeFrameWindows(bool resume) {
         // Off Windows Calculate runs too (multiplatform, untested on a device):
         // its batched steps go through getModifiedDelta instead of the
         // step-count midhooks (hook_gjbasegamelayer.cpp), the checkpoint
@@ -3329,7 +3335,8 @@ namespace gucci {
         }
         pl->m_isPaused = false;
 
-        auto const r = ::Bot::get()->frameWindow().start(pl);
+        auto& acfw = ::Bot::get()->frameWindow();
+        auto const r = resume ? acfw.startResume(pl) : acfw.start(pl);
         fwAcConflictsChecked = false;  // checked again for every run
         if (auto const& conflicts = this->analyzerConflicts(); !conflicts.empty()) {
             log::warn("[GucciBot] frame windows: {}", conflicts);

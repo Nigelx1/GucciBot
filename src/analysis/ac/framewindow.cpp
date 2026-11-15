@@ -1171,6 +1171,20 @@ void FrameWindowAnalyzer::pairDualClicks() {
     m_partner.clear();
     if (!m_twoPlayer || m_twoPlayerLevel) return;
 
+    size_t pairs = 0;
+    auto partner = this->dualPartners(&pairs);
+    if (pairs == 0) return;
+
+    m_partner = std::move(partner);
+    FWLOG("[fw][samples] 2-player fixes: {} click(s) stored under both players' "
+          "flags on one tick, each counted as one click",
+          pairs);
+}
+
+// GucciBot (2026-11-15): the pairs themselves, for pairDualClicks and for
+// Continue's count of what has a window (computeResumePoint), which runs
+// outside a run. Empty when there are none.
+std::vector<size_t> FrameWindowAnalyzer::dualPartners(size_t* pairsOut) const {
     auto const& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
     std::vector<size_t> partner(actions.size(), NO_INDEX);
     // The same event on the same tick, at the same point in it, under the
@@ -1209,12 +1223,9 @@ void FrameWindowAnalyzer::pairDualClicks() {
         }
         pairs++;
     }
-    if (pairs == 0) return;
-
-    m_partner = std::move(partner);
-    FWLOG("[fw][samples] 2-player fixes: {} click(s) stored under both players' "
-          "flags on one tick, each counted as one click",
-          pairs);
+    if (pairsOut) *pairsOut = pairs;
+    if (pairs == 0) partner.clear();
+    return partner;
 }
 
 // GucciBot (2026-10-23): the other half of a pair (pairDualClicks) goes where
@@ -1262,6 +1273,141 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::start(PlayLayer* pl) {
 FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
                                                             uint32_t from,
                                                             uint32_t to) {
+    return this->startRun(pl, from, to, false);
+}
+
+// GucciBot (2026-11-15): Continue from where it stopped. A user ran Calculate
+// on a level for 7 hours, saved the macro with its windows when the run had
+// stopped at about 85%, and had no way on but a whole run again.
+//
+// The keys are frame, player flag and release, as everywhere a window is
+// matched to its input (resultFor, mergeKept, allInputs), and the flag must
+// match in every level. A click stored under both flags that the 2-player
+// fixes count as one (pairDualClicks) has one window, its first half's, and
+// its other half is no click of its own here, as in collectSamples. (Until
+// the review the same day, a 1-player level took a window under either flag:
+// then a press on the same tick under the other flag that wasn't paired, so
+// had a window of its own to get, was taken as counted and never measured.)
+namespace {
+// One input's key packed in one number, so a sorted list of them is searched
+// with binary_search: the frame, then release, then the player-2 flag.
+uint64_t resumeKey(uint32_t frame, bool player2, bool release) {
+    return (static_cast<uint64_t>(frame) << 2) | (release ? 2u : 0u) |
+           (player2 ? 1u : 0u);
+}
+std::vector<uint64_t> resumeKeysOf(std::vector<FrameWindowMark> const& marks) {
+    std::vector<uint64_t> keys;
+    keys.reserve(marks.size());
+    for (auto const& mk : marks)
+        keys.push_back(resumeKey(mk.frame, mk.player2, mk.release));
+    std::sort(keys.begin(), keys.end());
+    return keys;
+}
+bool resumeKeyHeld(std::vector<uint64_t> const& keys, uint32_t frame,
+                   bool player2, bool release) {
+    return std::binary_search(keys.begin(), keys.end(),
+                              resumeKey(frame, player2, release));
+}
+bool twoPlayerLevelOf(PlayLayer* pl) {
+    return pl && pl->m_levelSettings && pl->m_levelSettings->m_twoPlayerMode;
+}
+}  // namespace
+
+FrameWindowAnalyzer::ResumePoint FrameWindowAnalyzer::resumePoint(
+    PlayLayer* pl) const {
+    // A cheap key over what the answer depends on: the windows (their count
+    // and generation) and every input's frame, kind and flag.
+    auto const& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
+    uint64_t key = 1469598103934665603ull;
+    auto const mix = [&key](uint64_t v) {
+        key ^= v;
+        key *= 1099511628211ull;
+    };
+    mix(m_generation);
+    mix(m_results.size());
+    mix(actions.size());
+    mix(twoPlayerLevelOf(pl) ? 1 : 2);
+    mix(m_twoPlayerFixes->inner() ? 3 : 4);
+    for (auto const& a : actions)
+        mix((static_cast<uint64_t>(a.m_frame) << 8) |
+            (static_cast<uint64_t>(a.m_type) << 2) | (a.m_holding ? 2u : 0u) |
+            (a.m_player2 ? 1u : 0u));
+    if (!m_haveResumeCache || key != m_resumeCacheKey) {
+        m_resumeCache = this->computeResumePoint(pl);
+        m_resumeCacheKey = key;
+        m_haveResumeCache = true;
+    }
+    return m_resumeCache;
+}
+
+FrameWindowAnalyzer::ResumePoint FrameWindowAnalyzer::computeResumePoint(
+    PlayLayer* pl) const {
+    ResumePoint rp;
+    if (m_results.empty()) return rp;
+    auto const& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
+    auto const keys = resumeKeysOf(m_results);
+    // The pairs the next run makes (pairDualClicks): each is one click.
+    std::vector<size_t> const partner =
+        m_twoPlayerFixes->inner() && !twoPlayerLevelOf(pl)
+            ? this->dualPartners(nullptr)
+            : std::vector<size_t>{};
+    int presses = 0;
+    bool found = false;
+    for (size_t i = 0; i < actions.size(); i++) {
+        auto const& a = actions[i];
+        if (!isMeasurableInput(a) || !a.m_holding) continue;
+        if (i < partner.size() && partner[i] != NO_INDEX && partner[i] < i)
+            continue;
+        presses++;
+        uint32_t const frame = static_cast<uint32_t>(a.m_frame);
+        if (resumeKeyHeld(keys, frame, a.m_player2, false)) {
+            rp.counted++;
+            continue;
+        }
+        rp.left++;
+        // The earliest, in case the actions aren't in frame order.
+        if (!found || frame < rp.frame) {
+            found = true;
+            rp.frame = frame;
+            rp.number = presses;
+        }
+    }
+    rp.valid = rp.counted > 0 && rp.left > 0;
+    return rp;
+}
+
+FrameWindowAnalyzer::Report FrameWindowAnalyzer::startResume(PlayLayer* pl) {
+    Report report;
+    if (m_running) {
+        report.message = "Already running.";
+        return report;
+    }
+    auto const rp = this->computeResumePoint(pl);
+    if (!rp.valid) {
+        report.message = rp.counted == 0
+                             ? "Nothing is counted yet. Press Calculate."
+                             : "Every click already has a window.";
+        return report;
+    }
+    // From just after the last window before that click: a release between
+    // them is where a run can stop too (a wave or ship release), and the
+    // release filter leaves out again any of them it left out before.
+    uint32_t from = 0;
+    for (auto const& mk : m_results)
+        if (mk.frame < rp.frame) from = std::max(from, mk.frame + 1);
+    m_resumeNumber = rp.number;
+    return this->startRun(pl, from, UINT32_MAX, true);
+}
+
+bool FrameWindowAnalyzer::resumeCounted(uint32_t frame, bool player2,
+                                        bool release) const {
+    return resumeKeyHeld(m_resumeKeys, frame, player2, release);
+}
+
+FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRun(PlayLayer* pl,
+                                                          uint32_t from,
+                                                          uint32_t to,
+                                                          bool resume) {
     Report report;
 
     auto bot = Bot::get();
@@ -1307,7 +1453,8 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
         return report;
     }
 
-    bool const partial = from > 0 || to != UINT32_MAX;
+    // GucciBot (2026-11-15): a Continue is a partial run even from frame 0.
+    bool const partial = resume || from > 0 || to != UINT32_MAX;
     if (partial && !m_results.empty() &&
         std::abs(m_resultsTps - updater.m_tps) > 0.5) {
         report.message = fmt::format(
@@ -1329,6 +1476,16 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
     // cleared them, typed ones were lost), each on the inputs it stood on.
     keptMessages = m_messages;
     auto anchors = this->anchorMessages();
+    // GucciBot (2026-11-15): what a Continue leaves alone, taken before the
+    // results are cleared for the run (mergeKept puts them back after it).
+    m_resume = resume;
+    m_resumeKeys = resume ? resumeKeysOf(m_results) : std::vector<uint64_t>{};
+    m_resumePrevMeasured = resume ? m_measured : 0;
+    m_resumePrevDesynced = resume ? m_desynced : 0;
+    m_probeMask.clear();
+    m_probeStartIndex = 0;
+    m_stoppedByPlayer = false;
+    if (!resume) m_resumeNumber = 0;
     auto const restore = [&] {
         m_results = std::move(kept);
         m_messages = std::move(keptMessages);
@@ -1369,6 +1526,8 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
     // already, and 274 that can't matter in their game mode went after the
     // capture pass, which is what sees the mode (applyOrbAwareSkip).
     auto const asked = [&](Sample const& s) {
+        if (resume && this->resumeCounted(s.frame, s.player2, s.release))
+            return false;
         return !partial || (s.frame >= from && s.frame <= to);
     };
     size_t const askedCount =
@@ -1380,16 +1539,19 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
 
     size_t inRange = m_samples.size();
     if (partial) {
-        uint32_t const tail = to + static_cast<uint32_t>(m_horizon);
+        // GucciBot (2026-11-15): saturated. `to` is UINT32_MAX for a range
+        // with no end (Continue, the MCP tool's default), and to + horizon
+        // wrapped to a few frames, so every input past the first few was cut.
+        uint32_t const horizon = static_cast<uint32_t>(m_horizon);
+        uint32_t const tail =
+            to > UINT32_MAX - horizon ? UINT32_MAX : to + horizon;
         std::erase_if(m_samples,
                       [tail](Sample const& s) { return s.frame > tail; });
-        inRange = std::count_if(
-            m_samples.begin(), m_samples.end(), [from, to](Sample const& s) {
-                return s.frame >= from && s.frame <= to;
-            });
+        inRange = std::count_if(m_samples.begin(), m_samples.end(), asked);
         if (inRange == 0) {
             restore();
-            report.message = "No input in that range.";
+            report.message = resume ? "Every input already has a window."
+                                    : "No input in that range.";
             return report;
         }
     }
@@ -1500,6 +1662,12 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRange(PlayLayer* pl,
 
     report.ok = true;
     report.message = fmt::format("Analyzing {} inputs.", askedCount);
+    // GucciBot (2026-11-15): a Continue says where it picks up and what stays.
+    if (resume)
+        report.message = fmt::format(
+            "Continuing from click {}: {} input(s) to count, {} window(s) "
+            "kept.",
+            m_resumeNumber, askedCount, m_keptResults.size());
     if (askedRelease)
         report.message +=
             " Releases that can't matter are left out, so fewer may be "
@@ -4400,8 +4568,53 @@ void FrameWindowAnalyzer::abortClick(char const* why) {
 
 bool FrameWindowAnalyzer::inProbeRange(size_t index) const {
     if (!m_partial) return true;
+    // GucciBot (2026-11-15): a Continue's own list (buildResumeMask).
+    if (m_resume && index < m_probeMask.size()) return m_probeMask[index] != 0;
     uint32_t const frame = m_samples[index].frame;
-    return frame >= m_probeFrom && frame <= m_probeTo;
+    if (frame < m_probeFrom || frame > m_probeTo) return false;
+    auto const& s = m_samples[index];
+    return !m_resume || !this->resumeCounted(s.frame, s.player2, s.release);
+}
+
+// GucciBot (2026-11-15): the inputs a Continue measures: every one from its
+// start that has no window yet. An input counted out of order (a range, the
+// practice count of the last few, a window typed by hand) keeps its window and
+// isn't measured again. A setup group (joint setup sweep) that has one of
+// them is measured whole, from its first input, so a run that stopped inside
+// one counts it as one again rather than its rest one by one without the
+// joint search; its inputs that had windows get the new ones (mergeKept).
+void FrameWindowAnalyzer::buildResumeMask() {
+    m_probeMask.assign(m_samples.size(), 0);
+    size_t count = 0;
+    for (size_t i = 0; i < m_samples.size(); i++) {
+        auto const& s = m_samples[i];
+        bool const want = s.frame >= m_probeFrom && s.frame <= m_probeTo &&
+                          !this->resumeCounted(s.frame, s.player2, s.release);
+        m_probeMask[i] = want ? 1 : 0;
+    }
+    size_t regrouped = 0;
+    for (auto const& g : m_setupGroups) {
+        size_t const end = std::min(g.first + g.count, m_probeMask.size());
+        bool any = false;
+        for (size_t i = g.first; i < end; i++) any |= m_probeMask[i] != 0;
+        if (!any) continue;
+        for (size_t i = g.first; i < end; i++) {
+            if (!m_probeMask[i]) regrouped++;
+            m_probeMask[i] = 1;
+        }
+    }
+    for (char const c : m_probeMask) count += c ? 1 : 0;
+    FWLOG("[fw][resume] continuing from click {}: {} of {} input(s) to measure, {} window(s) kept, {} counted "
+          "again with their setup group",
+          m_resumeNumber, count, m_samples.size(), m_keptResults.size(), regrouped);
+}
+
+size_t FrameWindowAnalyzer::probeTotal() const {
+    if (!m_partial) return m_samples.size();
+    size_t n = 0;
+    for (size_t i = 0; i < m_samples.size(); i++)
+        if (this->inProbeRange(i)) n++;
+    return n;
 }
 
 void FrameWindowAnalyzer::mergeKept() {
@@ -4445,6 +4658,11 @@ void FrameWindowAnalyzer::nextClick() {
         if (m_filtered > 0)
             msg += fmt::format(" {} were filtered out before probing.",
                                m_filtered);
+        // GucciBot (2026-11-15): a Continue's count is of the inputs it
+        // took on, with the windows from before kept beside them.
+        if (m_resume)
+            msg = fmt::format("Continued from click {}. ", m_resumeNumber) + msg +
+                  fmt::format(" The {} window(s) counted before are kept.", m_keptResults.size());
         if (m_dependentSearch->inner() && this->beginDependentPass(msg))
             return;
         // GucciBot: Juice's count for the suspicious clicks, after the strict one.
@@ -4595,7 +4813,27 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
     m_trailP1.clear();
     m_trailP2.clear();
 
+    // GucciBot (2026-11-15): a range or Continue run's results hold every
+    // window from before it once merged, so one stopped by Cancel or by
+    // leaving the level can be saved without losing any (shell.cpp,
+    // saveAcResultsAfterRun). Not one whose capture died: its windows are
+    // pinned to the search distance.
+    m_lastKeptOthers =
+        m_partial && !m_captureNoclip && (ok || m_stoppedByPlayer);
+    bool const resumed = m_resume && m_partial;
     if (m_partial) this->mergeKept();
+    // The counts from before a Continue, back with their windows. (Its own
+    // "not measured" stay its own: those from before were tried again.)
+    if (resumed) {
+        m_measured += m_resumePrevMeasured;
+        m_desynced += m_resumePrevDesynced;
+    }
+    m_resume = false;
+    m_resumeKeys.clear();
+    m_probeMask.clear();
+    m_resumePrevMeasured = 0;
+    m_resumePrevDesynced = 0;
+    m_probeStartIndex = 0;
     this->reapplyManual();
     this->putBackMessages();
 
@@ -4690,6 +4928,7 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
 
 void FrameWindowAnalyzer::cancel() {
     if (!m_running) return;
+    m_stoppedByPlayer = true;
     this->finish("Canceled.", false);
 }
 
@@ -4701,6 +4940,7 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
     ScopeTimer timer{m_tickNanos};
 
     if (!pl) {
+        m_stoppedByPlayer = true;
         this->finish("Left the level.", false);
         return;
     }
@@ -4717,9 +4957,12 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
     // where it is, as Cancel would, but keeps and saves what it measured.
     if (int const cap = SLSettings::get()->frameWindow.timeCapMinutes;
         cap > 0 && now - m_runStart > std::chrono::minutes(cap)) {
+        // GucciBot (2026-11-15): out of this run's inputs (a range or a
+        // Continue measures only some), and Continue picks up from here.
         this->finish(fmt::format("Stopped at the {}-minute time cap with {} of {} inputs measured. Raise the "
-                                 "cap (Calculate page, Speed) to measure the rest.",
-                                 cap, m_measured, m_total),
+                                 "cap (Calculate page, Speed), or press Continue from where it stopped to "
+                                 "measure the rest.",
+                                 cap, m_measured, this->probeTotal()),
                      true);
         return;
     }
@@ -4823,6 +5066,10 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
                           updater.getFrame(), m_total);
 
                     this->detectSetupGroups();
+                    // GucciBot (2026-11-15): which inputs a Continue measures,
+                    // now that the samples are settled (and the setup groups
+                    // known).
+                    if (m_resume) this->buildResumeMask();
 
                     pf.clearStoredFrames();
                     pf.removeAll();
@@ -4833,9 +5080,15 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
                            !this->inProbeRange(m_index))
                         m_index++;
                     if (m_index >= m_samples.size()) {
-                        this->finish("No input in that range.", false);
+                        this->finish(m_resume ? "Every input left was filtered out (releases that can't matter), "
+                                                "so there was nothing more to count."
+                                              : "No input in that range.",
+                                     false);
                         return;
                     }
+                    m_probeStartIndex = m_index;
+                    if (m_resume)
+                        m_status = fmt::format("Probing (continued from click {})", m_resumeNumber);
 
                     this->beginClick();
                     m_stageId = Stage::Rewind;
@@ -4921,7 +5174,7 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
                     this->finish(
                         fmt::format("Measured {} of {} inputs. The macro "
                                     "cannot be replayed past frame {}.",
-                                    m_measured, m_samples.size(),
+                                    m_measured, this->probeTotal(),
                                     updater.getFrame()),
                         true);
                     return;
@@ -8578,7 +8831,12 @@ void FrameWindowAnalyzer::updateProgressOverlay(PlayLayer* pl) {
     double const frac = m_total ? static_cast<double>(m_index) /
                                       static_cast<double>(m_total)
                                 : 0.0;
-    double const eta = frac > 0.001 ? elapsed / frac - elapsed : 0.0;
+    // GucciBot (2026-11-15): from where the probing started, so a Continue
+    // that starts at 85% doesn't read as nearly done after a minute.
+    double const base = m_total && m_index >= m_probeStartIndex
+                            ? static_cast<double>(m_probeStartIndex) / static_cast<double>(m_total)
+                            : 0.0;
+    double const eta = frac - base > 0.001 ? elapsed * (1.0 - frac) / (frac - base) : 0.0;
 
     double const usPerTick =
         m_stepCount > 0

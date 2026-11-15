@@ -3493,8 +3493,11 @@ namespace gucci::ui {
                     };
                     std::string timing = clock(elapsed) + " so far";
                     float const p = fw.progress();
-                    if (p > 0.05f && p < 1.f && fw.stage() != "dependent" && fw.stage() != "suggest")
-                        timing += ", about " + clock(elapsed * (1.0 - p) / p) + " to go";
+                    // GucciBot (2026-11-15): from where the probing started, so a
+                    // Continue that starts at 85% doesn't guess it's nearly done.
+                    float const done = p - fw.progressStart();
+                    if (done > 0.05f && p < 1.f && fw.stage() != "dependent" && fw.stage() != "suggest")
+                        timing += ", about " + clock(elapsed * (1.0 - p) / done) + " to go";
                     ImGui::TextDisabled("%s", timing.c_str());
                     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 260.f);
                     ImGui::TextUnformatted(fw.status().c_str());
@@ -3587,9 +3590,15 @@ namespace gucci::ui {
                     auto* gbe = GucciEngine::get();
                     // GucciBot (2026-10-23): a run that was canceled or failed
                     // no longer deletes or replaces the windows saved before it.
-                    std::string const kept = gbe->saveAcResultsAfterRun(analyzer.lastRunOk())
-                                                 ? " The windows saved before this run are kept."
-                                                 : "";
+                    // GucciBot (2026-11-15): a range or Continue run stopped by
+                    // Cancel or by leaving the level saves too: its results hold
+                    // every window from before it (lastRunKeptOthers).
+                    bool const keptOthers = !analyzer.lastRunOk() && analyzer.lastRunKeptOthers();
+                    std::string const kept =
+                        gbe->saveAcResultsAfterRun(analyzer.lastRunOk() || analyzer.lastRunKeptOthers())
+                            ? " The windows saved before this run are kept."
+                        : keptOthers ? " What it counted is kept, with every window from before it."
+                                     : "";
                     // The run's own last word stays on the Calculate page; the
                     // start message ("Analyzing N inputs.") used to.
                     if (!analyzer.status().empty()) {
