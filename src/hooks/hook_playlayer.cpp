@@ -120,6 +120,40 @@ namespace {
                ::Bot::get()->frameWindow().running() || ::Bot::get()->pathfinder().isRunning() ||
                Pathfinder::get()->active || absense::judge::active() || gucci::ai::job::holdsGame();
     }
+
+#if !GB_NATIVE_ENGINE
+    // The R / Shift+R restart keeping a held mouse or touch, off Windows
+    // (GBPortableRestartHold, at the end of this file; Windows does it with
+    // the byte patch at UILayer::handleKeypress +0x12c, engine_updater.cpp).
+    // GD's restart key first forgets which touch holds each player's button
+    // (m_p1TouchId = m_p2TouchId = -1), then resets the level. The hook keeps
+    // the two IDs from before the key here, and resetLevel puts them back
+    // before restoreHoldOnReset reads them.
+    struct RestartKeyHold {
+        UILayer* ui = nullptr;  // set only while a key down is inside handleKeypress
+        int p1 = -1;
+        int p2 = -1;
+        bool logged = false;
+    } s_restartKeyHold;
+
+    // From inside the restart key's handleKeypress: the touch IDs as they
+    // were before the key. Nothing to do outside it, or when nothing was held.
+    void putRestartKeyHoldBack(const char* where) {
+        auto& h = s_restartKeyHold;
+        if (!h.ui || (h.p1 == -1 && h.p2 == -1))
+            return;
+        if (h.ui->m_p1TouchId == h.p1 && h.ui->m_p2TouchId == h.p2)
+            return;
+        h.ui->m_p1TouchId = h.p1;
+        h.ui->m_p2TouchId = h.p2;
+        if (!h.logged) {
+            h.logged = true;
+            log::info("[GucciBot] Restart key: kept the held touch through UILayer::handleKeypress ({}). "
+                      "Logged once.",
+                      where);
+        }
+    }
+#endif
 } // namespace
 
 class $modify(GB7PlayLayer, PlayLayer) {
@@ -745,6 +779,11 @@ class $modify(GB7PlayLayer, PlayLayer) {
             m_player2->releaseAllButtons();
             return PlayLayer::resetLevel();
         }
+#if !GB_NATIVE_ENGINE
+        // The R key's restart: GD has just forgotten the held touches
+        // (GBPortableRestartHold). Windows never forgets them (its byte patch).
+        putRestartKeyHoldBack("PlayLayer::resetLevel");
+#endif
 
         if (auto* ell = getChildByID("EndLevelLayer"))
             ell->removeFromParent();
@@ -1334,6 +1373,41 @@ class $modify(GBPortableCheckpoint, PlayLayer) {
             }
         }
         PlayLayer::processCheckpoints();
+    }
+};
+
+// The R / Shift+R restart keeping a held mouse or touch, as the Windows byte
+// patch at UILayer::handleKeypress +0x12c does (Silicate's patch, the same in
+// GucciBot's engine_updater.cpp; Silicate 1.1.2: "restart keybinds ... don't
+// reset the held touches"). Read from the 2.2081 Windows binary: on a key down
+// of the restart key (quick keys on, in a level), GD sets m_p1TouchId and
+// m_p2TouchId to -1, calls resetUINodeState, then resetLevel or fullReset.
+// Without this, holding the mouse through R started the new attempt with the
+// button up (a recording got a release at its first frame), and GD had lost
+// the touch, so letting go did nothing until the next click.
+//
+// It doesn't need to know which key is the restart key: the hook keeps the
+// touch IDs from before the key, and the top of GucciBot's resetLevel hook puts
+// them back, and in 2.2081 only the restart path in handleKeypress reaches
+// resetLevel. The touch IDs go back there and nowhere else, so the pause key
+// (handleKeypress -> onPause -> doPause, which also forgets the touches and is a
+// real function off Windows) is left as GD has it. Unlike the Windows patch,
+// GD's resetUINodeState still runs on the restart: it only resets the
+// on-screen buttons' own touch and look (read from the Windows binary), never
+// a player's button. A held key (Space, Up) was never affected: m_p1Jumping
+// isn't cleared there. On Android this only matters with a hardware keyboard;
+// iOS GD takes no keys. The log says once that it kept a hold. Untested on a
+// device.
+class $modify(GBPortableRestartHold, UILayer) {
+    void handleKeypress(cocos2d::enumKeyCodes key, bool down, double timestamp) {
+        auto& h = s_restartKeyHold;
+        if (!down || h.ui || !GucciEngine::get()->enabled)
+            return UILayer::handleKeypress(key, down, timestamp);
+        h.ui = this;
+        h.p1 = m_p1TouchId;
+        h.p2 = m_p2TouchId;
+        UILayer::handleKeypress(key, down, timestamp);
+        h.ui = nullptr;
     }
 };
 #endif

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-bg (Render page and Video Mode notes for Windows and Mac, and a Mac FFmpeg note that says when a restart wont help)"
+    "2026-11-15-bh (Mac and Android: holding the mouse or a touch through an R restart keeps the hold (untested on a device))"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
