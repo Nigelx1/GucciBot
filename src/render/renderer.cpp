@@ -577,6 +577,15 @@ namespace gucci {
             return geode::Err("Failed to create video stream");
         if (ff->avcodec_parameters_from_context(m_videoStream->codecpar, m_videoCodecCtx.get()) < 0)
             return geode::Err("Failed to copy codec parameters");
+        // The stream's frame rate, as FFmpeg's own command line sets it. Left
+        // unset, the MKV muxer wrote no default frame duration, so players and
+        // editors had to guess the rate from timestamps MKV rounds to the
+        // millisecond (16 and 17 ms apart at 60 FPS): ffprobe read a 60 FPS
+        // render as 120 FPS, averaging 62.5 (acceptance test 2026-11-15).
+        // The time base is only a hint; each muxer picks its own.
+        m_videoStream->time_base = m_videoCodecCtx->time_base;
+        m_videoStream->avg_frame_rate = m_videoCodecCtx->framerate;
+        m_videoStream->r_frame_rate = m_videoCodecCtx->framerate;
 
         m_audioTracks.clear();
         if (m_collectAudio) {
@@ -796,6 +805,8 @@ namespace gucci {
                 break;
             if (ret < 0)
                 return geode::Err("Failed to receive packet");
+            if (m_pkt->duration <= 0)
+                m_pkt->duration = 1;  // one frame, in the codec's 1/fps time base
             ff->av_packet_rescale_ts(
                 m_pkt.get(), m_videoCodecCtx->time_base, m_videoStream->time_base);
             m_pkt->stream_index = m_videoStream->index;
@@ -908,6 +919,8 @@ namespace gucci {
         if (m_pkt && m_videoCodecCtx && m_formatCtx && m_videoStream) {
             ff->avcodec_send_frame(m_videoCodecCtx.get(), nullptr);
             while (ff->avcodec_receive_packet(m_videoCodecCtx.get(), m_pkt.get()) == 0) {
+                if (m_pkt->duration <= 0)
+                    m_pkt->duration = 1;
                 ff->av_packet_rescale_ts(
                     m_pkt.get(), m_videoCodecCtx->time_base, m_videoStream->time_base);
                 m_pkt->stream_index = m_videoStream->index;

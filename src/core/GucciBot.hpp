@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-n (Renderer: the log names the video encoder it opened, with size, FPS, pixel format and threads)"
+    "2026-11-15-o (Renderer: the video stream states its frame rate, so a 60 FPS render reads as 60 FPS)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
