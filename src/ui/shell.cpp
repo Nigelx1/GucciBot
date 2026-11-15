@@ -2431,8 +2431,9 @@ namespace gucci::ui {
         }
 
         void pageRender() {
-#if !GB_NATIVE_ENGINE
-        kit::Note("Rendering is Windows-only for now: it loads FFmpeg from Windows DLLs.", Tone::Warn);
+#if !GB_FFMPEG
+        kit::Note("Rendering is Windows and Mac only for now: GucciBot doesn't ship FFmpeg for phones yet.",
+                  Tone::Warn);
 #endif
             auto* sl = SLRenderer::get();
             auto* mod = Mod::get();
@@ -2481,6 +2482,24 @@ namespace gucci::ui {
             if (!sl->isFFmpegLoaded()) {
                 kit::Note("FFmpeg isn't loaded, so nothing can render. Its files belong in the folder below; "
                           "restarting the game puts them back.",
+                          Tone::Bad);
+                if (kit::Button("Open the FFmpeg folder"))
+                    geode::utils::file::openFolder(Mod::get()->getPersistentDir() / "libraries");
+            }
+#endif
+#if defined(GEODE_IS_MACOS)
+            // The same on a Mac, with macOS's own reason (render/ffmpeg.hpp).
+            if (!sl->isFFmpegLoaded()) {
+                std::string const& why = ffmpegLoadError();
+                // A missing file comes back on a restart (main.cpp); a file
+                // macOS refused doesn't, so that case asks for the log.
+                char const* fix = ffmpegFilesMissing()
+                                      ? "Its files belong in the folder below; restarting the game puts them back."
+                                      : "Its files are in the folder below, but macOS wouldn't load them, so "
+                                        "restarting won't help. Please report it with the newest Geode log.";
+                kit::Note(fmt::format("FFmpeg isn't loaded, so nothing can render{}. {}",
+                                      why.empty() ? std::string() : ": " + why, fix)
+                              .c_str(),
                           Tone::Bad);
                 if (kit::Button("Open the FFmpeg folder"))
                     geode::utils::file::openFolder(Mod::get()->getPersistentDir() / "libraries");

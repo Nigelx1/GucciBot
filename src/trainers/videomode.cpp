@@ -134,10 +134,10 @@ namespace gucci::videomode {
             std::string why;
             std::error_code ec;
             if (!SLRenderer::get()->isFFmpegLoaded())
-                why = GB_NATIVE_ENGINE
+                why = GB_FFMPEG
                           ? "FFmpeg didn't load (the same libraries rendering uses), so nothing can decode the video."
-                          : "Video Mode is Windows-only for now: it decodes the video with FFmpeg from Windows DLLs, "
-                            "as rendering does.";
+                          : "Video Mode is Windows and Mac only for now: it decodes the video with FFmpeg, as "
+                            "rendering does, and GucciBot doesn't ship FFmpeg for phones yet.";
             else if (path.empty())
                 why = "No video chosen yet.";
             else if (!fs::exists(path, ec))

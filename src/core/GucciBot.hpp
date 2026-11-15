@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-bf (Mac rendering: load FFmpeg from the bundled dylibs and capture with OpenGL 2.1)"
+    "2026-11-15-bg (Render page and Video Mode notes for Windows and Mac, and a Mac FFmpeg note that says when a restart wont help)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

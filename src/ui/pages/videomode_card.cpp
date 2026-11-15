@@ -69,16 +69,16 @@ namespace gucci::ui::pages {
             return f > 0.0 ? std::max(1, (int)std::lround(1.0 / f)) : 30;
         }
 
-        // Off Windows FFmpeg never loads (render/ffmpeg.hpp), so Video Mode
+        // On phones FFmpeg never loads (render/ffmpeg.hpp), so Video Mode
         // can't decode anything: say so up front, as the Render page does,
         // instead of letting the switch end on a failure that reads like a
-        // broken install.
-        constexpr bool kCanDecode = GB_NATIVE_ENGINE;
+        // broken install. Windows and macOS have it.
+        constexpr bool kCanDecode = GB_FFMPEG;
 
         void windowsOnlyNote() {
             if (!kCanDecode)
-                kit::Note("Video Mode is Windows-only for now: it decodes the video with FFmpeg from Windows DLLs, "
-                          "as rendering does.",
+                kit::Note("Video Mode is Windows and Mac only for now: it decodes the video with FFmpeg, as rendering "
+                          "does, and GucciBot doesn't ship FFmpeg for phones yet.",
                           Tone::Warn);
         }
 

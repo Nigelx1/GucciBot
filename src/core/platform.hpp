@@ -35,6 +35,14 @@
 #define GB_DESKTOP_GL 0
 #endif
 
+// GB_FFMPEG: the renderer and Video Mode have FFmpeg to load (render/ffmpeg.hpp):
+// the Windows DLLs and, since 2.0, the macOS dylibs. Not on phones yet.
+#if defined(GEODE_IS_WINDOWS) || defined(GEODE_IS_MACOS)
+#define GB_FFMPEG 1
+#else
+#define GB_FFMPEG 0
+#endif
+
 // Geode's gnustl (GD's standard library on Android) has no move assignment for
 // gd::map, so a struct holding one, or a GJGameState, must not get an implicit
 // move assignment there: declaring the copy assignment makes moves copy. Other

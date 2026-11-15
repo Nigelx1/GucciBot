@@ -8,6 +8,7 @@
 #endif
 
 #include <Geode/Geode.hpp>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -165,6 +166,15 @@ namespace gucci {
         static std::string s_why;
         return s_why;
     }
+
+    // True when a library file wasn't in libraries/ at all (main.cpp copies
+    // them back on the next launch), false when it was there but macOS
+    // refused it (a signature, an architecture, a missing symbol), which a
+    // restart doesn't fix.
+    inline bool& ffmpegFilesMissing() {
+        static bool s_missing = false;
+        return s_missing;
+    }
 #endif
 
     inline bool loadFFmpegFunctions(void* ff) {
@@ -230,6 +240,7 @@ namespace gucci {
         // the ones it needs) every library finds the ones already loaded.
         std::string& why = ffmpegLoadError();
         why.clear();
+        ffmpegFilesMissing() = false;
         std::vector<void*> modules;
         std::vector<std::string> libs = {
             "libavutil.60.dylib",
@@ -245,6 +256,9 @@ namespace gucci {
             auto const path = geode::Mod::get()->getPersistentDir() / "libraries" / s;
             geode::log::info("[RENDERER] Loading library {}", path);
 
+            std::error_code ec;
+            if (!std::filesystem::exists(path, ec))
+                ffmpegFilesMissing() = true;
             void* mod = dlopen(path.string().c_str(), RTLD_NOW | RTLD_LOCAL);
             if (!mod) {
                 char const* err = dlerror();
@@ -283,6 +297,7 @@ namespace gucci {
         // Every function was found (a library none of them is in, like
         // avdevice, may still have failed: the log has it).
         why.clear();
+        ffmpegFilesMissing() = false;
         return true;
 #else
         // FFmpeg ships for Windows and macOS only; rendering on phones isn't
