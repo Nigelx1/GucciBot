@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-ad (Trainer stats: a completed run counts as an attempt)"
+    "2026-11-15-ae (Classic Pathfinder: Minimum progress above 60 survives a relaunch)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

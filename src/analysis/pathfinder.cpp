@@ -64,7 +64,9 @@ namespace gucci {
         windowFrames = std::clamp(windowFrames, 5, 240);
         checkpointInterval = std::clamp(checkpointInterval, 1, 60);
         maxRuns = std::clamp(maxRuns, 100, 1000000);
-        minProgressFrames = std::clamp(minProgressFrames, 1, 60);
+        // The slider's range (shell.cpp, 1 to 240): clamped to 60 here, a
+        // value saved above that came back as 60 at the next launch.
+        minProgressFrames = std::clamp(minProgressFrames, 1, 240);
     }
 
     void Pathfinder::saveSettings() const {
