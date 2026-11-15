@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-bd (Trainer page: the macro dropdown follows the file that loaded)"
+    "2026-11-15-be (The universal package carries the Mac FFmpeg libraries for rendering)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

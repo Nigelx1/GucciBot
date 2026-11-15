@@ -2,7 +2,7 @@ name: Multi-platform build
 
 # Builds GucciBot for every platform Geode runs on and packages one .geode
 # with all five binaries and every resource, the renderer's FFmpeg DLLs
-# included. This package is THE build: a release ships it as it is, Nigel's
+# and macOS dylibs included. This package is THE build: a release ships it as it is, Nigel's
 # game runs it (install_ci_build.bat), and dihmaster's copy is it - one
 # universal file per commit (Nigel, 2026-10-12). Since 2.0.0-beta.3 mod.json
 # declares every platform itself (the combine step keeps one job's mod.json, so
@@ -51,6 +51,41 @@ jobs:
           zipfile.ZipFile("ffmpeg-libs.zip").extractall("resources/ffmpeg_libs")
           PYEOF
           rm ffmpeg-libs.zip
+          ls -l resources/ffmpeg_libs
+
+      # The same seven FFmpeg libraries for macOS: universal dylibs (arm64 +
+      # x86_64, install names @loader_path/<name>, ad-hoc signed) from the
+      # ffmpeg-n8.0.1-mac release of guccibot-build-files, checked against this
+      # SHA-256 first and unpacked next to the DLLs. Every job takes them too,
+      # for the same reason: the combine step keeps one job's resources.
+      - name: Fetch the renderer's FFmpeg dylibs (macOS)
+        shell: bash
+        run: |
+          curl -fsSL --retry 3 -o ffmpeg-libs-mac.zip         https://github.com/Nigelx1/guccibot-build-files/releases/download/ffmpeg-n8.0.1-mac/ffmpeg-libs-mac.zip
+          PY=$(command -v python || command -v python3)
+          "$PY" - <<'PYEOF'
+          import hashlib, os, sys, zipfile
+          want = "e4caf02bf083f4368f97d9be5f116df71c698d1d0c92e95d13689c5eabbbd3dc"
+          got = hashlib.sha256(open("ffmpeg-libs-mac.zip", "rb").read()).hexdigest()
+          if got != want:
+              sys.exit(f"ffmpeg-libs-mac.zip is {got}, not {want} - refusing to build")
+          names = ["libavutil.60.dylib", "libswresample.6.dylib", "libswscale.9.dylib", "libavcodec.62.dylib",
+                   "libavformat.62.dylib", "libavfilter.11.dylib", "libavdevice.62.dylib"]
+          os.makedirs("resources/ffmpeg_libs", exist_ok=True)
+          z = zipfile.ZipFile("ffmpeg-libs-mac.zip")
+          found = {}
+          for info in z.infolist():
+              base = os.path.basename(info.filename)
+              if base in names and not info.is_dir():
+                  found[base] = info
+          missing = [n for n in names if n not in found]
+          if missing:
+              sys.exit(f"ffmpeg-libs-mac.zip has no {', '.join(missing)} - refusing to build")
+          for base, info in found.items():
+              with z.open(info) as src, open(os.path.join("resources/ffmpeg_libs", base), "wb") as dst:
+                  dst.write(src.read())
+          PYEOF
+          rm ffmpeg-libs-mac.zip
           ls -l resources/ffmpeg_libs
 
       - name: Declare ${{ matrix.config.gd }} in mod.json
