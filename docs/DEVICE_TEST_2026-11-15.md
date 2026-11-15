@@ -4,12 +4,12 @@ About an hour, on your Apple-silicon Mac and your Android phone. Nothing here ne
 
 ## 1. Put the build on
 
-The build is GitHub's package of commit **`f880d41a332074113550279dd378057eb2ad8029`** (build **2026-11-15-c**). It's one file for every platform. Its build run: https://github.com/Nigelx1/GucciBot/actions/runs/43712723806
+The build is GitHub's package of commit **`1975ec7c2c2513f91bfa894e0dca44d76d785e8a`** (build **2026-11-15-al**, with today's menu sweep in it). It's one file for every platform. Its build run: https://github.com/Nigelx1/GucciBot/actions/runs/43730050933
 
-1. Open https://github.com/Nigelx1/GucciBot/actions/runs/43712723806 (the **Multi-platform build** run for that commit, green check), scroll down to **Artifacts** and download **GucciBot (all platforms)**. You need to be logged in to GitHub. It's a zip of about 200 MB. Unzip it to get `nigelx1.guccibot.geode`.
+1. Open https://github.com/Nigelx1/GucciBot/actions/runs/43730050933 (the **Multi-platform build** run for that commit, green check), scroll down to **Artifacts** and download **GucciBot (all platforms)**. You need to be logged in to GitHub. It's a zip of about 200 MB. Unzip it to get `nigelx1.guccibot.geode`.
 2. In the game: Geode's mod list > the gear > **Install From File** > pick the file > restart the game. This is the easy way on both.
    - By hand instead: **Open Mods Folder** in the same place shows the folder. On a Steam Mac it's inside the app: `~/Library/Application Support/Steam/steamapps/common/Geometry Dash/Geometry Dash.app/Contents/geode/mods`. On Android (Geode's launcher) it's `Android/media/com.geode.launcher/game/geode/mods`.
-3. Check you have the right build: near the top of Geode's log (below) there's a line starting `[GucciBot] BUILD: 2026-11-15-c`. A later build (a later label) is fine too, as long as it's 2026-11-15-c or newer.
+3. Check you have the right build: near the top of Geode's log (below) there's a line starting `[GucciBot] BUILD: 2026-11-15-al`. A later build from today is fine too (-am, -an and so on come after -al); it must be 2026-11-15-ak or newer to have steps 9 and 10.
 
 ## 2. The logs to send
 
@@ -27,5 +27,7 @@ Everything this round checks is written to **Geode's log**: the newest file in t
 | 6 | **Calculate** (the page says "untested on this platform"). Record a short macro (a few clicks), then run Calculate on it. | It finishes without a crash, and the windows look like normal ones: a few frames each, not all 0 or 1 frame. A screenshot of the results helps. |
 | 7 | **The sub-tick clock line.** In any level, click or tap a few times (bot on or off). | The log has one line starting `SCBF clock check`. It ends in **MATCH** (good) or **NO MATCH** (sub-tick recording would record nothing on this device; Claude fixes it from the numbers in that line). Just send it either way. |
 | 8 | **Video Mode** (the Video Mode cards under the JMF Trainer and the Trainer). Just look, nothing to set up. | Each card has a warning, `Video Mode is Windows-only for now`, and its switch can't be turned on. Bad: the switch turns on and ends on a red failure. |
+| 9 | **Android only: the Click Trainer's Tap button** (build -aj). On the JMF Trainer or Trainer page, load a macro, turn on the Click bar, and don't open a level. Hold and let go of the big **Tap** button under the bar along with the macro's clicks. | Each tap shows up as a line under the macro's clicks, the way the space bar does on a computer. In a level, playing works as before. |
+| 10 | **Android only: the Frame Editor by touch** (build -ak). Open a macro through Macro Tools > Edit a macro > Open, and tap one of its bars. | The panel for the selected bar has **Select this lane** and **Select all** buttons, and both work. The hints talk about tapping, not Ctrl, right click or the mouse wheel. |
 
 If something goes wrong, keep going with the rest if you can, and say which step it was. That's the whole round: thank you!
