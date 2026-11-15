@@ -182,4 +182,13 @@ class $modify(GB7CalibrationTickPL, PlayLayer) {
         PlayLayer::postUpdate(dt);
         CalibrationService::get().tick(dt);
     }
+
+    // Leaving the level stops a calibration, as the card says. tick's own
+    // no-level check never ran: tick only runs from postUpdate, which stops
+    // with the level, so the calibration stayed on (the cue muted, the
+    // metronome picked up again in the next level).
+    void onQuit() {
+        CalibrationService::get().cancel();
+        PlayLayer::onQuit();
+    }
 };

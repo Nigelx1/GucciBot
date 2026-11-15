@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-aa (Prediction card: Find the best tick obeys Legit only, and the off-Windows note sits inside the card)"
+    "2026-11-15-ab (Click cue: leaving the level stops a calibration)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
