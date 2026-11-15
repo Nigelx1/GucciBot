@@ -238,6 +238,14 @@ namespace gucci::ui::pages {
                               .c_str());
             if (!fw.running() && !gb->fwAcReport.empty())
                 kit::Note(gb->fwAcReport.c_str(), gb->fwAcOk ? Tone::Muted : Tone::Warn);
+            // GucciBot (2026-11-15): windows from 2.0.0-beta.5 or older on a 1-player level, with
+            // clicks under the player-2 flag (FrameWindowAnalyzer::olderP2Count).
+            if (auto* pl = PlayLayer::get(); pl && !fw.running() && fw.olderP2Count() && !fw.results().empty() &&
+                                             !(pl->m_levelSettings && pl->m_levelSettings->m_twoPlayerMode))
+                kit::Note("These windows were counted by an older version (2.0.0-beta.5 or before), which counted "
+                          "this macro's ship and wave clicks as cube clicks on this level. Press Calculate to count "
+                          "them again from the start.",
+                          Tone::Warn);
 
             kit::EndCard();
         }

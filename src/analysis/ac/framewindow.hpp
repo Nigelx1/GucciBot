@@ -161,6 +161,13 @@ class FrameWindowAnalyzer {
     // (UINT32_MAX: none). The windows from this frame on are the older run's,
     // which Continue counts again; saved in the windows file ("recountFrom").
     uint32_t recountFrom() const { return m_recountFrom; }
+    // GucciBot (2026-11-15): these windows came from a file written by
+    // 2.0.0-beta.5 or older (its marks have no "wide" key) and some carry the
+    // player-2 flag. In a 1-player level those builds measured such a click
+    // on player 2, who isn't there, so ship and wave clicks were counted as
+    // cube clicks (fixed 2026-10-23, cf168a3). Kept in the file
+    // ("olderP2Count") until a whole run counts every input again.
+    bool olderP2Count() const { return m_olderP2Count; }
     // Changes whenever a running run has counted more, for the windows file
     // written while it runs (GucciEngine::keepRunningWindows).
     uint64_t runStamp() const {
@@ -423,6 +430,7 @@ class FrameWindowAnalyzer {
         m_results.clear();
         m_messages.clear();
         m_recountFrom = UINT32_MAX;
+        m_olderP2Count = false;
         m_measured = 0;
         m_skipped = 0;
         m_desynced = 0;
@@ -1048,6 +1056,10 @@ class FrameWindowAnalyzer {
     // so a run that stops keeps those of the inputs it hadn't reached.
     std::vector<FrameWindowMark> m_recountOld;
     uint32_t m_recountFrom = UINT32_MAX;  // see recountFrom()
+    bool m_olderP2Count = false;          // see olderP2Count()
+    // This run counts every input again from some point on: a whole run, or
+    // a Continue past a recountFrom mark (m_recountOld is its old windows).
+    bool m_recounting = false;
     // Stopped before the end (Cancel, leaving the level, the time cap, a
     // replay that can't go on), at m_stopAt: the first input it hadn't done.
     bool m_stoppedShort = false;

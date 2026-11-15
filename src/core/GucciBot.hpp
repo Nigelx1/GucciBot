@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-aw (Calculate: a running run's windows file is written every two minutes and as the game closes)"
+    "2026-11-15-ax (Calculate: says when a 1-player level's windows came from beta.5's player-2 count)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -1505,8 +1505,10 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRun(PlayLayer* pl,
     // on, which it counts again (taken out of the ones it keeps, so one it
     // can't count goes as in a whole run). Typed ones are m_manualKept's.
     uint32_t const recountFrom = m_recountFrom;
+    bool const olderP2Count = m_olderP2Count;
     std::vector<FrameWindowMark> recountOld;
-    if (!partial || (resume && recountFrom != UINT32_MAX)) {
+    bool const recounting = !partial || (resume && recountFrom != UINT32_MAX);
+    if (recounting) {
         uint32_t const at = partial ? recountFrom : 0;
         for (auto const& mk : m_results)
             if (!mk.manual && mk.frame >= at) recountOld.push_back(mk);
@@ -1544,11 +1546,13 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRun(PlayLayer* pl,
                          [](auto const& a, auto const& b) { return a.frame < b.frame; });
         m_messages = std::move(keptMessages);
         m_recountFrom = recountFrom;
+        m_olderP2Count = olderP2Count;
         m_generation++;
     };
 
     this->clear();
     m_recountFrom = recountFrom;  // (clear() drops it; the run's end sets it)
+    m_olderP2Count = olderP2Count;
 
     m_sweep = std::clamp(m_sweepRange->inner(), 1, MAX_SWEEP);
     m_maxWin = std::max(0, m_maxWindow->inner());
@@ -1617,6 +1621,7 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRun(PlayLayer* pl,
     m_probeTo = to;
     m_keptResults = std::move(kept);
     m_recountOld = std::move(recountOld);
+    m_recounting = recounting;
     m_keptMessages = std::move(keptMessages);
     m_keptMessageAnchors = std::move(anchors);
 
@@ -4938,6 +4943,10 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
             }
     m_recountOld.clear();
     if (!m_captureNoclip) m_recountFrom = this->recountAfter(carried, stopAt);
+    // GucciBot (2026-11-15): every input counted again by this build.
+    if (ok && m_recounting && !m_stoppedShort && !m_captureNoclip)
+        m_olderP2Count = false;
+    m_recounting = false;
     m_lastKeptOthers =
         !m_captureNoclip && (m_stoppedShort || (m_partial && ok));
     bool const resumed = m_resume && m_partial;
@@ -7349,6 +7358,10 @@ struct StoredResults {
     // (FrameWindowAnalyzer::recountFrom). Written only when set, so a file
     // without one reads as before, and older builds skip the key.
     uint32_t recountFrom = UINT32_MAX;
+    // GucciBot (2026-11-15): FrameWindowAnalyzer::olderP2Count. Read: the
+    // key, or marks that have no "wide" key (2.0.0-beta.5 and older) with one
+    // carrying the player-2 flag. Written only when set.
+    bool olderP2Count = false;
     std::vector<StoredMark> marks;
     std::vector<StoredMessage> messages;
 };
@@ -7457,6 +7470,7 @@ static std::string toJson(StoredResults const& r) {
     });
     if (r.recountFrom != UINT32_MAX)
         root.set("recountFrom", (int64_t)r.recountFrom);
+    if (r.olderP2Count) root.set("olderP2Count", true);
     return root.dump();
 }
 
@@ -7501,9 +7515,11 @@ static bool fromJson(std::string const& text, StoredResults& out) {
         int64_t const rf = jnum(root, "recountFrom", -1);
         out.recountFrom = rf >= 0 && rf < (int64_t)UINT32_MAX ? (uint32_t)rf : UINT32_MAX;
     }
+    out.olderP2Count = jbool(root, "olderP2Count", false);
 
     auto const marks = root["marks"];
     if (marks.isArray()) {
+        bool anyWide = false, anyP2 = false;
         out.marks.reserve(marks.size());
         for (size_t i = 0; i < marks.size(); i++) {
             auto const& j = marks[i];
@@ -7554,8 +7570,11 @@ static bool fromJson(std::string const& text, StoredResults& out) {
             m.autoWindow = (int)jnum(j, "autoWindow", m.autoWindow);
             m.autoSubframe = (float)jreal(j, "autoSubframe", m.autoSubframe);
             m.autoCbf = jbool(j, "autoCbf", m.autoCbf);
+            anyWide |= j.contains("wide");
+            anyP2 |= m.player2;
             out.marks.push_back(m);
         }
+        if (!out.marks.empty() && !anyWide && anyP2) out.olderP2Count = true;
     }
 
     auto const messages = root["messages"];
@@ -7608,6 +7627,7 @@ bool FrameWindowAnalyzer::writeResults(std::filesystem::path const& path,
     out.skipped = skipped;
     out.desynced = desynced;
     out.recountFrom = recountFrom;
+    out.olderP2Count = m_olderP2Count;
 
     if (auto* pl = PlayLayer::get(); pl && pl->m_level)
         out.level = pl->m_level->m_levelName;
@@ -7746,6 +7766,7 @@ bool FrameWindowAnalyzer::loadResults(std::filesystem::path const& path) {
     m_desynced = in.desynced;
     m_resultsTps = in.tps > 0.0 ? in.tps : 240.0;
     m_recountFrom = in.recountFrom;
+    m_olderP2Count = in.olderP2Count;
     m_generation++;
     this->resetDisplay();
     return true;
