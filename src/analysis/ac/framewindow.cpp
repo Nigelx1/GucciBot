@@ -15,7 +15,13 @@
 #include <Geode/binding/PlayerObject.hpp>
 #include <algorithm>
 #include <chrono>
+#include <cstdio>
 #include <cstdlib>
+#ifdef _WIN32
+#include <io.h>  // _commit (writeResults)
+#else
+#include <unistd.h>  // fsync (writeResults)
+#endif
 #include <fstream>
 #include <numeric>
 #include <map>
@@ -1398,7 +1404,10 @@ FrameWindowAnalyzer::ResumePoint FrameWindowAnalyzer::computeResumePoint(
             rp.number = presses;
         }
     }
-    rp.valid = rp.counted > 0 && rp.left > 0;
+    // A run that stopped before it counted any click, with the older
+    // windows it was counting again kept (recount), shows it too: its
+    // report says Continue counts those again.
+    rp.valid = rp.left > 0 && (rp.counted > 0 || rp.recount);
     return rp;
 }
 
@@ -1418,9 +1427,14 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startResume(PlayLayer* pl) {
     // From just after the last window before that click: a release between
     // them is where a run can stop too (a wave or ship release), and the
     // release filter leaves out again any of them it left out before.
+    // Only the windows this one keeps count for that (those before where the
+    // run before it stopped, recountFrom): an older one carried past there is
+    // counted again, so a run that stopped on a release with an older window
+    // counts that release again rather than starting past it and dropping it.
+    uint32_t const keptBefore = std::min(rp.frame, m_recountFrom);
     uint32_t from = 0;
     for (auto const& mk : m_results)
-        if (mk.frame < rp.frame) from = std::max(from, mk.frame + 1);
+        if (mk.frame < keptBefore) from = std::max(from, mk.frame + 1);
     m_resumeNumber = rp.number;
     return this->startRun(pl, from, UINT32_MAX, true);
 }
@@ -4944,7 +4958,9 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
     m_recountOld.clear();
     if (!m_captureNoclip) m_recountFrom = this->recountAfter(carried, stopAt);
     // GucciBot (2026-11-15): every input counted again by this build.
-    if (ok && m_recounting && !m_stoppedShort && !m_captureNoclip)
+    // (Stopped in the ~N or suggestion passes, every input's window was
+    // counted again already: stopAt is UINT32_MAX there.)
+    if (m_recounting && !m_captureNoclip && (m_stoppedShort ? m_stopAt == UINT32_MAX : ok))
         m_olderP2Count = false;
     m_recounting = false;
     m_lastKeptOthers =
@@ -5304,8 +5320,13 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
                     }
                     // GucciBot (2026-11-15): stopped here, at this input:
                     // the windows past it from before the run stay.
+                    // Ended here once (not abortClick: its nextClick finished
+                    // the run itself at the last input, and the second finish
+                    // then wiped the stop point the first had set).
                     this->stopShort();
-                    this->abortClick("died before reaching the branch point");
+                    FWWARN("[fw][click {}] NOT MEASURED @ frame {}: {}", m_index + 1, m_recorded,
+                           "died before reaching the branch point");
+                    m_skipped++;
                     this->finish(
                         fmt::format("Measured {} of {} inputs. The macro "
                                     "cannot be replayed past frame {}.",
@@ -7666,19 +7687,30 @@ bool FrameWindowAnalyzer::writeResults(std::filesystem::path const& path,
     if (path.has_parent_path())
         std::filesystem::create_directories(path.parent_path(), ec);
 
-    // GucciBot (2026-11-15): written whole to a temporary file, then put in
-    // place, so a game that closes or a PC that loses power mid-write leaves
-    // the file as it was, never half of it. (The file is written every two
+    // GucciBot (2026-11-15): written whole to a temporary file, pushed out to
+    // the disk (not just to the system's cache: a PC that loses power right
+    // after a rename could otherwise come back with the new name on an empty
+    // file), then put in place. A game that closes or a PC that loses power
+    // mid-write leaves the file as it was. (The file is written every two
     // minutes while a run counts now: GucciEngine::keepRunningWindows.)
     auto tmp = path;
     tmp += ".tmp";
     {
-        std::ofstream fd(tmp, std::ios::binary | std::ios::trunc);
-        if (!fd) return false;
-        fd << serialized;
-        fd.flush();
-        if (!fd) {
-            fd.close();
+#ifdef _WIN32
+        FILE* f = _wfopen(tmp.c_str(), L"wb");
+#else
+        FILE* f = std::fopen(tmp.c_str(), "wb");
+#endif
+        if (!f) return false;
+        bool good = std::fwrite(serialized.data(), 1, serialized.size(), f) == serialized.size() &&
+                    std::fflush(f) == 0;
+#ifdef _WIN32
+        good = good && _commit(_fileno(f)) == 0;
+#else
+        good = good && fsync(fileno(f)) == 0;
+#endif
+        good = std::fclose(f) == 0 && good;
+        if (!good) {
             std::filesystem::remove(tmp, ec);
             return false;
         }

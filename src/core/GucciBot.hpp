@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-ax (Calculate: says when a 1-player level's windows came from beta.5's player-2 count)"
+    "2026-11-15-ay (Calculate: Continue after a stop on a release counts it again, and the windows file is flushed to disk)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
