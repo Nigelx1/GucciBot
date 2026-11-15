@@ -614,7 +614,7 @@ namespace gucci::mcp {
                 "(or leaves the key out, as it was). {reset: true} puts every one back, "
                 "in memory too; tools/assist.py's close() does that first. {list: true} "
                 "returns every key with its type and value now. Keys that were never "
-                "saved anyway: hack_rng_lock, hack_rng_seed, gd_flip_2p (GD's Flip "
+                "saved anyway: gd_flip_2p (GD's Flip "
                 "2-Player Controls option), bigbrrr (this launch's "
                 "switch), test_mute (FMOD's master volume 0), fwac_conflict_test_id "
                 "(one more mod id for Calculate's conflict check), pf_pending_verify "

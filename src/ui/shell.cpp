@@ -124,6 +124,7 @@ namespace gucci::ui {
             {"hack_no_mirror_recording_only", &GucciEngine::noMirrorRecordingOnly},
             {"show_macro_path", &GucciEngine::showMacroPath},
             {"trainer_reveal", &GucciEngine::trainerRevealEnabled},
+            {"hack_rng_lock", &GucciEngine::rngLocked},
         };
 
         // Float settings the menu loads, with the same keys it saves them under.
@@ -193,6 +194,7 @@ namespace gucci::ui {
                 gb->*(s.field) = mod->getSavedValue<bool>(s.key, gb->*(s.field));
             for (auto const& f : kUiLoadedFloats)
                 gb->*(f.field) = static_cast<float>(mod->getSavedValue<double>(f.key, gb->*(f.field)));
+            gb->rngSeedVal = static_cast<uint32_t>(mod->getSavedValue<int64_t>("hack_rng_seed", gb->rngSeedVal));
             auto* brrr = BigBrrrManager::get();
             brrr->shakeEnabled = mod->getSavedValue<bool>("brrr_shake", brrr->shakeEnabled);
             brrr->flickerIntensity = std::clamp(
@@ -1837,17 +1839,20 @@ namespace gucci::ui {
             }
             cheatSwitch("Force platformer", "Levels you open play as platformer levels", &gb->hackForcePlatformer,
                          "hack_force_platformer");
-            // Not saved (nor the seed): off again at each launch, and the key
-            // doesn't save it either (keybinds.cpp).
-            engineSwitch("RNG lock", "While recording: every attempt starts from the seed below. Off again at "
-                                     "each launch", &gb->rngLocked, nullptr);
+            // Saved, and its seed, like the other switches (Nigel,
+            // 2026-11-15): they only act while recording, which safe mode
+            // already counts as a cheat. Until then both reset at each launch.
+            engineSwitch("RNG lock", "While recording: every attempt starts from the seed below", &gb->rngLocked,
+                         "hack_rng_lock");
             if (gb->rngLocked) {
                 // The seed recordings start from while locked (hook_playlayer.cpp
                 // reads it); about.md promises one of your choosing.
                 int seed = static_cast<int>(gb->rngSeedVal);
                 kit::RowBegin("Seed", "Recordings start from this seed");
-                if (kit::InputInt("rngseed", &seed, 1))
+                if (kit::InputInt("rngseed", &seed, 1)) {
                     gb->rngSeedVal = static_cast<uint32_t>(seed);
+                    Mod::get()->setSavedValue<int64_t>("hack_rng_seed", static_cast<int64_t>(gb->rngSeedVal));
+                }
                 kit::RowEnd();
             }
             kit::EndCard();

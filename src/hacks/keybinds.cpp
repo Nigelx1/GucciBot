@@ -76,7 +76,7 @@ namespace {
                 gb->setMode(GucciEngine::Mode::Playing);
         });
         // Every setting a key flips is saved like its menu switch, so it
-        // outlasts a restart. RNG lock isn't: its switch doesn't save either.
+        // outlasts a restart.
         used |= fire(keys.onNoclip, k, [&] { flipCheat(gb->noclipEnabled, "hack_noclip"); });
         used |= fire(keys.onTrajectory, k, [&] { flipCheat(gb->pathPreview, "hack_trajectory"); });
         used |= fire(keys.onHitboxes, k, [&] { flipCheat(gb->showHitboxes, "hack_hitboxes"); });
@@ -87,7 +87,7 @@ namespace {
         used |= fire(keys.onLayoutMode, k, [&] { flipCheat(gb->layoutMode, "hack_layout_mode"); });
         used |= fire(keys.onNoMirror, k, [&] { flipCheat(gb->noMirrorEffect, "hack_no_mirror"); });
         used |= fire(keys.onAudioPitch, k, [&] { flipSaved(gb->updater.m_speedhackAudio, "feat_audio_pitch"); });
-        used |= fire(keys.onRngLock, k, [&] { gb->rngLocked = !gb->rngLocked; });
+        used |= fire(keys.onRngLock, k, [&] { flipSaved(gb->rngLocked, "hack_rng_lock"); });
         used |= fire(keys.onAutoclicker, k, [&] {
             if (legit::blockKey())
                 return;

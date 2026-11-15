@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-aq (Prevent death works with Backwards stepping off: it keeps its own step-back ticks while it is on)"
+    "2026-11-15-ar (RNG lock and its seed are saved across launches)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

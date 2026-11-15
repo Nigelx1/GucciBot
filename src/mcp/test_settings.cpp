@@ -196,14 +196,15 @@ namespace gucci::testset {
                 v.push_back(engineBool("hack_hide_percentage", [e]() -> bool& { return e()->hackHidePercentage; }));
                 v.push_back(engineBool("hack_no_flash", [e]() -> bool& { return e()->hackNoSpikeFlash; }));
                 v.push_back(engineBool("ind_enabled", [e]() -> bool& { return e()->survivalIndicator; }));
-                // RNG lock and its seed are never saved (the row has no key).
-                v.push_back({"hack_rng_lock", "bool", Store::Memory, [] { return matjson::Value(gb()->rngLocked); },
-                             [](matjson::Value const& val, bool) { gb()->rngLocked = wantBool("hack_rng_lock", val); }});
-                v.push_back({"hack_rng_seed", "int", Store::Memory,
+                // RNG lock and its seed, saved by their rows since 2026-11-15.
+                v.push_back(engineBool("hack_rng_lock", [e]() -> bool& { return e()->rngLocked; }));
+                v.push_back({"hack_rng_seed", "int", Store::Field,
                              [] { return matjson::Value(static_cast<int64_t>(gb()->rngSeedVal)); },
                              [](matjson::Value const& val, bool) {
                                  gb()->rngSeedVal = static_cast<uint32_t>(
                                      wantInt("hack_rng_seed", val, 0, std::numeric_limits<uint32_t>::max()));
+                                 Mod::get()->setSavedValue<int64_t>("hack_rng_seed",
+                                                                    static_cast<int64_t>(gb()->rngSeedVal));
                              }});
 
                 // Hitboxes and hitborders, as their cards' switches set them
