@@ -69,6 +69,19 @@ namespace gucci::ui::pages {
             return f > 0.0 ? std::max(1, (int)std::lround(1.0 / f)) : 30;
         }
 
+        // Off Windows FFmpeg never loads (render/ffmpeg.hpp), so Video Mode
+        // can't decode anything: say so up front, as the Render page does,
+        // instead of letting the switch end on a failure that reads like a
+        // broken install.
+        constexpr bool kCanDecode = GB_NATIVE_ENGINE;
+
+        void windowsOnlyNote() {
+            if (!kCanDecode)
+                kit::Note("Video Mode is Windows-only for now: it decodes the video with FFmpeg from Windows DLLs, "
+                          "as rendering does.",
+                          Tone::Warn);
+        }
+
         // What differs between the two cards.
         struct Binding {
             vm::Source source;
@@ -155,9 +168,10 @@ namespace gucci::ui::pages {
                     kit::Label("Opening the video...", Tone::Muted);
                     break;
                 case vm::Status::Failed:
-                    kit::Note(vm::failure().c_str(), Tone::Bad);
-                    kit::Hint("Switch Video Mode off and on to try again. guccibot_videomode.log in the mod's save "
-                              "folder has the details.");
+                    kit::Note(vm::failure().c_str(), kCanDecode ? Tone::Bad : Tone::Warn);
+                    if (kCanDecode)
+                        kit::Hint("Switch Video Mode off and on to try again. guccibot_videomode.log in the mod's "
+                                  "save folder has the details.");
                     break;
                 case vm::Status::Ready: {
                     kit::Chip(fmt::format("{}x{}", vm::width(), vm::height()).c_str(), Tone::Accent);
@@ -236,7 +250,8 @@ namespace gucci::ui::pages {
             // A cheat only over its trainer's own level (Legit only).
             kit::LegitGate gate(gucci::trainers::followsLevel(b.source == vm::Source::Jmf ? gucci::trainers::Kind::Jupiter
                                                                                           : gucci::trainers::Kind::Any));
-            ImGui::BeginDisabled(!canTurnOn && !b.enabled);
+            // Off Windows it can still be switched off (a setting saved on), never on.
+            ImGui::BeginDisabled((!canTurnOn || !kCanDecode) && !b.enabled);
             if (kit::SwitchRow("Video Mode", hint, &b.enabled)) {
                 g_message.clear();
                 gb->jupiterVideoAlignToolActive = false;  // the tool is shared by both Video Modes
@@ -317,6 +332,7 @@ namespace gucci::ui::pages {
                        "The built-in JMF showcase video, full screen in place of the menu with the click bar over it, "
                        "on the bar's clock, for reviewing a run against the macro's timing. No level needs to be "
                        "open.");
+        windowsOnlyNote();
         videoSwitch(b, "Plays the showcase video that ships with the mod; nothing to set up", true);
         if (b.enabled && vm::source() == vm::Source::Jmf)
             cardBody(b);
@@ -333,6 +349,7 @@ namespace gucci::ui::pages {
         kit::BeginCard("Video Mode",
                        "A video of your own, full screen in place of the menu with the click bar over it, on the bar's "
                        "clock, for reviewing a run against the macro's timing. No level needs to be open.");
+        windowsOnlyNote();
         bool const haveVideo = !gb->trainerVideoPath.empty();
         kit::RowBegin("Video", haveVideo ? nullptr : "Pick one to start");
         if (haveVideo) {

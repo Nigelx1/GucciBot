@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-a (Look-ahead copies spin a ball and turn a normal player on ring jumps off Windows too)"
+    "2026-11-15-b (Video Mode says it is Windows-only for now on Mac and phones)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
