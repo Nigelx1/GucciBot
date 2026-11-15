@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-h (No macro loads while Calculate or a pathfinder runs, and the row menu Calculate obeys Legit only)"
+    "2026-11-15-i (Mirror inputs acts only in two-player levels, as its hint says)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -595,9 +595,10 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
         // both from the same pair. Before (2026-11-10), player 2's line read
         // player 1's already-mirrored hold: with Mirror inverted, player 2
         // never got player 1's mirror (p2 | !(p1 | !p2) is p2), and with
-        // neither key down only player 1 was held. A 1-player level comes out
-        // the same either way (both are folded into player 1 below).
-        if (gb->replay.m_mirrorInputs) {
+        // neither key down only player 1 was held. Two-player levels only, as
+        // the switch says (2026-11-15): in a 1-player level both sides are
+        // player 1's, and Mirror inverted held it whatever was pressed.
+        if (gb->replay.m_mirrorInputs && twoPlayer) {
             bool const inv = gb->replay.m_mirrorInverted;
             bool const held1 = p1J, held2 = p2J;
             p1J = held1 | (held2 ^ inv);
@@ -675,7 +676,12 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
             a.m_player2 = cmd.m_isPlayer2 && m_levelSettings->m_twoPlayerMode;
             gb->replay.m_lastInputs.insert_or_assign(key, a);
 
-            if (!gb->replay.m_mirrorInputs)
+            // Two-player levels only, as the switch says (2026-11-15, in-game
+            // check): in a 1-player level both sides move player 1, so
+            // Mirror inverted followed every press with a release on the same
+            // tick and every release with a press, and holds came out
+            // inverted in the recording.
+            if (!gb->replay.m_mirrorInputs || !m_levelSettings->m_twoPlayerMode)
                 continue;
             bool inv = gb->replay.m_mirrorInverted;
             // GucciBot (2026-10-23): onto the other player, which the other
@@ -683,9 +689,7 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
             // holds button sides, and GD hands both to a player the same way.
             // Silicate's playerFlipped(!side) (its GJBaseGameLayer.cpp:437)
             // mirrored onto the same player while the setting was on; with it
-            // off the two are the same side. In a 1-player level, where a side
-            // picks no player, the mirror takes the other side with the
-            // setting on as it always did with it off.
+            // off the two are the same side.
             queueButton((int)cmd.m_button, cmd.m_isPush ^ inv, !cmd.m_isPlayer2, 0.0);
         }
     }
