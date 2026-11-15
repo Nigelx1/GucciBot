@@ -174,6 +174,8 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 
 - [ ] The pathfinder (both engines and the AI pilot): its model of the level reads GD's Windows memory layout (Nigel, 2026-11-09: "u should add pathfinder to everything")
 - [ ] Rendering and Video Mode
+  - Mac: landed 2026-11-15 (builds -be..-bg; CI green on all five platforms; Nigel OK'd the extra download size). The package carries FFmpeg n8.0.1-64-g15504610b0 for macOS (seven universal dylibs, GPL v3, from guccibot-build-files' release ffmpeg-n8.0.1-mac, smoke-tested on GitHub's macOS VM, arm64 and x86_64); GucciBot copies them into libraries/, loads them with dlopen, encodes with VideoToolbox by default (libx264 fallback; Showcase unchanged) and captures through GD's OpenGL 2.1 context. Windows renders checked unchanged in the render test copy (default settings and Showcase, full Stereo Madness). Rendering and Video Mode work on Windows and Mac; the Mac is untested until Nigel's check (docs/DEVICE_TEST_2026-11-15.md, section 4, commit a042169). Open on the Mac: whether a Retina screen's viewport is in points or pixels (the first render's log line `mac view:` says), and whether macOS accepts the ad-hoc signed libraries after Geode unpacks them
+  - iOS and Android: still to do (no FFmpeg for phones yet)
 - [ ] Under-162 TPS and High TPS Precision
 - [ ] The trigger model in the look-aheads
 - [ ] Seeded random teleports and shake

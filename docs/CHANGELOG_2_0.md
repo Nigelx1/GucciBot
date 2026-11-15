@@ -193,10 +193,11 @@ GucciBot's safe mode follows what the Demonlist allows, strictly. The aim is sim
 One download covers Windows, macOS, iOS and Android (32 and 64-bit). Windows is home and gets the most testing. The rest is experimental.
 
 - **Intel Macs** are supported (the Mac build now covers both Apple silicon and Intel). *Not tested on an Intel Mac yet.*
+- **Rendering and Video Mode work on Mac.** The download now carries FFmpeg for macOS (the same FFmpeg 8.0.1 as on Windows, for Apple silicon and Intel, about 12 MB more in the download). A Mac render uses Apple's hardware encoder, VideoToolbox, by default, and falls back to libx264 if it won't open; the Showcase preset works the same as on Windows. If FFmpeg doesn't load, the Render page says why. *Not tested on a Mac yet.*
 - **Seeded random teleports** and **checkpoint placement** now work off Windows too, so macros through random teleports should replay on Mac and phones. *Not tested on a device yet.*
 - High TPS precision is grayed out off Windows, with a note, since it does nothing there.
 - On iOS, Settings > Keybinds no longer offers keys, since no key reaches GucciBot there.
-- **Still Windows only:** the Pathfinder (all of its engines), rendering and Video Mode, tick rates under 162 TPS and High TPS precision, and the trigger model behind the look-aheads.
+- **Still Windows only:** the Pathfinder (all of its engines), tick rates under 162 TPS and High TPS precision, and the trigger model behind the look-aheads. Rendering and Video Mode work on Windows and Mac, not on phones yet.
 
 ### Credits
 

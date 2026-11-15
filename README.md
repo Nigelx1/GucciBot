@@ -22,7 +22,7 @@ You need Geometry Dash 2.2081 and Geode 5.10.1 or a later 5.x. One `.geode` file
 
 **Turn off ToastyReplay Lite and Silicate first.** GucciBot can't run live alongside either one (ToastyReplay Lite crashed macro playback; Silicate patches the same spots in the game GucciBot does), so while either is enabled GucciBot stands down and says why. Turn the other one off or uninstall it, restart, and you're in.
 
-Windows is home, and gets the most testing. macOS, iOS and Android are newer: the Android build has run on a phone, the rest has had little testing, and the Pathfinder, rendering and Video Mode still need Windows ([the full list](about.md#platforms)). The Mac build in beta.5 runs on Apple silicon only; Intel Macs come with the next release.
+Windows is home, and gets the most testing. macOS, iOS and Android are newer: the Android build has run on a phone, the rest has had little testing, the Pathfinder still needs Windows, and rendering and Video Mode work on Windows and Mac (the Mac's are new in 2.0 and not tested on a Mac yet; [the full list](about.md#platforms)). The Mac build in beta.5 runs on Apple silicon only; Intel Macs come with the next release.
 
 Stuck, or got a question? Ask in [the Discord](https://discord.gg/m95NUPdbpJ). Found a bug? [Open an issue](https://github.com/Nigelx1/GucciBot/issues/new/choose).
 

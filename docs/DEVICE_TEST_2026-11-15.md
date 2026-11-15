@@ -26,8 +26,31 @@ Everything this round checks is written to **Geode's log**: the newest file in t
 | 5 | **The per-tick check.** Play any level for a minute or two, with the bot on. | Nothing shows. If a red notification says `... steps in one tick at ... TPS, please report`, macros made on this device would number frames differently from Windows. Note when it came up. |
 | 6 | **Calculate** (the page says "untested on this platform"). Record a short macro (a few clicks), then run Calculate on it. | It finishes without a crash, and the windows look like normal ones: a few frames each, not all 0 or 1 frame. A screenshot of the results helps. |
 | 7 | **The sub-tick clock line.** In any level, click or tap a few times (bot on or off). | The log has one line starting `SCBF clock check`. It ends in **MATCH** (good) or **NO MATCH** (sub-tick recording would record nothing on this device; Claude fixes it from the numbers in that line). Just send it either way. |
-| 8 | **Video Mode** (the Video Mode cards under the JMF Trainer and the Trainer). Just look, nothing to set up. | Each card has a warning, `Video Mode is Windows-only for now`, and its switch can't be turned on. Bad: the switch turns on and ends on a red failure. |
+| 8 | **Video Mode** (the Video Mode cards under the JMF Trainer and the Trainer). Just look, nothing to set up. | Each card has a warning, `Video Mode is Windows-only for now`, and its switch can't be turned on. Bad: the switch turns on and ends on a red failure. On the Mac build from section 4 (2026-11-15-bg or newer) the Mac has no warning any more: there, Video Mode can be switched on. On Android the warning says `Video Mode is Windows and Mac only for now`. |
 | 9 | **Android only: the Click Trainer's Tap button** (build -aj). On the JMF Trainer or Trainer page, load a macro, turn on the Click bar, and don't open a level. Hold and let go of the big **Tap** button under the bar along with the macro's clicks. | Each tap shows up as a line under the macro's clicks, the way the space bar does on a computer. In a level, playing works as before. |
 | 10 | **Android only: the Frame Editor by touch** (build -ak). Open a macro through Macro Tools > Edit a macro > Open, and tap one of its bars. | The panel for the selected bar has **Select this lane** and **Select all** buttons, and both work. The hints talk about tapping, not Ctrl, right click or the mouse wheel. |
 
-If something goes wrong, keep going with the rest if you can, and say which step it was. That's the whole round: thank you!
+If something goes wrong, keep going with the rest if you can, and say which step it was.
+
+## 4. Mac only: rendering (a newer build)
+
+Rendering works on the Mac since build 2026-11-15-bg. This part needs a newer build than the one in section 1: GitHub's package of commit **`a042169fcfaf979b57f5e9455c87c01ef922f232`** (it has builds -be, -bf and -bg in it). Its build run: https://github.com/Nigelx1/GucciBot/actions/runs/43758435429
+
+1. Install it the same way as in section 1 (download **GucciBot (all platforms)** from that run's Artifacts, unzip, Install From File, restart). Near the top of Geode's log the `[GucciBot] BUILD:` line should say 2026-11-15-bg or newer.
+2. Open the **Render** page. Good: no red "FFmpeg isn't loaded" note, and the Start button isn't grayed out. If there is a red note, take a screenshot of it, skip the rest and send the log (below).
+3. To find the videos easily, type a folder you can see into Render > **Folder**, for example `/Users/<your name>/Desktop`. (Left blank, videos go in GucciBot's `renders` folder inside the game's save folder.)
+4. **Render 1, the default settings.** Leave every render setting as it comes (if you've changed any on the Mac before, empty **Codec** and set **Width** and **Height** back to 1920 and 1080). Open **Stereo Madness**, press **Start** on the Render page, play about 10 seconds (dying is fine), then press **Stop**.
+5. **Render 2, Showcase.** Press **Showcase: 8K60 lossless** on the Render page, then set **Width** and **Height** to 1920 and 1080 so the file stays small (8K works too, it's just slow and big). Render about 10 seconds of Stereo Madness again, the same way.
+6. Open both videos (QuickTime plays the first one, an .mp4; the Showcase one is an .mkv, which QuickTime can't open: use VLC or IINA).
+
+| Check | What "good" looks like |
+|---|---|
+| The video plays | Both files open and play to the end. |
+| Picture | The level, the whole screen, the right way up, in normal colors. Bad: black, frozen, upside down, garbled colors, or only part of the screen blown up to fill the frame. |
+| Sound | You hear the music in both. |
+| Size | Both are 1920x1080 (QuickTime: Window > Show Movie Inspector; VLC: Tools > Media Information > Codec). Bad: a different size, or the picture squashed into a corner. |
+| Length | About as long as you played. |
+
+**If something fails, send:** Geode's newest log (see section 2: the `logs` folder next to `mods`). The render lines in it start with `[RENDERER]` and `[GucciBot] Video encoder`, `[GucciBot] Render shaders` and `[GucciBot] Render stopping`; one line starts `[RENDERER] mac view:` and gives the sizes Claude needs if the picture is the wrong size or zoomed in. After a crash, also the newest file in `crashlogs`. A screenshot of anything red on the Render page helps too.
+
+That's the whole round: thank you!
