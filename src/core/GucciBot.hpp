@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-i (Mirror inputs acts only in two-player levels, as its hint says)"
+    "2026-11-15-j (Macro Tools: the pickers list each file with its theme tag, and act on that file)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -1211,13 +1211,18 @@ namespace gucci {
             std::string error;
             macroops::Diff diff;
         };
-        MacroDiffResult diffMacros(const std::string& a, const std::string& b, int moveWindow);
+        // With an extension, that one file (one name can be saved under
+        // several themes); without, findMacroFile's first match.
+        MacroDiffResult diffMacros(const std::string& a, const std::string& b, int moveWindow,
+                                   const std::string& extA = "", const std::string& extB = "");
         struct MacroToolResult {
             macroops::Outcome outcome;
             std::string savedAs;  // the new macro's name, when one was written
         };
-        MacroToolResult trimMacro(const std::string& name, int startTick, int endTick, bool rebase);
-        MacroToolResult mergeMacros(const std::string& a, const std::string& b, int gapTicks);
+        MacroToolResult trimMacro(const std::string& name, int startTick, int endTick, bool rebase,
+                                  const std::string& ext = "");
+        MacroToolResult mergeMacros(const std::string& a, const std::string& b, int gapTicks,
+                                    const std::string& extA = "", const std::string& extB = "");
 
         std::string startPosWarning;
 

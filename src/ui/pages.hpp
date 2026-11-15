@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 // Pages and cards the shell (ui/shell.cpp) draws. Each lives in its own file
 // under src/ui/pages/ and is built only from the kit (ui/kit.hpp), the look
 // and the engine.
@@ -54,5 +56,8 @@ namespace gucci::ui::pages {
     // or nullptr. The Saved macros list, its row menu, Compact Mode and Macro
     // Tools' Load it again ask it.
     const char* macroLoadLock();
+    // shell.cpp: a saved macro file as a picker lists it, "name (Theme)" when
+    // it was saved under a theme's own extension (the Saved macros list's tag).
+    std::string macroFileLabel(std::string const& name, std::string const& ext);
 
 } // namespace gucci::ui::pages

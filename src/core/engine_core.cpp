@@ -1834,13 +1834,13 @@ namespace gucci {
     }
 
     GucciEngine::MacroToolResult GucciEngine::trimMacro(const std::string& name, int startTick, int endTick,
-                                                        bool rebase) {
+                                                        bool rebase, const std::string& ext) {
         MacroToolResult r;
         if (startTick < 0 || endTick < startTick) {
             r.outcome.message = "The end frame is before the start frame.";
             return r;
         }
-        auto path = findMacroFile(name);
+        auto path = findMacroFile(name, ext);
         std::string err;
         auto m = path.empty() ? std::nullopt : macroops::load(path, &err);
         if (!m) {
@@ -1856,10 +1856,11 @@ namespace gucci {
     }
 
     GucciEngine::MacroToolResult GucciEngine::mergeMacros(const std::string& a, const std::string& b,
-                                                          int gapTicks) {
+                                                          int gapTicks, const std::string& extA,
+                                                          const std::string& extB) {
         MacroToolResult r;
-        auto pa = findMacroFile(a);
-        auto pb = findMacroFile(b);
+        auto pa = findMacroFile(a, extA);
+        auto pb = findMacroFile(b, extB);
         std::string err;
         auto ma = pa.empty() ? std::nullopt : macroops::load(pa, &err);
         if (!ma) {
@@ -1878,10 +1879,11 @@ namespace gucci {
     }
 
     GucciEngine::MacroDiffResult GucciEngine::diffMacros(const std::string& a, const std::string& b,
-                                                         int moveWindow) {
+                                                         int moveWindow, const std::string& extA,
+                                                         const std::string& extB) {
         MacroDiffResult r;
-        auto pa = findMacroFile(a);
-        auto pb = findMacroFile(b);
+        auto pa = findMacroFile(a, extA);
+        auto pb = findMacroFile(b, extB);
         std::string err;
         auto ma = pa.empty() ? std::nullopt : macroops::load(pa, &err);
         if (!ma) {

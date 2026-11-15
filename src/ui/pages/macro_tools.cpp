@@ -48,21 +48,37 @@ namespace gucci::ui::pages {
                 kit::Note(branded(m.text).c_str(), m.tone);
         }
 
-        // A macro picker that remembers the name, not the position, so a
+        // A picked saved macro: its name and the extension it's saved under.
+        // One name can be saved under several themes (zz.juice, zz.solar),
+        // and the picker lists each file, tagged as the Saved macros list
+        // tags them, so either can be picked.
+        struct Pick {
+            std::string name, ext;
+            bool empty() const { return name.empty(); }
+            std::string label() const { return macroFileLabel(name, ext); }
+        };
+
+        // A macro picker that remembers the file, not the position, so a
         // reloaded list (Trim and Merge add to it) keeps the choice.
-        bool pickMacro(const char* id, std::string& name) {
-            auto const& names = GucciEngine::get()->storedMacros;
-            auto it = std::find(names.begin(), names.end(), name);
-            int index = it == names.end() ? -1 : static_cast<int>(it - names.begin());
-            if (!kit::Dropdown(id, &index, names) || index < 0 || index >= static_cast<int>(names.size()))
+        bool pickMacro(const char* id, Pick& pick) {
+            auto const& files = GucciEngine::get()->storedMacroFiles;
+            std::vector<std::string> labels;
+            labels.reserve(files.size());
+            int index = -1;
+            for (auto const& [name, ext] : files) {
+                if (name == pick.name && ext == pick.ext)
+                    index = static_cast<int>(labels.size());
+                labels.push_back(macroFileLabel(name, ext));
+            }
+            if (!kit::Dropdown(id, &index, labels) || index < 0 || index >= static_cast<int>(files.size()))
                 return false;
-            name = names[static_cast<size_t>(index)];
+            pick = {files[static_cast<size_t>(index)].first, files[static_cast<size_t>(index)].second};
             return true;
         }
 
-        void macroRow(const char* label, const char* id, std::string& name) {
+        void macroRow(const char* label, const char* id, Pick& pick) {
             kit::RowBegin(label, nullptr);
-            pickMacro(id, name);
+            pickMacro(id, pick);
             kit::RowEnd();
         }
 
@@ -117,7 +133,7 @@ namespace gucci::ui::pages {
         // ------------------------------------------------------------ Diff
 
         struct DiffState {
-            std::string a, b;
+            Pick a, b;
             bool ran = false;
             std::string ranA, ranB;
             GucciEngine::MacroDiffResult result;
@@ -140,10 +156,10 @@ namespace gucci::ui::pages {
             bool const ready = !s.a.empty() && !s.b.empty();
             ImGui::BeginDisabled(!ready);
             if (kit::Button("Compare", Tone::Accent)) {
-                s.result = gb->diffMacros(s.a, s.b, g_moveWindow);
+                s.result = gb->diffMacros(s.a.name, s.b.name, g_moveWindow, s.a.ext, s.b.ext);
                 s.ran = true;
-                s.ranA = s.a;
-                s.ranB = s.b;
+                s.ranA = s.a.label();
+                s.ranB = s.b.label();
             }
             ImGui::EndDisabled();
             if (!ready)
@@ -217,7 +233,7 @@ namespace gucci::ui::pages {
         // ------------------------------------------------------------ Trim
 
         struct TrimState {
-            std::string name;
+            Pick name;
             int start = 0;
             int end = 0;
             Message msg;
@@ -247,7 +263,7 @@ namespace gucci::ui::pages {
             bool const ready = !s.name.empty() && s.end >= s.start;
             ImGui::BeginDisabled(!ready);
             if (kit::Button("Trim", Tone::Accent)) {
-                auto r = gb->trimMacro(s.name, s.start, s.end, g_rebase);
+                auto r = gb->trimMacro(s.name.name, s.start, s.end, g_rebase, s.name.ext);
                 if (r.outcome.ok)
                     s.msg = {fmt::format("Saved as '{}': {} inputs. {}", r.savedAs,
                                          mo::stats(r.outcome.macro).inputs, r.outcome.message),
@@ -269,7 +285,7 @@ namespace gucci::ui::pages {
         // ------------------------------------------------------------ Merge
 
         struct MergeState {
-            std::string a, b;
+            Pick a, b;
             Message msg;
         };
         MergeState g_merge;
@@ -291,7 +307,7 @@ namespace gucci::ui::pages {
             bool const ready = !s.a.empty() && !s.b.empty();
             ImGui::BeginDisabled(!ready);
             if (kit::Button("Merge", Tone::Accent)) {
-                auto r = gb->mergeMacros(s.a, s.b, g_gap);
+                auto r = gb->mergeMacros(s.a.name, s.b.name, g_gap, s.a.ext, s.b.ext);
                 if (r.outcome.ok)
                     s.msg = {fmt::format("Saved as '{}': {} inputs. {}", r.savedAs,
                                          mo::stats(r.outcome.macro).inputs, r.outcome.message),
@@ -310,8 +326,9 @@ namespace gucci::ui::pages {
         // ------------------------------------------------------------ Edit (metadata + TPS changes)
 
         struct EditState {
-            std::string pick;      // what the picker shows
+            Pick pick;             // what the picker shows
             std::string name;      // what is open
+            std::string ext;       // ...and the extension it's saved under
             fs::path path;
             std::optional<mo::Macro> macro;
             mo::Stats stats;
@@ -323,12 +340,13 @@ namespace gucci::ui::pages {
         };
         EditState g_edit;
 
-        void openForEdit(std::string const& name) {
+        void openForEdit(Pick const& pick) {
             auto& s = g_edit;
             s = EditState{};
-            s.pick = name;
-            s.name = name;
-            s.path = GucciEngine::get()->findMacroFile(name);
+            s.pick = pick;
+            s.name = pick.name;
+            s.ext = pick.ext;
+            s.path = GucciEngine::get()->findMacroFile(pick.name, pick.ext);
             std::string err;
             s.macro = s.path.empty() ? std::nullopt : mo::load(s.path, &err);
             if (!s.macro) {
@@ -502,7 +520,7 @@ namespace gucci::ui::pages {
                 return;
             }
 
-            kit::Label(fmt::format("Editing '{}'", s.name).c_str(), Tone::Accent);
+            kit::Label(fmt::format("Editing '{}'", macroFileLabel(s.name, s.ext)).c_str(), Tone::Accent);
             metadataSection(s);
             tpsSection(s);
 
@@ -521,13 +539,15 @@ namespace gucci::ui::pages {
             }
             ImGui::SameLine();
             if (kit::Button("Revert"))
-                openForEdit(s.name);
+                openForEdit({s.name, s.ext});
             ImGui::EndDisabled();
             message(s.msg);
 
             // The loaded macro is a copy in memory: it doesn't see the file
             // change, and saving it from the Macro page would write over it.
-            if (s.name == gb->replayName && !gb->replay.m_actionAtom.empty()) {
+            // The same file, not another theme's file of that name.
+            if (s.name == gb->replayName && s.path == gb->replay.getCurrentPath() &&
+                !gb->replay.m_actionAtom.empty()) {
                 kit::Note("This is the macro you have loaded. It plays as it was loaded until you load it again, "
                           "and saving it from the Macro page would put back what it was.",
                           Tone::Warn);

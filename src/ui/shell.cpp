@@ -3340,8 +3340,7 @@ namespace gucci::ui {
                 for (auto const& [name, ext] : files) {
                     if (name == gb->replayName && ext == loadedExt)
                         pick = static_cast<int>(labels.size());
-                    std::string const tag = macroTag(ext);
-                    labels.push_back(tag.empty() ? name : fmt::format("{} ({})", name, tag));
+                    labels.push_back(pages::macroFileLabel(name, ext));
                 }
                 ImGui::BeginDisabled(gb->isRecording() || pages::macroLoadLock());
                 if (kit::Dropdown("macro", &pick, labels, labels.empty() ? "No saved macros" : "Load a saved macro") &&
@@ -3721,6 +3720,13 @@ namespace gucci::ui {
             return t && t->id == themes::kGBotTheme;
         }
     } // namespace
+
+    namespace pages {
+        std::string macroFileLabel(std::string const& name, std::string const& ext) {
+            std::string const tag = macroTag(ext);
+            return tag.empty() ? name : fmt::format("{} ({})", name, tag);
+        }
+    } // namespace pages
 
     bool hasTheme(const std::string& name) {
         return namedTheme(name).has_value();
