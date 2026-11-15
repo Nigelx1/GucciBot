@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-ag (Macro path: Marker size and Line opacity show as you move them)"
+    "2026-11-15-ah (Import a macro: the picker lists GucciBot macros saved under every theme)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

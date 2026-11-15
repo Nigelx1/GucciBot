@@ -1139,10 +1139,17 @@ namespace gucci::ui {
         arc::Future<int> pickMacroTask(std::optional<std::filesystem::path> folder) {
             geode::utils::file::FilePickOptions options;
             options.defaultPath = std::move(folder);
-            options.filters.push_back({"Macros",
-                                       {"*.gdr", "*.gdr2", "*.json", "*.slc", "*.scbf1", "*.tcm", "*.ttr3", "*.ybot", "*.xd",
-                                        "*.mhr", "*.echo", "*.replay", "*.zbf", "*.kd", "*.rush", "*.freplay", "*.xbot",
-                                        "*.url", "*.txt", "*.brrr", "*.gbot"}});
+            geode::utils::file::FilePickOptions::Filter macros{
+                "Macros",
+                {"*.gdr", "*.gdr2", "*.json", "*.slc", "*.scbf1", "*.tcm", "*.ttr3", "*.ybot", "*.xd", "*.mhr", "*.echo",
+                 "*.replay", "*.zbf", "*.kd", "*.rush", "*.freplay", "*.xbot", "*.url", "*.txt", "*.brrr", "*.gbot"}};
+            // GucciBot's own under every theme (.juice, .solar, a custom
+            // theme's...): importing takes any of them (copyGucciBotMacro),
+            // but the filter only listed .brrr and .gbot, and on macOS a
+            // filter is the only types that can be picked.
+            for (auto const& ext : knownMacroExtensions())
+                macros.files.insert("*" + ext);
+            options.filters.push_back(std::move(macros));
             geode::utils::file::PickResult result =
                 co_await geode::utils::file::pick(geode::utils::file::PickMode::OpenFile, options);
             // Windows fails the whole pick, before the dialog shows, when it
