@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-f (Renderer: Video args skip -vf and other filter options with one log line, and name any option the encoder did not take)"
+    "2026-11-15-g (Compact Mode: Load a saved macro lists each file with its theme tag and loads that file)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

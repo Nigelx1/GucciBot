@@ -3314,13 +3314,26 @@ namespace gucci::ui {
                                                         : GucciEngine::Mode::Idle);
                 }
                 // A saved macro, loaded as a click in the Saved macros list
-                // loads it (not while recording).
-                auto const& saved = gb->storedMacros;
-                int pick = static_cast<int>(std::find(saved.begin(), saved.end(), gb->replayName) - saved.begin());
+                // loads it (not while recording). One entry per file, tagged
+                // with its theme as the list is: a name saved under two
+                // themes is two entries, each loading its own file.
+                auto const& files = gb->storedMacroFiles;
+                auto const loadedExt = gb->replayName.empty() ? std::string()
+                                                              : gb->replay.getCurrentPath().extension().string();
+                std::vector<std::string> labels;
+                labels.reserve(files.size());
+                int pick = -1;
+                for (auto const& [name, ext] : files) {
+                    if (name == gb->replayName && ext == loadedExt)
+                        pick = static_cast<int>(labels.size());
+                    std::string const tag = macroTag(ext);
+                    labels.push_back(tag.empty() ? name : fmt::format("{} ({})", name, tag));
+                }
                 ImGui::BeginDisabled(gb->isRecording());
-                if (kit::Dropdown("macro", &pick, saved, saved.empty() ? "No saved macros" : "Load a saved macro")) {
-                    std::string const name = saved[static_cast<size_t>(pick)];
-                    loadMacroByName(name);
+                if (kit::Dropdown("macro", &pick, labels, labels.empty() ? "No saved macros" : "Load a saved macro") &&
+                    pick >= 0 && pick < static_cast<int>(files.size())) {
+                    auto const [name, ext] = files[static_cast<size_t>(pick)];
+                    loadMacroByName(name, ext);
                 }
                 ImGui::EndDisabled();
                 kit::InputText("name", &gb->replayName, "macro name");
