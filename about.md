@@ -19,7 +19,7 @@ Windows is GucciBot's home, and where all of it has been tested. Since 2.0.0-bet
 
 What still needs Windows:
 
-- **Pathfinder** (every engine).
+- The **Pathfinder's** trigger model. Since 2.0 the Pathfinder runs on Mac and phones too (every engine), without it, so levels with move and rotate triggers fail more often there; not tested on a device yet.
 - **Rendering** and **Video Mode** on iOS and Android: GucciBot doesn't ship FFmpeg for phones yet. Since 2.0 they work on Windows and Mac (the Mac with its own FFmpeg libraries, encoding with Apple's VideoToolbox by default; not tested on a Mac yet).
 - Tick rates under 162 TPS, and **High TPS Precision**.
 - The trigger model behind the look-aheads. Elsewhere, Show Trajectory, Frame Extrapolation, Prevent Death's look-ahead, Find Best Tick and the Survival Indicator carry moving objects at the speed they have, without the triggers that change them later.

@@ -53,4 +53,16 @@ Rendering works on the Mac since build 2026-11-15-bg. This part needs a newer bu
 
 **If something fails, send:** Geode's newest log (see section 2: the `logs` folder next to `mods`). The render lines in it start with `[RENDERER]` and `[GucciBot] Video encoder`, `[GucciBot] Render shaders` and `[GucciBot] Render stopping`; one line starts `[RENDERER] mac view:` and gives the sizes Claude needs if the picture is the wrong size or zoomed in. After a crash, also the newest file in `crashlogs`. A screenshot of anything red on the Render page helps too.
 
+## 5. The R restart and the Pathfinder (a newer build)
+
+Builds 2026-11-15-bh and -bj came after section 4. This part needs GitHub's package of commit **`6265e7c14a40833f816b62f7fe67f34fa0302c0c`** (build **2026-11-15-bj**; it has everything in sections 1 to 4 too). Its build run: https://github.com/Nigelx1/GucciBot/actions/runs/43760412885
+
+1. Install it the same way as in section 1 (download **GucciBot (all platforms)** from that run's Artifacts, unzip, Install From File, restart). Near the top of Geode's log the `[GucciBot] BUILD:` line should say 2026-11-15-bj or newer.
+2. Keep **safe mode on**, as always. Both checks below go in Geode's log (section 2).
+
+| # | What you do | What "good" looks like |
+|---|---|---|
+| 11 | **Mac only: hold through a restart** (build -bh). Open a level in normal mode with the bot off. Hold the mouse button down and keep holding it, press **R** to restart, and still don't let go. | The player keeps jumping after the restart, as if you had pressed again, until you let go. Bad: it stops jumping after the restart until you click again (that's how it was before). The log has one line starting `[GucciBot] Restart key: kept the held touch through UILayer::handleKeypress`. If the hold drops and that line isn't there, the Mac's R key goes another way: say so and send the log. |
+| 12 | **Mac and phone: a cold Pathfinder run on Stereo Madness** (build -bj). The Pathfinder page now says `Untested on this platform` at the top, and Start works. Open **Stereo Madness** with no macro loaded. Open GucciBot's menu > **Pathfinder**, set **Engine** to **Search (old)** and **Search** to **Absense** (the defaults), leave **Remember solutions** off, and press **Start**. Leave it alone; on Windows it takes about 2 minutes, a phone may take a lot longer. | It plays the level by itself, stopping and starting while it thinks, until it reaches 100%. Then it saves a macro named after the level, and replaying that macro finishes the level too. The log has a line starting `[GucciBot]: [AbsPF] stopped: level complete`. Bad: a crash, it gets stuck at one spot for minutes, or the log has many lines with `the simulation did not see that death` (a few is fine; note how many). Send Geode's log either way: the Pathfinder's lines all start with `[AbsPF]`. If it's very slow or the phone gets hot, stop it with **Stop** and send the log anyway. |
+
 That's the whole round: thank you!

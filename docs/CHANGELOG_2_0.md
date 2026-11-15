@@ -83,7 +83,7 @@ Many of these come from anticroom's Antic's Counter changelogs. They were rewrit
 
 ### Pathfinder
 
-So it's clear what each change is, every item is labeled one of three ways. **Search** means trying moves in a copy of the game and backing up when they die. **Planning** means reasoning over the whole level. **Learning** means trained networks. The Pathfinder needs Windows.
+So it's clear what each change is, every item is labeled one of three ways. **Search** means trying moves in a copy of the game and backing up when they die. **Planning** means reasoning over the whole level. **Learning** means trained networks. Off Windows the Pathfinder runs without the trigger model (see Platforms).
 
 - **Learning: the AI engine, still early.** The Pathfinder page now has an **Engine** choice: **AI** or **Search (old)**. It starts on **Search (old)**, as the Pathfinder always has. AI means trained networks play the level and practice it. The networks learn from human macros (as examples of normal play; no macro is followed at run time) and with reinforcement learning, playing levels in test copies of the game. **It isn't ready yet.** It doesn't beat the levels the search engine beats, and this download doesn't include trained networks, so picking AI shows "No trained AI yet" and Start stays grayed out.
 - **Search: a much stronger search engine** (Engine: Search (old), then Search: Absense, the default). In Claude's unattended test runs it beat all five of these from a cold start, with no macro loaded and nothing remembered, and each result replayed: Clubstep, Theory of Everything 2, Deadlocked, The Nightmare and Bloodbath. Later runs also beat Stereo Madness, Base After Base, Clutterfunk, Stalemate and Slaughterhouse the same way. Forest Temple, GRIEF, LIMBO, ORBIT and Heliopolis are still out of reach. What changed:
@@ -195,9 +195,11 @@ One download covers Windows, macOS, iOS and Android (32 and 64-bit). Windows is 
 - **Intel Macs** are supported (the Mac build now covers both Apple silicon and Intel). *Not tested on an Intel Mac yet.*
 - **Rendering and Video Mode work on Mac.** The download now carries FFmpeg for macOS (the same FFmpeg 8.0.1 as on Windows, for Apple silicon and Intel, about 12 MB more in the download). A Mac render uses Apple's hardware encoder, VideoToolbox, by default, and falls back to libx264 if it won't open; the Showcase preset works the same as on Windows. If FFmpeg doesn't load, the Render page says why. *Not tested on a Mac yet.*
 - **Seeded random teleports** and **checkpoint placement** now work off Windows too, so macros through random teleports should replay on Mac and phones. *Not tested on a device yet.*
+- **The Pathfinder runs on Mac and phones** (both searches and the AI engine), without the trigger model: it can't see what move and rotate triggers will do next, so levels that use them fail more often than on Windows. The page says so. *Tested only on Windows, with a build that runs the Mac and phone engine: the search beat Stereo Madness and Base After Base from a cold start. Not tested on a device yet.*
+- **Holding the mouse through an R restart keeps the hold** on Mac (and Android with a keyboard), as it already did on Windows. *Not tested on a device yet.*
 - High TPS precision is grayed out off Windows, with a note, since it does nothing there.
 - On iOS, Settings > Keybinds no longer offers keys, since no key reaches GucciBot there.
-- **Still Windows only:** the Pathfinder (all of its engines), tick rates under 162 TPS and High TPS precision, and the trigger model behind the look-aheads. Rendering and Video Mode work on Windows and Mac, not on phones yet.
+- **Still Windows only:** tick rates under 162 TPS and High TPS precision, and the trigger model behind the look-aheads and the Pathfinder. Rendering and Video Mode work on Windows and Mac, not on phones yet.
 
 ### Credits
 
