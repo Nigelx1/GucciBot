@@ -70,6 +70,25 @@ namespace gucci {
                name == "lavfi" || name.starts_with("filter:");
     }
 
+    // For the log: the formats this renderer writes (av_get_pix_fmt_name
+    // isn't in the loaded FFmpeg table).
+    static const char* pixFmtName(AVPixelFormat f) {
+        switch (f) {
+        case AV_PIX_FMT_YUV420P:
+            return "yuv420p";
+        case AV_PIX_FMT_YUV444P:
+            return "yuv444p";
+        case AV_PIX_FMT_NV12:
+            return "nv12";
+        case AV_PIX_FMT_RGB0:
+            return "rgb0";
+        case AV_PIX_FMT_RGB24:
+            return "rgb24";
+        default:
+            return "other";
+        }
+    }
+
     enum class GPUVendor { NVIDIA, AMD, INTEL, OTHER };
 
     static GPUVendor getGPUVendor() {
@@ -530,6 +549,14 @@ namespace gucci {
             ff->av_dict_free(&video_opts);
             if (opened < 0)
                 return geode::Err("Failed to open codec '{}'", name);
+            // What the render runs with, for anyone reading a log. Threads 0
+            // is "auto" (the encoder picks; this FFmpeg's default, checked
+            // 2026-11-15), unless the Video args gave -threads.
+            geode::log::info("[GucciBot] Video encoder '{}' opened: {}x{} at {} FPS, pixel format {}, threads {}",
+                             name, m_settings.m_width, m_settings.m_height, m_settings.m_fps,
+                             pixFmtName(m_settings.m_pixFmt),
+                             m_videoCodecCtx->thread_count == 0 ? std::string("auto")
+                                                                : std::to_string(m_videoCodecCtx->thread_count));
             return geode::Ok();
         };
         if (auto r = openVideoCodec(m_settings.m_codec); r.isErr()) {

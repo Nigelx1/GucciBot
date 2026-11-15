@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-m (Tick rate: a typed rate counts once it is finished, not on every keystroke)"
+    "2026-11-15-n (Renderer: the log names the video encoder it opened, with size, FPS, pixel format and threads)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
