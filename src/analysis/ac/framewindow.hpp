@@ -141,6 +141,9 @@ class FrameWindowAnalyzer {
         int number = 0;      // which click that is, from 1 (as Every input numbers them)
         int counted = 0;     // clicks with a window
         int left = 0;        // clicks without one
+        // The windows from `frame` on are an older run's, which the run that
+        // stopped was counting again (recountFrom): they're counted again too.
+        bool recount = false;
     };
     // Worked out again only when the windows or the macro's inputs change (the
     // Calculate page asks every frame).
@@ -148,10 +151,22 @@ class FrameWindowAnalyzer {
     // A run over every input without a window, from that click on, that
     // keeps every window already there (typed ones too).
     Report startResume(PlayLayer* pl);
-    // The last run counted only some inputs and kept the rest (a range or a
-    // Continue). Its results then hold the windows from before it too, so
-    // even one that was canceled can be saved without losing any.
+    // The last run's results hold every window from before it that it didn't
+    // count again: a range or a Continue that finished or was stopped, or any
+    // run stopped short (Cancel, leaving the level, the time cap, a replay
+    // that can't go on), whose inputs past the stop keep their old windows.
+    // So it can be saved without losing any. Never one whose capture died.
     bool lastRunKeptOthers() const { return m_lastKeptOthers; }
+    // GucciBot (2026-11-15): where a whole run over older windows stopped
+    // (UINT32_MAX: none). The windows from this frame on are the older run's,
+    // which Continue counts again; saved in the windows file ("recountFrom").
+    uint32_t recountFrom() const { return m_recountFrom; }
+    // Changes whenever a running run has counted more, for the windows file
+    // written while it runs (GucciEngine::keepRunningWindows).
+    uint64_t runStamp() const {
+        return (static_cast<uint64_t>(m_results.size()) << 40) ^
+               (static_cast<uint64_t>(m_index) << 8) ^ static_cast<uint64_t>(m_stageId);
+    }
 
     struct PlayheadInput {
         bool valid = false;
@@ -392,12 +407,16 @@ class FrameWindowAnalyzer {
     int skippedCount() const { return m_skipped; }
     int desyncCount() const { return m_desynced; }
 
+    // While a run counts, this writes what the run would leave if it stopped
+    // now (runSnapshot), and nothing when its capture died (pinned windows).
+    // Through a temporary file and a rename, so the file is never half there.
     bool saveResults(std::filesystem::path const& path) const;
     bool loadResults(std::filesystem::path const& path);
 
     void clear() {
         m_results.clear();
         m_messages.clear();
+        m_recountFrom = UINT32_MAX;
         m_measured = 0;
         m_skipped = 0;
         m_desynced = 0;
@@ -1002,6 +1021,50 @@ class FrameWindowAnalyzer {
 
     bool inProbeRange(size_t index) const;
     void mergeKept();
+
+    // GucciBot (2026-11-15): the three steps finish() takes to put a run's
+    // results together, on any list of them, so a running run's windows file
+    // (runSnapshot) is put together the same way. `old` stays where `results`
+    // has no window for its input; typed windows go back over the results;
+    // the messages go back on the inputs they stood on.
+    static void mergeOld(std::vector<FrameWindowMark>& results,
+                         std::vector<FrameWindowMark> const& old);
+    static bool applyManual(std::vector<FrameWindowMark>& results,
+                            std::vector<FrameWindowMark> const& manual);
+    static int resultIndexIn(std::vector<FrameWindowMark> const& results,
+                             InputKey const& key);
+    static void reanchorIn(std::vector<FrameWindowMessage>& messages,
+                           std::vector<FrameWindowMark> const& results,
+                           std::vector<MessageAnchor> const& anchors);
+    // GucciBot (2026-11-15): Calculate never loses a long run. A whole run
+    // (and a Continue counting again an older run's windows) keeps the old
+    // windows it is counting again aside here (typed ones are m_manualKept's),
+    // so a run that stops keeps those of the inputs it hadn't reached.
+    std::vector<FrameWindowMark> m_recountOld;
+    uint32_t m_recountFrom = UINT32_MAX;  // see recountFrom()
+    // Stopped before the end (Cancel, leaving the level, the time cap, a
+    // replay that can't go on), at m_stopAt: the first input it hadn't done.
+    bool m_stoppedShort = false;
+    uint32_t m_stopAt = UINT32_MAX;
+    // The first input a running run hasn't counted yet (0 in the capture
+    // pass, UINT32_MAX once every input is probed).
+    uint32_t stopFrame() const;
+    void stopShort() {
+        m_stoppedShort = true;
+        m_stopAt = this->stopFrame();
+    }
+    // The recountFrom a run leaves, stopped at `stopAt` with old windows from
+    // there on kept (`carried`) or not.
+    uint32_t recountAfter(bool carried, uint32_t stopAt) const;
+    // What the run would leave if it stopped now.
+    void runSnapshot(std::vector<FrameWindowMark>& marks,
+                     std::vector<FrameWindowMessage>& messages,
+                     uint32_t& recountFrom) const;
+    bool writeResults(std::filesystem::path const& path,
+                      std::vector<FrameWindowMark> const& marks,
+                      std::vector<FrameWindowMessage> const& messages,
+                      uint32_t recountFrom, int measured, int skipped,
+                      int desynced) const;
 
     // GucciBot (2026-11-15): Continue from where it stopped (startResume).
     // The run behind both start() and startRange(); `resume` also skips

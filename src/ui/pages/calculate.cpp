@@ -204,11 +204,22 @@ namespace gucci::ui::pages {
                         if (kit::Button("Continue from where it stopped"))
                             gb->analyzeFrameWindows(true);
                         ImGui::EndDisabled();
-                        kit::Hint(fmt::format("{} of {} clicks have a window. Continue counts the other {}, "
-                                              "starting at click {}, and keeps every window already counted. Use "
-                                              "the same settings as the first run, or the two parts won't match.",
-                                              rp.counted, rp.counted + rp.left, rp.left, rp.number)
-                                      .c_str());
+                        // GucciBot (2026-11-15): after a run that stopped while counting again
+                        // windows from an older one, those past the stop are counted again too.
+                        if (rp.recount)
+                            kit::Hint(fmt::format("{} of {} clicks are counted. The last run stopped while counting "
+                                                  "again windows from an older run, so Continue counts the other {} "
+                                                  "from click {}, those windows among them, and keeps the rest. Use "
+                                                  "the same settings as that run, or the two parts won't match.",
+                                                  rp.counted, rp.counted + rp.left, rp.left, rp.number)
+                                          .c_str());
+                        else
+                            kit::Hint(fmt::format("{} of {} clicks have a window. Continue counts the other {}, "
+                                                  "starting at click {}, and keeps every window already counted. "
+                                                  "Use the same settings as the first run, or the two parts won't "
+                                                  "match.",
+                                                  rp.counted, rp.counted + rp.left, rp.left, rp.number)
+                                          .c_str());
                     }
                 }
                 // Mods that step frames themselves throw the numbers off; this

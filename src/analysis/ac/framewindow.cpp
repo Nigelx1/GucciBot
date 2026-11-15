@@ -1295,11 +1295,15 @@ uint64_t resumeKey(uint32_t frame, bool player2, bool release) {
     return (static_cast<uint64_t>(frame) << 2) | (release ? 2u : 0u) |
            (player2 ? 1u : 0u);
 }
-std::vector<uint64_t> resumeKeysOf(std::vector<FrameWindowMark> const& marks) {
+// Only the windows before `before` (recountFrom): those from it on are an
+// older run's that the run that stopped was counting again.
+std::vector<uint64_t> resumeKeysOf(std::vector<FrameWindowMark> const& marks,
+                                   uint32_t before) {
     std::vector<uint64_t> keys;
     keys.reserve(marks.size());
     for (auto const& mk : marks)
-        keys.push_back(resumeKey(mk.frame, mk.player2, mk.release));
+        if (mk.frame < before)
+            keys.push_back(resumeKey(mk.frame, mk.player2, mk.release));
     std::sort(keys.begin(), keys.end());
     return keys;
 }
@@ -1325,6 +1329,7 @@ FrameWindowAnalyzer::ResumePoint FrameWindowAnalyzer::resumePoint(
     };
     mix(m_generation);
     mix(m_results.size());
+    mix(m_recountFrom);
     mix(actions.size());
     mix(twoPlayerLevelOf(pl) ? 1 : 2);
     mix(m_twoPlayerFixes->inner() ? 3 : 4);
@@ -1345,7 +1350,11 @@ FrameWindowAnalyzer::ResumePoint FrameWindowAnalyzer::computeResumePoint(
     ResumePoint rp;
     if (m_results.empty()) return rp;
     auto const& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
-    auto const keys = resumeKeysOf(m_results);
+    auto const keys = resumeKeysOf(m_results, m_recountFrom);
+    // Every window, for saying when old ones get counted again.
+    auto const allKeys = m_recountFrom == UINT32_MAX
+                             ? std::vector<uint64_t>{}
+                             : resumeKeysOf(m_results, UINT32_MAX);
     // The pairs the next run makes (pairDualClicks): each is one click.
     std::vector<size_t> const partner =
         m_twoPlayerFixes->inner() && !twoPlayerLevelOf(pl)
@@ -1364,6 +1373,9 @@ FrameWindowAnalyzer::ResumePoint FrameWindowAnalyzer::computeResumePoint(
             rp.counted++;
             continue;
         }
+        if (frame >= m_recountFrom &&
+            resumeKeyHeld(allKeys, frame, a.m_player2, false))
+            rp.recount = true;
         rp.left++;
         // The earliest, in case the actions aren't in frame order.
         if (!found || frame < rp.frame) {
@@ -1472,6 +1484,23 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRun(PlayLayer* pl,
         if (mk.manual) m_manualKept.push_back(mk);
     if (partial)
         kept = m_results;
+    // GucciBot (2026-11-15): the older windows this run counts again, aside,
+    // so a run that stops keeps those of the inputs it hadn't reached
+    // (finish, runSnapshot): every one for a whole run (it clears them), and
+    // for a Continue those from where the run before it stopped (recountFrom)
+    // on, which it counts again (taken out of the ones it keeps, so one it
+    // can't count goes as in a whole run). Typed ones are m_manualKept's.
+    uint32_t const recountFrom = m_recountFrom;
+    std::vector<FrameWindowMark> recountOld;
+    if (!partial || (resume && recountFrom != UINT32_MAX)) {
+        uint32_t const at = partial ? recountFrom : 0;
+        for (auto const& mk : m_results)
+            if (!mk.manual && mk.frame >= at) recountOld.push_back(mk);
+        if (partial)
+            std::erase_if(kept, [at](FrameWindowMark const& mk) {
+                return !mk.manual && mk.frame >= at;
+            });
+    }
     // GucciBot (2026-10-29): so do the text messages, a whole run's too (it
     // cleared them, typed ones were lost), each on the inputs it stood on.
     keptMessages = m_messages;
@@ -1479,20 +1508,33 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRun(PlayLayer* pl,
     // GucciBot (2026-11-15): what a Continue leaves alone, taken before the
     // results are cleared for the run (mergeKept puts them back after it).
     m_resume = resume;
-    m_resumeKeys = resume ? resumeKeysOf(m_results) : std::vector<uint64_t>{};
+    m_resumeKeys = resume ? resumeKeysOf(m_results, recountFrom) : std::vector<uint64_t>{};
     m_resumePrevMeasured = resume ? m_measured : 0;
     m_resumePrevDesynced = resume ? m_desynced : 0;
     m_probeMask.clear();
     m_probeStartIndex = 0;
     m_stoppedByPlayer = false;
+    m_stoppedShort = false;
+    m_stopAt = UINT32_MAX;
+    m_recountOld.clear();
     if (!resume) m_resumeNumber = 0;
+    // (A refused run gets its windows back whole: those in recountOld, and
+    // for a whole run its typed ones, are put back too. Until 2026-11-15 a
+    // whole run refused here had cleared them.)
     auto const restore = [&] {
         m_results = std::move(kept);
+        m_results.insert(m_results.end(), recountOld.begin(), recountOld.end());
+        if (!partial)
+            m_results.insert(m_results.end(), m_manualKept.begin(), m_manualKept.end());
+        std::stable_sort(m_results.begin(), m_results.end(),
+                         [](auto const& a, auto const& b) { return a.frame < b.frame; });
         m_messages = std::move(keptMessages);
+        m_recountFrom = recountFrom;
         m_generation++;
     };
 
     this->clear();
+    m_recountFrom = recountFrom;  // (clear() drops it; the run's end sets it)
 
     m_sweep = std::clamp(m_sweepRange->inner(), 1, MAX_SWEEP);
     m_maxWin = std::max(0, m_maxWindow->inner());
@@ -1560,6 +1602,7 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRun(PlayLayer* pl,
     m_probeFrom = from;
     m_probeTo = to;
     m_keptResults = std::move(kept);
+    m_recountOld = std::move(recountOld);
     m_keptMessages = std::move(keptMessages);
     m_keptMessageAnchors = std::move(anchors);
 
@@ -4617,23 +4660,28 @@ size_t FrameWindowAnalyzer::probeTotal() const {
     return n;
 }
 
-void FrameWindowAnalyzer::mergeKept() {
-    auto fresh = std::move(m_results);
-    m_results.clear();
+void FrameWindowAnalyzer::mergeOld(std::vector<FrameWindowMark>& results,
+                                   std::vector<FrameWindowMark> const& old) {
+    auto fresh = std::move(results);
+    results.clear();
 
-    for (auto const& old : m_keptResults) {
+    for (auto const& mk0 : old) {
         bool const replaced =
             std::any_of(fresh.begin(), fresh.end(), [&](auto const& mk) {
-                return mk.frame == old.frame && mk.player2 == old.player2 &&
-                       mk.release == old.release;
+                return mk.frame == mk0.frame && mk.player2 == mk0.player2 &&
+                       mk.release == mk0.release;
             });
-        if (!replaced) m_results.push_back(old);
+        if (!replaced) results.push_back(mk0);
     }
-    m_results.insert(m_results.end(), fresh.begin(), fresh.end());
-    std::stable_sort(m_results.begin(), m_results.end(),
+    results.insert(results.end(), fresh.begin(), fresh.end());
+    std::stable_sort(results.begin(), results.end(),
                      [](auto const& a, auto const& b) {
-                         return a.frame < b.frame;  
+                         return a.frame < b.frame;
                      });
+}
+
+void FrameWindowAnalyzer::mergeKept() {
+    mergeOld(m_results, m_keptResults);
 
     // (The messages come back in putBackMessages, after the typed windows.)
     m_keptResults.clear();
@@ -4643,6 +4691,46 @@ void FrameWindowAnalyzer::mergeKept() {
 
     m_generation++;
     this->resetDisplay();
+}
+
+// GucciBot (2026-11-15): Calculate never loses a long run (a user's 7-hour
+// run, saved mid-run and the PC shut off: the windows file then held only what
+// it had counted, or, from -s on, nothing new at all).
+uint32_t FrameWindowAnalyzer::stopFrame() const {
+    if (!m_running || m_stageId == Stage::Capture) return 0;
+    if (m_stageId == Stage::Dependent || m_stageId == Stage::Suggest ||
+        m_index >= m_samples.size())
+        return UINT32_MAX;
+    return m_samples[m_index].frame;
+}
+
+// A whole run, or a Continue counting an older run's windows again, says where
+// it stopped when it kept older windows past there, and nothing when it went
+// to the end. One stopped before it counted anything (the capture pass) leaves
+// what was there. A range leaves it too: it only counts its own inputs.
+uint32_t FrameWindowAnalyzer::recountAfter(bool carried, uint32_t stopAt) const {
+    if (stopAt == 0) return m_recountFrom;
+    if (m_partial && !m_resume) return m_recountFrom;
+    return carried ? stopAt : UINT32_MAX;
+}
+
+void FrameWindowAnalyzer::runSnapshot(std::vector<FrameWindowMark>& marks,
+                                      std::vector<FrameWindowMessage>& messages,
+                                      uint32_t& recountFrom) const {
+    uint32_t const stopAt = this->stopFrame();
+    marks = m_results;
+    auto old = m_keptResults;
+    bool carried = false;
+    for (auto const& mk : m_recountOld)
+        if (mk.frame >= stopAt) {
+            old.push_back(mk);
+            carried = true;
+        }
+    mergeOld(marks, old);
+    applyManual(marks, m_manualKept);
+    messages = m_keptMessages;
+    reanchorIn(messages, marks, m_keptMessageAnchors);
+    recountFrom = this->recountAfter(carried, stopAt);
 }
 
 void FrameWindowAnalyzer::nextClick() {
@@ -4818,10 +4906,28 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
     // leaving the level can be saved without losing any (shell.cpp,
     // saveAcResultsAfterRun). Not one whose capture died: its windows are
     // pinned to the search distance.
+    //
+    // GucciBot (2026-11-15, later): any run stopped short keeps, for the
+    // inputs it hadn't reached, the older windows it was counting again
+    // (m_recountOld: a whole run's, or a Continue's past the run before it),
+    // and says where it stopped (recountFrom), so Continue counts those again
+    // and the finished windows are a whole run's. A whole run stopped by
+    // Cancel or by leaving the level used to put the saved file back instead,
+    // which dropped everything it had counted.
+    bool carried = false;
+    uint32_t const stopAt = m_stoppedShort ? m_stopAt : UINT32_MAX;
+    if (m_stoppedShort && !m_captureNoclip)
+        for (auto const& mk : m_recountOld)
+            if (mk.frame >= stopAt) {
+                m_keptResults.push_back(mk);
+                carried = true;
+            }
+    m_recountOld.clear();
+    if (!m_captureNoclip) m_recountFrom = this->recountAfter(carried, stopAt);
     m_lastKeptOthers =
-        m_partial && !m_captureNoclip && (ok || m_stoppedByPlayer);
+        !m_captureNoclip && (m_stoppedShort || (m_partial && ok));
     bool const resumed = m_resume && m_partial;
-    if (m_partial) this->mergeKept();
+    if (m_partial || carried) this->mergeKept();
     // The counts from before a Continue, back with their windows. (Its own
     // "not measured" stay its own: those from before were tried again.)
     if (resumed) {
@@ -4929,6 +5035,7 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
 void FrameWindowAnalyzer::cancel() {
     if (!m_running) return;
     m_stoppedByPlayer = true;
+    this->stopShort();
     this->finish("Canceled.", false);
 }
 
@@ -4941,6 +5048,7 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
 
     if (!pl) {
         m_stoppedByPlayer = true;
+        this->stopShort();
         this->finish("Left the level.", false);
         return;
     }
@@ -4957,6 +5065,7 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
     // where it is, as Cancel would, but keeps and saves what it measured.
     if (int const cap = SLSettings::get()->frameWindow.timeCapMinutes;
         cap > 0 && now - m_runStart > std::chrono::minutes(cap)) {
+        this->stopShort();
         // GucciBot (2026-11-15): out of this run's inputs (a range or a
         // Continue measures only some), and Continue picks up from here.
         this->finish(fmt::format("Stopped at the {}-minute time cap with {} of {} inputs measured. Raise the "
@@ -5170,6 +5279,9 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
                         this->hardResetToStart();
                         continue;
                     }
+                    // GucciBot (2026-11-15): stopped here, at this input:
+                    // the windows past it from before the run stay.
+                    this->stopShort();
                     this->abortClick("died before reaching the branch point");
                     this->finish(
                         fmt::format("Measured {} of {} inputs. The macro "
@@ -7219,6 +7331,10 @@ struct StoredResults {
     int measured = 0;
     int skipped = 0;
     int desynced = 0;
+    // GucciBot (2026-11-15): where a whole run over older windows stopped
+    // (FrameWindowAnalyzer::recountFrom). Written only when set, so a file
+    // without one reads as before, and older builds skip the key.
+    uint32_t recountFrom = UINT32_MAX;
     std::vector<StoredMark> marks;
     std::vector<StoredMessage> messages;
 };
@@ -7314,18 +7430,20 @@ static std::string toJson(StoredResults const& r) {
     messages.reserve(r.messages.size());
     for (auto const& m : r.messages) messages.push_back(messageToJson(m));
 
-    return matjson::makeObject({
-               {"version", (int64_t)r.version},
-               {"tps", r.tps},
-               {"level", r.level},
-               {"replay", r.replay},
-               {"measured", (int64_t)r.measured},
-               {"skipped", (int64_t)r.skipped},
-               {"desynced", (int64_t)r.desynced},
-               {"marks", matjson::Value(marks)},
-               {"messages", matjson::Value(messages)},
-           })
-        .dump();
+    auto root = matjson::makeObject({
+        {"version", (int64_t)r.version},
+        {"tps", r.tps},
+        {"level", r.level},
+        {"replay", r.replay},
+        {"measured", (int64_t)r.measured},
+        {"skipped", (int64_t)r.skipped},
+        {"desynced", (int64_t)r.desynced},
+        {"marks", matjson::Value(marks)},
+        {"messages", matjson::Value(messages)},
+    });
+    if (r.recountFrom != UINT32_MAX)
+        root.set("recountFrom", (int64_t)r.recountFrom);
+    return root.dump();
 }
 
 // Every getter falls back to the struct's own default, so a sidecar written by
@@ -7365,6 +7483,10 @@ static bool fromJson(std::string const& text, StoredResults& out) {
     out.measured = (int)jnum(root, "measured", d.measured);
     out.skipped = (int)jnum(root, "skipped", d.skipped);
     out.desynced = (int)jnum(root, "desynced", d.desynced);
+    {
+        int64_t const rf = jnum(root, "recountFrom", -1);
+        out.recountFrom = rf >= 0 && rf < (int64_t)UINT32_MAX ? (uint32_t)rf : UINT32_MAX;
+    }
 
     auto const marks = root["marks"];
     if (marks.isArray()) {
@@ -7444,18 +7566,41 @@ static bool fromJson(std::string const& text, StoredResults& out) {
 }  // namespace fwstore
 
 bool FrameWindowAnalyzer::saveResults(std::filesystem::path const& path) const {
+    if (m_running) {
+        // GucciBot (2026-11-15): never the windows of a run whose capture
+        // died (pinned to the search distance), and otherwise what the run
+        // would leave if it stopped now.
+        if (m_captureNoclip) return false;
+        std::vector<FrameWindowMark> marks;
+        std::vector<FrameWindowMessage> messages;
+        uint32_t recountFrom = UINT32_MAX;
+        this->runSnapshot(marks, messages, recountFrom);
+        int const prevMeasured = m_resume ? m_resumePrevMeasured : 0;
+        int const prevDesynced = m_resume ? m_resumePrevDesynced : 0;
+        return this->writeResults(path, marks, messages, recountFrom, m_measured + prevMeasured, m_skipped,
+                                  m_desynced + prevDesynced);
+    }
+    return this->writeResults(path, m_results, m_messages, m_recountFrom, m_measured, m_skipped, m_desynced);
+}
+
+bool FrameWindowAnalyzer::writeResults(std::filesystem::path const& path,
+                                       std::vector<FrameWindowMark> const& marks,
+                                       std::vector<FrameWindowMessage> const& messages,
+                                       uint32_t recountFrom, int measured, int skipped,
+                                       int desynced) const {
     fwstore::StoredResults out;
     out.tps = m_resultsTps > 0.0 ? m_resultsTps : 240.0;
-    out.measured = m_measured;
-    out.skipped = m_skipped;
-    out.desynced = m_desynced;
+    out.measured = measured;
+    out.skipped = skipped;
+    out.desynced = desynced;
+    out.recountFrom = recountFrom;
 
     if (auto* pl = PlayLayer::get(); pl && pl->m_level)
         out.level = pl->m_level->m_levelName;
     out.replay = Bot::get()->replaySystem().m_replayName;
 
-    out.marks.reserve(m_results.size());
-    for (auto const& mk : m_results) {
+    out.marks.reserve(marks.size());
+    for (auto const& mk : marks) {
         out.marks.push_back({mk.frame, mk.window, mk.low, mk.high,
                              mk.clampedByNeighbour, mk.unbounded, mk.wide,
                              mk.subframe,
@@ -7475,8 +7620,8 @@ bool FrameWindowAnalyzer::saveResults(std::filesystem::path const& path) const {
         out.marks.back().steerSaved = mk.steerSaved;
     }
 
-    out.messages.reserve(m_messages.size());
-    for (auto const& m : m_messages)
+    out.messages.reserve(messages.size());
+    for (auto const& m : messages)
         out.messages.push_back({m.text, m.startIndex, m.span, m.scale,
                                 m.offsetY, m.enabled});
 
@@ -7487,9 +7632,32 @@ bool FrameWindowAnalyzer::saveResults(std::filesystem::path const& path) const {
     if (path.has_parent_path())
         std::filesystem::create_directories(path.parent_path(), ec);
 
-    std::ofstream fd(path);
-    if (!fd) return false;
-    fd << serialized;
+    // GucciBot (2026-11-15): written whole to a temporary file, then put in
+    // place, so a game that closes or a PC that loses power mid-write leaves
+    // the file as it was, never half of it. (The file is written every two
+    // minutes while a run counts now: GucciEngine::keepRunningWindows.)
+    auto tmp = path;
+    tmp += ".tmp";
+    {
+        std::ofstream fd(tmp, std::ios::binary | std::ios::trunc);
+        if (!fd) return false;
+        fd << serialized;
+        fd.flush();
+        if (!fd) {
+            fd.close();
+            std::filesystem::remove(tmp, ec);
+            return false;
+        }
+    }
+    std::filesystem::rename(tmp, path, ec);
+    if (ec) {
+        // A rename refused (the file held open elsewhere): copied over instead.
+        std::error_code copyEc;
+        bool const copied = std::filesystem::copy_file(
+            tmp, path, std::filesystem::copy_options::overwrite_existing, copyEc);
+        std::filesystem::remove(tmp, copyEc);
+        return copied;
+    }
     return true;
 }
 
@@ -7563,6 +7731,7 @@ bool FrameWindowAnalyzer::loadResults(std::filesystem::path const& path) {
     m_skipped = in.skipped;
     m_desynced = in.desynced;
     m_resultsTps = in.tps > 0.0 ? in.tps : 240.0;
+    m_recountFrom = in.recountFrom;
     m_generation++;
     this->resetDisplay();
     return true;
@@ -9559,17 +9728,24 @@ std::vector<FrameWindowAnalyzer::PlayheadInput> FrameWindowAnalyzer::allInputs(
 }
 
 void FrameWindowAnalyzer::reapplyManual() {
+    bool const changed = applyManual(m_results, m_manualKept);
+    m_manualKept.clear();
+    if (changed) this->markEdited();
+}
+
+bool FrameWindowAnalyzer::applyManual(std::vector<FrameWindowMark>& results,
+                                      std::vector<FrameWindowMark> const& manual) {
     bool changed = false;
-    for (auto const& man : m_manualKept) {
-        auto it = std::find_if(m_results.begin(), m_results.end(), [&](FrameWindowMark const& mk) {
+    for (auto const& man : manual) {
+        auto it = std::find_if(results.begin(), results.end(), [&](FrameWindowMark const& mk) {
             return mk.frame == man.frame && mk.player2 == man.player2 && mk.release == man.release;
         });
-        if (it == m_results.end()) {
+        if (it == results.end()) {
             // Not measured this time: the hand entry stands as it was.
             auto const at = std::upper_bound(
-                m_results.begin(), m_results.end(), man.frame,
+                results.begin(), results.end(), man.frame,
                 [](uint32_t f, FrameWindowMark const& m) { return f < m.frame; });
-            m_results.insert(at, man);
+            results.insert(at, man);
             changed = true;
             continue;
         }
@@ -9590,8 +9766,7 @@ void FrameWindowAnalyzer::reapplyManual() {
         *it = mk;
         changed = true;
     }
-    m_manualKept.clear();
-    if (changed) this->markEdited();
+    return changed;
 }
 
 // GucciBot (2026-10-29): the inputs each message stands on, as a run starts.
@@ -9634,12 +9809,18 @@ void FrameWindowAnalyzer::putBackMessages() {
 // both need it: a message is a place in the results, and every message after
 // the change point moved onto another input, and was saved that way.
 void FrameWindowAnalyzer::reanchorMessages(std::vector<MessageAnchor> const& anchors) {
-    int const last = std::max(0, static_cast<int>(m_results.size()) - 1);
-    for (size_t i = 0; i < m_messages.size(); i++) {
-        auto& msg = m_messages[i];
-        if (i < anchors.size() && anchors[i].valid && !m_results.empty()) {
-            int const from = this->resultIndexFor(anchors[i].first);
-            int const to = this->resultIndexFor(anchors[i].last);
+    reanchorIn(m_messages, m_results, anchors);
+}
+
+void FrameWindowAnalyzer::reanchorIn(std::vector<FrameWindowMessage>& messages,
+                                     std::vector<FrameWindowMark> const& results,
+                                     std::vector<MessageAnchor> const& anchors) {
+    int const last = std::max(0, static_cast<int>(results.size()) - 1);
+    for (size_t i = 0; i < messages.size(); i++) {
+        auto& msg = messages[i];
+        if (i < anchors.size() && anchors[i].valid && !results.empty()) {
+            int const from = resultIndexIn(results, anchors[i].first);
+            int const to = resultIndexIn(results, anchors[i].last);
             msg.startIndex = from;
             msg.span = std::max(1, to - from + 1);
         }
@@ -9650,14 +9831,19 @@ void FrameWindowAnalyzer::reanchorMessages(std::vector<MessageAnchor> const& anc
 // That input's result, or the first one after it (the last one, when none
 // is). The results are in frame order.
 int FrameWindowAnalyzer::resultIndexFor(InputKey const& key) const {
+    return resultIndexIn(m_results, key);
+}
+
+int FrameWindowAnalyzer::resultIndexIn(std::vector<FrameWindowMark> const& results,
+                                       InputKey const& key) {
     auto const at = std::lower_bound(
-        m_results.begin(), m_results.end(), key.frame,
+        results.begin(), results.end(), key.frame,
         [](FrameWindowMark const& m, uint32_t f) { return m.frame < f; });
-    for (auto it = at; it != m_results.end() && it->frame == key.frame; ++it)
+    for (auto it = at; it != results.end() && it->frame == key.frame; ++it)
         if (it->player2 == key.player2 && it->release == key.release)
-            return static_cast<int>(it - m_results.begin());
-    int const after = static_cast<int>(at - m_results.begin());
-    return std::min(after, std::max(0, static_cast<int>(m_results.size()) - 1));
+            return static_cast<int>(it - results.begin());
+    int const after = static_cast<int>(at - results.begin());
+    return std::min(after, std::max(0, static_cast<int>(results.size()) - 1));
 }
 
 FrameWindowAnalyzer::Report FrameWindowAnalyzer::testPlayhead(PlayLayer* pl,

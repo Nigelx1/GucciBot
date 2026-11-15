@@ -1752,6 +1752,17 @@ namespace gucci::mcp {
                         out["skipped"] = (int64_t)fw.skippedCount();
                         out["desynced"] = (int64_t)fw.desyncCount();
                         out["last_run_ok"] = fw.lastRunOk();
+                        // GucciBot (2026-11-15): where a whole run over older windows stopped
+                        // (-1: none), and what Continue would do.
+                        out["recount_from"] =
+                            fw.recountFrom() == UINT32_MAX ? (int64_t)-1 : (int64_t)fw.recountFrom();
+                        if (auto const rp = fw.resumePoint(PlayLayer::get()); rp.valid) {
+                            out["resume_number"] = (int64_t)rp.number;
+                            out["resume_frame"] = (int64_t)rp.frame;
+                            out["resume_counted"] = (int64_t)rp.counted;
+                            out["resume_left"] = (int64_t)rp.left;
+                            out["resume_recount"] = rp.recount;
+                        }
                         out["report"] = gb->fwAcReport;
                         out["ok"] = gb->fwAcOk;
                         return out;

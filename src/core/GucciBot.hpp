@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-at (Trainer page: the macro picker lists each file with its theme tag and loads that file)"
+    "2026-11-15-au (Calculate: a run that stops keeps every window, and Continue picks up where it stopped)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -3654,10 +3654,16 @@ namespace gucci::ui {
                     // GucciBot (2026-11-15): a range or Continue run stopped by
                     // Cancel or by leaving the level saves too: its results hold
                     // every window from before it (lastRunKeptOthers).
+                    // GucciBot (2026-11-15, later): a whole run stopped short too: what it
+                    // counted, with the older windows of the inputs it hadn't reached, which
+                    // Continue counts again (recountFrom).
                     bool const keptOthers = !analyzer.lastRunOk() && analyzer.lastRunKeptOthers();
                     std::string const kept =
                         gbe->saveAcResultsAfterRun(analyzer.lastRunOk() || analyzer.lastRunKeptOthers())
                             ? " The windows saved before this run are kept."
+                        : keptOthers && analyzer.recountFrom() != UINT32_MAX
+                            ? " What it counted is kept, with the older windows past where it stopped. Continue "
+                              "from where it stopped counts those again."
                         : keptOthers ? " What it counted is kept, with every window from before it."
                                      : "";
                     // The run's own last word stays on the Calculate page; the

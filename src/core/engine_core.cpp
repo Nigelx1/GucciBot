@@ -1039,13 +1039,20 @@ namespace gucci {
     // a Calculate run never deletes it (saveAcResultsAfterRun).
     static void saveAcResults(const fs::path& macroPath, bool allowDelete = true) {
         auto& acfw = ::Bot::get()->frameWindow();
-        // GucciBot (2026-11-15): never while a run counts. Its results then are
-        // only what it has counted so far (a Continue's, or a range's, without
-        // the windows it keeps aside), so a save mid-run replaced the file with
-        // part of it. The run's end saves them (saveAcResultsAfterRun).
-        if (acfw.running())
-            return;
         auto const sc = fwAcSidecarPath(macroPath);
+        // GucciBot (2026-11-15): while a run counts, its results are only what
+        // it has counted so far, so a save mid-run once replaced the file with
+        // part of it (and then, for most of that day, skipped it: a user who
+        // saved mid-run and shut his PC off lost the whole run). Now it writes
+        // what the run would leave if it stopped there: what it counted, with
+        // every older window it hasn't counted again (saveResults). Never a
+        // delete mid-run, and nothing for a run whose capture died.
+        if (acfw.running()) {
+            if (acfw.saveResults(sc))
+                log::info("[GucciBot] frame windows: saved the running count alongside {}",
+                          macroPath.filename().string());
+            return;
+        }
         std::error_code ec;
         if (acfw.results().empty()) {
             if (allowDelete)
