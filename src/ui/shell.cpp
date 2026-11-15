@@ -2426,14 +2426,17 @@ namespace gucci::ui {
             {
                 // Read when a render starts (renderer.cpp): a format the codec
                 // doesn't take falls back to the first one it does.
-                static const char* const kPixFmts[] = {"Auto", "yuv420p", "nv12", "rgb0", "rgb24"};
-                static const char* const kPixKeys[] = {"auto", "yuv420p", "nv12", "rgb0", "rgb24"};
+                // yuv444p keeps full-size color (Showcase uses it, with x264 at qp 0).
+                static const char* const kPixFmts[] = {"Auto", "yuv420p", "yuv444p", "nv12", "rgb0", "rgb24"};
+                static const char* const kPixKeys[] = {"auto", "yuv420p", "yuv444p", "nv12", "rgb0", "rgb24"};
+                constexpr int kPixCount = (int)(sizeof(kPixKeys) / sizeof(kPixKeys[0]));
                 std::string const cur = mod->getSavedValue<std::string>("render_pix_fmt", "auto");
                 int idx = 0;
-                for (int i = 0; i < 5; i++)
+                for (int i = 0; i < kPixCount; i++)
                     if (cur == kPixKeys[i])
                         idx = i;
-                if (kit::ChoiceRow("Pixel format", "Auto takes the first one the codec supports", &idx, kPixFmts, 5))
+                if (kit::ChoiceRow("Pixel format", "Auto takes the first one the codec supports", &idx, kPixFmts,
+                                   kPixCount))
                     mod->setSavedValue<std::string>("render_pix_fmt", kPixKeys[idx]);
             }
             saveWhole("Bitrate (Mbps)", nullptr, "render_bitrate", 30, 1, 1000);

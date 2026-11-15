@@ -21,6 +21,7 @@
 #include "colorspace/rgb0.hpp"
 #include "colorspace/rgb24.hpp"
 #include "colorspace/yuv420p.hpp"
+#include "colorspace/yuv444p.hpp"
 
 using namespace geode::prelude;
 
@@ -392,6 +393,8 @@ namespace gucci {
             switch (f) {
             case AV_PIX_FMT_YUV420P:
                 return std::make_unique<YUV420PColorspace>();
+            case AV_PIX_FMT_YUV444P:
+                return std::make_unique<YUV444PColorspace>();
             case AV_PIX_FMT_NV12:
                 return std::make_unique<NV12Colorspace>();
             case AV_PIX_FMT_RGB0:
@@ -403,9 +406,10 @@ namespace gucci {
             }
         };
         // The pixel format picked on the Render page comes first, when the
-        // codec takes it; otherwise the first of these four the codec lists.
+        // codec takes it; otherwise the first of these five the codec lists.
         std::string const wanted = Mod::get()->getSavedValue<std::string>("render_pix_fmt", "auto");
         AVPixelFormat const wantedFmt = wanted == "yuv420p" ? AV_PIX_FMT_YUV420P
+                                        : wanted == "yuv444p" ? AV_PIX_FMT_YUV444P
                                         : wanted == "nv12"  ? AV_PIX_FMT_NV12
                                         : wanted == "rgb0"  ? AV_PIX_FMT_RGB0
                                         : wanted == "rgb24" ? AV_PIX_FMT_RGB24

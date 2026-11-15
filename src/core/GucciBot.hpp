@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-d (Saved macros: Delete shows only for the loaded file, and deletes that file)"
+    "2026-11-15-e (Renderer: yuv444p output, the same BT.709 colors as yuv420p with full-size color planes)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
