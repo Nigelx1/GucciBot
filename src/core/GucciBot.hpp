@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-am (Renderer: every way a render stops says why in the log)"
+    "2026-11-15-an (Renderer: a new render no longer inherits the last one's frame times, and a frame that can't be read back is dropped cleanly)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

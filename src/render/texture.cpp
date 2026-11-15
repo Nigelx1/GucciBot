@@ -195,21 +195,21 @@ namespace gucci {
     // Maps the oldest outstanding slot, but only once its fence reports the
     // copy is done -- so the map itself never waits. With block=true it will
     // wait up to a second, which is what the end-of-render drain uses.
-    bool SLRenderTexture::tryHarvest(uint8_t** outData, bool block) {
+    SLRenderTexture::Harvest SLRenderTexture::tryHarvest(uint8_t** outData, bool block) {
 #if GB_DESKTOP_GL
         if (m_mapped >= m_issued)
-            return false;
+            return Harvest::Pending;
 
         int const slot = (int)(m_mapped % RING_SIZE);
         auto fence = static_cast<GLsync>(m_fence[slot]);
         if (!fence)
-            return false;
+            return Harvest::Pending;
 
         GLbitfield const flags = block ? GL_SYNC_FLUSH_COMMANDS_BIT : 0;
         GLuint64 const timeout = block ? 1'000'000'000ull : 0;
         GLenum const status = glClientWaitSync(fence, flags, timeout);
         if (status != GL_ALREADY_SIGNALED && status != GL_CONDITION_SATISFIED)
-            return false;  // still in flight
+            return Harvest::Pending;  // still in flight
 
         glDeleteSync(fence);
         m_fence[slot] = nullptr;
@@ -221,18 +221,18 @@ namespace gucci {
         if (!pixelData) {
             geode::log::error("[GucciBot] failed to map readback buffer: {}", glGetError());
             m_mapped++;
-            return false;
+            return Harvest::Lost;
         }
 
         m_slotData[slot] = pixelData;
         m_slotMapped[slot] = true;
         *outData = pixelData;
         m_mapped++;
-        return true;
+        return Harvest::Ready;
 #else
         (void)outData;
         (void)block;
-        return false;
+        return Harvest::Pending;
 #endif
     }
 

@@ -173,6 +173,7 @@ namespace gucci {
         bool tryBeginFrame();
         void enqueueFrame(uint8_t* data, int64_t pts);
         void harvestCompleted();
+        void takeHarvested(SLRenderTexture::Harvest got, uint8_t* data);
         void flushPending();
 
         std::deque<QueuedFrame> m_frameQueue;
@@ -180,6 +181,8 @@ namespace gucci {
         std::mutex m_recordMutex;
         std::condition_variable m_recordCv;
         std::atomic<int64_t> m_encoded{0};
+        // Readbacks lost this render (game thread only); see takeHarvested.
+        int64_t m_lostFrames = 0;
         int64_t m_bufferPts = 0;
 
         void recordLoop();

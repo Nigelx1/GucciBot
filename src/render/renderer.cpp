@@ -706,6 +706,14 @@ namespace gucci {
         // left over from the last render made the check always pass, so a
         // slow encoder could have its slot reclaimed before it read it.
         m_encoded.store(0, std::memory_order_release);
+        m_lostFrames = 0;
+        // Nothing from the last render: its frames' timestamps (a stop that
+        // couldn't collect every readback left some, see flushPending).
+        m_ptsQueue.clear();
+        {
+            std::lock_guard<std::mutex> lock(m_recordMutex);
+            m_frameQueue.clear();
+        }
         m_introStarted = false;
         m_introFinished = false;
         m_introIndex = 0;
@@ -1106,7 +1114,10 @@ namespace gucci {
     // first, so a full ring usually frees a slot right here.
     bool SLRenderer::tryBeginFrame() {
         this->harvestCompleted();
-        return m_texture.issuedCount() - m_encoded.load(std::memory_order_acquire) <
+        // A lost readback's slot is free again but never gets encoded: count
+        // it, or each one would shrink the ring by a slot for the rest of the
+        // render.
+        return m_texture.issuedCount() - m_lostFrames - m_encoded.load(std::memory_order_acquire) <
                SLRenderTexture::RING_SIZE;
     }
 
@@ -1122,11 +1133,28 @@ namespace gucci {
     // hand each to the encoder with the timestamp it was issued under.
     void SLRenderer::harvestCompleted() {
         uint8_t* data = nullptr;
-        while (!m_ptsQueue.empty() && m_texture.tryHarvest(&data, false)) {
-            int64_t const pts = m_ptsQueue.front();
-            m_ptsQueue.pop_front();
-            this->enqueueFrame(data, pts);
+        while (!m_ptsQueue.empty()) {
+            auto const got = m_texture.tryHarvest(&data, false);
+            if (got == SLRenderTexture::Harvest::Pending)
+                break;
+            this->takeHarvested(got, data);
         }
+    }
+
+    // One readback came back: hand it to the encoder with its own timestamp,
+    // or, if it was lost, drop that timestamp so the next frame keeps its own.
+    void SLRenderer::takeHarvested(SLRenderTexture::Harvest got, uint8_t* data) {
+        int64_t const pts = m_ptsQueue.front();
+        m_ptsQueue.pop_front();
+        if (got == SLRenderTexture::Harvest::Ready) {
+            this->enqueueFrame(data, pts);
+            return;
+        }
+        // Logged once here and counted at the stop, not once a frame.
+        if (m_lostFrames++ == 0)
+            geode::log::warn("[GucciBot] Video frame {} is missing: the graphics card's copy of it "
+                             "couldn't be read",
+                             pts);
     }
 
     // End of render: wait for everything still in flight, so the tail of the
@@ -1134,12 +1162,26 @@ namespace gucci {
     void SLRenderer::flushPending() {
         uint8_t* data = nullptr;
         while (!m_ptsQueue.empty() && m_texture.mappedCount() < m_texture.issuedCount()) {
-            if (!m_texture.tryHarvest(&data, true))
+            auto const got = m_texture.tryHarvest(&data, true);
+            if (got == SLRenderTexture::Harvest::Pending)
                 break;
-            int64_t const pts = m_ptsQueue.front();
-            m_ptsQueue.pop_front();
-            this->enqueueFrame(data, pts);
+            this->takeHarvested(got, data);
         }
+        // A readback the graphics card didn't finish within the wait (a
+        // second each) is lost. Its timestamp goes with it: left in the
+        // queue, the next render's first frames took the old render's
+        // timestamps, the encoder got them out of order and that render
+        // failed at once ("Failed to write frame", FFmpeg error -22).
+        if (!m_ptsQueue.empty()) {
+            geode::log::warn("[GucciBot] The video's last {} frames weren't written: the graphics card "
+                             "didn't hand them over in time",
+                             m_ptsQueue.size());
+            m_ptsQueue.clear();
+        }
+        if (m_lostFrames > 0)
+            geode::log::warn("[GucciBot] {} video frames were missing from this render (their copies "
+                             "couldn't be read); the frames after each gap kept their own times",
+                             m_lostFrames);
     }
 
     // No slot check here: drawScene has already waited for one (tryBeginFrame)

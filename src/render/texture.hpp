@@ -24,7 +24,12 @@ namespace gucci {
         static constexpr int RING_SIZE = 8;
 
         void issue(float fadeThreshold);
-        bool tryHarvest(uint8_t** outData, bool block);
+        // Ready: *outData holds the oldest readback. Pending: it hasn't
+        // landed yet. Lost: it landed but couldn't be mapped; that frame is
+        // gone and the caller drops its timestamp (it used to stay queued, so
+        // every later frame of the render took the timestamp before its own).
+        enum class Harvest { Ready, Pending, Lost };
+        Harvest tryHarvest(uint8_t** outData, bool block);
         void releaseSlot();
 
         int64_t issuedCount() const {
