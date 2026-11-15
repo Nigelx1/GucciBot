@@ -1037,6 +1037,14 @@ namespace gucci {
     // No windows left removes the file (Clear, the last window taken off by
     // hand, a new recording saved over the macro), unless allowDelete is false:
     // a Calculate run never deletes it (saveAcResultsAfterRun).
+    // GucciBot (2026-11-15): the macro a running Calculate run's windows file
+    // belongs to, taken as the run starts (keepRunningWindows) and moved only
+    // by saving the macro under another name mid-run. The name field stays
+    // editable while a run counts, and the two-minute writes, the write as the
+    // game closes and the run's end followed it, so a run could write over
+    // another macro's windows file.
+    static fs::path g_fwRunMacro;
+
     static void saveAcResults(const fs::path& macroPath, bool allowDelete = true) {
         auto& acfw = ::Bot::get()->frameWindow();
         auto const sc = fwAcSidecarPath(macroPath);
@@ -1258,8 +1266,13 @@ namespace gucci {
         // windows in memory are that file's now (see forgetMacroWindows). A
         // save elsewhere (Absense's furthest path) leaves them unattached.
         std::error_code sameEc;
-        if (gb->fwWindowsForgotten && fs::equivalent(path, getCurrentPath(), sameEc))
+        bool const asLoaded = fs::equivalent(path, getCurrentPath(), sameEc);
+        if (gb->fwWindowsForgotten && asLoaded)
             gb->fwWindowsForgotten = false;
+        // Saved mid-run under the name in the name field: the run's windows
+        // file is that one's now (g_fwRunMacro).
+        if (written && asLoaded && ::Bot::get()->frameWindow().running())
+            g_fwRunMacro = path;
         return written;
     }
 
@@ -3114,7 +3127,10 @@ namespace gucci {
         // They are written when the macro is saved.
         if (fwWindowsForgotten)
             return;
-        auto const path = replay.getCurrentPath();
+        // (Mid-run, the run's own macro: g_fwRunMacro.)
+        auto const path = ::Bot::get()->frameWindow().running() && !g_fwRunMacro.empty()
+                              ? g_fwRunMacro
+                              : replay.getCurrentPath();
         if (path.empty())
             return;
         saveAcResults(path);
@@ -3137,9 +3153,12 @@ namespace gucci {
         // finish either -- those windows were measured on clicks this
         // recording doesn't have, and its next save would write them next to
         // it. What the run measured stays, as with no saved file.
+        // The run's own macro (g_fwRunMacro), not whatever the name field
+        // says now: a run reloads or writes that one's windows file.
+        fs::path path = g_fwRunMacro.empty() ? replay.getCurrentPath() : g_fwRunMacro;
+        g_fwRunMacro.clear();
         if (fwWindowsForgotten)
             return false;
-        auto const path = replay.getCurrentPath();
         if (path.empty())
             return false;
         std::error_code ec;
@@ -3174,17 +3193,20 @@ namespace gucci {
         }
         auto const now = Clock::now();
         if (!s_tracking) {
-            // A run that just started has counted nothing new yet.
+            // A run that just started has counted nothing new yet. Its macro
+            // is the one loaded now (g_fwRunMacro; none for windows that
+            // belong to no file yet).
             s_tracking = true;
             s_next = now + kEvery;
             s_stamp = acfw.runStamp();
+            g_fwRunMacro = fwWindowsForgotten ? fs::path{} : replay.getCurrentPath();
         }
         if (!closing && now < s_next)
             return;
         s_next = now + kEvery;
         if (acfw.runStamp() == s_stamp || fwWindowsForgotten)
             return;
-        auto const path = replay.getCurrentPath();
+        auto const path = g_fwRunMacro;
         std::error_code ec;
         if (path.empty() || !fs::exists(path, ec))
             return;

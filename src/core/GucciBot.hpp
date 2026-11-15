@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-ay (Calculate: Continue after a stop on a release counts it again, and the windows file is flushed to disk)"
+    "2026-11-15-az (Calculate: a running run writes only its own macro's windows file)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
