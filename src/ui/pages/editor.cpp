@@ -283,6 +283,25 @@ namespace gucci::ui::pages {
             return std::binary_search(s.sel.begin(), s.sel.end(), key);
         }
 
+        // Ctrl+A, and on a phone the inspector's Select all.
+        void selectAll(State& s) {
+            s.sel.clear();
+            for (auto const& it : s.model.items)
+                s.sel.push_back(it.key());
+        }
+
+        // Every bar in the first selected bar's lane: the bar menu's Select
+        // this lane, and on a phone the inspector's.
+        void selectLane(State& s) {
+            uint32_t const idx = s.sel.empty() ? ed::kNone : ed::itemOfKey(s.model, s.sel.front());
+            if (idx == ed::kNone)
+                return;
+            std::vector<uint32_t> keys;
+            for (uint32_t i : s.model.lanes[static_cast<size_t>(s.model.items[idx].lane)])
+                keys.push_back(s.model.items[i].key());
+            s.sel = std::move(keys);
+        }
+
         // ------------------------------------------------------------ geometry
 
         struct View {
@@ -910,15 +929,8 @@ namespace gucci::ui::pages {
                 std::string const label = s.sel.size() == 1 ? "Delete" : fmt::format("Delete {}", s.sel.size());
                 if (ImGui::MenuItem(label.c_str(), "Del", false, editable))
                     deleteSelection(s);
-                if (ImGui::MenuItem("Select this lane")) {
-                    uint32_t const idx = s.sel.empty() ? ed::kNone : ed::itemOfKey(s.model, s.sel.front());
-                    if (idx != ed::kNone) {
-                        std::vector<uint32_t> keys;
-                        for (uint32_t i : s.model.lanes[static_cast<size_t>(s.model.items[idx].lane)])
-                            keys.push_back(s.model.items[i].key());
-                        s.sel = std::move(keys);
-                    }
-                }
+                if (ImGui::MenuItem("Select this lane"))
+                    selectLane(s);
                 ImGui::EndPopup();
             }
         }
@@ -1021,10 +1033,18 @@ namespace gucci::ui::pages {
             v.fpp = s.fpp;
             kit::Gap(0.25f);
             lanesView(s, macro(), v, lanes, editable);
+#if defined(GEODE_IS_MOBILE)
+            // No Ctrl, wheel or keys on a phone (imgui-cocos hands a touch on
+            // as the left button only).
+            kit::Hint("Drag a bar to move it, or its ends to stretch or shorten it (zoom in for short ones). "
+                      "Drag on empty space to box-select. Frame numbers are the macro's own: a press made while "
+                      "the frame counter shows 99 is stored at 100.");
+#else
             kit::Hint("Drag a bar to move it, or its ends to stretch or shorten it (zoom in for short ones). "
                       "Ctrl+click adds to the selection; drag on empty space to box-select; double-click an empty "
                       "spot to add a click. Wheel zooms, Shift+wheel scrolls. Frame numbers are the macro's own: a "
                       "press made while the frame counter shows 99 is stored at 100.");
+#endif
             kit::EndCard();
         }
 
@@ -1133,6 +1153,15 @@ namespace gucci::ui::pages {
                 ImGui::SameLine();
                 if (kit::Button("Clear selection"))
                     s.sel.clear();
+#if defined(GEODE_IS_MOBILE)
+                // No right click (the bar menu's Select this lane) or Ctrl+A
+                // on a phone: buttons for both.
+                if (kit::Button("Select this lane"))
+                    selectLane(s);
+                ImGui::SameLine();
+                if (kit::Button("Select all"))
+                    selectAll(s);
+#endif
             } else {
                 kit::Section("Add a click");
                 static const char* const kLaneNames[ed::kLanes] = {"P1 Jump", "P1 Left", "P1 Right",
@@ -1152,7 +1181,13 @@ namespace gucci::ui::pages {
                     if (s.msg.tone == Tone::Good)
                         s.addAt += s.addHold + 1;  // ready for the next one
                 }
+#if defined(GEODE_IS_MOBILE)
+                if (kit::Button("Select all"))
+                    selectAll(s);
+                kit::Hint("Tap a bar to select it and edit it.");
+#else
                 kit::Hint("Select a bar to edit it. Ctrl+A selects everything.");
+#endif
             }
             ImGui::EndDisabled();
             kit::EndCard();
@@ -1172,9 +1207,7 @@ namespace gucci::ui::pages {
             } else if (ctrl && ImGui::IsKeyPressed(ImGuiKey_Y, false)) {
                 redo(s);
             } else if (ctrl && ImGui::IsKeyPressed(ImGuiKey_A, false)) {
-                s.sel.clear();
-                for (auto const& it : s.model.items)
-                    s.sel.push_back(it.key());
+                selectAll(s);
             } else if (ImGui::IsKeyPressed(ImGuiKey_Delete, false) || ImGui::IsKeyPressed(ImGuiKey_Backspace, false)) {
                 deleteSelection(s);
             } else if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {

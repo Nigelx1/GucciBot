@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-aj (Click Trainer on phones: a Tap button to click along away from the level)"
+    "2026-11-15-ak (Frame Editor on phones: Select all and Select this lane buttons, touch-worded hints)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
