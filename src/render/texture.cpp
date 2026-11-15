@@ -202,6 +202,31 @@ namespace gucci {
 
         int const slot = (int)(m_mapped % RING_SIZE);
         auto fence = static_cast<GLsync>(m_fence[slot]);
+#if defined(GEODE_IS_MACOS)
+        // No fence for an issued slot: glFenceSync gave none (an OpenGL 2.1
+        // driver without sync objects). Left waiting for one, no frame would
+        // ever be written; the slot is mapped straight away instead, and
+        // glMapBuffer itself waits for the copy to land (slower, not wrong).
+        if (!fence) {
+            static bool s_said = false;
+            if (!s_said) {
+                s_said = true;
+                geode::log::warn("[GucciBot] No GL fence for render readbacks here: mapping each one directly");
+            }
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, m_pbo[slot]);
+            auto* data = static_cast<uint8_t*>(glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY));
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+            m_mapped++;
+            if (!data) {
+                geode::log::error("[GucciBot] failed to map readback buffer: {}", glGetError());
+                return Harvest::Lost;
+            }
+            m_slotData[slot] = data;
+            m_slotMapped[slot] = true;
+            *outData = data;
+            return Harvest::Ready;
+        }
+#endif
         if (!fence)
             return Harvest::Pending;
 

@@ -132,6 +132,13 @@ namespace gucci {
     }
 
     static std::string getDefaultCodec() {
+#if defined(GEODE_IS_MACOS)
+        // macOS: Apple's own hardware encoder, VideoToolbox, on every Mac
+        // (Apple silicon and Intel alike); no graphics-card lookup. A Mac
+        // whose VideoToolbox won't open it (an 8K H.264, an old Intel Mac)
+        // falls back to libx264 in start(), as a GPU encoder does on Windows.
+        return "h264_videotoolbox";
+#endif
         switch (getGPUVendor()) {
         case GPUVendor::NVIDIA:
             return "h264_nvenc";
@@ -175,6 +182,26 @@ namespace gucci {
 
         int const width = clientRect.right - clientRect.left;
         int const height = clientRect.bottom - clientRect.top;
+        if (width <= 0 || height <= 0)
+            return std::nullopt;
+
+        return CCSize(static_cast<float>(width), static_cast<float>(height));
+#elif defined(GEODE_IS_MACOS)
+        // macOS has no WGL window to ask. cocos's own window viewport is the
+        // framebuffer in pixels (setViewport scales the frame size by the
+        // view's zoom factor, which is where a Retina screen's 2x would be),
+        // so it's set, read back, and the viewport put back as it was. Called
+        // before a render resizes the view, so the frame size is the window's.
+        GLint saved[4] = {};
+        glGetIntegerv(GL_VIEWPORT, saved);
+        CCDirector::get()->setViewport();
+        GLint vp[4] = {};
+        glGetIntegerv(GL_VIEWPORT, vp);
+        glViewport(saved[0], saved[1], saved[2], saved[3]);
+
+        // A letterboxed or cropped viewport sits centered in the framebuffer.
+        int const width = vp[2] + 2 * vp[0];
+        int const height = vp[3] + 2 * vp[1];
         if (width <= 0 || height <= 0)
             return std::nullopt;
 
@@ -247,6 +274,15 @@ namespace gucci {
                    m_windowSize.height / m_windowFramebufferSize.height);
         m_texture.m_windowWidth = (uint32_t)m_windowFramebufferSize.width;
         m_texture.m_windowHeight = (uint32_t)m_windowFramebufferSize.height;
+#if defined(GEODE_IS_MACOS)
+        // Untested on a Mac: whether cocos's viewport there is the frame size
+        // (points) or twice it (Retina pixels). If it's twice, a viewport set
+        // inside the captured scene (GD's ShaderLayer) would zoom the video,
+        // so the first Mac render logs both to settle it.
+        geode::log::info("[RENDERER] mac view: frame size {}x{}, framebuffer {}x{}, render size {}x{}",
+                         (int)m_windowSize.width, (int)m_windowSize.height, (int)m_windowFramebufferSize.width,
+                         (int)m_windowFramebufferSize.height, (int)renderSize.width, (int)renderSize.height);
+#endif
         m_viewResized = true;
     }
 
@@ -255,6 +291,12 @@ namespace gucci {
             return;
         m_viewResized = false;
         silentChangeSize(m_windowSize);
+#if defined(GEODE_IS_MACOS)
+        // silentChangeSize ends on a viewport of the frame size itself. On a
+        // Mac whose view scales that (Retina), the window's viewport is
+        // cocos's own, so it's put back from cocos.
+        CCDirector::get()->setViewport();
+#endif
         resizeShaderLayer(m_windowSize);
     }
 
@@ -264,6 +306,9 @@ namespace gucci {
             return;
         }
         silentChangeSize(m_windowSize);
+#if defined(GEODE_IS_MACOS)
+        CCDirector::get()->setViewport();  // as in restoreView
+#endif
         callback();
         silentChangeSize(alignedRenderSize(m_settings));
     }
@@ -475,6 +520,19 @@ namespace gucci {
                     break;
                 }
             }
+#if defined(GEODE_IS_MACOS)
+            // VideoToolbox lists nv12 before yuv420p. nv12's color plane is
+            // read back as two channels (GL_RG), which macOS's old OpenGL 2.1
+            // may not take; yuv420p reads one channel per plane, as libx264's
+            // renders do everywhere. So on a Mac, Auto takes yuv420p when the
+            // codec has it.
+            for (int i = 0; i < outPixFmtCount && m_settings.m_pixFmt == AV_PIX_FMT_NONE; i++) {
+                if (outPixFmts[i] == AV_PIX_FMT_YUV420P) {
+                    m_settings.m_pixFmt = AV_PIX_FMT_YUV420P;
+                    colorspace = makeColorspace(AV_PIX_FMT_YUV420P);
+                }
+            }
+#endif
             for (int i = 0; i < outPixFmtCount && m_settings.m_pixFmt == AV_PIX_FMT_NONE; i++) {
                 if (auto cs = makeColorspace(outPixFmts[i])) {
                     m_settings.m_pixFmt = outPixFmts[i];

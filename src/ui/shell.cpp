@@ -2542,7 +2542,16 @@ namespace gucci::ui {
                 kit::RowEnd();
             };
 
+#if defined(GEODE_IS_MACOS)
+            // The Mac's hardware encoders are VideoToolbox's (renderer.cpp
+            // getDefaultCodec); the default is the H.264 one.
+            saveText("Codec",
+                     "Blank uses the Mac's hardware encoder, h264_videotoolbox. hevc_videotoolbox (H.265) and libx264 "
+                     "work too",
+                     "render_codec", "", "auto");
+#else
             saveText("Codec", "Blank uses the default", "render_codec", "", "auto");
+#endif
             {
                 // Read when a render starts (renderer.cpp): a format the codec
                 // doesn't take falls back to the first one it does.

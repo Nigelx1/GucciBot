@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-be (The universal package carries the Mac FFmpeg libraries for rendering)"
+    "2026-11-15-bf (Mac rendering: load FFmpeg from the bundled dylibs and capture with OpenGL 2.1)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

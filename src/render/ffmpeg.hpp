@@ -11,6 +11,10 @@
 #include <string>
 #include <vector>
 
+#if defined(GEODE_IS_MACOS)
+#include <dlfcn.h>
+#endif
+
 // At global scope: inside namespace gucci, these C headers pull in C++
 // wrappers that open namespace std there (gucci::std) under Clang.
 extern "C" {
@@ -154,6 +158,15 @@ namespace gucci {
 
     static_assert(sizeof(ff_t) == sizeof(void*) * 46);
 
+#if defined(GEODE_IS_MACOS)
+    // Why FFmpeg didn't load on macOS (dlopen's own words), for the Render
+    // page. Empty once it has loaded.
+    inline std::string& ffmpegLoadError() {
+        static std::string s_why;
+        return s_why;
+    }
+#endif
+
     inline bool loadFFmpegFunctions(void* ff) {
 #ifdef _WIN32
         std::vector<HMODULE> modules;
@@ -209,9 +222,71 @@ namespace gucci {
         }
 
         return true;
+#elif defined(GEODE_IS_MACOS)
+        // macOS: the same seven libraries as universal dylibs (arm64 + x86_64)
+        // from guccibot-build-files' ffmpeg-n8.0.1-mac release, which main.cpp
+        // copies into libraries/. Each one's install name is
+        // @loader_path/<name>, so loaded by full path in this order (each after
+        // the ones it needs) every library finds the ones already loaded.
+        std::string& why = ffmpegLoadError();
+        why.clear();
+        std::vector<void*> modules;
+        std::vector<std::string> libs = {
+            "libavutil.60.dylib",
+            "libswresample.6.dylib",
+            "libswscale.9.dylib",
+            "libavcodec.62.dylib",
+            "libavformat.62.dylib",
+            "libavfilter.11.dylib",
+            "libavdevice.62.dylib",
+        };
+
+        for (std::string& s : libs) {
+            auto const path = geode::Mod::get()->getPersistentDir() / "libraries" / s;
+            geode::log::info("[RENDERER] Loading library {}", path);
+
+            void* mod = dlopen(path.string().c_str(), RTLD_NOW | RTLD_LOCAL);
+            if (!mod) {
+                char const* err = dlerror();
+                std::string const reason = err ? err : "no reason given";
+                geode::log::error("[RENDERER] Failed to load {}: {}", s, reason);
+                // The first failure is the one to show: a library the others
+                // need takes them down with it.
+                if (why.empty())
+                    why = fmt::format("{} didn't load: {}", s, reason);
+                continue;
+            }
+            modules.push_back(mod);
+        }
+
+        geode::log::info("Loading {} functions...", DLL_FUNCTION_NAMES.size());
+        uintptr_t i = 0;
+        for (std::string& s : DLL_FUNCTION_NAMES) {
+            void** loc = reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(ff) + i);
+            *loc = nullptr;
+            for (void* mod : modules) {
+                *loc = dlsym(mod, s.c_str());
+                if (*loc)
+                    break;
+            }
+
+            if (*loc == nullptr) {
+                geode::log::error("[RENDERER] Failed to load symbol {}", s);
+                if (why.empty())
+                    why = fmt::format("FFmpeg has no {}", s);
+                return false;
+            }
+
+            i += sizeof(void*);
+        }
+
+        // Every function was found (a library none of them is in, like
+        // avdevice, may still have failed: the log has it).
+        why.clear();
+        return true;
 #else
-        // FFmpeg ships as Windows DLLs only; rendering is Windows-only for now
-        // (core/platform.hpp).
+        // FFmpeg ships for Windows and macOS only; rendering on phones isn't
+        // ported yet (core/platform.hpp).
         (void)ff;
         return false;
 #endif

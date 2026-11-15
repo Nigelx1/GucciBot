@@ -1,7 +1,7 @@
 #pragma once
 
 // OpenGL constants the renderer and Video Mode use that OpenGL ES 2, the GL on
-// phones, doesn't name. Both need FFmpeg, which ships for Windows only, so on
+// phones, doesn't name. Both need FFmpeg, which ships for Windows and macOS only, so on
 // phones nothing that uses these ever runs (core/platform.hpp): they only have
 // to compile. Standard values.
 
