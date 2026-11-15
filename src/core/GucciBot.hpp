@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-ah (Import a macro: the picker lists GucciBot macros saved under every theme)"
+    "2026-11-15-ai (Macro Buffing: spikes center on the click's own tick, as in Silicate)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

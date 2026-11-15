@@ -217,7 +217,12 @@ TrailBuffer::Report TrailBuffer::placeSpikes(LevelEditorLayer* editor) {
             // platformer, whatever Flip 2-Player Controls is set to, and
             // playerFlipped(flag) in a platformer, where GD doesn't flip sides.
             if (twoPlayer && rs.flagMovesPlayer2(editor, a.m_player2) != player2) continue;
-            clicks.push_back(static_cast<uint32_t>(a.m_frame));
+            // GucciBot (2026-11-15): on Silicate's frame. GucciBot stores
+            // an input one frame later than Silicate does for the same tick
+            // (CLAUDE.md section 4), while the samples are stamped with the
+            // same getFrame() as Silicate's, so spikes.cpp's lower_bound(
+            // click + 1) centred every click one sample late.
+            clicks.push_back(a.m_frame > 0 ? static_cast<uint32_t>(a.m_frame) - 1 : 0u);
         }
         std::sort(clicks.begin(), clicks.end());
     }
