@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-z (Calculate: the playhead Test is greyed out under Legit only, and both buttons say why)"
+    "2026-11-15-aa (Prediction card: Find the best tick obeys Legit only, and the off-Windows note sits inside the card)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

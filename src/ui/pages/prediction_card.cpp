@@ -68,14 +68,18 @@ namespace gucci::ui::pages {
     }
 
     void predictionCard() {
-#if !GB_NATIVE_ENGINE
-        kit::Note("Untested on this platform. Moving objects keep the speed they have now: triggers that start, stop or change them later are not simulated here (that part reads GD's Windows memory layout).", Tone::Warn);
-#endif
         auto* gb = GucciEngine::get();
         auto& upd = gb->updater;
         auto* mod = Mod::get();
 
         kit::BeginCard("Prediction", "Copies of the player run ahead of it through the level to show or test what comes next.");
+#if !GB_NATIVE_ENGINE
+        // Inside the card (it sat above it, between cards), and worded for
+        // the look-ahead copies; Show Trajectory has its own.
+        kit::Note("Untested on this platform. The look-ahead copies keep moving objects at the speed they have "
+                  "now: triggers that start, stop or change them later are not simulated here (that part reads "
+                  "GD's Windows memory layout).", Tone::Warn);
+#endif
 
         // ---- Frame Extrapolation
         if (kit::SwitchRow("Frame extrapolation",
@@ -102,18 +106,23 @@ namespace gucci::ui::pages {
             mod->setSavedValue<float>("feat_best_tick_threshold", upd.m_acceptablePrediction);
         }
         bool const canSearch = PlayLayer::get() && upd.m_backwardsStepping;
-        kit::RowBegin("Find it", "Steps forward a tick at a time, clicking (or letting go) on each, then steps "
-                                 "back to the tick that lived longest");
-        ImGui::BeginDisabled(!canSearch);
-        if (kit::Button("Find the best tick", Tone::Accent)) {
-            // Not from inside the menu's drawing: it steps the game. The next
-            // frame runs it before anything draws.
-            geode::queueInMainThread([] {
-                GucciEngine::get()->updater.findBestFrameCandidate();
-            });
+        // It frame-advances (a cheat), so greyed out under Legit only, like
+        // the frame-advance key (keybinds.cpp).
+        {
+            kit::LegitGate gate;
+            kit::RowBegin("Find it", "Steps forward a tick at a time, clicking (or letting go) on each, then steps "
+                                     "back to the tick that lived longest");
+            ImGui::BeginDisabled(!canSearch);
+            if (kit::Button("Find the best tick", Tone::Accent)) {
+                // Not from inside the menu's drawing: it steps the game. The
+                // next frame runs it before anything draws.
+                geode::queueInMainThread([] {
+                    GucciEngine::get()->updater.findBestFrameCandidate();
+                });
+            }
+            ImGui::EndDisabled();
+            kit::RowEnd();
         }
-        ImGui::EndDisabled();
-        kit::RowEnd();
         if (!upd.m_backwardsStepping)
             kit::Hint("Needs Backwards stepping (Macro > Frame stepper), to step back to the tick it finds.");
 
