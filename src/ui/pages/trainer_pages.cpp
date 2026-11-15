@@ -73,8 +73,13 @@ namespace gucci::ui::pages {
             return fmt::format("{} {}", n, n == 1 ? "click" : "clicks");
         }
 
-        // The Trainer page's macro picker and messages.
+        // The Trainer page's macro picker and messages. g_pickFile is the file
+        // the dropdown shows, so the entry follows that file when the list
+        // changes under it (a Refresh, a Convert, a save) instead of keeping
+        // its old place in the list.
         int g_pick = -1;
+        std::pair<std::string, std::string> g_pickFile;
+        bool g_relist = false;  // the list lacks the file that loaded: read it again
         Message g_macroMsg;
         Message g_trackMsg;
 
@@ -797,6 +802,8 @@ namespace gucci::ui::pages {
             // One entry per file, tagged with its theme as the Saved macros
             // list is (Compact Mode's picker does the same): a name saved
             // under two themes is two entries, each loading its own file.
+            if (std::exchange(g_relist, false))
+                gb->reloadMacroList();
             auto const& files = gb->storedMacroFiles;
             auto const label = [](std::string const& name, std::string const& ext) {
                 std::string const tag = ui::savedMacroTag(ext);
@@ -806,26 +813,45 @@ namespace gucci::ui::pages {
             labels.reserve(files.size());
             for (auto const& [name, ext] : files)
                 labels.push_back(label(name, ext));
-            if (g_pick < 0 || g_pick >= (int)files.size()) {
-                auto it = std::find(files.begin(), files.end(),
-                                    std::pair<std::string, std::string>{gb->trainerMacroName, gb->trainerMacroExt});
-                g_pick = it == files.end() ? -1 : (int)(it - files.begin());
+            auto const indexOf = [&](std::pair<std::string, std::string> const& f) {
+                auto it = std::find(files.begin(), files.end(), f);
+                return it == files.end() ? -1 : (int)(it - files.begin());
+            };
+            // A load can end on another file than the one picked: with the
+            // picked file gone (converted to another theme), loadTrainerMacro
+            // falls back to the name alone. The list still holds the gone
+            // file then, so it is read again and the dropdown moves to the
+            // file that loaded.
+            // (Read again at the top of the next frame: this one's labels are
+            // already built from the list.)
+            auto const afterLoad = [&] {
+                g_pickFile = {gb->trainerMacroName, gb->trainerMacroExt};
+                g_pick = indexOf(g_pickFile);
+                g_relist = g_pick < 0;
+            };
+            if (g_pick < 0 || g_pick >= (int)files.size() || files[(size_t)g_pick] != g_pickFile) {
+                int const kept = g_pickFile.first.empty() ? -1 : indexOf(g_pickFile);
+                g_pick = kept >= 0 ? kept : indexOf({gb->trainerMacroName, gb->trainerMacroExt});
+                g_pickFile = g_pick >= 0 ? files[(size_t)g_pick] : std::pair<std::string, std::string>{};
             }
             kit::RowBegin("Macro", files.empty() ? "No saved macros yet" : nullptr);
             if (kit::Button("Load", Tone::Accent) && g_pick >= 0 && g_pick < (int)files.size()) {
                 auto const [stem, ext] = files[(size_t)g_pick];
-                g_macroMsg = tr::selectMacro(stem, ext)
-                                 ? Message{}
-                                 : Message{fmt::format("'{}' didn't load: it has no click pairs, or it isn't a "
-                                                       "format the Trainer reads (GucciBot macros are).",
-                                                       label(stem, ext)),
-                                           Tone::Bad};
+                bool const ok = tr::selectMacro(stem, ext);
+                g_macroMsg = ok ? Message{}
+                                : Message{fmt::format("'{}' didn't load: it has no click pairs, or it isn't a "
+                                                      "format the Trainer reads (GucciBot macros are).",
+                                                      label(stem, ext)),
+                                          Tone::Bad};
+                if (ok)
+                    afterLoad();
             }
             ImGui::SameLine();
             if (kit::Button("Refresh"))
                 gb->reloadMacroList();
             ImGui::SameLine();
-            kit::Dropdown("macro", &g_pick, labels);
+            if (kit::Dropdown("macro", &g_pick, labels) && g_pick >= 0 && g_pick < (int)files.size())
+                g_pickFile = files[(size_t)g_pick];
             kit::RowEnd();
 
             if (s.macro.loaded) {
@@ -835,6 +861,8 @@ namespace gucci::ui::pages {
                 if (kit::Button("Reload")) {
                     if (!tr::selectMacro(gb->trainerMacroName, gb->trainerMacroExt))
                         g_macroMsg = {"It didn't load again; the file may have moved.", Tone::Bad};
+                    else
+                        afterLoad();
                 }
                 kit::RowEnd();
                 kit::Chip(clicksChip(s.macro.clickIntervalsSec.size()).c_str(), Tone::Accent);

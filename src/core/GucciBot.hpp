@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-bc (Trainer cards: a one-click macro says 1 click, not 1 clicks)"
+    "2026-11-15-bd (Trainer page: the macro dropdown follows the file that loaded)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
