@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-t (Menu: the mouse cursor shows while the menu is open, and goes back to what GD wants when it closes)"
+    "2026-11-15-u (Status chip says PATHFINDING while the AI pilot runs)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -1259,6 +1259,20 @@ namespace gucci::ui {
                 std::tie(g_rowNoteOk, g_rowNote) = convertMacroFile(replaysDir() / convertNow);
         }
 
+        // The AI pilot's play job (Pathfinder > Engine: AI > Start) queued or
+        // running. It never sets the Mode, so the status chip read IDLE.
+        bool aiRunning() {
+            int const id = gucci::ai::pilot::live().job;
+            if (!id)
+                return false;
+            try {
+                auto const state = gucci::ai::job::status(id)["state"].asString().unwrapOr("");
+                return state == "queued" || state == "running";
+            } catch (...) {
+                return false;
+            }
+        }
+
         // The "..." menu on a saved macro's row (a right click opens it too).
         // What it does is handed back, to run once the list has been drawn.
         std::function<void()> macroRowMenu(std::string const& name, std::string const& ext) {
@@ -2938,7 +2952,7 @@ namespace gucci::ui {
                 return {"RENDERING", Tone::Bad};
             if (::Bot::get()->frameWindow().running() || gb->analyzerOwnsRun())
                 return {"CALCULATING", Tone::Accent};
-            if (absense::isRunning() || Pathfinder::get()->active)
+            if (absense::isRunning() || Pathfinder::get()->active || aiRunning())
                 return {"PATHFINDING", Tone::Accent};
             if (gb->isRecording())
                 return {"RECORDING", Tone::Bad};
