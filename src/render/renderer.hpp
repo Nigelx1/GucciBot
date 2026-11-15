@@ -83,7 +83,16 @@ namespace gucci {
         SL_AV_PTR(AVFrame) frame = { nullptr, SL_AV_LEAK(AVFrame) };
         SL_AV_PTR(AVPacket) pkt = { nullptr, SL_AV_LEAK(AVPacket) };
         SwrContext* swrCtx = nullptr;
+        // Samples waiting for a whole encoder frame (interleaved floats, the
+        // mixer's channel count). The mixer hands over 1024 samples at a time;
+        // FLAC encodes 1152 per frame, Opus 960, MP3 1152.
+        std::vector<float> pending;
+        int frameSamples = 0;  // samples per encoder frame
+        int64_t nextPts = -1;  // in samples; set by the first block
     };
+
+    // Samples per block the audio recorders hand to writeAudio.
+    constexpr int kAudioBlockSamples = 1024;
 
     class SLRenderer {
     public:
@@ -121,6 +130,8 @@ namespace gucci {
         geode::Result<> encode(uint8_t* data, size_t size);
         geode::Result<> write();
         geode::Result<> writeAudio(std::vector<float>& data, uint64_t pts, int trackIndex);
+        geode::Result<> encodeAudioFrame(SLAudioTrack& track, float const* samples, int count);
+        void flushPendingAudio(SLAudioTrack& track);
         geode::Result<> stop();
 
         void signalStop() {

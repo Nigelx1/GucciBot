@@ -679,7 +679,13 @@ namespace gucci {
             track.frame.reset(ff->av_frame_alloc());
             if (!track.frame)
                 return geode::Err("Failed to allocate audio frame");
-            track.frame->nb_samples = track.codecCtx->frame_size;
+            // A codec that takes any frame size (frame_size 0) gets the
+            // mixer's block size.
+            track.frameSamples =
+                track.codecCtx->frame_size > 0 ? track.codecCtx->frame_size : kAudioBlockSamples;
+            track.pending.clear();
+            track.nextPts = -1;
+            track.frame->nb_samples = track.frameSamples;
             track.frame->sample_rate = track.codecCtx->sample_rate;
             track.frame->format = track.codecCtx->sample_fmt;
             track.frame->ch_layout = track.codecCtx->ch_layout;
@@ -822,16 +828,49 @@ namespace gucci {
         return geode::Ok();
     }
 
+    // The mixer hands over 1024 samples at a time; an encoder takes its own
+    // frame size (FLAC 1152, Opus 960, MP3 1152, AAC 1024). Blocks are queued
+    // and cut into whole encoder frames, timed by the samples written. Each
+    // block used to go out as one encoder frame of frame_size samples read
+    // from it: with FLAC every 1024 samples became 1152 (128 read from the
+    // next block, or past the end of the buffer) at a pts 1024 apart, so the
+    // music came out 12.5% long and garbled, 11 s behind the picture by the
+    // end of Stereo Madness (acceptance test 2026-11-15).
     geode::Result<> SLRenderer::writeAudio(std::vector<float>& data, uint64_t pts, int trackIndex) {
         if (trackIndex < 0 || trackIndex >= (int)m_audioTracks.size())
             return geode::Err("Invalid audio track index {}", trackIndex);
         auto& track = m_audioTracks[trackIndex];
+        if (m_channels <= 0 || track.frameSamples <= 0)
+            return geode::Err("Audio track {} isn't set up", trackIndex);
 
-        track.frame->pts = pts;
-        track.frame->nb_samples = track.codecCtx->frame_size;
+        if (track.nextPts < 0)
+            track.nextPts = (int64_t)pts;
+
+        size_t const block = std::min(data.size(), (size_t)kAudioBlockSamples * (size_t)m_channels);
+        track.pending.insert(track.pending.end(), data.begin(), data.begin() + block);
+
+        size_t const perFrame = (size_t)track.frameSamples * (size_t)m_channels;
+        size_t used = 0;
+        while (track.pending.size() - used >= perFrame) {
+            auto ret = this->encodeAudioFrame(track, track.pending.data() + used, track.frameSamples);
+            used += perFrame;
+            if (ret.isErr()) {
+                track.pending.erase(track.pending.begin(), track.pending.begin() + used);
+                return ret;
+            }
+        }
+        track.pending.erase(track.pending.begin(), track.pending.begin() + used);
+        return geode::Ok();
+    }
+
+    geode::Result<> SLRenderer::encodeAudioFrame(SLAudioTrack& track, float const* samples, int count) {
+        int ret = ff->av_frame_make_writable(track.frame.get());
+        if (ret < 0)
+            return geode::Err("Failed to make the audio frame writable: {}", ret);
+
+        track.frame->pts = track.nextPts;
+        track.frame->nb_samples = count;
         track.frame->ch_layout = track.codecCtx->ch_layout;
-
-        int ret = 0;
 
         AVChannelLayout inputChLayout;
         ff->av_channel_layout_default(&inputChLayout, m_channels);
@@ -854,12 +893,9 @@ namespace gucci {
                 return geode::Err("Failed to initialize swr context");
         }
 
-        const uint8_t* inData[1] = {reinterpret_cast<const uint8_t*>(data.data())};
-        ff->swr_convert(track.swrCtx,
-                        track.frame->data,
-                        track.codecCtx->frame_size,
-                        inData,
-                        track.codecCtx->frame_size);
+        const uint8_t* inData[1] = {reinterpret_cast<const uint8_t*>(samples)};
+        ff->swr_convert(track.swrCtx, track.frame->data, count, inData, count);
+        track.nextPts += count;
 
         ret = ff->avcodec_send_frame(track.codecCtx.get(), track.frame.get());
         if (ret < 0)
@@ -885,6 +921,28 @@ namespace gucci {
         }
 
         return geode::Ok();
+    }
+
+    // The end of a render: the samples short of a whole encoder frame go out
+    // as a shorter last frame where the codec takes one (FLAC does), padded
+    // with silence to a whole frame otherwise.
+    void SLRenderer::flushPendingAudio(SLAudioTrack& track) {
+        if (track.pending.empty() || m_channels <= 0 || track.frameSamples <= 0 || !track.codec)
+            return;
+        int const have = (int)(track.pending.size() / (size_t)m_channels);
+        int count = have;
+        bool const shortOk = (track.codec->capabilities &
+                              (AV_CODEC_CAP_SMALL_LAST_FRAME | AV_CODEC_CAP_VARIABLE_FRAME_SIZE)) != 0;
+        if (!shortOk)
+            count = track.frameSamples;
+        track.pending.resize((size_t)count * (size_t)m_channels, 0.f);
+        if (count > 0 && count <= track.frameSamples) {
+            auto ret = this->encodeAudioFrame(track, track.pending.data(), count);
+            if (ret.isErr())
+                geode::log::warn("[GucciBot] The audio's last {} samples weren't written: {}", have,
+                                 ret.unwrapErr());
+        }
+        track.pending.clear();
     }
 
     geode::Result<> SLRenderer::stop() {
@@ -935,6 +993,8 @@ namespace gucci {
         for (auto& track : m_audioTracks) {
             if (!(track.pkt && track.codecCtx && m_formatCtx && track.stream))
                 continue;
+            if (track.frame)
+                this->flushPendingAudio(track);
             ff->avcodec_send_frame(track.codecCtx.get(), nullptr);
             while (ff->avcodec_receive_packet(track.codecCtx.get(), track.pkt.get()) == 0) {
                 ff->av_packet_rescale_ts(

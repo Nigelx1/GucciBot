@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-o (Renderer: the video stream states its frame rate, so a 60 FPS render reads as 60 FPS)"
+    "2026-11-15-p (Renderer: audio frames match the encoder's frame size, so FLAC renders no longer come out garbled and too long)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
