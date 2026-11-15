@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-bb (Assistant Access: a tool never runs in the middle of a level reset or a Calculate step)"
+    "2026-11-15-bc (Trainer cards: a one-click macro says 1 click, not 1 clicks)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

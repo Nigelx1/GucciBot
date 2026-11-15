@@ -68,6 +68,11 @@ namespace gucci::ui::pages {
             return g_page[k == Kind::Jupiter ? 0 : 1];
         }
 
+        // "1 click", "7 clicks": the macro's chip on both trainer cards.
+        std::string clicksChip(size_t n) {
+            return fmt::format("{} {}", n, n == 1 ? "click" : "clicks");
+        }
+
         // The Trainer page's macro picker and messages.
         int g_pick = -1;
         Message g_macroMsg;
@@ -774,7 +779,7 @@ namespace gucci::ui::pages {
                           "says what was found.",
                           Tone::Bad);
             } else {
-                kit::Chip(fmt::format("{} clicks", s.macro.clickIntervalsSec.size()).c_str(), Tone::Accent);
+                kit::Chip(clicksChip(s.macro.clickIntervalsSec.size()).c_str(), Tone::Accent);
                 ImGui::SameLine();
                 kit::Chip(fmt::format("{:.0f} TPS", s.macro.clickBarTps).c_str(), Tone::Muted);
                 ImGui::SameLine();
@@ -832,7 +837,7 @@ namespace gucci::ui::pages {
                         g_macroMsg = {"It didn't load again; the file may have moved.", Tone::Bad};
                 }
                 kit::RowEnd();
-                kit::Chip(fmt::format("{} clicks", s.macro.clickIntervalsSec.size()).c_str(), Tone::Accent);
+                kit::Chip(clicksChip(s.macro.clickIntervalsSec.size()).c_str(), Tone::Accent);
                 ImGui::SameLine();
                 kit::Chip(fmt::format("{:.0f} TPS", s.macro.clickBarTps).c_str(), Tone::Muted);
                 ImGui::SameLine();
