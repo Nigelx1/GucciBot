@@ -1136,9 +1136,9 @@ namespace gucci {
                   gb->fwMarks.size());
     }
 
-    void GucciReplaySystem::save(const fs::path& path, bool noOverwrite) {
+    bool GucciReplaySystem::save(const fs::path& path, bool noOverwrite) {
         if (noOverwrite && fs::exists(path))
-            return;
+            return false;
 
         auto* gb = GucciEngine::get();
         m_replayName = gb->replayName;
@@ -1213,7 +1213,8 @@ namespace gucci {
         if (!f.tpsChanges.empty())
             f.header.flags |= GBR6_HAS_TPS;
 
-        if (!f.saveToPath(path)) {
+        bool const written = f.saveToPath(path);
+        if (!written) {
             log::error("[GucciBot] Failed to save to {}", path.string());
         } else {
             if (!f.deaths.empty())
@@ -1235,6 +1236,7 @@ namespace gucci {
         std::error_code sameEc;
         if (gb->fwWindowsForgotten && fs::equivalent(path, getCurrentPath(), sameEc))
             gb->fwWindowsForgotten = false;
+        return written;
     }
 
     void GucciReplaySystem::buildClickIntervals(double tps) {

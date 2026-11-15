@@ -510,15 +510,50 @@ namespace gucci::ui {
         // theme's extension: the Macro page's Save and Compact Mode's. With
         // "Back up a macro before overwriting it" on, the file it replaces is
         // backed up first (Compact Mode's Save skipped that).
+        // What the last Save said (under the button that made it): a name
+        // the file system can't take, a failed write, or that it saved.
+        std::string g_saveNote;
+        bool g_saveNoteOk = false;
+
         void saveLoadedMacro() {
             auto* gb = GucciEngine::get();
+            g_saveNoteOk = false;
+            // Rename's rule (engine_core.cpp moveMacro): a slash would put the
+            // file outside the replays folder, the rest can't be in a name.
+            if (gb->replayName.find_first_of("\\/:*?\"<>|") != std::string::npos) {
+                g_saveNote = "Not saved: a name can't have any of \\ / : * ? \" < > |";
+                return;
+            }
             std::error_code ec;
             std::filesystem::create_directories(replaysDir(), ec);
             auto const path = replaysDir() / (gb->replayName + macroExtension());
             if (gb->replayBackupsEnabled)
                 gb->replay.backupExisting(path);
-            gb->replay.save(path);
+            bool const written = gb->replay.save(path);
             gb->reloadMacroList();
+            g_saveNoteOk = written;
+            g_saveNote = written ? fmt::format("Saved \"{}\".", gb->replayName)
+                                 : fmt::format("Couldn't save \"{}\": the file couldn't be written.", gb->replayName);
+        }
+
+        // Under a Save button: what it said, for a few seconds after it did.
+        void saveNoteRow() {
+            static std::string s_shown;
+            static double s_since = 0.0;
+            if (g_saveNote.empty())
+                return;
+            double const now = ImGui::GetTime();
+            if (s_shown != g_saveNote || s_since > now) {
+                s_shown = g_saveNote;
+                s_since = now;
+            }
+            // A failure stays until the next Save; a success fades after 4 s.
+            if (g_saveNoteOk && now - s_since > 4.0) {
+                g_saveNote.clear();
+                s_shown.clear();
+                return;
+            }
+            kit::Note(g_saveNote.c_str(), g_saveNoteOk ? Tone::Good : Tone::Warn);
         }
 
         // A Geode notification is one line of text, and Calculate's longer
@@ -1469,6 +1504,7 @@ namespace gucci::ui {
             kit::Hint(fmt::format("{} actions  |  {:.0f} TPS{}", actions.size(), gb->updater.m_tps,
                                   canCalc ? "" : "  |  Calculate needs a level open and a macro")
                           .c_str());
+            saveNoteRow();
             if (!gb->startPosWarning.empty())
                 kit::Note(gb->startPosWarning.c_str(), Tone::Warn);
             kit::EndCard();
@@ -3375,6 +3411,7 @@ namespace gucci::ui {
                 if (kit::Button("Calculate", Tone::Plain, -1.f))
                     startCalculate();
                 ImGui::EndDisabled();
+                saveNoteRow();
                 // Nigel (2026-11-12): Compact Mode's quick controls, in his
                 // order: tick rate, speed, hitboxes, Show Trajectory, then the
                 // frame stepper. Both switches are cheats (grayed out under

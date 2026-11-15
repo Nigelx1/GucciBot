@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-p (Renderer: audio frames match the encoder's frame size, so FLAC renders no longer come out garbled and too long)"
+    "2026-11-15-q (Save says whether it saved, and refuses a name with a reserved character)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -451,7 +451,9 @@ namespace gucci {
             return twoPlayer && (layer->m_isPlatformer ? side : playerFlipped(side));
         }
 
-        void save(const std::filesystem::path& path, bool noOverwrite = false);
+        // True when the macro file was written (false: the write failed, or
+        // noOverwrite found one there).
+        bool save(const std::filesystem::path& path, bool noOverwrite = false);
         void load(const std::filesystem::path& path);
         std::filesystem::path getCurrentPath() const;
         // The file the last load read. getCurrentPath prefers it while it still
