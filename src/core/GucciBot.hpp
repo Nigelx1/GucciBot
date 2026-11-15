@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-v (Pathfinder: one engine at a time)"
+    "2026-11-15-w (Disable bot: switching GucciBot off stops the AI pilot's run too)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

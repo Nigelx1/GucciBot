@@ -4,6 +4,8 @@
 #include "core/bot_switch.hpp"
 
 #include "absense/glue.hpp"
+#include "ai/job.hpp"
+#include "ai/pilot.hpp"
 #include "analysis/ac/shim.hpp"
 #include "analysis/ac/framewindow.hpp"
 #include "analysis/pathfinder.hpp"
@@ -113,6 +115,14 @@ namespace gucci::botswitch {
             // answered before the server goes, so stopping can't wait on it,
             // and nothing it asks for starts after the rest has stopped.
             ui::suspendAssistantAccess();
+
+            // The AI pilot's run, as Legit only stops it (legit.cpp stopRuns),
+            // before the pause below: it holds the game paused at the level's
+            // start, and cancelling it puts that pause back. Left alone it
+            // froze uncancelled while the game was unpaused under it, and
+            // carried on over a changed game once switched back on.
+            if (int const job = gucci::ai::pilot::live().job)
+                (void)gucci::ai::job::cancel(job);
 
             if (gb->fwAnalyzing)
                 gb->cancelAnalysis();
