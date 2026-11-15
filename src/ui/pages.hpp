@@ -49,4 +49,10 @@ namespace gucci::ui::pages {
     void trainerVideoModeCard();  // pages/videomode_card.cpp (Trainer page)
     void videoModeSettings(bool jmf);  // pages/videomode_card.cpp: the card's settings, over the video while it plays
 
+    // pages/editor.cpp: why a saved macro can't be loaded over the loaded one
+    // right now (Calculate or a pathfinder works on the loaded macro's list),
+    // or nullptr. The Saved macros list, its row menu, Compact Mode and Macro
+    // Tools' Load it again ask it.
+    const char* macroLoadLock();
+
 } // namespace gucci::ui::pages

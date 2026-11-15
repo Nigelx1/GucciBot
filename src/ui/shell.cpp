@@ -1240,16 +1240,24 @@ namespace gucci::ui {
             std::string const who = name;
             bool const recording = gb->isRecording();
             ImGui::BeginDisabled(recording);
-            if (ImGui::MenuItem("Load"))
+            // Not while Calculate or a pathfinder runs (pages::macroLoadLock).
+            char const* const loadLock = pages::macroLoadLock();
+            if (ImGui::MenuItem("Load", nullptr, false, !loadLock))
                 act = [who, ext] { loadMacroByName(who, ext); };
-            bool const canCalc = PlayLayer::get() != nullptr;
-            if (ImGui::MenuItem("Calculate", nullptr, false, canCalc))
+            if (loadLock && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                ImGui::SetTooltip("%s", loadLock);
+            // Calculate can't run under Legit only (hacks/legit.hpp), as the
+            // card's and Compact Mode's Calculate buttons are greyed out.
+            char const* const calcLock = !PlayLayer::get() ? "Open a level first"
+                                         : legit::on()     ? legit::kReason
+                                                           : loadLock;
+            if (ImGui::MenuItem("Calculate", nullptr, false, !calcLock))
                 act = [who, ext] {
                     loadMacroByName(who, ext);
                     GucciEngine::get()->analyzeFrameWindows();
                 };
-            if (!canCalc && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-                ImGui::SetTooltip("Open a level first");
+            if (calcLock && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                ImGui::SetTooltip("%s", calcLock);
             // To the plain extension: .brrr, or GBot's own while disguised.
             std::string const plainExt = plainMacroExtension();
             if (!ext.empty() && ext != plainExt && ImGui::MenuItem(fmt::format("Convert to {}", plainExt).c_str()))
@@ -1648,8 +1656,14 @@ namespace gucci::ui {
                 float const tagW = tag.empty() ? 0.f : ImGui::CalcTextSize(tag.c_str()).x + style.ItemSpacing.x;
                 float const rowW = std::max(40.f, ImGui::GetContentRegionAvail().x - moreW - tagW - style.ItemSpacing.x);
                 if (ImGui::Selectable(name.c_str(), isLoaded, ImGuiSelectableFlags_None, ImVec2(rowW, 0.f)) &&
-                    !gb->isRecording())
-                    loadMacroByName(name, ext);
+                    !gb->isRecording()) {
+                    if (char const* why = pages::macroLoadLock()) {
+                        g_rowNote = why;
+                        g_rowNoteOk = false;
+                    } else {
+                        loadMacroByName(name, ext);
+                    }
+                }
                 if (probe::on())
                     probe::macroRow(name, ext, tag, isLoaded);
                 ImGui::OpenPopupOnItemClick("##rowmenu", ImGuiPopupFlags_MouseButtonRight);
@@ -3329,7 +3343,7 @@ namespace gucci::ui {
                     std::string const tag = macroTag(ext);
                     labels.push_back(tag.empty() ? name : fmt::format("{} ({})", name, tag));
                 }
-                ImGui::BeginDisabled(gb->isRecording());
+                ImGui::BeginDisabled(gb->isRecording() || pages::macroLoadLock());
                 if (kit::Dropdown("macro", &pick, labels, labels.empty() ? "No saved macros" : "Load a saved macro") &&
                     pick >= 0 && pick < static_cast<int>(files.size())) {
                     auto const [name, ext] = files[static_cast<size_t>(pick)];

@@ -23,6 +23,7 @@
 #include "ui/look.hpp"
 
 #include "absense/glue.hpp"
+#include "ai/job.hpp"
 #include "analysis/ac/framewindow.hpp"
 #include "analysis/pathfinder.hpp"
 #include "core/GucciBot.hpp"
@@ -1186,6 +1187,21 @@ namespace gucci::ui::pages {
         }
 
     } // namespace
+
+    // Calculate keeps indices into the loaded macro's list and writes through
+    // them (framewindow.cpp placeAt), and loading clears and rebuilds that
+    // list (engine_core.cpp load) without cancelling it; a pathfinder drives
+    // the game and its mode, and a load switches Mode to Playing under it.
+    // So no load while one runs.
+    const char* macroLoadLock() {
+        auto* gb = GucciEngine::get();
+        if (gb->fwAnalyzing || gb->analyzerOwnsRun())
+            return "Calculate is running. Load once it has finished.";
+        if (absense::isRunning() || absense::startPending() || Pathfinder::get()->active ||
+            gucci::ai::job::holdsGame())
+            return "The Pathfinder is running. Load once it has stopped.";
+        return nullptr;
+    }
 
     void editor() {
         State& s = st();

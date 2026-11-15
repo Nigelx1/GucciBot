@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-g (Compact Mode: Load a saved macro lists each file with its theme tag and loads that file)"
+    "2026-11-15-h (No macro loads while Calculate or a pathfinder runs, and the row menu Calculate obeys Legit only)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

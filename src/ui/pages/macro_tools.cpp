@@ -7,6 +7,7 @@
 
 #include "ui/kit.hpp"
 #include "ui/look.hpp"
+#include "ui/pages.hpp"
 #include "ui/ui.hpp"
 
 #include "core/GucciBot.hpp"
@@ -530,12 +531,18 @@ namespace gucci::ui::pages {
                 kit::Note("This is the macro you have loaded. It plays as it was loaded until you load it again, "
                           "and saving it from the Macro page would put back what it was.",
                           Tone::Warn);
-                ImGui::BeginDisabled(gb->isRecording() || s.dirty);
+                // Not while Calculate or a pathfinder runs on the loaded macro
+                // (pages::macroLoadLock): Calculate would write through its
+                // old indices into the new list.
+                char const* const loadLock = macroLoadLock();
+                ImGui::BeginDisabled(gb->isRecording() || s.dirty || loadLock);
                 if (kit::Button("Load it again")) {
                     gb->replay.load(s.path);
                     gb->replayName = s.name;
                 }
                 ImGui::EndDisabled();
+                if (loadLock)
+                    kit::Hint(loadLock);
             }
             kit::EndCard();
         }
