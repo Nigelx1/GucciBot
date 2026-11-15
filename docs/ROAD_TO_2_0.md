@@ -173,6 +173,12 @@ Everything left before GucciBot 2.0, in Nigel's order (2026-10-19). Boxes get ti
 - [ ] Seeded random teleports and shake
 - [ ] Checkpoint placement
 - [ ] iOS: the game slows down at 1,000+ TPS (#30). Likely cause, from reading the code: Fixed pacing's cap of 10 ticks a frame (600 TPS at 60 FPS). "Scale with the tick rate" is on by default since 2026-11-01 to lift it; not checked on an iPhone yet
+- 2026-11-15, landed on master (builds -a..-c, CI green on Windows, macOS, iOS, Android32 and Android64; none run on a device yet):
+  - -a: the look-ahead copies spin a ball and turn a normal player on ring jumps off Windows too (a Windows-only guard in the Absense physics layer; part of the pathfinder and trigger-model items above)
+  - -b: Video Mode says it's Windows-only for now off Windows and can't be switched on there (rendering and Video Mode themselves are still Windows-only)
+  - -c: off Windows, the log says once whether GD's press stamps match the sub-tick recorder's clock (log only: it finds out whether SCBF records anything there)
+- Waiting for Nigel's device test on his Mac and Android phone (`docs/DEVICE_TEST_2026-11-15.md`, build 2026-11-15-c): teleports, checkpoint placement, the Mac respawn crash (-ei), GitHub #20 on Android, the per-tick check, Calculate, the SCBF clock line, the Video Mode note. The boxes above stay open until it's back.
+- Next (desk study, not built): the R-key restart dropping a held mouse on the Mac (Silicate's `handleKeypress` patch has no hook off Windows yet); the other three restart byte patches are already covered by GucciBot's hooks there
 
 ## 6. Standalone copy - dropped (Nigel, 2026-10-23: "ditch the standalone copy")
 
