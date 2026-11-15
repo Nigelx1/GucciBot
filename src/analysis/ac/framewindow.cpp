@@ -4781,9 +4781,12 @@ void FrameWindowAnalyzer::nextClick() {
                                m_filtered);
         // GucciBot (2026-11-15): a Continue's count is of the inputs it
         // took on, with the windows from before kept beside them.
-        if (m_resume)
-            msg = fmt::format("Continued from click {}. ", m_resumeNumber) + msg +
-                  fmt::format(" The {} window(s) counted before are kept.", m_keptResults.size());
+        if (m_resume) {
+            msg = fmt::format("Continued from click {}. ", m_resumeNumber) + msg;
+            // (None after a run that stopped before its first click.)
+            if (!m_keptResults.empty())
+                msg += fmt::format(" The {} window(s) counted before are kept.", m_keptResults.size());
+        }
         if (m_dependentSearch->inner() && this->beginDependentPass(msg))
             return;
         // GucciBot: Juice's count for the suspicious clicks, after the strict one.

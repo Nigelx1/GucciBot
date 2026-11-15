@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-az (Calculate: a running run writes only its own macro's windows file)"
+    "2026-11-15-ba (Calculate: a Continue from click 1 no longer says 0 windows were kept)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
