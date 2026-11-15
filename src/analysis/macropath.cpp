@@ -93,12 +93,18 @@ public:
                             ? gb->replay.m_trainerBestX + gb->trainerRevealBuffer
                             : std::numeric_limits<float>::max();
 
+        // The Marker size and Line opacity sliders too: they're only read in
+        // rebuild(), so moving them showed nothing until something else
+        // changed.
         if (m_builtForCount == samples.size() && m_builtForName == gb->replayName &&
-            m_builtForRevealX == revealX)
+            m_builtForRevealX == revealX && m_builtForSize == gb->macroPathMarkerSize &&
+            m_builtForOpacity == gb->macroPathLineOpacity)
             return;
         m_builtForCount = samples.size();
         m_builtForName = gb->replayName;
         m_builtForRevealX = revealX;
+        m_builtForSize = gb->macroPathMarkerSize;
+        m_builtForOpacity = gb->macroPathLineOpacity;
 
         rebuild(pl, samples, revealX);
     }
@@ -175,6 +181,8 @@ private:
     size_t m_builtForCount = SIZE_MAX;
     std::string m_builtForName;
     float m_builtForRevealX = -1.f;
+    float m_builtForSize = -1.f;
+    float m_builtForOpacity = -1.f;
 };
 
 class $modify(MacroPathPlayLayer, PlayLayer) {

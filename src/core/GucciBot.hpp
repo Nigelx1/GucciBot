@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-af (Agency map: no frozen result after a search, and its hint says when it shows)"
+    "2026-11-15-ag (Macro path: Marker size and Line opacity show as you move them)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
