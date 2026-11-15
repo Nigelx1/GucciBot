@@ -1,6 +1,6 @@
 # Puts GitHub's build of a commit into Geometry Dash, after checking it's
 # complete. That build is the universal package: every platform plus every
-# resource, the renderer's FFmpeg DLLs included. It's the file a release ships
+# resource, the renderer's FFmpeg DLLs and macOS dylibs included. It's the file a release ships
 # and the one testers get, so Nigel's game runs exactly what everyone else does
 # (Nigel, 2026-10-12).
 #
@@ -41,7 +41,8 @@ if ($run.conclusion -ne "success") {
     throw "GitHub's build of $short didn't succeed ($($run.conclusion)): gh run view $($run.databaseId) --repo $Repo"
 }
 
-# 2. Download it and check it: the five platform binaries and the renderer's seven DLLs
+# 2. Download it and check it: the five platform binaries, the renderer's seven DLLs
+#    and its seven macOS dylibs (packed since build 2026-11-15-be)
 $tmp = Join-Path $env:TEMP "guccibot-ci-$short"
 if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
 gh run download $run.databaseId --repo $Repo --name $Artifact --dir $tmp
@@ -53,10 +54,13 @@ try { $names = @($zip.Entries | ForEach-Object { $_.FullName }) } finally { $zip
 $need = @("nigelx1.guccibot.dll", "nigelx1.guccibot.dylib", "nigelx1.guccibot.ios.dylib",
           "nigelx1.guccibot.android32.so", "nigelx1.guccibot.android64.so") +
         @(@("avcodec-62.dll", "avdevice-62.dll", "avfilter-11.dll", "avformat-62.dll", "avutil-60.dll",
-            "swresample-6.dll", "swscale-9.dll") | ForEach-Object { "resources/nigelx1.guccibot/$_" })
+            "swresample-6.dll", "swscale-9.dll",
+            "libavcodec.62.dylib", "libavdevice.62.dylib", "libavfilter.11.dylib", "libavformat.62.dylib",
+            "libavutil.60.dylib", "libswresample.6.dylib", "libswscale.9.dylib") |
+            ForEach-Object { "resources/nigelx1.guccibot/$_" })
 $missing = @($need | Where-Object { $names -notcontains $_ })
 if ($missing.Count -gt 0) { throw "incomplete package, missing: $($missing -join ', ')" }
-Write-Host ("  complete: 5 platforms, 7 renderer DLLs ({0:N0} MB)" -f ($geode.Length / 1MB))
+Write-Host ("  complete: 5 platforms, 7 renderer DLLs, 7 renderer dylibs ({0:N0} MB)" -f ($geode.Length / 1MB))
 
 # 3. A copy for releases and sharing
 $keep = Join-Path $Root "build\ci"
