@@ -2261,25 +2261,34 @@ namespace gucci::ui {
             return "";
         }
 
-        // One press for a showcase render: 8K at 60, lossless RGB x264 (the old
-        // preset's yuv444p is not a format this renderer writes), FLAC in MKV,
-        // the music and the level's own sounds but not the game's.
+        // One press for a showcase render: Nigel's TCBot setup (2026-11-15).
+        // 8K at 60, libx264 lossless (-qp 0) in yuv444p (full-size color,
+        // BT.709 like every render here), -preset ultrafast, FLAC in MKV, the
+        // music at full and the level's own sounds (its SFX triggers) but not
+        // the game's, nothing after the end. -vf isn't in it: the shaders
+        // already convert to BT.709.
+        //
+        // -threads is this PC's thread count, as he sets it in TCBot: the
+        // setup he knows works at 8K. Left out, x264 would pick 1.5 times as
+        // many (its "auto"), and at 8K 4:4:4 each frame x264 keeps in flight
+        // is about 100 MB of memory, for little gain at ultrafast.
         void applyShowcasePreset() {
             auto* mod = Mod::get();
             unsigned const threads = std::max(1u, std::thread::hardware_concurrency());
             mod->setSavedValue<int64_t>("render_width", 7680);
             mod->setSavedValue<int64_t>("render_height", 4320);
             mod->setSavedValue<int64_t>("render_fps", 60);
-            mod->setSavedValue<std::string>("render_codec", "libx264rgb");
-            mod->setSavedValue<std::string>("render_pix_fmt", "rgb24");
+            mod->setSavedValue<std::string>("render_codec", "libx264");
+            mod->setSavedValue<std::string>("render_pix_fmt", "yuv444p");
             mod->setSavedValue<std::string>("render_video_args",
-                                            fmt::format("-crf 0 -preset medium -threads {}", threads));
+                                            fmt::format("-preset ultrafast -qp 0 -threads {}", threads));
             mod->setSavedValue<std::string>("render_file_extension", ".mkv");
             mod->setSavedValue("render_include_audio", true);
             mod->setSavedValue<std::string>("render_audio_codec", "flac");
             mod->setSavedValue<double>("render_music_volume", 1.0);
             mod->setSavedValue<double>("render_sfx_volume", 0.0);
             mod->setSavedValue<double>("render_trigger_sfx_volume", 1.0);
+            mod->setSavedValue<std::string>("render_seconds_after", "0");
         }
 
         void renderPresetsCard() {
@@ -2289,7 +2298,9 @@ namespace gucci::ui {
             kit::BeginCard("Presets", "Every render setting at once, saved under a name.");
             if (kit::Button("Showcase: 8K60 lossless", Tone::Accent)) {
                 applyShowcasePreset();
-                s_note = "Showcase set: 7680x4320 at 60, lossless x264, FLAC in MKV. It's slow and the files are big.";
+                s_note = "Showcase set: 7680x4320 at 60, lossless x264 in yuv444p (ultrafast), FLAC in MKV, the music "
+                         "and the level's own sounds, nothing after the end. It's slow, and the files are big: "
+                         "about 3.5 GB a minute.";
             }
             kit::RowBegin("Save as", nullptr);
             kit::InputText("presetname", &s_name, "preset name");

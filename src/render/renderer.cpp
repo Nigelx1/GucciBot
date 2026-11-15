@@ -473,7 +473,7 @@ namespace gucci {
             m_videoCodecCtx->time_base = {1, m_settings.m_fps};
             m_videoCodecCtx->framerate = {m_settings.m_fps, 1};
             m_videoCodecCtx->max_b_frames = 0;
-            // An RGB stream (Showcase's libx264rgb with rgb24) is tagged as
+            // An RGB stream (libx264rgb with rgb24, the old Showcase) is tagged as
             // RGB, full range. Tagged BT.709 limited-range YUV like the others,
             // libx264rgb wrote that matrix into the stream, and players turned
             // its RGB planes into colors as if they were YUV: a teal background

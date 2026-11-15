@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-j (Macro Tools: the pickers list each file with its theme tag, and act on that file)"
+    "2026-11-15-k (Showcase preset: Nigel's TCBot setup, 8K60 libx264 yuv444p ultrafast qp 0, FLAC, music 100 and SFX 0 with trigger sounds kept)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
