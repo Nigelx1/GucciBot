@@ -340,7 +340,10 @@ namespace gucci::ui::pages {
         };
         EditState g_edit;
 
-        void openForEdit(Pick const& pick) {
+        // By value: Open passes g_edit.pick itself, and the reset below
+        // emptied what a reference pointed at, so Open found no file ("That
+        // macro isn't there any more") for every macro.
+        void openForEdit(Pick const pick) {
             auto& s = g_edit;
             s = EditState{};
             s.pick = pick;
