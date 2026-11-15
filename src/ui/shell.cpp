@@ -1551,9 +1551,17 @@ namespace gucci::ui {
             // new macro saved under the same name would take over the old one's
             // Calculate results and path. What is loaded stays loaded: saving
             // it again brings the file back.
+            // Only while the Name field names the file that is loaded
+            // (getCurrentPath gives m_loadedPath only then): a typed name
+            // used to delete that other saved macro, and then say it was
+            // still loaded.
             static std::string s_confirmDelete;
             static std::string s_deleteNote;
-            if (!gb->replayName.empty() && !gb->isRecording()) {
+            std::error_code loadedEc;
+            bool const namesLoadedFile = !gb->replayName.empty() && !gb->replay.m_loadedPath.empty() &&
+                                         std::filesystem::exists(gb->replay.m_loadedPath, loadedEc) &&
+                                         gb->replay.getCurrentPath() == gb->replay.m_loadedPath;
+            if (namesLoadedFile && !gb->isRecording()) {
                 ImGui::SameLine();
                 if (s_confirmDelete != gb->replayName) {
                     if (kit::Button(fmt::format("Delete \"{}\"", gb->replayName).c_str(), Tone::Bad))
