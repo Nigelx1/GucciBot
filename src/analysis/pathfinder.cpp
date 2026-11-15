@@ -1548,6 +1548,10 @@ namespace gucci {
 
         active = false;
         confirming = false;
+        // The agency map's data is measured only during a search: kept after
+        // one, it painted every tick of the next attempts with this search's
+        // last result.
+        gb->pfAgencyValid = false;
         releaseRing();
         for (auto& n : stack)
             releaseStoredFrame(n.ckpt);

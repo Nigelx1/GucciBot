@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-ae (Classic Pathfinder: Minimum progress above 60 survives a relaunch)"
+    "2026-11-15-af (Agency map: no frozen result after a search, and its hint says when it shows)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

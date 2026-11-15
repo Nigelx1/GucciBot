@@ -2025,7 +2025,8 @@ namespace gucci::ui {
             changed |= kit::SwitchRow("Hide the search", "Only show the run that counts", &pf->hideSearch);
             if (changed)
                 pf->saveSettings();
-            kit::SwitchRow("Agency map", "While you play, shows which ticks an input could actually change",
+            kit::SwitchRow("Agency map", "During a search (with Hide the search off), shows which ticks an input "
+                                         "could actually change",
                            &GucciEngine::get()->pfAgencyDebug);
         }
 
