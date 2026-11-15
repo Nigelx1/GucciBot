@@ -355,7 +355,15 @@ void fillDef(WorldDef& w, TriggerDef& d, EffectGameObject* e) {
     d.targetMode = (int)e->m_moveTargetMode;
     d.targetP1 = e->m_targetPlayer1;
     d.targetP2 = e->m_targetPlayer2;
+#ifdef GEODE_IS_WINDOWS
     d.directionMode = off::at<bool>(e, off::kEffDirectionMode);
+#else
+    // GucciBot (2026-11-15): the member the Windows offset is pinned to
+    // (offsets.hpp): the raw offset reads another byte off Windows, where the
+    // AI's observation (ai/observe.cpp) reads the level through this with the
+    // World off.
+    d.directionMode = e->m_isDirectionFollowSnap360;
+#endif
     d.directionDistance = e->m_directionModeDistance;
     d.targetModCenter = e->m_targetModCenterID;
     d.dynamic = e->m_isDynamicMode;
@@ -716,7 +724,12 @@ void WorldDef::build(GJBaseGameLayer* layer) {
                     // spawnObjectsInOrder 0x21ae8c-0x21aeb8.
                     const bool spawnable = o->m_classType == GameObjectClassType::Effect
                                                ? o->isSpawnableTrigger()
+#ifdef GEODE_IS_WINDOWS
                                                : (o->m_objectID == 2065 && off::at<bool>(o, off::kAnimateOnTrigger));
+#else  // the member the offset is pinned to (offsets.hpp), as directionMode above
+                                               : (o->m_objectID == 2065 &&
+                                                  static_cast<EnhancedGameObject*>(o)->m_animateOnTrigger);
+#endif
                     if (spawnable) spawnPairs.push_back({(uint32_t)g, s});
                 }
             }

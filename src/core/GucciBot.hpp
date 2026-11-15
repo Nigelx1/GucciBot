@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-bh (Mac and Android: holding the mouse or a touch through an R restart keeps the hold (untested on a device))"
+    "2026-11-15-bi (Mac and Android: the Pathfinder level read takes two trigger fields from their members, not Windows offsets)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
