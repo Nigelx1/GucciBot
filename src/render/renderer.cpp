@@ -699,6 +699,7 @@ namespace gucci {
 
         m_time = 0.0;
         m_endTime = 0.0f;
+        m_completionCaptured = false;
         m_updateIndex = 0;
         // The encode thread's count, read by the Render card's HUD and by the
         // ring's room check (tryBeginFrame). It has to start each render at
@@ -1314,13 +1315,26 @@ namespace gucci {
 
         if (pl->m_hasCompletedLevel &&
             !GucciEngine::get()->replay.getCurrentQueuedInput().has_value()) {
-            if (this->m_endTime >= this->m_settings.m_afterEndTime) {
-                this->flushAndStop(fmt::format("the level ended and the {} {} after it are in",
-                                               this->m_settings.m_afterEndTime,
-                                               this->m_settings.m_afterEndTime == 1.f ? "second" : "seconds"));
-                return;
+            if (this->m_settings.m_afterEndTime <= 0.f) {
+                // 0 seconds after the end: the level-complete frame is the
+                // video's last. It is captured below (m_endTime stays 0, so
+                // no fade-out on it) and the next update stops. Stopping on
+                // this update, as the general case below would, ended the
+                // video one frame before the level was complete.
+                if (m_completionCaptured) {
+                    this->flushAndStop("the level ended (0 seconds after the end)");
+                    return;
+                }
+                m_completionCaptured = true;
+            } else {
+                if (this->m_endTime >= this->m_settings.m_afterEndTime) {
+                    this->flushAndStop(fmt::format("the level ended and the {} {} after it are in",
+                                                   this->m_settings.m_afterEndTime,
+                                                   this->m_settings.m_afterEndTime == 1.f ? "second" : "seconds"));
+                    return;
+                }
+                this->m_endTime += this->getDt();
             }
-            this->m_endTime += this->getDt();
         }
 
         {

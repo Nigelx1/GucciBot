@@ -350,6 +350,9 @@ namespace gucci {
 
         int m_updateIndex = 0;
         float m_endTime = 0;
+        // With 0 seconds after the end, the level-complete frame has been
+        // captured: the next update stops the render (update()).
+        bool m_completionCaptured = false;
 
         int m_sampleRate = 44100;
         int m_channels = 2;

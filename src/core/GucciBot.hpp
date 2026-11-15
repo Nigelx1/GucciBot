@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-an (Renderer: a new render no longer inherits the last one's frame times, and a frame that can't be read back is dropped cleanly)"
+    "2026-11-15-ao (Renderer: with 0 seconds after the end, the video ends on the level-complete frame)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
