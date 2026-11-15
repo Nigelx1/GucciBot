@@ -82,6 +82,11 @@ def parse_args(argv):
     ap.add_argument("--imitation-decay", type=float, default=None,
                     help="the human pull's shrink per update (1 keeps it at --imitation)")
     ap.add_argument("--launch", action="store_true", help="start detached and return")
+    # 2026-11-15 (Nigel and Juice's "AI Practice" idea): practice ONE level, exam levels included. Every
+    # game plays it each iteration, and the cold exam is that level alone. Use its own --rl-name and
+    # --weights-name, so the general pilot isn't touched.
+    ap.add_argument("--only-level", type=int, default=0, help="practice this one level id (0: the normal pool)")
+    ap.add_argument("--only-name", default="", help="its name, for logs (default: from the exam list)")
     return ap.parse_args(argv)
 
 
@@ -140,7 +145,17 @@ class Loop:
     def exam_columns(self):
         return [f"exam_{lid}" for lid, _ in self.exams()]
 
+    def only(self):
+        """The one level --only-level practices, as (id, name), or None."""
+        lid = self.args.only_level
+        if not lid:
+            return None
+        name = self.args.only_name or dict(EXAMS).get(lid, f"level {lid}")
+        return (lid, name)
+
     def exams(self):
+        if self.only():
+            return [self.only()]
         return EXAMS + [tuple(x) for x in self.state["fixed_training"]]
 
     def append_curve(self, row):
@@ -321,10 +336,15 @@ class Loop:
         """Fixed exam training levels; the imitation pilot exported and installed, so the first rollouts are
         played by exactly the network PPO starts from."""
         if "fixed_training" not in self.state:
-            lv = sorted(rl_ppo.training_levels(self.root).items())
-            self.state["training_levels"] = lv
-            rnd = random.Random(0)
-            self.state["fixed_training"] = rnd.sample(lv, 3)
+            if self.only():
+                # Practice: the pool is this one level, and there are no fixed training exams.
+                self.state["training_levels"] = [list(self.only())]
+                self.state["fixed_training"] = []
+            else:
+                lv = sorted(rl_ppo.training_levels(self.root).items())
+                self.state["training_levels"] = lv
+                rnd = random.Random(0)
+                self.state["fixed_training"] = rnd.sample(lv, 3)
             self.state.setdefault("iteration", 0)
             self.save_state()
         if not os.path.exists(os.path.join(self.dir, "ppo.pt")):
@@ -378,7 +398,10 @@ class Loop:
                         continue
                 live = [k for k, g in enumerate(self.games) if g]
                 pool = self.state["training_levels"]
-                levels = rng.sample(pool, min(self.args.levels * len(live), len(pool)))
+                if self.only():
+                    levels = [pool[0]] * len(live)  # every game practices the one level
+                else:
+                    levels = rng.sample(pool, min(self.args.levels * len(live), len(pool)))
                 plan = [[] for _ in self.games]
                 for i, lv in enumerate(levels):
                     plan[live[i % len(live)]].append(lv)
