@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-u (Status chip says PATHFINDING while the AI pilot runs)"
+    "2026-11-15-v (Pathfinder: one engine at a time)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

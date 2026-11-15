@@ -2,6 +2,8 @@
 #include "analysis/pathfinder.hpp"
 
 #include "analysis/trajectory.hpp"
+#include "absense/glue.hpp"
+#include "ai/job.hpp"
 
 #include "ui/ui.hpp" // macroExtension, for auto-saving the solved macro
 
@@ -94,6 +96,14 @@ namespace gucci {
         active = false;
         return;
 #endif
+        // One pathfinder at a time: both drive the game and put it back
+        // after (the menu greys this Start out while another runs; this is
+        // for Assistant Access too).
+        if (absense::isRunning() || absense::startPending() || gucci::ai::job::holdsGame()) {
+            stage = "another pathfinder is running";
+            active = false;
+            return;
+        }
         // Fresh search: nothing proven dead yet.
         deadEnds.clear();
         skippedDeadEnds = 0;

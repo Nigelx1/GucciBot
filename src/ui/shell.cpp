@@ -2108,13 +2108,20 @@ namespace gucci::ui {
         kit::Note("The Pathfinder is Windows-only for now: its model of the level reads GD's Windows memory layout.", Tone::Warn);
 #endif
             kit::BeginCard("Pathfinder", "Finds a way through the level on its own.");
+            // Not switched while one runs: that hid the running engine's Stop
+            // and showed another engine's Start, so two could run at once.
+            bool const anyRun = absense::isRunning() || absense::startPending() || Pathfinder::get()->active ||
+                                aiRunning();
             int brain = gucci::ai::pilot::engineAi() ? 0 : 1;
             const char* brains[] = {"AI", "Search (old)"};
+            ImGui::BeginDisabled(anyRun);
             if (kit::ChoiceRow("Engine",
-                               "AI: trained networks play the level and practice it. Search (old): the searches "
-                               "from before the AI",
+                               anyRun ? "Stop the run first"
+                                      : "AI: trained networks play the level and practice it. Search (old): the "
+                                        "searches from before the AI",
                                &brain, brains, 2))
                 gucci::ai::pilot::setEngineAi(brain == 0);
+            ImGui::EndDisabled();
             if (brain == 0) {
                 aiPathfinder();
                 kit::EndCard();
@@ -2124,8 +2131,10 @@ namespace gucci::ui {
             const char* engines[] = {"Absense", "Classic"};
             std::string const engineHint =
                 branded("Absense: Absent's planner, the default. Classic: GucciBot's own search");
-            if (kit::ChoiceRow("Search", engineHint.c_str(), &engine, engines, 2))
+            ImGui::BeginDisabled(anyRun);
+            if (kit::ChoiceRow("Search", anyRun ? "Stop the run first" : engineHint.c_str(), &engine, engines, 2))
                 absense::selectClassic(engine == 1);
+            ImGui::EndDisabled();
             if (engine == 1) {
                 classicPathfinder();
                 kit::EndCard();

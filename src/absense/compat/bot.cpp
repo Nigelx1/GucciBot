@@ -4,6 +4,8 @@
 
 #include "core/platform.hpp"
 #include "absense/compat/bot.hpp"
+#include "ai/job.hpp"
+#include "analysis/pathfinder.hpp"
 #include "absense/glue.hpp"
 #include "absense/judge.hpp"
 #include "absense/pathfinder/pathfinder.hpp"
@@ -110,6 +112,12 @@ bool absense::requestStart(bool fromBeginning) {
     }
     if (Bot::get()->pathfinder().isRunning())
         return true;
+    // GucciBot (2026-11-15): one pathfinder at a time. The Classic search and
+    // the AI pilot drive the game too, and each puts it back when it ends.
+    if (gucci::Pathfinder::get()->active || gucci::ai::job::holdsGame()) {
+        s_pendingNote = "Another pathfinder is running. Stop it first.";
+        return false;
+    }
     s_pending = PendingStart{};
     s_pending.active = true;
     s_pending.fromBeginning = fromBeginning;
