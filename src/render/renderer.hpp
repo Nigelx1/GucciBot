@@ -134,7 +134,18 @@ namespace gucci {
         void flushPendingAudio(SLAudioTrack& track);
         geode::Result<> stop();
 
-        void signalStop() {
+        // Every way a render ends names its reason here, in one log line per
+        // render ("Render stopping: ..."): only the first call while it is
+        // still running logs, so a reason given again later adds nothing.
+        // `failed` logs it as an error. (The encode thread's own failures log
+        // their reason in recordLoop.)
+        void signalStop(std::string_view reason, bool failed = false) {
+            if (m_recording) {
+                if (failed)
+                    geode::log::error("[GucciBot] Render stopping: {}", reason);
+                else
+                    geode::log::info("[GucciBot] Render stopping: {}", reason);
+            }
             m_recording = false;
             // Wake the encode thread so it sees the flag and drains, rather
             // than sitting on the condition variable until the next frame it
@@ -145,9 +156,9 @@ namespace gucci {
         // Drains everything still in flight, then stops. Only safe from the
         // game/GL thread -- tryHarvest makes GL calls. Use this wherever the
         // caller is on that thread so the tail of the video is not dropped.
-        void flushAndStop() {
+        void flushAndStop(std::string_view reason) {
             this->flushPending();
-            this->signalStop();
+            this->signalStop(reason);
         }
 
         // Async encode handoff, ported from Silicate 2026-09-22. The GL thread

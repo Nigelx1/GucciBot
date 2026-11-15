@@ -295,7 +295,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
         else if (gb->fwAnalyzing)
             gb->cancelAnalysis();
         if (gucci::SLRenderer::get()->isRecording())
-            gucci::SLRenderer::get()->flushAndStop();
+            gucci::SLRenderer::get()->flushAndStop("the level was closed");
         // GD keeps this layer as PlayLayer::get() through the quit's fade: a
         // render started then (the Render page's Start) is refused.
         gucci::SLRenderer::get()->m_quittingLayer = this;

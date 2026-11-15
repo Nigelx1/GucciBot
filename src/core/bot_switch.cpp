@@ -139,7 +139,7 @@ namespace gucci::botswitch {
             sl->m_shouldStart = false;
             sl->m_startOnNextLevel = false;
             if (sl->isRecording())
-                sl->flushAndStop();
+                sl->flushAndStop("GucciBot was switched off (Disable bot)");
 
             // Recording keeps what it recorded: going idle leaves the macro
             // in memory, ready to save.

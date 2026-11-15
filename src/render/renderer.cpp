@@ -1070,11 +1070,12 @@ namespace gucci {
             m_bufferPts = frame.m_pts;
 
             if (auto e = this->encode(frame.m_data, m_bufferSize); e.isErr()) {
-                geode::log::error("[GucciBot] encode failed: {}", e.unwrapErr());
+                geode::log::error("[GucciBot] Render stopping: encoding a frame failed: {}", e.unwrapErr());
                 break;
             }
             if (auto w = this->write(); w.isErr()) {
-                geode::log::error("[GucciBot] write failed: {}", w.unwrapErr());
+                geode::log::error("[GucciBot] Render stopping: writing the video file failed: {}",
+                                  w.unwrapErr());
                 break;
             }
 
@@ -1272,7 +1273,9 @@ namespace gucci {
         if (pl->m_hasCompletedLevel &&
             !GucciEngine::get()->replay.getCurrentQueuedInput().has_value()) {
             if (this->m_endTime >= this->m_settings.m_afterEndTime) {
-                this->flushAndStop();
+                this->flushAndStop(fmt::format("the level ended and the {} {} after it are in",
+                                               this->m_settings.m_afterEndTime,
+                                               this->m_settings.m_afterEndTime == 1.f ? "second" : "seconds"));
                 return;
             }
             this->m_endTime += this->getDt();
@@ -1299,3 +1302,12 @@ namespace gucci {
     }
 
 } // namespace gucci
+
+// Closing the game mid-render: nothing finishes the video (the encode thread is
+// left as it is, as before), so the log says so. One line, like every other
+// way a render ends.
+$on_game(Exiting) {
+    if (gucci::SLRenderer::get()->isRecording())
+        geode::log::warn("[GucciBot] Render stopping: the game is closing. The video was never finished, "
+                         "so it may not play (an .mp4 won't)");
+}

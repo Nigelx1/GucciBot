@@ -104,9 +104,9 @@ namespace gucci {
 
             auto result = renderer->writeAudio(audio->m_buffer, pts, trackIndex);
             if (result.isErr()) {
-                geode::log::error("[GucciBot] Failed to write audio (track {}), stopping render",
-                                  trackIndex);
-                renderer->signalStop();
+                renderer->signalStop(
+                    fmt::format("writing the audio failed (track {}): {}", trackIndex, result.unwrapErr()),
+                    true);
                 return false;
             }
 

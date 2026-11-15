@@ -2445,7 +2445,7 @@ namespace gucci::ui {
                                       sl->getTime())
                               .c_str());
                 if (kit::Button("Stop", Tone::Bad, -1.f))
-                    sl->flushAndStop();
+                    sl->flushAndStop("the Stop button");
             } else if (sl->m_startOnNextLevel) {
                 kit::Chip("Waiting for a level", Tone::Accent);
                 if (kit::Button("Cancel", Tone::Plain, -1.f))

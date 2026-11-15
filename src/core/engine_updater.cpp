@@ -1178,7 +1178,8 @@ class $modify(GB7CCDirector, CCDirector) {
         // is captured again, but the render stayed on, the Render card showing
         // "Rendering" with a frozen frame count until Stop was pressed.
         if (sl->isRecording() && (pl != sl->m_layer || sl->m_layerGen != sl->m_levelGen))
-            sl->flushAndStop();
+            sl->flushAndStop(!pl ? "its level is gone (closed some way other than the quit button)"
+                                 : "another level opened");
         if (sl->m_shouldStart)
             sl->startIfQueued();
         if (pl && sl->isRecording() && !pl->m_isPaused && pl->m_started) {

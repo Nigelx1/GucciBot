@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-al (menu sweep: hints that said the wrong thing)"
+    "2026-11-15-am (Renderer: every way a render stops says why in the log)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
