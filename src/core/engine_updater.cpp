@@ -1122,6 +1122,9 @@ class $modify(GB7CCScheduler, CCScheduler) {
         // even when the engine is standing down.
         if (mcp::Server::get()->running())
             mcp::Server::get()->pump();
+        // A scheduler update run from inside this one (a checkpoint refresh,
+        // a step) is not a place for a tool (mcp::Server::Hold).
+        mcp::Server::Hold mcpHold;
         if (gb->updater.m_onlyRefresh || !gb->enabled || gucci::mcponly::launch()) {
             CCScheduler::update(dt);
             return;

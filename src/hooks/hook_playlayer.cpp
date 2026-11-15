@@ -17,6 +17,7 @@
 #include "absense/route/planner.hpp"
 #include "absense/judge.hpp"
 #include "ai/job.hpp"
+#include "mcp/mcp_server.hpp"
 #include "hacks/cps.hpp"
 #include "hacks/hitboxes.hpp"
 #include "hacks/hitborders.hpp"
@@ -725,6 +726,10 @@ class $modify(GB7PlayLayer, PlayLayer) {
     }
 
     void resetLevel() {
+        // No Assistant Access tool runs inside a reset: the checkpoint refresh
+        // below runs the scheduler, and a tool that reset the level from there
+        // crashed GD (mcp::Server::Hold).
+        gucci::mcp::Server::Hold mcpHold;
         GucciEngine::get()->updater.m_resetCount++;
         // Presses still waiting for their tick belong to the attempt that
         // just ended.

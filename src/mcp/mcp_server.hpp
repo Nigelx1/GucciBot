@@ -85,6 +85,27 @@ namespace gucci::mcp {
         // Anything a socket thread queued is executed here and only here.
         void pump();
 
+        // GucciBot (2026-11-15): a tool runs only where nothing is half done.
+        // GD's own update calls the scheduler, but so does GucciBot from
+        // inside other work: the checkpoint refresh in the middle of a level
+        // reset, Calculate's and the Pathfinder's ticks, a tool's own steps.
+        // A tool that resets the level from there (Calculate's cancel did)
+        // reset it inside a reset, and GD crashed loading a checkpoint. Each
+        // of those places holds the pump; a call waits for the next frame.
+        struct Hold {
+            Hold() {
+                ++Server::get()->m_hold;
+            }
+            ~Hold() {
+                --Server::get()->m_hold;
+            }
+            Hold(Hold const&) = delete;
+            Hold& operator=(Hold const&) = delete;
+        };
+        bool held() const {
+            return m_hold > 0;
+        }
+
         void addTool(Tool t);
         std::vector<Tool> const& tools() const {
             return m_tools;
@@ -92,6 +113,7 @@ namespace gucci::mcp {
 
     private:
         Server() = default;
+        int m_hold = 0;  // Hold; the game thread only
         void listenLoop();
         std::string handleRequest(std::string const& body);
         matjson::Value callToolOnMainThread(std::string const& name, matjson::Value const& args);

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-ba (Calculate: a Continue from click 1 no longer says 0 windows were kept)"
+    "2026-11-15-bb (Assistant Access: a tool never runs in the middle of a level reset or a Calculate step)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -382,6 +382,11 @@ namespace gucci::mcp {
     }
 
     void Server::pump() {
+        // Not inside other work (Hold), and never inside itself: a tool that
+        // steps the game runs the scheduler, which comes back here.
+        if (m_hold > 0)
+            return;
+        Hold hold;
         // GucciBot (2026-11-01): what happened since the last frame, for
         // gucci_events (mcp/events.hpp). A frame's worth of reads; nothing
         // it does may stop the tools from running.
