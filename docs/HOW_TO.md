@@ -148,7 +148,7 @@ Render records gameplay straight to a video file. No screen recorder needed. It 
 4. Press **Stop** when you want it to end.
 
 - **Output > Folder** picks where the video goes. Blank uses the default folder.
-- Presets: **Showcase: 8K60 lossless** sets everything up in one press.
+- Presets: **Showcase: 8K60 lossless** sets everything up in one press: 7680x4320 at 60 FPS, lossless x264 in yuv444p (full color detail), FLAC audio with the music at 100% and the game's sounds off (the level's own trigger sounds stay), in an .mkv file. Expect a very big file (several GB a minute) and a slow render.
 - The **Video**, **Audio**, **Timing** and **Intro card** cards hold the rest.
 - If it says **FFmpeg isn't loaded**, the start buttons are grayed out **(new in 2.0)**. Restart the game: it puts the files back. **Open the FFmpeg folder** shows where they belong.
 
