@@ -847,15 +847,11 @@ namespace gucci::ai {
             }
         };
 
+        // GucciBot (2026-11-15): every platform now. Off Windows the trigger
+        // model stays off (the Pathfinder page says what that costs).
         bool checkPlatform(std::string& why) {
-#if !GB_NATIVE_ENGINE
-            why = "The AI's simulation is Windows-only for now: its model of the level reads GD's Windows memory "
-                  "layout.";
-            return false;
-#else
             (void)why;
             return true;
-#endif
         }
 
     }  // namespace

@@ -92,12 +92,9 @@ namespace gucci {
     }
 
     void Pathfinder::begin() {
-#if !GB_NATIVE_ENGINE
-        // It ranks with the simulator, which reads GD's Windows memory layout.
-        stage = "Windows-only for now";
-        active = false;
-        return;
-#endif
+        // GucciBot (2026-11-15): off Windows too, without the trigger model (the
+        // World stays off there, as Windows' own runs fall back to when it
+        // switches off). The Pathfinder page says what that costs.
         // One pathfinder at a time: both drive the game and put it back
         // after (the menu greys this Start out while another runs; this is
         // for Assistant Access too).

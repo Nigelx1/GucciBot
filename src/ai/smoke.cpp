@@ -328,11 +328,9 @@ namespace gucci::ai {
 
     std::unique_ptr<job::Job> makeSimSmoke(std::string const& macroPath, int64_t levelId, int offset,
                                            int64_t maxTicks, std::string& why, bool probe) {
-#if !GB_NATIVE_ENGINE
-        (void)macroPath, (void)levelId, (void)offset, (void)maxTicks, (void)probe;
-        why = "The AI's simulation is Windows-only for now: its model of the level reads GD's Windows memory layout.";
-        return nullptr;
-#endif
+        // GucciBot (2026-11-15): off Windows too, without the trigger model (the
+        // World stays off there, as Windows' own runs fall back to when it
+        // switches off). The Pathfinder page says what that costs.
         auto* pl = PlayLayer::get();
         if (!pl || !pl->m_level || !pl->m_player1) {
             why = "open the level first";

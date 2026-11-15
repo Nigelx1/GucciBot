@@ -1293,10 +1293,9 @@ namespace gucci::ai::pilot {
     }
 
     std::unique_ptr<job::Job> makePlay(PlayOptions const& options, std::string& why) {
-#if !GB_NATIVE_ENGINE
-        why = "The AI's simulation is Windows-only for now: its model of the level reads GD's Windows memory layout.";
-        return nullptr;
-#else
+        // GucciBot (2026-11-15): off Windows too, without the trigger model (the
+        // World stays off there, as Windows' own runs fall back to when it
+        // switches off). The Pathfinder page says what that costs.
         if (!ready()) {
             why = weightsLine();
             return nullptr;
@@ -1331,7 +1330,6 @@ namespace gucci::ai::pilot {
         s_live.bestPercent = 0.0f;
         s_live.attempts = 0;
         return job;
-#endif
     }
 
     Live const& live() {

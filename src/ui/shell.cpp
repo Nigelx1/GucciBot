@@ -2137,7 +2137,13 @@ namespace gucci::ui {
 
         void pagePathfinder() {
 #if !GB_NATIVE_ENGINE
-        kit::Note("The Pathfinder is Windows-only for now: its model of the level reads GD's Windows memory layout.", Tone::Warn);
+            // GucciBot (2026-11-15): the Pathfinder runs here too, without the
+            // trigger model (absense/world reads GD's Windows memory layout).
+            kit::Note("Untested on this platform. No trigger model here: the Pathfinder can't see what move and rotate triggers "
+                      "will do next, so levels that use them fail more often than on Windows. Search tries "
+                      "inputs in a copy of the game's physics; it isn't a learned AI. The AI engine was trained "
+                      "with the trigger model on, so expect it to play worse here: treat it as a preview.",
+                      Tone::Warn);
 #endif
             kit::BeginCard("Pathfinder", "Finds a way through the level on its own.");
             // Not switched while one runs: that hid the running engine's Stop

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-bi (Mac and Android: the Pathfinder level read takes two trigger fields from their members, not Windows offsets)"
+    "2026-11-15-bj (Mac and phones: the Pathfinder and the AI pilot can start, without the trigger model, marked untested on this platform)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

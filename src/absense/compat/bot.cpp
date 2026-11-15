@@ -100,11 +100,9 @@ namespace {
 }  // namespace
 
 bool absense::requestStart(bool fromBeginning) {
-#if !GB_NATIVE_ENGINE
-    (void)fromBeginning;
-    s_pendingNote = "The Pathfinder is Windows-only for now: its model of the level reads GD's Windows memory layout.";
-    return false;
-#endif
+    // GucciBot (2026-11-15): off Windows too, without the trigger model (the
+    // World stays off there, as Windows' own runs fall back to when it
+    // switches off). The Pathfinder page says what that costs.
     auto* pl = PlayLayer::get();
     if (!pl || !pl->m_player1) {
         s_pendingNote = "Open a level first.";
