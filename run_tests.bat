@@ -1,5 +1,5 @@
 @echo off
-REM Offline tests: the GBR6 sub-tick and TPS sections, Check Macro, Macro Tools, the random teleport's pick, other bots' formats, the menu art's PNG reader, Hitborders' shapes, the AI pilot's networks, Ship Steering's controller and the Frame Editor's rules.
+REM Offline tests: the GBR6 sub-tick and TPS sections, Check Macro, Macro Tools, the random teleport's pick, other bots' formats, the menu art's PNG reader, Share my windows' picture, Hitborders' shapes, the AI pilot's networks, Ship Steering's controller and the Frame Editor's rules.
 
 setlocal
 set VCVARS="C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
@@ -55,6 +55,15 @@ cl /nologo /std:c++20 /EHsc /O2 /MD /I src /I build\_deps\zlib-src /I build\_dep
    /Fe:build\run_art_tests.exe /Fo:build\ || exit /b 1
 
 build\run_art_tests.exe || exit /b 1
+
+REM Share my windows' picture (src/ui/share_draw) and the PNG writer it saves with (png::encode): round
+REM trips through the reader, and sample cards (dark, light, no score) drawn with the menu's fonts, written
+REM to build\share_sample_*.png to look at. zlib as above; stb_truetype is imgui's copy.
+cl /nologo /std:c++20 /EHsc /O2 /MD /I src /I build\_deps\zlib-src /I build\_deps\zlib-build /I build\_deps\imgui-src ^
+   tools\run_share_tests.cpp src\ui\share_draw.cpp src\ui\png.cpp build\_deps\zlib-build\zlibstatic.lib ^
+   /Fe:build\run_share_tests.exe /Fo:build\ || exit /b 1
+
+build\run_share_tests.exe || exit /b 1
 
 REM Hitborders' shapes (src/tools/hitborder_geom): each object's collision shape grown by the player's,
 REM against point-by-point copies of GD's collision tests (rects, rotated boxes, saws, blocks, slopes).

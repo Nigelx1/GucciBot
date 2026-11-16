@@ -8897,6 +8897,31 @@ void FrameWindowAnalyzer::recountUpTo(uint32_t frame) {
     }
 }
 
+// GucciBot (2026-11-15): Share my windows' counts (ui/share), the legend's
+// own: the marks recountUpTo skips are skipped here too.
+FrameWindowTier const* FrameWindowAnalyzer::legendTierFor(
+    FrameWindowMark const& mk) const {
+    if (mk.desynced || mk.unbounded || mk.hidden) return nullptr;
+    return this->displayTierFor(mk);
+}
+
+std::vector<std::pair<FrameWindowTier, int>> FrameWindowAnalyzer::legendTotals()
+    const {
+    std::vector<std::pair<FrameWindowTier, int>> out;
+    for (auto const& tier : this->hudBands())
+        if (tier.showInHud) out.push_back({tier, 0});
+    for (auto const& mk : m_results) {
+        auto const* tier = this->legendTierFor(mk);
+        if (!tier) continue;
+        for (auto& row : out)
+            if (row.first.id == tier->id) {
+                row.second++;
+                break;
+            }
+    }
+    return out;
+}
+
 // GucciBot (2026-10-29): the display was rebuilt mid-level (a look change, an
 // edit to the windows, playback switched on), which wiped the markers the
 // player had passed, and nothing drew them again. The ones from the last few

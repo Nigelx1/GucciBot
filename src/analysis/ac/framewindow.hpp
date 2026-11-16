@@ -408,6 +408,13 @@ class FrameWindowAnalyzer {
     double resultsTps() const { return m_resultsTps > 0.0 ? m_resultsTps : 240.0; }
     std::vector<lstar::Input> precisionInputs(bool cbf = true) const;
     std::string describe() const;
+    // GucciBot (2026-11-15): Share my windows (ui/share). The band a mark is
+    // counted in on the in-level legend (nullptr: the legend doesn't count
+    // it: desynced, unbounded, hidden, or in no band shown), as recountUpTo
+    // counts; and the legend's bands (hudBands: the user's shown bands, or
+    // NaN GD's under Default Look) with each one's count over the whole macro.
+    FrameWindowTier const* legendTierFor(FrameWindowMark const& mk) const;
+    std::vector<std::pair<FrameWindowTier, int>> legendTotals() const;
     std::vector<FrameWindowMark>& editResults() { return m_results; }
     std::vector<FrameWindowMessage>& messages() { return m_messages; }
     void markEdited() {

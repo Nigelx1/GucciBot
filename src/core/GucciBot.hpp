@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-bn (Menu: a search box for the whole menu. Type noclip or a theme name and pick a result to jump to that control, on any page or tab; Ctrl+F jumps to the box)"
+    "2026-11-15-bo (Calculate: Share my windows saves a picture of the macro's frame windows, its bands, tightest clicks and L* score, to the shares folder)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

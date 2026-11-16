@@ -37,6 +37,13 @@ namespace gucci::ui::png {
     // left alone. False, with why, for anything that isn't a whole PNG.
     bool decode(uint8_t const* data, size_t size, Pixels& out, std::string& error);
 
+    // GucciBot (2026-11-15): the other way, for Share my windows (ui/share):
+    // `px` as an RGB PNG (alpha dropped: the picture is opaque) when
+    // `keepAlpha` is false, else RGBA. Each row gets PNG's Sub filter, which
+    // packs flat fills and text on a plain background well. Empty, with why,
+    // for a picture whose size doesn't match its pixels or that zlib refuses.
+    std::vector<uint8_t> encode(Pixels const& px, bool keepAlpha, std::string& error);
+
     // The picture at half its size: each pixel the average of the four it
     // covers, their colors weighted by their alpha (so a clear pixel's color
     // doesn't bleed into an edge) and alpha the plain average. An odd last

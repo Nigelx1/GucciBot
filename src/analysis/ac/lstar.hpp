@@ -35,6 +35,12 @@ struct Result {
 };
 
 double solve(std::vector<Input> inputs, Settings const& settings);
+// GucciBot (2026-11-15): the number Solver comes to, worked out the way it
+// works it (input by input, each solve seeded with the one before), so it
+// matches the Precision card to the last place; solve() seeds once and can
+// land a few thousandths away. For Share my windows (ui/share), on its own
+// thread. 0 when no input has a window.
+double solveLikeSolver(std::vector<Input> inputs, Settings const& settings);
 
 class Solver {
    public:

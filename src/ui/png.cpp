@@ -467,4 +467,73 @@ namespace gucci::ui::png {
         return true;
     }
 
+    namespace {
+
+        void put32(std::vector<uint8_t>& out, uint32_t v) {
+            uint8_t const be[4] = {uint8_t(v >> 24), uint8_t(v >> 16), uint8_t(v >> 8), uint8_t(v)};
+            out.insert(out.end(), be, be + 4);
+        }
+
+        // A PNG chunk: length, type, data, and the CRC of type and data.
+        void putChunk(std::vector<uint8_t>& out, char const* type, uint8_t const* data, size_t size) {
+            put32(out, static_cast<uint32_t>(size));
+            size_t const start = out.size();
+            out.insert(out.end(), type, type + 4);
+            if (size > 0)
+                out.insert(out.end(), data, data + size);
+            uLong const crc = crc32(0L, out.data() + start, static_cast<uInt>(out.size() - start));
+            put32(out, static_cast<uint32_t>(crc));
+        }
+
+    } // namespace
+
+    std::vector<uint8_t> encode(Pixels const& px, bool keepAlpha, std::string& error) {
+        if (px.width <= 0 || px.height <= 0 ||
+            px.rgba.size() != static_cast<size_t>(px.width) * static_cast<size_t>(px.height) * 4) {
+            error = "the picture's size doesn't match its pixels";
+            return {};
+        }
+        size_t const w = static_cast<size_t>(px.width);
+        size_t const h = static_cast<size_t>(px.height);
+        size_t const bpp = keepAlpha ? 4 : 3;
+        size_t const stride = 1 + w * bpp;
+        std::vector<uint8_t> raw(stride * h);
+        std::vector<uint8_t> line(w * bpp);
+        for (size_t y = 0; y < h; ++y) {
+            uint8_t const* src = px.rgba.data() + y * w * 4;
+            for (size_t x = 0; x < w; ++x)
+                for (size_t c = 0; c < bpp; ++c)
+                    line[x * bpp + c] = src[x * 4 + c];
+            uint8_t* dst = raw.data() + y * stride;
+            *dst++ = 1;  // Sub: each byte less the same channel of the pixel to its left
+            for (size_t i = 0; i < line.size(); ++i)
+                dst[i] = static_cast<uint8_t>(line[i] - (i >= bpp ? line[i - bpp] : 0));
+        }
+
+        uLongf packedSize = compressBound(static_cast<uLong>(raw.size()));
+        std::vector<uint8_t> packed(packedSize);
+        if (compress2(packed.data(), &packedSize, raw.data(), static_cast<uLong>(raw.size()), 6) != Z_OK) {
+            error = "zlib couldn't compress the picture";
+            return {};
+        }
+
+        // IHDR: width, height, 8 bits a channel, color type 2 (RGB) or 6
+        // (RGBA), deflate, filtering method 0, no interlace.
+        uint8_t ihdr[13] = {};
+        for (int i = 0; i < 4; ++i) {
+            ihdr[i] = uint8_t(uint32_t(w) >> (24 - 8 * i));
+            ihdr[4 + i] = uint8_t(uint32_t(h) >> (24 - 8 * i));
+        }
+        ihdr[8] = 8;
+        ihdr[9] = keepAlpha ? 6 : 2;
+
+        static constexpr uint8_t kSignature[8] = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+        std::vector<uint8_t> out(kSignature, kSignature + 8);
+        out.reserve(8 + 25 + 12 + packedSize + 12);
+        putChunk(out, "IHDR", ihdr, sizeof(ihdr));
+        putChunk(out, "IDAT", packed.data(), packedSize);
+        putChunk(out, "IEND", nullptr, 0);
+        return out;
+    }
+
 } // namespace gucci::ui::png

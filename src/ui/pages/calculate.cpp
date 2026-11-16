@@ -19,6 +19,7 @@
 #include "ui/pages.hpp"
 #include "ui/kit.hpp"
 #include "ui/look.hpp"
+#include "ui/share.hpp"
 #include "ui/ui.hpp"
 
 #include "analysis/ac/framewindow.hpp"
@@ -187,6 +188,13 @@ namespace gucci::ui::pages {
                     if (kit::Button("Clear", Tone::Bad))
                         g_askClear = true;
                 }
+                // GucciBot (2026-11-15): Share my windows (ui/share.hpp), Nigel's ask of 11-11. On the
+                // row's next line when it wouldn't fit beside the others (a phone's narrow menu).
+                ImGui::SameLine();
+                if (ImGui::GetContentRegionAvail().x <
+                    ImGui::CalcTextSize("Share my windows").x + ImGui::GetStyle().FramePadding.x * 4.f)
+                    ImGui::NewLine();
+                share::button();
                 if (!canRun)
                     kit::Hint("Needs a level open and a macro loaded.");
                 else if (legit::on())
@@ -194,6 +202,7 @@ namespace gucci::ui::pages {
                 else if (!fw.results().empty())
                     kit::Hint("Copy info: the precision and window breakdown in the format NaN uses in video "
                               "descriptions, grouped by your bands.");
+                share::notes();
                 // GucciBot (2026-11-15): a user's ask, after a 7-hour run stopped at about 85% and was
                 // saved with its windows. Only when some clicks have a window and some don't
                 // (FrameWindowAnalyzer::resumePoint); it counts every input without one and keeps the rest.

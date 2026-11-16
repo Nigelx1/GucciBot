@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <mutex>
 #include <thread>
 
 namespace lstar {
@@ -34,13 +35,16 @@ namespace {
 constexpr int ERFC_STEPS = 100000;
 constexpr double ERFC_MAX = 6.0;
 double g_erfc[ERFC_STEPS + 1];
-bool g_erfcReady = false;
+// GucciBot (2026-11-15): built once under a once-flag. Share my windows
+// (ui/share) solves on its own thread, so two threads could otherwise build
+// the table at the same time (and one read it half built).
+std::once_flag g_erfcOnce;
 
 void buildErfcTable() {
-    if (g_erfcReady) return;
-    for (int i = 0; i <= ERFC_STEPS; i++)
-        g_erfc[i] = std::erfc(static_cast<double>(i) / ERFC_STEPS * ERFC_MAX);
-    g_erfcReady = true;
+    std::call_once(g_erfcOnce, [] {
+        for (int i = 0; i <= ERFC_STEPS; i++)
+            g_erfc[i] = std::erfc(static_cast<double>(i) / ERFC_STEPS * ERFC_MAX);
+    });
 }
 
 double fastErfc(double x) {
@@ -234,6 +238,22 @@ double solve(std::vector<Input> inputs, Settings const& settings) {
 
     size_t first = 0;
     return solveAt(p, p.m_weight.size() - 1, first, target, L_MIN);
+}
+
+double solveLikeSolver(std::vector<Input> inputs, Settings const& settings) {
+    if (!order(inputs)) return 0.0;
+
+    buildErfcTable();
+
+    // Solver::start's loop, without the progress and the cancel.
+    Prepared const p = prepare(inputs, settings);
+    double const target =
+        settings.m_targetSeconds > 0.0 ? settings.m_targetSeconds : 86400.0;
+    size_t first = 0;
+    double seed = L_MIN;
+    for (size_t i = 0; i < p.m_weight.size(); i++)
+        seed = solveAt(p, i, first, target, seed);
+    return p.m_weight.empty() ? 0.0 : seed;
 }
 
 Solver* Solver::get() {

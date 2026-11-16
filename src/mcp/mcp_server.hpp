@@ -181,6 +181,8 @@ namespace gucci::mcp {
     void registerUiPressTools(Server& server);
     // gucci_search: the menu's search box, typed into and picked from (search_tool.cpp).
     void registerSearchTools(Server& server);
+    // gucci_share: what Share my windows saved, or why it can't (share_tool.cpp).
+    void registerShareTools(Server& server);
 
     // Who owns the run right now: "render", "analyzer", "pathfinder", or ""
     // for nobody. The driving tools refuse while it isn't "". Defined in
