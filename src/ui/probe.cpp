@@ -696,6 +696,10 @@ namespace gucci::ui::probe {
             for (auto const& w : g_cap.windows) {
                 if (!w.root.empty() || !windowWanted(q.window, w.key))
                     continue;
+                // The Windows layout's page window, unseen off screen while
+                // its page has nothing outside its cards (ui/layout.cpp).
+                if (w.key.starts_with("###gbw_quiet:"))
+                    continue;
                 if (w.rect.Min.x < -0.5f || w.rect.Min.y < -0.5f || w.rect.Max.x > g_cap.display.x + 0.5f ||
                     w.rect.Max.y > g_cap.display.y + 0.5f) {
                     auto j = matjson::Value::object();

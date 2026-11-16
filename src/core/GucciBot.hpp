@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-bo (Calculate: Share my windows saves a picture of the macro's frame windows, its bands, tightest clicks and L* score, to the shares folder)"
+    "2026-11-16-a (Menu: a Windows layout (Settings, Look, Layout): each card in a window of its own under a bar, tiled into columns, saved across restarts; Pages stays the default)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

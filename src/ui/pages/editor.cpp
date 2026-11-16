@@ -20,6 +20,7 @@
 // that index points at.
 
 #include "ui/kit.hpp"
+#include "ui/layout.hpp"
 #include "ui/look.hpp"
 
 #include "absense/glue.hpp"
@@ -1236,17 +1237,31 @@ namespace gucci::ui::pages {
         return nullptr;
     }
 
+    namespace {
+        bool g_keysLive = false;
+    }
+
+    bool editorKeysLive() {
+        return g_keysLive;
+    }
+
     void editor() {
         State& s = st();
         sync(s);
         const char* lock = lockReason();
         // Taken before anything is drawn: the page (or a card in it) has focus.
-        bool const focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows);
+        // In the Windows layout each card is a window of its own, not a child
+        // of the page's, so it asks after the editor's three cards instead.
+        bool const focused = layout::drawingPage()
+                                 ? (layout::cardFocused("Loaded macro") || layout::cardFocused("Timeline") ||
+                                    layout::cardFocused("Inspector"))
+                                 : ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows);
         ImGui::PushID("frame-editor");
         headerCard(s, lock);
         timelineCard(s, lock == nullptr);
         inspectorCard(s, lock == nullptr);
-        if (focused && s.drag == Drag::None)
+        g_keysLive = focused && s.drag == Drag::None;
+        if (g_keysLive)
             shortcuts(s);
         ImGui::PopID();
     }

@@ -183,6 +183,8 @@ namespace gucci::mcp {
     void registerSearchTools(Server& server);
     // gucci_share: what Share my windows saved, or why it can't (share_tool.cpp).
     void registerShareTools(Server& server);
+    // gucci_layout: the menu's Windows layout, for tests (layout_tool.cpp).
+    void registerLayoutTools(Server& server);
 
     // Who owns the run right now: "render", "analyzer", "pathfinder", or ""
     // for nobody. The driving tools refuse while it isn't "". Defined in

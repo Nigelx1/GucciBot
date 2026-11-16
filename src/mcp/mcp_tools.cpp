@@ -3434,6 +3434,7 @@ namespace gucci::mcp {
         registerUiPressTools(server);
         registerSearchTools(server);
         registerShareTools(server);
+        registerLayoutTools(server);
     }
 
 } // namespace gucci::mcp

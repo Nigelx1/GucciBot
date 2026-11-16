@@ -16,6 +16,7 @@ namespace gucci::ui::pages {
     void themes();       // pages/themes.cpp: theme picker + custom theme editor
     void clickSounds();  // pages/clicksounds.cpp
     void editor();       // pages/editor.cpp: Frame Editor (timeline of the loaded macro's inputs)
+    bool editorKeysLive();  // ... its shortcuts were listening at its last draw (Assistant Access: gucci_layout)
     void calculate();    // pages/calculate.cpp: Calculate (frame-window analyzer) settings + run
     void macroTools();   // pages/macro_tools.cpp: Macro Tools (diff, trim, merge, metadata, TPS changes)
     void editorTools();  // pages/editor_tools.cpp: Replace All and Macro Buffing (level editor)

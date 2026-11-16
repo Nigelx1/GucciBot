@@ -74,7 +74,9 @@ namespace gucci::ui::kit {
     bool InputInt(const char* id, int* v, int step = 1);
     bool InputText(const char* id, char* buf, size_t size, const char* placeholder = nullptr,
                    ImGuiInputTextFlags flags = 0);
-    bool InputText(const char* id, std::string* s, const char* placeholder = nullptr, ImGuiInputTextFlags flags = 0);
+    // width: 0 is the rest of the line.
+    bool InputText(const char* id, std::string* s, const char* placeholder = nullptr, ImGuiInputTextFlags flags = 0,
+                   float width = 0.f);
     // width: 0 = fit the label, < 0 = fill the rest of the line, > 0 = exact.
     bool Button(const char* label, Tone tone = Tone::Plain, float width = 0.f);
     bool Color(const char* id, ImVec4* c, bool alpha = true);

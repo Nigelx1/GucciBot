@@ -149,9 +149,14 @@ namespace gucci::ui::pages {
                        "can also sit loose in the pack's own folder. A pack with player1 and player2 folders "
                        "gives each player their own sounds. Packs made for other bots usually work as they are.");
         kit::RowBegin("", nullptr);
+        ImGuiStyle const& style = ImGui::GetStyle();
+        bool const oneLine = ImGui::CalcTextSize("Open the clickpacks folder").x + ImGui::CalcTextSize("Refresh").x +
+                                 style.FramePadding.x * 4.f + style.ItemSpacing.x <=
+                             kit::Avail();
         if (kit::Button("Open the clickpacks folder"))
             geode::utils::file::openFolder(clicks::packsDir());
-        ImGui::SameLine();
+        if (oneLine)
+            ImGui::SameLine();
         if (kit::Button("Refresh"))
             clicks::refresh();
         kit::RowEnd();

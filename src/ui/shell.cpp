@@ -12,6 +12,7 @@
 #include "ui/brand.hpp"
 #include "ui/cursor.hpp"
 #include "ui/kit.hpp"
+#include "ui/layout.hpp"
 #include "ui/look.hpp"
 #include "ui/pages.hpp"
 #include "ui/press.hpp"
@@ -187,6 +188,7 @@ namespace gucci::ui {
             look().textScale = static_cast<float>(mod->getSavedValue<double>("ui_text_scale", 1.0));
             look().effects = mod->getSavedValue<bool>("ui_effects", true);
             look().accentCycle = mod->getSavedValue<bool>("theme_glow_cycle", false);
+            layout::load();
 #if defined(GEODE_IS_MOBILE)
             look().menuScale = static_cast<float>(mod->getSavedValue<double>("ui_menu_scale", 1.0));
 #endif
@@ -1242,6 +1244,7 @@ namespace gucci::ui {
             }
             ImGui::EndDisabled();
             kit::RowBegin("Shift frames", "If a converted macro dies early, try one frame either way");
+            ImGui::SetNextItemWidth(kit::Avail());
             ImGui::SliderInt("##convertshift", &g_convertShift, -3, 3, g_convertShift == 0 ? "as saved" : "%+d");
             kit::RowEnd();
             // Each file's format, found once (nullptr: none).
@@ -1791,8 +1794,10 @@ namespace gucci::ui {
                 {"Editor Tools", pages::editorTools},
             };
             // The search's index pass: every tab's contents, one after the
-            // other (a tab bar would show only the first).
-            if (search::indexing()) {
+            // other (a tab bar would show only the first). The Windows layout
+            // too: every tab's cards are windows of their own, all one click
+            // away.
+            if (search::indexing() || layout::drawingPage()) {
                 for (auto const& t : kTabs) {
                     ImGui::PushID(t.name);
                     search::tabBegin(t.name);
@@ -1994,7 +1999,9 @@ namespace gucci::ui {
             // gone after a restart (polish item 94).
             bool const badName = s_presetName.find_first_of("\\/:*?\"<>|") != std::string::npos;
             kit::RowBegin("Name", badName ? "Give it a name without \\ / : * ? \" < > |" : nullptr);
-            if (kit::InputText("presetname", &s_presetName, "preset name"))
+            float const saveW = ImGui::CalcTextSize("Save").x + ImGui::GetStyle().FramePadding.x * 2.f;
+            if (kit::InputText("presetname", &s_presetName, "preset name", 0,
+                               std::max(60.f, kit::Avail() - saveW - ImGui::GetStyle().ItemSpacing.x)))
                 s_presetFailed = false;
             ImGui::SameLine();
             ImGui::BeginDisabled(s_presetName.empty() || badName);
@@ -2739,10 +2746,11 @@ namespace gucci::ui {
         bool g_brrrWasOn = false;
         double g_brrrStart = 0.0; // ImGui time the drop started
 
-#if !defined(GEODE_IS_MOBILE)
-        // The menu inside the game's window (drawMain): the gap it keeps from
-        // the edges, and the window size it last made sure it fits.
+        // The gap the menu keeps from the game window's edges (drawMain, and
+        // the Windows layout's bar, which every platform compiles).
         constexpr float kMenuMargin = 8.f;
+#if !defined(GEODE_IS_MOBILE)
+        // The window size the menu (drawMain) last made sure it fits.
         ImVec2 g_menuFitFor{0.f, 0.f};
 #endif
 
@@ -2851,6 +2859,26 @@ namespace gucci::ui {
             bool compact = g_compact;
             if (kit::SwitchRow("Compact mode", "A small quick-controls window instead of this one", &compact))
                 setCompactMode(compact);
+            // Pages (this window) or Windows (each card its own window, with
+            // a bar for the pages and the search box). Both draw the same
+            // cards, so every switch here works the same in either.
+            if (layout::available()) {
+                int lay = layout::windows() ? 1 : 0;
+                const char* const kLayouts[] = {"Pages", "Windows"};
+                if (kit::ChoiceRow("Layout", "Windows: every card in its own window you can drag and collapse", &lay,
+                                   kLayouts, 2))
+                    layout::setWindows(lay == 1);
+                if (layout::windows()) {
+                    kit::RowBegin("Window places", "Puts every window back in its column, none collapsed");
+                    if (kit::Button("Tile them again", Tone::Plain))
+                        layout::resetPlaces();
+                    kit::RowEnd();
+                }
+            } else {
+                kit::RowBegin("Layout", "Phones keep Pages: the windows need a mouse");
+                kit::Label("Pages", Tone::Muted);
+                kit::RowEnd();
+            }
             kit::EndCard();
 
 #if defined(GEODE_IS_IOS)
@@ -3542,6 +3570,153 @@ namespace gucci::ui {
                 setOpen(false);
         }
 
+        // The Windows layout (ui/layout.hpp; Settings > Look > Layout): a bar
+        // across the top with the theme's name, the status chips, the search
+        // box and a button per page, and every card of each page shown there
+        // in a window of its own (the kit puts it there). Pages draw exactly
+        // as in drawMain; only where their cards go differs.
+        void drawWindows() {
+            // A search result picked last frame: its page, shown.
+            if (auto const picked = search::takePick())
+                for (int i = 0; i < kPageCount; ++i)
+                    if (kPages[i].title == *picked && !(kPages[i].hidden && kPages[i].hidden())) {
+                        g_page = i;
+                        layout::setShown(kPages[i].title, true);
+                        break;
+                    }
+            // The page changed some other way (Assistant Access, the layout
+            // just put on): shown too.
+            static int s_seenPage = -1;
+            if (g_page != s_seenPage) {
+                s_seenPage = g_page;
+                layout::setShown(kPages[g_page].title, true);
+            }
+            auto const& pal = look().pal;
+            ImGuiIO const& io = ImGui::GetIO();
+            ImGuiStyle const& style = ImGui::GetStyle();
+            bool open = true;
+
+            // The bar
+            float const barW = std::round(std::max(200.f, std::min(io.DisplaySize.x - 2.f * kMenuMargin, 1040.f)));
+            ImGui::SetNextWindowPos(ImVec2(std::round(io.DisplaySize.x * 0.5f), kMenuMargin), ImGuiCond_Always,
+                                    ImVec2(0.5f, 0.f));
+            ImGui::SetNextWindowSize(ImVec2(barW, 0.f), ImGuiCond_Always);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.f, 7.f));
+            bool const barDrawn = ImGui::Begin("###gucci_bar", nullptr,
+                                               ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                                                   ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
+                                                   ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings |
+                                                   ImGuiWindowFlags_NoFocusOnAppearing);
+            ImGui::PopStyleVar();
+            ImGuiWindow* bar = ImGui::GetCurrentWindow();
+            if (barDrawn) {
+                {
+                    UseFont f(Font::Strong);
+                    ImGui::PushStyleColor(ImGuiCol_Text, pal.accent);
+                    ImGui::AlignTextToFramePadding();
+                    ImGui::TextUnformatted(themes::active().name.c_str());
+                    ImGui::PopStyleColor();
+                }
+                ImGui::SameLine();
+                statusBar();
+                // The search box, Pages and Close at the end of the line (or
+                // on a line of their own when it's too short).
+                auto const buttonW = [&](const char* label) {
+                    return ImGui::CalcTextSize(label).x + style.FramePadding.x * 2.f;
+                };
+                float const boxW = std::round(std::clamp(ImGui::GetContentRegionAvail().x * 0.3f, 130.f, 240.f));
+                float const tail = boxW + buttonW("Pages") + buttonW("Close") + style.ItemSpacing.x * 2.f;
+                ImGui::SameLine();
+                float const room = ImGui::GetContentRegionAvail().x;
+                if (room >= tail)
+                    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + room - tail);
+                else
+                    ImGui::NewLine();
+                search::menuFocused(layout::ownsFocus());
+                search::field(boxW);
+                ImGui::SameLine();
+                if (kit::Button("Pages", Tone::Muted))
+                    layout::setWindows(false);
+                ImGui::SameLine();
+                if (kit::Button("Close", Tone::Muted))
+                    open = false;
+                // A button per page the sidebar lists: lit while its windows
+                // show; a click shows or hides them.
+                float const right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
+                bool first = true;
+                for (int i = 0; i < kPageCount; ++i) {
+                    if (kPages[i].hidden && kPages[i].hidden())
+                        continue;
+                    const char* title = kPages[i].title;
+                    bool const on = layout::shown(title);
+                    if (!first && ImGui::GetItemRectMax().x + style.ItemSpacing.x + buttonW(title) <= right)
+                        ImGui::SameLine();
+                    first = false;
+                    if (kit::Button(title, on ? Tone::Accent : Tone::Plain)) {
+                        layout::setShown(title, !on);
+                        if (!on) {
+                            g_page = i;
+                            s_seenPage = i;
+                        }
+                    }
+                }
+            }
+            float const barBottom = bar->Pos.y + bar->Size.y;
+            float const barRight = bar->Pos.x + bar->Size.x;
+            ImGui::End();
+
+            // What the search box finds, under the bar at its right end.
+            if (search::showing()) {
+                float const w = std::round(std::min(380.f, io.DisplaySize.x - 2.f * kMenuMargin));
+                ImGui::SetNextWindowPos(ImVec2(std::max(kMenuMargin, barRight - w), barBottom + 6.f), ImGuiCond_Always);
+                ImGui::SetNextWindowSize(ImVec2(w, 0.f), ImGuiCond_Always);
+                ImGui::SetNextWindowSizeConstraints(
+                    ImVec2(w, 0.f), ImVec2(w, std::max(120.f, io.DisplaySize.y - barBottom - 6.f - kMenuMargin)));
+                if (ImGui::Begin("###gucci_search_results", nullptr,
+                                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                                     ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
+                                     ImGuiWindowFlags_NoFocusOnAppearing))
+                    search::results(false);
+                ImGui::End();
+            }
+
+            // Every shown page's cards, in the sidebar's order, tiled from
+            // under the bar. A result just picked is found, brought forward
+            // and lit up as its page draws.
+            layout::frameBegin(barBottom + 8.f);
+            search::setFreeWindows(true);
+            std::string const jumpPage = search::jumpPage();
+            bool jumpDrawn = false;
+            for (int i = 0; i < kPageCount; ++i) {
+                if ((kPages[i].hidden && kPages[i].hidden()) || !layout::shown(kPages[i].title))
+                    continue;
+                PageLook const pageLook(kPages[i].draw == pages::jupiterTrainer);
+                layout::pageBegin(kPages[i].title);
+                bool const live = jumpPage == kPages[i].title;
+                if (live) {
+                    search::livePageBegin(kPages[i].title);
+                    jumpDrawn = true;
+                }
+                kPages[i].draw();
+                if (live)
+                    search::livePageEnd();
+                layout::pageEnd();
+            }
+            // The picked page isn't showing (hidden again): the jump ends.
+            if (!jumpPage.empty() && !jumpDrawn) {
+                search::livePageBegin("");
+                search::livePageEnd();
+            }
+            search::setFreeWindows(false);
+            layout::frameEnd();
+            // The bar and the results stay in front of the cards.
+            for (const char* name : {"###gucci_bar", "###gucci_search_results"})
+                if (ImGuiWindow* w = ImGui::FindWindowByName(name); w && w->WasActive)
+                    ImGui::BringWindowToDisplayFront(w);
+            if (!open)
+                setOpen(false);
+        }
+
         // The quick controls while you play: the mode, a saved macro to load,
         // its name, Save and Calculate, the tick rate and speed, and frame
         // stepping in a level. Everything acts as it does in the full menu.
@@ -3919,7 +4094,10 @@ namespace gucci::ui {
             } else {
                 // Before drawMain reads the page (its look, its title).
                 leaveHiddenPage();
-                drawMain();
+                if (layout::windows())
+                    drawWindows();
+                else
+                    drawMain();
             }
             drawSearchIndex();
         }

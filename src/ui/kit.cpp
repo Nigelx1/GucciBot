@@ -1,5 +1,6 @@
 #include "ui/kit.hpp"
 #include "hacks/legit.hpp"
+#include "ui/layout.hpp"
 #include "ui/probe.hpp"
 #include "ui/search.hpp"
 #include "ui/state.hpp"
@@ -69,6 +70,9 @@ namespace gucci::ui::kit {
 
     void BeginCard(const char* title, const char* caption) {
         auto const& pal = look().pal;
+        // The Windows layout (ui/layout.hpp): a page's card in a window of
+        // its own, the card itself drawn inside it as here.
+        bool const own = layout::cardBegin(title);
         ImGui::PushID(title ? title : "card");
         ImGui::PushStyleColor(ImGuiCol_ChildBg, pal.surface);
         ImGui::PushStyleColor(ImGuiCol_Border, outline(pal));
@@ -84,7 +88,8 @@ namespace gucci::ui::kit {
         if (search::recording())
             search::card(title, caption);
         if (title && *title) {
-            {
+            // In a window of its own the title bar says it.
+            if (!own) {
                 UseFont f(Font::Strong);
                 ImGui::TextUnformatted(title);
             }
@@ -123,14 +128,20 @@ namespace gucci::ui::kit {
         if (probe::on())
             probe::endCard();
         ImGui::PopID();
-        ImGui::Dummy(ImVec2(0.f, 3.f));
+        if (!layout::cardEnd())
+            ImGui::Dummy(ImVec2(0.f, 3.f));
     }
 
     void Gap(float lines) {
+        // Between cards in their own windows, nothing to space out.
+        if (layout::atPageLevel())
+            return;
         ImGui::Dummy(ImVec2(0.f, ImGui::GetTextLineHeight() * std::max(0.f, lines)));
     }
 
     void Divider() {
+        if (layout::atPageLevel())
+            return;
         ImVec2 const p = ImGui::GetCursorScreenPos();
         float const w = Avail();
         ImGui::GetWindowDrawList()->AddLine(ImVec2(p.x, p.y + 4.f), ImVec2(p.x + w, p.y + 4.f), u32(look().pal.line));
@@ -533,9 +544,9 @@ namespace gucci::ui::kit {
         return changed;
     }
 
-    bool InputText(const char* id, std::string* s, const char* placeholder, ImGuiInputTextFlags flags) {
+    bool InputText(const char* id, std::string* s, const char* placeholder, ImGuiInputTextFlags flags, float width) {
         ImGui::PushID(id);
-        ImGui::SetNextItemWidth(Avail());
+        ImGui::SetNextItemWidth(width > 0.f ? width : Avail());
         flags |= ImGuiInputTextFlags_CallbackResize;
         bool const changed = placeholder
                                  ? ImGui::InputTextWithHint("##text", placeholder, s->data(), s->capacity() + 1, flags,
@@ -652,7 +663,14 @@ namespace gucci::ui::kit {
 
     bool ChoiceRow(const char* label, const char* hint, int* index, const char* const* options, int count) {
         RowBegin(label, hint);
-        bool const changed = Choice("##choice", index, options, count);
+        // Too narrow for every option's name in its part (a card's own
+        // window in the Windows layout, a small screen): a dropdown instead.
+        float widest = 0.f;
+        for (int i = 0; i < count; ++i)
+            widest = std::max(widest, ImGui::CalcTextSize(options[i]).x);
+        bool const fits = count <= 0 || Avail() / static_cast<float>(count) >= widest + 8.f;
+        bool const changed = fits ? Choice("##choice", index, options, count)
+                                  : Dropdown("##choice", index, options, count);
         RowEnd();
         return changed;
     }

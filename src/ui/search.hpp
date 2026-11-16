@@ -82,6 +82,17 @@ namespace gucci::ui::search {
     // Around the live page's draw (the full menu's ##page child).
     void livePageBegin(const char* title);
     void livePageEnd();
+    // The Windows layout (ui/layout.hpp): the shell draws several pages, so
+    // it calls livePageBegin/End around the picked one only (jumpPage, "" for
+    // no jump going), and "in view" is the screen inside the card's own
+    // window (setFreeWindows, around the pages). seekingCard: a card on the
+    // jump's way (its window opens and comes to the front). menuFocused: for
+    // the next field() this frame, whether any of the layout's windows has the
+    // keyboard (Ctrl+F's check), in place of the window the box is in.
+    std::string jumpPage();
+    void setFreeWindows(bool on);
+    bool seekingCard(std::string const& page, std::string const& title);
+    void menuFocused(bool focused);
     // A page to switch to after a pick (its title), once.
     std::optional<std::string> takePick();
     // A pick from Compact Mode wants the full menu.

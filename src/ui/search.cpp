@@ -92,6 +92,11 @@ namespace gucci::ui::search {
         bool g_clearPending = false;
         bool g_focusPending = false;
         int g_menuFocusedFrame = -100;  // the last frame the box was drawn in a focused menu
+        // The Windows layout (ui/layout.hpp): the menu is many windows, and
+        // the jump's view is the card's own window, not the page's.
+        bool g_free = false;
+        int g_focusOverrideFrame = -100;
+        bool g_focusOverride = false;
 
         // ---- a jump
 
@@ -644,6 +649,46 @@ namespace gucci::ui::search {
         resetDrawState("");
     }
 
+    namespace {
+        // What counts as in view for something found: the page's scrolling
+        // child, or (Windows layout) the screen, inside the card's own window.
+        bool viewFor(Found const& f, ImRect* view) {
+            if (!g_free) {
+                if (!g_pageWindow)
+                    return false;
+                *view = g_pageWindow->InnerClipRect;
+                return true;
+            }
+            ImVec2 const display = ImGui::GetIO().DisplaySize;
+            *view = ImRect(ImVec2(0.f, 0.f), display);
+            if (f.window && f.window->RootWindow)
+                view->ClipWith(f.window->RootWindow->InnerClipRect);
+            return true;
+        }
+    } // namespace
+
+    void setFreeWindows(bool on) {
+        g_free = on;
+    }
+
+    void menuFocused(bool focused) {
+        g_focusOverride = focused;
+        g_focusOverrideFrame = ImGui::GetFrameCount();
+    }
+
+    std::string jumpPage() {
+        return g_jump.phase == "seeking" || g_jump.phase == "found" ? g_jump.page : std::string();
+    }
+
+    bool seekingCard(std::string const& page, std::string const& title) {
+        if (g_jump.phase != "seeking" || g_jump.page != page)
+            return false;
+        for (size_t i = 0; i < g_jump.labels.size() && i < g_jump.cards.size(); ++i)
+            if (g_jump.cards[i] && g_jump.labels[i] == title)
+                return true;
+        return false;
+    }
+
     void livePageBegin(const char* title) {
         g_pageWindow = ImGui::GetCurrentWindow();
         std::string const page = title ? title : "";
@@ -675,8 +720,8 @@ namespace gucci::ui::search {
             // Where the highlight is now, for Assistant Access's answer.
             if (g_jump.shown >= 0 && (size_t)g_jump.shown < g_jump.found.size()) {
                 auto const& f = g_jump.found[(size_t)g_jump.shown];
-                if (f.valid && g_pageWindow) {
-                    ImRect const view = g_pageWindow->InnerClipRect;
+                ImRect view;
+                if (f.valid && viewFor(f, &view)) {
                     g_jump.shownRect = f.rect;
                     g_jump.inView = f.rect.Max.y > view.Min.y && f.rect.Min.y < view.Max.y;
                 }
@@ -705,9 +750,10 @@ namespace gucci::ui::search {
         }
         auto const& f = g_jump.found[(size_t)best];
         bool const isCard = g_jump.cards[(size_t)best];
-        ImRect view = g_pageWindow ? g_pageWindow->InnerClipRect : ImRect();
+        ImRect view;
+        bool const hasView = viewFor(f, &view);
         bool const fits = f.rect.GetHeight() <= view.GetHeight();
-        bool const inView = g_pageWindow && f.rect.Min.y >= view.Min.y - 1.f &&
+        bool const inView = hasView && f.rect.Min.y >= view.Min.y - 1.f &&
                             (fits ? f.rect.Max.y <= view.Max.y + 1.f : f.rect.Min.y <= view.Min.y + view.GetHeight() * 0.5f);
         // A card skipped (scrolled out) is scrolled to first; what's in it
         // is laid out the frame after, and the jump goes on to that.
@@ -770,7 +816,9 @@ namespace gucci::ui::search {
         auto* g = ImGui::GetCurrentContext();
         // Ctrl+F puts the cursor in it, when nothing else is being typed in
         // and the menu has the keyboard (its window or a child is focused).
-        bool const menuFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
+        bool const menuFocused = ImGui::GetFrameCount() == g_focusOverrideFrame
+                                     ? g_focusOverride
+                                     : ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
         g_menuFocusedFrame = menuFocused ? ImGui::GetFrameCount() : -100;
         if (!ImGui::GetIO().WantTextInput && ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F, false) &&
             menuFocused)
@@ -780,10 +828,9 @@ namespace gucci::ui::search {
             g_focusPending = false;
         }
         ImGui::PushID("##gucci_search");
-        ImGui::SetNextItemWidth(width > 0.f ? width : kit::Avail());
         // Escape empties it (and, empty, lets go); Enter picks the first result.
         ImGuiInputTextFlags const flags = ImGuiInputTextFlags_EscapeClearsAll | ImGuiInputTextFlags_EnterReturnsTrue;
-        bool const enter = kit::InputText("box", &g_query, "Search the menu", flags);
+        bool const enter = kit::InputText("box", &g_query, "Search the menu", flags, width > 0.f ? width : 0.f);
         g_fieldId = g->LastItemData.ID;
         bool const active = g->ActiveId == g_fieldId;
         // A fresh index each time it's clicked into (a second or two apart),
