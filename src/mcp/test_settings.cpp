@@ -437,6 +437,14 @@ namespace gucci::testset {
                              [](matjson::Value const& val, bool) {
                                  absense::setStartStop(wantBool("pf_start_stop", val));
                              }});
+                // GucciBot (2026-11-16, pf2 lane): a frozen slice may take up
+                // to four times the game's own frame cost (at most 200 ms) on
+                // a level whose frames are slow; off by default.
+                v.push_back({"pf_frozen_long", "bool", Store::Memory,
+                             [] { return matjson::Value(absense::frozenLong()); },
+                             [](matjson::Value const& val, bool) {
+                                 absense::setFrozenLong(wantBool("pf_frozen_long", val));
+                             }});
                 // The cell-by-cell write-back on a level with rows (on by
                 // default); off for the old pass of everything, to compare.
                 v.push_back({"pf_pending_cells", "bool", Store::Memory,

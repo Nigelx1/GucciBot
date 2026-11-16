@@ -165,6 +165,13 @@ namespace absense {
     // the test switch pf_start_stop, this launch only, turns it on).
     bool startStop();
     void setStartStop(bool on);
+    // GucciBot (2026-11-16, pf2 lane): while the game is frozen waiting for a
+    // decision on a level whose own frames are slow, a slice may take up to
+    // four times what the game's frame costs (at most 200 ms), so the search
+    // gets about four fifths of the wall clock instead of half or less (off by
+    // default: the test switch pf_frozen_long, this launch only, turns it on).
+    bool frozenLong();
+    void setFrozenLong(bool on);
     // ... and its kill switch, never saved either (gucci_test_set
     // pf_pending_cells, on by default): on a level with rows of sections
     // (ORBIT, Heliopolis) a run writes back what the real game moved a

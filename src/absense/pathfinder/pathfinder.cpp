@@ -132,6 +132,11 @@ constexpr double kFrameBudgetMs = 33.0;
 constexpr double kLiveFrameShare = 0.5;
 // Never cut a slice below this: under it the search makes no progress at all.
 constexpr double kMinBudgetMs = 2.0;
+// GucciBot (2026-11-16, pf2 lane; pf_frozen_long): while frozen, a slice of up
+// to this many times the game's own frame cost, never longer than the second
+// constant (the frozen screen still redraws about five times a second then).
+constexpr double kFrozenLongShare = 4.0;
+constexpr double kFrozenLongMaxMs = 200.0;
 // What one round on the graphics card is sized from. Fixed on purpose: the
 // pacing budget must never reach the decisions, or changing how the work is
 // spread over frames would change which ideas get scored. This is what
@@ -1049,6 +1054,20 @@ void AbsensePathfinder::tick() {
             // changes, only how fast it is reached (the budgets that decide are
             // simulated ticks and fixed card rounds, see kGpuTargetMs).
             if (absense::frozenShare()) m_budgetMs = std::max(m_budgetMs, std::clamp(gameMs, kMinBudgetMs, cap));
+            // GucciBot (2026-11-16, pf2 lane; the test switch pf_frozen_long):
+            // on a level whose own frames are slow the slice may take up to
+            // kFrozenLongShare times the frame's cost, past the setting, up to
+            // kFrozenLongMaxMs. GRIEF's frames cost 46-132 ms (457 ms at its
+            // heaviest kept-start decision) against 33 ms slices: about 30% of
+            // a 40-minute run was the game's own frames while it waited. With
+            // four times the frame the search gets about 80% of the wall clock
+            // (30% on a 457 ms frame instead of 7%) and the frozen screen still
+            // redraws at least four times a second. A level whose frames cost
+            // a quarter of the setting or less is unchanged. Nothing decided
+            // reads the clock (see pf_frozen_share above), so only how fast a
+            // decision is reached changes.
+            if (absense::frozenLong())
+                m_budgetMs = std::max(m_budgetMs, std::clamp(gameMs * kFrozenLongShare, kMinBudgetMs, kFrozenLongMaxMs));
         }
     }
     const double budget = m_budgetMs / 1000.0;

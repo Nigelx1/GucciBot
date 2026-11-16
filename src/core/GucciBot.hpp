@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-i (Pathfinder test switch pf_start_stop (off): a death within a quarter second of the search start that nothing gets past stops the run instead of looping)"
+    "2026-11-16-j (Pathfinder test switch pf_frozen_long (off): on levels with slow frames the search may think longer while the game waits)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
