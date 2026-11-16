@@ -36,6 +36,8 @@
 - **The mouse cursor shows while the menu is open** (Windows), mid-level too, where GD hides it. When the menu closes, it goes back to what GD wants then: hidden in a level, held in the window with Lock Cursor on, shown when paused or outside a level. *Checked in a test game through GD's own cursor state; whether the arrow is drawn and moves, alt-tab and fullscreen not seen yet.*
 - **A new logo**, the iced cone. It replaces the old photo everywhere. It's in Geode's mod list (GBot shows its own logo there while it's the theme), at the top of the menu's sidebar, and on the pause-menu button on phones and Mac.
 - **yuv444p renders** (Render > Video > Pixel format): the same BT.709 colors as yuv420p, with full color detail instead of color at quarter size, so thin colored edges stay sharp. *Checked in a test game.*
+- **Search the menu.** A box on every page's title line, and at the top of Compact Mode. Type noclip, a theme's name or an old name such as path preview, and pick a result: the menu opens that page and tab, scrolls to the control and outlines it for a moment. A setting under a switch that's off lights up that switch. Ctrl+F jumps to the box, Enter picks the first result, and Escape or Back clears it. Keys typed in it never reach the game or your hotkeys. *Checked in a test game on Windows; not tried on a phone or a Mac yet.*
+- **Share my windows** (the Calculate card, next to Copy info): saves a picture of the macro's frame windows to the `shares` folder, in your theme's colors: the level and macro, the legend's bands with counts, the 8 tightest windows and the L* score. *Checked in a test game on Windows; not tried on a phone or a Mac yet.*
 
 ### Changed
 
