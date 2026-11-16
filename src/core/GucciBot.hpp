@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-r (Pathfinder: pf_fork_jump (off) drives into a skipped portal only far enough to live past it, not past the old dead end, and aims where a stacked speed and mode portal overlap)"
+    "2026-11-16-s (Pathfinder: the fork jump (pf_fork_jump) is on by default: a dead end the search cannot pass sends it back to a mode portal the path skipped)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

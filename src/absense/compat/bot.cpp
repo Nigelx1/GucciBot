@@ -651,9 +651,11 @@ void absense::setProbeReal(bool on) {
 }
 
 namespace {
-// GucciBot (2026-11-16, pf2 lane): off by default until the cold regression
-// says it helps (see pathfinder.cpp, escalate(): the route fork).
-bool g_forkJump = false;
+// GucciBot (2026-11-16, pf2 lane; on by default since the pf3 lane): see
+// pathfinder.cpp, escalate(): the route fork. With the drive fix (pf3) Forest
+// Temple went from 83.99% to 100% cold, and the seven regression levels made
+// the same decisions with it on as off (the rule never acted there).
+bool g_forkJump = true;
 }
 
 bool absense::forkJump() {
