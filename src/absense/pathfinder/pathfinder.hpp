@@ -298,6 +298,18 @@ public:
         bool rescue = false;
         bool rescueLeg = false;
         float rescueX = 0.0f;
+        // GucciBot (2026-11-15, pf lane): where this decision's thinking time
+        // went, a stage at a time (Stage's order, then the set-up slice), and
+        // in how many slices. A slice counts toward the stage it began in.
+        // Only for the log line of a slow decision (see decide): nothing reads
+        // it to decide anything.
+        double stageSec[9] = {};
+        int slices = 0;
+        // ... and the frames it spanned: what the game's own share of each
+        // cost (noteFrameCost) and what slice each was given (m_budgetMs).
+        int frames = 0;
+        double gameMsSum = 0.0;
+        double budgetMsSum = 0.0;
         // Where the search ran from and its key in the run memo (see memoStart).
         const Trajectory::SimStart* searchMemoFrom = nullptr;
         std::pair<uint64_t, uint64_t> searchKey{0, 0};
@@ -421,6 +433,7 @@ public:
 
     // Search
     void decide();
+    void logSlowDecision(const Decision& d, int bucket, double slice);
     void buildCandidates(std::vector<Candidate>& out, bool held, int horizon);
     void buildSteeredCandidates(std::vector<Candidate>& out, bool held, int horizon);
     // GucciBot (step 3): what a route leg search came back with - its ideas, or

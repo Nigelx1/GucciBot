@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-bj (Mac and phones: the Pathfinder and the AI pilot can start, without the trigger model, marked untested on this platform)"
+    "2026-11-15-bk (Pathfinder log: a decision that takes over 30 seconds says where its time went, what the game frames cost and what time each frame gave the search)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

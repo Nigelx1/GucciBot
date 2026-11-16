@@ -1012,6 +1012,12 @@ void AbsensePathfinder::tick() {
     m_forcedThisSlice = false;  // one forced unit per slice, not one per loop
     m_unitTimed = false;        // nothing of the last slice is still being timed
     m_stats.budgetMs = m_budgetMs;
+    if (m_decision.active) {
+        // GucciBot (2026-11-15, pf lane): for a slow decision's log line.
+        m_decision.frames++;
+        m_decision.gameMsSum += std::max(m_gameMs, m_gameMsAvg);
+        m_decision.budgetMsSum += m_budgetMs;
+    }
     m_deadline = frameStart + std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(budget));
 
     while (isRunning() && secondsSince(frameStart) < budget) {
@@ -3087,17 +3093,59 @@ void AbsensePathfinder::driveHandoff(Decision& d) {
                             d.tick, d.driveGateX, d.driveWhat, tried));
 }
 
+// GucciBot (2026-11-15, pf lane): a decision (or one player's pass of a
+// two-player one) that took over 30 s says where its time went: GRIEF had
+// single decisions of 205-367 s among ones of 7-25 s, and the log could not
+// say which part. Thinking is the slices' time, a stage at a time (each slice
+// counts toward the stage it began in; `slice` is the one still running, in
+// `bucket`); the rest of the wall clock went on the game's frames in between.
+// Logging only: nothing here decides anything.
+void AbsensePathfinder::logSlowDecision(const Decision& d, int bucket, double slice) {
+    const double took = secondsSince(d.began);
+    if (took <= 30.0) return;
+    double sec[9];
+    for (int i = 0; i < 9; i++) sec[i] = d.stageSec[i];
+    sec[std::clamp(bucket, 0, 8)] += slice;
+    double thinking = 0.0;
+    for (double v : sec) thinking += v;
+    static const char* kStageNames[9] = {"route legs",  "steered ideas", "card", "card's best", "search",
+                                         "other ideas", "verdict",       "trim", "set-up"};
+    std::string parts;
+    for (int i = 0; i < 9; i++) {
+        if (sec[i] < 0.05) continue;
+        if (!parts.empty()) parts += ", ";
+        parts += fmt::format("{} {:.1f} s", kStageNames[i], sec[i]);
+    }
+    const int frames = std::max(1, d.frames);
+    log("tick %llu: this decision took %.1f s, %.1f s of it thinking in %d slices (%s); %d frames, the game's own "
+        "share %.1f ms a frame, slices given %.1f ms a frame; %zu ideas, %zu judged, %d card rounds%s%s",
+        (unsigned long long)d.tick, took, thinking, d.slices + 1, parts.c_str(), d.frames, d.gameMsSum / frames,
+        d.budgetMsSum / frames, d.candidates.size(), d.tried.size(), d.gpuRound,
+        d.pair ? (d.player2 ? ", player 2's pass" : ", player 1's pass") : "", m_probe.active ? ", from a kept start" : "");
+}
+
 void AbsensePathfinder::decide() {
     auto* bot = Bot::get();
     auto* pl = PlayLayer::get();
     if (!pl) return;
     Decision& d = m_decision;
     const auto sliceStart = std::chrono::steady_clock::now();
+    // GucciBot (2026-11-15, pf lane): ... and toward the stage this slice
+    // began in (8: the set-up), for a slow decision's log line (Decision::
+    // stageSec). Logging only.
+    const int sliceBucket = d.active ? std::clamp((int)d.stage, 0, 7) : 8;
     struct SliceTimer {
         double& into;
+        Decision& d;
+        int bucket;
         std::chrono::steady_clock::time_point at;
-        ~SliceTimer() { into += secondsSince(at); }
-    } sliceTimer{m_stats.secondsSim, sliceStart};
+        ~SliceTimer() {
+            const double s = secondsSince(at);
+            into += s;
+            d.stageSec[bucket] += s;
+            d.slices++;
+        }
+    } sliceTimer{m_stats.secondsSim, d, sliceBucket, sliceStart};
 
     if (!d.active) {
         const auto& cfg = SLSettings::get()->pathfinder;
@@ -4513,6 +4561,7 @@ void AbsensePathfinder::decide() {
         m_pairKnownDeath1 = m_planKnownDeath;
         m_pairName1 = d.chosen.name;
         if (d.trimmed > 0) {}  // already counted
+        logSlowDecision(d, sliceBucket, secondsSince(sliceStart));
         d.active = false;
         m_pairSecondPass = true;
         return;  // the next slice starts player 2's decision
@@ -4757,6 +4806,7 @@ void AbsensePathfinder::decide() {
     std::snprintf(buf, sizeof(buf), "tick %llu: %s (lasts %s%d ticks), committing %d%s%s", (unsigned long long)tick,
                   name.c_str(), survived >= H ? ">=" : "", survived, commit,
                   m_repair.active ? " [repair]" : "", dropped > 0 ? " [fewer clicks]" : "");
+    logSlowDecision(d, sliceBucket, secondsSince(sliceStart));
     if (m_probe.active) {
         // Found from a kept start: now the game goes back there for real,
         // and the plan is played once it has (see finishRestore).
