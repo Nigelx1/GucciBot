@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-g (Calculate: two experimental switches, off by default, for sub-tick readings that got lost: mid-tick edges stay sub-tick, and steered sub-tick windows)"
+    "2026-11-16-h (Pathfinder test switch pf_stuck_work (off): the five-minute stuck rule can count thinking and level time played instead of the wall clock)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

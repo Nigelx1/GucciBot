@@ -901,6 +901,9 @@ public:
     uint64_t m_stuckBest = 0;
     double m_stuckSeconds = 0.0;
     std::chrono::steady_clock::time_point m_stuckClock{};
+    // GucciBot (2026-11-15, pf2 lane; pf_stuck_work): committed ticks at the
+    // last look, for the level time played between two looks.
+    uint64_t m_stuckTicks = 0;
     // Frame pacing: a slice takes what is left of a frame at the target
     // frame rate. When the last frame came late the game's own share is
     // taken from it (the time between slices minus the slice) and the next

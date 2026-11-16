@@ -584,6 +584,20 @@ void absense::setFrozenShare(bool on) {
     g_frozenShare = on;
 }
 
+namespace {
+// GucciBot (2026-11-15, pf2 lane): off by default until the cold regression
+// says it helps (see pathfinder.cpp, tick(): the stuck rule).
+bool g_stuckWork = false;
+}
+
+bool absense::stuckWork() {
+    return g_stuckWork;
+}
+
+void absense::setStuckWork(bool on) {
+    g_stuckWork = on;
+}
+
 bool absense::pendingVerify() {
     return world::g_pendingVerify;
 }

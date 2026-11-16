@@ -483,6 +483,7 @@ bool AbsensePathfinder::start() {
     m_stuckBest = tick;
     m_stuckSeconds = 0.0;
     m_stuckClock = m_startedAt;
+    m_stuckTicks = m_stats.committedTicks;
     m_stats.message = "Searching";
 
     absense::gpu::Client::get().setEnabled(SLSettings::get()->pathfinder.gpu);
@@ -946,11 +947,29 @@ void AbsensePathfinder::tick() {
     // for minutes of searching.
     {
         const auto now = std::chrono::steady_clock::now();
+        // GucciBot (2026-11-15, pf2 lane; the test switch pf_stuck_work):
+        // with the switch on, the clock counts only the search's own thinking
+        // (the last slice) and the level time the game played since (the
+        // ticks committed), never more than the wall clock. What it leaves
+        // out is the game's own frames while it is frozen waiting and the
+        // game running slow: on GRIEF in a test window about 40% of the wall
+        // clock, and more on a loaded PC, where the same run stopped at 38.8%
+        // on this rule after reaching 51% unloaded. Nothing decided reads
+        // this clock: only when a stuck run ends changes.
+        const uint64_t committed = m_stats.committedTicks;
+        const double wall = std::clamp(std::chrono::duration<double>(now - m_stuckClock).count(), 0.0, 10.0);
+        double counted = wall;
+        if (absense::stuckWork()) {
+            const double tps = std::max(1.0, Bot::get()->updater().getTps());
+            const double played = committed > m_stuckTicks ? (double)(committed - m_stuckTicks) / tps : 0.0;
+            counted = std::min(wall, std::max(0.0, m_lastSliceMs) / 1000.0 + played);
+        }
+        m_stuckTicks = committed;
         if (m_stats.bestTick != m_stuckBest) {
             m_stuckBest = m_stats.bestTick;
             m_stuckSeconds = 0.0;
         } else {
-            m_stuckSeconds += std::clamp(std::chrono::duration<double>(now - m_stuckClock).count(), 0.0, 10.0);
+            m_stuckSeconds += counted;
         }
         m_stuckClock = now;
         if (m_stuckSeconds >= kStuckSeconds) {
