@@ -714,7 +714,7 @@ class FrameWindowAnalyzer {
     size_t nextSampleFor(size_t idx) const;
     size_t prevActionFor(size_t ai, bool player2) const;
     size_t nextActionFor(size_t ai, bool player2) const;
-    size_t pairedReleaseFor(size_t ai) const;
+    size_t pairedReleaseFor(size_t ai, bool tickGroups = true) const;
     long posRoom(size_t idx) const;
     // GucciBot (2026-10-23): how far a test leg runs past an input it placed
     // at `from` (action `afterAi`). One rule; it was five copies. `pastNext`:
@@ -884,6 +884,30 @@ class FrameWindowAnalyzer {
     std::vector<size_t> dualPartners(size_t* pairsOut) const;
     void followPartner(size_t k);
     bool inRetimeTail(size_t k, size_t ai, bool player2) const;
+    // GucciBot (2026-11-16): a tick with more than one press of one player
+    // (spam and multiclick macros: press, release, press... on one tick) is
+    // one click, led by its first press. For each action, that first press
+    // when the action is one of the others on its tick (it gets no window of
+    // its own and moves wherever the first press goes), else NO_INDEX; for a
+    // first press, the last action of its tick's click. Both empty when the
+    // macro has no such tick (groupTickPresses).
+    std::vector<size_t> m_tickLead;
+    std::vector<size_t> m_tickLast;
+    size_t tickLeadOf(size_t k) const {
+        return k < m_tickLead.size() ? m_tickLead[k] : NO_INDEX;
+    }
+    size_t tickLastOf(size_t k) const {
+        return k < m_tickLast.size() && m_tickLast[k] != NO_INDEX ? m_tickLast[k] : k;
+    }
+    bool inTickOf(size_t k, size_t lead) const {
+        return lead != NO_INDEX && this->tickLeadOf(k) == lead;
+    }
+    // GucciBot (2026-11-16): that, or the other half (pairDualClicks) of one
+    // of those actions, which moves with it (followPartner).
+    bool inClickTick(size_t k, size_t lead) const {
+        return this->inTickOf(k, lead) || this->inTickOf(this->partnerOf(k), lead);
+    }
+    void groupTickPresses();
 
     uint32_t m_recorded = 0;
     int64_t m_maxNeg = 0;

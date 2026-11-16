@@ -840,9 +840,15 @@ bool FrameWindowAnalyzer::collectSamples() {
         m_originalOffsets.push_back(scbf::offsetOf(a));
     }
     m_subtickMacro = scbf::hasOffsets(actions);
+    // GucciBot (2026-11-16): the pairs are found with no same-tick click in
+    // place (pairedReleaseFor reads it), as Continue's count finds them.
+    m_tickLead.clear();
+    m_tickLast.clear();
     // GucciBot (2026-10-23): the 2-player fixes in a 1-player level: a click
     // stored under both flags on one tick is one sample, its first half's.
     this->pairDualClicks();
+    // GucciBot (2026-11-16): a tick's presses of one player are one click.
+    this->groupTickPresses();
 
     for (size_t i = 0; i < actions.size(); i++) {
         if (!isMeasurableInput(actions[i])) continue;
@@ -871,8 +877,15 @@ void FrameWindowAnalyzer::foldSwiftClicks() {
     kept.reserve(m_samples.size());
 
     int folded = 0;
+    int tickFolded = 0;
     for (size_t i = 0; i < m_samples.size(); i++) {
         auto const& s = m_samples[i];
+        // GucciBot (2026-11-16): the rest of a same-tick click goes with its
+        // first press (groupTickPresses), so it has no window of its own.
+        if (this->tickLeadOf(s.actionIndex) != NO_INDEX) {
+            tickFolded++;
+            continue;
+        }
         if (s.release) {
             bool sameFramePress = false;
             for (size_t j = i; j-- > 0;) {
@@ -894,7 +907,9 @@ void FrameWindowAnalyzer::foldSwiftClicks() {
 
     FWLOG("[fw][samples] swift-click fold: {} -> {} ({} folded)",
           m_samples.size(), kept.size(), folded);
-    m_filtered += folded;
+    if (tickFolded > 0)
+        FWLOG("[fw][samples] same-tick click fold: {} input(s) go with their tick's first press", tickFolded);
+    m_filtered += folded + tickFolded;
 
     m_samples.swap(kept);
 }
@@ -949,10 +964,20 @@ size_t FrameWindowAnalyzer::prevActionFor(size_t ai, bool player2) const {
     return NO_INDEX;
 }
 
-size_t FrameWindowAnalyzer::pairedReleaseFor(size_t ai) const {
+size_t FrameWindowAnalyzer::pairedReleaseFor(size_t ai, bool tickGroups) const {
     auto const& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
     if (ai >= actions.size() || !actions[ai].m_holding) return NO_INDEX;
-    for (size_t k = ai + 1; k < actions.size(); k++) {
+    // GucciBot (2026-11-16): a same-tick click's release (groupTickPresses) is
+    // its last press's, or its last action when that is a release on the tick.
+    // `tickGroups` false: the press's own next release, as before them (the
+    // pairs, dualPartners, are found that way).
+    size_t from = ai;
+    if (size_t const last = tickGroups ? this->tickLastOf(ai) : ai;
+        last != ai && last < actions.size()) {
+        if (!actions[last].m_holding) return last;
+        from = last;
+    }
+    for (size_t k = from + 1; k < actions.size(); k++) {
         if (!isMeasurableInput(actions[k])) continue;
         if (actions[k].m_player2 != actions[ai].m_player2) continue;
         if (actions[k].m_type != actions[ai].m_type) continue;
@@ -1026,7 +1051,11 @@ int64_t FrameWindowAnalyzer::legReach(size_t afterAi, int64_t from,
         for (size_t k = after + 1; k < actions.size(); k++)
             if (k != skip && k != also && isMeasurableInput(actions[k]) &&
                 this->movesWith(k, p2) && !partOf(k, afterAi, skip) &&
-                !partOf(k, after, also))
+                !partOf(k, after, also) &&
+                // GucciBot (2026-11-16): nor the rest of a same-tick click
+                // (groupTickPresses), nor those actions' other halves
+                // (pairDualClicks), which go with them. Never true without one.
+                !this->inClickTick(k, afterAi) && !this->inClickTick(k, after))
                 return k;
         return NO_INDEX;
     };
@@ -1230,8 +1259,8 @@ std::vector<size_t> FrameWindowAnalyzer::dualPartners(size_t* pairsOut) const {
         size_t const j = partner[i];
         if (j == NO_INDEX || j < i) continue;
         if (actions[i].m_holding) {
-            size_t const ri = this->pairedReleaseFor(i);
-            size_t const rj = this->pairedReleaseFor(j);
+            size_t const ri = this->pairedReleaseFor(i, false);
+            size_t const rj = this->pairedReleaseFor(j, false);
             bool const releasesPair = ri == NO_INDEX
                                           ? rj == NO_INDEX
                                           : rj != NO_INDEX && partner[ri] == rj;
@@ -1248,14 +1277,103 @@ std::vector<size_t> FrameWindowAnalyzer::dualPartners(size_t* pairsOut) const {
     return partner;
 }
 
+// GucciBot (2026-11-16): the ticks with more than one press of one player.
+// Spam and multiclick macros (Nigel's Clubstep 2, Deadlocked 2 and Theory of
+// Everything 3 ones; a fast CBF spam can do it too) put press, release,
+// press... on one tick. Each press was measured alone: moved, it left the
+// tick's other press clicking where it was, and its test ended 11 frames on
+// (the next input was on its own tick), so shifts that die in the game came
+// out alive and the windows ran out to the Search distance. Real play
+// (2026-11-16, KOCMOC with extra presses added on 420, 559 and 1190) died
+// where moving the whole tick dies, which is the one-press count. So the tick
+// is one click: its first press is measured, its other actions (that
+// player's, of that kind, on that tick) go wherever the first press goes, and
+// none of them gets a window. For each action, the first press it goes with,
+// or NO_INDEX; `lastOut`, when given, gets each first press's last action.
+// From the actions' frames as they are (a run's start, or outside a run).
+// `partner` is pairDualClicks': the other half of a pair is never a first
+// press (it follows its own half). Empty when no tick has two presses.
+static std::vector<size_t> tickLeadsOf(std::vector<slc::Action> const& actions,
+                                       std::vector<size_t> const& partner,
+                                       std::vector<size_t>* lastOut) {
+    constexpr size_t NONE = static_cast<size_t>(-1);
+    std::vector<size_t> lead;
+    std::vector<size_t> last;
+    auto const half = [&](size_t k) {
+        return k < partner.size() && partner[k] != NONE && partner[k] < k;
+    };
+    for (size_t i = 0; i < actions.size(); i++) {
+        if (!isMeasurableInput(actions[i]) || !actions[i].m_holding || half(i)) continue;
+        if (i < lead.size() && lead[i] != NONE) continue;
+        size_t end = i;
+        bool another = false;
+        for (size_t j = i + 1; j < actions.size() && actions[j].m_frame == actions[i].m_frame; j++) {
+            if (!isMeasurableInput(actions[j]) || actions[j].m_player2 != actions[i].m_player2 ||
+                actions[j].m_type != actions[i].m_type)
+                continue;
+            end = j;
+            if (actions[j].m_holding) another = true;
+        }
+        if (!another) continue;
+        if (lead.empty()) {
+            lead.assign(actions.size(), NONE);
+            last.assign(actions.size(), NONE);
+        }
+        last[i] = end;
+        for (size_t j = i + 1; j <= end; j++)
+            if (isMeasurableInput(actions[j]) && actions[j].m_player2 == actions[i].m_player2 &&
+                actions[j].m_type == actions[i].m_type)
+                lead[j] = i;
+    }
+    if (lastOut) *lastOut = std::move(last);
+    return lead;
+}
+
+void FrameWindowAnalyzer::groupTickPresses() {
+    auto const& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
+    m_tickLead = tickLeadsOf(actions, m_partner, &m_tickLast);
+    if (m_tickLead.empty()) return;
+    size_t ticks = 0;
+    size_t presses = 0;
+    for (size_t k = 0; k < actions.size(); k++) {
+        if (m_tickLast[k] != NO_INDEX) ticks++;
+        if (m_tickLead[k] != NO_INDEX && actions[k].m_holding) presses++;
+    }
+    FWLOG("[fw][samples] same-tick presses: {} tick(s) with more than one press of a player, {} more press(es) "
+          "on them, each tick counted as one click",
+          ticks, presses);
+}
+
 // GucciBot (2026-10-23): the other half of a pair (pairDualClicks) goes where
 // action k was just placed: the same tick, the same point in it.
+// GucciBot (2026-11-16): and the rest of a same-tick click (groupTickPresses)
+// goes with its first press: each by as much as the first press moved, from
+// its own recorded spot, as a sub-tick Retime leg moves its tail.
 void FrameWindowAnalyzer::followPartner(size_t k) {
-    size_t const partner = this->partnerOf(k);
-    if (partner == NO_INDEX) return;
     auto& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
-    actions[partner].m_frame = actions[k].m_frame;
-    scbf::setOffset(actions[partner], scbf::offsetOf(actions[k]));
+    if (size_t const partner = this->partnerOf(k); partner != NO_INDEX) {
+        actions[partner].m_frame = actions[k].m_frame;
+        scbf::setOffset(actions[partner], scbf::offsetOf(actions[k]));
+    }
+    size_t const last = this->tickLastOf(k);
+    if (last == k || last >= actions.size() || last >= m_originalFrames.size() ||
+        last >= m_originalOffsets.size())
+        return;
+    double const moved =
+        static_cast<double>(actions[k].m_frame) + scbf::offsetOf(actions[k]) -
+        (static_cast<double>(m_originalFrames[k]) + m_originalOffsets[k]);
+    for (size_t j = k + 1; j <= last; j++) {
+        if (!this->inTickOf(j, k)) continue;
+        double const pos = std::max(
+            0.0, static_cast<double>(m_originalFrames[j]) + m_originalOffsets[j] + moved);
+        double const whole = std::floor(pos);
+        actions[j].m_frame = static_cast<uint64_t>(whole);
+        scbf::setOffset(actions[j], pos > whole ? pos - whole : 0.0);
+        if (size_t const partner = this->partnerOf(j); partner != NO_INDEX) {
+            actions[partner].m_frame = actions[j].m_frame;
+            scbf::setOffset(actions[partner], scbf::offsetOf(actions[j]));
+        }
+    }
 }
 
 // GucciBot (2026-10-23): whether a Retime move of input `ai` (a `player2` one)
@@ -1562,6 +1680,12 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRun(PlayLayer* pl,
         m_recountFrom = recountFrom;
         m_olderP2Count = olderP2Count;
         m_generation++;
+        // GucciBot (2026-11-16): and the click maps collectSamples built, which
+        // only finish() cleared, so a run refused after them ("No input in that
+        // range.") left them for the next macro (review of 0615bdd).
+        m_partner.clear();
+        m_tickLead.clear();
+        m_tickLast.clear();
     };
 
     this->clear();
@@ -2021,7 +2145,10 @@ void FrameWindowAnalyzer::commitSetupGroup(SetupGroup const& sg) {
     }
 
     this->applySetupFrames(sg, m_setupBestLeaderShift, m_setupBestCombo);
-    size_t const lastAi = m_samples[sg.first + sg.count - 1].actionIndex;
+    // GucciBot (2026-11-16): through the rest of the last input's same-tick
+    // click (groupTickPresses), which went with it (followPartner).
+    size_t const lastAi =
+        this->tickLastOf(m_samples[sg.first + sg.count - 1].actionIndex);
     for (size_t k = m_samples[sg.first].actionIndex; k <= lastAi; k++)
         m_originalFrames[k] = actions[k].m_frame;
     // GucciBot (2026-10-23): the other half of a pair (pairDualClicks) keeps
@@ -2030,6 +2157,12 @@ void FrameWindowAnalyzer::commitSetupGroup(SetupGroup const& sg) {
         size_t const ai = m_samples[sg.first + j].actionIndex;
         if (size_t const pair = this->partnerOf(ai); pair != NO_INDEX)
             m_originalFrames[pair] = m_originalFrames[ai];
+        // GucciBot (2026-11-16): and the halves of the rest of its same-tick
+        // click (groupTickPresses).
+        for (size_t k = ai + 1, last = this->tickLastOf(ai); k <= last; k++)
+            if (this->inTickOf(k, ai))
+                if (size_t const pair = this->partnerOf(k); pair != NO_INDEX)
+                    m_originalFrames[pair] = m_originalFrames[k];
     }
 
     for (size_t j = 0; j < sg.count; j++) {
@@ -2655,7 +2788,9 @@ bool FrameWindowAnalyzer::bufferShiftValid(int64_t shift) const {
         prev != NO_INDEX &&
         shifted <= static_cast<int64_t>(m_originalFrames[prev]))
         return false;
-    if (size_t const next = this->nextActionFor(ai, p2);
+    // GucciBot (2026-11-16): past the rest of a same-tick click, which moves
+    // with it (groupTickPresses); `ai` itself without one.
+    if (size_t const next = this->nextActionFor(this->tickLastOf(ai), p2);
         next != NO_INDEX &&
         shifted >= static_cast<int64_t>(m_originalFrames[next]))
         return false;
@@ -2678,11 +2813,20 @@ bool FrameWindowAnalyzer::bufferShiftValid(int64_t shift) const {
             prev != NO_INDEX &&
             shifted <= static_cast<int64_t>(m_originalFrames[prev]))
             return false;
-        if (size_t const next = this->nextActionFor(partner, pp2);
+        // GucciBot (2026-11-16): past the halves of the rest of its same-tick
+        // click (groupTickPresses) too, and up to the half of the click's own
+        // release; the same as before without one.
+        size_t partnerLast = partner;
+        if (size_t const lastHalf = this->partnerOf(this->tickLastOf(ai));
+            lastHalf != NO_INDEX && lastHalf > partnerLast)
+            partnerLast = lastHalf;
+        if (size_t const next = this->nextActionFor(partnerLast, pp2);
             next != NO_INDEX &&
             shifted >= static_cast<int64_t>(m_originalFrames[next]))
             return false;
-        if (size_t const rel = this->pairedReleaseFor(partner); rel != NO_INDEX) {
+        size_t const relHalf = this->partnerOf(this->pairedReleaseFor(ai));
+        if (size_t const rel = relHalf != NO_INDEX ? relHalf : this->pairedReleaseFor(partner);
+            rel != NO_INDEX) {
             int64_t const relShifted =
                 static_cast<int64_t>(m_originalFrames[rel]) + tickShift;
             if (size_t const after = this->nextActionFor(rel, pp2);
@@ -2704,7 +2848,8 @@ bool FrameWindowAnalyzer::bufferShiftValid(int64_t shift) const {
         size_t const halfAi = this->partnerOf(ai);
         size_t const halfRel = this->partnerOf(rel);
         auto const moves = [&](size_t k) {
-            return k == ai || k == rel || k == halfAi || k == halfRel;
+            return k == ai || k == rel || k == halfAi || k == halfRel ||
+                   this->inClickTick(k, ai);  // GucciBot (2026-11-16)
         };
         for (size_t const x : {ai, rel}) {
             size_t const other = this->partnerOf(x);
@@ -4167,7 +4312,8 @@ void FrameWindowAnalyzer::beginRecovery() {
     size_t const niPair = this->partnerOf(ni);
     size_t const niRelPair = this->partnerOf(niRel);
     auto const movesHere = [&](size_t k) {
-        return k == ni || k == niRel || k == niPair || k == niRelPair;
+        return k == ni || k == niRel || k == niPair || k == niRelPair ||
+               this->inClickTick(k, ni);  // GucciBot (2026-11-16): groupTickPresses
     };
     auto const fits = [&](size_t m) {
         int64_t const at = placed(m) + m_recoveryOffset;
@@ -4916,6 +5062,8 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
     rs.clearDispatchOrder();
     m_dispatchLegArmed = false;
     m_partner.clear();
+    m_tickLead.clear();  // GucciBot (2026-11-16): groupTickPresses
+    m_tickLast.clear();
     m_running = false;
     m_stageId = Stage::Idle;
 
@@ -9795,11 +9943,18 @@ std::vector<FrameWindowAnalyzer::PlayheadInput> FrameWindowAnalyzer::allInputs(
     bool releases) const {
     std::vector<PlayheadInput> out;
     auto const& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
+    // GucciBot (2026-11-16): the rest of a same-tick click (groupTickPresses)
+    // has no window of its own and no row: its row took its first press's
+    // window (the same frame, player and kind), and a window typed into it
+    // went to the first press. Still numbered, as the playhead numbers them.
+    auto const leads = tickLeadsOf(actions, {}, nullptr);
     int presses = 0;
-    for (auto const& a : actions) {
+    for (size_t i = 0; i < actions.size(); i++) {
+        auto const& a = actions[i];
         if (!isMeasurableInput(a)) continue;
         if (a.m_holding) presses++;
         if (!a.m_holding && !releases) continue;
+        if (i < leads.size() && leads[i] != static_cast<size_t>(-1)) continue;
         PlayheadInput in;
         in.valid = true;
         in.frame = static_cast<uint32_t>(a.m_frame);

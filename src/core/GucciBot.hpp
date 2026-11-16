@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-d (Trainer stats: Attempts count exactly like GD own attempt counter)"
+    "2026-11-16-e (Calculate: several presses of one player on one tick count as one click, measured on the first press, so spam and multiclick ticks no longer get windows that are far too wide)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
