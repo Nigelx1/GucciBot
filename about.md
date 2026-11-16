@@ -97,6 +97,7 @@ Pick the engine at the top of the Pathfinder page. **Search (old)** is the defau
 - **Plans a route through it** — **Show the planned route** draws the way through the whole level it would take. **Follow the planned route** set to **Route ideas** has each decision first try the way GD's physics finds to the route's next gate, and a dead end jump back to where it left the route. Set to **Route drives** (experimental), every decision aims at the next gate's best choice from where the player is (use or skip an orb, touch or avoid a pad or portal) and plays the way physics finds through it, only as far as that gate.
 - **Starts how you like** — from wherever the level is, straight from the pause menu, or with **Start from the beginning** on, from frame 0 after a Full Restart.
 - **Exact start flags** (on by default) — when it tries again from an earlier moment, each portal, orb, pad and trigger counts as used or not exactly as the game had it then.
+- **Rotate triggers (experimental)** (off by default) — the search's copy of the level turns blocks the way the game's basic rotate triggers do, exactly. On some levels this makes the search slower or sends it another way, so it's off for now. Windows only for now (it needs the trigger model).
 
 **Classic** — GucciBot's own search, still there.
 
