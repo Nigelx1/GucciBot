@@ -12,6 +12,8 @@
 #include "analysis/ac/framewindow.hpp"
 #include "analysis/ac/lstar.hpp"
 #include "core/GucciBot.hpp"
+#include "core/gbr6_format.hpp"
+#include "tools/share_bundle.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/utils/file.hpp>
@@ -21,7 +23,9 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <cstring>
 #include <ctime>
+#include <tuple>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -50,6 +54,17 @@ namespace gucci::ui::share {
             std::vector<lstar::Input> inputs;
             lstar::Settings settings;
             std::chrono::steady_clock::time_point started;
+            // The macro file next to the picture (Nigel, 2026-11-15: "an image
+            // plus like... a full macro+fwc thing u can load up"): the macro
+            // and its sidecars as saved, read and packed on the worker
+            // (tools/share_bundle). No macro file when bundleSkip says why.
+            fs::path macroFile;
+            std::vector<uint8_t> macroBytes;  // read on the game's thread, after it was checked (sameAsSaved)
+            std::string macroName;  // its file name in the .zip, UTF-8
+            std::vector<std::pair<std::string, fs::path>> sidecars;  // ".fwac" -> replays/sidecars/<file>.fwac
+            std::string bundleSkip;
+            std::string madeWith;
+            fs::path outZip;
         };
 
         Rgba rgba(ImVec4 const& c) {
@@ -146,6 +161,115 @@ namespace gucci::ui::share {
             return std::vector<uint8_t>((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
         }
 
+        // Written whole or not at all: to <file>.part, then renamed.
+        std::string writeWhole(fs::path const& to, std::vector<uint8_t> const& bytes, char const* what) {
+            std::error_code ec;
+            fs::create_directories(to.parent_path(), ec);
+            if (ec)
+                return "couldn't make the shares folder: " + ec.message();
+            fs::path tmp = to;
+            tmp += ".part";
+            {
+                std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+                if (!out)
+                    return "couldn't write in the shares folder";
+                out.write(reinterpret_cast<char const*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+                if (!out) {
+                    out.close();
+                    fs::remove(tmp, ec);
+                    return fmt::format("couldn't write the {} (is the disk full?)", what);
+                }
+            }
+            fs::rename(tmp, to, ec);
+            if (ec) {
+                std::error_code rmEc;
+                fs::remove(tmp, rmEc);
+                return fmt::format("couldn't save the {}: {}", what, ec.message());
+            }
+            return "";
+        }
+
+        // GucciBot (2026-11-16, the ui2 review): the file holds the macro in
+        // memory. The Frame Editor's edits stay in memory until Save, and a
+        // name typed into the name field (not saved yet) can point at another
+        // macro's file; either way the windows on the picture were measured
+        // on clicks that file doesn't have. Compares what the loader would
+        // make of the file (GucciReplaySystem::load: inputs, sub-ticks, TPS
+        // changes) with the inputs and TPS changes in memory.
+        bool sameAsSaved(std::vector<uint8_t> const& bytes, std::vector<gb::Action> const& actions) {
+            if (bytes.size() < 4 || std::memcmp(bytes.data(), "GBR6", 4) != 0)
+                return false;
+            auto f = GBR6File::deserialize(bytes.data(), bytes.size());
+            if (!f)
+                return false;
+            // (frame, button or TPS, held, player 2, sub-tick or TPS rate)
+            using Key = std::tuple<uint32_t, int, bool, bool, double>;
+            std::vector<Key> file, mem;
+            auto const sub = [](double v) { return v > 0.0 && v < 1.0 ? v : 0.0; };
+            std::vector<gb::Action> loaded;
+            for (auto const* list : {&f->p1Inputs, &f->p2Inputs})
+                for (auto const& in : *list) {
+                    gb::Action a;
+                    a.m_frame = in.frame;
+                    a.m_type = static_cast<gb::ActionType>(in.button);
+                    a.m_holding = in.pressed;
+                    a.m_player2 = in.player2;
+                    loaded.push_back(a);
+                }
+            for (auto const& st : f->subticks)
+                for (auto& a : loaded)
+                    if (a.m_frame == st.frame && (uint8_t)a.m_type == st.button && a.m_holding == st.pressed &&
+                        a.m_player2 == st.player2) {
+                        a.m_subtick = st.offset;
+                        break;
+                    }
+            for (auto const& a : loaded)
+                file.emplace_back(a.m_frame, (int)a.m_type, a.m_holding, a.m_player2, sub(a.m_subtick));
+            for (auto const& t : f->tpsChanges)
+                if (t.frame > 0)
+                    file.emplace_back(t.frame, (int)gb::ActionType::TPS, false, false, t.tps);
+            for (auto const& a : actions) {
+                if (a.isInput())
+                    mem.emplace_back(a.m_frame, (int)a.m_type, a.m_holding, a.m_player2, sub(a.m_subtick));
+                else if (a.m_type == gb::ActionType::TPS && a.m_frame > 0)
+                    mem.emplace_back(a.m_frame, (int)gb::ActionType::TPS, false, false, a.m_tps);
+            }
+            if (file.size() != mem.size())
+                return false;
+            std::sort(file.begin(), file.end());
+            std::sort(mem.begin(), mem.end());
+            for (size_t i = 0; i < file.size(); ++i) {
+                auto const& [ff, ft, fh, fp, fv] = file[i];
+                auto const& [mf, mt, mh, mp, mv] = mem[i];
+                if (ff != mf || ft != mt || fh != mh || fp != mp || std::abs(fv - mv) > 1e-9)
+                    return false;
+            }
+            return true;
+        }
+
+        // The worker's macro file: the macro and its sidecars, read now and
+        // packed. Returns "" or why it failed.
+        std::string makeBundle(Job const& job) {
+            bundle::Share share;
+            share.macroFile = job.macroName;
+            share.macro = job.macroBytes;
+            if (share.macro.empty())
+                return "couldn't read the macro file";
+            for (auto const& [ext, path] : job.sidecars) {
+                std::error_code ec;
+                if (!fs::exists(path, ec))
+                    continue;  // gone since (a Clear): left out
+                share.sidecars.push_back({ext, readFile(path)});
+            }
+            share.level = job.card.level;
+            share.madeWith = job.madeWith;
+            std::string error;
+            auto const zip = bundle::pack(share, error);
+            if (zip.empty())
+                return "couldn't pack the macro: " + error;
+            return writeWhole(job.outZip, zip, "macro file");
+        }
+
         // The worker: everything slow. Returns "" or why it failed.
         std::string make(Job& job) {
             Card& card = job.card;
@@ -170,27 +294,7 @@ namespace gucci::ui::share {
             auto const file = png::encode(px, false, error);
             if (file.empty())
                 return error;
-
-            std::error_code ec;
-            fs::create_directories(job.out.parent_path(), ec);
-            if (ec)
-                return "couldn't make the shares folder: " + ec.message();
-            fs::path tmp = job.out;
-            tmp += ".part";
-            {
-                std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
-                if (!out)
-                    return "couldn't write in the shares folder";
-                out.write(reinterpret_cast<char const*>(file.data()), static_cast<std::streamsize>(file.size()));
-                if (!out)
-                    return "couldn't write the picture (is the disk full?)";
-            }
-            fs::rename(tmp, job.out, ec);
-            if (ec) {
-                fs::remove(tmp, ec);
-                return "couldn't save the picture: " + ec.message();
-            }
-            return "";
+            return writeWhole(job.out, file, "picture");
         }
 
         // Fills a job from the game's state. "" or why there's nothing to share.
@@ -333,14 +437,63 @@ namespace gucci::ui::share {
             if (!gbot)  // the cone is GucciBot's: none on GBot's picture
                 job.mark = res / "cone_silhouette_256.png";
 
+            // The macro file: the macro and its sidecars as saved. The windows
+            // on the picture are the ones in its .fwac (each change to them is
+            // written there as it's made, saveAcFrameWindowResults). A macro
+            // not saved yet, or windows that belong to no file yet (a new
+            // recording made over a loaded macro), have no file to send; the
+            // picture is still made.
+            std::error_code fec;
+            fs::path const macroPath = gb->replay.getCurrentPath();
+            if (gb->replayName.empty() || macroPath.empty() || !fs::is_regular_file(macroPath, fec)) {
+                job.bundleSkip = "the macro isn't saved. Save it, then share again for a file others can load.";
+            } else if (gb->fwWindowsForgotten) {
+                job.bundleSkip = "these windows aren't saved with a macro yet. Save it, then share again for a file "
+                                 "others can load.";
+            } else if (job.macroBytes = readFile(macroPath);
+                       !sameAsSaved(job.macroBytes, gb->replay.m_actionAtom.m_actions)) {
+                job.macroBytes.clear();
+                job.bundleSkip = "the macro has changes that aren't saved (or the name box names another macro). "
+                                 "Save it, then share again for a file others can load.";
+            } else {
+                job.macroFile = macroPath;
+                std::string const file = geode::utils::string::pathToString(macroPath.filename());
+                // Its sidecars are named after the whole file name
+                // (replays/sidecars/<file>.fwac); one more dot is another
+                // file's (<file>.bak.fwac, a backup's), left out.
+                std::string const prefix = file + ".";
+                for (auto const& e : fs::directory_iterator(macroPath.parent_path() / "sidecars", fec)) {
+                    std::error_code typeEc;
+                    if (!e.is_regular_file(typeEc))
+                        continue;
+                    std::string const n = geode::utils::string::pathToString(e.path().filename());
+                    if (n.size() <= prefix.size() || n.compare(0, prefix.size(), prefix) != 0)
+                        continue;
+                    std::string const ext = n.substr(file.size());
+                    if (bundle::sidecarExtOk(ext))
+                        job.sidecars.emplace_back(ext, e.path());
+                }
+                job.macroName = bundle::fileNameOk(file)
+                                    ? file
+                                    : safeName(gb->replayName) +
+                                          geode::utils::string::pathToString(macroPath.extension());
+                job.madeWith = gbot ? std::string("GBot")
+                                    : "GucciBot " + geode::Mod::get()->getVersion().toVString();
+            }
+
             char stamp[32];
             std::strftime(stamp, sizeof stamp, "%Y-%m-%d %H%M%S", &tm);
             std::string base = fmt::format("{} windows {}", safeName(gb->replayName), stamp);
-            fs::path out = sharesDir() / u8path(base + ".png");
+            // The picture and the macro file share a name, and neither may
+            // replace a file already there.
+            auto const named = [&](std::string const& b) {
+                job.out = sharesDir() / u8path(b + ".png");
+                job.outZip = sharesDir() / u8path(b + ".zip");
+            };
+            named(base);
             std::error_code ec;
-            for (int n = 2; fs::exists(out, ec) && n < 100; ++n)
-                out = sharesDir() / u8path(base + fmt::format(" ({})", n) + ".png");
-            job.out = out;
+            for (int n = 2; (fs::exists(job.out, ec) || fs::exists(job.outZip, ec)) && n < 100; ++n)
+                named(base + fmt::format(" ({})", n));
             return "";
         }
 
@@ -392,9 +545,19 @@ namespace gucci::ui::share {
             } catch (...) {
                 error = "couldn't make the picture";
             }
+            std::string bundleError = job->bundleSkip;
+            if (bundleError.empty()) {
+                try {
+                    bundleError = makeBundle(*job);
+                } catch (std::exception const& e) {
+                    bundleError = std::string("couldn't make the macro file: ") + e.what();
+                } catch (...) {
+                    bundleError = "couldn't make the macro file";
+                }
+            }
             double const seconds =
                 std::chrono::duration<double>(std::chrono::steady_clock::now() - job->started).count();
-            geode::queueInMainThread([job, error, seconds]() {
+            geode::queueInMainThread([job, error, bundleError, seconds]() {
                 auto const& c = job->card;
                 g_status.level = c.level;
                 g_status.details = c.details;
@@ -413,11 +576,22 @@ namespace gucci::ui::share {
                 g_status.seconds = seconds;
                 if (error.empty()) {
                     g_status.path = geode::utils::string::pathToString(job->out);
+                    g_status.folder = geode::utils::string::pathToString(job->out.parent_path());
+                    g_status.pictureName = geode::utils::string::pathToString(job->out.filename());
                     g_status.saved++;
                     geode::log::info("[share] saved {} in {:.2f} s", g_status.path, seconds);
                 } else {
                     geode::log::warn("[share] failed: {}", error);
                 }
+                g_status.bundleOk = bundleError.empty();
+                g_status.bundleError = bundleError;
+                g_status.bundlePath = g_status.bundleOk ? geode::utils::string::pathToString(job->outZip) : "";
+                g_status.bundleName = g_status.bundleOk ? geode::utils::string::pathToString(job->outZip.filename()) : "";
+                if (g_status.bundleOk)
+                    geode::log::info("[share] saved {} ({} sidecar file(s) found)", g_status.bundlePath,
+                                     job->sidecars.size());
+                else
+                    geode::log::info("[share] no macro file: {}", bundleError);
             });
         }).detach();
         return "";
@@ -445,15 +619,30 @@ namespace gucci::ui::share {
             return;
         }
         if (!g_status.done) {
-            kit::Hint("Share my windows: a picture of these windows (each band's count, the tightest ones and L*) "
-                      "for Discord or YouTube.");
+            kit::Hint(branded("Share my windows: a picture of these windows (each band's count, the tightest ones and "
+                              "L*) for Discord or YouTube, and a .zip with the macro and its windows that anyone with "
+                              "GucciBot can load.")
+                          .c_str());
             return;
         }
         if (!g_status.ok) {
             kit::Note(fmt::format("Couldn't save the picture: {}", g_status.error).c_str(), Tone::Warn);
+            if (g_status.bundleOk)
+                kit::Note(fmt::format("The macro file was saved: {}", g_status.bundlePath).c_str(), Tone::Muted);
             return;
         }
-        kit::Note(fmt::format("Saved to {}", g_status.path).c_str(), Tone::Muted);
+        if (g_status.bundleOk) {
+            // Both files, on the one line.
+            kit::Note(fmt::format("Saved to {}: {} and {}", g_status.folder, g_status.pictureName, g_status.bundleName)
+                          .c_str(),
+                      Tone::Muted);
+            kit::Hint(branded("The .zip holds the macro and its windows: anyone with GucciBot loads it with Import a "
+                              "macro (Saved macros) and sees the same windows.")
+                          .c_str());
+        } else {
+            kit::Note(fmt::format("Saved to {}", g_status.path).c_str(), Tone::Muted);
+            kit::Hint(fmt::format("No macro file with it: {}", g_status.bundleError).c_str());
+        }
 #if defined(GEODE_IS_DESKTOP)
         if (kit::Button("Open folder")) {
             std::error_code ec;

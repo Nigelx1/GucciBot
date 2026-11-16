@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-b (Menu: no search box in Compact Mode, the full menu keeps it)"
+    "2026-11-16-c (Share my windows: a zip with the macro and its windows next to the picture, and Import a macro loads it)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

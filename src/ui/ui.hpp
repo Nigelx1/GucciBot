@@ -10,6 +10,7 @@
 
 #include <filesystem>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace gucci::ui {
@@ -77,6 +78,11 @@ namespace gucci::ui {
     // A saved macro's theme tag, as the Saved macros list shows it: the theme
     // its extension belongs to, none for .brrr (or while disguised).
     std::string savedMacroTag(std::string const& ext);
+    // Saved macros' Import a macro, for a file already picked: another bot's
+    // macro, a GucciBot one, or a shared macro with its windows (Share my
+    // windows' .zip, unpacked and selected). True and what it did, or false
+    // and why not; the same note shows under Saved macros.
+    std::pair<bool, std::string> importMacroFromFile(std::filesystem::path const& picked);
 
     // The active custom theme's name and extension (empty when a built-in is
     // active), and the folder custom themes (and their audio) live in.

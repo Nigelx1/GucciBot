@@ -4,6 +4,7 @@
 
 #include "audio/clicks.hpp"
 #include "tools/macro_convert.hpp"
+#include "tools/share_bundle.hpp"
 #include "core/platform.hpp"
 #include "core/setup_check.hpp"
 #include "hacks/legit.hpp"
@@ -947,6 +948,110 @@ namespace gucci::ui {
             return {true, msg};
         }
 
+        // What a sidecar holds, for the import's note.
+        std::string sidecarWords(std::string const& ext) {
+            if (ext == ".fwac")
+                return "frame windows";
+            if (ext == ".fw")
+                return "older frame windows";
+            if (ext == ".path")
+                return "macro path";
+            if (ext == ".trainer")
+                return "Trainer progress";
+            return ext;
+        }
+
+        // GucciBot (2026-11-16): a shared macro with its windows (the .zip
+        // Share my windows saves, tools/share_bundle), unpacked into replays/
+        // under a name no macro has and none of whose sidecars are there
+        // either (an orphan from a macro deleted by hand stays), its sidecars
+        // in replays/sidecars named after the new file. Nothing is written
+        // when anything in it is wrong, and a part-written one is taken away.
+        std::pair<bool, std::string> unpackSharedMacro(std::vector<uint8_t> const& bytes,
+                                                       std::filesystem::path const& src, std::string& savedAs,
+                                                       bool& withWindows) {
+            auto const fname = fileNameOf(src);
+            bundle::Share share;
+            std::string err;
+            if (!bundle::unpack(bytes, share, err))
+                return {false, fmt::format("{}: {}", fname, err)};
+            convert::Macro m;
+            if (!convert::fromGucciBot(share.macro, m, err))
+                return {false, fmt::format("{}: the macro in it can't be read ({})", fname, err)};
+            auto const inner = pathFromUtf8(share.macroFile);
+            auto const known = knownMacroExtensions();
+            // A name or extension Windows can't spell comes in plain (spelledAs).
+            std::string ext = spelledAs(inner.extension()).value_or(plainMacroExtension());
+            if (std::find(known.begin(), known.end(), ext) == known.end())
+                ext = plainMacroExtension();
+            auto const spelledStem = spelledAs(inner.stem());
+            std::string const base = spelledStem.value_or("Shared macro");
+            auto const dir = replaysDir();
+            auto const sidecars = dir / "sidecars";
+            auto* gb = GucciEngine::get();
+            std::error_code ec;
+            auto const taken = [&](std::string const& name) {
+                if (!gb->findMacroFile(name).empty() || std::filesystem::exists(dir / (name + ext), ec))
+                    return true;
+                for (auto const& sc : share.sidecars)
+                    if (std::filesystem::exists(sidecars / (name + ext + sc.ext), ec))
+                        return true;
+                // Any sidecar of that file name at all, not only the kinds in
+                // this share: one left behind by a macro deleted by hand (its
+                // .fw marks, its .path) would be loaded with the shared macro
+                // and drawn over its windows (the ui2 review, 11-16).
+                std::string const prefix = name + ext + ".";
+                for (auto const& e : std::filesystem::directory_iterator(sidecars, ec)) {
+                    std::string const n = geode::utils::string::pathToString(e.path().filename());
+                    if (n.size() > prefix.size() && n.compare(0, prefix.size(), prefix) == 0)
+                        return true;
+                }
+                return false;
+            };
+            std::string name = base;
+            for (int n = 2; taken(name); n++) {
+                if (n > 9999)
+                    return {false, fmt::format("{}: no free name for it in the replays folder.", fname)};
+                name = fmt::format("{} ({})", base, n);
+            }
+            auto const target = dir / (name + ext);
+            std::vector<std::filesystem::path> written;
+            auto const undo = [&]() {
+                for (auto const& p : written)
+                    std::filesystem::remove(p, ec);
+            };
+            if (!writeAll(target, share.macro)) {
+                std::filesystem::remove(target, ec);
+                return {false, fmt::format("Couldn't save {}{}.", name, ext)};
+            }
+            written.push_back(target);
+            if (!share.sidecars.empty())
+                std::filesystem::create_directories(sidecars, ec);
+            std::string what;
+            for (auto const& sc : share.sidecars) {
+                auto const to = sidecars / (name + ext + sc.ext);
+                if (!writeAll(to, sc.bytes)) {
+                    written.push_back(to);
+                    undo();
+                    return {false, fmt::format("Couldn't save its {} in the sidecars folder.", sidecarWords(sc.ext))};
+                }
+                written.push_back(to);
+                what += (what.empty() ? "" : ", ") + sidecarWords(sc.ext);
+            }
+            gb->reloadMacroList();
+            savedAs = name;
+            withWindows = std::any_of(share.sidecars.begin(), share.sidecars.end(), [](bundle::Share::Sidecar const& sc) {
+                return sc.ext == ".fwac" || sc.ext == ".fw";
+            });
+            std::string msg = fmt::format("{} is a shared macro{}, unpacked as \"{}\": {} inputs at {} TPS", fname,
+                                          share.level.empty() ? "" : " for " + share.level, name, m.inputs.size(),
+                                          m.tps);
+            msg += what.empty() ? ", with no windows in it." : fmt::format(", with its {}.", what);
+            if (!spelledStem)
+                msg += plainNameNote(name);
+            return {true, msg};
+        }
+
         // What Import a macro does with the file picked.
         std::pair<bool, std::string> importMacroFile(std::filesystem::path const& picked) {
             auto* gb = GucciEngine::get();
@@ -958,6 +1063,8 @@ namespace gucci::ui {
             if (bytes.empty())
                 return {false, fmt::format("{}: The file is empty.", fname)};
             bool const ours = convert::isGucciBot(bytes);
+            // A shared macro with its windows (Share my windows' .zip).
+            bool const shared = !ours && bundle::looksLikeShare(bytes);
             std::error_code ec;
             // A macro that's already here is selected (loaded, as a click on
             // its row does), unless it already is (loading it again would drop
@@ -991,7 +1098,7 @@ namespace gucci::ui {
                 log::warn("[GucciBot] {} isn't readable JSON, starting it again", indexFile);
             std::string const hash = geode::sha256(std::span<uint8_t const>(bytes)).toString();
             matjson::Value const seen = std::as_const(index)[hash];
-            std::string const nudge = std::to_string(ours ? 0 : g_convertShift);
+            std::string const nudge = std::to_string(ours || shared ? 0 : g_convertShift);
 
             // Imported before, at this nudge, and that macro is still the one
             // the import wrote, byte for byte. An entry written before the
@@ -1035,10 +1142,14 @@ namespace gucci::ui {
             }
 
             std::string name;
-            auto [ok, msg] = ours ? copyGucciBotMacro(bytes, original, name)
-                                  : convertMacroBytes(bytes, original, false, &name);
+            bool withWindows = false;
+            auto [ok, msg] = ours     ? copyGucciBotMacro(bytes, original, name)
+                             : shared ? unpackSharedMacro(bytes, original, name, withWindows)
+                                      : convertMacroBytes(bytes, original, false, &name);
             if (!ok)
                 return {false, msg};
+            if (shared && g_convertShift != 0)
+                msg += "\nShift frames isn't used on a shared macro: it came in as it was.";
 
             if (copy.empty()) {
                 std::filesystem::create_directories(dir, ec);
@@ -1084,8 +1195,38 @@ namespace gucci::ui {
                 msg += fmt::format("\nCouldn't update imported/index.json ({}), so importing it again makes a "
                                    "second macro.",
                                    written.unwrapErr());
+            // A shared macro is there to be looked at: selected (loaded, as a
+            // click on its row does, windows and all), unless a run is on.
+            if (shared) {
+                if (gb->isRecording() || gb->analyzerOwnsRun()) {
+                    msg += "\nNot selected while recording or while Calculate runs: pick it in Saved macros after.";
+                } else {
+                    loadMacroByName(name);
+                    msg += withWindows ? "\nIt's selected: open its level to see the windows." : "\nIt's selected.";
+                }
+            }
             return {true, msg};
         }
+
+    } // namespace
+
+    // Import a macro's own path, for the picker's result and Assistant
+    // Access's test hook (gucci_share import): the same note under Saved
+    // macros either way.
+    std::pair<bool, std::string> importMacroFromFile(std::filesystem::path const& picked) {
+        // Anything that throws on the way is a note, not a crash. (A file
+        // name Windows can't spell in its code page used to: it comes in
+        // under a plain name now, spelledAs.)
+        try {
+            std::tie(g_rowNoteOk, g_rowNote) = importMacroFile(picked);
+        } catch (std::exception const& e) {
+            g_rowNoteOk = false;
+            g_rowNote = fmt::format("Couldn't import {}: {}", fileNameOf(picked), e.what());
+        }
+        return {g_rowNoteOk, g_rowNote};
+    }
+
+    namespace {
 
         std::filesystem::path exportsDir() {
             return replaysDir() / "exports";
@@ -1147,7 +1288,8 @@ namespace gucci::ui {
             geode::utils::file::FilePickOptions::Filter macros{
                 "Macros",
                 {"*.gdr", "*.gdr2", "*.json", "*.slc", "*.scbf1", "*.tcm", "*.ttr3", "*.ybot", "*.xd", "*.mhr", "*.echo",
-                 "*.replay", "*.zbf", "*.kd", "*.rush", "*.freplay", "*.xbot", "*.url", "*.txt", "*.brrr", "*.gbot"}};
+                 "*.replay", "*.zbf", "*.kd", "*.rush", "*.freplay", "*.xbot", "*.url", "*.txt", "*.brrr", "*.gbot",
+                 "*.zip"}};  // .zip: a shared macro with its windows (Share my windows)
             // GucciBot's own under every theme (.juice, .solar, a custom
             // theme's...): importing takes any of them (copyGucciBotMacro),
             // but the filter only listed .brrr and .gbot, and on macOS a
@@ -1200,21 +1342,14 @@ namespace gucci::ui {
 #endif
                     g_rowNoteOk = false;
                 } else if (got.path) {
-                    // Anything that throws on the way is a note, not a crash. (A
-                    // file name Windows can't spell in its code page used to:
-                    // it comes in under a plain name now, spelledAs.)
-                    try {
-                        std::tie(g_rowNoteOk, g_rowNote) = importMacroFile(*got.path);
-                    } catch (std::exception const& e) {
-                        g_rowNoteOk = false;
-                        g_rowNote = fmt::format("Couldn't import {}: {}", fileNameOf(*got.path), e.what());
-                    }
+                    importMacroFromFile(*got.path);
                 }
             }
             kit::Section("From other bots");
             kit::Hint(branded(fmt::format("GDR, Silicate, TcBot, ToastyReplay, yBot, xdBot, Mega Hack, Echo and more, "
                                           "and {}. Drop them in the replays folder, or import one (or a GucciBot "
-                                          "macro) from anywhere: the original stays where it was, a copy dated the "
+                                          "macro, or the .zip Share my windows saves, which brings its windows too) "
+                                          "from anywhere: the original stays where it was, a copy dated the "
                                           "day it first came in is kept in replays/imported, and importing it again "
                                           "selects the macro it became.",
                                           disguised() ? "old 1.x macros" : "GucciBot 1.x's old .brrr"))
