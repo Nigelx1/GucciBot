@@ -1006,6 +1006,19 @@ void AbsensePathfinder::tick() {
             m_budgetMs = cap;  // as fast as it goes, but the frame still gets drawn
         } else {
             m_budgetMs = std::clamp(cap - gameMs, kMinBudgetMs, cap);
+            // GucciBot (2026-11-15, pf lane; the test switch pf_frozen_share):
+            // the game is frozen waiting for this decision, so the slice gets
+            // at least what the game's own frame costs, up to the setting:
+            // about half the wall clock while a frame costs no more than the
+            // setting, less when it costs more (GRIEF, a 50.6 ms frame against
+            // 30 ms slices: about 37%). On by default since the 2026-11-15
+            // cold regression; pf_frozen_share false is the old way. Without it a frame costing
+            // over 31 ms left 2 ms a frame: GRIEF's decision at tick 11748 took
+            // 294 s for 15.8 s of thinking. The frozen screen draws less often
+            // (a 40 ms frame: about 14 a second instead of 24); nothing decided
+            // changes, only how fast it is reached (the budgets that decide are
+            // simulated ticks and fixed card rounds, see kGpuTargetMs).
+            if (absense::frozenShare()) m_budgetMs = std::max(m_budgetMs, std::clamp(gameMs, kMinBudgetMs, cap));
         }
     }
     const double budget = m_budgetMs / 1000.0;

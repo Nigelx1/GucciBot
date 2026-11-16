@@ -569,6 +569,21 @@ void absense::setNoAhead(bool on) {
     g_noAhead = on;
 }
 
+namespace {
+// GucciBot (2026-11-15, pf lane): on by default since the cold regression
+// (GRIEF 26% -> 51%, the passing levels' decisions unchanged; see
+// pathfinder.cpp, tick(): the frozen slice). The test switch turns it off.
+bool g_frozenShare = true;
+}
+
+bool absense::frozenShare() {
+    return g_frozenShare;
+}
+
+void absense::setFrozenShare(bool on) {
+    g_frozenShare = on;
+}
+
 bool absense::pendingVerify() {
     return world::g_pendingVerify;
 }

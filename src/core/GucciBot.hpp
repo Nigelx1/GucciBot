@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-bk (Pathfinder log: a decision that takes over 30 seconds says where its time went, what the game frames cost and what time each frame gave the search)"
+    "2026-11-15-bl (Pathfinder: while the game waits for a decision, the search gets at least as much of each frame as the game itself, so heavy levels decide several times faster)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

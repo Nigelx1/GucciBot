@@ -126,6 +126,13 @@ namespace absense {
     // default; the test switch pf_no_ahead, this launch only, turns it off).
     bool noAhead();
     void setNoAhead(bool on);
+    // GucciBot (2026-11-15, pf lane): while the game is frozen waiting for a
+    // decision, a slice gets at least what the game's own frame costs (up to
+    // the time-per-frame setting) instead of what is left of that setting
+    // (on by default: the test switch pf_frozen_share, this launch only,
+    // turns it off).
+    bool frozenShare();
+    void setFrozenShare(bool on);
     // ... and its kill switch, never saved either (gucci_test_set
     // pf_pending_cells, on by default): on a level with rows of sections
     // (ORBIT, Heliopolis) a run writes back what the real game moved a

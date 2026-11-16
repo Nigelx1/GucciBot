@@ -403,6 +403,14 @@ namespace gucci::testset {
                              [](matjson::Value const& val, bool) {
                                  absense::setNoAhead(wantBool("pf_no_ahead", val));
                              }});
+                // GucciBot (2026-11-15, pf lane): a frozen slice gets at least
+                // the game's own frame cost (up to the time-per-frame setting);
+                // on by default, false for the old way.
+                v.push_back({"pf_frozen_share", "bool", Store::Memory,
+                             [] { return matjson::Value(absense::frozenShare()); },
+                             [](matjson::Value const& val, bool) {
+                                 absense::setFrozenShare(wantBool("pf_frozen_share", val));
+                             }});
                 // The cell-by-cell write-back on a level with rows (on by
                 // default); off for the old pass of everything, to compare.
                 v.push_back({"pf_pending_cells", "bool", Store::Memory,

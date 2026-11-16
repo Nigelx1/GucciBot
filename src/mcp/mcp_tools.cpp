@@ -621,7 +621,9 @@ namespace gucci::mcp {
                 "(the pathfinder checks, every tick, that each object the real game "
                 "moved and a copy could meet stands where the run has it; its stop line "
                 "counts the misses), pf_no_ahead (on by default: no decision made ahead of a plan's end, "
-                "every one from the real game; false for the old way) and pf_pending_cells (on by default: a level with "
+                "every one from the real game; false for the old way), pf_frozen_share (on by default: while the game "
+                "waits for a decision, a slice gets at least what the game's own frame costs, up to the time-per-frame "
+                "setting; false for the old way) and pf_pending_cells (on by default: a level with "
                 "rows of sections writes those objects back a cell at a time; off, all "
                 "at a run's first look, as before). A change made in "
                 "the menu to a key this holds isn't saved this launch either.",
