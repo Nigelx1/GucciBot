@@ -1440,6 +1440,18 @@ namespace gucci::ui::pages {
                      "causes counts against this one too",
                      &FW::checkPastNextInput);
                 // GucciBot (2026-10-23): from anticroom's antics-counter beta.4 and beta.6 changelogs.
+                // GucciBot (2026-11-16): from Antic's Counter 1.0.0-beta.17's changelog and Nigel's 647 run.
+                flag("Mid-tick edges stay sub-tick",
+                     "A sub-tick count that comes to a whole number of frames, like 3.01, keeps its sub-tick "
+                     "window when its edges fall inside a frame (-0.41 to +2.59) instead of showing the "
+                     "whole-frame window. Only a count whose edges sit on frame edges shows the whole window then. "
+                     "Off is the old count",
+                     &FW::subtickOffTickEdges);
+                flag("Steered sub-tick windows",
+                     "When Ship Steering's whole-frame window is wider than a ship input's sub-tick count, the "
+                     "input shows both together: on each side, whichever edge reaches further (for example -0.94 "
+                     "from the sub-tick count and +3 from steering, 3.95). Off shows the wider of the two, as before",
+                     &FW::steerSubtickMerge);
                 flag("2-player fixes",
                      "For 2-player macros and dual levels. In a 2-player level a test moves only the measured "
                      "player's clicks, plays the other player's at their own timing with none skipped, and runs on "

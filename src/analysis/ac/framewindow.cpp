@@ -1709,6 +1709,9 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRun(PlayLayer* pl,
     // flipping the switch mid-run changes nothing until the next one.
     m_twoPlayer = m_twoPlayerFixes->inner();
     m_twoPlayerLevel = pl->m_levelSettings && pl->m_levelSettings->m_twoPlayerMode;
+    // GucciBot (2026-11-16): the experimental sub-tick rules, for this run.
+    m_offTickEdges = m_subtickOffTickEdgesV->inner();
+    m_steerMerge = m_steerSubtickMergeV->inner();
     m_dispatchLegArmed = false;
     // GucciBot (2026-11-10): Ship Steering, taken once per run (floor 50 ms).
     m_steerOn = m_shipSteering->inner();
@@ -4431,8 +4434,22 @@ FrameWindowMark FrameWindowAnalyzer::buildMark() const {
             m_index + 1, m_fine, m_validCount, fineFrames,
             fineFrames / m_baseTps * 1000.0, m_baseTps, m_coarseWindow);
 
-        bool const tickAligned = m_coarseWindow > 0 && m_validCount > 1 &&
-                                 (m_validCount - 1) % m_fine == 0;
+        bool tickAligned = m_coarseWindow > 0 && m_validCount > 1 &&
+                           (m_validCount - 1) % m_fine == 0;
+        // GucciBot (2026-11-16): Mid-tick edges stay sub-tick (experimental,
+        // off by default). The count alone said tick-aligned; with this on,
+        // the edges have to be on tick edges too.
+        if (tickAligned && m_offTickEdges) {
+            auto const onTick = [this](int64_t slot) {
+                return ((slot % m_fine) + m_fine) % m_fine == 0;
+            };
+            if (!onTick(m_low) || !onTick(m_high)) {
+                tickAligned = false;
+                FWLOG("[fw][click {}] {} slots = a whole number of ticks, but the edges {}..{} are inside a "
+                      "tick: keeping the sub-tick count (mid-tick edges)",
+                      m_index + 1, m_validCount, m_low, m_high);
+            }
+        }
         if (tickAligned)
             FWLOG(
                 "[fw][click {}] CBF adds nothing: edges tick-aligned ({} "
@@ -4531,9 +4548,33 @@ void FrameWindowAnalyzer::finishClick() {
         } else if (m_haveSteeredMark) {
             float const fine = mk.subframe > 0.f ? mk.subframe : static_cast<float>(mk.window);
             if (static_cast<float>(m_steeredMark.window) > fine) {
-                FWLOG("[fw][click {}] steered window {} is wider than the sub-tick pass's {:.3f}, keeping it",
-                      m_index + 1, m_steeredMark.window, fine);
-                mk = m_steeredMark;
+                if (m_steerMerge && mk.cbf && mk.subframe > 0.f) {
+                    // GucciBot (2026-11-16): Steered sub-tick windows
+                    // (experimental, off by default). Each side's further
+                    // edge, in slots: the sub-tick pass's, or the steered
+                    // whole-frame one's. The plain band is the sub-tick one.
+                    int64_t const lo = std::min<int64_t>(mk.low, m_steeredMark.low * m_fine);
+                    int64_t const hi = std::max<int64_t>(mk.high, m_steeredMark.high * m_fine);
+                    float const merged = static_cast<float>(hi - lo + 1) / static_cast<float>(m_fine);
+                    FWLOG("[fw][click {}] steered window {} ({}..{}) and sub-tick {:.3f} ({}..{} slots) "
+                          "merged: {}..{} slots = {:.3f}",
+                          m_index + 1, m_steeredMark.window, m_steeredMark.low, m_steeredMark.high, fine,
+                          mk.low, mk.high, lo, hi, merged);
+                    mk.havePlain = true;
+                    mk.plainLow = mk.low;
+                    mk.plainHigh = mk.high;
+                    mk.low = lo;
+                    mk.high = hi;
+                    mk.subframe = merged;
+                    mk.window = m_steeredMark.window;
+                    mk.steered = true;
+                    mk.steerSaved = m_steerSaves;
+                    mk.hz = merged > 0.f ? std::min<int64_t>(std::llround(m_baseTps / merged), MAX_CBF_HZ) : 0;
+                } else {
+                    FWLOG("[fw][click {}] steered window {} is wider than the sub-tick pass's {:.3f}, keeping it",
+                          m_index + 1, m_steeredMark.window, fine);
+                    mk = m_steeredMark;
+                }
             }
         }
     }

@@ -221,6 +221,21 @@ struct FrameWindowSettings {
     // or past it count plainly.
     bool shipSteering = true;
     int steerReactionMs = 100;
+    // GucciBot (2026-11-16): two experimental sub-tick rules, off by default
+    // (Nigel's call; real play can't check them, since a game test moves
+    // inputs by whole frames). From Antic's Counter 1.0.0-beta.17's changelog
+    // ("some inputs weren't CBF-counted in CBF mode"; no source) and Nigel's
+    // 647 run, where two tight inputs lost their sub-tick reading.
+    // Mid-tick edges: a sub-tick count of a whole number of ticks plus one
+    // slot (3.01) kept only the whole-frame window even with its edges inside
+    // a tick (-0.41..+2.59); with this on, only a count whose edges are on
+    // tick edges does.
+    bool subtickOffTickEdges = false;
+    // Steered sub-tick windows: when Ship Steering's whole-frame window is
+    // wider than the sub-tick count, the mark took the steered whole window
+    // and dropped the sub-tick edges; with this on it gets both: the earlier
+    // and the later of each side's edges (4272: -0.94 and +3, 3.95).
+    bool steerSubtickMerge = false;
     bool testShipReleases = true;
     bool testAllReleases = false;
     bool orbAwareReleaseSkip = true;

@@ -73,6 +73,8 @@ namespace gucci::fwstore {
             // default, and a saved value loads over the default.
             {"fwac_two_player_fixes2", &FW::twoPlayerFixes},
             {"fwac_ship_steering", &FW::shipSteering},
+            {"fwac_subtick_off_tick_edges", &FW::subtickOffTickEdges},
+            {"fwac_steer_subtick_merge", &FW::steerSubtickMerge},
             {"fwac_test_ship_releases", &FW::testShipReleases},
             {"fwac_test_all_releases", &FW::testAllReleases},
             {"fwac_orb_aware_skip", &FW::orbAwareReleaseSkip},

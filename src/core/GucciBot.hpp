@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-f (Calculate: a same-tick click gets one number in the Windows by hand table, the playhead and Continue, so its release no longer takes the next number)"
+    "2026-11-16-g (Calculate: two experimental switches, off by default, for sub-tick readings that got lost: mid-tick edges stay sub-tick, and steered sub-tick windows)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

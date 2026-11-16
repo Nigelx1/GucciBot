@@ -624,6 +624,14 @@ class FrameWindowAnalyzer {
     SLValuePtr<bool> m_twoPlayerFixes = SLValue<bool>::create(
         "framewindow.two_player_fixes",
         &SLSettings::get()->frameWindow.twoPlayerFixes);
+    // GucciBot (2026-11-16): the two experimental sub-tick rules (shim.hpp),
+    // taken once per run.
+    SLValuePtr<bool> m_subtickOffTickEdgesV = SLValue<bool>::create(
+        "framewindow.subtick_off_tick_edges",
+        &SLSettings::get()->frameWindow.subtickOffTickEdges);
+    SLValuePtr<bool> m_steerSubtickMergeV = SLValue<bool>::create(
+        "framewindow.steer_subtick_merge",
+        &SLSettings::get()->frameWindow.steerSubtickMerge);
     // GucciBot (2026-11-10): Ship Steering (taken once per run, startRange).
     SLValuePtr<bool> m_shipSteering = SLValue<bool>::create(
         "framewindow.ship_steering",
@@ -842,6 +850,8 @@ class FrameWindowAnalyzer {
     int m_recovery = 4;
     Algorithm m_algo = Algorithm::TimeBased;
     bool m_pastNext = false;
+    bool m_offTickEdges = false;  // GucciBot (2026-11-16): subtickOffTickEdges, this run's
+    bool m_steerMerge = false;    // GucciBot (2026-11-16): steerSubtickMerge, this run's
     // GucciBot (2026-10-23): the 2-player fixes for this run, and whether its
     // level is a 2-player one; both taken when it starts.
     bool m_twoPlayer = false;
