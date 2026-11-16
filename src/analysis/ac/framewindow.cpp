@@ -1498,6 +1498,9 @@ FrameWindowAnalyzer::ResumePoint FrameWindowAnalyzer::computeResumePoint(
         m_twoPlayerFixes->inner() && !twoPlayerLevelOf(pl)
             ? this->dualPartners(nullptr)
             : std::vector<size_t>{};
+    // GucciBot (2026-11-16): and a same-tick click (groupTickPresses) is one
+    // input: its first press's window is the click's.
+    auto const leads = tickLeadsOf(actions, partner, nullptr);
     int presses = 0;
     bool found = false;
     for (size_t i = 0; i < actions.size(); i++) {
@@ -1505,6 +1508,7 @@ FrameWindowAnalyzer::ResumePoint FrameWindowAnalyzer::computeResumePoint(
         if (!isMeasurableInput(a) || !a.m_holding) continue;
         if (i < partner.size() && partner[i] != NO_INDEX && partner[i] < i)
             continue;
+        if (i < leads.size() && leads[i] != NO_INDEX) continue;
         presses++;
         uint32_t const frame = static_cast<uint32_t>(a.m_frame);
         if (resumeKeyHeld(keys, frame, a.m_player2, false)) {
@@ -9753,9 +9757,14 @@ FrameWindowAnalyzer::PlayheadInput FrameWindowAnalyzer::playheadInput() const {
     uint32_t const now = Bot::get()->updater().getFrame();
     bool const releases = m_labelReleases->inner();
 
+    // GucciBot (2026-11-16): a same-tick click (groupTickPresses) is one
+    // input, numbered and shown as its first press, as the table has it.
+    auto const leads = tickLeadsOf(actions, {}, nullptr);
     int presses = 0;
-    for (auto const& a : actions) {
+    for (size_t i = 0; i < actions.size(); i++) {
+        auto const& a = actions[i];
         if (!isMeasurableInput(a) || a.m_frame > now) continue;
+        if (i < leads.size() && leads[i] != NO_INDEX) continue;
         if (a.m_holding) presses++;
         if (!a.m_holding && !releases) continue;
 
@@ -9946,15 +9955,16 @@ std::vector<FrameWindowAnalyzer::PlayheadInput> FrameWindowAnalyzer::allInputs(
     // GucciBot (2026-11-16): the rest of a same-tick click (groupTickPresses)
     // has no window of its own and no row: its row took its first press's
     // window (the same frame, player and kind), and a window typed into it
-    // went to the first press. Still numbered, as the playhead numbers them.
+    // went to the first press. Numbered as one input, as the playhead and
+    // Continue number them, so a click's press and release share a number.
     auto const leads = tickLeadsOf(actions, {}, nullptr);
     int presses = 0;
     for (size_t i = 0; i < actions.size(); i++) {
         auto const& a = actions[i];
         if (!isMeasurableInput(a)) continue;
+        if (i < leads.size() && leads[i] != NO_INDEX) continue;
         if (a.m_holding) presses++;
         if (!a.m_holding && !releases) continue;
-        if (i < leads.size() && leads[i] != static_cast<size_t>(-1)) continue;
         PlayheadInput in;
         in.valid = true;
         in.frame = static_cast<uint32_t>(a.m_frame);

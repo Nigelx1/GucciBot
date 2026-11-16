@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-e (Calculate: several presses of one player on one tick count as one click, measured on the first press, so spam and multiclick ticks no longer get windows that are far too wide)"
+    "2026-11-16-f (Calculate: a same-tick click gets one number in the Windows by hand table, the playhead and Continue, so its release no longer takes the next number)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
