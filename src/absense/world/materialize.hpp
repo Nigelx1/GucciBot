@@ -143,6 +143,7 @@ struct BaseTable {
    private:
     mutable std::unordered_map<int, Box> m_boxes;
     mutable bool m_diffValid = false;
+    mutable bool m_diffRot = false;
     mutable uint32_t m_diffProgress = 0;
     mutable uint32_t m_diffIndex = 0;
     mutable uint64_t m_diffEpoch = 0;
@@ -420,11 +421,31 @@ class Materializer {
         bool useOuterOb = false;
         std::array<uint8_t, 0x78> boxBytes{};
     };
+    // GucciBot (2026-11-15, rotate lane): what a run that models rotates
+    // (world/rotate.hpp) writes on top of Orig - the node's rotation,
+    // m_rotationX/YOffset, m_isRotationAligned and +0x513, all raw, so the
+    // restore puts back the very bytes - and, when it was taken before
+    // anything was written, an image of the object's bytes around them for
+    // the restore check (ROTATE_PLAN.md risk 3).
+    static constexpr std::ptrdiff_t kImageFrom = 0x2a0;
+    static constexpr std::size_t kImageBytes = 0x100;  // [0x2a0, 0x3a0)
+    struct RotOrig {
+        bool have = false;
+        bool image = false;
+        float rotX = 0.0f, rotY = 0.0f;
+        float offX = 0.0f, offY = 0.0f;
+        bool aligned = false;
+        bool finish = false;
+        std::array<uint8_t, kImageBytes> bytes{};
+        std::array<uint8_t, 8> node{};
+        uint8_t b513 = 0;
+    };
     struct Written {
         GameObject* o = nullptr;
         int slot = -1;
         Orig orig;
         Pose pose;
+        RotOrig rot;
     };
     struct Window {
         int x0 = 0, x1 = -1, y0 = 0, y1 = -1;
@@ -439,8 +460,16 @@ class Materializer {
     bool tableCurrent() const;
     Pose desired(Run& run, int slot);
     void refresh(Run& run, int slot, const Window* window);
-    void write(Written& w, const Pose& p, uint8_t flags);
+    void write(Written& w, const Pose& p, uint8_t flags, bool rot = false);
     void restoreOne(Written& w);
+    // The rotate fields of a Written taken now (RotOrig), with the image
+    // when nothing has been written to the object yet.
+    static void takeRotOrig(Written& w, bool image);
+    // ... put back, and the restore check: every field a rotate writes, and
+    // with the image every byte of [0x2a0, 0x3a0), the node's rotation and
+    // +0x513, must come out as they were - a miss is counted
+    // (rotate::restoreMisses) and logged as an error.
+    static void restoreRot(Written& w);
     // The sections the copy's collision pass can reach, from where it stands
     // before its update.
     Window windowOf(PlayerObject* copy) const;

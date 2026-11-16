@@ -15,6 +15,7 @@
 #include <Geode/Geode.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
@@ -27,6 +28,7 @@
 #include "absense/world/ledger.hpp"
 #include "absense/world/materialize.hpp"
 #include "absense/world/offsets.hpp"
+#include "absense/world/rotate.hpp"
 #include "absense/world/state.hpp"
 #include "absense/world/world.hpp"
 
@@ -257,7 +259,7 @@ void testOps(uint64_t seed, uint32_t tick, std::vector<Op>& out) {
             op.sign = (r.next() & 1) ? 1 : -1;
         } else {
             op.kind = OpKind::RotateAbout;
-            op.angle = 1.5;
+            op.rr = 1.5;
         }
         const uint32_t size = r.next() % 10;
         op.dx = size == 0 ? 0.0f : (size == 1 ? -0.0f : ((float)(r.next() % 2001) - 1000.0f) / 7.0f);
@@ -676,7 +678,278 @@ const char* checkWorldStep() {
     return nullptr;
 }
 
+// ------------------------------------------------------------ rotate (pf_rotate)
+//
+// GucciBot (2026-11-15, rotate lane): the rotate step's checks
+// (world/rotate.hpp), run on a lone private node with no level behind it.
+// A failure only ever turns rotate off, never the World.
+
+// The check level with one more group: 6 holds slot 7 alone, the centre the
+// rotates turn about (a group of exactly one object, rotate.cpp (R5)).
+std::shared_ptr<WorldDef> rotateDef(bool replace) {
+    auto def = std::make_shared<WorldDef>();
+    def->slots.assign(8, nullptr);
+    def->flags.assign(8, kCollidable);
+    def->defOfSlot.assign(8, -1);
+    def->objectCount = 8;
+    std::vector<std::vector<int>> groups(7), statics(7), optimized(7);
+    groups[1] = {0, 1, 2};
+    statics[1] = {0, 1, 2};
+    groups[2] = {1, 3, 3};
+    statics[2] = {1, 3, 3};
+    groups[3] = {4, 5};
+    optimized[3] = {4, 5};
+    groups[4] = {0, 6};
+    statics[4] = {0};
+    optimized[4] = {6};
+    groups[5] = {7, 2};
+    statics[5] = {7, 2};
+    groups[6] = {7};
+    statics[6] = {7};
+    def->setGroups(groups, statics, optimized, 8);
+    def->rotateReplace = replace;
+    return def;
+}
+
+Pose rotateBase(int slot) {
+    Pose p = testBase(slot);
+    p.marker = 7u;
+    p.skipLast = false;
+    p.noMoveX = false;
+    p.counter = 0;
+    p.disabled = false;
+    p.canRotateFree = slot != 2;  // one that never turns
+    p.decoration = slot == 4 || slot == 5;
+    p.rot = p.rotY = slot == 3 ? 15.0f : 0.0f;
+    if (slot == 1) p.rotY = 5.0f;  // rotation x and y apart: addRotation's other branch
+    p.offX = slot == 0 ? 2.5f : 0.0f;
+    p.offY = slot == 0 ? -1.25f : 0.0f;
+    return p;
+}
+
+WCmd rotateCommand(int uid, int target, int center, float degrees, double duration, bool lock) {
+    WCmd c = freshCommand(uid);
+    c.commandType = off::kCmdRotate;
+    c.targetGroup = target;
+    c.centerGroup = center;
+    c.duration = duration;
+    c.easingType = 0;
+    c.easingRate = 2.0;
+    c.lockObjectRotation = lock;
+    c.rotationOffset = (double)degrees;
+    if (degrees == 0.0f) {
+        c.finished = true;
+        c.finishRelated = true;
+    } else {
+        c.actionValue1 = (double)degrees;
+        c.actionType1 = 3;
+    }
+    c.triggerUid = 600 + uid;
+    return c;
+}
+
+WCmd moveCommand(int uid, int target, double dx, double duration) {
+    WCmd c = freshCommand(uid);
+    c.commandType = 0;
+    c.targetGroup = target;
+    c.duration = duration;
+    c.actionType1 = 1;
+    c.actionValue1 = dx;
+    c.triggerUid = 600 + uid;
+    return c;
+}
+
+struct RotateRig {
+    std::shared_ptr<WorldDef> def;
+    WorldState ws;
+    OpLog log;
+    ObjectCache cache;
+    Run run;
+    explicit RotateRig(bool replace = false) : def(rotateDef(replace)) {
+        ws.commandIndex = 5000;
+        ws.nextCommandUid = 900;
+        ws.rotate = true;
+        cache.reset(def);
+        for (int s = 0; s < 8; s++) cache.setBase(s, rotateBase(s));
+        run.def = def.get();
+        run.ws = &ws;
+        run.log = &log;
+        run.cache = &cache;
+    }
+    void tick() { stepTestTick(run, 1.0f / 240.0f); }
+};
+
+template <class Fn>
+void forEachOp(const OpLog& log, Fn&& fn) {
+    for (const auto& ch : log.sealed()) {
+        for (const Op& op : ch->ops) fn(op);
+    }
+    for (const Op& op : log.open().ops) fn(op);
+}
+
+bool closeTo(double a, double b) { return std::fabs(a - b) <= 1e-3; }
+
+const char* checkRotateGeometry() {
+    // A quarter turn (cocos: clockwise for a positive angle) of group 1 about
+    // slot 7, done in one tick, with a move of +10 in x on the same group the
+    // same tick: the rotate takes the move (claimMoveAction), so it happens
+    // once, after the turn.
+    RotateRig r;
+    r.ws.cmds.edit().push_back(rotateCommand(1, 1, 6, 90.0f, 0.0, false));
+    r.ws.cmds.edit().push_back(moveCommand(2, 1, 10.0, 0.0));
+    const Pose c0 = rotateBase(7);
+    const Pose p0 = rotateBase(0);
+    const Pose q0 = rotateBase(2);
+    // A fresh command's first step only clears m_alreadyUpdated (step
+    // 0x257900): it moves on the second tick.
+    r.tick();
+    r.tick();
+    int rotates = 0, translates = 0;
+    uint32_t turnTick = 0;
+    forEachOp(r.log, [&](const Op& op) {
+        if (op.kind == OpKind::Rotate && op.group == 1) {
+            rotates++;
+            turnTick = op.tick;
+        }
+    });
+    forEachOp(r.log, [&](const Op& op) {
+        if (op.kind == OpKind::Translate && op.group == 1 && op.tick == turnTick) translates++;
+    });
+    if (rotates != 1) return "rotate check: a quarter turn did not emit one rotate op";
+    if (translates != 0) return "rotate check: the move a rotate took was applied again";
+    const Pose p = r.cache.pose(r.log, 0);
+    const double cx = c0.x - (double)c0.offX, cy = c0.y - (double)c0.offY;
+    const double lx = (p0.x - (double)p0.offX) - cx, ly = (p0.y - (double)p0.offY) - cy;
+    // clockwise: (lx, ly) -> (ly, -lx)
+    if (!closeTo(p.x, cx + ly + 10.0 + (double)p0.offX) || !closeTo(p.y, cy - lx + (double)p0.offY)) {
+        return "rotate check: a quarter turn put an object in the wrong place";
+    }
+    if (p.rot != 90.0f || p.rotY != 90.0f || !p.aligned || !p.useOuterOb) {
+        return "rotate check: a quarter turn left an object's own rotation wrong";
+    }
+    if (p.rotOffX != 90.0f || p.rotOffY != 90.0f) return "rotate check: the rotation offsets are wrong";
+    if (p.lastX != (float)p0.x || p.lastY != (float)p0.y || p.marker != r.ws.commandIndex) {
+        return "rotate check: a turn did not stamp the last position";
+    }
+    if (!bitEqual(p, r.cache.replayFromBase(r.log, 0))) return "rotate check: a turned pose comes out two ways";
+    // Slot 2 cannot rotate freely: it moves on the circle, its rotation stays.
+    const Pose q = r.cache.pose(r.log, 2);
+    if (q.rot != q0.rot || q.useOuterOb != q0.useOuterOb) return "rotate check: an object that cannot turn turned";
+    const double qx = (q0.x - (double)q0.offX) - cx, qy = (q0.y - (double)q0.offY) - cy;
+    if (!closeTo(q.x, cx + qy + 10.0) || !closeTo(q.y, cy - qx)) return "rotate check: a fixed object left the circle";
+    // Slot 1 has rotation x and y apart: both turn by the angle.
+    const Pose o1 = r.cache.pose(r.log, 1);
+    if (o1.rot != 90.0f || o1.rotY != 95.0f) return "rotate check: addRotation with x and y apart is wrong";
+    return nullptr;
+}
+
+const char* checkRotateMerge() {
+    // Two commands on the same (target, centre) in one tick merge into one
+    // op (claimRotationAction): the positions turn by both, the objects' own
+    // rotation only by the one that does not lock.
+    RotateRig r;
+    r.ws.cmds.edit().push_back(rotateCommand(1, 1, 6, 30.0f, 0.0, false));
+    r.ws.cmds.edit().push_back(rotateCommand(2, 1, 6, 30.0f, 0.0, true));
+    r.tick();
+    r.tick();
+    int rotates = 0;
+    Op first;
+    forEachOp(r.log, [&](const Op& op) {
+        if (op.kind != OpKind::Rotate) return;
+        if (rotates++ == 0) first = op;
+    });
+    if (rotates != 1) return "rotate check: a merged pair did not emit one op";
+    if (first.rr != 30.0f) return "rotate check: a merged pair's own rotation is not the unlocked one's";
+    const cocos2d::CCAffineTransform t60 = rotate::transform(60.0f, cocos2d::CCPoint{first.rcx, first.rcy});
+    if (first.rt[0] != t60.a || first.rt[1] != t60.b || first.rt[4] != t60.tx || first.rt[5] != t60.ty) {
+        return "rotate check: a merged pair did not turn by the sum";
+    }
+    // No centre (group 0): the objects turn where they stand.
+    RotateRig n;
+    n.ws.cmds.edit().push_back(rotateCommand(1, 1, 0, 45.0f, 0.0, false));
+    n.tick();
+    n.tick();
+    const Pose p = n.cache.pose(n.log, 0);
+    const Pose p0 = rotateBase(0);
+    if (p.x != p0.x || p.y != p0.y || p.lastX != p0.lastX || p.marker != p0.marker) {
+        return "rotate check: a turn without a centre moved an object";
+    }
+    if (p.rot != 45.0f || p.aligned || !p.useOuterOb) return "rotate check: a turn without a centre did not turn the object";
+    // EM +0x818: the newest rotate of a target this tick replaces the older
+    // one (prepareMoveActions case 1).
+    RotateRig x(true);
+    x.ws.cmds.edit().push_back(rotateCommand(1, 1, 6, 30.0f, 0.0, false));
+    x.ws.cmds.edit().push_back(rotateCommand(2, 1, 6, 20.0f, 0.0, false));
+    x.tick();
+    x.tick();
+    float own = 0.0f;
+    int ops = 0;
+    forEachOp(x.log, [&](const Op& op) {
+        if (op.kind != OpKind::Rotate) return;
+        own = op.rr;
+        ops++;
+    });
+    if (ops != 1 || own != 20.0f) return "rotate check: the newest rotate did not replace the older one";
+    return nullptr;
+}
+
+const char* checkRotateBranches() {
+    // A long rotate and a move on one group, an in-place one on another, a
+    // locked one on a third, and the centre itself moving: stepped straight
+    // and through abandoned branches, the same state, ops and poses.
+    auto setUp = [](RotateRig& r) {
+        std::vector<WCmd>& cmds = r.ws.cmds.edit();
+        cmds.push_back(rotateCommand(1, 1, 6, -51.0f, 0.6, false));
+        cmds.back().easingType = 1;
+        cmds.push_back(moveCommand(2, 1, -66.0, 0.7));
+        cmds.push_back(rotateCommand(3, 2, 0, 400.0f, 0.4, false));
+        cmds.push_back(rotateCommand(4, 5, 6, 77.0f, 0.3, true));
+        cmds.push_back(moveCommand(5, 6, 30.0, 0.5));
+    };
+    RotateRig a;
+    setUp(a);
+    for (int t = 0; t < 240; t++) a.tick();
+    RotateRig b;
+    setUp(b);
+    for (int t = 0; t < 240; t++) {
+        if (t % 9 == 4) {
+            const WorldState savedWs = b.ws;
+            const OpLog savedLog = b.log;
+            for (int k = 0; k < 1 + t % 11; k++) {
+                if (k == 0) {
+                    b.ws.cmds.edit().push_back(rotateCommand(b.ws.nextCommandUid++, 1 + t % 5, 6, 33.0f, 0.2, false));
+                }
+                b.tick();
+                for (int s = 0; s < 8; s++) b.cache.pose(b.log, s);
+            }
+            b.ws = savedWs;
+            b.log = savedLog;
+        }
+        b.tick();
+        if (t % 5 == 0) b.cache.pose(b.log, t % 8);
+    }
+    if (!(a.ws == b.ws)) return "rotate check: a state stepped through branches comes out different";
+    if (!a.log.sameOps(b.log)) return "rotate check: a log stepped through branches holds other ops";
+    for (int s = 0; s < 8; s++) {
+        if (!bitEqual(a.cache.pose(a.log, s), b.cache.pose(b.log, s))) return "rotate check: a pose after branches is off";
+        if (!bitEqual(a.cache.pose(a.log, s), a.cache.replayFromBase(a.log, s))) {
+            return "rotate check: a pose comes out two ways";
+        }
+    }
+    if (a.cache.pose(a.log, 0).x == rotateBase(0).x) return "rotate check: the long rotate moved nothing";
+    return nullptr;
+}
+
 }  // namespace
+
+const char* rotateSelfTest() {
+    rotate::setLoneChain(true);
+    const char* bad = checkRotateGeometry();
+    if (!bad) bad = checkRotateMerge();
+    if (!bad) bad = checkRotateBranches();
+    rotate::setLoneChain(false);
+    return bad;
+}
 
 void World::turnOff(const char* why) {
     if (World::disabled) return;  // the first reason is the one worth keeping

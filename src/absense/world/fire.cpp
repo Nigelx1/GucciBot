@@ -574,6 +574,40 @@ void triggerMoveCommand(Run& run, const TriggerDef& d, std::span<const int> keys
     createMoveCommand(run, offset, target, d, lockPX, lockPY, lockCX, lockCY, control);
 }
 
+// EffectGameObject::triggerObject's rotate (0x4a66be) in the default mode,
+// then createRotateCommand 0x25c9b0: world/rotate.cpp (R1) and (R2).
+void triggerRotateCommand(Run& run, const TriggerDef& d, std::span<const int> keys) {
+    WorldState& ws = *run.ws;
+    const int target = remapped(run, keys, d.target);
+    const int center = remapped(run, keys, d.center);
+    const int control = remapped(run, keys, d.control);
+    const float angle = (float)d.times360 * 360.0f + d.degrees;
+    WCmd c = freshCommand(ws.nextCommandUid++);
+    c.centerGroup = center;
+    c.triggerUid = d.uid;
+    c.duration = (double)d.duration;
+    c.controlId = control;
+    c.easingType = d.easingType;
+    c.targetGroup = target;
+    c.commandType = off::kCmdRotate;
+    c.lockObjectRotation = d.lockRotation;
+    c.targetPlayer = 0;
+    c.easingRate = (double)d.easingRate;
+    c.rotationOffset = (double)angle;
+    if ((double)angle == 0.0) {
+        c.finished = true;
+        c.finishRelated = true;
+    } else {
+        c.actionValue1 = (double)angle;
+        c.actionType1 = 3;
+    }
+    if (g_debugNotes) {
+        g_debugNotes->push_back(fmt::format("  World: rotate {} fires: group {} about {} by {} over {} s{}", d.uid,
+                                            target, center, angle, d.duration, d.lockRotation ? " (locked)" : ""));
+    }
+    ws.cmds.edit().push_back(c);
+}
+
 // ------------------------------------------------------------ spawns
 
 // SpawnTriggerGameObject::updateRemapKeys 0x4b90f0, fact (p): the keys a spawn
@@ -1790,6 +1824,17 @@ void fire(Run& run, int defIdx, std::span<const int> keys, int playerUid, double
             return;
         case Kind::Move:
             triggerMoveCommand(run, d, keys);
+            return;
+        case Kind::Rotate:
+            // GucciBot (2026-11-15, rotate lane): the default mode, in a run
+            // that models rotates (world/rotate.cpp (R1)); aim, follow and
+            // dynamic rotates are still not ported.
+            if (ws.rotate && !d.useTarget && !d.directionMode) {
+                triggerRotateCommand(run, d, keys);
+                return;
+            }
+            markFireUncertain(*run.def, ws, d, remapped(run, keys, d.target), remapped(run, keys, d.center));
+            markUncertain(ws, remapped(run, keys, d.targetModCenter));
             return;
         case Kind::Toggle:
             toggleGroup(run, remapped(run, keys, d.target), d.activateGroup);

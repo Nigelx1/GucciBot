@@ -22,6 +22,7 @@
 #include "absense/compat/bot.hpp"
 #include "absense/compat/bot.hpp"
 #include "absense/compat/settings.hpp"
+#include "absense/world/rotate.hpp"
 #include "absense/world/def.hpp"
 #include "absense/world/ledger.hpp"
 #include "absense/world/offsets.hpp"
@@ -2382,7 +2383,16 @@ struct Trajectory::Sim {
             // from while the game stood elsewhere keeps what those runs had,
             // even when a restore brings the game back to its tick.
             if (fromWorld) fromWorld->taken = true;
+            // GucciBot (2026-11-15, rotate lane): a run from the live game
+            // models rotate triggers when the test switch is on and the
+            // transform chain checks out right now (world/rotate.hpp); a kept
+            // start never does, and leaves them uncertain as before.
+            const bool rotateRun = !fromWorld && world::rotate::wantedForRun(pl);
+            world::g_captureRotates = rotateRun;
             ws = fromWorld ? fromWorld->materialize() : world::World::captureLive(pl);
+            world::g_captureRotates = false;
+            ws.rotate = rotateRun;
+            ws.rotateChain = rotateRun ? world::rotate::chainKey() : 0;
             // captureLive's first read of a level runs the level check, which
             // can turn the World off: the run then goes without it.
             worldOn = !world::World::disabled;

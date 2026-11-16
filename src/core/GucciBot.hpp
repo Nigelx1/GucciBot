@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-m (Pathfinder: pf_stuck_work and pf_start_stop on by default, with a wall-clock backstop of 20 minutes for a stuck run)"
+    "2026-11-16-n (Pathfinder test switch pf_rotate (off): the trigger model runs rotate triggers in the default mode exactly, with every byte it writes put back and checked)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

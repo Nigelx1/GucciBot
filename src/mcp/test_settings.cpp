@@ -405,6 +405,13 @@ namespace gucci::testset {
                              [](matjson::Value const& val, bool) {
                                  absense::setPendingVerify(wantBool("pf_pending_verify", val));
                              }});
+                // GucciBot (2026-11-15, rotate lane): rotate triggers in the
+                // World (world/rotate.hpp), this launch only; off by default.
+                v.push_back({"pf_rotate", "bool", Store::Memory,
+                             [] { return matjson::Value(absense::rotateTriggers()); },
+                             [](matjson::Value const& val, bool) {
+                                 absense::setRotateTriggers(wantBool("pf_rotate", val));
+                             }});
                 // GucciBot (2026-11-12): no decisions made ahead of a plan's
                 // end (on by default since build 2026-11-12-h); false puts the
                 // decisions made ahead back, to compare.

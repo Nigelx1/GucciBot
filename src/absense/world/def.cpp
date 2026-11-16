@@ -1,4 +1,5 @@
 #include "core/platform.hpp"
+#include "absense/world/rotate.hpp"
 #include "absense/world/def.hpp"
 
 #include <Geode/Geode.hpp>
@@ -772,6 +773,11 @@ void WorldDef::build(GJBaseGameLayer* layer) {
         std::sort(pairs.begin(), pairs.end());
         remapTables.push_back(std::move(pairs));
     }
+#ifdef GEODE_IS_WINDOWS
+    rotateReplace = layer->m_effectManager && off::at<bool>(layer->m_effectManager, off::kEmRotateReplace);
+#else
+    rotateReplace = false;  // the World is off here (World::init)
+#endif
     groupParents.clear();
     if (cocos2d::CCDictionary* dict = layer->m_parentGroupsDict) {
         for (cocos2d::CCDictElement* el = dict->m_pElements; el; el = static_cast<cocos2d::CCDictElement*>(el->hh.next)) {
@@ -793,6 +799,7 @@ void WorldDef::build(GJBaseGameLayer* layer) {
     }
     m_targeting = toLists(targetPairs, (std::size_t)kGroupLimit, true);
     m_groupModelled.assign((std::size_t)kGroupLimit, 1);
+    m_groupModelledRotate.assign((std::size_t)kGroupLimit, 1);
     for (std::size_t g = 0; g < (std::size_t)kGroupLimit; g++) {
         if (m_targeting.at(g).empty()) continue;
         for (int s : m_members.at(g)) flags[(std::size_t)s] |= kReferenced;
@@ -805,9 +812,14 @@ void WorldDef::build(GJBaseGameLayer* layer) {
         for (int s : m_targeting.at(g)) {
             const int di = defOfSlot[(std::size_t)s];
             if (di < 0) continue;
-            if (!kindShipped(triggers[(std::size_t)di].kind)) {
+            const TriggerDef& t = triggers[(std::size_t)di];
+            if (!kindShipped(t.kind)) {
                 m_groupModelled[g] = 0;
-                break;
+                // A run with rotates runs the default mode (world/rotate.cpp
+                // (R1)): no aim, follow or dynamic rotate.
+                if (!(t.kind == Kind::Rotate && !t.useTarget && !t.directionMode && !t.paramsMissing)) {
+                    m_groupModelledRotate[g] = 0;
+                }
             }
         }
     }
@@ -836,6 +848,9 @@ std::shared_ptr<const WorldDef> g_def;
 void forgetLevel() {
     g_def.reset();
     forgetMaterialDef();
+    // The rotate step's private nodes copy the level's transform chain
+    // (world/rotate.hpp): checked again on the next level.
+    rotate::forget();
     // The ledger's ring names objects of the level being let go (design step
     // 10): it goes with them rather than be undone into objects that are gone.
     forgetLedger();

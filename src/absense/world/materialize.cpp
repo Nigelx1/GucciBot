@@ -60,6 +60,7 @@
 #endif
 #include "absense/trajectory/trajectory.hpp"  // moverCacheGeneration
 #include "absense/world/offsets.hpp"
+#include "absense/world/rotate.hpp"
 #include "absense/world/world.hpp"
 
 #if defined(__clang__)
@@ -201,6 +202,23 @@ bool sameLive(const Pose& p, GameObject* o) {
     return sameBits(p.x, o->m_positionX) && sameBits(p.y, o->m_positionY) && sameBits(p.lastX, o->m_lastPosition.x) &&
            sameBits(p.lastY, o->m_lastPosition.y) && p.marker == off::moveMarker(o) &&
            p.counter == o->m_enabledGroupsCounter && p.disabled == o->m_isGroupDisabled;
+}
+
+// GucciBot (2026-11-15, rotate lane): the rotate fields a run that models
+// rotates writes (world/rotate.hpp), the same bit for bit - in a pose, and
+// in the object. Only such a run ever compares them, so every other run
+// writes exactly what it did before.
+bool sameRotWritable(const Pose& a, const Pose& b) {
+    return sameBits(a.rot, b.rot) && sameBits(a.rotY, b.rotY) && sameBits(a.rotOffX, b.rotOffX) &&
+           sameBits(a.rotOffY, b.rotOffY) && a.aligned == b.aligned && a.useOuterOb == b.useOuterOb &&
+           a.rotFinish == b.rotFinish;
+}
+
+bool sameRotLive(const Pose& p, GameObject* o) {
+    return sameBits(p.rot, off::at<float>(o, off::kNodeRotX)) && sameBits(p.rotY, off::at<float>(o, off::kNodeRotY)) &&
+           sameBits(p.rotOffX, off::at<float>(o, off::kRotOffX)) && sameBits(p.rotOffY, off::at<float>(o, off::kRotOffY)) &&
+           p.aligned == off::at<bool>(o, off::kRotationAligned) && p.useOuterOb == off::at<bool>(o, off::kUseOuterOb) &&
+           p.rotFinish == off::at<bool>(o, off::kRotFinish);
 }
 
 // One step of a move: the object was moved on the step that stood at
@@ -354,7 +372,13 @@ const Box& BaseTable::groupBox(int group) const {
 }
 
 const std::vector<int>& BaseTable::liveDiff(uint32_t liveProgress, uint32_t liveCommandIndex) const {
-    if (m_diffValid && m_diffProgress == liveProgress && m_diffIndex == liveCommandIndex && m_diffEpoch == g_realEpoch) {
+    // GucciBot (2026-11-16, rotate lane review): with pf_rotate on, an object
+    // the real game only turned in place (a rotate with no centre) is a
+    // change too, so the rotate fields are compared as well; with it off this
+    // is the same check as before.
+    const bool rotDiff = g_rotate;
+    if (m_diffValid && m_diffProgress == liveProgress && m_diffIndex == liveCommandIndex && m_diffEpoch == g_realEpoch &&
+        m_diffRot == rotDiff) {
         return m_diff;
     }
     UpkeepTimer upkeep(g_upkeep.diffs);
@@ -368,11 +392,12 @@ const std::vector<int>& BaseTable::liveDiff(uint32_t liveProgress, uint32_t live
         const WorldDef& def = *md->def;
         for (std::size_t i = 0; i < md->slots.size(); i++) {
             GameObject* o = def.slots[(std::size_t)md->slots[i]];
-            if (o && !sameLive(poses[i], o)) m_diff.push_back(md->slots[i]);
+            if (o && (!sameLive(poses[i], o) || (rotDiff && !sameRotLive(poses[i], o)))) m_diff.push_back(md->slots[i]);
         }
         for (std::size_t i = 0; i < extraSlots.size(); i++) {
             GameObject* o = def.slots[(std::size_t)extraSlots[i]];
-            if (o && !sameLive(extraPoses[i], o)) m_diff.push_back(extraSlots[i]);
+            if (o && (!sameLive(extraPoses[i], o) || (rotDiff && !sameRotLive(extraPoses[i], o))))
+                m_diff.push_back(extraSlots[i]);
         }
     }
     g_upkeep.diffs.items += m_diff.size();
@@ -380,6 +405,7 @@ const std::vector<int>& BaseTable::liveDiff(uint32_t liveProgress, uint32_t live
     m_diffProgress = liveProgress;
     m_diffIndex = liveCommandIndex;
     m_diffEpoch = g_realEpoch;
+    m_diffRot = rotDiff;
     return m_diff;
 }
 
@@ -484,6 +510,14 @@ std::shared_ptr<const std::vector<Carry>> carriedMovers(const BaseTable& table, 
     // lock's axis with no input.
     std::vector<std::pair<uint16_t, uint8_t>> followed;
     for (const WCmd& c : *ws.cmds) {
+        if (ws.rotate && c.commandType == off::kCmdRotate) {
+            // GucciBot (2026-11-15, rotate lane): a run that models rotates
+            // follows the groups its rotate commands turn (world/step.cpp),
+            // on both axes - unless it already gave the group up.
+            const uint16_t g = (uint16_t)WorldDef::clampGroup(c.targetGroup);
+            if (!std::binary_search(ws.uncertainGroups.begin(), ws.uncertainGroups.end(), g)) followed.push_back({g, 3});
+            continue;
+        }
         if (c.commandType != off::kCmdMove) continue;
         const uint8_t axes = (uint8_t)((c.lockCameraX ? 0 : 1) | (c.lockCameraY ? 0 : 2));
         followed.push_back({(uint16_t)WorldDef::clampGroup(c.targetGroup), axes});
@@ -1133,7 +1167,9 @@ void Materializer::refresh(Run& run, int slot, const Window* window) {
     auto it = m_writtenOf.find(slot);
     Written* w = it != m_writtenOf.end() ? &m_written[it->second] : nullptr;
     const bool noted = debugUid(o->m_uniqueID);
-    if (w ? sameWritable(w->pose, want) : sameLive(want, o)) {
+    const bool rot = run.ws && run.ws->rotate;
+    if (w ? (sameWritable(w->pose, want) && (!rot || sameRotWritable(w->pose, want)))
+          : (sameLive(want, o) && (!rot || sameRotLive(want, o)))) {
         if (noted)
             g_debugNotes->push_back(fmt::format("  materializer: uid {} belongs at {:.2f},{:.2f}, where it {}",
                                                 o->m_uniqueID, want.x, want.y, w ? "was written" : "stands"));
@@ -1174,14 +1210,33 @@ void Materializer::refresh(Run& run, int slot, const Window* window) {
         r.useOuterOb = off::at<bool>(o, off::kUseOuterOb);
         if (r.box) std::memcpy(r.boxBytes.data(), reinterpret_cast<const char*>(r.box) + kBoxFirst, kBoxBytes);
         fresh.pose = ObjectCache::readLive(o);
+        if (rot) takeRotOrig(fresh, true);
         m_writtenOf[slot] = (uint32_t)m_written.size();
         m_written.push_back(fresh);
         w = &m_written.back();
     }
-    write(*w, want, flags);
+    write(*w, want, flags, rot);
 }
 
-void Materializer::write(Written& w, const Pose& p, uint8_t flags) {
+void Materializer::takeRotOrig(Written& w, bool image) {
+    GameObject* o = w.o;
+    RotOrig& r = w.rot;
+    r.have = true;
+    r.rotX = off::at<float>(o, off::kNodeRotX);
+    r.rotY = off::at<float>(o, off::kNodeRotY);
+    r.offX = off::at<float>(o, off::kRotOffX);
+    r.offY = off::at<float>(o, off::kRotOffY);
+    r.aligned = off::at<bool>(o, off::kRotationAligned);
+    r.finish = off::at<bool>(o, off::kRotFinish);
+    r.image = image;
+    if (image) {
+        std::memcpy(r.bytes.data(), &off::at<uint8_t>(o, kImageFrom), r.bytes.size());
+        std::memcpy(r.node.data(), &off::at<uint8_t>(o, off::kNodeRotX), r.node.size());
+        r.b513 = off::at<uint8_t>(o, off::kRotFinish);
+    }
+}
+
+void Materializer::write(Written& w, const Pose& p, uint8_t flags, bool rot) {
     if (g_nearProfile.on) g_nearProfile.writes++;
     GameObject* o = w.o;
     // The buckets first, from the slots the object has now; an object with
@@ -1202,7 +1257,82 @@ void Materializer::write(Written& w, const Pose& p, uint8_t flags) {
     off::rectDirtyWord(o) = 0x101;
     o->m_enabledGroupsCounter = p.counter;
     o->m_isGroupDisabled = p.disabled;
+    if (rot) {
+        // GucciBot (2026-11-15, rotate lane): what processRotationActions
+        // leaves on the object (world/rotate.cpp (R6)-(R8)), written raw: the
+        // node's rotation without CCNode's setters (which would mark the
+        // node's transform dirty, and GameObject::setRotation turns the
+        // child sprites too - nothing the copies' collision pass reads, and
+        // more to put back), the two offsets the oriented box's angle comes
+        // from, the axis-aligned flag, the outer box switch and +0x513, with
+        // setRotation's +0x350. The dirty words above make the collision pass
+        // work the rect and the oriented box out again from these.
+        if (!w.rot.have) takeRotOrig(w, false);
+        if (!sameRotLive(p, o)) rotate::noteWrite();
+        off::at<float>(o, off::kNodeRotX) = p.rot;
+        off::at<float>(o, off::kNodeRotY) = p.rotY;
+        off::at<float>(o, off::kRotOffX) = p.rotOffX;
+        off::at<float>(o, off::kRotOffY) = p.rotOffY;
+        off::at<bool>(o, off::kRotationAligned) = p.aligned;
+        off::at<bool>(o, off::kUseOuterOb) = p.useOuterOb;
+        off::at<bool>(o, off::kRotFinish) = p.rotFinish;
+        off::at<bool>(o, off::kDirty350) = true;
+    }
     w.pose = p;
+}
+
+void Materializer::restoreRot(Written& w) {
+    GameObject* o = w.o;
+    const RotOrig& r = w.rot;
+    off::at<float>(o, off::kNodeRotX) = r.rotX;
+    off::at<float>(o, off::kNodeRotY) = r.rotY;
+    off::at<float>(o, off::kRotOffX) = r.offX;
+    off::at<float>(o, off::kRotOffY) = r.offY;
+    off::at<bool>(o, off::kRotationAligned) = r.aligned;
+    off::at<bool>(o, off::kRotFinish) = r.finish;
+    // The check, after everything restoreOne puts back (this runs last).
+    rotate::noteRestoreChecked();
+    const char* what = nullptr;
+    std::ptrdiff_t at = -1;
+    if (!sameBits(off::at<float>(o, off::kNodeRotX), r.rotX) || !sameBits(off::at<float>(o, off::kNodeRotY), r.rotY)) {
+        what = "the node's rotation";
+    } else if (!sameBits(off::at<float>(o, off::kRotOffX), r.offX) ||
+               !sameBits(off::at<float>(o, off::kRotOffY), r.offY)) {
+        what = "a rotation offset";
+    } else if (off::at<bool>(o, off::kUseOuterOb) != w.orig.useOuterOb) {
+        what = "m_shouldUseOuterOb";
+    } else if (std::memcmp(&off::at<uint8_t>(o, off::kRectCaches), w.orig.rects.data(), w.orig.rects.size()) != 0) {
+        what = "the rect caches";
+    } else if (off::at<OBB2D*>(o, off::kOrientedBox) != w.orig.box) {
+        what = "the oriented box pointer";
+    } else if (w.orig.box && std::memcmp(reinterpret_cast<const char*>(w.orig.box) + kBoxFirst, w.orig.boxBytes.data(),
+                                         kBoxBytes) != 0) {
+        what = "the oriented box";
+    } else if (r.image) {
+        const auto* now = &off::at<uint8_t>(o, kImageFrom);
+        for (std::size_t i = 0; i < r.bytes.size(); i++) {
+            if (now[i] != r.bytes[i]) {
+                what = "a byte of the object";
+                at = kImageFrom + (std::ptrdiff_t)i;
+                break;
+            }
+        }
+        if (!what && std::memcmp(&off::at<uint8_t>(o, off::kNodeRotX), r.node.data(), r.node.size()) != 0) {
+            what = "the node's rotation bytes";
+        }
+        if (!what && off::at<uint8_t>(o, off::kRotFinish) != r.b513) what = "+0x513";
+    }
+    if (!what) return;
+    rotate::noteRestoreMiss();
+    const uint64_t n = rotate::restoreMisses();
+    if (n <= 16 || (n & (n - 1)) == 0) {
+        geode::log::error("World: rotate restore check FAILED ({} so far): uid {} - {} {} did not come back as it was",
+                          n, o->m_uniqueID, what, at >= 0 ? fmt::format("(+0x{:x})", at) : std::string());
+        devlog::logf(devlog::Cat::System,
+                     "world: ROTATE RESTORE CHECK FAILED (%llu so far): uid %d - %s %s did not come back as it was",
+                     (unsigned long long)n, o->m_uniqueID, what,
+                     at >= 0 ? fmt::format("(+0x{:x})", at).c_str() : "");
+    }
 }
 
 void Materializer::restoreOne(Written& w) {
@@ -1229,6 +1359,7 @@ void Materializer::restoreOne(Written& w) {
     off::at<int>(o, off::kSlot) = r.slot;
     off::at<int>(o, off::kSecX) = r.secX;
     off::at<int>(o, off::kSecY) = r.secY;
+    if (w.rot.have) restoreRot(w);
 }
 
 // The members of a group a run's ops reach: m_groups, and anything the static

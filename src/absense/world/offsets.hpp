@@ -52,6 +52,14 @@ inline constexpr std::ptrdiff_t kCameraPadding = 0x2cc;
 // in the game state, but past the bytes a run's snapshot keeps of it, so the
 // trajectory's PortalState carries it on its own.
 inline constexpr std::ptrdiff_t kDualGroundMode = 0x540;
+inline constexpr std::ptrdiff_t kAreaTransformNode = 0x8c8;    // the rotate step's node chain (world/rotate.cpp (R6))
+inline constexpr std::ptrdiff_t kAreaSkewNode = 0x8d0;
+inline constexpr std::ptrdiff_t kAreaScaleNode = 0x8d8;
+inline constexpr std::ptrdiff_t kParentGroupsDict = 0xf60;     // m_parentGroupsDict: a rotate's centre first
+inline constexpr std::ptrdiff_t kObjectLayer = 0xfe8;          // m_objectLayer: parked by the rotate step
+// GJEffectManager +0x818: a rotate command replaces the older ones of its
+// target this tick (world/rotate.cpp (R3)); no binding names it.
+inline constexpr std::ptrdiff_t kEmRotateReplace = 0x818;
 inline constexpr std::ptrdiff_t kGroups = 0xf18;               // m_groups (vector<CCArray*>, null = empty)
 inline constexpr std::ptrdiff_t kStaticGroups = 0xf30;         // m_staticGroups
 inline constexpr std::ptrdiff_t kOptimizedGroups = 0xf48;      // m_optimizedGroups (decoration only, see step.cpp (e))
@@ -126,6 +134,27 @@ inline constexpr std::ptrdiff_t kUseOuterOb = 0x2e8;           // m_shouldUseOut
 inline constexpr std::ptrdiff_t kRectCaches = 0x340;           // m_textureRect
 inline constexpr std::ptrdiff_t kRectCachesEnd = 0x36a;        // m_colorSpriteLocked (not included)
 inline constexpr std::ptrdiff_t kObjectRect = 0x358;           // m_objectRect
+// GucciBot (2026-11-15, rotate lane): what processRotationActions 0x22b7f0
+// reads and writes on an object (world/rotate.cpp (R6)-(R9)).
+inline constexpr std::ptrdiff_t kPosOffX = 0x2a0;              // m_positionXOffset
+inline constexpr std::ptrdiff_t kPosOffY = 0x2a4;              // m_positionYOffset
+inline constexpr std::ptrdiff_t kRotOffX = 0x2a8;              // m_rotationXOffset
+inline constexpr std::ptrdiff_t kRotOffY = 0x2b0;              // m_rotationYOffset
+inline constexpr std::ptrdiff_t kFollowers = 0x258;            // m_followers (CCArray*), when m_hasFollower
+inline constexpr std::ptrdiff_t kHasFollower = 0x268;          // m_hasFollower
+inline constexpr std::ptrdiff_t kGlowSprite = 0x2f0;           // m_glowSprite
+inline constexpr std::ptrdiff_t kParticle = 0x308;             // m_particle, unless +0x430
+inline constexpr std::ptrdiff_t kDirty350 = 0x350;             // m_isDirty (setRotation, the rotate step)
+inline constexpr std::ptrdiff_t kColorSpriteLocked = 0x36a;    // m_colorSpriteLocked
+inline constexpr std::ptrdiff_t kCanRotateFree = 0x36c;        // m_canRotateFree
+inline constexpr std::ptrdiff_t kColorSprite = 0x380;          // m_colorSprite, unless +0x36a
+inline constexpr std::ptrdiff_t kRotationAligned = 0x390;      // m_isRotationAligned
+inline constexpr std::ptrdiff_t kParticleLocked = 0x430;       // setRotation skips the particle while set
+inline constexpr std::ptrdiff_t kRotFinish = 0x513;            // m_unk4fb: the rotate step's finishRelated
+// CCNode::m_fRotationX / m_fRotationY (addRotation 0x197cda / 0x197ce2 reads
+// them there); protected in the headers, so only reached raw.
+inline constexpr std::ptrdiff_t kNodeRotX = 0x38;
+inline constexpr std::ptrdiff_t kNodeRotY = 0x3c;
 
 // ------------------------------------------------------------ EnhancedGameObject
 inline constexpr std::ptrdiff_t kNoMultiActivate = 0x5b1;      // m_isNoMultiActivate
@@ -510,6 +539,25 @@ static_assert(offsetof(GameObject, m_textureRect) == world::off::kRectCaches);
 static_assert(offsetof(GameObject, m_colorSpriteLocked) == world::off::kRectCachesEnd);
 static_assert(offsetof(GameObject, m_objectRect) == world::off::kObjectRect);
 static_assert(offsetof(GameObject, m_isOrientedBoxDirty) == world::off::kDirty368 + 1);
+static_assert(offsetof(GameObject, m_positionXOffset) == world::off::kPosOffX);
+static_assert(offsetof(GameObject, m_positionYOffset) == world::off::kPosOffY);
+static_assert(offsetof(GameObject, m_rotationXOffset) == world::off::kRotOffX);
+static_assert(offsetof(GameObject, m_rotationYOffset) == world::off::kRotOffY);
+static_assert(offsetof(GameObject, m_followers) == world::off::kFollowers);
+static_assert(offsetof(GameObject, m_hasFollower) == world::off::kHasFollower);
+static_assert(offsetof(GameObject, m_glowSprite) == world::off::kGlowSprite);
+static_assert(offsetof(GameObject, m_particle) == world::off::kParticle);
+static_assert(offsetof(GameObject, m_isDirty) == world::off::kDirty350);
+static_assert(offsetof(GameObject, m_colorSpriteLocked) == world::off::kColorSpriteLocked);
+static_assert(offsetof(GameObject, m_canRotateFree) == world::off::kCanRotateFree);
+static_assert(offsetof(GameObject, m_colorSprite) == world::off::kColorSprite);
+static_assert(offsetof(GameObject, m_isRotationAligned) == world::off::kRotationAligned);
+static_assert(offsetof(GameObject, m_isDecoration2) + 1 == world::off::kRotFinish);
+static_assert(offsetof(GJBaseGameLayer, m_areaTransformNode) == world::off::kAreaTransformNode);
+static_assert(offsetof(GJBaseGameLayer, m_areaSkewNode) == world::off::kAreaSkewNode);
+static_assert(offsetof(GJBaseGameLayer, m_areaScaleNode) == world::off::kAreaScaleNode);
+static_assert(offsetof(GJBaseGameLayer, m_parentGroupsDict) == world::off::kParentGroupsDict);
+static_assert(offsetof(GJBaseGameLayer, m_objectLayer) == world::off::kObjectLayer);
 
 static_assert(offsetof(EnhancedGameObject, m_isNoMultiActivate) == world::off::kNoMultiActivate);
 static_assert(offsetof(EnhancedGameObject, m_isMultiActivate) == world::off::kMultiActivate);

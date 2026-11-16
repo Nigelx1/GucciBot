@@ -1,6 +1,7 @@
 // The level census (world/census.hpp). GucciBot (2026-11-01, H0 of the heavy
 // three).
 
+#include "absense/world/rotate.hpp"
 #include "absense/world/census.hpp"
 
 #include <algorithm>
@@ -232,7 +233,10 @@ Census takeCensus(GJBaseGameLayer* pl, const std::shared_ptr<const WorldDef>& de
         CensusKind out;
         out.kind = (Kind)k;
         for (std::size_t i = 0; i < a.ids.size(); i++) out.ids += (i ? "," : "") + std::to_string(a.ids[i]);
-        out.shipped = kindShipped(out.kind);
+        // GucciBot (2026-11-15, rotate lane): with the test switch pf_rotate
+        // on, a rotate in the default mode runs too (world/rotate.hpp); the
+        // other modes stay in `unmodelled` below.
+        out.shipped = kindShipped(out.kind) || (g_rotate && out.kind == Kind::Rotate);
         out.tier = tierOf(out.kind);
         out.count = a.count;
         out.walk = a.walk;
@@ -271,7 +275,7 @@ Census takeCensus(GJBaseGameLayer* pl, const std::shared_ptr<const WorldDef>& de
     mark++;
     std::map<int64_t, CensusBin> bins;
     for (int g = 1; g < kGroupLimit; g++) {
-        if (def.groupModelled(g)) continue;
+        if (g_rotate ? def.groupModelledRotate(g) : def.groupModelled(g)) continue;
         if (def.members(g).empty() && def.staticMembers(g).empty() && def.optimizedMembers(g).empty()) continue;
         c.unmodelledGroups++;
         walkGroup(g, [&](std::size_t s) {

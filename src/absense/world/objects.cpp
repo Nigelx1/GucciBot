@@ -4,6 +4,7 @@
 #include <Geode/Geode.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <type_traits>
 
@@ -12,6 +13,7 @@
 #include "absense/world/def.hpp"
 #include "absense/world/materialize.hpp"
 #include "absense/world/offsets.hpp"
+#include "absense/world/rotate.hpp"
 #include "absense/world/state.hpp"
 
 namespace world {
@@ -141,8 +143,8 @@ bool OpLog::sameOps(const OpLog& other) const {
 bool bitEqual(const Op& a, const Op& b) {
     auto bits = [](const auto& x, const auto& y) { return std::memcmp(&x, &y, sizeof(x)) == 0; };
     return a.tick == b.tick && a.commandIndex == b.commandIndex && a.kind == b.kind && a.sign == b.sign &&
-           a.group == b.group && bits(a.dx, b.dx) && bits(a.dy, b.dy) && bits(a.angle, b.angle) && bits(a.cx, b.cx) &&
-           bits(a.cy, b.cy) && bits(a.sx, b.sx) && bits(a.sy, b.sy);
+           a.group == b.group && bits(a.dx, b.dx) && bits(a.dy, b.dy) && bits(a.rt, b.rt) && bits(a.rcx, b.rcx) &&
+           bits(a.rcy, b.rcy) && bits(a.rr, b.rr) && a.rflags == b.rflags;
 }
 
 // ------------------------------------------------------------ bit-exact equality
@@ -224,7 +226,10 @@ bool bitEqual(const Pose& a, const Pose& b) {
     return same(a.x, b.x) && same(a.y, b.y) && same(a.lastX, b.lastX) && same(a.lastY, b.lastY) &&
            a.marker == b.marker && same(a.rot, b.rot) && same(a.sx, b.sx) && same(a.sy, b.sy) &&
            a.counter == b.counter && a.disabled == b.disabled && a.noMoveX == b.noMoveX && a.skipLast == b.skipLast &&
-           a.uncertain == b.uncertain;
+           a.uncertain == b.uncertain && same(a.rotY, b.rotY) && same(a.rotOffX, b.rotOffX) &&
+           same(a.rotOffY, b.rotOffY) && a.aligned == b.aligned && a.useOuterOb == b.useOuterOb &&
+           a.rotFinish == b.rotFinish && same(a.offX, b.offX) && same(a.offY, b.offY) &&
+           a.canRotateFree == b.canRotateFree && a.decoration == b.decoration;
 }
 
 Pose ObjectCache::readLive(GameObject* o) {
@@ -242,8 +247,62 @@ Pose ObjectCache::readLive(GameObject* o) {
     p.disabled = o->m_isGroupDisabled;
     p.noMoveX = o->m_tempOffsetXRelated;
     p.skipLast = off::skipLastPosition(o);
+    // GucciBot (2026-11-15, rotate lane): the rotate fields, through the
+    // bindings' members (offsets.hpp pins each to the game's offset on
+    // Windows); only +0x513 has no name, and only Windows reads it.
+    p.rotY = o->getRotationY();
+    p.rotOffX = o->m_rotationXOffset;
+    p.rotOffY = o->m_rotationYOffset;
+    p.aligned = o->m_isRotationAligned;
+    p.useOuterOb = o->m_shouldUseOuterOb;
+#ifdef GEODE_IS_WINDOWS
+    p.rotFinish = off::at<bool>(o, off::kRotFinish);
+#endif
+    p.offX = o->m_positionXOffset;
+    p.offY = o->m_positionYOffset;
+    p.canRotateFree = o->m_canRotateFree;
+    p.decoration = o->m_objectType == GameObjectType::Decoration;
     return p;
 }
+
+namespace {
+
+// GameObject::setRotation 0x197e00 / setRotationX 0x197f50 / setRotationY
+// 0x1980a0 on a pose (world/rotate.cpp (R8)): each does nothing when the node
+// already has the value, and only the first two set the aligned flag.
+void poseSetRotation(Pose& p, float v) {
+    if (p.rot == v && p.rotY == v) return;
+    p.rot = v;
+    p.rotY = v;
+    p.aligned = rotate::alignedAngle(v);
+}
+
+// addRotation 0x197cd0 on a pose.
+void poseAddRotation(Pose& p, float r) {
+    if (p.rot == p.rotY) {
+        poseSetRotation(p, p.rot + r);
+        return;
+    }
+    const float x = p.rot + r;
+    if (!(p.rot == x)) {
+        p.rot = x;
+        p.aligned = rotate::alignedAngle(x);
+    }
+    const float y = p.rotY + r;
+    if (!(p.rotY == y)) p.rotY = y;
+}
+
+// The rotation part of processRotationActions' object loop (R6, R7): the
+// two offsets, addRotation, and the oriented box from now on for anything but
+// decoration.
+void poseRotateOwn(Pose& p, float r) {
+    p.rotOffY = r + p.rotOffY;
+    p.rotOffX = r + p.rotOffX;
+    poseAddRotation(p, r);
+    if (!p.decoration && !p.useOuterOb) p.useOuterOb = true;
+}
+
+}  // namespace
 
 void ObjectCache::applyOnce(Pose& p, const Op& op) {
     switch (op.kind) {
@@ -280,6 +339,36 @@ void ObjectCache::applyOnce(Pose& p, const Op& op) {
             p.y = dy + p.y;
             p.lastX = (float)p.x;
             p.lastY = (float)p.y;
+            break;
+        }
+        case OpKind::Rotate: {
+            // processRotationActions 0x22b7f0 on one entry of the array,
+            // world/rotate.cpp (R6) and (R7), in the game's order and
+            // precision. (The dirty words it sets are the materializer's.)
+            const float r = op.rr;
+            const bool turn = r != 0.0f || std::isnan(r);  // ucomiss + jp: a NaN turns
+            if (!(op.rflags & kRotCenter)) {
+                if (p.canRotateFree) poseRotateOwn(p, r);
+                break;
+            }
+            p.rotFinish = (op.rflags & kRotFinish) != 0;
+            if (!p.skipLast && p.marker != op.commandIndex) {
+                p.lastX = (float)p.x;
+                p.lastY = (float)p.y;
+                p.marker = op.commandIndex;
+            }
+            const cocos2d::CCPoint local{(float)((p.x - (double)p.offX) - (double)op.rcx),
+                                         (float)((p.y - (double)p.offY) - (double)op.rcy)};
+            const cocos2d::CCAffineTransform t{op.rt[0], op.rt[1], op.rt[2], op.rt[3], op.rt[4], op.rt[5]};
+            // libcocos2d's own, the import the game calls at 0x22be5f.
+            const cocos2d::CCPoint moved = cocos2d::__CCPointApplyAffineTransform(local, t);
+            const float sx = op.dx + moved.x;
+            const float sy = op.dy + moved.y;
+            const double x0 = p.x;
+            const double y0 = p.y;
+            p.x = (((double)sx - x0) + (double)p.offX) + x0;
+            p.y = (((double)sy - y0) + (double)p.offY) + y0;
+            if (turn && p.canRotateFree) poseRotateOwn(p, r);
             break;
         }
         case OpKind::RotateAbout:
@@ -336,13 +425,19 @@ const Pose& ObjectCache::base(int slot) {
     return m_bases.emplace(slot, readLive(o)).first->second;
 }
 
-int ObjectCache::multiplicity(OpKind kind, int group, int slot) const {
+int ObjectCache::multiplicity(const Op& op, int slot) const {
     if (!m_def) return 0;
-    switch (kind) {
+    const int group = op.group;
+    switch (op.kind) {
         case OpKind::Translate: return WorldDef::countIn(m_def->staticMembers(group), slot);
         case OpKind::TranslateOptimized: return WorldDef::countIn(m_def->optimizedMembers(group), slot);
         case OpKind::Toggle:
         case OpKind::Place: return WorldDef::countIn(m_def->members(group), slot);
+        case OpKind::Rotate:
+            // m_groups when the static array has members, m_optimizedGroups
+            // otherwise (world/rotate.cpp (R5)); the op says which it walked.
+            return WorldDef::countIn((op.rflags & kRotOptimized) ? m_def->optimizedMembers(group) : m_def->members(group),
+                                     slot);
         case OpKind::RotateAbout:
         case OpKind::Scale:
             // Whichever array the unported step uses, a member of the group is touched.
@@ -409,7 +504,7 @@ void ObjectCache::replay(Pose& p, const OpLog& log, int slot, std::size_t chunk,
         for (uint32_t i : picks) {
             const Op& o = ch.ops[i];
             if (o.tick > uptoTick) return;  // ticks never go down along a log
-            const int times = multiplicity(o.kind, o.group, slot);
+            const int times = multiplicity(o, slot);
             // An object listed twice in the array is moved twice, as moveObjects
             // walks every entry.
             for (int t = 0; t < times; t++) applyOnce(p, o);

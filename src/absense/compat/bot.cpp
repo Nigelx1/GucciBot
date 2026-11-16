@@ -14,6 +14,7 @@
 #include "absense/route/planner.hpp"
 
 #include "absense/world/census.hpp"
+#include "absense/world/rotate.hpp"
 #include "absense/world/world.hpp"
 
 #include <Geode/loader/Mod.hpp>
@@ -664,6 +665,14 @@ bool absense::pendingVerify() {
 
 void absense::setPendingVerify(bool on) {
     world::g_pendingVerify = on;
+}
+
+bool absense::rotateTriggers() {
+    return world::g_rotate;
+}
+
+void absense::setRotateTriggers(bool on) {
+    world::g_rotate = on;
 }
 
 bool absense::pendingCells() {

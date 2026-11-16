@@ -141,6 +141,12 @@ namespace absense {
     // how many were looked at and missed (world::g_pendingVerify).
     bool pendingVerify();
     void setPendingVerify(bool on);
+    // GucciBot (2026-11-15, rotate lane): rotate triggers in the default mode
+    // run in the World (world/rotate.hpp), a test switch that is never saved
+    // (gucci_test_set pf_rotate, off by default): off, rotate commands leave
+    // their groups uncertain, exactly as before.
+    bool rotateTriggers();
+    void setRotateTriggers(bool on);
     // GucciBot (2026-11-12): the pathfinder makes no decision ahead of a
     // plan's end, so every decision is made from the real game (on by
     // default; the test switch pf_no_ahead, this launch only, turns it off).
