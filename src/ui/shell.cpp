@@ -2211,6 +2211,15 @@ namespace gucci::ui {
                                "time. Takes effect when a search starts",
                                &remember))
                 absense::setRememberSolutions(remember);
+            // GucciBot (2026-11-15, the vsearch lane): on by default; only
+            // draws, never changes what is decided (absense/glue.hpp).
+            bool showSearch = absense::searchShown();
+            if (kit::SwitchRow("Show the search",
+                               "On by default. While the game waits for a decision, shows the paths it is trying "
+                               "(faint), the best one so far (bright) and a line in the corner saying how it's going. "
+                               "Only shows what it does: it decides the same either way",
+                               &showSearch))
+                absense::setSearchShown(showSearch);
             auto const s = absense::status();
             kit::RowBegin("", nullptr);
             if (!s.running && !absense::startPending()) {
@@ -3615,6 +3624,12 @@ namespace gucci::ui {
             if (ImGui::Begin("##pathfinderOverlay", nullptr, flags)) {
                 UseFont f(Font::Small);
                 ImGui::Text("Pathfinder: %s  |  now %.1f%%  best %.1f%%", s.phase, s.progress * 100.f, s.bestProgress * 100.f);
+                // GucciBot (2026-11-15): Show the search's line while the game
+                // waits for a decision, and its colour for the drawing.
+                auto const& accent = look().pal.accent;
+                absense::setSearchAccent(accent.x, accent.y, accent.z);
+                if (auto const line = absense::searchLine(); !line.empty())
+                    ImGui::TextUnformatted(line.c_str());
             }
             ImGui::End();
         }

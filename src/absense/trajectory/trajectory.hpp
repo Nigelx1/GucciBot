@@ -132,6 +132,46 @@ struct TraceSample {
     int fired = 0;
 };
 
+// GucciBot (2026-11-15, the Pathfinder's "Show the search"): a fixed-size
+// recorder of one run's path, for drawing only. run() hands it the copy's
+// position before the first tick and after every tick when one is set; it
+// reads positions the run already has and changes nothing. When full it keeps
+// every other point and doubles its stride, so a path of any length is 16 to
+// 32 evenly spaced points, plus its exact end. Never grows.
+struct PathTap {
+    static constexpr int kPoints = 32;
+    float x[kPoints] = {};
+    float y[kPoints] = {};
+    int count = 0;
+    int stride = 1;   // ticks between kept points
+    int seen = 0;     // positions offered so far (the start counts)
+    float endX = 0.0f, endY = 0.0f;
+    bool died = false;
+    void reset() {
+        count = 0;
+        stride = 1;
+        seen = 0;
+        died = false;
+    }
+    void add(float px, float py) {
+        endX = px;
+        endY = py;
+        if (seen++ % stride != 0) return;
+        if (count == kPoints) {
+            for (int i = 0; i < kPoints / 2; i++) {
+                x[i] = x[i * 2];
+                y[i] = y[i * 2];
+            }
+            count = kPoints / 2;
+            stride *= 2;
+            if ((seen - 1) % stride != 0) return;
+        }
+        x[count] = px;
+        y[count] = py;
+        count++;
+    }
+};
+
 class Trajectory {
    public:
     using TrajectoryMode = SLSettings::TrajectorySettings::Mode;
@@ -156,6 +196,9 @@ class Trajectory {
     // tick with the tick's number (1-based), while the run's objects are where
     // the tick left them. Empty otherwise.
     std::function<void(int)> m_traceWatch;
+    // GucciBot (2026-11-15): see PathTap. Null unless the pathfinder's
+    // evaluate() has set one around its own run.
+    PathTap* m_pathTap = nullptr;
 
    private:
     std::unordered_set<uintptr_t> m_activatedObjectsP1;
@@ -1250,6 +1293,10 @@ class TrajectoryManager {
     }
 
     bool simulating() const { return m_trajectory && m_trajectory->simulating(); }
+    // GucciBot (2026-11-15): see PathTap.
+    void setPathTap(PathTap* tap) {
+        if (m_trajectory) m_trajectory->m_pathTap = tap;
+    }
     void simBreak(GameObject* o) {
         if (m_trajectory) m_trajectory->simBreak(o);
     }

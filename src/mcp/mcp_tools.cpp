@@ -834,7 +834,8 @@ namespace gucci::mcp {
                  {"scale", "integer", "1, 2 or 4: each side divided by it (default 1)"},
                  {"trigger", "string",
                   "now (default), death (player 1 dies), respawn (back alive, or the frame went back), complete (the "
-                  "level's end) or frame:<n> (the engine's frame reaches n)"},
+                  "level's end), search (the Pathfinder's Show the search is drawn, 8+ paths) or frame:<n> (the engine's "
+                  "frame reaches n)"},
                  {"wait", "boolean", "answer once every file is written (default false: pending, then status)"},
                  {"status", "boolean", "true: how the last shot went, instead of taking one"}});
             auto crop = obj();
@@ -855,7 +856,7 @@ namespace gucci::mcp {
                 "(count > 1) is <name>_000.png..., `every` frames apart, and a burst or "
                 "a trigger also writes <name>.json: each shot's engine frame, game "
                 "tick, ImGui frame, ms since the trigger, player 1 {x, y, dead} and "
-                "rect. A trigger (death, respawn, complete, frame:<n>) is checked "
+                "rect. A trigger (death, respawn, complete, search, frame:<n>) is checked "
                 "in the frame's swap itself, so a death flash a frame after the "
                 "death is caught exactly; status says armed while it waits. crop "
                 "takes part of the window, scale shrinks it (a full 1080p shot stalls "
@@ -920,6 +921,8 @@ namespace gucci::mcp {
                         b.trigger = shot::Trigger::Respawn;
                     else if (trigger == "complete")
                         b.trigger = shot::Trigger::Complete;
+                    else if (trigger == "search")
+                        b.trigger = shot::Trigger::Search;
                     else if (trigger.rfind("frame:", 0) == 0) {
                         b.trigger = shot::Trigger::Frame;
                         try {
@@ -928,7 +931,7 @@ namespace gucci::mcp {
                             throw ToolError("trigger frame:<n> needs a frame number, e.g. frame:600");
                         }
                     } else {
-                        throw ToolError("trigger is now, death, respawn, complete or frame:<n>");
+                        throw ToolError("trigger is now, death, respawn, complete, search or frame:<n>");
                     }
                     int64_t const frames = argInt(a, "frames", b.trigger == shot::Trigger::Now ? 3 : 1);
                     if (frames < 1 || frames > 600)
@@ -2013,6 +2016,8 @@ namespace gucci::mcp {
                             ab["exact_start_flags"] = st.exactStartFlags;
                             ab["exact_start_flags_switch"] = absense::exactStartFlags();
                             ab["remember_solutions_switch"] = absense::rememberSolutions();
+                            // Show the search: what it shows and what drawing it costs.
+                            ab["search_view"] = absense::searchViewJson();
                             out["absense"] = ab;
                         }
                         out["active"] = pf->active;

@@ -378,6 +378,16 @@ namespace gucci::testset {
                                  absense::setExactStartFlags(wantBool("pf_exact_start_flags2", val));
                              }});
                 v.push_back(live("pf_remember_solutions", LiveType::Bool));
+                // The Pathfinder page's engine (AI or Search): read where it's used
+                // (ai/pilot.cpp engineAi), so a test can show the Search's rows.
+                v.push_back(live("pf_engine_ai", LiveType::Bool));
+                // Show the search (on by default: a missing key reads as on), through
+                // its own getter and setter for the same reason as exact start flags.
+                v.push_back({"pf_show_search", "bool", Store::Live,
+                             [] { return matjson::Value(absense::searchShown()); },
+                             [](matjson::Value const& val, bool) {
+                                 absense::setSearchShown(wantBool("pf_show_search", val));
+                             }});
                 // Follow the planned route: the route planner keeps it after
                 // its first read (route/planner.cpp, g_guidance), so it goes
                 // through the row's setter, which sets both.

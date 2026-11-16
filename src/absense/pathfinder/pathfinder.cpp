@@ -16,6 +16,7 @@
 #include "absense/compat/bot.hpp"
 #include "absense/compat/devlog.hpp"
 #include "absense/glue.hpp"
+#include "absense/pathfinder/search_view.hpp"
 #include "absense/gpu/client.hpp"
 #include "absense/route/planner.hpp"
 #include "absense/world/world.hpp"
@@ -1182,6 +1183,25 @@ bool AbsensePathfinder::mayWork() {
     }
     if (m_forcedThisSlice) return false;
     return go();
+}
+
+AbsensePathfinder::ViewInfo AbsensePathfinder::viewInfo() const {
+    ViewInfo v;
+    const Decision& d = m_decision;
+    v.waiting = isRunning() && !m_live && d.active && (m_phase == Phase::Deciding || m_phase == Phase::Probing);
+    if (!v.waiting) return v;
+    v.repairing = m_repair.active || m_probe.active;
+    v.key = (uint64_t)d.began.time_since_epoch().count();
+    v.horizon = d.H;
+    v.judged = d.tried.size();
+    if (d.best >= 0 && (size_t)d.best < d.candidates.size()) {
+        const Candidate& b = d.candidates[(size_t)d.best];
+        v.best = d.best;
+        v.bestSurvived = b.survived;
+        v.bestComplete = b.complete;
+        if (d.bestTraceFor == d.best && !d.bestTrace.empty()) v.bestTrace = &d.bestTrace;
+    }
+    return v;
 }
 
 void AbsensePathfinder::noteFrameCost(double gameMs, double restoreMs) {
@@ -2633,7 +2653,18 @@ bool AbsensePathfinder::evaluate(Candidate& c, int horizon, bool held, std::vect
             return true;
         }
     }
+    // GucciBot (2026-11-15, the vsearch lane): "Show the search" records this
+    // run's path while it is on (PathTap: read only, see search_view.hpp).
+    PathTap* const tap =
+        absense::view::tapFor((uint64_t)m_decision.began.time_since_epoch().count());
+    if (tap) Bot::get()->trajectory().setPathTap(tap);
     const RunResult r = runFor(m_decision, c.inputs, horizon, trace);
+    if (tap) {
+        Bot::get()->trajectory().setPathTap(nullptr);
+        const auto& all = m_decision.candidates;
+        const bool mine = !all.empty() && &c >= all.data() && &c < all.data() + all.size();
+        absense::view::keep(mine ? (int)(&c - all.data()) : -1, r.survived, r.complete);
+    }
     m_stats.simulations++;
     m_stats.simulatedTicks += (uint64_t)std::max(0, r.survived) + (r.died ? 1u : 0u);
     c.survived = r.survived;

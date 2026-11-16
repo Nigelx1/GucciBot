@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-bl (Pathfinder: while the game waits for a decision, the search gets at least as much of each frame as the game itself, so heavy levels decide several times faster)"
+    "2026-11-15-bm (Pathfinder: Show the search, faint lines for the paths the search is trying, the best one brighter, and a status line while the game waits (switch on the Pathfinder page, on by default))"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

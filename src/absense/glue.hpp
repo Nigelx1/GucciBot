@@ -51,6 +51,26 @@ namespace absense {
     void stopPathfinder();
     bool isRunning();
 
+    // GucciBot (2026-11-15, the vsearch lane): the Pathfinder page's "Show the
+    // search" (saved as pf_show_search, on by default). While the game waits
+    // for a decision, the paths of the copies it is trying are drawn over the
+    // level, the best so far brighter, and searchLine() is one line about it
+    // in plain words (empty while nothing is shown). Read only: it never
+    // changes what is decided. Defined in absense/pathfinder/search_view.cpp.
+    bool searchShown();
+    void setSearchShown(bool on);
+    std::string searchLine();
+    // The drawing's colour for the best path (the theme's accent, 0..1).
+    void setSearchAccent(float r, float g, float b);
+    // Once a frame, from the drawScene hook after the pathfinder's slice.
+    void searchViewFrame();
+    // For Assistant Access: what is shown and what drawing it costs.
+    matjson::Value searchViewJson();
+    void resetSearchViewCost();
+    // For gucci_screenshot's "search" trigger: the drawing is on screen with
+    // at least this many paths.
+    bool searchViewReady(int minPaths);
+
     struct Status {
         bool running = false;
         const char* phase = "";     // in words: deciding, playing, going back...

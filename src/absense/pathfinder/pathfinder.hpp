@@ -138,6 +138,23 @@ class AbsensePathfinder {
     Phase phase() const { return m_phase; }
     const Stats& stats() const { return m_stats; }
 
+    // GucciBot (2026-11-15, the vsearch lane): what "Show the search" draws
+    // (absense/pathfinder/search_view.cpp), read from the decision in
+    // progress. Read only: nothing here is used to decide anything.
+    struct ViewInfo {
+        bool waiting = false;     // a decision is being made and the game waits for it
+        bool repairing = false;   // ... about getting past a dead end
+        uint64_t key = 0;         // names the decision (its start time)
+        int horizon = 0;          // ticks it looks ahead
+        size_t judged = 0;        // ideas judged (the log's "ideas tried")
+        int best = -1;            // its best idea so far (index), -1: none yet
+        int bestSurvived = 0;     // ... its ticks
+        bool bestComplete = false;
+        // ... and its own samples, when the decision has them (null: not)
+        const std::vector<TraceSample>* bestTrace = nullptr;
+    };
+    ViewInfo viewInfo() const;
+
     // The drawScene hook measures what the frame cost outside this slice (the
     // game and the drawing, and the restore that runs after it) and hands it
     // back here; the next slice is sized from it. See AbsensePathfinder::tick().

@@ -3864,6 +3864,13 @@ RunResult Trajectory::run(GJBaseGameLayer* pl, bool p1,
     Sim s;
     if (!s.begin(this, pl, p1, buttonDown, other, otherDown, eitherDeath)) return result;
     result.minY = result.maxY = s.players[0]->getPositionY();
+    // GucciBot (2026-11-15): the path for "Show the search" (PathTap): read
+    // only, and nothing at all without a tap.
+    PathTap* const tap = m_pathTap;
+    if (tap) {
+        const cocos2d::CCPoint& at = s.players[0]->getPosition();
+        tap->add(at.x, at.y);
+    }
     for (int i = 0; i < ticks; i++) {
         const TickInput in = inputs.empty() ? TickInput{} : inputs[std::min<size_t>((size_t)i, inputs.size() - 1)];
         const uint64_t ringsBefore = m_ringsUsed;
@@ -3871,6 +3878,11 @@ RunResult Trajectory::run(GJBaseGameLayer* pl, bool p1,
         const bool dead = s.step(in);
         s.fill(result);
         if (m_traceWatch) m_traceWatch(i + 1);
+        if (tap) {
+            const cocos2d::CCPoint& at = s.players[0]->getPosition();
+            tap->add(at.x, at.y);
+            if (dead) tap->died = true;
+        }
         if (trace) {
             PlayerObject* player = s.players[0];
             const cocos2d::CCPoint pos = player->getPosition();

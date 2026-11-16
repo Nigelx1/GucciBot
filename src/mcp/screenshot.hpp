@@ -40,7 +40,10 @@ namespace gucci::mcp::shot {
         float half = 160.f;
     };
 
-    enum class Trigger { Now, Death, Respawn, Complete, Frame };
+    // Search (2026-11-15): the Pathfinder's "Show the search" is drawn, with at
+    // least 8 paths (a decision is often over in a fraction of a second, too
+    // quick for a shot asked from outside).
+    enum class Trigger { Now, Death, Respawn, Complete, Frame, Search };
 
     struct Burst {
         std::filesystem::path dir;  // must exist

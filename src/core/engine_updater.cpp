@@ -1282,6 +1282,9 @@ class $modify(GB7CCDirector, CCDirector) {
             restoreMs = msSince(t1);
             gb->updater.m_frozenSeconds = std::min((sliceMs + restoreMs) / 1000.0, 1.0);
         }
+        // GucciBot (2026-11-15): the Pathfinder's "Show the search", drawn
+        // from what the slice just left (absense/glue.hpp). Read only.
+        absense::searchViewFrame();
         // The AI pilot's job, a slice of at most its budget (10 ms by
         // default): the game stays responsive while the AI simulates, and
         // the time is taken out of the frame's delta like the search's.

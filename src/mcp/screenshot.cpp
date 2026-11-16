@@ -12,6 +12,7 @@
 #include <zlib.h>
 
 #include "core/GucciBot.hpp"
+#include "absense/glue.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -263,6 +264,7 @@ namespace gucci::mcp::shot {
                     break;
                 case Trigger::Complete: fire = complete && !g_ask.lastComplete; break;
                 case Trigger::Frame: fire = pl && frame >= b.frame; break;
+                case Trigger::Search: fire = pl && absense::searchViewReady(8); break;
             }
             g_ask.lastDead = dead;
             g_ask.lastComplete = complete;
@@ -418,7 +420,7 @@ namespace gucci::mcp::shot {
             m["name"] = b.name;
             m["count"] = (int64_t)b.count;
             m["every"] = (int64_t)b.every;
-            static char const* const kTriggers[] = {"now", "death", "respawn", "complete", "frame"};
+            static char const* const kTriggers[] = {"now", "death", "respawn", "complete", "frame", "search"};
             m["trigger"] = kTriggers[static_cast<int>(b.trigger)];
             m["scale"] = (int64_t)b.scale;
             m["files"] = g_ask.entries;
