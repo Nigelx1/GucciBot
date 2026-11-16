@@ -157,6 +157,12 @@ constexpr float kForkReachY = 240.0f;
 constexpr int kForkJumpsPerSpot = 3;
 constexpr int kForkJumpsPerRun = 6;
 constexpr float kForkWatchX = 600.0f;  // GucciBot (pf3 lane; log only): how far either side of a fork its crossings are logged
+// GucciBot (2026-11-16, pf3 lane; pf_fork_jump): how close in x a speed
+// portal and a mode portal are to count as one gate (Forest Temple's robot
+// portal at x 19317 and its 1x speed portal at 19315), and how much of their
+// bands must overlap for the drive to aim at both.
+constexpr float kForkStackX = 30.0f;
+constexpr float kForkStackMinBand = 10.0f;
 // What one round on the graphics card is sized from. Fixed on purpose: the
 // pacing budget must never reach the decisions, or changing how the work is
 // spread over frames would change which ideas get scored. This is what
@@ -3534,17 +3540,41 @@ void AbsensePathfinder::decide() {
             const ForkGate& g = m_forkForced.gate;
             d.drives = true;
             d.clear = clear;
-            d.driveNeed = seeTo > d.tick ? std::min(d.need, d.H) : 0;
+            // GucciBot (2026-11-16, pf3 lane): the bar is a drive's own (live
+            // `clear` past the portal), not the repair's: the jump is there to
+            // change the route, and the way past the old dead end is on the old
+            // route. Held to the repair's need (to see past the old spot, 2179
+            // ticks on Forest Temple) every way into the robot portal - the way,
+            // then a plain steer - died 137 ticks into the robot part, the drive
+            // never passed, today's engine took the old fly-over again, and the
+            // jump changed nothing. Played to the crossing, the decisions after
+            // it are the ordinary ones, from the portal's mode and speed.
+            d.driveNeed = 0;
             d.driveJudged = d.candidates.size();
+            // ... and a speed portal stacked on the mode portal (or a mode
+            // portal on the speed portal) is taken with it: the band is where
+            // both bands overlap, or the drive can take the mode and miss the
+            // speed the next part is built for.
+            float lo = g.lo, hi = g.hi;
+            std::string with;
+            for (const ForkGate& o2 : m_forkGates) {
+                if (o2.uid == g.uid || std::abs(o2.x - g.x) > kForkStackX || (o2.mode >= 0) == (g.mode >= 0)) continue;
+                const float l = std::max(lo, o2.lo), h = std::min(hi, o2.hi);
+                if (h - l < kForkStackMinBand) continue;
+                lo = l;
+                hi = h;
+                with += fmt::format(" and the {} at x {:.0f}", o2.what, o2.x);
+            }
             Decision::DriveOption o;
             o.x = g.x;
-            o.lo = g.lo;
-            o.hi = g.hi;
+            o.lo = lo;
+            o.hi = hi;
             o.uid = g.uid;
             o.mustFire = true;
-            o.gapLo = g.lo;
-            o.text = fmt::format("touch {:.0f}-{:.0f} at the {}, x {:.0f} (a fork the path passed)", g.lo, g.hi, g.what, g.x);
-            o.label = fmt::format("touch {:.0f}-{:.0f}", g.lo, g.hi);
+            o.gapLo = lo;
+            o.text = fmt::format("touch {:.0f}-{:.0f} at the {}, x {:.0f}{} (a fork the path passed)", lo, hi, g.what, g.x,
+                                 with);
+            o.label = fmt::format("touch {:.0f}-{:.0f}", lo, hi);
             d.driveGateX = g.x;
             d.driveWhat = g.what;
             d.driveOptions.push_back(std::move(o));

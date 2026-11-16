@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-q (Pathfinder: after a fork jump (pf_fork_jump, off), the log lists every mode or speed portal the real player crosses near the fork, with its y, mode and speed)"
+    "2026-11-16-r (Pathfinder: pf_fork_jump (off) drives into a skipped portal only far enough to live past it, not past the old dead end, and aims where a stacked speed and mode portal overlap)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
