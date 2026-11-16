@@ -89,6 +89,7 @@ Pick the engine at the top of the Pathfinder page. **Search (old)** is the defau
 
 - **Looks before it clicks** — before each input it runs copies of the player ahead through the real level, with Silicate's physics for portals, orbs, pads and dashes and a model of the level's triggers, and plays the idea that lasts.
 - **Plays where you can see it** — the level runs in real time while it plans the next stretch, with its progress in the corner.
+- **Shows what it's trying** — with **Show the search** on (the default), the level shows the last paths it tried as faint lines while the game waits for a decision, a red dot where one dies, the best one so far brighter, and how many it has tried in the corner.
 - **Goes back when it has to** — a dead end sends it back through Backwards Stepping's stored frames to try another way, and further back each time a spot keeps biting.
 - **Can learn levels** — with **Remember solutions** on (off by default, so every search is cold), what got it past a spot is remembered per level and tried first the next time.
 - **Maps the whole level** — **Show the level map** draws the gaps the player fits through, the choices (forks, orbs, pads, portals) and the parts that move; a copy of the player rides the level in the background to time what moves, without holding the game up. Shown in a level, safe mode counts it as a cheat: it shows the way through.
