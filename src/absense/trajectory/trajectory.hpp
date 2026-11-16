@@ -1135,6 +1135,11 @@ class Trajectory {
     static StartState liveState(GJBaseGameLayer* pl, bool p1);
     static bool startHeld2(const SimStart& s);
     static bool startFlying2(const SimStart& s);
+    // GucciBot (2026-11-16, pf2 lane): whether the start's runs put the moving
+    // objects where they stood at its tick (its World took the table of that
+    // tick, live or from the ledger); false when they carry them the old way
+    // from where they stand now, or the start has no World.
+    static bool startObjectsExact(const SimStart& s);
 
     // Hitbox sizes of the real player and of its simulated copy after the
     // copy was set up the way run() does it (a diagnostic: they must agree).

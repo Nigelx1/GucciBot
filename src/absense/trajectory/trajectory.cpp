@@ -1530,6 +1530,7 @@ Trajectory::StartState Trajectory::liveState(GJBaseGameLayer* pl, bool p1) {
     return out;
 }
 bool Trajectory::startHeld2(const SimStart& s) { return s.held2; }
+bool Trajectory::startObjectsExact(const SimStart& s) { return s.world && !s.world->inexact; }
 bool Trajectory::startFlying2(const SimStart& s) { return s.flying2; }
 
 // Objects the real player has activated since the kept start (the ones

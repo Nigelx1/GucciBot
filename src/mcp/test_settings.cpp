@@ -445,6 +445,14 @@ namespace gucci::testset {
                              [](matjson::Value const& val, bool) {
                                  absense::setFrozenLong(wantBool("pf_frozen_long", val));
                              }});
+                // GucciBot (2026-11-16, pf2 lane): a walk-back stop written off
+                // from an inexact kept start on a quick, uncertain death is
+                // gone back to for real first; off by default.
+                v.push_back({"pf_probe_real", "bool", Store::Memory,
+                             [] { return matjson::Value(absense::probeReal()); },
+                             [](matjson::Value const& val, bool) {
+                                 absense::setProbeReal(wantBool("pf_probe_real", val));
+                             }});
                 // The cell-by-cell write-back on a level with rows (on by
                 // default); off for the old pass of everything, to compare.
                 v.push_back({"pf_pending_cells", "bool", Store::Memory,

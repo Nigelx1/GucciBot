@@ -172,6 +172,14 @@ namespace absense {
     // default: the test switch pf_frozen_long, this launch only, turns it on).
     bool frozenLong();
     void setFrozenLong(bool on);
+    // GucciBot (2026-11-16, pf2 lane): a stop of the walk back whose kept start
+    // could not put its moving objects back where they were at its tick, and
+    // where every idea dies within a quarter second on an object the copy
+    // can't be sure of, is looked at again in the real game (gone back to for
+    // real) instead of being written off (off by default: the test switch
+    // pf_probe_real, this launch only, turns it on).
+    bool probeReal();
+    void setProbeReal(bool on);
     // ... and its kill switch, never saved either (gucci_test_set
     // pf_pending_cells, on by default): on a level with rows of sections
     // (ORBIT, Heliopolis) a run writes back what the real game moved a

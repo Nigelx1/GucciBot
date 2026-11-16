@@ -137,6 +137,12 @@ constexpr double kMinBudgetMs = 2.0;
 // constant (the frozen screen still redraws about five times a second then).
 constexpr double kFrozenLongShare = 4.0;
 constexpr double kFrozenLongMaxMs = 200.0;
+// GucciBot (2026-11-16, pf2 lane; pf_probe_real): a kept start's best idea that
+// dies within this much of the start (a quarter second) on an object the copy
+// can't be sure of, while the start could not put its moving objects back, is
+// looked at again in the real game - at most this many stops per spot.
+constexpr double kProbeRealSeconds = 0.25;
+constexpr int kProbeRealPerSpot = 3;
 // What one round on the graphics card is sized from. Fixed on purpose: the
 // pacing budget must never reach the decisions, or changing how the work is
 // spread over frames would change which ideas get scored. This is what
@@ -693,6 +699,11 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
             (unsigned long long)m_stats.routeErrors, (unsigned long long)m_stats.legSafety, m_stats.routeMs / legs,
             (double)m_stats.routeTicks / legs, (unsigned long long)m_stats.routeWins,
             (unsigned long long)m_stats.routeJumps, (unsigned long long)m_stats.routeRetaken);
+    }
+    if (m_stats.probeReal > 0) {
+        log("%llu walk-back stops gone back to for real: their kept start could not place its moving objects and "
+            "every idea died at once on one it wasn't sure of",
+            (unsigned long long)m_stats.probeReal);
     }
     if (m_stats.driveDecisions > 0 || m_stats.driveHandoffs > 0) {
         log("route drives: %llu decisions played as a leg to the next gate's option, %llu decided by today's engine "
@@ -4436,6 +4447,47 @@ void AbsensePathfinder::decide() {
 
         if (!viable) {
             if (m_repair.active) {
+                // GucciBot (2026-11-16, pf2 lane; the test switch
+                // pf_probe_real): a stop looked at from its kept start, where
+                // the start could not put the level's moving objects back where
+                // they stood at its tick (the ledger did not reach it: on
+                // GRIEF it holds about 67 ticks, and a real death's put-back
+                // makes every tick before it unreachable), and every idea dies
+                // within a quarter second on an object the copy can't be sure
+                // of: that verdict is about where the object stands now, not
+                // then. GRIEF's walk back wrote off tick 11103 this way (every
+                // idea "lasts 4", killed by a hazard two Move triggers had
+                // lowered after the start was kept) where the real game lived
+                // 1024 more ticks. Such a stop is gone back to for real and
+                // decided from the game's own state; at most
+                // kProbeRealPerSpot stops per spot, each once.
+                if (absense::probeReal() && m_probe.active && m_probe.tick == tick && best && !best->complete &&
+                    !best->killerStatic && (best->killerUid == 0 || m_confirmedKillers.count(best->killerUid) == 0) &&
+                    best->survived <= (int)std::lround(kProbeRealSeconds * std::max(1.0, bot->updater().getTps()))) {
+                    const Start* kept = startAt(tick);
+                    const double tpsP = bot->updater().getTps();
+                    Trap* spot = trapAt(m_repair.deathTick, (uint64_t)std::lround(32.0 * std::max(1.0, tpsP / 240.0)));
+                    if (kept && kept->sim && !Trajectory::startObjectsExact(*kept->sim) && spot &&
+                        (int)spot->probedReal.size() < kProbeRealPerSpot &&
+                        std::find(spot->probedReal.begin(), spot->probedReal.end(), tick) == spot->probedReal.end()) {
+                        spot->probedReal.push_back(tick);
+                        m_stats.probeReal++;
+                        log("tick %llu: the kept start says nothing lasts (best %s lasts %d, killer id %d not sure, needed %d) "
+                            "but its moving objects are not where they stood then; going back for real to look (%d of %d "
+                            "for this spot)",
+                            (unsigned long long)tick, best->name.c_str(), best->survived, best->killerId, need,
+                            (int)spot->probedReal.size(), kProbeRealPerSpot);
+                        d.active = false;
+                        m_pairSecondPass = false;
+                        m_plan.clear();
+                        m_plan2.clear();
+                        m_planIndex = 0;
+                        endProbe();
+                        m_goTo = tick;
+                        m_phase = Phase::Backtracking;
+                        return;
+                    }
+                }
                 // A killer the game confirmed is final. One the simulation only
                 // calls static is final until the spot has widened once: from
                 // then on the game is asked at the floor too (kRetriesPerStop a

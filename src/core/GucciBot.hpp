@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-j (Pathfinder test switch pf_frozen_long (off): on levels with slow frames the search may think longer while the game waits)"
+    "2026-11-16-k (Pathfinder test switch pf_probe_real (off): a walk-back stop written off on a hazard the copy may misplace is checked again in the real game)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

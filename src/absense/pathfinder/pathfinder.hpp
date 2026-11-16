@@ -94,6 +94,7 @@ class AbsensePathfinder {
         uint64_t routeWins = 0;     // route ideas that were the one played
         uint64_t routeJumps = 0;    // step R5: dead ends that went back to where the route was left
         uint64_t routeRetaken = 0;  // ... and took the route there
+        uint64_t probeReal = 0;     // GucciBot (pf_probe_real): kept-start verdicts looked at again in the real game
         uint64_t driveDecisions = 0;  // step 5 (Route drives): decisions played as a leg to the next gate's option
         uint64_t driveHandoffs = 0;   // ... and decided by today's engine instead (no option got through)
         uint64_t driveNoGate = 0;     // ... of those, with no gate to aim at (past the last one, say)
@@ -693,6 +694,10 @@ public:
         int anyway = 0;      // times the floor's best idea was played although it does not get past
         int level = 0;       // times every stop of this spot failed: each one widens what is tried (see escalate)
         std::vector<uint64_t> routeForced;  // step R5: decisions gone back to for this spot, to take the route
+        // GucciBot (2026-11-16, pf2 lane; pf_probe_real): stops gone back to
+        // for real for this spot because their kept start's verdict could not
+        // be trusted (see decide()).
+        std::vector<uint64_t> probedReal;
     };
     std::vector<Trap> m_traps;
     Trap* trapAt(uint64_t tick, uint64_t slack);

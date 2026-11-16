@@ -626,6 +626,20 @@ void absense::setFrozenLong(bool on) {
     g_frozenLong = on;
 }
 
+namespace {
+// GucciBot (2026-11-16, pf2 lane): off by default until the cold regression
+// says it helps (see pathfinder.cpp, decide(): a kept start's quick death).
+bool g_probeReal = false;
+}
+
+bool absense::probeReal() {
+    return g_probeReal;
+}
+
+void absense::setProbeReal(bool on) {
+    g_probeReal = on;
+}
+
 bool absense::pendingVerify() {
     return world::g_pendingVerify;
 }
