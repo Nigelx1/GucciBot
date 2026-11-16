@@ -16,6 +16,7 @@
 #include "ui/pages.hpp"
 #include "ui/press.hpp"
 #include "ui/probe.hpp"
+#include "ui/search.hpp"
 #include "ui/state.hpp"
 #include "ui/themes.hpp"
 #include "ui/touch.hpp"
@@ -1780,18 +1781,37 @@ namespace gucci::ui {
         // Frame Editor, Macro Tools and Editor Tools as one tab (Nigel's
         // layout), each a tab of its own inside it.
         void pageMacroTools() {
+            struct Tab {
+                const char* name;
+                void (*draw)();
+            };
+            static constexpr Tab kTabs[] = {
+                {"Frame Editor", pages::editor},
+                {"Macro Tools", pages::macroTools},
+                {"Editor Tools", pages::editorTools},
+            };
+            // The search's index pass: every tab's contents, one after the
+            // other (a tab bar would show only the first).
+            if (search::indexing()) {
+                for (auto const& t : kTabs) {
+                    ImGui::PushID(t.name);
+                    search::tabBegin(t.name);
+                    t.draw();
+                    search::tabEnd();
+                    ImGui::PopID();
+                }
+                return;
+            }
             if (ImGui::BeginTabBar("##macrotools")) {
-                if (ImGui::BeginTabItem("Frame Editor")) {
-                    pages::editor();
-                    ImGui::EndTabItem();
-                }
-                if (ImGui::BeginTabItem("Macro Tools")) {
-                    pages::macroTools();
-                    ImGui::EndTabItem();
-                }
-                if (ImGui::BeginTabItem("Editor Tools")) {
-                    pages::editorTools();
-                    ImGui::EndTabItem();
+                for (auto const& t : kTabs) {
+                    // A search result on another tab switches to it.
+                    ImGuiTabItemFlags const flags = search::selectTab(t.name) ? ImGuiTabItemFlags_SetSelected : 0;
+                    if (ImGui::BeginTabItem(t.name, nullptr, flags)) {
+                        search::tabBegin(t.name);
+                        t.draw();
+                        search::tabEnd();
+                        ImGui::EndTabItem();
+                    }
                 }
                 ImGui::EndTabBar();
             }
@@ -3219,7 +3239,44 @@ namespace gucci::ui {
             }
         }
 
+        // The search's index (ui/search.hpp): every page the sidebar lists,
+        // drawn once into a window off screen that takes no input, with the
+        // kit reporting each card, row and button to the recorder. Clipped
+        // off screen, the widgets draw nothing, so it costs about a frame's
+        // layout. Never in a frame the menu probe is capturing.
+        void drawSearchIndex() {
+            if (!search::wantIndex())
+                return;
+            ImGui::SetNextWindowPos(ImVec2(-30000.f, -30000.f), ImGuiCond_Always);
+            ImGui::SetNextWindowSize(ImVec2(620.f, 480.f), ImGuiCond_Always);
+            ImGui::SetNextWindowBgAlpha(0.f);
+            ImGuiWindowFlags const flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs |
+                                           ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoFocusOnAppearing |
+                                           ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings |
+                                           ImGuiWindowFlags_NoBackground;
+            // Drawn whether or not Begin says it's in view: it never is.
+            ImGui::Begin("##gucci_search_index", nullptr, flags);
+            search::indexBegin();
+            for (int i = 0; i < kPageCount; ++i) {
+                if (kPages[i].hidden && kPages[i].hidden())
+                    continue;
+                ImGui::PushID(i);
+                search::indexPage(kPages[i].title);
+                kPages[i].draw();
+                ImGui::PopID();
+            }
+            search::indexEnd();
+            ImGui::End();
+        }
+
         void drawMain() {
+            // A search result picked last frame: its page.
+            if (auto const picked = search::takePick())
+                for (int i = 0; i < kPageCount; ++i)
+                    if (kPages[i].title == *picked && !(kPages[i].hidden && kPages[i].hidden())) {
+                        g_page = i;
+                        break;
+                    }
             PageLook const pageLook(kPages[g_page].draw == pages::jupiterTrainer);
             auto const& pal = look().pal;
             ImGuiIO const& io = ImGui::GetIO();
@@ -3428,11 +3485,28 @@ namespace gucci::ui {
             ImGui::SameLine();
 
             // Page
-            ImGui::BeginChild("##page", ImVec2(0.f, 0.f));
+            // The page's title with the search box at the end of its line,
+            // held above the page (it doesn't scroll away, so the box is
+            // always there), then the page in its own scrolling child.
+            ImGui::BeginGroup();
             {
-                UseFont f(Font::Display);
-                ImGui::TextUnformatted(kPages[g_page].title);
+                float const titleY = ImGui::GetCursorPosY();
+                float titleH = 0.f;
+                {
+                    UseFont f(Font::Display);
+                    ImGui::TextUnformatted(kPages[g_page].title);
+                    titleH = ImGui::GetItemRectSize().y;
+                }
+                float const after = ImGui::GetCursorPosY();
+                float const boxW = std::round(std::clamp(ImGui::GetContentRegionAvail().x * 0.42f, 120.f, 240.f));
+                ImGui::SameLine();
+                float const room = ImGui::GetContentRegionAvail().x;
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.f, room - boxW));
+                ImGui::SetCursorPosY(titleY + std::max(0.f, (titleH - ImGui::GetFrameHeight()) * 0.5f));
+                search::field(std::min(boxW, std::max(80.f, room)));
+                ImGui::SetCursorPosY(std::max(after, ImGui::GetCursorPosY()));
             }
+            ImGui::BeginChild("##page", ImVec2(0.f, 0.f));
             // The theme's words under every page's title (Nigel, 2026-10-18:
             // "add labels everywhere with the cool quote stuff"). A theme has
             // three quotes (the old menu's Replay, Tools and Credits pages);
@@ -3449,8 +3523,18 @@ namespace gucci::ui {
             }
             statusBar();
             kit::Gap(0.3f);
-            kPages[g_page].draw();
+            if (search::showing()) {
+                // What the box finds, where the page would be.
+                search::results(false);
+            } else {
+                // A result just picked is found, scrolled to and lit up as
+                // the page draws.
+                search::livePageBegin(kPages[g_page].title);
+                kPages[g_page].draw();
+                search::livePageEnd();
+            }
             ImGui::EndChild();
+            ImGui::EndGroup();
 
             ImGui::End();
             ImGui::PopStyleVar();
@@ -3468,7 +3552,15 @@ namespace gucci::ui {
             bool open = true;
             // The title bar shows the name (GBot's while disguised); after
             // "###" the id stays the same, so a new name isn't a new window.
-            if (ImGui::Begin(fmt::format("{}###compact", brandName()).c_str(), &open, ImGuiWindowFlags_NoCollapse)) {
+            bool const drawn = ImGui::Begin(fmt::format("{}###compact", brandName()).c_str(), &open, ImGuiWindowFlags_NoCollapse);
+            // The menu's search box here too: its results in place of the
+            // quick controls, and a pick opens the full menu at it.
+            if (drawn) {
+                search::field(-1.f);
+                if (search::showing())
+                    search::results(true);
+            }
+            if (drawn && !search::showing()) {
                 int mode = gb->isRecording() ? 1 : gb->isPlaying() ? 2 : 0;
                 const char* modes[] = {"Off", "Rec", "Play"};
                 {
@@ -3667,6 +3759,9 @@ namespace gucci::ui {
             // A press asked for by Assistant Access (ui/press.hpp) moves on a
             // step, before anything is drawn.
             press::step();
+            // The menu's search box: a box let go of by Escape or a pick
+            // empties, and a highlight that's had its time ends.
+            search::frameBegin();
             // The master switch's once-a-frame step: here the game's update for
             // the frame is over, so its code and hooks can come out or go back.
             botswitch::service();
@@ -3816,6 +3911,9 @@ namespace gucci::ui {
             }
             if (!g_open)
                 return;
+            // A search result picked in Compact Mode opens the full menu.
+            if (search::takeWantFullMenu() && g_compact)
+                setCompactMode(false);
             if (g_compact) {
                 drawCompact();
             } else {
@@ -3823,6 +3921,7 @@ namespace gucci::ui {
                 leaveHiddenPage();
                 drawMain();
             }
+            drawSearchIndex();
         }
 
     } // namespace

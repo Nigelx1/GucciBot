@@ -1,6 +1,7 @@
 #include "ui/kit.hpp"
 #include "hacks/legit.hpp"
 #include "ui/probe.hpp"
+#include "ui/search.hpp"
 #include "ui/state.hpp"
 #include "ui/ui.hpp"
 
@@ -80,6 +81,8 @@ namespace gucci::ui::kit {
         ImGui::PopStyleColor(2);
         if (probe::on())
             probe::card(title, caption);
+        if (search::recording())
+            search::card(title, caption);
         if (title && *title) {
             {
                 UseFont f(Font::Strong);
@@ -114,6 +117,8 @@ namespace gucci::ui::kit {
                 card->DrawList->PopClipRect();
             }
         }
+        if (search::recording())
+            search::endCard();
         ImGui::EndChild();
         if (probe::on())
             probe::endCard();
@@ -257,6 +262,9 @@ namespace gucci::ui::kit {
         ImGui::BeginGroup();
         ImGui::PushTextWrapPos(startLocalX + labelWidth - 12.f);
         ImGui::AlignTextToFramePadding();
+        // The search's index keeps the row's own hint, not Legit only's.
+        if (search::recording())
+            search::row(label, hint);
         if (g_legitDepth > 0)
             hint = legit::kReason;  // a cheat's row while Legit only is on
         if (probe::on())
@@ -284,11 +292,15 @@ namespace gucci::ui::kit {
             probe::endRow();
         float const controlBottom = ImGui::GetItemRectMax().y;
         if (rowStack().empty()) {
+            if (search::recording())
+                search::endRow(ImGui::GetCursorScreenPos(), controlBottom);
             ImGui::PopID();
             return;
         }
         RowFrame const row = rowStack().back();
         rowStack().pop_back();
+        if (search::recording())
+            search::endRow(row.start, std::max(row.labelBottom, controlBottom));
         ImGui::SetCursorScreenPos(ImVec2(row.start.x, std::max(row.labelBottom, controlBottom)));
         ImGui::Dummy(ImVec2(0.f, 0.f));
         ImGui::PopID();
@@ -578,6 +590,8 @@ namespace gucci::ui::kit {
             ImGui::PopStyleVar();
         if (probe::on())
             probe::button(label, tone);
+        if (search::recording())
+            search::button(label);
         return pressed;
     }
 
@@ -601,7 +615,12 @@ namespace gucci::ui::kit {
 
     bool Key(const char* id, int* keyCode) {
         ImGui::PushID(id);
-        bool changed = detail::takeCaptured(keyCode);
+        // The search's hidden index pass draws every page: a key just
+        // captured is the live control's to report, not that copy's.
+        bool changed = search::indexing() ? false : detail::takeCaptured(keyCode);
+        search::Mute mute;  // its button isn't a button of its own
+        if (search::recording())
+            search::hotkey();
         bool const waiting = detail::captureTarget() == keyCode;
         std::string const text = (waiting ? std::string("Press a key...") : keyName(*keyCode)) + "##key";
         if (Button(text.c_str(), waiting ? Tone::Accent : Tone::Plain, std::min(Avail(), 140.f)))
@@ -693,12 +712,16 @@ namespace gucci::ui::kit {
         RowEnd();
         if (changed)
             *changed = flipped;
-        if (!*enabled)
+        // The search's index pass opens the options of a switch that's off
+        // too (drawn off screen; the switch isn't changed), so they're found.
+        if (!*enabled && !search::indexing())
             return false;
         featureStack().push_back(ImGui::GetCursorScreenPos());
         ImGui::Indent(16.f);
         if (probe::on())
             probe::feature(true);
+        if (search::recording())
+            search::featureBody(true);
         return true;
     }
 
@@ -706,6 +729,8 @@ namespace gucci::ui::kit {
         ImGui::Unindent(16.f);
         if (probe::on())
             probe::feature(false);
+        if (search::recording())
+            search::featureBody(false);
         if (featureStack().empty())
             return;
         ImVec2 const top = featureStack().back();

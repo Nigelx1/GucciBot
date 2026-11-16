@@ -9,6 +9,7 @@
 
 #include "ui/kit.hpp"
 #include "ui/look.hpp"
+#include "ui/search.hpp"
 #include "ui/ui.hpp"
 
 #include "core/GucciBot.hpp"
@@ -1024,7 +1025,10 @@ namespace gucci::ui::pages {
 
     void jupiterTrainer() {
         tr::ensureLoaded();
-        tr::markPageDrawn(Kind::Jupiter);
+        // The search's hidden index pass draws this page too: that isn't the
+        // page being open (its bar's clock and music run while it is).
+        if (!search::indexing())
+            tr::markPageDrawn(Kind::Jupiter);
         jupiterHeader();
         body(Kind::Jupiter);
     }
@@ -1091,7 +1095,10 @@ namespace gucci::ui::pages {
 
     void anyTrainer() {
         tr::ensureLoaded();
-        tr::markPageDrawn(Kind::Any);
+        // The search's hidden index pass draws this page too: that isn't the
+        // page being open (its bar's clock and music run while it is).
+        if (!search::indexing())
+            tr::markPageDrawn(Kind::Any);
         anyHeader();
         body(Kind::Any);
     }

@@ -5,6 +5,7 @@
 #include "hacks/legit.hpp"
 #include "hacks/safemode.hpp"
 #include "trainers/trainer_core.hpp"
+#include "ui/search.hpp"
 #include "ui/ui.hpp"
 
 #include <Geode/Geode.hpp>
@@ -147,6 +148,10 @@ class $modify(GucciKeys, CCKeyboardDispatcher) {
         if (down && !repeat && ui::feedKeyCapture(k))
             return true;
         if (ImGui::GetIO().WantTextInput)
+            return CCKeyboardDispatcher::dispatchKeyboardMSG(key, down, repeat, timestamp);
+        // Ctrl+F in the menu goes to its search box (ui/search.cpp), not to a
+        // hotkey bound to F: the box isn't taking typing yet as F goes down.
+        if (key == enumKeyCodes::KEY_F && ui::search::ctrlFIsMine())
             return CCKeyboardDispatcher::dispatchKeyboardMSG(key, down, repeat, timestamp);
 
         // Switched off (core/bot_switch.hpp), only the menu key does anything.

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-15-bm (Pathfinder: Show the search, faint lines for the paths the search is trying, the best one brighter, and a status line while the game waits (switch on the Pathfinder page, on by default))"
+    "2026-11-15-bn (Menu: a search box for the whole menu. Type noclip or a theme name and pick a result to jump to that control, on any page or tab; Ctrl+F jumps to the box)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

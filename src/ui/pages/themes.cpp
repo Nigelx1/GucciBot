@@ -14,6 +14,7 @@
 #include "ui/pages.hpp"
 #include "ui/kit.hpp"
 #include "ui/look.hpp"
+#include "ui/search.hpp"
 #include "ui/themes.hpp"
 #include "ui/ui.hpp"
 
@@ -508,7 +509,10 @@ namespace gucci::ui::pages {
                 }
             }
 
-            th::preview(d);
+            // Not from the search's hidden index pass: worn for that frame
+            // while another page shows, it would flash the draft's colors.
+            if (!search::indexing())
+                th::preview(d);
         }
 
         // ------------------------------------------------------------ picker
@@ -553,6 +557,10 @@ namespace gucci::ui::pages {
             ImVec2 const a = ImGui::GetCursorScreenPos();
             ImVec2 const b(a.x + width, a.y + height);
             bool const clicked = ImGui::InvisibleButton("tile", ImVec2(std::max(1.f, width), height));
+            // Not a kit button, so the search hears of it here: a theme's
+            // name finds its tile.
+            if (search::recording())
+                search::button(t.name.c_str());
             bool const hovered = ImGui::IsItemHovered();
             bool const held = ImGui::IsItemActive();
             if (hovered)

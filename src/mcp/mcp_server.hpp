@@ -179,6 +179,8 @@ namespace gucci::mcp {
     void registerUiTapTools(Server& server);
     // gucci_ui_press: a GucciBot menu control pressed by its ID (ui_press_tool.cpp).
     void registerUiPressTools(Server& server);
+    // gucci_search: the menu's search box, typed into and picked from (search_tool.cpp).
+    void registerSearchTools(Server& server);
 
     // Who owns the run right now: "render", "analyzer", "pathfinder", or ""
     // for nobody. The driving tools refuse while it isn't "". Defined in

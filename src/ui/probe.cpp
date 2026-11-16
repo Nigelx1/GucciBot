@@ -989,7 +989,9 @@ namespace gucci::ui::probe {
             else if (key == "page")
                 hit = child && name.starts_with("GucciBot##menu/") && name.find("/##page_") != std::string_view::npos;
             else if (key == "macros")
-                hit = child && name.find("/##macros_") != std::string_view::npos;
+                // The menu's own list: the search's hidden index window draws
+                // the Macro page too, with a list of the same name.
+                hit = child && name.starts_with("GucciBot##menu/") && name.find("/##macros_") != std::string_view::npos;
             else if (key == "compact")
                 hit = !child && name.ends_with("###compact");
             else
