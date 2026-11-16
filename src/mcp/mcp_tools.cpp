@@ -2589,8 +2589,10 @@ namespace gucci::mcp {
             "checkpoint (the checkpoint key's own path; lands at the end of this "
             "frame) | respawn (back to the last checkpoint). status returns the "
             "frame, saved checkpoint frames and level_hash (every object's "
-            "position/rotation/scale/opacity/disabled, hashed).",
-            schemaOf({{"action", "string", "status, on, off, checkpoint or respawn"}}),
+            "position/rotation/scale/opacity/disabled, hashed). dump also writes "
+            "every object's line to zz_gbtest_objects_<name>.txt in the save folder.",
+            schemaOf({{"action", "string", "status, on, off, checkpoint, respawn or dump"},
+                      {"name", "string", "dump only: the file's name part (default dump)"}}),
             [](matjson::Value const& a) {
                 auto* pl = requireLevel();
                 auto* gb = GucciEngine::get();
@@ -2617,6 +2619,38 @@ namespace gucci::mcp {
                 } else if (what == "respawn") {
                     requireFreeRun();
                     pl->resetLevel();
+                } else if (what == "dump") {
+                    // GucciBot (2026-11-16, rotate lane): diagnostics. Every
+                    // object, one line each, into the save folder's
+                    // zz_gbtest_objects_<name>.txt: what level_hash mixes, plus
+                    // m_positionX/Y and a hash of the bytes [0x2a0, 0x3a0)
+                    // (where the World's rotate fields live), so two dumps
+                    // can be told apart object by object. Reads only.
+                    auto name = argStr(a, "name", "dump");
+                    for (char& c : name)
+                        if (!std::isalnum((unsigned char)c) && c != '_' && c != '-') c = '_';
+                    auto const path = Mod::get()->getSaveDir() / ("zz_gbtest_objects_" + name + ".txt");
+                    std::ofstream f(path, std::ios::trunc);
+                    int64_t i = 0;
+                    if (pl->m_objects) {
+                        for (auto* o : CCArrayExt<GameObject*>(pl->m_objects)) {
+                            if (!o) {
+                                i++;
+                                continue;
+                            }
+                            auto const p = o->getPosition();
+                            uint64_t bh = 1469598103934665603ull;
+                            auto const* bytes = reinterpret_cast<uint8_t const*>(o) + 0x2a0;
+                            for (int b = 0; b < 0x100; b++) bh = (bh ^ bytes[b]) * 1099511628211ull;
+                            f << fmt::format("{} uid {} id {} node {:.9g} {:.9g} rot {:.9g} {:.9g} scale {:.9g} {:.9g} "
+                                             "op {} dis {}{} pos {:.17g} {:.17g} bytes {:016x}\n",
+                                             i, o->m_uniqueID, o->m_objectID, p.x, p.y, o->getRotationX(),
+                                             o->getRotationY(), o->getScaleX(), o->getScaleY(), (int)o->getOpacity(),
+                                             o->m_isDisabled ? 1 : 0, o->m_isDisabled2 ? 1 : 0, o->m_positionX,
+                                             o->m_positionY, bh);
+                            i++;
+                        }
+                    }
                 } else if (what != "status") {
                     throw ToolError("unknown action: " + what);
                 }

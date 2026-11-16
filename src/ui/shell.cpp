@@ -2382,6 +2382,20 @@ namespace gucci::ui {
                                "Only shows what it does: it decides the same either way",
                                &showSearch))
                 absense::setSearchShown(showSearch);
+            // GucciBot (2026-11-16, rotate lane): rotate triggers in the
+            // trigger model (absense/world/rotate.hpp), off by default and
+            // saved with the mod (Nigel: shipped off, but not hidden). A
+            // search takes it when it starts; not switched during a run.
+            bool rotate = absense::rotateTriggers();
+            ImGui::BeginDisabled(anyRun || !GB_NATIVE_ENGINE);
+            if (kit::SwitchRow("Rotate triggers (experimental)",
+                               "Off by default. On: the search's copy of the game turns rotating blocks exactly like "
+                               "the game does. On some levels this makes the search slower or sends it another way "
+                               "(Slaughterhouse took longer with it on). Works where the trigger model runs: Windows "
+                               "only for now. Takes effect when a search starts",
+                               &rotate))
+                absense::setRotateTriggers(rotate);
+            ImGui::EndDisabled();
             auto const s = absense::status();
             kit::RowBegin("", nullptr);
             if (!s.running && !absense::startPending()) {

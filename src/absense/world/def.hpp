@@ -448,6 +448,16 @@ class WorldDef {
         // answer: the careful one.
         return g < m_groupModelled.size() && m_groupModelled[g] != 0;
     }
+    // GucciBot (2026-11-15, rotate lane): the same for a run that models
+    // rotates (WorldState::rotate), where a rotate trigger in the default mode
+    // (world/rotate.cpp (R1)) is a kind the World runs.
+    bool groupModelledRotate(int group) const {
+        const std::size_t g = clampGroup(group);
+        return g < m_groupModelledRotate.size() && m_groupModelledRotate[g] != 0;
+    }
+    // GJEffectManager +0x818 when the level was read (world/rotate.cpp (R3)):
+    // a rotate command replaces the older ones its target has this tick.
+    bool rotateReplace = false;
     // Where each group's collidable members stood when the WorldDef was built
     // (empty for a group with none). Only a bound to grow: objects move after.
     std::vector<Box> groupBaseBox;
@@ -499,6 +509,7 @@ class WorldDef {
     Lists<int> m_spawnIn;
     Lists<int> m_targeting;
     std::vector<uint8_t> m_groupModelled;
+    std::vector<uint8_t> m_groupModelledRotate;
 };
 
 }  // namespace world

@@ -13,6 +13,7 @@
 
 #include "absense/compat/bot.hpp"
 #include "absense/compat/bot.hpp"
+#include "absense/world/rotate.hpp"
 #include "absense/world/def.hpp"
 #include "absense/world/offsets.hpp"
 #include "absense/world/world.hpp"
@@ -339,7 +340,11 @@ WorldState World::captureLive(GJBaseGameLayer* pl, bool withActions) {
             std::vector<WCmd> cmds;
             for (const GroupCommandObject2& c : em->m_unkVector560) {
                 if (c.m_doUpdate) continue;
-                const bool ported = c.m_commandType == off::kCmdMove && !c.m_lockToCameraX && !c.m_lockToCameraY;
+                // GucciBot (2026-11-15, rotate lane): a rotate command, in a
+                // capture for a run that models rotates (world/rotate.hpp):
+                // whichever mode made it, a running one is a plain command.
+                const bool ported = (c.m_commandType == off::kCmdMove && !c.m_lockToCameraX && !c.m_lockToCameraY) ||
+                                    (g_captureRotates && c.m_commandType == off::kCmdRotate);
                 if (!withActions || !ported) {
                     markUncertain(uncertain, c.m_targetGroupID);
                     markUncertain(uncertain, c.m_centerGroupID);

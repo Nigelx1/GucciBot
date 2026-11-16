@@ -156,13 +156,13 @@ constexpr double kForkLeadSeconds = 1.0;
 constexpr float kForkReachY = 240.0f;
 constexpr int kForkJumpsPerSpot = 3;
 constexpr int kForkJumpsPerRun = 6;
-constexpr float kForkWatchX = 600.0f;
+constexpr float kForkWatchX = 600.0f;  // GucciBot (pf3 lane; log only): how far either side of a fork its crossings are logged
 // GucciBot (2026-11-16, pf3 lane; pf_fork_jump): how close in x a speed
 // portal and a mode portal are to count as one gate (Forest Temple's robot
 // portal at x 19317 and its 1x speed portal at 19315), and how much of their
 // bands must overlap for the drive to aim at both.
 constexpr float kForkStackX = 30.0f;
-constexpr float kForkStackMinBand = 10.0f;  // GucciBot (pf3 lane; log only): how far either side of a fork its crossings are logged
+constexpr float kForkStackMinBand = 10.0f;
 // What one round on the graphics card is sized from. Fixed on purpose: the
 // pacing budget must never reach the decisions, or changing how the work is
 // spread over frames would change which ideas get scored. This is what

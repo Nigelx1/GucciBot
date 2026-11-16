@@ -135,7 +135,9 @@ Certainty certaintyOf(GJBaseGameLayer* pl, GameObject* object) {
         // Something the World does not follow has already moved or toggled it
         // this run, or a kind it does not run can reach it at all.
         if (inUncertain(ws->uncertainGroups, (int)g)) return Certainty::Uncertain;
-        if (!def->groupModelled((int)g)) return Certainty::Uncertain;
+        // (A run that models rotates, world/rotate.hpp, also runs a rotate
+        // trigger in the default mode.)
+        if (!(ws->rotate ? def->groupModelledRotate((int)g) : def->groupModelled((int)g))) return Certainty::Uncertain;
         // ... or the ledger's shadow check caught the step having this group
         // somewhere else than the real game did (design step 10). The design
         // kept an untrusted set of kinds; a group is what the check can name

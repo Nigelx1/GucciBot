@@ -223,6 +223,8 @@
 #include "absense/compat/bot.hpp"
 #include "absense/compat/bot.hpp"
 #include "absense/world/def.hpp"
+#include "absense/world/offsets.hpp"
+#include "absense/world/rotate.hpp"
 #include "absense/world/world.hpp"
 
 namespace world {
@@ -418,6 +420,25 @@ void emitOp(Run& run, const Op& op) {
                 widen(r.netY[k], r.loY[k], r.hiY[k], op.dy);
             }
             break;
+        case OpKind::Rotate:
+            // GucciBot (2026-11-15, rotate lane): a turn about a centre can
+            // carry a member anywhere on its circle, which no signed sum
+            // bounds: the range opens all the way, as a NaN move's does, and
+            // the materializer looks at every member of the group whenever
+            // it looks (ROTATE_PLAN.md risk 7: measured, not guessed, before
+            // anything tighter). The optimized array holds decoration alone
+            // (fact (e)) and is not in the ranges; a turn without a centre
+            // leaves every object where it stands.
+            r.x += std::fabs((double)op.dx);
+            r.y += std::fabs((double)op.dy);
+            if ((op.rflags & kRotCenter) && !(op.rflags & kRotOptimized)) {
+                const double inf = std::numeric_limits<double>::infinity();
+                r.loX[0] = -inf;
+                r.hiX[0] = inf;
+                r.loY[0] = -inf;
+                r.hiY[0] = inf;
+            }
+            break;
         default:
             break;
     }
@@ -494,7 +515,90 @@ struct MoveNode {
     double sx = 0.0, sy = 0.0;  // node +0x38 / +0x40: the static groups
     double ox = 0.0, oy = 0.0;  // node +0x90 / +0x98: the optimized groups
     bool force = false;         // node +0x78
+    // node +0xd0: a rotate took the node's move (world/rotate.cpp (R6)), and
+    // processMoveActions passes it. (+0xd1, which also stops the claim, is
+    // only ever set by keyframe commands, which are not ported.)
+    bool taken = false;
 };
+
+// GucciBot (2026-11-15, rotate lane): the three registries prepareMoveActions
+// keeps for rotate commands each tick (world/rotate.cpp (R3)), as command
+// indices: EM +0x678 by target, EM +0x7f0 by (target, centre), EM +0x660 in
+// order. Kept from tick to tick like the nodes (stepTick never runs inside
+// itself); cleared at the top of every tick that steps commands.
+struct RotateRegistry {
+    std::vector<std::pair<int, std::vector<uint32_t>>> byTarget;
+    std::vector<std::pair<std::pair<int, int>, std::vector<uint32_t>>> byPair;
+    std::vector<uint32_t> list;
+
+    void clear() {
+        byTarget.clear();
+        byPair.clear();
+        list.clear();
+    }
+    std::vector<uint32_t>* findTarget(int target) {
+        for (auto& e : byTarget) {
+            if (e.first == target) return &e.second;
+        }
+        return nullptr;
+    }
+    std::vector<uint32_t>& target(int target) {
+        if (std::vector<uint32_t>* v = findTarget(target)) return *v;
+        byTarget.push_back({target, {}});
+        return byTarget.back().second;
+    }
+    std::vector<uint32_t>* findPair(int target, int center) {
+        for (auto& e : byPair) {
+            if (e.first.first == target && e.first.second == center) return &e.second;
+        }
+        return nullptr;
+    }
+    std::vector<uint32_t>& pair(int target, int center) {
+        if (std::vector<uint32_t>* v = findPair(target, center)) return *v;
+        byPair.push_back({{target, center}, {}});
+        return byPair.back().second;
+    }
+    void erasePair(int target, int center) {
+        std::erase_if(byPair, [&](const auto& e) { return e.first.first == target && e.first.second == center; });
+    }
+};
+
+// prepareMoveActions' case 1 (0x25f7b7), world/rotate.cpp (R3), up to the
+// tail every command takes.
+void prepareRotate(RotateRegistry& reg, WCmd& c, uint32_t index, float dt, bool intermediate, bool replace) {
+    if (replace) reg.target(c.targetGroup).clear();
+    c.interpRelatedFalse = false;  // +0x1a8
+    reg.target(c.targetGroup).push_back(index);
+    // registerRotationCommand 0x25f170: the (target, centre) entry emptied
+    // first when it exists, then the command onto it and onto the list.
+    if (replace) {
+        if (std::vector<uint32_t>* v = reg.findPair(c.targetGroup, c.centerGroup)) v->clear();
+    }
+    reg.pair(c.targetGroup, c.centerGroup).push_back(index);
+    reg.list.push_back(index);
+    if (!c.finishRelated) {
+        stepCommand(c, dt);
+        const double before = c.interpOne1;  // +0xa0
+        c.interpZero1 = before;              // +0x110
+        c.interpOne1 = before + c.rotateDelta;
+        c.interpZero2 = c.interpOne2;        // +0x118 = +0xa8
+        if (!intermediate) c.interpOne2 = c.interpOne1;
+    } else {
+        c.interpZero1 = c.interpOne1;
+        c.interpZero2 = c.interpOne2;
+        c.interpOne2 = c.interpOne1;
+    }
+}
+
+// The centre object of processRotationActions (R5): the group's parent, or
+// the group's only object.
+int rotateCenter(const WorldDef& def, int center) {
+    if (center <= 0) return -1;
+    const int parent = def.parentOf(center);
+    if (parent >= 0) return parent;
+    const auto members = def.members(center);
+    return members.size() == 1 ? members[0] : -1;
+}
 
 MoveNode& nodeFor(std::vector<MoveNode>& nodes, int group) {
     for (MoveNode& n : nodes) {
@@ -520,6 +624,106 @@ void commandTail(WCmd& c, bool keepThirds) {
     }
     if (c.finishRelated) c.doUpdate = true;
     else if (c.finished) c.finishRelated = true;
+}
+
+// claimMoveAction 0x22dbe0 (R6): the target's node, when it has one not yet
+// taken, is taken, and its sums (rounded to float) come back.
+cocos2d::CCPoint claimMove(std::vector<MoveNode>& nodes, int target, bool optimized) {
+    for (MoveNode& n : nodes) {
+        if (n.group != target) continue;
+        if (n.taken) return cocos2d::CCPoint{0.0f, 0.0f};
+        n.taken = true;
+        return optimized ? cocos2d::CCPoint{(float)n.ox, (float)n.oy} : cocos2d::CCPoint{(float)n.sx, (float)n.sy};
+    }
+    return cocos2d::CCPoint{0.0f, 0.0f};
+}
+
+// processRotationActions 0x22b7f0, world/rotate.cpp (R4)-(R7): what each
+// registered command does this tick, as one OpKind::Rotate per command.
+void processRotations(Run& run, std::vector<WCmd>& cmds, RotateRegistry& reg, std::vector<MoveNode>& nodes) {
+    WorldState& ws = *run.ws;
+    const WorldDef& def = *run.def;
+    // Every command in the +0x678 lists is stamped with the command index.
+    for (auto& entry : reg.byTarget) {
+        for (uint32_t i : entry.second) cmds[i].unk204 = (int)ws.commandIndex;
+    }
+    for (uint32_t index : reg.list) {
+        WCmd& c = cmds[index];
+        if (c.unk204 != (int)ws.commandIndex || c.interpRelatedFalse) continue;
+        const int centerSlot = rotateCenter(def, c.centerGroup);
+        const int group = (int)WorldDef::clampGroup(c.targetGroup);
+        const bool optimized = def.staticMembers(group).empty();
+        const double delta = optimized ? c.interpOne2 - c.interpZero2 : c.interpOne1 - c.interpZero1;
+        float angle = (float)delta;
+        const bool finish = c.finishRelated;
+        if (angle == 0.0f && !finish) continue;  // ucomiss + jp: a NaN goes on
+        c.interpRelatedFalse = true;
+        float own = c.lockObjectRotation ? 0.0f : angle;
+        // claimRotationAction 0x22d9a0: the other commands of (target, centre).
+        if (std::vector<uint32_t>* same = reg.findPair(c.targetGroup, c.centerGroup)) {
+            for (uint32_t j : *same) {
+                WCmd& o = cmds[j];
+                if (o.interpRelatedFalse) continue;
+                const float d = (float)(optimized ? o.interpOne2 - o.interpZero2 : o.interpOne1 - o.interpZero1);
+                o.interpRelatedFalse = true;
+                angle = d + angle;
+                if (!o.lockObjectRotation) own = d + own;
+            }
+            reg.erasePair(c.targetGroup, c.centerGroup);
+        }
+        const std::span<const int> array = optimized ? def.optimizedMembers(group) : def.members(group);
+        Op op;
+        op.tick = (uint32_t)ws.tick;
+        op.commandIndex = ws.commandIndex;
+        op.kind = OpKind::Rotate;
+        op.group = group;
+        op.rr = own;
+        op.rflags = (uint8_t)(optimized ? kRotOptimized : 0);
+        if (!run.cache || !run.log) {
+            // A run without the object log (none is made today): the
+            // commands' own fields go on as the game's, where the objects go
+            // is not followed.
+            markUncertain(ws, c.targetGroup);
+            if (centerSlot >= 0) claimMove(nodes, c.targetGroup, optimized);
+            continue;
+        }
+        if (centerSlot >= 0) {
+            // A centre the World does not follow, or a chain set up for
+            // another run since this one began (world/rotate.hpp chainKey):
+            // where the objects go is not known for sure.
+            for (uint16_t g : def.groupsOf(centerSlot)) {
+                if (std::binary_search(ws.uncertainGroups.begin(), ws.uncertainGroups.end(), g)) {
+                    markUncertain(ws, c.targetGroup);
+                    break;
+                }
+            }
+            if (rotate::chainKey() != ws.rotateChain) markUncertain(ws, c.targetGroup);
+            const Pose& cp = run.cache->pose(*run.log, centerSlot);
+            if (cp.uncertain) markUncertain(ws, c.targetGroup);
+            const cocos2d::CCPoint center{(float)(cp.x - (double)cp.offX), (float)(cp.y - (double)cp.offY)};
+            const cocos2d::CCPoint claim = claimMove(nodes, c.targetGroup, optimized);
+            const cocos2d::CCAffineTransform t = rotate::transform(angle, center);
+            op.rflags |= kRotCenter;
+            if (finish) op.rflags |= kRotFinish;
+            op.rt = {t.a, t.b, t.c, t.d, t.tx, t.ty};
+            op.rcx = center.x;
+            op.rcy = center.y;
+            op.dx = claim.x;
+            op.dy = claim.y;
+        } else if (own == 0.0f) {
+            continue;  // (R7): nothing to turn
+        }
+        if (debugGroup(group)) {
+            g_debugNotes->push_back(fmt::format(
+                "  step: group {} rotates by {:.4f} (own {:.4f}) about {}, claimed move ({:.3f},{:.3f}); {} objects{}",
+                group, angle, own,
+                centerSlot >= 0 ? fmt::format("({:.3f},{:.3f})", op.rcx, op.rcy) : std::string("itself"), op.dx,
+                op.dy, array.size(), optimized ? " (optimized)" : ""));
+        }
+        if (array.empty() || !run.log) continue;
+        rotate::noteOp();
+        emitOp(run, op);
+    }
 }
 
 }  // namespace
@@ -586,8 +790,14 @@ void stepTick(Run& run, float dt) {
     // are skipped whole (0x25f5cf), and the ones not ported stay as they are:
     // neither writes, so the commands a snapshot shares are not copied for them.
     bool anyMove = false;
+    const bool rotates = ws.rotate;
     for (const WCmd& c : *ws.cmds) {
         if (c.disabled) continue;
+        if (rotates && c.commandType == off::kCmdRotate) {
+            // Modelled (world/rotate.cpp): stepped and applied below.
+            anyMove = true;
+            continue;
+        }
         if (c.commandType != 0) {
             // Rotate, follow, follow player Y, transform and keyframe commands
             // are not ported: they are left as they are, and what they move
@@ -608,10 +818,18 @@ void stepTick(Run& run, float dt) {
     // was an allocation each time. stepTick never runs inside itself.
     static std::vector<MoveNode> nodes;
     nodes.clear();
+    static RotateRegistry rotateReg;
+    rotateReg.clear();
     std::vector<WCmd>& cmds = ws.cmds.edit();
     for (std::size_t i = 0; i < cmds.size(); i++) {
         WCmd& c = cmds[i];
-        if (c.disabled || c.commandType != 0) continue;  // (marked above)
+        if (c.disabled) continue;
+        if (rotates && c.commandType == off::kCmdRotate) {
+            prepareRotate(rotateReg, c, (uint32_t)i, dt, intermediate, run.def && run.def->rotateReplace);
+            commandTail(c, false);
+            continue;
+        }
+        if (c.commandType != 0) continue;  // (marked above)
         MoveNode& node = nodeFor(nodes, c.targetGroup);
         if (c.finishRelated) {
             node.ox = c.deltaX3 + node.ox;
@@ -663,13 +881,20 @@ void stepTick(Run& run, float dt) {
         commandTail(c, intermediate);
     }
 
+    // processMoveActionsStep 0x22b5d0 -> processRotationActions 0x22b7f0,
+    // before the moves (world/rotate.cpp (R4)-(R7)).
+    if (rotates && run.def && !rotateReg.list.empty()) processRotations(run, cmds, rotateReg, nodes);
+
     // processMoveActionsStep 0x22b5d0 -> processMoveActions 0x22d5b0, fact (e):
     // each node in the order it was made moves its static groups by its
     // sums rounded to float once, then its optimized groups by theirs. The
-    // local-offset pre-loop only has entries from rotate commands, which
-    // are not ported (their groups are uncertain already).
+    // local-offset pre-loop only has entries from keyframe commands
+    // (prepareMoveActions case 5, 0x2600db-0x260122; an earlier note here
+    // said rotate commands), which are not ported (their groups are
+    // uncertain already).
     if (run.log && run.def) {
         for (const MoveNode& n : nodes) {
+            if (n.taken) continue;  // a rotate applied its move (R6)
             const int group = (int)WorldDef::clampGroup(n.group);
             const float fx = (float)n.sx;
             const float fy = (float)n.sy;

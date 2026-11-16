@@ -470,6 +470,14 @@ struct WorldState {
     bool unlinkedDual = false;
     // The level has been ended by an end trigger (3600).
     bool levelEnd = false;
+    // GucciBot (2026-11-15, rotate lane): the run models rotate commands
+    // (world/rotate.hpp): the test switch pf_rotate was on and the transform
+    // chain checked out when the run began (Sim::begin), and `rotateChain` is
+    // the key of the private chain it checked (rotate::chainKey). False in
+    // every other state, which then runs exactly as before: a rotate command
+    // marks its groups uncertain.
+    bool rotate = false;
+    uint64_t rotateChain = 0;
     // The level's points and the time it has been running (the layer's +0x864
     // and +0x3560), which an item trigger reads as item modes 3 and 4 and an
     // item edit trigger writes. A run carries both rather than writing the
@@ -527,21 +535,37 @@ enum class OpKind : uint8_t {
     // +0x2c8) and m_lastPosition takes the new position; the move marker is
     // not stamped.
     Place = 5,
+    // GucciBot (2026-11-15, rotate lane): one command of processRotationActions
+    // 0x22b7f0 on its objects (world/rotate.cpp (R6), (R7)), only ever emitted
+    // by a run with WorldState::rotate: m_groups[group], or
+    // m_optimizedGroups[group] with kRotOptimized. With kRotCenter: the
+    // transform `rt` (a, b, c, d, tx, ty) about the centre (rcx, rcy), the
+    // claimed move (dx, dy) and kRotFinish for m_finishRelated; without: the
+    // rotation alone. `rr` is the objects' own rotation.
+    Rotate = 6,
 };
+
+inline constexpr uint8_t kRotCenter = 1;
+inline constexpr uint8_t kRotFinish = 2;
+inline constexpr uint8_t kRotOptimized = 4;
 
 struct Op {
     uint32_t tick = 0;          // the World tick the op belongs to
     uint32_t commandIndex = 0;  // m_commandIndex while it ran (moveObjects' marker)
     OpKind kind = OpKind::Translate;
     int8_t sign = 0;
+    uint8_t rflags = 0;         // OpKind::Rotate: kRotCenter, kRotFinish, kRotOptimized
     int group = 0;
     float dx = 0.0f;
     float dy = 0.0f;
-    double angle = 0.0;
-    double cx = 0.0;
-    double cy = 0.0;
-    double sx = 1.0;
-    double sy = 1.0;
+    // OpKind::Rotate only (zero for every other kind). GucciBot (2026-11-15,
+    // rotate lane): these took the place of the angle, centre and scale
+    // doubles RotateAbout and Scale were given room for, which nothing ever
+    // emitted or read (the op is smaller than it was).
+    std::array<float, 6> rt{};
+    float rcx = 0.0f;
+    float rcy = 0.0f;
+    float rr = 0.0f;
 
     bool operator==(const Op&) const = default;
 };
@@ -642,6 +666,22 @@ struct Pose {
     bool noMoveX = false;       // +0x2c8 as the base had it: moveObjects skips the x move
     bool skipLast = false;      // +0x512 as the base had it: moveObjects skips the last position
     bool uncertain = false;     // an op the World does not port touched it
+    // GucciBot (2026-11-15, rotate lane): what a rotate (OpKind::Rotate)
+    // reads and writes, world/rotate.cpp (R6)-(R8). `rot` above is the
+    // node's rotation x; these are read from every object but only an
+    // OpKind::Rotate changes them, and only a run with WorldState::rotate
+    // writes them into the level.
+    float rotY = 0.0f;          // the node's rotation y
+    float rotOffX = 0.0f;       // m_rotationXOffset (+0x2a8), the oriented box's angle with +0x3d4
+    float rotOffY = 0.0f;       // m_rotationYOffset (+0x2b0)
+    bool aligned = false;       // m_isRotationAligned (+0x390)
+    bool useOuterOb = false;    // m_shouldUseOuterOb (+0x2e8)
+    bool rotFinish = false;     // +0x513: m_finishRelated of the last centred rotate
+    // ... and, as the base had them (no op changes them):
+    float offX = 0.0f;          // m_positionXOffset (+0x2a0)
+    float offY = 0.0f;          // m_positionYOffset (+0x2a4)
+    bool canRotateFree = false; // m_canRotateFree (+0x36c)
+    bool decoration = false;    // m_objectType == 7 (+0x3a0)
 };
 
 // Every field the same bit for bit (a -0.0 is not a 0.0, a NaN is itself).
@@ -711,7 +751,7 @@ class ObjectCache {
     // up to `uptoTick`: sets `chunk` past it, or leaves the base.
     bool nearestBoundary(const OpLog& log, int slot, uint32_t uptoTick, Pose& p, std::size_t& chunk);
     bool chunkTouches(const Chunk& c, int slot) const;
-    int multiplicity(OpKind kind, int group, int slot) const;
+    int multiplicity(const Op& op, int slot) const;
 
     std::shared_ptr<const WorldDef> m_def;
     std::shared_ptr<const BaseTable> m_table;
