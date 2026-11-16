@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-n (Pathfinder test switch pf_rotate (off): the trigger model runs rotate triggers in the default mode exactly, with every byte it writes put back and checked)"
+    "2026-11-16-o (Diagnostics for the trigger model: sim_vs_real compares every field a move or a rotate writes bit for bit, and the practice dump writes each object to a file)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -1017,6 +1017,16 @@ Materializer::Window Materializer::windowOf(PlayerObject* copy) const {
     return Window{sx - 2, sx + 2, sy - 2, sy + 2};
 }
 
+bool debugRunPose(const GameObject* o, Pose& out) {
+    Run* run = currentRun();
+    if (!run || !run->def || !run->cache || !run->log) return false;
+    const int slot = run->def->slotOf(o);
+    if (slot < 0) return false;
+    out = (run->objects && run->objects->active() && run->ws) ? run->objects->debugDesired(*run, slot)
+                                                            : run->cache->pose(*run->log, slot);
+    return true;
+}
+
 void catchUpCurrentRun() {
     Run* run = currentRun();
     if (run && run->objects && run->objects->active()) run->objects->catchUpAll(*run);

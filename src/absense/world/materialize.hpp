@@ -175,6 +175,12 @@ void noteRealStateChanged();
 // move the old way (MovingObjects), which stays as it was.
 void catchUpCurrentRun();
 
+// GucciBot (2026-11-16, rotate lane): diagnostics for gucci_sim_vs_real's watch -
+// where the run in progress (currentRun) has `o`, as the materializer would
+// write it, whether or not it is in a copy's window now. False without a run
+// or when `o` is not one of the level's slots. Reads only.
+bool debugRunPose(const GameObject* o, Pose& out);
+
 // The movers of `table` a run starting from `ws` carries: a mover the state's
 // running move commands follow is left to the ops, per axis (a move locked to
 // the camera is followed on its other axis only).
@@ -374,6 +380,8 @@ class Materializer {
     void begin(GJBaseGameLayer* pl, std::shared_ptr<const BaseTable> table, std::shared_ptr<const std::vector<Carry>> carry,
                uint32_t liveProgress, uint32_t liveCommandIndex, int baseTick);
     bool active() const { return m_table != nullptr; }
+    // GucciBot (2026-11-16, rotate lane): desired() for the watch diagnostics.
+    Pose debugDesired(Run& run, int slot) { return desired(run, slot); }
     const std::shared_ptr<const BaseTable>& table() const { return m_table; }
     const std::shared_ptr<const std::vector<Carry>>& carry() const { return m_carry; }
     int baseTick() const { return m_baseTick; }

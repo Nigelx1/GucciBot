@@ -199,6 +199,10 @@ class Trajectory {
     // GucciBot (2026-11-15): see PathTap. Null unless the pathfinder's
     // evaluate() has set one around its own run.
     PathTap* m_pathTap = nullptr;
+    // GucciBot (2026-11-16, rotate lane): the same, called right after it
+    // with the run's World as the current one (world::currentRun), so it can
+    // ask where the run has an object (world::debugRunPose). Empty otherwise.
+    std::function<void(int)> m_tracePose;
 
    private:
     std::unordered_set<uintptr_t> m_activatedObjectsP1;

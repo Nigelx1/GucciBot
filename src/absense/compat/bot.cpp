@@ -14,6 +14,8 @@
 #include "absense/route/planner.hpp"
 
 #include "absense/world/census.hpp"
+#include "absense/world/materialize.hpp"
+#include "absense/world/offsets.hpp"
 #include "absense/world/rotate.hpp"
 #include "absense/world/world.hpp"
 
@@ -21,6 +23,8 @@
 #include <fmt/format.h>
 
 #include <algorithm>
+#include <array>
+#include <cstring>
 #include <chrono>
 #include <map>
 
@@ -1303,6 +1307,120 @@ matjson::Value absense::routeLeg(float gateX, float lo, float hi, int maxTicks, 
     return out;
 }
 
+namespace {
+// GucciBot (2026-11-16, rotate lane): gucci_sim_vs_real's exact watch - every
+// field a move or a rotate writes, bit for bit, on every tick: the real
+// object, the simulation's object (as the materializer left it near the copy)
+// and where the run has it (world::debugRunPose, window or not).
+struct ExactRec {
+    bool have = false;
+    double x = 0.0, y = 0.0;
+    float lx = 0.0f, ly = 0.0f, rx = 0.0f, ry = 0.0f, ox = 0.0f, oy = 0.0f;
+    bool al = false, ob = false, uncertain = false;
+    bool hasBox = false;
+    uint64_t box = 0;
+    std::array<float, 8> corners{};
+};
+
+ExactRec exactLive(GameObject* o) {
+    ExactRec e;
+#ifndef GEODE_IS_WINDOWS
+    // GucciBot (2026-11-16, rotate lane review): the raw offsets below, and
+    // the oriented box read through +0x2e0, are Windows layouts
+    // (world/offsets.hpp checks them only there), and the World that writes
+    // these fields runs only on Windows; elsewhere the watch has no record.
+    (void)o;
+    return e;
+#else
+    namespace off = world::off;
+    e.have = true;
+    e.x = o->m_positionX;
+    e.y = o->m_positionY;
+    e.lx = o->m_lastPosition.x;
+    e.ly = o->m_lastPosition.y;
+    e.rx = off::at<float>(o, off::kNodeRotX);
+    e.ry = off::at<float>(o, off::kNodeRotY);
+    e.ox = off::at<float>(o, off::kRotOffX);
+    e.oy = off::at<float>(o, off::kRotOffY);
+    e.al = off::at<bool>(o, off::kRotationAligned);
+    e.ob = off::at<bool>(o, off::kUseOuterOb);
+    if (OBB2D* b = off::at<OBB2D*>(o, off::kOrientedBox)) {
+        e.hasBox = true;
+        const auto* bytes = reinterpret_cast<const uint8_t*>(b) + offsetof(OBB2D, m_corners);
+        uint64_t h = 1469598103934665603ull;
+        for (std::size_t i = 0; i < 0x78; i++) h = (h ^ bytes[i]) * 1099511628211ull;
+        e.box = h;
+        for (std::size_t i = 0; i < 4; i++) {
+            e.corners[i * 2] = b->m_corners[i].x;
+            e.corners[i * 2 + 1] = b->m_corners[i].y;
+        }
+    }
+    return e;
+#endif
+}
+
+ExactRec exactPose(world::Pose const& p) {
+    ExactRec e;
+    e.have = true;
+    e.x = p.x;
+    e.y = p.y;
+    e.lx = p.lastX;
+    e.ly = p.lastY;
+    e.rx = p.rot;
+    e.ry = p.rotY;
+    e.ox = p.rotOffX;
+    e.oy = p.rotOffY;
+    e.al = p.aligned;
+    e.ob = p.useOuterOb;
+    e.uncertain = p.uncertain;
+    return e;
+}
+
+template <class T>
+bool bitsDiffer(T const& a, T const& b) {
+    return std::memcmp(&a, &b, sizeof(T)) != 0;
+}
+
+std::string bitsText(double v) {
+    uint64_t u;
+    std::memcpy(&u, &v, sizeof u);
+    return fmt::format("{:.9g} ({:016x})", v, u);
+}
+
+std::string bitsText(float v) {
+    uint32_t u;
+    std::memcpy(&u, &v, sizeof u);
+    return fmt::format("{:.9g} ({:08x})", v, u);
+}
+
+// The fields that differ, by name, with both values.
+std::vector<std::pair<std::string, std::string>> exactDiff(ExactRec const& a, ExactRec const& b, bool box) {
+    std::vector<std::pair<std::string, std::string>> d;
+    auto f = [&](char const* n, auto va, auto vb) {
+        if (bitsDiffer(va, vb)) d.push_back({n, bitsText(va) + " vs " + bitsText(vb)});
+    };
+    f("x", a.x, b.x);
+    f("y", a.y, b.y);
+    f("lastX", a.lx, b.lx);
+    f("lastY", a.ly, b.ly);
+    f("rotX", a.rx, b.rx);
+    f("rotY", a.ry, b.ry);
+    f("rotOffX", a.ox, b.ox);
+    f("rotOffY", a.oy, b.oy);
+    if (a.al != b.al) d.push_back({"aligned", fmt::format("{} vs {}", a.al, b.al)});
+    if (a.ob != b.ob) d.push_back({"outerOb", fmt::format("{} vs {}", a.ob, b.ob)});
+    if (box && a.hasBox && b.hasBox && a.box != b.box) {
+        std::string ca, cb;
+        for (std::size_t i = 0; i < 8; i++) {
+            ca += fmt::format("{}{:.4f}", i ? "," : "", a.corners[i]);
+            cb += fmt::format("{}{:.4f}", i ? "," : "", b.corners[i]);
+        }
+        d.push_back({"box", ca + " vs " + cb});
+    }
+    return d;
+}
+}  // namespace
+
 matjson::Value absense::simVsReal(std::vector<ScriptTick> const& script, int ticks, int every,
                                   std::string const& watch) {
     auto out = matjson::Value::object();
@@ -1354,10 +1472,28 @@ matjson::Value absense::simVsReal(std::vector<ScriptTick> const& script, int tic
         return s;
     };
     int const watchEvery = std::max(1, every);
+    // [tick][watched object]: the exact watch (ExactRec), on every tick.
+    std::vector<std::vector<ExactRec>> simPose, simLive, realLive;
+    bool simRotateRun = false, simWorldRun = false;
     if (!watched.empty()) {
         simWatch[0] = describeWatched(0);
         t->m_traceWatch = [&](int tick) {
             if (tick % watchEvery == 0) simWatch[tick] = describeWatched(tick);
+        };
+        t->m_tracePose = [&](int tick) {
+            if ((int)simPose.size() < tick + 1) {
+                simPose.resize((size_t)tick + 1);
+                simLive.resize((size_t)tick + 1);
+            }
+            if (world::Run* run = world::currentRun()) {
+                simWorldRun = true;
+                if (run->ws && run->ws->rotate) simRotateRun = true;
+            }
+            for (auto* o : watched) {
+                world::Pose p;
+                simPose[(size_t)tick].push_back(world::debugRunPose(o, p) ? exactPose(p) : ExactRec{});
+                simLive[(size_t)tick].push_back(exactLive(o));
+            }
         };
     }
 
@@ -1373,6 +1509,7 @@ matjson::Value absense::simVsReal(std::vector<ScriptTick> const& script, int tic
         ~WatchReset() {
             Trajectory::s_noDeaths = false;
             t->m_traceWatch = nullptr;
+            t->m_tracePose = nullptr;
         }
     };
     Trajectory::s_noDeaths = !watched.empty();
@@ -1388,6 +1525,8 @@ matjson::Value absense::simVsReal(std::vector<ScriptTick> const& script, int tic
         realWatch[0] = describeWatched(0);
         jopt.perTick = [&](int tick) {
             if (tick % watchEvery == 0) realWatch[tick] = describeWatched(tick);
+            if ((int)realLive.size() < tick + 1) realLive.resize((size_t)tick + 1);
+            for (auto* o : watched) realLive[(size_t)tick].push_back(exactLive(o));
         };
     }
     auto const rr = judge::run(inputs, ticks, &real, jopt);
@@ -1489,6 +1628,85 @@ matjson::Value absense::simVsReal(std::vector<ScriptTick> const& script, int tic
             w.push(fmt::format("{} sim {} | real {}", tk, it == simWatch.end() ? "-" : it->second, r));
         }
         out["watched"] = w;
+        // The exact compare, tick by tick (see ExactRec).
+        auto ex = matjson::Value::array();
+        size_t const nt = std::min(simPose.size(), realLive.size());
+        for (size_t k = 0; k < watched.size(); k++) {
+            auto u = matjson::Value::object();
+            u["uid"] = (int64_t)watched[k]->m_uniqueID;
+            int compared = 0, noPose = 0, uncertain = 0, poseBad = 0, liveBad = 0, boxBoth = 0, boxSame = 0,
+                moved = 0, rotated = 0;
+            std::map<std::string, int> poseFields, liveFields;
+            auto firstPose = matjson::Value::array();
+            auto firstLive = matjson::Value::array();
+            ExactRec const* prev = nullptr;
+            for (size_t tk = 1; tk < nt; tk++) {
+                if (k >= simPose[tk].size() || k >= realLive[tk].size()) continue;
+                ExactRec const& r = realLive[tk][k];
+                ExactRec const& sp = simPose[tk][k];
+                ExactRec const& sl = simLive[tk][k];
+                compared++;
+                if (prev) {
+                    if (bitsDiffer(prev->x, r.x) || bitsDiffer(prev->y, r.y)) moved++;
+                    if (bitsDiffer(prev->rx, r.rx) || bitsDiffer(prev->ry, r.ry)) rotated++;
+                }
+                prev = &r;
+                if (!sp.have) {
+                    noPose++;
+                } else {
+                    if (sp.uncertain) uncertain++;
+                    auto const d = exactDiff(sp, r, false);
+                    if (!d.empty()) {
+                        poseBad++;
+                        for (auto const& [n, v] : d) {
+                            poseFields[n]++;
+                            if (firstPose.size() < 8) firstPose.push(fmt::format("tick {} {}: run {}", tk, n, v));
+                        }
+                    }
+                }
+                auto const d2 = exactDiff(sl, r, true);
+                if (sl.hasBox && r.hasBox) {
+                    boxBoth++;
+                    if (sl.box == r.box) boxSame++;
+                }
+                if (!d2.empty()) {
+                    liveBad++;
+                    for (auto const& [n, v] : d2) {
+                        liveFields[n]++;
+                        if (firstLive.size() < 8) firstLive.push(fmt::format("tick {} {}: sim {}", tk, n, v));
+                    }
+                }
+            }
+            u["ticks_compared"] = (int64_t)compared;
+            u["real_moved_ticks"] = (int64_t)moved;
+            u["real_rotated_ticks"] = (int64_t)rotated;
+            u["run_pose_missing_ticks"] = (int64_t)noPose;
+            u["run_pose_uncertain_ticks"] = (int64_t)uncertain;
+            u["run_pose_vs_real_bad_ticks"] = (int64_t)poseBad;
+            auto pf = matjson::Value::object();
+            for (auto const& [n, c] : poseFields) pf[n] = (int64_t)c;
+            u["run_pose_bad_fields"] = pf;
+            u["run_pose_first_bad"] = firstPose;
+            u["sim_object_vs_real_bad_ticks"] = (int64_t)liveBad;
+            auto lf = matjson::Value::object();
+            for (auto const& [n, c] : liveFields) lf[n] = (int64_t)c;
+            u["sim_object_bad_fields"] = lf;
+            u["sim_object_first_bad"] = firstLive;
+            u["box_both_ticks"] = (int64_t)boxBoth;
+            u["box_same_ticks"] = (int64_t)boxSame;
+            if (nt > 1 && k < realLive[nt - 1].size()) {
+                ExactRec const& r = realLive[nt - 1][k];
+                u["real_end"] = fmt::format("x {} y {} rot {} {} off {}", bitsText(r.x), bitsText(r.y),
+                                            bitsText(r.rx), bitsText(r.ry), bitsText(r.ox));
+            }
+            ex.push(u);
+        }
+        out["exact"] = ex;
+        out["exact_note"] = "run_pose = where the simulation's World has the object (window or not); sim_object = the "
+                            "level object as the simulation left it (only written near the copy, so far away it "
+                            "keeps where it stood); box = the oriented box's bytes when both have one.";
+        out["sim_world_run"] = simWorldRun;
+        out["sim_rotate_run"] = simRotateRun;
         if (!rr.deaths.empty()) {
             auto d = matjson::Value::array();
             for (auto const& nd : rr.deaths)

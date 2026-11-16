@@ -3894,6 +3894,10 @@ RunResult Trajectory::run(GJBaseGameLayer* pl, bool p1,
             tap->add(at.x, at.y);
             if (dead) tap->died = true;
         }
+        if (m_tracePose) {
+            world::Scope poseScope(s.worldStep ? &s.run : nullptr, s.worldOn ? &s.ws : nullptr);
+            m_tracePose(i + 1);
+        }
         if (trace) {
             PlayerObject* player = s.players[0];
             const cocos2d::CCPoint pos = player->getPosition();
