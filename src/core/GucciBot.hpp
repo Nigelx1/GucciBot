@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-p (Pathfinder: Rotate triggers (experimental) is a visible, saved switch on the Pathfinder page, off by default, Windows only)"
+    "2026-11-16-q (Pathfinder: after a fork jump (pf_fork_jump, off), the log lists every mode or speed portal the real player crosses near the fork, with its y, mode and speed)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

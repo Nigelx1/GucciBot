@@ -156,6 +156,7 @@ constexpr double kForkLeadSeconds = 1.0;
 constexpr float kForkReachY = 240.0f;
 constexpr int kForkJumpsPerSpot = 3;
 constexpr int kForkJumpsPerRun = 6;
+constexpr float kForkWatchX = 600.0f;  // GucciBot (pf3 lane; log only): how far either side of a fork its crossings are logged
 // What one round on the graphics card is sized from. Fixed on purpose: the
 // pacing budget must never reach the decisions, or changing how the work is
 // spread over frames would change which ideas get scored. This is what
@@ -481,6 +482,7 @@ bool AbsensePathfinder::start() {
     m_forkGatesCount = -1;
     m_forkGates.clear();
     m_forkJumps = 0;
+    m_forkWatchX = -1.0e30f;
     m_startMoves = 0;
     m_gpuWarned = false;
     m_live = false;
@@ -5509,6 +5511,7 @@ void AbsensePathfinder::noteForks(uint64_t now) {
         }
         std::sort(m_forkGates.begin(), m_forkGates.end(), [](const ForkGate& a, const ForkGate& b) { return a.x < b.x; });
     }
+    if (m_forkWatchX > -1.0e29f && prev > m_forkWatchX + kForkWatchX) m_forkWatchX = -1.0e30f;  // past it: done
     auto it = std::upper_bound(m_forkGates.begin(), m_forkGates.end(), prev,
                                [](float v, const ForkGate& g) { return v < g.x; });
     const int mode = Trajectory::modeOf(p);
@@ -5516,6 +5519,15 @@ void AbsensePathfinder::noteForks(uint64_t now) {
     for (; it != m_forkGates.end() && it->x <= x; ++it) {
         const ForkGate& g = *it;
         const bool untaken = g.mode >= 0 ? mode != g.mode : std::abs(p->m_playerSpeed - g.speed) > 0.01f;
+        // GucciBot (pf3 lane; log only): what the real game did at a portal
+        // near the fork a jump went back to.
+        if (m_forkWatchX > -1.0e29f && std::abs(g.x - m_forkWatchX) <= kForkWatchX) {
+            static const char* kModes[] = {"cube", "ship", "ball", "UFO", "wave", "robot", "spider", "swing"};
+            log("route fork check: the real player crossed the %s at x %.0f at tick %llu: y %.1f (its band %.0f-%.0f), "
+                "%s, speed %.2f after the tick - %s",
+                g.what, g.x, (unsigned long long)now, y, g.lo, g.hi, mode >= 0 && mode < 8 ? kModes[mode] : "?",
+                p->m_playerSpeed, untaken ? "passed it" : "took it");
+        }
         if (!untaken || std::abs(y - g.y) > kForkReachY) continue;
         if (!m_forks.empty() && m_forks.back().gate.uid == g.uid && m_forks.back().tick == now) continue;
         m_forks.push_back(Fork{now, g, y});
@@ -5546,6 +5558,7 @@ bool AbsensePathfinder::forkJump(const char* why, uint64_t floor) {
         m_stats.forkJumps++;
         m_forkForced = *it;
         m_forkForceAt = target;
+        m_forkWatchX = it->gate.x;
         m_goTo = target;
         // The floor is the fork's tick now: a stop after it that fails walks
         // back to it, not past it into ticks the walk has already ruled out.

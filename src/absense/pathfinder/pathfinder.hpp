@@ -703,6 +703,12 @@ public:
     uint64_t m_forkForceAt = UINT64_MAX;  // the decision a fork jump went back to
     Fork m_forkForced;
     int m_forkJumps = 0;
+    // GucciBot (2026-11-16, pf3 lane; pf_fork_jump, log only): after a fork
+    // jump, every mode or speed portal the real player crosses within
+    // kForkWatchX of the fork's x is logged with the player's y, mode and
+    // speed after the crossing, so the log says whether the path played after
+    // the jump really took the portal. Nothing here decides anything.
+    float m_forkWatchX = -1.0e30f;  // the fork's x, none when no jump is being watched
     void noteForks(uint64_t now);
     bool forkJump(const char* why, uint64_t floor);
     // Where the last repair resumed from, so a death at the same spot can try
