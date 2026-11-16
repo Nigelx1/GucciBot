@@ -598,6 +598,20 @@ void absense::setStuckWork(bool on) {
     g_stuckWork = on;
 }
 
+namespace {
+// GucciBot (2026-11-15, pf2 lane): off by default until the cold regression
+// says it helps (see pathfinder.cpp, escalate()).
+bool g_startStop = false;
+}
+
+bool absense::startStop() {
+    return g_startStop;
+}
+
+void absense::setStartStop(bool on) {
+    g_startStop = on;
+}
+
 bool absense::pendingVerify() {
     return world::g_pendingVerify;
 }

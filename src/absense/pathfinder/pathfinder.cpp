@@ -109,6 +109,16 @@ constexpr float kLegCellY = 10.0f;
 // Nigel (2026-10-22, answer 3 in docs/ROUTE_ENGINE_PLAN.md): five minutes on
 // one spot - the best tick not moving on - and the run stops and says where.
 constexpr double kStuckSeconds = 300.0;
+// GucciBot (2026-11-15, pf2 lane; pf_start_stop): how many times a spot whose
+// floor is the search's own start, with no stored frame before it, may fail
+// before the run stops (see escalate), and how close to the start the death
+// must be: a quarter of a second, so only a death the search has almost no
+// ticks to answer stops the run (Society tick 1, Desideration tick 3, Cortex
+// Break tick 37). A harder part later in the level's first seconds keeps
+// walking as before: its later walks still try new random ideas (the seed
+// takes the visit count), so it can still be found.
+constexpr int kStartStopLevel = 8;
+constexpr double kStartStopSeconds = 0.25;
 constexpr double kBackSeconds = 3.0;
 // The most a slice may take while the game is frozen and the search is the
 // only thing running. Not 100: with the game costing about 1.5 ms a frame a
@@ -5190,7 +5200,10 @@ int AbsensePathfinder::widenLevel(uint64_t at) {
 // further back when anything is kept there (the start too, into the frames
 // stored before it), never further from the death than a decision at that
 // level still sees. Only the player, closing the level or completing it ends
-// the search.
+// the search - and, with pf_start_stop on, a death within a quarter of a
+// second of the search's start that has failed at level 8 with no stored
+// frame before the start (see kStartStopLevel); the five-minute stuck rule
+// in tick() ends it too.
 void AbsensePathfinder::escalate(const char* why) {
     auto* bot = Bot::get();
     pauseLive();
@@ -5238,6 +5251,38 @@ void AbsensePathfinder::escalate(const char* why) {
         log("%s (spot at tick %llu): level %d; the floor is where the search started, so the start goes back a step",
             why, (unsigned long long)m_repair.deathTick, level);
         if (moveStartBack()) return;  // the walk starts over from there, at this level
+        // GucciBot (2026-11-15, pf2 lane; the test switch pf_start_stop): no
+        // frame before the start to go back to, the death is within a
+        // quarter of a second of the start (so the search has only a few
+        // ticks of input to change), and the spot has failed this many times
+        // over: the run stops and says so instead of walking the same few
+        // ticks again until the stuck rule (Society, Desideration, Cortex
+        // Break: levels in the thousands, 41,000-129,500 log lines in five
+        // minutes, never through). Later walks would still try new random
+        // ideas, so this is a judgment that a few ticks are tried out, not a
+        // proof. A death further from the start walks on as before. The
+        // passing levels meet this branch at most once, at level 1
+        // (Bloodbath, Cold Sweat).
+        const double tps0 = std::max(1.0, tps);
+        const double after =
+            (double)(m_repair.deathTick > m_stats.startTick ? m_repair.deathTick - m_stats.startTick : 0) / tps0;
+        if (absense::startStop() && level >= kStartStopLevel && after <= kStartStopSeconds) {
+            // "dies 0.00 s after where the search started" read oddly for a
+            // death on the start's own tick, so a death within a few ticks
+            // says "right where the search started".
+            const std::string why =
+                after < 0.05
+                    ? fmt::format("the player dies at tick {}, right where the search started, and nothing tried "
+                                  "gets past it",
+                                  m_repair.deathTick)
+                    : fmt::format("the player dies at tick {}, {:.2f} s after where the search started, and nothing "
+                                  "tried gets past it",
+                                  m_repair.deathTick, after);
+            log("%s (spot at tick %llu): level %d, no stored frame before the start to go back to; stopping", why.c_str(),
+                (unsigned long long)m_repair.deathTick, level);
+            giveUp(why);
+            return;
+        }
         std::snprintf(moved, sizeof(moved), "the floor stays at tick %llu (no stored frame before the start)",
                       (unsigned long long)m_repair.floor);
     } else {

@@ -429,6 +429,14 @@ namespace gucci::testset {
                              [](matjson::Value const& val, bool) {
                                  absense::setStuckWork(wantBool("pf_stuck_work", val));
                              }});
+                // GucciBot (2026-11-15, pf2 lane): a dead end at the search's
+                // own start with no frame before it stops the run after a few
+                // failed walks; off by default.
+                v.push_back({"pf_start_stop", "bool", Store::Memory,
+                             [] { return matjson::Value(absense::startStop()); },
+                             [](matjson::Value const& val, bool) {
+                                 absense::setStartStop(wantBool("pf_start_stop", val));
+                             }});
                 // The cell-by-cell write-back on a level with rows (on by
                 // default); off for the old pass of everything, to compare.
                 v.push_back({"pf_pending_cells", "bool", Store::Memory,

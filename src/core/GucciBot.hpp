@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-h (Pathfinder test switch pf_stuck_work (off): the five-minute stuck rule can count thinking and level time played instead of the wall clock)"
+    "2026-11-16-i (Pathfinder test switch pf_start_stop (off): a death within a quarter second of the search start that nothing gets past stops the run instead of looping)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

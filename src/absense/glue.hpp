@@ -159,6 +159,12 @@ namespace absense {
     // switch pf_stuck_work, this launch only, turns it on).
     bool stuckWork();
     void setStuckWork(bool on);
+    // GucciBot (2026-11-15, pf2 lane): a dead end whose floor is the search's
+    // own start, with no stored frame before it, stops the run after a few
+    // failed walks instead of looping until the stuck rule (off by default:
+    // the test switch pf_start_stop, this launch only, turns it on).
+    bool startStop();
+    void setStartStop(bool on);
     // ... and its kill switch, never saved either (gucci_test_set
     // pf_pending_cells, on by default): on a level with rows of sections
     // (ORBIT, Heliopolis) a run writes back what the real game moved a
