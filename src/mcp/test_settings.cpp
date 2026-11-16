@@ -406,8 +406,11 @@ namespace gucci::testset {
                                  absense::setPendingVerify(wantBool("pf_pending_verify", val));
                              }});
                 // GucciBot (2026-11-15, rotate lane): rotate triggers in the
-                // World (world/rotate.hpp), this launch only; off by default.
-                v.push_back({"pf_rotate", "bool", Store::Memory,
+                // World (world/rotate.hpp), off by default. Since 2026-11-16 the
+                // Pathfinder page's saved switch "Rotate triggers
+                // (experimental)": shielded like the other saved keys, so a test
+                // launch's value never reaches saved.json.
+                v.push_back({"pf_rotate", "bool", Store::Field,
                              [] { return matjson::Value(absense::rotateTriggers()); },
                              [](matjson::Value const& val, bool) {
                                  absense::setRotateTriggers(wantBool("pf_rotate", val));

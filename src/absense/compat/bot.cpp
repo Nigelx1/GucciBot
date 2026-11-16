@@ -19,6 +19,7 @@
 #include "absense/world/rotate.hpp"
 #include "absense/world/world.hpp"
 
+#include <Geode/Geode.hpp>
 #include <Geode/loader/Mod.hpp>
 #include <fmt/format.h>
 
@@ -671,12 +672,24 @@ void absense::setPendingVerify(bool on) {
     world::g_pendingVerify = on;
 }
 
+// GucciBot (2026-11-16, rotate lane): Rotate triggers (experimental) on the
+// Pathfinder page, saved with the mod under pf_rotate, off by default (Nigel,
+// 11-16: shipped off, but a visible switch, not a hidden one). The World reads
+// world::g_rotate on its hot paths, so the saved value is copied into it once
+// when the mod loads and again by every change here.
+static constexpr const char* kRotateKey = "pf_rotate";
+
 bool absense::rotateTriggers() {
     return world::g_rotate;
 }
 
 void absense::setRotateTriggers(bool on) {
     world::g_rotate = on;
+    geode::Mod::get()->setSavedValue(kRotateKey, on);
+}
+
+$on_mod(Loaded) {
+    world::g_rotate = geode::Mod::get()->getSavedValue<bool>(kRotateKey, false);
 }
 
 bool absense::pendingCells() {

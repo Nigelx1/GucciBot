@@ -24,8 +24,8 @@
 
 namespace world {
 
-// The test switch (gucci_test_set pf_rotate, this launch only, off by
-// default). A run decides once, when it begins, whether it models rotates
+// The switch (the Pathfinder page's "Rotate triggers (experimental)", saved
+// under pf_rotate, off by default; absense::setRotateTriggers). A run decides once, when it begins, whether it models rotates
 // (WorldState::rotate), and keeps that for its whole life.
 extern bool g_rotate;
 // Set only around the World::captureLive of a run that models rotates

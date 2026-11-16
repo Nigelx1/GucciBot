@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-o (Diagnostics for the trigger model: sim_vs_real compares every field a move or a rotate writes bit for bit, and the practice dump writes each object to a file)"
+    "2026-11-16-p (Pathfinder: Rotate triggers (experimental) is a visible, saved switch on the Pathfinder page, off by default, Windows only)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
