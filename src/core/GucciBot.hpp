@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-a (Menu: a Windows layout (Settings, Look, Layout): each card in a window of its own under a bar, tiled into columns, saved across restarts; Pages stays the default)"
+    "2026-11-16-b (Menu: no search box in Compact Mode, the full menu keeps it)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

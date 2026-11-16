@@ -95,15 +95,14 @@ namespace gucci::ui::search {
     void menuFocused(bool focused);
     // A page to switch to after a pick (its title), once.
     std::optional<std::string> takePick();
-    // A pick from Compact Mode wants the full menu.
-    bool takeWantFullMenu();
 
-    // The search box. `width` > 0 exact, else the rest of the line.
+    // The search box, on the full menu's pages only (Compact Mode has none:
+    // Nigel, 2026-11-15). `width` > 0 exact, else the rest of the line.
     void field(float width);
     // The box has text: the results go where the page would be.
     bool showing();
-    // The results, as a card (the full menu) or plain rows (compact).
-    void results(bool compact);
+    // The results, as a card in place of the page.
+    void results();
 
     // ---- Assistant Access (gucci_search, mcp/search_tool.cpp)
 
@@ -118,7 +117,8 @@ namespace gucci::ui::search {
     std::vector<Result> currentResults();
     // What the results say when nothing matches ("" when something does).
     std::string emptyMessage();
-    // The box's ImGui ID (0 before it's drawn) and each result row's.
+    // The box's ImGui ID (0 when it wasn't drawn last frame: the menu is
+    // closed or in Compact Mode) and each result row's.
     ImGuiID fieldId();
     std::vector<ImGuiID> resultIds();
     bool fieldActive();

@@ -62,6 +62,7 @@ namespace gucci::mcp {
             auto v = matjson::Value::object();
             v["query"] = ui::search::query();
             v["box_active"] = ui::search::fieldActive();
+            v["box_drawn"] = ui::search::fieldId() != 0;
             v["showing_results"] = ui::search::showing();
             v["page"] = ui::pageTitle();
             v["compact"] = ui::compactMode();
@@ -121,8 +122,8 @@ namespace gucci::mcp {
             auto const& a = j.args;
             switch (j.step) {
                 case Step::Open:
-                    // The box is in the menu: open it (the page or Compact
-                    // Mode it was on) and give it a frame to be drawn.
+                    // The box is on the full menu's pages: open the menu and
+                    // give it a frame to be drawn (Compact Mode has no box).
                     if (!ui::isOpen())
                         ui::setOpen(true);
                     // Compact Mode on or off first, as its switch in Settings

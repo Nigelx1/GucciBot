@@ -88,6 +88,7 @@ namespace gucci::ui::search {
         std::vector<size_t> g_resultEntries;
         std::vector<ImGuiID> g_resultIds;
         ImGuiID g_fieldId = 0;
+        int g_fieldFrame = -100;  // the last frame the box was drawn
         bool g_fieldWasActive = false;
         bool g_clearPending = false;
         bool g_focusPending = false;
@@ -132,7 +133,6 @@ namespace gucci::ui::search {
         };
         Jump g_jump;
         std::optional<std::string> g_pickPage;
-        bool g_wantFull = false;
         ImGuiWindow* g_pageWindow = nullptr;
 
         constexpr double kHighlight = 1.6;
@@ -455,7 +455,6 @@ namespace gucci::ui::search {
                 g_jump.labels.push_back(label);
             }
             g_pickPage = e.page;
-            g_wantFull = true;
             g_clearPending = true;
         }
 
@@ -806,10 +805,6 @@ namespace gucci::ui::search {
         return p;
     }
 
-    bool takeWantFullMenu() {
-        return std::exchange(g_wantFull, false);
-    }
-
     // ---- the box
 
     void field(float width) {
@@ -832,6 +827,7 @@ namespace gucci::ui::search {
         ImGuiInputTextFlags const flags = ImGuiInputTextFlags_EscapeClearsAll | ImGuiInputTextFlags_EnterReturnsTrue;
         bool const enter = kit::InputText("box", &g_query, "Search the menu", flags, width > 0.f ? width : 0.f);
         g_fieldId = g->LastItemData.ID;
+        g_fieldFrame = ImGui::GetFrameCount();
         bool const active = g->ActiveId == g_fieldId;
         // A fresh index each time it's clicked into (a second or two apart),
         // so what the pages show now is what's found.
@@ -852,12 +848,11 @@ namespace gucci::ui::search {
         return !g_query.empty();
     }
 
-    void results(bool compact) {
+    void results() {
         refreshResults();
         auto const& pal = look().pal;
         g_resultIds.assign(g_results.size(), 0);
-        if (!compact)
-            kit::BeginCard("Search", nullptr);
+        kit::BeginCard("Search", nullptr);
         if (g_index.empty()) {
             kit::Hint("Looking through the menu...");
         } else if (g_results.empty()) {
@@ -868,20 +863,15 @@ namespace gucci::ui::search {
                 ImGui::PushID((int)i);
                 ImVec2 const at = ImGui::GetCursorScreenPos();
                 float const lineH = ImGui::GetTextLineHeight();
-                float rowH = compact ? lineH * 2.f + 2.f : lineH + 4.f;
+                float rowH = lineH + 4.f;
 #if defined(GEODE_IS_MOBILE)
                 // A finger's height, as the sidebar's rows are on a phone.
                 rowH = std::max(rowH, 34.f);
 #endif
-                // Beside it in the menu, the label and where it lives sit in
-                // the row's middle; in Compact Mode, at its top, two lines.
-                float const textY = compact ? 0.f : std::round((rowH - lineH) * 0.5f);
-                // The Selectable draws the label at its top left; where it
-                // lives follows, muted (under it in Compact Mode, beside it
-                // in the menu).
-                // At the top (the look centers a Selectable's text, for the
-                // sidebar), so the second line in Compact Mode sits under it.
-                ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0.f, compact ? 0.f : 0.5f));
+                // The label and where it lives sit in the row's middle: the
+                // Selectable draws the label, where it lives follows, muted.
+                float const textY = std::round((rowH - lineH) * 0.5f);
+                ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0.f, 0.5f));
                 bool const picked = ImGui::Selectable(fmt::format("{}##result", r.label).c_str(), false,
                                                       ImGuiSelectableFlags_None, ImVec2(0.f, rowH));
                 ImGui::PopStyleVar();
@@ -889,9 +879,8 @@ namespace gucci::ui::search {
                     pick(i);
                 g_resultIds[i] = ImGui::GetItemID();
                 ImGui::PushClipRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), true);
-                std::string const where = (compact ? "" : "- ") + r.where;
-                ImVec2 const whereAt = compact ? ImVec2(at.x, at.y + lineH)
-                                               : ImVec2(at.x + ImGui::CalcTextSize(r.label.c_str()).x + 8.f, at.y + textY);
+                std::string const where = "- " + r.where;
+                ImVec2 const whereAt = ImVec2(at.x + ImGui::CalcTextSize(r.label.c_str()).x + 8.f, at.y + textY);
                 ImGui::GetWindowDrawList()->AddText(whereAt, ImGui::GetColorU32(pal.muted), where.c_str());
                 ImGui::PopClipRect();
                 if (!r.hint.empty() && ImGui::IsItemHovered())
@@ -901,8 +890,7 @@ namespace gucci::ui::search {
             if (g_results.size() >= kMaxResults)
                 kit::Hint("More match: type more of the name.");
         }
-        if (!compact)
-            kit::EndCard();
+        kit::EndCard();
     }
 
     // ---- Assistant Access
@@ -924,7 +912,8 @@ namespace gucci::ui::search {
     }
 
     ImGuiID fieldId() {
-        return g_fieldId;
+        // Drawn this frame or the last (the tools run between frames).
+        return ImGui::GetCurrentContext() && ImGui::GetFrameCount() - g_fieldFrame <= 1 ? g_fieldId : 0;
     }
 
     std::vector<ImGuiID> resultIds() {
@@ -933,7 +922,7 @@ namespace gucci::ui::search {
 
     bool fieldActive() {
         ImGuiContext* g = ImGui::GetCurrentContext();
-        return g && g_fieldId != 0 && g->ActiveId == g_fieldId;
+        return g && fieldId() != 0 && g->ActiveId == g_fieldId;
     }
 
     void requestIndex() {

@@ -3553,7 +3553,7 @@ namespace gucci::ui {
             kit::Gap(0.3f);
             if (search::showing()) {
                 // What the box finds, where the page would be.
-                search::results(false);
+                search::results();
             } else {
                 // A result just picked is found, scrolled to and lit up as
                 // the page draws.
@@ -3676,7 +3676,7 @@ namespace gucci::ui {
                                  ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
                                      ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
                                      ImGuiWindowFlags_NoFocusOnAppearing))
-                    search::results(false);
+                    search::results();
                 ImGui::End();
             }
 
@@ -3727,15 +3727,9 @@ namespace gucci::ui {
             bool open = true;
             // The title bar shows the name (GBot's while disguised); after
             // "###" the id stays the same, so a new name isn't a new window.
-            bool const drawn = ImGui::Begin(fmt::format("{}###compact", brandName()).c_str(), &open, ImGuiWindowFlags_NoCollapse);
-            // The menu's search box here too: its results in place of the
-            // quick controls, and a pick opens the full menu at it.
-            if (drawn) {
-                search::field(-1.f);
-                if (search::showing())
-                    search::results(true);
-            }
-            if (drawn && !search::showing()) {
+            // No search box here (Nigel, 2026-11-15: "i dont really like
+            // search in compact mode"): it lives on the full menu's pages.
+            if (ImGui::Begin(fmt::format("{}###compact", brandName()).c_str(), &open, ImGuiWindowFlags_NoCollapse)) {
                 int mode = gb->isRecording() ? 1 : gb->isPlaying() ? 2 : 0;
                 const char* modes[] = {"Off", "Rec", "Play"};
                 {
@@ -4086,9 +4080,6 @@ namespace gucci::ui {
             }
             if (!g_open)
                 return;
-            // A search result picked in Compact Mode opens the full menu.
-            if (search::takeWantFullMenu() && g_compact)
-                setCompactMode(false);
             if (g_compact) {
                 drawCompact();
             } else {
