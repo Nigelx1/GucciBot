@@ -109,6 +109,10 @@ constexpr float kLegCellY = 10.0f;
 // Nigel (2026-10-22, answer 3 in docs/ROUTE_ENGINE_PLAN.md): five minutes on
 // one spot - the best tick not moving on - and the run stops and says where.
 constexpr double kStuckSeconds = 300.0;
+// GucciBot (2026-11-16, pf2 lane; pf_stuck_work): with the switch on, the
+// wall clock still stops a run whose best tick has not moved for this many
+// times the five minutes, so a search doing no work cannot run forever.
+constexpr double kStuckWallFactor = 4.0;
 // GucciBot (2026-11-15, pf2 lane; pf_start_stop): how many times a spot whose
 // floor is the search's own start, with no stored frame before it, may fail
 // before the run stops (see escalate), and how close to the start the death
@@ -519,6 +523,7 @@ bool AbsensePathfinder::start() {
     m_lastRateTicks = 0;
     m_stuckBest = tick;
     m_stuckSeconds = 0.0;
+    m_stuckWallSeconds = 0.0;
     m_stuckClock = m_startedAt;
     m_stuckTicks = m_stats.committedTicks;
     m_stats.message = "Searching";
@@ -999,9 +1004,13 @@ void AbsensePathfinder::tick() {
         // ticks committed), never more than the wall clock. What it leaves
         // out is the game's own frames while it is frozen waiting and the
         // game running slow: on GRIEF in a test window about 40% of the wall
-        // clock, and more on a loaded PC, where the same run stopped at 38.8%
-        // on this rule after reaching 51% unloaded. Nothing decided reads
-        // this clock: only when a stuck run ends changes.
+        // clock, and more on a loaded PC. Measured with it (11-16, loaded
+        // PC, one run each): GRIEF with all five test switches on got past
+        // tick 18709, where the same switches without this one stopped on
+        // this rule. Nothing decided reads this clock: only when a stuck run
+        // ends changes. A run doing no work at all (a restore that never
+        // arrives) counts almost nothing, so the wall clock still stops it
+        // at kStuckWallFactor times the five minutes.
         const uint64_t committed = m_stats.committedTicks;
         const double wall = std::clamp(std::chrono::duration<double>(now - m_stuckClock).count(), 0.0, 10.0);
         double counted = wall;
@@ -1014,11 +1023,13 @@ void AbsensePathfinder::tick() {
         if (m_stats.bestTick != m_stuckBest) {
             m_stuckBest = m_stats.bestTick;
             m_stuckSeconds = 0.0;
+            m_stuckWallSeconds = 0.0;
         } else {
             m_stuckSeconds += counted;
+            m_stuckWallSeconds += wall;
         }
         m_stuckClock = now;
-        if (m_stuckSeconds >= kStuckSeconds) {
+        if (m_stuckSeconds >= kStuckSeconds || m_stuckWallSeconds >= kStuckSeconds * kStuckWallFactor) {
             const std::string why =
                 fmt::format("stuck at x {:.0f} (tick {}) for 5 minutes", m_stats.bestX, m_stats.bestTick);
             log("%s: the furthest it got has not moved on in that time", why.c_str());
@@ -5540,6 +5551,7 @@ bool AbsensePathfinder::forkJump(const char* why, uint64_t floor) {
         // back to it, not past it into ticks the walk has already ruled out.
         m_repair.floor = std::min(m_repair.floor, target);
         m_stuckSeconds = 0.0;
+        m_stuckWallSeconds = 0.0;
         m_repair.passes++;
         m_repair.probe = 0;
         m_repair.retries = 0;

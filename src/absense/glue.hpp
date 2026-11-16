@@ -155,14 +155,14 @@ namespace absense {
     void setFrozenShare(bool on);
     // GucciBot (2026-11-15, pf2 lane): the five-minute stuck rule counts the
     // search's own thinking and the level time played, never more than the
-    // wall clock, instead of the wall clock alone (off by default: the test
-    // switch pf_stuck_work, this launch only, turns it on).
+    // wall clock, instead of the wall clock alone (on by default: the test
+    // switch pf_stuck_work, this launch only, turns it off).
     bool stuckWork();
     void setStuckWork(bool on);
     // GucciBot (2026-11-15, pf2 lane): a dead end whose floor is the search's
     // own start, with no stored frame before it, stops the run after a few
-    // failed walks instead of looping until the stuck rule (off by default:
-    // the test switch pf_start_stop, this launch only, turns it on).
+    // failed walks instead of looping until the stuck rule (on by default:
+    // the test switch pf_start_stop, this launch only, turns it off).
     bool startStop();
     void setStartStop(bool on);
     // GucciBot (2026-11-16, pf2 lane): while the game is frozen waiting for a

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-l (Pathfinder test switch pf_fork_jump (off): when the walk back fails as far as it reaches, the search goes back to the last mode or speed portal it passed and takes it)"
+    "2026-11-16-m (Pathfinder: pf_stuck_work and pf_start_stop on by default, with a wall-clock backstop of 20 minutes for a stuck run)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

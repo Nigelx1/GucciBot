@@ -944,6 +944,7 @@ public:
     // tick(): five minutes of it and the run stops and says where).
     uint64_t m_stuckBest = 0;
     double m_stuckSeconds = 0.0;
+    double m_stuckWallSeconds = 0.0;  // the same on the wall clock (the backstop for pf_stuck_work)
     std::chrono::steady_clock::time_point m_stuckClock{};
     // GucciBot (2026-11-15, pf2 lane; pf_stuck_work): committed ticks at the
     // last look, for the level time played between two looks.

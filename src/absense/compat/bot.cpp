@@ -585,9 +585,11 @@ void absense::setFrozenShare(bool on) {
 }
 
 namespace {
-// GucciBot (2026-11-15, pf2 lane): off by default until the cold regression
-// says it helps (see pathfinder.cpp, tick(): the stuck rule).
-bool g_stuckWork = false;
+// GucciBot (2026-11-15, pf2 lane): on by default since 2026-11-16 (the cold
+// regression: the 7 passing levels' decisions identical with it on; on a busy
+// PC the wall-clock rule stopped GRIEF 5 minutes into a stall it gets past
+// with this on). See pathfinder.cpp, tick(): the stuck rule.
+bool g_stuckWork = true;
 }
 
 bool absense::stuckWork() {
@@ -599,9 +601,11 @@ void absense::setStuckWork(bool on) {
 }
 
 namespace {
-// GucciBot (2026-11-15, pf2 lane): off by default until the cold regression
-// says it helps (see pathfinder.cpp, escalate()).
-bool g_startStop = false;
+// GucciBot (2026-11-15, pf2 lane): on by default since 2026-11-16 (the cold
+// regression: the 7 passing levels' decisions identical with it on; Society,
+// Desideration and Cortex Break stop in 10-50 s instead of 5 minutes).
+// See pathfinder.cpp, escalate().
+bool g_startStop = true;
 }
 
 bool absense::startStop() {

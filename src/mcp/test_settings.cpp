@@ -423,7 +423,7 @@ namespace gucci::testset {
                              }});
                 // GucciBot (2026-11-15, pf2 lane): the stuck rule's five
                 // minutes count thinking + level time played (at most the wall
-                // clock), not the wall clock; off by default.
+                // clock), not the wall clock; on by default (11-16).
                 v.push_back({"pf_stuck_work", "bool", Store::Memory,
                              [] { return matjson::Value(absense::stuckWork()); },
                              [](matjson::Value const& val, bool) {
@@ -431,7 +431,7 @@ namespace gucci::testset {
                              }});
                 // GucciBot (2026-11-15, pf2 lane): a dead end at the search's
                 // own start with no frame before it stops the run after a few
-                // failed walks; off by default.
+                // failed walks; on by default (11-16).
                 v.push_back({"pf_start_stop", "bool", Store::Memory,
                              [] { return matjson::Value(absense::startStop()); },
                              [](matjson::Value const& val, bool) {
