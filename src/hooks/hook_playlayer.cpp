@@ -97,19 +97,32 @@ namespace {
         log::info("[GucciBot] No death flash: the death added [{}]; {} hidden", added, hidden);
     }
 
-    // Trainer stats (the Trainer's and the JMF Trainer's Attempts): an
-    // attempt counts once, when it ends, the way GD's own attempt counter
-    // counts one per attempt. A death counts it (destroyPlayer) and so does a
-    // finished run (levelComplete); both close it, so the respawn after them
-    // doesn't count it again. A restart without dying counts it at the reset
-    // (resetLevel; Nigel, 2026-11-15: before, Attempts only went up on deaths
-    // and finished runs). An attempt opens at each reset and when a level
-    // loads, and it only counts at a restart once a tick has run in it.
-    struct TrainerAttempt {
-        bool open = false;
-        uint32_t startFrame = 0;
-    };
-    TrainerAttempt g_trainerAttempt;
+    // Trainer stats (the Trainer's and the JMF Trainer's Attempts) count
+    // exactly as GD's own attempt counter does (Nigel, 2026-11-15: "keep the
+    // attempt stuff native"): one each time GD's counter (PlayLayer's
+    // m_attempts, the "Attempt N" label) goes up. GD counts an attempt as it
+    // starts: the first one as the level opens, then one at every reset (a
+    // death's respawn, a restart, a restart from the end screen, a restart
+    // with nothing played), so an attempt quit part way through was counted
+    // when it began. Resets GucciBot makes for itself (a step back, Calculate,
+    // a pathfinder, the judge, the AI pilot, engineReset) and attempts while a
+    // macro plays aren't counted, though GD's counter may move with them.
+    // Before (fc312fc), an attempt counted as it ended, and a restart with no
+    // tick played and quitting alive part way through weren't counted.
+    // g_attemptsSeen is GD's count as last read: what's past it is new.
+    int g_attemptsSeen = 0;
+    void countGdAttempts(PlayLayer* pl, bool counts) {
+        int const now = pl->m_attempts;
+        if (now > g_attemptsSeen && counts) {
+            auto* gb = GucciEngine::get();
+            int const added = now - g_attemptsSeen;
+            if (gbju::isJupiterLevel(pl))
+                gb->jupiterAttemptCount += added;
+            if (gbtr::isTrainerLevel(pl))
+                gb->trainerAttemptCount += added;
+        }
+        g_attemptsSeen = now;
+    }
 
     // A reset GucciBot or one of its engines makes for itself (a step back,
     // a restored state, Calculate, a pathfinder, the judge, the AI pilot):
@@ -315,8 +328,12 @@ class $modify(GB7PlayLayer, PlayLayer) {
         if (::Bot::get()->trajectory().exists())
             ::Bot::get()->trajectory().uninit();
 
+        // A new level's attempts start from none (countGdAttempts); GD's
+        // first one, if it counts it during init, is counted just below.
+        g_attemptsSeen = 0;
         if (!PlayLayer::init(level, useReplay, dontCreateObjects))
             return false;
+        countGdAttempts(this, !gb->isPlaying());
 
         m_clickOnSteps = false;
         m_clickBetweenSteps = false;
@@ -340,21 +357,12 @@ class $modify(GB7PlayLayer, PlayLayer) {
         gb->updater.m_frameOnLastAttempt = 0;
         gb->updater.m_lastTfp = 0.0f;
         gb->m_levelLength = m_levelLength;
-        // The frame counter still holds the last level's ticks until the
-        // first reset zeroes it: an attempt starts from wherever it stands, so
-        // GD's own reset as the level opens doesn't read those ticks as an
-        // attempt played (onQuit closes the last level's attempt for the case
-        // where that reset comes first).
-        g_trainerAttempt = {true, gb->updater.m_frame};  // getFrame() with no offset yet
 
         return true;
     }
 
     void onQuit() {
         auto* gb = GucciEngine::get();
-        // Leaving the level ends its attempt without counting it, so the next
-        // level's opening reset can't count it either (g_trainerAttempt).
-        g_trainerAttempt.open = false;
         // Absense's pathfinder stops on its own terms (it saves what it has),
         // and its look-ahead copies go before the PlayLayer does.
         ::Bot::get()->pathfinder().onQuit();
@@ -790,15 +798,9 @@ class $modify(GB7PlayLayer, PlayLayer) {
 
         m_practiceMusicSync = true;
         auto& upd = gb->updater;
-        // A restart without dying is an attempt too (g_trainerAttempt).
-        bool const playerReset = !engineReset(gb);
-        if (playerReset && g_trainerAttempt.open && upd.getFrame() > g_trainerAttempt.startFrame &&
-            !gb->isPlaying()) {
-            if (gbju::isJupiterLevel(this))
-                gb->jupiterAttemptCount++;
-            if (gbtr::isTrainerLevel(this))
-                gb->trainerAttemptCount++;
-        }
+        // The attempt GD's counter starts in this reset is counted after it
+        // (countGdAttempts), unless GucciBot made the reset for itself.
+        bool const countsAttempt = !engineReset(gb) && !gb->isPlaying();
         upd.m_tpsOverflow = 0.0;
         upd.m_respawnTimer = gb->hackRespawnInstant ? 0 : 2;
         upd.incrementFrame();
@@ -829,7 +831,11 @@ class $modify(GB7PlayLayer, PlayLayer) {
         // checkpoint respawn puts its own back (applyCheckpoint, from inside
         // PlayLayer::resetLevel).
         gb->practiceFix.m_p2DualGravity = -1;
+        // GD's counter as it stands before its reset (a full reset sets it
+        // to 0 first), so what the reset adds is what's new.
+        g_attemptsSeen = m_attempts;
         PlayLayer::resetLevel();
+        countGdAttempts(this, countsAttempt);
 
         if (hasAddedCheckpoint) {
             gb->practiceFix.m_shouldLoadPlatformer = false;
@@ -877,8 +883,6 @@ class $modify(GB7PlayLayer, PlayLayer) {
         gb->practiceFix.m_hasDiedNormally = false;
         gb->practiceFix.m_isBackstep = false;
         upd.breakLoop();
-        if (playerReset)
-            g_trainerAttempt = {true, upd.getFrame()};
 
         // A reset Absense's pathfinder asked for is its way back; any other
         // stops it.
@@ -1085,12 +1089,9 @@ class $modify(GB7PlayLayer, PlayLayer) {
         if (noFlash)
             hideDeathFlash(beforeDeath);
 
-        // The death ends the attempt; its respawn doesn't count it again.
-        if (obj != m_anticheatSpike)
-            g_trainerAttempt.open = false;
-
+        // A death is counted in Deaths; its attempt was counted as it began,
+        // and the respawn's is counted at the reset (countGdAttempts).
         if (obj != m_anticheatSpike && !gb->isPlaying() && gbju::isJupiterLevel(this)) {
-            gb->jupiterAttemptCount++;
             float xp = player ? player->m_position.x : -1.f;
             if (m_levelLength > 0.f && xp >= 0.f) {
                 float pct = std::clamp(xp / m_levelLength * 100.f, 0.f, 100.f);
@@ -1102,7 +1103,6 @@ class $modify(GB7PlayLayer, PlayLayer) {
         }
 
         if (obj != m_anticheatSpike && !gb->isPlaying() && gbtr::isTrainerLevel(this)) {
-            gb->trainerAttemptCount++;
             float xp = player ? player->m_position.x : -1.f;
             if (m_levelLength > 0.f && xp >= 0.f) {
                 float pct = std::clamp(xp / m_levelLength * 100.f, 0.f, 100.f);
@@ -1160,17 +1160,13 @@ class $modify(GB7PlayLayer, PlayLayer) {
             return;
 
         PlayLayer::levelComplete();
-        g_trainerAttempt.open = false;  // counted here, not at the restart after
-        // A finished run is an attempt too: Attempts only went up on a death
-        // (destroyPlayer), so the Stats card's Attempts chip always read the
-        // same as Deaths.
+        // A finished run's attempt was counted as it began (countGdAttempts),
+        // as GD's own counter has it.
         if (!gb->isPlaying() && gbju::isJupiterLevel(this)) {
-            gb->jupiterAttemptCount++;
             gb->jupiterSessionBestPct = 100.f;
             gbju::notifyJupiterAttemptEnded();
         }
         if (!gb->isPlaying() && gbtr::isTrainerLevel(this)) {
-            gb->trainerAttemptCount++;
             gb->trainerSessionBestPct = 100.f;
             gbtr::notifyTrainerAttemptEnded();
         }

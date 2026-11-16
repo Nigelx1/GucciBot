@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-c (Share my windows: a zip with the macro and its windows next to the picture, and Import a macro loads it)"
+    "2026-11-16-d (Trainer stats: Attempts count exactly like GD own attempt counter)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
