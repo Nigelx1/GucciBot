@@ -183,8 +183,8 @@ namespace absense {
     // GucciBot (2026-11-16, pf2 lane): when every stop down to the furthest
     // floor has failed, the search goes back for real to the last mode or
     // speed portal the player passed without taking (further back than the
-    // walk back reaches) and takes it this time (off by default: the test
-    // switch pf_fork_jump, this launch only, turns it on).
+    // walk back reaches) and takes it this time (on by default since the pf3
+    // lane; the test switch pf_fork_jump, this launch only, turns it off).
     bool forkJump();
     void setForkJump(bool on);
     // ... and its kill switch, never saved either (gucci_test_set

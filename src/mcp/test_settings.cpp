@@ -455,7 +455,7 @@ namespace gucci::testset {
                              }});
                 // GucciBot (2026-11-16, pf2 lane): a spot whose walk back has
                 // failed to the furthest floor goes back to the last portal
-                // passed untaken and takes it; off by default.
+                // passed untaken and takes it; on by default (pf3 lane).
                 v.push_back({"pf_fork_jump", "bool", Store::Memory,
                              [] { return matjson::Value(absense::forkJump()); },
                              [](matjson::Value const& val, bool) {
