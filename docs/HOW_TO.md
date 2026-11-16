@@ -1,9 +1,25 @@
 # How to use GucciBot
 
-A quick guide: install it, open it, record your first macro, and fix the usual problems.
+A quick guide: install it, open it, record and replay a macro, measure your frame windows, let the Pathfinder play, render a video, and fix the usual problems.
 Stuck anywhere? Ask in [the Discord](https://discord.gg/m95NUPdbpJ).
 
-This guide is written for 2.0. A few things in it are newer than 2.0.0-beta.5. Those say **(new in 2.0)**.
+This guide is for GucciBot 2.0. Things that are new since 2.0.0-beta.5 say **(new in 2.0)**.
+
+**Contents:**
+[Install](#1-install) ·
+[Open the menu](#2-open-the-menu) ·
+[Record a macro](#3-record-and-save-a-macro) ·
+[Replay it](#4-replay-a-macro) ·
+[Other bots' macros](#5-load-other-bots-macros) ·
+[Calculate](#6-calculate-frame-windows) ·
+[Pathfinder](#7-let-the-pathfinder-play-a-level) ·
+[Render](#8-render-a-video) ·
+[Themes](#9-try-a-theme) ·
+[Handy tools](#10-handy-tools-while-you-practice) ·
+[Safe mode](#11-safe-mode-legit-only-and-switching-guccibot-off) ·
+[Setup check](#12-the-setup-check) ·
+[Troubleshooting](#13-troubleshooting) ·
+[Where to ask](#14-where-to-ask)
 
 ---
 
@@ -28,7 +44,7 @@ The **Open Mods Folder** button always finds it. By hand:
 | Platform | Mods folder |
 |---|---|
 | **Windows** (Steam) | In Steam, right-click Geometry Dash > Manage > Browse local files. Then open `geode\mods`. |
-| **Mac** | `~/Library/Application Support/GeometryDash/geode/mods` |
+| **Mac** (Steam) | Inside the game's app: `~/Library/Application Support/Steam/steamapps/common/Geometry Dash/Geometry Dash.app/Contents/geode/mods` (right-click the app > Show Package Contents). |
 | **Android** | `Android/media/com.geode.launcher/game/geode/mods` (Geode's launcher) |
 | **iPhone / iPad** | Use **Install From File**; the folder depends on how Geode is installed. |
 
@@ -36,9 +52,10 @@ The **Open Mods Folder** button always finds it. By hand:
 
 - **Windows** is home and gets the most testing.
 - **Android** has run on a phone.
-- **Mac, iPhone and iPad** have had little testing.
-- beta.5's Mac build runs on Apple silicon only. Intel Macs come with the next release.
-- The **Pathfinder**, **Render** and **Video Mode** still need Windows.
+- **Mac, iPhone and iPad** have had little testing. The Mac build runs on Apple silicon and on Intel Macs **(new in 2.0)**; nobody has tried it on an Intel Mac yet.
+- **Rendering and Video Mode** work on Windows and Mac **(Mac is new in 2.0, and not tried on a Mac yet)**. They don't work on phones yet.
+- **The Pathfinder** runs everywhere **(new in 2.0)**, but it's at its best on Windows. Off Windows it can't see what move and rotate triggers will do next, so levels that use them fail more often. The page says so. It hasn't been tried on a Mac or a phone yet.
+- **Still Windows only:** tick rates under 162 TPS, High TPS precision, and the Pathfinder's **Rotate triggers (experimental)** switch.
 
 ---
 
@@ -50,47 +67,88 @@ The **Open Mods Folder** button always finds it. By hand:
 | **Mac** | Press **Option**, or pause a level and press the **GucciBot** button. |
 | **iPhone, iPad, Android** | Pause a level and press the **GucciBot** button in the bottom-right corner of the pause menu. |
 
-- The pause-menu button shows the GucciBot logo, an iced cone **(new in 2.0)**. In beta.5 it's a button with the word GucciBot.
-- To change the key on Windows: **Settings > Keybinds > Open the menu**. Click the key, then press the new one. Right-click unbinds it.
+- The pause-menu button shows the GucciBot logo, an iced cone **(new in 2.0)**.
+- To change the key on Windows or Mac: **Settings > Keybinds > Open the menu**. Click the key, then press the new one. Right-click unbinds it.
 - The pages are down the left side: **Macro, Hacks, Macro Tools, Calculate, JMF Trainer, Trainer, Pathfinder, Render, Click sounds, Themes, Settings, Credits**.
 
 ![The GucciBot menu open on the Macro page](images/howto/menu.png)
-*The menu, open on the Macro page. The pages are down the left side.*
+*The menu, open on the Macro page. The pages are down the left side, and the search box is at the top right.*
+
+### Search the menu (new in 2.0)
+
+Every page has a **Search the menu** box at the end of its title line.
+
+1. Click the box (or press **Ctrl+F** on a keyboard).
+2. Type what you want, like `noclip`, `hitboxes` or a theme's name. Old names work too, like `path preview`.
+3. Click a result (or press **Enter** for the first one). The menu jumps to that setting and outlines it for a moment.
+
+**Escape** clears the box. While you type in it, your keys don't reach the game or your hotkeys.
+
+### Two ways to lay out the menu (new in 2.0)
+
+**Settings > Look > Layout** has two choices:
+
+- **Pages** (the default): one page at a time, as in the picture above.
+- **Windows**: a bar across the top (the search box, a button for each page, **Pages** and **Close**), and every card of the pages you pick in a window of its own. Drag a window by its title bar, and collapse it with its arrow. Where you put them is remembered. **Tile them again** puts them back in neat columns.
+
+Phones always use Pages, because the windows need a mouse.
+
+### Compact Mode
+
+Want a small window instead of the whole menu? Switch on **Settings > Look > Compact mode** (or bind a key to **Compact mode** in Settings > Keybinds).
+
+Compact Mode has the things you use most:
+
+- **Mode** (Off, Rec, Play) and **Load a saved macro**
+- the macro's **Name**, **Save** and **Calculate**
+- **Tick rate** and **Game speed**
+- **Show hitboxes** and **Show Trajectory**
+- **Pause** (or **Resume**) and the **<** and **>** step buttons
+- **Full menu**, to go back to the whole menu
+
+Everything in that list except Mode, Name and Save is **new in 2.0**. Compact Mode has no search box.
+
+![Compact Mode](images/howto/compact.png)
+*Compact Mode: the quick controls in one small window.*
 
 ---
 
-## 3. Your first macro
+## 3. Record and save a macro
 
 A macro is a recording of your inputs, tick by tick. GucciBot plays it back exactly.
-
-### Record
 
 1. Open a level.
 2. Open the menu and go to the **Macro** page.
 3. In the **Macro** card, set **Mode** to **Record**.
-4. Restart the level and play it.
-5. When you're done, type a name in **Name** and press **Save**.
+4. Close the menu, restart the level and play it.
+5. When you're done, open the menu, type a name in **Name** and press **Save**. A note under the buttons says **Saved**, or why it couldn't save.
 
-Practice mode works too. Checkpoints are captured whole, so a macro recorded through respawns plays back like one recorded straight through.
+- A name can't have `\ / : * ? " < > |` in it.
+- **Practice mode works too.** Checkpoints are saved whole, so a macro recorded through respawns plays back like one recorded straight through.
+- **Fix a mistake without starting over (new in 2.0):** while the macro plays, switch **Mode** to **Record** at the spot you want to change. Recording carries on from there, and the rest of the macro is cut.
+- **Autosave:** the **Saving** card on the same page has **Autosave at the level's end** and **Autosave on a timer**. **Back up a macro before overwriting it** is on by default.
+- Your macros are saved with your theme's file ending (`.brrr` for the GucciBot theme). The **Saved macros** list shows which theme each one was saved under.
 
-**Autosave:** the **Saving** card on the same page has **Autosave at the level's end** and **Autosave on a timer**.
-
-### Play
-
-1. On the **Macro** page, find your macro in **Saved macros** and click its name to load it.
-2. Set **Mode** to **Play**.
-3. Restart the level. The macro plays.
-
-- **Block inputs during playback** (new in 2.0, on by default), in the **Recording and playback** card, means only the macro presses buttons.
-- **Check macro** (in **Saved macros**) lists anything that would make playback go wrong.
-- To edit a macro click by click: **Macro Tools > Frame Editor**. Edits stay in memory until you press **Save** on the Macro page.
-
-![The Macro card with Mode, Name and Save](images/howto/macro.png)
+![The Macro card with Mode, Name, Save and Calculate](images/howto/macro.png)
 *The Macro card: set Mode, type a Name, press Save.*
 
 ---
 
-## 4. Load other bots' macros
+## 4. Replay a macro
+
+1. Open the level the macro was made on.
+2. On the **Macro** page, find your macro in **Saved macros** and click its name. That loads it and sets **Mode** to **Play**. (The **search** box above the list filters it.)
+3. Restart the level. The macro plays.
+
+- **Block inputs during playback** (in the **Recording and playback** card, on by default) means only the macro presses buttons. Switch it off if you want your own clicks to reach the game too.
+- **Check macro** (in **Saved macros**) lists anything that would make playback go wrong.
+- The **...** button on a macro's row has **Load**, **Calculate**, **Rename**, **Delete** and more.
+- To edit a macro click by click: **Macro Tools > Frame Editor**. Edits stay in memory until you press **Save** on the Macro page.
+- A hotkey can start and stop playback: **Settings > Keybinds > Start / stop playback**.
+
+---
+
+## 5. Load other bots' macros
 
 GucciBot reads 27 formats: GDR and GDR2, Silicate `.slc`, TcBot, ToastyReplay `.ttr3`, yBot, xdBot, Mega Hack, Echo, GucciBot 1.x's old `.brrr`, and more. The full list is in [about.md](../about.md#other-bots-macros).
 
@@ -100,7 +158,7 @@ Go to **Macro > Saved macros**, to the part called **From other bots**. Then eit
 1. Press **Import a macro** and pick the file.
 2. GucciBot converts it right away and loads it. Play it like any other macro.
 
-The file you picked stays where it was. A dated copy is kept in `replays/imported`.
+The file you picked stays where it was. A dated copy is kept in `replays/imported`. **Import a macro** also takes GucciBot macros, and the `.zip` that **Share my windows** saves (see section 6) **(new in 2.0)**.
 
 **Or convert files in the replays folder**
 1. Press **Open folder** (at the top of **Saved macros**) and copy the files into the replays folder that opens.
@@ -112,52 +170,138 @@ After converting, the original moves to `replays/converted`, so it isn't offered
 - If a converted macro dies early, set **Shift frames** one frame either way, and convert it again.
 
 ![The From other bots part of Saved macros](images/howto/convert.png)
-*Saved macros > From other bots, with Import a macro and Shift frames.*
+*Saved macros > From other bots, with Import a macro, Convert and Shift frames.*
 
 ---
 
-## 5. Calculate (frame windows)
+## 6. Calculate (frame windows)
 
 Calculate measures, for every input in the loaded macro, how many frames you had: how far the click could move and still pass. It measures against the real game engine, not a guess. It runs on anticroom's Silicate analyzer. The whole frame-window trend started with NaN GD.
 
-1. Load a macro and open its level.
-2. Go to the **Calculate** page and press **Calculate** (or press **Calculate** on the Macro page).
-3. Wait for the bar to finish. Markers show over the level, colored by window size.
+### Run it
 
-- **Copy info** copies the precision and window breakdown, in the format NaN uses in video descriptions.
-- **Overlay** and **Bands** change how the markers look. **Precision (L\*)** shows the L* number (NaN GD's formula).
-- **Windows by hand** lets you type any input's window yourself. At the top of its **Every input** table, **Set every window to [x] frames** gives every input the same window in one press **(new in 2.0)**. It asks first if that would replace any window. **Clear** on a row puts Calculate's own count back.
-- Calculate silences the game while it runs and gives your volumes back when it finishes. There's no switch for this.
+1. Load a macro and open its level.
+2. Go to the **Calculate** page and press **Calculate** (or press **Calculate** on the Macro page, or in Compact Mode).
+3. Wait for the bar to finish. A long level can take a while; **Cancel** stops it.
+
+- Calculate silences the game while it runs and gives your volumes back when it finishes.
+- If a run stopped partway (you canceled, left the level, or the game closed), press **Continue from where it stopped** to count only what's left **(new in 2.0)**. Every window already counted is kept.
 - Mods that step frames themselves throw the numbers off. Calculate says so when it finds one.
 
-A Calculate run counts as a cheat (see section 7). Frame windows alone don't decide how hard a level is.
+### Read the windows
 
-![The Calculate page](images/howto/calculate.png)
-*The Calculate card. The button lights up once a level is open and a macro is loaded. This picture is from beta.5: the Mute while it runs switch under the button is gone in 2.0.*
+1. Set **Mode** to **Play** and restart the level.
+2. As the macro plays, a marker shows up over each input once the player reaches it: a ring colored by the window's size, with the number of frames next to it.
+3. The top-left corner counts how many inputs of each size you've passed. The top right shows the last input's window in milliseconds.
+
+- The windows only show while a macro plays.
+- Only windows of **10 frames or less** get a marker (that's where the color bands stop), so an easy level may show just a few.
+- **Calculate > Overlay** changes how the markers look (**Default Look**, on by default, draws them the way NaN GD's videos do), and **Bands** sets the colors for each window size.
+
+![Frame-window markers in a level](images/howto/windows.png)
+*Stereo Madness, played back after Calculate. The green ring is a click with a 5-frame window; the counts are at the top left, and that window in milliseconds at the top right.*
+
+- **Copy info** copies the precision and window breakdown, in the format NaN uses in video descriptions.
+- **Precision (L\*)** shows the L* number (NaN GD's formula).
+- **Windows by hand** lets you type any input's window yourself. At the top of its **Every input** table, **Set every window to [x] frames** gives every input the same window in one press **(new in 2.0)**. **Clear** on a row puts Calculate's own count back.
+- **Suspicious clicks:** for a click whose count looks off, Calculate also gives its own suggestion ("my suggestion is x frames"). **Use my suggestion** in **Windows by hand** takes it, and the **Frame Editor** flags those clicks.
+
+### Share them (new in 2.0)
+
+1. After a Calculate run, press **Share my windows** (next to **Copy info** on the **Calculate** card).
+2. GucciBot saves two files in the `shares` folder (in GucciBot's save folder), named after the level and the date, in your theme's colors:
+   - a **picture** of your windows (the level, the macro, how many inputs had each window, the 8 tightest ones and the L* score), for Discord or YouTube;
+   - a **.zip** with the macro and its windows.
+3. Send both. Anyone with GucciBot can open the `.zip` with **Macro > Saved macros > Import a macro** and see the same windows. It never replaces one of their own macros.
+
+If the macro has changes you haven't saved, you get the picture only, and the card says why. Save first to get the `.zip` too.
+
+![The picture Share my windows saves](images/howto/share.png)
+*The picture Share my windows saved for the Pathfinder's Stereo Madness macro (section 7).*
+
+![The Calculate card after a run](images/howto/calculate.png)
+*The Calculate card after a run, with Copy info and Share my windows.*
+
+A Calculate run counts as a cheat (see section 11). Frame windows alone don't decide how hard a level is.
 
 ---
 
-## 6. Render a video (Windows only for now)
+## 7. Let the Pathfinder play a level
 
-Render records gameplay straight to a video file. No screen recorder needed. It loads FFmpeg from Windows DLLs, so it doesn't run on Mac or phones yet.
+The Pathfinder finds its own way through a level. It tries moves in a copy of the game's physics, backs up when one dies, and keeps the clicks that work. It doesn't need a macro.
 
-1. Load a macro and set **Mode** to **Play** (or just play the level yourself).
-2. Open the level, then go to the **Render** page.
+1. Open the level.
+2. Go to the **Pathfinder** page.
+3. Set **Engine** to **Search (old)** (that's the default), and **Search** to **Absense** (also the default).
+4. Press **Start**.
+5. Watch. The game pauses now and then while it thinks. When it beats the level, it saves the macro and says **Macro saved as "..."**. It's named after the level. Replay it like any other macro (section 4).
+
+**Tip:** empty the **Name** box on the Macro page before you press Start. If a name is in it, the Pathfinder saves over that macro instead (a backup of the old one is kept by default).
+
+In a test on Stereo Madness it took about 2 minutes. Harder levels can take much longer.
+
+- **Show the search** (on by default) draws what it's trying while the game waits: faint lines for the paths it tries, a red dot where one dies, the best one so far brighter, and a line in the corner saying how it's going **(new in 2.0)**. It doesn't change what the search decides.
+- A run that goes five minutes without getting any further stops and says where.
+- **Remember solutions** (off by default) lets it reuse what got past a spot last time.
+- **Rotate triggers (experimental)** (off by default, Windows only) makes its copy of the game turn rotating blocks the way the game does. On some levels that makes the search slower, so it's off **(new in 2.0)**.
+- The **AI** engine is still early. This download has no trained AI, so **AI** shows "No trained AI yet" and its **Start** stays grayed out. Use **Search (old)**.
+
+How good is it? In Claude's test runs it beat Stereo Madness, Clubstep, Theory of Everything 2, Deadlocked, The Nightmare, Bloodbath, Slaughterhouse and Forest Temple from scratch. It can't beat everything yet: GRIEF, LIMBO, ORBIT and Heliopolis are still out of reach. A Pathfinder run counts as a cheat.
+
+![The Pathfinder page](images/howto/pathfinder.png)
+*The Pathfinder page, set to Search (old) and Absense, ready to Start.*
+
+---
+
+## 8. Render a video
+
+Render records gameplay straight to a video file. No screen recorder needed. It works on **Windows and Mac**, not on phones yet. (Mac is new in 2.0 and hasn't been tried on a Mac yet.)
+
+1. Load a macro, set **Mode** to **Play**, and open the level.
+2. Go to the **Render** page.
 3. Press **Start from the beginning** (or **Start** to begin where you are).
    Not in a level yet? **Render the next level I open** waits for one.
-4. Press **Stop** when you want it to end.
+4. Press **Stop** when you want it to end. With **Seconds after the end** set, it also stops by itself a few seconds after the level ends.
 
+**The Showcase preset:** under **Presets**, **Showcase: 8K60 lossless** sets everything up in one press: 7680x4320 at 60 FPS, lossless x264 in yuv444p (full color detail), FLAC audio with the music at 100% and the game's sounds off (the level's own trigger sounds stay), in an .mkv file. It's slow, and the files are big: about 3.5 GB a minute.
+
+- **Save the current settings** under a name to make your own preset, and **Load** it later.
 - **Output > Folder** picks where the video goes. Blank uses the default folder.
-- Presets: **Showcase: 8K60 lossless** sets everything up in one press: 7680x4320 at 60 FPS, lossless x264 in yuv444p (full color detail), FLAC audio with the music at 100% and the game's sounds off (the level's own trigger sounds stay), in an .mkv file. Expect a very big file (several GB a minute) and a slow render.
-- The **Video**, **Audio**, **Timing** and **Intro card** cards hold the rest.
-- If it says **FFmpeg isn't loaded**, the start buttons are grayed out **(new in 2.0)**. Restart the game: it puts the files back. **Open the FFmpeg folder** shows where they belong.
+- The **Video**, **Audio**, **Timing** and **Intro card** cards hold the rest. Every line of the intro card can be changed **(new in 2.0)**.
+- If it says **FFmpeg isn't loaded**, the start buttons are grayed out. Restart the game: it puts the files back. **Open the FFmpeg folder** shows where they belong.
 
 ![The Render page](images/howto/render.png)
-*The Render card in a level, with Start and Start from the beginning, and the presets below it.*
+*The Render page in a level, with Start, Start from the beginning, and the Showcase preset below.*
 
 ---
 
-## 7. Safe mode and Legit only
+## 9. Try a theme
+
+GucciBot comes with 24 themes, and you can make your own.
+
+1. Go to the **Themes** page.
+2. Click a theme to use it. The whole menu changes at once.
+
+- A theme also sets the file ending your new macros save with (for example `.brrr` for GucciBot). Macros saved under another theme still show in **Saved macros**, tagged with that theme's name.
+- **New custom theme** makes your own: colors, corners, snow, its own music and more.
+- **Settings > Look** has **Text size**, **Cycle the accent color** and **Animations** (switch it off to keep the menu still).
+
+---
+
+## 10. Handy tools while you practice
+
+All on the **Macro** page:
+
+- **Show hitboxes** (the **Hitboxes** card) draws the collision boxes. **Show Trajectory**, in the same card, draws lines ahead of you: green if you hold, red if you let go.
+- **Hitborders** (new in 2.0) grows every hitbox by the size of yours, so you can think of yourself as a point. Red is where your center dies.
+- **Frame stepper:** pause and move one tick at a time. On a keyboard: **V** pauses, **C** steps one frame (change them in Settings > Keybinds).
+- **Speed:** **Tick rate** and **Game speed**. Type a value or use **-** and **+**.
+
+Hitboxes, Show Trajectory and Hitborders while you play count as cheats.
+
+---
+
+## 11. Safe mode, Legit only, and switching GucciBot off
 
 **Auto safe mode** is on by default. While a cheat is on, a run doesn't count: no completion, no new best, nothing sent to the servers.
 
@@ -168,33 +312,33 @@ Render records gameplay straight to a video file. No screen recorder needed. It 
 - **Your own editor levels (new in 2.0):** a run with a cheat or the bot on (recording too) never verifies the level, even with **Auto safe mode** off. The end screen says so instead of "Level Verified!". A clean run with safe mode off still verifies.
 - **Hacks > Gameplay > Safe mode** makes no run count at all, cheat or not.
 
-**Legit only (new in 2.0):** **Hacks > Gameplay > Legit only** turns off everything that counts as a cheat, at once, and keeps it off. Macros can't play or record while it's on. Turn it off and your settings come back as they were.
+**Legit only (new in 2.0):** **Hacks > Gameplay > Legit only** turns off everything that counts as a cheat, at once, and keeps it off. Macros can't play or record while it's on, and buttons like Calculate and the Pathfinder's Start are grayed out. Turn it off and your settings come back as they were.
 
-**Take GucciBot out of the game:** **Settings >** the first card, switch **GucciBot** off. The game runs as if GucciBot weren't installed, with no restart. Switch it back on the same way.
+**Take GucciBot out of the game:** on the **Settings** page, the first card is called **GucciBot**. Switch **GucciBot** off, and the game runs as if GucciBot weren't installed, with no restart. Switch it back on the same way.
 
 ![The Safe mode card in Settings](images/howto/safemode.png)
 *Settings > Safe mode. Auto safe mode is on by default; it's switched off in this picture.*
 
 ---
 
-## 8. The setup check
+## 12. The setup check
 
 Some settings and mods break recording and playback. GucciBot checks for them each launch.
 
 - If it finds one, a **Heads Up** popup lists each problem and how to fix it.
-- When you start recording or playing, you get a short **Heads up** note. The full list is in the **Heads up** card on the **Macro** page.
+- When you start recording or playing, you get a short **Heads up** note. The full list is in the **Heads up** card at the top of the **Macro** page (you can see one in the first picture of this guide).
 
 What it looks for:
 
 - The game's own **Auto-Checkpoints** option (pause a level, open the settings, turn it off).
-- **Mega Hack's Practice Bug Fix**, or another mod that hooks the game's checkpoints. GucciBot has its own practice fix, and two of them fight. If a mod is named that has no practice fix, press **It's fine**.
+- **Mega Hack's Practice Bug Fix**, or another mod that hooks the game's checkpoints. GucciBot has its own practice fix, and two of them fight. If a mod is named that has no practice fix, press **It's fine**. **Warn again** brings the warning back.
 - **Frame Extrapolation** in Mega Hack or QOLMod.
 - **Another bot running.** Two bots fight over your inputs.
 - **A second GucciBot file in the mods folder (new in 2.0).** It says which one to delete.
 
 ---
 
-## 9. Troubleshooting
+## 13. Troubleshooting
 
 ### "Unable to read entry (code -3)"
 This is Geode saying it can't unpack the file. Usually the download is damaged (it didn't finish, or got cut off).
@@ -203,7 +347,7 @@ This is Geode saying it can't unpack the file. Usually the download is damaged (
 3. Install it again and restart.
 
 ### "GucciBot Is Standing Down"
-GucciBot can't run live alongside **ToastyReplay Lite**, **Silicate** or **Antic's Counter** (Antic's Counter is new in 2.0). While one is enabled, GucciBot leaves the game alone for that launch and says which one.
+GucciBot can't run alongside **ToastyReplay Lite**, **Silicate** or **Antic's Counter** (Antic's Counter is new in 2.0). While one is enabled, GucciBot leaves the game alone for that launch and says which one.
 1. Open Geode's mod list.
 2. Turn the other mod off (or uninstall it).
 3. Restart the game.
@@ -222,6 +366,11 @@ In 2.0 the setup check names the file for you.
 - On iPhone and iPad no key reaches GucciBot: always use the pause-menu button.
 - If the stand-down popup showed at launch, see above.
 
+### A button is grayed out
+- **Calculate** needs a level open and a macro loaded.
+- The **Pathfinder's Start** needs a level open (and **Engine** set to **Search (old)**).
+- Under **Legit only**, everything that counts as a cheat is grayed out.
+
 ### Where the logs are
 Bug reports go much faster with these.
 - **Geode's log:** the `geode/logs` folder inside the game's folder (next to `geode/mods`).
@@ -231,7 +380,7 @@ Bug reports go much faster with these.
 
 ---
 
-## 10. Where to ask
+## 14. Where to ask
 
 - **Questions and setup help:** [Nigel's Neighborhood on Discord](https://discord.gg/m95NUPdbpJ).
 - **Bugs:** [open a GitHub issue](https://github.com/Nigelx1/GucciBot/issues/new/choose). Say what you were doing, and attach Geode's crash report or log.
