@@ -143,6 +143,15 @@ constexpr double kFrozenLongMaxMs = 200.0;
 // looked at again in the real game - at most this many stops per spot.
 constexpr double kProbeRealSeconds = 0.25;
 constexpr int kProbeRealPerSpot = 3;
+// GucciBot (2026-11-16, pf2 lane; pf_fork_jump): the forks kept, how far before
+// a fork's crossing the jump lands (a second: room to line up into the portal),
+// how far from the player's y a portal still counts as one the path could have
+// taken, and how many jumps a spot and a run may make.
+constexpr size_t kMaxForks = 8;
+constexpr double kForkLeadSeconds = 1.0;
+constexpr float kForkReachY = 240.0f;
+constexpr int kForkJumpsPerSpot = 3;
+constexpr int kForkJumpsPerRun = 6;
 // What one round on the graphics card is sized from. Fixed on purpose: the
 // pacing budget must never reach the decisions, or changing how the work is
 // spread over frames would change which ideas get scored. This is what
@@ -461,6 +470,13 @@ bool AbsensePathfinder::start() {
     m_traps.clear();
     m_routeChoices.clear();
     m_forceRouteAt = UINT64_MAX;
+    m_forks.clear();
+    m_forkPrevX = -1.0e30f;
+    m_forkForceAt = UINT64_MAX;
+    m_forkGatesFor = nullptr;  // a new level may sit where the last one did, with as many objects
+    m_forkGatesCount = -1;
+    m_forkGates.clear();
+    m_forkJumps = 0;
     m_startMoves = 0;
     m_gpuWarned = false;
     m_live = false;
@@ -704,6 +720,10 @@ void AbsensePathfinder::stop(const std::string& reason, bool leavingLevel) {
         log("%llu walk-back stops gone back to for real: their kept start could not place its moving objects and "
             "every idea died at once on one it wasn't sure of",
             (unsigned long long)m_stats.probeReal);
+    }
+    if (m_stats.forkJumps > 0) {
+        log("%llu dead ends went back to a portal the path passed untaken, %llu found a way into it there",
+            (unsigned long long)m_stats.forkJumps, (unsigned long long)m_stats.forkTaken);
     }
     if (m_stats.driveDecisions > 0 || m_stats.driveHandoffs > 0) {
         log("route drives: %llu decisions played as a leg to the next gate's option, %llu decided by today's engine "
@@ -3367,6 +3387,10 @@ void AbsensePathfinder::decide() {
         // tick it went back to, takes the route there (see beginBacktrack).
         d.forceRoute = m_forceRouteAt == d.tick && !m_probe.active && !m_ahead.active && !d.pair;
         m_forceRouteAt = UINT64_MAX;
+        // GucciBot (2026-11-16, pf2 lane; pf_fork_jump): the decision a fork
+        // jump went back to (escalate) drives into the portal.
+        d.forkForce = m_forkForceAt == d.tick && !m_probe.active && !m_ahead.active && !d.pair;
+        if (!m_probe.active && !m_ahead.active) m_forkForceAt = UINT64_MAX;
         if (!d.player2) m_stats.decisions++;
         d.candidates.reserve(256);
         // Carrying on with the previous plan is always one of the ideas.
@@ -3487,7 +3511,40 @@ void AbsensePathfinder::decide() {
         // before also runs a rescue leg past the death (see beginRescueLeg).
         d.rescue = rescueWanted(d);
         bool routeOut = false;
-        if (absense::route::drivesEnabled() && !d.pair) {
+        if (d.forkForce) {
+            // GucciBot (2026-11-16, pf2 lane; pf_fork_jump): a route drive with
+            // one option, the portal the path passed: its leg searches for a
+            // way to cross the portal's x touching it (the leg's own test that
+            // the object fired), and a way that also lives as far as the
+            // drive's bar is played as far as the portal. None: today's
+            // verdict decides with the ways found among its ideas.
+            const ForkGate& g = m_forkForced.gate;
+            d.drives = true;
+            d.clear = clear;
+            d.driveNeed = seeTo > d.tick ? std::min(d.need, d.H) : 0;
+            d.driveJudged = d.candidates.size();
+            Decision::DriveOption o;
+            o.x = g.x;
+            o.lo = g.lo;
+            o.hi = g.hi;
+            o.uid = g.uid;
+            o.mustFire = true;
+            o.gapLo = g.lo;
+            o.text = fmt::format("touch {:.0f}-{:.0f} at the {}, x {:.0f} (a fork the path passed)", g.lo, g.hi, g.what, g.x);
+            o.label = fmt::format("touch {:.0f}-{:.0f}", g.lo, g.hi);
+            d.driveGateX = g.x;
+            d.driveWhat = g.what;
+            d.driveOptions.push_back(std::move(o));
+            log("tick %llu: route fork: driving into the %s at x %.0f (y %.0f; passed at y %.0f, tick %llu)",
+                (unsigned long long)d.tick, g.what, g.x, g.y, m_forkForced.playerY,
+                (unsigned long long)m_forkForced.tick);
+            routeOut = beginDriveLeg(d);
+            if (!routeOut) {
+                log("tick %llu: route fork: its leg could not run (%s); today's engine decides",
+                    (unsigned long long)d.tick, d.driveOptions.front().result.c_str());
+                driveHandoff(d);
+            }
+        } else if (absense::route::drivesEnabled() && !d.pair) {
             // GucciBot (docs/ROUTE_ENGINE_PLAN.md step 5), Route drives: this
             // decision's target is the next gate, seen from the decision's own
             // state - a kept start's, or the end of the plan playing when it is
@@ -3781,6 +3838,14 @@ void AbsensePathfinder::decide() {
             }
             if (!beginDriveLeg(d)) break;  // none left
             d.routeLeg = true;
+        }
+        if (d.forkForce) {
+            // GucciBot (2026-11-16, pf2 lane; pf_fork_jump): what the fork's drive came to.
+            const Decision::DriveOption& o = d.driveOptions.front();
+            if (d.drivePass) m_stats.forkTaken++;
+            log("tick %llu: route fork: %s - %s%s", (unsigned long long)d.tick, o.text.c_str(),
+                o.result.empty() ? "nothing came back" : o.result.c_str(),
+                d.drivePass ? "; a way in lives as far as it must: playing it" : "; today's engine decides");
         }
         if (d.drivePass) {
             d.stage = Decision::Verdict;
@@ -5357,6 +5422,12 @@ void AbsensePathfinder::escalate(const char* why) {
         std::snprintf(moved, sizeof(moved), "the floor stays at tick %llu (no stored frame before the start)",
                       (unsigned long long)m_repair.floor);
     } else {
+        // GucciBot (2026-11-16, pf2 lane; the test switch pf_fork_jump): every
+        // stop down to the furthest floor failed, so the way past is further
+        // back than a decision there can see it. The newest portal the path
+        // passed untaken before the floor is gone back to for real and taken
+        // (forkJump); without one, as before.
+        if (absense::forkJump() && forkJump(why, m_repair.floor)) return;
         std::snprintf(moved, sizeof(moved), "the floor stays at tick %llu (as far from the spot as this level sees)",
                       (unsigned long long)m_repair.floor);
     }
@@ -5367,6 +5438,122 @@ void AbsensePathfinder::escalate(const char* why) {
     log("%s (spot at tick %llu): level %d - search budget x%d at every stop, decisions see %.0f s before the spot; %s",
         why, (unsigned long long)m_repair.deathTick, level, 1 + std::min(level, 3), seconds, moved);
     m_phase = Phase::Backtracking;
+}
+
+// GucciBot (2026-11-16, pf2 lane; the test switch pf_fork_jump): the portals
+// of the level a route could take or pass - mode portals and speed portals -
+// read once, and after each committed tick the ones whose x the player just
+// crossed without taking what they give (the player's mode or speed after the
+// tick is not the portal's) within kForkReachY of its y: a fork the path
+// chose. Forest Temple's wave flew over a robot portal and its 1x speed
+// portal at x 19315-19317 (y 375 against a portal at about 271), entered the
+// ball part at 0.5x, and stalled at 83.99% twelve seconds later, past the
+// furthest floor (10 s); taken by hand, that portal leads on to 87.51%.
+void AbsensePathfinder::noteForks(uint64_t now) {
+    auto* pl = PlayLayer::get();
+    if (!pl || !pl->m_player1 || !pl->m_objects || pl->m_isPlatformer) return;
+    PlayerObject* p = pl->m_player1;
+    const float x = p->m_position.x;
+    const float prev = m_forkPrevX;
+    m_forkPrevX = x;
+    // One player only: in the dual part or a two-player level a portal is
+    // anyone's, and the drive is one player's.
+    if (pl->m_gameState.m_isDualMode || separateNow() || prev <= -1.0e29f || x <= prev) return;
+    if (m_forkGatesFor != pl || m_forkGatesCount != (int)pl->m_objects->count()) {
+        m_forkGatesFor = pl;
+        m_forkGatesCount = (int)pl->m_objects->count();
+        m_forkGates.clear();
+        for (unsigned i = 0; i < pl->m_objects->count(); i++) {
+            auto* o = static_cast<GameObject*>(pl->m_objects->objectAtIndex(i));
+            if (!o) continue;
+            ForkGate g;
+            switch (o->m_objectType) {
+                case GameObjectType::CubePortal: g.mode = Trajectory::kModeCube; g.what = "cube portal"; break;
+                case GameObjectType::ShipPortal: g.mode = Trajectory::kModeShip; g.what = "ship portal"; break;
+                case GameObjectType::BallPortal: g.mode = Trajectory::kModeBall; g.what = "ball portal"; break;
+                case GameObjectType::UfoPortal: g.mode = Trajectory::kModeBird; g.what = "UFO portal"; break;
+                case GameObjectType::WavePortal: g.mode = Trajectory::kModeDart; g.what = "wave portal"; break;
+                case GameObjectType::RobotPortal: g.mode = Trajectory::kModeRobot; g.what = "robot portal"; break;
+                case GameObjectType::SpiderPortal: g.mode = Trajectory::kModeSpider; g.what = "spider portal"; break;
+                case GameObjectType::SwingPortal: g.mode = Trajectory::kModeSwing; g.what = "swing portal"; break;
+                case GameObjectType::Modifier:
+                    switch (o->m_objectID) {
+                        case 200: g.speed = 0.7f; g.what = "0.5x speed portal"; break;
+                        case 201: g.speed = 0.9f; g.what = "1x speed portal"; break;
+                        case 202: g.speed = 1.1f; g.what = "2x speed portal"; break;
+                        case 203: g.speed = 1.3f; g.what = "3x speed portal"; break;
+                        case 1334: g.speed = 1.6f; g.what = "4x speed portal"; break;
+                        default: continue;
+                    }
+                    break;
+                default: continue;
+            }
+            const cocos2d::CCRect r = o->getObjectRect();
+            g.x = r.getMidX();
+            g.y = r.getMidY();
+            g.lo = r.getMinY() - 15.0f;
+            g.hi = r.getMaxY() + 15.0f;
+            g.uid = o->m_uniqueID;
+            m_forkGates.push_back(g);
+        }
+        std::sort(m_forkGates.begin(), m_forkGates.end(), [](const ForkGate& a, const ForkGate& b) { return a.x < b.x; });
+    }
+    auto it = std::upper_bound(m_forkGates.begin(), m_forkGates.end(), prev,
+                               [](float v, const ForkGate& g) { return v < g.x; });
+    const int mode = Trajectory::modeOf(p);
+    const float y = p->m_position.y;
+    for (; it != m_forkGates.end() && it->x <= x; ++it) {
+        const ForkGate& g = *it;
+        const bool untaken = g.mode >= 0 ? mode != g.mode : std::abs(p->m_playerSpeed - g.speed) > 0.01f;
+        if (!untaken || std::abs(y - g.y) > kForkReachY) continue;
+        if (!m_forks.empty() && m_forks.back().gate.uid == g.uid && m_forks.back().tick == now) continue;
+        m_forks.push_back(Fork{now, g, y});
+        if (m_forks.size() > kMaxForks) m_forks.erase(m_forks.begin());
+    }
+}
+
+// The newest fork before the floor that this spot has not gone back to yet:
+// the game goes back for real to a second before its crossing, and the
+// decision there drives into the portal (decide). Bounded per spot and per
+// run; each jump starts the stuck clock over, or the five-minute rule would
+// end the run 30 s after it (Forest Temple's floor stayed at 18:55:17 and
+// the rule stopped the run at 18:55:47). False when there is none.
+bool AbsensePathfinder::forkJump(const char* why, uint64_t floor) {
+    if (m_forkJumps >= kForkJumpsPerRun) return false;
+    const double tps = std::max(1.0, Bot::get()->updater().getTps());
+    Trap* trap = trapAt(m_repair.deathTick, (uint64_t)std::lround(32.0 * std::max(1.0, tps / 240.0)));
+    if (!trap || (int)trap->forksTried.size() >= kForkJumpsPerSpot) return false;
+    const uint64_t lead = (uint64_t)std::lround(kForkLeadSeconds * tps);
+    const uint64_t tick = currentTick();
+    for (auto it = m_forks.rbegin(); it != m_forks.rend(); ++it) {
+        if (it->tick >= floor) continue;
+        if (std::find(trap->forksTried.begin(), trap->forksTried.end(), it->gate.uid) != trap->forksTried.end()) continue;
+        const uint64_t target = std::max(it->tick > lead ? it->tick - lead : 0, m_stats.startTick);
+        if (target >= tick) continue;
+        trap->forksTried.push_back(it->gate.uid);
+        m_forkJumps++;
+        m_stats.forkJumps++;
+        m_forkForced = *it;
+        m_forkForceAt = target;
+        m_goTo = target;
+        // The floor is the fork's tick now: a stop after it that fails walks
+        // back to it, not past it into ticks the walk has already ruled out.
+        m_repair.floor = std::min(m_repair.floor, target);
+        m_stuckSeconds = 0.0;
+        m_repair.passes++;
+        m_repair.probe = 0;
+        m_repair.retries = 0;
+        m_repair.retryTarget = UINT64_MAX;
+        log("%s (spot at tick %llu): level %d; the floor stays at tick %llu, so back to the route fork at x %.0f: the %s "
+            "passed at y %.0f (its y %.0f) at tick %llu - going back for real to tick %llu to take it (jump %d of %d "
+            "for this spot)",
+            why, (unsigned long long)m_repair.deathTick, trap->level, (unsigned long long)floor, it->gate.x,
+            it->gate.what, it->playerY, it->gate.y, (unsigned long long)it->tick, (unsigned long long)target,
+            (int)trap->forksTried.size(), kForkJumpsPerSpot);
+        m_phase = Phase::Backtracking;
+        return true;
+    }
+    return false;
 }
 
 // The way past is before the tick the search was started at. Rather than
@@ -5438,6 +5625,9 @@ bool AbsensePathfinder::moveStartBack() {
     m_lastResume = LastResume{};
     m_routeChoices.clear();
     m_forceRouteAt = UINT64_MAX;
+    m_forks.clear();
+    m_forkPrevX = -1.0e30f;
+    m_forkForceAt = UINT64_MAX;
     m_deadEndAt = 0;
     m_deadEndReal = false;
     m_deadEndUnseen = false;
@@ -5607,6 +5797,11 @@ bool AbsensePathfinder::afterTick(uint64_t tick, const TickInput& in, const Tick
     // promised this very tick alive (its plan lasted `survived` whole ticks).
     if (!died) confirmLessons(now);
     keepStart(now);
+    // GucciBot (2026-11-16, pf2 lane; pf_fork_jump): a portal passed untaken.
+    if (absense::forkJump()) {
+        if (!died) noteForks(now);
+        else m_forkPrevX = -1.0e30f;
+    }
 
     if (m_completed) return false;  // handled by tick()
 
@@ -6361,6 +6556,8 @@ void AbsensePathfinder::finishRestore() {
     dropLessonsAfter(tick);  // the path from here changes: nothing past here is learned
     std::erase_if(m_played, [tick](const auto& e) { return e.first > tick; });  // those decisions are void
     std::erase_if(m_routeChoices, [tick](const RouteChoice& r) { return r.tick > tick; });  // ... and what they did about the route
+    std::erase_if(m_forks, [tick](const Fork& f) { return f.tick > tick; });  // GucciBot (pf_fork_jump): ... and the forks it passed
+    m_forkPrevX = -1.0e30f;
     m_plan.clear();
     m_plan2.clear();
     m_planIndex = 0;

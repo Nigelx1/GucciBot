@@ -453,6 +453,14 @@ namespace gucci::testset {
                              [](matjson::Value const& val, bool) {
                                  absense::setProbeReal(wantBool("pf_probe_real", val));
                              }});
+                // GucciBot (2026-11-16, pf2 lane): a spot whose walk back has
+                // failed to the furthest floor goes back to the last portal
+                // passed untaken and takes it; off by default.
+                v.push_back({"pf_fork_jump", "bool", Store::Memory,
+                             [] { return matjson::Value(absense::forkJump()); },
+                             [](matjson::Value const& val, bool) {
+                                 absense::setForkJump(wantBool("pf_fork_jump", val));
+                             }});
                 // The cell-by-cell write-back on a level with rows (on by
                 // default); off for the old pass of everything, to compare.
                 v.push_back({"pf_pending_cells", "bool", Store::Memory,

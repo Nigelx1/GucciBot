@@ -95,6 +95,8 @@ class AbsensePathfinder {
         uint64_t routeJumps = 0;    // step R5: dead ends that went back to where the route was left
         uint64_t routeRetaken = 0;  // ... and took the route there
         uint64_t probeReal = 0;     // GucciBot (pf_probe_real): kept-start verdicts looked at again in the real game
+        uint64_t forkJumps = 0;     // GucciBot (pf_fork_jump): dead ends that went back to a portal passed untaken
+        uint64_t forkTaken = 0;     // ... and found a way into it there
         uint64_t driveDecisions = 0;  // step 5 (Route drives): decisions played as a leg to the next gate's option
         uint64_t driveHandoffs = 0;   // ... and decided by today's engine instead (no option got through)
         uint64_t driveNoGate = 0;     // ... of those, with no gate to aim at (past the last one, say)
@@ -399,6 +401,9 @@ public:
         // beginBacktrack); routeForced once a route idea was taken for it.
         bool forceRoute = false;
         bool routeForced = false;
+        // GucciBot (2026-11-16, pf2 lane; pf_fork_jump): a dead end came back
+        // here to take the portal the path passed (see escalate, forkJump).
+        bool forkForce = false;
         // Play no more than this many ticks of the chosen idea (0: no cap): a
         // route idea whose way to its gate is all that is known to hold up a
         // tick late, or that is played although nothing of it does.
@@ -669,6 +674,37 @@ public:
     std::vector<RouteChoice> m_routeChoices;
     void noteRouteChoice(const RouteChoice& choice);
     uint64_t m_forceRouteAt = UINT64_MAX;  // the decision a dead end went back to, to take the route there
+    // GucciBot (2026-11-16, pf2 lane; the test switch pf_fork_jump): route
+    // forks. A mode or speed portal the real player went past without taking
+    // it (its mode or speed is not the player's after the crossing) is a fork
+    // the path chose; the newest few are kept, with the tick of the crossing.
+    // When every stop down to the furthest floor of a spot has failed, the
+    // newest fork before the floor is gone back to for real, a second before
+    // its crossing, and that decision is a drive into the portal (see
+    // escalate and decide). The portals of the level are read once.
+    struct ForkGate {
+        float x = 0.0f, y = 0.0f;
+        float lo = 0.0f, hi = 0.0f;  // the band the player's centre crosses the portal's x in to touch it
+        int uid = 0;
+        int mode = -1;        // the mode it gives (Trajectory::FakeMode), -1 for a speed portal
+        float speed = 0.0f;   // the speed it gives (m_playerSpeed), for a speed portal
+        const char* what = "";
+    };
+    struct Fork {
+        uint64_t tick = 0;  // the tick after the crossing
+        ForkGate gate;
+        float playerY = 0.0f;
+    };
+    std::vector<ForkGate> m_forkGates;  // by x
+    const void* m_forkGatesFor = nullptr;
+    int m_forkGatesCount = -1;
+    std::vector<Fork> m_forks;          // oldest first, at most kMaxForks
+    float m_forkPrevX = -1.0e30f;       // the player's x before the last committed tick (none after a restore)
+    uint64_t m_forkForceAt = UINT64_MAX;  // the decision a fork jump went back to
+    Fork m_forkForced;
+    int m_forkJumps = 0;
+    void noteForks(uint64_t now);
+    bool forkJump(const char* why, uint64_t floor);
     // Where the last repair resumed from, so a death at the same spot can try
     // something else from that stop before walking further back (the
     // simulation approved what was played, and the game disagreed: what is
@@ -698,6 +734,9 @@ public:
         // for real for this spot because their kept start's verdict could not
         // be trusted (see decide()).
         std::vector<uint64_t> probedReal;
+        // GucciBot (2026-11-16, pf2 lane; pf_fork_jump): the portals (by uid)
+        // gone back to for this spot.
+        std::vector<int> forksTried;
     };
     std::vector<Trap> m_traps;
     Trap* trapAt(uint64_t tick, uint64_t slack);

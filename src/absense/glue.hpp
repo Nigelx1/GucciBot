@@ -180,6 +180,13 @@ namespace absense {
     // pf_probe_real, this launch only, turns it on).
     bool probeReal();
     void setProbeReal(bool on);
+    // GucciBot (2026-11-16, pf2 lane): when every stop down to the furthest
+    // floor has failed, the search goes back for real to the last mode or
+    // speed portal the player passed without taking (further back than the
+    // walk back reaches) and takes it this time (off by default: the test
+    // switch pf_fork_jump, this launch only, turns it on).
+    bool forkJump();
+    void setForkJump(bool on);
     // ... and its kill switch, never saved either (gucci_test_set
     // pf_pending_cells, on by default): on a level with rows of sections
     // (ORBIT, Heliopolis) a run writes back what the real game moved a

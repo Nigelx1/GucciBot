@@ -640,6 +640,20 @@ void absense::setProbeReal(bool on) {
     g_probeReal = on;
 }
 
+namespace {
+// GucciBot (2026-11-16, pf2 lane): off by default until the cold regression
+// says it helps (see pathfinder.cpp, escalate(): the route fork).
+bool g_forkJump = false;
+}
+
+bool absense::forkJump() {
+    return g_forkJump;
+}
+
+void absense::setForkJump(bool on) {
+    g_forkJump = on;
+}
+
 bool absense::pendingVerify() {
     return world::g_pendingVerify;
 }

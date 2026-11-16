@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-k (Pathfinder test switch pf_probe_real (off): a walk-back stop written off on a hazard the copy may misplace is checked again in the real game)"
+    "2026-11-16-l (Pathfinder test switch pf_fork_jump (off): when the walk back fails as far as it reaches, the search goes back to the last mode or speed portal it passed and takes it)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
