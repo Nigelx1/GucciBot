@@ -10,7 +10,7 @@ It's Gucci. GucciBot is a Geometry Dash macro bot (a [Geode](https://geode-sdk.o
 
 ## Get it
 
-You need Geometry Dash 2.2081 and Geode 5.10.1 or a later 5.x. One `.geode` file covers Windows, macOS, iOS and Android (32 and 64-bit), and it's about 250 MB, since the renderer, the music and the JMF Trainer's video ride along. The newest release is **2.0.0-beta.5**.
+You need Geometry Dash 2.2081 and Geode 5.10.1 or a later 5.x. One `.geode` file covers Windows, macOS, iOS and Android (32 and 64-bit), and it's about 250 MB, since the renderer, the music and the JMF Trainer's video ride along. The newest release is **2.0.0**.
 
 1. Download `nigelx1.guccibot.geode` from the [latest release](https://github.com/Nigelx1/GucciBot/releases/latest).
 2. In the game, open Geode's mod list, press the gear for Geode's settings, press **Install From File** and pick the file. (Or put the file in Geode's mods folder yourself: **Open Mods Folder** is in the same place.)
@@ -104,7 +104,7 @@ Also in Settings: **BIG BRRRR**, a core feature of this mod, with **Shake** and 
 
 ## Status
 
-2.0 is in beta. **2.0.0-beta.5** is the newest release, and the work since then lands on `master`, where every push builds the full package. What's left before 2.0, mostly the AI pathfinder and a test of every feature in the game, is ticked off in [docs/ROAD_TO_2_0.md](docs/ROAD_TO_2_0.md), and anything still waiting on its in-game test says so in its commit message.
+**2.0.0** is the newest release, and the work since then lands on `master`, where every push builds the full package. What's left before 2.0, mostly the AI pathfinder and a test of every feature in the game, is ticked off in [docs/ROAD_TO_2_0.md](docs/ROAD_TO_2_0.md), and anything still waiting on its in-game test says so in its commit message.
 
 ## Help and contact
 

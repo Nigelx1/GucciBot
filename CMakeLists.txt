@@ -122,7 +122,7 @@ if (WIN32)
 endif()
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
-    MOD_VERSION="2.0.0-beta.5"
+    MOD_VERSION="2.0.0"
     NOMINMAX
     _HAS_ITERATOR_DEBUGGING=0
     # ImGui's test-engine hooks, for Assistant Access's menu probe

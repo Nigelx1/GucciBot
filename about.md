@@ -1,4 +1,4 @@
-# GucciBot 2.0.0-beta.5
+# GucciBot 2.0.0
 
 > Frame perfect. Ice cold. Brrr.
 
