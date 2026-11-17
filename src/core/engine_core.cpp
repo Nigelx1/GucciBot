@@ -325,7 +325,24 @@ namespace gucci {
     }
 
     void GucciPracticeFix::clearPlatformer(bool full) {
-        m_platformerCheckpoints.clear();
+        // Silicate's clearPlatformer(true): each touched checkpoint is turned
+        // off again (so it can be taken on the next attempt) and the
+        // CheckpointObject storeCheckpoint retained is released. GucciBot's
+        // port only emptied the list, so every touched platformer checkpoint
+        // leaked and its flag could stay lit. Without `full` (a level loading,
+        // Silicate's clearPlatformer(false)) the list is only forgotten.
+        while (!m_platformerCheckpoints.empty()) {
+            if (full) {
+                auto& back = m_platformerCheckpoints.back();
+                if (back.second) {
+                    back.second->m_checkpointActivated = false;
+                    back.second->resetCheckpoint();
+                }
+                if (back.first)
+                    back.first->release();
+            }
+            m_platformerCheckpoints.pop_back();
+        }
         m_shouldLoadPlatformer = false;
         if (full) {
             m_savedCheckpoints.clear();

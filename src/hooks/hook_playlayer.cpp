@@ -203,7 +203,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
         addToSection(obj->m_physicalCheckpointObject);
         if (this->m_activatedCheckpoint) {
             gb->practiceFix.m_platformerCheckpoints.push_back(
-                std::make_pair(obj, (CheckpointObject*)this->m_activatedCheckpoint));
+                std::make_pair(obj, this->m_activatedCheckpoint));
             return;
         }
         // Captured here, in the same instant GD built `obj`, and labelled with

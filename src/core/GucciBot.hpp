@@ -139,7 +139,10 @@ namespace gucci {
         // PracticeFix::m_storeEvery). 1 is every tick, as GucciBot always did;
         // Absense's pathfinder raises it for the length of a search.
         uint32_t m_storeEvery = 1;
-        std::vector<std::pair<CheckpointObject*, CheckpointObject*>> m_platformerCheckpoints;
+        // Platformer checkpoints touched this attempt: the CheckpointObject GD
+        // built (retained by storeCheckpoint) and the level's checkpoint object
+        // that was touched (PlayLayer::m_activatedCheckpoint), as in Silicate.
+        std::vector<std::pair<CheckpointObject*, CheckpointGameObject*>> m_platformerCheckpoints;
 
         bool m_loadCheckpoint = false;
         bool m_isBackstep = false;
@@ -208,6 +211,11 @@ namespace gucci {
         void applyLatest();
         void applyCheckpoint(SavedCheckpointState& state);
         void dropLastStoredFrame();
+        // Empties the platformer checkpoints. `full` (a reset, a quit) also turns
+        // each touched checkpoint off and releases what storeCheckpoint retained
+        // (Silicate's clearPlatformer(true)), and empties the practice
+        // checkpoints and the backstep store; without it (a level loading) the
+        // list is only forgotten.
         void clearPlatformer(bool full);
         bool canRestoreState() const {
             return !m_storedFrames.empty();
