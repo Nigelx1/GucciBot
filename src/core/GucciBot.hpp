@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-u (Calculate's hint on the Macro card now says it needs Play mode too, and its refusal in Off or Record says: It needs Play mode, set Mode to Play first)"
+    "2026-11-16-w (Test tools can read and set the converter Shift frames slider, now drawn with the menu kit slider, which looks the same)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
