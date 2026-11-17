@@ -10413,7 +10413,17 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::testPlayhead(PlayLayer* pl,
         std::unique(trip.checkpoints.begin(), trip.checkpoints.end()),
         trip.checkpoints.end());
 
+    // Leaving recording disarms intentional death (GucciEngine::setMode).
+    // The trip comes back to the recording, so the armed key comes through it:
+    // put back here, before startRange saves it and turns it off for the run,
+    // and finish() restores it.
+    bool const armedCanDie = updater.m_canDie;
+    bool const armedInputIsDeath = updater.m_inputIsDeath;
     if (trip.record) bot->setMode(Bot::Mode::Playing);
+    if (trip.record) {
+        updater.m_canDie = armedCanDie;
+        updater.m_inputIsDeath = armedInputIsDeath;
+    }
 
     report = this->startRange(pl, from, in.frame);
     if (!report.ok) {
