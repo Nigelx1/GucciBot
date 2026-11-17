@@ -2939,17 +2939,19 @@ void FrameWindowAnalyzer::beginShift(int64_t shift, ShiftMode mode) {
             if (tail && moved != shifted) m_tailArm.push_back(moved);
         }
     } else if (mode == ShiftMode::Steer) {
-        // GucciBot (2026-11-10): Ship Steering. The tail as Retime places it
-        // where that is before react; the rest of the tail is gated, placed
+        // GucciBot (2026-11-10): Ship Steering. The click (the input and its
+        // own release; 2026-11-16, before that the whole tail up to react)
+        // moves as Retime places it; the rest of the tail is gated, placed
         // at max(recorded, react) so the actions stay in frame order, and
         // played only after a handback, on its recorded frame.
         int64_t const react = static_cast<int64_t>(m_steer.react);
+        size_t const steerRel = this->pairedReleaseFor(ai);
         m_steer.gate.assign(actions.size(), 0);
         for (size_t k = 0; k < actions.size(); k++) {
             int64_t moved = static_cast<int64_t>(m_originalFrames[k]);
             moved += this->entryShift(k);
             if (this->inRetimeTail(k, ai, thisP2)) {
-                if (moved + tickShift < react) {
+                if (this->inSteerClick(k, ai, steerRel) && moved + tickShift < react) {
                     moved += tickShift;
                 } else {
                     moved = std::max(moved, react);
@@ -3030,7 +3032,9 @@ void FrameWindowAnalyzer::beginShift(int64_t shift, ShiftMode mode) {
     m_legPressBuffered = false;
     m_legPressSeen = false;
     m_testTarget = static_cast<uint32_t>(std::max<int64_t>(shifted + reach, 0));
-    // GucciBot (2026-11-10): a steer leg ends where its dead Retime leg did.
+    // GucciBot (2026-11-10): a steer leg ends at its own target (2026-11-16:
+    // the next click's leg end, past the handback; before, the dead Retime
+    // leg's end).
     if (mode == ShiftMode::Steer) m_testTarget = m_steer.target;
     // GucciBot (2026-10-23): where the nominal leg ends (captureDeathInSpan).
     if (shift == 0) m_nominalTarget = m_testTarget;
@@ -3088,8 +3092,8 @@ void FrameWindowAnalyzer::concludeShift(bool survived) {
         uint32_t const at = Bot::get()->updater().getFrame();
         if (saved) {
             m_steerTot.saved++;
-            FWLOG("[fw][steer][saved] click {} shift={:+d} frame={} target={} handedBack={} h={} taps={} ticks={}",
-                  m_index + 1, m_shift, at, m_steer.target, m_steer.handedBack ? 1 : 0,
+            FWLOG("[fw][steer][saved] click {} shift={:+d} frame={} end={} target={} handedBack={} h={} taps={} ticks={}",
+                  m_index + 1, m_shift, at, m_steer.end, m_steer.target, m_steer.handedBack ? 1 : 0,
                   m_steer.handedBack ? static_cast<int64_t>(m_steer.handback) : -1, m_steer.taps, m_steer.ticks);
         } else {
             m_steerTot.lost++;
@@ -3526,19 +3530,36 @@ void FrameWindowAnalyzer::advanceSweep(bool survived) {
     this->finishClick();
 }
 
-// GucciBot (2026-11-10): Ship Steering, built from Antic's Counter
-// 1.0.0-beta.16's behavior (anticroom's; no source). A steer leg is one more
-// test of a ship shift that died every other way: the recording plays as the
-// dead Retime leg did up to `react` (the reaction time after the input's
-// recorded frame, early or late shift alike: the counter's clock, 2026-11-11),
-// then the controller (steer.hpp) taps the
-// button to fly back onto the capture's line, and once it is back on it (the
-// handback) the recording's own inputs play again on their recorded frames.
-// The shift counts if the player is alive at the Retime leg's own end. It
-// never changes a shift that already lives, so no window gets narrower, and
-// the taps go to GD's input queue only (processQueuedButtons): nothing is
-// recorded.
+// GucciBot (2026-11-10): Ship Steering, built from Antic's Counter's behavior
+// (anticroom's; its UI, results and log lines only, no source). A steer leg is
+// one more test of a ship shift that died every other way: the shifted click
+// (the input and its own release) plays as Retime places it, the rest of the
+// recording waits, and from `react` the controller (steer.hpp) taps the button
+// to fly back onto the capture's line. Once it is back on it (the handback)
+// the recording's own inputs play again on their recorded frames. It never
+// changes a shift that already lives, so no window gets narrower, and the taps
+// go to GD's input queue only (processQueuedButtons): nothing is recorded.
+//
+// 2026-11-16, beta.17's rule (Nigel: "whatever anti does"), read off its
+// [fw][steer][arm]/[handback]/[saved] lines on KOCMOC:
+// - The reaction clock starts where the run leaves the recorded line: the
+//   click's last shifted action (a press's release, else the input itself),
+//   so react = the frame after it + the reaction time. Before, it started at the
+//   input's recorded frame (beta.16's), which let a late shift steer before
+//   its own release had played and an early one steer straight away.
+// - The steering hands back by the plain leg's end (`end`, the tick after
+//   it) at the latest, on the line or not, and the shift counts only if the
+//   player then lives on the recorded inputs to the next click's own leg end
+//   (`target`). Before, alive at the plain leg's end was enough, handed back
+//   or not; real play found 11 of 27 such KOCMOC saves die soon after it.
+// - No room (no whole tap fits between react and `end`, or the recorded line
+//   leaves this stretch of ship first): the shift counts the plain way.
 void FrameWindowAnalyzer::clearSteer() { m_steer = Steer{}; }
+
+bool FrameWindowAnalyzer::inSteerClick(size_t k, size_t ai, size_t rel) const {
+    if (k == ai || this->inClickTick(k, ai)) return true;
+    return rel != NO_INDEX && (k == rel || this->inClickTick(k, rel));
+}
 
 void FrameWindowAnalyzer::deadShift() {
     if (this->beginSteerLeg(false)) return;
@@ -3572,7 +3593,55 @@ bool FrameWindowAnalyzer::beginSteerLeg(bool reordered) {
     auto const& actions = Bot::get()->replaySystem().m_actionAtom.m_actions;
     int64_t const recorded = static_cast<int64_t>(m_recorded);
     int64_t const first = std::min(recorded, recorded + m_shift);
-    uint32_t const target = m_steerRetimeTarget;
+
+    // GucciBot (2026-11-16): beta.17's frames (see above), off the recorded
+    // frames, so every shift of one click gets the same end and target. The
+    // click's last action, the next input after the click (its start ends the
+    // plain leg) and the one after that (it ends the next click's leg), by
+    // legReach's rules: Slack frames before them.
+    size_t const ai = s.actionIndex;
+    size_t const rel = this->pairedReleaseFor(ai);
+    int64_t const clickLast =
+        rel != NO_INDEX && rel < m_originalFrames.size() ? static_cast<int64_t>(m_originalFrames[rel]) : recorded;
+    auto const inputAfter = [&](size_t after, size_t lead) {
+        for (size_t k = after + 1; k < actions.size(); k++)
+            if (isMeasurableInput(actions[k]) && this->movesWith(k, s.player2) && !this->inSteerClick(k, ai, rel) &&
+                !this->inClickTick(k, lead))
+                return k;
+        return NO_INDEX;
+    };
+    size_t const next = inputAfter(rel != NO_INDEX ? std::max(ai, rel) : ai, ai);
+    size_t const beyond = next != NO_INDEX ? inputAfter(next, next) : NO_INDEX;
+    int64_t const horizon = static_cast<int64_t>(m_horizon);
+    int64_t plainEnd = clickLast + horizon - 1;
+    int64_t legTarget = plainEnd;
+    if (next != NO_INDEX) {
+        int64_t const nf = static_cast<int64_t>(m_originalFrames[next]);
+        plainEnd = clickLast + std::clamp<int64_t>(std::max<int64_t>(nf - clickLast - m_slack_, 0),
+                                                   MIN_HORIZON, horizon) - 1;
+        // No MIN_HORIZON here: the counter's target for a 6-frame next click
+        // (KOCMOC 6630/6636) is 6633, Slack + 1 before its release.
+        legTarget = beyond != NO_INDEX
+                        ? std::min(static_cast<int64_t>(m_originalFrames[beyond]) - m_slack_ - 1, nf + horizon - 1)
+                        : nf + horizon - 1;
+    }
+    int64_t endAt = plainEnd + 1;
+    // GucciBot (2026-11-16, review): the handback has to come before the
+    // next recorded input. The gate holds that input back until the handback
+    // (steerSwallows), and the tick decided at nf - 1 looks it up (one frame
+    // ahead), so a handback at nf or later would drop the next click. That
+    // happens with Slack 0 (end = nf) or in the MIN_HORIZON clamp (end =
+    // clickLast + 12 with nf at or before it). The room check below then
+    // skips the shift as "short" when no tap fits.
+    if (next != NO_INDEX) endAt = std::min<int64_t>(endAt, static_cast<int64_t>(m_originalFrames[next]) - 1);
+    uint32_t const end = static_cast<uint32_t>(std::max<int64_t>(0, endAt));
+    // With Check Past Next Input on, the shift's own Retime leg played on
+    // past the next click (legReach); a steered save must live at least as
+    // far as that, never a shorter test than a plain shift. I'm not sure this
+    // is exactly beta.17's target with that setting (step S1 didn't run it),
+    // but it can only make the steered test longer.
+    if (m_pastNext) legTarget = std::max<int64_t>(legTarget, static_cast<int64_t>(m_steerRetimeTarget));
+    uint32_t const target = static_cast<uint32_t>(std::max<int64_t>(end, legTarget));
     auto const skip = [&](char const* why, long& counter, std::string const& more = {}) {
         counter++;
         FWLOG("[fw][steer][{}] click {} rec={} shift={:+d}{}", why, m_index + 1, m_recorded, m_shift, more);
@@ -3596,12 +3665,6 @@ bool FrameWindowAnalyzer::beginSteerLeg(bool reordered) {
             return skip("tps", m_steerTot.skipped, fmt::format(" tps change at {}", f));
     }
     int const reactT = gucci::steer::reactTicks(m_steerReactMs, tps);
-    // A late shift at or past the reaction time never plays the input itself:
-    // steering would start before it lands and hold it back, so every such
-    // shift is one leg (fly on without the input) and says nothing about this
-    // input's timing. Those shifts count only the plain way.
-    if (m_shift >= reactT)
-        return skip("late", m_steerTot.skipped, fmt::format(" react={} ticks", reactT));
     int const span = gucci::steer::ticksAt(gucci::steer::kFitSpan240, tps);
     int64_t fitLo = std::max<int64_t>(0, recorded - span);
     int64_t fitHi = recorded + span;
@@ -3611,15 +3674,34 @@ bool FrameWindowAnalyzer::beginSteerLeg(bool reordered) {
         if (f <= recorded) fitLo = std::max(fitLo, f + 1);
         else fitHi = std::min(fitHi, f - 1);
     }
-    // The clock starts at the recorded frame, not the earlier of it and the
-    // shifted one (anticroom's way, 2026-11-11): an early shift gets the same
-    // react frame as the recording, which fits the counter's early edges.
-    uint32_t const react = static_cast<uint32_t>(std::max<int64_t>(0, recorded + reactT));
-    if (react >= target)
-        return skip("short", m_steerTot.shortLegs, fmt::format(" react={} target={}", react, target));
+    // GucciBot (2026-11-16): the clock starts where the run leaves the
+    // recorded line, the click's last shifted action (beta.17's start; it was
+    // the input's recorded frame, beta.16's). A late shift's click has always
+    // played by then, so no shift is too late to steer; one past the room
+    // left before `end` is (beta.17's "noroom").
+    // `start` is the first frame after the moved click, in GucciBot's labels:
+    // the counter logs Silicate's, one lower for an input (CLAUDE.md section
+    // 4), so its start and react read one lower than these. Its leg ends and
+    // targets read the same as Calculate's (legReach, 2026-11-09). Real play
+    // backs the extra frame: the counter's 6324r -5 save, rebuilt from its
+    // log, dies at its log's tap frames and lives one frame later (step K1).
+    // Room means one whole tap (a press held for the dwell) fits before
+    // `end`: beta.17's "noroom" lines all have its react + 10 ticks at or
+    // past its end, its arm lines all before (KOCMOC: 6209 -5 arms at its
+    // react 6237, end 6248; 6218r +2 has no room at its react 6244).
+    int64_t const start = clickLast + m_shift + 1;
+    uint32_t const react = static_cast<uint32_t>(std::max<int64_t>(0, start + reactT));
+    int const dwellT = gucci::steer::ticksAt(gucci::steer::kDwell240, tps);
+    if (static_cast<int64_t>(react) + dwellT > static_cast<int64_t>(end))
+        return skip("short", m_steerTot.shortLegs, fmt::format(" start={} react={} end={}", start, react, end));
     // The steer leg plays the Retime leg's inputs up to react, so it would
-    // die where that did.
-    if (m_steerRetimeDeath < react)
+    // die where that did, unless Retime had moved a later input of the tail
+    // before that (the steer leg holds those back).
+    int64_t sameUntil = react;
+    for (size_t k = ai; k < actions.size(); k++)
+        if (this->inRetimeTail(k, ai, s.player2) && !this->inSteerClick(k, ai, rel))
+            sameUntil = std::min<int64_t>(sameUntil, static_cast<int64_t>(m_originalFrames[k]) + m_shift);
+    if (static_cast<int64_t>(m_steerRetimeDeath) < sameUntil)
         return skip("early", m_steerTot.early, fmt::format(" died={} react={}", m_steerRetimeDeath, react));
     for (uint32_t const d : m_captureDeaths)
         if (d >= m_branchFrame && d <= target)
@@ -3645,6 +3727,22 @@ bool FrameWindowAnalyzer::beginSteerLeg(bool reordered) {
         !(line[recorded].flags & gucci::steer::kShip))
         return skip("noline", m_steerTot.skipped);
     bool const upside = line[recorded].flags & gucci::steer::kUpside;
+    // GucciBot (2026-11-16): and before the recorded line leaves this stretch
+    // of ship (a portal, a gravity or size change): beta.17's "limit" (6650
+    // -6 has no room at react 6679, limit 6679, end 6758; 7260 +12..+14,
+    // whose react comes after the ship portal, never arm).
+    {
+        uint8_t const keep = gucci::steer::kValid | gucci::steer::kShip;
+        uint8_t const same = gucci::steer::kUpside | gucci::steer::kMini;
+        int64_t limit = recorded;
+        while (limit + 1 < static_cast<int64_t>(line.size()) && limit + 1 <= static_cast<int64_t>(target) &&
+               (line[limit + 1].flags & keep) == keep &&
+               (line[limit + 1].flags & same) == (line[recorded].flags & same))
+            limit++;
+        if (limit < static_cast<int64_t>(target) && static_cast<int64_t>(react) + dwellT > limit)
+            return skip("short", m_steerTot.shortLegs,
+                        fmt::format(" start={} react={} limit={} (the ship stretch ends)", start, react, limit));
+    }
     auto model = gucci::steer::fit(line.data(), line.size(), static_cast<size_t>(fitLo),
                                    static_cast<size_t>(std::max(fitLo, fitHi)), upside);
     if (!model.ok) {
@@ -3670,6 +3768,7 @@ bool FrameWindowAnalyzer::beginSteerLeg(bool reordered) {
     m_steer.armed = true;
     m_steer.reordered = reordered;
     m_steer.react = react;
+    m_steer.end = end;
     m_steer.target = target;
     m_steer.line = lineIdx;
     m_steer.flag = s.player2;
@@ -3680,9 +3779,10 @@ bool FrameWindowAnalyzer::beginSteerLeg(bool reordered) {
     m_steer.model = std::move(model);
     m_steerTot.armed++;
     if (reordered) m_steerTot.reordered++;
-    FWLOG("[fw][steer][arm] click {} rec={} shift={:+d} {} react={} target={} retimeDied={} p{} tps={:.0f} lift={:.3f} "
-          "v={:.2f}..{:.2f} samples={}/{} fit={}..{}{}",
-          m_index + 1, m_recorded, m_shift, s.release ? "release" : "press", react, target, m_steerRetimeDeath, lineIdx + 1,
+    FWLOG("[fw][steer][arm] click {} rec={} shift={:+d} {} start={} react={} end={} target={} retimeEnd={} retimeDied={} "
+          "p{} tps={:.0f} lift={:.3f} v={:.2f}..{:.2f} samples={}/{} fit={}..{}{}",
+          m_index + 1, m_recorded, m_shift, s.release ? "release" : "press", start, react, end, target,
+          m_steerRetimeTarget, m_steerRetimeDeath, lineIdx + 1,
           tps, m_steer.model.lift, m_steer.model.vMin, m_steer.model.vMax, m_steer.model.samplesHold,
           m_steer.model.samplesFree, fitLo, fitHi, reordered ? " reordered" : "");
     this->beginShift(m_shift, ShiftMode::Steer);
@@ -3700,6 +3800,20 @@ void FrameWindowAnalyzer::steerDecide(PlayLayer* pl) {
         FWLOG("[fw][steer][stop] click {} shift={:+d} frame={} {}", m_index + 1, m_shift, t, why);
     };
     if (!p || line.empty()) return stop("noplayer");
+
+    // GucciBot (2026-11-16): the latest handback (beta.17's, at its end on
+    // every [handback] line, taps or none): the recording's own inputs play
+    // again from here, and the leg's target decides.
+    if (t >= st.end) {
+        st.handedBack = true;
+        st.handback = t;
+        st.pending = -1;
+        m_steerTot.handbacks++;
+        m_steerTot.forced++;
+        FWLOG("[fw][steer][handback] click {} shift={:+d} frame={} y={:.2f} vy={:.3f} forced=end", m_index + 1,
+              m_shift, t, p->getPositionY(), p->m_yVelocity);
+        return;
+    }
 
     auto const held = p->m_holdingButtons.find(1);
     gucci::steer::State s;
@@ -3749,7 +3863,7 @@ void FrameWindowAnalyzer::steerDecide(PlayLayer* pl) {
     st.ticks++;
     m_steerTot.ticks++;
     // The line from the tick the decision lands on, `look` points, held at
-    // the leg's end.
+    // the leg's end (its target, past the handback, where the recording plays).
     std::vector<gucci::steer::LinePoint> ahead(static_cast<size_t>(st.look));
     int64_t const offset = base - static_cast<int64_t>(t);
     for (int k = 0; k < st.look; k++) {
@@ -8289,8 +8403,8 @@ std::string FrameWindowAnalyzer::describe() const {
     for (auto const& mk : m_results)
         if (mk.steered && !mk.manual) steered++;
     if (steered > 0)
-        out += fmt::format("\nShip steering: {} ship input{} counted wider because taps kept them alive as far "
-                           "as the normal test goes\n",
+        out += fmt::format("\nShip steering: {} ship input{} counted wider because taps got them back to the "
+                           "macro's inputs and they survived the next click\n",
                            steered, steered == 1 ? "" : "s");
 
     if (!out.empty() && out.back() == '\n') out.pop_back();

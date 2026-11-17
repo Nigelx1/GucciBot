@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-s (Pathfinder: the fork jump (pf_fork_jump) is on by default: a dead end the search cannot pass sends it back to a mode portal the path skipped)"
+    "2026-11-16-t (Calculate: Ship Steering follows Antic's Counter beta.17's stricter rule (reaction time from the end of the moved click, the save must hand back by the normal test's end and then survive the next click))"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
