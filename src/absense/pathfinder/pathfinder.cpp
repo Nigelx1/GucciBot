@@ -156,6 +156,9 @@ constexpr double kForkLeadSeconds = 1.0;
 constexpr float kForkReachY = 240.0f;
 constexpr int kForkJumpsPerSpot = 3;
 constexpr int kForkJumpsPerRun = 6;
+// GucciBot (2026-11-16, pf3 lane; pf_fork_dual): how many times the drive leg's 6 s safety the drive into a
+// portal stacked on a dual portal may take (its steps, doubled, are what stop it).
+constexpr double kForkDualLegClock = 12.0;
 constexpr float kForkWatchX = 600.0f;  // GucciBot (pf3 lane; log only): how far either side of a fork its crossings are logged
 // GucciBot (2026-11-16, pf3 lane; pf_fork_jump): how close in x a speed
 // portal and a mode portal are to count as one gate (Forest Temple's robot
@@ -3095,6 +3098,17 @@ bool AbsensePathfinder::beginDriveLeg(Decision& d) {
         goal.frontierCap = 128;
         goal.maxSteps = (int)std::lround(kDriveLegSteps * std::max(1.0, tps / 240.0));
         goal.maxMs = kDriveLegSafetyMs;
+        // GucciBot (2026-11-16, pf3 lane; pf_fork_dual): the drive into a
+        // mode portal stacked on a dual portal gets twice the steps and a
+        // clock that doesn't bind first. On GRIEF (a heavy level, on a busy
+        // PC) the leg from a second before the hidden cube portal stopped on
+        // its 6 s safety after 10368 of its 60000 steps, so the jump went back
+        // and never tried the portal. A fork jump happens a few times a run at
+        // most, and with the steps deciding, the answer is the same on every PC.
+        if (d.forkForce && m_forkForced.gate.onDual) {
+            goal.maxSteps *= 2;
+            goal.maxMs = kDriveLegSafetyMs * kForkDualLegClock;
+        }
         goal.dotsEvery = 0;
         goal.witnesses = 3;
         goal.calmTicks = calmTicks();
