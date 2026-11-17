@@ -21,7 +21,7 @@
 # and Geode pick the save folder from the exe's name, so a GeometryDash.exe
 # would share the real save), must not be in a Steam library, and must have
 # Geode 6 in it. The package must say geode 6 and gd win 2.2091 and nothing
-# else. A copy stays at build\ci\GucciBot-GD2.2091.geode. Without -Gd2209
+# else. A copy stays at build\ci\nigelx1.guccibot2209.geode. Without -Gd2209
 # the script does what it always did and reads only multi-platform.yml.
 
 param([string]$Commit = "", [switch]$Gd2209, [string]$Folder = "")
@@ -79,8 +79,8 @@ if ($Gd2209) {
     $tmp = Join-Path $env:TEMP "guccibot-ci2209-$short"
     if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
     gh run download $run.databaseId --repo $Repo --name $Artifact --dir $tmp
-    $geode = @(Get-ChildItem $tmp -Recurse -Filter "*-GD2.2091.geode")
-    if ($geode.Count -ne 1) { throw "the download should hold one *-GD2.2091.geode, it holds $($geode.Count)" }
+    $geode = @(Get-ChildItem $tmp -Recurse -Filter "*.geode")
+    if ($geode.Count -ne 1) { throw "the download should hold one .geode, it holds $($geode.Count)" }
     $geode = $geode[0]
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $zip = [System.IO.Compression.ZipFile]::OpenRead($geode.FullName)
@@ -105,8 +105,8 @@ if ($Gd2209) {
     # 3. A copy for sharing, under a name that can't be taken for the 2.2081 file
     $keep = Join-Path $Root "build\ci"
     New-Item -ItemType Directory -Force $keep | Out-Null
-    Copy-Item $geode.FullName (Join-Path $keep "GucciBot-GD2.2091.geode") -Force
-    Write-Host "  copy kept: build\ci\GucciBot-GD2.2091.geode"
+    Copy-Item $geode.FullName (Join-Path $keep "nigelx1.guccibot2209.geode") -Force
+    Write-Host "  copy kept: build\ci\nigelx1.guccibot2209.geode"
 
     # 4. Into the test copy, while its game isn't running
     $name = [IO.Path]::GetFileNameWithoutExtension($exe)

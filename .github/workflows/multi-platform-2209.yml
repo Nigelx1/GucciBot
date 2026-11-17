@@ -74,7 +74,7 @@ jobs:
       # The package has to be complete and say what it's for before anyone
       # gets it: the binary, the seven DLLs, mod.json for Geode 6.0.0-alpha.2
       # and GD 2.2091 on Windows only, and an about.md that doesn't claim
-      # 2.2081. Then it's renamed so it can't be confused with the 2.2081 file.
+      # 2.2081. Then it's renamed nigelx1.guccibot2209.geode, the release file's name.
       - name: Check and name the package
         id: pkg
         shell: bash
@@ -111,7 +111,11 @@ jobs:
           if "2.2091" not in about:
               sys.exit("about.md doesn't say 2.2091")
           z.close()
-          name = f"GucciBot-{mod['version'].lstrip('v')}-GD2.2091.geode"
+          # The release file's name (Nigel, 2026-11-17): one GitHub release
+          # can't hold two assets with the same name, so the 2.2081 file is
+          # nigelx1.guccibot2208.geode and this one nigelx1.guccibot2209.geode.
+          # Geode's Install From File saves it as nigelx1.guccibot.geode anyway.
+          name = "nigelx1.guccibot2209.geode"
           dst = os.path.join(out, name)
           shutil.move(files[0], dst)
           sha = hashlib.sha256(open(dst, "rb").read()).hexdigest()
