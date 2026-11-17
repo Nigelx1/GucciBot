@@ -356,7 +356,7 @@ void fillDef(WorldDef& w, TriggerDef& d, EffectGameObject* e) {
     d.targetMode = (int)e->m_moveTargetMode;
     d.targetP1 = e->m_targetPlayer1;
     d.targetP2 = e->m_targetPlayer2;
-#ifdef GEODE_IS_WINDOWS
+#if GB_WORLD_LAYOUTS
     d.directionMode = off::at<bool>(e, off::kEffDirectionMode);
 #else
     // GucciBot (2026-11-15): the member the Windows offset is pinned to
@@ -725,7 +725,7 @@ void WorldDef::build(GJBaseGameLayer* layer) {
                     // spawnObjectsInOrder 0x21ae8c-0x21aeb8.
                     const bool spawnable = o->m_classType == GameObjectClassType::Effect
                                                ? o->isSpawnableTrigger()
-#ifdef GEODE_IS_WINDOWS
+#if GB_WORLD_LAYOUTS
                                                : (o->m_objectID == 2065 && off::at<bool>(o, off::kAnimateOnTrigger));
 #else  // the member the offset is pinned to (offsets.hpp), as directionMode above
                                                : (o->m_objectID == 2065 &&
@@ -773,7 +773,7 @@ void WorldDef::build(GJBaseGameLayer* layer) {
         std::sort(pairs.begin(), pairs.end());
         remapTables.push_back(std::move(pairs));
     }
-#ifdef GEODE_IS_WINDOWS
+#if GB_WORLD_LAYOUTS
     rotateReplace = layer->m_effectManager && off::at<bool>(layer->m_effectManager, off::kEmRotateReplace);
 #else
     rotateReplace = false;  // the World is off here (World::init)

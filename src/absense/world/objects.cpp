@@ -2,6 +2,7 @@
 // stand, from the ops its triggers emitted, with the game's own arithmetic.
 
 #include <Geode/Geode.hpp>
+#include "core/platform.hpp" // GB_WORLD_LAYOUTS
 
 #include <algorithm>
 #include <cmath>
@@ -255,7 +256,7 @@ Pose ObjectCache::readLive(GameObject* o) {
     p.rotOffY = o->m_rotationYOffset;
     p.aligned = o->m_isRotationAligned;
     p.useOuterOb = o->m_shouldUseOuterOb;
-#ifdef GEODE_IS_WINDOWS
+#if GB_WORLD_LAYOUTS
     p.rotFinish = off::at<bool>(o, off::kRotFinish);
 #endif
     p.offX = o->m_positionXOffset;

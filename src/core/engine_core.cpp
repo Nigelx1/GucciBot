@@ -1,4 +1,6 @@
+#include "core/gd_addresses.hpp"
 #include "core/GucciBot.hpp"
+#include "core/geode_compat.hpp" // gucci::pathToString
 #include "hacks/legit.hpp"
 #include "analysis/ac/framewindow.hpp"
 #include "ui/ui.hpp"
@@ -19,7 +21,6 @@
 #include <Geode/Geode.hpp>
 #include <Geode/binding/PauseLayer.hpp>
 #include <Geode/binding/FMODAudioEngine.hpp>
-#include <Geode/utils/Task.hpp>
 #include <Geode/utils/web.hpp>
 #include <array>
 #include <chrono>
@@ -898,7 +899,7 @@ namespace gucci {
             // GucciBot 1.x's old .brrr, through the macro converter's reader
             // (readBrr). The macro list converts these, but a trainer macro
             // picked in 1.x can still name one.
-            auto const read = convert::read(bytes, geode::utils::string::pathToString(path.filename()));
+            auto const read = convert::read(bytes, gucci::pathToString(path.filename()));
             if (!read.ok() || read.macro.inputs.empty())
                 return;
 
@@ -1679,7 +1680,7 @@ namespace gucci {
             } catch (std::system_error const&) {
                 log::warn("[GucciBot] Macro list: skipped \"{}\": Windows can't spell its name in this system's code "
                           "page. Rename it with plain letters to see it.",
-                          geode::utils::string::pathToString(it.path().filename()));
+                          gucci::pathToString(it.path().filename()));
                 continue;
             }
             bool isKnown = std::find(known.begin(), known.end(), ext) != known.end();
@@ -2564,12 +2565,12 @@ namespace gucci {
     // the jupiter folder. The JMF page fills it from a played macro's path
     // (setJupiterMacroPath).
     static fs::path jupiterMacroAnchor() {
-        return Mod::get()->getSaveDir() / "jupiter" / "jupiter_my_favourite.gdr";
+        return gucci::stdPath(Mod::get()->getSaveDir()) / "jupiter" / "jupiter_my_favourite.gdr";
     }
 
     static void loadBundledJupiterMacro(GucciEngine::TrainerMacroData& out) {
         out = {};
-        auto const bundled = Mod::get()->getResourcesDir() / "jupiter_my_favourite.gdr";
+        auto const bundled = gucci::stdPath(Mod::get()->getResourcesDir()) / "jupiter_my_favourite.gdr";
         std::ifstream f(bundled, std::ios::binary | std::ios::ate);
         if (!f)
             return;
@@ -2985,17 +2986,17 @@ namespace gucci {
 
         {
             std::error_code dirEc;
-            fs::create_directories(Mod::get()->getSaveDir() / "jupiter", dirEc);
+            fs::create_directories(gucci::stdPath(Mod::get()->getSaveDir()) / "jupiter", dirEc);
             loadBundledJupiterMacro(jupiterMacro);
 
             // What the live game ended up with, in its own file: the JMF
             // trainer has come up empty before (2026-08-31, and again after
             // build -bz) with nothing else to say why.
-            std::ofstream jmLog(Mod::get()->getSaveDir() / "guccibot_jupitermacro.log",
+            std::ofstream jmLog(gucci::stdPath(Mod::get()->getSaveDir()) / "guccibot_jupitermacro.log",
                                 std::ios::trunc);
             if (jmLog) {
                 jmLog << "source="
-                      << geode::utils::string::pathToString(Mod::get()->getResourcesDir() /
+                      << gucci::pathToString(gucci::stdPath(Mod::get()->getResourcesDir()) /
                                                             "jupiter_my_favourite.gdr")
                       << "\n";
                 jmLog << "jupiterMacro.loaded=" << (jupiterMacro.loaded ? 1 : 0) << "\n";
@@ -3024,7 +3025,7 @@ namespace gucci {
             } catch (std::system_error const&) {
                 log::warn("[GucciBot] Presets: skipped \"{}\": Windows can't spell its name in this system's code "
                           "page. Rename it with plain letters to load it.",
-                          geode::utils::string::pathToString(entry.path().filename()));
+                          gucci::pathToString(entry.path().filename()));
                 continue;
             }
             std::ifstream fin(entry.path());
@@ -3090,14 +3091,23 @@ namespace gucci {
         // and 1 in hook_playerobject.cpp. A literal, not midhookSites().size():
         // a site registers itself as it's placed, so one whose $execute never
         // ran would shrink both counts and still pass.
-        bool const noEngineCode = standingDown || botswitch::takenOut() || !GB_NATIVE_ENGINE;
+        // GD 2.2091 (Geode 6) places fewer: 5 midhooks (shake, teleport) and
+        // 9 patches (core/gd_addresses.hpp).
+        bool const noEngineCode = standingDown || botswitch::takenOut() || !GB_RAW_SITES;
+#if GB_GD2091_SITES
+        int const wantMidhooks = gdaddr::v2091::kExpectedMidhooks;
+        int const wantPatches = gdaddr::v2091::kExpectedPatches;
+#else
+        int const wantMidhooks = 12;
+        int const wantPatches = 4;
+#endif
         gbcheck::g_engineSkippedWhy =
-            !GB_NATIVE_ENGINE ? "this platform doesn't use the Windows engine"
+            !GB_RAW_SITES ? "this platform doesn't use the Windows engine"
             : standingDown    ? "GucciBot stood down for another bot this launch"
             : mcponly::launch() ? "this is an MCP-only test launch (GUCCIBOT_MCP_ONLY)"
             : botswitch::takenOut() ? "the bot is switched off (Disable bot)"
                                     : nullptr;
-        gbcheck::run(noEngineCode ? 0 : 12, noEngineCode ? 0 : 4, GBR6_VERSION, BRR_FORMAT_VERSION,
+        gbcheck::run(noEngineCode ? 0 : wantMidhooks, noEngineCode ? 0 : wantPatches, GBR6_VERSION, BRR_FORMAT_VERSION,
                      MOD_VERSION);
     }
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Geode/Geode.hpp>
+#include "core/geode_compat.hpp" // gucci::stdPath
 #include <functional>
 #include <string>
 #include <vector>
@@ -97,7 +98,7 @@ namespace gucci {
             }
 
             {
-                auto dir = geode::Mod::get()->getSaveDir();
+                auto dir = gucci::stdPath(geode::Mod::get()->getSaveDir());
                 std::error_code ec;
                 bool ok = std::filesystem::exists(dir, ec) || ec.value() == 0;
                 add("Save directory", ok, dir.string());

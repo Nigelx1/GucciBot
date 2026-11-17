@@ -1,4 +1,5 @@
 #include "core/platform.hpp"
+#include "core/geode_compat.hpp" // GB_PLAYLAYER_INIT_PARAMS
 #include "core/GucciBot.hpp"
 #include "core/standdown.hpp"
 #include "render/renderer.hpp"
@@ -305,7 +306,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
             removeCheckpoint(false);
     }
 
-    bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
+    bool init(GB_PLAYLAYER_INIT_PARAMS) {
         auto* gb = GucciEngine::get();
         // GucciBot (2026-10-23): Silicate's PlayLayer::init and onQuit both
         // clear the practice fix's lists of the level's objects (removeAll);
@@ -320,7 +321,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
         gucci::SLRenderer::get()->m_quittingLayer = nullptr;  // a new level (see onQuit)
         ++gucci::SLRenderer::get()->m_levelGen;  // and a new one for drawScene's check
         if (!gb->enabled)
-            return PlayLayer::init(level, useReplay, dontCreateObjects);
+            return PlayLayer::init(GB_PLAYLAYER_INIT_ARGS);
 
         gb->practiceFix.clearStoredFrames();
         gb->practiceFix.clearPlatformer(false);
@@ -331,7 +332,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
         // A new level's attempts start from none (countGdAttempts); GD's
         // first one, if it counts it during init, is counted just below.
         g_attemptsSeen = 0;
-        if (!PlayLayer::init(level, useReplay, dontCreateObjects))
+        if (!PlayLayer::init(GB_PLAYLAYER_INIT_ARGS))
             return false;
         countGdAttempts(this, !gb->isPlaying());
 
@@ -944,7 +945,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
     void fakeFullReset() {
         auto winSize = CCDirector::sharedDirector()->getWinSize();
         m_gameState.m_totalTime = 0.0;
-        m_gameState.m_unkDouble3 = 0.0;
+        m_gameState.GB_FIELD(m_unkDouble3, m_bestTime) = 0.0;
         m_gameState.m_levelTime = 0.0;
         if (m_player1)
             m_player1->m_totalTime = 0.0;
@@ -1397,6 +1398,12 @@ class $modify(GBPortableCheckpoint, PlayLayer) {
 // isn't cleared there. On Android this only matters with a hardware keyboard;
 // iOS GD takes no keys. The log says once that it kept a hold. Untested on a
 // device.
+//
+// GD 2.2091 on Windows (the Geode 6 build) has no UILayer::handleKeypress to
+// hook: the bindings mark it inline there (RobTop's new keybind system took
+// its job, docs/PORT_2209_ASSESSMENT.md). Until the restart key's new home is
+// found, that build doesn't keep the held touch through the restart key.
+#if !(GB_GEODE6 && defined(GEODE_IS_WINDOWS))
 class $modify(GBPortableRestartHold, UILayer) {
     void handleKeypress(cocos2d::enumKeyCodes key, bool down, double timestamp) {
         auto& h = s_restartKeyHold;
@@ -1409,4 +1416,5 @@ class $modify(GBPortableRestartHold, UILayer) {
         h.ui = nullptr;
     }
 };
+#endif // handleKeypress hookable
 #endif

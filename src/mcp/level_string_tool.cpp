@@ -15,6 +15,7 @@
 
 #include "mcp_server.hpp"
 
+#include "core/geode_compat.hpp" // compressLevelString, playLayerScene
 #include "core/mcp_only.hpp"
 #include "hacks/safemode.hpp"
 
@@ -136,7 +137,7 @@ namespace gucci::mcp {
                     throw ToolError("level_string is empty");
                 std::string packed = raw;
                 if (raw.rfind("H4sI", 0) != 0) {
-                    packed = std::string(cocos2d::ZipUtils::compressString(gd::string(raw), false, 0));
+                    packed = gucci::compressLevelString<cocos2d::ZipUtils>(raw);
                     if (packed.empty())
                         throw ToolError("could not compress level_string");
                 }
@@ -170,7 +171,7 @@ namespace gucci::mcp {
                     level->m_levelID = (int)id;
                 g_level = level;
 
-                auto* scene = PlayLayer::scene(level, false, false);
+                auto* scene = gucci::playLayerScene<PlayLayer>(level);
                 CCDirector::sharedDirector()->replaceScene(CCTransitionFade::create(0.5f, scene));
                 auto out = matjson::Value::object();
                 out["opening"] = name;

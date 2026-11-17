@@ -1,4 +1,5 @@
 #include <Geode/Geode.hpp>
+#include "core/geode_compat.hpp" // GB_PLAYLAYER_INIT_PARAMS
 #include <Geode/modify/PlayLayer.hpp>
 #include "core/GucciBot.hpp"
 
@@ -160,8 +161,8 @@ private:
 };
 
 class $modify(PracticeRangePlayLayer, PlayLayer) {
-    bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
-        if (!PlayLayer::init(level, useReplay, dontCreateObjects))
+    bool init(GB_PLAYLAYER_INIT_PARAMS) {
+        if (!PlayLayer::init(GB_PLAYLAYER_INIT_ARGS))
             return false;
         PracticeRangeOverlay::get()->attach(this);
         return true;

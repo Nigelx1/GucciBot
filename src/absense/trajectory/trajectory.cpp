@@ -96,7 +96,7 @@ bool Trajectory::iterate(GJBaseGameLayer* pl, PlayerObject* player, int mode,
     const bool clockPerCopy = world::current() == nullptr;
     if (clockPerCopy) {
         pl->m_gameState.m_totalTime += physicsDt;
-        pl->m_gameState.m_unkDouble3 += physicsDt / timeWarp;
+        pl->m_gameState.GB_FIELD(m_unkDouble3, m_bestTime) += physicsDt / timeWarp;
         pl->m_gameState.m_currentProgress++;
         // pl->m_gameState.m_unkUint2++;
         pl->m_gameState.m_unkUint5 += (int)roundf(timeWarp * 1000.0f);
@@ -853,11 +853,11 @@ void Trajectory::noteRingUsed(PlayerObject* p, GameObject* ring) {
 // on an orb it has already fired does not count on firing it again.
 void Trajectory::seedRingContacts(PlayerObject* copy) {
     if (!isFakePlayer(copy) || !copy->m_touchingRings) return;
-    if (copy->m_ringRelatedSet.empty()) return;
+    if (copy->GB_FIELD(m_ringRelatedSet, m_usedRings).empty()) return;
     const unsigned n = copy->m_touchingRings->count();
     for (unsigned i = 0; i < n; i++) {
         auto* ring = static_cast<GameObject*>(copy->m_touchingRings->objectAtIndex(i));
-        if (!ring || !copy->m_ringRelatedSet.count(ring->m_uniqueID)) continue;
+        if (!ring || !copy->GB_FIELD(m_ringRelatedSet, m_usedRings).count(ring->m_uniqueID)) continue;
         noteRingContact(copy, ring);
         noteRingUsed(copy, ring);
     }
@@ -1400,7 +1400,7 @@ std::shared_ptr<Trajectory::SimStart> Trajectory::captureStart(GJBaseGameLayer* 
         s->count = 2;
     }
     s->totalTime = pl->m_gameState.m_totalTime;
-    s->unkDouble3 = pl->m_gameState.m_unkDouble3;
+    s->unkDouble3 = pl->m_gameState.GB_FIELD(m_unkDouble3, m_bestTime);
     s->currentProgress = pl->m_gameState.m_currentProgress;
     s->dualMode = pl->m_gameState.m_isDualMode;
     s->moveTick = (int)Bot::get()->updater().getFrame();
@@ -2320,7 +2320,7 @@ struct Trajectory::Sim {
         if (from) {
             // The clock and the speed of that tick (put back by end()).
             pl->m_gameState.m_totalTime = from->totalTime;
-            pl->m_gameState.m_unkDouble3 = from->unkDouble3;
+            pl->m_gameState.GB_FIELD(m_unkDouble3, m_bestTime) = from->unkDouble3;
             pl->m_gameState.m_currentProgress = from->currentProgress;
             pl->m_gameState.m_unkUint5 = from->unkUint5;
             from->portal.put(pl);
@@ -2654,7 +2654,7 @@ struct Trajectory::Sim {
         // is still there for the new player to fire.
         if (partner->m_touchingRings) partner->m_touchingRings->removeAllObjects();
         partner->m_touchedRings.clear();
-        partner->m_ringRelatedSet.clear();
+        partner->GB_FIELD(m_ringRelatedSet, m_usedRings).clear();
         {
             const int pi = partner == t->m_fakePlayer2 ? 1 : 0;
             t->m_ringTouch[pi].clear();
@@ -2981,7 +2981,7 @@ struct Trajectory::Sim {
             // (the buttons are in s.player, and apply() puts them back)
         }
         out.totalTime = pl->m_gameState.m_totalTime;
-        out.unkDouble3 = pl->m_gameState.m_unkDouble3;
+        out.unkDouble3 = pl->m_gameState.GB_FIELD(m_unkDouble3, m_bestTime);
         out.currentProgress = pl->m_gameState.m_currentProgress;
         out.unkUint5 = pl->m_gameState.m_unkUint5;
         out.portal.grab(pl);
@@ -3060,7 +3060,7 @@ struct Trajectory::Sim {
             if (worldStep) p->m_lastPosition = s.lastPosition;
         }
         pl->m_gameState.m_totalTime = in.totalTime;
-        pl->m_gameState.m_unkDouble3 = in.unkDouble3;
+        pl->m_gameState.GB_FIELD(m_unkDouble3, m_bestTime) = in.unkDouble3;
         pl->m_gameState.m_currentProgress = in.currentProgress;
         pl->m_gameState.m_unkUint5 = in.unkUint5;
         in.portal.put(pl);
@@ -5696,7 +5696,7 @@ std::shared_ptr<Trajectory::SimStart> Trajectory::advanceStart(GJBaseGameLayer* 
             for (int i = 0; i < s.count; i++) grab(s.players[i], out->p[i]);
             // The clock as the run left it (end() puts the game's back).
             out->totalTime = pl->m_gameState.m_totalTime;
-            out->unkDouble3 = pl->m_gameState.m_unkDouble3;
+            out->unkDouble3 = pl->m_gameState.GB_FIELD(m_unkDouble3, m_bestTime);
             out->currentProgress = pl->m_gameState.m_currentProgress;
             out->unkUint5 = pl->m_gameState.m_unkUint5;
             out->portal.grab(pl);
@@ -7109,7 +7109,7 @@ bool Trajectory::probeCollisions(GJBaseGameLayer* pl, const ProbeSetup& setup,
     copy->m_touchedGravityPortal = false;
     copy->m_touchedPad = false;
     copy->m_padRingRelated = false;
-    copy->m_ringRelatedSet.clear();
+    copy->GB_FIELD(m_ringRelatedSet, m_usedRings).clear();
     copy->m_stateNoAutoJump = 0;
     copy->m_stateDartSlide = 0;
     copy->m_stateHitHead = 0;

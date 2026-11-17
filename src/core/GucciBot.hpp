@@ -4,6 +4,7 @@
     "2026-11-17-b (Pathfinder: pf_fork_dual on by default, a mode portal stacked on a dual portal is a route fork)"
 
 #include <Geode/Geode.hpp>
+#include "core/geode_compat.hpp" // gucci::stdPath
 #include <cmath>
 #include "core/platform.hpp"
 #include "core/portable_tps.hpp"
@@ -1309,10 +1310,10 @@ namespace gucci {
         void reloadMacroList();
 
         std::filesystem::path getReplayDir() const {
-            return Mod::get()->getSaveDir() / "replays";
+            return gucci::stdPath(Mod::get()->getSaveDir()) / "replays";
         }
         std::filesystem::path getPresetsDir() const {
-            return Mod::get()->getSaveDir() / "presets";
+            return gucci::stdPath(Mod::get()->getSaveDir()) / "presets";
         }
 
     private:

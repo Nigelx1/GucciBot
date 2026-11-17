@@ -1,4 +1,5 @@
 #include "core/setup_check.hpp"
+#include "core/geode_compat.hpp" // gucci::pathToString
 
 #include "core/GucciBot.hpp"
 #include "core/bot_switch.hpp"
@@ -126,7 +127,7 @@ namespace gucci::setupcheck {
             if (auto const isEnabled = megaHackIsEnabled())
                 return {isEnabled(kMegaHackPracticeFix), isEnabled(kMegaHackExtrapolation), true};
 #endif
-            auto const path = mod->getSaveDir() / "v9" / "hackpro.json";
+            auto const path = gucci::stdPath(mod->getSaveDir()) / "v9" / "hackpro.json";
             std::error_code ec;
             auto const stamp = std::filesystem::last_write_time(path, ec);
             if (ec)
@@ -210,7 +211,7 @@ namespace gucci::setupcheck {
         }
 
         bool namedLikeGucciBot(std::filesystem::path const& path) {
-            auto name = utils::string::pathToString(path.filename());
+            auto name = gucci::pathToString(path.filename());
             std::transform(name.begin(), name.end(), name.begin(),
                            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
             return name.rfind(std::string(Mod::get()->getID()), 0) == 0;
@@ -225,7 +226,7 @@ namespace gucci::setupcheck {
             s_done = true;
 
             auto* self = Mod::get();
-            auto const running = self->getPackagePath();
+            auto const running = gucci::stdPath(self->getPackagePath());
             std::vector<std::filesystem::path> seen;
             auto const look = [&](std::filesystem::path const& path) {
                 std::error_code ec;
@@ -235,23 +236,23 @@ namespace gucci::setupcheck {
                 if (std::any_of(seen.begin(), seen.end(), [&](auto const& p) { return samePath(p, path); }))
                     return;
                 seen.push_back(path);
-                auto const meta = ModMetadata::createFromGeodeFile(path);
+                auto const meta = ModMetadata::createFromGeodeFile(gucci::geodePath(path));
                 if (!meta.hasErrors() && meta.getID() == self->getID())
                     s_found.push_back({path, meta.getVersion()});
                 else if (meta.hasErrors() && namedLikeGucciBot(path))
                     s_found.push_back({path, std::nullopt});
             };
             for (auto const& problem : Loader::get()->getLoadProblems()) {
-                if (auto const* path = std::get_if<std::filesystem::path>(&problem.cause))
-                    look(*path);
+                if (auto const* path = std::get_if<gucci::GeodePath>(&problem.cause))
+                    look(gucci::stdPath(*path));
                 else if (auto const* meta = std::get_if<ModMetadata>(&problem.cause); meta && meta->hasErrors())
-                    look(meta->getPath());
+                    look(gucci::stdPath(meta->getPath()));
                 else if (auto const* mod = std::get_if<Mod*>(&problem.cause);
                          mod && *mod && (*mod)->getMetadata().hasErrors())
-                    look((*mod)->getPackagePath());
+                    look(gucci::stdPath((*mod)->getPackagePath()));
             }
             std::error_code ec;
-            for (std::filesystem::directory_iterator it(dirs::getModsDir(), ec), end; !ec && it != end;
+            for (std::filesystem::directory_iterator it(gucci::stdPath(dirs::getModsDir()), ec), end; !ec && it != end;
                  it.increment(ec))
                 if (namedLikeGucciBot(it->path()))
                     look(it->path());
@@ -262,10 +263,10 @@ namespace gucci::setupcheck {
         // where it can tell (the iOS reporter's extra file was the newer one).
         std::string extraCopiesFix(std::vector<ExtraCopy> const& extras) {
             auto const quoted = [](std::filesystem::path const& path) {
-                return "\"" + utils::string::pathToString(path.filename()) + "\"";
+                return "\"" + gucci::pathToString(path.filename()) + "\"";
             };
             auto* self = Mod::get();
-            std::string const ours = quoted(self->getPackagePath());
+            std::string const ours = quoted(gucci::stdPath(self->getPackagePath()));
             std::string const ourVersion = self->getVersion().toVString();
             if (extras.size() == 1) {
                 auto const& extra = extras.front();
@@ -463,10 +464,10 @@ namespace gucci::setupcheck {
                   mh.frameExtrapolation ? "on" : "off", qolModFrameExtrapolation() ? "on" : "off");
         std::string copies;
         for (auto const& extra : extraCopies())
-            copies += fmt::format("{}{} ({})", copies.empty() ? "" : ", ", utils::string::pathToString(extra.path),
+            copies += fmt::format("{}{} ({})", copies.empty() ? "" : ", ", gucci::pathToString(extra.path),
                                   extra.version ? extra.version->toVString() : std::string("can't be opened"));
         log::info("[SETUP-CHECK] GucciBot runs from {}; other GucciBot files in the mods folder: {}",
-                  utils::string::pathToString(Mod::get()->getPackagePath()), copies.empty() ? "none" : copies);
+                  gucci::pathToString(gucci::stdPath(Mod::get()->getPackagePath())), copies.empty() ? "none" : copies);
 
         g_dirty = true;
         auto const& problems = current();

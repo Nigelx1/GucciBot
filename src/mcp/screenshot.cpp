@@ -1,6 +1,7 @@
 // gucci_screenshot's capture and PNG writer (mcp/screenshot.hpp).
 
 #include "mcp/screenshot.hpp"
+#include "core/geode_compat.hpp" // gucci::pathToString
 
 #include <Geode/Geode.hpp>
 
@@ -192,11 +193,11 @@ namespace gucci::mcp::shot {
                 try {
                     if (!job.text.empty()) {
                         if (auto written = geode::utils::file::writeString(job.path, job.text); !written)
-                            why = "couldn't write the manifest: " + written.unwrapErr();
+                            why = "couldn't write the manifest: " + std::string(written.unwrapErr());
                     } else {
                         auto const png = encodePng(job.pixels, job.width, job.height, job.scale);
                         if (auto written = geode::utils::file::writeBinarySafe(job.path, png); !written)
-                            why = "couldn't write the file: " + written.unwrapErr();
+                            why = "couldn't write the file: " + std::string(written.unwrapErr());
                     }
                 } catch (std::exception const& e) {
                     why = std::string("couldn't make the PNG: ") + e.what();
@@ -385,7 +386,7 @@ namespace gucci::mcp::shot {
             if (b.manifest) {
                 auto e = matjson::Value::object();
                 e["i"] = (int64_t)index;
-                e["path"] = geode::utils::string::pathToString(path);
+                e["path"] = gucci::pathToString(path);
                 e["frame"] = (int64_t)GucciEngine::get()->updater.getFrame();
                 if (ImGui::GetCurrentContext())
                     e["imgui_frame"] = (int64_t)ImGui::GetFrameCount();
@@ -482,7 +483,7 @@ namespace gucci::mcp::shot {
     void request(std::filesystem::path path, int frames, Crop crop) {
         Burst b;
         b.dir = path.parent_path();
-        b.name = geode::utils::string::pathToString(path.stem());
+        b.name = gucci::pathToString(path.stem());
         b.frames = frames;
         b.crop = crop;
         request(std::move(b));

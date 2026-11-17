@@ -1,4 +1,5 @@
 #include "core/GucciBot.hpp"
+#include "core/geode_compat.hpp" // GB_FIELD
 #include "core/checkpoint_player.hpp"
 
 namespace gucci {
@@ -103,7 +104,7 @@ namespace gucci {
         p->m_accelerationOrSpeed = m_accelerationOrSpeed;
         p->m_snapDistance = m_snapDistance;
         p->m_ringJumpRelated = m_ringJumpRelated;
-        p->m_ringRelatedSet = m_ringRelatedSet;
+        p->GB_FIELD(m_ringRelatedSet, m_usedRings) = m_ringRelatedSet;
         p->m_objectSnappedTo = m_objectSnappedTo;
         p->m_pendingCheckpoint = m_pendingCheckpoint;
         p->m_onFlyCheckpointTries = m_onFlyCheckpointTries;
@@ -249,7 +250,7 @@ namespace gucci {
         p->m_stateForce = m_stateForce;
         p->m_stateForceVector = m_stateForceVector;
         p->m_affectedByForces = m_affectedByForces;
-        p->m_jumpPadRelated = m_jumpPadRelated;
+        p->GB_FIELD(m_jumpPadRelated, m_touchedForceIds) = m_jumpPadRelated;
         p->m_somethingPlayerSpeedTime = m_somethingPlayerSpeedTime;
         p->m_playerSpeedAC = m_playerSpeedAC;
         p->m_fixRobotJump = m_fixRobotJump;
@@ -364,7 +365,7 @@ namespace gucci {
         c.m_accelerationOrSpeed = p->m_accelerationOrSpeed;
         c.m_snapDistance = p->m_snapDistance;
         c.m_ringJumpRelated = p->m_ringJumpRelated;
-        c.m_ringRelatedSet = p->m_ringRelatedSet;
+        c.m_ringRelatedSet = p->GB_FIELD(m_ringRelatedSet, m_usedRings);
         c.m_objectSnappedTo = p->m_objectSnappedTo;
         c.m_pendingCheckpoint = p->m_pendingCheckpoint;
         c.m_onFlyCheckpointTries = p->m_onFlyCheckpointTries;
@@ -509,7 +510,7 @@ namespace gucci {
         c.m_stateForce = p->m_stateForce;
         c.m_stateForceVector = p->m_stateForceVector;
         c.m_affectedByForces = p->m_affectedByForces;
-        c.m_jumpPadRelated = p->m_jumpPadRelated;
+        c.m_jumpPadRelated = p->GB_FIELD(m_jumpPadRelated, m_touchedForceIds);
         c.m_somethingPlayerSpeedTime = p->m_somethingPlayerSpeedTime;
         c.m_playerSpeedAC = p->m_playerSpeedAC;
         c.m_fixRobotJump = p->m_fixRobotJump;

@@ -3,6 +3,7 @@
 // changes are listed at the top of intro.hpp.
 
 #include "intro.hpp"
+#include "core/geode_compat.hpp" // gucci::stdPath
 
 #include <Geode/Geode.hpp>
 #include <Geode/binding/GJGameLevel.hpp>
@@ -128,9 +129,9 @@ namespace gucci {
                 return fs::exists(fs::path(name), ec) ? name : std::string();
 
             auto* mod = geode::Mod::get();
-            if (fs::exists(mod->getResourcesDir() / name, ec))
+            if (fs::exists(gucci::stdPath(mod->getResourcesDir()) / name, ec))
                 return mod->getID() + "/" + name;
-            auto const saved = mod->getSaveDir() / name;
+            auto const saved = gucci::stdPath(mod->getSaveDir()) / name;
             if (fs::exists(saved, ec))
                 return saved.string();
             return {};

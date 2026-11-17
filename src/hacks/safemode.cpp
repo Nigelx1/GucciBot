@@ -22,7 +22,7 @@
 #include <Geode/modify/PlayLayer.hpp>
 #include <Geode/modify/PlayerObject.hpp>
 #include <Geode/modify/TextArea.hpp>
-#include <Geode/utils/hash.hpp>
+#include "core/geode_compat.hpp" // sha256
 
 #include <array>
 #include <cmath>
@@ -369,9 +369,9 @@ class $modify(GB7SafeModePlayLayer, PlayLayer) {
         CCDrawNode* green = nullptr;
     };
 
-    bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
+    bool init(GB_PLAYLAYER_INIT_PARAMS) {
         safemode::g_tainted = false;
-        if (!PlayLayer::init(level, useReplay, dontCreateObjects))
+        if (!PlayLayer::init(GB_PLAYLAYER_INIT_ARGS))
             return false;
         // The dots: top left, on the PlayLayer itself rather than its UI layer
         // (which some mods hide), so recordings show them (renders don't:

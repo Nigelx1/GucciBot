@@ -1,0 +1,129 @@
+name: GD 2.2091 build (Geode 6, Windows preview)
+
+# The second package: GucciBot for GD 2.2091 on Geode 6, built from the same
+# commit as the GD 2.2081 package (multi-platform.yml), which it never touches.
+# A .geode loads on only one Geode major, so each GD version gets its own file
+# (docs/PORT_2209_ASSESSMENT.md). Windows only for now: Mac and Android on
+# 2.2091 come in 2.0.1, iOS waits for Geode's bindings (CMakeLists.txt stops
+# any other platform on Geode 6).
+#
+# Kept apart from multi-platform.yml on purpose:
+# - its own workflow, because the build action's artifacts have fixed names
+#   (geode-build-win) and its combine step merges every artifact of a run;
+# - no combine step: one platform, so the build's .geode is the package;
+# - its own artifact and file name, "GD 2.2091" in both, so it can't be taken
+#   for the 2.2081 package;
+# - every build input pinned, including the two that float in the 2.2081
+#   workflow (build-geode-mod@main there, safetyhook#main in CMakeLists for
+#   Geode 5). Pinning those for 2.2081 too would change its build, so that
+#   waits for the merge (docs/CI_2209.md).
+#
+# The bindings come from CMakeLists.txt (commit 7a670e9, the one Geode
+# 6.0.0-alpha.2 came out with, plus patches/bindings-g6-copyable-renames.patch).
+# No bindings-ref here on purpose: with one, the action checks out unpatched
+# bindings and sets GEODE_BINDINGS_REPO_PATH, which skips the patch.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master, port-2209]
+
+jobs:
+  windows:
+    name: Windows (GD 2.2091, Geode 6)
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The renderer's seven FFmpeg DLLs, the same release asset and SHA-256
+      # check as multi-platform.yml. Two are over GitHub's 100 MB file limit
+      # (.gitignore), so they live in github.com/Nigelx1/guccibot-build-files.
+      # The macOS dylibs aren't fetched: this package is Windows only.
+      - name: Fetch the renderer's FFmpeg DLLs
+        shell: bash
+        run: |
+          curl -fsSL --retry 3 -o ffmpeg-libs.zip             https://github.com/Nigelx1/guccibot-build-files/releases/download/ffmpeg-n8.0.1/ffmpeg-libs.zip
+          PY=$(command -v python || command -v python3)
+          "$PY" - <<'PYEOF'
+          import hashlib, sys, zipfile
+          want = "94c570044c0956ce988b0b4e19b5aa046643bb7d254e429e31907f706b7d76b2"
+          got = hashlib.sha256(open("ffmpeg-libs.zip", "rb").read()).hexdigest()
+          if got != want:
+              sys.exit(f"ffmpeg-libs.zip is {got}, not {want} - refusing to build")
+          zipfile.ZipFile("ffmpeg-libs.zip").extractall("resources/ffmpeg_libs")
+          PYEOF
+          rm ffmpeg-libs.zip
+          ls -l resources/ffmpeg_libs
+
+      - name: Show the compiler
+        shell: bash
+        run: clang++ --version
+
+      # Pinned: build-geode-mod at 61a56c6 (2026-11-03, main on 2026-11-16),
+      # Geode SDK 6.0.0-alpha.2 (the tag), Geode CLI v4.0.1 (Geode 6 needs
+      # CLI 4). The action still pulls geode-sdk/cli's setup action at @main
+      # inside itself; that one can't be pinned from here.
+      - uses: geode-sdk/build-geode-mod@61a56c697aea9655e3f31c6c1b83870431f30434
+        id: build
+        with:
+          sdk: 6.0.0-alpha.2
+          cli: v4.0.1
+          target: Win64
+
+      # The package has to be complete and say what it's for before anyone
+      # gets it: the binary, the seven DLLs, mod.json for Geode 6.0.0-alpha.2
+      # and GD 2.2091 on Windows only, and an about.md that doesn't claim
+      # 2.2081. Then it's renamed so it can't be confused with the 2.2081 file.
+      - name: Check and name the package
+        id: pkg
+        shell: bash
+        env:
+          OUT: ${{ steps.build.outputs.build-output }}
+        run: |
+          PY=$(command -v python || command -v python3)
+          "$PY" - <<'PYEOF'
+          import glob, hashlib, json, os, shutil, sys, zipfile
+          out = os.environ["OUT"]
+          files = glob.glob(os.path.join(out, "*.geode"))
+          if len(files) != 1:
+              sys.exit(f"expected one .geode in {out}, found {files}")
+          z = zipfile.ZipFile(files[0])
+          names = set(z.namelist())
+          need = ["nigelx1.guccibot.dll", "mod.json", "about.md"] + [
+              "resources/nigelx1.guccibot/" + n for n in
+              ["avcodec-62.dll", "avdevice-62.dll", "avfilter-11.dll", "avformat-62.dll",
+               "avutil-60.dll", "swresample-6.dll", "swscale-9.dll"]]
+          missing = [n for n in need if n not in names]
+          if missing:
+              sys.exit("incomplete package, missing: " + ", ".join(missing))
+          other = [n for n in names if n.endswith((".dylib", ".so")) and "/" not in n]
+          if other:
+              sys.exit("a Windows-only package holds other platforms' binaries: " + ", ".join(other))
+          mod = json.loads(z.read("mod.json"))
+          if mod.get("geode") != "6.0.0-alpha.2":
+              sys.exit(f"mod.json says geode {mod.get('geode')!r}, not 6.0.0-alpha.2")
+          if mod.get("gd") != {"win": "2.2091"}:
+              sys.exit(f"mod.json says gd {mod.get('gd')!r}, not {{'win': '2.2091'}}")
+          about = z.read("about.md").decode("utf-8")
+          if "2.2081" in about:
+              sys.exit("about.md still says 2.2081")
+          if "2.2091" not in about:
+              sys.exit("about.md doesn't say 2.2091")
+          z.close()
+          name = f"GucciBot-{mod['version'].lstrip('v')}-GD2.2091.geode"
+          dst = os.path.join(out, name)
+          shutil.move(files[0], dst)
+          sha = hashlib.sha256(open(dst, "rb").read()).hexdigest()
+          print(f"{name}: {os.path.getsize(dst):,} bytes, {len(names)} files, sha256 {sha}")
+          print(f"mod.json: version {mod['version']}, geode {mod['geode']}, gd {mod['gd']}")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as s:
+              s.write(f"**{name}** (Geode {mod['geode']}, GD win {mod['gd']['win']}): "
+                      f"{len(names)} files, SHA-256 `{sha}`\n")
+          PYEOF
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GucciBot GD 2.2091 (Geode 6, Windows)
+          path: ${{ steps.build.outputs.build-output }}/*.geode
+          if-no-files-found: error

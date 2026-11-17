@@ -23,13 +23,48 @@
 
 #include <utility>
 
+#include "geode_compat.hpp"
+
 // GB_FORCE_PORTABLE (a TEST-ONLY CMake option, default off; never set by CI,
 // build_win.bat or a release) builds Windows with the off-Windows engine, so a
 // hidden Windows test game can run the code macOS and Android run.
-#if defined(GEODE_IS_WINDOWS) && !defined(GB_FORCE_PORTABLE)
+//
+// The Windows engine's midhooks, patches and raw addresses are GD 2.2081's.
+// The GD 2.2091 build (Geode 6) runs the off-Windows engine on Windows until
+// they are found again in 2.2091 (docs/PORT_2209_ASSESSMENT.md, section 2).
+#if defined(GEODE_IS_WINDOWS) && !defined(GB_FORCE_PORTABLE) && !GB_GEODE6
 #define GB_NATIVE_ENGINE 1
 #else
 #define GB_NATIVE_ENGINE 0
+#endif
+
+// GB_GD2091_SITES: the GD 2.2091 build (Geode 6, Windows) places the raw
+// sites it has 2.2091 addresses for (core/gd_addresses.hpp: the byte patches,
+// the shake and teleport midhooks), each checked byte for byte before it goes
+// in. The tick loop stays the off-Windows one there (GB_NATIVE_ENGINE 0).
+#if defined(GEODE_IS_WINDOWS) && !defined(GB_FORCE_PORTABLE) && GB_GEODE6
+#define GB_GD2091_SITES 1
+#else
+#define GB_GD2091_SITES 0
+#endif
+
+// GB_RAW_SITES: this build places midhooks or byte patches at all (the
+// machinery in hooks/util_midhook.hpp, the master switch's half of it).
+#if GB_NATIVE_ENGINE || GB_GD2091_SITES
+#define GB_RAW_SITES 1
+#else
+#define GB_RAW_SITES 0
+#endif
+
+// GB_WORLD_LAYOUTS: GD 2.2081's Windows memory layout and code addresses,
+// which the World (absense/world: the trigger model) and the pathfinder's
+// physics copies read raw. Windows on GD 2.2081 only: on GD 2.2091 they are
+// still to be found again (docs/PORT_2209_ASSESSMENT.md, section 2B), so the
+// World stays off there as it does on macOS and Android.
+#if defined(GEODE_IS_WINDOWS) && !GB_GEODE6
+#define GB_WORLD_LAYOUTS 1
+#else
+#define GB_WORLD_LAYOUTS 0
 #endif
 
 #if defined(GEODE_IS_DESKTOP)

@@ -6,6 +6,7 @@
 // controls. Written fresh for 2.0; the Trainer's since 2026-10-19.
 
 #include "ui/kit.hpp"
+#include "core/geode_compat.hpp" // gucci::pathToString
 #include "ui/look.hpp"
 #include "ui/pages.hpp"
 
@@ -286,7 +287,7 @@ namespace gucci::ui::pages {
             PickedVideo got;
             got.ready = true;
             if (result.isOk())
-                got.path = std::move(result).unwrap();
+                got.path = gucci::stdPath(std::move(result).unwrap());
             else
                 got.error = std::move(result).unwrapErr();
             geode::queueInMainThread([got = std::move(got)]() mutable {
@@ -316,7 +317,7 @@ namespace gucci::ui::pages {
             if (!got.path)
                 return;
             auto* gb = GucciEngine::get();
-            gb->trainerVideoPath = geode::utils::string::pathToString(*got.path);
+            gb->trainerVideoPath = gucci::pathToString(*got.path);
             gb->jupiterVideoAlignToolActive = false;
             vm::saveSettings();
             say(vm::Source::Trainer, "Video chosen. Video Mode plays it on the Trainer's click bar.", Tone::Good);

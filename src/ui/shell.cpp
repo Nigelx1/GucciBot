@@ -60,7 +60,7 @@
 #include <sstream>
 #include <system_error>
 #include <Geode/utils/async.hpp>
-#include <Geode/utils/hash.hpp>
+#include "core/geode_compat.hpp" // sha256
 #include <thread>
 #include <cctype>
 
@@ -487,7 +487,7 @@ namespace gucci::ui {
         }
 
         std::filesystem::path replaysDir() {
-            return Mod::get()->getSaveDir() / "replays";
+            return gucci::stdPath(Mod::get()->getSaveDir()) / "replays";
         }
 
         // The extension a converted or copied-in macro gets, and the one
@@ -751,7 +751,7 @@ namespace gucci::ui {
             if (!f) {
                 int const why = errno;
                 if (error)
-                    *error = fmt::format("Couldn't open {}{}", geode::utils::string::pathToString(p.filename()),
+                    *error = fmt::format("Couldn't open {}{}", gucci::pathToString(p.filename()),
                                          why ? ": " + std::generic_category().message(why) : std::string("."));
                 return {};
             }
@@ -768,7 +768,7 @@ namespace gucci::ui {
                        "with a Convert button.";
             return fmt::format("Copy it into GucciBot's replays folder instead ({}) and it will show below with a "
                                "Convert button.",
-                               geode::utils::string::pathToString(replaysDir()));
+                               gucci::pathToString(replaysDir()));
         }
 
         bool writeAll(std::filesystem::path const& p, std::vector<uint8_t> const& bytes) {
@@ -778,7 +778,7 @@ namespace gucci::ui {
         }
 
         std::string fileNameOf(std::filesystem::path const& p) {
-            return geode::utils::string::pathToString(p.filename());
+            return gucci::pathToString(p.filename());
         }
 
         // GucciBot (2026-10-23): part of a picked file's name (its stem or
@@ -1092,7 +1092,7 @@ namespace gucci::ui {
                 // and drawn over its windows (the ui2 review, 11-16).
                 std::string const prefix = name + ext + ".";
                 for (auto const& e : std::filesystem::directory_iterator(sidecars, ec)) {
-                    std::string const n = geode::utils::string::pathToString(e.path().filename());
+                    std::string const n = gucci::pathToString(e.path().filename());
                     if (n.size() > prefix.size() && n.compare(0, prefix.size(), prefix) == 0)
                         return true;
                 }
@@ -1268,7 +1268,7 @@ namespace gucci::ui {
                 hashes.set(nudge, made);
             else
                 hashes.erase(nudge);
-            entry.set("file", geode::utils::string::pathToString(original));
+            entry.set("file", gucci::pathToString(original));
             entry.set("date", date);
             if (!copy.empty())
                 entry.set("copy", fileNameOf(copy));
@@ -1374,7 +1374,7 @@ namespace gucci::ui {
 
         arc::Future<int> pickMacroTask(std::optional<std::filesystem::path> folder) {
             geode::utils::file::FilePickOptions options;
-            options.defaultPath = std::move(folder);
+            options.defaultPath = gucci::geodePath(folder);
             geode::utils::file::FilePickOptions::Filter macros{
                 "Macros",
                 {"*.gdr", "*.gdr2", "*.json", "*.slc", "*.scbf1", "*.tcm", "*.ttr3", "*.ybot", "*.xd", "*.mhr", "*.echo",
@@ -1398,7 +1398,7 @@ namespace gucci::ui {
             PickedMacro got;
             got.ready = true;
             if (result.isOk())
-                got.path = std::move(result).unwrap();
+                got.path = gucci::stdPath(std::move(result).unwrap());
             else
                 got.error = std::move(result).unwrapErr();
             geode::queueInMainThread([got = std::move(got)]() mutable {
@@ -2393,6 +2393,17 @@ namespace gucci::ui {
         std::string g_legText;    // the last "find a way to the next gate" (step R3)
 
         void pagePathfinder() {
+#if GB_GEODE6
+            // GucciBot (2026-11-17): Nigel's call for 2.0 (11-16): the GD 2.2091
+            // file ships every feature but the Pathfinder and custom TPS; both
+            // come in 2.0.1. The page says so and offers nothing to start.
+            kit::BeginCard("Pathfinder", "Finds a way through the level on its own.");
+            kit::Note("The Pathfinder isn't available on GD 2.2091 yet. It's coming in GucciBot 2.0.1. "
+                      "On GD 2.2081 it works as before.",
+                      Tone::Warn);
+            kit::EndCard();
+            return;
+#endif
 #if !GB_NATIVE_ENGINE
             // GucciBot (2026-11-15): the Pathfinder runs here too, without the
             // trigger model (absense/world reads GD's Windows memory layout).
@@ -2597,7 +2608,7 @@ namespace gucci::ui {
         // name of the next render stays out: it is per render, not a setup.
 
         std::filesystem::path renderPresetsDir() {
-            return Mod::get()->getConfigDir() / "render_presets";
+            return gucci::stdPath(Mod::get()->getConfigDir()) / "render_presets";
         }
 
         std::vector<std::string> renderPresets() {
@@ -2770,7 +2781,7 @@ namespace gucci::ui {
                           "restarting the game puts them back.",
                           Tone::Bad);
                 if (kit::Button("Open the FFmpeg folder"))
-                    geode::utils::file::openFolder(Mod::get()->getPersistentDir() / "libraries");
+                    geode::utils::file::openFolder(gucci::stdPath(Mod::get()->getPersistentDir()) / "libraries");
             }
 #endif
 #if defined(GEODE_IS_MACOS)
@@ -2788,7 +2799,7 @@ namespace gucci::ui {
                               .c_str(),
                           Tone::Bad);
                 if (kit::Button("Open the FFmpeg folder"))
-                    geode::utils::file::openFolder(Mod::get()->getPersistentDir() / "libraries");
+                    geode::utils::file::openFolder(gucci::stdPath(Mod::get()->getPersistentDir()) / "libraries");
             }
 #endif
             kit::EndCard();
@@ -4299,7 +4310,7 @@ namespace gucci::ui {
                     std::filesystem::path const file(std::u8string(r.path.begin(), r.path.end()));
                     std::string const body =
                         fmt::format("Saved <cy>{}</c>\n{}x{} at {} fps, {:.1f} s, {:.1f} MB",
-                                    geode::utils::string::pathToString(file.filename()), r.width, r.height,
+                                    gucci::pathToString(file.filename()), r.width, r.height,
                                     r.fps, r.duration, (double)r.fileSize / 1048576.0);
                     Loader::get()->queueInMainThread([body, dir = file.parent_path()] {
                         createQuickPopup("Render finished", body, "OK", "Open folder", [dir](auto, bool open) {

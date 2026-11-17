@@ -1,0 +1,62 @@
+diff --git a/bindings/2.2091/inline/GJBaseGameLayer.cpp b/bindings/2.2091/inline/GJBaseGameLayer.cpp
+index 7b5a4e8f..e4326588 100644
+--- a/bindings/2.2091/inline/GJBaseGameLayer.cpp
++++ b/bindings/2.2091/inline/GJBaseGameLayer.cpp
+@@ -804,14 +804,14 @@ void GJBaseGameLayer::lightningFlash(cocos2d::CCPoint to, cocos2d::ccColor3B col
+ }
+ 
+ void GJBaseGameLayer::modifyObjectPhysics(AdvancedFollowEditObject* object, GameObjectPhysics& physics) {
+-    physics.m_unkPoint1.x = GameToolbox::fast_rand_0_1() * object->m_modXVariance + object->m_modX;
+-    physics.m_unkPoint1.y = GameToolbox::fast_rand_0_1() * object->m_modYVariance + object->m_modY;
++    physics.m_velocity.x = GameToolbox::fast_rand_0_1() * object->m_modXVariance + object->m_modX;
++    physics.m_velocity.y = GameToolbox::fast_rand_0_1() * object->m_modYVariance + object->m_modY;
+     auto speed = GameToolbox::fast_rand_0_1() * object->m_startSpeedVariance + object->m_startSpeed;
+     if (speed != 0.f) {
+         auto speedVal = this->getFollowSpeedVal(physics.m_gameObject, object->m_startSpeedReference, object->m_startDirectionReference,
+             GameToolbox::fast_rand_0_1() * object->m_startDirectionVariance + object->m_startDirection, speed);
+-        if (!object->m_xOnly) physics.m_unkPoint1.y += speedVal.y;
+-        if (!object->m_yOnly) physics.m_unkPoint1.x += speedVal.x;
++        if (!object->m_xOnly) physics.m_velocity.y += speedVal.y;
++        if (!object->m_yOnly) physics.m_velocity.x += speedVal.x;
+     }
+ }
+ 
+diff --git a/codegen/src/BindingGen.cpp b/codegen/src/BindingGen.cpp
+index e31ea548..63b11d5c 100644
+--- a/codegen/src/BindingGen.cpp
++++ b/codegen/src/BindingGen.cpp
+@@ -2,6 +2,25 @@
+ #include <iostream>
+ #include <set>
+ 
++// GucciBot patch (patches/bindings-g6-copyable-renames.patch): an old name
++// kept for a renamed member is a union with the new one. For a class type
++// with its own copy constructor (cocos2d::CCPoint, std::string) that union
++// can't be copied, so neither can GJGameState, which GucciBot copies for
++// practice checkpoints and the path preview. Old names stay only for plain
++// scalars and pointers, whose unions copy fine; the layout is the same.
++// The bindings' own inline code is moved to the new names where it used a
++// dropped old one (GJBaseGameLayer::modifyObjectPhysics).
++static bool gbAliasCopies(std::string const& t) {
++    if (!t.empty() && t.back() == '*') return true;
++    static std::set<std::string> const k = {
++        "bool", "char", "short", "int", "long", "float", "double",
++        "unsigned", "unsigned int", "unsigned char", "unsigned short", "unsigned long",
++        "long long", "unsigned long long", "int8_t", "int16_t", "int32_t", "int64_t",
++        "uint8_t", "uint16_t", "uint32_t", "uint64_t", "size_t", "intptr_t", "uintptr_t",
++    };
++    return k.count(t) > 0;
++}
++
+ namespace { namespace format_strings {
+     // requires: base_classes, class_name
+     constexpr char const* binding_include = R"GEN(#include "{base_directory}/{file_name}"
+@@ -316,7 +335,7 @@ std::string generateBindingHeader(Root const& root, std::filesystem::path const&
+                     if (opt != nullptr && std::string_view(opt) == "1") {
+                         unimplementedField = false;
+                     }
+-                    if (m->attributes.renamed_from.empty()) {
++                    if (m->attributes.renamed_from.empty() || !gbAliasCopies(m->type.name)) {
+                         single_output += fmt::format(format_strings::member_definition,
+                             fmt::arg("private", unimplementedField ? "private:\n" : ""),
+                             fmt::arg("public", unimplementedField ? "\npublic:" : ""),
