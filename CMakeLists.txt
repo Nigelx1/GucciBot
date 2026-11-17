@@ -36,11 +36,36 @@ endif()
 # .github/workflows/multi-platform.yml); move both together. A
 # GEODE_BINDINGS_REPO_PATH environment variable still wins (CI's action sets
 # it), for working on bindings.
+#
+# ONE codebase, TWO builds (Nigel, 2026-11-16): the same tree builds against
+# Geode 5 (GD 2.2081, what 2.0 ships; GEODE_SDK=C:\GeodeSDK) and Geode 6 (GD
+# 2.2091; GEODE_SDK pointing at a Geode 6 SDK). A .geode loads on only one
+# Geode major, so each SDK gives its own file. The SDK's VERSION file says
+# which one this is; the code itself switches on GEODE_COMP_GD_VERSION
+# (src/core/geode_compat.hpp).
+file(READ "$ENV{GEODE_SDK}/VERSION" GB_GEODE_SDK_VERSION)
+string(STRIP "${GB_GEODE_SDK_VERSION}" GB_GEODE_SDK_VERSION)
+string(REGEX MATCH "^[0-9]+" GB_GEODE_MAJOR "${GB_GEODE_SDK_VERSION}")
+if(GB_GEODE_MAJOR GREATER_EQUAL 6)
+    set(GB_GEODE6 ON)
+    message(STATUS "GucciBot: Geode ${GB_GEODE_SDK_VERSION} build (GD 2.2091)")
+    # Geode 6 builds only Windows so far: iOS's 2.2091 bindings miss 42 of
+    # GucciBot's hooks, and the phone ImGui patches aren't redone for the
+    # newer gd-imgui-cocos yet (docs/PORT_2209_ASSESSMENT.md).
+    if(NOT WIN32)
+        message(FATAL_ERROR "GucciBot's Geode 6 (GD 2.2091) build is Windows only for now")
+    endif()
+    # The bindings commit Geode 6.0.0-alpha.2 came out with (2026-11-14).
+    set(GB_BINDINGS_COMMIT 7a670e953f63de379722215b8d2fa4d95e1e3f75)
+else()
+    set(GB_GEODE6 OFF)
+    set(GB_BINDINGS_COMMIT d641858f3e1cd2c6d86013c799f224ebdb8ec1cd)
+endif()
 if(NOT DEFINED ENV{GEODE_BINDINGS_REPO_PATH})
     include(FetchContent)
     FetchContent_Declare(gb_bindings
         GIT_REPOSITORY https://github.com/geode-sdk/bindings.git
-        GIT_TAG d641858f3e1cd2c6d86013c799f224ebdb8ec1cd
+        GIT_TAG ${GB_BINDINGS_COMMIT}
         SOURCE_SUBDIR no-cmake-here  # fetch only: the SDK adds it as a subdirectory itself
     )
     FetchContent_MakeAvailable(gb_bindings)
@@ -62,7 +87,10 @@ set(IMGUI_VERSION "v1.91.4" CACHE STRING "Pin imgui version" FORCE)
 # imgui-cocos-frame-scale.patch lets ImGui lay out a display smaller than the
 # GL frame and scales its drawing and touches to match (src/ui/look.cpp sets
 # the scale). Android and iOS only; Windows and macOS fetch it as before.
-if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
+if (GB_GEODE6)
+    # The first gd-imgui-cocos for Geode 6 and GD 2.2091 (2026-11-03).
+    CPMAddPackage("gh:matcool/gd-imgui-cocos#934958c68b1f050a8976d893584fa71368c1df1f")
+elseif (CMAKE_SYSTEM_NAME STREQUAL "iOS")
     # The keyboard modify header doesn't compile for iOS; this version already
     # leaves the keyboard hook out there but still includes the header.
     CPMAddPackage(
@@ -152,4 +180,33 @@ if(MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE /bigobj /utf-8 /wd4201)
 endif()
 
-setup_geode_mod(${PROJECT_NAME})
+if(GB_GEODE6)
+    # Geode checks mod.json's "geode" and "gd" against the SDK, so the Geode 6
+    # build packages a copy made here from the one mod.json: the same file
+    # with Geode 6's version, GD 2.2091 for the platforms it builds, and the
+    # resource paths made absolute (they point back into this tree). The copy
+    # and its logo and about.md live in the build folder; the source tree stays
+    # the Geode 5 one. setup_geode_mod reads mod.json from
+    # CMAKE_CURRENT_SOURCE_DIR, so that points at the copy for the one call.
+    set(GB_MOD_ROOT "${CMAKE_BINARY_DIR}/mod-geode6")
+    file(READ "${CMAKE_CURRENT_SOURCE_DIR}/mod.json" GB_MOD_JSON)
+    string(JSON GB_MOD_JSON SET "${GB_MOD_JSON}" geode "\"${GEODE_VERSION_FULL}\"")
+    string(JSON GB_MOD_JSON SET "${GB_MOD_JSON}" gd "{\"win\": \"${GEODE_GD_VERSION}\"}")
+    string(JSON GB_RES_COUNT LENGTH "${GB_MOD_JSON}" resources files)
+    math(EXPR GB_RES_LAST "${GB_RES_COUNT} - 1")
+    foreach(i RANGE ${GB_RES_LAST})
+        string(JSON GB_RES GET "${GB_MOD_JSON}" resources files ${i})
+        string(JSON GB_MOD_JSON SET "${GB_MOD_JSON}" resources files ${i}
+            "\"${CMAKE_CURRENT_SOURCE_DIR}/${GB_RES}\"")
+    endforeach()
+    file(WRITE "${GB_MOD_ROOT}/mod.json" "${GB_MOD_JSON}")
+    foreach(f logo.png about.md)
+        configure_file("${CMAKE_CURRENT_SOURCE_DIR}/${f}" "${GB_MOD_ROOT}/${f}" COPYONLY)
+    endforeach()
+    set(GB_REAL_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+    set(CMAKE_CURRENT_SOURCE_DIR "${GB_MOD_ROOT}")
+    setup_geode_mod(${PROJECT_NAME})
+    set(CMAKE_CURRENT_SOURCE_DIR "${GB_REAL_SOURCE_DIR}")
+else()
+    setup_geode_mod(${PROJECT_NAME})
+endif()

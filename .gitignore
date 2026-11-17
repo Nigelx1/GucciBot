@@ -38,3 +38,6 @@ src_backup_pre_strip_2026-07-05/
 /CLAUDE.md
 /.claude/settings.local.json
 __pycache__/
+
+# The Geode 6 (GD 2.2091) build folder
+build-g6/

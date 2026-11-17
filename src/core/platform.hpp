@@ -23,10 +23,16 @@
 
 #include <utility>
 
+#include "geode_compat.hpp"
+
 // GB_FORCE_PORTABLE (a TEST-ONLY CMake option, default off; never set by CI,
 // build_win.bat or a release) builds Windows with the off-Windows engine, so a
 // hidden Windows test game can run the code macOS and Android run.
-#if defined(GEODE_IS_WINDOWS) && !defined(GB_FORCE_PORTABLE)
+//
+// The Windows engine's midhooks, patches and raw addresses are GD 2.2081's.
+// The GD 2.2091 build (Geode 6) runs the off-Windows engine on Windows until
+// they are found again in 2.2091 (docs/PORT_2209_ASSESSMENT.md, section 2).
+#if defined(GEODE_IS_WINDOWS) && !defined(GB_FORCE_PORTABLE) && !GB_GEODE6
 #define GB_NATIVE_ENGINE 1
 #else
 #define GB_NATIVE_ENGINE 0
