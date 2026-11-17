@@ -180,7 +180,7 @@ Calculate measures, for every input in the loaded macro, how many frames you had
 
 ### Run it
 
-1. Load a macro and open its level.
+1. Open the macro's level and load the macro by clicking its name in **Saved macros** (that also sets **Mode** to **Play**, which Calculate needs).
 2. Go to the **Calculate** page and press **Calculate** (or press **Calculate** on the Macro page, or in Compact Mode).
 3. Wait for the bar to finish. A long level can take a while; **Cancel** stops it.
 
@@ -234,7 +234,7 @@ The Pathfinder finds its own way through a level. It tries moves in a copy of th
 2. Go to the **Pathfinder** page.
 3. Set **Engine** to **Search (old)** (that's the default), and **Search** to **Absense** (also the default).
 4. Press **Start**.
-5. Watch. The game pauses now and then while it thinks. When it beats the level, it saves the macro and says **Macro saved as "..."**. It's named after the level. Replay it like any other macro (section 4).
+5. Watch. The game pauses now and then while it thinks. When it beats the level, it saves the macro and says **Macro saved as "..."**, on the page too. It's named after the level. **Mode** goes back to what it was before the run, so to replay it or run Calculate on it, click its name in **Saved macros** first (section 4).
 
 **Tip:** empty the **Name** box on the Macro page before you press Start. If a name is in it, the Pathfinder saves over that macro instead (a backup of the old one is kept by default).
 
