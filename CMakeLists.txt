@@ -57,15 +57,23 @@ if(GB_GEODE_MAJOR GREATER_EQUAL 6)
     endif()
     # The bindings commit Geode 6.0.0-alpha.2 came out with (2026-11-14).
     set(GB_BINDINGS_COMMIT 7a670e953f63de379722215b8d2fa4d95e1e3f75)
+    # Its codegen keeps a renamed member's old name as a union with the new
+    # one, and a union holding a CCPoint can't be copied, so GJGameState
+    # couldn't be either (practice checkpoints and the path preview copy it).
+    # The patch keeps old names only for scalars and pointers; same layout.
+    set(GB_BINDINGS_PATCH PATCH_COMMAND git apply --ignore-whitespace
+        "${CMAKE_CURRENT_SOURCE_DIR}/patches/bindings-g6-copyable-renames.patch")
 else()
     set(GB_GEODE6 OFF)
     set(GB_BINDINGS_COMMIT d641858f3e1cd2c6d86013c799f224ebdb8ec1cd)
+    set(GB_BINDINGS_PATCH "")
 endif()
 if(NOT DEFINED ENV{GEODE_BINDINGS_REPO_PATH})
     include(FetchContent)
     FetchContent_Declare(gb_bindings
         GIT_REPOSITORY https://github.com/geode-sdk/bindings.git
         GIT_TAG ${GB_BINDINGS_COMMIT}
+        ${GB_BINDINGS_PATCH}
         SOURCE_SUBDIR no-cmake-here  # fetch only: the SDK adds it as a subdirectory itself
     )
     FetchContent_MakeAvailable(gb_bindings)
