@@ -537,6 +537,7 @@ bool AbsensePathfinder::start() {
     m_stuckWallSeconds = 0.0;
     m_stuckClock = m_startedAt;
     m_stuckTicks = m_stats.committedTicks;
+    m_forkBest = 0;
     m_stats.message = "Searching";
 
     absense::gpu::Client::get().setEnabled(SLSettings::get()->pathfinder.gpu);
@@ -1031,7 +1032,21 @@ void AbsensePathfinder::tick() {
             counted = std::min(wall, std::max(0.0, m_lastSliceMs) / 1000.0 + played);
         }
         m_stuckTicks = committed;
-        if (m_stats.bestTick != m_stuckBest) {
+        // GucciBot (2026-11-16, pf3 lane; pf_fork_dual): after a fork jump the
+        // route is a new one, and until it gets past the old furthest tick, its
+        // own furthest since the jump is what has to keep moving on. On GRIEF the
+        // jump took the hidden cube portal, but the two-player cube part after it
+        // waited 5-20 s a decision on a busy PC, and five minutes after the jump
+        // the rule stopped a run still moving, 160 ticks past the portal.
+        // Ticks at or past the old best (the dead end itself, before the jump's
+        // rewind lands) don't count; the best moving on ends it.
+        const uint64_t nowTick = currentTick();
+        if (m_forkBest != 0 && m_stats.bestTick != m_stuckBest) m_forkBest = 0;
+        if (m_forkBest != 0 && nowTick > m_forkBest && nowTick < m_stuckBest) {
+            m_forkBest = nowTick;
+            m_stuckSeconds = 0.0;
+            m_stuckWallSeconds = 0.0;
+        } else if (m_stats.bestTick != m_stuckBest) {
             m_stuckBest = m_stats.bestTick;
             m_stuckSeconds = 0.0;
             m_stuckWallSeconds = 0.0;
@@ -5639,6 +5654,7 @@ bool AbsensePathfinder::forkJump(const char* why, uint64_t floor, bool dualOnly)
         m_repair.floor = std::min(m_repair.floor, target);
         m_stuckSeconds = 0.0;
         m_stuckWallSeconds = 0.0;
+        if (absense::forkDual()) m_forkBest = target;  // the new route's furthest, for the stuck rule (pf_fork_dual)
         m_repair.passes++;
         m_repair.probe = 0;
         m_repair.retries = 0;

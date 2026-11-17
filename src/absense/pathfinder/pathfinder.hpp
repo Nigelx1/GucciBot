@@ -958,6 +958,10 @@ public:
     // GucciBot (2026-11-15, pf2 lane; pf_stuck_work): committed ticks at the
     // last look, for the level time played between two looks.
     uint64_t m_stuckTicks = 0;
+    // GucciBot (2026-11-16, pf3 lane; pf_fork_dual): the furthest real tick
+    // since the last fork jump while the new route is short of the old best
+    // (0: none); its moving on restarts the stuck clock.
+    uint64_t m_forkBest = 0;
     // Frame pacing: a slice takes what is left of a frame at the target
     // frame rate. When the last frame came late the game's own share is
     // taken from it (the time between slices minus the slice) and the next
