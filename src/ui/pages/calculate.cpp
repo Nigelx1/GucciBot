@@ -374,17 +374,17 @@ namespace gucci::ui::pages {
                      &FW::showSetupRange, true);
                 kit::FeatureEnd();
             }
-            // GucciBot (2026-11-10): Ship Steering, from Antic's Counter beta.16's behavior.
+            // GucciBot (2026-11-10): Ship Steering, from Antic's Counter's behavior (beta.17's rule, 2026-11-16).
             if (feature("Ship steering",
                         "A ship click or release that kills you still counts if taps a person could make, starting "
-                        "after your reaction time, keep you alive as far as the normal test of that timing goes, the "
-                        "way you'd save it when playing. It doesn't check that you get back onto the macro's path "
-                        "after that. Late timings past the reaction time count the normal way. Closer to how ship is "
-                        "really played, and a little slower. Off counts ship like every other mode",
+                        "your reaction time after the moved click, get you back to the macro's own inputs by the end "
+                        "of the normal test, and you then survive the macro's next click on them, the way you'd save "
+                        "it when playing. Closer to how ship is really played, and a little slower. Off counts ship "
+                        "like every other mode",
                         &FW::shipSteering)) {
                 slider("Reaction time",
-                       "How long after the macro's own timing of the input before steering can start, whether the "
-                       "test moved it earlier or later. Lower is more lenient",
+                       "How long after the moved click ends (its release) before steering can start. Lower is more "
+                       "lenient",
                        &FW::steerReactionMs, "%d ms");
                 kit::FeatureEnd();
             }
@@ -1197,8 +1197,8 @@ namespace gucci::ui::pages {
                         // GucciBot (2026-11-10): Ship Steering.
                         if (mk && !mk->manual && mk->steered && ImGui::IsItemHovered())
                             ImGui::SetTooltip("Ship steering: %d shift%s of this ship input counted because taps "
-                                              "kept it alive as far as the normal test goes (not always back "
-                                              "on the macro's path)",
+                                              "got it back to the macro's inputs, and it survived the next "
+                                              "click on them",
                                               mk->steerSaved, mk->steerSaved == 1 ? "" : "s");
 
                         ImGui::TableNextColumn();

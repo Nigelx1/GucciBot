@@ -4,6 +4,9 @@
 // Counter 1.0.0-beta.16's behavior (anticroom's counter; its UI, results files
 // and log lines only, no source). "A ship input also counts if you could fly
 // back onto the recorded line after it with taps a player could make."
+// 2026-11-16: the leg's rules (when the clock starts, the latest handback, how
+// far the shift must live) follow beta.17's (framewindow.cpp, beginSteerLeg);
+// this controller is unchanged.
 //
 // This file is the controller's math only: a motion model fitted from the
 // capture's recorded line, the tap decision and the handback test. No GD

@@ -307,6 +307,11 @@ class FrameWindowAnalyzer {
         bool reordered = false;   // run straight after Retime (the side already had a save)
         bool noHandback = false;  // the x guard looked the line up by x
         uint32_t react = 0;
+        // GucciBot (2026-11-16): end is the frame the steering hands back by
+        // at the latest (the tick after the plain leg's end); target is where
+        // the leg ends, the next click's own leg end (Antic's Counter
+        // beta.17's end and target).
+        uint32_t end = 0;
         uint32_t target = 0;
         uint32_t handback = 0;
         int line = 0;      // m_line index of the measured player
@@ -348,6 +353,10 @@ class FrameWindowAnalyzer {
         long ticks = 0, reordered = 0, wider = 0;
     } m_steerTot;
     void clearSteer();
+    // GucciBot (2026-11-16): the measured input's click (the input, its own
+    // release, a same-tick click's other actions), which a steer leg moves
+    // like Retime; the rest of the tail waits for the handback.
+    bool inSteerClick(size_t k, size_t ai, size_t rel) const;
     bool beginSteerLeg(bool reordered);
     void deadShift();
     void steerDecide(PlayLayer* pl);
