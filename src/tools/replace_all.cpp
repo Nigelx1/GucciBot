@@ -3,6 +3,7 @@
 // place of its printf-style format().
 
 #include "tools/replace_all.hpp"
+#include "core/geode_compat.hpp" // gd:: on Geode 6
 
 #include <Geode/Geode.hpp>
 #include <Geode/binding/EditorUI.hpp>
