@@ -458,4 +458,126 @@ class $modify(GB2209PlatformerJournal, GameLevelManager) {
     }
 };
 
+// ---- 2. GD's own speed (Nigel's rule 2, Silicate 1.1.2's way)
+//
+// While GucciBot is in charge, GD's own speed stays 1x: GucciBot's speed is the
+// only one, so a macro records and plays at one known speed. GD's speed slider
+// (pause menu) and its speed keys move GucciBot's speed instead, in GD's 0.1x
+// steps from 0.1x to 2x. Any speed but 1x is a cheat (safemode.cpp reads
+// GucciBot's speed already). With GucciBot switched off, GD's slider and keys
+// are GD's again.
+namespace {
+    constexpr double kMinSpeed = 0.1;
+    constexpr double kMaxSpeed = 2.0;
+    constexpr double kSpeedSteps = 10.0;
+
+    double roundToStep(double speed) {
+        return std::round(speed * kSpeedSteps) / kSpeedSteps;
+    }
+
+    std::string formatSpeed(double speed) {
+        auto text = fmt::format("{:.2f}", speed);
+        if (text.ends_with('0'))
+            text.pop_back();
+        return text + "x";
+    }
+
+    void setBotSpeed(double speed) {
+        GucciEngine::get()->updater.m_speedhack = speed;
+        Mod::get()->setSavedValue<double>("eng_speed", speed);  // as the menu's Game speed box saves it
+    }
+}  // namespace
+
+class $modify(GB2209SpeedPin, GJBaseGameLayer) {
+    static void onModify(auto& self) {
+        gucci::mcponly::keep(self);
+    }
+
+    void applyTimeWarp(float timeWarp) {
+        if (live() && checks().speed) {
+            auto& speed = field<float>(this, v2091::kGblSpeed);
+            auto& music = field<float>(this, v2091::kGblMusicSpeed);
+            if (speed != 1.f || music != 1.f) {
+                speed = 1.f;
+                music = 1.f;
+                ++g_counts.speedPinned;
+                if (auto* pl = PlayLayer::get(); pl && static_cast<GJBaseGameLayer*>(pl) == this)
+                    pl->updateTestModeLabel();
+            }
+        }
+        GJBaseGameLayer::applyTimeWarp(timeWarp);
+    }
+};
+
+class $modify(GB2209SpeedSlider, TimeSpeedControl) {
+    static void onModify(auto& self) {
+        gucci::mcponly::keep(self);
+    }
+
+    bool init(GJBaseGameLayer* gameLayer) {
+        if (!TimeSpeedControl::init(gameLayer))
+            return false;
+        if (live()) {
+            double const speed = GucciEngine::get()->updater.m_speedhack;
+            float const value =
+                static_cast<float>((std::clamp(speed, kMinSpeed, kMaxSpeed) - kMinSpeed) / (kMaxSpeed - kMinSpeed));
+            if (m_slider)
+                m_slider->setValue(value);
+            if (m_speedLabel)
+                m_speedLabel->setString(formatSpeed(speed).c_str());
+        }
+        // GD's own handler (timeSliderChanged) has no return type in the
+        // bindings, so it can't be hooked: the slider's thumb calls this one
+        // instead, which hands over to GD's while GucciBot is switched off.
+        // Left alone if GD's can't be reached that way.
+        if (siteHolds(v2091::kTimeSliderChanged) && m_slider && m_slider->m_touchLogic &&
+            m_slider->m_touchLogic->m_thumb)
+            m_slider->m_touchLogic->m_thumb->setTarget(this, menu_selector(GB2209SpeedSlider::onGucciSlider));
+        return true;
+    }
+
+    void onGucciSlider(CCObject* sender) {
+        if (!live()) {
+            // GD's own handler, by address (the bindings' has no return type).
+            static bool const s_gdHandler = siteHolds(v2091::kTimeSliderChanged);
+            if (s_gdHandler)
+                reinterpret_cast<void (*)(TimeSpeedControl*, CCObject*)>(geode::base::get() +
+                                                                          v2091::kTimeSliderChanged.offset)(this, sender);
+            return;
+        }
+        float const value = static_cast<SliderThumb*>(sender)->getValue();
+        double const speed = roundToStep(value * (kMaxSpeed - kMinSpeed) + kMinSpeed);
+        setBotSpeed(speed);
+        if (m_speedLabel)
+            m_speedLabel->setString(formatSpeed(speed).c_str());
+    }
+};
+
+// The speed up / down keys (UILayer::handleAction, actions 10022 / 10023),
+// right before GD adds the step to its own speed: the step goes to GucciBot's
+// speed and GD's speed code is skipped (Silicate 1.1.2's speedKeybind
+// midhook, same address and bytes).
+namespace {
+    void speedKeybindMidhook(SafetyHookContext& ctx) {
+        if (!live())
+            return;
+        double const step = ctx.xmm0.f32[0];
+        double const speed = GucciEngine::get()->updater.m_speedhack;
+        setBotSpeed(std::max(kMinSpeed, roundToStep(speed + step)));
+        ctx.rip = geode::base::get() + v2091::kSpeedKeybindDone.offset;
+    }
+}  // namespace
+
+$execute {
+    auto const base = geode::base::get();
+    // The spot it jumps to is checked too, before anything goes in.
+    if (!standDownBot() && !siteHolds(v2091::kSpeedKeybindDone)) {
+        ++g_midhookAttempts;
+        ++g_midhookFailures;
+        return;
+    }
+    util_guarded_midhook(base + v2091::kSpeedKeybind.offset, v2091::kSpeedKeybind.expect, v2091::kSpeedKeybind.name,
+                         speedKeybindMidhook);
+}
+
 #endif  // GB_SAFETY_2209

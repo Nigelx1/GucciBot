@@ -250,10 +250,33 @@ namespace gucci::gdaddr {
              0x55, 0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57},
             "GameLevelManager::uploadDeathData"};
 
+        // TimeSpeedControl::timeSliderChanged (0x66dc50, the bindings'
+        // number; TodoReturn there, so it can be neither hooked nor called
+        // through the bindings): GD's own handler for its speed slider,
+        // `void (TimeSpeedControl*, CCObject* thumb)` (it hands rdx to
+        // SliderThumb::getValue). Its prologue. Called by address while
+        // GucciBot is switched off.
+        inline const GuardedSite kTimeSliderChanged{
+            0x66dc50,
+            {0x48, 0x89, 0x5c, 0x24, 0x10, 0x57, 0x48, 0x83, 0xec, 0x30, 0x0f, 0x29, 0x7c, 0x24, 0x20, 0x48,
+             0x8b, 0xd9, 0x48, 0x8b, 0xca},
+            "TimeSpeedControl::timeSliderChanged"};
+
+        // UILayer::handleAction: the speed up / down keybinds (10022 /
+        // 10023) right before GD adds the step to its speed (`mov rax,
+        // [rdi+0x100]; addss xmm0, [rax+0x3560]`), and where that path
+        // ends (`mov al, 1; jmp`). Silicate 1.1.2, TimeSpeedControl.cpp
+        // (SPEED_KEYBIND_OFFSET / _DONE_OFFSET), same bytes.
+        inline const GuardedSite kSpeedKeybind{
+            0x672c83,
+            {0x48, 0x8b, 0x87, 0x00, 0x01, 0x00, 0x00, 0xf3, 0x0f, 0x58, 0x80, 0x60, 0x35, 0x00, 0x00},
+            "speedKeybind"};
+        inline const GuardedSite kSpeedKeybindDone{0x672da4, {0xb0, 0x01, 0xeb, 0x02}, "speedKeybindDone"};
+
 #endif  // GB_GEODE6 (Lane B)
 
         // What the launch self-check expects placed on 2.2091 (core/engine_core.cpp).
-        inline constexpr int kExpectedMidhooks = 5;  // 4 shake + teleport
+        inline constexpr int kExpectedMidhooks = 6;  // 4 shake + teleport + speed keys
         inline constexpr int kExpectedPatches = 9;
 
     } // namespace v2091

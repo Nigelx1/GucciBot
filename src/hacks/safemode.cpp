@@ -284,7 +284,13 @@ namespace gucci::safemode {
                || gb->isRecording()
                // HUD readouts the sheet doesn't list: Touching orbs and Time
                // warp (Nigel, 2026-11-02).
-               || hud::showsCheat(gb->hud);
+               || hud::showsCheat(gb->hud)
+#if GB_SAFETY_2209
+               // GD 2.2091's own Ignore Damage, and GD's own speed off 1x
+               // (Nigel, 2026-11-16; hacks/safemode_2209.cpp).
+               || gdOwnCheat()
+#endif
+            ;
     }
 
 } // namespace gucci::safemode
