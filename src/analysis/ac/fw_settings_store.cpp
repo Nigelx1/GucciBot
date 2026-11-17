@@ -31,6 +31,11 @@ namespace gucci::fwstore {
             T FW::* member;
             T lo;
             T hi;
+            // GucciBot (2026-11-16): a key added after 2.0's betas is written
+            // only once it's been changed (it differs from the default, or a
+            // value for it is already saved), so a player who never touches
+            // it keeps a settings file byte for byte as it was.
+            bool sparse = false;
         };
 
         struct Flag {
@@ -147,6 +152,8 @@ namespace gucci::fwstore {
             {"fwac_hud_scale", &FW::hudScale, 0.1f, 2.f},
             {"fwac_lstar_hud_scale", &FW::lstarHudScale, 0.1f, 2.f},
             {"fwac_label_cbf", &FW::labelCbf, 0.f, static_cast<float>(kBandWindowMax)},
+            // The plain ring's line (Ring thickness, Calculate > Overlay).
+            {"fwac_ring_width", &FW::ringWidth, 0.5f, 8.f, true},
         };
 
         constexpr char const* kTiersKey = "fwac_tiers";
@@ -360,10 +367,15 @@ namespace gucci::fwstore {
             fw.*f.member = std::clamp(mod->getSavedValue<int64_t>(f.key, fw.*f.member), f.lo, f.hi);
         for (auto const& f : kDoubles)
             fw.*f.member = std::clamp(mod->getSavedValue<double>(f.key, fw.*f.member), f.lo, f.hi);
-        for (auto const& f : kFloats)
+        for (auto const& f : kFloats) {
+            // getSavedValue with a default also puts the default into the
+            // save, so a sparse key is only read once it's there.
+            if (f.sparse && !mod->hasSavedValue(f.key))
+                continue;
             fw.*f.member = static_cast<float>(std::clamp(
                 mod->getSavedValue<double>(f.key, static_cast<double>(fw.*f.member)),
                 static_cast<double>(f.lo), static_cast<double>(f.hi)));
+        }
 
         if (mod->hasSavedValue(kTiersKey)) {
             auto const text = mod->getSavedValue<std::string>(kTiersKey, "");
@@ -385,8 +397,12 @@ namespace gucci::fwstore {
             mod->setSavedValue<int64_t>(f.key, fw.*f.member);
         for (auto const& f : kDoubles)
             mod->setSavedValue<double>(f.key, fw.*f.member);
-        for (auto const& f : kFloats)
+        FW const defaults;
+        for (auto const& f : kFloats) {
+            if (f.sparse && fw.*f.member == defaults.*f.member && !mod->hasSavedValue(f.key))
+                continue;
             mod->setSavedValue<double>(f.key, fw.*f.member);
+        }
         mod->setSavedValue<std::string>(kTiersKey, dumpTiers(fw.tiers));
     }
 

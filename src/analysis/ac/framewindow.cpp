@@ -8596,9 +8596,13 @@ void FrameWindowAnalyzer::spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
                 float const angle = static_cast<float>(i) * 6.2831853f / 64.f;
                 verts[i] = CCPoint{radius * std::cos(angle), radius * std::sin(angle)};
             }
-            circle->drawPolygon(verts, 64, {0.f, 0.f, 0.f, 0.f}, 4.f,
+            // GucciBot (2026-11-16): Ring thickness. The dark edge stays 2
+            // wider than the colored line, as anticroom's 4 and 2 are (the
+            // default, 2, draws exactly those).
+            float const line = std::clamp(fwcfg.ringWidth, 0.5f, 8.f);
+            circle->drawPolygon(verts, 64, {0.f, 0.f, 0.f, 0.f}, line + 2.f,
                                 {0.f, 0.f, 0.f, a});
-            circle->drawPolygon(verts, 64, {0.f, 0.f, 0.f, 0.f}, 2.f,
+            circle->drawPolygon(verts, 64, {0.f, 0.f, 0.f, 0.f}, line,
                                 {color.r * a, color.g * a, color.b * a, a});
         }
         if (!shapeNode) {

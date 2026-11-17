@@ -653,6 +653,8 @@ namespace gucci::ui::pages {
                 if (!s.circleSkin || gb->fwDefaultLook)
                     slider("Marker radius", nullptr, &FW::markerRadius, "%.1f", true);
                 slider("Label size", nullptr, &FW::markerScale, "%.2fx", true);
+                slider("Ring thickness", "How thick the plain ring's line is. Shapes and images keep their own",
+                       &FW::ringWidth, "%.1f", true);
                 if (!gb->fwDefaultLook && feature("Circle skin",
                             "The ring grows with the window, so how tight a click is reads at a glance. Replaces the "
                             "fixed radius",

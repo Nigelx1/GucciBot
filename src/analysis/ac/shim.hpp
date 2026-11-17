@@ -252,6 +252,11 @@ struct FrameWindowSettings {
     bool playSounds = true;
     float soundVolume = 1.f;
     float markerRadius = 11.f;
+    // GucciBot (2026-11-16): how thick the plain ring's colored line is (its
+    // dark edge is 2 wider). 2 is the thickness it always had. Saved only
+    // once it's changed (fwstore's sparse keys), so a save that never touched
+    // it stays as it was.
+    float ringWidth = 2.f;
 
     // Circle skin: marker radius grows with the window instead of being one
     // fixed size, so how tight a click is reads at a glance without looking at
