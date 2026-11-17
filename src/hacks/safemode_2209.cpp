@@ -42,6 +42,7 @@
 #include <Geode/modify/TimeSpeedControl.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstring>
@@ -714,6 +715,7 @@ std::string gucci::safemode::probeLevel() {
 //   resume             the pause menu's Resume
 //   complete           PlayLayer::levelComplete, as the end of the level calls it
 //   speed_key:<id>     UILayer::handleAction(<id>) down and up, as GD's keybinds
+//   speed_key_ed:<id>  the same as in an editor level (GD's speed keys act only there)
 //   slider:<0..1>      a TimeSpeedControl made for the level, its slider set and moved
 //   gd_speed:<x>       GD's own speed written as its slider would (no GucciBot hook)
 //   ignore_damage      GD's Ignore Damage turned on, as its keybind does
@@ -751,13 +753,45 @@ std::string gucci::safemode::probeAction(std::string const& action) {
         pl->levelComplete();
         return "";
     }
+    // UILayer::handleAction by its address (0x6713c0, the bindings' number;
+    // its prologue checked): a test on 11-17 called it through the bindings'
+    // vtable slot and GD's code was never reached.
+    using HandleActionFn = bool (*)(UILayer*, int, bool, double);
+    static constexpr uintptr_t kHandleAction = 0x6713c0;
+    static constexpr std::array<uint8_t, 7> kHandleActionStart{0x48, 0x8b, 0xc4, 0x48, 0x89, 0x58, 0x10};
+    auto handleAction = [&](int n, bool down) -> bool {
+        if (std::memcmp(reinterpret_cast<void const*>(geode::base::get() + kHandleAction), kHandleActionStart.data(),
+                        kHandleActionStart.size()))
+            return false;
+        reinterpret_cast<HandleActionFn>(geode::base::get() + kHandleAction)(pl->m_uiLayer, n, down, 0.0);
+        return true;
+    };
     if (auto id = arg("speed_key:")) {
         if (!pl->m_uiLayer)
             return "no UILayer";
         int const n = std::atoi(id->c_str());
-        pl->m_uiLayer->handleAction(n, true, 0.0);
-        pl->m_uiLayer->handleAction(n, false, 0.0);
+        if (!handleAction(n, true) || !handleAction(n, false))
+            return "UILayer::handleAction isn't where it should be";
         return "";
+    }
+    if (auto id = arg("speed_key_ed:")) {
+        // GD's speed keys act only in editor levels: handleAction goes on to
+        // them when UILayer +0x11a is set, else only when the level's type is
+        // Editor (0x672bfb: `cmp byte [rdi+0x11a], 0; jne`; 0x672c58: `cmp
+        // dword [level+0x4c4], 2`). A main level stands in for one here: the
+        // byte is set for the two calls and put back.
+        static constexpr std::array<uint8_t, 7> kGate{0x80, 0xbf, 0x1a, 0x01, 0x00, 0x00, 0x00};
+        if (std::memcmp(reinterpret_cast<void const*>(geode::base::get() + 0x672bfb), kGate.data(), kGate.size()))
+            return "handleAction's editor gate isn't where it should be";
+        if (!pl->m_uiLayer)
+            return "no UILayer";
+        int const n = std::atoi(id->c_str());
+        auto& gate = field<uint8_t>(pl->m_uiLayer, 0x11a);
+        uint8_t const was = gate;
+        gate = 1;
+        bool const ok = handleAction(n, true) && handleAction(n, false);
+        gate = was;
+        return ok ? "" : "UILayer::handleAction isn't where it should be";
     }
     if (auto v = arg("slider:")) {
         auto* control = TimeSpeedControl::create(pl);
