@@ -230,6 +230,11 @@ namespace gucci::fwstore {
                     o["pulseg"] = t.pulseColor[1];
                     o["pulseb"] = t.pulseColor[2];
                 }
+                // Saved without the spaces around it (the menu keeps them
+                // while typing, the legend ignores them).
+                auto const a = t.group.find_first_not_of(" 	");
+                if (a != std::string::npos)
+                    o["group"] = t.group.substr(a, t.group.find_last_not_of(" 	") - a + 1);
                 arr.push(o);
             }
             return arr.dump();
@@ -262,6 +267,11 @@ namespace gucci::fwstore {
                 c = std::clamp(c, 0.f, 1.f);
             for (auto& c : t.pulseColor)
                 c = std::isfinite(c) ? std::clamp(c, 0.f, 1.f) : 1.f;
+            // A group is a short name. (Not trimmed here: this runs after
+            // every keystroke in the menu, and would eat the space typed
+            // between two words.)
+            if (t.group.size() > 40)
+                t.group.resize(40);
             int const shape = std::clamp(static_cast<int>(t.style.shape), 0, 3);
             int const fill = std::clamp(static_cast<int>(t.style.fill), 0, 2);
             t.style.shape = static_cast<gbshape::Shape>(shape);
@@ -337,6 +347,7 @@ namespace gucci::fwstore {
                 t.pulseColor[0] = static_cast<float>(jreal(j, "pulser", def.pulseColor[0]));
                 t.pulseColor[1] = static_cast<float>(jreal(j, "pulseg", def.pulseColor[1]));
                 t.pulseColor[2] = static_cast<float>(jreal(j, "pulseb", def.pulseColor[2]));
+                t.group = jstr(j, "group", "");
                 clampTier(t);
                 tiers.push_back(std::move(t));
             }

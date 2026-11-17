@@ -144,6 +144,7 @@ void fwFileLog(std::string const& line, bool important);
 // log too, a 9-input run wrote about 6,300 lines there, up to 1,500 a second
 // (test pass 2026-11-10, bug 4); the run's end says how many went to the file.
 static size_t g_fwFileOnlyLines = 0;
+static std::string legendGroupName(std::string const& g);  // the legend's rows
 #define FWLOG(...) do { if (m_verbose->inner()) { fwFileLog(fmt::format(__VA_ARGS__)); ++g_fwFileOnlyLines; } } while (0)
 // A warning that comes once per restore or step, not once per run: the file
 // only, counted like FWLOG. Rare ones (a death in the capture, a divergence)
@@ -9134,9 +9135,13 @@ void FrameWindowAnalyzer::rebuildHud(PlayLayer* pl) {
 
     for (auto const& tier : tiers) {
         if (!tier.showInHud) continue;
+        // GucciBot (2026-11-16): a group's later bands are on its first one's row.
+        if (this->legendRowOf(tier.id) != tier.id) continue;
 
+        std::string const group = legendGroupName(tier.group);
         std::string const name =
-            tier.text.empty()
+            !group.empty() ? group
+            : tier.text.empty()
                 ? (tier.minWindow == tier.maxWindow
                        ? fmt::format("{:g}", tier.minWindow)
                        : fmt::format("{:g}-{:g}", tier.minWindow, tier.maxWindow))
@@ -9184,12 +9189,17 @@ void FrameWindowAnalyzer::refreshHudCounts(PlayLayer* pl) {
     auto* hud = pl->m_uiLayer->getChildByID("framewindow-hud"_spr);
     if (!hud) return;
 
+    // GucciBot (2026-11-16): a row's count is its bands' together (legend
+    // groups); a band without a group is a row of its own.
+    std::map<int, int> rows;
+    for (auto const& [id, n] : m_hudCounts)
+        rows[this->legendRowOf(id)] += n;
     for (auto const& tier : this->hudBands()) {
         auto* node = hud->getChildByID(fmt::format("framewindow-count-{}", tier.id));
         if (auto* label = typeinfo_cast<CCLabelBMFont*>(node)) {
-            auto const it = m_hudCounts.find(tier.id);
+            auto const it = rows.find(tier.id);
             label->setString(
-                fmt::format("{}", it == m_hudCounts.end() ? 0 : it->second)
+                fmt::format("{}", it == rows.end() ? 0 : it->second)
                     .c_str());
         }
     }
@@ -9229,7 +9239,9 @@ void FrameWindowAnalyzer::updateHudFlash(PlayLayer* pl, uint32_t frame,
         auto* label = typeinfo_cast<CCLabelBMFont*>(node);
         if (!label) continue;
 
-        bool const flashing = m_hudFlashActive && tier.id == m_hudFlashTier;
+        // A band in a group lights its group's row.
+        bool const flashing = m_hudFlashActive && m_hudFlashTier >= 0 &&
+                              tier.id == this->legendRowOf(m_hudFlashTier);
         float const mix = flashing ? amount : 0.f;
 
         auto const chan = [&](int i) {
@@ -9287,17 +9299,44 @@ FrameWindowTier const* FrameWindowAnalyzer::legendTierFor(
     return this->displayTierFor(mk);
 }
 
+// GucciBot (2026-11-16): a legend group's name without the spaces around it,
+// so "Good " and "Good" are one group (the menu keeps them while typing).
+static std::string legendGroupName(std::string const& g) {
+    auto const a = g.find_first_not_of(" 	");
+    if (a == std::string::npos) return {};
+    auto const b = g.find_last_not_of(" 	");
+    return g.substr(a, b - a + 1);
+}
+
+int FrameWindowAnalyzer::legendRowOf(int tierId) const {
+    auto const& bands = this->hudBands();
+    auto const it = std::find_if(bands.begin(), bands.end(),
+                                 [&](FrameWindowTier const& t) { return t.id == tierId; });
+    if (it == bands.end() || !it->showInHud) return tierId;
+    auto const group = legendGroupName(it->group);
+    if (group.empty()) return tierId;
+    for (auto const& t : bands)
+        if (t.showInHud && legendGroupName(t.group) == group) return t.id;
+    return tierId;
+}
+
 std::vector<std::pair<FrameWindowTier, int>> FrameWindowAnalyzer::legendTotals()
     const {
     std::vector<std::pair<FrameWindowTier, int>> out;
-    for (auto const& tier : this->hudBands())
-        if (tier.showInHud) out.push_back({tier, 0});
+    // One entry per legend row: a group's is its first band, labelled with
+    // the group's name (GucciBot, 2026-11-16).
+    for (auto const& tier : this->hudBands()) {
+        if (!tier.showInHud || this->legendRowOf(tier.id) != tier.id) continue;
+        out.push_back({tier, 0});
+        if (auto const g = legendGroupName(tier.group); !g.empty()) out.back().first.text = g;
+    }
     for (auto const& mk : m_results) {
         auto const* tier = this->legendTierFor(mk);
         if (!tier) continue;
-        for (auto& row : out)
-            if (row.first.id == tier->id) {
-                row.second++;
+        int const row = this->legendRowOf(tier->id);
+        for (auto& r : out)
+            if (r.first.id == row) {
+                r.second++;
                 break;
             }
     }

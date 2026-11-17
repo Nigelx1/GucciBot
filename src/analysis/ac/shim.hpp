@@ -133,6 +133,11 @@ struct FrameWindowTier {
     // own color, as it always did. The band's opacity is kept either way.
     bool pulseTint = false;
     std::array<float, 3> pulseColor = {1.f, 1.f, 1.f};
+    // GucciBot (2026-11-16): a legend group. Shown bands with the same group
+    // share one legend row (in the level and on Share my windows' picture),
+    // named for the group, in the first one's color, with their counts added
+    // up. Empty: the band has a row of its own, as always.
+    std::string group = "";
 };
 
 // Copied field-for-field from anticroom's settings.hpp. Defaults are his --

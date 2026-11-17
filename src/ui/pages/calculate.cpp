@@ -707,6 +707,12 @@ namespace gucci::ui::pages {
                                    "number");
             changed |= kit::InputText("text", &t.text, "auto");
             kit::RowEnd();
+            // GucciBot (2026-11-16): legend groups.
+            kit::RowBegin("Legend group", "Bands with the same group share one row on the legend (and on Share my "
+                                          "windows' picture), with their counts added up. The row shows the group's "
+                                          "name in the first band's color. Empty gives the band its own row");
+            changed |= kit::InputText("group", &t.group, "none");
+            kit::RowEnd();
             kit::RowBegin("Sound", "An ogg, mp3 or wav. Relative paths look in the mod's config folder, then its "
                                    "resources. Empty plays the bundled clip for the window");
             changed |= kit::InputText("audio", &t.audioPath, "file.ogg");
