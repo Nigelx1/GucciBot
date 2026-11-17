@@ -61,8 +61,9 @@ if(GB_GEODE_MAJOR GREATER_EQUAL 6)
     # one, and a union holding a CCPoint can't be copied, so GJGameState
     # couldn't be either (practice checkpoints and the path preview copy it).
     # The patch keeps old names only for scalars and pointers; same layout.
-    set(GB_BINDINGS_PATCH PATCH_COMMAND git apply --ignore-whitespace
-        "${CMAKE_CURRENT_SOURCE_DIR}/patches/bindings-g6-copyable-renames.patch")
+    set(GB_BINDINGS_PATCH PATCH_COMMAND ${CMAKE_COMMAND}
+        "-DPATCH=${CMAKE_CURRENT_SOURCE_DIR}/patches/bindings-g6-copyable-renames.patch"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/patches/apply_once.cmake")
 else()
     set(GB_GEODE6 OFF)
     set(GB_BINDINGS_COMMIT d641858f3e1cd2c6d86013c799f224ebdb8ec1cd)
