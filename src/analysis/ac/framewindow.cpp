@@ -10554,6 +10554,13 @@ void FrameWindowAnalyzer::endTrip(PlayLayer* pl, bool arrived,
 
     if (arrived || !pl) {
         if (m_trip.record) bot->setMode(Bot::Mode::Recording);
+    } else if (m_trip.record) {
+        // Left in playback: the armed key the trip carried for the recording
+        // (testPlayhead above) has no recording to go back to. Disarmed, as any
+        // other way out of recording does (GucciEngine::setMode), so the next
+        // playback reset doesn't take the intentional-death path.
+        updater.m_canDie = false;
+        updater.m_inputIsDeath = false;
     }
     updater.setPaused(arrived ? m_trip.paused : true);
 
