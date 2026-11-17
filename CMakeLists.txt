@@ -123,7 +123,13 @@ endif()
 # SafetyHook (and Zydis under it) places the engine's midhooks at fixed
 # addresses in the Windows build of GD: x86-64 Windows only. No other platform
 # builds them (src/core/platform.hpp).
-if (WIN32)
+if (WIN32 AND GB_GEODE6)
+    # Pinned for the GD 2.2091 build: main's commit on 2026-11-16, the one
+    # both local builds compiled with. The Geode 5 build below still follows
+    # main, so its file doesn't change; pinning it too waits for the merge.
+    CPMAddPackage("gh:cursey/safetyhook#f44cc070a8340f2f26649553c49533475417304d")
+    CPMAddPackage("gh:zyantific/zydis#bffbb61")
+elseif (WIN32)
     CPMAddPackage("gh:cursey/safetyhook#main")
     CPMAddPackage("gh:zyantific/zydis#bffbb61")
 endif()
