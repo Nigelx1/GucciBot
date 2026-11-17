@@ -28,7 +28,11 @@
 
 #include <cstdint>
 #include <initializer_list>
+#include "core/platform.hpp"      // GB_GD2091_SITES
 
+// Only the GD 2.2091 build uses these tables (every user is under
+// GB_GD2091_SITES), so the GD 2.2081 build compiles none of them.
+#if GB_GD2091_SITES
 namespace gucci::gdaddr {
 
     // A byte patch with the bytes it expects to find first.
@@ -181,3 +185,4 @@ namespace gucci::gdaddr {
     } // namespace v2091
 
 } // namespace gucci::gdaddr
+#endif // GB_GD2091_SITES
