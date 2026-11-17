@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-v (Test tools: gucci_list_macros lists every other macro when one file name cannot be spelled in the system code page, and names that file)"
+    "2026-11-16-w (Test tools can read and set the converter Shift frames slider, now drawn with the menu kit slider, which looks the same)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -1379,8 +1379,9 @@ namespace gucci::ui {
             }
             ImGui::EndDisabled();
             kit::RowBegin("Shift frames", "If a converted macro dies early, try one frame either way");
-            ImGui::SetNextItemWidth(kit::Avail());
-            ImGui::SliderInt("##convertshift", &g_convertShift, -3, 3, g_convertShift == 0 ? "as saved" : "%+d");
+            // kit's slider (the same ImGui slider, full width) so the test
+            // tools see it: gucci_ui reads it, gucci_ui_press types into it.
+            kit::SliderInt("convertshift", &g_convertShift, -3, 3, g_convertShift == 0 ? "as saved" : "%+d");
             kit::RowEnd();
             // Each file's format, found once (nullptr: none).
             static std::map<std::string, convert::Format const*> s_formatOf;
