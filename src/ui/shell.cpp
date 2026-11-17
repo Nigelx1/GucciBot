@@ -1242,6 +1242,10 @@ namespace gucci::ui {
             std::string err;
             if (!convert::fromGucciBot(readAll(file), m, err))
                 return {false, err};
+#if GB_GEODE6
+            // The game it runs in, not the converter's default (GD 2.2081).
+            m.gameVersion = 2.2091;
+#endif
             auto const out = convert::write(m, f);
             if (!out.error.empty())
                 return {false, out.error};

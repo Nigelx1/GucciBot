@@ -59,6 +59,10 @@ namespace gucci::convert {
         std::string author;
         std::string bot;  // the bot that wrote it, when the file says
         bool platformer = false;
+        // The GD version an export says it was made on (GDR's gameVersion,
+        // GDR2's 22081). The menu's export sets the running game's; this
+        // core has no Geode to ask.
+        double gameVersion = 2.2081;
         // What didn't carry over, or needs knowing, in words for the menu.
         std::vector<std::string> notes;
     };

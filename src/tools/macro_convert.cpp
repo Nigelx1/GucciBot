@@ -920,7 +920,7 @@ namespace gucci::convert {
             Value level = Value::object();
             level.set("id", Value::ofInt(m.levelId)).set("name", Value::ofStr(m.levelName));
             Value j = Value::object();
-            j.set("gameVersion", Value::ofNum(2.2081))
+            j.set("gameVersion", Value::ofNum(m.gameVersion))
                 .set("description", Value::ofStr("Converted by GucciBot"))
                 .set("version", Value::ofNum(1.0))
                 .set("duration", Value::ofNum((double)lastFrame(list) / (m.tps > 0 ? m.tps : 240.0)))
@@ -1041,7 +1041,7 @@ namespace gucci::convert {
             str(m.author.empty() ? "GucciBot" : m.author);
             str("Converted by GucciBot");
             w.be<float>((float)((double)lastFrame(list) / (m.tps > 0 ? m.tps : 240.0)));
-            w.varint(22081);
+            w.varint((uint64_t)std::lround(m.gameVersion * 10000.0));
             w.be<double>(m.tps);
             w.varint(0);  // seed
             w.varint(0);  // coins
