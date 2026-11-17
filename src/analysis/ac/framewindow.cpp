@@ -23,6 +23,8 @@
 #include <unistd.h>  // fsync (writeResults)
 #endif
 #include <fstream>
+#include <functional>
+#include <optional>
 #include <numeric>
 #include <map>
 #include <matjson.hpp>
@@ -8503,6 +8505,61 @@ template <class S> auto secondHalfOf(S const& gs, int) -> decltype(gs.m_inSecond
 template <class S> bool secondHalfOf(S const& gs, long) { return gs.m_unkBool11; }
 }  // namespace
 
+// GucciBot (2026-11-16): a marker's shape, drawn into `dn` in `color`: one
+// of Juice's shapes, a Filled circle, or anticroom's plain ring (two passes,
+// so it reads on a bright background and a dark one; Ring thickness sets the
+// colored line, the dark edge 2 wider). `style` is empty for the plain ring
+// of a mark with no band. The pulse color redraws through this as it fades.
+static void drawMarkerShape(CCDrawNode* dn, float radius, std::optional<gbshape::Style> const& style,
+                            float line, ccColor4F color) {
+    float const a = color.a;
+    ccColor4F const pre{color.r * a, color.g * a, color.b * a, a};
+    if (style && (style->shape != gbshape::Shape::Circle || style->fill == gbshape::Fill::Normal)) {
+        gbshape::draw(dn, {0.f, 0.f}, radius, pre, *style);
+        return;
+    }
+    CCPoint verts[64];
+    for (int i = 0; i < 64; i++) {
+        float const angle = static_cast<float>(i) * 6.2831853f / 64.f;
+        verts[i] = CCPoint{radius * std::cos(angle), radius * std::sin(angle)};
+    }
+    dn->drawPolygon(verts, 64, {0.f, 0.f, 0.f, 0.f}, line + 2.f, {0.f, 0.f, 0.f, a});
+    dn->drawPolygon(verts, 64, {0.f, 0.f, 0.f, 0.f}, line, pre);
+}
+
+namespace {
+// GucciBot (2026-11-16): the pulse color's fade, from one color to another
+// over the action's time, handed to `paint` each frame (a label or a picture
+// takes it as its color; a drawn shape is drawn again in it).
+class PulseTint : public CCActionInterval {
+public:
+    static PulseTint* create(float seconds, ccColor4F from, ccColor4F to,
+                             std::function<void(ccColor4F)> paint) {
+        auto* ret = new PulseTint();
+        if (ret->initWithDuration(seconds)) {
+            ret->m_from = from;
+            ret->m_to = to;
+            ret->m_paint = std::move(paint);
+            ret->autorelease();
+            return ret;
+        }
+        delete ret;
+        return nullptr;
+    }
+    void update(float t) override {
+        float const k = std::clamp(t, 0.f, 1.f);
+        if (m_paint)
+            m_paint({m_from.r + (m_to.r - m_from.r) * k, m_from.g + (m_to.g - m_from.g) * k,
+                     m_from.b + (m_to.b - m_from.b) * k, m_from.a + (m_to.a - m_from.a) * k});
+    }
+
+private:
+    ccColor4F m_from{};
+    ccColor4F m_to{};
+    std::function<void(ccColor4F)> m_paint;
+};
+}  // namespace
+
 void FrameWindowAnalyzer::spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
                                       FrameWindowTier const* tier, bool redraw) {
     auto* container = this->markerContainer(pl);
@@ -8576,36 +8633,18 @@ void FrameWindowAnalyzer::spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
             }
         }
 
-        auto* circle = CCDrawNode::create();
-        float const a = color.a;
-
         // A band can carry one of Juice's shapes. Without one this is the plain
-        // ring anticroom draws, kept exactly as it was -- two passes so the
-        // marker reads against a bright background as well as a dark one.
-        if (shapeNode) {
-            // the picture stands in for it
-        } else if (tier && tier->style.shape != gbshape::Shape::Circle) {
-            gbshape::draw(circle, {0.f, 0.f}, radius,
-                          {color.r * a, color.g * a, color.b * a, a}, tier->style);
-        } else if (tier && tier->style.fill == gbshape::Fill::Normal) {
-            gbshape::draw(circle, {0.f, 0.f}, radius,
-                          {color.r * a, color.g * a, color.b * a, a}, tier->style);
-        } else {
-            CCPoint verts[64];
-            for (int i = 0; i < 64; i++) {
-                float const angle = static_cast<float>(i) * 6.2831853f / 64.f;
-                verts[i] = CCPoint{radius * std::cos(angle), radius * std::sin(angle)};
-            }
-            // GucciBot (2026-11-16): Ring thickness. The dark edge stays 2
-            // wider than the colored line, as anticroom's 4 and 2 are (the
-            // default, 2, draws exactly those).
-            float const line = std::clamp(fwcfg.ringWidth, 0.5f, 8.f);
-            circle->drawPolygon(verts, 64, {0.f, 0.f, 0.f, 0.f}, line + 2.f,
-                                {0.f, 0.f, 0.f, a});
-            circle->drawPolygon(verts, 64, {0.f, 0.f, 0.f, 0.f}, line,
-                                {color.r * a, color.g * a, color.b * a, a});
-        }
+        // ring anticroom draws (drawMarkerShape), two passes so the marker
+        // reads against a bright background as well as a dark one. Ring
+        // thickness (2026-11-16) sets its line; 2 is the one it always had.
+        std::optional<gbshape::Style> const style =
+            tier ? std::optional<gbshape::Style>(tier->style) : std::nullopt;
+        float const line = std::clamp(fwcfg.ringWidth, 0.5f, 8.f);
+        CCDrawNode* circle = nullptr;
         if (!shapeNode) {
+            // (a picture, when there is one, stands in for it)
+            circle = CCDrawNode::create();
+            drawMarkerShape(circle, radius, style, line, color);
             node->addChild(circle);
             shapeNode = circle;
         }
@@ -8635,6 +8674,38 @@ void FrameWindowAnalyzer::spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
                 pulse(shapeNode);
             if (tier->pulseText)
                 pulse(label);
+
+            // GucciBot (2026-11-16): the pulse color, on what pulses, with
+            // the same timing: to the color, hold, back to the band's.
+            if (tier->pulseTint) {
+                ccColor4F const to{tier->pulseColor[0], tier->pulseColor[1],
+                                   tier->pulseColor[2], color.a};
+                auto const rgb = [](ccColor4F c) {
+                    auto const b = [](float v) { return static_cast<GLubyte>(std::clamp(v, 0.f, 1.f) * 255.f); };
+                    return ccColor3B{b(c.r), b(c.g), b(c.b)};
+                };
+                // `from` is what the node shows outside the pulse.
+                auto const tint = [&](CCNode* n, ccColor4F from, std::function<void(ccColor4F)> paint) {
+                    auto* in = PulseTint::create(tier->pulseIn, from, to, paint);
+                    auto* out = PulseTint::create(tier->pulseOut, to, from, paint);
+                    if (!in || !out) return;
+                    n->runAction(CCSequence::create(in, CCDelayTime::create(tier->pulseHold), out, nullptr));
+                };
+                if (tier->pulseMarker) {
+                    if (circle) {
+                        tint(circle, color, [circle, radius, style, line](ccColor4F c) {
+                            circle->clear();
+                            drawMarkerShape(circle, radius, style, line, c);
+                        });
+                    } else if (auto* sprite = typeinfo_cast<CCSprite*>(shapeNode)) {
+                        // A picture is multiplied by its color: white is as drawn.
+                        tint(sprite, {1.f, 1.f, 1.f, color.a},
+                             [sprite, rgb](ccColor4F c) { sprite->setColor(rgb(c)); });
+                    }
+                }
+                if (tier->pulseText)
+                    tint(label, color, [label, rgb](ccColor4F c) { label->setColor(rgb(c)); });
+            }
         }
 
         container->addChild(node);

@@ -222,6 +222,14 @@ namespace gucci::fwstore {
                 o["pulsein"] = t.pulseIn;
                 o["pulsehold"] = t.pulseHold;
                 o["pulseout"] = t.pulseOut;
+                // GucciBot (2026-11-16): written only once it's set, so a band
+                // without it saves exactly as before.
+                if (t.pulseTint || t.pulseColor != FrameWindowTier{}.pulseColor) {
+                    o["pulsetint"] = t.pulseTint;
+                    o["pulser"] = t.pulseColor[0];
+                    o["pulseg"] = t.pulseColor[1];
+                    o["pulseb"] = t.pulseColor[2];
+                }
                 arr.push(o);
             }
             return arr.dump();
@@ -252,6 +260,8 @@ namespace gucci::fwstore {
             t.maxWindow = bandEdge(t.maxWindow, t.minWindow);
             for (auto& c : t.color)
                 c = std::clamp(c, 0.f, 1.f);
+            for (auto& c : t.pulseColor)
+                c = std::isfinite(c) ? std::clamp(c, 0.f, 1.f) : 1.f;
             int const shape = std::clamp(static_cast<int>(t.style.shape), 0, 3);
             int const fill = std::clamp(static_cast<int>(t.style.fill), 0, 2);
             t.style.shape = static_cast<gbshape::Shape>(shape);
@@ -323,6 +333,10 @@ namespace gucci::fwstore {
                 t.pulseIn = static_cast<float>(jreal(j, "pulsein", def.pulseIn));
                 t.pulseHold = static_cast<float>(jreal(j, "pulsehold", def.pulseHold));
                 t.pulseOut = static_cast<float>(jreal(j, "pulseout", def.pulseOut));
+                t.pulseTint = jbool(j, "pulsetint", def.pulseTint);
+                t.pulseColor[0] = static_cast<float>(jreal(j, "pulser", def.pulseColor[0]));
+                t.pulseColor[1] = static_cast<float>(jreal(j, "pulseg", def.pulseColor[1]));
+                t.pulseColor[2] = static_cast<float>(jreal(j, "pulseb", def.pulseColor[2]));
                 clampTier(t);
                 tiers.push_back(std::move(t));
             }

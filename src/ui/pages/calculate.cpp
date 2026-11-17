@@ -723,6 +723,17 @@ namespace gucci::ui::pages {
                 changed |= kit::SliderRow("Fade in", "Seconds to grow", &t.pulseIn, 0.f, 2.f, "%.2f s");
                 changed |= kit::SliderRow("Hold", "Seconds at full size", &t.pulseHold, 0.f, 3.f, "%.2f s");
                 changed |= kit::SliderRow("Fade out", "Seconds to settle back", &t.pulseOut, 0.f, 3.f, "%.2f s");
+                // GucciBot (2026-11-16): off, the pulse keeps the band's color.
+                changed |= kit::SwitchRow("Pulse color", "It turns this color as it pulses, then back. Off keeps "
+                                                         "the band's own color",
+                                          &t.pulseTint);
+                if (t.pulseTint) {
+                    ImVec4 pc(t.pulseColor[0], t.pulseColor[1], t.pulseColor[2], 1.f);
+                    if (kit::ColorRow("Color", "The pulse's color. The band's opacity is kept", &pc, false)) {
+                        t.pulseColor = {pc.x, pc.y, pc.z};
+                        changed = true;
+                    }
+                }
             }
 
             const char* shapes[] = {"Circle", "Star", "Spiral", "Polygon"};

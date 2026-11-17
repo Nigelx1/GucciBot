@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-aa (Renders free their encoder when they end, so memory and threads no longer pile up render after render)"
+    "2026-11-16-ab (Calculate: a pulse color per band (off by default, the pulse keeps the band color))"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

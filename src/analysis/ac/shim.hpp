@@ -127,6 +127,12 @@ struct FrameWindowTier {
     float pulseIn = 0.08f;
     float pulseHold = 0.12f;
     float pulseOut = 0.25f;
+    // GucciBot (2026-11-16): a color for the pulse. While it pulses, what
+    // pulses (the marker, the label or both) turns this color and back, on
+    // the same fade-in, hold and fade-out. Off, the pulse keeps the band's
+    // own color, as it always did. The band's opacity is kept either way.
+    bool pulseTint = false;
+    std::array<float, 3> pulseColor = {1.f, 1.f, 1.f};
 };
 
 // Copied field-for-field from anticroom's settings.hpp. Defaults are his --
