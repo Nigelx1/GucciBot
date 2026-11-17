@@ -23,6 +23,8 @@
 #include <unistd.h>  // fsync (writeResults)
 #endif
 #include <fstream>
+#include <functional>
+#include <optional>
 #include <numeric>
 #include <map>
 #include <matjson.hpp>
@@ -142,6 +144,7 @@ void fwFileLog(std::string const& line, bool important);
 // log too, a 9-input run wrote about 6,300 lines there, up to 1,500 a second
 // (test pass 2026-11-10, bug 4); the run's end says how many went to the file.
 static size_t g_fwFileOnlyLines = 0;
+static std::string legendGroupName(std::string const& g);  // the legend's rows
 #define FWLOG(...) do { if (m_verbose->inner()) { fwFileLog(fmt::format(__VA_ARGS__)); ++g_fwFileOnlyLines; } } while (0)
 // A warning that comes once per restore or step, not once per run: the file
 // only, counted like FWLOG. Rare ones (a death in the capture, a divergence)
@@ -8503,6 +8506,61 @@ template <class S> auto secondHalfOf(S const& gs, int) -> decltype(gs.m_inSecond
 template <class S> bool secondHalfOf(S const& gs, long) { return gs.m_unkBool11; }
 }  // namespace
 
+// GucciBot (2026-11-16): a marker's shape, drawn into `dn` in `color`: one
+// of Juice's shapes, a Filled circle, or anticroom's plain ring (two passes,
+// so it reads on a bright background and a dark one; Ring thickness sets the
+// colored line, the dark edge 2 wider). `style` is empty for the plain ring
+// of a mark with no band. The pulse color redraws through this as it fades.
+static void drawMarkerShape(CCDrawNode* dn, float radius, std::optional<gbshape::Style> const& style,
+                            float line, ccColor4F color) {
+    float const a = color.a;
+    ccColor4F const pre{color.r * a, color.g * a, color.b * a, a};
+    if (style && (style->shape != gbshape::Shape::Circle || style->fill == gbshape::Fill::Normal)) {
+        gbshape::draw(dn, {0.f, 0.f}, radius, pre, *style);
+        return;
+    }
+    CCPoint verts[64];
+    for (int i = 0; i < 64; i++) {
+        float const angle = static_cast<float>(i) * 6.2831853f / 64.f;
+        verts[i] = CCPoint{radius * std::cos(angle), radius * std::sin(angle)};
+    }
+    dn->drawPolygon(verts, 64, {0.f, 0.f, 0.f, 0.f}, line + 2.f, {0.f, 0.f, 0.f, a});
+    dn->drawPolygon(verts, 64, {0.f, 0.f, 0.f, 0.f}, line, pre);
+}
+
+namespace {
+// GucciBot (2026-11-16): the pulse color's fade, from one color to another
+// over the action's time, handed to `paint` each frame (a label or a picture
+// takes it as its color; a drawn shape is drawn again in it).
+class PulseTint : public CCActionInterval {
+public:
+    static PulseTint* create(float seconds, ccColor4F from, ccColor4F to,
+                             std::function<void(ccColor4F)> paint) {
+        auto* ret = new PulseTint();
+        if (ret->initWithDuration(seconds)) {
+            ret->m_from = from;
+            ret->m_to = to;
+            ret->m_paint = std::move(paint);
+            ret->autorelease();
+            return ret;
+        }
+        delete ret;
+        return nullptr;
+    }
+    void update(float t) override {
+        float const k = std::clamp(t, 0.f, 1.f);
+        if (m_paint)
+            m_paint({m_from.r + (m_to.r - m_from.r) * k, m_from.g + (m_to.g - m_from.g) * k,
+                     m_from.b + (m_to.b - m_from.b) * k, m_from.a + (m_to.a - m_from.a) * k});
+    }
+
+private:
+    ccColor4F m_from{};
+    ccColor4F m_to{};
+    std::function<void(ccColor4F)> m_paint;
+};
+}  // namespace
+
 void FrameWindowAnalyzer::spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
                                       FrameWindowTier const* tier, bool redraw) {
     auto* container = this->markerContainer(pl);
@@ -8576,32 +8634,18 @@ void FrameWindowAnalyzer::spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
             }
         }
 
-        auto* circle = CCDrawNode::create();
-        float const a = color.a;
-
         // A band can carry one of Juice's shapes. Without one this is the plain
-        // ring anticroom draws, kept exactly as it was -- two passes so the
-        // marker reads against a bright background as well as a dark one.
-        if (shapeNode) {
-            // the picture stands in for it
-        } else if (tier && tier->style.shape != gbshape::Shape::Circle) {
-            gbshape::draw(circle, {0.f, 0.f}, radius,
-                          {color.r * a, color.g * a, color.b * a, a}, tier->style);
-        } else if (tier && tier->style.fill == gbshape::Fill::Normal) {
-            gbshape::draw(circle, {0.f, 0.f}, radius,
-                          {color.r * a, color.g * a, color.b * a, a}, tier->style);
-        } else {
-            CCPoint verts[64];
-            for (int i = 0; i < 64; i++) {
-                float const angle = static_cast<float>(i) * 6.2831853f / 64.f;
-                verts[i] = CCPoint{radius * std::cos(angle), radius * std::sin(angle)};
-            }
-            circle->drawPolygon(verts, 64, {0.f, 0.f, 0.f, 0.f}, 4.f,
-                                {0.f, 0.f, 0.f, a});
-            circle->drawPolygon(verts, 64, {0.f, 0.f, 0.f, 0.f}, 2.f,
-                                {color.r * a, color.g * a, color.b * a, a});
-        }
+        // ring anticroom draws (drawMarkerShape), two passes so the marker
+        // reads against a bright background as well as a dark one. Ring
+        // thickness (2026-11-16) sets its line; 2 is the one it always had.
+        std::optional<gbshape::Style> const style =
+            tier ? std::optional<gbshape::Style>(tier->style) : std::nullopt;
+        float const line = std::clamp(fwcfg.ringWidth, 0.5f, 8.f);
+        CCDrawNode* circle = nullptr;
         if (!shapeNode) {
+            // (a picture, when there is one, stands in for it)
+            circle = CCDrawNode::create();
+            drawMarkerShape(circle, radius, style, line, color);
             node->addChild(circle);
             shapeNode = circle;
         }
@@ -8631,6 +8675,38 @@ void FrameWindowAnalyzer::spawnMarker(PlayLayer* pl, FrameWindowMark const& mk,
                 pulse(shapeNode);
             if (tier->pulseText)
                 pulse(label);
+
+            // GucciBot (2026-11-16): the pulse color, on what pulses, with
+            // the same timing: to the color, hold, back to the band's.
+            if (tier->pulseTint) {
+                ccColor4F const to{tier->pulseColor[0], tier->pulseColor[1],
+                                   tier->pulseColor[2], color.a};
+                auto const rgb = [](ccColor4F c) {
+                    auto const b = [](float v) { return static_cast<GLubyte>(std::clamp(v, 0.f, 1.f) * 255.f); };
+                    return ccColor3B{b(c.r), b(c.g), b(c.b)};
+                };
+                // `from` is what the node shows outside the pulse.
+                auto const tint = [&](CCNode* n, ccColor4F from, std::function<void(ccColor4F)> paint) {
+                    auto* in = PulseTint::create(tier->pulseIn, from, to, paint);
+                    auto* out = PulseTint::create(tier->pulseOut, to, from, paint);
+                    if (!in || !out) return;
+                    n->runAction(CCSequence::create(in, CCDelayTime::create(tier->pulseHold), out, nullptr));
+                };
+                if (tier->pulseMarker) {
+                    if (circle) {
+                        tint(circle, color, [circle, radius, style, line](ccColor4F c) {
+                            circle->clear();
+                            drawMarkerShape(circle, radius, style, line, c);
+                        });
+                    } else if (auto* sprite = typeinfo_cast<CCSprite*>(shapeNode)) {
+                        // A picture is multiplied by its color: white is as drawn.
+                        tint(sprite, {1.f, 1.f, 1.f, color.a},
+                             [sprite, rgb](ccColor4F c) { sprite->setColor(rgb(c)); });
+                    }
+                }
+                if (tier->pulseText)
+                    tint(label, color, [label, rgb](ccColor4F c) { label->setColor(rgb(c)); });
+            }
         }
 
         container->addChild(node);
@@ -9059,9 +9135,13 @@ void FrameWindowAnalyzer::rebuildHud(PlayLayer* pl) {
 
     for (auto const& tier : tiers) {
         if (!tier.showInHud) continue;
+        // GucciBot (2026-11-16): a group's later bands are on its first one's row.
+        if (this->legendRowOf(tier.id) != tier.id) continue;
 
+        std::string const group = legendGroupName(tier.group);
         std::string const name =
-            tier.text.empty()
+            !group.empty() ? group
+            : tier.text.empty()
                 ? (tier.minWindow == tier.maxWindow
                        ? fmt::format("{:g}", tier.minWindow)
                        : fmt::format("{:g}-{:g}", tier.minWindow, tier.maxWindow))
@@ -9109,12 +9189,17 @@ void FrameWindowAnalyzer::refreshHudCounts(PlayLayer* pl) {
     auto* hud = pl->m_uiLayer->getChildByID("framewindow-hud"_spr);
     if (!hud) return;
 
+    // GucciBot (2026-11-16): a row's count is its bands' together (legend
+    // groups); a band without a group is a row of its own.
+    std::map<int, int> rows;
+    for (auto const& [id, n] : m_hudCounts)
+        rows[this->legendRowOf(id)] += n;
     for (auto const& tier : this->hudBands()) {
         auto* node = hud->getChildByID(fmt::format("framewindow-count-{}", tier.id));
         if (auto* label = typeinfo_cast<CCLabelBMFont*>(node)) {
-            auto const it = m_hudCounts.find(tier.id);
+            auto const it = rows.find(tier.id);
             label->setString(
-                fmt::format("{}", it == m_hudCounts.end() ? 0 : it->second)
+                fmt::format("{}", it == rows.end() ? 0 : it->second)
                     .c_str());
         }
     }
@@ -9154,7 +9239,9 @@ void FrameWindowAnalyzer::updateHudFlash(PlayLayer* pl, uint32_t frame,
         auto* label = typeinfo_cast<CCLabelBMFont*>(node);
         if (!label) continue;
 
-        bool const flashing = m_hudFlashActive && tier.id == m_hudFlashTier;
+        // A band in a group lights its group's row.
+        bool const flashing = m_hudFlashActive && m_hudFlashTier >= 0 &&
+                              tier.id == this->legendRowOf(m_hudFlashTier);
         float const mix = flashing ? amount : 0.f;
 
         auto const chan = [&](int i) {
@@ -9212,17 +9299,44 @@ FrameWindowTier const* FrameWindowAnalyzer::legendTierFor(
     return this->displayTierFor(mk);
 }
 
+// GucciBot (2026-11-16): a legend group's name without the spaces around it,
+// so "Good " and "Good" are one group (the menu keeps them while typing).
+static std::string legendGroupName(std::string const& g) {
+    auto const a = g.find_first_not_of(" 	");
+    if (a == std::string::npos) return {};
+    auto const b = g.find_last_not_of(" 	");
+    return g.substr(a, b - a + 1);
+}
+
+int FrameWindowAnalyzer::legendRowOf(int tierId) const {
+    auto const& bands = this->hudBands();
+    auto const it = std::find_if(bands.begin(), bands.end(),
+                                 [&](FrameWindowTier const& t) { return t.id == tierId; });
+    if (it == bands.end() || !it->showInHud) return tierId;
+    auto const group = legendGroupName(it->group);
+    if (group.empty()) return tierId;
+    for (auto const& t : bands)
+        if (t.showInHud && legendGroupName(t.group) == group) return t.id;
+    return tierId;
+}
+
 std::vector<std::pair<FrameWindowTier, int>> FrameWindowAnalyzer::legendTotals()
     const {
     std::vector<std::pair<FrameWindowTier, int>> out;
-    for (auto const& tier : this->hudBands())
-        if (tier.showInHud) out.push_back({tier, 0});
+    // One entry per legend row: a group's is its first band, labelled with
+    // the group's name (GucciBot, 2026-11-16).
+    for (auto const& tier : this->hudBands()) {
+        if (!tier.showInHud || this->legendRowOf(tier.id) != tier.id) continue;
+        out.push_back({tier, 0});
+        if (auto const g = legendGroupName(tier.group); !g.empty()) out.back().first.text = g;
+    }
     for (auto const& mk : m_results) {
         auto const* tier = this->legendTierFor(mk);
         if (!tier) continue;
-        for (auto& row : out)
-            if (row.first.id == tier->id) {
-                row.second++;
+        int const row = this->legendRowOf(tier->id);
+        for (auto& r : out)
+            if (r.first.id == row) {
+                r.second++;
                 break;
             }
     }

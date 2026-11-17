@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-y (The Pathfinder page says what its macro was saved as when a run beats the level, not only a toast)"
+    "2026-11-16-af (Calculate: band sound packs, export and import a named set of band sounds)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

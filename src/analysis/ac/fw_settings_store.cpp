@@ -31,6 +31,11 @@ namespace gucci::fwstore {
             T FW::* member;
             T lo;
             T hi;
+            // GucciBot (2026-11-16): a key added after 2.0's betas is written
+            // only once it's been changed (it differs from the default, or a
+            // value for it is already saved), so a player who never touches
+            // it keeps a settings file byte for byte as it was.
+            bool sparse = false;
         };
 
         struct Flag {
@@ -147,6 +152,8 @@ namespace gucci::fwstore {
             {"fwac_hud_scale", &FW::hudScale, 0.1f, 2.f},
             {"fwac_lstar_hud_scale", &FW::lstarHudScale, 0.1f, 2.f},
             {"fwac_label_cbf", &FW::labelCbf, 0.f, static_cast<float>(kBandWindowMax)},
+            // The plain ring's line (Ring thickness, Calculate > Overlay).
+            {"fwac_ring_width", &FW::ringWidth, 0.5f, 8.f, true},
         };
 
         constexpr char const* kTiersKey = "fwac_tiers";
@@ -215,6 +222,19 @@ namespace gucci::fwstore {
                 o["pulsein"] = t.pulseIn;
                 o["pulsehold"] = t.pulseHold;
                 o["pulseout"] = t.pulseOut;
+                // GucciBot (2026-11-16): written only once it's set, so a band
+                // without it saves exactly as before.
+                if (t.pulseTint || t.pulseColor != FrameWindowTier{}.pulseColor) {
+                    o["pulsetint"] = t.pulseTint;
+                    o["pulser"] = t.pulseColor[0];
+                    o["pulseg"] = t.pulseColor[1];
+                    o["pulseb"] = t.pulseColor[2];
+                }
+                // Saved without the spaces around it (the menu keeps them
+                // while typing, the legend ignores them).
+                auto const a = t.group.find_first_not_of(" 	");
+                if (a != std::string::npos)
+                    o["group"] = t.group.substr(a, t.group.find_last_not_of(" 	") - a + 1);
                 arr.push(o);
             }
             return arr.dump();
@@ -245,6 +265,13 @@ namespace gucci::fwstore {
             t.maxWindow = bandEdge(t.maxWindow, t.minWindow);
             for (auto& c : t.color)
                 c = std::clamp(c, 0.f, 1.f);
+            for (auto& c : t.pulseColor)
+                c = std::isfinite(c) ? std::clamp(c, 0.f, 1.f) : 1.f;
+            // A group is a short name. (Not trimmed here: this runs after
+            // every keystroke in the menu, and would eat the space typed
+            // between two words.)
+            if (t.group.size() > 40)
+                t.group.resize(40);
             int const shape = std::clamp(static_cast<int>(t.style.shape), 0, 3);
             int const fill = std::clamp(static_cast<int>(t.style.fill), 0, 2);
             t.style.shape = static_cast<gbshape::Shape>(shape);
@@ -316,6 +343,11 @@ namespace gucci::fwstore {
                 t.pulseIn = static_cast<float>(jreal(j, "pulsein", def.pulseIn));
                 t.pulseHold = static_cast<float>(jreal(j, "pulsehold", def.pulseHold));
                 t.pulseOut = static_cast<float>(jreal(j, "pulseout", def.pulseOut));
+                t.pulseTint = jbool(j, "pulsetint", def.pulseTint);
+                t.pulseColor[0] = static_cast<float>(jreal(j, "pulser", def.pulseColor[0]));
+                t.pulseColor[1] = static_cast<float>(jreal(j, "pulseg", def.pulseColor[1]));
+                t.pulseColor[2] = static_cast<float>(jreal(j, "pulseb", def.pulseColor[2]));
+                t.group = jstr(j, "group", "");
                 clampTier(t);
                 tiers.push_back(std::move(t));
             }
@@ -360,10 +392,15 @@ namespace gucci::fwstore {
             fw.*f.member = std::clamp(mod->getSavedValue<int64_t>(f.key, fw.*f.member), f.lo, f.hi);
         for (auto const& f : kDoubles)
             fw.*f.member = std::clamp(mod->getSavedValue<double>(f.key, fw.*f.member), f.lo, f.hi);
-        for (auto const& f : kFloats)
+        for (auto const& f : kFloats) {
+            // getSavedValue with a default also puts the default into the
+            // save, so a sparse key is only read once it's there.
+            if (f.sparse && !mod->hasSavedValue(f.key))
+                continue;
             fw.*f.member = static_cast<float>(std::clamp(
                 mod->getSavedValue<double>(f.key, static_cast<double>(fw.*f.member)),
                 static_cast<double>(f.lo), static_cast<double>(f.hi)));
+        }
 
         if (mod->hasSavedValue(kTiersKey)) {
             auto const text = mod->getSavedValue<std::string>(kTiersKey, "");
@@ -385,8 +422,12 @@ namespace gucci::fwstore {
             mod->setSavedValue<int64_t>(f.key, fw.*f.member);
         for (auto const& f : kDoubles)
             mod->setSavedValue<double>(f.key, fw.*f.member);
-        for (auto const& f : kFloats)
+        FW const defaults;
+        for (auto const& f : kFloats) {
+            if (f.sparse && fw.*f.member == defaults.*f.member && !mod->hasSavedValue(f.key))
+                continue;
             mod->setSavedValue<double>(f.key, fw.*f.member);
+        }
         mod->setSavedValue<std::string>(kTiersKey, dumpTiers(fw.tiers));
     }
 

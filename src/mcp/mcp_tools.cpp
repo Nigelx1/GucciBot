@@ -3487,6 +3487,7 @@ namespace gucci::mcp {
         registerUiPressTools(server);
         registerSearchTools(server);
         registerShareTools(server);
+        registerBandsTools(server);
         registerLayoutTools(server);
     }
 

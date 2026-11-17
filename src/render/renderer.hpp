@@ -74,6 +74,9 @@ namespace gucci {
     };
 
 #define SL_AV_PTR(type) std::unique_ptr<type, void (*)(type*)>
+// The pointers' own deleter does nothing (it can't reach the ff table the
+// FFmpeg functions are loaded into); SLRenderer::releaseEncoder frees them by
+// hand once a render has ended.
 #define SL_AV_LEAK(type) [](type*) {}
 
     struct SLAudioTrack {
@@ -133,6 +136,9 @@ namespace gucci {
         geode::Result<> encodeAudioFrame(SLAudioTrack& track, float const* samples, int count);
         void flushPendingAudio(SLAudioTrack& track);
         geode::Result<> stop();
+        // Frees the encoder, the output file's context and the audio tracks
+        // (renderer.cpp). Game thread, encode thread stopped.
+        void releaseEncoder();
 
         // Every way a render ends names its reason here, in one log line per
         // render ("Render stopping: ..."): only the first call while it is

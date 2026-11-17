@@ -16,6 +16,7 @@
 // dismissal and the conflict log live there, not here).
 
 #include "core/platform.hpp"
+#include "ui/band_files.hpp"
 #include "ui/pages.hpp"
 #include "ui/kit.hpp"
 #include "ui/look.hpp"
@@ -653,6 +654,8 @@ namespace gucci::ui::pages {
                 if (!s.circleSkin || gb->fwDefaultLook)
                     slider("Marker radius", nullptr, &FW::markerRadius, "%.1f", true);
                 slider("Label size", nullptr, &FW::markerScale, "%.2fx", true);
+                slider("Ring thickness", "How thick the plain ring's line is. Shapes and images keep their own",
+                       &FW::ringWidth, "%.1f", true);
                 if (!gb->fwDefaultLook && feature("Circle skin",
                             "The ring grows with the window, so how tight a click is reads at a glance. Replaces the "
                             "fixed radius",
@@ -684,6 +687,40 @@ namespace gucci::ui::pages {
             return fmt::format("{:g} - {:g} frames", t.minWindow, t.maxWindow);
         }
 
+        // GucciBot (2026-11-16): under a band's Sound or Image, your own
+        // files: one picked with the file picker (copied into bands/ in the
+        // config folder and set on this band), or one already there.
+        bool yourFiles(FrameWindowTier& t, bandfiles::Kind kind) {
+            bool const sound = kind == bandfiles::Kind::Sound;
+            std::string& path = sound ? t.audioPath : t.imagePath;
+            bool changed = false;
+            kit::RowBegin(sound ? "Your sounds" : "Your pictures",
+                          sound ? "Choose a sound file for this band: it's copied into bands/ in the mod's config "
+                                  "folder. Or pick one already there (Import folder brings in a whole folder)"
+                                : "Choose a picture for this band: it's copied into bands/ in the mod's config "
+                                  "folder. Or pick one already there (Import folder brings in a whole folder)");
+            ImGui::BeginDisabled(bandfiles::picking());
+            if (kit::Button(bandfiles::picking() ? "Choosing..." : (sound ? "Choose a sound" : "Choose a picture")))
+                bandfiles::pickFile(kind, t.id);
+            ImGui::EndDisabled();
+            auto const files = bandfiles::imported(kind);
+            if (!files.empty()) {
+                ImGui::SameLine();
+                int at = -1;
+                for (size_t i = 0; i < files.size(); ++i)
+                    if (files[i] == path)
+                        at = static_cast<int>(i);
+                ImGui::SetNextItemWidth(std::max(80.f, kit::Avail()));
+                if (kit::Dropdown(sound ? "##yoursound" : "##yourpicture", &at, files, "One already in bands/") &&
+                    at >= 0 && at < static_cast<int>(files.size())) {
+                    path = files[static_cast<size_t>(at)];
+                    changed = true;
+                }
+            }
+            kit::RowEnd();
+            return changed;
+        }
+
         void bandDetails(FrameWindowTier& t) {
             bool changed = false;
             // GucciBot (2026-10-23): decimal edges, after anticroom's
@@ -705,14 +742,22 @@ namespace gucci::ui::pages {
                                    "number");
             changed |= kit::InputText("text", &t.text, "auto");
             kit::RowEnd();
+            // GucciBot (2026-11-16): legend groups.
+            kit::RowBegin("Legend group", "Bands with the same group share one row on the legend (and on Share my "
+                                          "windows' picture), with their counts added up. The row shows the group's "
+                                          "name in the first band's color. Empty gives the band its own row");
+            changed |= kit::InputText("group", &t.group, "none");
+            kit::RowEnd();
             kit::RowBegin("Sound", "An ogg, mp3 or wav. Relative paths look in the mod's config folder, then its "
                                    "resources. Empty plays the bundled clip for the window");
             changed |= kit::InputText("audio", &t.audioPath, "file.ogg");
             kit::RowEnd();
+            changed |= yourFiles(t, bandfiles::Kind::Sound);
             kit::RowBegin("Image", "A png or jpg drawn in place of the shape, sized by Size below. Relative paths look "
                                    "in the mod's config folder, then its resources. Empty draws the shape");
             changed |= kit::InputText("image", &t.imagePath, "file.png");
             kit::RowEnd();
+            changed |= yourFiles(t, bandfiles::Kind::Image);
 
             changed |= kit::SwitchRow("Pulse the marker", "It grows and settles back as it appears", &t.pulseMarker);
             changed |= kit::SwitchRow("Pulse the label", "Its text grows and settles back as it appears", &t.pulseText);
@@ -721,6 +766,17 @@ namespace gucci::ui::pages {
                 changed |= kit::SliderRow("Fade in", "Seconds to grow", &t.pulseIn, 0.f, 2.f, "%.2f s");
                 changed |= kit::SliderRow("Hold", "Seconds at full size", &t.pulseHold, 0.f, 3.f, "%.2f s");
                 changed |= kit::SliderRow("Fade out", "Seconds to settle back", &t.pulseOut, 0.f, 3.f, "%.2f s");
+                // GucciBot (2026-11-16): off, the pulse keeps the band's color.
+                changed |= kit::SwitchRow("Pulse color", "It turns this color as it pulses, then back. Off keeps "
+                                                         "the band's own color",
+                                          &t.pulseTint);
+                if (t.pulseTint) {
+                    ImVec4 pc(t.pulseColor[0], t.pulseColor[1], t.pulseColor[2], 1.f);
+                    if (kit::ColorRow("Color", "The pulse's color. The band's opacity is kept", &pc, false)) {
+                        t.pulseColor = {pc.x, pc.y, pc.z};
+                        changed = true;
+                    }
+                }
             }
 
             const char* shapes[] = {"Circle", "Star", "Spiral", "Polygon"};
@@ -767,8 +823,37 @@ namespace gucci::ui::pages {
             }
         }
 
+        // GucciBot (2026-11-16): bring in a folder of files, and band sound
+        // packs (ui/band_files.hpp).
+        void bandFilesSection() {
+            kit::Section("Your files and sound packs");
+            kit::Hint("Import folder copies every sound (ogg, mp3, wav) and picture (png, jpg) in a folder into bands/ "
+                      "in the mod's config folder, for the bands' Sound and Image. A sound pack is your bands' sounds "
+                      "in one .zip, under a name, to share or keep; importing one gives each band the pack's sound for "
+                      "its window range.");
+            ImGui::BeginDisabled(bandfiles::picking());
+            if (kit::Button(bandfiles::picking() ? "Choosing..." : "Import folder"))
+                bandfiles::pickFolder();
+            ImGui::SameLine();
+            if (kit::Button("Import a pack"))
+                bandfiles::pickPack();
+            ImGui::EndDisabled();
+            kit::RowBegin("Pack name", "What Export pack calls it. An imported pack fills it in");
+            kit::InputText("packname", &bandfiles::packName(), "My sounds");
+            kit::RowEnd();
+            if (kit::Button("Export pack")) {
+                auto const res = bandfiles::exportPack(bandfiles::packName());
+                bandfiles::setNote(res.ok, res.note);
+            }
+            if (!bandfiles::note().empty())
+                kit::Note(bandfiles::note().c_str(), bandfiles::noteOk() ? Tone::Good : Tone::Bad);
+        }
+
         void bandsCard() {
             auto& tiers = S().tiers;
+            // A file or pack the picker brought back (it may set a band).
+            if (bandfiles::poll())
+                g_look = true;
             kit::BeginCard("Bands", "Colors, labels, shapes, images, pulses and sounds by window size. Hidden bands draw no markers.");
             if (GucciEngine::get()->fwDefaultLook)
                 kit::Hint(disguised() ? "Default Look is on, so the level uses NaN GD's colors and legend, with the "
@@ -887,6 +972,7 @@ namespace gucci::ui::pages {
                 g_openBands.clear();
                 g_look = true;
             }
+            bandFilesSection();
             kit::EndCard();
         }
 
