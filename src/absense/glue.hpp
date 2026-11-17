@@ -197,7 +197,7 @@ namespace absense {
     // GucciBot (2026-11-16, pf3 lane): a mode portal stacked on a dual
     // portal (GRIEF's hidden cube portal) is a route fork too, and it is gone
     // back to the first time a walk back past it fails (the test switch
-    // pf_fork_dual, this launch only; off by default).
+    // pf_fork_dual, this launch only; on by default since 2026-11-17).
     bool forkDual();
     void setForkDual(bool on);
     // ... and its kill switch, never saved either (gucci_test_set

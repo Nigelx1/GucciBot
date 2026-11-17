@@ -473,7 +473,7 @@ namespace gucci::testset {
                              }});
                 // GucciBot (2026-11-16, pf3 lane): a mode portal stacked on a
                 // dual portal is a route fork too, gone back to the first time
-                // a walk back past it fails; off by default.
+                // a walk back past it fails; on by default (GRIEF, 2026-11-17).
                 v.push_back({"pf_fork_dual", "bool", Store::Memory,
                              [] { return matjson::Value(absense::forkDual()); },
                              [](matjson::Value const& val, bool) {
