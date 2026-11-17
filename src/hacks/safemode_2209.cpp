@@ -406,9 +406,10 @@ class $modify(GB2209SafeAchievements, AchievementManager) {
 // (GameLevelManager::writePlatformerSaveJournal, from onQuit). None is written
 // for a visit in which the bot or a cheat was on at any point -- not just this
 // attempt, as a checkpoint reached with a cheat stays in the save after the
-// cheat is off -- or while safe mode keeps the run from counting. A legit visit
-// saves as normal. Loading a save is refused while GucciBot records or plays:
-// the macro starts the level from its start.
+// cheat is off. A legit visit saves as normal, with the Safe mode switch on
+// too (Nigel, 2026-11-17: "yes", legit platformer runs keep their progress;
+// only bot or cheat runs don't). Loading a save is refused while GucciBot
+// records or plays: the macro starts the level from its start.
 class $modify(GB2209PlatformerSave, PlayLayer) {
     struct Fields {
         bool cheatedVisit = false;
@@ -422,7 +423,11 @@ class $modify(GB2209PlatformerSave, PlayLayer) {
         bool const cheat = live() && (safemode::cheatingNow() || safemode::tainted());
         if (cheat)
             m_fields->cheatedVisit = true;
-        return m_fields->cheatedVisit || safemode::runShielded();
+        // Not runShielded(): the Safe mode switch (and a test launch's forced
+        // safe mode) shield every run, legit or not, and rule 4 keeps a legit
+        // run's save. A test launch writes none of GD's save files anyway (the
+        // test-save guard, and the journal hook below).
+        return m_fields->cheatedVisit;
     }
 
     void postUpdate(float dt) {
@@ -433,7 +438,7 @@ class $modify(GB2209PlatformerSave, PlayLayer) {
     void writePersistentSave() {
         if (cheatedNow()) {
             ++g_counts.platformerSavesBlocked;
-            note("no platformer save: the bot or a cheat was on in this visit (or safe mode)");
+            note("no platformer save: the bot or a cheat was on in this visit");
             return;
         }
         PlayLayer::writePersistentSave();
