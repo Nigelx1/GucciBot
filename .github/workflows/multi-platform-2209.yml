@@ -26,7 +26,7 @@ name: GD 2.2091 build (Geode 6, Windows preview)
 on:
   workflow_dispatch:
   push:
-    branches: [master, port-2209, lane-ci2209]  # TEMP: lane-ci2209 only registers the workflow for dispatch; removed before the merge
+    branches: [master, port-2209]
 
 jobs:
   windows:
