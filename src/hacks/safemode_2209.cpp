@@ -26,7 +26,11 @@
 #include "mcp/mcp_server.hpp"
 
 #include <Geode/Geode.hpp>
+#include <Geode/binding/AchievementManager.hpp>
 #include <Geode/binding/GameLevelManager.hpp>
+#include <Geode/binding/GameStatsManager.hpp>
+#include <Geode/binding/PauseLayer.hpp>
+#include <Geode/binding/UILayer.hpp>
 #include <Geode/binding/Slider.hpp>
 #include <Geode/binding/SliderThumb.hpp>
 #include <Geode/binding/SliderTouchLogic.hpp>
@@ -41,6 +45,8 @@
 #include <cmath>
 #include <cstddef>
 #include <cstring>
+#include <optional>
+#include <string>
 
 using namespace geode::prelude;
 using gucci::GucciEngine;
@@ -121,6 +127,11 @@ namespace {
         int speedPinned = 0;
     } g_counts;
 
+    // A test launch's control run (safety2209_probe "noflag_on"): NoProgress
+    // leaves GD's no-progress flag alone, so a test can see what GD would have
+    // written without it (the writers' own holds below still apply).
+    bool g_testNoFlag = false;
+
     // A few lines in the log, not one per frame.
     void note(char const* what) {
         static int s_lines = 0;
@@ -135,7 +146,7 @@ namespace {
 namespace gucci::safemode {
 
     NoProgress::NoProgress(PlayLayer* pl, bool on, bool testMode) {
-        if (!on || !pl || !checks().flags)
+        if (!on || !pl || !checks().flags || (g_testNoFlag && testLaunch()))
             return;
         m_pl = pl;
         m_wasSpeed = field<bool>(pl, v2091::kPlSpeedChanged);
@@ -356,13 +367,16 @@ $execute {
     g_uploadHooked = true;
 }
 
-bool gucci::safemode::probeUpload() {
-    if (!g_uploadHooked)
-        return false;
-    // Through the hook: the hooked address runs the hook first.
-    reinterpret_cast<UploadFn>(geode::base::get() + v2091::kUploadDeathData.offset)(GameLevelManager::sharedState());
-    return true;
-}
+namespace {
+    bool probeUpload() {
+        if (!g_uploadHooked)
+            return false;
+        // Through the hook: the hooked address runs the hook first.
+        reinterpret_cast<UploadFn>(geode::base::get() + v2091::kUploadDeathData.offset)(
+            GameLevelManager::sharedState());
+        return true;
+    }
+}  // namespace
 
 // ---- Achievements (Silicate 1.1.2: AchievementManager::reportAchievementWithID)
 //
@@ -578,6 +592,172 @@ $execute {
     }
     util_guarded_midhook(base + v2091::kSpeedKeybind.offset, v2091::kSpeedKeybind.expect, v2091::kSpeedKeybind.name,
                          speedKeybindMidhook);
+}
+
+// ---- Assistant Access's safety2209_probe (tests only)
+
+namespace {
+    uint32_t fnv(std::string const& s) {
+        uint32_t h = 2166136261u;
+        for (unsigned char c : s)
+            h = (h ^ c) * 16777619u;
+        return h;
+    }
+
+    template <class S>
+    std::string strInfo(S const& from) {
+        std::string const s(from);  // gd::string or std::string
+        return fmt::format("{}:{:08x}", s.size(), fnv(s));
+    }
+
+    template <class T>
+    T* findNode(CCNode* node) {
+        if (!node)
+            return nullptr;
+        if (auto* hit = typeinfo_cast<T*>(node))
+            return hit;
+        for (auto* child : CCArrayExt<CCNode*>(node->getChildren()))
+            if (auto* hit = findNode<T>(child))
+                return hit;
+        return nullptr;
+    }
+}  // namespace
+
+std::string gucci::safemode::probeLevel() {
+    std::string out;
+    auto* pl = PlayLayer::get();
+    // The last level read stays readable after the level is left (playtime
+    // through quit).
+    static geode::Ref<GJGameLevel> s_last;
+    if (pl && pl->m_level)
+        s_last = pl->m_level;
+    if (!pl && s_last)
+        out += "(left the level) ";
+    if (s_last) {
+        auto* l = s_last.data();
+        out += fmt::format(
+            "level id={} type={} deathsPerPercent={} startPosDeaths={} sessionAttempts={} startPosHistory={} "
+            "deathMarkers={} pending={} sessionLog={} compressedSessionLog={} sessionPlay={} totalPlay={} "
+            "practiceAttempts={} attempts={} jumps={} normal={} practice={} orbs={} newNormal2={} attemptTime={} "
+            "bestTime={} inputsTime={} platformerSaveReplay={}; ",
+            l->m_levelID.value(), static_cast<int>(l->m_levelType), strInfo(l->m_deathsPerPercent),
+            strInfo(l->m_startPosDeathCounts), strInfo(l->m_currentSessionAttempts),
+            strInfo(l->m_startPosAttemptHistory), strInfo(l->m_deathMarkers), l->m_deathDataPendingUpload,
+            strInfo(l->m_sessionLog), strInfo(l->m_compressedSessionLog), l->m_sessionPlayTime, l->m_totalPlayTime,
+            l->m_practiceAttempts, l->m_attempts.value(), l->m_jumps.value(), l->m_normalPercent.value(),
+            l->m_practicePercent, l->m_orbCompletion.value(), l->m_newNormalPercent2.value(),
+            l->m_attemptTime.value(), l->m_bestTime, strInfo(l->m_inputsTime), strInfo(l->m_platformerSaveReplay));
+        if (pl)
+            out += fmt::format("layer gdSpeed={} gdMusicSpeed={} ignoreDamage={} speedFlag={} testMode={} gdOwnCheat={}; ",
+                               checks().speed ? field<float>(pl, v2091::kGblSpeed) : -1.f,
+                               checks().speed ? field<float>(pl, v2091::kGblMusicSpeed) : -1.f,
+                               checks().flags && field<bool>(pl, v2091::kPlIgnoreDamageUsed),
+                               checks().flags && field<bool>(pl, v2091::kPlSpeedChanged), pl->m_isTestMode,
+                               safemode::gdOwnCheat());
+        if (l->m_levelType == GJLevelType::Main)
+            out += fmt::format("completedMain={}; ",
+                               GameStatsManager::sharedState()->hasCompletedMainLevel(l->m_levelID.value()));
+    } else {
+        out += "no level; ";
+    }
+    auto* gsm = GameStatsManager::sharedState();
+    out += "stats";
+    for (int k = 1; k <= 40; ++k) {
+        int const v = gsm->getStat(std::to_string(k).c_str());
+        if (v)
+            out += fmt::format(" {}={}", k, v);
+    }
+    out += fmt::format("; completedLevels={}", gsm->m_completedLevels ? gsm->m_completedLevels->count() : 0u);
+    auto* am = AchievementManager::sharedState();
+    out += fmt::format("; achievements={}", am->m_reportedAchievements ? am->m_reportedAchievements->count() : 0u);
+    out += fmt::format("; botSpeed={}", GucciEngine::get()->updater.m_speedhack);
+    return out;
+}
+
+// Actions (a test launch only; mcp/test_settings.cpp checks):
+//   upload             GD's death-data upload through the guard (held back)
+//   noflag_on/_off     the control run's switch (g_testNoFlag above)
+//   pause              PlayLayer::pauseGame, as GD's pause button
+//   resume             the pause menu's Resume
+//   complete           PlayLayer::levelComplete, as the end of the level calls it
+//   speed_key:<id>     UILayer::handleAction(<id>) down and up, as GD's keybinds
+//   slider:<0..1>      a TimeSpeedControl made for the level, its slider set and moved
+//   gd_speed:<x>       GD's own speed written as its slider would (no GucciBot hook)
+//   ignore_damage      GD's Ignore Damage turned on, as its keybind does
+std::string gucci::safemode::probeAction(std::string const& action) {
+    auto* pl = PlayLayer::get();
+    auto arg = [&](char const* prefix) -> std::optional<std::string> {
+        std::string_view const p = prefix;
+        if (action.size() > p.size() && action.compare(0, p.size(), p) == 0)
+            return action.substr(p.size());
+        return std::nullopt;
+    };
+    if (action == "upload")
+        return probeUpload() ? "" : "the upload guard isn't in (see the log)";
+    if (action == "noflag_on" || action == "noflag_off") {
+        g_testNoFlag = action == "noflag_on";
+        return "";
+    }
+    if (!pl)
+        return "no level is open";
+    if (action == "pause") {
+        pl->pauseGame(false);
+        return "";
+    }
+    if (action == "resume") {
+        auto* pause = findNode<PauseLayer>(CCDirector::get()->getRunningScene());
+        if (!pause)
+            return "no pause menu on screen";
+        pause->onResume(nullptr);
+        return "";
+    }
+    if (action == "complete") {
+        pl->levelComplete();
+        return "";
+    }
+    if (auto id = arg("speed_key:")) {
+        if (!pl->m_uiLayer)
+            return "no UILayer";
+        int const n = std::atoi(id->c_str());
+        pl->m_uiLayer->handleAction(n, true, 0.0);
+        pl->m_uiLayer->handleAction(n, false, 0.0);
+        return "";
+    }
+    if (auto v = arg("slider:")) {
+        auto* control = TimeSpeedControl::create(pl);
+        if (!control || !control->m_slider || !control->m_slider->m_touchLogic ||
+            !control->m_slider->m_touchLogic->m_thumb)
+            return "TimeSpeedControl or its slider wasn't made";
+        pl->addChild(control);
+        control->m_slider->setValue(static_cast<float>(std::atof(v->c_str())));
+        control->m_slider->m_touchLogic->m_thumb->activate();
+        std::string const label = control->m_speedLabel ? control->m_speedLabel->getString() : "";
+        control->removeFromParent();
+        log::info("[safety 2.2091] probe slider: label after the move '{}'", label);
+        return "";
+    }
+    if (auto v = arg("gd_speed:")) {
+        if (!checks().speed)
+            return "the speed byte check failed";
+        float const speed = static_cast<float>(std::atof(v->c_str()));
+        field<float>(pl, v2091::kGblSpeed) = speed;
+        field<float>(pl, v2091::kGblMusicSpeed) = speed;
+        return "";
+    }
+    if (action == "ignore_damage") {
+        if (!checks().ignoreOff)
+            return "the Ignore Damage byte check failed";
+        // As UILayer::handleAction's Ignore Damage keybind writes them (0x671ce7).
+        field<bool>(pl, v2091::kGblIgnoreDamage) = true;
+        field<bool>(pl, v2091::kPlIgnoreDamageUsed) = true;
+        if (pl->m_player1)
+            field<bool>(pl->m_player1, v2091::kPlayerIgnoreDamage) = true;
+        if (pl->m_player2)
+            field<bool>(pl->m_player2, v2091::kPlayerIgnoreDamage) = true;
+        pl->updateTestModeLabel();
+        return "";
+    }
+    return "unknown action '" + action + "'";
 }
 
 #endif  // GB_SAFETY_2209

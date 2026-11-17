@@ -67,9 +67,15 @@ namespace gucci::safemode {
     // For Assistant Access's safety2209_probe key (mcp/test_settings.cpp):
     // what each guard let through or held back this launch.
     std::string probeCounts();
-    // Calls GD's uploadDeathData through GucciBot's hook (test launches only;
-    // the caller checks). Returns false if the hook isn't in.
-    bool probeUpload();
+    // What GD keeps about the level being played and the player's stats, for a
+    // test to compare before and after (the death tracker, playtime, attempts,
+    // percent, stars, achievements, GD's own speed and Ignore Damage).
+    std::string probeLevel();
+    // A test launch's probe actions (the caller checks it is one); returns ""
+    // when done, else why not. "upload" calls GD's death-data upload through
+    // GucciBot's hook (always held back in a test launch, so nothing leaves the
+    // PC); the rest are listed in safemode_2209.cpp.
+    std::string probeAction(std::string const& action);
 
 }  // namespace gucci::safemode
 
