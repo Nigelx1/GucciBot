@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-z (Calculate: Ring thickness, a slider for the plain ring marker line (default 2, as before))"
+    "2026-11-16-aa (Renders free their encoder when they end, so memory and threads no longer pile up render after render)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

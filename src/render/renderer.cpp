@@ -405,6 +405,9 @@ namespace gucci {
             return geode::Err("A render is already in progress");
         if (!ff || !m_ffmpegLoaded)
             return geode::Err("FFmpeg not loaded");
+        // No render is running (checked above): free what a start that failed
+        // halfway left behind, before this one allocates its own.
+        this->releaseEncoder();
         auto* pl = PlayLayer::get();
         if (!pl)
             return geode::Err("Not in a level");
@@ -1080,16 +1083,12 @@ namespace gucci {
                 std::lock_guard<std::mutex> lock(m_muxMutex);
                 ff->av_write_trailer(m_formatCtx);
             }
-            if (m_formatCtx->pb)
+            if (m_formatCtx->pb) {
                 ff->avio_close(m_formatCtx->pb);
+                m_formatCtx->pb = nullptr;
+            }
         }
-        for (auto& track : m_audioTracks)
-            ff->swr_free(&track.swrCtx);
-        m_audioTracks.clear();
-
-        if (m_frame) {
-            m_frame->data[0] = nullptr;
-        }
+        this->releaseEncoder();
         m_texture.destroy();
         this->restoreView();
         this->publishRenderResult(true);
@@ -1097,6 +1096,52 @@ namespace gucci {
             m_shouldQuit = true;
         geode::log::info("[GucciBot] SLRenderer stopped");
         return geode::Ok();
+    }
+
+    // Every render used to keep its encoder until the game closed: about
+    // 120-165 MB and libx264's 13 worker threads per render (soak test,
+    // 2026-11-16), because the pointers' deleters do nothing (SL_AV_LEAK) and
+    // nothing freed them. Silicate's stop() frees the codec contexts and the
+    // format context after the trailer; this does the same, and the frames and
+    // packets too. Only from the game thread with the encode thread joined
+    // (finishStop) and the audio recorders detached (stop), so nothing else
+    // can be using any of it; start() also calls it, for what a start that
+    // failed halfway left behind.
+    void SLRenderer::releaseEncoder() {
+        if (!ff)
+            return;
+        // avcodec_free_context closes the encoder, which joins its threads.
+        if (AVCodecContext* ctx = m_videoCodecCtx.release())
+            ff->avcodec_free_context(&ctx);
+        if (AVFrame* frame = m_frame.release()) {
+            // The planes point into the capture's buffer (prepareFrame), not
+            // memory this frame owns.
+            for (auto& plane : frame->data)
+                plane = nullptr;
+            ff->av_frame_free(&frame);
+        }
+        if (AVPacket* pkt = m_pkt.release())
+            ff->av_packet_free(&pkt);
+        for (auto& track : m_audioTracks) {
+            if (AVCodecContext* ctx = track.codecCtx.release())
+                ff->avcodec_free_context(&ctx);
+            if (AVFrame* frame = track.frame.release())
+                ff->av_frame_free(&frame);
+            if (AVPacket* pkt = track.pkt.release())
+                ff->av_packet_free(&pkt);
+            ff->swr_free(&track.swrCtx);
+        }
+        m_audioTracks.clear();
+        if (m_formatCtx) {
+            if (m_formatCtx->pb) {
+                ff->avio_close(m_formatCtx->pb);
+                m_formatCtx->pb = nullptr;
+            }
+            // The streams belong to the format context and go with it.
+            ff->avformat_free_context(m_formatCtx);
+            m_formatCtx = nullptr;
+        }
+        m_videoStream = nullptr;
     }
 
     void SLRenderer::publishRenderResult(bool success) {

@@ -87,6 +87,10 @@ namespace gucci {
 
         // Lists the Video args the encoder didn't take (renderer.cpp).
         FFMPEG_FN(av_dict_get)
+
+        // Frees the output file's context when a render ends (renderer.cpp's
+        // releaseEncoder; Silicate's stop() frees it the same way).
+        FFMPEG_FN(avformat_free_context)
     } ff_t;
 
     static std::vector<std::string> DLL_FUNCTION_NAMES = {"avformat_alloc_output_context2",
@@ -134,7 +138,8 @@ namespace gucci {
                                                           "sws_getContext",
                                                           "sws_scale",
                                                           "sws_freeContext",
-                                                          "av_dict_get"};
+                                                          "av_dict_get",
+                                                          "avformat_free_context"};
 
 #ifdef _WIN32
     inline void* loadFunction(HMODULE* modules, size_t moduleSize, const char* name) {
@@ -157,7 +162,7 @@ namespace gucci {
 #endif
 
 
-    static_assert(sizeof(ff_t) == sizeof(void*) * 46);
+    static_assert(sizeof(ff_t) == sizeof(void*) * 47);
 
 #if defined(GEODE_IS_MACOS)
     // Why FFmpeg didn't load on macOS (dlopen's own words), for the Render
