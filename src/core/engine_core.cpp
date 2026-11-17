@@ -562,6 +562,13 @@ namespace gucci {
                 auto* pl = PlayLayer::get();
                 m_recordedFromStartPos = pl && pl->m_startPosObject;
                 gb->updater.m_droppedTimeFrame = UINT32_MAX;
+                // GucciBot (2026-11-16): Record stays on from one level to
+                // the next, and the Name box keeps the last macro's name. A
+                // run starting over on another level is a new macro: Save
+                // (and the autosaves) keep the old one instead of writing
+                // over it. The same level, recorded again, saves in place.
+                if (pl && pl->m_level)
+                    forgetSourceIfOtherLevel(pl->m_level->m_levelName);
                 // GucciBot (2026-10-23): the clicks these windows were
                 // measured on are gone: drop them from memory, or Save writes
                 // them next to this new recording. The old macro's sidecar on
@@ -648,6 +655,14 @@ namespace gucci {
     }
 
     static fs::path sidecarPath(const fs::path& macroPath, const char* ext);
+
+    void GucciReplaySystem::forgetSourceIfOtherLevel(std::string const& level) {
+        if (m_savedFrom.empty() || level == m_savedFromLevel)
+            return;
+        log::info("[GucciBot] Recording on \"{}\", not \"{}\": a new macro, not {}",
+                  level, m_savedFromLevel, m_savedFrom.filename().string());
+        m_savedFrom.clear();
+    }
 
     void GucciReplaySystem::backupExisting(const fs::path& path) {
         if (!fs::exists(path))
@@ -1259,6 +1274,7 @@ namespace gucci {
             if (path.parent_path() == gb->getReplayDir() && path.stem().string() == gb->replayName) {
                 m_loadedPath = path;
                 m_savedFrom = path;
+                m_savedFromLevel = hdr.levelName;
             }
         }
         saveFwMarks(path);
@@ -1347,6 +1363,7 @@ namespace gucci {
             m_inputIndex = 0;
             m_loadedPath = path;
             m_savedFrom = path;
+            m_savedFromLevel = f.header.levelName;
             for (auto& inp : f.p1Inputs)
                 m_actionAtom.addAction(
                     inp.frame, static_cast<gb::ActionType>(inp.button), inp.pressed, false);

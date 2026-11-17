@@ -467,6 +467,14 @@ namespace gucci {
         // that plays: setModeFromMenu). A Save to this file writes over it;
         // a Save over any other macro's file asks first (tools/save_target.hpp).
         std::filesystem::path m_savedFrom;
+        // The level that file's macro was recorded on (its header's level
+        // name). A recording that starts over on another level is a fresh
+        // macro, not that file's (onReset, Absense's Pathfinder start).
+        std::string m_savedFromLevel;
+        // Forgets m_savedFrom when the macro in memory is no longer that
+        // file's: a recording starting over on a level other than
+        // m_savedFromLevel. `level` is the current level's name.
+        void forgetSourceIfOtherLevel(std::string const& level);
         void backupExisting(const std::filesystem::path& path);
     };
 

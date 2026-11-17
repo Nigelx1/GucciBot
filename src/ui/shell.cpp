@@ -717,6 +717,13 @@ namespace gucci::ui {
             auto* gb = GucciEngine::get();
             std::error_code ec;
             auto const file = gb->findMacroFile(name, ext);
+            // GucciBot (2026-11-16): the macro in memory came from this file:
+            // it no longer does. Save still brings it back (a free name is
+            // written at once), but a macro that takes the name later is
+            // another one, and Save asks before replacing it.
+            bool const wasSource = !file.empty() && !gb->replay.m_savedFrom.empty() &&
+                                   std::filesystem::equivalent(file, gb->replay.m_savedFrom, ec);
+            ec.clear();
             if (file.empty() || !std::filesystem::remove(file, ec))
                 return fmt::format("Couldn't delete \"{}\"{}", name, ec ? ": " + ec.message() : ".");
             auto const prefix = file.filename().string() + ".";
@@ -726,6 +733,8 @@ namespace gucci::ui {
                     sidecars.push_back(e.path());
             for (auto const& p : sidecars)
                 std::filesystem::remove(p, ec);
+            if (wasSource)
+                gb->replay.m_savedFrom.clear();
             gb->reloadMacroList();
             return "";
         }
