@@ -99,7 +99,11 @@ namespace gucci::setupcheck {
         constexpr const char* kMegaHackPracticeFix = "LEVEL/HACK_PRACTICE_BUG_FIX";
         constexpr const char* kMegaHackExtrapolation = "DISPLAY/HACK_FRAME_EXTRAPOLATION";
 
-#ifdef GEODE_IS_WINDOWS
+        // Not on GD 2.2091 (Geode 6): the export is called through a fixed
+        // signature, and a Geode 6 Mega Hack with another one would be called
+        // wrongly, a crash at launch. Until its Geode 6 build is checked, the
+        // 2.2091 file reads hackpro.json only (parity plan, must-have 17).
+#if defined(GEODE_IS_WINDOWS) && !GB_GEODE6
         using MegaHackIsEnabled = bool (*)(std::string const&);
 
         // Looked up the first time it's needed, which is after Mega Hack has
@@ -123,7 +127,7 @@ namespace gucci::setupcheck {
             auto* mod = Loader::get()->getInstalledMod("absolllute.megahack");
             if (!mod || !mod->isLoaded())
                 return {};
-#ifdef GEODE_IS_WINDOWS
+#if defined(GEODE_IS_WINDOWS) && !GB_GEODE6
             if (auto const isEnabled = megaHackIsEnabled())
                 return {isEnabled(kMegaHackPracticeFix), isEnabled(kMegaHackExtrapolation), true};
 #endif
