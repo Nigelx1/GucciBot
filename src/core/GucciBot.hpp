@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-17-b (Pathfinder: pf_fork_dual on by default, a mode portal stacked on a dual portal is a route fork)"
+    "2026-11-17-c (CI: build-geode-mod and SafetyHook pinned to the commits the build already used, same output)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
