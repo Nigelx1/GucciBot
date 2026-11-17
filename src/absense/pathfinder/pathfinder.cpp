@@ -6683,5 +6683,8 @@ void AbsensePathfinder::saveResult() {
     if (auto* pl = PlayLayer::get(); pl && pl->m_level) g_resultLevel = pl->m_level->m_levelName;
     rs.save(path);
     log("saved %s", path.filename().string().c_str());
+    // On the page too, as saveFurthest says its file: the toast is gone in a
+    // few seconds, and a run left alone finishes unseen (11-16 new-user pass).
+    m_stats.message += " - macro saved as \"" + name + "\"";
     Notification::create(fmt::format("Macro saved as \"{}\"", name), NotificationIcon::Success)->show();
 }

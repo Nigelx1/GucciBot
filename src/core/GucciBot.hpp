@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-x (Switching pages in the menu starts the new page at its top, instead of at the last page's scroll)"
+    "2026-11-16-y (The Pathfinder page says what its macro was saved as when a run beats the level, not only a toast)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
