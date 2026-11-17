@@ -426,6 +426,13 @@ bool AbsensePathfinder::start() {
         // saveFurthest).
         if (rs.m_actionAtom.empty())
             gucci::GucciEngine::get()->forgetMacroWindows();
+        // GucciBot (2026-11-16): nothing of the loaded macro left, or it was
+        // another level's: the result is a macro of its own, not that file's,
+        // and saving it keeps both (saveResult; Save asks).
+        if (rs.m_actionAtom.empty())
+            rs.m_savedFrom.clear();
+        else if (auto* pl = PlayLayer::get(); pl && pl->m_level)
+            rs.forgetSourceIfOtherLevel(pl->m_level->m_levelName);
         rs.m_inputIndex = rs.m_actionAtom.length();
         bot->setMode(Bot::Mode::Recording);
     }
@@ -6725,7 +6732,11 @@ void AbsensePathfinder::saveResult() {
     auto path = gucciMacroPath(PlayLayer::get(), "", name);
     std::error_code ec;
     std::filesystem::create_directories(path.parent_path(), ec);
-    if (!named) {
+    // GucciBot (2026-11-16): the user's name, but its file is another macro
+    // (not the one this run carried on from): numbered past it too, so both
+    // are kept, as Save would ask (tools/save_target.hpp).
+    const bool ownFile = !rs.m_savedFrom.empty() && std::filesystem::equivalent(path, rs.m_savedFrom, ec);
+    if (!named || (std::filesystem::exists(path, ec) && !ownFile)) {
         // A name of our own: numbered past any macro already called that,
         // rather than over it (the classic Pathfinder does the same).
         const std::string base = name;
@@ -6743,5 +6754,8 @@ void AbsensePathfinder::saveResult() {
     if (auto* pl = PlayLayer::get(); pl && pl->m_level) g_resultLevel = pl->m_level->m_levelName;
     rs.save(path);
     log("saved %s", path.filename().string().c_str());
+    // On the page too, as saveFurthest says its file: the toast is gone in a
+    // few seconds, and a run left alone finishes unseen (11-16 new-user pass).
+    m_stats.message += " - macro saved as \"" + name + "\"";
     Notification::create(fmt::format("Macro saved as \"{}\"", name), NotificationIcon::Success)->show();
 }

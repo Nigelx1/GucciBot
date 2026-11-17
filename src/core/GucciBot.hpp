@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-w (Test tools can read and set the converter Shift frames slider, now drawn with the menu kit slider, which looks the same)"
+    "2026-11-16-ag (Save asks before replacing a different macro and can keep both, appending to a macro still saves in place)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -461,6 +461,20 @@ namespace gucci {
         // (zz.juice and zz.solar), and the name alone picked whichever came
         // first in the extension list.
         std::filesystem::path m_loadedPath;
+        // GucciBot (2026-11-16): the saved file the macro in memory came from
+        // (loaded, or last saved to under the Name box's name); empty for a
+        // fresh recording (Record from the menu, not carrying on from a macro
+        // that plays: setModeFromMenu). A Save to this file writes over it;
+        // a Save over any other macro's file asks first (tools/save_target.hpp).
+        std::filesystem::path m_savedFrom;
+        // The level that file's macro was recorded on (its header's level
+        // name). A recording that starts over on another level is a fresh
+        // macro, not that file's (onReset, Absense's Pathfinder start).
+        std::string m_savedFromLevel;
+        // Forgets m_savedFrom when the macro in memory is no longer that
+        // file's: a recording starting over on a level other than
+        // m_savedFromLevel. `level` is the current level's name.
+        void forgetSourceIfOtherLevel(std::string const& level);
         void backupExisting(const std::filesystem::path& path);
     };
 
@@ -1180,6 +1194,12 @@ namespace gucci {
         double autosaveIntervalSec = 60.0;
         bool replayBackupsEnabled = true;
         void applyIntervalAutosave();
+        // An autosave (at the interval or the level's end): over the macro's
+        // own file as always; when its file is another macro's (a fresh
+        // recording under an old name), it can't ask, so it keeps both and
+        // saves as "<name> 2" (the next free number), and the Name box
+        // follows. Says so in a notification.
+        void autosaveMacro();
 
         std::vector<std::string> storedMacros;
         std::set<std::string> incompatibleMacros;

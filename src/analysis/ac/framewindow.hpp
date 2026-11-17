@@ -423,6 +423,11 @@ class FrameWindowAnalyzer {
     // counts; and the legend's bands (hudBands: the user's shown bands, or
     // NaN GD's under Default Look) with each one's count over the whole macro.
     FrameWindowTier const* legendTierFor(FrameWindowMark const& mk) const;
+    // GucciBot (2026-11-16): legend groups. The legend row a band is counted
+    // on: the id of the first shown band in its group (its own id when it has
+    // no group, or isn't shown). legendTotals has one entry per row, the
+    // group's name as the band's label.
+    int legendRowOf(int tierId) const;
     std::vector<std::pair<FrameWindowTier, int>> legendTotals() const;
     std::vector<FrameWindowMark>& editResults() { return m_results; }
     std::vector<FrameWindowMessage>& messages() { return m_messages; }
