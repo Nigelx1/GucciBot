@@ -166,23 +166,40 @@ namespace gucci::safemode {
             m_pl->m_isTestMode = m_wasTest;
     }
 
+    // GD's Ignore Damage setting, a game variable (the pause menu's side
+    // button and the keybind toggle it; PlayLayer::init applies it when an
+    // editor level starts).
+    constexpr char const* kIgnoreDamageVar = "0173";
+
     bool gdIgnoreDamageOn() {
         auto* pl = PlayLayer::get();
-        return pl && checks().flags && field<bool>(pl, v2091::kPlIgnoreDamageUsed);
+        if (!pl || !checks().ignoreOff)
+            return false;
+        // On right now: the layer's switch or a player's own flag (what GD's
+        // keybind and pause button turn on and off), not the attempt's "used
+        // Ignore Damage" mark, which stays until the next attempt.
+        return field<bool>(pl, v2091::kGblIgnoreDamage) ||
+               (pl->m_player1 && field<bool>(pl->m_player1, v2091::kPlayerIgnoreDamage)) ||
+               (pl->m_player2 && field<bool>(pl->m_player2, v2091::kPlayerIgnoreDamage));
     }
 
     void gdIgnoreDamageOff() {
         auto* pl = PlayLayer::get();
-        if (!pl || !checks().ignoreOff || !field<bool>(pl, v2091::kPlIgnoreDamageUsed))
+        if (!pl || !checks().ignoreOff)
             return;
-        // As GD's resetLevel turns it off (0x518cc2): the attempt's flag, the
-        // layer's request, both players' own flag, then the label.
-        field<bool>(pl, v2091::kPlIgnoreDamageUsed) = false;
+        // As GD's own keybind and pause button turn it off (UILayer::handleAction
+        // 0x671ce7, PauseLayer::onSideButtonPressed 0x4d99d8): the layer's
+        // switch and both players' flag, then the label. The attempt's "used
+        // Ignore Damage" mark (+0x39f9) stays, as in GD, so this attempt still
+        // doesn't count; GD's restart clears it. The setting goes off too, or
+        // the next editor-level start turns Ignore Damage back on.
         field<bool>(pl, v2091::kGblIgnoreDamage) = false;
         if (pl->m_player1)
             field<bool>(pl->m_player1, v2091::kPlayerIgnoreDamage) = false;
         if (pl->m_player2)
             field<bool>(pl->m_player2, v2091::kPlayerIgnoreDamage) = false;
+        if (auto* gm = GameManager::get(); gm && gm->getGameVariable(kIgnoreDamageVar))
+            gm->setGameVariable(kIgnoreDamageVar, false);
         pl->updateTestModeLabel();
     }
 
