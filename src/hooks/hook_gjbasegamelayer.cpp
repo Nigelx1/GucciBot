@@ -343,12 +343,15 @@ class $modify(GB7GJBaseGameLayer, GJBaseGameLayer) {
                                     static_cast<gb::ActionType>(cmd.m_button),
                                     cmd.m_isPush,
                                     gb->replay.playerFlipped(cmd.m_isPlayer2));
-        if (gb->isRecording() && added)
+        if (gb->isRecording() && added) {
+            // Recorded on this game: what Save says the macro was made on.
+            gb->replay.stampMadeHere();
             log::info("[GucciBot] Recording: input @ frame {} ({}, btn {}, p{})",
                       f,
                       cmd.m_isPush ? "press" : "release",
                       (int)cmd.m_button,
                       cmd.m_isPlayer2 ? 2 : 1);
+        }
     }
 
     // Silicate's trail buffer snapshots the hitbox either side of the

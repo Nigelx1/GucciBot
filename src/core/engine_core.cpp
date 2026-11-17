@@ -6,6 +6,7 @@
 #include "core/bot_switch.hpp"
 #include "core/brr_format.hpp"
 #include "core/gbr6_format.hpp"
+#include "core/gd_version.hpp"
 #include "core/mcp_only.hpp"
 #include "core/platform.hpp"
 #include "core/setup_check.hpp"
@@ -557,6 +558,8 @@ namespace gucci {
             } else {
                 m_actionAtom.m_actions.clear();
                 m_pathSamples.clear();
+                // A new recording, made on this game.
+                stampMadeHere();
                 // The run starts over here, from the level's start or from a
                 // start position; Save marks the file with which.
                 auto* pl = PlayLayer::get();
@@ -1218,6 +1221,10 @@ namespace gucci {
         }
         hdr.name = m_replayName;
         hdr.rngSeed = m_startingSeed;
+        // What it was made on: the loaded file's, or this game's once
+        // something recorded on top (stampMadeHere). Unknown stays unknown.
+        hdr.gdVersion = m_madeOnGd;
+        hdr.gbVersion = m_madeWithGb;
         if (m_recordedFromStartPos)
             hdr.flags |= GBR6_FROM_START_POS;
         hdr.timestamp = std::chrono::duration_cast<std::chrono::seconds>(
@@ -1295,6 +1302,17 @@ namespace gucci {
         return written;
     }
 
+    void GucciReplaySystem::stampMadeHere() {
+        if (m_madeOnGd != currentGdVersion())
+            m_madeOnGd = currentGdVersion();
+        if (m_madeWithGb != MOD_VERSION)
+            m_madeWithGb = MOD_VERSION;
+    }
+
+    std::string GucciReplaySystem::gdVersionWarning() const {
+        return gucci::gdVersionWarning(m_madeOnGd, currentGdVersion());
+    }
+
     void GucciReplaySystem::buildClickIntervals(double tps) {
         m_clickIntervalsSec.clear();
         m_clickBarTps = tps > 0.0 ? tps : 240.0;
@@ -1355,6 +1373,14 @@ namespace gucci {
             // Shown on the Macro card: a macro recorded from a start position
             // only plays, and measures, from that one. Kept for a re-save.
             m_recordedFromStartPos = f.header.fromStartPos();
+            m_madeOnGd = f.header.gdVersion;
+            m_madeWithGb = f.header.gbVersion;
+            if (auto const warn = gdVersionWarning(); !warn.empty()) {
+                // Never a reason not to play it: a note on the Macro card
+                // (gdVersionWarning) and this one notification per load.
+                log::warn("[GucciBot] {}", warn);
+                geode::queueInMainThread([warn] { ui::warnNotice(warn); });
+            }
             gb->startPosWarning = m_recordedFromStartPos
                                       ? "Recorded from a start position: play it, and Calculate it, from that "
                                         "same start position."
@@ -1550,6 +1576,7 @@ namespace gucci {
         rs.clearDispatchOrder();
         forgetMacroWindows();
         rs.m_recordedFromStartPos = pl->m_startPosObject != nullptr;
+        rs.stampMadeHere();
         // The Macro card's note was the dropped file's ("Recorded from a
         // start position"), not this recording's.
         startPosWarning.clear();

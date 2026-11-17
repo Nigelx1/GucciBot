@@ -9,6 +9,14 @@
 #define GBR6_MAGIC "GBR6"
 #define GBR6_VERSION 1
 #define GBR6_HEADER_BASE 36
+// The extension tail (2026-11-17): every flag bit is taken, so anything new
+// goes after the last flagged block as "GBXT", then chunks of a 4-byte tag, a
+// u32 length and that many bytes. Readers from before it stop at the last
+// flagged block and never look at the rest of the file, so they load such a
+// macro exactly as they did; a reader skips a chunk whose tag it doesn't know.
+#define GBR6_EXT_MAGIC "GBXT"
+// Chunk "GVER": two strings (u16 length + bytes): GD's version, GucciBot's.
+#define GBR6_CHUNK_GDVER "GVER"
 
 namespace gucci {
 
@@ -90,6 +98,12 @@ namespace gucci {
         uint32_t p2Count = 0;
         std::string name;
         std::string levelName;
+        // What the macro was made on (2026-11-17): GD's version ("2.2081")
+        // and GucciBot's ("2.0.0"). Empty = not known: a macro from before
+        // this, or one converted from another bot. Written in the extension
+        // tail (see GBR6_EXT_MAGIC) only when one of them is set.
+        std::string gdVersion;
+        std::string gbVersion;
 
         bool twoPlayer() const {
             return flags & GBR6_TWO_PLAYER;
@@ -104,6 +118,11 @@ namespace gucci {
             return flags & GBR6_PLATFORMER;
         }
     };
+
+    // The Macro card's note for a macro made on another GD version, or ""
+    // when it was made on this one or nobody knows (old and converted macros
+    // carry no version). Never a reason to refuse it: it only warns.
+    std::string gdVersionWarning(std::string const& madeOn, std::string const& current);
 
     class GBR6File {
     public:

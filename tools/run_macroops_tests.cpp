@@ -152,6 +152,26 @@ int main() {
         CHECK(!merge(a, mk({}), 0).ok);
     }
 
+    // the GD version a macro was made on (2026-11-17): a file round trip and
+    // a trim keep it, a merge keeps A's and says when B's differs
+    {
+        auto a = mk({in(10, true), in(20, false), in(30, true), in(40, false)});
+        a.header.gdVersion = "2.2081";
+        a.header.gbVersion = "2.0.0";
+        auto r = roundTrip(a);
+        CHECK(r.header.gdVersion == "2.2081" && r.header.gbVersion == "2.0.0");
+        auto t = trim(a, 5, 25, false);
+        CHECK(t.ok && t.macro.header.gdVersion == "2.2081");
+        auto b = mk({in(5, true), in(8, false)});
+        b.header.gdVersion = "2.2091";
+        auto o = merge(a, b, 10);
+        CHECK(o.ok && o.macro.header.gdVersion == "2.2081");
+        CHECK(o.message.find("different GD versions (2.2081 and 2.2091)") != std::string::npos);
+        b.header.gdVersion = "";
+        auto o2 = merge(a, b, 10);
+        CHECK(o2.ok && o2.message.find("GD versions") == std::string::npos);
+    }
+
     // diff
     {
         auto a = mk({in(10, true), in(20, false), in(30, true), in(40, false), ev(50, T::TPS, 480.0)});

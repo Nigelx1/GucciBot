@@ -542,6 +542,9 @@ namespace gucci::mcp {
 
                 out["macro"] = gb->replay.m_replayName;
                 out["macro_actions"] = (int64_t)gb->replay.m_actionAtom.length();
+                out["macro_gd_version"] = gb->replay.m_madeOnGd;
+                out["macro_gb_version"] = gb->replay.m_madeWithGb;
+                out["gd_version_warning"] = gb->replay.gdVersionWarning();
                 out["macro_input_index"] = (int64_t)gb->replay.m_inputIndex;
 
                 auto* pl = PlayLayer::get();

@@ -815,7 +815,14 @@ void AbsensePathfinder::saveFurthest() {
     // Swap the furthest actions in, write, swap back.
     std::vector<slc::Action> live = rs.m_actionAtom.m_actions;
     rs.m_actionAtom.m_actions = m_bestActions;
+    // GucciBot (2026-11-17): found on this game, so the file says this GD
+    // version; the loaded macro keeps its own.
+    auto const madeOn = rs.m_madeOnGd;
+    auto const madeWith = rs.m_madeWithGb;
+    rs.stampMadeHere();
     rs.save(path);
+    rs.m_madeOnGd = madeOn;
+    rs.m_madeWithGb = madeWith;
     rs.m_actionAtom.m_actions = std::move(live);
     m_stats.message += " - furthest path saved as " + name;
     log("furthest path (tick %llu) saved as %s", (unsigned long long)m_stats.bestTick, name.c_str());

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-17-c (CI: build-geode-mod and SafetyHook pinned to the commits the build already used, same output)"
+    "2026-11-17-d (Macros record the GD and GucciBot versions they were made on, and warn when one made on another GD version is loaded)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -311,6 +311,17 @@ namespace gucci {
         // saved as GBR6_FROM_START_POS, which is what the Macro card's
         // start-position warning reads.
         bool m_recordedFromStartPos = false;
+        // What the macro was made on (2026-11-17): GD's version and
+        // GucciBot's, read from the file on load and written by Save. Empty =
+        // not known (a macro from before this, or converted from another
+        // bot), and stays so until something records on top of it. Recording
+        // and the pathfinders stamp this game's (stampMadeHere).
+        std::string m_madeOnGd;
+        std::string m_madeWithGb;
+        void stampMadeHere();
+        // The Macro card's note when the macro was made on another GD
+        // version; "" when it wasn't, or nobody knows.
+        std::string gdVersionWarning() const;
         void buildClickIntervals(double tps);
 
         float m_trainerBestX = 0.f;
