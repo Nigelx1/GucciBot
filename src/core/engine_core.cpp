@@ -13,6 +13,7 @@
 #include "hacks/hud.hpp"
 #include "mcp/test_settings.hpp"
 #include "tools/macro_convert.hpp"
+#include "tools/save_target.hpp"
 #include "tools/selfcheck.hpp"
 
 #include <Geode/Geode.hpp>
@@ -1255,8 +1256,10 @@ namespace gucci {
             // loaded one now: Save writes the theme's extension, which may not
             // be the one loaded (zz.solar loaded, zz.juice saved), and the
             // autosaves, sidecars and highlighted row follow getCurrentPath.
-            if (path.parent_path() == gb->getReplayDir() && path.stem().string() == gb->replayName)
+            if (path.parent_path() == gb->getReplayDir() && path.stem().string() == gb->replayName) {
                 m_loadedPath = path;
+                m_savedFrom = path;
+            }
         }
         saveFwMarks(path);
         saveAcResults(path);
@@ -1343,6 +1346,7 @@ namespace gucci {
             m_actionAtom.clear();
             m_inputIndex = 0;
             m_loadedPath = path;
+            m_savedFrom = path;
             for (auto& inp : f.p1Inputs)
                 m_actionAtom.addAction(
                     inp.frame, static_cast<gb::ActionType>(inp.button), inp.pressed, false);
@@ -1588,6 +1592,12 @@ namespace gucci {
         bool const runPlaysMacro = fwAnalyzing || acfw.running() || acfw.returning();
         if (m == Mode::Recording && isPlaying() && !runPlaysMacro && beginResumeRecording())
             return;
+        // GucciBot (2026-11-16): any other Record from the menu is a fresh
+        // recording, not the file the Name box may still name: a Save over
+        // that file asks first (tools/save_target.hpp). Carrying on from a
+        // macro that plays (above) keeps its file, and saves over it.
+        if (m == Mode::Recording && !isRecording() && !runPlaysMacro)
+            replay.m_savedFrom.clear();
         if (m == Mode::Recording && !runPlaysMacro && beginRecordingFromOff())
             return;
         setMode(m);
@@ -1745,16 +1755,36 @@ namespace gucci {
         if (replay.m_autosaveJobId == 0) {
             replay.m_autosaveJobId = scheduler.schedule(autosaveIntervalSec, [this] {
                 // Not without a name, as at the level's end (hook_playlayer.cpp).
-                if (autosaveAtInterval && isRecording() && !replay.m_actionAtom.empty() && !replayName.empty()) {
-                    auto path = replay.getCurrentPath();
-                    if (replayBackupsEnabled)
-                        replay.backupExisting(path);
-                    replay.save(path);
-                }
+                if (autosaveAtInterval && isRecording() && !replay.m_actionAtom.empty() && !replayName.empty())
+                    autosaveMacro();
             });
         } else {
             scheduler.reschedule(replay.m_autosaveJobId, autosaveIntervalSec);
         }
+    }
+
+    void GucciEngine::autosaveMacro() {
+        auto path = replay.getCurrentPath();
+        std::error_code ec;
+        bool const exists = fs::exists(path, ec);
+        bool const own = !replay.m_savedFrom.empty() && fs::equivalent(path, replay.m_savedFrom, ec);
+        if (savetarget::decide(exists, own) == savetarget::Decision::Ask) {
+            // A fresh recording, and the Name box still names another macro:
+            // an autosave can't ask, so both are kept (Nigel, 2026-11-16).
+            std::string const taken = replayName;
+            replayName = savetarget::nextFreeName(taken, [this](std::string const& n) {
+                return !findMacroFile(n).empty();
+            });
+            path = getReplayDir() / (replayName + ui::macroExtension());
+            log::info("[GucciBot] Autosave: \"{}\" is another macro; saved as \"{}\"", taken, replayName);
+            Notification::create(
+                fmt::format("Autosaved as \"{}\": there's already a macro called \"{}\".", replayName, taken),
+                NotificationIcon::Info, 4.f)
+                ->show();
+        } else if (replayBackupsEnabled) {
+            replay.backupExisting(path);
+        }
+        replay.save(path);
     }
 
     // Macro Tools. Everything here is file in, file out through
@@ -1831,6 +1861,8 @@ namespace gucci {
             replayName = name;
         if (replay.m_loadedPath == src)
             replay.m_loadedPath = dst;
+        if (replay.m_savedFrom == src)
+            replay.m_savedFrom = dst;
         log::info("[GucciBot] macro {} -> {}", src.filename().string(), dst.filename().string());
         reloadMacroList();
         return "";

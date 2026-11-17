@@ -1,5 +1,5 @@
 @echo off
-REM Offline tests: the GBR6 sub-tick and TPS sections, Check Macro, Macro Tools, the random teleport's pick, other bots' formats, the menu art's PNG reader, Share my windows' picture and macro file, Hitborders' shapes, the AI pilot's networks, Ship Steering's controller and the Frame Editor's rules.
+REM Offline tests: the GBR6 sub-tick and TPS sections, Check Macro, Macro Tools, the random teleport's pick, other bots' formats, the menu art's PNG reader, Share my windows' picture and macro file, Hitborders' shapes, the AI pilot's networks, Ship Steering's controller, Save's rule and the Frame Editor's rules.
 
 setlocal
 set VCVARS="C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
@@ -94,6 +94,13 @@ cl /nologo /std:c++20 /EHsc /O2 /MD /I src ^
    tools\run_steer_tests.cpp src\analysis\ac\steer.cpp /Fe:build\run_steer_tests.exe /Fo:build\ || exit /b 1
 
 build\run_steer_tests.exe || exit /b 1
+
+REM Save's rule (src/tools/save_target): write at once to a new file or the macro's own, ask before
+REM replacing another macro's file, and the name Save as offers.
+cl /nologo /std:c++20 /EHsc /O2 /MD /I src ^
+   tools\run_savetarget_tests.cpp /Fe:build\run_savetarget_tests.exe /Fo:build\ || exit /b 1
+
+build\run_savetarget_tests.exe || exit /b 1
 
 REM Frame Editor rules (src/tools/edit_core, ported from Absense's macro editor).
 cl /nologo /std:c++20 /EHsc /O2 /MD /I src ^

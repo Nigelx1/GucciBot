@@ -461,6 +461,12 @@ namespace gucci {
         // (zz.juice and zz.solar), and the name alone picked whichever came
         // first in the extension list.
         std::filesystem::path m_loadedPath;
+        // GucciBot (2026-11-16): the saved file the macro in memory came from
+        // (loaded, or last saved to under the Name box's name); empty for a
+        // fresh recording (Record from the menu, not carrying on from a macro
+        // that plays: setModeFromMenu). A Save to this file writes over it;
+        // a Save over any other macro's file asks first (tools/save_target.hpp).
+        std::filesystem::path m_savedFrom;
         void backupExisting(const std::filesystem::path& path);
     };
 
@@ -1180,6 +1186,12 @@ namespace gucci {
         double autosaveIntervalSec = 60.0;
         bool replayBackupsEnabled = true;
         void applyIntervalAutosave();
+        // An autosave (at the interval or the level's end): over the macro's
+        // own file as always; when its file is another macro's (a fresh
+        // recording under an old name), it can't ask, so it keeps both and
+        // saves as "<name> 2" (the next free number), and the Name box
+        // follows. Says so in a notification.
+        void autosaveMacro();
 
         std::vector<std::string> storedMacros;
         std::set<std::string> incompatibleMacros;
