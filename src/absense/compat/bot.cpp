@@ -666,6 +666,22 @@ void absense::setForkJump(bool on) {
     g_forkJump = on;
 }
 
+namespace {
+// GucciBot (2026-11-16, pf3 lane): see pathfinder.cpp, noteForks() and
+// escalate(): a mode portal stacked on a dual portal is a fork too. On by
+// default since GRIEF finished cold with it (2026-11-17); the test switch
+// pf_fork_dual, this launch only, turns it off.
+bool g_forkDual = true;
+}
+
+bool absense::forkDual() {
+    return g_forkDual;
+}
+
+void absense::setForkDual(bool on) {
+    g_forkDual = on;
+}
+
 bool absense::pendingVerify() {
     return world::g_pendingVerify;
 }
