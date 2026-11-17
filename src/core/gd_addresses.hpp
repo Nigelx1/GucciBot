@@ -174,6 +174,84 @@ namespace gucci::gdaddr {
         //    Silicate 1.1.2 has no such midhook, so High TPS Precision stays
         //    off on 2.2091 (as on Mac and Android).
 
+        // Only in the Geode 6 build, and only where core/geode_compat.hpp was
+        // included first (it defines GB_GEODE6); the 2.2081 build never sees it.
+#if defined(GB_GEODE6) && GB_GEODE6
+        // ==== Lane B (safety on 2.2091; hacks/safemode_2209.cpp) ====
+        //
+        // 2.209 added death tracking and uploads, playtime, platformer saves
+        // and leaderboard times with an input recording, GD's own speed
+        // slider and keys, and GD's own Ignore Damage. The numbers below were
+        // read (2026-11-16, safety2209 lane) from a copy of the GD 2.2091
+        // Windows executable, read only, and match Silicate 1.1.2's where it
+        // has them (its src/hooks/SafeMode.cpp and TimeSpeedControl.cpp).
+        // Each raw field is used only after the bytes below are found where
+        // they should be; on a mismatch the feature that needs it stays off
+        // and the log says so.
+
+        // PlayLayer fields GD's own no-progress checks read: destroyPlayer
+        // (+0x52b / +0x6eb), levelComplete and dtCommitPlaytime skip the
+        // death tracker, playtime and progress while either is set, and
+        // updateTestModeLabel shows "Used Ignore Damage" / "Used Speed
+        // Change" from them. Silicate 1.1.2 raises 0x39fa (its
+        // PLAYLAYER_SPEED_CHANGED) around a death and a completion; GucciBot
+        // does the same (its NoProgress).
+        inline constexpr uintptr_t kPlIgnoreDamageUsed = 0x39f9;  // this attempt uses Ignore Damage
+        inline constexpr uintptr_t kPlSpeedChanged = 0x39fa;      // this attempt changed GD's speed
+        // GJBaseGameLayer: GD's game speed and music speed (the speed slider
+        // and keys write them). Silicate 1.1.2: GD_SPEED_OFFSET / GD_MUSIC_SPEED_OFFSET.
+        inline constexpr uintptr_t kGblSpeed = 0x3560;
+        inline constexpr uintptr_t kGblMusicSpeed = 0x3564;
+        // GJBaseGameLayer: Ignore Damage asked for (the pause menu's side
+        // button / keybind), and PlayerObject's own flag. resetLevel turns
+        // Ignore Damage off by clearing 0x39f9, 0x8a2 and both players' 0x7ed.
+        inline constexpr uintptr_t kGblIgnoreDamage = 0x8a2;
+        inline constexpr uintptr_t kPlayerIgnoreDamage = 0x7ed;
+
+        // PlayLayer::updateTestModeLabel (0x505ed0) +0x33: `cmp byte [rbx+0x39f9], 0;
+        // jne; lea rdi, [rbx+0x39fa]` -- both flags where they're expected.
+        inline const GuardedSite kCheckFlags{
+            0x505f03,
+            {0x80, 0xbb, 0xf9, 0x39, 0x00, 0x00, 0x00, 0x75, 0x2c, 0x48, 0x8d, 0xbb, 0xfa, 0x39, 0x00, 0x00},
+            "PlayLayer no-progress flags (0x39f9 / 0x39fa)"};
+        // Same function +0x51: `movss xmm0, [rbx+0x3560]` -- GD's speed.
+        inline const GuardedSite kCheckSpeed{
+            0x505f21, {0xf3, 0x0f, 0x10, 0x83, 0x60, 0x35, 0x00, 0x00}, "GD speed (0x3560)"};
+        // TimeSpeedControl::timeSliderChanged (0x66dc50) +0xb4: `movss [rax+0x3564], xmm0`.
+        inline const GuardedSite kCheckMusicSpeed{
+            0x66dd04, {0xf3, 0x0f, 0x11, 0x80, 0x64, 0x35, 0x00, 0x00}, "GD music speed (0x3564)"};
+        // PlayLayer::resetLevel (0x518c00) +0xc2: GD turning Ignore Damage
+        // off, which GucciBot's Legit only repeats.
+        inline const GuardedSite kCheckIgnoreDamageOff{
+            0x518cc2,
+            {0x44, 0x38, 0xa6, 0xf9, 0x39, 0x00, 0x00, 0x74, 0x37, 0x84, 0xc0, 0x75, 0x33, 0x88, 0x86,
+             0xf9, 0x39, 0x00, 0x00, 0x44, 0x88, 0xa6, 0xa2, 0x08, 0x00, 0x00, 0x48, 0x8b, 0x86, 0xb8,
+             0x0d, 0x00, 0x00, 0x44, 0x88, 0xa0, 0xed, 0x07, 0x00, 0x00, 0x48, 0x8b, 0x86, 0xc0, 0x0d,
+             0x00, 0x00, 0x44, 0x88, 0xa0, 0xed, 0x07, 0x00, 0x00},
+            "Ignore Damage fields (0x39f9 / 0x8a2 / player 0x7ed)"};
+
+        // GJGameLevel's practice attempt count (new in 2.209; Silicate 1.1.2's
+        // LEVEL_PRACTICE_ATTEMPTS). PlayLayer::resetLevel +0xd69: `mov rax,
+        // [rsi+0x878]; inc dword [rax+0x6ac]` (the level, then the count).
+        inline constexpr uintptr_t kLevelPracticeAttempts = 0x6ac;
+        inline const GuardedSite kCheckPracticeAttempts{
+            0x519969, {0x48, 0x8b, 0x86, 0x78, 0x08, 0x00, 0x00, 0xff, 0x80, 0xac, 0x06, 0x00, 0x00},
+            "GJGameLevel practice attempts (0x6ac)"};
+
+        // GameLevelManager::uploadDeathData (0x2266f0, the bindings' number;
+        // TodoReturn there, so it is hooked by address, not through
+        // $modify). Its prologue. It reads only `this` (rcx) before it
+        // checks GJAccountManager's account ID ([+0x168] - [+0x16c] > 0,
+        // else it returns): it needs a signed-in account. GD's only caller
+        // is LevelInfoLayer::onEnterTransitionDidFinish.
+        inline const GuardedSite kUploadDeathData{
+            0x2266f0,
+            {0x48, 0x8b, 0xc4, 0x48, 0x89, 0x58, 0x10, 0x48, 0x89, 0x70, 0x18, 0x48, 0x89, 0x78, 0x20,
+             0x55, 0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57},
+            "GameLevelManager::uploadDeathData"};
+
+#endif  // GB_GEODE6 (Lane B)
+
         // What the launch self-check expects placed on 2.2091 (core/engine_core.cpp).
         inline constexpr int kExpectedMidhooks = 5;  // 4 shake + teleport
         inline constexpr int kExpectedPatches = 9;

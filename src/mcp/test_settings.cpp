@@ -15,6 +15,7 @@
 #include "hacks/hitborders.hpp"
 #include "hacks/legit.hpp"
 #include "hacks/safemode.hpp"
+#include "hacks/safemode_2209.hpp"  // GB_SAFETY_2209
 #include "mcp/mcp_server.hpp"
 #include "trainers/click_indicators.hpp"
 #include "trainers/trainer_core.hpp"
@@ -593,6 +594,25 @@ namespace gucci::testset {
                 // Legit only (hacks/legit.hpp), saved like its switch.
                 v.push_back({"legit_only", "bool", Store::Field, [] { return matjson::Value(legit::on()); },
                              [](matjson::Value const& val, bool) { legit::setOn(wantBool("legit_only", val)); }});
+#if GB_SAFETY_2209
+                // GD 2.2091's safety guards (hacks/safemode_2209.cpp): reads
+                // what each one let through or held back this launch. Setting
+                // it to "upload" calls GD's death-data upload through the
+                // guard, only in a test launch (where it is always held back,
+                // so nothing leaves the PC).
+                v.push_back({"safety2209_probe", "text", Store::Memory,
+                             [] { return matjson::Value(safemode::probeCounts()); },
+                             [](matjson::Value const& val, bool restoring) {
+                                 if (restoring)
+                                     return;
+                                 if (!val.isString() || val.asString().unwrapOr("") != "upload")
+                                     throw ToolError("safety2209_probe: the only action is \"upload\"");
+                                 if (!safemode::testLaunch())
+                                     throw ToolError("safety2209_probe: only in a test launch (GUCCIBOT_FORCE_SAFE_MODE)");
+                                 if (!safemode::probeUpload())
+                                     throw ToolError("safety2209_probe: the upload guard isn't in (see the log)");
+                             }});
+#endif
                 // Sound: this launch's switches.
                 v.push_back({"bigbrrr", "bool", Store::Memory,
                              [] { return matjson::Value(BigBrrrManager::get()->enabled); },

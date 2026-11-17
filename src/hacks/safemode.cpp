@@ -23,6 +23,7 @@
 #include <Geode/modify/PlayerObject.hpp>
 #include <Geode/modify/TextArea.hpp>
 #include "core/geode_compat.hpp" // sha256
+#include "hacks/safemode_2209.hpp" // GB_SAFETY_2209: GD 2.2091's half
 
 #include <array>
 #include <cmath>
@@ -432,7 +433,17 @@ class $modify(GB7SafeModePlayLayer, PlayLayer) {
         g_completeCheatBlocked = cheatBlock;
         if (shield || cheatBlock)
             m_isTestMode = true; // only raised, and only for this call
+#if GB_SAFETY_2209
+        {
+            // GD 2.2091: its no-progress flag too, so the death tracker's
+            // writes and the playtime at a completion skip as well
+            // (Silicate 1.1.2's NoProgress; hacks/safemode_2209.cpp).
+            safemode::NoProgress speedFlag(this, shield || cheatBlock, false);
+            PlayLayer::levelComplete();
+        }
+#else
         PlayLayer::levelComplete();
+#endif
         m_isTestMode = was;
     }
 
@@ -646,6 +657,14 @@ class $modify(GB7SafeModeAchievements, GameManager) {
         GameManager::reportAchievementWithID(key, percent, dontNotify);
     }
 };
+
+#if GB_SAFETY_2209
+// For GD 2.2091's half (hacks/safemode_2209.cpp), which keeps its systems to
+// the same rule as this file.
+bool gucci::safemode::runShielded() {
+    return shielded();
+}
+#endif
 
 // A launch the environment forces says so once, in Assistant Access's log, so
 // a test run's log shows it was shielded from the first frame.
