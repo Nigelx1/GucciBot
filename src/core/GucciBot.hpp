@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-u (Calculate's hint on the Macro card now says it needs Play mode too, and its refusal in Off or Record says: It needs Play mode, set Mode to Play first)"
+    "2026-11-16-v (Test tools: gucci_list_macros lists every other macro when one file name cannot be spelled in the system code page, and names that file)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

@@ -706,26 +706,45 @@ namespace gucci::mcp {
             "one)}], in the card's order, and foreign [{file, format, known}]: "
             "other bots' macros in the replays folder, which the card offers to "
             "convert. The card's list follows the folder within about 1.5 s "
-            "while the Macro page is open (or on Refresh).",
+            "while the Macro page is open (or on Refresh). skipped_unspellable "
+            "(only when there are any): files whose names the system code page "
+            "can't spell, which the card leaves out too.",
             obj(),
             [](matjson::Value const&) {
                 auto dir = GucciEngine::get()->getReplayDir();
                 auto arr = matjson::Value::array();
+                // Files the system code page can't spell: path::string()
+                // throws for them on Windows, which used to stop the whole
+                // tool. Reported here by their UTF-8 name and left out of
+                // macros, as the menu's list (reloadMacroList) leaves them out.
+                auto unspellable = matjson::Value::array();
+                size_t unspellableCount = 0;
                 std::error_code ec;
                 if (fs::exists(dir, ec)) {
-                    for (auto const& it : fs::directory_iterator(dir, ec)) {
-                        if (!it.is_regular_file(ec))
+                    for (fs::directory_iterator walk(dir, ec), end; !ec && walk != end; walk.increment(ec)) {
+                        auto const& it = *walk;
+                        std::error_code typeEc;
+                        if (!it.is_regular_file(typeEc))
                             continue;
                         auto e = obj();
-                        e["name"] = it.path().stem().string();
-                        e["ext"] = it.path().extension().string();
-                        e["bytes"] = (int64_t)fs::file_size(it.path(), ec);
+                        try {
+                            e["name"] = it.path().stem().string();
+                            e["ext"] = it.path().extension().string();
+                        } catch (std::system_error const&) {
+                            unspellable.push(geode::utils::string::pathToString(it.path().filename()));
+                            ++unspellableCount;
+                            continue;
+                        }
+                        std::error_code sizeEc;
+                        e["bytes"] = (int64_t)fs::file_size(it.path(), sizeEc);
                         arr.push(e);
                     }
                 }
                 auto out = obj();
-                out["dir"] = dir.string();
+                out["dir"] = geode::utils::string::pathToString(dir);
                 out["macros"] = arr;
+                if (unspellableCount > 0)
+                    out["skipped_unspellable"] = unspellable;
                 // GucciBot (2026-11-01): the card's own list, as it shows it.
                 auto listed = matjson::Value::array();
                 for (auto const& m : ui::listedMacros()) {
