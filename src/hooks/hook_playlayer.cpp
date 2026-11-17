@@ -431,7 +431,15 @@ class $modify(GB7PlayLayer, PlayLayer) {
             gb->practiceFix.clearPlatformer(true);
             resetLevel();
         } else {
+            // A full reset is a restart from the start. GD's fullReset calls
+            // resetLevelFromStart (hooked below) on Windows 2.2081; set here as
+            // well in case a build of GD inlines that call into fullReset, where
+            // the hook would never run and the reset could land on a platformer
+            // checkpoint.
+            bool const was = g_resetFromStart;
+            g_resetFromStart = true;
             PlayLayer::fullReset();
+            g_resetFromStart = was;
             gb->practiceFix.clearPlatformer(true);
             upd.m_frameOnLastAttempt = 0;
         }
