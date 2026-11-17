@@ -417,6 +417,15 @@ class $modify(GB7SafeModePlayLayer, PlayLayer) {
     }
 
     void resetLevel() {
+#if GB_SAFETY_2209
+        // GD 2.2091: GD's own checkpoints count too (a platformer checkpoint
+        // GD stored itself, a practice checkpoint), not only the one
+        // GucciBot's reset adds: with any in the list, GD's reset goes back
+        // to the last one, and a platformer run's time carries on from it.
+        // Read before GD's reset, which may change the list. A full restart
+        // empties the list first (resetLevelFromStart -> removeAllCheckpoints).
+        bool const gdCheckpoint = m_checkpointArray && m_checkpointArray->count() > 0;
+#endif
         PlayLayer::resetLevel();
         // A respawn at a checkpoint (practice or platformer, or a step back)
         // carries on the same attempt: what was cheated before it still
@@ -425,7 +434,10 @@ class $modify(GB7SafeModePlayLayer, PlayLayer) {
         // reset set it to what was on right now: record to a platformer
         // checkpoint with intentional death armed, stop recording, die, and
         // the run from the checkpoint counted as legit.
-        bool const sameAttempt = safemode::g_checkpointRespawn;
+        bool sameAttempt = safemode::g_checkpointRespawn;
+#if GB_SAFETY_2209
+        sameAttempt = sameAttempt || gdCheckpoint;
+#endif
         safemode::g_checkpointRespawn = false;
         if (sameAttempt)
             safemode::g_tainted = safemode::g_tainted || safemode::cheatingNow();
