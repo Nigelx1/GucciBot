@@ -384,4 +384,78 @@ class $modify(GB2209SafeAchievements, AchievementManager) {
     }
 };
 
+// ---- 4. Platformer saves (Nigel's rule 4)
+//
+// GD keeps a platformer level's checkpoints between visits: writePersistentSave
+// (from onQuit, the practice switch, removing checkpoints, and every game save
+// through GameManager / LocalLevelManager::encodeDataTo) and the save journal
+// (GameLevelManager::writePlatformerSaveJournal, from onQuit). None is written
+// for a visit in which the bot or a cheat was on at any point -- not just this
+// attempt, as a checkpoint reached with a cheat stays in the save after the
+// cheat is off -- or while safe mode keeps the run from counting. A legit visit
+// saves as normal. Loading a save is refused while GucciBot records or plays:
+// the macro starts the level from its start.
+class $modify(GB2209PlatformerSave, PlayLayer) {
+    struct Fields {
+        bool cheatedVisit = false;
+    };
+
+    static void onModify(auto& self) {
+        gucci::mcponly::keep(self);
+    }
+
+    bool cheatedNow() {
+        bool const cheat = live() && (safemode::cheatingNow() || safemode::tainted());
+        if (cheat)
+            m_fields->cheatedVisit = true;
+        return m_fields->cheatedVisit || safemode::runShielded();
+    }
+
+    void postUpdate(float dt) {
+        PlayLayer::postUpdate(dt);
+        (void)cheatedNow();
+    }
+
+    void writePersistentSave() {
+        if (cheatedNow()) {
+            ++g_counts.platformerSavesBlocked;
+            note("no platformer save: the bot or a cheat was on in this visit (or safe mode)");
+            return;
+        }
+        PlayLayer::writePersistentSave();
+    }
+
+    void loadPersistentCheckpoint(gd::string& save) {
+        auto* gb = GucciEngine::get();
+        if (live() && (gb->isRecording() || gb->isPlaying())) {
+            ++g_counts.platformerLoadsRefused;
+            note("platformer save not loaded: GucciBot is recording or playing");
+            Loader::get()->queueInMainThread([] {
+                Notification::create("Platformer save not loaded: GucciBot is recording or playing a macro.",
+                                     NotificationIcon::Info, 3.f)
+                    ->show();
+            });
+            return;
+        }
+        PlayLayer::loadPersistentCheckpoint(save);
+    }
+};
+
+class $modify(GB2209PlatformerJournal, GameLevelManager) {
+    static void onModify(auto& self) {
+        gucci::mcponly::keep(self);
+    }
+
+    void writePlatformerSaveJournal(GJGameLevel* level) {
+        bool hold = safemode::testLaunch();  // a test launch writes none of GD's saves
+        if (auto* pl = PlayLayer::get())
+            hold = hold || static_cast<GB2209PlatformerSave*>(pl)->cheatedNow();
+        if (hold) {
+            ++g_counts.journalBlocked;
+            return;
+        }
+        GameLevelManager::writePlatformerSaveJournal(level);
+    }
+};
+
 #endif  // GB_SAFETY_2209
