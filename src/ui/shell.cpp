@@ -1580,7 +1580,7 @@ namespace gucci::ui {
             if (kit::InputFloatCommit("tps", &tps, 1.f, "%.0f") && tps >= 1.f && tps != tpsWas) {
 #else
             // Only a rate GD can run here is taken (core/portable_tps.hpp).
-            kit::RowBegin("Tick rate", hints ? "Physics ticks per second: 240, or 162 and up on this platform" : nullptr);
+            kit::RowBegin("Tick rate", hints ? "Physics ticks per second: 240, or 162 and up on " GB_HERE : nullptr);
             if (kit::InputFloatCommit("tps", &tps, 1.f, "%.0f") && gucci::portable_tps::runnable(tps) && tps != tpsWas) {
 #endif
                 gb->updater.setTps(tps);
@@ -1716,7 +1716,7 @@ namespace gucci::ui {
                 // nobody has checked on a phone or a Mac yet: if they disagree,
                 // every click records on the tick's edge. The count below
                 // shows which.
-                kit::Note("Untested on this platform. If the count below says every click landed on the edge, it "
+                kit::Note("Untested on " GB_HERE ". If the count below says every click landed on the edge, it "
                           "isn't working here yet.",
                           Tone::Warn);
 #endif
@@ -2078,8 +2078,14 @@ namespace gucci::ui {
             {
                 bool off = false;
                 ImGui::BeginDisabled();
+#if GB_GEODE6
+                // Windows too: its midhook isn't found in GD 2.2091 yet.
+                kit::SwitchRow("High TPS precision",
+                               "Not on GD 2.2091 yet. A macro made with it on won't replay the same here", &off);
+#else
                 kit::SwitchRow("High TPS precision",
                                "Windows only for now. A macro made with it on won't replay the same here", &off);
+#endif
                 ImGui::EndDisabled();
             }
 #endif

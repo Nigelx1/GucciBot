@@ -47,7 +47,11 @@ namespace gucci::ui::pages {
         if (kit::CheatFeatureBegin("Show Trajectory", "Lines ahead of the player: green if you hold, red if you let go",
                               &gb->pathPreview, nullptr, &changed)) {
 #if !GB_NATIVE_ENGINE
+#if GB_GEODE6
+            kit::Note("Untested on GD 2.2091. Moving objects keep the speed they have now: triggers that start, stop or change them later are not simulated here yet (that part reads GD 2.2081's memory layout).", Tone::Warn);
+#else
             kit::Note("Untested on this platform. Moving objects keep the speed they have now: triggers that start, stop or change them later are not simulated here (that part reads GD's Windows memory layout).", Tone::Warn);
+#endif
 #endif
             if (kit::SliderRow("Length", "How far ahead, in ticks; at 240 TPS, 240 is one second", &gb->pathLength,
                                kMinPathTicks, kMaxPathTicks, "%d ticks"))
@@ -76,9 +80,15 @@ namespace gucci::ui::pages {
 #if !GB_NATIVE_ENGINE
         // Inside the card (it sat above it, between cards), and worded for
         // the look-ahead copies; Show Trajectory has its own.
+#if GB_GEODE6
+        kit::Note("Untested on GD 2.2091. The look-ahead copies keep moving objects at the speed they have "
+                  "now: triggers that start, stop or change them later are not simulated here yet (that part "
+                  "reads GD 2.2081's memory layout).", Tone::Warn);
+#else
         kit::Note("Untested on this platform. The look-ahead copies keep moving objects at the speed they have "
                   "now: triggers that start, stop or change them later are not simulated here (that part reads "
                   "GD's Windows memory layout).", Tone::Warn);
+#endif
 #endif
 
         // ---- Frame Extrapolation

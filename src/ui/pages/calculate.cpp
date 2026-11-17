@@ -1580,7 +1580,11 @@ namespace gucci::ui::pages {
     } // namespace
 
     void calculate() {
-#if !GB_NATIVE_ENGINE
+#if GB_GEODE6
+        kit::Note("Calculate is new on GD 2.2091: it has been checked mostly on GD 2.2081 so far. If its windows look "
+                  "wrong here, please report it.",
+                  Tone::Warn);
+#elif !GB_NATIVE_ENGINE
         kit::Note("Calculate is untested on this platform: it has only been checked on Windows so far. If its windows look "
                   "wrong here, please report it.",
                   Tone::Warn);

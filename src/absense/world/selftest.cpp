@@ -968,7 +968,12 @@ void World::init(GJBaseGameLayer* pl) {
     // current speed (MovingObjects). Nothing else turns it on (disabled starts
     // true, and only the end of this function clears it).
     (void)pl;
+#if GB_GEODE6
+    // Windows too: its layout is GD 2.2081's, not yet found again in 2.2091.
+    disable("the trigger model reads GD 2.2081's memory layout; off on GD 2.2091 for now");
+#else
     disable("the trigger model reads GD's Windows memory layout; off on this platform");
+#endif
     return;
 #else
     // The code is checked whether or not a layer is at hand: returning early

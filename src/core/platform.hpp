@@ -67,6 +67,17 @@
 #define GB_WORLD_LAYOUTS 0
 #endif
 
+// GB_HERE: how the menu names where it is running when a feature works
+// differently from Windows on GD 2.2081: "GD 2.2091" in the 2.2091 build
+// (Windows, Geode 6), "this platform" on macOS, iOS and Android. It joins
+// string literals ("Untested on " GB_HERE "."), so the 2.2081 build's texts
+// stay byte for byte what they were.
+#if GB_GEODE6
+#define GB_HERE "GD 2.2091"
+#else
+#define GB_HERE "this platform"
+#endif
+
 #if defined(GEODE_IS_DESKTOP)
 #define GB_DESKTOP_GL 1
 #else
