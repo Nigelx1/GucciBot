@@ -1176,10 +1176,9 @@ class $modify(GB7PlayLayer, PlayLayer) {
         // written as a file named only by its extension.
         if (!gb->isRecording() || gb->replay.m_actionAtom.empty() || gb->replayName.empty())
             return;
-        auto path = gb->replay.getCurrentPath();
-        if (gb->replayBackupsEnabled)
-            gb->replay.backupExisting(path);
-        gb->replay.save(path);
+        // Over the macro's own file, or as "<name> 2" when the name is
+        // another macro's (a fresh recording): GucciEngine::autosaveMacro.
+        gb->autosaveMacro();
     }
 
     void setupHasCompleted() {

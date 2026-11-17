@@ -125,7 +125,8 @@ A macro is a recording of your inputs, tick by tick. GucciBot plays it back exac
 
 - A name can't have `\ / : * ? " < > |` in it.
 - **Practice mode works too.** Checkpoints are saved whole, so a macro recorded through respawns plays back like one recorded straight through.
-- **Fix a mistake without starting over (new in 2.0):** while the macro plays, switch **Mode** to **Record** at the spot you want to change. Recording carries on from there, and the rest of the macro is cut.
+- **Fix a mistake without starting over (new in 2.0):** while the macro plays, switch **Mode** to **Record** at the spot you want to change. Recording carries on from there, and the rest of the macro is cut. **Save** then saves over that macro, as it does after any change to a macro you loaded.
+- **When the name is taken (new in 2.0):** if another macro already has the name in **Name** (say you recorded from **Off** and the last macro's name was still there), **Save** asks first: **Replace** it (it's backed up first if that's on), **Save as "name 2"** to keep both, or **Cancel**. An autosave can't ask, so it keeps both: it saves as "name 2" and says so.
 - **Autosave:** the **Saving** card on the same page has **Autosave at the level's end** and **Autosave on a timer**. **Back up a macro before overwriting it** is on by default.
 - Your macros are saved with your theme's file ending (`.brrr` for the GucciBot theme). The **Saved macros** list shows which theme each one was saved under.
 
