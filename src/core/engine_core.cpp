@@ -1,3 +1,4 @@
+#include "core/gd_addresses.hpp"
 #include "core/GucciBot.hpp"
 #include "core/geode_compat.hpp" // gucci::pathToString
 #include "hacks/legit.hpp"
@@ -3041,14 +3042,23 @@ namespace gucci {
         // and 1 in hook_playerobject.cpp. A literal, not midhookSites().size():
         // a site registers itself as it's placed, so one whose $execute never
         // ran would shrink both counts and still pass.
-        bool const noEngineCode = standingDown || botswitch::takenOut() || !GB_NATIVE_ENGINE;
+        // GD 2.2091 (Geode 6) places fewer: 5 midhooks (shake, teleport) and
+        // 9 patches (core/gd_addresses.hpp).
+        bool const noEngineCode = standingDown || botswitch::takenOut() || !GB_RAW_SITES;
+#if GB_GD2091_SITES
+        int const wantMidhooks = gdaddr::v2091::kExpectedMidhooks;
+        int const wantPatches = gdaddr::v2091::kExpectedPatches;
+#else
+        int const wantMidhooks = 12;
+        int const wantPatches = 4;
+#endif
         gbcheck::g_engineSkippedWhy =
-            !GB_NATIVE_ENGINE ? "this platform doesn't use the Windows engine"
+            !GB_RAW_SITES ? "this platform doesn't use the Windows engine"
             : standingDown    ? "GucciBot stood down for another bot this launch"
             : mcponly::launch() ? "this is an MCP-only test launch (GUCCIBOT_MCP_ONLY)"
             : botswitch::takenOut() ? "the bot is switched off (Disable bot)"
                                     : nullptr;
-        gbcheck::run(noEngineCode ? 0 : 12, noEngineCode ? 0 : 4, GBR6_VERSION, BRR_FORMAT_VERSION,
+        gbcheck::run(noEngineCode ? 0 : wantMidhooks, noEngineCode ? 0 : wantPatches, GBR6_VERSION, BRR_FORMAT_VERSION,
                      MOD_VERSION);
     }
 

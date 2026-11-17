@@ -10,9 +10,10 @@
 #include "trainers/trainerghost.hpp"
 #include "trainers/trainer_core.hpp"
 #include "render/renderer.hpp"
-#if GB_NATIVE_ENGINE
+#if GB_RAW_SITES
 #include <safetyhook.hpp>
 #endif
+#include "core/gd_addresses.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/modify/GJBaseGameLayer.hpp>
@@ -46,7 +47,7 @@ namespace gucci::slopediag {
 // (see handleButton).
 static bool s_queueRecorded = false;
 
-#if GB_NATIVE_ENGINE // Windows midhooks and raw addresses (core/platform.hpp)
+#if GB_RAW_SITES // Windows midhooks: GD 2.2081, and 2.2091 (core/platform.hpp)
 static void shakeRandomOverride(SafetyHookContext& ctx) {
     uint64_t& state = GucciEngine::get()->replay.m_shakeRandomState;
     state = (int)((214013 * state + 2531011) >> 16) & 0x7FFF;
@@ -66,7 +67,7 @@ static void shakeRandomOverride(SafetyHookContext& ctx) {
 // rip skip) -- Silicate's placement. Off Windows hooks/portable_teleport.cpp
 // makes the same pick from the same state (core/teleport_pick.hpp): keep the
 // two in step.
-#if GB_NATIVE_ENGINE // Windows midhooks and raw addresses (core/platform.hpp)
+#if GB_RAW_SITES // Windows midhooks: GD 2.2081, and 2.2091 (core/platform.hpp)
 static void teleportRandomOverride(SafetyHookContext& ctx) {
     uint64_t& state = GucciEngine::get()->replay.m_teleportRandomState;
     state = (int)((214013 * state + 2531011) >> 16) & 0x7FFF;
@@ -1137,5 +1138,22 @@ $execute {
     util_midhook(geode::base::get() + 0x23E1E9, "shakeRandom4", shakeRandomOverride);
     util_midhook(geode::base::get() + 0x20FEDC, "teleportRandomOverride", teleportRandomOverride);
     util_midhook(geode::base::get() + 0x3A3657, "checkpointPlacement", overrideCheckpointPlacement);
+}
+#endif
+
+#if GB_GD2091_SITES
+// GD 2.2091 (Geode 6): the shake and teleport midhooks at Silicate 1.1.2's
+// addresses, each placed only if GD's code there is what Silicate found
+// (core/gd_addresses.hpp). The checkpoint placement midhook isn't placed: the
+// GD function it sits in, tryPlaceCheckpoint, is replaced by GucciBot's own
+// on every platform (hook_playerobject.cpp), so its code never runs. While
+// the teleport midhook is in, the off-Windows stand-in steps aside
+// (portable_teleport.cpp). Untested in a 2.2091 game.
+$execute {
+    using namespace gucci::gdaddr::v2091;
+    for (auto const* s : {&kShake1, &kShake2, &kShake3, &kShake4})
+        util_guarded_midhook(geode::base::get() + s->offset, s->expect, s->name, shakeRandomOverride);
+    util_guarded_midhook(geode::base::get() + kTeleportRandom.offset, kTeleportRandom.expect,
+                         kTeleportRandom.name, teleportRandomOverride);
 }
 #endif

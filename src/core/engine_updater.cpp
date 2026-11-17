@@ -8,6 +8,7 @@
 #include "core/bot_switch.hpp"
 #include "core/mcp_only.hpp"
 #include "hooks/util_midhook.hpp"
+#include "core/gd_addresses.hpp"
 #include "render/renderer.hpp"
 #include "trailbuf/trailbuf.hpp"
 #include "analysis/ac/shim.hpp"
@@ -1351,6 +1352,27 @@ $execute {
 
     if (g_patchFailures)
         geode::log::error("[GucciBot] {} of {} binary patches FAILED to apply", g_patchFailures, g_patchAttempts);
+}
+#endif
+
+#if GB_GD2091_SITES
+// GD 2.2091 (Geode 6): the same four jobs as the 2.2081 patches above, at
+// Silicate 1.1.2's addresses, each checked byte for byte first
+// (core/gd_addresses.hpp says where every number comes from). 2.2091 needs
+// nine patches for them. The tick loop's midhooks have no 2.2091 address yet,
+// so this build ticks through the off-Windows engine (GBPortableTick below).
+// Untested in a 2.2091 game.
+$execute {
+    if (standDownBot())
+        return;
+    using namespace gucci::gdaddr::v2091;
+    for (auto const* p : {&kResetLevelVariables, &kRestartKey, &kFullRestartKey, &kStartPosRestartKey,
+                          &kStartPosCycleKey, &kStartPosCycleReset, &kResetLevelHeld, &kResumeAndRestartP1,
+                          &kResumeAndRestartP2})
+        util_guarded_patch(geode::base::get() + p->offset, p->expect, p->write, p->name);
+    if (g_patchFailures)
+        geode::log::error("[GucciBot] {} of {} binary patches FAILED to apply (GD 2.2091)", g_patchFailures,
+                          g_patchAttempts);
 }
 #endif
 

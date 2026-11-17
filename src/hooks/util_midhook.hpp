@@ -6,10 +6,12 @@
 #include "core/standdown.hpp"
 
 #include <Geode/Geode.hpp>
-#if GB_NATIVE_ENGINE
+#if GB_RAW_SITES
 #include <safetyhook.hpp>
 #endif
 #include <cstdint>
+#include <cstring>
+#include <initializer_list>
 #include <deque>
 #include <string>
 #include <vector>
@@ -27,7 +29,7 @@ namespace gucci {
     inline int g_midhooksNotBackIn = 0;
     inline int g_patchesNotBackIn = 0;
 
-#if GB_NATIVE_ENGINE
+#if GB_RAW_SITES
     // Every midhook and byte patch GucciBot asks for is written down here,
     // whether or not it went in, so the master switch (core/bot_switch.hpp)
     // can take them all out and put them back. A deque, not a vector: a
@@ -122,6 +124,56 @@ namespace gucci {
         if (!engineCodeWantedAtLaunch())
             return false;
         return placePatch(site);
+    }
+
+    // Silicate 1.1.2's guard for its GD 2.2091 sites (util/patch.hpp,
+    // expectBytes; GPL-3, credit peony): a site is touched only if GD's code
+    // there is exactly what was found when the address was taken, so a GD
+    // version or an address that's off is logged and left alone instead of
+    // being overwritten. A mismatch counts as a failed attempt, so the launch
+    // self-check (Settings > Diagnostics) shows it.
+    inline bool util_expect_bytes(uintptr_t address, std::initializer_list<uint8_t> expect, char const* name,
+                                  bool isPatch) {
+        if (std::memcmp(reinterpret_cast<void const*>(address), expect.begin(), expect.size()) == 0)
+            return true;
+        ++(isPatch ? g_patchAttempts : g_midhookAttempts);
+        ++(isPatch ? g_patchFailures : g_midhookFailures);
+        geode::log::error("[GucciBot] Left '{}' alone: GD's code at {:#x} isn't what it should be "
+                          "(another GD version, or the address is wrong)",
+                          name, address - geode::base::get());
+        return false;
+    }
+
+    // A byte patch whose original bytes are checked first; `write` empty
+    // means NOP them all. Registered with the master switch like util_patch.
+    inline bool util_guarded_patch(uintptr_t address, std::initializer_list<uint8_t> expect,
+                                   std::initializer_list<uint8_t> write, char const* name) {
+        if (!util_expect_bytes(address, expect, name, true))
+            return false;
+        std::vector<uint8_t> bytes = write.size() ? std::vector<uint8_t>(write)
+                                                  : std::vector<uint8_t>(expect.size(), 0x90);
+        return util_patch(address, std::move(bytes), name);
+    }
+
+    // A midhook whose spot is checked first.
+    inline bool util_guarded_midhook(uintptr_t address, std::initializer_list<uint8_t> expect, char const* name,
+                                     safetyhook::MidHookFn fn) {
+        if (standDownBot())
+            return util_midhook(address, name, fn);  // logs the skip
+        if (!util_expect_bytes(address, expect, name, false))
+            return false;
+        return util_midhook(address, name, fn);
+    }
+
+    // Whether the midhook of this name is in GD's code right now (placed and
+    // not taken out by the master switch). A stand-in hook that does the same
+    // job by other means asks this so the two never both act
+    // (hooks/portable_teleport.cpp on GD 2.2091).
+    inline bool midhookLive(char const* name) {
+        for (auto& site : midhookSites())
+            if (site.name == name)
+                return site.hook && site.hook.enabled();
+        return false;
     }
 
     // The master switch's half of this file: every midhook and patch out

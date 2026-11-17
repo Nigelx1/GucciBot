@@ -38,6 +38,24 @@
 #define GB_NATIVE_ENGINE 0
 #endif
 
+// GB_GD2091_SITES: the GD 2.2091 build (Geode 6, Windows) places the raw
+// sites it has 2.2091 addresses for (core/gd_addresses.hpp: the byte patches,
+// the shake and teleport midhooks), each checked byte for byte before it goes
+// in. The tick loop stays the off-Windows one there (GB_NATIVE_ENGINE 0).
+#if defined(GEODE_IS_WINDOWS) && !defined(GB_FORCE_PORTABLE) && GB_GEODE6
+#define GB_GD2091_SITES 1
+#else
+#define GB_GD2091_SITES 0
+#endif
+
+// GB_RAW_SITES: this build places midhooks or byte patches at all (the
+// machinery in hooks/util_midhook.hpp, the master switch's half of it).
+#if GB_NATIVE_ENGINE || GB_GD2091_SITES
+#define GB_RAW_SITES 1
+#else
+#define GB_RAW_SITES 0
+#endif
+
 // GB_WORLD_LAYOUTS: GD 2.2081's Windows memory layout and code addresses,
 // which the World (absense/world: the trigger model) and the pathfinder's
 // physics copies read raw. Windows on GD 2.2081 only: on GD 2.2091 they are
