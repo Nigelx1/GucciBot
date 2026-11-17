@@ -15,7 +15,7 @@ GucciBot is a Geometry Dash macro bot built on Silicate's physics engine, with a
 
 ## Platforms
 
-Windows is GucciBot's home, and where all of it has been tested. Since 2.0.0-beta.3 it also runs on **macOS, iOS and Android**. It's still experimental there: it has been played on an Android phone, but the rest has had little testing, so if something looks wrong, open an issue. On a phone the menu opens from the **GucciBot** button in the pause menu, fills the screen and scrolls when you drag it; **Menu size** in Settings makes it bigger or smaller. On a Mac the menu key's default is **Option**, and the pause-menu button is there too. On iOS no key reaches GucciBot, so Settings > Keybinds says so instead of offering keys.
+Windows is GucciBot's home, and where all of it has been tested. Since 2.0.0-beta.3 it also runs on **macOS, iOS and Android**. It's still experimental there: it has been played on an Android phone, but the rest has had little testing, so if something looks wrong, open an issue. On a phone the menu opens from the **GucciBot** button in the pause menu, fills the screen and scrolls when you drag it; **Menu size** in Settings makes it bigger or smaller. The Mac build runs on Apple silicon and, since 2.0, on Intel Macs too, though nobody has run it on an Intel Mac yet. On a Mac the menu key's default is **Option**, and the pause-menu button is there too. On iOS no key reaches GucciBot, so Settings > Keybinds says so instead of offering keys.
 
 What still needs Windows:
 
