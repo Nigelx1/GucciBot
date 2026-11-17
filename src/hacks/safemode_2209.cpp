@@ -675,12 +675,15 @@ std::string gucci::safemode::probeLevel() {
             l->m_practicePercent, l->m_orbCompletion.value(), l->m_newNormalPercent2.value(),
             l->m_attemptTime.value(), l->m_bestTime, strInfo(l->m_inputsTime), strInfo(l->m_platformerSaveReplay));
         if (pl)
-            out += fmt::format("layer gdSpeed={} gdMusicSpeed={} ignoreDamage={} speedFlag={} testMode={} gdOwnCheat={}; ",
+            out += fmt::format("layer gdSpeed={} gdMusicSpeed={} ignoreDamage={} ignoreOn={} ignoreVar={} speedFlag={} "
+                               "testMode={} gdOwnCheat={} tainted={} checkpoints={}; ",
                                checks().speed ? field<float>(pl, v2091::kGblSpeed) : -1.f,
                                checks().speed ? field<float>(pl, v2091::kGblMusicSpeed) : -1.f,
                                checks().flags && field<bool>(pl, v2091::kPlIgnoreDamageUsed),
+                               safemode::gdIgnoreDamageOn(), GameManager::get()->getGameVariable(kIgnoreDamageVar),
                                checks().flags && field<bool>(pl, v2091::kPlSpeedChanged), pl->m_isTestMode,
-                               safemode::gdOwnCheat());
+                               safemode::gdOwnCheat(), safemode::tainted(),
+                               pl->m_checkpointArray ? pl->m_checkpointArray->count() : 0u);
         if (l->m_levelType == GJLevelType::Main)
             out += fmt::format("completedMain={}; ",
                                GameStatsManager::sharedState()->hasCompletedMainLevel(l->m_levelID.value()));
@@ -711,6 +714,9 @@ std::string gucci::safemode::probeLevel() {
 //   slider:<0..1>      a TimeSpeedControl made for the level, its slider set and moved
 //   gd_speed:<x>       GD's own speed written as its slider would (no GucciBot hook)
 //   ignore_damage      GD's Ignore Damage turned on, as its keybind does
+//   checkpoint         a checkpoint stored where the player is (as practice's)
+//   respawn            PlayLayer::resetLevel, as a death's respawn calls it
+//   restart            PlayLayer::resetLevelFromStart (the checkpoints go)
 std::string gucci::safemode::probeAction(std::string const& action) {
     auto* pl = PlayLayer::get();
     auto arg = [&](char const* prefix) -> std::optional<std::string> {
@@ -769,6 +775,21 @@ std::string gucci::safemode::probeAction(std::string const& action) {
         float const speed = static_cast<float>(std::atof(v->c_str()));
         field<float>(pl, v2091::kGblSpeed) = speed;
         field<float>(pl, v2091::kGblMusicSpeed) = speed;
+        return "";
+    }
+    if (action == "checkpoint") {
+        auto* cp = pl->createCheckpoint();
+        if (!cp)
+            return "no checkpoint made";
+        pl->storeCheckpoint(cp);
+        return "";
+    }
+    if (action == "respawn") {
+        pl->resetLevel();
+        return "";
+    }
+    if (action == "restart") {
+        pl->resetLevelFromStart();
         return "";
     }
     if (action == "ignore_damage") {
