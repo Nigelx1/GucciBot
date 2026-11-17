@@ -684,6 +684,9 @@ std::string gucci::safemode::probeLevel() {
                                checks().flags && field<bool>(pl, v2091::kPlSpeedChanged), pl->m_isTestMode,
                                safemode::gdOwnCheat(), safemode::tainted(),
                                pl->m_checkpointArray ? pl->m_checkpointArray->count() : 0u);
+        if (pl)
+            // Rule 4: would a platformer save be held back for this visit?
+            out += fmt::format("visitHeld={}; ", static_cast<GB2209PlatformerSave*>(pl)->cheatedNow());
         if (l->m_levelType == GJLevelType::Main)
             out += fmt::format("completedMain={}; ",
                                GameStatsManager::sharedState()->hasCompletedMainLevel(l->m_levelID.value()));
@@ -795,7 +798,9 @@ std::string gucci::safemode::probeAction(std::string const& action) {
     if (action == "ignore_damage") {
         if (!checks().ignoreOff)
             return "the Ignore Damage byte check failed";
-        // As UILayer::handleAction's Ignore Damage keybind writes them (0x671ce7).
+        // As UILayer::handleAction's Ignore Damage keybind writes them (0x671ce7),
+        // the setting with them.
+        GameManager::get()->setGameVariable(kIgnoreDamageVar, true);
         field<bool>(pl, v2091::kGblIgnoreDamage) = true;
         field<bool>(pl, v2091::kPlIgnoreDamageUsed) = true;
         if (pl->m_player1)
