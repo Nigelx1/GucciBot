@@ -3688,6 +3688,20 @@ namespace gucci::ui {
                 ImGui::SetCursorPosY(std::max(after, ImGui::GetCursorPosY()));
             }
             ImGui::BeginChild("##page", ImVec2(0.f, 0.f));
+            // Every page shares this one child, so ImGui kept the last page's
+            // scroll: from the Pathfinder scrolled down to Start, Calculate
+            // opened with its own button above the view (11-16 new-user
+            // pass). Another page starts at its top. A search result picked
+            // onto a new page still scrolls to it: its jump sets the scroll
+            // later in this frame, and the later one wins.
+            {
+                static int s_drawnPage = -1;
+                if (g_page != s_drawnPage) {
+                    if (s_drawnPage >= 0)
+                        ImGui::SetScrollY(0.f);
+                    s_drawnPage = g_page;
+                }
+            }
             // The theme's words under every page's title (Nigel, 2026-10-18:
             // "add labels everywhere with the cool quote stuff"). A theme has
             // three quotes (the old menu's Replay, Tools and Credits pages);

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-w (Test tools can read and set the converter Shift frames slider, now drawn with the menu kit slider, which looks the same)"
+    "2026-11-16-x (Switching pages in the menu starts the new page at its top, instead of at the last page's scroll)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
