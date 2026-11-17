@@ -34,8 +34,10 @@ The release has **two files**. Take the one that matches your Geometry Dash, and
 
 | Your game | Your Geode | Download |
 |---|---|---|
-| **GD 2.2081** | Geode 5.10.1 or a later 5.x | `GucciBot-2.0.0-GD2.2081.geode`: Windows, Mac, iPhone, iPad and Android |
-| **GD 2.2091** | Geode **6.0.0-alpha.2**, exactly | `GucciBot-2.0.0-GD2.2091.geode`: the **preview**, Windows only |
+| **GD 2.2081** | Geode 5.10.1 or a later 5.x | `nigelx1.guccibot2208.geode`: Windows, Mac, iPhone, iPad and Android |
+| **GD 2.2091** | Geode **6.0.0-alpha.2**, exactly | `nigelx1.guccibot2209.geode`: the **preview**, Windows only |
+
+The number in each name is the GD version it's for: **2208** is GD 2.2081, **2209** is GD 2.2091.
 
 **Not sure which you have?** Open Geode's mod list: Geode itself is listed there with its version. Geode 5 means GD 2.2081, Geode 6 means GD 2.2091. To see the GD version itself, open the newest log in the game's `geode/logs` folder: near the top it says `Running Geode v... in Geometry Dash v2.2081` (or `v2.2091`). If that line also says **forward compatibility mode**, your game is on 2.2091 with Geode 5, and neither file loads: install Geode 6.0.0-alpha.2 first.
 
@@ -53,10 +55,10 @@ Each file is over 200 MB, because the renderer, the music and the JMF Trainer's 
 ### Every platform
 
 1. Install Geode first, using the steps on [geode-sdk.org](https://geode-sdk.org/) for your platform.
-2. Download the file for your GD (`GucciBot-2.0.0-GD2.2081.geode` or `GucciBot-2.0.0-GD2.2091.geode`) from the [latest release](https://github.com/Nigelx1/GucciBot/releases/latest).
+2. Download the file for your GD (`nigelx1.guccibot2208.geode` or `nigelx1.guccibot2209.geode`) from the [latest release](https://github.com/Nigelx1/GucciBot/releases/latest).
 3. Open the game, then open Geode's mod list.
 4. Press the gear for Geode's settings, then **Install From File**, and pick the file. Geode saves it as `nigelx1.guccibot.geode`.
-   Or put the file in Geode's mods folder yourself: **Open Mods Folder** is in the same place. Delete any older GucciBot file there first.
+   Or put the file in Geode's mods folder yourself: **Open Mods Folder** is in the same place. Delete any older GucciBot file there first, whatever its name (`nigelx1.guccibot.geode`, `nigelx1.guccibot2208.geode` or `nigelx1.guccibot2209.geode`).
 5. If GucciBot is already installed, Geode asks whether to replace it: press **Replace**. (If it said "can not be installed" just before, it's the wrong file: press **Cancel**.)
 6. Restart the game.
 

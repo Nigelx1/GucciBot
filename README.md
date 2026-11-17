@@ -26,21 +26,21 @@ GucciBot 2.0 comes as **two files on the same release**, one for each Geometry D
 
 | Your game | Your Geode | Download | Runs on |
 |---|---|---|---|
-| **GD 2.2081** | **Geode 5.10.1** or a later 5.x | `GucciBot-2.0.0-GD2.2081.geode` | Windows, Mac (Apple silicon and Intel), iPhone, iPad and Android (32- and 64-bit) |
-| **GD 2.2091** | **Geode 6.0.0-alpha.2**, exactly that version | `GucciBot-2.0.0-GD2.2091.geode` (preview) | Windows only, for now |
+| **GD 2.2081** | **Geode 5.10.1** or a later 5.x | `nigelx1.guccibot2208.geode` | Windows, Mac (Apple silicon and Intel), iPhone, iPad and Android (32- and 64-bit) |
+| **GD 2.2091** | **Geode 6.0.0-alpha.2**, exactly that version | `nigelx1.guccibot2209.geode` (preview) | Windows only, for now |
 
-Each file is about 250 MB, since the renderer, the music and the JMF Trainer's video ride along.
+The number in each name is the GD version it's for: **2208** is GD 2.2081, **2209** is GD 2.2091. Each file is about 250 MB, since the renderer, the music and the JMF Trainer's video ride along.
 
 ### Which GD and Geode do I have?
 
 Geode tells you both.
 
 - **Your Geode:** open Geode's mod list. Geode itself is in the list of installed mods, with its version under its name.
-  - **Geode 5** (5.10.1 or later) means GD 2.2081: take the **GD2.2081** file.
-  - **Geode 6.0.0-alpha.2** means GD 2.2091: take the **GD2.2091** file.
+  - **Geode 5** (5.10.1 or later) means GD 2.2081: take the **2208** file (`nigelx1.guccibot2208.geode`).
+  - **Geode 6.0.0-alpha.2** means GD 2.2091: take the **2209** file (`nigelx1.guccibot2209.geode`).
   - Any other Geode 6 version: the preview won't load on it yet. It's built for alpha.2 only, and a new file follows when Geode 6 moves on.
 - **Your GD:** open the `geode/logs` folder in the game's folder (next to `geode/mods`) and open the newest log. Near the top, Geode writes a line like `Running Geode v5.10.1 in Geometry Dash v2.2081 on Windows`. The number after "Geometry Dash v" is your GD version.
-- **If that line says "forward compatibility mode"**, your game updated to 2.2091 but your Geode is still Geode 5. Neither GucciBot file loads like that. Install [Geode 6.0.0-alpha.2](https://github.com/geode-sdk/geode/releases/tag/v6.0.0-alpha.2) and take the GD2.2091 file, or play on GD 2.2081 with Geode 5 and take the GD2.2081 file.
+- **If that line says "forward compatibility mode"**, your game updated to 2.2091 but your Geode is still Geode 5. Neither GucciBot file loads like that. Install [Geode 6.0.0-alpha.2](https://github.com/geode-sdk/geode/releases/tag/v6.0.0-alpha.2) and take the 2209 file, or play on GD 2.2081 with Geode 5 and take the 2208 file.
 
 ### Install
 
@@ -60,7 +60,7 @@ Both files are the same mod (`nigelx1.guccibot`), built for two different games.
 
 - **The wrong one doesn't load.** Geode marks it **Outdated** in the mod list, with the GD or Geode version it was built for (for example "Outdated (GD 2.2091)" on a 2.2081 game).
 - **Two at once conflict.** Geode loads one and lists the other as invalid. GucciBot's setup check points out the extra file.
-- **Putting a file in the mods folder yourself** (**Open Mods Folder**, next to Install From File)? Delete the old GucciBot file first. An older `nigelx1.guccibot.geode` counts.
+- **Putting a file in the mods folder yourself** (**Open Mods Folder**, next to Install From File)? Delete the old GucciBot file first, whatever its name: `nigelx1.guccibot.geode`, `nigelx1.guccibot2208.geode` and `nigelx1.guccibot2209.geode` all count.
 - **Playing both GD versions?** Keep each version's file in that game's own mods folder, never both in one.
 
 **Turn off ToastyReplay Lite, Silicate and Antic's Counter first.** GucciBot can't run live alongside any of them (ToastyReplay Lite crashed macro playback; Silicate and Antic's Counter patch the same spots in the game GucciBot does), so while one is enabled GucciBot stands down and says why. Turn the other one off or uninstall it, restart, and you're in.
