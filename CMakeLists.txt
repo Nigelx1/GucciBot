@@ -123,7 +123,13 @@ endif()
 # SafetyHook (and Zydis under it) places the engine's midhooks at fixed
 # addresses in the Windows build of GD: x86-64 Windows only. No other platform
 # builds them (src/core/platform.hpp).
-if (WIN32)
+if (WIN32 AND GB_GEODE6)
+    # Pinned for the GD 2.2091 build: main's commit on 2026-11-16, the one
+    # both local builds compiled with. The Geode 5 build below still follows
+    # main, so its file doesn't change; pinning it too waits for the merge.
+    CPMAddPackage("gh:cursey/safetyhook#f44cc070a8340f2f26649553c49533475417304d")
+    CPMAddPackage("gh:zyantific/zydis#bffbb61")
+elseif (WIN32)
     CPMAddPackage("gh:cursey/safetyhook#main")
     CPMAddPackage("gh:zyantific/zydis#bffbb61")
 endif()
@@ -209,9 +215,26 @@ if(GB_GEODE6)
             "\"${CMAKE_CURRENT_SOURCE_DIR}/${GB_RES}\"")
     endforeach()
     file(WRITE "${GB_MOD_ROOT}/mod.json" "${GB_MOD_JSON}")
-    foreach(f logo.png about.md)
-        configure_file("${CMAKE_CURRENT_SOURCE_DIR}/${f}" "${GB_MOD_ROOT}/${f}" COPYONLY)
-    endforeach()
+    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/logo.png" "${GB_MOD_ROOT}/logo.png" COPYONLY)
+    # Geode shows about.md on the mod's page, so the 2.2091 file's copy says
+    # which GD and Geode it's for and what this preview leaves out (no
+    # Pathfinder, 240 TPS only). The two lines that name 2.2081 are swapped;
+    # if about.md still says 2.2081 after that (someone reworded a line), the
+    # configure stops rather than package a page that's wrong.
+    file(READ "${CMAKE_CURRENT_SOURCE_DIR}/about.md" GB_ABOUT)
+    string(REPLACE
+        "- Geometry Dash 2.2081 on Windows, macOS, iOS or Android, Geode 5.10.1+ (macOS, iOS and Android are experimental: see Platforms)"
+        "- Geometry Dash ${GEODE_GD_VERSION} on Windows, with Geode ${GEODE_VERSION_FULL}. This file is a preview of GucciBot on GD ${GEODE_GD_VERSION}: everything except the Pathfinder, and the game runs at 240 TPS (no custom TPS yet). Those, and macOS and Android on GD ${GEODE_GD_VERSION}, come in 2.0.1. For another GD version or platform, use the GucciBot file made for it.\n- Keep only one GucciBot file in your mods folder."
+        GB_ABOUT "${GB_ABOUT}")
+    string(REPLACE
+        "- Silicate's full physics engine — exact GD 2.2081 offsets, proper TPS bypass,"
+        "- Silicate's physics engine — GD ${GEODE_GD_VERSION} offsets from Silicate 1.1.2, at 240 TPS in this preview,"
+        GB_ABOUT "${GB_ABOUT}")
+    string(FIND "${GB_ABOUT}" "2.2081" GB_ABOUT_OLD)
+    if(NOT GB_ABOUT_OLD EQUAL -1)
+        message(FATAL_ERROR "about.md still says 2.2081 somewhere the Geode 6 build doesn't rewrite: update the swaps in CMakeLists.txt")
+    endif()
+    file(WRITE "${GB_MOD_ROOT}/about.md" "${GB_ABOUT}")
     set(GB_REAL_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
     set(CMAKE_CURRENT_SOURCE_DIR "${GB_MOD_ROOT}")
     setup_geode_mod(${PROJECT_NAME})

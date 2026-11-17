@@ -2301,6 +2301,17 @@ namespace gucci::ui {
         std::string g_legText;    // the last "find a way to the next gate" (step R3)
 
         void pagePathfinder() {
+#if GB_GEODE6
+            // GucciBot (2026-11-17): Nigel's call for 2.0 (11-16): the GD 2.2091
+            // file ships every feature but the Pathfinder and custom TPS; both
+            // come in 2.0.1. The page says so and offers nothing to start.
+            kit::BeginCard("Pathfinder", "Finds a way through the level on its own.");
+            kit::Note("The Pathfinder isn't available on GD 2.2091 yet. It's coming in GucciBot 2.0.1. "
+                      "On GD 2.2081 it works as before.",
+                      Tone::Warn);
+            kit::EndCard();
+            return;
+#endif
 #if !GB_NATIVE_ENGINE
             // GucciBot (2026-11-15): the Pathfinder runs here too, without the
             // trigger model (absense/world reads GD's Windows memory layout).
