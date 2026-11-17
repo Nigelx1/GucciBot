@@ -689,6 +689,9 @@ public:
         int mode = -1;        // the mode it gives (Trajectory::FakeMode), -1 for a speed portal
         float speed = 0.0f;   // the speed it gives (m_playerSpeed), for a speed portal
         const char* what = "";
+        // GucciBot (2026-11-16, pf3 lane; pf_fork_dual): a mode portal stacked
+        // on a dual portal (GRIEF's hidden cube portal at x 36090).
+        bool onDual = false;
     };
     struct Fork {
         uint64_t tick = 0;  // the tick after the crossing
@@ -703,6 +706,7 @@ public:
     uint64_t m_forkForceAt = UINT64_MAX;  // the decision a fork jump went back to
     Fork m_forkForced;
     int m_forkJumps = 0;
+    int m_forkDualJumps = 0;  // of them, the early jumps to a portal stacked on a dual portal (pf_fork_dual)
     // GucciBot (2026-11-16, pf3 lane; pf_fork_jump, log only): after a fork
     // jump, every mode or speed portal the real player crosses within
     // kForkWatchX of the fork's x is logged with the player's y, mode and
@@ -710,7 +714,7 @@ public:
     // the jump really took the portal. Nothing here decides anything.
     float m_forkWatchX = -1.0e30f;  // the fork's x, none when no jump is being watched
     void noteForks(uint64_t now);
-    bool forkJump(const char* why, uint64_t floor);
+    bool forkJump(const char* why, uint64_t floor, bool dualOnly = false);
     // Where the last repair resumed from, so a death at the same spot can try
     // something else from that stop before walking further back (the
     // simulation approved what was played, and the game disagreed: what is
@@ -955,6 +959,10 @@ public:
     // GucciBot (2026-11-15, pf2 lane; pf_stuck_work): committed ticks at the
     // last look, for the level time played between two looks.
     uint64_t m_stuckTicks = 0;
+    // GucciBot (2026-11-16, pf3 lane; pf_fork_dual): the furthest real tick
+    // since the last fork jump while the new route is short of the old best
+    // (0: none); its moving on restarts the stuck clock.
+    uint64_t m_forkBest = 0;
     // Frame pacing: a slice takes what is left of a frame at the target
     // frame rate. When the last frame came late the game's own share is
     // taken from it (the time between slices minus the slice) and the next

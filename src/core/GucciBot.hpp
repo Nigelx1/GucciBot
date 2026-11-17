@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-ag (Save asks before replacing a different macro and can keep both, appending to a macro still saves in place)"
+    "2026-11-17-a (Pathfinder: a mode portal stacked on a dual portal is a route fork too, behind the test switch pf_fork_dual (off): a dead end goes back to it early, the drive into it gets more room, and the stuck rule follows the new route)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
