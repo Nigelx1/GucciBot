@@ -126,6 +126,7 @@ namespace gucci {
         return placePatch(site);
     }
 
+#if GB_GD2091_SITES  // only the GD 2.2091 build places guarded sites
     // Silicate 1.1.2's guard for its GD 2.2091 sites (util/patch.hpp,
     // expectBytes; GPL-3, credit peony): a site is touched only if GD's code
     // there is exactly what was found when the address was taken, so a GD
@@ -175,6 +176,8 @@ namespace gucci {
                 return site.hook && site.hook.enabled();
         return false;
     }
+
+#endif // GB_GD2091_SITES
 
     // The master switch's half of this file: every midhook and patch out
     // (`in` false) or back in. Out goes midhooks first, then patches; in, the
