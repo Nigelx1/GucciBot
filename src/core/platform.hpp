@@ -38,6 +38,17 @@
 #define GB_NATIVE_ENGINE 0
 #endif
 
+// GB_WORLD_LAYOUTS: GD 2.2081's Windows memory layout and code addresses,
+// which the World (absense/world: the trigger model) and the pathfinder's
+// physics copies read raw. Windows on GD 2.2081 only: on GD 2.2091 they are
+// still to be found again (docs/PORT_2209_ASSESSMENT.md, section 2B), so the
+// World stays off there as it does on macOS and Android.
+#if defined(GEODE_IS_WINDOWS) && !GB_GEODE6
+#define GB_WORLD_LAYOUTS 1
+#else
+#define GB_WORLD_LAYOUTS 0
+#endif
+
 #if defined(GEODE_IS_DESKTOP)
 #define GB_DESKTOP_GL 1
 #else
