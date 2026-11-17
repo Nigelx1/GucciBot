@@ -367,7 +367,7 @@ In 2.0 the setup check names the file for you.
 - If the stand-down popup showed at launch, see above.
 
 ### A button is grayed out
-- **Calculate** needs a level open and a macro loaded.
+- **Calculate** needs a level open, a macro loaded and **Mode** set to **Play**.
 - The **Pathfinder's Start** needs a level open (and **Engine** set to **Search (old)**).
 - Under **Legit only**, everything that counts as a cheat is grayed out.
 
