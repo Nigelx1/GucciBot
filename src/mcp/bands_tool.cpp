@@ -1,8 +1,9 @@
 // GucciBot (2026-11-16): gucci_bands, the Bands card's files for a test
 // launch (ui/band_files.hpp). A hidden test game can't use the file picker,
 // so this hands a path to the same code the picker's result goes through:
-// choose (a file for one band) and folder (Import folder). It answers what
-// came of it, the files in bands/, and the card's note.
+// choose (a file for one band), folder (Import folder), export and import (a
+// band sound pack). It answers what came of it, the files in bands/, and the
+// card's note.
 
 #include "mcp_server.hpp"
 
@@ -40,6 +41,12 @@ namespace gucci::mcp {
         band["description"] = "for choose: the band's place in the list, 1 for the first";
         props["band"] = band;
         props["folder"] = str("a folder, as Import folder picks it");
+        props["export"] = str("a pack name: Export pack with that name");
+        props["import"] = str("a pack .zip, as Import a pack picks it");
+        auto saved = matjson::Value::object();
+        saved["type"] = "boolean";
+        saved["description"] = "true: also every fwac_ key as it would be written to saved.json now";
+        props["saved"] = saved;
         auto schema = matjson::Value::object();
         schema["type"] = "object";
         schema["properties"] = props;
@@ -47,8 +54,9 @@ namespace gucci::mcp {
         server.addTool({
             "gucci_bands",
             "The Calculate Bands card's files, test launches only. choose+kind+band: a file brought in and set on "
-            "that band (the picker's own code). folder: Import folder. Each answers ok, note and path (the band's new "
-            "Sound/Image, or the folder). Always answers sounds and images (what's in bands/), folder, and "
+            "that band (the picker's own code). folder: Import folder. export: Export pack under that name. import: "
+            "Import a pack. Each answers ok, note and path (the band's new Sound/Image, the pack's file, or the "
+            "folder). Always answers sounds and images (what's in bands/), pack_name, folder, packs_folder, and "
             "bands (each band's sound and image).",
             schema,
             [](matjson::Value const& a) -> matjson::Value {
@@ -73,6 +81,12 @@ namespace gucci::mcp {
                                        tiers[static_cast<size_t>(at - 1)].id));
                 } else if (a.contains("folder")) {
                     put(bf::importFolder(u8path(a["folder"].asString().unwrapOr(""))));
+                } else if (a.contains("export")) {
+                    auto const name = a["export"].asString().unwrapOr("");
+                    bf::packName() = name;
+                    put(bf::exportPack(name));
+                } else if (a.contains("import")) {
+                    put(bf::importPack(u8path(a["import"].asString().unwrapOr(""))));
                 }
                 auto sounds = matjson::Value::array();
                 for (auto const& s : bf::imported(bf::Kind::Sound))
@@ -82,7 +96,9 @@ namespace gucci::mcp {
                     images.push(s);
                 out["sounds"] = sounds;
                 out["images"] = images;
+                out["pack_name"] = bf::packName();
                 out["folder"] = geode::utils::string::pathToString(bf::folder());
+                out["packs_folder"] = geode::utils::string::pathToString(bf::packsFolder());
                 out["card_note"] = bf::note();
                 auto bands = matjson::Value::array();
                 for (auto const& t : SLSettings::get()->frameWindow.tiers) {
@@ -95,6 +111,15 @@ namespace gucci::mcp {
                     bands.push(b);
                 }
                 out["bands"] = bands;
+                // What a save would write (test launches never write it), to
+                // check that defaults leave a settings file as it was.
+                if (a["saved"].asBool().unwrapOr(false)) {
+                    auto keys = matjson::Value::object();
+                    for (auto const& kv : Mod::get()->getSaveContainerConst())
+                        if (kv.getKey().value_or("").starts_with("fwac_"))
+                            keys[*kv.getKey()] = kv;
+                    out["saved"] = keys;
+                }
                 return out;
             },
         });

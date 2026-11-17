@@ -823,15 +823,28 @@ namespace gucci::ui::pages {
             }
         }
 
-        // GucciBot (2026-11-16): bring in a folder of files (ui/band_files.hpp).
+        // GucciBot (2026-11-16): bring in a folder of files, and band sound
+        // packs (ui/band_files.hpp).
         void bandFilesSection() {
-            kit::Section("Your files");
+            kit::Section("Your files and sound packs");
             kit::Hint("Import folder copies every sound (ogg, mp3, wav) and picture (png, jpg) in a folder into bands/ "
-                      "in the mod's config folder, for the bands' Sound and Image.");
+                      "in the mod's config folder, for the bands' Sound and Image. A sound pack is your bands' sounds "
+                      "in one .zip, under a name, to share or keep; importing one gives each band the pack's sound for "
+                      "its window range.");
             ImGui::BeginDisabled(bandfiles::picking());
             if (kit::Button(bandfiles::picking() ? "Choosing..." : "Import folder"))
                 bandfiles::pickFolder();
+            ImGui::SameLine();
+            if (kit::Button("Import a pack"))
+                bandfiles::pickPack();
             ImGui::EndDisabled();
+            kit::RowBegin("Pack name", "What Export pack calls it. An imported pack fills it in");
+            kit::InputText("packname", &bandfiles::packName(), "My sounds");
+            kit::RowEnd();
+            if (kit::Button("Export pack")) {
+                auto const res = bandfiles::exportPack(bandfiles::packName());
+                bandfiles::setNote(res.ok, res.note);
+            }
             if (!bandfiles::note().empty())
                 kit::Note(bandfiles::note().c_str(), bandfiles::noteOk() ? Tone::Good : Tone::Bad);
         }

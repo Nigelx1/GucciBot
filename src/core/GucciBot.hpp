@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-ae (Calculate: bring in your own band sounds and pictures with a file picker, and Import folder)"
+    "2026-11-16-af (Calculate: band sound packs, export and import a named set of band sounds)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

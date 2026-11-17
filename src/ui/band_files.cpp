@@ -1,6 +1,6 @@
 // See band_files.hpp. Written fresh for GucciBot 2.0 (2026-11-16) from
 // today's Calculate code; the picker is Import a macro's (ui/shell.cpp), the
-// size limit is Share my windows' (tools/share_bundle).
+// zip is Share my windows' (tools/share_bundle).
 
 #include "ui/band_files.hpp"
 
@@ -12,6 +12,7 @@
 #include "ui/ui.hpp"
 
 #include <Geode/Geode.hpp>
+#include <matjson.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -28,6 +29,10 @@ namespace gucci::ui::bandfiles {
 
     namespace {
 
+        constexpr char kManifest[] = "bandsounds.json";
+        constexpr char kFormat[] = "band sounds";
+        constexpr int kVersion = 1;
+        constexpr char kSoundDir[] = "sounds/";
         // A folder import brings at most this many files, and skips any one
         // bigger than a pack may hold.
         constexpr size_t kMaxFolderFiles = 200;
@@ -172,12 +177,45 @@ namespace gucci::ui::bandfiles {
             return utf8(file);
         }
 
+        // A band's sound as given: as is when absolute, else the config
+        // folder, then the resources (FrameWindowSound::play's rule).
+        struct Found {
+            fs::path file;
+            bool bundled = false;  // in the mod's resources
+        };
+        std::optional<Found> findSound(std::string const& given) {
+            fs::path p = u8path(given);
+            std::error_code ec;
+            if (p.is_absolute())
+                return fs::is_regular_file(p, ec) ? std::optional<Found>(Found{p, false}) : std::nullopt;
+            if (auto const c = Mod::get()->getConfigDir() / p; fs::is_regular_file(c, ec))
+                return Found{c, false};
+            if (auto const r = Mod::get()->getResourcesDir() / p; fs::is_regular_file(r, ec))
+                return Found{r, true};
+            return std::nullopt;
+        }
+
+        std::string bandName(FrameWindowTier const& t, size_t index) {
+            if (!t.text.empty())
+                return fmt::format("Band {} ({})", index + 1, t.text);
+            return t.minWindow == t.maxWindow ? fmt::format("Band {} ({:g})", index + 1, t.minWindow)
+                                              : fmt::format("Band {} ({:g}-{:g})", index + 1, t.minWindow, t.maxWindow);
+        }
+
+        std::string trimmed(std::string s) {
+            auto const a = s.find_first_not_of(" \t");
+            if (a == std::string::npos)
+                return "";
+            return s.substr(a, s.find_last_not_of(" \t") - a + 1);
+        }
+
         // ---- the card's state
 
+        std::string g_packName;
         std::string g_note;
         bool g_noteOk = true;
 
-        enum class Want { None, File, Folder };
+        enum class Want { None, File, Folder, Pack };
         struct Picked {
             bool ready = false;
             Want what = Want::None;
@@ -196,7 +234,7 @@ namespace gucci::ui::bandfiles {
         std::optional<fs::path> pickerFolder(Want what) {
 #if defined(GEODE_IS_DESKTOP)
             std::error_code ec;
-            auto const dir = folder();
+            auto const dir = what == Want::Pack ? packsFolder() : folder();
             fs::create_directories(dir, ec);
             if (fs::is_directory(dir, ec))
                 return dir;
@@ -218,6 +256,11 @@ namespace gucci::ui::bandfiles {
                     f.description = "Pictures";
                     f.files = {"*.png", "*.jpg", "*.jpeg"};
                 }
+                options.filters.push_back(std::move(f));
+            } else if (what == Want::Pack) {
+                geode::utils::file::FilePickOptions::Filter f;
+                f.description = "Band sound packs";
+                f.files = {"*.zip"};
                 options.filters.push_back(std::move(f));
             }
             auto const mode = what == Want::Folder ? geode::utils::file::PickMode::OpenFolder
@@ -277,6 +320,7 @@ namespace gucci::ui::bandfiles {
     } // namespace
 
     fs::path folder() { return Mod::get()->getConfigDir() / "bands"; }
+    fs::path packsFolder() { return Mod::get()->getSaveDir() / "band packs"; }
 
     Result importFile(fs::path const& picked, Kind kind) {
         Result r;
@@ -441,8 +485,359 @@ namespace gucci::ui::bandfiles {
         return out;
     }
 
+    Result exportPack(std::string const& given) {
+        Result r;
+        std::string const name = trimmed(given);
+        if (name.empty()) {
+            r.note = "Give the pack a name first.";
+            return r;
+        }
+        if (!gucci::bundle::fileNameOk(name) || name.size() > 80) {
+            r.note = "That name can't be a file name. Leave out \\ / : * ? \" < > | and keep it short.";
+            return r;
+        }
+        auto const& tiers = SLSettings::get()->frameWindow.tiers;
+        if (tiers.empty()) {
+            r.note = "There are no bands to take sounds from.";
+            return r;
+        }
+
+        auto bands = matjson::Value::array();
+        std::vector<gucci::bundle::Entry> entries;
+        entries.push_back({kManifest, {}});
+        std::map<std::string, std::vector<uint8_t> const*> byName;  // name in sounds/ -> its bytes
+        std::vector<std::vector<uint8_t>> kept;
+        kept.reserve(tiers.size());
+        uint64_t total = 0;
+        int files = 0;
+        for (size_t i = 0; i < tiers.size(); ++i) {
+            auto const& t = tiers[i];
+            auto b = matjson::Value::object();
+            b["band"] = static_cast<int64_t>(i + 1);
+            b["min"] = static_cast<double>(t.minWindow);
+            b["max"] = static_cast<double>(t.maxWindow);
+            if (!t.text.empty())
+                b["label"] = t.text;
+            if (t.audioPath.empty()) {
+                b["default"] = true;
+            } else {
+                auto const found = findSound(t.audioPath);
+                if (!found) {
+                    r.note = fmt::format("{}'s sound ({}) isn't there, so the pack wasn't made.", bandName(t, i),
+                                         t.audioPath);
+                    return r;
+                }
+                std::string const fname = utf8(found->file.filename());
+                if (!soundExt(utf8(found->file.extension()))) {
+                    r.note = fmt::format("{}'s sound ({}) isn't an ogg, mp3 or wav, so the pack wasn't made.",
+                                         bandName(t, i), fname);
+                    return r;
+                }
+                if (found->bundled) {
+                    // Every copy of the mod has it: only its name goes in.
+                    b["bundled"] = fname;
+                } else {
+                    std::string error;
+                    auto bytes = readFile(found->file, error);
+                    if (!error.empty() || bytes.empty()) {
+                        r.note = fmt::format("Couldn't read {}'s sound ({}): {}.", bandName(t, i), fname,
+                                             error.empty() ? "it's empty" : error);
+                        return r;
+                    }
+                    std::string inPack = keepableName(fname);
+                    if (inPack.empty())
+                        inPack = fmt::format("band {}{}", i + 1, lower(extOf(fname)));
+                    // One copy of a file several bands share; another file
+                    // with the same name gets "name (2).ext".
+                    std::string chosen;
+                    for (int n = 1; n < 1000 && chosen.empty(); ++n) {
+                        std::string const candidate =
+                            n == 1 ? inPack
+                                   : fmt::format("{} ({}){}", inPack.substr(0, inPack.size() - extOf(inPack).size()),
+                                                 n, extOf(inPack));
+                        auto const it = byName.find(candidate);
+                        if (it == byName.end() || *it->second == bytes)
+                            chosen = candidate;
+                    }
+                    if (!byName.contains(chosen)) {
+                        total += bytes.size();
+                        if (total > gucci::bundle::kMaxTotal) {
+                            r.note = "The sounds come to more than 64 MB, more than a pack can hold.";
+                            return r;
+                        }
+                        kept.push_back(std::move(bytes));
+                        byName[chosen] = &kept.back();
+                        entries.push_back({std::string(kSoundDir) + chosen, kept.back()});
+                        files++;
+                    }
+                    b["sound"] = std::string(kSoundDir) + chosen;
+                }
+            }
+            bands.push(b);
+        }
+        auto manifest = matjson::Value::object();
+        manifest["format"] = kFormat;
+        manifest["version"] = kVersion;
+        manifest["name"] = name;
+        manifest["made_with"] = disguised() ? std::string("GBot")
+                                            : "GucciBot " + Mod::get()->getVersion().toVString();
+        manifest["bands"] = bands;
+        auto const text = manifest.dump();
+        entries[0].bytes.assign(text.begin(), text.end());
+
+        std::string error;
+        auto const zip = gucci::bundle::writeZip(entries, error);
+        if (zip.empty()) {
+            r.note = "Couldn't pack it: " + error;
+            return r;
+        }
+        auto const to = packsFolder() / u8path(name + ".zip");
+        if (auto err = writeWhole(to, zip); !err.empty()) {
+            r.note = "Couldn't save the pack: " + err + ".";
+            return r;
+        }
+        r.ok = true;
+        r.path = utf8(to);
+        r.note = fmt::format("Saved \"{}\" ({} band{}, {} sound file{}) to {}.", name, tiers.size(),
+                             tiers.size() == 1 ? "" : "s", files, files == 1 ? "" : "s", r.path);
+        return r;
+    }
+
+    Result importPack(fs::path const& zipPath) {
+        Result r;
+        std::string const fname = utf8(zipPath.filename());
+        std::error_code ec;
+        auto const size = fs::file_size(zipPath, ec);
+        if (ec) {
+            r.note = fmt::format("Couldn't read {}.", fname);
+            return r;
+        }
+        if (size > gucci::bundle::kMaxTotal + (1u << 20)) {
+            r.note = fmt::format("{} is bigger than a pack can be (64 MB).", fname);
+            return r;
+        }
+        std::ifstream in(zipPath, std::ios::binary);
+        std::vector<uint8_t> const bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        if (bytes.size() != size) {
+            r.note = fmt::format("Couldn't read all of {}.", fname);
+            return r;
+        }
+
+        std::vector<gucci::bundle::Entry> entries;
+        std::string error;
+        if (!gucci::bundle::readZip(bytes, entries, error)) {
+            r.note = fmt::format("{} isn't a band sound pack: {}.", fname, error);
+            return r;
+        }
+        gucci::bundle::Entry const* manifest = nullptr;
+        std::map<std::string, gucci::bundle::Entry const*> files;
+        for (auto const& e : entries) {
+            if (e.name == kManifest)
+                manifest = &e;
+            else if (e.name.starts_with(kSoundDir))
+                files[e.name] = &e;
+        }
+        if (!manifest) {
+            r.note = fmt::format("{} isn't a band sound pack (there's no {} in it).", fname, kManifest);
+            return r;
+        }
+        auto parsed = matjson::parse(std::string(manifest->bytes.begin(), manifest->bytes.end()));
+        if (!parsed.isOk() || !parsed.unwrap().isObject()) {
+            r.note = fmt::format("{}: its {} isn't readable.", fname, kManifest);
+            return r;
+        }
+        auto const json = parsed.unwrap();
+        if (json["format"].asString().unwrapOr("") != kFormat) {
+            r.note = fmt::format("{} isn't a band sound pack.", fname);
+            return r;
+        }
+        if (json["version"].asInt().unwrapOr(0) > kVersion) {
+            r.note = fmt::format("{} was made by a newer version: update to use it.", fname);
+            return r;
+        }
+        std::string const name = trimmed(json["name"].asString().unwrapOr(""));
+        if (name.empty() || !gucci::bundle::fileNameOk(name) || name.size() > 80) {
+            r.note = fmt::format("{}: the pack's name can't be used as a folder name.", fname);
+            return r;
+        }
+        auto const& list = json["bands"];
+        if (!list.isArray() || list.size() == 0 || list.size() > 64) {
+            r.note = fmt::format("{} has no bands in it.", fname);
+            return r;
+        }
+
+        // Every check before anything is written.
+        struct Item {
+            int band = 0;
+            std::optional<float> min, max;
+            std::string sound;    // in sounds/, or
+            std::string bundled;  // a resource's name, or neither: the default clip
+        };
+        std::vector<Item> items;
+        std::set<std::string> used;
+        std::set<int> bandsSeen;
+        for (size_t i = 0; i < list.size(); ++i) {
+            auto const& b = list[i];
+            if (!b.isObject()) {
+                r.note = fmt::format("{}: band entry {} isn't readable.", fname, i + 1);
+                return r;
+            }
+            Item it;
+            it.band = static_cast<int>(b["band"].asInt().unwrapOr(0));
+            if (it.band < 1 || it.band > 999 || !bandsSeen.insert(it.band).second) {
+                r.note = fmt::format("{}: band entry {} has no band number, or one already used.", fname, i + 1);
+                return r;
+            }
+            if (b["min"].isNumber() && b["max"].isNumber()) {
+                it.min = static_cast<float>(b["min"].asDouble().unwrapOr(0.0));
+                it.max = static_cast<float>(b["max"].asDouble().unwrapOr(0.0));
+            }
+            if (b.contains("sound")) {
+                auto const s = b["sound"].asString().unwrapOr("");
+                std::string const base = s.starts_with(kSoundDir) ? s.substr(sizeof(kSoundDir) - 1) : "";
+                if (base.empty() || !gucci::bundle::fileNameOk(base) || !soundExt(extOf(base)) || !files.contains(s)) {
+                    r.note = fmt::format("{}: band {}'s sound ({}) isn't in the pack, or isn't an ogg, mp3 or wav.",
+                                         fname, it.band, s);
+                    return r;
+                }
+                if (files.at(s)->bytes.empty()) {
+                    r.note = fmt::format("{}: band {}'s sound ({}) is empty.", fname, it.band, base);
+                    return r;
+                }
+                it.sound = base;
+                used.insert(base);
+            } else if (b.contains("bundled")) {
+                auto const s = b["bundled"].asString().unwrapOr("");
+                std::error_code rc;
+                if (!gucci::bundle::fileNameOk(s) || !soundExt(extOf(s)) ||
+                    !fs::is_regular_file(Mod::get()->getResourcesDir() / u8path(s), rc)) {
+                    r.note = fmt::format("{}: band {}'s sound ({}) isn't one this version has.", fname, it.band, s);
+                    return r;
+                }
+                it.bundled = s;
+            }
+            items.push_back(std::move(it));
+        }
+
+        // The sounds into bands/<name>/ in one step: written into a fresh
+        // folder beside it, which then takes its place.
+        // Only a folder an earlier pack import made (it holds the marker
+        // file) is replaced; anything else already there under that name is
+        // the user's own, so the pack goes in beside it as "name (2)".
+        auto const base = folder();
+        constexpr char kPackMarker[] = ".guccibot_pack";
+        auto const madeByPack = [&](fs::path const& p) {
+            std::error_code mc;
+            return fs::is_directory(p, mc) && fs::is_regular_file(p / kPackMarker, mc);
+        };
+        fs::path target = base / u8path(name);
+        for (int n = 2; n < 1000 && fs::exists(target, ec) && !madeByPack(target); ++n)
+            target = base / u8path(fmt::format("{} ({})", name, n));
+        if (fs::exists(target, ec) && !madeByPack(target)) {
+            r.note = fmt::format("Couldn't bring in \"{}\": too many folders with that name in bands/.", name);
+            return r;
+        }
+        fs::create_directories(base, ec);
+        fs::path staging;
+        for (int n = 0; n < 1000; ++n) {
+            staging = base / fmt::format(".incoming-{}", n);
+            if (!fs::exists(staging, ec))
+                break;
+        }
+        auto const giveUp = [&](std::string why) {
+            std::error_code rmEc;
+            fs::remove_all(staging, rmEc);
+            r.note = fmt::format("Couldn't bring in \"{}\": {}. Nothing was changed.", name, why);
+            return r;
+        };
+        if (!used.empty()) {
+            fs::create_directories(staging, ec);
+            if (ec)
+                return giveUp("couldn't make a folder in bands/ (" + ec.message() + ")");
+            for (auto const& f : used)
+                if (auto err = writeWhole(staging / u8path(f), files.at(std::string(kSoundDir) + f)->bytes);
+                    !err.empty())
+                    return giveUp(err);
+            if (auto err = writeWhole(staging / kPackMarker, {}); !err.empty())
+                return giveUp(err);
+            if (fs::exists(target, ec)) {
+                fs::path old = staging;
+                old += "-old";
+                fs::rename(target, old, ec);
+                if (ec)
+                    return giveUp("couldn't replace the pack already in bands/ (" + ec.message() + ")");
+                fs::rename(staging, target, ec);
+                if (ec) {
+                    std::error_code back;
+                    fs::rename(old, target, back);
+                    return giveUp("couldn't put it in bands/ (" + ec.message() + ")");
+                }
+                std::error_code rmEc;
+                fs::remove_all(old, rmEc);
+            } else {
+                fs::rename(staging, target, ec);
+                if (ec)
+                    return giveUp("couldn't put it in bands/ (" + ec.message() + ")");
+            }
+        }
+
+        // The bands: the same window range first, then the same place.
+        auto& tiers = SLSettings::get()->frameWindow.tiers;
+        std::vector<bool> taken(tiers.size(), false);
+        std::vector<int> unmatched;
+        int set = 0;
+        std::vector<std::pair<size_t, Item const*>> plan;
+        std::vector<Item const*> left;
+        for (auto const& it : items) {
+            bool found = false;
+            if (it.min && it.max)
+                for (size_t i = 0; i < tiers.size(); ++i)
+                    if (!taken[i] && tiers[i].minWindow == *it.min && tiers[i].maxWindow == *it.max) {
+                        taken[i] = true;
+                        plan.push_back({i, &it});
+                        found = true;
+                        break;
+                    }
+            if (!found)
+                left.push_back(&it);
+        }
+        for (auto const* it : left) {
+            size_t const i = static_cast<size_t>(it->band - 1);
+            if (i < tiers.size() && !taken[i]) {
+                taken[i] = true;
+                plan.push_back({i, it});
+            } else {
+                unmatched.push_back(it->band);
+            }
+        }
+        for (auto const& [i, it] : plan) {
+            tiers[i].audioPath = !it->sound.empty()     ? bandPath(target / u8path(it->sound))
+                                 : !it->bundled.empty() ? it->bundled
+                                                        : std::string();
+            set++;
+        }
+        fwstore::save();
+        FrameWindowSound::clearCache();
+        forgetListed();
+        g_packName = name;
+        r.ok = true;
+        r.path = utf8(target);
+        r.note = fmt::format("\"{}\" is in: sounds for {} band{}.", name, set, set == 1 ? "" : "s");
+        if (!unmatched.empty()) {
+            std::string list;
+            for (size_t i = 0; i < unmatched.size(); ++i)
+                list += (i ? ", " : "") + std::to_string(unmatched[i]);
+            r.note += fmt::format(" The pack has more bands than you do: its band{} {} had nowhere to go.",
+                                  unmatched.size() == 1 ? "" : "s", list);
+        }
+        return r;
+    }
+
+    std::string& packName() { return g_packName; }
+
     void pickFile(Kind kind, int bandId) { startPick(Want::File, kind, bandId); }
     void pickFolder() { startPick(Want::Folder, Kind::Sound, 0); }
+    void pickPack() { startPick(Want::Pack, Kind::Sound, 0); }
     bool picking() { return s_pending; }
 
     std::string const& note() { return g_note; }
@@ -486,6 +881,11 @@ namespace gucci::ui::bandfiles {
                     auto const res = importFolder(*got.path);
                     setNote(res.ok, res.note);
                     break;
+                }
+                case Want::Pack: {
+                    auto const res = importPack(*got.path);
+                    setNote(res.ok, res.note);
+                    return res.ok;
                 }
                 default:
                     break;
