@@ -1595,7 +1595,7 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRun(PlayLayer* pl,
         return report;
     }
     if (!bot->isPlaying()) {
-        report.message = "Switch to playback mode first.";
+        report.message = "It needs Play mode: set Mode to Play first.";
         return report;
     }
     if (updater.m_preventDeath) {

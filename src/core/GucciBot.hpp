@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-t (Calculate: Ship Steering follows Antic's Counter beta.17's stricter rule (reaction time from the end of the moved click, the save must hand back by the normal test's end and then survive the next click))"
+    "2026-11-16-u (Calculate's hint on the Macro card now says it needs Play mode too, and its refusal in Off or Record says: It needs Play mode, set Mode to Play first)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

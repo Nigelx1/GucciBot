@@ -1664,8 +1664,11 @@ namespace gucci::ui {
                 startCalculate();
             ImGui::EndDisabled();
             kit::RowEnd();
+            // What Calculate needs, said plainly (11-16 test pass: Off said
+            // only "Switch to playback mode first." after the press).
+            bool const calcReady = canCalc && gb->isPlaying();
             kit::Hint(fmt::format("{} actions  |  {:.0f} TPS{}", actions.size(), gb->updater.m_tps,
-                                  canCalc ? "" : "  |  Calculate needs a level open and a macro")
+                                  calcReady ? "" : "  |  Calculate needs a level open, a loaded macro and Play mode")
                           .c_str());
             saveNoteRow();
             if (!gb->startPosWarning.empty())
