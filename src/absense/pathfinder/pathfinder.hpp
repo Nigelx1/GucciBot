@@ -706,6 +706,7 @@ public:
     uint64_t m_forkForceAt = UINT64_MAX;  // the decision a fork jump went back to
     Fork m_forkForced;
     int m_forkJumps = 0;
+    int m_forkDualJumps = 0;  // of them, the early jumps to a portal stacked on a dual portal (pf_fork_dual)
     // GucciBot (2026-11-16, pf3 lane; pf_fork_jump, log only): after a fork
     // jump, every mode or speed portal the real player crosses within
     // kForkWatchX of the fork's x is logged with the player's y, mode and

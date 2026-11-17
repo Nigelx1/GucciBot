@@ -156,6 +156,13 @@ constexpr double kForkLeadSeconds = 1.0;
 constexpr float kForkReachY = 240.0f;
 constexpr int kForkJumpsPerSpot = 3;
 constexpr int kForkJumpsPerRun = 6;
+// GucciBot (2026-11-17, pf3 lane; pf_fork_dual, review): the early jump to a
+// portal stacked on a dual portal (escalate, level 1 of a spot) goes back at
+// most this far before the dead end (GRIEF's was 12.3 s), and a run may make
+// at most this many of them, so they can't use up the run's jumps that the
+// floor's own fork jump (pf_fork_jump) needs.
+constexpr double kForkDualReachSeconds = 20.0;
+constexpr int kForkDualJumpsPerRun = 3;
 // GucciBot (2026-11-16, pf3 lane; pf_fork_dual): how many times the drive leg's 6 s safety the drive into a
 // portal stacked on a dual portal may take (its steps, doubled, are what stop it).
 constexpr double kForkDualLegClock = 12.0;
@@ -498,6 +505,7 @@ bool AbsensePathfinder::start() {
     m_forkGatesCount = -1;
     m_forkGates.clear();
     m_forkJumps = 0;
+    m_forkDualJumps = 0;
     m_forkWatchX = -1.0e30f;
     m_startMoves = 0;
     m_gpuWarned = false;
@@ -1045,11 +1053,15 @@ void AbsensePathfinder::tick() {
         // jump took the hidden cube portal, but the two-player cube part after it
         // waited 5-20 s a decision on a busy PC, and five minutes after the jump
         // the rule stopped a run still moving, 160 ticks past the portal.
-        // Ticks at or past the old best (the dead end itself, before the jump's
-        // rewind lands) don't count; the best moving on ends it.
+        // Ticks at or past the old best don't count; the best moving on ends
+        // it. Nor does any tick while a jump back or a restore is under way:
+        // until the jump's rewind lands the game still stands at the floor
+        // stop it jumped from, past the fork, and counting that tick would
+        // leave the new route nothing to beat (review, 11-17).
         const uint64_t nowTick = currentTick();
+        const bool settled = m_phase != Phase::Backtracking && m_phase != Phase::Restoring && m_goTo == UINT64_MAX;
         if (m_forkBest != 0 && m_stats.bestTick != m_stuckBest) m_forkBest = 0;
-        if (m_forkBest != 0 && nowTick > m_forkBest && nowTick < m_stuckBest) {
+        if (m_forkBest != 0 && settled && nowTick > m_forkBest && nowTick < m_stuckBest) {
             m_forkBest = nowTick;
             m_stuckSeconds = 0.0;
             m_stuckWallSeconds = 0.0;
@@ -5638,7 +5650,9 @@ void AbsensePathfinder::noteForks(uint64_t now) {
 // the rule stopped the run at 18:55:47). False when there is none.
 bool AbsensePathfinder::forkJump(const char* why, uint64_t floor, bool dualOnly) {
     if (m_forkJumps >= kForkJumpsPerRun) return false;
+    if (dualOnly && m_forkDualJumps >= kForkDualJumpsPerRun) return false;
     const double tps = std::max(1.0, Bot::get()->updater().getTps());
+    const uint64_t dualReach = (uint64_t)std::lround(kForkDualReachSeconds * tps);
     Trap* trap = trapAt(m_repair.deathTick, (uint64_t)std::lround(32.0 * std::max(1.0, tps / 240.0)));
     if (!trap || (int)trap->forksTried.size() >= kForkJumpsPerSpot) return false;
     const uint64_t lead = (uint64_t)std::lround(kForkLeadSeconds * tps);
@@ -5646,11 +5660,13 @@ bool AbsensePathfinder::forkJump(const char* why, uint64_t floor, bool dualOnly)
     for (auto it = m_forks.rbegin(); it != m_forks.rend(); ++it) {
         if (it->tick >= floor) continue;
         if (dualOnly && !it->gate.onDual) continue;
+        if (dualOnly && m_repair.deathTick > it->tick + dualReach) continue;  // too far back for the early jump
         if (std::find(trap->forksTried.begin(), trap->forksTried.end(), it->gate.uid) != trap->forksTried.end()) continue;
         const uint64_t target = std::max(it->tick > lead ? it->tick - lead : 0, m_stats.startTick);
         if (target >= tick) continue;
         trap->forksTried.push_back(it->gate.uid);
         m_forkJumps++;
+        if (dualOnly) m_forkDualJumps++;
         m_stats.forkJumps++;
         m_forkForced = *it;
         m_forkForceAt = target;
