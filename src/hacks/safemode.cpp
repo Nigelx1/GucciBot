@@ -425,6 +425,17 @@ class $modify(GB7SafeModePlayLayer, PlayLayer) {
         // reset set it to what was on right now: record to a platformer
         // checkpoint with intentional death armed, stop recording, die, and
         // the run from the checkpoint counted as legit.
+        //
+        // Every respawn that resumes at a checkpoint sets the flag: GD's
+        // resetLevel only resumes from the last entry in m_checkpointArray
+        // (or a start position's own saved state, which is a start), and
+        // with GucciBot on that array gets an entry only in the branches of
+        // handleResetWithCheckpoints that return true (GucciBot's
+        // storeCheckpoint never hands GD one). A plain death after a
+        // platformer checkpoint goes back to the start for now (that
+        // function's last branch), so it is a new attempt. Checked in GD
+        // 2.2091's code (resetLevel 0x5192bb..0x5193e2, storeCheckpoint
+        // 0x516510); the 2.2081 lane read the same in 2.2081's.
         bool const sameAttempt = safemode::g_checkpointRespawn;
         safemode::g_checkpointRespawn = false;
         if (sameAttempt)
