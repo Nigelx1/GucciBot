@@ -136,7 +136,7 @@ namespace gucci::mcp {
                     throw ToolError("level_string is empty");
                 std::string packed = raw;
                 if (raw.rfind("H4sI", 0) != 0) {
-                    packed = std::string(cocos2d::ZipUtils::compressString(gd::string(raw), false, 0));
+                    packed = gucci::compressLevelString<cocos2d::ZipUtils>(raw);
                     if (packed.empty())
                         throw ToolError("could not compress level_string");
                 }

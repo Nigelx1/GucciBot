@@ -22,7 +22,7 @@
 #include <Geode/modify/PlayLayer.hpp>
 #include <Geode/modify/PlayerObject.hpp>
 #include <Geode/modify/TextArea.hpp>
-#include <Geode/utils/hash.hpp>
+#include "core/geode_compat.hpp" // sha256
 
 #include <array>
 #include <cmath>
