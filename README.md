@@ -10,19 +10,75 @@ It's Gucci. GucciBot is a Geometry Dash macro bot (a [Geode](https://geode-sdk.o
 
 ## Get it
 
-You need Geometry Dash 2.2081 and Geode 5.10.1 or a later 5.x. One `.geode` file covers Windows, macOS, iOS and Android (32 and 64-bit), and it's about 250 MB, since the renderer, the music and the JMF Trainer's video ride along. The newest release is **2.0.0-beta.5**.
+<!-- DRAFT (branch docs-2209, 2026-11-17): the two-file install section for 2.0's release day. Still open before it lands:
+     - The file names follow the parity plan's recommendation (decision 13 is still Nigel's: same 2.0.0 with the GD version in the
+       name, or a pre-release tag such as 2.0.0-preview.1 for the 2.2091 file). Change every file name below if he picks another.
+     - "Macros play the same on both" waits for the cross-version traces (parity plan must-have 20). Until they're in, the text
+       says it hasn't been checked.
+     - The preview's "not yet" list follows the parity plan (no Pathfinder, 240 TPS only, no trigger model for the look-aheads).
+       Re-read it against the 2.2091 build that actually ships: as of port-2209 9aa1def the 240 TPS lock isn't in the code yet
+       (port2209 PROGRESS, open item 3), and the Pathfinder page note is (9aa1def).
+     - Not checked in a game: that Geode's installed-mods list shows Geode itself with its version (read from Geode's UI code,
+       ModItem.cpp, not seen on screen). The log line, the "can not be installed" box, the Already Installed / Replace box and the
+       "Outdated (GD x)" label are read from Geode 5.10.1's and 6.0.0-alpha.2's source. -->
 
-1. Download `nigelx1.guccibot.geode` from the [latest release](https://github.com/Nigelx1/GucciBot/releases/latest).
-2. In the game, open Geode's mod list, press the gear for Geode's settings, press **Install From File** and pick the file. (Or put the file in Geode's mods folder yourself: **Open Mods Folder** is in the same place.)
-3. Restart the game.
-4. Open GucciBot:
+GucciBot 2.0 comes as **two files on the same release**, one for each Geometry Dash version. Download only the one for your game.
+
+| Your game | Your Geode | Download | Runs on |
+|---|---|---|---|
+| **GD 2.2081** | **Geode 5.10.1** or a later 5.x | `GucciBot-2.0.0-GD2.2081.geode` | Windows, Mac (Apple silicon and Intel), iPhone, iPad and Android (32- and 64-bit) |
+| **GD 2.2091** | **Geode 6.0.0-alpha.2**, exactly that version | `GucciBot-2.0.0-GD2.2091.geode` (preview) | Windows only, for now |
+
+Each file is about 250 MB, since the renderer, the music and the JMF Trainer's video ride along.
+
+### Which GD and Geode do I have?
+
+Geode tells you both.
+
+- **Your Geode:** open Geode's mod list. Geode itself is in the list of installed mods, with its version under its name.
+  - **Geode 5** (5.10.1 or later) means GD 2.2081: take the **GD2.2081** file.
+  - **Geode 6.0.0-alpha.2** means GD 2.2091: take the **GD2.2091** file.
+  - Any other Geode 6 version: the preview won't load on it yet. It's built for alpha.2 only, and a new file follows when Geode 6 moves on.
+- **Your GD:** open the `geode/logs` folder in the game's folder (next to `geode/mods`) and open the newest log. Near the top, Geode writes a line like `Running Geode v5.10.1 in Geometry Dash v2.2081 on Windows`. The number after "Geometry Dash v" is your GD version.
+- **If that line says "forward compatibility mode"**, your game updated to 2.2091 but your Geode is still Geode 5. Neither GucciBot file loads like that. Install [Geode 6.0.0-alpha.2](https://github.com/geode-sdk/geode/releases/tag/v6.0.0-alpha.2) and take the GD2.2091 file, or play on GD 2.2081 with Geode 5 and take the GD2.2081 file.
+
+### Install
+
+1. Download the file for your GD from the [latest release](https://github.com/Nigelx1/GucciBot/releases/latest).
+2. In the game, open Geode's mod list, press the gear for Geode's settings, press **Install From File** and pick the file. (Geode saves it in the mods folder as `nigelx1.guccibot.geode`, whichever file it was.)
+3. If GucciBot is already installed, Geode asks whether to replace it. Press **Replace** to update.
+   **But if Geode first says the mod "can not be installed"**, you picked the other GD's file. Press **OK**, then **Cancel** on the next box. **Replace** there would delete your working GucciBot and put in one that won't load.
+4. Restart the game.
+5. Open GucciBot:
    - **Windows:** press **Left Alt**. You can change the key in Settings > Keybinds.
    - **Mac:** press **Option**, or the **GucciBot** logo in a level's pause menu.
    - **iPhone, iPad and Android:** pause a level and press the **GucciBot** logo (the iced cone) in the bottom-right corner of the pause menu.
 
-**Turn off ToastyReplay Lite and Silicate first.** GucciBot can't run live alongside either one (ToastyReplay Lite crashed macro playback; Silicate patches the same spots in the game GucciBot does), so while either is enabled GucciBot stands down and says why. Turn the other one off or uninstall it, restart, and you're in.
+### Keep exactly one GucciBot file
 
-Windows is home, and gets the most testing. macOS, iOS and Android are newer: the Android build has run on a phone, the rest has had little testing, the Pathfinder runs off Windows without the trigger model (new, not tested on a device yet), and rendering and Video Mode work on Windows and Mac (the Mac's are new in 2.0 and not tested on a Mac yet; [the full list](about.md#platforms)). The Mac build in beta.5 runs on Apple silicon only; Intel Macs come with the next release.
+Both files are the same mod (`nigelx1.guccibot`), built for two different games. Your mods folder holds exactly one of them.
+
+- **The wrong one doesn't load.** Geode marks it **Outdated** in the mod list, with the GD or Geode version it was built for (for example "Outdated (GD 2.2091)" on a 2.2081 game).
+- **Two at once conflict.** Geode loads one and lists the other as invalid. GucciBot's setup check points out the extra file.
+- **Putting a file in the mods folder yourself** (**Open Mods Folder**, next to Install From File)? Delete the old GucciBot file first. An older `nigelx1.guccibot.geode` counts.
+- **Playing both GD versions?** Keep each version's file in that game's own mods folder, never both in one.
+
+**Turn off ToastyReplay Lite, Silicate and Antic's Counter first.** GucciBot can't run live alongside any of them (ToastyReplay Lite crashed macro playback; Silicate and Antic's Counter patch the same spots in the game GucciBot does), so while one is enabled GucciBot stands down and says why. Turn the other one off or uninstall it, restart, and you're in.
+
+### GD 2.2081: every platform
+
+Windows is home, and gets the most testing. macOS, iOS and Android are newer: the Android build has run on a phone, the rest has had little testing, the Pathfinder runs off Windows without the trigger model (not tested on a device yet), and rendering and Video Mode work on Windows and Mac (the Mac's are new in 2.0 and not tested on a Mac yet; [the full list](about.md#platforms)).
+
+### GD 2.2091: the Windows preview
+
+The preview is the same GucciBot, built from the same code for GD 2.2091 and Geode 6. It's **Windows only** for now, and it has everything in 2.0 except:
+
+- **The Pathfinder.** Its page says it isn't on GD 2.2091 yet. It comes in **2.0.1**.
+- **Tick rates other than 240 TPS.** The preview runs at 240 only, so no custom TPS, no TPS changes inside a macro, and no High TPS precision. They come in **2.0.1**.
+- **The trigger model behind the look-aheads.** Show Trajectory, Frame extrapolation, Prevent death's look-ahead, Best tick and the sub-tick preview work as they do on a Mac: moving objects keep their current speed.
+- **Mac, Android, iPhone and iPad on 2.2091.** Later. Until then, those platforms have GucciBot on GD 2.2081 only.
+
+Macros use the same file format on both versions. Whether every 2.2081 macro plays back exactly the same on 2.2091 hasn't been checked yet, because 2.209 may have changed some physics.
 
 Stuck, or got a question? Ask in [the Discord](https://discord.gg/m95NUPdbpJ). Found a bug? [Open an issue](https://github.com/Nigelx1/GucciBot/issues/new/choose).
 

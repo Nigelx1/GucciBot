@@ -6,6 +6,7 @@ Stuck anywhere? Ask in [the Discord](https://discord.gg/m95NUPdbpJ).
 This guide is for GucciBot 2.0. Things that are new since 2.0.0-beta.5 say **(new in 2.0)**.
 
 **Contents:**
+[Which file?](#which-file-do-i-download) ·
 [Install](#1-install) ·
 [Open the menu](#2-open-the-menu) ·
 [Record a macro](#3-record-and-save-a-macro) ·
@@ -23,19 +24,41 @@ This guide is for GucciBot 2.0. Things that are new since 2.0.0-beta.5 say **(ne
 
 ---
 
+## Which file do I download?
+
+<!-- DRAFT (branch docs-2209, 2026-11-17): file names follow the parity plan's recommendation; decision 13 (naming / a
+     pre-release tag for the 2.2091 file) is still Nigel's. The preview's list follows the parity plan; re-read it against the
+     2.2091 build that ships. -->
+
+The release has **two files**. Take the one that matches your Geometry Dash, and keep **only that one** in your mods folder.
+
+| Your game | Your Geode | Download |
+|---|---|---|
+| **GD 2.2081** | Geode 5.10.1 or a later 5.x | `GucciBot-2.0.0-GD2.2081.geode`: Windows, Mac, iPhone, iPad and Android |
+| **GD 2.2091** | Geode **6.0.0-alpha.2**, exactly | `GucciBot-2.0.0-GD2.2091.geode`: the **preview**, Windows only |
+
+**Not sure which you have?** Open Geode's mod list: Geode itself is listed there with its version. Geode 5 means GD 2.2081, Geode 6 means GD 2.2091. To see the GD version itself, open the newest log in the game's `geode/logs` folder: near the top it says `Running Geode v... in Geometry Dash v2.2081` (or `v2.2091`). If that line also says **forward compatibility mode**, your game is on 2.2091 with Geode 5, and neither file loads: install Geode 6.0.0-alpha.2 first.
+
+**The preview (GD 2.2091)** has everything in 2.0 except the **Pathfinder** and **tick rates other than 240 TPS** (both come in 2.0.1). Its look-aheads (Show Trajectory and the rest) work as they do on a Mac, without the trigger model. Mac, Android, iPhone and iPad on 2.2091 come later.
+
+**Picked the wrong one?** Geode says the mod "can not be installed". Press **OK**, then **Cancel** on the box after it: **Replace** there would delete the GucciBot that works.
+
+---
+
 ## 1. Install
 
-You need **Geometry Dash 2.2081** and **[Geode](https://geode-sdk.org/) 5.10.1 or a later 5.x**.
-There is **one file** for every platform: `nigelx1.guccibot.geode` (over 200 MB, because the renderer, the music and the JMF Trainer's video come with it).
+You need **Geometry Dash 2.2081** with **[Geode](https://geode-sdk.org/) 5.10.1 or a later 5.x**, or **Geometry Dash 2.2091** with **Geode 6.0.0-alpha.2** (Windows only for now). See [Which file do I download?](#which-file-do-i-download)
+Each file is over 200 MB, because the renderer, the music and the JMF Trainer's video come with it.
 
 ### Every platform
 
 1. Install Geode first, using the steps on [geode-sdk.org](https://geode-sdk.org/) for your platform.
-2. Download `nigelx1.guccibot.geode` from the [latest release](https://github.com/Nigelx1/GucciBot/releases/latest).
+2. Download the file for your GD (`GucciBot-2.0.0-GD2.2081.geode` or `GucciBot-2.0.0-GD2.2091.geode`) from the [latest release](https://github.com/Nigelx1/GucciBot/releases/latest).
 3. Open the game, then open Geode's mod list.
-4. Press the gear for Geode's settings, then **Install From File**, and pick the file.
-   Or put the file in Geode's mods folder yourself: **Open Mods Folder** is in the same place.
-5. Restart the game.
+4. Press the gear for Geode's settings, then **Install From File**, and pick the file. Geode saves it as `nigelx1.guccibot.geode`.
+   Or put the file in Geode's mods folder yourself: **Open Mods Folder** is in the same place. Delete any older GucciBot file there first.
+5. If GucciBot is already installed, Geode asks whether to replace it: press **Replace**. (If it said "can not be installed" just before, it's the wrong file: press **Cancel**.)
+6. Restart the game.
 
 ### Where the mods folder is
 
@@ -344,7 +367,7 @@ What it looks for:
 ### "Unable to read entry (code -3)"
 This is Geode saying it can't unpack the file. Usually the download is damaged (it didn't finish, or got cut off).
 1. Delete `nigelx1.guccibot.geode` from the mods folder.
-2. Download it again from the [release page](https://github.com/Nigelx1/GucciBot/releases/latest). It should be over 200 MB.
+2. Download the file for your GD again from the [release page](https://github.com/Nigelx1/GucciBot/releases/latest). It should be over 200 MB.
 3. Install it again and restart.
 
 ### "GucciBot Is Standing Down"
@@ -354,12 +377,15 @@ GucciBot can't run alongside **ToastyReplay Lite**, **Silicate** or **Antic's Co
 3. Restart the game.
 
 ### Geode lists a second GucciBot as invalid
-Geode loads one copy of a mod and marks any other copy invalid. This happens when an old file is still in the mods folder.
+Geode loads one copy of a mod and marks any other copy invalid. This happens when an old file is still in the mods folder, or when both the GD 2.2081 and the GD 2.2091 file are in it.
 1. Open the mods folder.
-2. Keep the newest GucciBot file and delete the rest.
+2. Keep the newest GucciBot file for your GD and delete the rest.
 3. Restart the game.
 
 In 2.0 the setup check names the file for you.
+
+### Geode says GucciBot is "Outdated"
+That's the file for the other GD version. "Outdated (GD 2.2091)" on a 2.2081 game means you have the preview file; "Outdated (GD 2.2081)" on a 2.2091 game means you have the 2.2081 file. (On a Mac or a phone, the preview file shows as "Unsupported Platform": it's Windows only.) Delete it from the mods folder, install the other one (see [Which file do I download?](#which-file-do-i-download)) and restart.
 
 ### Nothing happens when I press the key
 - Check **Settings > Keybinds > Open the menu**.
