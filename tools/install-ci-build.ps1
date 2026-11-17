@@ -110,8 +110,14 @@ if ($Gd2209) {
 
     # 4. Into the test copy, while its game isn't running
     $name = [IO.Path]::GetFileNameWithoutExtension($exe)
-    $live = @(Get-Process -Name $name -ErrorAction SilentlyContinue)
-    if ($live.Count -gt 0) { throw "$exe is running - close it and run this again (the copy in build\ci is ready)" }
+    # Only a game started from this folder counts (other copies' games may
+    # run); one whose path can't be read counts too, to be safe.
+    $live = @(Get-Process -Name $name -ErrorAction SilentlyContinue |
+              Where-Object { -not $_.Path -or $_.Path.StartsWith("$dir\", [StringComparison]::OrdinalIgnoreCase) })
+    if ($live.Count -gt 0) {
+        Remove-Item $tmp -Recurse -Force
+        throw "$exe is running from $dir - close it and run this again (the copy in build\ci is ready)"
+    }
     Copy-Item $geode.FullName (Join-Path $mods "nigelx1.guccibot.geode") -Force
     Remove-Item $tmp -Recurse -Force
     Write-Host "  installed: $mods"
