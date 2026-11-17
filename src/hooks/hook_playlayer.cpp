@@ -22,6 +22,7 @@
 #include "hacks/hitboxes.hpp"
 #include "hacks/hitborders.hpp"
 #include "hacks/noclip_accuracy.hpp"
+#include "hacks/safemode.hpp"
 #include "trainers/jupiterghost.hpp"
 #include "trainers/trainerghost.hpp"
 
@@ -815,6 +816,11 @@ class $modify(GB7PlayLayer, PlayLayer) {
 
         checkIfResetWasExpected(deathFrame);
         bool hasAddedCheckpoint = handleResetWithCheckpoints(deathFrame);
+        // Safe mode's taint (hacks/safemode.cpp) is kept through a respawn at
+        // a checkpoint; set here, before GD's reset, so its resetLevel hook
+        // sees it whichever order the two hooks run in.
+        if (hasAddedCheckpoint)
+            gucci::safemode::noteCheckpointRespawn();
         upd.resetFrame();
         cps::clear();
 
