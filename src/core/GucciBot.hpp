@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-ad (Calculate: legend groups, several bands counted together on one legend row)"
+    "2026-11-16-ae (Calculate: bring in your own band sounds and pictures with a file picker, and Import folder)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>

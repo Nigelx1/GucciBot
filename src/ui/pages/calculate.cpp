@@ -16,6 +16,7 @@
 // dismissal and the conflict log live there, not here).
 
 #include "core/platform.hpp"
+#include "ui/band_files.hpp"
 #include "ui/pages.hpp"
 #include "ui/kit.hpp"
 #include "ui/look.hpp"
@@ -686,6 +687,40 @@ namespace gucci::ui::pages {
             return fmt::format("{:g} - {:g} frames", t.minWindow, t.maxWindow);
         }
 
+        // GucciBot (2026-11-16): under a band's Sound or Image, your own
+        // files: one picked with the file picker (copied into bands/ in the
+        // config folder and set on this band), or one already there.
+        bool yourFiles(FrameWindowTier& t, bandfiles::Kind kind) {
+            bool const sound = kind == bandfiles::Kind::Sound;
+            std::string& path = sound ? t.audioPath : t.imagePath;
+            bool changed = false;
+            kit::RowBegin(sound ? "Your sounds" : "Your pictures",
+                          sound ? "Choose a sound file for this band: it's copied into bands/ in the mod's config "
+                                  "folder. Or pick one already there (Import folder brings in a whole folder)"
+                                : "Choose a picture for this band: it's copied into bands/ in the mod's config "
+                                  "folder. Or pick one already there (Import folder brings in a whole folder)");
+            ImGui::BeginDisabled(bandfiles::picking());
+            if (kit::Button(bandfiles::picking() ? "Choosing..." : (sound ? "Choose a sound" : "Choose a picture")))
+                bandfiles::pickFile(kind, t.id);
+            ImGui::EndDisabled();
+            auto const files = bandfiles::imported(kind);
+            if (!files.empty()) {
+                ImGui::SameLine();
+                int at = -1;
+                for (size_t i = 0; i < files.size(); ++i)
+                    if (files[i] == path)
+                        at = static_cast<int>(i);
+                ImGui::SetNextItemWidth(std::max(80.f, kit::Avail()));
+                if (kit::Dropdown(sound ? "##yoursound" : "##yourpicture", &at, files, "One already in bands/") &&
+                    at >= 0 && at < static_cast<int>(files.size())) {
+                    path = files[static_cast<size_t>(at)];
+                    changed = true;
+                }
+            }
+            kit::RowEnd();
+            return changed;
+        }
+
         void bandDetails(FrameWindowTier& t) {
             bool changed = false;
             // GucciBot (2026-10-23): decimal edges, after anticroom's
@@ -717,10 +752,12 @@ namespace gucci::ui::pages {
                                    "resources. Empty plays the bundled clip for the window");
             changed |= kit::InputText("audio", &t.audioPath, "file.ogg");
             kit::RowEnd();
+            changed |= yourFiles(t, bandfiles::Kind::Sound);
             kit::RowBegin("Image", "A png or jpg drawn in place of the shape, sized by Size below. Relative paths look "
                                    "in the mod's config folder, then its resources. Empty draws the shape");
             changed |= kit::InputText("image", &t.imagePath, "file.png");
             kit::RowEnd();
+            changed |= yourFiles(t, bandfiles::Kind::Image);
 
             changed |= kit::SwitchRow("Pulse the marker", "It grows and settles back as it appears", &t.pulseMarker);
             changed |= kit::SwitchRow("Pulse the label", "Its text grows and settles back as it appears", &t.pulseText);
@@ -786,8 +823,24 @@ namespace gucci::ui::pages {
             }
         }
 
+        // GucciBot (2026-11-16): bring in a folder of files (ui/band_files.hpp).
+        void bandFilesSection() {
+            kit::Section("Your files");
+            kit::Hint("Import folder copies every sound (ogg, mp3, wav) and picture (png, jpg) in a folder into bands/ "
+                      "in the mod's config folder, for the bands' Sound and Image.");
+            ImGui::BeginDisabled(bandfiles::picking());
+            if (kit::Button(bandfiles::picking() ? "Choosing..." : "Import folder"))
+                bandfiles::pickFolder();
+            ImGui::EndDisabled();
+            if (!bandfiles::note().empty())
+                kit::Note(bandfiles::note().c_str(), bandfiles::noteOk() ? Tone::Good : Tone::Bad);
+        }
+
         void bandsCard() {
             auto& tiers = S().tiers;
+            // A file or pack the picker brought back (it may set a band).
+            if (bandfiles::poll())
+                g_look = true;
             kit::BeginCard("Bands", "Colors, labels, shapes, images, pulses and sounds by window size. Hidden bands draw no markers.");
             if (GucciEngine::get()->fwDefaultLook)
                 kit::Hint(disguised() ? "Default Look is on, so the level uses NaN GD's colors and legend, with the "
@@ -906,6 +959,7 @@ namespace gucci::ui::pages {
                 g_openBands.clear();
                 g_look = true;
             }
+            bandFilesSection();
             kit::EndCard();
         }
 
