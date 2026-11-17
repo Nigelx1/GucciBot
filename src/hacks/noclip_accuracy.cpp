@@ -2,6 +2,7 @@
 // 2026-10-03; neither Silicate nor Absense has one to port.
 
 #include "hacks/noclip_accuracy.hpp"
+#include "core/geode_compat.hpp" // GB_PLAYLAYER_INIT_PARAMS
 
 #include "core/GucciBot.hpp"
 
@@ -71,9 +72,9 @@ namespace gucci::noclipacc {
 // Every reset starts a new attempt (a restart, a practice respawn, Calculate's
 // own resets), and a new level starts from nothing.
 class $modify(GBNoclipAccuracyPL, PlayLayer) {
-    bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
+    bool init(GB_PLAYLAYER_INIT_PARAMS) {
         gucci::noclipacc::clear();
-        return PlayLayer::init(level, useReplay, dontCreateObjects);
+        return PlayLayer::init(GB_PLAYLAYER_INIT_ARGS);
     }
 
     void resetLevel() {
