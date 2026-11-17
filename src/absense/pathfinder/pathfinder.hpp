@@ -689,6 +689,9 @@ public:
         int mode = -1;        // the mode it gives (Trajectory::FakeMode), -1 for a speed portal
         float speed = 0.0f;   // the speed it gives (m_playerSpeed), for a speed portal
         const char* what = "";
+        // GucciBot (2026-11-16, pf3 lane; pf_fork_dual): a mode portal stacked
+        // on a dual portal (GRIEF's hidden cube portal at x 36090).
+        bool onDual = false;
     };
     struct Fork {
         uint64_t tick = 0;  // the tick after the crossing
@@ -710,7 +713,7 @@ public:
     // the jump really took the portal. Nothing here decides anything.
     float m_forkWatchX = -1.0e30f;  // the fork's x, none when no jump is being watched
     void noteForks(uint64_t now);
-    bool forkJump(const char* why, uint64_t floor);
+    bool forkJump(const char* why, uint64_t floor, bool dualOnly = false);
     // Where the last repair resumed from, so a death at the same spot can try
     // something else from that stop before walking further back (the
     // simulation approved what was played, and the game disagreed: what is

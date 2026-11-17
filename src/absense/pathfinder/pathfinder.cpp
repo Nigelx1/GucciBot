@@ -5414,6 +5414,13 @@ void AbsensePathfinder::escalate(const char* why) {
     const int level = trap->level;
     m_stats.escalations++;
 
+    // GucciBot (2026-11-16, pf3 lane; the test switch pf_fork_dual): a mode
+    // portal stacked on a dual portal that the path passed untaken is gone
+    // back to the first time a walk back fails, not only at the furthest
+    // floor: GRIEF's is 12 s before its dead end, and the walk there took
+    // about 3 minutes a level, so the five-minute stuck rule ended both
+    // 3-hour runs at level 1.
+    if (absense::forkJump() && absense::forkDual() && forkJump(why, m_repair.floor, true)) return;
     const double seconds = std::min(kMaxWidenSeconds, kMaxRepairSeconds + (double)level);
     const uint64_t reach = (uint64_t)std::lround(seconds * tps);
     const uint64_t nearest = m_repair.deathTick > reach ? m_repair.deathTick - reach : 0;
@@ -5501,7 +5508,15 @@ void AbsensePathfinder::noteForks(uint64_t now) {
     m_forkPrevX = x;
     // One player only: in the dual part or a two-player level a portal is
     // anyone's, and the drive is one player's.
-    if (pl->m_gameState.m_isDualMode || separateNow() || prev <= -1.0e29f || x <= prev) return;
+    // GucciBot (2026-11-16, pf3 lane; pf_fork_dual): ... except a mode portal
+    // stacked on a dual portal (onDual): GRIEF hides a cube portal on the dual
+    // portal at x 36090 with a hitbox a few units smaller, the route clipped
+    // only the dual portal's corner, and the dual wave pair it led to was
+    // crushed at a floor-to-ceiling wall 15 s later; through the cube portal
+    // the level goes on to 100%. The fork is player 1's crossing, and the
+    // jump lands a second before it, before the dual part begins.
+    const bool two = pl->m_gameState.m_isDualMode || separateNow();
+    if ((two && !absense::forkDual()) || prev <= -1.0e29f || x <= prev) return;
     if (m_forkGatesFor != pl || m_forkGatesCount != (int)pl->m_objects->count()) {
         m_forkGatesFor = pl;
         m_forkGatesCount = (int)pl->m_objects->count();
@@ -5539,6 +5554,19 @@ void AbsensePathfinder::noteForks(uint64_t now) {
             g.uid = o->m_uniqueID;
             m_forkGates.push_back(g);
         }
+        // GucciBot (pf3 lane; pf_fork_dual): the mode portals stacked on a
+        // dual portal (id 286): within kForkStackX in x, their bands
+        // overlapping by kForkStackMinBand.
+        for (unsigned i = 0; i < pl->m_objects->count(); i++) {
+            auto* o = static_cast<GameObject*>(pl->m_objects->objectAtIndex(i));
+            if (!o || o->m_objectID != 286) continue;
+            const cocos2d::CCRect r = o->getObjectRect();
+            const float dx = r.getMidX(), dlo = r.getMinY() - 15.0f, dhi = r.getMaxY() + 15.0f;
+            for (ForkGate& g : m_forkGates) {
+                if (g.mode < 0 || std::abs(g.x - dx) > kForkStackX) continue;
+                if (std::min(g.hi, dhi) - std::max(g.lo, dlo) >= kForkStackMinBand) g.onDual = true;
+            }
+        }
         std::sort(m_forkGates.begin(), m_forkGates.end(), [](const ForkGate& a, const ForkGate& b) { return a.x < b.x; });
     }
     if (m_forkWatchX > -1.0e29f && prev > m_forkWatchX + kForkWatchX) m_forkWatchX = -1.0e30f;  // past it: done
@@ -5548,6 +5576,7 @@ void AbsensePathfinder::noteForks(uint64_t now) {
     const float y = p->m_position.y;
     for (; it != m_forkGates.end() && it->x <= x; ++it) {
         const ForkGate& g = *it;
+        if (two && !g.onDual) continue;  // in the dual part only a portal stacked on a dual portal (pf_fork_dual)
         const bool untaken = g.mode >= 0 ? mode != g.mode : std::abs(p->m_playerSpeed - g.speed) > 0.01f;
         // GucciBot (pf3 lane; log only): what the real game did at a portal
         // near the fork a jump went back to.
@@ -5571,7 +5600,7 @@ void AbsensePathfinder::noteForks(uint64_t now) {
 // run; each jump starts the stuck clock over, or the five-minute rule would
 // end the run 30 s after it (Forest Temple's floor stayed at 18:55:17 and
 // the rule stopped the run at 18:55:47). False when there is none.
-bool AbsensePathfinder::forkJump(const char* why, uint64_t floor) {
+bool AbsensePathfinder::forkJump(const char* why, uint64_t floor, bool dualOnly) {
     if (m_forkJumps >= kForkJumpsPerRun) return false;
     const double tps = std::max(1.0, Bot::get()->updater().getTps());
     Trap* trap = trapAt(m_repair.deathTick, (uint64_t)std::lround(32.0 * std::max(1.0, tps / 240.0)));
@@ -5580,6 +5609,7 @@ bool AbsensePathfinder::forkJump(const char* why, uint64_t floor) {
     const uint64_t tick = currentTick();
     for (auto it = m_forks.rbegin(); it != m_forks.rend(); ++it) {
         if (it->tick >= floor) continue;
+        if (dualOnly && !it->gate.onDual) continue;
         if (std::find(trap->forksTried.begin(), trap->forksTried.end(), it->gate.uid) != trap->forksTried.end()) continue;
         const uint64_t target = std::max(it->tick > lead ? it->tick - lead : 0, m_stats.startTick);
         if (target >= tick) continue;
@@ -5599,12 +5629,12 @@ bool AbsensePathfinder::forkJump(const char* why, uint64_t floor) {
         m_repair.probe = 0;
         m_repair.retries = 0;
         m_repair.retryTarget = UINT64_MAX;
-        log("%s (spot at tick %llu): level %d; the floor stays at tick %llu, so back to the route fork at x %.0f: the %s "
+        log("%s (spot at tick %llu): level %d; the floor %s at tick %llu, so back to the route fork at x %.0f: the %s%s "
             "passed at y %.0f (its y %.0f) at tick %llu - going back for real to tick %llu to take it (jump %d of %d "
             "for this spot)",
-            why, (unsigned long long)m_repair.deathTick, trap->level, (unsigned long long)floor, it->gate.x,
-            it->gate.what, it->playerY, it->gate.y, (unsigned long long)it->tick, (unsigned long long)target,
-            (int)trap->forksTried.size(), kForkJumpsPerSpot);
+            why, (unsigned long long)m_repair.deathTick, trap->level, dualOnly ? "is" : "stays", (unsigned long long)floor,
+            it->gate.x, it->gate.what, it->gate.onDual ? " stacked on a dual portal" : "", it->playerY, it->gate.y,
+            (unsigned long long)it->tick, (unsigned long long)target, (int)trap->forksTried.size(), kForkJumpsPerSpot);
         m_phase = Phase::Backtracking;
         return true;
     }
