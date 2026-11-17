@@ -282,6 +282,18 @@ class $modify(GB2209SafeDeath, PlayLayer) {
     // The level's practice attempt count, which 2.209 added: kept where it
     // was through a shielded reset, as safemode.cpp keeps the normal one
     // (Silicate 1.1.2's resetLevel keeps both).
+    //
+    // GD's session bookkeeping in resetLevel (GJGameLevel::rollSession,
+    // 0x265e30, called at 0x51978e) is left alone on purpose. It only moves
+    // the session's attempts (+0x6f8), start-position history (+0x718) and
+    // playtime (+0x740) into the session log (+0x750 / +0x770) once the last
+    // activity (+0x73c) is older than GD's timeout, then empties them, and
+    // otherwise only updates the session's timestamps (+0x738 / +0x73c).
+    // Every one of those fields is written only by destroyPlayer's death-data
+    // block, which +0x39fa gates (0x5128c8: NoProgress raises it) and whose
+    // writers are held above, and by dtCommitPlaytime, also held. So a
+    // shielded run adds nothing to the session log; it can only move the
+    // session's timestamps. The pass over +0x6f8 at 0x5197b1 only reads it.
     void resetLevel() {
         static bool const s_checked = siteHolds(v2091::kCheckPracticeAttempts);
         if (!s_checked || !m_level || !safemode::runShielded())
@@ -428,8 +440,16 @@ class $modify(GB2209SafeAchievements, AchievementManager) {
 // through GameManager / LocalLevelManager::encodeDataTo) and the save journal
 // (GameLevelManager::writePlatformerSaveJournal, from onQuit). None is written
 // for a visit in which the bot or a cheat was on at any point -- not just this
-// attempt, as a checkpoint reached with a cheat stays in the save after the
-// cheat is off. A legit visit saves as normal, with the Safe mode switch on
+// attempt, and not just until a full restart. A full restart does take the
+// checkpoints away (resetLevelFromStart -> removeAllCheckpoints), but
+// writePersistentSave also saves state it copies from the layer's +0x968
+// object (+0x370, +0x3b0 and the map at +0x480: 0x518059..0x51814e), and
+// neither resetLevel (it clears that object's +0x3f8 and +0x438 only,
+// 0x519337..0x519351) nor resetLevelFromStart (0x518a50) clears those. So
+// what a cheat collected there could still be saved by a legit run after the
+// restart. I'm fairly sure of this from GD's code; it isn't tested in a game.
+// Leaving the level and coming back starts a visit that saves again. A legit
+// visit saves as normal, with the Safe mode switch on
 // too (Nigel, 2026-11-17: "yes", legit platformer runs keep their progress;
 // only bot or cheat runs don't). Loading a save is refused while GucciBot
 // records or plays: the macro starts the level from its start.
@@ -508,6 +528,13 @@ class $modify(GB2209PlatformerJournal, GameLevelManager) {
 // steps from 0.1x to 2x. Any speed but 1x is a cheat (safemode.cpp reads
 // GucciBot's speed already). With GucciBot switched off, GD's slider and keys
 // are GD's again.
+//
+// Unlike GD's own speed (a per-layer value that starts at 1x on every level),
+// the speed set this way is GucciBot's Game speed, which is saved, as
+// Silicate saves its speed setting (updater.speedhack): it stays on later
+// levels and launches until it's set back to 1x, with the cheat mark on while
+// it isn't 1x. (GD's speed keys act only in editor levels, UILayer::
+// handleAction 0x672bfb / 0x672c58.)
 namespace {
     constexpr double kMinSpeed = 0.1;
     constexpr double kMaxSpeed = 2.0;
