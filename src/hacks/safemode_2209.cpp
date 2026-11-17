@@ -268,6 +268,11 @@ class $modify(GB2209SafeDeath, PlayLayer) {
         bool const shield = safemode::runShielded();
         if (shield)
             ++g_counts.playtimeShielded;
+        // Without the byte check GD's own skip can't be asked for: hold the
+        // whole commit back (resetLevel resets its baseline, +0x3b18, so the
+        // held time doesn't reach the next attempt either).
+        if (shield && !checks().flags)
+            return;
         // The flag only: GD's playtime skip doesn't read the test-mode flag.
         safemode::NoProgress guard(this, shield, false);
         PlayLayer::dtCommitPlaytime();
