@@ -27,7 +27,9 @@
 #include <Geode/platform/cplatform.h>
 #include <Geode/utils/string.hpp>
 
+#include <chrono>
 #include <filesystem>
+#include <optional>
 #include <string>
 
 #if !defined(GEODE_COMP_GD_VERSION)
@@ -40,9 +42,33 @@
 #define GB_GEODE6 0
 #endif
 
+// PlayLayer::init hooks: GD 2.2091 dropped the useReplay flag (2.2081 has
+// init(level, useReplay, dontCreateObjects), 2.2091 init(level,
+// dontCreateObjects)). A hook is written once:
+//     bool init(GB_PLAYLAYER_INIT_PARAMS) { ... PlayLayer::init(GB_PLAYLAYER_INIT_ARGS) ... }
+#if GB_GEODE6
+#define GB_PLAYLAYER_INIT_PARAMS GJGameLevel* level, bool dontCreateObjects
+#define GB_PLAYLAYER_INIT_ARGS level, dontCreateObjects
+#else
+#define GB_PLAYLAYER_INIT_PARAMS GJGameLevel* level, bool useReplay, bool dontCreateObjects
+#define GB_PLAYLAYER_INIT_ARGS level, useReplay, dontCreateObjects
+#endif
+
+// A GD member that has another name in the GD 2.2091 bindings (renamed, or an
+// unnamed m_unk field that got its real name), written with both names:
+//     p->GB_FIELD(m_ringRelatedSet, m_usedRings)
+// Old names the bindings still alias (plain scalars and pointers, see
+// patches/bindings-g6-copyable-renames.patch) need nothing.
+#if GB_GEODE6
+#define GB_FIELD(gd2081, gd2091) gd2091
+#else
+#define GB_FIELD(gd2081, gd2091) gd2081
+#endif
+
 #if GB_GEODE6
 #include <Geode/utils/crypto.hpp>
 #include <asp/fs/Path.hpp>
+#include <asp/fs/std.hpp>  // Path::fromStdPath
 #include <map>
 #include <set>
 #include <unordered_map>
@@ -66,6 +92,29 @@ namespace gd {
     template <class K, class H = std::hash<K>, class E = std::equal_to<K>, class A = std::allocator<K>>
     using unordered_set = std::unordered_set<K, H, E, A>;
 }
+
+// Geode 6's file helpers take asp::fs::PathView. These overloads take the
+// std::filesystem::path GucciBot uses everywhere and convert, so the call
+// sites stay as they are on Geode 5.
+#include <Geode/utils/file.hpp>
+namespace geode::utils::file {
+    inline auto readString(std::filesystem::path const& p) { return readString(asp::fs::Path::fromStdPath(p)); }
+    inline auto readJson(std::filesystem::path const& p) { return readJson(asp::fs::Path::fromStdPath(p)); }
+    inline auto readBinary(std::filesystem::path const& p) { return readBinary(asp::fs::Path::fromStdPath(p)); }
+    inline auto writeString(std::filesystem::path const& p, std::string_view d) {
+        return writeString(asp::fs::Path::fromStdPath(p), d);
+    }
+    inline auto writeStringSafe(std::filesystem::path const& p, std::string_view d) {
+        return writeStringSafe(asp::fs::Path::fromStdPath(p), d);
+    }
+    inline auto writeBinary(std::filesystem::path const& p, ByteSpan d) { return writeBinary(asp::fs::Path::fromStdPath(p), d); }
+    inline auto writeBinarySafe(std::filesystem::path const& p, ByteSpan d) {
+        return writeBinarySafe(asp::fs::Path::fromStdPath(p), d);
+    }
+    inline auto createDirectory(std::filesystem::path const& p) { return createDirectory(asp::fs::Path::fromStdPath(p)); }
+    inline auto createDirectoryAll(std::filesystem::path const& p) { return createDirectoryAll(asp::fs::Path::fromStdPath(p)); }
+    inline bool openFolder(std::filesystem::path const& p) { return openFolder(asp::fs::Path::fromStdPath(p)); }
+}
 #else
 #include <Geode/utils/hash.hpp>
 #endif
@@ -83,6 +132,8 @@ namespace gucci {
     }
 
 #if GB_GEODE6
+    // The path type Geode's own APIs use.
+    using GeodePath = asp::fs::Path;
     inline std::filesystem::path stdPath(asp::fs::PathView path) {
         return std::filesystem::path(path.native());
     }
@@ -102,6 +153,7 @@ namespace gucci {
         return path.string();
     }
 #else
+    using GeodePath = std::filesystem::path;
     inline std::filesystem::path stdPath(std::filesystem::path path) {
         return path;
     }
@@ -109,6 +161,39 @@ namespace gucci {
         return path;
     }
 #endif
+
+    // A web request timeout in seconds (Geode 6 takes an asp::Duration, Geode
+    // 5 a std::chrono duration). Template so this header needs no web.hpp.
+    template <class Request>
+    Request& webTimeout(Request& req, int seconds) {
+#if GB_GEODE6
+        return req.timeout(asp::Duration::fromSecs(seconds));
+#else
+        return req.timeout(std::chrono::seconds(seconds));
+#endif
+    }
+
+    // PlayLayer::scene: GD 2.2091 dropped the useReplay flag, leaving
+    // scene(level, dontCreateObjects). Every caller here passes false, false.
+    template <class PL, class Level>
+    auto playLayerScene(Level* level) {
+#if GB_GEODE6
+        return PL::scene(level, false);
+#else
+        return PL::scene(level, false, false);
+#endif
+    }
+
+    // The file picker's start folder and result (std::optional of Geode's
+    // path type on both Geodes).
+    inline std::optional<GeodePath> geodePath(std::optional<std::filesystem::path> const& path) {
+        if (!path) return std::nullopt;
+        return GeodePath(geodePath(*path));
+    }
+    inline std::optional<std::filesystem::path> stdPath(std::optional<GeodePath> const& path) {
+        if (!path) return std::nullopt;
+        return stdPath(*path);
+    }
 
     // A level string packed the way GD saves levels (gzip, base64, no XOR).
     // Geode 6 added a compression level to ZipUtils::compressString, and its

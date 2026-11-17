@@ -12,6 +12,7 @@
 // about lifetimes; see pickTrack().
 
 #include "ui/pages.hpp"
+#include "core/geode_compat.hpp" // gucci::pathToString
 #include "ui/kit.hpp"
 #include "ui/look.hpp"
 #include "ui/search.hpp"
@@ -59,7 +60,7 @@ namespace gucci::ui::pages {
         }
 
         std::string fileName(const fs::path& p) {
-            return geode::utils::string::pathToString(p.filename());
+            return gucci::pathToString(p.filename());
         }
 
         // ------------------------------------------------------------ state
@@ -135,7 +136,7 @@ namespace gucci::ui::pages {
             got.ready = true;
             got.session = session;
             if (result.isOk())
-                got.path = std::move(result).unwrap();
+                got.path = gucci::stdPath(std::move(result).unwrap());
             else
                 got.error = std::move(result).unwrapErr();
             geode::queueInMainThread([got = std::move(got)]() mutable {
@@ -168,7 +169,7 @@ namespace gucci::ui::pages {
             }
             if (!got.path)
                 return;
-            if (lowerAscii(geode::utils::string::pathToString(got.path->extension())) != ".mp3") {
+            if (lowerAscii(gucci::pathToString(got.path->extension())) != ".mp3") {
                 ed.trackNote = disguised() ? "Tracks are .mp3 files. Pick one of those."
                                            : "BIG BRRRR plays .mp3 files. Pick one of those.";
                 return;

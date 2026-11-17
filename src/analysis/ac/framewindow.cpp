@@ -1,4 +1,5 @@
 #include "framewindow.hpp"
+#include "core/geode_compat.hpp" // gucci::pathToString
 #include "core/GucciBot.hpp"
 #include "core/log_rotate.hpp"
 #include "trailbuf/trailbuf.hpp"
@@ -77,7 +78,7 @@ static std::uintmax_t g_fwLogBytes = 0;
 static bool g_fwLogCapped = false;
 
 static void fwLogOpen() {
-    auto const dir = geode::Mod::get()->getSaveDir();
+    auto const dir = gucci::stdPath(geode::Mod::get()->getSaveDir());
     auto const path = dir / "guccibot_fw.log";
     auto const old = dir / "guccibot_fw.old.log";
     auto const why = gucci::logrotate::rotate(path, old);
@@ -8481,12 +8482,12 @@ static std::string bandImageFile(std::string const& path) {
     std::filesystem::path p(std::u8string(path.begin(), path.end()));
     std::error_code ec;
     if (!p.is_absolute()) {
-        auto const inConfig = Mod::get()->getConfigDir() / p;
-        p = std::filesystem::exists(inConfig, ec) ? inConfig : Mod::get()->getResourcesDir() / p;
+        auto const inConfig = gucci::stdPath(Mod::get()->getConfigDir()) / p;
+        p = std::filesystem::exists(inConfig, ec) ? inConfig : gucci::stdPath(Mod::get()->getResourcesDir()) / p;
     }
     if (!std::filesystem::exists(p, ec))
         return {};
-    return geode::utils::string::pathToString(p);
+    return gucci::pathToString(p);
 }
 
 // GucciBot: GD's "the level is flipping" flag, under the name newer bindings

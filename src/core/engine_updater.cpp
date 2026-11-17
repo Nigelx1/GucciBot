@@ -1,4 +1,5 @@
 #include <Geode/modify/GJBaseGameLayer.hpp>
+#include "core/geode_compat.hpp" // gucci::stdPath
 #include "core/GucciBot.hpp"
 #include "hacks/autoclicker.hpp"
 #include "analysis/trajectory.hpp"
@@ -40,7 +41,7 @@ using namespace gucci;
 static std::ofstream g_slopeLog;
 static void slopeLog(const std::string& line) {
     if (!g_slopeLog.is_open()) {
-        auto path = Mod::get()->getSaveDir() / "guccibot_slope.log";
+        auto path = gucci::stdPath(Mod::get()->getSaveDir()) / "guccibot_slope.log";
         g_slopeLog.open(path, std::ios::out | std::ios::trunc);
         log::info("[SLOPE] log file at: {}", path.string());
     }
@@ -69,7 +70,7 @@ namespace gucci::slopediag {
 static std::ofstream g_frameIncLog;
 void gucci::logFrameIncrement(const char* callSite, uint32_t frame, PlayerObject* p) {
     if (!g_frameIncLog.is_open()) {
-        auto path = Mod::get()->getSaveDir() / "guccibot_frameinc.log";
+        auto path = gucci::stdPath(Mod::get()->getSaveDir()) / "guccibot_frameinc.log";
         g_frameIncLog.open(path, std::ios::out | std::ios::trunc);
         log::info("[FRAMEINC] log file at: {}", path.string());
     }

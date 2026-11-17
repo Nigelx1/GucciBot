@@ -1,4 +1,5 @@
 #include "client.hpp"
+#include "core/geode_compat.hpp" // gucci::stdPath
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -271,7 +272,7 @@ bool Client::start() {
 #ifdef _WIN32
     if (m_process) return true;
     if (m_broken) return false;
-    const auto exe = Mod::get()->getResourcesDir() / kExe;
+    const auto exe = gucci::stdPath(Mod::get()->getResourcesDir()) / kExe;
     std::error_code ec;
     if (!std::filesystem::exists(exe, ec)) {
         m_message = "absense-gpu.exe is not in the mod's resources";

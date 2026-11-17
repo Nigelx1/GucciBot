@@ -1,4 +1,5 @@
 #include "core/platform.hpp"
+#include "core/geode_compat.hpp" // gucci::stdPath
 #include "analysis/pathfinder.hpp"
 
 #include "analysis/trajectory.hpp"
@@ -1599,7 +1600,7 @@ namespace gucci {
             // GucciBot (2026-11-10): unless a macro file already has it (a
             // loaded macro keeps its name here): the search's result went over
             // that file. It goes beside it as "<name> pathfinder" instead.
-            auto dir = Mod::get()->getSaveDir() / "replays";
+            auto dir = gucci::stdPath(Mod::get()->getSaveDir()) / "replays";
             std::string ext = ui::macroExtension();
             if (!gb->replayName.empty()) {
                 std::error_code ec;

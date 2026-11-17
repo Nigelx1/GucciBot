@@ -1,4 +1,5 @@
 #include "ui/themes.hpp"
+#include "core/geode_compat.hpp" // gucci::pathToString
 
 #include <Geode/Geode.hpp>
 #include <matjson.hpp>
@@ -522,13 +523,13 @@ namespace gucci::ui::themes {
 
             std::string ext = sanitizeExtension(v["extension"].asString().unwrapOr(""));
             if (ext.empty())
-                ext = sanitizeExtension(geode::utils::string::pathToString(file.stem()));
+                ext = sanitizeExtension(gucci::pathToString(file.stem()));
             if (ext.empty())
                 return false;
             t.extension = ext;
             t.name = trimmed(t.name);
             if (t.name.empty())
-                t.name = geode::utils::string::pathToString(file.stem());
+                t.name = gucci::pathToString(file.stem());
             t.title = t.name;
             t.radius = std::clamp(t.radius, 0.f, 14.f);
             t.opacity = std::clamp(t.opacity, 0.3f, 1.f);
@@ -595,7 +596,7 @@ namespace gucci::ui::themes {
     }
 
     std::filesystem::path customThemesDir() {
-        return Mod::get()->getSaveDir() / "customthemes";
+        return gucci::stdPath(Mod::get()->getSaveDir()) / "customthemes";
     }
 
     std::vector<Theme>& customs() {
@@ -633,7 +634,7 @@ namespace gucci::ui::themes {
         std::error_code ec;
         for (auto const& entry : fs::directory_iterator(customThemesDir(), ec)) {
             std::error_code typeEc;
-            if (!entry.is_regular_file(typeEc) || lowered(geode::utils::string::pathToString(entry.path().extension())) != ".json")
+            if (!entry.is_regular_file(typeEc) || lowered(gucci::pathToString(entry.path().extension())) != ".json")
                 continue;
             auto parsed = geode::utils::file::readJson(entry.path());
             if (!parsed || !parsed.unwrap().isObject()) {
@@ -705,7 +706,7 @@ namespace gucci::ui::themes {
         if (theme.custom && theme.hasTrack)
             return customTrackPath(theme.extension);
         bool const ownBundled = !theme.custom && !theme.track.empty();
-        return Mod::get()->getResourcesDir() / (ownBundled ? theme.track : std::string(kStockTrack));
+        return gucci::stdPath(Mod::get()->getResourcesDir()) / (ownBundled ? theme.track : std::string(kStockTrack));
     }
 
     std::string saveCustom(const Theme& theme, std::string_view previousName, const TrackChange& track) {
@@ -761,7 +762,7 @@ namespace gucci::ui::themes {
         fs::path const jsonFile = dir / (bare(ext) + ".json");
         auto written = geode::utils::file::writeStringSafe(jsonFile, toJson(out).dump());
         if (!written)
-            return "Couldn't save the theme: " + written.unwrapErr();
+            return "Couldn't save the theme: " + std::string(written.unwrapErr());
 
         // Only now let go of what the old name and extension left behind.
         if (!oldFile.empty() && !fs::equivalent(oldFile, jsonFile, ec))
@@ -815,7 +816,7 @@ namespace gucci::ui::themes {
         out.bpm = theme.bpm > 0.0 ? theme.bpm : kStockBpm;
         out.dropOffsetSec = std::max(0.0, theme.dropOffsetSec);
         if (theme.custom)
-            out.file = geode::utils::string::pathToString(customTrackPath(theme.extension));
+            out.file = gucci::pathToString(customTrackPath(theme.extension));
         else
             out.file = theme.track.empty() ? std::string(kStockTrack) : theme.track;
         return out;

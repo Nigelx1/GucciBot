@@ -1,4 +1,5 @@
 #include "renderer.hpp"
+#include "core/geode_compat.hpp" // gucci::stdPath
 #include "core/GucciBot.hpp"
 #include "analysis/ac/sound.hpp"
 #include "analysis/ac/shim.hpp"  // SLSettings (the intro reads the frame-window switch)
@@ -430,7 +431,7 @@ namespace gucci {
             // code page on Windows).
             outDir = fs::path(std::u8string(renderFolderStr.begin(), renderFolderStr.end()));
         } else {
-            outDir = mod->getSaveDir() / "renders";
+            outDir = gucci::stdPath(mod->getSaveDir()) / "renders";
         }
         std::error_code mkec;
         fs::create_directories(outDir, mkec);

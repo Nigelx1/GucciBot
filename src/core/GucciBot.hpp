@@ -4,6 +4,7 @@
     "2026-11-16-u (Calculate's hint on the Macro card now says it needs Play mode too, and its refusal in Off or Record says: It needs Play mode, set Mode to Play first)"
 
 #include <Geode/Geode.hpp>
+#include "core/geode_compat.hpp" // gucci::stdPath
 #include <cmath>
 #include "core/platform.hpp"
 #include "core/portable_tps.hpp"
@@ -1289,10 +1290,10 @@ namespace gucci {
         void reloadMacroList();
 
         std::filesystem::path getReplayDir() const {
-            return Mod::get()->getSaveDir() / "replays";
+            return gucci::stdPath(Mod::get()->getSaveDir()) / "replays";
         }
         std::filesystem::path getPresetsDir() const {
-            return Mod::get()->getSaveDir() / "presets";
+            return gucci::stdPath(Mod::get()->getSaveDir()) / "presets";
         }
 
     private:

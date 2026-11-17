@@ -7,6 +7,8 @@
 #include <Windows.h>
 #endif
 
+#include "core/geode_compat.hpp" // gucci::stdPath
+
 #include <Geode/Geode.hpp>
 #include <filesystem>
 #include <string>
@@ -192,10 +194,10 @@ namespace gucci {
 
         for (std::string& s : dlls) {
             geode::log::info("[RENDERER] Loading library {}",
-                             geode::Mod::get()->getPersistentDir() / "libraries" / s);
+                             gucci::stdPath(geode::Mod::get()->getPersistentDir()) / "libraries" / s);
 
             HMODULE mod = LoadLibraryW(
-                (geode::Mod::get()->getPersistentDir() / "libraries" / s).wstring().c_str());
+                (gucci::stdPath(geode::Mod::get()->getPersistentDir()) / "libraries" / s).wstring().c_str());
 
             if (mod == NULL) {
                 DWORD errorCode = GetLastError();
@@ -253,7 +255,7 @@ namespace gucci {
         };
 
         for (std::string& s : libs) {
-            auto const path = geode::Mod::get()->getPersistentDir() / "libraries" / s;
+            auto const path = gucci::stdPath(geode::Mod::get()->getPersistentDir()) / "libraries" / s;
             geode::log::info("[RENDERER] Loading library {}", path);
 
             std::error_code ec;
