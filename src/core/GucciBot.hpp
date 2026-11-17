@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-16-ab (Calculate: a pulse color per band (off by default, the pulse keeps the band color))"
+    "2026-11-16-ac (Leaving a level with frame advance on no longer freezes the fade to the menu)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
