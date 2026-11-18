@@ -437,6 +437,64 @@ _SW_SHOWNOACTIVATE = 4    # shows it at its normal size without taking the focus
 _GW_OWNER = 4
 
 
+class _WINDOWPLACEMENT(ctypes.Structure):
+    _fields_ = [("length", wintypes.UINT), ("flags", wintypes.UINT), ("showCmd", wintypes.UINT),
+                ("ptMinPosition", wintypes.POINT), ("ptMaxPosition", wintypes.POINT),
+                ("rcNormalPosition", wintypes.RECT)]
+
+
+_u32.GetWindowPlacement.argtypes = [wintypes.HWND, ctypes.POINTER(_WINDOWPLACEMENT)]
+_u32.SetWindowPlacement.argtypes = [wintypes.HWND, ctypes.POINTER(_WINDOWPLACEMENT)]
+
+
+# GucciBot (2026-11-18): NO WINDOWS. A test game's window never comes onto a
+# monitor. The test pass of 11-18 saw shot() restore the hidden 2.2091 game to
+# its old place on Nigel's screen for about 0.6 s per picture (the mod's own
+# keep-off-screen hook didn't move it there), so these helpers keep it to the
+# right of every monitor whatever the game does.
+def _screen():
+    """The rectangle around every monitor: (left, top, right, bottom)."""
+    x, y = _u32.GetSystemMetrics(76), _u32.GetSystemMetrics(77)  # SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN
+    return x, y, x + _u32.GetSystemMetrics(78), y + _u32.GetSystemMetrics(79)  # SM_CX/CYVIRTUALSCREEN
+
+
+def _on_screen(hwnd):
+    """True while the window is shown (not minimized) with any part of it on a monitor."""
+    r = wintypes.RECT()
+    if not _u32.IsWindowVisible(hwnd) or _u32.IsIconic(hwnd) or not _u32.GetWindowRect(hwnd, ctypes.byref(r)):
+        return False
+    left, top, right, bottom = _screen()
+    return not (r.right <= left or r.left >= right or r.bottom <= top or r.top >= bottom)
+
+
+def _off_screen(hwnd):
+    """Moves a shown window to the right of every monitor, without the focus."""
+    r = wintypes.RECT()
+    if _u32.GetWindowRect(hwnd, ctypes.byref(r)):
+        _u32.SetWindowPos(hwnd, None, _screen()[2] + 200, r.top, 0, 0, _SWP_NOSIZE | _SWP_NOZORDER | _SWP_NOACTIVATE)
+
+
+def _restore_off_screen(hwnd):
+    """Puts the place a minimized window comes back to when it's restored to the right
+    of every monitor (it stays minimized; nothing is activated). True when that place is
+    off every monitor."""
+    wp = _WINDOWPLACEMENT()
+    wp.length = ctypes.sizeof(wp)
+    if not _u32.GetWindowPlacement(hwnd, ctypes.byref(wp)):
+        return False
+    right = _screen()[2]
+    rc = wp.rcNormalPosition  # shares wp's memory
+    if rc.left < right + 200:
+        width = rc.right - rc.left
+        rc.left, rc.right = right + 200, right + 200 + width
+        wp.flags = 0
+        wp.showCmd = _SW_SHOWMINNOACTIVE if _u32.IsIconic(hwnd) else _SW_SHOWNOACTIVATE
+        _u32.SetWindowPlacement(hwnd, ctypes.byref(wp))
+    check = _WINDOWPLACEMENT()
+    check.length = ctypes.sizeof(check)
+    return bool(_u32.GetWindowPlacement(hwnd, ctypes.byref(check))) and check.rcNormalPosition.left >= right
+
+
 def _windows(pid):
     """The game's top-level windows (visible, unowned), main one first (the one with a title)."""
     found = []
@@ -482,27 +540,53 @@ def hide():
 
 def show():
     """Shows our game's window again at its normal size, without taking the focus, and
-    stops keeping it minimized."""
+    stops keeping it minimized. A window launch() kept minimized comes back to the right
+    of every monitor, never onto one."""
     global _minimized
+    hidden = _minimized
     _minimized = False
     hwnd = _window()
     if hwnd and _u32.IsIconic(hwnd):
+        if hidden and not _restore_off_screen(hwnd):
+            raise RuntimeError("couldn't move the game's window off the screen; not shown")
         _u32.ShowWindow(hwnd, _SW_SHOWNOACTIVATE)
 
 
 @contextlib.contextmanager
 def _shown(settle=0.6):
-    """The window shown for a picture when it's minimized, and minimized again afterwards."""
+    """The window shown for a picture when it's minimized, and minimized again afterwards.
+    It comes back to the right of every monitor, never onto one: the place a restore
+    brings it back to is moved off the screen first, and while it's shown a watcher moves
+    it off again at once if anything puts it on a monitor."""
     hwnd = _window()
     if not hwnd or not _u32.IsIconic(hwnd):
         yield
         return
+    if not _restore_off_screen(hwnd):
+        raise RuntimeError("couldn't move the game's window off the screen for a picture; not shown")
+    stop = threading.Event()
+    seen = []
+
+    def keep_off():
+        while not stop.is_set():
+            if _on_screen(hwnd):
+                seen.append(time.time())
+                _off_screen(hwnd)
+            time.sleep(0.002)
+
+    watcher = threading.Thread(target=keep_off, daemon=True)
+    watcher.start()
     _u32.ShowWindow(hwnd, _SW_SHOWNOACTIVATE)
-    time.sleep(settle)  # the game draws again once it's back
     try:
+        time.sleep(settle)  # the game draws again once it's back
         yield
     finally:
         _minimize(hwnd)
+        stop.set()
+        watcher.join(1)
+        if seen:
+            print(f"assist: the game's window came onto a monitor {len(seen)} time(s) during a picture "
+                  "and was moved off at once", file=sys.stderr)
 
 
 _loading = set()  # PIDs whose window is kept off the screen while the game loads
@@ -538,18 +622,20 @@ _homes = {}
 
 
 def _unpark(pid, minimize=True):
-    """The game's windows back where they stood, then minimized (no focus taken)."""
+    """Parking stops; the game's windows stay off the screen where _park put them (never
+    back where they stood on a monitor, not even after a failed launch), then are
+    minimized (no focus taken), still coming back off the screen when restored."""
     _loading.discard(pid)
     end = time.time() + 2
     while pid not in _homes and time.time() < end:
         time.sleep(0.05)
-    flags = _SWP_NOSIZE | _SWP_NOZORDER | _SWP_NOACTIVATE
-    for hwnd, (x, y) in _homes.pop(pid, {}).items():
-        if _u32.IsWindow(hwnd):
-            _u32.SetWindowPos(hwnd, None, x, y, 0, 0, flags)
-    if minimize:
-        for hwnd in _windows(pid):
+    _homes.pop(pid, None)
+    for hwnd in _windows(pid):
+        if _on_screen(hwnd):
+            _off_screen(hwnd)
+        if minimize:
             _minimize(hwnd)
+            _restore_off_screen(hwnd)
 
 
 def _start_parking(pid, before):
@@ -663,7 +749,7 @@ def launch(force_safe=True, timeout=180, settle=20, visible=None, port=None, env
         _wait_for_tools(time.time(), timeout)
     except BaseException:
         if _minimized:
-            _unpark(proc.pid, minimize=False)  # in sight, to see what went wrong
+            _unpark(proc.pid, minimize=False)  # left off the screen (NO WINDOWS), not minimized
         raise
     if _minimized:
         _unpark(proc.pid)  # GucciBot answers: loaded, so a minimized game keeps running
