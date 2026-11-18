@@ -24,6 +24,7 @@
 //   of them stands in for a real player.
 
 #include "hacks/hitboxes.hpp"
+#include "core/geode_compat.hpp" // GB_PLAYLAYER_INIT_PARAMS
 
 #include "core/GucciBot.hpp"
 #include "analysis/ac/shim.hpp"
@@ -810,8 +811,8 @@ class $modify(GBHitboxTickHook, GJBaseGameLayer) {
 };
 
 class $modify(GBHitboxPlayLayerHook, PlayLayer) {
-    bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
-        if (!PlayLayer::init(level, useReplay, dontCreateObjects))
+    bool init(GB_PLAYLAYER_INIT_PARAMS) {
+        if (!PlayLayer::init(GB_PLAYLAYER_INIT_ARGS))
             return false;
         if (gucci::GucciEngine::get()->enabled)
             gucci::HitboxOverlay::get()->init(this);

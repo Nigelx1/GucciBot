@@ -1355,7 +1355,7 @@ struct ExactRec {
 
 ExactRec exactLive(GameObject* o) {
     ExactRec e;
-#ifndef GEODE_IS_WINDOWS
+#if !GB_WORLD_LAYOUTS
     // GucciBot (2026-11-16, rotate lane review): the raw offsets below, and
     // the oriented box read through +0x2e0, are Windows layouts
     // (world/offsets.hpp checks them only there), and the World that writes

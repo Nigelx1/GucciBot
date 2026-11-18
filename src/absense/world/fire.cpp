@@ -310,6 +310,7 @@
 //     m_targetGroupID (when above 0) and the level ends.
 
 #include <Geode/Geode.hpp>
+#include "core/geode_compat.hpp" // GB_FIELD
 #include <Geode/binding/RingObject.hpp>
 
 #include <algorithm>
@@ -1024,7 +1025,7 @@ void fireSequence(Run& run, const TriggerDef& d, std::span<const int> keys) {
     // 0x4b48b0: the key is the last remap key negated, and only with unique
     // remap on.
     const int key = (o->m_uniqueRemap && !keys.empty()) ? -keys.back() : 0;
-    const double clock = run.pl->m_gameState.m_unkDouble3;
+    const double clock = run.pl->m_gameState.GB_FIELD(m_unkDouble3, m_bestTime);
     float time;
     int index;
     {

@@ -214,6 +214,7 @@
 //     EM+0x810/+0x814 the players' rotation change (rotate triggers).
 
 #include <Geode/Geode.hpp>
+#include "core/geode_compat.hpp" // GB_FIELD
 
 #include <algorithm>
 #include <cmath>
@@ -259,7 +260,7 @@ void advanceClock(GJBaseGameLayer* pl) {
     const float timeWarp = stepTimeWarp();
     const float physicsDt = stepDt();
     pl->m_gameState.m_totalTime += physicsDt;
-    pl->m_gameState.m_unkDouble3 += physicsDt / timeWarp;
+    pl->m_gameState.GB_FIELD(m_unkDouble3, m_bestTime) += physicsDt / timeWarp;
     pl->m_gameState.m_currentProgress++;
     pl->m_gameState.m_unkUint5 += (int)roundf(timeWarp * 1000.0f);
 }

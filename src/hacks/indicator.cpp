@@ -17,6 +17,7 @@
 //   reading, so nothing simulates while the scene is being drawn.
 
 #include "hacks/indicator.hpp"
+#include "core/geode_compat.hpp" // GB_PLAYLAYER_INIT_PARAMS
 
 #include "absense/compat/bot.hpp"
 #include "absense/glue.hpp"
@@ -574,8 +575,8 @@ class $modify(GBIndicatorScheduler, CCScheduler) {
 // The readouts' node goes on the UI layer once the level is built, beside the
 // HUD's. A new level starts the session's accuracy over (the best is kept).
 class $modify(GBIndicatorPlayLayer, PlayLayer) {
-    bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
-        if (!PlayLayer::init(level, useReplay, dontCreateObjects))
+    bool init(GB_PLAYLAYER_INIT_PARAMS) {
+        if (!PlayLayer::init(GB_PLAYLAYER_INIT_ARGS))
             return false;
         gucci::indicator::resetStats(false);
         if (m_uiLayer && !m_uiLayer->getChildByID(gucci::indicator::kNodeId)) {

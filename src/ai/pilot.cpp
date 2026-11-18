@@ -1,4 +1,5 @@
 #include "ai/pilot.hpp"
+#include "core/geode_compat.hpp" // gucci::stdPath
 
 #include "absense/glue.hpp"
 #include "absense/judge.hpp"
@@ -80,7 +81,7 @@ namespace gucci::ai::pilot {
         fs::path findWeights(char const* name) {
             std::error_code ec;
             std::string const file = std::string(name) + ".gbnn";
-            fs::path const res = Mod::get()->getResourcesDir();
+            fs::path const res = gucci::stdPath(Mod::get()->getResourcesDir());
             for (fs::path const& dir : {weightsDir(), res / "ai", res}) {
                 auto const p = dir / file;
                 if (fs::is_regular_file(p, ec)) return p;

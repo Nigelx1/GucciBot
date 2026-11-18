@@ -1,4 +1,5 @@
 #include "trainers/trainerghost.hpp"
+#include "core/geode_compat.hpp" // gucci::pathToString
 #include "core/GucciBot.hpp"
 #include "audio/gameaudiomute.hpp"
 #include <Geode/Geode.hpp>
@@ -107,7 +108,7 @@ private:
     }
 
     void start() {
-        auto path = Mod::get()->getSaveDir() / "trainer_music.mp3";
+        auto path = gucci::stdPath(Mod::get()->getSaveDir()) / "trainer_music.mp3";
         std::error_code ec;
         if (!std::filesystem::exists(path, ec))
             return;
@@ -115,7 +116,7 @@ private:
         if (!system)
             return;
         // FMOD takes UTF-8 file names (path.string() is the ANSI code page).
-        std::string const name = geode::utils::string::pathToString(path);
+        std::string const name = gucci::pathToString(path);
         if (system->createSound(name.c_str(), FMOD_CREATESAMPLE, nullptr, &m_sound) !=
                 FMOD_OK ||
             !m_sound) {
@@ -264,8 +265,8 @@ private:
 };
 
 class $modify(TrainerGhostPlayLayer, PlayLayer) {
-    bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
-        if (!PlayLayer::init(level, useReplay, dontCreateObjects))
+    bool init(GB_PLAYLAYER_INIT_PARAMS) {
+        if (!PlayLayer::init(GB_PLAYLAYER_INIT_ARGS))
             return false;
         TrainerGhostOverlay::get()->attach(this);
         return true;

@@ -36,6 +36,7 @@
 //      leaves set only make the renderer recompute the same transform.
 
 #include "absense/world/materialize.hpp"
+#include "core/platform.hpp" // GB_WORLD_LAYOUTS
 
 #include <optional>
 
@@ -55,7 +56,7 @@
 #include <cstdint>
 
 #include "absense/compat/devlog.hpp"
-#ifndef GEODE_IS_WINDOWS
+#if !GB_WORLD_LAYOUTS
 #include <cstdlib>  // std::abort (GucciBot multiplatform, see gameNew)
 #endif
 #include "absense/trajectory/trajectory.hpp"  // moverCacheGeneration
@@ -70,7 +71,7 @@
 
 namespace world {
 
-#ifdef GEODE_IS_WINDOWS // Windows layouts only (core/platform.hpp)
+#if GB_WORLD_LAYOUTS // Windows layouts only (core/platform.hpp)
 static_assert(sizeof(RawVec) == sizeof(gd::vector<int>));
 // addToSection 0x226bb4 allocates 0x20 bytes for a column's flags.
 static_assert(sizeof(RawBits) == 0x20 && sizeof(std::vector<bool>) == 0x20);
@@ -87,7 +88,7 @@ constexpr int kMaxSection = 100001;
 
 // ------------------------------------------------------------ the game's heap
 
-#ifdef GEODE_IS_WINDOWS
+#if GB_WORLD_LAYOUTS
 void* gameNew(std::size_t bytes) {
     using Fn = void* (*)(std::size_t);
     return reinterpret_cast<Fn>(geode::base::get() + off::kGameNew)(bytes);

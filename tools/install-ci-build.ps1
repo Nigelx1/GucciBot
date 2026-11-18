@@ -11,13 +11,119 @@
 # minutes). Keeps a copy at build\ci\nigelx1.guccibot.geode for releases and
 # sharing. Needs the GitHub CLI (gh), signed in. Won't install while Geometry
 # Dash is running.
+#
+# The GD 2.2091 (Geode 6) Windows package, from multi-platform-2209.yml, goes
+# only into one of our own GD 2.2091 TEST copies, never into a real game:
+#
+#   .\install_ci_build.bat -Gd2209 -Folder <test copy> [-Commit <commit>]
+#
+# The folder must hold GD2209.exe or GD2209b.exe and no GeometryDash.exe (GD
+# and Geode pick the save folder from the exe's name, so a GeometryDash.exe
+# would share the real save), must not be in a Steam library, and must have
+# Geode 6 in it. The package must say geode 6 and gd win 2.2091 and nothing
+# else. A copy stays at build\ci\nigelx1.guccibot2209.geode. Without -Gd2209
+# the script does what it always did and reads only multi-platform.yml.
 
-param([string]$Commit = "")
+param([string]$Commit = "", [switch]$Gd2209, [string]$Folder = "")
 $ErrorActionPreference = "Stop"
 $Repo = "Nigelx1/GucciBot"
 $Workflow = "multi-platform.yml"
 $Artifact = "GucciBot (all platforms)"
 $Root = Split-Path $PSScriptRoot -Parent
+
+if ($Gd2209) {
+    # 0. Where it goes, checked before anything is downloaded
+    if (-not $Folder) { throw "-Gd2209 needs -Folder <a GD 2.2091 test copy>" }
+    if (-not (Test-Path -LiteralPath $Folder -PathType Container)) { throw "no folder $Folder" }
+    $dir = (Resolve-Path -LiteralPath $Folder).ProviderPath.TrimEnd('\')
+    if ((Get-Item -LiteralPath $dir -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        throw "refusing $dir`: it's a link to another folder"
+    }
+    if (Test-Path -LiteralPath (Join-Path $dir "GeometryDash.exe")) {
+        throw "refusing $dir`: it has GeometryDash.exe, which shares the real save folder (only GD2209.exe / GD2209b.exe test copies)"
+    }
+    if ($dir -match '\\steamapps\\') { throw "refusing $dir`: it's in a Steam library, not a test copy" }
+    $exes = @("GD2209.exe", "GD2209b.exe" | Where-Object { Test-Path -LiteralPath (Join-Path $dir $_) })
+    if ($exes.Count -ne 1) { throw "refusing $dir`: it needs exactly one of GD2209.exe or GD2209b.exe (found $($exes.Count))" }
+    $exe = $exes[0]
+    if (-not (Test-Path -LiteralPath (Join-Path $dir "Geode.dll"))) { throw "refusing $dir`: no Geode in it" }
+    $mods = Join-Path $dir "geode\mods"
+    if (-not (Test-Path -LiteralPath $mods -PathType Container)) { throw "refusing $dir`: no geode\mods folder" }
+
+    $Workflow = "multi-platform-2209.yml"
+    $Artifact = "GucciBot GD 2.2091 (Geode 6, Windows)"
+    if (-not $Commit) { $Commit = (git -C $Root rev-parse HEAD).Trim() }
+    $short = $Commit.Substring(0, [Math]::Min(7, $Commit.Length))
+    Write-Host "GucciBot: GitHub's GD 2.2091 build of $short, for the test copy $dir ($exe)"
+
+    # 1. GitHub's run for this commit, waiting while it builds
+    $deadline = (Get-Date).AddMinutes(30)
+    while ($true) {
+        $runs = @(gh run list --repo $Repo --workflow $Workflow --commit $Commit --json databaseId,status,conclusion | ConvertFrom-Json)
+        if ($runs.Count -gt 0 -and $runs[0]) {
+            $run = $runs[0]
+            if ($run.status -eq "completed") { break }
+            Write-Host "  still building ($($run.status))..."
+        } else {
+            Write-Host "  no GD 2.2091 build for $short yet (gh workflow run $Workflow --ref <branch>) - waiting..."
+        }
+        if ((Get-Date) -gt $deadline) { throw "no finished GD 2.2091 build for $short after 30 minutes" }
+        Start-Sleep -Seconds 30
+    }
+    if ($run.conclusion -ne "success") {
+        throw "GitHub's GD 2.2091 build of $short didn't succeed ($($run.conclusion)): gh run view $($run.databaseId) --repo $Repo"
+    }
+
+    # 2. Download it and check it: the Windows binary, the seven DLLs, and a
+    #    mod.json for Geode 6 and GD 2.2091 on Windows only
+    $tmp = Join-Path $env:TEMP "guccibot-ci2209-$short"
+    if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
+    gh run download $run.databaseId --repo $Repo --name $Artifact --dir $tmp
+    $geode = @(Get-ChildItem $tmp -Recurse -Filter "*.geode")
+    if ($geode.Count -ne 1) { throw "the download should hold one .geode, it holds $($geode.Count)" }
+    $geode = $geode[0]
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($geode.FullName)
+    try {
+        $names = @($zip.Entries | ForEach-Object { $_.FullName })
+        $entry = $zip.GetEntry("mod.json")
+        if (-not $entry) { throw "the package has no mod.json" }
+        $reader = New-Object System.IO.StreamReader($entry.Open())
+        try { $mod = $reader.ReadToEnd() | ConvertFrom-Json } finally { $reader.Dispose() }
+    } finally { $zip.Dispose() }
+    $need = @("nigelx1.guccibot.dll") +
+            @(@("avcodec-62.dll", "avdevice-62.dll", "avfilter-11.dll", "avformat-62.dll", "avutil-60.dll",
+                "swresample-6.dll", "swscale-9.dll") | ForEach-Object { "resources/nigelx1.guccibot/$_" })
+    $missing = @($need | Where-Object { $names -notcontains $_ })
+    if ($missing.Count -gt 0) { throw "incomplete package, missing: $($missing -join ', ')" }
+    $gdKeys = @($mod.gd.PSObject.Properties | ForEach-Object { $_.Name })
+    if (-not ("$($mod.geode)" -match '^6\.') -or $gdKeys.Count -ne 1 -or $mod.gd.win -ne "2.2091") {
+        throw "this package isn't the GD 2.2091 Windows one (geode $($mod.geode), gd $($gdKeys -join ','))"
+    }
+    Write-Host ("  complete: Windows binary, 7 renderer DLLs, geode {0}, gd win {1} ({2:N0} MB)" -f $mod.geode, $mod.gd.win, ($geode.Length / 1MB))
+
+    # 3. A copy for sharing, under a name that can't be taken for the 2.2081 file
+    $keep = Join-Path $Root "build\ci"
+    New-Item -ItemType Directory -Force $keep | Out-Null
+    Copy-Item $geode.FullName (Join-Path $keep "nigelx1.guccibot2209.geode") -Force
+    Write-Host "  copy kept: build\ci\nigelx1.guccibot2209.geode"
+
+    # 4. Into the test copy, while its game isn't running
+    $name = [IO.Path]::GetFileNameWithoutExtension($exe)
+    # Only a game started from this folder counts (other copies' games may
+    # run); one whose path can't be read counts too, to be safe.
+    $live = @(Get-Process -Name $name -ErrorAction SilentlyContinue |
+              Where-Object { -not $_.Path -or $_.Path.StartsWith("$dir\", [StringComparison]::OrdinalIgnoreCase) })
+    if ($live.Count -gt 0) {
+        Remove-Item $tmp -Recurse -Force
+        throw "$exe is running from $dir - close it and run this again (the copy in build\ci is ready)"
+    }
+    Copy-Item $geode.FullName (Join-Path $mods "nigelx1.guccibot.geode") -Force
+    Remove-Item $tmp -Recurse -Force
+    Write-Host "  installed: $mods"
+    exit 0
+}
+if ($Folder) { throw "-Folder is only for -Gd2209 (a GD 2.2091 test copy)" }
 
 if (-not $Commit) { $Commit = (git -C $Root rev-parse HEAD).Trim() }
 $short = $Commit.Substring(0, [Math]::Min(7, $Commit.Length))

@@ -16,6 +16,7 @@
 // the tick edge as usual; the recorder only counts them.
 
 #include <Geode/binding/GJBaseGameLayer.hpp>
+#include "core/geode_compat.hpp" // gd:: on Geode 6
 
 #include <cstdint>
 #include <vector>

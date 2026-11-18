@@ -1,5 +1,6 @@
 
 #include "player.hpp"
+#include "core/geode_compat.hpp" // GB_FIELD
 
 #include <Geode/Geode.hpp>
 
@@ -208,7 +209,7 @@ void ringJump(PlayerObject* player, RingObject* ring) {
     // (measured on a black orb: seven clicks on seven ticks, seven drops,
     // with the ring in the fired set the whole time).
     if (!ring->m_isMultiActivate) {
-        if (player->m_ringRelatedSet.count(ring->m_uniqueID)) return;
+        if (player->GB_FIELD(m_ringRelatedSet, m_usedRings).count(ring->m_uniqueID)) return;
         if (Bot::get()->trajectory().ringUsedThisContact(player, ring)) return;
     }
 
@@ -236,7 +237,7 @@ void ringJump(PlayerObject* player, RingObject* ring) {
 
     player->m_ringJumpRelated = true;
 
-    player->m_ringRelatedSet.insert(ring->m_uniqueID);
+    player->GB_FIELD(m_ringRelatedSet, m_usedRings).insert(ring->m_uniqueID);
     Bot::get()->trajectory().noteRingUsed(player, ring);
     // PlayerObject::ringJump calls ring->activatedByPlayer(player) at its end
     // (0x399cbd) on every path that got past the checks above - press path

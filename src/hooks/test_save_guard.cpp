@@ -11,6 +11,7 @@
 // as they always have. The exit save of the mods' own data (Geode's, which
 // writes GucciBot's saved.json and settings.json) is skipped too.
 
+#include "core/geode_compat.hpp" // GB_GEODE6
 #include "core/mcp_only.hpp"
 #include "hacks/safemode.hpp"
 
@@ -37,10 +38,20 @@ class $modify(GBTestSaveGuardGM, GManager) {
         gucci::mcponly::keep(self);  // stays in an MCP-only test launch (core/mcp_only.hpp)
     }
 
+#if GB_GEODE6
+    // GD 2.2091: save(bool async), returning whether it saved. A skipped save
+    // reports success: nothing is wrong, it is a test launch on purpose. I'm
+    // not sure what GD does with a false here, so the guard never returns one.
+    bool save(bool async) {
+        if (skipSave("GManager::save")) return true;
+        return GManager::save(async);
+    }
+#else
     void save() {
         if (skipSave("GManager::save")) return;
         GManager::save();
     }
+#endif
 };
 
 class $modify(GBTestSaveGuardApp, AppDelegate) {

@@ -1,4 +1,5 @@
 #include "core/GucciBot.hpp"
+#include "core/geode_compat.hpp" // GB_PLAYLAYER_INIT_PARAMS
 #include "core/action_types.hpp"
 
 #include <limits>
@@ -186,8 +187,8 @@ private:
 };
 
 class $modify(MacroPathPlayLayer, PlayLayer) {
-    bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
-        if (!PlayLayer::init(level, useReplay, dontCreateObjects))
+    bool init(GB_PLAYLAYER_INIT_PARAMS) {
+        if (!PlayLayer::init(GB_PLAYLAYER_INIT_ARGS))
             return false;
         MacroPathOverlay::get()->attach(this);
         return true;

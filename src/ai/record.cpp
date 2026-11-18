@@ -1,4 +1,5 @@
 #include "ai/record.hpp"
+#include "core/geode_compat.hpp" // gucci::stdPath
 
 #include "ai/observe.hpp"
 #include "ai/sim.hpp"
@@ -24,7 +25,7 @@ namespace fs = std::filesystem;
 namespace gucci::ai {
 
     fs::path aiRoot() {
-        return Mod::get()->getSaveDir() / "ai";
+        return gucci::stdPath(Mod::get()->getSaveDir()) / "ai";
     }
 
     namespace {

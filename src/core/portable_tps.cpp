@@ -29,10 +29,16 @@ namespace gucci::portable_tps {
         static double lastRefused = -1.0;
         if (tps != lastRefused) {
             lastRefused = tps;
-            log::warn("[GucciBot] {:.0f} TPS can't run on this platform (only 240, or {:.0f} "
+            log::warn("[GucciBot] {:.0f} TPS can't run on " GB_HERE " (only 240, or {:.0f} "
                       "and up); running at 240. A macro made at {:.0f} TPS will not replay here.",
                       tps, kMinTps, tps);
+#if GB_GEODE6
+            // Windows too, so not "needs Windows": the rates under 162 need
+            // the tick-loop patch, which isn't found in GD 2.2091 yet.
+            std::string msg = fmt::format("{:.0f} TPS isn't on GD 2.2091 yet: running at 240", tps);
+#else
             std::string msg = fmt::format("{:.0f} TPS needs Windows: running at 240", tps);
+#endif
             geode::queueInMainThread([msg] {
                 geode::Notification::create(msg, geode::NotificationIcon::Warning)->show();
             });
