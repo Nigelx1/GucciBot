@@ -12,6 +12,7 @@
 #include "render/renderer.hpp"
 #include "trainers/click_indicators.hpp"
 #include "trainers/trainer_core.hpp"
+#include "trainers/lane.hpp"
 #include "trainers/videomode.hpp"
 
 #include <Geode/Geode.hpp>
@@ -252,6 +253,9 @@ namespace gucci::safemode {
         for (Kind k : {Kind::Jupiter, Kind::Any}) {
             auto const s = trainers::state(k);
             if (s.pageVisible && s.barEnabled && !s.macro.clickIntervalsSec.empty() && trainers::followsLevel(k))
+                return true;
+            // ... and the trainer lane drawn over that level (2026-11-17).
+            if (trainers::lane::shownInLevel(k))
                 return true;
         }
         // The AI pathfinder's level map, drawn over a level: the gaps you fit

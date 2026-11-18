@@ -15,6 +15,7 @@
 
 #include "core/GucciBot.hpp"
 #include "trainers/trainer_core.hpp"
+#include "trainers/lane.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/utils/async.hpp>
@@ -308,7 +309,375 @@ namespace gucci::ui::pages {
             dl->AddText(ImVec2(p0.x + 6.f, laneMid + 2.f), u32(pal.muted, 0.8f), "you");
         }
 
+        // ------------------------------------------------------------ the lane
+        //
+        // Juice's design (2026-11-17, "basically like osu!taiko"): the macro's
+        // clicks scroll right to left into a fixed hit marker, an empty
+        // circle near the left end. A note's look is its window as Calculate
+        // counted it: a small red note for 1 frame, an orange ring round a red
+        // center for 2, a big yellow circle round a red center for 3, a wider
+        // green one past that (or when any timing lived); a note with no
+        // counted window is the plain accent color. A hold whose release is
+        // timed is a slider, a window mark at each end (the release end's
+        // center a ring: let go there). Each press is judged as it lands and
+        // the marker pulses in the verdict's color. trainers/lane.* has the
+        // rules; this draws them.
+
+        namespace ln = gucci::trainers::lane;
+        using LTier = gucci::lanerules::Tier;
+        using LVerdict = gucci::lanerules::Verdict;
+
+        ImVec4 const kNoteRed{0.925f, 0.231f, 0.255f, 1.f};   // #EC3B41
+        ImVec4 const kNoteOrange{1.f, 0.557f, 0.141f, 1.f};   // #FF8E24
+        ImVec4 const kNoteYellow{1.f, 0.835f, 0.192f, 1.f};   // #FFD531
+        ImVec4 const kNoteWide{0.494f, 0.851f, 0.333f, 1.f};  // #7ED955
+        ImVec4 const kNoteP2{1.f, 0.388f, 0.788f, 1.f};       // #FF63C9, player 2's edge
+
+        ImVec4 verdictColor(LVerdict v, bool stray) {
+            auto const& pal = look().pal;
+            if (stray)
+                return pal.muted;
+            switch (v) {
+                case LVerdict::Perfect: return pal.good;
+                case LVerdict::Inside: return pal.warn;
+                case LVerdict::Outside: return pal.bad;
+                case LVerdict::Missed: return pal.bad;
+            }
+            return pal.muted;
+        }
+
+        struct NoteSizes {
+            float red, two, three, wide, plain, marker;
+        };
+        NoteSizes noteSizes(float h) {
+            return {h * 0.12f, h * 0.20f, h * 0.27f, h * 0.32f, h * 0.19f, h * 0.36f};
+        }
+
+        float outerRadius(LTier tier, NoteSizes const& z) {
+            switch (tier) {
+                case LTier::Unknown: return z.plain;
+                case LTier::One: return z.red;
+                case LTier::Two: return z.two;
+                case LTier::Three: return z.three;
+                case LTier::Wide: return z.wide;
+            }
+            return z.red;
+        }
+
+        // One note head. `release`: a slider's end (its center a ring: let
+        // go there). `fade` 1 normal, lower for a missed note.
+        void drawHead(ImDrawList* dl, ImVec2 c, LTier tier, NoteSizes const& z, bool release, bool p2, float fade,
+                      float scale) {
+            auto const& pal = look().pal;
+            ImU32 const edge = IM_COL32(0, 0, 0, (int)(150 * fade));
+            ImU32 const rim = IM_COL32(255, 255, 255, (int)(215 * fade));
+            auto disc = [&](float r, ImVec4 col) {
+                r *= scale;
+                dl->AddCircleFilled(c, r + 1.2f, edge, 0);
+                dl->AddCircleFilled(c, r, u32(col, fade), 0);
+            };
+            float const outer = outerRadius(tier, z);
+            if (tier == LTier::Unknown) {
+                disc(z.plain, pal.accent);
+            } else {
+                if (tier == LTier::Two)
+                    disc(z.two, kNoteOrange);
+                else if (tier == LTier::Three)
+                    disc(z.three, kNoteYellow);
+                else if (tier == LTier::Wide)
+                    disc(z.wide, kNoteWide);
+                // The red center: the macro's own frame.
+                if (release && tier != LTier::One) {
+                    dl->AddCircle(c, z.red * scale * 0.8f, edge, 0, 2.f * scale + 2.f);
+                    dl->AddCircle(c, z.red * scale * 0.8f, u32(kNoteRed, fade), 0, 2.2f * scale + 1.f);
+                } else {
+                    disc(z.red, kNoteRed);
+                    if (release)
+                        dl->AddCircleFilled(c, z.red * scale * 0.42f, IM_COL32(255, 255, 255, (int)(230 * fade)), 0);
+                }
+            }
+            // The white rim, as taiko's notes have.
+            dl->AddCircle(c, outer * scale - 0.8f, rim, 0, 1.6f);
+            if (p2)
+                dl->AddCircle(c, outer * scale + 2.4f, u32(kNoteP2, fade), 0, 2.f);
+        }
+
+        // The lane in the rectangle p0..p0+size. `inLevel`: over the level,
+        // on its own backdrop.
+        void drawLaneBox(Kind k, ImDrawList* dl, ImVec2 p0, ImVec2 size, bool inLevel) {
+            auto const& pal = look().pal;
+            auto const& set = ln::settings();
+            auto const v = ln::view(k);
+            // The clock as of now, not the start of the frame: in the level,
+            // the tick the game is on as this is drawn.
+            double const now = ln::now(k);
+            ln::advance(k, now);
+            double const realNow = ln::steadyNow();
+            auto const& notes = *v.notes;
+            auto const& results = *v.results;
+
+            float const w = size.x, h = size.y;
+            ImVec2 const p1(p0.x + w, p0.y + h);
+            NoteSizes const z = noteSizes(h);
+            float const cy = p0.y + h * 0.5f;
+            // The judgment's zone at the left, then the marker.
+            float const hitX = p0.x + std::max(h * 1.75f, 104.f);
+            double const tps = v.tps > 0.0 ? v.tps : 240.0;
+            double const leadSec = std::max(4, set.leadTicks) / tps;
+            double const pxPerSec = std::max(1.0, (double)(p1.x - hitX - z.wide - 4.f) / leadSec);
+            auto x = [&](double t) { return hitX + (float)((t - now) * pxPerSec); };
+
+            // The box and its track.
+            ImU32 const box = inLevel ? u32(pal.backdrop, overLevelAlpha(0.72f)) : u32(pal.raised, 0.55f);
+            dl->AddRectFilled(p0, p1, box, pal.radius);
+            float const trackHalf = z.marker + 3.f;
+            float const trackL = hitX - z.marker - 6.f;
+            ImVec4 const track =
+                pal.light ? mix(pal.surface, pal.ink, 0.07f) : mix(pal.surface, ImVec4(0.f, 0.f, 0.f, 1.f), 0.35f);
+            dl->AddRectFilled(ImVec2(trackL, cy - trackHalf), ImVec2(p1.x - 2.f, cy + trackHalf), u32(track, 0.88f));
+            dl->AddLine(ImVec2(trackL, cy - trackHalf), ImVec2(p1.x - 2.f, cy - trackHalf), u32(pal.line, 0.8f));
+            dl->AddLine(ImVec2(trackL, cy + trackHalf), ImVec2(p1.x - 2.f, cy + trackHalf), u32(pal.line, 0.8f));
+
+            // The hit marker's pulse: the verdict's color for a moment after a hit.
+            ImVec4 const markInk = pal.light ? pal.ink : ImVec4(1.f, 1.f, 1.f, 1.f);
+            float const age = (float)(realNow - v.flash.atReal);
+            bool const stray = v.flash.text.empty();
+            float const pulse = age >= 0.f && age < 0.2f ? 1.f - age / 0.2f : 0.f;
+            ImVec4 const vcol = verdictColor(v.flash.verdict, stray);
+            if (pulse > 0.f)
+                dl->AddCircleFilled(ImVec2(hitX, cy), z.marker * (1.f + 0.18f * pulse), u32(vcol, 0.30f * pulse), 0);
+
+            // The notes in view: from the earliest whose hold can still reach
+            // the left edge to just past the right one.
+            double const leftT = now - (hitX - trackL + z.wide) / pxPerSec;
+            double const rightT = now + (p1.x - hitX + z.wide) / pxPerSec;
+            auto const first = std::lower_bound(notes.begin(), notes.end(), leftT - v.maxHoldSec,
+                                                [](ln::Note const& n, double t) { return n.pressSec < t; });
+            size_t const from = (size_t)(first - notes.begin());
+            size_t to = from;
+            while (to < notes.size() && notes[to].pressSec <= rightT)
+                ++to;
+
+            // Passed notes leave just past the marker; the zone to its left
+            // is the judgment's.
+            dl->PushClipRect(ImVec2(trackL, p0.y), p1, true);
+            // Tails first, so every head sits on top.
+            for (size_t i = from; i < to; ++i) {
+                auto const& n = notes[i];
+                if (n.tail == ln::Note::Tail::None || n.releaseSec < leftT)
+                    continue;
+                auto const& r = results[i];
+                float xa = x(n.pressSec);
+                float const xb = x(n.releaseSec);
+                if (r.pressed)
+                    xa = std::max(xa, hitX);  // the part still to hold
+                if (r.released || xb <= xa)
+                    continue;
+                bool const held = v.holding == (int)i;
+                float const fade = r.missed ? 0.35f : 1.f;
+                if (n.tail == ln::Note::Tail::Slider) {
+                    float const half = z.red * 1.05f;
+                    ImVec4 const body = held ? shade(pal.accent, 0.15f) : mix(pal.muted, pal.surface, 0.25f);
+                    dl->AddRectFilled(ImVec2(xa, cy - half - 1.2f), ImVec2(xb, cy + half + 1.2f),
+                                      IM_COL32(0, 0, 0, (int)(140 * fade)), half);
+                    dl->AddRectFilled(ImVec2(xa, cy - half), ImVec2(xb, cy + half), u32(body, 0.92f * fade), half);
+                    dl->AddRect(ImVec2(xa, cy - half), ImVec2(xb, cy + half),
+                                IM_COL32(255, 255, 255, (int)(170 * fade)), half, 0, 1.2f);
+                } else {
+                    // A hold whose release isn't timed: a plain bar to hold
+                    // along (fainter when any release lived).
+                    bool const isFree = n.tail == ln::Note::Tail::FreeHold;
+                    float const half = z.red * (isFree ? 0.35f : 0.55f);
+                    ImVec4 const body = held ? pal.accent : pal.muted;
+                    dl->AddRectFilled(ImVec2(xa, cy - half), ImVec2(xb, cy + half),
+                                      u32(body, (isFree ? 0.45f : 0.75f) * fade), half);
+                    if (!isFree)
+                        dl->AddCircleFilled(ImVec2(xb, cy), half * 1.6f, u32(body, 0.9f * fade), 0);
+                }
+            }
+            // Heads, latest first so the next note to hit is on top; a
+            // slider's end goes under its own head.
+            for (size_t j = to; j-- > from;) {
+                auto const& n = notes[j];
+                auto const& r = results[j];
+                float const fade = r.missed ? 0.32f : 1.f;
+                if (n.tail == ln::Note::Tail::Slider && !r.released) {
+                    float const xb = x(n.releaseSec);
+                    if (xb >= trackL - z.wide && xb <= p1.x + z.wide)
+                        drawHead(dl, ImVec2(xb, cy), n.releaseTier, z, true, n.player2, fade, 0.86f);
+                }
+                if (r.pressed)
+                    continue;  // hit: gone, as in taiko
+                float const xa = x(n.pressSec);
+                if (xa < trackL - z.wide || xa > p1.x + z.wide)
+                    continue;
+                drawHead(dl, ImVec2(xa, cy), n.pressTier, z, false, n.player2, fade, 1.f);
+            }
+            dl->PopClipRect();
+
+            // The marker itself, an empty circle (white, or the ink on a
+            // light theme), and its inner target.
+            float const ring = z.marker * (1.f + 0.12f * pulse);
+            dl->AddCircle(ImVec2(hitX, cy), ring + 1.5f, IM_COL32(0, 0, 0, 120), 0, 4.5f);
+            dl->AddCircle(ImVec2(hitX, cy), ring, u32(pulse > 0.f ? mix(markInk, vcol, pulse) : markInk, 0.95f), 0,
+                          2.6f + 1.6f * pulse);
+            dl->AddCircle(ImVec2(hitX, cy), z.red, u32(markInk, 0.35f), 0, 1.2f);
+
+            // The judgment in the zone left of the marker, fading out.
+            float const zoneR = trackL - 4.f;
+            if (set.judgments && !stray && age >= 0.f && age < 0.9f) {
+                float const a = age < 0.5f ? 1.f : 1.f - (age - 0.5f) / 0.4f;
+                UseFont f(Font::Strong);
+                char const* text = v.flash.text.c_str();
+                ImVec2 const ts = ImGui::CalcTextSize(text);
+                float const lift = std::min(age, 0.15f) * 20.f;
+                ImVec2 const at(std::max(p0.x + 4.f, zoneR - ts.x),
+                                cy - ts.y * 0.5f - (v.flash.release ? 6.f : 0.f) - lift + 3.f);
+                dl->AddText(ImVec2(at.x + 1.f, at.y + 1.f), IM_COL32(0, 0, 0, (int)(160 * a)), text);
+                dl->AddText(at, u32(vcol, a), text);
+                if (v.flash.release) {
+                    UseFont sm(Font::Small);
+                    ImVec2 const rs = ImGui::CalcTextSize("release");
+                    dl->AddText(ImVec2(std::max(p0.x + 4.f, zoneR - rs.x), at.y + ts.y - 1.f), u32(pal.muted, a),
+                                "release");
+                }
+            }
+            // The last few hits as ticks on a small scale along the bottom of
+            // the zone: the center is the macro's frame, a step a frame.
+            if (v.recent && !v.recent->empty() && h >= 44.f) {
+                float const sy = p1.y - 7.f;
+                float const sx = p0.x + (zoneR - p0.x) * 0.5f + 2.f;
+                float const step = std::min(5.f, (zoneR - p0.x - 8.f) / 12.f);
+                dl->AddLine(ImVec2(sx - step * 5.5f, sy), ImVec2(sx + step * 5.5f, sy), u32(pal.line), 1.f);
+                dl->AddLine(ImVec2(sx, sy - 4.f), ImVec2(sx, sy + 3.f), u32(pal.muted), 1.f);
+                for (auto const& rc : *v.recent) {
+                    float const old = (float)std::clamp((realNow - rc.atReal) / 6.0, 0.0, 1.0);
+                    float const tx = sx + step * (float)std::clamp((int)rc.delta, -5, 5);
+                    dl->AddLine(ImVec2(tx, sy - 5.f), ImVec2(tx, sy + 1.f),
+                                u32(verdictColor(rc.verdict, false), 1.f - 0.75f * old), 2.f);
+                }
+            }
+            dl->AddRect(p0, p1, u32(pal.line), pal.radius);
+        }
+
+        // The lane on the Click Trainer card: drag it to skim, as the bar.
+        void drawLane(Kind k) {
+            auto s = tr::state(k);
+            auto& ps = page(k);
+            bool const following = tr::followsLevel(k);
+            float const h = std::round(64.f * ln::settings().size);
+            float const w = kit::Avail();
+            ImVec2 const p0 = ImGui::GetCursorScreenPos();
+            ImGui::InvisibleButton("##lane", ImVec2(w, h));
+            bool const hovered = ImGui::IsItemHovered();
+            bool const active = ImGui::IsItemActive();
+            if (active && !following) {
+                if (!ps.dragging) {
+                    ps.dragging = true;
+                    ps.resumeAfterDrag = !s.paused;
+                    tr::setPaused(k, true);
+                }
+                double const tps = s.macro.clickBarTps > 0.0 ? s.macro.clickBarTps : 240.0;
+                double const leadSec = std::max(4, ln::settings().leadTicks) / tps;
+                double const pxPerSec = std::max(1.f, w * 0.75f) / leadSec;
+                float const dx = ImGui::GetIO().MouseDelta.x;
+                if (dx != 0.f)
+                    tr::seek(k, s.posSec - dx / pxPerSec);
+            } else if (ps.dragging) {
+                ps.dragging = false;
+                if (ps.resumeAfterDrag)
+                    tr::setPaused(k, false);
+            }
+            if (hovered && following)
+                ImGui::SetTooltip("The lane follows the level while it's open.");
+            else if (hovered && !active)
+                ImGui::SetTooltip("Drag to skim.");
+            drawLaneBox(k, ImGui::GetWindowDrawList(), p0, ImVec2(w, h), false);
+        }
+
+        // What the colors and sizes mean, under the lane.
+        void laneLegend(Kind k) {
+            auto const& pal = look().pal;
+            auto const v = ln::view(k);
+            UseFont f(Font::Small);
+            NoteSizes const z = noteSizes(40.f);
+            auto* dl = ImGui::GetWindowDrawList();
+            struct Item {
+                LTier tier;
+                const char* words;
+            };
+            Item const items[] = {{LTier::One, "1 frame"},
+                                  {LTier::Two, "2 frames"},
+                                  {LTier::Three, "3 frames"},
+                                  {LTier::Wide, "4+ or any"},
+                                  {LTier::Unknown, "not counted"}};
+            ImVec2 p = ImGui::GetCursorScreenPos();
+            float const startX = p.x;
+            float const lineH = std::max(z.wide * 2.f + 4.f, ImGui::GetTextLineHeight());
+            for (auto const& it : items) {
+                float const r = outerRadius(it.tier, z);
+                ImVec2 const c(p.x + r + 2.f, p.y + lineH * 0.5f);
+                drawHead(dl, c, it.tier, z, false, false, 1.f, 1.f);
+                ImVec2 const ts = ImGui::CalcTextSize(it.words);
+                dl->AddText(ImVec2(c.x + r + 5.f, c.y - ts.y * 0.5f), u32(pal.muted), it.words);
+                p.x = c.x + r + 5.f + ts.x + 14.f;
+            }
+            ImGui::Dummy(ImVec2(std::max(1.f, p.x - startX), lineH));
+            if (v.notes && !v.notes->empty() && v.counted == 0)
+                kit::Hint("No windows are counted for this macro yet, so its notes are the plain accent color and a "
+                          "press is judged by the OK range below. Count them on the Calculate page, then press Reload "
+                          "at the top.");
+        }
+
+        // The lane over the trainer's level while you play it.
+        void laneOverlay(Kind k) {
+            auto s = tr::state(k);
+            auto const& set = ln::settings();
+            if (set.style != ln::Style::Lane || !set.inLevel || !s.barEnabled || s.macro.clickIntervalsSec.empty() ||
+                !tr::followsLevel(k) || tr::busy())
+                return;
+            // On the trainer's own page, open, the card shows it.
+            if (s.pageVisible)
+                return;
+            ImGuiIO const& io = ImGui::GetIO();
+            float const h = std::round(64.f * set.size);
+            float const w = std::clamp(io.DisplaySize.x * set.levelWidth, 260.f, std::max(260.f, io.DisplaySize.x - 16.f));
+            float const y = set.place == ln::Place::Top ? io.DisplaySize.y * 0.085f : io.DisplaySize.y * 0.97f - h;
+            // The background list: over the game, under every window, and it
+            // never takes a click from the game.
+            drawLaneBox(k, ImGui::GetBackgroundDrawList(), ImVec2((io.DisplaySize.x - w) * 0.5f, y), ImVec2(w, h),
+                        true);
+            ln::markShownInLevel(k);
+        }
+
         // ------------------------------------------------------------ cards
+
+        // The lane's own rows: how it scrolls, how big it is, and whether it
+        // shows over the level.
+        void laneSettings() {
+            auto& set = ln::settings();
+            bool changed = false;
+            changed |= kit::SliderRow("Lead", "How many ticks ahead of the hit marker the lane shows. Fewer is "
+                                              "faster scrolling.",
+                                      &set.leadTicks, 24, 960, "%d ticks");
+            changed |= kit::SliderRow("Lane size", nullptr, &set.size, 0.6f, 2.f, "%.2fx");
+            changed |= kit::SwitchRow("Judgments", "PERFECT, EARLY 1f, LATE 2f or MISS by the marker as you hit",
+                                      &set.judgments);
+            changed |= kit::SwitchRow("Show in the level", "The lane over the trainer's level while you play it, "
+                                                            "with the menu closed",
+                                      &set.inLevel);
+            if (set.inLevel) {
+                changed |= kit::SliderRow("Width in the level", nullptr, &set.levelWidth, 0.3f, 1.f, "%.2f");
+                int place = (int)set.place;
+                const char* const places[] = {"Top", "Bottom"};
+                if (kit::DropdownRow("Place in the level", nullptr, &place, places, 2)) {
+                    set.place = (ln::Place)place;
+                    changed = true;
+                }
+            }
+            if (changed)
+                ln::saveSettings();
+        }
 
         void clickTrainerCard(Kind k) {
             auto* gb = GucciEngine::get();
@@ -332,7 +701,19 @@ namespace gucci::ui::pages {
                 "and each of its presses you answer gets a {} line at its start.",
 #endif
                 look().pal.light ? "dark" : "white", look().pal.hitName);
-            kit::BeginCard("Click Trainer", caption.c_str());
+            bool const laneCaption = ln::settings().style == ln::Style::Lane;
+            kit::BeginCard("Click Trainer",
+                           laneCaption ?
+#if defined(GEODE_IS_MOBILE)
+                                       "The macro's clicks scroll into the hit marker as notes, each sized by how "
+                                       "tight Calculate counted its window. Hold the Tap button under it along with "
+                                       "them, or play the level: each press is judged as it lands."
+#else
+                                       "The macro's clicks scroll into the hit marker as notes, each sized by how "
+                                       "tight Calculate counted its window. Tap space, up or W along with them, or "
+                                       "play the level: each press is judged as it lands."
+#endif
+                                       : caption.c_str());
             {
                 // A cheat only while it follows the trainer's own level.
                 kit::LegitGate gate(tr::followsLevel(k));
@@ -350,7 +731,14 @@ namespace gucci::ui::pages {
                 return;
             }
 
-            drawBar(k);
+            bool const laneStyle = ln::settings().style == ln::Style::Lane;
+            if (laneStyle) {
+                drawLane(k);
+                kit::Gap(0.2f);
+                laneLegend(k);
+            } else {
+                drawBar(k);
+            }
             kit::Gap(0.3f);
 
             {
@@ -389,11 +777,56 @@ namespace gucci::ui::pages {
                                        "looping on, the bar loops the looped segments.",
                                &s.barLoop))
                 tr::saveSettings(k);
-            if (kit::SliderRow("Window", "How much of the macro the bar shows at once", &s.barWindowSec, 0.5f, 10.f,
-                               "%.1f s"))
+            {
+                int style = (int)ln::settings().style;
+                const char* const styles[] = {"Lane", "Classic"};
+                if (kit::DropdownRow("Style", "Lane: notes scroll into a hit marker, sized by their window. "
+                                              "Classic: the old bar, the macro's clicks over yours.",
+                                     &style, styles, 2)) {
+                    ln::settings().style = (ln::Style)style;
+                    ln::saveSettings();
+                }
+            }
+            if (laneStyle)
+                laneSettings();
+            else if (kit::SliderRow("Window", "How much of the macro the bar shows at once", &s.barWindowSec, 0.5f,
+                                    10.f, "%.1f s"))
                 tr::saveSettings(k);
+            // Click Between Frames sits out while the bot records or plays
+            // (GucciEngine::syncInputMods), so a CBF player trains without it
+            // then: the trainer lane's measurer found that's the likeliest
+            // "my clicks feel late".
+            if (!gb->inputModsPaused.empty())
+                kit::Note(fmt::format("{} is paused while the bot is on Record or Play, so your presses land on "
+                                      "tick edges. Set the bot to Idle to train with it.",
+                                      gb->inputModsPaused)
+                              .c_str(),
+                          Tone::Warn);
 
             kit::Section("Your timing");
+            if (laneStyle) {
+                auto const v = ln::view(k);
+                kit::Chip(fmt::format("On the frame {}", v.tally.perfect).c_str(), Tone::Good);
+                ImGui::SameLine();
+                kit::Chip(fmt::format("In the window {}", v.tally.inside).c_str(), Tone::Warn);
+                ImGui::SameLine();
+                kit::Chip(fmt::format("Outside {}", v.tally.outside).c_str(), Tone::Bad);
+                ImGui::SameLine();
+                kit::Chip(fmt::format("Missed {}", v.tally.missed).c_str(), Tone::Muted);
+                kit::Hint("A press is judged against the note it lands nearest, in ticks off the macro's frame. In "
+                          "the window means the count says it still lives there. A slider's release is judged too. "
+                          "Notes with no counted window use the OK range below. The tally starts over with each "
+                          "attempt.");
+                bool okChanged =
+                    kit::SliderRow("OK within", "For notes with no counted window", &gb->clickIndicatorOkMs, 1.f,
+                                   200.f, "%.0f ms");
+                if (okChanged) {
+                    gb->clickIndicatorOkMs = std::max(gb->clickIndicatorOkMs, gb->clickIndicatorPerfectMs);
+                    tr::saveScoreWindows();
+                }
+                kit::EndCard();
+                return;
+            }
             auto const& sc = s.score;
             if (sc.hasLastReading) {
                 int const d = sc.lastDeltaFrames;
@@ -1092,6 +1525,12 @@ namespace gucci::ui::pages {
 
     void trainerVideoOverlay() {
         videoBar(Kind::Any);
+    }
+
+    // The trainer lane over its level, menu open or not (ui/shell.cpp).
+    void trainerLaneOverlay() {
+        laneOverlay(Kind::Jupiter);
+        laneOverlay(Kind::Any);
     }
 
     void anyTrainer() {

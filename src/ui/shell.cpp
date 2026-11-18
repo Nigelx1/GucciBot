@@ -4369,6 +4369,8 @@ namespace gucci::ui {
                 return;
             }
             drawOverlay();
+            // The trainer lane over the trainer's level, menu open or not.
+            pages::trainerLaneOverlay();
             // Video Mode: the click bar over the video instead of the menu,
             // open or closed (the overlay has the way out), and the Video Mode
             // card's settings, folded, over the top of it (the page that

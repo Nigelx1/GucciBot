@@ -160,7 +160,7 @@ class $modify(GucciKeys, CCKeyboardDispatcher) {
         // The trainers' click bars take the player's own jump key while they
         // run away from a level (in one, GD's handleButton reports it).
         if (live && !repeat && jumpKey(key))
-            trainers::onKeyInput(down);
+            trainers::onKeyInput(down, timestamp);
 
         // Every key goes on to the game as well, bound or not. (Whether one was
         // used only mattered to the autoclicker's old key tracking, which is

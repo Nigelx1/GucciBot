@@ -34,6 +34,7 @@ namespace gucci::ui::pages {
     void solarArtIdle(bool keep);
     void solarLookApply();   // ... her gems' blue, her card edges, the framed page and scroll grab (after look().refresh())
     void gardenBackdrop();   // pages/garden_backdrop.cpp: RondoBot's scene, the Garden's parquet behind the menu
+    void trainerLaneOverlay();   // the trainer lane over its level (pages/trainer_pages.cpp)
     void jupiterVideoOverlay();  // Video Mode: the JMF click bar over the video, in place of the menu
     void trainerVideoOverlay();  // ... the Trainer's, over the video you picked
     void anyTrainer();      // pages/trainer_pages.cpp: Trainer (any saved macro)

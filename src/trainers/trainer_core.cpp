@@ -5,6 +5,9 @@
 #include "core/geode_compat.hpp" // gucci::stdPath
 #include "hacks/legit.hpp"
 #include "trainers/click_indicators.hpp"
+#include "trainers/lane.hpp"
+#include "replay/scbf_input.hpp"
+#include "audio/clicks.hpp"
 #include "core/bot_switch.hpp"
 #include "trainers/jupiterghost.hpp"
 #include "trainers/trainerghost.hpp"
@@ -103,7 +106,8 @@ namespace gucci::trainers {
         // Drops the player's clicks at or after `fromSec` and frees the macro
         // clicks there for matching again, as if that stretch had not been
         // played. The tallies start over: they describe one go at it.
-        void rewindComparison(State& s, double fromSec) {
+        void rewindComparison(Kind k, State& s, double fromSec) {
+            lane::rewind(k, fromSec);
             double const cut = fromSec - 1e-6;
             std::erase_if(s.myPresses, [&](double t) { return t >= cut; });
             std::erase_if(s.myReleases, [&](double t) { return t >= cut; });
@@ -126,6 +130,8 @@ namespace gucci::trainers {
             (down ? s.myPresses : s.myReleases).push_back(atSec);
             if (!s.macro.clickIntervalsSec.empty())
                 GucciEngine::get()->scoreRealClick(s.macro.clickIntervalsSec, s.score, atSec, down, tps);
+            // The lane judges it too, against the note it answers (trainers/lane.hpp).
+            lane::onInput(k, down, atSec, tps);
         }
 
         // ---- segment text
@@ -451,6 +457,7 @@ namespace gucci::trainers {
         s.myPresses.clear();
         s.myReleases.clear();
         s.score.reset(s.macro.clickIntervalsSec.size());
+        lane::clear(k);
     }
 
     void seek(Kind k, double sec) {
@@ -459,7 +466,7 @@ namespace gucci::trainers {
         auto s = state(k);
         sec = std::clamp(sec, 0.0, duration(k));
         if (sec < s.posSec)
-            rewindComparison(s, sec);
+            rewindComparison(k, s, sec);
         s.posSec = sec;
     }
 
@@ -535,13 +542,41 @@ namespace gucci::trainers {
                 record(k, down, t, gameTps());
     }
 
-    void onKeyInput(bool down) {
+    void onKeyInput(bool down, double timestamp) {
+        // GucciBot (2026-11-17): stamped with the key's own time, not the
+        // bar's as of the start of the frame before (the trainer lane's
+        // measurer found every press filed one frame early that way). The
+        // event's time is on the clock GD's input stamps use
+        // (scbf::clockSeconds); a stamp that isn't (none, or from a
+        // synthetic key) is taken as now.
+        double age = 0.0;
+        if (timestamp > 0.0) {
+            double const a = scbf::clockSeconds() - timestamp;
+            if (a >= 0.0 && a < 0.25)
+                age = a;
+        }
+        double const when = lane::steadyNow() - age;
+        bool sounded = false;
         for (Kind k : {Kind::Jupiter, Kind::Any}) {
             auto s = state(k);
             if (!s.pageVisible || !s.barEnabled || s.paused || followsLevel(k))
                 continue;
-            record(k, down, s.posSec, macroTps(s));
+            record(k, down, lane::at(k, when), macroTps(s));
+            // In a level GD's own click plays (triggerClickAudio); here, the
+            // lane's press clicks when click sounds are on.
+            if (down && !sounded && lane::settings().style == lane::Style::Lane && clicks::settings().enabled) {
+                clicks::playClick(false);
+                sounded = true;
+            }
         }
+    }
+
+    bool busy() {
+        return levelBusy();
+    }
+
+    void injectForTest(Kind k, bool down, double atSec) {
+        record(k, down, atSec, followsLevel(k) ? gameTps() : macroTps(state(k)));
     }
 
     // ------------------------------------------------------------ the level, per tick
@@ -568,7 +603,7 @@ namespace gucci::trainers {
             auto s = state(k);
             double const last = g_lastLevelSec[i];
             if (last >= 0.0 && t < last - 1e-9)
-                rewindComparison(s, t);
+                rewindComparison(k, s, t);
 
             double a = 0.0, b = 0.0;
             bool const looping = s.loopEnabled && loopRange(k, a, b) && !gb->isPlaying() && pl->m_isPracticeMode;
