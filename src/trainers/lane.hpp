@@ -39,7 +39,7 @@ namespace gucci::trainers::lane {
         int leadTicks = 300;
         float size = 1.f;          // the lane's height: 1x = 12% of the screen's height
         bool inLevel = true;       // drawn over the trainer's level while you play it
-        float levelWidth = 0.64f;  // of the screen's width, in the level
+        float levelWidth = 0.68f;  // of the screen's width, in the level
         Place place = Place::Auto;  // in the level
         bool judgments = true;     // the PERFECT / EARLY 1f words
     };
