@@ -970,7 +970,9 @@ namespace gucci::ui::search {
     } // namespace
 
     bool ctrlFIsMine(bool cocosCtrl) {
-        return menuHasKeyboard() && (cocosCtrl || ImGui::GetIO().KeyCtrl);
+        // Not ImGui's Ctrl as well: on Geode 6 it sticks down after Ctrl is let
+        // go, and a plain F then opened the box (ui::ctrlHeld).
+        return menuHasKeyboard() && cocosCtrl;
     }
 
     void focusBox() {

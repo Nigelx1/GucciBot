@@ -25,10 +25,21 @@ namespace gucci::ui::touch {
     void letGoOfKeyboard(bool always) {
         bool const touched = std::exchange(g_gameTouched, false);
         ImGuiContext* g = ImGui::GetCurrentContext();
-        if (!g || !(always || (touched && g->ActiveId != 0)))
+        // GucciBot (2026-11-18): after a click on the game the menu lets go of
+        // its focus too, with nothing active as well, as ImGui does for a
+        // click on nothing. Before, a window kept it: a click in the Frame
+        // Editor, then on GD's level editor, and the Frame Editor still took
+        // Ctrl+Z from GD (ui/pages.hpp, editorCtrlKey), as Ctrl+F went to the
+        // menu's search.
+        if (!g || !(always || touched))
             return;
-        ImGui::ClearActiveID();
+        if (g->ActiveId != 0)
+            ImGui::ClearActiveID();
         ImGui::SetWindowFocus(nullptr);
+    }
+
+    void noteGameTouch() {
+        g_gameTouched = true;
     }
 
 } // namespace gucci::ui::touch
