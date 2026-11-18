@@ -824,6 +824,7 @@ class $modify(GB7PlayLayer, PlayLayer) {
         // below runs the scheduler, and a tool that reset the level from there
         // crashed GD (mcp::Server::Hold).
         gucci::mcp::Server::Hold mcpHold;
+        gucci::mcp::Server::Busy mcpBusy;  // and nothing queued for later ends the level here
         GucciEngine::get()->updater.m_resetCount++;
         // Presses still waiting for their tick belong to the attempt that
         // just ended.

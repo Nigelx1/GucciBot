@@ -4378,6 +4378,7 @@ namespace gucci::ui {
             // No Assistant Access tool runs inside the menu's frame: Calculate's
             // tick below steps and resets the level (mcp::Server::Hold).
             gucci::mcp::Server::Hold mcpHold;
+            gucci::mcp::Server::Busy mcpBusy;  // (mcp_server.hpp)
             // Assistant Access's menu probe (ui/probe.hpp): a frame a tool asked
             // for is captured from here to every return below. Nothing otherwise.
             probe::FrameGuard probeFrame;

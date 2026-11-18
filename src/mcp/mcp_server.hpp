@@ -120,6 +120,29 @@ namespace gucci::mcp {
             return m_hold > 0;
         }
 
+        // GucciBot (2026-11-18): inside a level reset or the menu's frame
+        // (where Calculate's tick steps and resets the level), which Hold
+        // covers too. Hold also covers every scheduler update, the place GD
+        // runs the main-thread queue from, so it can't tell work queued for
+        // later (gucci_quit_level's leave) whether this is a safe place; this
+        // can. A reset runs the scheduler for its checkpoint refresh, so a
+        // queued leave ran inside a Calculate test's reset, the run's Cancel
+        // then reset the level inside that reset, and GD crashed loading a
+        // checkpoint (2026-11-18 test pass, S5; crash log 18-44-15).
+        struct Busy {
+            Busy() {
+                ++Server::get()->m_busy;
+            }
+            ~Busy() {
+                --Server::get()->m_busy;
+            }
+            Busy(Busy const&) = delete;
+            Busy& operator=(Busy const&) = delete;
+        };
+        bool busy() const {
+            return m_busy > 0;
+        }
+
         void addTool(Tool t);
         std::vector<Tool> const& tools() const {
             return m_tools;
@@ -128,6 +151,7 @@ namespace gucci::mcp {
     private:
         Server() = default;
         int m_hold = 0;  // Hold; the game thread only
+        int m_busy = 0;  // Busy; the game thread only
         void listenLoop();
         std::string handleRequest(std::string const& body);
         matjson::Value callToolOnMainThread(std::string const& name, matjson::Value const& args);

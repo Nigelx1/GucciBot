@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-18-k (Calculate: the Leg trail goes when the run ends)"
+    "2026-11-18-l (Calculate: a canceled run keeps the saved windows file as it was)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
