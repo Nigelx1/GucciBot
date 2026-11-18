@@ -326,7 +326,43 @@ namespace gucci {
     }
 
     void GucciPracticeFix::clearPlatformer(bool full) {
-        m_platformerCheckpoints.clear();
+        // Silicate's clearPlatformer(true): each touched checkpoint is turned
+        // off again (so it can be taken on the next attempt) and the
+        // CheckpointObject storeCheckpoint retained is released. GucciBot's
+        // port only emptied the list, so every touched platformer checkpoint
+        // leaked and its flag could stay lit. Without `full` (a level loading,
+        // Silicate's clearPlatformer(false)) the list is only forgotten.
+        //
+        // Before the release, the checkpoint's own object comes out of the
+        // section storeCheckpoint put it in, the way removeCheckpoint does for
+        // a practice checkpoint. Sections hold plain pointers: released while
+        // still filed there, it was freed under GD's visibility pass, which
+        // crashed (access violation in GJBaseGameLayer::preUpdateVisibility,
+        // render test copy 2026-11-17, a platformer checkpoint cleared by a
+        // restart from the start, then the level played on). Silicate 1.1.0's
+        // clearPlatformer has the same gap.
+        auto* pl = full ? PlayLayer::get() : nullptr;
+        while (!m_platformerCheckpoints.empty()) {
+            if (full) {
+                auto& back = m_platformerCheckpoints.back();
+                if (back.second) {
+                    back.second->m_checkpointActivated = false;
+                    back.second->resetCheckpoint();
+                }
+                if (back.first) {
+                    if (auto* obj = back.first->m_physicalCheckpointObject; obj && pl) {
+                        pl->removeObjectFromSection(obj);
+                        if (obj->m_glowSprite) {
+                            obj->m_glowSprite->removeMeAndCleanup();
+                            obj->m_glowSprite = nullptr;
+                        }
+                        obj->removeMeAndCleanup();
+                    }
+                    back.first->release();
+                }
+            }
+            m_platformerCheckpoints.pop_back();
+        }
         m_shouldLoadPlatformer = false;
         if (full) {
             m_savedCheckpoints.clear();
