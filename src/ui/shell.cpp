@@ -1300,6 +1300,10 @@ namespace gucci::ui {
 
     } // namespace
 
+    void warnNotice(std::string const& text, float seconds) {
+        showNotice(text, NotificationIcon::Warning, seconds);
+    }
+
     // Import a macro's own path, for the picker's result and Assistant
     // Access's test hook (gucci_share import): the same note under Saved
     // macros either way.
@@ -1765,6 +1769,9 @@ namespace gucci::ui {
             saveNoteRow();
             if (!gb->startPosWarning.empty())
                 kit::Note(gb->startPosWarning.c_str(), Tone::Warn);
+            // Made on another GD version: it plays anyway, with this note.
+            if (auto const gdWarn = gb->replay.gdVersionWarning(); !gdWarn.empty() && !actions.empty())
+                kit::Note(gdWarn.c_str(), Tone::Warn);
             kit::EndCard();
 
             // Nigel's layout (2026-11-12): the tick rate and speed come first,
@@ -1860,6 +1867,14 @@ namespace gucci::ui {
                     auto const& f = report.findings[i];
                     s_checkReport += fmt::format("\nframe {}{}: {}", f.frame, f.lane >= 3 ? " (P2)" : "", macrocheck::name(f.problem));
                 }
+                // What it was made on, when the file says (2026-11-17).
+                if (!gb->replay.m_madeOnGd.empty())
+                    s_checkReport += fmt::format("\nMade on GD {}{}.", gb->replay.m_madeOnGd,
+                                                 gb->replay.m_madeWithGb.empty()
+                                                     ? std::string()
+                                                     : " with GucciBot " + gb->replay.m_madeWithGb);
+                if (auto const gdWarn = gb->replay.gdVersionWarning(); !gdWarn.empty())
+                    s_checkReport += "\n" + gdWarn;
             }
             // Deleting the macro picked in the list below (the loaded one). Two
             // presses, so a slip doesn't lose a run; its sidecars go too, or a

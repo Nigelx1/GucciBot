@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-17-b (Pathfinder: pf_fork_dual on by default, a mode portal stacked on a dual portal is a route fork)"
+    "2026-11-17-j (Platformer checkpoints: a death in normal play respawns at the last one, like plain GD)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
@@ -319,6 +319,17 @@ namespace gucci {
         // saved as GBR6_FROM_START_POS, which is what the Macro card's
         // start-position warning reads.
         bool m_recordedFromStartPos = false;
+        // What the macro was made on (2026-11-17): GD's version and
+        // GucciBot's, read from the file on load and written by Save. Empty =
+        // not known (a macro from before this, or converted from another
+        // bot), and stays so until something records on top of it. Recording
+        // and the pathfinders stamp this game's (stampMadeHere).
+        std::string m_madeOnGd;
+        std::string m_madeWithGb;
+        void stampMadeHere();
+        // The Macro card's note when the macro was made on another GD
+        // version; "" when it wasn't, or nobody knows.
+        std::string gdVersionWarning() const;
         void buildClickIntervals(double tps);
 
         float m_trainerBestX = 0.f;

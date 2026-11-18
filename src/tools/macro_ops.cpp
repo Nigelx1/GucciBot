@@ -453,6 +453,10 @@ namespace gucci::macroops {
             a.header.levelName != b.header.levelName)
             notes += "They were recorded on different levels ('" + a.header.levelName + "' and '" +
                      b.header.levelName + "'); the result says A's. ";
+        if (!a.header.gdVersion.empty() && !b.header.gdVersion.empty() &&
+            a.header.gdVersion != b.header.gdVersion)
+            notes += "They were made on different GD versions (" + a.header.gdVersion + " and " +
+                     b.header.gdVersion + "); the result says A's. ";
         if (a.header.rngSeed != b.header.rngSeed)
             notes += "They started with different random seeds; the result keeps A's, so random "
                      "triggers in B's part may play differently. ";

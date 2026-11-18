@@ -30,6 +30,11 @@ namespace gucci::ui {
     bool compactMode();
     void setCompactMode(bool on);
 
+    // A warning notification broken into lines that fit the screen (a Geode
+    // notification is one line, and a long one runs off both sides). Main
+    // thread only.
+    void warnNotice(std::string const& text, float seconds = 4.f);
+
     // ---- keybinds (virtual key codes as cocos reports them; 0 = unbound)
 
     struct Keys {

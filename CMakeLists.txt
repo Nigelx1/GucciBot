@@ -87,7 +87,10 @@ endif()
 # addresses in the Windows build of GD: x86-64 Windows only. No other platform
 # builds them (src/core/platform.hpp).
 if (WIN32)
-    CPMAddPackage("gh:cursey/safetyhook#main")
+    # Pinned to the commit main pointed at on 2026-11-17 (unchanged since
+    # 2026-06-20), the one CI and the local builds already used, so an
+    # upstream change can't alter the release build.
+    CPMAddPackage("gh:cursey/safetyhook#f44cc070a8340f2f26649553c49533475417304d")
     CPMAddPackage("gh:zyantific/zydis#bffbb61")
 endif()
 CPMAddPackage(

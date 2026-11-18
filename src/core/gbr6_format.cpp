@@ -363,6 +363,13 @@ namespace gucci {
         p2Inputs = GBR6Decoder::decode(p2Raw.data(), p2Raw.size(), true);
     }
 
+    std::string gdVersionWarning(std::string const& madeOn, std::string const& current) {
+        if (madeOn.empty() || current.empty() || madeOn == current)
+            return {};
+        return "This macro was made on GD " + madeOn + "; you're on GD " + current +
+               ". It may not play the same.";
+    }
+
     std::vector<uint8_t> GBR6File::serialize() const {
         std::vector<uint8_t> buf;
 
@@ -421,6 +428,19 @@ namespace gucci {
                 writeLE<uint32_t>(buf, t.frame);
                 writeLE<double>(buf, t.tps);
             }
+        }
+
+        // The extension tail (GBR6_EXT_MAGIC). Only when there is something
+        // to put in it, so a macro without a version is byte for byte what
+        // the format wrote before.
+        if (!header.gdVersion.empty() || !header.gbVersion.empty()) {
+            buf.insert(buf.end(), GBR6_EXT_MAGIC, GBR6_EXT_MAGIC + 4);
+            std::vector<uint8_t> chunk;
+            writeStr(chunk, header.gdVersion);
+            writeStr(chunk, header.gbVersion);
+            buf.insert(buf.end(), GBR6_CHUNK_GDVER, GBR6_CHUNK_GDVER + 4);
+            writeLE<uint32_t>(buf, static_cast<uint32_t>(chunk.size()));
+            buf.insert(buf.end(), chunk.begin(), chunk.end());
         }
 
         return buf;
@@ -499,6 +519,32 @@ namespace gucci {
                     // positive number is never handed to the engine.
                     if (std::isfinite(t.tps) && t.tps > 0.0)
                         f.tpsChanges.push_back(t);
+                }
+            }
+
+            // The extension tail. Anything wrong in it is ignored: the
+            // macro itself is already read, and loads as an old one would.
+            if (pos + 4 <= size && std::memcmp(data + pos, GBR6_EXT_MAGIC, 4) == 0) {
+                try {
+                    size_t p = pos + 4;
+                    while (p + 8 <= size) {
+                        char tag[4];
+                        std::memcpy(tag, data + p, 4);
+                        p += 4;
+                        uint32_t const len = readLE<uint32_t>(data, p, size);
+                        if (len > size - p)
+                            break;
+                        size_t const end = p + len;
+                        if (std::memcmp(tag, GBR6_CHUNK_GDVER, 4) == 0) {
+                            size_t q = p;
+                            std::string gd = readStr(data, q, end);
+                            std::string gbv = readStr(data, q, end);
+                            f.header.gdVersion = std::move(gd);
+                            f.header.gbVersion = std::move(gbv);
+                        }
+                        p = end;
+                    }
+                } catch (...) {
                 }
             }
 

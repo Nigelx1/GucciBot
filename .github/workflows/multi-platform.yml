@@ -96,7 +96,9 @@ jobs:
           m.gd['${{ matrix.config.gd }}'] = m.gd.win;
           fs.writeFileSync('mod.json', JSON.stringify(m, null, 4));"
 
-      - uses: geode-sdk/build-geode-mod@main
+      # Pinned to the commit main pointed at on 2026-11-17 (the one CI already
+      # ran), so an upstream change can't alter the release build.
+      - uses: geode-sdk/build-geode-mod@61a56c697aea9655e3f31c6c1b83870431f30434
         with:
           combine: true
           target: ${{ matrix.config.target }}
@@ -109,7 +111,9 @@ jobs:
     needs: [build]
 
     steps:
-      - uses: geode-sdk/build-geode-mod/combine@main
+      # Pinned to the commit main pointed at on 2026-11-17 (the one CI already
+      # ran), so an upstream change can't alter the release build.
+      - uses: geode-sdk/build-geode-mod/combine@61a56c697aea9655e3f31c6c1b83870431f30434
         id: build
 
       - uses: actions/upload-artifact@v4
