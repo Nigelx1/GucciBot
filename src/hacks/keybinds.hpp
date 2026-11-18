@@ -13,4 +13,9 @@ namespace gucci::keybinds {
     uint32_t handedOn(int keyCode);
     uint32_t kept(int keyCode);
 
+    // Ctrl is down on the game's keyboard (ui::ctrlHeld reads it). Geode 6 on
+    // Windows: what GucciBot's own KeyboardInputEvent listener saw; elsewhere
+    // the keyboard dispatcher's modifier. false on iOS.
+    bool ctrlDown();
+
 } // namespace gucci::keybinds

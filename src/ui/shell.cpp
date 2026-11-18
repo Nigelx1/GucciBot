@@ -7,6 +7,7 @@
 #include "tools/share_bundle.hpp"
 #include "core/platform.hpp"
 #include "core/setup_check.hpp"
+#include "hacks/keybinds.hpp"
 #include "hacks/legit.hpp"
 #include "hacks/safemode.hpp"
 #include "ui/ui.hpp"
@@ -335,19 +336,23 @@ namespace gucci::ui {
     }
 
     bool ctrlHeld() {
+        // The game keyboard's Ctrl (hacks/keybinds.hpp, ctrlDown), not ImGui's:
+        // on Windows ImGui never sees Ctrl go down on Geode 5, and on Geode 6
+        // its Ctrl sticks down after Ctrl is let go (imgui-cocos hands it the
+        // modifiers of every key going up, and Geode counts Ctrl as held on
+        // the Ctrl key's own release), so the next plain Z was an undo.
+        if (keybinds::ctrlDown())
+            return true;
+#if !defined(GEODE_IS_WINDOWS)
+        // Off Windows, as before (imgui-cocos's handling there is unread).
         if (ImGui::GetCurrentContext() && ImGui::GetIO().KeyCtrl)
             return true;
-#if !defined(GEODE_IS_IOS)  // no keyboard dispatcher binding there
-        if (auto* kb = CCKeyboardDispatcher::get()) {
-            if (kb->getControlKeyPressed())
-                return true;
-#if defined(GEODE_IS_MACOS)
-            // Cmd+Z on a Mac. Not seen on one: whether cocos keeps Cmd apart
-            // from Control there is unread, so either counts.
-            if (kb->getCommandKeyPressed())
-                return true;
 #endif
-        }
+#if defined(GEODE_IS_MACOS)
+        // Cmd+Z on a Mac. Not seen on one: whether cocos keeps Cmd apart
+        // from Control there is unread, so either counts.
+        if (auto* kb = CCKeyboardDispatcher::get(); kb && kb->getCommandKeyPressed())
+            return true;
 #endif
         return false;
     }

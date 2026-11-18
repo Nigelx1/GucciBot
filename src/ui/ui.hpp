@@ -67,12 +67,11 @@ namespace gucci::ui {
     bool capturingKey();
 
     // Ctrl is held (on a Mac, Cmd counts too), for a Ctrl-click or a Ctrl key
-    // in the menu. ImGui's own io.KeyCtrl isn't enough on its own: imgui-cocos
-    // hands ImGui a key going down only while ImGui already wants the keyboard
-    // (a text box being typed in), and ImGui 1.91 builds KeyCtrl from the keys
-    // it was handed, so with no box active it never sees Ctrl go down. This
-    // also reads the game's keyboard dispatcher, whose modifiers Geode sets
-    // right before every key it hands on (updateModifierKeys).
+    // in the menu, as the game's keyboard has it (hacks/keybinds.hpp,
+    // ctrlDown). Not ImGui's io.KeyCtrl on Windows: imgui-cocos hands ImGui a
+    // key going down only while ImGui already wants the keyboard (a text box
+    // being typed in), so on Geode 5 it never sees Ctrl go down, and on
+    // Geode 6 its Ctrl sticks down after Ctrl is let go.
     bool ctrlHeld();
 
     // Human-readable name of a key code ("Left Alt", "F5", "Unbound").

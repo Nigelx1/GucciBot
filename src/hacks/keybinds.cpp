@@ -148,6 +148,67 @@ namespace {
 
 } // namespace
 
+#if GB_GEODE6 && defined(GEODE_IS_WINDOWS)
+// Ctrl as the keyboard has it, on Geode 6 for Windows (keybinds.hpp,
+// ctrlDown). Neither of the other two places to read it can be trusted there
+// (Geode 6.0.0-alpha.2 loader/src/platform/windows/input.cpp,
+// handleKeyboardEvent; imgui-cocos 934958c src/hooks.cpp):
+// - ImGui's Ctrl sticks down after Ctrl is let go: Geode puts Control in the
+//   modifiers of a Ctrl key's own event, its release too, and imgui-cocos
+//   hands ImGui those modifiers on every key going up.
+// - The dispatcher's misses a release imgui-cocos takes (while ImGui wants
+//   the keyboard, a widget held or a box typed in): Geode sets the
+//   dispatcher's modifiers only for a key it hands on.
+// So this listens where every key arrives first, KeyboardInputEvent, ahead of
+// imgui-cocos (a lower number goes first), and never stops a key. A Ctrl key
+// says itself whether it's down; any other key carries Geode's own record of
+// the modifiers held (its KeyStateTracker), which puts the two right again.
+namespace {
+    bool g_ctrlLeft = false, g_ctrlRight = false;
+}
+
+$execute {
+    KeyboardInputEvent().listen(
+        [](KeyboardInputData& d) {
+            bool const down = d.action != KeyboardInputData::Action::Release;
+            switch (d.key) {
+                case enumKeyCodes::KEY_LeftControl:
+                case enumKeyCodes::KEY_Control:
+                    g_ctrlLeft = down;
+                    break;
+                case enumKeyCodes::KEY_RightContol:
+                    g_ctrlRight = down;
+                    break;
+                default:
+                    if (!static_cast<bool>(d.modifiers & KeyboardModifier::Control))
+                        g_ctrlLeft = g_ctrlRight = false;
+                    else if (!g_ctrlLeft && !g_ctrlRight)
+                        g_ctrlLeft = true;
+                    break;
+            }
+            return ListenerResult::Propagate;
+        },
+        -1000)
+        .leak();
+}
+
+bool gucci::keybinds::ctrlDown() {
+    return g_ctrlLeft || g_ctrlRight;
+}
+#else
+bool gucci::keybinds::ctrlDown() {
+#if defined(GEODE_IS_IOS)  // no keyboard dispatcher binding there
+    return false;
+#else
+    // Geode 5 sets the dispatcher's modifiers right before every key it hands
+    // on, and on Windows imgui-cocos takes keys only after that, inside
+    // dispatchKeyboardMSG; a lost focus lets go of every key through it too.
+    auto* kb = CCKeyboardDispatcher::get();
+    return kb && kb->getControlKeyPressed();
+#endif
+}
+#endif
+
 uint32_t gucci::keybinds::handedOn(int keyCode) {
     return keyCode > 0 && keyCode < 256 ? g_handedOn[keyCode] : 0;
 }

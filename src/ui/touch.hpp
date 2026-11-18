@@ -16,8 +16,12 @@ namespace gucci::ui::touch {
     // or tap that went to the game, the text box being typed in lets go (and
     // with it the keyboard, and on a phone the on-screen one); with `always`,
     // whatever ImGui has active or focused lets go regardless (the menu just
-    // closed).
+    // closed). After a click on the game no window keeps the focus either.
     void letGoOfKeyboard(bool always);
+    // Assistant Access (mcp/keys_tool.cpp): as if a click had just gone to
+    // the game. A hidden test game's ImGui has the real cursor, so a real
+    // click there can't be made.
+    void noteGameTouch();
 
     // Once a frame, before any window is drawn: a finger that goes down on a
     // window and moves up or down by more than a few units scrolls the window

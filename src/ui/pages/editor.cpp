@@ -288,9 +288,8 @@ namespace gucci::ui::pages {
         }
 
         // A click on a bar with Ctrl held puts it in or takes it out of the
-        // selection. True when Ctrl was held (ui::ctrlHeld: ImGui's Ctrl or
-        // the game keyboard's, which is the only one a real keyboard sets
-        // while no text box is active).
+        // selection. True when Ctrl was held (ui::ctrlHeld: the game
+        // keyboard's Ctrl, the only one that's right on both Geode versions).
         bool ctrlClickBar(State& s, uint32_t key) {
             if (!ctrlHeld())
                 return false;
