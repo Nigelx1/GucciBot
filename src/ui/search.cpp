@@ -811,6 +811,11 @@ namespace gucci::ui::search {
         auto* g = ImGui::GetCurrentContext();
         // Ctrl+F puts the cursor in it, when nothing else is being typed in
         // and the menu has the keyboard (its window or a child is focused).
+        // A real keyboard's Ctrl+F comes through focusBox() (keybinds.cpp
+        // reads cocos's Ctrl): imgui-cocos never hands ImGui those keys going
+        // down while no box has the keyboard, on Geode 5 and 6 alike. The
+        // check here takes a Ctrl+F put straight into ImGui (Assistant
+        // Access's gucci_search key ctrl_f).
         bool const menuFocused = ImGui::GetFrameCount() == g_focusOverrideFrame
                                      ? g_focusOverride
                                      : ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
@@ -958,9 +963,19 @@ namespace gucci::ui::search {
         g_clearPending = true;
     }
 
-    bool ctrlFIsMine() {
-        ImGuiContext* g = ImGui::GetCurrentContext();
-        return g && ImGui::GetIO().KeyCtrl && ImGui::GetFrameCount() - g_menuFocusedFrame <= 1;
+    namespace {
+        bool menuHasKeyboard() {
+            return ImGui::GetCurrentContext() && ImGui::GetFrameCount() - g_menuFocusedFrame <= 1;
+        }
+    } // namespace
+
+    bool ctrlFIsMine(bool cocosCtrl) {
+        return menuHasKeyboard() && (cocosCtrl || ImGui::GetIO().KeyCtrl);
+    }
+
+    void focusBox() {
+        if (menuHasKeyboard() && !ImGui::GetIO().WantTextInput)
+            g_focusPending = true;
     }
 
     bool takeBack() {

@@ -263,7 +263,11 @@ int main() {
         CHECK(gdVersionWarning("2.2081", "2.2081").empty());
         CHECK(gdVersionWarning("", "2.2091").empty());
         CHECK(gdVersionWarning("2.2081", "2.2091") ==
-              "This macro was made on GD 2.2081; you're on GD 2.2091. It may not play the same.");
+              "This macro was made on GD 2.2081. It should play the same on GD 2.2091; double-check frame-perfect "
+              "slope parts.");
+        CHECK(gdVersionWarning("2.2091", "2.2081") ==
+              "This macro was made on GD 2.2091. It should play the same on GD 2.2081; double-check frame-perfect "
+              "slope parts.");
     }
     std::printf(fails ? "gbr6 sub-tick: %d FAILED\n" : "gbr6 sub-tick: all passed\n", fails);
     return fails ? 1 : 0;

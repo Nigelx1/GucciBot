@@ -252,6 +252,19 @@ How good is it? In Claude's test runs it beat Stereo Madness, Clubstep, Theory o
 ![The Pathfinder page](images/howto/pathfinder.png)
 *The Pathfinder page, set to Search (old) and Absense, ready to Start.*
 
+### Queue: leave it running on a list of levels (new in 2.0)
+
+Juice's idea: give it a list of levels, leave your PC on, and come back to macros. The **Queue** card is under the Pathfinder card (Windows with GD 2.2081 only for now; elsewhere the card says it isn't available yet).
+
+1. Paste level IDs into **Level IDs**: online IDs, or 1 to 22 for RobTop's levels, split by spaces, commas or lines. Press **Add to the queue**.
+2. Set **Time per level** (30 minutes by default) and leave **Count frame windows when beaten** on if you want Calculate to count each win.
+3. Press **Start**. For each level it downloads it if you don't have it (the way the game does when you open a level), opens it, and lets the Pathfinder's search play it from the start. A win is saved as **"Level name (ID)"**. Otherwise the furthest it got is saved as **"Level name (ID) furthest"**. A name that's taken gets a number (**"Level name (ID) 2"**), so a rerun never replaces an earlier macro. With counting on, Calculate then counts the win's windows and saves them with it.
+4. The table shows each level's result (beaten, or the best %), the time it took, the macro's name and the windows it counted (with L*). Hover a row to see why a level failed. A level that doesn't download is marked and skipped.
+
+It always uses the search (**Search (old)**, Absense), whatever **Engine** says. Safe mode is on from Start until the queue ends; if a level is still open then, it stays on until you leave that level. **Legit only** keeps a queue from starting. If a macro in memory isn't saved, Start asks first (**Start anyway**), since the queue replaces it. If the game closes mid-queue, the results are kept, and next time the card asks **Continue the queue (3 left)?** After a crash, the level that was running gets one more try; a second crash on it marks it failed. Closing the game normally doesn't count as a try.
+
+The **Calculate** page has a queue too: tick saved macros, press **Add the ticked**, then **Start**. Each macro's level is opened (found by the "(ID)" in its name when that level is the one the macro was recorded on, otherwise by the level name it was recorded on), Calculate counts it, and the windows are saved with the macro. A macro whose level isn't on your PC is skipped, with the reason.
+
 ---
 
 ## 8. Render a video

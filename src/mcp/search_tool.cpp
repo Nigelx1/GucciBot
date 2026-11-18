@@ -101,6 +101,28 @@ namespace gucci::mcp {
             return v;
         }
 
+#if !defined(GEODE_IS_IOS)
+        // A key handed on the way Geode hands on a real one (Geode 5.10.1 and
+        // 6.0.0-alpha.2, loader/src/platform/windows/input.cpp,
+        // handleKeyboardEvent): KeyboardInputEvent first, where imgui-cocos
+        // 934958c (the Geode 6 build) takes keys while ImGui wants the
+        // keyboard, then the dispatcher's modifiers and dispatchKeyboardMSG,
+        // where imgui-cocos 9764333 (the Geode 5 build) does the same. Nothing
+        // goes straight into ImGui, unlike ctrl_f, so ctrl_f_geode shows what a
+        // real Ctrl+F does. (Geode skips dispatchKeyboardMSG while a cocos
+        // text field has the IME; none is open in these tests.)
+        void geodeKey(enumKeyCodes key, bool down, bool ctrl) {
+            KeyboardModifier const mods = ctrl ? KeyboardModifier::Control : KeyboardModifier::None;
+            KeyboardInputData data(key, down ? KeyboardInputData::Action::Press : KeyboardInputData::Action::Release,
+                                   {0, 0}, 0.0, mods);
+            if (KeyboardInputEvent(key).send(data) != ListenerResult::Propagate || data.key == KEY_Unknown)
+                return;
+            auto* kb = CCKeyboardDispatcher::get();
+            kb->updateModifierKeys(false, ctrl, false, false);
+            kb->dispatchKeyboardMSG(data.key, data.action != KeyboardInputData::Action::Release, false, 0.0);
+        }
+#endif
+
         void sendKey(std::string const& key, bool down) {
             auto* dir = CCDirector::get();
             if (key == "back") {
@@ -109,6 +131,10 @@ namespace gucci::mcp {
                 return;
             }
 #if !defined(GEODE_IS_IOS)
+            if (key == "ctrl_f_geode") {
+                geodeKey(KEY_F, down, true);
+                return;
+            }
             enumKeyCodes const code = key == "escape" ? KEY_Escape : (key == "f" || key == "ctrl_f") ? KEY_F : KEY_Space;
             if (code == KEY_F)
                 ImGui::GetIO().AddKeyEvent(ImGuiKey_F, down);
@@ -199,8 +225,9 @@ namespace gucci::mcp {
 
                 case Step::Key: {
                     j.key = a["key"].asString().unwrapOr("");
-                    if (j.key != "escape" && j.key != "back" && j.key != "space" && j.key != "f" && j.key != "ctrl_f")
-                        throw ToolError("key is escape, back, space, f or ctrl_f");
+                    if (j.key != "escape" && j.key != "back" && j.key != "space" && j.key != "f" && j.key != "ctrl_f" &&
+                        j.key != "ctrl_f_geode")
+                        throw ToolError("key is escape, back, space, f, ctrl_f or ctrl_f_geode");
 #if defined(GEODE_IS_IOS)
                     if (j.key != "back")
                         throw ToolError("no keyboard dispatcher on iOS");
@@ -209,7 +236,7 @@ namespace gucci::mcp {
                     // back after it, never saved), so the answer's noclip
                     // shows whether a hotkey on F fired. ctrl_f holds Ctrl in
                     // ImGui a frame before F goes down, as a hand would.
-                    bool const fKey = j.key == "f" || j.key == "ctrl_f";
+                    bool const fKey = j.key == "f" || j.key == "ctrl_f" || j.key == "ctrl_f_geode";
                     if (fKey) {
                         j.noclipKey = ui::keys().onNoclip;
                         ui::keys().onNoclip = static_cast<int>(KEY_F);
@@ -223,6 +250,13 @@ namespace gucci::mcp {
                         j.step = Step::KeyDown;
                         return std::nullopt;
                     }
+#if !defined(GEODE_IS_IOS)
+                    if (j.key == "ctrl_f_geode") {
+                        geodeKey(KEY_LeftControl, true, true);
+                        j.step = Step::KeyDown;
+                        return std::nullopt;
+                    }
+#endif
                     sendKey(j.key, true);
                     j.step = Step::KeyUp;
                     return std::nullopt;
@@ -230,6 +264,12 @@ namespace gucci::mcp {
 
                 case Step::KeyDown:
                     j.keyBefore["ctrl_held"] = ImGui::GetIO().KeyCtrl;
+#if !defined(GEODE_IS_IOS)
+                    // ImGui's Ctrl and cocos's, a frame after Ctrl went down
+                    // (ctrl_f_geode: ImGui's stays false while no box has the keyboard).
+                    j.keyBefore["imgui_ctrl"] = ImGui::GetIO().KeyCtrl;
+                    j.keyBefore["cocos_ctrl"] = CCKeyboardDispatcher::get()->getControlKeyPressed();
+#endif
                     sendKey(j.key, true);
                     j.step = Step::KeyUp;
                     return std::nullopt;
@@ -240,6 +280,10 @@ namespace gucci::mcp {
                         ImGui::GetIO().AddKeyEvent(ImGuiKey_LeftCtrl, false);
                         ImGui::GetIO().AddKeyEvent(ImGuiMod_Ctrl, false);
                     }
+#if !defined(GEODE_IS_IOS)
+                    if (j.key == "ctrl_f_geode")
+                        geodeKey(KEY_LeftControl, false, false);
+#endif
                     j.step = Step::KeySettle;
                     j.wait = 0;
                     return std::nullopt;
@@ -326,8 +370,10 @@ namespace gucci::mcp {
             };
             field("query", "string", "typed into the box (all of it, over what's there), left open for typing");
             field("key", "string",
-                  "escape, back, space, f or ctrl_f: sent through cocos's keyboard (escape, space, f) or keypad (back) "
-                  "dispatcher (f and ctrl_f bind Noclip's hotkey to F for the test; ctrl_f holds Ctrl in ImGui first) "
+                  "escape, back, space, f, ctrl_f or ctrl_f_geode: sent through cocos's keyboard (escape, space, f) or "
+                  "keypad (back) dispatcher (f, ctrl_f and ctrl_f_geode bind Noclip's hotkey to F for the test; ctrl_f "
+                  "holds Ctrl in ImGui first; ctrl_f_geode sends Ctrl, then F, the way Geode hands on real keys: "
+                  "KeyboardInputEvent, the dispatcher's modifiers, dispatchKeyboardMSG, nothing put into ImGui) "
                   "while the box is as the query left it; answers the box and the game (macro inputs, paused) "
                   "before and after");
             field("pick", "integer", "the n-th result (from 0) pressed; answers where the jump went");

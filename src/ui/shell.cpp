@@ -53,6 +53,7 @@
 #include <ctime>
 #include <filesystem>
 #include <fstream>
+#include <cmath>
 #include <iterator>
 #include <map>
 #include <optional>
@@ -190,6 +191,8 @@ namespace gucci::ui {
             look().textScale = static_cast<float>(mod->getSavedValue<double>("ui_text_scale", 1.0));
             look().effects = mod->getSavedValue<bool>("ui_effects", true);
             look().accentCycle = mod->getSavedValue<bool>("theme_glow_cycle", false);
+            look().menuOpacity = std::clamp(static_cast<float>(mod->getSavedValue<double>("ui_menu_opacity", 1.0)),
+                                            Look::kMinMenuOpacity, 1.f);
             layout::load();
 #if defined(GEODE_IS_MOBILE)
             look().menuScale = static_cast<float>(mod->getSavedValue<double>("ui_menu_scale", 1.0));
@@ -275,6 +278,7 @@ namespace gucci::ui {
         if (!g_test.effects)
             mod->setSavedValue("ui_effects", look().effects);
         mod->setSavedValue("theme_glow_cycle", look().accentCycle);
+        mod->setSavedValue<double>("ui_menu_opacity", look().menuOpacity);
 #if defined(GEODE_IS_MOBILE)
         mod->setSavedValue<double>("ui_menu_scale", look().menuScale);
 #endif
@@ -2417,11 +2421,22 @@ namespace gucci::ui {
         std::string g_speedTest;  // the last speed test's result (step R0 of AI_PATHFINDER_PLAN.md)
         std::string g_legText;    // the last "find a way to the next gate" (step R3)
 
+        void pagePathfinderMain();
+
+        // The Pathfinder page: the Pathfinder's own card, then its queue
+        // (tools/queue.hpp, Juice's idea).
         void pagePathfinder() {
+            pagePathfinderMain();
+            pages::pathfinderQueueCard();
+        }
+
+        void pagePathfinderMain() {
 #if GB_GEODE6
             // GucciBot (2026-11-17): Nigel's call for 2.0 (11-16): the GD 2.2091
-            // file ships every feature but the Pathfinder and custom TPS; both
-            // come in 2.0.1. The page says so and offers nothing to start.
+            // file ships every feature but the Pathfinder, tick rates under 162
+            // TPS, TPS changes inside a macro and High TPS Precision (240 and 162
+            // and up work, proven in game 11-17); those come in 2.0.1. The page
+            // says so and offers nothing to start.
             kit::BeginCard("Pathfinder", "Finds a way through the level on its own.");
             kit::Note("The Pathfinder isn't available on GD 2.2091 yet. It's coming in GucciBot 2.0.1. "
                       "On GD 2.2081 it works as before.",
@@ -3110,6 +3125,15 @@ namespace gucci::ui {
             kit::BeginCard("Look", nullptr);
             if (kit::SliderRow("Text size", nullptr, &look().textScale, 0.8f, 1.4f, "%.2fx"))
                 saveSettings();
+            {
+                // In percent; saved as 0.4 to 1.
+                float percent = std::round(look().menuOpacity * 100.f);
+                if (kit::SliderRow("Menu opacity", "How solid the menu is. The boxes over the level stay as they are",
+                                   &percent, Look::kMinMenuOpacity * 100.f, 100.f, "%.0f%%")) {
+                    look().menuOpacity = std::clamp(percent / 100.f, Look::kMinMenuOpacity, 1.f);
+                    saveSettings();
+                }
+            }
 #if defined(GEODE_IS_MOBILE)
             {
                 // Applied when the finger lifts: the slider grows and shrinks
@@ -3228,6 +3252,19 @@ namespace gucci::ui {
                     ImGui::TreePop();
                 }
             }
+            // The tick logs (GucciUpdater::m_logFrameIncrements): saved since
+            // before 2.0, with no row until now. For chasing a desync.
+            kit::Gap(0.3f);
+            // (The disguise doesn't name the files: they say guccibot.)
+            if (kit::SwitchRow("Log frame increments",
+                               disguised()
+                                   ? "Writes every frame-counter change and every input played back to log files "
+                                     "in the mod's save folder. For chasing a desync"
+                                   : "Writes every frame-counter change to guccibot_frameinc.log and every input "
+                                     "played back to guccibot_slope.log, in the mod's save folder. For chasing a "
+                                     "desync",
+                               &GucciEngine::get()->updater.m_logFrameIncrements))
+                saveEngineSwitch("debug_tick_logs", GucciEngine::get()->updater.m_logFrameIncrements);
             kit::EndCard();
             // GBot (the disguise) has no BIG BRRRR and doesn't mention it: the
             // card, the last one here, isn't drawn. Its saved switches are
@@ -3547,6 +3584,68 @@ namespace gucci::ui {
             }
         }
 
+        // Settings > Look > Menu opacity, for as long as it lives: the
+        // windows' and cards' fills (the palette's backdrop and surface, and
+        // the style's window and title bar colours) times look().menuOpacity,
+        // put back after. Around the full menu and Compact mode only, so the
+        // boxes over the level, drawn outside it, keep their own. At 1 it
+        // touches nothing: the theme's look exactly.
+        class MenuSeeThrough {
+        public:
+            MenuSeeThrough() {
+                m_scale = std::clamp(look().menuOpacity, Look::kMinMenuOpacity, 1.f);
+                if (m_scale >= 1.f)
+                    return;
+                m_on = true;
+                look().menuSeeThrough = m_scale;
+                auto& pal = look().pal;
+                m_pal = pal;
+                pal.opacity *= m_scale;  // the JMF look's sky reads this one
+                pal.backdrop.w *= m_scale;
+                pal.surface.w *= m_scale;
+                ImVec4* c = ImGui::GetStyle().Colors;
+                for (size_t i = 0; i < std::size(kSlots); ++i) {
+                    m_cols[i] = c[kSlots[i]];
+                    c[kSlots[i]].w *= m_scale;
+                }
+            }
+            ~MenuSeeThrough() {
+                if (!m_on)
+                    return;
+                look().menuSeeThrough = 1.f;
+                look().pal = m_pal;
+                ImVec4* c = ImGui::GetStyle().Colors;
+                for (size_t i = 0; i < std::size(kSlots); ++i)
+                    c[kSlots[i]] = m_cols[i];
+            }
+            MenuSeeThrough(MenuSeeThrough const&) = delete;
+            MenuSeeThrough& operator=(MenuSeeThrough const&) = delete;
+
+            // A theme's scene (the JMF sky, SolarBot's, the garden) and the
+            // snow are pictures drawn on the window, solid whatever its
+            // colour says: the vertices they added since `from`, faded the
+            // same way.
+            static void fade(ImDrawList* dl, int from) {
+                float const scale = std::clamp(look().menuOpacity, Look::kMinMenuOpacity, 1.f);
+                if (scale >= 1.f || !dl)
+                    return;
+                for (int i = std::max(0, from); i < dl->VtxBuffer.Size; ++i) {
+                    ImU32& col = dl->VtxBuffer[i].col;
+                    auto const a = static_cast<float>((col >> IM_COL32_A_SHIFT) & 0xFF);
+                    auto const faded = static_cast<ImU32>(std::lround(a * scale));
+                    col = (col & ~IM_COL32_A_MASK) | (faded << IM_COL32_A_SHIFT);
+                }
+            }
+
+        private:
+            static constexpr ImGuiCol kSlots[] = {ImGuiCol_WindowBg, ImGuiCol_TitleBg, ImGuiCol_TitleBgActive,
+                                                  ImGuiCol_TitleBgCollapsed, ImGuiCol_MenuBarBg};
+            float m_scale = 1.f;
+            bool m_on = false;
+            Palette m_pal;
+            ImVec4 m_cols[std::size(kSlots)];
+        };
+
         // The search's index (ui/search.hpp): every page the sidebar lists,
         // drawn once into a window off screen that takes no input, with the
         // kit reporting each card, row and button to the recorder. Clipped
@@ -3646,10 +3745,12 @@ namespace gucci::ui {
 #endif
             // Behind the pages: the page's own picture (the JMF sky), else the
             // theme's scene, else its snow.
+            int const backdropFrom = ImGui::GetWindowDrawList()->VtxBuffer.Size;
             if (Backdrop const backdrop = kPages[g_page].backdrop ? kPages[g_page].backdrop : sceneBackdrop())
                 backdrop();
             else if (themes::active().snow && look().effects)
                 drawSnow();
+            MenuSeeThrough::fade(ImGui::GetWindowDrawList(), backdropFrom);
             ImVec2 offset{0.f, 0.f};
             if (brrr->enabled) {
                 double const t = ImGui::GetTime();
@@ -3730,8 +3831,17 @@ namespace gucci::ui {
                     float const gap = ImGui::GetStyle().ItemSpacing.y;
                     ImVec2 const f0(a.x, a.y - std::floor(gap * 0.5f));
                     ImVec2 const f1(a.x + ImGui::GetContentRegionAvail().x, a.y + kRowH + (gap - std::floor(gap * 0.5f)));
-                    dl->AddRectFilled(f0, f1, u32(frame.outer), pal.radius);
-                    dl->AddRectFilled(ImVec2(f0.x + 1.f, f0.y + 1.f), ImVec2(f1.x - 1.f, f1.y - 1.f), u32(frame.inner), pal.radius);
+                    if (pal.surface.w >= 1.f) {
+                        dl->AddRectFilled(f0, f1, u32(frame.outer), pal.radius);
+                        dl->AddRectFilled(ImVec2(f0.x + 1.f, f0.y + 1.f), ImVec2(f1.x - 1.f, f1.y - 1.f), u32(frame.inner), pal.radius);
+                    } else {
+                        // Menu opacity under 100%: the card fill is see-through,
+                        // so the frame is drawn as its two rings (filled, her
+                        // gold showed through the fill, under the gold name).
+                        dl->AddRect(f0, f1, u32(frame.outer), pal.radius, 0, 1.f);
+                        dl->AddRect(ImVec2(f0.x + 1.25f, f0.y + 1.25f), ImVec2(f1.x - 1.25f, f1.y - 1.25f), u32(frame.inner),
+                                    pal.radius, 0, 1.5f);
+                    }
                     dl->AddRectFilled(ImVec2(f0.x + 2.5f, f0.y + 2.5f), ImVec2(f1.x - 2.5f, f1.y - 2.5f), u32(pal.surface), pal.radius);
                     ImVec2 const gem(f1.x - 14.f, (f0.y + f1.y) * 0.5f);
                     auto const diamond = [&](float halfH, float halfW, ImU32 color) {
@@ -4158,6 +4268,15 @@ namespace gucci::ui {
                     ImGui::TextDisabled("%s", timing.c_str());
                     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 260.f);
                     ImGui::TextUnformatted(fw.status().c_str());
+                    // GD 2.2091's own Ignore Damage, seen during this run or
+                    // kept from the windows before it (a Continue's, a range
+                    // run's): "was on", since it may be off now
+                    // (FrameWindowAnalyzer::gdIgnoreDamage).
+                    if (fw.gdIgnoreDamage()) {
+                        ImGui::PushStyleColor(ImGuiCol_Text, look().tone(Tone::Bad));
+                        ImGui::TextUnformatted("GD's Ignore Damage was on for some of these windows: they won't be legit.");
+                        ImGui::PopStyleColor();
+                    }
                     ImGui::PopTextWrapPos();
                     if (kit::Button("Cancel", Tone::Bad))
                         GucciEngine::get()->cancelAnalysis();
@@ -4375,6 +4494,7 @@ namespace gucci::ui {
             }
             if (!g_open)
                 return;
+            MenuSeeThrough const seeThrough;  // Settings > Look > Menu opacity
             if (g_compact) {
                 drawCompact();
             } else {

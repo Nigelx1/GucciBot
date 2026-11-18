@@ -326,8 +326,11 @@ namespace gucci::ui::share {
         float const edge = std::max(1.f, 1.5f * fs);
 
         cv.fill(th.backdrop);
-        // The accent along the top edge.
-        roundRect(cv, 0.f, 0.f, static_cast<float>(card.width), Y(6.f), 0.f, th.accent);
+        // The accent along the top edge, red under a warning (Card::warning).
+        Rgba const warnRed{214, 48, 49};
+        bool const warned = !card.warning.empty();
+        roundRect(cv, 0.f, 0.f, static_cast<float>(card.width), Y(warned ? 12.f : 6.f), 0.f,
+                  warned ? warnRed : th.accent);
 
         float const margin = X(48.f);
         float const right = card.width - margin;
@@ -343,7 +346,17 @@ namespace gucci::ui::share {
         {
             float const maxW = scoreX0 - margin - X(32.f);
             float y = headTop + Y(4.f);
-            bold.draw(cv, card.kicker, 20.f * fs, margin, y, th.accent);
+            if (warned) {
+                // White on a red pill, in the kicker's place.
+                float const px = bold.sizeToFit(card.warning, 20.f * fs, 14.f * fs, maxW - X(20.f));
+                std::string const text = bold.fit(card.warning, px, maxW - X(20.f));
+                float const w = bold.width(text, px);
+                roundRect(cv, margin - X(10.f), y - Y(5.f), margin + w + X(10.f), y + 20.f * fs + Y(3.f),
+                          Y(6.f), warnRed);
+                bold.draw(cv, text, px, margin, y + (20.f * fs - px) * 0.5f, Rgba{255, 255, 255});
+            } else {
+                bold.draw(cv, card.kicker, 20.f * fs, margin, y, th.accent);
+            }
             y += Y(32.f);
             float const px = bold.sizeToFit(card.level, 66.f * fs, 40.f * fs, maxW);
             std::string const level = bold.fit(card.level.empty() ? "Unknown level" : card.level, px, maxW);

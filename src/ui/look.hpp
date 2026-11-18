@@ -84,6 +84,15 @@ namespace gucci::ui {
         bool effects = true;        // small animations, a theme's pulsing accent (Red Kingdom's, SolarBot's)
                                     // and the moving backdrops (BrrrBot's snow, the JMF sky, SolarBot's Janet)
         float menuScale = 1.f;      // Android and iOS: bigger or smaller than deviceScale picks
+        // Settings > Look > Menu opacity: how solid the menu's windows and
+        // cards are, times the theme's own (1 = the theme as it is). The full
+        // menu and Compact mode only, never the boxes over the level
+        // (ui/shell.cpp MenuSeeThrough). Text and controls stay solid.
+        float menuOpacity = 1.f;
+        static constexpr float kMinMenuOpacity = 0.4f;  // under this a bright level shows through the text
+        // What MenuSeeThrough has the fills at right now (1 outside it), for
+        // a look that sets its own card colour inside it (the JMF page's).
+        float menuSeeThrough = 1.f;
 
     private:
         ImFont* m_fonts[5] = {};
