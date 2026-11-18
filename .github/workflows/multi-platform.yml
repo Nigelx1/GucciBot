@@ -96,6 +96,34 @@ jobs:
           m.gd['${{ matrix.config.gd }}'] = m.gd.win;
           fs.writeFileSync('mod.json', JSON.stringify(m, null, 4));"
 
+      # GitHub's windows-latest image (windows-2025-vs2026) is moving from MSVC
+      # 14.51 to 14.52 (image 20261116.315 and later) and keeps LLVM 20.1.8,
+      # and 14.52's C++ library refuses Clang before 22 ("error STL1000:
+      # Unexpected compiler version, expected Clang 22 or newer"): the
+      # "Could NOT find Boost" failures of 2026-11-18. Both image versions also
+      # have the VS 2022 toolset, MSVC 14.44, which takes Clang 19 and up and is
+      # the one local Windows builds use. Clang is pointed at it on every image
+      # (VCToolsInstallDir), so a job builds with the same compiler and library
+      # whichever image it gets. The job stops here if 14.44 is gone.
+      - name: Use the MSVC 14.44 toolset
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          VS="/c/Program Files/Microsoft Visual Studio"
+          d=$(ls -d "$VS"/*/*/VC/Tools/MSVC/14.44.* 2>/dev/null | sort -V | tail -n 1)
+          if [ -z "$d" ]; then
+            echo "No MSVC 14.44 toolset on this image. The toolsets here:"
+            ls -d "$VS"/*/*/VC/Tools/MSVC/* 2>/dev/null
+            exit 1
+          fi
+          w="$(cygpath -w "$d")\\"
+          echo "VCToolsInstallDir=$w" >> "$GITHUB_ENV"
+          echo "MSVC toolset for Clang: $w"
+          printf '#include <filesystem>\nint main() { return std::filesystem::path("a").empty() ? 1 : 0; }\n' > msvc-check.cpp
+          VCToolsInstallDir="$w" clang++ -std=c++17 -v -c msvc-check.cpp -o msvc-check.obj 2>&1 | grep -i "MSVC" | head -n 4
+          VCToolsInstallDir="$w" clang++ -std=c++17 -c msvc-check.cpp -o msvc-check.obj
+          rm -f msvc-check.cpp msvc-check.obj
+
       # Pinned to the commit main pointed at on 2026-11-17 (the one CI already
       # ran), so an upstream change can't alter the release build.
       - uses: geode-sdk/build-geode-mod@61a56c697aea9655e3f31c6c1b83870431f30434
