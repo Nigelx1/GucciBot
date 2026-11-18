@@ -355,7 +355,7 @@ Then the 8 bar levels unattended (Clubstep, ToE2, Deadlocked, The Nightmare, Blo
 
 1. Calm inputs: "nothing should count as spam or not". So the gap is a preference, never a rule or a label: legs prefer a 33 ms gap and the calmest way in, fall back to no gap where nothing calmer gets through, and nothing is called spam in the log or the menu.
 2. Speed: slower than today on easy levels is fine, but only if it gets the hard ones to 100%.
-3. Stuck: 5 minutes on one spot, then it stops and says where.
+3. Stuck: 5 minutes on one spot, then it stops and says where. (Changed with Nigel's OK on 2026-11-18: 300 decisions in a row without getting further, with a 60-minute clock backstop; GRIEF needs 6-7 minutes on one spot.)
 4. The bar is run with no macro loaded.
 5. Route drives stays a switch until all eight bar levels pass.
 6. If handing GD the spike after a rewind does not fix the lost slope launches, the pathfinder may hide the spike from the player after its own rewinds (pathfinder runs only).
