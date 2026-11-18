@@ -143,6 +143,9 @@ namespace gucci::trainers::lane {
         float alpha = 1.f;
         int moves = 0;
         float y = 0.f, h = 0.f;  // the box's top and height on screen, in pixels
+        float floorY = -1.f, ceilY = -1.f;  // GD's ground line and ceiling line on screen (-1: not shown)
+        int fill = 0;            // the box's fill alpha before the near-player easing
+        bool bottomFits = false; // the bottom band fits wholly under the ground line
     };
     Placement& placement(Kind k);
 

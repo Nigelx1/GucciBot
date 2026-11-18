@@ -372,6 +372,7 @@ namespace gucci::ui::pages {
         constexpr float kVerdictGap = 4.f;
         // The box's fill over the level, and while the player is near it.
         constexpr int kFillLevel = 165;
+        constexpr int kFillBottomOverPlay = 217;  // 85%
         constexpr int kFillNearPlayer = 90;
         constexpr int kFillCard = 235;
         // The whole lane's opacity while a player is inside its band.
@@ -431,49 +432,71 @@ namespace gucci::ui::pages {
 
         // A press: a filled circle (red center in its window's ring), the
         // dark outline outside its edge.
-        void drawHead(ImDrawList* dl, ImVec2 c, LTier tier, NoteSizes const& z, bool p2, float fade) {
+        void drawHead(ImDrawList* dl, ImVec2 c, LTier tier, NoteSizes const& z, bool p2, float fade,
+                      float radius = 0.f) {
             if (fade <= 0.01f)
                 return;
             float const ew = z.edge;
-            float const r = outerRadius(tier, z);
+            float const r = radius > 0.f ? radius : outerRadius(tier, z);
             dl->AddCircleFilled(c, r + ew, darkEdge(fade));
             dl->AddCircleFilled(c, r, u32(tierColor(tier), fade));
             if (tier != LTier::Unknown && tier != LTier::One) {
-                dl->AddCircleFilled(c, z.center + ew * 0.8f, darkEdge(fade));
-                dl->AddCircleFilled(c, z.center, u32(kNoteRed, fade));
+                float const cr = std::min(z.center, r * 0.6f);
+                dl->AddCircleFilled(c, cr + ew * 0.8f, darkEdge(fade));
+                dl->AddCircleFilled(c, cr, u32(kNoteRed, fade));
             }
             if (p2)
                 dl->AddCircle(c, r + ew * 1.9f, u32(kNoteP2, fade), 0, ew * 1.5f);
         }
 
         // A release (a slider's end): a ring with no fill in its window's
-        // color, always its tier's full size (bigger = more lenient holds
-        // for releases too), a dark line either side of it and a white
+        // color at its tier's press size (1 frame 40% of the lane, 2 frames
+        // 58%, 3+ 76%: bigger = more lenient, as for presses), its stroke 11%
+        // of the lane inside that, a dark line either side and a white
         // upright line through the hole. A filled bullseye always means
-        // press; an empty ring, let go. `aroundR` > 0: a press is right by
-        // it, so it's drawn as a thinner ring that big around the press
-        // (and no upright line), on top of it: the press shows through.
-        void drawRelease(ImDrawList* dl, ImVec2 c, LTier tier, NoteSizes const& z, float h, bool p2, float fade,
-                         float aroundR) {
+        // press; an empty ring, let go.
+        void drawRelease(ImDrawList* dl, ImVec2 c, LTier tier, NoteSizes const& z, float h, bool p2, float fade) {
             if (fade <= 0.01f)
                 return;
             float const ew = z.edge;
-            bool const around = aroundR > 0.f;
-            float const r = around ? aroundR : outerRadius(tier, z);
-            float const t = around ? std::max(3.f, h * 0.06f) : std::max(4.f, h * 0.11f);
+            float const r = outerRadius(tier, z);
+            float const t = std::max(4.f, h * 0.11f);
             float const mid = r - t * 0.5f;
             dl->AddCircle(c, mid, darkEdge(fade), 0, t + 2.f * ew);
             dl->AddCircle(c, mid, u32(tierColor(tier), fade), 0, t);
-            if (!around) {
-                float const lw = 3.f;
-                float const lh = std::max(3.f, (r - t - ew) * 0.85f);
-                dl->AddRectFilled(ImVec2(c.x - lw * 0.5f - 1.f, c.y - lh - 1.f),
-                                  ImVec2(c.x + lw * 0.5f + 1.f, c.y + lh + 1.f), darkEdge(fade), 2.f);
-                dl->AddRectFilled(ImVec2(c.x - lw * 0.5f, c.y - lh), ImVec2(c.x + lw * 0.5f, c.y + lh),
-                                  IM_COL32(255, 255, 255, (int)(245 * fade)), 1.5f);
-            }
+            float const lw = 3.f;
+            float const lh = std::max(3.f, (r - t - ew) * 0.85f);
+            dl->AddRectFilled(ImVec2(c.x - lw * 0.5f - 1.f, c.y - lh - 1.f), ImVec2(c.x + lw * 0.5f + 1.f, c.y + lh + 1.f),
+                              darkEdge(fade), 2.f);
+            dl->AddRectFilled(ImVec2(c.x - lw * 0.5f, c.y - lh), ImVec2(c.x + lw * 0.5f, c.y + lh),
+                              IM_COL32(255, 255, 255, (int)(245 * fade)), 1.5f);
             if (p2)
                 dl->AddCircle(c, r + ew * 1.9f, u32(kNoteP2, fade), 0, ew * 1.5f);
+        }
+
+        // A release right by a press (they'd touch or overlap) is drawn as a
+        // ring around that press instead, centered on it: its stroke just
+        // outside the press's dark outline, so the press stays whole.
+        // ringStroke: the colored band's width; the press inside is drawn
+        // after it (on top).
+        float ringStroke(float h) {
+            return std::max(4.f, std::round(h * 0.032f));
+        }
+        // The press's radius inside such a ring, so the ring's outside
+        // stays within 80% of the lane's height (a 3-frame press shrinks a
+        // little; smaller ones keep their size).
+        float ringedPressRadius(float pressR, NoteSizes const& z, float h) {
+            return std::min(pressR, h * 0.40f - ringStroke(h) - z.edge * 1.7f);
+        }
+        void drawReleaseAround(ImDrawList* dl, ImVec2 c, LTier tier, float pressR, NoteSizes const& z, float h,
+                               float fade) {
+            if (fade <= 0.01f)
+                return;
+            float const ew = z.edge;
+            float const t = ringStroke(h);
+            float const mid = pressR + ew + t * 0.5f;
+            dl->AddCircle(c, mid, darkEdge(fade), 0, t + 1.4f * ew);
+            dl->AddCircle(c, mid, u32(tierColor(tier), fade), 0, t);
         }
 
         // A word drawn big with a dark outline, its top-left at `at`.
@@ -616,7 +639,9 @@ namespace gucci::ui::pages {
         // The lane in the rectangle p0..p0+size, scrolling at pxPerSec, its
         // fill `fill` (alpha), the verdict where `spot` says (its x and y
         // filled in here from the box).
-        void drawLaneBox(Kind k, ImDrawList* dl, ImVec2 p0, ImVec2 size, double pxPerSec, int fill, VerdictSpot spot) {
+        // Returns the first vertex of the verdict (or the list's end if none
+        // was drawn), so the overlay can fade the box and the verdict apart.
+        int drawLaneBox(Kind k, ImDrawList* dl, ImVec2 p0, ImVec2 size, double pxPerSec, int fill, VerdictSpot spot) {
             auto const& set = ln::settings();
             auto const v = ln::view(k);
             // The clock as of now, not the start of the frame: in the level,
@@ -635,11 +660,13 @@ namespace gucci::ui::pages {
             ImVec2 const hc(hitX, cy);
             float const border = std::max(2.f, h * 0.02f);
             float const round = std::min(h * 0.14f, 16.f);
-            // Nothing is drawn across the border: notes and bars fade out
-            // together over the last 5% of the lane before it (one pass over
-            // their vertices, below), notes fade at the left end too, and
-            // bars stop at it.
-            float const inL = p0.x + border, inR = p1.x - border;
+            // Nothing is drawn across the border: every note, ring and bar
+            // vertex is kept inside the box's inner edge (3 px inside the
+            // border), and they fade out together over the last 5% of the
+            // lane, to nothing at that edge (one pass over their vertices,
+            // below); notes fade at the left end too.
+            float const inL = p0.x + border + 3.f, inR = p1.x - border - 3.f;
+            float const inT = p0.y + border + 1.f, inB = p1.y - border - 1.f;
             float const fadeIn = std::max(10.f, w * 0.05f);
             float const fadeFrom = inR - fadeIn;
             auto leftFade = [&](float cx, float r) { return std::clamp(((cx - r) - inL) / (fadeIn * 0.5f), 0.f, 1.f); };
@@ -668,7 +695,41 @@ namespace gucci::ui::pages {
             while (to < notes.size() && notes[to].pressSec <= rightT)
                 ++to;
 
-            int const fadeVtx = dl->VtxBuffer.Size;  // bars and notes, faded at the right end below
+            // Each slider end close to a press (they'd touch, or come within
+            // 6 px of each other) is drawn as a ring around that press,
+            // centered on it; its bar runs to that press. Farther apart, the
+            // two are separate shapes with a gap of 6 px or more. Reused
+            // buffers: no allocation per frame once they've grown.
+            static std::vector<int> s_ringOn;  // per note in view: the press its release rings, or -1
+            static std::vector<int> s_ringBy;  // per note in view: the release ringing its press, or -1
+            size_t const count = to - from;
+            s_ringOn.assign(count, -1);
+            s_ringBy.assign(count, -1);
+            float const sep = 2.f * z.edge + 6.f;
+            for (size_t i = from; i < to; ++i) {
+                auto const& n = notes[i];
+                if (n.tail != ln::Note::Tail::Slider || results[i].released)
+                    continue;
+                float const xb = x(n.releaseSec);
+                float const rr = outerRadius(n.releaseTier, z);
+                float best = FLT_MAX;
+                int pick = -1;
+                for (size_t j = from; j < to; ++j) {
+                    if (results[j].pressed || s_ringBy[j - from] >= 0)
+                        continue;
+                    float const dx = std::fabs(x(notes[j].pressSec) - xb);
+                    if (dx < rr + outerRadius(notes[j].pressTier, z) + sep && dx < best) {
+                        best = dx;
+                        pick = (int)j;
+                    }
+                }
+                if (pick >= 0) {
+                    s_ringOn[i - from] = pick;
+                    s_ringBy[(size_t)pick - from] = (int)i;
+                }
+            }
+
+            int const fadeVtx = dl->VtxBuffer.Size;  // bars and notes, kept inside and faded below
 
             // 1. The hold bars. Each is split where the right end's fade
             // starts, so the fade has a vertex to start from, and its edge is
@@ -679,17 +740,18 @@ namespace gucci::ui::pages {
                                       (roundR ? ImDrawFlags_RoundCornersRight : 0);
                 if (corners == 0)
                     corners = ImDrawFlags_RoundCornersNone;
-                dl->AddRectFilled(ImVec2(a, cy - half), ImVec2(b, cy + half), body, half, corners);
-                float const la = roundL ? a + half : a, lb = roundR ? b - half : b;
+                float const rnd = std::min(half, std::max(0.f, (b - a) * (roundL && roundR ? 0.5f : 1.f)));
+                dl->AddRectFilled(ImVec2(a, cy - half), ImVec2(b, cy + half), body, rnd, corners);
+                float const la = roundL ? a + rnd : a, lb = roundR ? b - rnd : b;
                 if (lb > la) {
                     dl->AddLine(ImVec2(la, cy - half), ImVec2(lb, cy - half), edge, edgeW);
                     dl->AddLine(ImVec2(la, cy + half), ImVec2(lb, cy + half), edge, edgeW);
                 }
-                if (roundL) {
+                if (roundL && rnd >= half - 0.5f) {
                     dl->PathArcTo(ImVec2(a + half, cy), half, 1.5707963f, 4.7123890f);
                     dl->PathStroke(edge, 0, edgeW);
                 }
-                if (roundR) {
+                if (roundR && rnd >= half - 0.5f) {
                     dl->PathArcTo(ImVec2(b - half, cy), half, -1.5707963f, 1.5707963f);
                     dl->PathStroke(edge, 0, edgeW);
                 }
@@ -700,7 +762,8 @@ namespace gucci::ui::pages {
                     continue;
                 auto const& r = results[i];
                 float xa = x(n.pressSec);
-                float const xb = x(n.releaseSec);
+                int const ringOn = s_ringOn[i - from];
+                float const xb = ringOn >= 0 ? x(notes[(size_t)ringOn].pressSec) : x(n.releaseSec);
                 if (r.pressed)
                     xa = std::max(xa, hitX);  // the part still to hold
                 if (r.released || xb <= xa)
@@ -730,59 +793,79 @@ namespace gucci::ui::pages {
                 }
             }
 
-            // 2. Presses, latest first so the next to hit is on top; a hit
-            // one is gone, as in taiko.
+            // The pulse: a thick ring in the verdict's color, out from the
+            // marker (1.0x) to 1.25x over 0.2 s, inside the border, and for
+            // the first 0.1 s the marker's inside lit with that color at 25%.
+            // Over the bars, under every release and press: the next note
+            // coming in stays whole on top of it.
+            float const age = (float)(realNow - v.flash.atReal);
+            ImVec4 const vcol = wordColor(v.flash.text);
+            if (age >= 0.f && age < 0.2f) {
+                float const t = age / 0.2f;
+                float const ease = 1.f - (1.f - t) * (1.f - t);
+                float const th = std::max(6.f, std::round(h * 0.048f));
+                float const maxR = h * 0.5f - border - th * 0.5f - 1.5f;  // its dark ring's outside, inside the border
+                float const rr = std::min(z.marker * (1.f + 0.25f * ease), maxR);
+                if (age < 0.1f)
+                    dl->AddCircleFilled(hc, z.marker - mt * 0.5f, u32(vcol, 0.25f));
+                dl->AddCircle(hc, rr, IM_COL32(0, 0, 0, (int)(170 * (1.f - t))), 0, th + 3.f);
+                dl->AddCircle(hc, rr, u32(vcol, 1.f - t * t), 0, th);
+            }
+
+            // 2. Slider ends on their own, at their tier's size, over the
+            // bars and under every press.
+            for (size_t i = from; i < to; ++i) {
+                auto const& n = notes[i];
+                auto const& r = results[i];
+                if (n.tail != ln::Note::Tail::Slider || r.released || s_ringOn[i - from] >= 0)
+                    continue;
+                float const xb = x(n.releaseSec);
+                float const rr = outerRadius(n.releaseTier, z);
+                if (xb + rr < inL || xb - rr > inR)
+                    continue;
+                float const fade = (r.missed ? 0.32f : 1.f) * leftFade(xb, rr);
+                drawRelease(dl, ImVec2(xb, cy), n.releaseTier, z, h, n.player2, fade);
+            }
+
+            // 3. Presses, latest first so the next to hit is on top; a hit
+            // one is gone, as in taiko. A press with a release ringing it
+            // gets that ring first, then the press (whole, with its outline)
+            // over it.
             for (size_t j = to; j-- > from;) {
                 auto const& n = notes[j];
                 auto const& r = results[j];
                 if (r.pressed)
                     continue;
                 float const xa = x(n.pressSec);
-                float const rr = outerRadius(n.pressTier, z);
-                if (xa + rr < inL || xa - rr > inR)
+                float rr = outerRadius(n.pressTier, z);
+                int const by = s_ringBy[j - from];
+                float const reach = by >= 0 ? h * 0.40f : rr;
+                if (xa + reach < inL || xa - reach > inR)
                     continue;
-                float const fade = (r.missed ? 0.32f : 1.f) * leftFade(xa, rr);
-                drawHead(dl, ImVec2(xa, cy), n.pressTier, z, n.player2, fade);
-            }
-
-            // 3. Slider ends (releases), on top of the presses and never
-            // smaller than their tier: empty rings, so a press under one shows
-            // through. A press right by one (closer than their two radii)
-            // gets the release as a ring around it, 1.12x its size.
-            for (size_t i = from; i < to; ++i) {
-                auto const& n = notes[i];
-                auto const& r = results[i];
-                if (n.tail != ln::Note::Tail::Slider || r.released)
-                    continue;
-                float const xb = x(n.releaseSec);
-                float const rr = outerRadius(n.releaseTier, z);
-                if (xb + rr < inL || xb - rr > inR)
-                    continue;
-                float around = 0.f;
-                for (size_t j = from; j < to; ++j) {
-                    if (results[j].pressed)
-                        continue;
-                    float const xj = x(notes[j].pressSec);
-                    float const pr = outerRadius(notes[j].pressTier, z);
-                    float const dx = std::fabs(xj - xb);
-                    if (dx < rr + pr)
-                        around = std::max(around, dx + pr * 1.12f + z.edge * 2.f);
+                float const fade = (r.missed ? 0.32f : 1.f) * leftFade(xa, reach);
+                if (by >= 0) {
+                    auto const& rn = notes[(size_t)by];
+                    rr = ringedPressRadius(rr, z, h);
+                    drawReleaseAround(dl, ImVec2(xa, cy), rn.releaseTier, rr, z, h,
+                                      fade * (results[(size_t)by].missed ? 0.32f : 1.f));
                 }
-                if (around > 0.f)
-                    around = std::clamp(around, rr, h * 0.47f);
-                float const fade = (r.missed ? 0.32f : 1.f) * leftFade(xb, rr);
-                drawRelease(dl, ImVec2(xb, cy), n.releaseTier, z, h, n.player2, fade, around);
+                drawHead(dl, ImVec2(xa, cy), n.pressTier, z, n.player2, fade, rr);
             }
 
-            // The right end's fade, over everything above at once (a note on
-            // a bar fades with it, not over it).
+            // Keep everything above inside the box, and fade it at the right
+            // end (a note on a bar fades with it, not over it). The alpha is
+            // from each vertex's own spot, then the spot is pulled in to the
+            // inner edge: a big triangle that crossed the edge would
+            // otherwise smear color past the border (round 3's leak).
             for (int vi = fadeVtx; vi < dl->VtxBuffer.Size; ++vi) {
                 ImDrawVert& vx = dl->VtxBuffer.Data[vi];
-                if (vx.pos.x <= fadeFrom)
-                    continue;
-                float const f = std::clamp((inR - vx.pos.x) / fadeIn, 0.f, 1.f);
-                ImU32 const a = (ImU32)(((vx.col >> IM_COL32_A_SHIFT) & 0xFF) * f);
-                vx.col = (vx.col & ~IM_COL32_A_MASK) | (a << IM_COL32_A_SHIFT);
+                if (vx.pos.x > fadeFrom) {
+                    float const f = std::clamp((inR - vx.pos.x) / fadeIn, 0.f, 1.f);
+                    ImU32 const a = (ImU32)(((vx.col >> IM_COL32_A_SHIFT) & 0xFF) * f);
+                    vx.col = (vx.col & ~IM_COL32_A_MASK) | (a << IM_COL32_A_SHIFT);
+                }
+                vx.pos.x = std::clamp(vx.pos.x, inL, inR);
+                vx.pos.y = std::clamp(vx.pos.y, inT, inB);
             }
 
             // The border: light, with a dark line outside it so it shows over
@@ -792,21 +875,6 @@ namespace gucci::ui::pages {
             dl->AddRect(ImVec2(p0.x + border * 0.5f, p0.y + border * 0.5f),
                         ImVec2(p1.x - border * 0.5f, p1.y - border * 0.5f), IM_COL32(255, 255, 255, 230), round, 0,
                         border);
-
-            // The pulse: a thick ring in the verdict's color, out from the
-            // marker to 1.25x over 0.2 s, so it stays inside the border. The
-            // marker itself stays empty.
-            float const age = (float)(realNow - v.flash.atReal);
-            ImVec4 const vcol = wordColor(v.flash.text);
-            if (age >= 0.f && age < 0.2f) {
-                float const t = age / 0.2f;
-                float const ease = 1.f - (1.f - t) * (1.f - t);
-                float const th = std::max(4.f, h * 0.045f);
-                float const maxR = h * 0.5f - border - th * 0.5f - 1.5f;  // its dark ring's outside, inside the border
-                float const rr = std::min(z.marker * (1.f + 0.25f * ease), maxR);
-                dl->AddCircle(hc, rr, IM_COL32(0, 0, 0, (int)(170 * (1.f - t))), 0, th + 3.f);
-                dl->AddCircle(hc, rr, u32(vcol, 1.f - t * t), 0, th);
-            }
 
             if (set.judgments && !v.flash.text.empty() && age >= 0.f && age < 0.6f) {
                 if (spot.side) {
@@ -819,8 +887,11 @@ namespace gucci::ui::pages {
                     spot.minX = p0.x;
                     spot.maxX = p1.x;
                 }
+                int const verdictVtx = dl->VtxBuffer.Size;
                 drawVerdict(dl, v.flash.text.c_str(), v.flash.release, vcol, age, h, spot);
+                return verdictVtx;
             }
+            return dl->VtxBuffer.Size;
         }
 
         // The lane's height on the card: as over the level, but no more than
@@ -906,7 +977,7 @@ namespace gucci::ui::pages {
                 }
                 ImVec2 const c(p.x + r + 2.f, y + lineH * 0.5f);
                 if (it.release)
-                    drawRelease(dl, c, it.tier, z, sh, false, 1.f, 0.f);
+                    drawRelease(dl, c, it.tier, z, sh, false, 1.f);
                 else
                     drawHead(dl, c, it.tier, z, false, 1.f);
                 dl->AddText(ImVec2(c.x + r + 7.f, c.y - ts.y * 0.5f), u32(pal.ink), it.words);
@@ -920,12 +991,29 @@ namespace gucci::ui::pages {
         }
 
         // The players on screen, as boxes in ImGui's pixels (about each
-        // one's size: a ship is wider), and their gamemodes as bits.
+        // one's size: a ship is wider), their gamemodes as bits, and GD's
+        // floor and ceiling lines on screen (ImGui's y, down; -1 when that
+        // line isn't shown).
         struct PlayersOnScreen {
             int n = 0;
             ImVec2 lo[2], hi[2];
             int modes = 0;
+            float floorY = -1.f;  // the top of the ground
+            float ceilY = -1.f;   // the bottom of the ceiling (ship, UFO, wave, ball, spider, swing parts)
+            float floorObjY = -1.f;  // where the level's floor (y 90) is, from the object layer
         };
+        // A ground layer's line (its edge toward the play field) in ImGui's
+        // y, or -1 if that ground isn't showing.
+        float groundLineY(GJGroundLayer* g, float winH, float sy) {
+            if (!g || !g->isVisible() || !g->m_lineSprite)
+                return -1.f;
+            for (cocos2d::CCNode* n = g; n; n = n->getParent())
+                if (!n->isVisible())
+                    return -1.f;
+            auto* line = g->m_lineSprite;
+            cocos2d::CCPoint const w = line->getParent()->convertToWorldSpace(line->getPosition());
+            return (winH - w.y) * sy;
+        }
         PlayersOnScreen playersOnScreen() {
             PlayersOnScreen out;
             auto* pl = PlayLayer::get();
@@ -934,6 +1022,9 @@ namespace gucci::ui::pages {
             if (!pl || !pl->m_objectLayer || win.width <= 0.f || win.height <= 0.f)
                 return out;
             float const sx = disp.x / win.width, sy = disp.y / win.height;
+            out.floorY = groundLineY(pl->m_groundLayer, win.height, sy);
+            out.ceilY = groundLineY(pl->m_groundLayer2, win.height, sy);
+            out.floorObjY = (win.height - pl->m_objectLayer->convertToWorldSpace(cocos2d::CCPoint{0.f, 90.f}).y) * sy;
             int slot = 0;
             for (PlayerObject* p : {pl->m_player1, pl->m_player2}) {
                 ++slot;
@@ -955,10 +1046,11 @@ namespace gucci::ui::pages {
             return out;
         }
 
-        // The box's fill over the level: see-through, and more so (eased)
-        // while a player is within 40 px of it (ship, UFO and wave parts reach
-        // up there), so the player and the spikes by it still show.
-        int levelFill(Kind k, PlayersOnScreen const& ps, ImVec2 p0, ImVec2 p1) {
+        // The box's fill over the level: see-through (85% when the lane sits
+        // at the bottom over the play field, not over the ground, so the
+        // level's spikes don't make it busy), and more see-through (eased)
+        // while a player is within 40 px of it, so the player shows.
+        int levelFill(Kind k, PlayersOnScreen const& ps, ImVec2 p0, ImVec2 p1, int base) {
             static float eased[2] = {1.f, 1.f};  // 1 = the full fill
             float& e = eased[k == Kind::Jupiter ? 0 : 1];
             bool nearPlayer = false;
@@ -968,58 +1060,126 @@ namespace gucci::ui::pages {
                     nearPlayer = true;
             float const dt = std::clamp(ImGui::GetIO().DeltaTime, 0.f, 0.1f);
             e += std::clamp((nearPlayer ? 0.f : 1.f) - e, -dt * 8.f, dt * 8.f);
-            return (int)std::round(kFillNearPlayer + (kFillLevel - kFillNearPlayer) * e);
+            return (int)std::round(kFillNearPlayer + (base - kFillNearPlayer) * e);
         }
 
         // Where the lane sits over the level, and how see-through it is.
-        // Auto puts it in the band (top or bottom) the player is farther
-        // from: decided at the level's start and each restart, at each
-        // gamemode portal, and whenever the player comes within half a lane
-        // height of its band; it slides over in 0.3 s. On any place, a
-        // player inside the lane's band fades the whole lane to 30%.
+        // Auto:
+        //  - With a ceiling on screen (ship, UFO, wave, swing, and ball or
+        //    spider parts with one), by the corridor between the ceiling and
+        //    the floor, not by where the player is this moment: the band
+        //    that covers clearly less of it (a quarter lane or more).
+        //  - Otherwise (cube, robot, ball, spider on the ground): the top,
+        //    unless the bottom band fits wholly under GD's ground line, and
+        //    then only once the player has been in the top band for 0.25 s
+        //    (one jump's apex isn't enough). A player in the top band with
+        //    no room under the ground: the lane fades to 30% instead.
+        //  - It moves only after it has wanted the other band for 0.25 s of
+        //    the level's time, at most every 0.6 s, sliding over 0.3 s; a
+        //    new level, restart or respawn decides again with no slide.
+        // On any place, a player inside the lane's band fades the whole lane
+        // to 30%.
         struct AutoPlace {
             PlayLayer* level = nullptr;
             double lastNow = -1.0;
-            int modes = -1;
             int band = 0;
             float slide = 0.f;  // 0 top .. 1 bottom, before easing
-            double lastMove = -100.0;
+            double lastMove = -100.0;  // the level's time
+            double wantSince = -1.0;   // the level's time the other band became the better one
+            double inTopSince = -1.0;  // the level's time a player came into the top band
             float alpha = 1.f;
+            float verdictAlpha = 1.f;
         };
-        float placeLane(Kind k, LaneGeom const& g, PlayersOnScreen const& ps, float& alphaOut) {
+        struct PlaceOut {
+            float y = 0.f, alpha = 1.f, verdictAlpha = 1.f;
+            int fill = kFillLevel;
+        };
+        PlaceOut placeLane(Kind k, LaneGeom const& g, PlayersOnScreen const& ps) {
             static AutoPlace s_auto[2];
             AutoPlace& st = s_auto[k == Kind::Jupiter ? 0 : 1];
             auto const& set = ln::settings();
             float const dt = std::clamp(ImGui::GetIO().DeltaTime, 0.f, 0.1f);
+            float const screenH = ImGui::GetIO().DisplaySize.y;
             double const now = ln::now(k);
-            double const realNow = ln::steadyNow();
             auto* pl = PlayLayer::get();
             // A new level, a restart or a respawn: decide again, no slide.
             bool const snap = pl != st.level || now < st.lastNow - 0.05;
             st.level = pl;
             st.lastNow = now;
-            auto gapTo = [&](float y0) {
-                float best = FLT_MAX;
+            if (snap) {
+                st.wantSince = st.inTopSince = -1.0;
+                st.lastMove = -100.0;
+            }
+            auto inBandAt = [&](float y0, float right) {
                 for (int i = 0; i < ps.n; ++i)
-                    best = std::min(best, std::max(0.f, std::max(y0 - ps.hi[i].y, ps.lo[i].y - (y0 + g.h))));
-                return best;
+                    if (ps.hi[i].x > 0.f && ps.lo[i].x < right && ps.hi[i].y > y0 && ps.lo[i].y < y0 + g.h)
+                        return true;
+                return false;
             };
+            // Flying (ship, UFO, wave, swing, either player), or a ceiling on
+            // screen: judge by the corridor. Its ceiling can sit at or above
+            // the screen's top edge (then the corridor starts at the top).
+            int const flyBits = 1 | 2 | 8 | 64;
+            bool const flying = (ps.modes & (flyBits | flyBits << 8)) != 0;
+            bool const ceiling = flying || (ps.ceilY > 0.f && ps.ceilY < screenH);
+            float const floorLine = ps.floorY >= 0.f ? ps.floorY : ps.floorObjY;
+            bool const bottomFits = floorLine >= 0.f && g.bottomY >= floorLine;
             auto& out = ln::placement(k);
+            int want = st.band;
             if (set.place != ln::Place::Auto) {
-                st.band = set.place == ln::Place::Bottom ? 1 : 0;
+                want = set.place == ln::Place::Bottom ? 1 : 0;
             } else if (ps.n > 0) {
-                float const gTop = gapTo(g.topY), gBot = gapTo(g.bottomY);
-                float const gCur = st.band ? gBot : gTop, gOther = st.band ? gTop : gBot;
-                bool const decide = snap || ps.modes != st.modes || gCur < g.h * 0.5f;
-                // Not back and forth faster than every 0.6 s, unless the
-                // player is in the lane's band now.
-                bool const mayMove = snap || realNow - st.lastMove > 0.6 || gCur <= 0.f;
-                if (decide && mayMove && gOther > gCur) {
-                    st.band = 1 - st.band;
-                    st.lastMove = realNow;
-                    ++out.moves;
+                if (ceiling) {
+                    // The corridor the player flies in, on screen.
+                    float const top = std::max(0.f, ps.ceilY);
+                    float const bot = floorLine >= 0.f ? std::min(floorLine, screenH) : screenH;
+                    auto cover = [&](float y0) {
+                        return std::max(0.f, std::min(y0 + g.h, bot) - std::max(y0, top));
+                    };
+                    float const cTop = cover(g.topY), cBot = cover(g.bottomY);
+                    // Only for a clear difference (a quarter of the lane):
+                    // when the corridor fills the screen both bands cover
+                    // it, and the lane stays put (fading while the player
+                    // is in it) instead of moving on a few pixels.
+                    float const clear = g.h * 0.25f;
+                    if (cBot + clear < cTop)
+                        want = 1;
+                    else if (cTop + clear < cBot)
+                        want = 0;
+                    st.inTopSince = -1.0;
+                } else {
+                    if (inBandAt(g.topY, g.x + g.w)) {
+                        if (st.inTopSince < 0.0)
+                            st.inTopSince = now;
+                    } else {
+                        st.inTopSince = -1.0;
+                    }
+                    bool const topBusy = st.inTopSince >= 0.0 && now - st.inTopSince >= 0.25;
+                    if (st.band == 1)
+                        want = bottomFits ? 1 : 0;
+                    else
+                        want = bottomFits && topBusy ? 1 : 0;
                 }
-                st.modes = ps.modes;
+            }
+            if (snap) {
+                // At a start, without a reason to be at the bottom, the top.
+                st.band = set.place == ln::Place::Auto && !ceiling ? 0 : want;
+                st.wantSince = -1.0;
+            } else if (want != st.band) {
+                if (set.place != ln::Place::Auto) {
+                    st.band = want;
+                } else {
+                    if (st.wantSince < 0.0)
+                        st.wantSince = now;
+                    if (now - st.wantSince >= 0.25 && now - st.lastMove >= 0.6) {
+                        st.band = want;
+                        st.lastMove = now;
+                        st.wantSince = -1.0;
+                        ++out.moves;
+                    }
+                }
+            } else {
+                st.wantSince = -1.0;
             }
             float const target = (float)st.band;
             if (snap)
@@ -1029,19 +1189,36 @@ namespace gucci::ui::pages {
             float const e = st.slide * st.slide * (3.f - 2.f * st.slide);  // ease in and out
             float const y = std::round(g.topY + (g.bottomY - g.topY) * e);
             // Inside the band (the box and the verdict's room left of it)?
-            bool inBand = false;
-            for (int i = 0; i < ps.n; ++i)
-                if (ps.hi[i].x > 0.f && ps.lo[i].x < g.x + g.w && ps.hi[i].y > y && ps.lo[i].y < y + g.h)
-                    inBand = true;
-            float const want = inBand ? kInBandAlpha : 1.f;
-            st.alpha = snap ? want : st.alpha + std::clamp(want - st.alpha, -dt * 5.f, dt * 5.f);
-            alphaOut = st.alpha;
+            // The box fades for a player over the box; the verdict, left of
+            // it, only for a player over the verdict's own spot.
+            auto inRect = [&](float y0, float left, float right) {
+                for (int i = 0; i < ps.n; ++i)
+                    if (ps.hi[i].x > left && ps.lo[i].x < right && ps.hi[i].y > y0 && ps.lo[i].y < y0 + g.h)
+                        return true;
+                return false;
+            };
+            float const wantA = inRect(y, g.x, g.x + g.w) ? kInBandAlpha : 1.f;
+            float const wantV = inRect(y, 0.f, g.x) ? kInBandAlpha : 1.f;
+            st.alpha = snap ? wantA : st.alpha + std::clamp(wantA - st.alpha, -dt * 5.f, dt * 5.f);
+            st.verdictAlpha = snap ? wantV : st.verdictAlpha + std::clamp(wantV - st.verdictAlpha, -dt * 5.f, dt * 5.f);
+            PlaceOut po;
+            po.y = y;
+            po.alpha = st.alpha;
+            po.verdictAlpha = st.verdictAlpha;
+            // At the bottom over the play field (not under the ground line):
+            // a fuller fill.
+            bool const overPlay = floorLine < 0.f || y < floorLine;
+            po.fill = e > 0.5f && overPlay ? kFillBottomOverPlay : kFillLevel;
             out.band = st.band;
             out.slide = e;
             out.alpha = st.alpha;
             out.y = y;
             out.h = g.h;
-            return y;
+            out.floorY = floorLine;
+            out.ceilY = ps.ceilY;
+            out.fill = po.fill;
+            out.bottomFits = bottomFits;
+            return po;
         }
 
         // The lane over the trainer's level while you play it.
@@ -1056,8 +1233,9 @@ namespace gucci::ui::pages {
                 return;
             auto const g = levelGeom();
             auto const ps = playersOnScreen();
-            float alpha = 1.f;
-            float const y = placeLane(k, g, ps, alpha);
+            auto const place = placeLane(k, g, ps);
+            float const alpha = place.alpha;
+            float const y = place.y;
             ImVec2 const p0(g.x, y), p1(g.x + g.w, y + g.h);
             // The background list: over the game, under every window, and it
             // never takes a click from the game. The verdict goes left of the
@@ -1068,14 +1246,15 @@ namespace gucci::ui::pages {
             spot.side = true;
             spot.minX = 8.f;
             spot.pill = IM_COL32(0, 0, 0, 165);
-            drawLaneBox(k, dl, p0, ImVec2(g.w, g.h), lanePxPerSec(g.w, g.h, ln::view(k).tps), levelFill(k, ps, p0, p1),
-                        spot);
-            // A player inside the band: the whole lane (fill, notes, bars,
-            // marker, border, verdict) at 30%.
-            if (alpha < 0.999f) {
+            int const verdictVtx = drawLaneBox(k, dl, p0, ImVec2(g.w, g.h), lanePxPerSec(g.w, g.h, ln::view(k).tps),
+                                               levelFill(k, ps, p0, p1, place.fill), spot);
+            // A player over the box: the whole box (fill, notes, bars,
+            // marker, border) at 30%; over the verdict's spot, the verdict.
+            if (alpha < 0.999f || place.verdictAlpha < 0.999f) {
                 for (int vi = vtx0; vi < dl->VtxBuffer.Size; ++vi) {
+                    float const f = vi < verdictVtx ? alpha : place.verdictAlpha;
                     ImDrawVert& vx = dl->VtxBuffer.Data[vi];
-                    ImU32 const a = (ImU32)(((vx.col >> IM_COL32_A_SHIFT) & 0xFF) * alpha);
+                    ImU32 const a = (ImU32)(((vx.col >> IM_COL32_A_SHIFT) & 0xFF) * f);
                     vx.col = (vx.col & ~IM_COL32_A_MASK) | (a << IM_COL32_A_SHIFT);
                 }
             }

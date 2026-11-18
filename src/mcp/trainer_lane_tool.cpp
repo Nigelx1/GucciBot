@@ -165,6 +165,10 @@ namespace gucci::mcp {
                     where["moves"] = (int64_t)pl.moves;
                     where["y"] = (double)pl.y;
                     where["h"] = (double)pl.h;
+                    where["floor_y"] = (double)pl.floorY;
+                    where["ceil_y"] = (double)pl.ceilY;
+                    where["fill"] = (int64_t)pl.fill;
+                    where["bottom_fits"] = pl.bottomFits;
                     out["place"] = where;
                 }
                 out["lead_ticks"] = (int64_t)set.leadTicks;
