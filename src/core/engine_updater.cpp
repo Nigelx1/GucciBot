@@ -486,17 +486,6 @@ void GucciUpdater::runUpdates(std::function<void(float)> update, float realDt, b
                    // doesn't take it.
                    SLRenderer::get()->m_collectAudio;
 
-    if (gb->fwAnalyzing && (getFrame() % 25) == 0) {
-        auto qi = gb->replay.getCurrentQueuedInput();
-        log::info("[FWDISP] f={} enterBlock={} lockD={} hasInput={} realDt={:.6f} est={}",
-                  getFrame(),
-                  m_lockDelta && isPlayLayer,
-                  m_lockDelta,
-                  qi.has_value(),
-                  realDt,
-                  estimatedStepCount);
-    }
-
     // SCBF: re-anchor the wall-clock -> tick map around this frame's ticks,
     // exactly where Silicate does it. Outside a splitting recording the map is
     // dropped, so it re-syncs from scratch when one starts.

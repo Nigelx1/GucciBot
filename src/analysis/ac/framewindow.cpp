@@ -1824,6 +1824,10 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRun(PlayLayer* pl,
     m_resyncFailures = 0;
     m_resyncGaveUp = false;
     m_pathDiverged = false;
+    // GucciBot (2026-11-18): a run that stopped mid-leg (time cap, cancel,
+    // quit) left the trace's last frame behind, and the next run's first
+    // leg read the step back to frame 0 as a jump ("frame jumped 672 -> 0").
+    g_traceLastFrame = UINT32_MAX;
     m_baseTps = Bot::get()->updater().m_tps;
     m_resultsTps = m_baseTps;
     // GucciBot (2026-11-10): Ship Steering's run state. Its own start line,
@@ -5649,6 +5653,8 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
                     pf.removeAll();
                     pl->resetLevel();
                     bot->replaySystem().onReset(0);
+                    // Back at frame 0 without hardResetToStart: forget the trace too.
+                    g_traceLastFrame = UINT32_MAX;
 
                     while (m_index < m_samples.size() &&
                            !this->inProbeRange(m_index))
