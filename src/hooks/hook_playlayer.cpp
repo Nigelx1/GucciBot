@@ -144,7 +144,11 @@ namespace {
     bool g_resetFromStart = false;
 
 #if !GB_NATIVE_ENGINE
-    // The R / Shift+R restart keeping a held mouse or touch, off Windows
+    // The R / Ctrl+R restart keeping a held mouse or touch, off Windows
+    // (GD's full restart is Ctrl+R: on 2.2081 handleKeypress checks the
+    // dispatcher's Ctrl byte, +0x59, on R; 2.2091's loadDefaults binds
+    // chord 0x10052, Ctrl+R, to action 10011 Full Reset. Shift+R is a plain
+    // restart on 2.2081 and bound to nothing on 2.2091.)
     // (GBPortableRestartHold, at the end of this file; Windows does it with
     // the byte patch at UILayer::handleKeypress +0x12c, engine_updater.cpp).
     // GD's restart key first forgets which touch holds each player's button
@@ -1432,7 +1436,7 @@ class $modify(GBPortableCheckpoint, PlayLayer) {
     }
 };
 
-// The R / Shift+R restart keeping a held mouse or touch, as the Windows byte
+// The R / Ctrl+R restart keeping a held mouse or touch, as the Windows byte
 // patch at UILayer::handleKeypress +0x12c does (Silicate's patch, the same in
 // GucciBot's engine_updater.cpp; Silicate 1.1.2: "restart keybinds ... don't
 // reset the held touches"). Read from the 2.2081 Windows binary: on a key down
