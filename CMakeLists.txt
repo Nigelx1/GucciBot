@@ -215,9 +215,13 @@ if(GB_GEODE6)
     configure_file("${CMAKE_CURRENT_SOURCE_DIR}/logo.png" "${GB_MOD_ROOT}/logo.png" COPYONLY)
     # Geode shows about.md on the mod's page, so the 2.2091 file's copy says
     # which GD and Geode it's for and what this preview leaves out (no
-    # Pathfinder, 240 TPS only). The two lines that name 2.2081 are swapped;
-    # if about.md still says 2.2081 after that (someone reworded a line), the
-    # configure stops rather than package a page that's wrong.
+    # Pathfinder, 240 TPS only). The two lines that name 2.2081 are swapped
+    # word for word. If the requirements line was reworded, it's still found by
+    # its start ("- Geometry Dash 2.2081") and replaced whole. Any other
+    # 2.2081 left after that becomes the 2.2091 version number, with a CMake
+    # warning naming the line: a release-day edit to about.md must not stop
+    # the 2.2091 build (it runs on every push to master), but the warning says
+    # to give that line a proper swap here.
     file(READ "${CMAKE_CURRENT_SOURCE_DIR}/about.md" GB_ABOUT)
     string(REPLACE
         "- Geometry Dash 2.2081 on Windows, macOS, iOS or Android, Geode 5.10.1+ (macOS, iOS and Android are experimental: see Platforms)"
@@ -227,9 +231,24 @@ if(GB_GEODE6)
         "- Silicate's full physics engine — exact GD 2.2081 offsets, proper TPS bypass,"
         "- Silicate's physics engine — GD ${GEODE_GD_VERSION} offsets from Silicate 1.1.2, at 240 TPS in this preview,"
         GB_ABOUT "${GB_ABOUT}")
-    string(FIND "${GB_ABOUT}" "2.2081" GB_ABOUT_OLD)
-    if(NOT GB_ABOUT_OLD EQUAL -1)
-        message(FATAL_ERROR "about.md still says 2.2081 somewhere the Geode 6 build doesn't rewrite: update the swaps in CMakeLists.txt")
+    # The requirements line, reworded after the version: matched by its start.
+    # (A newline goes in front so the first line can match too; it comes off
+    # again below.)
+    set(GB_ABOUT "\n${GB_ABOUT}")
+    string(REGEX REPLACE "\n- Geometry Dash 2[.]2081[^\n]*"
+        "\n- Geometry Dash ${GEODE_GD_VERSION} on Windows, with Geode ${GEODE_VERSION_FULL}. This file is a preview of GucciBot on GD ${GEODE_GD_VERSION}: everything except the Pathfinder, and the game runs at 240 TPS (no custom TPS yet). Those, and macOS and Android on GD ${GEODE_GD_VERSION}, come in 2.0.1. For another GD version or platform, use the GucciBot file made for it.\n- Keep only one GucciBot file in your mods folder."
+        GB_ABOUT "${GB_ABOUT}")
+    string(SUBSTRING "${GB_ABOUT}" 1 -1 GB_ABOUT)
+    # Anything else that still names 2.2081: the version number is swapped and
+    # the line is named, so the page never names the wrong GD.
+    string(REGEX MATCHALL "[^\n]*2[.]2081[^\n]*" GB_ABOUT_LEFT "${GB_ABOUT}")
+    if(GB_ABOUT_LEFT)
+        foreach(GB_LINE IN LISTS GB_ABOUT_LEFT)
+            message(WARNING "about.md names 2.2081 in a line the Geode 6 build has no swap for; "
+                "it now says ${GEODE_GD_VERSION} there, word for word otherwise. Check the line reads right "
+                "for the 2.2091 file and give it a swap in CMakeLists.txt: ${GB_LINE}")
+        endforeach()
+        string(REPLACE "2.2081" "${GEODE_GD_VERSION}" GB_ABOUT "${GB_ABOUT}")
     endif()
     file(WRITE "${GB_MOD_ROOT}/about.md" "${GB_ABOUT}")
     set(GB_REAL_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
