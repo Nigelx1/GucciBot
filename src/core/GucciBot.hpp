@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-17-d (Macros record the GD and GucciBot versions they were made on, and warn when one made on another GD version is loaded)"
+    "2026-11-17-e (Assistant Access test tools: walk in a platformer, open The Tower, read the checkpoints)"
 
 #include <Geode/Geode.hpp>
 #include <cmath>
