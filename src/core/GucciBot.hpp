@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-17-n (A macro from the other GD version gets a gentler notice: it should play the same, double-check slope parts)"
+    "2026-11-17-o (Disable bot puts the game's audio pitch back to normal)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
