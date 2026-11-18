@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-17-k (GD 2.2091 / Geode 6 support merged: one codebase, two builds)"
+    "2026-11-17-l (Queues, Juice's idea: a Pathfinder queue of level IDs and a frame-window queue of saved macros, safe mode on while one runs)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

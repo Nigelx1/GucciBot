@@ -1678,6 +1678,7 @@ namespace gucci::ui::pages {
         g_changed = g_look = g_lstar = false;
 
         runCard();
+        frameWindowQueueCard();
         byHandCard();
         measurementCard();
         cbfCard();

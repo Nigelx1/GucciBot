@@ -118,6 +118,9 @@ namespace gucci::safemode {
         // Forced by the gucci_force_safe_mode tool: until the game closes.
         bool g_forcedByTool = false;
 
+        // A queue is running (setQueueHold).
+        bool g_queueHold = false;
+
         // The environment the game was started with, read once.
         bool forcedByEnvironment() {
             static bool const s_on = [] {
@@ -131,6 +134,14 @@ namespace gucci::safemode {
 
     bool forced() {
         return forcedByEnvironment() || g_forcedByTool;
+    }
+
+    void setQueueHold(bool on) {
+        g_queueHold = on;
+    }
+
+    bool queueHold() {
+        return g_queueHold;
     }
 
     bool testLaunch() {
@@ -316,7 +327,7 @@ namespace {
     // achievements and attempt counts it also keeps are at the end of this file.
     // A test run's forced safe mode (safemode.hpp) counts as the switch.
     bool shielded() {
-        if (GucciEngine::get()->protectedMode || safemode::forced())
+        if (GucciEngine::get()->protectedMode || safemode::forced() || safemode::queueHold())
             return true;
         return safemode::autoSafeMode() && (safemode::g_tainted || safemode::cheatingNow());
     }
@@ -453,7 +464,7 @@ class $modify(GB7SafeModePlayLayer, PlayLayer) {
         // (Red: a cheat with nothing keeping the run from counting.)
         if (auto* red = m_fields->red)
             red->setVisible(cheated && !safemode::autoSafeMode() && !GucciEngine::get()->protectedMode &&
-                            !safemode::forced() && !safemode::dotHidden());
+                            !safemode::forced() && !safemode::queueHold() && !safemode::dotHidden());
         if (auto* green = m_fields->green)
             green->setVisible(!cheated && safemode::greenDot());
     }

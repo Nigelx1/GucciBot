@@ -2417,7 +2417,16 @@ namespace gucci::ui {
         std::string g_speedTest;  // the last speed test's result (step R0 of AI_PATHFINDER_PLAN.md)
         std::string g_legText;    // the last "find a way to the next gate" (step R3)
 
+        void pagePathfinderMain();
+
+        // The Pathfinder page: the Pathfinder's own card, then its queue
+        // (tools/queue.hpp, Juice's idea).
         void pagePathfinder() {
+            pagePathfinderMain();
+            pages::pathfinderQueueCard();
+        }
+
+        void pagePathfinderMain() {
 #if GB_GEODE6
             // GucciBot (2026-11-17): Nigel's call for 2.0 (11-16): the GD 2.2091
             // file ships every feature but the Pathfinder and custom TPS; both

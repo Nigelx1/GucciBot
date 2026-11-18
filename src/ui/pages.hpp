@@ -41,6 +41,8 @@ namespace gucci::ui::pages {
     void indicators();      // pages/indicators.cpp: Survival Indicator, click cue + calibration, accuracy/streak (both trainer pages)
 
     // Cards drawn inside other pages
+    void pathfinderQueueCard();   // pages/queue_cards.cpp: the Pathfinder queue (Pathfinder page)
+    void frameWindowQueueCard();  // pages/queue_cards.cpp: the frame-window queue (Calculate page)
     void hitboxCard();       // pages/hitboxes_card.cpp (Macro page)
     void trajectoryRows();   // pages/prediction_card.cpp: Show Trajectory and its options (in the Hitboxes card)
     void hitbordersCard();   // pages/hitborders_card.cpp (Macro page, under Hitboxes)
