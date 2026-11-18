@@ -807,10 +807,20 @@ void AbsensePathfinder::saveFurthest() {
     auto* bot = Bot::get();
     auto& rs = bot->replaySystem();
     std::string name;
-    const auto path = gucciMacroPath(PlayLayer::get(), " furthest", name);
+    auto path = gucciMacroPath(PlayLayer::get(), " furthest", name);
     std::error_code ec;
     std::filesystem::create_directories(path.parent_path(), ec);
-    if (gucci::GucciEngine::get()->replayBackupsEnabled) rs.backupExisting(path);
+    // GucciBot (2026-11-17): numbered past a "<name> furthest" already
+    // there, as saveResult numbers wins, so an earlier run's further path
+    // (a queue rerun with a shorter limit, say) is never replaced.
+    {
+        const std::string base = name;
+        const std::string ext = path.extension().string();
+        for (int n = 2; std::filesystem::exists(path, ec); ++n) {
+            name = fmt::format("{} {}", base, n);
+            path = gucci::GucciEngine::get()->getReplayDir() / (name + ext);
+        }
+    }
 
     // Swap the furthest actions in, write, swap back.
     std::vector<slc::Action> live = rs.m_actionAtom.m_actions;
