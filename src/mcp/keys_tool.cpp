@@ -21,6 +21,7 @@
 
 #include "ui/press.hpp"  // imgui_internal.h, before GucciBot's header (its `log`)
 #include "ui/pages.hpp"
+#include "ui/touch.hpp"
 #include "ui/ui.hpp"
 #include "hacks/keybinds.hpp"
 #include "hacks/safemode.hpp"
@@ -89,11 +90,20 @@ namespace gucci::mcp {
         }
 
 #if !defined(GEODE_IS_IOS)
+        // `ctrl` and `shift`: held once this key has gone down or up (Geode's
+        // KeyStateTracker after it). As Geode does (handleKeyboardEvent), the
+        // event's own modifiers also count a Ctrl or Shift key as held on its
+        // own event, its release too, and the dispatcher gets the tracker's.
         void geodeKey(enumKeyCodes key, bool down, bool ctrl, bool shift) {
-            KeyboardModifier mods = KeyboardModifier::None;
+            KeyboardModifier tracked = KeyboardModifier::None;
             if (ctrl)
-                mods |= KeyboardModifier::Control;
+                tracked |= KeyboardModifier::Control;
             if (shift)
+                tracked |= KeyboardModifier::Shift;
+            KeyboardModifier mods = tracked;
+            if (key == KEY_LeftControl || key == KEY_RightContol || key == KEY_Control)
+                mods |= KeyboardModifier::Control;
+            if (key == KEY_LeftShift || key == KEY_RightShift || key == KEY_Shift)
                 mods |= KeyboardModifier::Shift;
             KeyboardInputData data(key, down ? KeyboardInputData::Action::Press : KeyboardInputData::Action::Release,
                                    {0, 0}, 0.0, mods);
@@ -132,6 +142,7 @@ namespace gucci::mcp {
             bool ctrl = false, shift = false;
             int step = 0, wait = 0;
             int noclipKey = -1;
+            bool keyDown = false, ctrlDown = false, shiftDown = false;  // ours, still down
             matjson::Value out = matjson::Value::object();
         };
 
@@ -140,6 +151,21 @@ namespace gucci::mcp {
                 ui::keys().onNoclip = j.noclipKey;
                 j.noclipKey = -1;
             }
+        }
+
+        // Cut off (timed out, cancelled): what it put down comes up again, so
+        // no later test runs with Ctrl held.
+        void letGo(KeyJob& j) {
+#if !defined(GEODE_IS_IOS)
+            if (j.keyDown)
+                geodeKey(static_cast<enumKeyCodes>(j.code), false, j.ctrlDown, j.shiftDown);
+            if (j.ctrlDown)
+                geodeKey(KEY_LeftControl, false, false, j.shiftDown);
+            if (j.shiftDown)
+                geodeKey(KEY_LeftShift, false, false, false);
+#endif
+            j.keyDown = j.ctrlDown = j.shiftDown = false;
+            restoreNoclip(j);
         }
 
         std::optional<matjson::Value> pollKey(KeyJob& j) {
@@ -152,9 +178,11 @@ namespace gucci::mcp {
                 case 0:  // the modifiers go down
                     j.out["before"] = stateJson(j.code);
                     if (j.shift)
-                        geodeKey(KEY_LeftShift, true, j.ctrl, true);
+                        geodeKey(KEY_LeftShift, true, false, true);
+                    j.shiftDown = j.shift;
                     if (j.ctrl)
                         geodeKey(KEY_LeftControl, true, true, j.shift);
+                    j.ctrlDown = j.ctrl;
                     j.step = 1;
                     return std::nullopt;
                 case 1: {  // a frame later, the key
@@ -164,15 +192,19 @@ namespace gucci::mcp {
                     m["ctrl_held"] = ui::ctrlHeld();
                     j.out["while_held"] = m;
                     geodeKey(k, true, j.ctrl, j.shift);
+                    j.keyDown = true;
                     j.step = 2;
                     return std::nullopt;
                 }
                 case 2:  // up again, then the modifiers
                     geodeKey(k, false, j.ctrl, j.shift);
+                    j.keyDown = false;
                     if (j.ctrl)
                         geodeKey(KEY_LeftControl, false, false, j.shift);
+                    j.ctrlDown = false;
                     if (j.shift)
                         geodeKey(KEY_LeftShift, false, false, false);
+                    j.shiftDown = false;
                     j.step = 3;
                     j.wait = 0;
                     return std::nullopt;
@@ -180,6 +212,10 @@ namespace gucci::mcp {
                     // A few frames: the editor acts at its next draw.
                     if (++j.wait < 4)
                         return std::nullopt;
+                    // With nothing held: ImGui's Ctrl (stuck down after a
+                    // Ctrl release on Geode 6) and ui::ctrlHeld().
+                    j.out["after_imgui_ctrl"] = ImGui::GetIO().KeyCtrl;
+                    j.out["after_ctrl_held"] = ui::ctrlHeld();
                     j.out["after"] = stateJson(j.code);
                     restoreNoclip(j);
                     return j.out;
@@ -191,8 +227,17 @@ namespace gucci::mcp {
             matjson::Value args;
             int step = 0, wait = 0;
             bool ctrl = false;
+            bool ctrlDown = false;  // ours, still down
             matjson::Value out = matjson::Value::object();
         };
+
+        void letGo(EditorJob& j) {
+#if !defined(GEODE_IS_IOS)
+            if (j.ctrlDown)
+                geodeKey(KEY_LeftControl, false, false, false);
+#endif
+            j.ctrlDown = false;
+        }
 
         std::optional<matjson::Value> pollEditor(EditorJob& j) {
             auto const& a = j.args;
@@ -201,6 +246,8 @@ namespace gucci::mcp {
                     j.out["before"] = editorJson();
                     if (a.contains("focus"))
                         ui::pages::editortest::focus(a["focus"].asBool().unwrapOr(true));
+                    if (a["game_click"].asBool().unwrapOr(false))
+                        ui::touch::noteGameTouch();
                     if (!a.contains("click")) {
                         j.step = 3;
                         return std::nullopt;
@@ -209,6 +256,7 @@ namespace gucci::mcp {
                     // Ctrl held a frame before the click, as a hand does.
                     if (j.ctrl)
                         geodeKey(KEY_LeftControl, true, true, false);
+                    j.ctrlDown = j.ctrl;
 #endif
                     j.step = 1;
                     return std::nullopt;
@@ -224,6 +272,7 @@ namespace gucci::mcp {
 #if !defined(GEODE_IS_IOS)
                     if (j.ctrl)
                         geodeKey(KEY_LeftControl, false, false, false);
+                    j.ctrlDown = false;
 #endif
                     j.step = 3;
                     j.wait = 0;
@@ -280,7 +329,7 @@ namespace gucci::mcp {
                         job->noclipKey = ui::keys().onNoclip;
                         ui::keys().onNoclip = job->code;
                     }
-                    throw Defer{[job]() { return pollKey(*job); }, [job] { restoreNoclip(*job); }, 120};
+                    throw Defer{[job]() { return pollKey(*job); }, [job] { letGo(*job); }, 120};
                 },
             });
         }
@@ -293,6 +342,9 @@ namespace gucci::mcp {
                                   "bar n (the n-th click, from 0) clicked: what a left click on it does to the "
                                   "selection, with Ctrl as the editor reads it then");
             props["ctrl"] = prop("boolean", "with click: Ctrl held through the game's keyboard (as gucci_key does)");
+            props["game_click"] = prop("boolean",
+                                       "as if a click had gone to the game (not the menu): the menu lets go of its "
+                                       "focus at its next frame");
             auto schema = matjson::Value::object();
             schema["type"] = "object";
             schema["properties"] = props;
@@ -301,6 +353,7 @@ namespace gucci::mcp {
                 "The Frame Editor (test launches only; it acts while its page is drawn). Answers before and "
                 "after: focused (had the keyboard at its last draw), keys_live, items, selected, can_undo, "
                 "can_redo, message, ctrl_keys_taken. focus gives its page the keyboard focus or takes it away; "
+                "game_click is a click on the game as the menu notes one; "
                 "click (with ctrl) clicks bar n, and click_saw_ctrl says whether the click saw Ctrl held.",
                 schema,
                 [](matjson::Value const& a) -> matjson::Value {
@@ -313,7 +366,7 @@ namespace gucci::mcp {
                     if (job->ctrl)
                         throw ToolError("no keyboard dispatcher on iOS");
 #endif
-                    throw Defer{[job]() { return pollEditor(*job); }, [] {}, 120};
+                    throw Defer{[job]() { return pollEditor(*job); }, [job] { letGo(*job); }, 120};
                 },
             });
         }
