@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-17-p (Settings, Look: Menu opacity, how see-through the menu is)"
+    "2026-11-17-q (Settings, Diagnostics: a Log frame increments switch)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
@@ -559,8 +559,8 @@ namespace gucci {
         float m_lastTfp = 0.f;
         // Tick diagnostics, off by default: every frame-counter change in
         // guccibot_frameinc.log, and every input playback hands over in
-        // guccibot_slope.log. Saved as debug_tick_logs, with no menu row:
-        // for a session chasing a desync.
+        // guccibot_slope.log. Saved as debug_tick_logs; Settings >
+        // Diagnostics > Log frame increments: for a session chasing a desync.
         bool m_logFrameIncrements = false;
 
         bool m_lockDelta = true;
