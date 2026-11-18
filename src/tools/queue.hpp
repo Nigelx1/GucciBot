@@ -75,4 +75,12 @@ namespace gucci::queue {
     // For Assistant Access (gucci_queue_read).
     matjson::Value toJson(Kind kind);
 
+    // One step of the running queue. Called from GucciBot's CCScheduler
+    // update hook (core/engine_updater.cpp) on every scheduler update, ahead
+    // of anything that can hold the update back: frame advance (which the
+    // Pathfinder leaves on when a stop takes it back to its furthest path)
+    // skips the rest of the update, and a ticker scheduled on the scheduler
+    // stood still with it (deco test 2026-11-17 20:16).
+    void frame();
+
 }  // namespace gucci::queue

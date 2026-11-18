@@ -1,5 +1,5 @@
-// The queues (tools/queue.hpp has what they do). One state machine, ticked
-// once a frame by the cocos scheduler, works through the running queue's
+// The queues (tools/queue.hpp has what they do). One state machine, stepped
+// on every scheduler update (frame(), from core/engine_updater.cpp), works through the running queue's
 // items; every step it takes is one the menu or Assistant Access already
 // takes (leave the level, open one, Start the Pathfinder, Calculate), so this
 // file only decides when.
@@ -119,6 +119,7 @@ namespace gucci::queue {
             int targetId = 0;          // main or online ID (0: by name)
             std::string targetName;    // a local level, by name
             Clock::time_point runStart{};
+            bool stopAsked = false;  // PfRunning: the Pathfinder was told to stop (once)
             bool asked = false;  // this step's one-off action is done (reset by go)
         };
 
@@ -488,10 +489,19 @@ namespace gucci::queue {
                                 absense::stopPathfinder();
                             if (::Bot::get()->frameWindow().running())
                                 gb->cancelAnalysis();
+                            // Frame advance off (a Pathfinder stop can leave
+                            // it on): it would hold the fade out.
+                            gb->updater.setPaused(false);
                             geode::queueInMainThread([pl] {
                                 if (PlayLayer::get() == pl)
                                     pl->onQuit();
                             });
+                        }
+                        // Still there after 5 s: asked again, straight from here.
+                        if (inStep > 5.0 && inStep < 5.5 && !pl->m_isPaused) {
+                            gb->updater.setPaused(false);
+                            pl->onQuit();
+                            return;
                         }
                         if (inStep > 30.0)
                             finishItem(k, Status::Failed, "Couldn't leave the level that was open");
@@ -601,6 +611,7 @@ namespace gucci::queue {
                     auto const s = absense::status();
                     if (s.running) {
                         r.runStart = Clock::now();
+                        r.stopAsked = false;
                         go(r, Step::PfRunning);
                         return;
                     }
@@ -625,11 +636,22 @@ namespace gucci::queue {
                     r.activity = fmt::format("Pathfinder on {}: best {:.1f}%, {} of {} min", itemLabel(r, *it),
                                              it->bestPercent, (int)(ran / 60.0), r.st.limitMinutes);
                     if (s.running) {
-                        if (!PlayLayer::get()) {
+                        if (r.stopAsked) {
+                            // Told once; a stop that hasn't taken after 30 s
+                            // is told again.
+                            if (secondsSince(r.stepAt) > 30.0) {
+                                r.stepAt = Clock::now();
+                                absense::stopPathfinder();
+                            }
+                        } else if (!PlayLayer::get()) {
+                            r.stopAsked = true;
+                            r.stepAt = Clock::now();
                             absense::stopPathfinder();
                         } else if (ran > r.st.limitMinutes * 60.0) {
                             log(fmt::format("{}: the time limit, stopping", it->levelId));
                             it->note = fmt::format("Ran out of time ({} min)", r.st.limitMinutes);
+                            r.stopAsked = true;
+                            r.stepAt = Clock::now();
                             absense::stopPathfinder();
                         }
                         return;
@@ -747,32 +769,27 @@ namespace gucci::queue {
             }
         }
 
-        // Ticked by the scheduler, whatever scene is up.
-        class Ticker : public CCObject {
-        public:
-            void update(float) override {
-                for (Kind k : {Kind::Pathfinder, Kind::FrameWindows}) {
-                    loadOnce(k);
-                    try {
-                        tick(k);
-                    } catch (std::exception const& e) {
-                        geode::log::error("[GucciBot] queue: {}", e.what());
-                        if (R(k).running && current(R(k)))
-                            finishItem(k, Status::Failed, std::string("Went wrong: ") + e.what());
-                    }
-                }
-            }
-        };
-
-        void startTicker() {
-            static Ticker* s_ticker = nullptr;
-            if (s_ticker)
-                return;
-            s_ticker = new Ticker();
-            CCDirector::sharedDirector()->getScheduler()->scheduleUpdateForTarget(s_ticker, 0, false);
-        }
-
     }  // namespace
+
+    void frame() {
+        // Only at the outer update: a step run from inside one (a checkpoint
+        // refresh, Calculate's legs) is not a place to change scenes.
+        static int depth = 0;
+        if (depth > 0)
+            return;
+        ++depth;
+        for (Kind k : {Kind::Pathfinder, Kind::FrameWindows}) {
+            loadOnce(k);
+            try {
+                tick(k);
+            } catch (std::exception const& e) {
+                geode::log::error("[GucciBot] queue: {}", e.what());
+                if (R(k).running && current(R(k)))
+                    finishItem(k, Status::Failed, std::string("Went wrong: ") + e.what());
+            }
+        }
+        --depth;
+    }
 
     bool pathfinderAvailable() {
         return GB_NATIVE_ENGINE != 0;
@@ -906,7 +923,6 @@ namespace gucci::queue {
 
     std::string start(Kind k) {
         loadOnce(k);
-        startTicker();
         auto& r = R(k);
         if (r.running)
             return "";

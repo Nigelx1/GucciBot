@@ -21,6 +21,7 @@
 #include "absense/glue.hpp"
 #include "absense/judge.hpp"
 #include "ai/job.hpp"
+#include "tools/queue.hpp"
 
 #include <Geode/Geode.hpp>
 #include <Geode/modify/CCScheduler.hpp>
@@ -1130,6 +1131,11 @@ class $modify(GB7CCScheduler, CCScheduler) {
         // even when the engine is standing down.
         if (mcp::Server::get()->running())
             mcp::Server::get()->pump();
+        // The queues (tools/queue.hpp) step here too, before frame advance or
+        // a stand-down can hold the rest of the update back. Not inside other
+        // work (an update run from inside this one, or from a tool).
+        if (!mcp::Server::get()->held())
+            gucci::queue::frame();
         // A scheduler update run from inside this one (a checkpoint refresh,
         // a step) is not a place for a tool (mcp::Server::Hold).
         mcp::Server::Hold mcpHold;
