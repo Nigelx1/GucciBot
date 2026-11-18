@@ -1,4 +1,5 @@
 #include "memory.hpp"
+#include "core/geode_compat.hpp" // gucci::stdPath
 
 #include <Geode/Geode.hpp>
 
@@ -194,7 +195,7 @@ Store& Store::get() {
     return instance;
 }
 
-std::filesystem::path Store::folder() const { return Mod::get()->getSaveDir() / "learned"; }
+std::filesystem::path Store::folder() const { return gucci::stdPath(Mod::get()->getSaveDir()) / "learned"; }
 std::filesystem::path Store::levelPath() const { return folder() / (std::to_string(m_level.key) + ".json"); }
 
 void Store::loadPriors() {

@@ -1,6 +1,7 @@
 // The menu art's textures (ui/art.hpp).
 
 #include "render/gl_compat.hpp"
+#include "core/geode_compat.hpp" // gucci::stdPath
 #include "ui/art.hpp"
 #include "ui/png.hpp"
 
@@ -16,7 +17,7 @@ namespace gucci::ui::art {
 
     bool Texture::load(std::string_view file, std::string& error, LoadOptions const& options) {
         release();
-        auto const path = Mod::get()->getResourcesDir() / std::string(file);
+        auto const path = gucci::stdPath(Mod::get()->getResourcesDir()) / std::string(file);
         auto bytes = geode::utils::file::readBinary(path);
         if (!bytes) {
             error = fmt::format("{}: {}", file, bytes.unwrapErr());

@@ -4,6 +4,7 @@
 // Nothing in it comes from ToastyReplay.
 
 #include "audio/clicks.hpp"
+#include "core/geode_compat.hpp" // gucci::stdPath
 #include "audio/playsound.hpp"
 #include "core/bot_switch.hpp"
 
@@ -215,7 +216,7 @@ namespace gucci::clicks {
         std::vector<BuiltIn> scanBuiltIns() {
             std::vector<BuiltIn> packs;
             std::error_code ec;
-            fs::path const dir = Mod::get()->getResourcesDir();
+            fs::path const dir = gucci::stdPath(Mod::get()->getResourcesDir());
             for (fs::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec)) {
                 std::error_code typeEc;
                 if (!it->is_regular_file(typeEc) || !isSoundFile(it->path()))
@@ -578,7 +579,7 @@ namespace gucci::clicks {
     }
 
     fs::path packsDir() {
-        fs::path dir = Mod::get()->getSaveDir() / "clickpacks";
+        fs::path dir = gucci::stdPath(Mod::get()->getSaveDir()) / "clickpacks";
         std::error_code ec;
         fs::create_directories(dir, ec);
         return dir;

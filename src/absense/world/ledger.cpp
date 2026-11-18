@@ -26,6 +26,7 @@
 //      Ring::tick.
 
 #include "absense/world/ledger.hpp"
+#include "core/geode_compat.hpp" // GB_FIELD
 
 #include <Geode/Geode.hpp>
 
@@ -270,8 +271,8 @@ uint64_t liveShape(GJBaseGameLayer* pl) {
     h = mixBits(h, gs.m_moveEffectInstances.size());
     h = mixBits(h, gs.m_rotateEffectInstances.size());
     h = mixBits(h, gs.m_scaleEffectInstances.size());
-    h = mixBits(h, gs.m_unkMapPairGJGameEventIntVectorEventTriggerInstance.size());
-    h = mixBits(h, gs.m_unkMapPairGJGameEventIntInt.size());
+    h = mixBits(h, gs.GB_FIELD(m_unkMapPairGJGameEventIntVectorEventTriggerInstance, m_gameEventTriggers).size());
+    h = mixBits(h, gs.GB_FIELD(m_unkMapPairGJGameEventIntInt, m_gameEventCounts).size());
     if (GJEffectManager* em = pl->m_effectManager) {
         h = mixBits(h, em->m_unkVector560.size());
         for (const GroupCommandObject2& c : em->m_unkVector560) {

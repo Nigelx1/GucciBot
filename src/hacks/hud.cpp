@@ -22,6 +22,7 @@
 //   stands in for a real player the HUD keeps its last text.
 
 #include "core/platform.hpp"
+#include "core/geode_compat.hpp" // GB_PLAYLAYER_INIT_PARAMS
 #include "hacks/hud.hpp"
 #include "hacks/cps.hpp"
 
@@ -362,8 +363,8 @@ namespace gucci::hud {
 // The HUD's node goes on the UI layer once the level is built, above GD's
 // own UI (Silicate's z-order for its labels).
 class $modify(GBHudPlayLayerHook, PlayLayer) {
-    bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
-        if (!PlayLayer::init(level, useReplay, dontCreateObjects))
+    bool init(GB_PLAYLAYER_INIT_PARAMS) {
+        if (!PlayLayer::init(GB_PLAYLAYER_INIT_ARGS))
             return false;
         if (gucci::GucciEngine::get()->enabled && m_uiLayer && !m_uiLayer->getChildByID(gucci::hud::kNodeId)) {
             if (auto* node = gucci::hud::HudNode::create()) {

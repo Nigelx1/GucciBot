@@ -22,7 +22,8 @@
 #include <Geode/modify/PlayLayer.hpp>
 #include <Geode/modify/PlayerObject.hpp>
 #include <Geode/modify/TextArea.hpp>
-#include <Geode/utils/hash.hpp>
+#include "core/geode_compat.hpp" // sha256
+#include "hacks/safemode_2209.hpp" // GB_SAFETY_2209: GD 2.2091's half
 
 #include <array>
 #include <cmath>
@@ -302,7 +303,13 @@ namespace gucci::safemode {
                || gb->isRecording()
                // HUD readouts the sheet doesn't list: Touching orbs and Time
                // warp (Nigel, 2026-11-02).
-               || hud::showsCheat(gb->hud);
+               || hud::showsCheat(gb->hud)
+#if GB_SAFETY_2209
+               // GD 2.2091's own Ignore Damage, and GD's own speed off 1x
+               // (Nigel, 2026-11-16; hacks/safemode_2209.cpp).
+               || gdOwnCheat()
+#endif
+            ;
     }
 
 } // namespace gucci::safemode
@@ -388,9 +395,9 @@ class $modify(GB7SafeModePlayLayer, PlayLayer) {
         CCDrawNode* green = nullptr;
     };
 
-    bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
+    bool init(GB_PLAYLAYER_INIT_PARAMS) {
         safemode::g_tainted = false;
-        if (!PlayLayer::init(level, useReplay, dontCreateObjects))
+        if (!PlayLayer::init(GB_PLAYLAYER_INIT_ARGS))
             return false;
         // The dots: top left, on the PlayLayer itself rather than its UI layer
         // (which some mods hide), so recordings show them (renders don't:
@@ -429,6 +436,17 @@ class $modify(GB7SafeModePlayLayer, PlayLayer) {
         // reset set it to what was on right now: record to a platformer
         // checkpoint with intentional death armed, stop recording, die, and
         // the run from the checkpoint counted as legit.
+        //
+        // Every respawn that resumes at a checkpoint sets the flag: GD's
+        // resetLevel only resumes from the last entry in m_checkpointArray
+        // (or a start position's own saved state, which is a start), and
+        // with GucciBot on that array gets an entry only in the branches of
+        // handleResetWithCheckpoints that return true (GucciBot's
+        // storeCheckpoint never hands GD one). That includes the plain-play
+        // platformer branch (a death after a platformer checkpoint respawns
+        // there, 2026-11-17-j), so the mark holds through it. Checked in GD
+        // 2.2091's code (resetLevel 0x5192bb..0x5193e2, storeCheckpoint
+        // 0x516510); the 2.2081 lane read the same in 2.2081's.
         bool const sameAttempt = safemode::g_checkpointRespawn;
         safemode::g_checkpointRespawn = false;
         if (sameAttempt)
@@ -463,7 +481,17 @@ class $modify(GB7SafeModePlayLayer, PlayLayer) {
         g_completeCheatBlocked = cheatBlock;
         if (shield || cheatBlock)
             m_isTestMode = true; // only raised, and only for this call
+#if GB_SAFETY_2209
+        {
+            // GD 2.2091: its no-progress flag too, so the death tracker's
+            // writes and the playtime at a completion skip as well
+            // (Silicate 1.1.2's NoProgress; hacks/safemode_2209.cpp).
+            safemode::NoProgress speedFlag(this, shield || cheatBlock, false);
+            PlayLayer::levelComplete();
+        }
+#else
         PlayLayer::levelComplete();
+#endif
         m_isTestMode = was;
     }
 
@@ -677,6 +705,14 @@ class $modify(GB7SafeModeAchievements, GameManager) {
         GameManager::reportAchievementWithID(key, percent, dontNotify);
     }
 };
+
+#if GB_SAFETY_2209
+// For GD 2.2091's half (hacks/safemode_2209.cpp), which keeps its systems to
+// the same rule as this file.
+bool gucci::safemode::runShielded() {
+    return shielded();
+}
+#endif
 
 // A launch the environment forces says so once, in Assistant Access's log, so
 // a test run's log shows it was shielded from the first frame.

@@ -2,6 +2,7 @@
 // makes it, and the button.
 
 #include "ui/share.hpp"
+#include "core/geode_compat.hpp" // gucci::pathToString
 
 #include "ui/kit.hpp"
 #include "ui/look.hpp"
@@ -154,7 +155,7 @@ namespace gucci::ui::share {
         // code page on Windows).
         fs::path u8path(std::string const& s) { return fs::path(std::u8string(s.begin(), s.end())); }
 
-        fs::path sharesDir() { return geode::Mod::get()->getSaveDir() / "shares"; }
+        fs::path sharesDir() { return gucci::stdPath(geode::Mod::get()->getSaveDir()) / "shares"; }
 
         std::vector<uint8_t> readFile(fs::path const& path) {
             std::ifstream in(path, std::ios::binary);
@@ -431,7 +432,7 @@ namespace gucci::ui::share {
             std::strftime(date, sizeof date, "%Y-%m-%d", &tm);
             card.date = date;
 
-            auto const res = geode::Mod::get()->getResourcesDir();
+            auto const res = gucci::stdPath(geode::Mod::get()->getResourcesDir());
             job.regularFont = res / "Roboto-Regular.ttf";
             job.boldFont = res / "Roboto-Bold.ttf";
             if (!gbot)  // the cone is GucciBot's: none on GBot's picture
@@ -457,7 +458,7 @@ namespace gucci::ui::share {
                                  "Save it, then share again for a file others can load.";
             } else {
                 job.macroFile = macroPath;
-                std::string const file = geode::utils::string::pathToString(macroPath.filename());
+                std::string const file = gucci::pathToString(macroPath.filename());
                 // Its sidecars are named after the whole file name
                 // (replays/sidecars/<file>.fwac); one more dot is another
                 // file's (<file>.bak.fwac, a backup's), left out.
@@ -466,7 +467,7 @@ namespace gucci::ui::share {
                     std::error_code typeEc;
                     if (!e.is_regular_file(typeEc))
                         continue;
-                    std::string const n = geode::utils::string::pathToString(e.path().filename());
+                    std::string const n = gucci::pathToString(e.path().filename());
                     if (n.size() <= prefix.size() || n.compare(0, prefix.size(), prefix) != 0)
                         continue;
                     std::string const ext = n.substr(file.size());
@@ -476,7 +477,7 @@ namespace gucci::ui::share {
                 job.macroName = bundle::fileNameOk(file)
                                     ? file
                                     : safeName(gb->replayName) +
-                                          geode::utils::string::pathToString(macroPath.extension());
+                                          gucci::pathToString(macroPath.extension());
                 job.madeWith = gbot ? std::string("GBot")
                                     : "GucciBot " + geode::Mod::get()->getVersion().toVString();
             }
@@ -575,9 +576,9 @@ namespace gucci::ui::share {
                 g_status.error = error;
                 g_status.seconds = seconds;
                 if (error.empty()) {
-                    g_status.path = geode::utils::string::pathToString(job->out);
-                    g_status.folder = geode::utils::string::pathToString(job->out.parent_path());
-                    g_status.pictureName = geode::utils::string::pathToString(job->out.filename());
+                    g_status.path = gucci::pathToString(job->out);
+                    g_status.folder = gucci::pathToString(job->out.parent_path());
+                    g_status.pictureName = gucci::pathToString(job->out.filename());
                     g_status.saved++;
                     geode::log::info("[share] saved {} in {:.2f} s", g_status.path, seconds);
                 } else {
@@ -585,8 +586,8 @@ namespace gucci::ui::share {
                 }
                 g_status.bundleOk = bundleError.empty();
                 g_status.bundleError = bundleError;
-                g_status.bundlePath = g_status.bundleOk ? geode::utils::string::pathToString(job->outZip) : "";
-                g_status.bundleName = g_status.bundleOk ? geode::utils::string::pathToString(job->outZip.filename()) : "";
+                g_status.bundlePath = g_status.bundleOk ? gucci::pathToString(job->outZip) : "";
+                g_status.bundleName = g_status.bundleOk ? gucci::pathToString(job->outZip.filename()) : "";
                 if (g_status.bundleOk)
                     geode::log::info("[share] saved {} ({} sidecar file(s) found)", g_status.bundlePath,
                                      job->sidecars.size());

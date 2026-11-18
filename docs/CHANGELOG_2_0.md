@@ -225,12 +225,22 @@ One download covers Windows, macOS, iOS and Android (32 and 64-bit). Windows is 
 - On iOS, Settings > Keybinds no longer offers keys, since no key reaches GucciBot there.
 - **Still Windows only:** tick rates under 162 TPS and High TPS precision, and the trigger model behind the look-aheads and the Pathfinder. Rendering and Video Mode work on Windows and Mac, not on phones yet.
 
+### GD 2.2091 preview
+
+2.0 comes as two files. `nigelx1.guccibot2208.geode` is GucciBot 2.0 for GD 2.2081 with Geode 5, on every platform. `nigelx1.guccibot2209.geode` is a preview for **GD 2.2091 on Windows**, with Geode 6.0.0-alpha.2. Both are built from the same code. Keep only one GucciBot file in your mods folder.
+
+- **What works on 2.2091:** recording and playback, practice checkpoints, Calculate, the trainers, rendering, the macro converter, themes, hitboxes and hitborders, and keeping a held click through a restart.
+- **Macros carry over.** 13 macros made on GD 2.2081 ended the same way on 2.2091: the same completions, and the same deaths at the same spot. Exports from the 2.2091 file say 2.2091.
+- **Safe mode covers 2.209's new systems.** When the bot or a cheat was on, deaths stay out of GD's death tracker and its upload, and playtime and practice attempts don't count. GD's own speed setting and its Ignore Damage both count as cheats. *Checked in a test game.* A platformer visit with the bot or a cheat on saves no progress and sends no leaderboard time. *Built, but not tested in a game yet: our test copies only open main levels, so a platformer save never ran.*
+- **Not in the preview yet:** the Pathfinder (and its AI engine), custom TPS (it runs at 240 TPS only), High TPS precision, and macOS, Android and iOS on 2.2091. They're planned for 2.0.1. Geode 6 itself is still an alpha.
+- *Checked in a signed-out test copy of GD 2.2091, on main levels only. Not tested by players yet.*
+
 ### Credits
 
 The credits on this page, the README, about.md and the in-game Credits page match: **Nigelx1, Claude, Juice, anticroom, dihmaster500, DashBlaze, Isaiah, Absent, Bogdaner09, GWDdoS, ToastexGD, C0nscious and Gucci Mane.** Claude wrote essentially the whole codebase, these notes included. Nigelx1 created GucciBot, owns it and makes every call. Since beta.5, a few people asked to come off the credits, and they have. The whole frame-window trend started with NaN GD, and the L* precision number GucciBot puts on a macro comes from his formula. Hitborders were NaN GD's idea too; he isn't involved.
 
 ### Get it, and get help
 
-Download `nigelx1.guccibot.geode` from the release and install it with Geode's **Install From File**. Turn off ToastyReplay Lite, Silicate and Antic's Counter first. On Windows the menu opens with **Left Alt**, and on a Mac with **Option**. On phones and Mac there's also the logo button in a level's pause menu.
+Download `nigelx1.guccibot2208.geode` from the release (or `nigelx1.guccibot2209.geode` for GD 2.2091 on Windows) and install it with Geode's **Install From File**. Turn off ToastyReplay Lite, Silicate and Antic's Counter first. On Windows the menu opens with **Left Alt**, and on a Mac with **Option**. On phones and Mac there's also the logo button in a level's pause menu.
 
 Questions: [the Discord](https://discord.gg/m95NUPdbpJ). Bugs: [open an issue](https://github.com/Nigelx1/GucciBot/issues/new/choose) with Geode's crash report.

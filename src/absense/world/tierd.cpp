@@ -135,6 +135,7 @@
 //     (world/step.cpp).
 
 #include <Geode/Geode.hpp>
+#include "core/platform.hpp" // GB_WORLD_LAYOUTS
 
 #include <algorithm>
 #include <cstdint>
@@ -156,7 +157,7 @@ namespace world {
 // The bindings and the fact table have to agree about every field read below;
 // where they did not, the constant would win and a raw accessor would take the
 // member's place (design step 1).
-#ifdef GEODE_IS_WINDOWS // Windows layouts only (core/platform.hpp)
+#if GB_WORLD_LAYOUTS // Windows layouts only (core/platform.hpp)
 static_assert(sizeof(EnterEffectInstance) == off::kAreaInstanceSize);
 static_assert(offsetof(EnterEffectInstance, m_gameObject) == 0xa0);
 static_assert(offsetof(EnterEffectInstance, m_targetID) == 0xac);
