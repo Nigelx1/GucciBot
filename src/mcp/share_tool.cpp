@@ -75,6 +75,7 @@ namespace gucci::mcp {
                 out["game_ms"] = s.gameMs;
                 out["level"] = s.level;
                 out["details"] = s.details;
+                out["warning"] = s.warning;
                 out["score"] = s.score;
                 auto bands = matjson::Value::array();
                 for (auto const& b : s.bands)

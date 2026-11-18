@@ -1783,6 +1783,9 @@ namespace gucci::mcp {
                         out["skipped"] = (int64_t)fw.skippedCount();
                         out["desynced"] = (int64_t)fw.desyncCount();
                         out["last_run_ok"] = fw.lastRunOk();
+                        // GucciBot (2026-11-17): GD 2.2091's Ignore Damage was on while
+                        // these windows were counted (FrameWindowAnalyzer::gdIgnoreDamage).
+                        out["gd_ignore_damage"] = fw.gdIgnoreDamage();
                         // GucciBot (2026-11-15): where a whole run over older windows stopped
                         // (-1: none), and what Continue would do.
                         out["recount_from"] =

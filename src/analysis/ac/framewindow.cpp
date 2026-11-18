@@ -2,6 +2,7 @@
 #include "core/geode_compat.hpp" // gucci::pathToString
 #include "core/GucciBot.hpp"
 #include "core/log_rotate.hpp"
+#include "hacks/safemode_2209.hpp"  // GB_SAFETY_2209: GD 2.2091's Ignore Damage (gdIgnoreDamage)
 #include "trailbuf/trailbuf.hpp"
 
 #include "cbf.hpp"
@@ -1646,6 +1647,7 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRun(PlayLayer* pl,
     // can't count goes as in a whole run). Typed ones are m_manualKept's.
     uint32_t const recountFrom = m_recountFrom;
     bool const olderP2Count = m_olderP2Count;
+    bool const gdIgnoreDamage = m_gdIgnoreDamage;
     std::vector<FrameWindowMark> recountOld;
     bool const recounting = !partial || (resume && recountFrom != UINT32_MAX);
     if (recounting) {
@@ -1687,6 +1689,7 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRun(PlayLayer* pl,
         m_messages = std::move(keptMessages);
         m_recountFrom = recountFrom;
         m_olderP2Count = olderP2Count;
+        m_gdIgnoreDamage = gdIgnoreDamage;
         m_generation++;
         // GucciBot (2026-11-16): and the click maps collectSamples built, which
         // only finish() cleared, so a run refused after them ("No input in that
@@ -1699,6 +1702,12 @@ FrameWindowAnalyzer::Report FrameWindowAnalyzer::startRun(PlayLayer* pl,
     this->clear();
     m_recountFrom = recountFrom;  // (clear() drops it; the run's end sets it)
     m_olderP2Count = olderP2Count;
+    // GucciBot (2026-11-17): every run keeps the earlier mark, since a run
+    // that stops short keeps the older windows it hadn't reached (a whole
+    // run's too: finish, runSnapshot). Only a whole run that counts every
+    // input again replaces it, with what it saw itself (finish).
+    m_gdIgnoreDamage = gdIgnoreDamage;
+    m_gdIgnoreDamageSeen = false;
 
     m_sweep = std::clamp(m_sweepRange->inner(), 1, MAX_SWEEP);
     m_maxWin = std::max(0, m_maxWindow->inner());
@@ -5276,6 +5285,14 @@ void FrameWindowAnalyzer::finish(std::string message, bool ok) {
     // counted again already: stopAt is UINT32_MAX there.)
     if (m_recounting && !m_captureNoclip && (m_stoppedShort ? m_stopAt == UINT32_MAX : ok))
         m_olderP2Count = false;
+    // GucciBot (2026-11-17): the Ignore Damage mark, only by a whole run that
+    // counted every input again: then no older window is left. (A Continue
+    // keeps the mark even when it finishes: the windows before it may be
+    // the marked run's.)
+    if (!m_partial && m_recounting && !m_captureNoclip &&
+        (m_stoppedShort ? m_stopAt == UINT32_MAX : ok))
+        m_gdIgnoreDamage = m_gdIgnoreDamageSeen;
+    m_gdIgnoreDamageSeen = false;
     m_recounting = false;
     m_lastKeptOthers =
         !m_captureNoclip && (m_stoppedShort || (m_partial && ok));
@@ -5396,6 +5413,17 @@ void FrameWindowAnalyzer::tick(PlayLayer* pl) {
     if (m_trip.active) this->stepTrip(pl);
     if (pl) this->updateTripLabel(pl);
     if (!m_running) return;
+
+#if GB_SAFETY_2209
+    // GucciBot (2026-11-17): GD 2.2091's own Ignore Damage, once a drawn
+    // frame while a run counts (gdIgnoreDamage). It stays on until it is
+    // turned off, so a frame's look sees it for the ticks in between too.
+    if (pl && !m_gdIgnoreDamageSeen && gucci::safemode::gdIgnoreDamageOn()) {
+        m_gdIgnoreDamageSeen = true;
+        m_gdIgnoreDamage = true;
+        log::warn("[GucciBot] Calculate: GD's Ignore Damage is on during this run; its windows aren't legit");
+    }
+#endif
 
     ScopeTimer timer{m_tickNanos};
 
@@ -7697,6 +7725,9 @@ struct StoredResults {
     // key, or marks that have no "wide" key (2.0.0-beta.5 and older) with one
     // carrying the player-2 flag. Written only when set.
     bool olderP2Count = false;
+    // GucciBot (2026-11-17): FrameWindowAnalyzer::gdIgnoreDamage. Written
+    // only when set.
+    bool gdIgnoreDamage = false;
     std::vector<StoredMark> marks;
     std::vector<StoredMessage> messages;
 };
@@ -7806,6 +7837,7 @@ static std::string toJson(StoredResults const& r) {
     if (r.recountFrom != UINT32_MAX)
         root.set("recountFrom", (int64_t)r.recountFrom);
     if (r.olderP2Count) root.set("olderP2Count", true);
+    if (r.gdIgnoreDamage) root.set("gdIgnoreDamage", true);
     return root.dump();
 }
 
@@ -7851,6 +7883,7 @@ static bool fromJson(std::string const& text, StoredResults& out) {
         out.recountFrom = rf >= 0 && rf < (int64_t)UINT32_MAX ? (uint32_t)rf : UINT32_MAX;
     }
     out.olderP2Count = jbool(root, "olderP2Count", false);
+    out.gdIgnoreDamage = jbool(root, "gdIgnoreDamage", false);
 
     auto const marks = root["marks"];
     if (marks.isArray()) {
@@ -7963,6 +7996,7 @@ bool FrameWindowAnalyzer::writeResults(std::filesystem::path const& path,
     out.desynced = desynced;
     out.recountFrom = recountFrom;
     out.olderP2Count = m_olderP2Count;
+    out.gdIgnoreDamage = m_gdIgnoreDamage;
 
     if (auto* pl = PlayLayer::get(); pl && pl->m_level)
         out.level = pl->m_level->m_levelName;
@@ -8113,6 +8147,7 @@ bool FrameWindowAnalyzer::loadResults(std::filesystem::path const& path) {
     m_resultsTps = in.tps > 0.0 ? in.tps : 240.0;
     m_recountFrom = in.recountFrom;
     m_olderP2Count = in.olderP2Count;
+    m_gdIgnoreDamage = in.gdIgnoreDamage;
     m_generation++;
     this->resetDisplay();
     return true;

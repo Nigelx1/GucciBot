@@ -367,6 +367,10 @@ namespace gucci::ui::share {
             details += fmt::format("{} click{}", grouped(presses), presses == 1 ? "" : "s") + dot +
                        fmt::format("{:g} TPS", tps);
             card.details = details;
+            // GucciBot (2026-11-17): GD 2.2091's Ignore Damage was on while
+            // these were counted (FrameWindowAnalyzer::gdIgnoreDamage).
+            if (fw.gdIgnoreDamage())
+                card.warning = "NOT LEGIT: GD'S IGNORE DAMAGE WAS ON WHILE THESE WERE COUNTED";
 
             for (auto const& [tier, count] : fw.legendTotals())
                 card.bands.push_back({bandName(tier), rgba(tier.color), count});
@@ -562,6 +566,7 @@ namespace gucci::ui::share {
                 auto const& c = job->card;
                 g_status.level = c.level;
                 g_status.details = c.details;
+                g_status.warning = c.warning;
                 g_status.score = c.haveScore ? c.score : "";
                 g_status.bands.clear();
                 for (auto const& b : c.bands)

@@ -168,6 +168,13 @@ class FrameWindowAnalyzer {
     // cube clicks (fixed 2026-10-23, cf168a3). Kept in the file
     // ("olderP2Count") until a whole run counts every input again.
     bool olderP2Count() const { return m_olderP2Count; }
+    // GucciBot (2026-11-17): GD 2.2091's own Ignore Damage (editor levels
+    // only) was on while a run counted these windows, so deaths didn't kill
+    // and they aren't legit. Seen once a drawn frame while a run counts
+    // (tick); every run keeps the earlier mark. Saved in the windows file
+    // ("gdIgnoreDamage") until a whole run counts every input again without it.
+    // Only the 2.2091 file sets it: 2.2081 has no Ignore Damage.
+    bool gdIgnoreDamage() const { return m_gdIgnoreDamage; }
     // Changes whenever a running run has counted more, for the windows file
     // written while it runs (GucciEngine::keepRunningWindows).
     uint64_t runStamp() const {
@@ -452,6 +459,7 @@ class FrameWindowAnalyzer {
         m_messages.clear();
         m_recountFrom = UINT32_MAX;
         m_olderP2Count = false;
+        m_gdIgnoreDamage = false;
         m_measured = 0;
         m_skipped = 0;
         m_desynced = 0;
@@ -1112,6 +1120,8 @@ class FrameWindowAnalyzer {
     std::vector<FrameWindowMark> m_recountOld;
     uint32_t m_recountFrom = UINT32_MAX;  // see recountFrom()
     bool m_olderP2Count = false;          // see olderP2Count()
+    bool m_gdIgnoreDamage = false;        // see gdIgnoreDamage()
+    bool m_gdIgnoreDamageSeen = false;    // Ignore Damage seen by the running run
     // This run counts every input again from some point on: a whole run, or
     // a Continue past a recountFrom mark (m_recountOld is its old windows).
     bool m_recounting = false;
