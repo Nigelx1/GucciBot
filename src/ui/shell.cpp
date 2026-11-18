@@ -4293,8 +4293,13 @@ namespace gucci::ui {
                     UseFont f(Font::Small);
                     ImGui::ProgressBar(fw.progress(), ImVec2(260.f, 0.f),
                                        fmt::format("Calculate {:.0f}%", fw.progress() * 100.f).c_str());
-                    // How long it has run, and a rough guess at the rest while
-                    // the main count runs (the passes after it aren't counted).
+                    // How long it has run, and a rough guess at the rest: of the
+                    // capture while it plays, then of the probing at its own pace
+                    // per input (the passes after it aren't counted). GucciBot
+                    // (2026-11-18): the probing had no guess at all on a range run
+                    // (its inputs are a small part of the macro's, so the old
+                    // percentage-based one never passed 5%), and the capture's
+                    // guess read as the whole run's (test pass S7).
                     double const elapsed = fw.elapsedSeconds();
                     auto const clock = [](double sec) {
                         int const s = static_cast<int>(sec);
@@ -4302,11 +4307,16 @@ namespace gucci::ui {
                     };
                     std::string timing = clock(elapsed) + " so far";
                     float const p = fw.progress();
-                    // GucciBot (2026-11-15): from where the probing started, so a
-                    // Continue that starts at 85% doesn't guess it's nearly done.
-                    float const done = p - fw.progressStart();
-                    if (done > 0.05f && p < 1.f && fw.stage() != "dependent" && fw.stage() != "suggest")
-                        timing += ", about " + clock(elapsed * (1.0 - p) / done) + " to go";
+                    double left = 0.0;
+                    bool capped = false;
+                    if (fw.stage() == "capture") {
+                        float const done = p - fw.progressStart();
+                        if (done > 0.05f && p < 1.f)
+                            timing += ", capture done in about " + clock(elapsed * (1.0 - p) / done);
+                    } else if (fw.probeTimeLeft(left, capped)) {
+                        timing += capped ? ", the time cap stops it in " + clock(left)
+                                         : ", about " + clock(left) + " to go";
+                    }
                     ImGui::TextDisabled("%s", timing.c_str());
                     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 260.f);
                     ImGui::TextUnformatted(fw.status().c_str());
@@ -4448,9 +4458,20 @@ namespace gucci::ui {
                         // the run ends, and the Calculate page may be shut (Nigel,
                         // 2026-10-21: "i dont see a finish message"). In lines
                         // that fit the screen (showNotice).
+                        // GucciBot (2026-11-18): whole. It was cut at 140 letters,
+                        // which ended the time cap's notice at "...where it sto..."
+                        // (test pass S7); showNotice wraps it to the screen's width.
+                        // (2026-11-18 review) A long one (the capture-death one is
+                        // about 500 letters, 10 lines on a small screen) stops at the
+                        // end of a sentence instead: the whole of it stays on the
+                        // Calculate page.
                         std::string text = analyzer.status();
-                        if (text.size() > 140)
-                            text = text.substr(0, 137) + "...";
+                        if (text.size() > 300) {
+                            size_t const cut = text.rfind(". ", 280);
+                            text = cut != std::string::npos && cut > 60
+                                       ? text.substr(0, cut + 1) + " The rest is on the Calculate page."
+                                       : text.substr(0, 277) + "...";
+                        }
                         showNotice("Calculate: " + text + kept,
                                    analyzer.lastRunOk() ? NotificationIcon::Success : NotificationIcon::Warning, 6.f);
                     }

@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-18-l (Calculate: a canceled run keeps the saved windows file as it was)"
+    "2026-11-18-m (Calculate: the time-cap notice fits, and the probe stage shows time to go)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath

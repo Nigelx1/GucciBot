@@ -413,6 +413,13 @@ class FrameWindowAnalyzer {
     double elapsedSeconds() const {
         return m_running ? std::chrono::duration<double>(std::chrono::steady_clock::now() - m_runStart).count() : 0.0;
     }
+    // GucciBot (2026-11-18): a rough time to go while the inputs are probed:
+    // this probe stage's own time per input so far (from the end of its first
+    // input), times the inputs it has
+    // left (the passes after it, ~N and suggestions, aren't counted). False
+    // until two inputs of the stage are done. `capped`: the time cap
+    // stops the run first, and `seconds` is the time until it does.
+    bool probeTimeLeft(double& seconds, bool& capped) const;
     // GucciBot: whether the last run finished cleanly, for the page to show
     // its result as a note or a warning after the run.
     bool lastRunOk() const { return m_lastOk; }
@@ -1036,6 +1043,9 @@ class FrameWindowAnalyzer {
 
     void updateDisplay(PlayLayer* pl);
     std::chrono::steady_clock::time_point m_runStart{};
+    // GucciBot (2026-11-18): when the probe stage's first input was done
+    // (probeTimeLeft; none yet: the epoch).
+    std::chrono::steady_clock::time_point m_probeFirstDoneAt{};
     void updateTiming(PlayLayer* pl, FrameWindowMark const* mk);
     void refreshTiming(PlayLayer* pl);
 
