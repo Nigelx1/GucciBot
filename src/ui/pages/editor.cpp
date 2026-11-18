@@ -1409,9 +1409,12 @@ namespace gucci::ui::pages {
             return false;
         // While a level runs (not paused), the arrows are the player's: a
         // platformer player who clicked a bar and then walks with the arrows
-        // must not nudge the click instead. Paused (GD's pause, or
-        // GucciBot's frame step) they move the selection.
-        if (k.what == EdKey::Move && levelRunning())
+        // must not nudge the click instead. Escape is the player's pause key
+        // then too: it pauses the level and the selection stays. Paused
+        // (GD's pause, or GucciBot's frame step) the arrows move the
+        // selection and Escape clears it; with nothing selected Escape
+        // pauses as before.
+        if ((k.what == EdKey::Move || k.what == EdKey::Deselect) && levelRunning())
             return false;
         held = true;
         takeGameKey(k);

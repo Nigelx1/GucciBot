@@ -1,7 +1,7 @@
 #pragma once
 
 #define GB_BUILD_LABEL                                                                    \
-    "2026-11-18-g (Frame Editor: Delete, Backspace, Escape, the arrows and Shift+wheel work from a real keyboard on both GD versions; ImGui Ctrl and Shift no longer stick on 2.2091; arrows in a menu text box type no a)"
+    "2026-11-18-h (Frame Editor: Escape pauses a running level even with a bar selected)"
 
 #include <Geode/Geode.hpp>
 #include "core/geode_compat.hpp" // gucci::stdPath
