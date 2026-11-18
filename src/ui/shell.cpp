@@ -4453,7 +4453,17 @@ namespace gucci::ui {
                         // GucciBot (2026-11-18): whole. It was cut at 140 letters,
                         // which ended the time cap's notice at "...where it sto..."
                         // (test pass S7); showNotice wraps it to the screen's width.
-                        std::string const text = analyzer.status();
+                        // (2026-11-18 review) A long one (the capture-death one is
+                        // about 500 letters, 10 lines on a small screen) stops at the
+                        // end of a sentence instead: the whole of it stays on the
+                        // Calculate page.
+                        std::string text = analyzer.status();
+                        if (text.size() > 300) {
+                            size_t const cut = text.rfind(". ", 280);
+                            text = cut != std::string::npos && cut > 60
+                                       ? text.substr(0, cut + 1) + " The rest is on the Calculate page."
+                                       : text.substr(0, 277) + "...";
+                        }
                         showNotice("Calculate: " + text + kept,
                                    analyzer.lastRunOk() ? NotificationIcon::Success : NotificationIcon::Warning, 6.f);
                     }
