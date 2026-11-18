@@ -33,10 +33,10 @@ namespace gucci::trainers::lane {
         Style style = Style::Lane;
         // Ticks of lead: how far ahead of the hit marker the lane shows, at
         // the macro's tick rate (or the game's, in the level).
-        int leadTicks = 150;
-        float size = 1.f;          // the lane's height, times its normal 64
+        int leadTicks = 300;
+        float size = 1.f;          // the lane's height: 1x = 12% of the screen's height
         bool inLevel = true;       // drawn over the trainer's level while you play it
-        float levelWidth = 0.62f;  // of the screen's width, in the level
+        float levelWidth = 0.64f;  // of the screen's width, in the level
         Place place = Place::Top;  // in the level
         bool judgments = true;     // the PERFECT / EARLY 1f words
     };
@@ -123,6 +123,11 @@ namespace gucci::trainers::lane {
     void clear(Kind k);
     // Once a frame from the drawing: notes the clock passed unanswered.
     void advance(Kind k, double nowSec);
+
+    // Assistant Access (test launches): make the last verdict this many
+    // seconds old, so a shot catches its pop, pulse or fade on purpose.
+    // `hold`: keep it that old (the next verdict too) until a call without.
+    void ageFlashForTest(Kind k, double ageSec, bool hold);
 
     // Drawn over the trainer's level this frame (safe mode counts it).
     void markShownInLevel(Kind k);

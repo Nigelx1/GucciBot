@@ -70,6 +70,12 @@ namespace gucci::ui {
 
         ImFont* font(Font f) const;
         ImVec4 tone(Tone t) const;
+        // Big bold glyphs for a word drawn large over the game (the Trainer
+        // lane's PERFECT / EARLY 1f / LATE 2f / MISS): the baked size nearest
+        // `px` from above, so it's drawn crisp rather than stretched from a
+        // 15-pixel font. Only capitals, digits, space, + - and f are baked.
+        // Null when no font file loaded (then use font(Font::Strong)).
+        ImFont* bigFont(float px) const;
 
         // Screen pixels per ImGui unit. 1 on Windows and macOS. On a phone or
         // tablet the whole interface (fonts, spacing, every size a page uses)
@@ -87,6 +93,9 @@ namespace gucci::ui {
 
     private:
         ImFont* m_fonts[5] = {};
+        static constexpr int kBigSizes = 4;
+        ImFont* m_big[kBigSizes] = {};
+        float m_bigPx[kBigSizes] = {};
         float m_fontRaster = 1.f;   // the fonts were loaded this many times their size (loadFonts)
     };
 

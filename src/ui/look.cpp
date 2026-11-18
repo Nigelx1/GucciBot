@@ -200,6 +200,22 @@ namespace gucci::ui {
             m_fonts[static_cast<int>(w.slot)] = io.Fonts->AddFontFromFileTTF(path.c_str(), w.px);
 #endif
         }
+        // The big words (bigFont): a few sizes of the bold face, only the
+        // glyphs those words use, so the atlas stays small.
+        {
+            static const ImWchar kBigGlyphs[] = {0x20, 0x20, 0x2B, 0x2D, 0x30, 0x39, 0x41, 0x5A, 0x66, 0x66, 0};
+            static const float kBigPx[kBigSizes] = {24.f, 40.f, 64.f, 100.f};
+            std::string const& path = haveBold ? bold : regular;
+            if (haveBold || haveRegular) {
+                for (int i = 0; i < kBigSizes; ++i) {
+                    ImFontConfig big;
+                    big.OversampleH = 1;
+                    big.OversampleV = 1;
+                    m_bigPx[i] = kBigPx[i];
+                    m_big[i] = io.Fonts->AddFontFromFileTTF(path.c_str(), kBigPx[i], &big, kBigGlyphs);
+                }
+            }
+        }
         if (!m_fonts[static_cast<int>(Font::Body)]) {
 #if defined(GEODE_IS_MOBILE)
             ImFontConfig fallback;  // ImGui's own settings for its pixel font, made as big
@@ -224,6 +240,20 @@ namespace gucci::ui {
     ImFont* Look::font(Font f) const {
         ImFont* chosen = m_fonts[static_cast<int>(f)];
         return chosen ? chosen : m_fonts[static_cast<int>(Font::Body)];
+    }
+
+    ImFont* Look::bigFont(float px) const {
+        // Drawn at most a little bigger than baked; shrinking is crisp.
+        px *= deviceScale();
+        ImFont* best = nullptr;
+        for (int i = 0; i < kBigSizes; ++i) {
+            if (!m_big[i])
+                continue;
+            best = m_big[i];
+            if (m_bigPx[i] * 1.1f >= px)
+                break;
+        }
+        return best;
     }
 
     ImVec4 Look::tone(Tone t) const {

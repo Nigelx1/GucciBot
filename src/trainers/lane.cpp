@@ -44,6 +44,8 @@ namespace gucci::trainers::lane {
             std::vector<View::Recent> recent;
         };
         std::array<Lane, 2> g_lanes;
+        // A test's held verdict age (ageFlashForTest), or -1.
+        std::array<double, 2> g_heldAge{-1.0, -1.0};
         std::array<double, 2> g_shownAt{-100.0, -100.0};
 
         Settings g_settings;
@@ -227,6 +229,8 @@ namespace gucci::trainers::lane {
 
     View view(Kind k) {
         auto& l = built(k);
+        if (g_heldAge[(size_t)idx(k)] >= 0.0)
+            l.flash.atReal = steadyNow() - g_heldAge[(size_t)idx(k)];
         View v;
         v.notes = &l.notes;
         v.results = &l.results;
@@ -328,6 +332,12 @@ namespace gucci::trainers::lane {
         auto& l = built(k);
         resetResults(l);
         l.flash = {};
+    }
+
+    void ageFlashForTest(Kind k, double ageSec, bool hold) {
+        auto& l = g_lanes[(size_t)idx(k)];
+        l.flash.atReal = steadyNow() - ageSec;
+        g_heldAge[(size_t)idx(k)] = hold ? ageSec : -1.0;
     }
 
     void markShownInLevel(Kind k) {

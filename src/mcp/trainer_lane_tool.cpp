@@ -80,6 +80,8 @@ namespace gucci::mcp {
             field("in_level", "boolean", "the lane over the level (this launch)");
             field("place", "string", "\"top\" or \"bottom\" (this launch)");
             field("width", "number", "the lane's width in the level, of the screen (this launch)");
+            field("flash_age", "number", "make the last verdict this many seconds old (its pop, pulse, fade)");
+            field("flash_hold", "boolean", "with flash_age: hold it at that age until a flash_age call without it");
             field("notes", "boolean", "list the notes in view with their tiers and results");
             auto s = matjson::Value::object();
             s["type"] = "object";
@@ -101,7 +103,8 @@ namespace gucci::mcp {
                 bool const writes = a.contains("select") || a.contains("bar") || a.contains("seek") ||
                                     a.contains("paused") || a.contains("press") || a.contains("style") ||
                                     a.contains("lead_ticks") || a.contains("size") || a.contains("in_level") ||
-                                    a.contains("place") || a.contains("width");
+                                    a.contains("place") || a.contains("width") ||
+                                    a.contains("flash_age");
                 if (writes && !gucci::safemode::testLaunch())
                     throw ToolError("test launches only (tools/assist.py launch)");
                 tr::ensureLoaded();
@@ -135,6 +138,9 @@ namespace gucci::mcp {
                                                            : ln::now(kind) + num(a, "offset_ticks", 0.0) / tps;
                     tr::injectForTest(kind, flag(a, "press", true), at);
                 }
+
+                if (a.contains("flash_age"))
+                    ln::ageFlashForTest(kind, std::max(0.0, num(a, "flash_age", 0.0)), flag(a, "flash_hold", false));
 
                 auto out = matjson::Value::object();
                 auto const v = ln::view(kind);
